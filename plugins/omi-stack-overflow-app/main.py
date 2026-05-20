@@ -5,6 +5,7 @@ Provides chat tools for searching Stack Overflow and reading question answers
 through the public Stack Exchange API.
 """
 
+from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from html import unescape
 import re
@@ -22,11 +23,46 @@ MAX_LIMIT = 10
 DEFAULT_SITE = "stackoverflow"
 USER_AGENT = "omi-stack-overflow-app/1.0 (https://omi.me)"
 
+SITE_HOSTS = {
+    "stackoverflow": "stackoverflow.com",
+    "serverfault": "serverfault.com",
+    "superuser": "superuser.com",
+    "askubuntu": "askubuntu.com",
+    "mathoverflow": "mathoverflow.net",
+    "stackapps": "stackapps.com",
+}
+
+_stack_client: Optional[httpx.AsyncClient] = None
+
+
+def _new_stack_client() -> httpx.AsyncClient:
+    headers = {"User-Agent": USER_AGENT, "Accept": "application/json"}
+    return httpx.AsyncClient(timeout=REQUEST_TIMEOUT_SECONDS, headers=headers)
+
+
+async def _get_stack_client() -> httpx.AsyncClient:
+    global _stack_client
+    if _stack_client is None or _stack_client.is_closed:
+        _stack_client = _new_stack_client()
+    return _stack_client
+
+
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    global _stack_client
+    _stack_client = _new_stack_client()
+    try:
+        yield
+    finally:
+        if _stack_client is not None:
+            await _stack_client.aclose()
+
 
 app = FastAPI(
     title="Omi Stack Overflow Integration",
     description="Search Stack Overflow and read answers from Omi chat tools",
     version="1.0.0",
+    lifespan=lifespan,
 )
 
 
@@ -105,18 +141,26 @@ def _format_date(timestamp: Optional[int]) -> str:
 
 
 async def _request_json(path: str, params: Optional[dict[str, Any]] = None) -> dict[str, Any]:
-    headers = {"User-Agent": USER_AGENT, "Accept": "application/json"}
-    async with httpx.AsyncClient(timeout=REQUEST_TIMEOUT_SECONDS, headers=headers) as client:
-        response = await client.get(f"{STACK_API_BASE_URL}{path}", params=params)
+    client = await _get_stack_client()
+    response = await client.get(f"{STACK_API_BASE_URL}{path}", params=params)
     response.raise_for_status()
     data = response.json()
     if data.get("error_id"):
         raise ValueError(data.get("error_message") or "Stack Exchange API returned an error")
+    if data.get("backoff"):
+        raise ValueError(f"Stack Exchange requested a {data['backoff']} second backoff. Retry shortly.")
     return data
 
 
 def _question_url(site: str, question_id: Any) -> str:
-    host = "stackoverflow.com" if site == DEFAULT_SITE else f"{site}.stackexchange.com"
+    if site.endswith(".stackoverflow"):
+        host = f"{site}.com"
+    elif site.endswith(".serverfault"):
+        host = f"{site}.com"
+    elif site.endswith(".superuser"):
+        host = f"{site}.com"
+    else:
+        host = SITE_HOSTS.get(site, f"{site}.stackexchange.com")
     return f"https://{host}/questions/{question_id}"
 
 
