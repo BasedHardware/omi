@@ -104,6 +104,7 @@ web/app/public/firebase-messaging-sw.js
 !app/ios/Podfile.lock
 !mcp/uv.lock
 desktop/codex-proxy/target/
+desktop/local-asr-helper/target/
 *.lock
 !desktop/codex-proxy/Cargo.lock
 *.log
