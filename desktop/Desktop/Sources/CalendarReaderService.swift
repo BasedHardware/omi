@@ -239,6 +239,7 @@ actor CalendarReaderService {
           _ = try await APIClient.shared.createMemory(
             content: memory,
             visibility: "private",
+            category: .system,
             tags: ["calendar", "onboarding", "profile"],
             source: "google_calendar",
             headline: "Calendar Profile Insight"
@@ -727,6 +728,7 @@ actor CalendarReaderService {
       _ = try await APIClient.shared.createMemory(
         content: content,
         visibility: "private",
+        category: .system,
         tags: ["calendar", "onboarding", "event"],
         source: "google_calendar",
         headline: event.summary

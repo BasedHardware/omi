@@ -1451,18 +1451,25 @@ struct CreateMemoryResponse: Codable {
 }
 
 /// One item in a POST /v3/memories/batch payload. Mirrors the `Memory` model
-/// in `backend/models/memories.py` (the server hardcodes category=manual on
-/// batch creation, so we intentionally don't send it).
+/// in `backend/models/memories.py`. The server honors `category`, so batch
+/// imports default to `.system` ("About You") rather than landing in "Manual".
 struct MemoryBatchItem: Encodable {
   let content: String
   let visibility: String
+  let category: String
   let tags: [String]
   let headline: String?
 
-  init(content: String, visibility: String = "private", tags: [String] = [], headline: String? = nil)
-  {
+  init(
+    content: String,
+    visibility: String = "private",
+    category: MemoryCategory = .system,
+    tags: [String] = [],
+    headline: String? = nil
+  ) {
     self.content = content
     self.visibility = visibility
+    self.category = category.rawValue
     self.tags = tags
     self.headline = headline
   }

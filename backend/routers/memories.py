@@ -53,8 +53,14 @@ async def create_memory(
     memory: Memory,
     uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "memories:create")),
 ):
-    memory.category = MemoryCategory.manual
-    memory_db = MemoryDB.from_memory(memory, uid, None, True)
+    # Honor the client-supplied category (the Memory model defaults it to
+    # `interesting`). Only memories the user explicitly typed in arrive as
+    # `manual`; auto-extracted ones (system/interesting) keep their category so
+    # the mobile app files them under "About You"/"Insights" instead of dumping
+    # everything into "Manual". manually_added tracks human entry, so derive it
+    # from the category rather than forcing it True for every API caller.
+    manually_added = memory.category == MemoryCategory.manual
+    memory_db = MemoryDB.from_memory(memory, uid, None, manually_added)
 
     # Build payload outside try so serialization bugs aren't misreported as
     # transient 503s — only the Firestore write should be retryable.
@@ -102,13 +108,15 @@ async def create_memories_batch(
     if not request.memories:
         return BatchMemoriesResponse(memories=[], created_count=0)
 
-    # Hardcode category to manual to match the single-create endpoint. Callers
-    # that need auto-categorization should use the dev API.
+    # Honor each item's category (defaults to `interesting` per the Memory
+    # model). Desktop import/extraction paths send `system`/`interesting` so
+    # they land under "About You"/"Insights"; only user-typed memories send
+    # `manual`. Derive manually_added from the category instead of forcing it.
     memory_dbs: List[MemoryDB] = []
     has_public = False
     for memory in request.memories:
-        memory.category = MemoryCategory.manual
-        memory_db = MemoryDB.from_memory(memory, uid, None, True)
+        manually_added = memory.category == MemoryCategory.manual
+        memory_db = MemoryDB.from_memory(memory, uid, None, manually_added)
         memory_dbs.append(memory_db)
         if memory.visibility == 'public':
             has_public = True

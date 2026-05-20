@@ -310,6 +310,7 @@ actor GmailReaderService {
           _ = try await APIClient.shared.createMemory(
             content: memory,
             visibility: "private",
+            category: .system,
             tags: ["gmail", "onboarding", "profile"],
             source: "gmail",
             headline: "Email Profile Insight"
@@ -982,6 +983,7 @@ actor GmailReaderService {
       _ = try await APIClient.shared.createMemory(
         content: content,
         visibility: "private",
+        category: .system,
         tags: ["gmail", "email"],
         source: "gmail",
         windowTitle: "Gmail — \(dateStr)",
