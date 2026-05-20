@@ -1621,7 +1621,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get finalTouches => '최종 마무리';
 
   @override
-  String get processing => '처리 중...';
+  String get processing => '처리 중';
 
   @override
   String get features => '기능';
@@ -8303,7 +8303,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get manageStorage => '저장소 관리';
 
   @override
-  String get safelyBackedUp => '휴대폰에 안전하게 백업됨';
+  String get safelyBackedUp => '생성된 대화';
 
   @override
   String get notYetSynced => '아직 휴대폰에 동기화되지 않음';
@@ -9116,4 +9116,117 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get recapDeleteFailed => '요약을 삭제할 수 없습니다. 나중에 다시 시도해 주세요.';
+
+  @override
+  String get syncStatusBackedUp => '백업됨';
+
+  @override
+  String get syncStatusBackingUp => '백업 중…';
+
+  @override
+  String get syncStatusWaiting => '동기화 대기 중';
+
+  @override
+  String get syncStatusRetrying => '처리하지 못함 — 다시 시도 중';
+
+  @override
+  String get syncStatusFailed => '실패 — 다시 시도를 누르세요';
+
+  @override
+  String get syncStatusFileUnavailable => '파일을 사용할 수 없음';
+
+  @override
+  String get noRecordingsYet => '아직 녹음이 없습니다';
+
+  @override
+  String get syncInProgress => '동기화 진행 중';
+
+  @override
+  String get syncStatusUploaded => '업로드됨 · Omi에서 처리 중';
+
+  @override
+  String get deleteWhileProcessingTitle => '아직 처리 중';
+
+  @override
+  String get deleteWhileProcessingMessage =>
+      '이 녹음은 업로드되었지만 Omi가 아직 대화를 만들고 있습니다. 지금 삭제하고 처리가 실패하면 복구할 수 없습니다. 그래도 삭제하시겠습니까?';
+
+  @override
+  String get syncCardAllBackedUp => '모든 녹음이 동기화됨';
+
+  @override
+  String syncCardReadyCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '녹음 $count건 동기화 준비됨',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get syncCardProcessing => 'Omi에서 처리 중…';
+
+  @override
+  String get syncCardWaitingInternet => '인터넷 연결 대기 중';
+
+  @override
+  String syncCardNeedsAttention(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '확인이 필요한 녹음 $count개',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get syncFlowIntro => '녹음은 Omi 기기에서 이 휴대전화로 전송되어 로컬에 저장된 후, Omi 서버로 업로드되어 텍스트로 변환되고 대화로 만들어집니다.';
+
+  @override
+  String get syncStepUpload => '동기화';
+
+  @override
+  String get syncStepUploadDesc => '녹음이 Omi 서버로 전송됩니다';
+
+  @override
+  String get syncStepProcess => '전사';
+
+  @override
+  String get syncStepProcessDesc => 'Omi가 오디오를 대화로 만듭니다';
+
+  @override
+  String get syncStepBackedUp => '대화 준비 완료';
+
+  @override
+  String get syncStepBackedUpDesc => '대화 에서 찾을 수 있습니다';
+
+  @override
+  String get syncFailureFootnote => '처리에 실패하면 다음 동기화 시 녹음이 자동으로 다시 시도됩니다.';
+
+  @override
+  String get syncStatusConversationCreated => '대화가 생성되었습니다';
+
+  @override
+  String get syncCardUploadingTitle => 'Omi에 업로드 중';
+
+  @override
+  String get syncCardDownloadingTitle => 'Omi에서 다운로드 중';
+
+  @override
+  String syncCardProgressOf(int current, int total) {
+    return '$total개 중 $current개';
+  }
+
+  @override
+  String get syncStatusOnDevice => 'Omi에서 대기 중';
+
+  @override
+  String get syncStatusDownloadingFromDevice => 'Omi에서 다운로드 중';
+
+  @override
+  String get newestFirst => '최신순';
+
+  @override
+  String get noSyncedRecordingsYet => '아직 동기화된 녹음이 없습니다';
 }

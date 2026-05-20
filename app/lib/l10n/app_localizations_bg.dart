@@ -1646,7 +1646,7 @@ class AppLocalizationsBg extends AppLocalizations {
   String get finalTouches => 'Финални щрихи';
 
   @override
-  String get processing => 'Обработка...';
+  String get processing => 'Обработва се';
 
   @override
   String get features => 'Функции';
@@ -8478,7 +8478,7 @@ class AppLocalizationsBg extends AppLocalizations {
   String get manageStorage => 'Управление на хранилището';
 
   @override
-  String get safelyBackedUp => 'Безопасно запазено на телефона ви';
+  String get safelyBackedUp => 'Създадени разговори';
 
   @override
   String get notYetSynced => 'Все още не е синхронизирано с телефона ви';
@@ -9300,4 +9300,121 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get recapDeleteFailed => 'Резюмето не може да бъде изтрито. Опитайте по-късно.';
+
+  @override
+  String get syncStatusBackedUp => 'Архивирано';
+
+  @override
+  String get syncStatusBackingUp => 'Архивиране…';
+
+  @override
+  String get syncStatusWaiting => 'Чака синхронизация';
+
+  @override
+  String get syncStatusRetrying => 'Неуспешна обработка — нов опит';
+
+  @override
+  String get syncStatusFailed => 'Неуспешно — натиснете „Опитай отново“';
+
+  @override
+  String get syncStatusFileUnavailable => 'Файлът е недостъпен';
+
+  @override
+  String get noRecordingsYet => 'Все още няма записи';
+
+  @override
+  String get syncInProgress => 'Извършва се синхронизация';
+
+  @override
+  String get syncStatusUploaded => 'Качено · обработва се в Omi';
+
+  @override
+  String get deleteWhileProcessingTitle => 'Все още се обработва';
+
+  @override
+  String get deleteWhileProcessingMessage =>
+      'Този запис е качен, но Omi още създава разговора. Ако го изтриете сега и обработката се провали, той не може да бъде възстановен. Изтриване въпреки това?';
+
+  @override
+  String get syncCardAllBackedUp => 'Всички записи са синхронизирани';
+
+  @override
+  String syncCardReadyCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count записа, готови за синхронизация',
+      one: '1 запис, готов за синхронизация',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get syncCardProcessing => 'Обработка в Omi…';
+
+  @override
+  String get syncCardWaitingInternet => 'Изчакване на интернет';
+
+  @override
+  String syncCardNeedsAttention(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count записа изискват внимание',
+      one: '1 запис изисква внимание',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get syncFlowIntro =>
+      'Записите се прехвърлят от вашето устройство Omi към този телефон и се съхраняват локално, след което се качват на сървъра на Omi, където се транскрибират и превръщат в разговори.';
+
+  @override
+  String get syncStepUpload => 'Синхронизация';
+
+  @override
+  String get syncStepUploadDesc => 'Записът ви се изпраща към сървъра на Omi';
+
+  @override
+  String get syncStepProcess => 'Транскрибиране';
+
+  @override
+  String get syncStepProcessDesc => 'Omi превръща звука в разговор';
+
+  @override
+  String get syncStepBackedUp => 'Разговорът е готов';
+
+  @override
+  String get syncStepBackedUpDesc => 'Намерете го в Разговори';
+
+  @override
+  String get syncFailureFootnote =>
+      'Ако обработката е неуспешна, записът се повтаря автоматично при следващата синхронизация.';
+
+  @override
+  String get syncStatusConversationCreated => 'Разговорът е създаден';
+
+  @override
+  String get syncCardUploadingTitle => 'Качване в Omi';
+
+  @override
+  String get syncCardDownloadingTitle => 'Изтегляне от Omi';
+
+  @override
+  String syncCardProgressOf(int current, int total) {
+    return '$current от $total';
+  }
+
+  @override
+  String get syncStatusOnDevice => 'Изчаква Omi';
+
+  @override
+  String get syncStatusDownloadingFromDevice => 'Изтегляне от Omi';
+
+  @override
+  String get newestFirst => 'Първо най-новите';
+
+  @override
+  String get noSyncedRecordingsYet => 'Все още няма синхронизирани записи';
 }

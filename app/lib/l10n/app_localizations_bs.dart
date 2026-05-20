@@ -1642,7 +1642,7 @@ class AppLocalizationsBs extends AppLocalizations {
   String get finalTouches => 'Završne izmene';
 
   @override
-  String get processing => 'Obrada...';
+  String get processing => 'Obrada';
 
   @override
   String get features => 'Karakteristike';
@@ -8467,7 +8467,7 @@ class AppLocalizationsBs extends AppLocalizations {
   String get manageStorage => 'Upravljaj memorijom';
 
   @override
-  String get safelyBackedUp => 'Bezbedno sačuvano na vašem telefonu';
+  String get safelyBackedUp => 'Razgovori kreirani';
 
   @override
   String get notYetSynced => 'Nije još sinhronizovano sa tvojim telefonom';
@@ -9289,4 +9289,122 @@ class AppLocalizationsBs extends AppLocalizations {
 
   @override
   String get recapDeleteFailed => 'Pregled nije moguće obrisati. Pokušajte ponovo kasnije.';
+
+  @override
+  String get syncStatusBackedUp => 'Sigurnosno kopirano';
+
+  @override
+  String get syncStatusBackingUp => 'Pravljenje kopije…';
+
+  @override
+  String get syncStatusWaiting => 'Čeka sinkronizaciju';
+
+  @override
+  String get syncStatusRetrying => 'Obrada nije uspjela — ponovni pokušaj';
+
+  @override
+  String get syncStatusFailed => 'Neuspjelo — dodirnite Ponovi';
+
+  @override
+  String get syncStatusFileUnavailable => 'Datoteka nije dostupna';
+
+  @override
+  String get noRecordingsYet => 'Još nema snimaka';
+
+  @override
+  String get syncInProgress => 'Sinhronizacija u toku';
+
+  @override
+  String get syncStatusUploaded => 'Otpremljeno · obrada na Omi';
+
+  @override
+  String get deleteWhileProcessingTitle => 'Još se obrađuje';
+
+  @override
+  String get deleteWhileProcessingMessage =>
+      'Ovaj snimak je otpremljen, ali Omi još kreira razgovor. Ako ga sada izbrišete i obrada ne uspije, ne može se vratiti. Svejedno izbrisati?';
+
+  @override
+  String get syncCardAllBackedUp => 'Sve snimke su sinkronizovane';
+
+  @override
+  String syncCardReadyCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count snimaka spremno za sinkronizaciju',
+      few: '$count snimka spremna za sinkronizaciju',
+      one: '1 snimak spreman za sinkronizaciju',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get syncCardProcessing => 'Obrada u Omi…';
+
+  @override
+  String get syncCardWaitingInternet => 'Čekanje interneta';
+
+  @override
+  String syncCardNeedsAttention(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count snimaka zahtijeva pažnju',
+      few: '$count snimke zahtijevaju pažnju',
+      one: '$count snimak zahtijeva pažnju',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get syncFlowIntro =>
+      'Snimci se prenose s vašeg Omi uređaja na ovaj telefon i pohranjuju lokalno, a zatim se učitavaju na Omijev server gdje se transkribuju i pretvaraju u razgovore.';
+
+  @override
+  String get syncStepUpload => 'Sinkronizacija';
+
+  @override
+  String get syncStepUploadDesc => 'Vaša snimka se šalje na Omijev server';
+
+  @override
+  String get syncStepProcess => 'Transkripcija';
+
+  @override
+  String get syncStepProcessDesc => 'Omi pretvara zvuk u razgovor';
+
+  @override
+  String get syncStepBackedUp => 'Razgovor je spreman';
+
+  @override
+  String get syncStepBackedUpDesc => 'Pronađite ga u Razgovori';
+
+  @override
+  String get syncFailureFootnote => 'Ako obrada ne uspije, snimak se automatski ponavlja pri sljedećoj sinkronizaciji.';
+
+  @override
+  String get syncStatusConversationCreated => 'Razgovor stvoren';
+
+  @override
+  String get syncCardUploadingTitle => 'Slanje na Omi';
+
+  @override
+  String get syncCardDownloadingTitle => 'Preuzimanje sa Omi';
+
+  @override
+  String syncCardProgressOf(int current, int total) {
+    return '$current od $total';
+  }
+
+  @override
+  String get syncStatusOnDevice => 'Čeka na Omi';
+
+  @override
+  String get syncStatusDownloadingFromDevice => 'Preuzimanje sa Omi';
+
+  @override
+  String get newestFirst => 'Prvo najnoviji';
+
+  @override
+  String get noSyncedRecordingsYet => 'Još nema sinhronizovanih snimaka';
 }

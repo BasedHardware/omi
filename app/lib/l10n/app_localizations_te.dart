@@ -1647,7 +1647,7 @@ class AppLocalizationsTe extends AppLocalizations {
   String get finalTouches => 'చివరి స్పర్శ';
 
   @override
-  String get processing => 'ప్రక్రియ చేస్తుంది...';
+  String get processing => 'ప్రాసెస్ అవుతోంది';
 
   @override
   String get features => 'లక్షణాలు';
@@ -8492,7 +8492,7 @@ class AppLocalizationsTe extends AppLocalizations {
   String get manageStorage => 'నిల్వను నిర్వహించండి';
 
   @override
-  String get safelyBackedUp => 'మీ ఫోన్‌కు సురక్షితంగా బ్యాకప్ చేయబడింది';
+  String get safelyBackedUp => 'సృష్టించిన సంభాషణలు';
 
   @override
   String get notYetSynced => 'ఇంకా మీ ఫోన్‌కు సమకాలీకరించబడలేదు';
@@ -9314,4 +9314,121 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get recapDeleteFailed => 'సారాంశాన్ని తొలగించలేకపోయాం. తర్వాత మళ్ళీ ప్రయత్నించండి.';
+
+  @override
+  String get syncStatusBackedUp => 'బ్యాకప్ అయింది';
+
+  @override
+  String get syncStatusBackingUp => 'బ్యాకప్ అవుతోంది…';
+
+  @override
+  String get syncStatusWaiting => 'సింక్ కోసం వేచి ఉంది';
+
+  @override
+  String get syncStatusRetrying => 'ప్రాసెస్ చేయలేకపోయింది — మళ్లీ ప్రయత్నిస్తోంది';
+
+  @override
+  String get syncStatusFailed => 'విఫలమైంది — Retry నొక్కండి';
+
+  @override
+  String get syncStatusFileUnavailable => 'ఫైల్ అందుబాటులో లేదు';
+
+  @override
+  String get noRecordingsYet => 'ఇంకా రికార్డింగ్‌లు లేవు';
+
+  @override
+  String get syncInProgress => 'సింక్ జరుగుతోంది';
+
+  @override
+  String get syncStatusUploaded => 'అప్‌లోడ్ అయింది · Omiలో ప్రాసెస్ అవుతోంది';
+
+  @override
+  String get deleteWhileProcessingTitle => 'ఇంకా ప్రాసెస్ అవుతోంది';
+
+  @override
+  String get deleteWhileProcessingMessage =>
+      'ఈ రికార్డింగ్ అప్‌లోడ్ అయింది కానీ Omi ఇంకా సంభాషణను సృష్టిస్తోంది. ఇప్పుడు తొలగిస్తే మరియు ప్రాసెసింగ్ విఫలమైతే, దాన్ని తిరిగి పొందలేరు. అయినా తొలగించాలా?';
+
+  @override
+  String get syncCardAllBackedUp => 'అన్ని రికార్డింగ్‌లు సింక్ అయ్యాయి';
+
+  @override
+  String syncCardReadyCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count రికార్డింగ్‌లు సింక్‌కు సిద్ధంగా ఉన్నాయి',
+      one: '1 రికార్డింగ్ సింక్‌కు సిద్ధంగా ఉంది',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get syncCardProcessing => 'Omiలో ప్రాసెస్ అవుతోంది…';
+
+  @override
+  String get syncCardWaitingInternet => 'ఇంటర్నెట్ కోసం వేచి ఉంది';
+
+  @override
+  String syncCardNeedsAttention(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count రికార్డింగ్‌లకు శ్రద్ధ అవసరం',
+      one: '1 రికార్డింగ్‌కు శ్రద్ధ అవసరం',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get syncFlowIntro =>
+      'రికార్డింగ్‌లు మీ Omi పరికరం నుండి ఈ ఫోన్‌కు బదిలీ చేయబడి స్థానికంగా నిల్వ చేయబడతాయి, ఆ తర్వాత Omi సర్వర్‌కు అప్‌లోడ్ చేయబడతాయి, అక్కడ అవి లిప్యంతరీకరించబడి సంభాషణలుగా మార్చబడతాయి.';
+
+  @override
+  String get syncStepUpload => 'సింక్';
+
+  @override
+  String get syncStepUploadDesc => 'మీ రికార్డింగ్ Omi సర్వర్‌కు పంపబడుతుంది';
+
+  @override
+  String get syncStepProcess => 'లిప్యంతరీకరణ';
+
+  @override
+  String get syncStepProcessDesc => 'Omi ఆడియోను సంభాషణగా మారుస్తుంది';
+
+  @override
+  String get syncStepBackedUp => 'సంభాషణ సిద్ధంగా ఉంది';
+
+  @override
+  String get syncStepBackedUpDesc => 'దీన్ని సంభాషణలు లో కనుగొనండి';
+
+  @override
+  String get syncFailureFootnote =>
+      'ప్రాసెసింగ్ విఫలమైతే, తదుపరి సింక్‌లో రికార్డింగ్ ఆటోమేటిక్‌గా మళ్లీ ప్రయత్నించబడుతుంది.';
+
+  @override
+  String get syncStatusConversationCreated => 'సంభాషణ సృష్టించబడింది';
+
+  @override
+  String get syncCardUploadingTitle => 'Omi కి అప్‌లోడ్ అవుతోంది';
+
+  @override
+  String get syncCardDownloadingTitle => 'Omi నుండి డౌన్‌లోడ్ అవుతోంది';
+
+  @override
+  String syncCardProgressOf(int current, int total) {
+    return '$totalలో $current';
+  }
+
+  @override
+  String get syncStatusOnDevice => 'Omi లో వేచి ఉంది';
+
+  @override
+  String get syncStatusDownloadingFromDevice => 'Omi నుండి డౌన్‌లోడ్ అవుతోంది';
+
+  @override
+  String get newestFirst => 'కొత్తవి మొదట';
+
+  @override
+  String get noSyncedRecordingsYet => 'ఇంకా సమకాలీకరించిన రికార్డింగ్‌లు లేవు';
 }

@@ -1642,7 +1642,7 @@ class AppLocalizationsBn extends AppLocalizations {
   String get finalTouches => 'চূড়ান্ত স্পর্শ';
 
   @override
-  String get processing => 'প্রক্রিয়া করছেন...';
+  String get processing => 'প্রক্রিয়াধীন';
 
   @override
   String get features => 'বৈশিষ্ট্য';
@@ -8452,7 +8452,7 @@ class AppLocalizationsBn extends AppLocalizations {
   String get manageStorage => 'স্টোরেজ পরিচালনা করুন';
 
   @override
-  String get safelyBackedUp => 'আপনার ফোনে নিরাপদে ব্যাকআপ করা হয়েছে';
+  String get safelyBackedUp => 'কথোপকথন তৈরি হয়েছে';
 
   @override
   String get notYetSynced => 'এখনো আপনার ফোনে সিঙ্ক হয়নি';
@@ -9273,4 +9273,121 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String get recapDeleteFailed => 'রিক্যাপ মুছে ফেলা যায়নি। পরে আবার চেষ্টা করুন।';
+
+  @override
+  String get syncStatusBackedUp => 'ব্যাকআপ হয়েছে';
+
+  @override
+  String get syncStatusBackingUp => 'ব্যাকআপ চলছে…';
+
+  @override
+  String get syncStatusWaiting => 'সিঙ্কের অপেক্ষায়';
+
+  @override
+  String get syncStatusRetrying => 'প্রক্রিয়া করা যায়নি — আবার চেষ্টা চলছে';
+
+  @override
+  String get syncStatusFailed => 'ব্যর্থ — Retry চাপুন';
+
+  @override
+  String get syncStatusFileUnavailable => 'ফাইল অনুপলব্ধ';
+
+  @override
+  String get noRecordingsYet => 'এখনও কোনো রেকর্ডিং নেই';
+
+  @override
+  String get syncInProgress => 'সিঙ্ক চলছে';
+
+  @override
+  String get syncStatusUploaded => 'আপলোড হয়েছে · Omi-তে প্রক্রিয়াধীন';
+
+  @override
+  String get deleteWhileProcessingTitle => 'এখনও প্রক্রিয়াধীন';
+
+  @override
+  String get deleteWhileProcessingMessage =>
+      'এই রেকর্ডিংটি আপলোড হয়েছে কিন্তু Omi এখনও কথোপকথন তৈরি করছে। এখন মুছে ফেললে এবং প্রক্রিয়া ব্যর্থ হলে এটি আর পুনরুদ্ধার করা যাবে না। তবুও মুছবেন?';
+
+  @override
+  String get syncCardAllBackedUp => 'সব রেকর্ডিং সিঙ্ক হয়েছে';
+
+  @override
+  String syncCardReadyCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$countটি রেকর্ডিং সিঙ্কের জন্য প্রস্তুত',
+      one: '1টি রেকর্ডিং সিঙ্কের জন্য প্রস্তুত',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get syncCardProcessing => 'Omi-তে প্রক্রিয়াজাত হচ্ছে…';
+
+  @override
+  String get syncCardWaitingInternet => 'ইন্টারনেটের জন্য অপেক্ষা';
+
+  @override
+  String syncCardNeedsAttention(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$countটি রেকর্ডিংয়ের প্রতি মনোযোগ প্রয়োজন',
+      one: '১টি রেকর্ডিংয়ের প্রতি মনোযোগ প্রয়োজন',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get syncFlowIntro =>
+      'রেকর্ডিংগুলি আপনার Omi ডিভাইস থেকে এই ফোনে স্থানান্তরিত হয় এবং স্থানীয়ভাবে সংরক্ষিত হয়, তারপর Omi-এর সার্ভারে আপলোড করা হয় যেখানে সেগুলি প্রতিলিপি করা হয় এবং কথোপকথনে রূপান্তরিত হয়।';
+
+  @override
+  String get syncStepUpload => 'সিঙ্ক';
+
+  @override
+  String get syncStepUploadDesc => 'আপনার রেকর্ডিং Omi-এর সার্ভারে পাঠানো হয়';
+
+  @override
+  String get syncStepProcess => 'ট্রান্সক্রিপশন';
+
+  @override
+  String get syncStepProcessDesc => 'Omi অডিওকে কথোপকথনে রূপ দেয়';
+
+  @override
+  String get syncStepBackedUp => 'কথোপকথন প্রস্তুত';
+
+  @override
+  String get syncStepBackedUpDesc => 'কথোপকথন-এ খুঁজে পাবেন';
+
+  @override
+  String get syncFailureFootnote =>
+      'প্রক্রিয়াজাতকরণ ব্যর্থ হলে, পরবর্তী সিঙ্কে রেকর্ডিংটি স্বয়ংক্রিয়ভাবে পুনরায় চেষ্টা করা হয়।';
+
+  @override
+  String get syncStatusConversationCreated => 'কথোপকথন তৈরি হয়েছে';
+
+  @override
+  String get syncCardUploadingTitle => 'Omi-তে আপলোড হচ্ছে';
+
+  @override
+  String get syncCardDownloadingTitle => 'Omi থেকে ডাউনলোড হচ্ছে';
+
+  @override
+  String syncCardProgressOf(int current, int total) {
+    return '$total-এর মধ্যে $current';
+  }
+
+  @override
+  String get syncStatusOnDevice => 'Omi-এ অপেক্ষমাণ';
+
+  @override
+  String get syncStatusDownloadingFromDevice => 'Omi থেকে ডাউনলোড হচ্ছে';
+
+  @override
+  String get newestFirst => 'নতুনগুলি আগে';
+
+  @override
+  String get noSyncedRecordingsYet => 'এখনও কোনো সিঙ্ক করা রেকর্ডিং নেই';
 }

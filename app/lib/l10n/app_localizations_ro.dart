@@ -1651,7 +1651,7 @@ class AppLocalizationsRo extends AppLocalizations {
   String get finalTouches => 'Retușuri finale';
 
   @override
-  String get processing => 'Se procesează...';
+  String get processing => 'Se procesează';
 
   @override
   String get features => 'Funcționalități';
@@ -8486,7 +8486,7 @@ class AppLocalizationsRo extends AppLocalizations {
   String get manageStorage => 'Gestionare stocare';
 
   @override
-  String get safelyBackedUp => 'Salvat în siguranță pe telefonul dvs.';
+  String get safelyBackedUp => 'Conversații create';
 
   @override
   String get notYetSynced => 'Nu a fost încă sincronizat cu telefonul dvs.';
@@ -9308,4 +9308,123 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get recapDeleteFailed => 'Rezumatul nu a putut fi șters. Încearcă din nou mai târziu.';
+
+  @override
+  String get syncStatusBackedUp => 'Copiat de rezervă';
+
+  @override
+  String get syncStatusBackingUp => 'Se face copia de rezervă…';
+
+  @override
+  String get syncStatusWaiting => 'Așteaptă sincronizarea';
+
+  @override
+  String get syncStatusRetrying => 'Procesarea a eșuat — se reîncearcă';
+
+  @override
+  String get syncStatusFailed => 'A eșuat — atinge Reîncearcă';
+
+  @override
+  String get syncStatusFileUnavailable => 'Fișierul nu este disponibil';
+
+  @override
+  String get noRecordingsYet => 'Încă nu există înregistrări';
+
+  @override
+  String get syncInProgress => 'Sincronizare în curs';
+
+  @override
+  String get syncStatusUploaded => 'Încărcat · se procesează pe Omi';
+
+  @override
+  String get deleteWhileProcessingTitle => 'Încă se procesează';
+
+  @override
+  String get deleteWhileProcessingMessage =>
+      'Această înregistrare a fost încărcată, dar Omi încă creează conversația. Dacă o ștergi acum și procesarea eșuează, nu poate fi recuperată. Ștergi oricum?';
+
+  @override
+  String get syncCardAllBackedUp => 'Toate înregistrările sincronizate';
+
+  @override
+  String syncCardReadyCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count de înregistrări gata de sincronizare',
+      few: '$count înregistrări gata de sincronizare',
+      one: '1 înregistrare gata de sincronizare',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get syncCardProcessing => 'Procesare în Omi…';
+
+  @override
+  String get syncCardWaitingInternet => 'Se așteaptă internetul';
+
+  @override
+  String syncCardNeedsAttention(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count de înregistrări necesită atenție',
+      few: '$count înregistrări necesită atenție',
+      one: '1 înregistrare necesită atenție',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get syncFlowIntro =>
+      'Înregistrările sunt transferate de pe dispozitivul Omi pe acest telefon și stocate local, apoi încărcate pe serverul Omi, unde sunt transcrise și transformate în conversații.';
+
+  @override
+  String get syncStepUpload => 'Sincronizare';
+
+  @override
+  String get syncStepUploadDesc => 'Înregistrarea ta este trimisă către serverul Omi';
+
+  @override
+  String get syncStepProcess => 'Transcriere';
+
+  @override
+  String get syncStepProcessDesc => 'Omi transformă audio într-o conversație';
+
+  @override
+  String get syncStepBackedUp => 'Conversația e gata';
+
+  @override
+  String get syncStepBackedUpDesc => 'O găsești în Conversații';
+
+  @override
+  String get syncFailureFootnote =>
+      'Dacă procesarea eșuează, înregistrarea se reia automat la următoarea sincronizare.';
+
+  @override
+  String get syncStatusConversationCreated => 'Conversație creată';
+
+  @override
+  String get syncCardUploadingTitle => 'Se încarcă pe Omi';
+
+  @override
+  String get syncCardDownloadingTitle => 'Se descarcă de pe Omi';
+
+  @override
+  String syncCardProgressOf(int current, int total) {
+    return '$current din $total';
+  }
+
+  @override
+  String get syncStatusOnDevice => 'Așteaptă pe Omi';
+
+  @override
+  String get syncStatusDownloadingFromDevice => 'Se descarcă de pe Omi';
+
+  @override
+  String get newestFirst => 'Cele mai noi primele';
+
+  @override
+  String get noSyncedRecordingsYet => 'Încă nu există înregistrări sincronizate';
 }

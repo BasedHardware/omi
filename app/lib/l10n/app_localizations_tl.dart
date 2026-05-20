@@ -1649,7 +1649,7 @@ class AppLocalizationsTl extends AppLocalizations {
   String get finalTouches => 'Huling touchup';
 
   @override
-  String get processing => 'Nagpoproseso...';
+  String get processing => 'Pinoproseso';
 
   @override
   String get features => 'Mga Features';
@@ -8521,7 +8521,7 @@ class AppLocalizationsTl extends AppLocalizations {
   String get manageStorage => 'Pamahalaan ang Storage';
 
   @override
-  String get safelyBackedUp => 'Safely backed up sa iyong phone';
+  String get safelyBackedUp => 'Mga conversation na nalikha';
 
   @override
   String get notYetSynced => 'Hindi pa nag-sync sa iyong phone';
@@ -9350,4 +9350,121 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get recapDeleteFailed => 'Hindi maburahin ang recap. Subukan ulit mamaya.';
+
+  @override
+  String get syncStatusBackedUp => 'Na-back up na';
+
+  @override
+  String get syncStatusBackingUp => 'Nagba-back up…';
+
+  @override
+  String get syncStatusWaiting => 'Naghihintay na mag-sync';
+
+  @override
+  String get syncStatusRetrying => 'Hindi naproseso — sinusubukang muli';
+
+  @override
+  String get syncStatusFailed => 'Nabigo — i-tap ang Subukan Muli';
+
+  @override
+  String get syncStatusFileUnavailable => 'Hindi available ang file';
+
+  @override
+  String get noRecordingsYet => 'Wala pang mga recording';
+
+  @override
+  String get syncInProgress => 'Kasalukuyang nagsi-sync';
+
+  @override
+  String get syncStatusUploaded => 'Na-upload · pinoproseso sa Omi';
+
+  @override
+  String get deleteWhileProcessingTitle => 'Pinoproseso pa rin';
+
+  @override
+  String get deleteWhileProcessingMessage =>
+      'Na-upload na ang recording na ito ngunit ginagawa pa ng Omi ang usapan. Kung buburahin mo ito ngayon at mabigo ang pagproseso, hindi na ito mababawi. Burahin pa rin?';
+
+  @override
+  String get syncCardAllBackedUp => 'Lahat ng recording ay na-sync na';
+
+  @override
+  String syncCardReadyCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count na recording ang handa nang i-sync',
+      one: '1 recording ang handa nang i-sync',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get syncCardProcessing => 'Pinoproseso sa Omi…';
+
+  @override
+  String get syncCardWaitingInternet => 'Naghihintay ng internet';
+
+  @override
+  String syncCardNeedsAttention(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count recording ang kailangang asikasuhin',
+      one: '1 recording ang kailangang asikasuhin',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get syncFlowIntro =>
+      'Inililipat ang mga recording mula sa iyong Omi device papunta sa telepono na ito at iniimbak nang lokal, pagkatapos ay ina-upload sa server ng Omi kung saan ito tina-transcribe at ginagawang mga pag-uusap.';
+
+  @override
+  String get syncStepUpload => 'I-sync';
+
+  @override
+  String get syncStepUploadDesc => 'Ipinapadala ang iyong recording sa server ng Omi';
+
+  @override
+  String get syncStepProcess => 'I-transcribe';
+
+  @override
+  String get syncStepProcessDesc => 'Ginagawang conversation ng Omi ang audio';
+
+  @override
+  String get syncStepBackedUp => 'Handa na ang conversation';
+
+  @override
+  String get syncStepBackedUpDesc => 'Hanapin sa ilalim ng Mga Conversation';
+
+  @override
+  String get syncFailureFootnote =>
+      'Kung mabigo ang pagproseso, awtomatikong susubukan muli ang recording sa susunod na sync.';
+
+  @override
+  String get syncStatusConversationCreated => 'Nagawa ang usapan';
+
+  @override
+  String get syncCardUploadingTitle => 'Ina-upload sa Omi';
+
+  @override
+  String get syncCardDownloadingTitle => 'Dina-download mula sa Omi';
+
+  @override
+  String syncCardProgressOf(int current, int total) {
+    return '$current ng $total';
+  }
+
+  @override
+  String get syncStatusOnDevice => 'Naghihintay sa Omi';
+
+  @override
+  String get syncStatusDownloadingFromDevice => 'Dina-download mula sa Omi';
+
+  @override
+  String get newestFirst => 'Pinakabago muna';
+
+  @override
+  String get noSyncedRecordingsYet => 'Wala pang naka-sync na recording';
 }

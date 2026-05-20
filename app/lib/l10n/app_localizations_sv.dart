@@ -1644,7 +1644,7 @@ class AppLocalizationsSv extends AppLocalizations {
   String get finalTouches => 'Sista finishen';
 
   @override
-  String get processing => 'Bearbetar...';
+  String get processing => 'Bearbetar';
 
   @override
   String get features => 'Funktioner';
@@ -8447,7 +8447,7 @@ class AppLocalizationsSv extends AppLocalizations {
   String get manageStorage => 'Hantera lagring';
 
   @override
-  String get safelyBackedUp => 'Säkerhetskopierat till din telefon';
+  String get safelyBackedUp => 'Skapade konversationer';
 
   @override
   String get notYetSynced => 'Inte synkroniserat med din telefon ännu';
@@ -9269,4 +9269,121 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get recapDeleteFailed => 'Det gick inte att radera sammanfattningen. Försök igen senare.';
+
+  @override
+  String get syncStatusBackedUp => 'Säkerhetskopierad';
+
+  @override
+  String get syncStatusBackingUp => 'Säkerhetskopierar…';
+
+  @override
+  String get syncStatusWaiting => 'Väntar på synkronisering';
+
+  @override
+  String get syncStatusRetrying => 'Kunde inte bearbetas — försöker igen';
+
+  @override
+  String get syncStatusFailed => 'Misslyckades — tryck på Försök igen';
+
+  @override
+  String get syncStatusFileUnavailable => 'Filen är inte tillgänglig';
+
+  @override
+  String get noRecordingsYet => 'Inga inspelningar än';
+
+  @override
+  String get syncInProgress => 'Synkronisering pågår';
+
+  @override
+  String get syncStatusUploaded => 'Uppladdad · bearbetas på Omi';
+
+  @override
+  String get deleteWhileProcessingTitle => 'Bearbetas fortfarande';
+
+  @override
+  String get deleteWhileProcessingMessage =>
+      'Den här inspelningen har laddats upp men Omi skapar fortfarande konversationen. Om du tar bort den nu och bearbetningen misslyckas kan den inte återställas. Ta bort ändå?';
+
+  @override
+  String get syncCardAllBackedUp => 'Alla inspelningar synkroniserade';
+
+  @override
+  String syncCardReadyCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count inspelningar redo att synkroniseras',
+      one: '1 inspelning redo att synkroniseras',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get syncCardProcessing => 'Bearbetar i Omi…';
+
+  @override
+  String get syncCardWaitingInternet => 'Väntar på internet';
+
+  @override
+  String syncCardNeedsAttention(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count inspelningar behöver uppmärksamhet',
+      one: '1 inspelning behöver uppmärksamhet',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get syncFlowIntro =>
+      'Inspelningar överförs från din Omi-enhet till den här telefonen och lagras lokalt, och laddas sedan upp till Omis server där de transkriberas och förvandlas till konversationer.';
+
+  @override
+  String get syncStepUpload => 'Synkronisera';
+
+  @override
+  String get syncStepUploadDesc => 'Din inspelning skickas till Omis server';
+
+  @override
+  String get syncStepProcess => 'Transkribera';
+
+  @override
+  String get syncStepProcessDesc => 'Omi gör om ljudet till en konversation';
+
+  @override
+  String get syncStepBackedUp => 'Konversationen är klar';
+
+  @override
+  String get syncStepBackedUpDesc => 'Hittas under Konversationer';
+
+  @override
+  String get syncFailureFootnote =>
+      'Om bearbetningen misslyckas görs ett nytt försök automatiskt vid nästa synkronisering.';
+
+  @override
+  String get syncStatusConversationCreated => 'Samtal skapat';
+
+  @override
+  String get syncCardUploadingTitle => 'Laddar upp till Omi';
+
+  @override
+  String get syncCardDownloadingTitle => 'Laddar ner från Omi';
+
+  @override
+  String syncCardProgressOf(int current, int total) {
+    return '$current av $total';
+  }
+
+  @override
+  String get syncStatusOnDevice => 'Väntar på Omi';
+
+  @override
+  String get syncStatusDownloadingFromDevice => 'Laddar ner från Omi';
+
+  @override
+  String get newestFirst => 'Nyaste först';
+
+  @override
+  String get noSyncedRecordingsYet => 'Inga synkroniserade inspelningar än';
 }

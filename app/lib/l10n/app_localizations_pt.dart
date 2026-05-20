@@ -1635,7 +1635,7 @@ class AppLocalizationsPt extends AppLocalizations {
   String get finalTouches => 'Toques finais';
 
   @override
-  String get processing => 'Processando...';
+  String get processing => 'Processando';
 
   @override
   String get features => 'Funcionalidades';
@@ -8446,7 +8446,7 @@ class AppLocalizationsPt extends AppLocalizations {
   String get manageStorage => 'Gerenciar armazenamento';
 
   @override
-  String get safelyBackedUp => 'Backup seguro no seu telefone';
+  String get safelyBackedUp => 'Conversas criadas';
 
   @override
   String get notYetSynced => 'Ainda não sincronizado com seu telefone';
@@ -9269,4 +9269,121 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get recapDeleteFailed => 'Não foi possível excluir o resumo. Tente novamente mais tarde.';
+
+  @override
+  String get syncStatusBackedUp => 'Backup concluído';
+
+  @override
+  String get syncStatusBackingUp => 'Fazendo backup…';
+
+  @override
+  String get syncStatusWaiting => 'Aguardando para sincronizar';
+
+  @override
+  String get syncStatusRetrying => 'Falha ao processar — tentando novamente';
+
+  @override
+  String get syncStatusFailed => 'Falhou — toque em Tentar novamente';
+
+  @override
+  String get syncStatusFileUnavailable => 'Arquivo indisponível';
+
+  @override
+  String get noRecordingsYet => 'Ainda não há gravações';
+
+  @override
+  String get syncInProgress => 'Sincronização em andamento';
+
+  @override
+  String get syncStatusUploaded => 'Enviado · processando no Omi';
+
+  @override
+  String get deleteWhileProcessingTitle => 'Ainda processando';
+
+  @override
+  String get deleteWhileProcessingMessage =>
+      'Esta gravação foi enviada, mas o Omi ainda está criando a conversa. Se você excluí-la agora e o processamento falhar, não será possível recuperá-la. Excluir mesmo assim?';
+
+  @override
+  String get syncCardAllBackedUp => 'Todas as gravações sincronizadas';
+
+  @override
+  String syncCardReadyCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count gravações prontas para sincronizar',
+      one: '1 gravação pronta para sincronizar',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get syncCardProcessing => 'Processando no Omi…';
+
+  @override
+  String get syncCardWaitingInternet => 'Aguardando conexão';
+
+  @override
+  String syncCardNeedsAttention(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count gravações precisam de atenção',
+      one: '1 gravação precisa de atenção',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get syncFlowIntro =>
+      'As gravações são transferidas do seu dispositivo Omi para este telefone e armazenadas localmente, depois enviadas para o servidor da Omi, onde são transcritas e transformadas em conversas.';
+
+  @override
+  String get syncStepUpload => 'Sincronizar';
+
+  @override
+  String get syncStepUploadDesc => 'A tua gravação é enviada para o servidor da Omi';
+
+  @override
+  String get syncStepProcess => 'Transcrever';
+
+  @override
+  String get syncStepProcessDesc => 'O Omi transforma o áudio em uma conversa';
+
+  @override
+  String get syncStepBackedUp => 'Conversa pronta';
+
+  @override
+  String get syncStepBackedUpDesc => 'Encontre em Conversas';
+
+  @override
+  String get syncFailureFootnote =>
+      'Se o processamento falhar, a gravação será tentada novamente na próxima sincronização.';
+
+  @override
+  String get syncStatusConversationCreated => 'Conversa criada';
+
+  @override
+  String get syncCardUploadingTitle => 'Enviando para Omi';
+
+  @override
+  String get syncCardDownloadingTitle => 'Baixando de Omi';
+
+  @override
+  String syncCardProgressOf(int current, int total) {
+    return '$current de $total';
+  }
+
+  @override
+  String get syncStatusOnDevice => 'Aguardando no Omi';
+
+  @override
+  String get syncStatusDownloadingFromDevice => 'Baixando de Omi';
+
+  @override
+  String get newestFirst => 'Mais recentes primeiro';
+
+  @override
+  String get noSyncedRecordingsYet => 'Ainda não há gravações sincronizadas';
 }

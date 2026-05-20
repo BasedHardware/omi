@@ -1644,7 +1644,7 @@ class AppLocalizationsBe extends AppLocalizations {
   String get finalTouches => 'Канцовыя штахы';
 
   @override
-  String get processing => 'Апрацоўка...';
+  String get processing => 'Апрацоўка';
 
   @override
   String get features => 'Функцыі';
@@ -8469,7 +8469,7 @@ class AppLocalizationsBe extends AppLocalizations {
   String get manageStorage => 'Кіраваць сховішчам';
 
   @override
-  String get safelyBackedUp => 'Бяспечна зарэзервавана на вашым тэлефоне';
+  String get safelyBackedUp => 'Размовы створаны';
 
   @override
   String get notYetSynced => 'Яшчэ не сінхранізавана на вашым тэлефоне';
@@ -9291,4 +9291,125 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String get recapDeleteFailed => 'Не атрымалася выдаліць агляд. Паспрабуйце пазней.';
+
+  @override
+  String get syncStatusBackedUp => 'Рэзервова захавана';
+
+  @override
+  String get syncStatusBackingUp => 'Рэзервнае капіраванне…';
+
+  @override
+  String get syncStatusWaiting => 'Чакае сінхранізацыі';
+
+  @override
+  String get syncStatusRetrying => 'Не атрымалася апрацаваць — паўтор';
+
+  @override
+  String get syncStatusFailed => 'Памылка — націсніце «Паўтарыць»';
+
+  @override
+  String get syncStatusFileUnavailable => 'Файл недаступны';
+
+  @override
+  String get noRecordingsYet => 'Запісаў пакуль няма';
+
+  @override
+  String get syncInProgress => 'Сінхранізацыя выконваецца';
+
+  @override
+  String get syncStatusUploaded => 'Запампавана · апрацоўка ў Omi';
+
+  @override
+  String get deleteWhileProcessingTitle => 'Усё яшчэ апрацоўваецца';
+
+  @override
+  String get deleteWhileProcessingMessage =>
+      'Гэты запіс запампаваны, але Omi яшчэ стварае размову. Калі выдаліць зараз і апрацоўка не атрымаецца, аднавіць будзе немагчыма. Усё роўна выдаліць?';
+
+  @override
+  String get syncCardAllBackedUp => 'Усе запісы сінхранізаваны';
+
+  @override
+  String syncCardReadyCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count запісу гатовыя да сінхранізацыі',
+      many: '$count запісаў гатовыя да сінхранізацыі',
+      few: '$count запісы гатовыя да сінхранізацыі',
+      one: '1 запіс гатовы да сінхранізацыі',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get syncCardProcessing => 'Апрацоўка ў Omi…';
+
+  @override
+  String get syncCardWaitingInternet => 'Чаканне інтэрнэту';
+
+  @override
+  String syncCardNeedsAttention(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count запісу патрабуе ўвагі',
+      many: '$count запісаў патрабуюць увагі',
+      few: '$count запісы патрабуюць увагі',
+      one: '$count запіс патрабуе ўвагі',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get syncFlowIntro =>
+      'Запісы перадаюцца з вашай прылады Omi на гэты тэлефон і захоўваюцца лакальна, затым загружаюцца на сервер Omi, дзе яны транскрыбуюцца і ператвараюцца ў размовы.';
+
+  @override
+  String get syncStepUpload => 'Сінхранізацыя';
+
+  @override
+  String get syncStepUploadDesc => 'Ваш запіс адпраўляецца на сервер Omi';
+
+  @override
+  String get syncStepProcess => 'Транскрыпцыя';
+
+  @override
+  String get syncStepProcessDesc => 'Omi ператварае аўдыя ў размову';
+
+  @override
+  String get syncStepBackedUp => 'Размова гатовая';
+
+  @override
+  String get syncStepBackedUpDesc => 'Знайдзіце яе ў раздзеле «Разнамовы»';
+
+  @override
+  String get syncFailureFootnote =>
+      'Калі апрацоўка не атрымаецца, запіс будзе аўтаматычна паўторны падчас наступнай сінхранізацыі.';
+
+  @override
+  String get syncStatusConversationCreated => 'Размова створана';
+
+  @override
+  String get syncCardUploadingTitle => 'Запампоўка ў Omi';
+
+  @override
+  String get syncCardDownloadingTitle => 'Спампоўка з Omi';
+
+  @override
+  String syncCardProgressOf(int current, int total) {
+    return '$current з $total';
+  }
+
+  @override
+  String get syncStatusOnDevice => 'Чакае на Omi';
+
+  @override
+  String get syncStatusDownloadingFromDevice => 'Спампоўка з Omi';
+
+  @override
+  String get newestFirst => 'Спачатку новыя';
+
+  @override
+  String get noSyncedRecordingsYet => 'Пакуль няма сінхранізаваных запісаў';
 }

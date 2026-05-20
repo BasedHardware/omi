@@ -91,10 +91,11 @@ class WalListItem extends StatelessWidget {
                 key: Key(wal.id),
                 direction: wal.isSyncing ? DismissDirection.none : DismissDirection.endToStart,
                 confirmDismiss: (direction) {
+                  final uploading = wal.syncDisplayState == WalSyncDisplayState.uploaded;
                   return OmiConfirmDialog.show(
                     context,
-                    title: context.l10n.deleteRecording,
-                    message: context.l10n.thisCannotBeUndone,
+                    title: uploading ? context.l10n.deleteWhileProcessingTitle : context.l10n.deleteRecording,
+                    message: uploading ? context.l10n.deleteWhileProcessingMessage : context.l10n.thisCannotBeUndone,
                     confirmLabel: context.l10n.delete,
                     confirmColor: Colors.red,
                   );
@@ -238,6 +239,8 @@ class WalListItem extends StatelessWidget {
                             )
                           else if (hasError)
                             _buildStatusChip(context.l10n.failedStatus, Colors.red)
+                          else if (wal.status == WalStatus.uploaded)
+                            _buildStatusChip(context.l10n.processing, const Color(0xFF4DA3FF))
                           else if (wal.status == WalStatus.corrupted)
                             _buildStatusChip(context.l10n.corruptedStatus, Colors.grey),
                         ],
@@ -1414,8 +1417,8 @@ class _ManageStorageSheet extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final syncedCount = provider.syncedWals.length;
-    final pendingCount = provider.pendingWals.length;
-    final totalCount = provider.allWals.length;
+    final pendingCount = provider.pendingDeletableWals.length;
+    final totalCount = syncedCount + pendingCount;
 
     return Container(
       decoration: const BoxDecoration(

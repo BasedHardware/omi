@@ -1640,7 +1640,7 @@ class AppLocalizationsLt extends AppLocalizations {
   String get finalTouches => 'Paskutiniai patobulinimai';
 
   @override
-  String get processing => 'Apdorojama...';
+  String get processing => 'Apdorojama';
 
   @override
   String get features => 'Funkcijos';
@@ -8452,7 +8452,7 @@ class AppLocalizationsLt extends AppLocalizations {
   String get manageStorage => 'Tvarkyti saugyklą';
 
   @override
-  String get safelyBackedUp => 'Saugiai nukopijuota į jūsų telefoną';
+  String get safelyBackedUp => 'Sukurti pokalbiai';
 
   @override
   String get notYetSynced => 'Dar nesinchronizuota su jūsų telefonu';
@@ -9274,4 +9274,125 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get recapDeleteFailed => 'Nepavyko ištrinti suvestinės. Bandykite vėliau.';
+
+  @override
+  String get syncStatusBackedUp => 'Sukurta atsarginė kopija';
+
+  @override
+  String get syncStatusBackingUp => 'Kuriama atsarginė kopija…';
+
+  @override
+  String get syncStatusWaiting => 'Laukiama sinchronizavimo';
+
+  @override
+  String get syncStatusRetrying => 'Nepavyko apdoroti — bandoma dar kartą';
+
+  @override
+  String get syncStatusFailed => 'Nepavyko — palieskite Bandyti dar kartą';
+
+  @override
+  String get syncStatusFileUnavailable => 'Failas nepasiekiamas';
+
+  @override
+  String get noRecordingsYet => 'Įrašų dar nėra';
+
+  @override
+  String get syncInProgress => 'Vyksta sinchronizavimas';
+
+  @override
+  String get syncStatusUploaded => 'Įkelta · apdorojama Omi';
+
+  @override
+  String get deleteWhileProcessingTitle => 'Vis dar apdorojama';
+
+  @override
+  String get deleteWhileProcessingMessage =>
+      'Šis įrašas įkeltas, bet Omi vis dar kuria pokalbį. Jei ištrinsite dabar ir apdorojimas nepavyks, jo nebus galima atkurti. Vis tiek ištrinti?';
+
+  @override
+  String get syncCardAllBackedUp => 'Visi įrašai sinchronizuoti';
+
+  @override
+  String syncCardReadyCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count įrašų paruošta sinchronizuoti',
+      many: '$count įrašo paruošta sinchronizuoti',
+      few: '$count įrašai paruošti sinchronizuoti',
+      one: '1 įrašas paruoštas sinchronizuoti',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get syncCardProcessing => 'Apdorojama Omi…';
+
+  @override
+  String get syncCardWaitingInternet => 'Laukiama interneto';
+
+  @override
+  String syncCardNeedsAttention(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count įrašų reikia dėmesio',
+      many: '$count įrašo reikia dėmesio',
+      few: '$count įrašams reikia dėmesio',
+      one: '$count įrašui reikia dėmesio',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get syncFlowIntro =>
+      'Įrašai perduodami iš jūsų Omi įrenginio į šį telefoną ir saugomi vietoje, paskui įkeliami į Omi serverį, kur jie transkribuojami ir paverčiami pokalbiais.';
+
+  @override
+  String get syncStepUpload => 'Sinchronizuoti';
+
+  @override
+  String get syncStepUploadDesc => 'Jūsų įrašas siunčiamas į Omi serverį';
+
+  @override
+  String get syncStepProcess => 'Transkripcija';
+
+  @override
+  String get syncStepProcessDesc => 'Omi paverčia garsą pokalbiu';
+
+  @override
+  String get syncStepBackedUp => 'Pokalbis paruoštas';
+
+  @override
+  String get syncStepBackedUpDesc => 'Rasite skiltyje Pokalbiai';
+
+  @override
+  String get syncFailureFootnote =>
+      'Jei apdorojimas nepavyksta, įrašas automatiškai pakartojamas kitos sinchronizacijos metu.';
+
+  @override
+  String get syncStatusConversationCreated => 'Pokalbis sukurtas';
+
+  @override
+  String get syncCardUploadingTitle => 'Įkeliama į Omi';
+
+  @override
+  String get syncCardDownloadingTitle => 'Atsisiunčiama iš Omi';
+
+  @override
+  String syncCardProgressOf(int current, int total) {
+    return '$current iš $total';
+  }
+
+  @override
+  String get syncStatusOnDevice => 'Laukia Omi';
+
+  @override
+  String get syncStatusDownloadingFromDevice => 'Atsisiunčiama iš Omi';
+
+  @override
+  String get newestFirst => 'Pirma naujausi';
+
+  @override
+  String get noSyncedRecordingsYet => 'Sinchronizuotų įrašų dar nėra';
 }

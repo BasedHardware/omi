@@ -1632,7 +1632,7 @@ class AppLocalizationsHe extends AppLocalizations {
   String get finalTouches => 'המגעות הסופיות';
 
   @override
-  String get processing => 'מעבד...';
+  String get processing => 'מעבד';
 
   @override
   String get features => 'תכונות';
@@ -8375,7 +8375,7 @@ class AppLocalizationsHe extends AppLocalizations {
   String get manageStorage => 'נהל אחסון';
 
   @override
-  String get safelyBackedUp => 'גיבוי בטוח בטלפון שלך';
+  String get safelyBackedUp => 'שיחות נוצרו';
 
   @override
   String get notYetSynced => 'עדיין לא סונכרן לטלפון שלך';
@@ -9192,4 +9192,124 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get recapDeleteFailed => 'לא ניתן היה למחוק את הסיכום. נסה שוב מאוחר יותר.';
+
+  @override
+  String get syncStatusBackedUp => 'גובה';
+
+  @override
+  String get syncStatusBackingUp => 'מגבה…';
+
+  @override
+  String get syncStatusWaiting => 'ממתין לסנכרון';
+
+  @override
+  String get syncStatusRetrying => 'העיבוד נכשל — מנסה שוב';
+
+  @override
+  String get syncStatusFailed => 'נכשל — הקש על נסה שוב';
+
+  @override
+  String get syncStatusFileUnavailable => 'הקובץ אינו זמין';
+
+  @override
+  String get noRecordingsYet => 'אין הקלטות עדיין';
+
+  @override
+  String get syncInProgress => 'מתבצע סנכרון';
+
+  @override
+  String get syncStatusUploaded => 'הועלה · בעיבוד ב-Omi';
+
+  @override
+  String get deleteWhileProcessingTitle => 'עדיין בעיבוד';
+
+  @override
+  String get deleteWhileProcessingMessage =>
+      'ההקלטה הזו הועלתה אך Omi עדיין יוצר את השיחה. אם תמחק אותה עכשיו והעיבוד ייכשל, לא יהיה ניתן לשחזר אותה. למחוק בכל זאת?';
+
+  @override
+  String get syncCardAllBackedUp => 'כל ההקלטות סונכרנו';
+
+  @override
+  String syncCardReadyCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count הקלטות מוכנות לסנכרון',
+      many: '$count הקלטות מוכנות לסנכרון',
+      two: '2 הקלטות מוכנות לסנכרון',
+      one: 'הקלטה אחת מוכנה לסנכרון',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get syncCardProcessing => 'בעיבוד ב-Omi…';
+
+  @override
+  String get syncCardWaitingInternet => 'ממתין לאינטרנט';
+
+  @override
+  String syncCardNeedsAttention(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count הקלטות דורשות תשומת לב',
+      many: '$count הקלטות דורשות תשומת לב',
+      two: '2 הקלטות דורשות תשומת לב',
+      one: 'הקלטה אחת דורשת תשומת לב',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get syncFlowIntro =>
+      'ההקלטות מועברות ממכשיר Omi שלך לטלפון הזה ונשמרות מקומית, ולאחר מכן מועלות לשרת של Omi שם הן מתומללות והופכות לשיחות.';
+
+  @override
+  String get syncStepUpload => 'סנכרון';
+
+  @override
+  String get syncStepUploadDesc => 'ההקלטה שלך נשלחת לשרת של Omi';
+
+  @override
+  String get syncStepProcess => 'תמלול';
+
+  @override
+  String get syncStepProcessDesc => 'Omi הופך את האודיו לשיחה';
+
+  @override
+  String get syncStepBackedUp => 'השיחה מוכנה';
+
+  @override
+  String get syncStepBackedUpDesc => 'תמצא אותה תחת שיחות';
+
+  @override
+  String get syncFailureFootnote => 'אם העיבוד נכשל, ההקלטה תנוסה שוב באופן אוטומטי בסנכרון הבא.';
+
+  @override
+  String get syncStatusConversationCreated => 'השיחה נוצרה';
+
+  @override
+  String get syncCardUploadingTitle => 'מעלה ל-Omi';
+
+  @override
+  String get syncCardDownloadingTitle => 'מוריד מ-Omi';
+
+  @override
+  String syncCardProgressOf(int current, int total) {
+    return '$current מתוך $total';
+  }
+
+  @override
+  String get syncStatusOnDevice => 'ממתין ב-Omi';
+
+  @override
+  String get syncStatusDownloadingFromDevice => 'מוריד מ-Omi';
+
+  @override
+  String get newestFirst => 'החדשות ביותר תחילה';
+
+  @override
+  String get noSyncedRecordingsYet => 'אין עדיין הקלטות מסונכרנות';
 }

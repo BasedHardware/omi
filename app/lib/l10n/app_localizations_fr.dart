@@ -1654,7 +1654,7 @@ class AppLocalizationsFr extends AppLocalizations {
   String get finalTouches => 'Touches finales';
 
   @override
-  String get processing => 'Traitement...';
+  String get processing => 'Traitement';
 
   @override
   String get features => 'Fonctionnalités';
@@ -8522,7 +8522,7 @@ class AppLocalizationsFr extends AppLocalizations {
   String get manageStorage => 'Gérer le stockage';
 
   @override
-  String get safelyBackedUp => 'Sauvegardé sur votre téléphone';
+  String get safelyBackedUp => 'Conversations créées';
 
   @override
   String get notYetSynced => 'Pas encore synchronisé avec votre téléphone';
@@ -9348,4 +9348,121 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get recapDeleteFailed => 'Impossible de supprimer le résumé. Réessayez plus tard.';
+
+  @override
+  String get syncStatusBackedUp => 'Sauvegardé';
+
+  @override
+  String get syncStatusBackingUp => 'Sauvegarde…';
+
+  @override
+  String get syncStatusWaiting => 'En attente de synchronisation';
+
+  @override
+  String get syncStatusRetrying => 'Échec du traitement — nouvelle tentative';
+
+  @override
+  String get syncStatusFailed => 'Échec — appuyez sur Réessayer';
+
+  @override
+  String get syncStatusFileUnavailable => 'Fichier indisponible';
+
+  @override
+  String get noRecordingsYet => 'Aucun enregistrement pour l\'instant';
+
+  @override
+  String get syncInProgress => 'Synchronisation en cours';
+
+  @override
+  String get syncStatusUploaded => 'Envoyé · traitement sur Omi';
+
+  @override
+  String get deleteWhileProcessingTitle => 'Traitement en cours';
+
+  @override
+  String get deleteWhileProcessingMessage =>
+      'Cet enregistrement a été envoyé mais Omi crée encore la conversation. Si vous le supprimez maintenant et que le traitement échoue, il sera irrécupérable. Supprimer quand même ?';
+
+  @override
+  String get syncCardAllBackedUp => 'Tous les enregistrements synchronisés';
+
+  @override
+  String syncCardReadyCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count enregistrements prêts à synchroniser',
+      one: '1 enregistrement prêt à synchroniser',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get syncCardProcessing => 'Traitement sur Omi…';
+
+  @override
+  String get syncCardWaitingInternet => 'En attente d\'Internet';
+
+  @override
+  String syncCardNeedsAttention(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count enregistrements à vérifier',
+      one: '1 enregistrement à vérifier',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get syncFlowIntro =>
+      'Les enregistrements sont transférés de votre appareil Omi vers ce téléphone et stockés localement, puis téléversés sur le serveur d\'Omi où ils sont transcrits et convertis en conversations.';
+
+  @override
+  String get syncStepUpload => 'Synchroniser';
+
+  @override
+  String get syncStepUploadDesc => 'Votre enregistrement est envoyé au serveur d\'Omi';
+
+  @override
+  String get syncStepProcess => 'Transcription';
+
+  @override
+  String get syncStepProcessDesc => 'Omi transforme l\'audio en conversation';
+
+  @override
+  String get syncStepBackedUp => 'Conversation prête';
+
+  @override
+  String get syncStepBackedUpDesc => 'Retrouvez-la dans Conversations';
+
+  @override
+  String get syncFailureFootnote =>
+      'En cas d\'échec du traitement, l\'enregistrement est réessayé automatiquement lors de la prochaine synchronisation.';
+
+  @override
+  String get syncStatusConversationCreated => 'Conversation créée';
+
+  @override
+  String get syncCardUploadingTitle => 'Envoi vers Omi';
+
+  @override
+  String get syncCardDownloadingTitle => 'Téléchargement depuis Omi';
+
+  @override
+  String syncCardProgressOf(int current, int total) {
+    return '$current sur $total';
+  }
+
+  @override
+  String get syncStatusOnDevice => 'En attente sur Omi';
+
+  @override
+  String get syncStatusDownloadingFromDevice => 'Téléchargement depuis Omi';
+
+  @override
+  String get newestFirst => 'Plus récents d\'abord';
+
+  @override
+  String get noSyncedRecordingsYet => 'Aucun enregistrement synchronisé pour l\'instant';
 }

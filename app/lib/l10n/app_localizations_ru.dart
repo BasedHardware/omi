@@ -1648,7 +1648,7 @@ class AppLocalizationsRu extends AppLocalizations {
   String get finalTouches => 'Завершающие штрихи';
 
   @override
-  String get processing => 'Обработка...';
+  String get processing => 'Обработка';
 
   @override
   String get features => 'Возможности';
@@ -8471,7 +8471,7 @@ class AppLocalizationsRu extends AppLocalizations {
   String get manageStorage => 'Управление хранилищем';
 
   @override
-  String get safelyBackedUp => 'Безопасно сохранено на вашем телефоне';
+  String get safelyBackedUp => 'Созданные беседы';
 
   @override
   String get notYetSynced => 'Ещё не синхронизировано с вашим телефоном';
@@ -9294,4 +9294,125 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get recapDeleteFailed => 'Не удалось удалить сводку. Повторите попытку позже.';
+
+  @override
+  String get syncStatusBackedUp => 'Сохранено в облаке';
+
+  @override
+  String get syncStatusBackingUp => 'Резервное копирование…';
+
+  @override
+  String get syncStatusWaiting => 'Ожидает синхронизации';
+
+  @override
+  String get syncStatusRetrying => 'Не удалось обработать — повтор';
+
+  @override
+  String get syncStatusFailed => 'Ошибка — нажмите «Повторить»';
+
+  @override
+  String get syncStatusFileUnavailable => 'Файл недоступен';
+
+  @override
+  String get noRecordingsYet => 'Записей пока нет';
+
+  @override
+  String get syncInProgress => 'Идёт синхронизация';
+
+  @override
+  String get syncStatusUploaded => 'Загружено · обработка в Omi';
+
+  @override
+  String get deleteWhileProcessingTitle => 'Ещё обрабатывается';
+
+  @override
+  String get deleteWhileProcessingMessage =>
+      'Эта запись загружена, но Omi ещё создаёт разговор. Если удалить её сейчас и обработка не удастся, восстановить будет невозможно. Всё равно удалить?';
+
+  @override
+  String get syncCardAllBackedUp => 'Все записи синхронизированы';
+
+  @override
+  String syncCardReadyCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count записи готовы к синхронизации',
+      many: '$count записей готовы к синхронизации',
+      few: '$count записи готовы к синхронизации',
+      one: '1 запись готова к синхронизации',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get syncCardProcessing => 'Обработка в Omi…';
+
+  @override
+  String get syncCardWaitingInternet => 'Ожидание интернета';
+
+  @override
+  String syncCardNeedsAttention(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count записи требуют внимания',
+      many: '$count записей требуют внимания',
+      few: '$count записи требуют внимания',
+      one: '$count запись требует внимания',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get syncFlowIntro =>
+      'Записи передаются с вашего устройства Omi на этот телефон и сохраняются локально, затем загружаются на сервер Omi, где они расшифровываются и превращаются в разговоры.';
+
+  @override
+  String get syncStepUpload => 'Синхронизация';
+
+  @override
+  String get syncStepUploadDesc => 'Ваша запись отправляется на сервер Omi';
+
+  @override
+  String get syncStepProcess => 'Расшифровка';
+
+  @override
+  String get syncStepProcessDesc => 'Omi превращает аудио в беседу';
+
+  @override
+  String get syncStepBackedUp => 'Беседа готова';
+
+  @override
+  String get syncStepBackedUpDesc => 'Найдёте её в разделе Беседы';
+
+  @override
+  String get syncFailureFootnote =>
+      'Если обработка не удастся, запись будет автоматически повторена при следующей синхронизации.';
+
+  @override
+  String get syncStatusConversationCreated => 'Разговор создан';
+
+  @override
+  String get syncCardUploadingTitle => 'Загрузка в Omi';
+
+  @override
+  String get syncCardDownloadingTitle => 'Загрузка с Omi';
+
+  @override
+  String syncCardProgressOf(int current, int total) {
+    return '$current из $total';
+  }
+
+  @override
+  String get syncStatusOnDevice => 'Ожидает на Omi';
+
+  @override
+  String get syncStatusDownloadingFromDevice => 'Загрузка с Omi';
+
+  @override
+  String get newestFirst => 'Сначала новые';
+
+  @override
+  String get noSyncedRecordingsYet => 'Пока нет синхронизированных записей';
 }

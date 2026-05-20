@@ -1644,7 +1644,7 @@ class AppLocalizationsPl extends AppLocalizations {
   String get finalTouches => 'Końcowe poprawki';
 
   @override
-  String get processing => 'Przetwarzanie...';
+  String get processing => 'Przetwarzanie';
 
   @override
   String get features => 'Funkcje';
@@ -8462,7 +8462,7 @@ class AppLocalizationsPl extends AppLocalizations {
   String get manageStorage => 'Zarządzaj pamięcią';
 
   @override
-  String get safelyBackedUp => 'Bezpiecznie zapisane na Twoim telefonie';
+  String get safelyBackedUp => 'Utworzone rozmowy';
 
   @override
   String get notYetSynced => 'Jeszcze nie zsynchronizowano z Twoim telefonem';
@@ -9285,4 +9285,125 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get recapDeleteFailed => 'Nie udało się usunąć podsumowania. Spróbuj ponownie później.';
+
+  @override
+  String get syncStatusBackedUp => 'Utworzono kopię';
+
+  @override
+  String get syncStatusBackingUp => 'Tworzenie kopii…';
+
+  @override
+  String get syncStatusWaiting => 'Oczekuje na synchronizację';
+
+  @override
+  String get syncStatusRetrying => 'Przetwarzanie nie powiodło się — ponawianie';
+
+  @override
+  String get syncStatusFailed => 'Niepowodzenie — naciśnij Ponów';
+
+  @override
+  String get syncStatusFileUnavailable => 'Plik niedostępny';
+
+  @override
+  String get noRecordingsYet => 'Brak nagrań';
+
+  @override
+  String get syncInProgress => 'Trwa synchronizacja';
+
+  @override
+  String get syncStatusUploaded => 'Przesłano · przetwarzanie w Omi';
+
+  @override
+  String get deleteWhileProcessingTitle => 'Wciąż przetwarzane';
+
+  @override
+  String get deleteWhileProcessingMessage =>
+      'To nagranie zostało przesłane, ale Omi nadal tworzy rozmowę. Jeśli usuniesz je teraz, a przetwarzanie się nie powiedzie, nie będzie można go odzyskać. Usunąć mimo to?';
+
+  @override
+  String get syncCardAllBackedUp => 'Wszystkie nagrania zsynchronizowane';
+
+  @override
+  String syncCardReadyCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count nagrania gotowych do synchronizacji',
+      many: '$count nagrań gotowych do synchronizacji',
+      few: '$count nagrania gotowe do synchronizacji',
+      one: '1 nagranie gotowe do synchronizacji',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get syncCardProcessing => 'Przetwarzanie w Omi…';
+
+  @override
+  String get syncCardWaitingInternet => 'Oczekiwanie na internet';
+
+  @override
+  String syncCardNeedsAttention(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count nagrania wymaga uwagi',
+      many: '$count nagrań wymaga uwagi',
+      few: '$count nagrania wymagają uwagi',
+      one: '1 nagranie wymaga uwagi',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get syncFlowIntro =>
+      'Nagrania są przesyłane z urządzenia Omi do tego telefonu i zapisywane lokalnie, a następnie wysyłane na serwer Omi, gdzie są transkrybowane i zamieniane w rozmowy.';
+
+  @override
+  String get syncStepUpload => 'Synchronizacja';
+
+  @override
+  String get syncStepUploadDesc => 'Twoje nagranie jest wysyłane na serwer Omi';
+
+  @override
+  String get syncStepProcess => 'Transkrypcja';
+
+  @override
+  String get syncStepProcessDesc => 'Omi zamienia dźwięk w rozmowę';
+
+  @override
+  String get syncStepBackedUp => 'Rozmowa gotowa';
+
+  @override
+  String get syncStepBackedUpDesc => 'Znajdziesz ją w Rozmowy';
+
+  @override
+  String get syncFailureFootnote =>
+      'Jeśli przetwarzanie się nie powiedzie, nagranie zostanie automatycznie ponowione przy kolejnej synchronizacji.';
+
+  @override
+  String get syncStatusConversationCreated => 'Rozmowa utworzona';
+
+  @override
+  String get syncCardUploadingTitle => 'Przesyłanie do Omi';
+
+  @override
+  String get syncCardDownloadingTitle => 'Pobieranie z Omi';
+
+  @override
+  String syncCardProgressOf(int current, int total) {
+    return '$current z $total';
+  }
+
+  @override
+  String get syncStatusOnDevice => 'Czeka na Omi';
+
+  @override
+  String get syncStatusDownloadingFromDevice => 'Pobieranie z Omi';
+
+  @override
+  String get newestFirst => 'Najpierw najnowsze';
+
+  @override
+  String get noSyncedRecordingsYet => 'Brak zsynchronizowanych nagrań';
 }

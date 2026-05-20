@@ -1643,7 +1643,7 @@ class AppLocalizationsMr extends AppLocalizations {
   String get finalTouches => 'अंतिम स्पर्श';
 
   @override
-  String get processing => 'प्रक्रिया करत आहे...';
+  String get processing => 'प्रक्रिया सुरू';
 
   @override
   String get features => 'वैशिष्ट्ये';
@@ -8455,7 +8455,7 @@ class AppLocalizationsMr extends AppLocalizations {
   String get manageStorage => 'स्टोरेज व्यवस्थापित करा';
 
   @override
-  String get safelyBackedUp => 'तुमच्या फोनमध्ये सुरक्षितपणे बॅकअप केले गेले';
+  String get safelyBackedUp => 'तयार झालेली संभाषणे';
 
   @override
   String get notYetSynced => 'अद्याप तुमच्या फोनशी सिंक केले नाही';
@@ -9276,4 +9276,121 @@ class AppLocalizationsMr extends AppLocalizations {
 
   @override
   String get recapDeleteFailed => 'रीकॅप हटवता आले नाही. नंतर पुन्हा प्रयत्न करा.';
+
+  @override
+  String get syncStatusBackedUp => 'बॅकअप झाला';
+
+  @override
+  String get syncStatusBackingUp => 'बॅकअप होत आहे…';
+
+  @override
+  String get syncStatusWaiting => 'सिंक होण्याची प्रतीक्षा';
+
+  @override
+  String get syncStatusRetrying => 'प्रक्रिया करता आली नाही — पुन्हा प्रयत्न';
+
+  @override
+  String get syncStatusFailed => 'अयशस्वी — Retry दाबा';
+
+  @override
+  String get syncStatusFileUnavailable => 'फाइल उपलब्ध नाही';
+
+  @override
+  String get noRecordingsYet => 'अद्याप कोणतीही रेकॉर्डिंग नाही';
+
+  @override
+  String get syncInProgress => 'सिंक सुरू आहे';
+
+  @override
+  String get syncStatusUploaded => 'अपलोड झाले · Omi वर प्रक्रिया सुरू';
+
+  @override
+  String get deleteWhileProcessingTitle => 'अद्याप प्रक्रिया सुरू';
+
+  @override
+  String get deleteWhileProcessingMessage =>
+      'ही रेकॉर्डिंग अपलोड झाली आहे पण Omi अद्याप संभाषण तयार करत आहे. आता हटवल्यास आणि प्रक्रिया अयशस्वी झाल्यास ती परत मिळवता येणार नाही. तरीही हटवायचे?';
+
+  @override
+  String get syncCardAllBackedUp => 'सर्व रेकॉर्डिंग सिंक झाली';
+
+  @override
+  String syncCardReadyCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count रेकॉर्डिंग सिंकसाठी तयार',
+      one: '1 रेकॉर्डिंग सिंकसाठी तयार',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get syncCardProcessing => 'Omi वर प्रक्रिया सुरू…';
+
+  @override
+  String get syncCardWaitingInternet => 'इंटरनेटची प्रतीक्षा';
+
+  @override
+  String syncCardNeedsAttention(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count रेकॉर्डिंगकडे लक्ष देणे आवश्यक',
+      one: '1 रेकॉर्डिंगकडे लक्ष देणे आवश्यक',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get syncFlowIntro =>
+      'रेकॉर्डिंग्ज तुमच्या Omi डिव्हाइसवरून या फोनवर हस्तांतरित होतात आणि स्थानिकरित्या साठवली जातात, नंतर Omi च्या सर्व्हरवर अपलोड केली जातात जिथे त्यांचे ट्रान्सक्रिप्शन केले जाते आणि संभाषणांमध्ये रूपांतर केले जाते.';
+
+  @override
+  String get syncStepUpload => 'सिंक';
+
+  @override
+  String get syncStepUploadDesc => 'तुमचे रेकॉर्डिंग Omi च्या सर्व्हरवर पाठवले जाते';
+
+  @override
+  String get syncStepProcess => 'ट्रान्स्क्राइब';
+
+  @override
+  String get syncStepProcessDesc => 'Omi ऑडिओचे संभाषणात रूपांतर करते';
+
+  @override
+  String get syncStepBackedUp => 'संभाषण तयार';
+
+  @override
+  String get syncStepBackedUpDesc => 'ते संभाषण मध्ये सापडेल';
+
+  @override
+  String get syncFailureFootnote =>
+      'प्रक्रिया अयशस्वी झाल्यास, पुढील सिंकमध्ये रेकॉर्डिंग आपोआप पुन्हा प्रयत्न केले जाते.';
+
+  @override
+  String get syncStatusConversationCreated => 'संभाषण तयार झाले';
+
+  @override
+  String get syncCardUploadingTitle => 'Omi वर अपलोड होत आहे';
+
+  @override
+  String get syncCardDownloadingTitle => 'Omi वरून डाउनलोड होत आहे';
+
+  @override
+  String syncCardProgressOf(int current, int total) {
+    return '$total पैकी $current';
+  }
+
+  @override
+  String get syncStatusOnDevice => 'Omi वर प्रतीक्षेत';
+
+  @override
+  String get syncStatusDownloadingFromDevice => 'Omi वरून डाउनलोड होत आहे';
+
+  @override
+  String get newestFirst => 'नवीन आधी';
+
+  @override
+  String get noSyncedRecordingsYet => 'अद्याप कोणतीही सिंक केलेली रेकॉर्डिंग नाही';
 }

@@ -6,7 +6,6 @@ import 'package:omi/backend/preferences.dart';
 import 'package:omi/models/sync_state.dart';
 import 'package:omi/pages/conversations/local_storage_page.dart';
 import 'package:omi/pages/conversations/private_cloud_sync_page.dart';
-import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/sync_provider.dart';
 import 'package:omi/providers/user_provider.dart';
 import 'package:omi/services/wals.dart';
@@ -24,22 +23,24 @@ class AutoSyncPage extends StatefulWidget {
 }
 
 class _AutoSyncPageState extends State<AutoSyncPage> {
+  WalDisplayFilter _filter = WalDisplayFilter.all;
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<SyncProvider>().refreshWals();
+      SyncReconciler.instance.poke();
     });
   }
 
   @override
   Widget build(BuildContext context) {
-    return Consumer3<SyncProvider, DeviceProvider, UserProvider>(
-      builder: (context, syncProvider, deviceProvider, userProvider, _) {
+    return Consumer2<SyncProvider, UserProvider>(
+      builder: (context, syncProvider, userProvider, _) {
         final syncState = syncProvider.syncState;
         final pendingWals = syncProvider.pendingWals;
         final syncedWals = syncProvider.syncedWals;
-        final isDeviceConnected = deviceProvider.isConnected;
 
         return Scaffold(
           backgroundColor: const Color(0xFF0D0D0D),
@@ -55,12 +56,12 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
             ),
             actions: [
               IconButton(
-                icon: const Icon(Icons.info_outline, color: Color(0xFF8E8E93), size: 22),
+                icon: const FaIcon(FontAwesomeIcons.circleInfo, color: Color(0xFF8E8E93), size: 18),
                 onPressed: () => _showInfoSheet(context),
               ),
               if (pendingWals.isNotEmpty || syncedWals.isNotEmpty)
                 IconButton(
-                  icon: const Icon(Icons.more_horiz, color: Color(0xFF8E8E93), size: 22),
+                  icon: const FaIcon(FontAwesomeIcons.ellipsis, color: Color(0xFF8E8E93), size: 18),
                   onPressed: () => _showManageStorageSheet(context, syncProvider),
                 ),
             ],
@@ -69,7 +70,7 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
             padding: const EdgeInsets.symmetric(horizontal: 20),
             children: [
               const SizedBox(height: 8),
-              _buildPipelineCard(syncState, pendingWals, isDeviceConnected, syncProvider),
+              _buildOverallStatusCard(syncProvider, syncState),
               if (syncProvider.syncCompleted && syncProvider.syncedConversationsPointers.isNotEmpty) ...[
                 const SizedBox(height: 16),
                 _buildConversationsCard(syncProvider),
@@ -80,11 +81,13 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
               ],
               const SizedBox(height: 32),
               _buildStorageSettings(userProvider),
-              if (pendingWals.isNotEmpty || syncedWals.isNotEmpty) ...[
+              if (syncProvider.displaySortedWals.isNotEmpty) ...[
                 const SizedBox(height: 32),
+                _buildRecordingsHeader(syncProvider),
+                const SizedBox(height: 10),
                 _buildFilterChips(syncProvider),
-                const SizedBox(height: 16),
-                _buildFilteredWalList(syncProvider),
+                const SizedBox(height: 12),
+                _buildUnifiedWalList(syncProvider),
               ],
               const SizedBox(height: 48),
             ],
@@ -95,278 +98,130 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
   }
 
   // ─────────────────────────────────────────
-  // Pipeline card
+  // Overall status card
   // ─────────────────────────────────────────
 
-  Widget _buildPipelineCard(
-    SyncState syncState,
-    List<Wal> pendingWals,
-    bool isDeviceConnected,
-    SyncProvider syncProvider,
-  ) {
-    final isSyncing = syncState.isSyncing || syncState.isFetchingConversations;
-    final hasPending = pendingWals.isNotEmpty;
-    final (deviceTier, phoneTier, cloudTier) = _tierStates(syncState, isSyncing, pendingWals, isDeviceConnected);
+  Widget _buildOverallStatusCard(SyncProvider p, SyncState s) {
+    final l = context.l10n;
+    final attention = p.needsAttentionWalsCount;
+    final uploaded = p.uploadedWals.length;
+    final readyToBackUp = p.displaySortedWals
+        .where((w) =>
+            w.syncDisplayState == WalSyncDisplayState.waiting || w.syncDisplayState == WalSyncDisplayState.retrying)
+        .length;
+    final hasAnyRecording = p.displaySortedWals.isNotEmpty;
+
+    final isActive = s.isSyncing || s.isFetchingConversations;
+    final bool showSpinner = isActive || uploaded > 0;
+
+    String title;
+    String? progressText;
+    Color titleColor = Colors.white;
+    Widget? action;
+
+    if (isActive) {
+      switch (s.phase) {
+        case SyncPhase.downloadingFromDevice:
+          title = l.syncCardDownloadingTitle;
+          final cur = s.currentFile ?? 0;
+          final tot = s.totalFiles ?? 0;
+          if (tot > 0) progressText = l.syncCardProgressOf(cur, tot);
+          break;
+        case SyncPhase.waitingForInternet:
+          title = l.syncCardWaitingInternet;
+          titleColor = Colors.orangeAccent;
+          break;
+        case SyncPhase.uploadingToCloud:
+          title = l.syncCardUploadingTitle;
+          final cur = s.currentFile ?? 0;
+          final tot = s.totalFiles ?? 0;
+          if (tot > 0) progressText = l.syncCardProgressOf(cur, tot);
+          break;
+        case SyncPhase.processingOnServer:
+          title = l.syncCardProcessing;
+          break;
+        default:
+          title = s.isFetchingConversations ? l.syncCardProcessing : l.syncCardUploadingTitle;
+      }
+      action = _statusActionPill(l.cancel, Colors.redAccent, () => _confirmCancel(context, p));
+    } else if (uploaded > 0) {
+      // Uploads finished, reconciler is resolving jobs in the background.
+      title = l.syncCardProcessing;
+    } else if (attention > 0) {
+      title = l.syncCardNeedsAttention(attention);
+      titleColor = Colors.orangeAccent;
+      action = _statusActionPill(l.sync, Colors.deepPurpleAccent, () => p.syncWals());
+    } else if (readyToBackUp > 0) {
+      title = l.syncCardReadyCount(readyToBackUp);
+      action = _statusActionPill(l.sync, Colors.deepPurpleAccent, () => p.syncWals());
+    } else if (hasAnyRecording) {
+      title = l.syncCardAllBackedUp;
+      titleColor = Colors.grey.shade400;
+    } else {
+      // No recordings — same calm baseline; the card never pops in/out.
+      title = l.syncCardAllBackedUp;
+      titleColor = Colors.grey.shade400;
+    }
 
     return Container(
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 15),
       decoration: BoxDecoration(
         color: const Color(0xFF1C1C1E),
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(16),
       ),
-      child: Column(
-        children: [
-          _buildTierRow(context.l10n.omisStorage, deviceTier, _deviceDetail(syncState, isSyncing, pendingWals)),
-          _tierLine(deviceTier),
-          _buildTierRow(context.l10n.phoneStorage, phoneTier, _phoneDetail(syncState, isSyncing, pendingWals)),
-          _tierLine(phoneTier),
-          _buildTierRow(context.l10n.cloudStorage, cloudTier, _cloudDetail(syncState, isSyncing)),
-          if (isSyncing) ...[
-            const SizedBox(height: 18),
-            GestureDetector(
-              onTap: () => _confirmCancel(context, syncProvider),
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 7),
-                decoration: BoxDecoration(
-                  color: Colors.red.withValues(alpha: 0.15),
-                  borderRadius: BorderRadius.circular(100),
-                ),
-                child: Text(context.l10n.cancel,
-                    style: const TextStyle(color: Colors.redAccent, fontSize: 13, fontWeight: FontWeight.w500)),
-              ),
-            ),
-          ] else if (hasPending && !syncState.isCompleted) ...[
-            const SizedBox(height: 18),
-            GestureDetector(
-              onTap: () => syncProvider.syncWals(),
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 7),
-                decoration: BoxDecoration(
-                  color: Colors.deepPurpleAccent.withValues(alpha: 0.15),
-                  borderRadius: BorderRadius.circular(100),
-                ),
-                child: Text(context.l10n.sync,
-                    style: const TextStyle(color: Colors.deepPurpleAccent, fontSize: 13, fontWeight: FontWeight.w500)),
-              ),
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-
-  (_TierState, _TierState, _TierState) _tierStates(
-      SyncState syncState, bool isSyncing, List<Wal> pendingWals, bool isDeviceConnected) {
-    // During active sync — show phase-based states
-    if (isSyncing) {
-      switch (syncState.phase) {
-        case SyncPhase.downloadingFromDevice:
-          return (_TierState.completed, _TierState.active, _TierState.pending);
-        case SyncPhase.waitingForInternet:
-          return (_TierState.completed, _TierState.completed, _TierState.waiting);
-        case SyncPhase.uploadingToCloud:
-          return (_TierState.completed, _TierState.completed, _TierState.active);
-        case SyncPhase.processingOnServer:
-          return (_TierState.completed, _TierState.completed, _TierState.active);
-        default:
-          return (_TierState.completed, _TierState.active, _TierState.pending);
-      }
-    }
-    if (syncState.isFetchingConversations) {
-      return (_TierState.completed, _TierState.completed, _TierState.active);
-    }
-
-    // Sync completed — all green regardless of remaining device files
-    if (syncState.isCompleted) {
-      return (_TierState.completed, _TierState.completed, _TierState.completed);
-    }
-
-    // Idle — show actual data location
-    if (pendingWals.isEmpty) {
-      return (_TierState.completed, _TierState.completed, _TierState.completed);
-    }
-
-    final deviceWals = pendingWals.where((w) => w.storage == WalStorage.sdcard).toList();
-    final phoneWals = pendingWals.where((w) => w.storage == WalStorage.disk || w.storage == WalStorage.mem).toList();
-
-    // Files on device waiting to be downloaded
-    if (deviceWals.isNotEmpty && phoneWals.isEmpty) {
-      return (
-        isDeviceConnected ? _TierState.waiting : _TierState.disconnected,
-        _TierState.pending,
-        _TierState.pending,
-      );
-    }
-
-    // Files already on phone waiting to upload to cloud
-    if (deviceWals.isEmpty && phoneWals.isNotEmpty) {
-      return (_TierState.completed, _TierState.waiting, _TierState.pending);
-    }
-
-    // Files on both device and phone
-    return (
-      isDeviceConnected ? _TierState.waiting : _TierState.disconnected,
-      _TierState.waiting,
-      _TierState.pending,
-    );
-  }
-
-  Widget _buildTierRow(String label, _TierState state, String? detail) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 3),
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          _tierIcon(state),
-          const SizedBox(width: 14),
+          if (showSpinner) ...[
+            const SizedBox(
+              width: 16,
+              height: 16,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                valueColor: AlwaysStoppedAnimation(Colors.deepPurpleAccent),
+              ),
+            ),
+            const SizedBox(width: 12),
+          ],
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
               children: [
                 Text(
-                  label,
-                  style: TextStyle(
-                    color: state == _TierState.pending ? Colors.grey.shade600 : Colors.white,
-                    fontSize: 15,
-                    fontWeight: FontWeight.w500,
-                  ),
+                  title,
+                  style: TextStyle(color: titleColor, fontSize: 15, fontWeight: FontWeight.w500, height: 1.25),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
                 ),
-                if (detail != null)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 2),
-                    child: Text(detail, style: TextStyle(color: Colors.grey.shade500, fontSize: 12)),
+                if (progressText != null) ...[
+                  const SizedBox(height: 3),
+                  Text(
+                    progressText,
+                    style: TextStyle(color: Colors.grey.shade500, fontSize: 13, fontWeight: FontWeight.w400),
                   ),
+                ],
               ],
             ),
           ),
+          if (action != null) ...[const SizedBox(width: 10), action],
         ],
       ),
     );
   }
 
-  Widget _tierIcon(_TierState state) {
-    switch (state) {
-      case _TierState.completed:
-        return Container(
-          width: 30,
-          height: 30,
-          decoration: const BoxDecoration(color: Colors.green, shape: BoxShape.circle),
-          child: const Icon(Icons.check, color: Colors.white, size: 17),
-        );
-      case _TierState.active:
-        return Container(
-          width: 30,
-          height: 30,
-          decoration: BoxDecoration(
-            color: Colors.deepPurpleAccent.withValues(alpha: 0.15),
-            shape: BoxShape.circle,
-          ),
-          child: const Padding(
-            padding: EdgeInsets.all(6),
-            child:
-                CircularProgressIndicator(strokeWidth: 2, valueColor: AlwaysStoppedAnimation(Colors.deepPurpleAccent)),
-          ),
-        );
-      case _TierState.waiting:
-        return Container(
-          width: 30,
-          height: 30,
-          decoration: BoxDecoration(color: Colors.orange.withValues(alpha: 0.15), shape: BoxShape.circle),
-          child: const Icon(Icons.schedule, color: Colors.orangeAccent, size: 16),
-        );
-      case _TierState.disconnected:
-        return Container(
-          width: 30,
-          height: 30,
-          decoration: BoxDecoration(color: Colors.orange.withValues(alpha: 0.15), shape: BoxShape.circle),
-          child: const Icon(Icons.bluetooth_disabled, color: Colors.orangeAccent, size: 15),
-        );
-      case _TierState.pending:
-        return Container(
-          width: 30,
-          height: 30,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            border: Border.all(color: const Color(0xFF3C3C43), width: 1.5),
-          ),
-        );
-    }
-  }
-
-  Widget _tierLine(_TierState from) {
-    final color = switch (from) {
-      _TierState.completed => Colors.green,
-      _TierState.active => Colors.deepPurpleAccent,
-      _ => const Color(0xFF3C3C43),
-    };
-    return Padding(
-      padding: const EdgeInsets.only(left: 14),
-      child: Align(alignment: Alignment.centerLeft, child: Container(width: 2, height: 22, color: color)),
+  Widget _statusActionPill(String label, Color color, VoidCallback onTap) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.15),
+          borderRadius: BorderRadius.circular(100),
+        ),
+        child: Text(label, style: TextStyle(color: color, fontSize: 13, fontWeight: FontWeight.w500)),
+      ),
     );
-  }
-
-  String? _deviceDetail(SyncState syncState, bool isSyncing, List<Wal> pendingWals) {
-    // During download from device — show file progress
-    if (isSyncing &&
-        syncState.phase == SyncPhase.downloadingFromDevice &&
-        syncState.currentFile != null &&
-        syncState.totalFiles != null) {
-      return '${syncState.currentFile} of ${syncState.totalFiles} files';
-    }
-    // Idle — show remaining device files
-    if (!isSyncing && !syncState.isCompleted) {
-      final deviceFiles = pendingWals.where((w) => w.storage == WalStorage.sdcard).toList();
-      if (deviceFiles.isNotEmpty) {
-        final totalBytes = deviceFiles.fold<int>(0, (s, w) => s + w.storageTotalBytes);
-        return '${deviceFiles.length} file${deviceFiles.length == 1 ? '' : 's'} \u00b7 ${_fmtBytes(totalBytes)}';
-      }
-    }
-    return null;
-  }
-
-  String? _phoneDetail(SyncState syncState, bool isSyncing, List<Wal> pendingWals) {
-    // During download from device — show BLE transfer speed
-    if (isSyncing && syncState.phase == SyncPhase.downloadingFromDevice) {
-      final speed = syncState.speedKBps;
-      return speed != null && speed > 0 ? '${speed.toStringAsFixed(1)} KB/s' : context.l10n.transferring;
-    }
-    // During upload to cloud — phone data is ready
-    if (isSyncing && syncState.phase == SyncPhase.uploadingToCloud) {
-      return null;
-    }
-    // Idle — show files on phone waiting to upload
-    if (!isSyncing && !syncState.isCompleted) {
-      final phoneFiles = pendingWals.where((w) => w.storage == WalStorage.disk || w.storage == WalStorage.mem).toList();
-      if (phoneFiles.isNotEmpty) {
-        return '${phoneFiles.length} file${phoneFiles.length == 1 ? '' : 's'} waiting to upload';
-      }
-    }
-    return null;
-  }
-
-  String? _cloudDetail(SyncState syncState, bool isSyncing) {
-    // Server is processing segments
-    if (isSyncing && syncState.phase == SyncPhase.processingOnServer) {
-      final current = syncState.currentFile;
-      final total = syncState.totalFiles;
-      if (current != null && total != null && total > 0) {
-        return context.l10n.processingOnServerProgress(current, total);
-      }
-      return context.l10n.processingOnServer;
-    }
-    // During upload — show file count progress
-    if (isSyncing && syncState.phase == SyncPhase.uploadingToCloud) {
-      final current = syncState.currentFile;
-      final total = syncState.totalFiles;
-      if (current != null && total != null && total > 0) {
-        return '$current of $total files';
-      }
-      return context.l10n.transferring;
-    }
-    // Fetching conversations after upload
-    if (syncState.isFetchingConversations) {
-      return 'Processing...';
-    }
-    return null;
   }
 
   // ─────────────────────────────────────────
@@ -386,7 +241,7 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
               width: 36,
               height: 36,
               decoration: BoxDecoration(color: Colors.green.withValues(alpha: 0.15), shape: BoxShape.circle),
-              child: const Icon(Icons.check, color: Colors.green, size: 18),
+              child: const Center(child: FaIcon(FontAwesomeIcons.check, color: Colors.green, size: 14)),
             ),
             const SizedBox(width: 14),
             Expanded(
@@ -395,7 +250,7 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
                 style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w500),
               ),
             ),
-            const Icon(Icons.chevron_right, color: Color(0xFF3C3C43), size: 20),
+            FaIcon(FontAwesomeIcons.chevronRight, color: Colors.grey.shade600, size: 12),
           ],
         ),
       ),
@@ -416,7 +271,7 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
       ),
       child: Row(
         children: [
-          const Icon(Icons.error_outline, color: Colors.redAccent, size: 20),
+          const FaIcon(FontAwesomeIcons.circleExclamation, color: Colors.redAccent, size: 16),
           const SizedBox(width: 12),
           Expanded(
             child: Text(syncState.errorMessage ?? context.l10n.syncFailed,
@@ -502,20 +357,12 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
               child:
                   Text(label, style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w400)),
             ),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-              decoration: BoxDecoration(
-                color: isOn ? Colors.green.withValues(alpha: 0.15) : const Color(0xFF2A2A2E),
-                borderRadius: BorderRadius.circular(100),
-              ),
-              child: Text(
-                isOn ? context.l10n.on : context.l10n.off,
-                style: TextStyle(
-                    color: isOn ? Colors.green : Colors.grey.shade500, fontSize: 12, fontWeight: FontWeight.w500),
-              ),
+            Text(
+              isOn ? context.l10n.on : context.l10n.off,
+              style: TextStyle(color: Colors.grey.shade500, fontSize: 14, fontWeight: FontWeight.w400),
             ),
-            const SizedBox(width: 8),
-            const Icon(Icons.chevron_right, color: Color(0xFF3C3C43), size: 20),
+            const SizedBox(width: 10),
+            FaIcon(FontAwesomeIcons.chevronRight, color: Colors.grey.shade600, size: 12),
           ],
         ),
       ),
@@ -526,87 +373,86 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
   // Filter chips + WAL list
   // ─────────────────────────────────────────
 
-  Widget _buildFilterChips(SyncProvider syncProvider) {
-    final pendingCount = syncProvider.pendingWals.length;
-    final syncedCount = syncProvider.syncedWals.length;
-
-    return Row(
-      children: [
-        _chipButton(
-          context.l10n.pending,
-          syncProvider.statusFilter == WalStatusFilter.pending,
-          () => syncProvider.setStatusFilter(WalStatusFilter.pending),
-          count: pendingCount,
-        ),
-        const SizedBox(width: 8),
-        _chipButton(
-          context.l10n.synced,
-          syncProvider.statusFilter == WalStatusFilter.synced,
-          () => syncProvider.setStatusFilter(WalStatusFilter.synced),
-          count: syncedCount,
-        ),
-      ],
-    );
-  }
-
-  Widget _chipButton(String label, bool selected, VoidCallback onTap, {int? count}) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-        decoration: BoxDecoration(
-          color: selected ? Colors.white.withValues(alpha: 0.12) : const Color(0xFF1C1C1E),
-          borderRadius: BorderRadius.circular(100),
-          border: selected ? Border.all(color: Colors.white.withValues(alpha: 0.3), width: 1) : null,
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              label,
-              style: TextStyle(
-                color: selected ? Colors.white : Colors.grey.shade400,
-                fontSize: 14,
-                fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
-              ),
-            ),
-            if (count != null) ...[
-              const SizedBox(width: 6),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                decoration: BoxDecoration(
-                  color: selected ? Colors.white.withValues(alpha: 0.2) : const Color(0xFF2A2A2E),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Text(
-                  '$count',
-                  style: TextStyle(
-                    color: selected ? Colors.white : Colors.grey.shade500,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-              ),
-            ],
-          ],
-        ),
+  Widget _buildRecordingsHeader(SyncProvider p) {
+    final total = p.walsForDisplayFilter(_filter).length;
+    return Padding(
+      padding: const EdgeInsets.only(left: 4, bottom: 2),
+      child: Row(
+        children: [
+          Text(
+            context.l10n.recordings,
+            style: TextStyle(color: Colors.grey.shade500, fontSize: 13, fontWeight: FontWeight.w500),
+          ),
+          const SizedBox(width: 8),
+          Text('$total', style: TextStyle(color: Colors.grey.shade600, fontSize: 13)),
+          const Spacer(),
+          Text(
+            context.l10n.newestFirst,
+            style: TextStyle(color: Colors.grey.shade600, fontSize: 11, fontWeight: FontWeight.w400),
+          ),
+        ],
       ),
     );
   }
 
-  Widget _buildFilteredWalList(SyncProvider syncProvider) {
-    final wals = syncProvider.filteredByStatusWals;
-    final isSyncedFilter = syncProvider.statusFilter == WalStatusFilter.synced;
+  Widget _buildFilterChips(SyncProvider p) {
+    Widget chip(WalDisplayFilter f, String label) {
+      final selected = _filter == f;
+      return Expanded(
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: () => setState(() => _filter = f),
+          child: Container(
+            margin: const EdgeInsets.symmetric(horizontal: 2),
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: selected ? Colors.white.withValues(alpha: 0.08) : Colors.transparent,
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Text(
+              label,
+              style: TextStyle(
+                color: selected ? Colors.white : Colors.grey.shade500,
+                fontSize: 13,
+                fontWeight: selected ? FontWeight.w500 : FontWeight.w400,
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
+    return Container(
+      padding: const EdgeInsets.all(3),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1C1C1E),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Row(
+        children: [
+          chip(WalDisplayFilter.all, context.l10n.all),
+          chip(WalDisplayFilter.pending, context.l10n.pending),
+          chip(WalDisplayFilter.synced, context.l10n.synced),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildUnifiedWalList(SyncProvider syncProvider) {
+    final wals = syncProvider.walsForDisplayFilter(_filter);
 
     if (wals.isEmpty) {
+      final emptyMsg = switch (_filter) {
+        WalDisplayFilter.synced => context.l10n.noSyncedRecordingsYet,
+        WalDisplayFilter.pending => context.l10n.noPendingRecordings,
+        _ => context.l10n.noRecordingsYet,
+      };
       return Container(
         padding: const EdgeInsets.all(32),
         decoration: BoxDecoration(color: const Color(0xFF1C1C1E), borderRadius: BorderRadius.circular(20)),
         child: Center(
-          child: Text(
-            isSyncedFilter ? context.l10n.noSyncedRecordings : context.l10n.noPendingRecordings,
-            style: TextStyle(color: Colors.grey.shade500, fontSize: 14),
-          ),
+          child: Text(emptyMsg, style: TextStyle(color: Colors.grey.shade500, fontSize: 14)),
         ),
       );
     }
@@ -618,13 +464,16 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
         children: [
           for (int i = 0; i < wals.length; i++) ...[
             Dismissible(
-              key: Key(wals[i].id),
+              // Index suffix because `wal.id` (device_timerStart) is not
+              // unique across SD-card + on-phone copies of the same recording.
+              key: ValueKey('${wals[i].id}#$i'),
               direction: wals[i].isSyncing ? DismissDirection.none : DismissDirection.endToStart,
               confirmDismiss: (direction) {
+                final uploading = wals[i].syncDisplayState == WalSyncDisplayState.uploaded;
                 return OmiConfirmDialog.show(
                   context,
-                  title: context.l10n.deleteRecording,
-                  message: context.l10n.thisCannotBeUndone,
+                  title: uploading ? context.l10n.deleteWhileProcessingTitle : context.l10n.deleteRecording,
+                  message: uploading ? context.l10n.deleteWhileProcessingMessage : context.l10n.thisCannotBeUndone,
                   confirmLabel: context.l10n.delete,
                   confirmColor: Colors.red,
                 );
@@ -638,20 +487,33 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
               onDismissed: (direction) {
                 syncProvider.deleteWal(wals[i]);
               },
-              child: _walItem(wals[i], synced: isSyncedFilter),
+              child: _walRow(wals[i]),
             ),
-            if (i < wals.length - 1) const Divider(height: 1, color: Color(0xFF3C3C43), indent: 52),
+            if (i < wals.length - 1) const Divider(height: 1, color: Color(0xFF2C2C2E), indent: 16, endIndent: 16),
           ],
         ],
       ),
     );
   }
 
-  Widget _walItem(Wal wal, {required bool synced}) {
+  Widget _walRow(Wal wal) {
     final date = DateTime.fromMillisecondsSinceEpoch(wal.timerStart * 1000).toLocal();
     final timeStr = dateTimeFormat('h:mm a', date);
     final dateStr = '${_monthName(date.month)} ${date.day}';
     final duration = wal.seconds > 0 ? _fmtDuration(wal.seconds) : null;
+
+    final state = wal.syncDisplayState;
+    var (color, _, label) = _rowVisual(state);
+    final isSynced = state == WalSyncDisplayState.synced;
+
+    // On-device WALs surface their transfer state instead of "Waiting to sync".
+    final onDevice = wal.storage == WalStorage.sdcard || wal.storage == WalStorage.flashPage;
+    if (state == WalSyncDisplayState.waiting && onDevice) {
+      final phase = context.read<SyncProvider>().syncState.phase;
+      label = phase == SyncPhase.downloadingFromDevice
+          ? context.l10n.syncStatusDownloadingFromDevice
+          : context.l10n.syncStatusOnDevice;
+    }
 
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
@@ -659,7 +521,7 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
         final syncProvider = context.read<SyncProvider>();
         if (syncProvider.isSyncing && wal.storage == WalStorage.sdcard) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Sync in progress'), duration: Duration(seconds: 2)),
+            SnackBar(content: Text(context.l10n.syncInProgress), duration: const Duration(seconds: 2)),
           );
           return;
         }
@@ -675,30 +537,75 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
                 children: [
                   Text(
                     '$dateStr \u00b7 $timeStr${duration != null ? ' \u00b7 $duration' : ''}',
-                    style: TextStyle(color: synced ? Colors.grey.shade400 : Colors.white, fontSize: 14),
-                  ),
-                  if (wal.isSyncing && wal.syncSpeedKBps != null)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 2),
-                      child: Text('${wal.syncSpeedKBps!.toStringAsFixed(1)} KB/s',
-                          style: const TextStyle(color: Colors.deepPurpleAccent, fontSize: 12)),
+                    style: TextStyle(
+                      color: isSynced ? Colors.grey.shade500 : Colors.white,
+                      fontSize: 15,
+                      fontWeight: FontWeight.w500,
                     ),
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(color: color, fontSize: 12, fontWeight: FontWeight.w400),
+                  ),
                 ],
               ),
             ),
-            if (wal.isSyncing)
-              const SizedBox(
-                width: 18,
-                height: 18,
-                child: CircularProgressIndicator(
-                    strokeWidth: 2, valueColor: AlwaysStoppedAnimation(Colors.deepPurpleAccent)),
-              )
-            else
-              Icon(Icons.chevron_right, color: Colors.grey.shade700, size: 18),
+            const SizedBox(width: 10),
+            _rowTrailing(wal, state),
           ],
         ),
       ),
     );
+  }
+
+  Widget _rowTrailing(Wal wal, WalSyncDisplayState state) {
+    if (state == WalSyncDisplayState.syncing) {
+      return const SizedBox(
+        width: 16,
+        height: 16,
+        child: CircularProgressIndicator(strokeWidth: 2, valueColor: AlwaysStoppedAnimation(Colors.deepPurpleAccent)),
+      );
+    }
+    if (state == WalSyncDisplayState.failed || state == WalSyncDisplayState.retrying) {
+      return GestureDetector(
+        onTap: () => context.read<SyncProvider>().syncWal(wal),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+          decoration: BoxDecoration(
+            color: Colors.deepPurpleAccent.withValues(alpha: 0.15),
+            borderRadius: BorderRadius.circular(100),
+          ),
+          child: Text(context.l10n.retry,
+              style: const TextStyle(color: Colors.deepPurpleAccent, fontSize: 13, fontWeight: FontWeight.w500)),
+        ),
+      );
+    }
+    return FaIcon(FontAwesomeIcons.chevronRight, color: Colors.grey.shade600, size: 12);
+  }
+
+  /// Row subtitle (color, icon, label). Colors stay restrained: grey for
+  /// neutral/active, amber for auto-retry, red for failed/corrupted. Purple
+  /// is reserved for actions and the spinner — not body text.
+  (Color, IconData, String) _rowVisual(WalSyncDisplayState state) {
+    switch (state) {
+      case WalSyncDisplayState.synced:
+        return (Colors.grey.shade500, Icons.cloud_done_rounded, context.l10n.syncStatusConversationCreated);
+      case WalSyncDisplayState.syncing:
+        return (Colors.grey.shade300, Icons.sync_rounded, context.l10n.syncStatusBackingUp);
+      case WalSyncDisplayState.uploaded:
+        return (Colors.grey.shade400, Icons.cloud_sync_rounded, context.l10n.syncStatusUploaded);
+      case WalSyncDisplayState.waiting:
+        return (Colors.grey.shade500, Icons.cloud_upload_outlined, context.l10n.syncStatusWaiting);
+      case WalSyncDisplayState.retrying:
+        return (Colors.orangeAccent, Icons.autorenew_rounded, context.l10n.syncStatusRetrying);
+      case WalSyncDisplayState.failed:
+        return (Colors.redAccent, Icons.error_outline_rounded, context.l10n.syncStatusFailed);
+      case WalSyncDisplayState.corrupted:
+        return (Colors.redAccent, Icons.warning_amber_rounded, context.l10n.syncStatusFileUnavailable);
+    }
   }
 
   // ─────────────────────────────────────────
@@ -708,13 +615,14 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
   void _showInfoSheet(BuildContext context) {
     showModalBottomSheet(
       context: context,
-      backgroundColor: const Color(0xFF1C1C1E),
+      backgroundColor: const Color(0xFF1F1F25),
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
       isScrollControlled: true,
       builder: (context) {
+        final l = context.l10n;
         return SafeArea(
           child: Padding(
-            padding: const EdgeInsets.fromLTRB(24, 12, 24, 24),
+            padding: const EdgeInsets.fromLTRB(24, 12, 24, 28),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -726,47 +634,24 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
                     decoration: BoxDecoration(color: const Color(0xFF3C3C43), borderRadius: BorderRadius.circular(2)),
                   ),
                 ),
-                const SizedBox(height: 20),
-                Text(context.l10n.howSyncingWorks,
-                    style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600)),
-                const SizedBox(height: 20),
-                _infoItem(
-                  icon: Icons.memory,
-                  color: Colors.deepPurpleAccent,
-                  title: context.l10n.omisStorage,
-                  desc: context.l10n.omisStorageDesc,
+                const SizedBox(height: 22),
+                Text(l.howSyncingWorks,
+                    style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w600)),
+                const SizedBox(height: 10),
+                Text(
+                  l.syncFlowIntro,
+                  style: TextStyle(color: Colors.grey.shade400, fontSize: 14, height: 1.45),
                 ),
+                const SizedBox(height: 22),
+                _syncFlowStep(1, l.syncStepUpload, l.syncStepUploadDesc),
                 const SizedBox(height: 16),
-                _infoItem(
-                  icon: Icons.phone_iphone,
-                  color: Colors.blue,
-                  title: context.l10n.phoneStorage,
-                  desc: context.l10n.phoneStorageDesc,
-                ),
+                _syncFlowStep(2, l.syncStepProcess, l.syncStepProcessDesc),
                 const SizedBox(height: 16),
-                _infoItem(
-                  icon: Icons.cloud_done_outlined,
-                  color: Colors.green,
-                  title: context.l10n.cloudStorage,
-                  desc: context.l10n.cloudStorageDesc,
-                ),
-                const SizedBox(height: 20),
-                Container(
-                  padding: const EdgeInsets.all(14),
-                  decoration: BoxDecoration(
-                    color: Colors.green.withValues(alpha: 0.08),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Row(
-                    children: [
-                      const Icon(Icons.auto_awesome, color: Colors.green, size: 18),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: Text(context.l10n.recordingsSyncAutomatically,
-                            style: const TextStyle(color: Colors.green, fontSize: 13, fontWeight: FontWeight.w500)),
-                      ),
-                    ],
-                  ),
+                _syncFlowStep(3, l.syncStepBackedUp, l.syncStepBackedUpDesc),
+                const SizedBox(height: 22),
+                Text(
+                  l.syncFailureFootnote,
+                  style: TextStyle(color: Colors.grey.shade500, fontSize: 13, height: 1.45),
                 ),
               ],
             ),
@@ -776,24 +661,25 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
     );
   }
 
-  Widget _infoItem({required IconData icon, required Color color, required String title, required String desc}) {
+  Widget _syncFlowStep(int n, String title, String desc) {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Container(
-          width: 32,
-          height: 32,
-          decoration: BoxDecoration(color: color.withValues(alpha: 0.15), shape: BoxShape.circle),
-          child: Icon(icon, color: color, size: 16),
+        SizedBox(
+          width: 22,
+          child: Text(
+            '$n.',
+            style: const TextStyle(color: Colors.deepPurpleAccent, fontSize: 15, fontWeight: FontWeight.w600),
+          ),
         ),
-        const SizedBox(width: 12),
+        const SizedBox(width: 8),
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(title, style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w500)),
-              const SizedBox(height: 4),
-              Text(desc, style: TextStyle(color: Colors.grey.shade400, fontSize: 13, height: 1.4)),
+              const SizedBox(height: 3),
+              Text(desc, style: TextStyle(color: Colors.grey.shade400, fontSize: 13, height: 1.45)),
             ],
           ),
         ),
@@ -894,19 +780,11 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
     return rm > 0 ? '${h}h ${rm}m' : '${h}h';
   }
 
-  String _fmtBytes(int bytes) {
-    if (bytes < 1024) return '$bytes B';
-    if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)} KB';
-    return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
-  }
-
   String _monthName(int month) {
     const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
     return months[month - 1];
   }
 }
-
-enum _TierState { completed, active, waiting, disconnected, pending }
 
 class _ManageStorageSheet extends StatelessWidget {
   final SyncProvider provider;
@@ -924,8 +802,8 @@ class _ManageStorageSheet extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final syncedCount = provider.syncedWals.length;
-    final pendingCount = provider.pendingWals.length;
-    final totalCount = provider.allWals.length;
+    final pendingCount = provider.pendingDeletableWals.length;
+    final totalCount = syncedCount + pendingCount;
 
     return Container(
       decoration: const BoxDecoration(

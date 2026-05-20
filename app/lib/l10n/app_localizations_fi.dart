@@ -1641,7 +1641,7 @@ class AppLocalizationsFi extends AppLocalizations {
   String get finalTouches => 'Viimeiset viimeistelyt';
 
   @override
-  String get processing => 'Käsitellään...';
+  String get processing => 'Käsitellään';
 
   @override
   String get features => 'Ominaisuudet';
@@ -8442,7 +8442,7 @@ class AppLocalizationsFi extends AppLocalizations {
   String get manageStorage => 'Hallitse tallennustilaa';
 
   @override
-  String get safelyBackedUp => 'Turvallisesti varmuuskopioitu puhelimeesi';
+  String get safelyBackedUp => 'Keskustelut luotu';
 
   @override
   String get notYetSynced => 'Ei vielä synkronoitu puhelimeesi';
@@ -9264,4 +9264,121 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get recapDeleteFailed => 'Yhteenvetoa ei voitu poistaa. Yritä myöhemmin uudelleen.';
+
+  @override
+  String get syncStatusBackedUp => 'Varmuuskopioitu';
+
+  @override
+  String get syncStatusBackingUp => 'Varmuuskopioidaan…';
+
+  @override
+  String get syncStatusWaiting => 'Odottaa synkronointia';
+
+  @override
+  String get syncStatusRetrying => 'Käsittely epäonnistui — yritetään uudelleen';
+
+  @override
+  String get syncStatusFailed => 'Epäonnistui — napauta Yritä uudelleen';
+
+  @override
+  String get syncStatusFileUnavailable => 'Tiedosto ei ole käytettävissä';
+
+  @override
+  String get noRecordingsYet => 'Ei vielä tallenteita';
+
+  @override
+  String get syncInProgress => 'Synkronointi käynnissä';
+
+  @override
+  String get syncStatusUploaded => 'Ladattu · käsitellään Omissa';
+
+  @override
+  String get deleteWhileProcessingTitle => 'Käsitellään yhä';
+
+  @override
+  String get deleteWhileProcessingMessage =>
+      'Tämä tallenne on ladattu, mutta Omi luo yhä keskustelua. Jos poistat sen nyt ja käsittely epäonnistuu, sitä ei voi palauttaa. Poistetaanko silti?';
+
+  @override
+  String get syncCardAllBackedUp => 'Kaikki tallenteet synkronoitu';
+
+  @override
+  String syncCardReadyCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count tallennetta valmiina synkronoitavaksi',
+      one: '1 tallenne valmis synkronoitavaksi',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get syncCardProcessing => 'Käsitellään Omissa…';
+
+  @override
+  String get syncCardWaitingInternet => 'Odottaa verkkoyhteyttä';
+
+  @override
+  String syncCardNeedsAttention(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count tallennetta vaatii huomiota',
+      one: '1 tallenne vaatii huomiota',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get syncFlowIntro =>
+      'Tallenteet siirretään Omi-laitteestasi tähän puhelimeen ja tallennetaan paikallisesti, minkä jälkeen ne ladataan Omin palvelimelle, jossa ne litteroidaan ja muunnetaan keskusteluiksi.';
+
+  @override
+  String get syncStepUpload => 'Synkronoi';
+
+  @override
+  String get syncStepUploadDesc => 'Tallenteesi lähetetään Omin palvelimelle';
+
+  @override
+  String get syncStepProcess => 'Litterointi';
+
+  @override
+  String get syncStepProcessDesc => 'Omi muuttaa äänen keskusteluksi';
+
+  @override
+  String get syncStepBackedUp => 'Keskustelu valmis';
+
+  @override
+  String get syncStepBackedUpDesc => 'Löydät sen kohdasta Keskustelut';
+
+  @override
+  String get syncFailureFootnote =>
+      'Jos käsittely epäonnistuu, tallenne yritetään automaattisesti uudelleen seuraavan synkronoinnin yhteydessä.';
+
+  @override
+  String get syncStatusConversationCreated => 'Keskustelu luotu';
+
+  @override
+  String get syncCardUploadingTitle => 'Lähetetään Omiin';
+
+  @override
+  String get syncCardDownloadingTitle => 'Ladataan Omista';
+
+  @override
+  String syncCardProgressOf(int current, int total) {
+    return '$current / $total';
+  }
+
+  @override
+  String get syncStatusOnDevice => 'Odottaa Omissa';
+
+  @override
+  String get syncStatusDownloadingFromDevice => 'Ladataan Omista';
+
+  @override
+  String get newestFirst => 'Uusimmat ensin';
+
+  @override
+  String get noSyncedRecordingsYet => 'Ei vielä synkronoituja nauhoituksia';
 }
