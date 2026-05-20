@@ -51,8 +51,10 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
           w.isSyncing)
       .toList();
 
-  /// Recordings uploaded but not yet confirmed processed (reconciler pending).
   List<Wal> get uploadedWals => _allWals.where((w) => w.status == WalStatus.uploaded).toList();
+
+  List<Wal> get pendingDeletableWals =>
+      _allWals.where((w) => !w.isSyncing && (w.status == WalStatus.miss || w.status == WalStatus.corrupted)).toList();
 
   List<Wal> get syncedWals => _allWals.where((w) => w.status == WalStatus.synced).toList();
 
