@@ -791,12 +791,15 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     // Create menu
     let menu = NSMenu()
 
-    // Quick toggles for screen capture and audio recording
+    // Quick toggles for screen capture and audio recording.
+    // When paywalled (trial expired / usage limit hit) both render OFF — the
+    // features can't run, and tapping a toggle surfaces the upgrade popup.
+    let paywalled = UserDefaults.standard.bool(forKey: "desktop_isPaywalled")
     let screenCaptureItem = NSMenuItem()
     let screenCaptureView = makeToggleItemView(
       title: "Screen Capture",
       iconName: "rectangle.dashed.badge.record",
-      isOn: AssistantSettings.shared.screenAnalysisEnabled
+      isOn: !paywalled && AssistantSettings.shared.screenAnalysisEnabled
         && ProactiveAssistantsPlugin.shared.isMonitoring,
       action: #selector(screenCaptureToggled(_:))
     )
@@ -807,7 +810,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     let audioRecordingView = makeToggleItemView(
       title: "Audio Recording",
       iconName: "mic.fill",
-      isOn: AssistantSettings.shared.transcriptionEnabled,
+      isOn: !paywalled && AssistantSettings.shared.transcriptionEnabled,
       action: #selector(audioRecordingToggled(_:))
     )
     audioRecordingItem.view = audioRecordingView
@@ -999,6 +1002,14 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     AnalyticsManager.shared.settingToggled(setting: "monitoring", enabled: enabled)
 
     if enabled {
+      // Paywall gate: trial expired / usage limit hit. Refuse to enable,
+      // revert the toggle, and surface the same upgrade popup as everywhere else.
+      if UserDefaults.standard.bool(forKey: "desktop_isPaywalled") {
+        sender.state = .off
+        NotificationCenter.default.post(
+          name: .showUsageLimitPopup, object: nil, userInfo: ["reason": "trial_expired"])
+        return
+      }
       if !ProactiveAssistantsPlugin.shared.hasScreenRecordingPermission {
         // No permission — revert toggle and open preferences
         sender.state = .off
@@ -1028,6 +1039,15 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
       action: enabled ? "audio_recording_on" : "audio_recording_off")
     AnalyticsManager.shared.settingToggled(setting: "transcription", enabled: enabled)
 
+    // Paywall gate: trial expired / usage limit hit. Refuse to enable,
+    // revert the toggle, and surface the same upgrade popup as everywhere else.
+    if enabled && UserDefaults.standard.bool(forKey: "desktop_isPaywalled") {
+      sender.state = .off
+      NotificationCenter.default.post(
+        name: .showUsageLimitPopup, object: nil, userInfo: ["reason": "trial_expired"])
+      return
+    }
+
     AssistantSettings.shared.transcriptionEnabled = enabled
     // Request the main view to start/stop transcription (needs AppState)
     NotificationCenter.default.post(
@@ -1041,9 +1061,13 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
   func menuWillOpen(_ menu: NSMenu) {
     log("AppDelegate: [MENUBAR] Menu opened by user")
     AnalyticsManager.shared.menuBarOpened()
-    // Refresh toggle states to match current runtime state
-    screenCaptureSwitch?.state = ProactiveAssistantsPlugin.shared.isMonitoring ? .on : .off
-    audioRecordingSwitch?.state = AssistantSettings.shared.transcriptionEnabled ? .on : .off
+    // Refresh toggle states to match current runtime state. When paywalled,
+    // force both OFF — the features can't run until the user upgrades.
+    let paywalled = UserDefaults.standard.bool(forKey: "desktop_isPaywalled")
+    screenCaptureSwitch?.state =
+      (!paywalled && ProactiveAssistantsPlugin.shared.isMonitoring) ? .on : .off
+    audioRecordingSwitch?.state =
+      (!paywalled && AssistantSettings.shared.transcriptionEnabled) ? .on : .off
   }
 
   func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
