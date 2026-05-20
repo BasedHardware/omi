@@ -37,31 +37,42 @@ enum HybridProviderReadiness {
     return "llama3.2"
   }
 
+  static func defaultSmallModel() -> String {
+    "gpt-5.4-mini"
+  }
+
   static func rows(from settings: [LocalDaemonSetting]) -> [Row] {
     var result: [Row] = []
+    let policy = HybridProviderPolicy.policyFromSettings(settings)
 
-    let aiConfigured = hasOpenAICompatibleProvider(
-      in: settings, keys: ["ai_provider", "provider"])
+    let postResolution = HybridProviderPolicy.resolveSlotFromSettings(
+      HybridProviderPolicy.postTranscriptSlot,
+      settings: settings
+    )
+    let postConfigured = hasResolvedOpenAICompatibleSlot(postResolution)
     result.append(
       Row(
-        id: "ai_provider",
-        label: "Processing (ai_provider)",
-        status: aiConfigured ? .configured : .optionalFallback,
-        detail: aiConfigured
-          ? "OpenAI-compatible provider configured"
-          : "Optional — deterministic fallback when unset"
+        id: HybridProviderPolicy.postTranscriptSlot,
+        label: "Post-transcript processing",
+        status: postConfigured ? .configured : .optionalFallback,
+        detail: postConfigured
+          ? slotDetail(postResolution)
+          : "Defaults to \(defaultSmallModel()); deterministic fallback when no provider account is configured"
       ))
 
-    let sttAvailable = DesktopBackendEnvironment.isCapability(.directSTT, availableIn: .localDaemon)
+    let proactiveResolution = HybridProviderPolicy.resolveSlotFromSettings(
+      HybridProviderPolicy.proactiveSlot,
+      settings: settings
+    )
+    let proactiveConfigured = hasResolvedOpenAICompatibleSlot(proactiveResolution)
     result.append(
       Row(
-        id: "stt",
-        label: "Live transcription",
-        status: sttAvailable ? .configured : .capabilityOff,
-        detail: sttAvailable
-          ? "On-device Apple Speech (no daemon key)"
-          : (DesktopBackendEnvironment.unavailableReason(for: .directSTT, in: .localDaemon)
-            ?? "Direct STT unavailable")
+        id: HybridProviderPolicy.proactiveSlot,
+        label: "Proactive assistants",
+        status: proactiveConfigured ? .configured : .missing,
+        detail: proactiveConfigured
+          ? slotDetail(proactiveResolution)
+          : "Defaults to \(defaultSmallModel()); configure a provider account to enable proactive AI calls"
       ))
 
     let chatResolution = HybridProviderPolicy.resolveSlotFromSettings(
@@ -72,35 +83,53 @@ enum HybridProviderReadiness {
     let chatCap = DesktopBackendEnvironment.isCapability(.directChat, availableIn: .localDaemon)
     result.append(
       Row(
-        id: "chat_provider",
-        label: "Chat (chat_provider)",
+        id: HybridProviderPolicy.chatSlot,
+        label: "Chat",
         status: chatResolvable && chatCap
           ? .configured
           : (chatCap ? .missing : .capabilityOff),
         detail: chatResolvable
-          ? "Direct chat endpoint configured through provider policy"
+          ? slotDetail(chatResolution)
           : (chatCap
             ? (chatResolution?.resolution.reason ?? "Configure the chat model slot")
             : (DesktopBackendEnvironment.unavailableReason(for: .directChat, in: .localDaemon)
               ?? "Direct chat disabled"))
       ))
 
-    let embedConfigured = HybridEmbeddingClient.loadProviderConfig(from: settings) != nil
-    let embedCap = DesktopBackendEnvironment.isCapability(
-      .directEmbeddings, availableIn: .localDaemon)
+    let visionResolution = HybridProviderPolicy.resolveSlotFromSettings(
+      HybridProviderPolicy.visionSlot,
+      settings: settings
+    )
+    let visionConfigured = hasResolvedOpenAICompatibleSlot(visionResolution)
     result.append(
       Row(
-        id: "embedding_provider",
-        label: "Embeddings (embedding_provider)",
-        status: embedConfigured && embedCap
-          ? .configured
-          : (embedCap ? .missing : .capabilityOff),
-        detail: embedConfigured
-          ? "Embedding provider configured"
-          : (embedCap
-            ? "Optional for Rewind semantic search"
-            : (DesktopBackendEnvironment.unavailableReason(
-              for: .directEmbeddings, in: .localDaemon) ?? "Direct embeddings disabled"))
+        id: HybridProviderPolicy.visionSlot,
+        label: "Vision, optional",
+        status: visionConfigured ? .configured : .optionalFallback,
+        detail: visionConfigured
+          ? slotDetail(visionResolution)
+          : "Optional; screenshot assistants use local OCR text when no vision slot is configured"
+      ))
+
+    let sttAvailable = DesktopBackendEnvironment.isCapability(.directSTT, availableIn: .localDaemon)
+    let sttModel = policy?.modelSlots[HybridProviderPolicy.sttSlot]?.modelID
+    result.append(
+      Row(
+        id: HybridProviderPolicy.sttSlot,
+        label: "STT/local transcription",
+        status: sttAvailable ? .configured : .capabilityOff,
+        detail: sttAvailable
+          ? "On-device Apple Speech\(sttModel.map { " / \($0)" } ?? ""); no daemon provider key required"
+          : (DesktopBackendEnvironment.unavailableReason(for: .directSTT, in: .localDaemon)
+            ?? "Direct STT unavailable")
+      ))
+
+    result.append(
+      Row(
+        id: HybridProviderPolicy.memorySearchSlot,
+        label: "Memory search",
+        status: .configured,
+        detail: "Local wiki/FTS search using \(policy?.modelSlots[HybridProviderPolicy.memorySearchSlot]?.modelID ?? HybridProviderPolicy.localWikiModel); no embeddings required"
       ))
 
     return result
@@ -120,5 +149,26 @@ enum HybridProviderReadiness {
     guard kind == "openai_compatible" || kind == "openai" else { return false }
     guard let base = json["base_url"] as? String, !base.isEmpty else { return false }
     return true
+  }
+
+  private static func hasResolvedOpenAICompatibleSlot(
+    _ response: HybridProviderPolicy.SlotResolutionResponse?
+  ) -> Bool {
+    guard response?.resolution.ok == true,
+      let account = response?.resolved?.providerAccount,
+      let baseURL = account.baseURL?.trimmingCharacters(in: .whitespacesAndNewlines),
+      !baseURL.isEmpty
+    else {
+      return false
+    }
+    return HybridProviderPolicy.isOpenAICompatible(kind: account.kind)
+  }
+
+  private static func slotDetail(_ response: HybridProviderPolicy.SlotResolutionResponse?) -> String {
+    guard let resolved = response?.resolved else {
+      return "Slot not configured"
+    }
+    let account = resolved.providerAccount?.displayName ?? resolved.providerAccount?.id ?? "no provider account"
+    return "\(account) / \(resolved.modelID)"
   }
 }

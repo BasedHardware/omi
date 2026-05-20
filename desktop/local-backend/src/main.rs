@@ -302,7 +302,7 @@ mod tests {
         assert_eq!(profile["profile"]["display_name"], "Local User");
 
         let settings = request_json(
-            app,
+            app.clone(),
             Method::PUT,
             "/v1/settings",
             Some(json!({
@@ -393,7 +393,7 @@ mod tests {
         assert_eq!(resolved["resolution"]["ok"], true);
 
         let proactive = request_json(
-            app,
+            app.clone(),
             Method::GET,
             "/v1/provider-policy/resolve/proactive",
             None,
@@ -404,6 +404,19 @@ mod tests {
             .as_str()
             .unwrap()
             .contains("no provider account"));
+
+        let memory_test = request_json(
+            app.clone(),
+            Method::POST,
+            "/v1/provider-policy/test-slot/memory_search",
+            Some(json!({})),
+        )
+        .await?;
+        assert_eq!(memory_test["ok"], true);
+        assert!(memory_test["message"]
+            .as_str()
+            .unwrap()
+            .contains("does not require embeddings"));
 
         Ok(())
     }

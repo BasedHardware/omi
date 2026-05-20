@@ -237,6 +237,7 @@ struct SettingsContentView: View {
   @State private var hybridEmbedBaseURL: String = HybridProviderReadiness.defaultBaseURL()
   @State private var hybridEmbedModel: String = HybridProviderReadiness.defaultModel()
   @State private var hybridEmbedApiKey: String = ""
+  @State private var hybridVisionModel: String = ""
   @State private var hybridProviderStatus: String?
   @State private var isSavingHybridProvider: Bool = false
   @State private var isTestingHybridProvider: Bool = false
@@ -1830,7 +1831,7 @@ struct SettingsContentView: View {
             .foregroundColor(OmiColors.textPrimary)
 
           Text(
-            "Bring your own AI endpoints. Keys are stored in the local daemon SQLite database on this Mac and sent only to URLs you configure—not Omi cloud proxies."
+            "Bring your own AI endpoint, then assign models to local task slots. Keys are stored in the local daemon SQLite database on this Mac and sent only to URLs you configure—not Omi cloud proxies."
           )
           .scaledFont(size: 12)
           .foregroundColor(OmiColors.textSecondary)
@@ -1875,33 +1876,63 @@ struct SettingsContentView: View {
   private var localHybridProvidersEditorCard: some View {
     settingsCard(settingId: "planusage.local.providers") {
       VStack(alignment: .leading, spacing: 18) {
-        hybridProviderEditorBlock(
-          title: "Processing (ai_provider)",
-          baseURL: $hybridAiBaseURL,
-          model: $hybridAiModel,
-          apiKey: $hybridAiApiKey,
-          settingKey: "ai_provider"
-        )
+        VStack(alignment: .leading, spacing: 8) {
+          Text("Provider account")
+            .scaledFont(size: 12, weight: .medium)
+            .foregroundColor(OmiColors.textTertiary)
+          TextField("Base URL", text: $hybridAiBaseURL)
+            .textFieldStyle(.roundedBorder)
+          SecureField("API key (optional on loopback)", text: $hybridAiApiKey)
+            .textFieldStyle(.roundedBorder)
+        }
 
         Divider().background(OmiColors.backgroundQuaternary)
 
-        hybridProviderEditorBlock(
-          title: "Chat (chat_provider)",
-          baseURL: $hybridChatBaseURL,
+        hybridSlotEditorBlock(
+          title: "Chat",
+          subtitle: "Direct Ask Omi chat",
           model: $hybridChatModel,
-          apiKey: $hybridChatApiKey,
-          settingKey: "chat_provider"
+          slot: HybridProviderPolicy.chatSlot
         )
 
         Divider().background(OmiColors.backgroundQuaternary)
 
-        hybridProviderEditorBlock(
-          title: "Embeddings (embedding_provider)",
-          baseURL: $hybridEmbedBaseURL,
-          model: $hybridEmbedModel,
-          apiKey: $hybridEmbedApiKey,
-          settingKey: "embedding_provider"
+        hybridSlotEditorBlock(
+          title: "Post-transcript processing",
+          subtitle: "Titles, summaries, memories, and action items",
+          model: $hybridAiModel,
+          slot: HybridProviderPolicy.postTranscriptSlot
         )
+
+        Divider().background(OmiColors.backgroundQuaternary)
+
+        hybridSlotEditorBlock(
+          title: "Proactive assistants",
+          subtitle: "Local assistant jobs; defaults to \(HybridProviderReadiness.defaultSmallModel())",
+          model: $hybridEmbedModel,
+          slot: HybridProviderPolicy.proactiveSlot
+        )
+
+        Divider().background(OmiColors.backgroundQuaternary)
+
+        hybridSlotEditorBlock(
+          title: "Vision, optional",
+          subtitle: "Leave blank to use local OCR text only",
+          model: $hybridVisionModel,
+          slot: HybridProviderPolicy.visionSlot,
+          optional: true
+        )
+
+        Divider().background(OmiColors.backgroundQuaternary)
+
+        VStack(alignment: .leading, spacing: 4) {
+          Text("Memory search")
+            .scaledFont(size: 12, weight: .medium)
+            .foregroundColor(OmiColors.textTertiary)
+          Text("Local wiki/FTS search uses local_wiki and does not require embeddings.")
+            .scaledFont(size: 11)
+            .foregroundColor(OmiColors.textSecondary)
+        }
 
         if let hybridProviderStatus {
           Text(hybridProviderStatus)
@@ -1913,34 +1944,33 @@ struct SettingsContentView: View {
     }
   }
 
-  private func hybridProviderEditorBlock(
+  private func hybridSlotEditorBlock(
     title: String,
-    baseURL: Binding<String>,
+    subtitle: String,
     model: Binding<String>,
-    apiKey: Binding<String>,
-    settingKey: String
+    slot: String,
+    optional: Bool = false
   ) -> some View {
     VStack(alignment: .leading, spacing: 8) {
       Text(title)
         .scaledFont(size: 12, weight: .medium)
         .foregroundColor(OmiColors.textTertiary)
-      TextField("Base URL", text: baseURL)
-        .textFieldStyle(.roundedBorder)
+      Text(subtitle)
+        .scaledFont(size: 11)
+        .foregroundColor(OmiColors.textSecondary)
       TextField("Model", text: model)
-        .textFieldStyle(.roundedBorder)
-      SecureField("API key (optional on loopback)", text: apiKey)
         .textFieldStyle(.roundedBorder)
       HStack(spacing: 10) {
         Button("Save") {
-          saveHybridProvider(key: settingKey, baseURL: baseURL.wrappedValue, model: model.wrappedValue, apiKey: apiKey.wrappedValue)
+          saveHybridProviderPolicy()
         }
         .buttonStyle(.bordered)
         .disabled(isSavingHybridProvider)
         Button("Test") {
-          testHybridProvider(key: settingKey, baseURL: baseURL.wrappedValue, model: model.wrappedValue, apiKey: apiKey.wrappedValue)
+          testHybridProviderSlot(slot)
         }
         .buttonStyle(.bordered)
-        .disabled(isTestingHybridProvider)
+        .disabled(isTestingHybridProvider || (optional && model.wrappedValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty))
       }
     }
   }
@@ -6364,57 +6394,43 @@ struct SettingsContentView: View {
       if target.mode == .localDaemon {
         settingsCard(settingId: "about.hybrid_providers") {
           VStack(alignment: .leading, spacing: 14) {
-            Text("Hybrid providers")
+            Text("Local provider slots")
               .scaledFont(size: 15, weight: .semibold)
               .foregroundColor(OmiColors.textPrimary)
 
             Text(
-              "API keys are stored in the local daemon SQLite database on this Mac and sent only to the endpoints you configure—not to Omi cloud proxies."
+              "Local mode resolves task slots through the daemon provider policy. Memory search uses local wiki/FTS search and does not require embeddings."
             )
             .scaledFont(size: 12)
             .foregroundColor(OmiColors.textSecondary)
             .fixedSize(horizontal: false, vertical: true)
 
-            VStack(alignment: .leading, spacing: 8) {
-              Text("Processing (ai_provider)")
-                .scaledFont(size: 12, weight: .medium)
-                .foregroundColor(OmiColors.textTertiary)
-              TextField("Base URL", text: $hybridAiBaseURL)
-                .textFieldStyle(.roundedBorder)
-              TextField("Model", text: $hybridAiModel)
-                .textFieldStyle(.roundedBorder)
-              SecureField("API key (optional on loopback)", text: $hybridAiApiKey)
-                .textFieldStyle(.roundedBorder)
-            }
-
-            HStack(spacing: 10) {
-              Button("Save") {
-                saveHybridAiProvider()
+            ForEach(HybridProviderReadiness.rows(from: backendSettings)) { row in
+              HStack(alignment: .top, spacing: 8) {
+                Image(
+                  systemName: row.status == .configured || row.status == .optionalFallback
+                    ? "checkmark.circle.fill" : "xmark.circle"
+                )
+                .foregroundColor(
+                  row.status == .configured
+                    ? OmiColors.success
+                    : (row.status == .optionalFallback
+                      ? OmiColors.textTertiary : OmiColors.warning))
+                VStack(alignment: .leading, spacing: 2) {
+                  Text(row.label)
+                    .scaledFont(size: 11, weight: .medium)
+                    .foregroundColor(OmiColors.textSecondary)
+                  Text(row.detail)
+                    .scaledFont(size: 10)
+                    .foregroundColor(OmiColors.textTertiary)
+                }
+                Spacer()
               }
-              .buttonStyle(.borderedProminent)
-              .disabled(isSavingHybridProvider)
-
-              Button("Test connection") {
-                testHybridAiProvider()
-              }
-              .buttonStyle(.bordered)
-              .disabled(isTestingHybridProvider)
-
-              if isSavingHybridProvider || isTestingHybridProvider {
-                ProgressView().controlSize(.small)
-              }
-            }
-
-            if let hybridProviderStatus {
-              Text(hybridProviderStatus)
-                .scaledFont(size: 12)
-                .foregroundColor(OmiColors.textSecondary)
-                .textSelection(.enabled)
             }
 
             Divider().background(OmiColors.backgroundQuaternary)
 
-            Text("Capabilities")
+            Text("Local daemon capabilities")
               .scaledFont(size: 12, weight: .medium)
               .foregroundColor(OmiColors.textTertiary)
 
@@ -6449,40 +6465,29 @@ struct SettingsContentView: View {
   }
 
   private func syncHybridProviderFieldsFromBackendSettings() {
-    syncHybridProviderFields(
-      forKey: "ai_provider", alsoKeys: ["provider"],
-      intoBaseURL: &hybridAiBaseURL, model: &hybridAiModel, apiKey: &hybridAiApiKey)
+    syncAllHybridProviderFieldsFromBackendSettings()
   }
 
   private func saveHybridAiProvider() {
-    saveHybridProvider(
-      key: "ai_provider",
-      baseURL: hybridAiBaseURL,
-      model: hybridAiModel,
-      apiKey: hybridAiApiKey
-    )
+    saveHybridProviderPolicy()
   }
 
   private func testHybridAiProvider() {
-    testHybridProvider(
-      key: "ai_provider",
-      baseURL: hybridAiBaseURL,
-      model: hybridAiModel,
-      apiKey: hybridAiApiKey
-    )
+    testHybridProviderSlot(HybridProviderPolicy.postTranscriptSlot)
   }
 
   private var localProcessingProviderStatus: String {
-    let providerSetting = backendSettings.first { $0.key == "ai_provider" || $0.key == "provider" }
-    guard let providerSetting else {
-      return "Deterministic fallback"
-    }
-    if providerSetting.valueJson.contains("\"api_key\"")
-      || providerSetting.valueJson.contains("\"key\"")
+    if let resolution = HybridProviderPolicy.resolveSlotFromSettings(
+      HybridProviderPolicy.postTranscriptSlot,
+      settings: backendSettings
+    ),
+      resolution.resolution.ok,
+      let resolved = resolution.resolved,
+      let account = resolved.providerAccount
     {
-      return "OpenAI-compatible provider configured"
+      return "\(account.displayName ?? account.id) / \(resolved.modelID)"
     }
-    return "Deterministic fallback"
+    return "Deterministic fallback; post-transcript defaults to \(HybridProviderReadiness.defaultSmallModel()) until a provider account is configured"
   }
 
   private func backendStatusRow(title: String, value: String) -> some View {
@@ -7452,9 +7457,56 @@ struct SettingsContentView: View {
   }
 
   private func syncAllHybridProviderFieldsFromBackendSettings() {
-    syncHybridProviderFields(forKey: "ai_provider", alsoKeys: ["provider"], intoBaseURL: &hybridAiBaseURL, model: &hybridAiModel, apiKey: &hybridAiApiKey)
-    syncHybridProviderFields(forKey: "chat_provider", alsoKeys: [], intoBaseURL: &hybridChatBaseURL, model: &hybridChatModel, apiKey: &hybridChatApiKey)
-    syncHybridProviderFields(forKey: "embedding_provider", alsoKeys: [], intoBaseURL: &hybridEmbedBaseURL, model: &hybridEmbedModel, apiKey: &hybridEmbedApiKey)
+    if syncHybridProviderPolicyFieldsFromBackendSettings() {
+      return
+    }
+    syncHybridProviderFields(
+      forKey: "ai_provider", alsoKeys: ["provider"], intoBaseURL: &hybridAiBaseURL,
+      model: &hybridAiModel, apiKey: &hybridAiApiKey)
+    syncHybridProviderFields(
+      forKey: "chat_provider", alsoKeys: [], intoBaseURL: &hybridChatBaseURL,
+      model: &hybridChatModel, apiKey: &hybridChatApiKey)
+    syncHybridProviderFields(
+      forKey: "vision_provider", alsoKeys: [], intoBaseURL: &hybridAiBaseURL,
+      model: &hybridVisionModel, apiKey: &hybridAiApiKey)
+  }
+
+  private func syncHybridProviderPolicyFieldsFromBackendSettings() -> Bool {
+    guard let policy = HybridProviderPolicy.policyFromSettings(backendSettings) else {
+      return false
+    }
+    let accountID =
+      policy.modelSlots[HybridProviderPolicy.chatSlot]?.providerAccountID
+      ?? policy.modelSlots[HybridProviderPolicy.postTranscriptSlot]?.providerAccountID
+      ?? policy.modelSlots[HybridProviderPolicy.proactiveSlot]?.providerAccountID
+      ?? policy.modelSlots[HybridProviderPolicy.visionSlot]?.providerAccountID
+    if let accountID,
+      let account = policy.providerAccounts.first(where: { $0.id == accountID })
+    {
+      if let baseURL = account.baseURL, !baseURL.isEmpty {
+        hybridAiBaseURL = baseURL
+        hybridChatBaseURL = baseURL
+        hybridEmbedBaseURL = baseURL
+      }
+      if let apiKey = account.apiKey {
+        hybridAiApiKey = apiKey
+        hybridChatApiKey = apiKey
+        hybridEmbedApiKey = apiKey
+      }
+    }
+    hybridChatModel =
+      policy.modelSlots[HybridProviderPolicy.chatSlot]?.modelID
+      ?? hybridChatModel
+    hybridAiModel =
+      policy.modelSlots[HybridProviderPolicy.postTranscriptSlot]?.modelID
+      ?? hybridAiModel
+    hybridEmbedModel =
+      policy.modelSlots[HybridProviderPolicy.proactiveSlot]?.modelID
+      ?? hybridEmbedModel
+    hybridVisionModel =
+      policy.modelSlots[HybridProviderPolicy.visionSlot]?.modelID
+      ?? ""
+    return true
   }
 
   private func syncHybridProviderFields(
@@ -7485,21 +7537,20 @@ struct SettingsContentView: View {
     guard !isSavingHybridProvider else { return }
     isSavingHybridProvider = true
     hybridProviderStatus = nil
-    let provider = HybridProviderBootstrap.defaultProviderObject()
     Task {
       do {
-        backendSettings = try await APIClient.shared.updateSelectedBackendSettings([
-          "ai_provider": .object(provider),
-          "chat_provider": .object(provider),
-        ])
+        let policy = currentHybridProviderPolicyFromUI()
+        _ = try await APIClient.shared.updateSelectedBackendProviderPolicy(policy)
+        backendSettings = try await APIClient.shared.getSelectedBackendSettings()
         await MainActor.run {
           applyLocalHybridProviderDefaultsToUI()
           syncAllHybridProviderFieldsFromBackendSettings()
-          hybridProviderStatus = "Applied local defaults (ai_provider + chat_provider)."
+          hybridProviderStatus = "Applied local provider-policy defaults."
           isSavingHybridProvider = false
         }
         do {
-          let test = try await APIClient.shared.testHybridProvider(key: "chat_provider")
+          let test = try await APIClient.shared.testSelectedBackendProviderSlot(
+            HybridProviderPolicy.chatSlot)
           await MainActor.run {
             hybridProviderStatus = test.message
           }
@@ -7520,11 +7571,113 @@ struct SettingsContentView: View {
 
   private func applyLocalHybridProviderDefaultsToUI() {
     hybridAiBaseURL = HybridProviderReadiness.defaultBaseURL()
-    hybridAiModel = HybridProviderReadiness.defaultModel()
+    hybridAiModel = HybridProviderReadiness.defaultSmallModel()
     hybridChatBaseURL = hybridAiBaseURL
-    hybridChatModel = hybridAiModel
+    hybridChatModel = HybridProviderReadiness.defaultModel()
     hybridEmbedBaseURL = hybridAiBaseURL
-    hybridEmbedModel = hybridAiModel
+    hybridEmbedModel = HybridProviderReadiness.defaultSmallModel()
+    hybridVisionModel = ""
+  }
+
+  private func currentHybridProviderPolicyFromUI() -> HybridProviderPolicy.Policy {
+    let account = HybridProviderPolicy.ProviderAccount(
+      id: HybridProviderPolicy.localProviderAccountID,
+      kind: "openai_compatible",
+      baseURL: hybridAiBaseURL.trimmingCharacters(in: .whitespacesAndNewlines),
+      apiKey: hybridAiApiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        ? nil : hybridAiApiKey.trimmingCharacters(in: .whitespacesAndNewlines),
+      displayName: "Local OpenAI-compatible",
+      capabilities: HybridProviderPolicy.ProviderCapabilities(
+        chatCompletions: true,
+        jsonMode: true,
+        toolCalls: false,
+        vision: !hybridVisionModel.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+        speechToText: false
+      ),
+      subscriptionIntegration: nil
+    )
+    var slots: [String: HybridProviderPolicy.ModelSlotTarget] = [
+      HybridProviderPolicy.chatSlot: HybridProviderPolicy.ModelSlotTarget(
+        providerAccountID: account.id,
+        modelID: hybridChatModel.trimmingCharacters(in: .whitespacesAndNewlines),
+        options: HybridProviderPolicy.ModelSlotOptions(jsonMode: false, toolSupport: false)
+      ),
+      HybridProviderPolicy.postTranscriptSlot: HybridProviderPolicy.ModelSlotTarget(
+        providerAccountID: account.id,
+        modelID: hybridAiModel.trimmingCharacters(in: .whitespacesAndNewlines),
+        options: HybridProviderPolicy.ModelSlotOptions(jsonMode: true, toolSupport: false)
+      ),
+      HybridProviderPolicy.proactiveSlot: HybridProviderPolicy.ModelSlotTarget(
+        providerAccountID: account.id,
+        modelID: hybridEmbedModel.trimmingCharacters(in: .whitespacesAndNewlines),
+        options: HybridProviderPolicy.ModelSlotOptions(jsonMode: true, toolSupport: false)
+      ),
+      HybridProviderPolicy.memorySearchSlot: HybridProviderPolicy.ModelSlotTarget(
+        providerAccountID: nil,
+        modelID: HybridProviderPolicy.localWikiModel,
+        options: HybridProviderPolicy.ModelSlotOptions(jsonMode: nil, toolSupport: nil)
+      ),
+    ]
+    let visionModel = hybridVisionModel.trimmingCharacters(in: .whitespacesAndNewlines)
+    if !visionModel.isEmpty {
+      slots[HybridProviderPolicy.visionSlot] = HybridProviderPolicy.ModelSlotTarget(
+        providerAccountID: account.id,
+        modelID: visionModel,
+        options: HybridProviderPolicy.ModelSlotOptions(jsonMode: true, toolSupport: false)
+      )
+    }
+    return HybridProviderPolicy.Policy(
+      version: 1,
+      providerAccounts: [account],
+      modelSlots: slots
+    )
+  }
+
+  private func saveHybridProviderPolicy() {
+    guard !isSavingHybridProvider else { return }
+    isSavingHybridProvider = true
+    hybridProviderStatus = nil
+    let policy = currentHybridProviderPolicyFromUI()
+    Task {
+      do {
+        _ = try await APIClient.shared.updateSelectedBackendProviderPolicy(policy)
+        backendSettings = try await APIClient.shared.getSelectedBackendSettings()
+        await MainActor.run {
+          hybridProviderStatus = "Saved provider account and model slots to the local daemon."
+          isSavingHybridProvider = false
+          syncAllHybridProviderFieldsFromBackendSettings()
+        }
+      } catch {
+        await MainActor.run {
+          hybridProviderStatus = error.localizedDescription
+          isSavingHybridProvider = false
+        }
+      }
+    }
+  }
+
+  private func testHybridProviderSlot(_ slot: String) {
+    guard !isTestingHybridProvider else { return }
+    isTestingHybridProvider = true
+    hybridProviderStatus = nil
+    let policy = currentHybridProviderPolicyFromUI()
+    Task {
+      do {
+        _ = try await APIClient.shared.updateSelectedBackendProviderPolicy(policy)
+        let result = try await APIClient.shared.testSelectedBackendProviderSlot(slot)
+        backendSettings = try await APIClient.shared.getSelectedBackendSettings()
+        await MainActor.run {
+          hybridProviderStatus = result.message
+          isTestingHybridProvider = false
+          syncAllHybridProviderFieldsFromBackendSettings()
+        }
+      } catch {
+        await MainActor.run {
+          hybridProviderStatus = error.localizedDescription
+          isTestingHybridProvider = false
+        }
+      }
+    }
   }
 
   private func saveHybridProvider(key: String, baseURL: String, model: String, apiKey: String) {

@@ -2,20 +2,57 @@ import Foundation
 
 enum HybridProviderPolicy {
   static let chatSlot = "chat"
+  static let postTranscriptSlot = "post_transcript"
   static let proactiveSlot = "proactive"
   static let visionSlot = "vision"
+  static let sttSlot = "stt"
+  static let memorySearchSlot = "memory_search"
+  static let localProviderAccountID = "local-openai-compatible"
+  static let localWikiModel = "local_wiki"
 
-  struct ProviderAccount: Decodable, Equatable {
+  struct ProviderCapabilities: Codable, Equatable {
+    let chatCompletions: Bool
+    let jsonMode: Bool
+    let toolCalls: Bool
+    let vision: Bool
+    let speechToText: Bool
+
+    enum CodingKeys: String, CodingKey {
+      case chatCompletions = "chat_completions"
+      case jsonMode = "json_mode"
+      case toolCalls = "tool_calls"
+      case vision
+      case speechToText = "speech_to_text"
+    }
+  }
+
+  struct ModelSlotOptions: Codable, Equatable {
+    let jsonMode: Bool?
+    let toolSupport: Bool?
+
+    enum CodingKeys: String, CodingKey {
+      case jsonMode = "json_mode"
+      case toolSupport = "tool_support"
+    }
+  }
+
+  struct ProviderAccount: Codable, Equatable {
     let id: String
     let kind: String
     let baseURL: String?
     let apiKey: String?
+    let displayName: String?
+    let capabilities: ProviderCapabilities?
+    let subscriptionIntegration: String?
 
     enum CodingKeys: String, CodingKey {
       case id
       case kind
       case baseURL = "base_url"
       case apiKey = "api_key"
+      case displayName = "display_name"
+      case capabilities
+      case subscriptionIntegration = "subscription_integration"
     }
   }
 
@@ -45,7 +82,7 @@ enum HybridProviderPolicy {
     let resolution: SlotResolution
   }
 
-  struct Policy: Decodable {
+  struct Policy: Codable {
     let version: Int
     let providerAccounts: [ProviderAccount]
     let modelSlots: [String: ModelSlotTarget]
@@ -57,13 +94,15 @@ enum HybridProviderPolicy {
     }
   }
 
-  struct ModelSlotTarget: Decodable {
+  struct ModelSlotTarget: Codable {
     let providerAccountID: String?
     let modelID: String
+    let options: ModelSlotOptions?
 
     enum CodingKeys: String, CodingKey {
       case providerAccountID = "provider_account_id"
       case modelID = "model_id"
+      case options
     }
   }
 
@@ -141,5 +180,14 @@ enum HybridProviderPolicy {
   static func isOpenAICompatible(kind: String) -> Bool {
     let normalized = kind.lowercased()
     return normalized == "openai_compatible" || normalized == "openai"
+  }
+
+  static func policyFromSettings(_ settings: [LocalDaemonSetting]) -> Policy? {
+    guard let raw = settings.first(where: { $0.key == "provider_policy" })?.valueJson,
+      let data = raw.data(using: .utf8)
+    else {
+      return nil
+    }
+    return try? JSONDecoder().decode(Policy.self, from: data)
   }
 }

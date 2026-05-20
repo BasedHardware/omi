@@ -36,6 +36,10 @@ pub fn router() -> Router<AppState> {
             get(resolve_provider_slot),
         )
         .route(
+            "/v1/provider-policy/test-slot/:slot",
+            post(test_provider_slot),
+        )
+        .route(
             "/v1/conversations",
             get(list_conversations).post(create_conversation),
         )
@@ -907,6 +911,20 @@ async fn resolve_provider_slot(
     Ok(Json(json!({
         "resolved": resolution.resolved,
         "resolution": resolution
+    })))
+}
+
+async fn test_provider_slot(
+    State(state): State<AppState>,
+    Path(slot): Path<String>,
+) -> ApiResult<Value> {
+    let message = providers::test_configured_slot(&state.store, &slot)
+        .await
+        .map_err(|error| ApiError::bad_request(error.to_string()))?;
+    Ok(Json(json!({
+        "ok": true,
+        "slot": slot,
+        "message": message
     })))
 }
 

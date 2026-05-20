@@ -172,9 +172,12 @@ will not work when `OMI_PYTHON_API_URL` is set to an invalid host (intentional
 for hybrid testing).
 
 **Settings → Plan and Usage** shows a **Local** plan (not cloud Free/Neo tiers).
-Use that section to configure hybrid providers (`ai_provider`, `chat_provider`,
-`embedding_provider`). Keys are stored in the local daemon SQLite database on this Mac.
-Cloud subscription, usage quotas, and the Advanced “BYOK free forever” flow are hidden
+Use that section to configure a local provider account and task slots: Chat,
+Post-transcript processing, Proactive assistants, optional Vision, STT/local
+transcription, and Memory search: Local wiki. Keys are stored in the local daemon
+SQLite database on this Mac. Memory search uses local wiki/FTS search and does
+not require `embedding_provider` or vector embeddings for this profile. Cloud
+subscription, usage quotas, and the Advanced “BYOK free forever” flow are hidden
 in local mode.
 
 The Conversations header shows a `Local` chip when the app is using local daemon
@@ -283,17 +286,17 @@ title, overview, or transcript text.
 
 ## Local Provider Configuration
 
-See [hybrid-provider-settings.md](hybrid-provider-settings.md) for the full settings schema
-(`ai_provider`, `stt_provider`, `chat_provider`, `embedding_provider`, `vision_provider`) and
-`POST /v1/settings/test-provider`.
+See [hybrid-provider-settings.md](hybrid-provider-settings.md) for the full
+provider-policy schema, default slots, legacy setting-key bridge, and
+`POST /v1/provider-policy/test-slot/{slot}`.
 
 Processing works without provider keys by using deterministic fallback. To force
-that path, clear provider settings:
+that path, clear the typed provider policy and legacy provider settings:
 
 ```bash
 curl -X PUT http://127.0.0.1:8765/v1/settings \
   -H 'content-type: application/json' \
-  -d '{"ai_provider": null, "provider": null}'
+  -d '{"provider_policy": null, "ai_provider": null, "provider": null, "chat_provider": null, "vision_provider": null}'
 ```
 
 To test a direct OpenAI-compatible provider without editing source code, point
@@ -302,22 +305,56 @@ MVP validation, prefer a loopback stub so the test cannot reach hosted Omi or
 OpenAI services by accident:
 
 ```bash
-curl -X PUT http://127.0.0.1:8765/v1/settings \
+curl -X PUT http://127.0.0.1:8765/v1/provider-policy \
   -H 'content-type: application/json' \
   -d '{
-    "ai_provider": {
+    "version": 1,
+    "provider_accounts": [{
+      "id": "local-openai-compatible",
       "kind": "openai_compatible",
       "base_url": "http://127.0.0.1:43210/v1",
-      "model": "local-stub",
-      "api_key": "local-test-key"
+      "api_key": "local-test-key",
+      "display_name": "Local stub",
+      "capabilities": {
+        "chat_completions": true,
+        "json_mode": true,
+        "tool_calls": false,
+        "vision": false,
+        "speech_to_text": false
+      },
+      "subscription_integration": null
+    }],
+    "model_slots": {
+      "chat": {
+        "provider_account_id": "local-openai-compatible",
+        "model_id": "local-stub",
+        "options": {"json_mode": false, "tool_support": false}
+      },
+      "post_transcript": {
+        "provider_account_id": "local-openai-compatible",
+        "model_id": "gpt-5.4-mini",
+        "options": {"json_mode": true, "tool_support": false}
+      },
+      "proactive": {
+        "provider_account_id": "local-openai-compatible",
+        "model_id": "gpt-5.4-mini",
+        "options": {"json_mode": true, "tool_support": false}
+      },
+      "memory_search": {
+        "provider_account_id": null,
+        "model_id": "local_wiki",
+        "options": {}
+      }
     }
   }'
 ```
 
-Inspect the active settings:
+Inspect and validate the active policy:
 
 ```bash
-curl http://127.0.0.1:8765/v1/settings
+curl http://127.0.0.1:8765/v1/provider-policy
+curl http://127.0.0.1:8765/v1/provider-policy/resolve/post_transcript
+curl -X POST http://127.0.0.1:8765/v1/provider-policy/test-slot/memory_search -d '{}'
 ```
 
 Provider keys remain in the local daemon SQLite settings table and are sent

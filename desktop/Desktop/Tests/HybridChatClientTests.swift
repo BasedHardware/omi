@@ -223,7 +223,10 @@ final class HybridChatClientTests: XCTestCase {
       id: accountID,
       kind: "openai_compatible",
       baseURL: baseURL,
-      apiKey: "test-key"
+      apiKey: "test-key",
+      displayName: nil,
+      capabilities: nil,
+      subscriptionIntegration: nil
     )
     let resolved = HybridProviderPolicy.ResolvedSlot(
       slot: "chat",

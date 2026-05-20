@@ -1625,6 +1625,24 @@ final class APIClientRoutingTests: XCTestCase {
     XCTAssertNil(URLCapture.capturedRequests.first?.headers["Authorization"])
   }
 
+  func testLocalModeTestProviderSlotRoutesToLocalDaemonWithoutAuth() async {
+    setenv("OMI_DESKTOP_BACKEND_MODE", "local", 1)
+    setenv("OMI_LOCAL_DAEMON_URL", "http://127.0.0.1:8765", 1)
+    defer {
+      unsetenv("OMI_DESKTOP_BACKEND_MODE")
+      unsetenv("OMI_LOCAL_DAEMON_URL")
+    }
+    let client = await makeTestClient()
+    _ = try? await client.testSelectedBackendProviderSlot("post_transcript")
+      as LocalDaemonTestSlotResponse
+    assertRoutes(
+      URLCapture.capturedRequests, host: "127.0.0.1", port: 8765,
+      pathContains: "v1/provider-policy/test-slot/post_transcript",
+      method: "POST",
+      label: "local test provider slot")
+    XCTAssertNil(URLCapture.capturedRequests.first?.headers["Authorization"])
+  }
+
   func testLocalModeGetMessagesForSessionRoutesToLocalDaemon() async {
     setenv("OMI_DESKTOP_BACKEND_MODE", "local", 1)
     setenv("OMI_LOCAL_DAEMON_URL", "http://127.0.0.1:8765", 1)

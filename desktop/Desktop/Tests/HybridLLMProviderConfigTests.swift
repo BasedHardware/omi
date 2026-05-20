@@ -164,6 +164,55 @@ final class HybridLLMProviderConfigTests: XCTestCase {
     XCTAssertNil(HybridVisionProvider.providerConfig(settings: settings))
   }
 
+  func testReadinessRowsExposeSlotsAndLocalWikiMemory() throws {
+    let settings = try makeSettings([
+      (
+        "provider_policy",
+        [
+          "version": 1,
+          "provider_accounts": [
+            [
+              "id": "local-openai-compatible",
+              "kind": "openai_compatible",
+              "base_url": "http://127.0.0.1:11434/v1",
+              "api_key": "test-key",
+              "display_name": "Local OpenAI-compatible",
+            ]
+          ],
+          "model_slots": [
+            "chat": [
+              "provider_account_id": "local-openai-compatible",
+              "model_id": "chat-local",
+            ],
+            "post_transcript": [
+              "provider_account_id": NSNull(),
+              "model_id": "gpt-5.4-mini",
+            ],
+            "proactive": [
+              "provider_account_id": NSNull(),
+              "model_id": "gpt-5.4-mini",
+            ],
+            "memory_search": [
+              "provider_account_id": NSNull(),
+              "model_id": "local_wiki",
+            ],
+          ],
+        ]
+      )
+    ])
+
+    let rows = HybridProviderReadiness.rows(from: settings)
+
+    XCTAssertEqual(rows.map(\.id).contains("embedding_provider"), false)
+    XCTAssertEqual(rows.first(where: { $0.id == "chat" })?.detail, "Local OpenAI-compatible / chat-local")
+    XCTAssertTrue(
+      rows.first(where: { $0.id == "post_transcript" })?.detail.contains("gpt-5.4-mini")
+        == true)
+    XCTAssertTrue(
+      rows.first(where: { $0.id == "memory_search" })?.detail.contains("no embeddings required")
+        == true)
+  }
+
   private func decodeSettings(_ jsonArray: String) throws -> [LocalDaemonSetting] {
     let decoder = JSONDecoder()
     decoder.dateDecodingStrategy = .iso8601

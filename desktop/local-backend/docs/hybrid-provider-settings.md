@@ -99,6 +99,9 @@ Desktop clients should prefer these daemon APIs over manual JSON editing:
 - `GET /v1/provider-policy/resolve/{slot}` resolves one slot to its provider account,
   model, options, source (`provider_policy`, `legacy_setting`, or `default`), and a
   readable success/failure reason.
+- `POST /v1/provider-policy/test-slot/{slot}` validates the actual resolved task
+  path. OpenAI-compatible slots run a minimal chat-completions JSON ping; `memory_search`
+  reports local wiki readiness without requiring embeddings.
 - `GET /v1/model-catalog` returns the local model catalog and availability.
 
 Callers should resolve `post_transcript`, `proactive`, and `chat` slots explicitly
@@ -263,7 +266,10 @@ local guest session startup. Ask Omi resolves
 uses the returned provider account/model. Legacy `chat_provider` rows are only
 read by the daemon compatibility bridge when constructing the typed policy.
 
-Configure or override in **Settings → Plan and Usage** (local mode) or via `PUT /v1/settings`.
+Configure or override in **Settings → Plan and Usage** (local mode). The app writes
+`/v1/provider-policy` so users can inspect one provider account and slot model
+choices without hand-editing JSON. Advanced callers may still use `PUT
+/v1/provider-policy` directly.
 
 ## ChatGPT / Codex subscription (desktop)
 
@@ -271,14 +277,25 @@ When the user connects **ChatGPT plan** in Settings → Advanced:
 
 - A loopback proxy (`desktop/codex-proxy`, default `http://127.0.0.1:10531/v1`) uses `~/.codex/auth.json` from Codex CLI login.
 - Daemon `chat_provider` and `ai_provider` are set to that URL (not `embedding_provider`).
-- Memory search uses **local wiki + FTS5** instead of vector embeddings unless `OMI_HYBRID_DIRECT_EMBEDDINGS_ENABLED=1`.
+- Memory search readiness uses **local wiki + FTS5** for this profile, not vector
+  embeddings.
 - Deepgram / live transcription behavior is unchanged.
 
 Build proxy: `cd desktop/codex-proxy && cargo build --release`
 
 ## Test connection
 
-`POST /v1/settings/test-provider` with body `{ "key": "ai_provider" }` runs a minimal
-request against a legacy configured provider (chat completions ping for
-`openai_compatible`). New UI should read and write policy through `/v1/provider-policy`
-and use `/v1/provider-policy/resolve/{slot}` before making task-specific calls.
+`POST /v1/provider-policy/test-slot/{slot}` validates the active slot path and is
+the preferred readiness check for Settings UI. Example:
+
+```bash
+curl -fsS -X POST http://127.0.0.1:8765/v1/provider-policy/test-slot/chat \
+  -H 'content-type: application/json' \
+  -d '{}'
+```
+
+`POST /v1/settings/test-provider` with body `{ "key": "ai_provider" }` remains as
+a legacy helper for raw setting-key providers. New UI should read and write
+policy through `/v1/provider-policy`, use `/v1/provider-policy/resolve/{slot}`
+before task-specific calls, and use `/v1/provider-policy/test-slot/{slot}` for
+actionable readiness.

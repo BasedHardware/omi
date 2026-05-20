@@ -260,6 +260,58 @@ actor APIClient {
     )
   }
 
+  func getSelectedBackendProviderPolicy() async throws -> HybridProviderPolicy.Policy {
+    let target = selectedBackendTarget
+    guard target.mode == .localDaemon else {
+      throw APIError.featureUnavailable(
+        feature: "get_provider_policy",
+        reason: "Provider policy is only available in local daemon mode."
+      )
+    }
+    let response: LocalDaemonProviderPolicyResponse = try await get(
+      "v1/provider-policy",
+      requireAuth: false,
+      customBaseURL: target.baseURL
+    )
+    return response.providerPolicy
+  }
+
+  func updateSelectedBackendProviderPolicy(_ policy: HybridProviderPolicy.Policy) async throws
+    -> HybridProviderPolicy.Policy
+  {
+    let target = selectedBackendTarget
+    guard target.mode == .localDaemon else {
+      throw APIError.featureUnavailable(
+        feature: "update_provider_policy",
+        reason: "Provider policy is only available in local daemon mode."
+      )
+    }
+    let response: LocalDaemonProviderPolicyResponse = try await put(
+      "v1/provider-policy",
+      body: policy,
+      requireAuth: false,
+      customBaseURL: target.baseURL
+    )
+    return response.providerPolicy
+  }
+
+  func testSelectedBackendProviderSlot(_ slot: String) async throws -> LocalDaemonTestSlotResponse {
+    let target = selectedBackendTarget
+    guard target.mode == .localDaemon else {
+      throw APIError.featureUnavailable(
+        feature: "test_provider_slot",
+        reason: "Provider slot tests are only available in local daemon mode."
+      )
+    }
+    let encodedSlot = slot.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? slot
+    return try await post(
+      "v1/provider-policy/test-slot/\(encodedSlot)",
+      body: EmptyRequest(),
+      requireAuth: false,
+      customBaseURL: target.baseURL
+    )
+  }
+
   func resolveSelectedBackendProviderSlot(_ slot: String) async throws
     -> HybridProviderPolicy.SlotResolutionResponse
   {
@@ -394,6 +446,16 @@ struct LocalDaemonSettingsResponse: Decodable {
   let settings: [LocalDaemonSetting]
 }
 
+struct LocalDaemonProviderPolicyResponse: Decodable {
+  let providerPolicy: HybridProviderPolicy.Policy
+
+  enum CodingKeys: String, CodingKey {
+    case providerPolicy = "provider_policy"
+  }
+}
+
+struct EmptyRequest: Encodable {}
+
 struct LocalDaemonTestProviderRequest: Encodable {
   let key: String
 }
@@ -401,6 +463,12 @@ struct LocalDaemonTestProviderRequest: Encodable {
 struct LocalDaemonTestProviderResponse: Decodable, Equatable {
   let ok: Bool
   let key: String
+  let message: String
+}
+
+struct LocalDaemonTestSlotResponse: Decodable, Equatable {
+  let ok: Bool
+  let slot: String
   let message: String
 }
 

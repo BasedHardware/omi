@@ -973,6 +973,44 @@ pub async fn test_configured_provider(store: &Store, key: &str) -> Result<String
     Ok(format!("{key} responded successfully"))
 }
 
+pub async fn test_configured_slot(store: &Store, slot: &str) -> Result<String> {
+    let resolution = resolve_model_slot_result(store, slot)?;
+    let Some(resolved) = resolution.resolved.as_ref() else {
+        return Err(anyhow!(resolution.reason));
+    };
+    if slot == SLOT_MEMORY_SEARCH {
+        return Ok(format!(
+            "memory_search uses {}; local wiki search does not require embeddings",
+            resolved.model_id
+        ));
+    }
+    if slot == SLOT_STT && resolved.provider_account.is_none() {
+        return Ok("stt uses local transcription; no provider account test required".to_string());
+    }
+    if !resolution.ok {
+        return Err(anyhow!(resolution.reason));
+    }
+    let Some(account) = resolved.provider_account.as_ref() else {
+        return Err(anyhow!("model slot {slot} has no provider account to test"));
+    };
+    if !is_openai_compatible_kind(&account.kind) {
+        return Err(anyhow!(
+            "test-slot supports openai_compatible provider accounts only"
+        ));
+    }
+    let provider = OpenAiCompatibleProvider::new(openai_config_from_resolved_slot(resolved)?);
+    let _ = provider
+        .complete_json(vec![
+            ChatMessage::system("Reply with JSON only: {\"ok\":true}"),
+            ChatMessage::user("ping"),
+        ])
+        .await?;
+    Ok(format!(
+        "{slot} resolved to {} on {} and responded successfully",
+        resolved.model_id, account.id
+    ))
+}
+
 fn load_openai_config_from_value(value: &Value) -> Result<OpenAiCompatibleConfig> {
     let kind = value["kind"].as_str().unwrap_or_default();
     if kind != "openai" && kind != "openai_compatible" {
