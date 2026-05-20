@@ -478,9 +478,10 @@ final class BackgroundTranscriptionRoutingGuardTests: XCTestCase {
 
     XCTAssertTrue(decision.useCloudBackend)
     XCTAssertNotNil(decision.unsupportedLocalReason)
+    XCTAssertNil(decision.localPlan)
   }
 
-  func testResolvedLocalBlocksBackgroundCaptureUntilLocalFinalizeExists() {
+  func testResolvedLocalBackgroundRoutesToLocalWhisperAndNotCloudListen() {
     let decision = BackgroundTranscriptionRoutingGuard().decide(
       selection: TranscriptionProviderSelection(mode: .local, quality: .balanced),
       capabilities: LocalTranscriptionCapabilities(
@@ -491,10 +492,11 @@ final class BackgroundTranscriptionRoutingGuardTests: XCTestCase {
     )
 
     XCTAssertFalse(decision.useCloudBackend)
-    XCTAssertTrue(decision.unsupportedLocalReason?.contains("backend force-processing") == true)
+    XCTAssertEqual(decision.localPlan?.engine, .mlxWhisper)
+    XCTAssertNil(decision.unsupportedLocalReason)
   }
 
-  func testAutoResolvedLocalBlocksBackgroundCaptureUntilLocalFinalizeExists() {
+  func testAutoResolvedLocalBackgroundRoutesToLocalWhisperAndNotCloudListen() {
     let decision = BackgroundTranscriptionRoutingGuard().decide(
       selection: TranscriptionProviderSelection(mode: .auto, quality: .balanced),
       capabilities: LocalTranscriptionCapabilities(
@@ -505,7 +507,8 @@ final class BackgroundTranscriptionRoutingGuardTests: XCTestCase {
     )
 
     XCTAssertFalse(decision.useCloudBackend)
-    XCTAssertTrue(decision.unsupportedLocalReason?.contains("backend force-processing") == true)
+    XCTAssertEqual(decision.localPlan?.engine, .mlxWhisper)
+    XCTAssertNil(decision.unsupportedLocalReason)
   }
 
   func testExplicitLocalWithoutEngineDoesNotSilentlyUseCloudForBackground() {
@@ -520,6 +523,7 @@ final class BackgroundTranscriptionRoutingGuardTests: XCTestCase {
 
     XCTAssertFalse(decision.useCloudBackend)
     XCTAssertEqual(decision.unsupportedLocalReason, "No local transcription engine is available")
+    XCTAssertNil(decision.localPlan)
   }
 }
 
@@ -535,6 +539,8 @@ final class TranscriptionProviderOnboardingAdvisorTests: XCTestCase {
 
     XCTAssertTrue(recommendation.canRecommendLocal)
     XCTAssertEqual(recommendation.recommendedSelection.mode, .auto)
+    XCTAssertTrue(recommendation.detail.contains("Continuous background transcription"))
+    XCTAssertFalse(recommendation.detail.contains("still requires cloud transcription"))
     XCTAssertTrue(recommendation.status.contains("MLX Whisper"))
   }
 
@@ -549,6 +555,7 @@ final class TranscriptionProviderOnboardingAdvisorTests: XCTestCase {
 
     XCTAssertFalse(recommendation.canRecommendLocal)
     XCTAssertEqual(recommendation.recommendedSelection.mode, .cloud)
+    XCTAssertTrue(recommendation.detail.contains("continuous background capture"))
     XCTAssertTrue(recommendation.status.contains("cloud"))
   }
 }

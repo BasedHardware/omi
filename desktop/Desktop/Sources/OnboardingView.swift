@@ -538,7 +538,7 @@ struct OnboardingView: View {
 
     guard routing.useCloudBackend else {
       log(
-        "OnboardingView: skipping automatic background transcription start because local background capture is unavailable"
+        "OnboardingView: skipping automatic background transcription start because local background capture must not use the cloud listen path"
       )
       return
     }

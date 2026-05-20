@@ -204,7 +204,7 @@ struct TranscriptionProviderOnboardingAdvisor {
         canRecommendLocal: true,
         title: "Use Local Whisper",
         detail:
-          "Recommended for this Mac. Push-to-Talk transcription stays on-device with local Whisper; continuous background capture still requires cloud transcription.",
+          "Recommended for this Mac. Continuous background transcription can use local Whisper to reduce always-on cloud transcription cost; Push-to-Talk may still use the existing cloud path.",
         status: Self.statusText(for: result)
       )
     }
@@ -214,7 +214,7 @@ struct TranscriptionProviderOnboardingAdvisor {
       canRecommendLocal: false,
       title: "Use Cloud Transcription",
       detail:
-        "Local Whisper is not available on this Mac yet. Cloud transcription keeps meetings and background capture working.",
+        "Local Whisper is not available on this Mac yet. Cloud transcription keeps meetings and continuous background capture working.",
       status: result.fallbackReason ?? "Local Whisper is unavailable"
     )
   }
@@ -233,8 +233,8 @@ struct TranscriptionProviderOnboardingAdvisor {
 
   static func displayName(for mode: TranscriptionProviderKind) -> String {
     switch mode {
-    case .auto: return "Local First"
-    case .local: return "Local Whisper Only"
+    case .auto: return "Local Background First"
+    case .local: return "Local Background Only"
     case .cloud: return "Cloud Transcription"
     }
   }

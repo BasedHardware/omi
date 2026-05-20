@@ -386,8 +386,38 @@ struct PTTBatchTranscriptionRouter {
 }
 
 struct BackgroundTranscriptionRoutingDecision: Equatable {
-  var useCloudBackend: Bool
-  var unsupportedLocalReason: String?
+  enum Route: Equatable {
+    case cloudBackend(fallbackReason: String?)
+    case localWhisper(LocalTranscriptionPlan)
+    case unavailable(String)
+  }
+
+  var route: Route
+
+  var useCloudBackend: Bool {
+    if case .cloudBackend = route {
+      return true
+    }
+    return false
+  }
+
+  var localPlan: LocalTranscriptionPlan? {
+    if case .localWhisper(let plan) = route {
+      return plan
+    }
+    return nil
+  }
+
+  var unsupportedLocalReason: String? {
+    switch route {
+    case .cloudBackend(let fallbackReason):
+      return fallbackReason
+    case .localWhisper:
+      return nil
+    case .unavailable(let reason):
+      return reason
+    }
+  }
 }
 
 struct BackgroundTranscriptionRoutingGuard {
@@ -400,24 +430,23 @@ struct BackgroundTranscriptionRoutingGuard {
     let resolved = policy.resolve(selection: selection, capabilities: capabilities)
     if selection.mode == .local, resolved.provider != .local {
       return BackgroundTranscriptionRoutingDecision(
-        useCloudBackend: false,
-        unsupportedLocalReason: resolved.fallbackReason
-          ?? "No local transcription engine is available"
+        route: .unavailable(resolved.fallbackReason ?? "No local transcription engine is available")
       )
     }
 
     guard resolved.provider == .local else {
       return BackgroundTranscriptionRoutingDecision(
-        useCloudBackend: true,
-        unsupportedLocalReason: resolved.fallbackReason
+        route: .cloudBackend(fallbackReason: resolved.fallbackReason)
       )
     }
 
-    return BackgroundTranscriptionRoutingDecision(
-      useCloudBackend: false,
-      unsupportedLocalReason:
-        "Local background transcription is not available until local finalization can persist conversations without backend force-processing."
-    )
+    guard let plan = resolved.localPlan else {
+      return BackgroundTranscriptionRoutingDecision(
+        route: .unavailable("No local transcription engine is available")
+      )
+    }
+
+    return BackgroundTranscriptionRoutingDecision(route: .localWhisper(plan))
   }
 }
 

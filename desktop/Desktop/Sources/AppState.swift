@@ -1285,12 +1285,12 @@ class AppState: ObservableObject {
     if !backgroundRouting.useCloudBackend {
       let message =
         backgroundRouting.unsupportedLocalReason
-        ?? "Local background transcription is not available yet."
+        ?? "Local background transcription is selected and will not use the cloud listen path."
       log("Transcription: \(message)")
       showAlert(
-        title: "Local Background Transcription Unavailable",
+        title: "Local Background Transcription",
         message:
-          "Local transcription is currently available for Push-to-Talk batch mode. Choose cloud transcription to use background capture."
+          "Local background transcription is selected, so Omi will not start a cloud /v4/listen session. The local background session manager is not enabled in this build yet."
       )
       return
     }

@@ -34,7 +34,7 @@ struct OnboardingBYOKStepView: View {
       eyebrow: "Free forever",
       title: "Choose transcription.",
       description:
-        "Use local Whisper for Push-to-Talk when this Mac can support it, or keep the existing cloud transcription path for continuous background capture. API keys are optional unless you want the free-forever plan.",
+        "Use local Whisper for continuous background transcription when this Mac can support it, or keep the existing cloud transcription path. Push-to-Talk may still use cloud. API keys are optional unless you want the free-forever plan.",
       showsSkip: true,
       onSkip: {
         AnalyticsManager.shared.onboardingStepCompleted(step: stepIndex, stepName: "BYOK_Skipped")
@@ -55,7 +55,7 @@ struct OnboardingBYOKStepView: View {
             .foregroundColor(OmiColors.textPrimary)
 
           Text(
-            "Add OpenAI, Anthropic, Gemini, and Deepgram keys to activate the free plan. Local Whisper does not require a Deepgram key."
+            "Add OpenAI, Anthropic, Gemini, and Deepgram keys to activate the free plan. Local background Whisper does not require a Deepgram key."
           )
           .font(.system(size: 12))
           .foregroundColor(OmiColors.textTertiary)

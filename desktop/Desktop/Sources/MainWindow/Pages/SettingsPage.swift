@@ -1089,16 +1089,17 @@ struct SettingsContentView: View {
           VStack(spacing: 10) {
             transcriptionProviderOption(
               mode: .auto,
-              title: "Local First",
+              title: "Local Background First",
               detail:
-                "Use local Whisper for Push-to-Talk when available; use cloud when local is unavailable or for background capture.",
+                "Use local Whisper for continuous background transcription when available. If local is unavailable, this mode may use cloud transcription.",
               icon: "sparkle.magnifyingglass"
             )
 
             transcriptionProviderOption(
               mode: .local,
-              title: "Local Whisper Only",
-              detail: "Use on-device batch transcription. Background capture is not available yet.",
+              title: "Local Background Only",
+              detail:
+                "Use on-device Whisper for continuous background transcription. If local ASR is unavailable, background transcription will fail instead of using cloud.",
               icon: "desktopcomputer"
             )
 
@@ -1106,21 +1107,19 @@ struct SettingsContentView: View {
               mode: .cloud,
               title: "Cloud Transcription",
               detail:
-                "Use the existing Omi cloud transcription path for live meetings and background capture.",
+                "Use the existing Omi cloud transcription path for live meetings and continuous background capture.",
               icon: "cloud.fill"
             )
           }
 
-          if !backgroundTranscriptionRouting.useCloudBackend {
+          if let unavailableReason = backgroundTranscriptionUnavailableReason {
             HStack(alignment: .top, spacing: 8) {
               Image(systemName: "info.circle.fill")
                 .scaledFont(size: 12)
                 .foregroundColor(OmiColors.warning)
                 .padding(.top, 1)
 
-              Text(
-                "Local background transcription is not available yet. Push-to-Talk can use local Whisper; choose Cloud Transcription for continuous background capture."
-              )
+              Text(unavailableReason)
               .scaledFont(size: 12)
               .foregroundColor(OmiColors.warning)
               .fixedSize(horizontal: false, vertical: true)
@@ -1462,6 +1461,13 @@ struct SettingsContentView: View {
       selection: transcriptionProviderSelection,
       capabilities: localTranscriptionCapabilities
     )
+  }
+
+  private var backgroundTranscriptionUnavailableReason: String? {
+    guard case .unavailable(let reason) = backgroundTranscriptionRouting.route else {
+      return nil
+    }
+    return reason
   }
 
   private var transcriptionProviderStatusText: String {
