@@ -6,7 +6,10 @@ use serde_json::{json, Value};
 use tokio::time;
 
 use crate::{
-    providers::{configured_openai_provider, ChatMessage},
+    providers::{
+        configured_openai_provider_for_slot, post_transcript_slot_resolution, ChatMessage,
+        ResolvedModelSlot, SLOT_POST_TRANSCRIPT,
+    },
     storage::{
         deterministic_id, NewActionItem, NewMemory, ProcessingJob, ProcessingJobStatus, Store,
         UpdateConversation,
@@ -94,18 +97,34 @@ async fn process_conversation_job(store: &Store, job: &ProcessingJob) -> Result<
         .map(|segment| segment.text.as_str())
         .collect::<Vec<_>>()
         .join(" ");
-    let output = if let Some(provider) = configured_openai_provider(store)? {
+    let resolution = post_transcript_slot_resolution(store)?;
+    let (output, metadata) = if resolution.ok {
+        let provider = configured_openai_provider_for_slot(store, SLOT_POST_TRANSCRIPT)?
+            .ok_or_else(|| anyhow!("post_transcript slot resolved to an unsupported provider"))?;
         let mut output = provider
+            .provider
             .complete_json(processing_prompt(&transcript))
             .await
             .and_then(parse_provider_output)?;
-        output.provider = "openai_compatible".to_string();
-        output
+        let account = provider
+            .slot
+            .provider_account
+            .as_ref()
+            .ok_or_else(|| anyhow!("post_transcript slot missing provider account"))?;
+        output.provider = account.kind.clone();
+        (
+            output,
+            provider_metadata(job, conversation_id, &provider.slot),
+        )
     } else {
-        fallback_output(&transcript)
+        let output = fallback_output(&transcript);
+        (
+            output,
+            fallback_metadata(job, conversation_id, &resolution.reason),
+        )
     };
 
-    persist_processing_output(store, conversation_id, &output)?;
+    persist_processing_output(store, conversation_id, &output, &metadata)?;
 
     Ok(json!({
         "conversation_id": conversation_id,
@@ -113,7 +132,8 @@ async fn process_conversation_job(store: &Store, job: &ProcessingJob) -> Result<
         "overview": output.overview,
         "action_items": output.action_items,
         "memories": output.memories,
-        "provider": output.provider
+        "provider": output.provider,
+        "metadata": metadata
     }))
 }
 
@@ -129,20 +149,12 @@ fn processing_prompt(transcript: &str) -> Vec<ChatMessage> {
 }
 
 fn parse_provider_output(value: Value) -> Result<ProcessingOutput> {
-    let title = value["title"]
-        .as_str()
-        .unwrap_or_default()
-        .trim()
-        .to_string();
-    let overview = value["overview"]
-        .as_str()
-        .unwrap_or_default()
-        .trim()
-        .to_string();
+    let title = required_string(&value, "title")?;
+    let overview = required_string(&value, "overview")?;
     let action_items = value["action_items"]
         .as_array()
-        .into_iter()
-        .flatten()
+        .ok_or_else(|| anyhow!("provider output missing action_items array"))?
+        .iter()
         .filter_map(|item| {
             let title = item["title"].as_str()?.trim().to_string();
             if title.is_empty() {
@@ -160,8 +172,8 @@ fn parse_provider_output(value: Value) -> Result<ProcessingOutput> {
         .collect();
     let memories = value["memories"]
         .as_array()
-        .into_iter()
-        .flatten()
+        .ok_or_else(|| anyhow!("provider output missing memories array"))?
+        .iter()
         .filter_map(|item| {
             let content = item["content"].as_str()?.trim().to_string();
             if content.is_empty() {
@@ -183,6 +195,18 @@ fn parse_provider_output(value: Value) -> Result<ProcessingOutput> {
         memories,
         provider: "openai_compatible".to_string(),
     })
+}
+
+fn required_string(value: &Value, key: &str) -> Result<String> {
+    let value = value[key]
+        .as_str()
+        .ok_or_else(|| anyhow!("provider output missing {key}"))?
+        .trim()
+        .to_string();
+    if value.is_empty() {
+        return Err(anyhow!("provider output {key} was empty"));
+    }
+    Ok(value)
 }
 
 pub fn fallback_output(transcript: &str) -> ProcessingOutput {
@@ -220,7 +244,19 @@ fn persist_processing_output(
     store: &Store,
     conversation_id: &str,
     output: &ProcessingOutput,
+    processing_metadata: &Value,
 ) -> Result<()> {
+    let conversation = store
+        .conversations()
+        .get(conversation_id)?
+        .ok_or_else(|| anyhow!("conversation missing while persisting processing output"))?;
+    let conversation_metadata =
+        merge_processing_metadata(&conversation.metadata_json, processing_metadata);
+    let status = if output.provider == "fallback" {
+        "processed_fallback"
+    } else {
+        "processed"
+    };
     store
         .conversations()
         .update(
@@ -228,9 +264,9 @@ fn persist_processing_output(
             UpdateConversation {
                 title: Some(output.title.clone()),
                 overview: Some(output.overview.clone()),
-                status: Some("processed".to_string()),
+                status: Some(status.to_string()),
                 ended_at: None,
-                metadata: None,
+                metadata: Some(conversation_metadata),
                 starred: None,
                 folder_id: None,
             },
@@ -257,7 +293,7 @@ fn persist_processing_output(
             description: Some(item.description.clone()),
             status: Some("open".to_string()),
             due_at: None,
-            metadata: Some(json!({"source": "local_processing"})),
+            metadata: Some(row_processing_metadata(processing_metadata)),
         })?;
     }
 
@@ -282,20 +318,76 @@ fn persist_processing_output(
             content: memory.content.clone(),
             category: memory.category.clone(),
             conversation_id: Some(conversation_id.to_string()),
-            metadata: Some(json!({"source": "local_processing"})),
+            metadata: Some(row_processing_metadata(processing_metadata)),
         })?;
     }
 
     Ok(())
 }
 
+fn provider_metadata(
+    job: &ProcessingJob,
+    conversation_id: &str,
+    slot: &ResolvedModelSlot,
+) -> Value {
+    let account = slot.provider_account.as_ref();
+    json!({
+        "source": "local_processing",
+        "mode": "model",
+        "conversation_id": conversation_id,
+        "job_id": job.id,
+        "job_kind": job.kind,
+        "slot": slot.slot,
+        "slot_source": slot.source,
+        "model_id": slot.model_id,
+        "provider_account_id": account.map(|account| account.id.clone()),
+        "provider_kind": account.map(|account| account.kind.clone()),
+        "options": slot.options.clone()
+    })
+}
+
+fn fallback_metadata(job: &ProcessingJob, conversation_id: &str, reason: &str) -> Value {
+    json!({
+        "source": "local_processing",
+        "mode": "fallback",
+        "conversation_id": conversation_id,
+        "job_id": job.id,
+        "job_kind": job.kind,
+        "slot": SLOT_POST_TRANSCRIPT,
+        "fallback_reason": reason
+    })
+}
+
+fn row_processing_metadata(processing_metadata: &Value) -> Value {
+    json!({
+        "source": "local_processing",
+        "local_processing": processing_metadata
+    })
+}
+
+fn merge_processing_metadata(existing_metadata_json: &str, processing_metadata: &Value) -> Value {
+    let mut metadata =
+        serde_json::from_str::<Value>(existing_metadata_json).unwrap_or_else(|_| json!({}));
+    if !metadata.is_object() {
+        metadata = json!({});
+    }
+    metadata["local_processing"] = processing_metadata.clone();
+    metadata
+}
+
 #[cfg(test)]
 mod tests {
+    use crate::providers::{
+        save_provider_policy, ModelSlotOptions, ModelSlotTarget, ProviderAccount,
+        ProviderCapabilities, ProviderPolicy, PROVIDER_POLICY_VERSION,
+    };
     use crate::storage::{NewConversation, NewProcessingJob, NewTranscriptSegment};
 
     use super::*;
+    use axum::{routing::post, Json, Router};
     use serde_json::Map;
-    use std::net::TcpListener;
+    use std::{collections::BTreeMap, net::TcpListener};
+    use tokio::net::TcpListener as TokioTcpListener;
 
     #[test]
     fn fallback_processing_is_deterministic_and_empty_for_items_and_memories() {
@@ -364,7 +456,7 @@ mod tests {
             conversation.title,
             "Plan the desktop local backend MVP and verify"
         );
-        assert_eq!(conversation.status, "processed");
+        assert_eq!(conversation.status, "processed_fallback");
         assert!(conversation
             .overview
             .starts_with("Plan the desktop local backend MVP"));
@@ -373,6 +465,137 @@ mod tests {
 
         let result: Value = serde_json::from_str(&job.result_json)?;
         assert_eq!(result["provider"], "fallback");
+        assert_eq!(result["metadata"]["mode"], "fallback");
+        assert_eq!(result["metadata"]["slot"], SLOT_POST_TRANSCRIPT);
+
+        let conversation_metadata: Value = serde_json::from_str(&conversation.metadata_json)?;
+        assert_eq!(
+            conversation_metadata["local_processing"]["mode"],
+            "fallback"
+        );
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn post_transcript_slot_provider_persists_model_outputs() -> Result<()> {
+        let store = Store::open_in_memory()?;
+        let conversation_id = deterministic_id("conv", &["session-slot-processing"]);
+        configure_post_transcript_stub_provider(
+            &store,
+            &spawn_processing_stub(json!({
+                "title": "Slot generated title",
+                "overview": "Slot generated overview",
+                "action_items": [{
+                    "title": "Review slot wiring",
+                    "description": "Confirm post transcript processing uses provider policy."
+                }],
+                "memories": [{
+                    "content": "User wants local post transcript processing through slots.",
+                    "category": "preference"
+                }]
+            }))
+            .await?,
+            "slot-model",
+        )?;
+
+        seed_conversation_with_segment(
+            &store,
+            &conversation_id,
+            "session-slot-processing",
+            "Use the configured slot provider for local processing.",
+        )?;
+        store.processing_jobs().enqueue(NewProcessingJob {
+            id: deterministic_id("job", &["slot-processing", &conversation_id]),
+            kind: "finalize_transcript".to_string(),
+            target_conversation_id: Some(conversation_id.clone()),
+            max_retries: Some(3),
+            payload: Some(json!({"conversation_id": conversation_id})),
+        })?;
+
+        let job = process_next_job(&store)
+            .await?
+            .expect("queued job should be processed");
+        assert_eq!(job.status, ProcessingJobStatus::Completed);
+
+        let conversation = store
+            .conversations()
+            .get(job.target_conversation_id.as_ref().unwrap())?
+            .expect("conversation should exist");
+        assert_eq!(conversation.title, "Slot generated title");
+        assert_eq!(conversation.overview, "Slot generated overview");
+        assert_eq!(conversation.status, "processed");
+
+        let action_items = store.action_items().list()?;
+        assert_eq!(action_items.len(), 1);
+        assert_eq!(action_items[0].title, "Review slot wiring");
+        let action_metadata: Value = serde_json::from_str(&action_items[0].metadata_json)?;
+        assert_eq!(
+            action_metadata["local_processing"]["model_id"],
+            "slot-model"
+        );
+
+        let memories = store.memories().list()?;
+        assert_eq!(memories.len(), 1);
+        assert_eq!(
+            memories[0].content,
+            "User wants local post transcript processing through slots."
+        );
+
+        let result: Value = serde_json::from_str(&job.result_json)?;
+        assert_eq!(result["metadata"]["mode"], "model");
+        assert_eq!(result["metadata"]["slot"], SLOT_POST_TRANSCRIPT);
+        assert_eq!(result["metadata"]["model_id"], "slot-model");
+        assert_eq!(result["metadata"]["slot_source"], "provider_policy");
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn malformed_provider_json_fails_and_is_retry_safe() -> Result<()> {
+        let store = Store::open_in_memory()?;
+        let conversation_id = deterministic_id("conv", &["session-malformed-provider"]);
+        configure_post_transcript_stub_provider(
+            &store,
+            &spawn_processing_stub(json!({
+                "title": "Missing arrays",
+                "overview": "This should not be accepted."
+            }))
+            .await?,
+            "slot-model",
+        )?;
+
+        seed_conversation_with_segment(
+            &store,
+            &conversation_id,
+            "session-malformed-provider",
+            "Malformed model JSON should fail instead of empty-success processing.",
+        )?;
+        store.processing_jobs().enqueue(NewProcessingJob {
+            id: deterministic_id("job", &["malformed-provider", &conversation_id]),
+            kind: "finalize_transcript".to_string(),
+            target_conversation_id: Some(conversation_id.clone()),
+            max_retries: Some(1),
+            payload: Some(json!({"conversation_id": conversation_id})),
+        })?;
+
+        let job = process_next_job(&store)
+            .await?
+            .expect("failed job should be returned");
+        assert_eq!(job.status, ProcessingJobStatus::Failed);
+        assert!(job
+            .last_error
+            .as_deref()
+            .unwrap_or("")
+            .contains("action_items array"));
+
+        let conversation = store
+            .conversations()
+            .get(job.target_conversation_id.as_ref().unwrap())?
+            .expect("conversation should exist");
+        assert_eq!(conversation.status, "open");
+        assert!(store.action_items().list()?.is_empty());
+        assert!(store.memories().list()?.is_empty());
 
         Ok(())
     }
@@ -482,8 +705,21 @@ mod tests {
             provider: "openai_compatible".to_string(),
         };
 
-        persist_processing_output(&store, &conversation_id, &output)?;
-        persist_processing_output(&store, &conversation_id, &output)?;
+        let metadata = json!({
+            "source": "local_processing",
+            "mode": "model",
+            "conversation_id": conversation_id,
+            "job_id": "job-provider-retry-1",
+            "job_kind": "finalize_transcript",
+            "slot": SLOT_POST_TRANSCRIPT,
+            "slot_source": "provider_policy",
+            "model_id": "first-model",
+            "provider_account_id": "local-openai",
+            "provider_kind": "openai_compatible"
+        });
+
+        persist_processing_output(&store, &conversation_id, &output, &metadata)?;
+        persist_processing_output(&store, &conversation_id, &output, &metadata)?;
 
         let action_items = store.action_items().list()?;
         let memories = store.memories().list()?;
@@ -505,7 +741,24 @@ mod tests {
             memories: Vec::new(),
             provider: "openai_compatible".to_string(),
         };
-        persist_processing_output(&store, &conversation_id, &replacement)?;
+        let replacement_metadata = json!({
+            "source": "local_processing",
+            "mode": "model",
+            "conversation_id": conversation_id,
+            "job_id": "job-provider-retry-2",
+            "job_kind": "finalize_transcript",
+            "slot": SLOT_POST_TRANSCRIPT,
+            "slot_source": "provider_policy",
+            "model_id": "replacement-model",
+            "provider_account_id": "local-openai",
+            "provider_kind": "openai_compatible"
+        });
+        persist_processing_output(
+            &store,
+            &conversation_id,
+            &replacement,
+            &replacement_metadata,
+        )?;
 
         let action_items = store.action_items().list()?;
         let memories = store.memories().list()?;
@@ -513,6 +766,112 @@ mod tests {
         assert_eq!(action_items[0].title, "Ship retry behavior");
         assert!(memories.is_empty());
 
+        let action_metadata: Value = serde_json::from_str(&action_items[0].metadata_json)?;
+        assert_eq!(
+            action_metadata["local_processing"]["model_id"],
+            "replacement-model"
+        );
+
         Ok(())
+    }
+
+    fn seed_conversation_with_segment(
+        store: &Store,
+        conversation_id: &str,
+        session_id: &str,
+        text: &str,
+    ) -> Result<()> {
+        store.conversations().create(NewConversation {
+            id: conversation_id.to_string(),
+            session_id: session_id.to_string(),
+            title: String::new(),
+            overview: String::new(),
+            started_at: None,
+            metadata: None,
+        })?;
+        store.transcripts().append(NewTranscriptSegment {
+            id: deterministic_id("seg", &[conversation_id, "0"]),
+            conversation_id: conversation_id.to_string(),
+            session_id: session_id.to_string(),
+            speaker_id: None,
+            speaker_label: None,
+            text: text.to_string(),
+            start_ms: 0,
+            end_ms: 1000,
+            segment_index: 0,
+            source: None,
+            metadata: None,
+        })?;
+        Ok(())
+    }
+
+    fn configure_post_transcript_stub_provider(
+        store: &Store,
+        base_url: &str,
+        model_id: &str,
+    ) -> Result<()> {
+        let account = ProviderAccount {
+            id: "slot-stub".to_string(),
+            kind: "openai_compatible".to_string(),
+            base_url: Some(base_url.to_string()),
+            api_key: Some("local-test-key".to_string()),
+            display_name: Some("Slot Stub".to_string()),
+            capabilities: ProviderCapabilities {
+                chat_completions: true,
+                json_mode: true,
+                tool_calls: false,
+                vision: false,
+                speech_to_text: false,
+            },
+            subscription_integration: None,
+        };
+        let mut slots = BTreeMap::new();
+        slots.insert(
+            SLOT_POST_TRANSCRIPT.to_string(),
+            ModelSlotTarget {
+                provider_account_id: Some(account.id.clone()),
+                model_id: model_id.to_string(),
+                options: ModelSlotOptions {
+                    json_mode: Some(true),
+                    tool_support: Some(false),
+                },
+            },
+        );
+        save_provider_policy(
+            store,
+            ProviderPolicy {
+                version: PROVIDER_POLICY_VERSION,
+                provider_accounts: vec![account],
+                model_slots: slots,
+            },
+        )?;
+        Ok(())
+    }
+
+    async fn spawn_processing_stub(content: Value) -> Result<String> {
+        let content = serde_json::to_string(&content)?;
+        let app = Router::new().route(
+            "/v1/chat/completions",
+            post(move || {
+                let content = content.clone();
+                async move {
+                    Json(json!({
+                        "choices": [{
+                            "message": {
+                                "content": content
+                            }
+                        }]
+                    }))
+                }
+            }),
+        );
+        let listener = TokioTcpListener::bind("127.0.0.1:0").await?;
+        let addr = listener.local_addr()?;
+        tokio::spawn(async move {
+            axum::serve(listener, app)
+                .await
+                .expect("stub server failed");
+        });
+        Ok(format!("http://{addr}/v1"))
     }
 }

@@ -333,7 +333,7 @@ status_file="$(request GET /v1/processing-jobs/status)"
 assert_json_value "${status_file}" "failed" "0"
 
 processed_file="$(request GET /v1/conversations/conv-e2e-smoke)"
-assert_json_value "${processed_file}" "conversation.status" "processed"
+assert_json_value "${processed_file}" "conversation.status" "processed_fallback"
 assert_json_value "${processed_file}" "conversation.title" "Plan the backend free desktop MVP and verify"
 
 request_status POST /v1/conversations 409 '{
@@ -395,6 +395,7 @@ if [[ "${configured_provider}" != "openai_compatible" ]]; then
   exit 1
 fi
 provider_processed_file="$(request GET /v1/conversations/conv-provider-smoke)"
+assert_json_value "${provider_processed_file}" "conversation.status" "processed"
 assert_json_value "${provider_processed_file}" "conversation.title" "Stub provider title"
 
 provider_request_count="$(wc -l <"${PROVIDER_LOG_FILE}" | tr -d ' ')"
@@ -456,7 +457,7 @@ stop_daemon
 start_daemon
 
 persisted_file="$(request GET /v1/conversations/conv-e2e-smoke)"
-assert_json_value "${persisted_file}" "conversation.status" "processed"
+assert_json_value "${persisted_file}" "conversation.status" "processed_fallback"
 assert_json_value "${persisted_file}" "transcript_segments.0.text" "Plan the backend free desktop MVP and verify deterministic local processing."
 
 persisted_search_file="$(request GET '/v1/search/conversations?q=backend')"

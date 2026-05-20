@@ -328,7 +328,8 @@ directly to the configured provider, not to Omi-hosted backend services.
 - Local daemon startup on loopback.
 - SQLite-backed conversation create/read/update/delete.
 - Transcript segment append and finalize.
-- Local fallback processing for title and overview.
+- Local post-transcript processing through the `post_transcript` slot, with
+  deterministic fallback metadata when no provider account is configured.
 - Local full-text search over conversation and transcript text.
 - Local memories, action items, profile, and settings endpoints.
 - Desktop routing for local MVP flows without Firebase auth.
@@ -346,8 +347,10 @@ directly to the configured provider, not to Omi-hosted backend services.
 - Proactive assistant and chat paths that currently depend on Omi-hosted
   Gemini/Anthropic/provider proxy endpoints are disabled in local daemon mode
   unless the path has direct local provider configuration.
-- Remote AI provider calls from the local daemon require explicit local provider
-  settings/API keys. Without them, processing uses deterministic fallback output.
+- Remote AI provider calls from the local daemon require an explicit provider
+  account and model slot in `/v1/provider-policy` or compatible legacy settings.
+  Without a resolved `post_transcript` slot provider, processing uses
+  deterministic fallback output and records the fallback reason in job metadata.
 - Fully offline local LLM/STT support is outside the current MVP.
 
 ## Known Environment Blockers

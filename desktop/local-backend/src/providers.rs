@@ -172,6 +172,11 @@ pub struct OpenAiCompatibleProvider {
     client: Client,
 }
 
+pub struct ResolvedOpenAiCompatibleProvider {
+    pub provider: OpenAiCompatibleProvider,
+    pub slot: ResolvedModelSlot,
+}
+
 impl OpenAiCompatibleProvider {
     pub fn new(config: OpenAiCompatibleConfig) -> Self {
         Self {
@@ -223,32 +228,60 @@ impl OpenAiCompatibleProvider {
     }
 }
 
-pub fn configured_openai_provider(store: &Store) -> Result<Option<OpenAiCompatibleProvider>> {
-    let Some(config) = load_openai_config(store)? else {
+pub fn configured_openai_provider_for_slot(
+    store: &Store,
+    slot: &str,
+) -> Result<Option<ResolvedOpenAiCompatibleProvider>> {
+    let Some(resolved) = resolve_model_slot(store, slot)? else {
         return Ok(None);
     };
-    Ok(Some(OpenAiCompatibleProvider::new(config)))
+    let Some(account) = resolved.provider_account.as_ref() else {
+        return Ok(None);
+    };
+    if !is_openai_compatible_kind(&account.kind) {
+        return Ok(None);
+    }
+    let config = openai_config_from_resolved_slot(&resolved)?;
+    Ok(Some(ResolvedOpenAiCompatibleProvider {
+        provider: OpenAiCompatibleProvider::new(config),
+        slot: resolved,
+    }))
 }
 
 pub fn load_openai_config(store: &Store) -> Result<Option<OpenAiCompatibleConfig>> {
     let Some(resolved) = resolve_model_slot(store, SLOT_POST_TRANSCRIPT)? else {
         return Ok(None);
     };
-    let Some(account) = resolved.provider_account else {
+    let Some(account) = resolved.provider_account.as_ref() else {
         return Ok(None);
     };
     if !is_openai_compatible_kind(&account.kind) {
         return Ok(None);
     }
+    openai_config_from_resolved_slot(&resolved).map(Some)
+}
+
+fn openai_config_from_resolved_slot(
+    resolved: &ResolvedModelSlot,
+) -> Result<OpenAiCompatibleConfig> {
+    let account = resolved
+        .provider_account
+        .as_ref()
+        .ok_or_else(|| anyhow!("resolved model slot missing provider account"))?;
     let base_url = account
         .base_url
+        .clone()
         .unwrap_or_else(|| "https://api.openai.com/v1".to_string());
     validate_provider_base_url(&base_url)?;
-    Ok(Some(OpenAiCompatibleConfig {
+    Ok(OpenAiCompatibleConfig {
         base_url,
-        model: resolved.model_id,
-        api_key: account.api_key.unwrap_or_default(),
-    }))
+        model: resolved.model_id.clone(),
+        api_key: account.api_key.clone().unwrap_or_default(),
+    })
+}
+
+pub fn post_transcript_slot_resolution(store: &Store) -> Result<ModelSlotResolution> {
+    resolve_model_slot_result(store, SLOT_POST_TRANSCRIPT)
 }
 
 pub fn load_provider_policy(store: &Store) -> Result<ProviderPolicy> {

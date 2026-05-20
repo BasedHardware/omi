@@ -104,6 +104,69 @@ Desktop clients should prefer these daemon APIs over manual JSON editing:
 Callers should resolve `post_transcript`, `proactive`, and `chat` slots explicitly
 instead of duplicating the legacy setting-key scan order.
 
+## Post-transcript processing
+
+Finalized transcript jobs resolve `/v1/provider-policy/resolve/post_transcript`
+inside the daemon. When the slot resolves to an `openai_compatible` account, the
+daemon asks that model for strict JSON containing:
+
+- `title`
+- `overview`
+- `action_items`: array of `{ "title", "description" }`
+- `memories`: array of `{ "content", "category" }`
+
+Successful jobs persist title/overview on the conversation, replace prior
+local-processing memories/action items for that conversation, and record
+`local_processing` provenance metadata with the job ID, slot source, provider
+account, and model ID. Malformed model JSON is treated as a provider failure, so
+the durable job retry counter advances and eventually leaves an inspectable
+failed job.
+
+When the slot has no usable provider account, the daemon completes with
+deterministic fallback title/overview, conversation status `processed_fallback`,
+and job result metadata containing `mode: "fallback"` plus the slot resolution
+reason.
+
+Minimal local stub policy:
+
+```bash
+curl -fsS -X PUT http://127.0.0.1:8765/v1/provider-policy \
+  -H 'content-type: application/json' \
+  -d '{
+    "version": 1,
+    "provider_accounts": [{
+      "id": "local-openai-compatible",
+      "kind": "openai_compatible",
+      "base_url": "http://127.0.0.1:11434/v1",
+      "api_key": null,
+      "display_name": "Local OpenAI-compatible",
+      "capabilities": {
+        "chat_completions": true,
+        "json_mode": true,
+        "tool_calls": false,
+        "vision": false,
+        "speech_to_text": false
+      },
+      "subscription_integration": null
+    }],
+    "model_slots": {
+      "post_transcript": {
+        "provider_account_id": "local-openai-compatible",
+        "model_id": "gpt-5.4-mini",
+        "options": { "json_mode": true, "tool_support": false }
+      }
+    }
+  }'
+```
+
+After importing a transcript, inspect:
+
+```bash
+curl -fsS http://127.0.0.1:8765/v1/provider-policy/resolve/post_transcript
+curl -fsS http://127.0.0.1:8765/v1/processing-jobs/status
+curl -fsS http://127.0.0.1:8765/v1/conversations/<conversation-id>
+```
+
 ## Settings keys
 
 | Key | Purpose | `kind` values (v1) |

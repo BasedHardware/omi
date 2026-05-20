@@ -131,9 +131,10 @@ commands for the imported conversation. Stable client conversation, memory, and
 action-item IDs are idempotent: exact replay returns the existing row, while a
 conflicting replay returns HTTP 409.
 
-Local processing uses deterministic fallback unless an OpenAI-compatible
-provider is configured through structured `PUT /v1/settings` JSON; see the
-runbook for local-stub set and clear commands.
+Local processing resolves the `post_transcript` model slot from
+`/v1/provider-policy`. Without a resolved provider account, it records
+deterministic fallback metadata; with an OpenAI-compatible account it persists
+model-derived title, overview, memories, action items, and provenance.
 
 ## Architecture And E2E Validation
 
