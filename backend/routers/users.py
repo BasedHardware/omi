@@ -813,6 +813,47 @@ def deactivate_byok_endpoint(uid: str = Depends(auth.get_current_user_uid_no_byo
     return {"active": False}
 
 
+class ChatGPTActivateRequest(BaseModel):
+    fingerprint: str
+
+
+@router.post('/v1/users/me/chatgpt-active', tags=['v1'])
+def activate_chatgpt_endpoint(
+    data: ChatGPTActivateRequest, uid: str = Depends(auth.get_current_user_uid_no_byok_validation)
+):
+    """Enroll ChatGPT / Codex subscription tier (LLM workloads only; no provider keys stored)."""
+    if not _SHA256_HEX_RE.match(data.fingerprint):
+        raise HTTPException(
+            status_code=400,
+            detail='Invalid fingerprint: expected lowercase hex SHA-256 (64 chars)',
+        )
+    users_db.set_chatgpt_active(uid, data.fingerprint)
+    clear_trial_paywall_cache(uid)
+    return {"active": True}
+
+
+@router.delete('/v1/users/me/chatgpt-active', tags=['v1'])
+def deactivate_chatgpt_endpoint(uid: str = Depends(auth.get_current_user_uid_no_byok_validation)):
+    """Drop ChatGPT / Codex tier enrollment."""
+    users_db.clear_chatgpt_active(uid)
+    clear_trial_paywall_cache(uid)
+    return {"active": False}
+
+
+def _chatgpt_unlimited_subscription() -> Subscription:
+    return Subscription(
+        plan=PlanType.unlimited,
+        status=SubscriptionStatus.active,
+        features=["chatgpt"],
+        limits=PlanLimits(
+            transcription_seconds=None,
+            words_transcribed=None,
+            insights_gained=None,
+            memories_created=None,
+        ),
+    )
+
+
 def _byok_unlimited_subscription() -> Subscription:
     """BYOK free plan: unlimited limits, marked with the `byok` feature flag."""
     return Subscription(
@@ -843,6 +884,22 @@ def get_user_subscription_endpoint(
     # Synthetic paid-tier quota for BYOK / marketplace-reviewer overrides so
     # these users aren't surprised by a disabled phone-call feature.
     unlimited_phone_quota = PhoneCallQuota(has_access=True, is_paid=True)
+
+    if users_db.is_chatgpt_active(uid):
+        return UserSubscriptionResponse(
+            subscription=_chatgpt_unlimited_subscription(),
+            transcription_seconds_used=0,
+            transcription_seconds_limit=0,
+            words_transcribed_used=0,
+            words_transcribed_limit=0,
+            insights_gained_used=0,
+            insights_gained_limit=0,
+            memories_created_used=0,
+            memories_created_limit=0,
+            available_plans=[],
+            show_subscription_ui=False,
+            phone_call_quota=unlimited_phone_quota,
+        )
 
     if users_db.is_byok_active(uid) and has_byok_keys():
         return UserSubscriptionResponse(
@@ -1053,6 +1110,18 @@ def get_user_chat_usage_quota(
     # BYOK free plan: user brings their own keys, so there's no Omi-side cost
     # to meter. Only return unlimited when BYOK headers are on the request (desktop).
     # Mobile (no headers) should see real quota.
+    if users_db.is_chatgpt_active(uid):
+        return ChatUsageQuota(
+            plan='Free (ChatGPT)',
+            plan_type=PlanType.unlimited.value,
+            unit=ChatQuotaUnit.questions,
+            used=0.0,
+            limit=None,
+            percent=0.0,
+            allowed=True,
+            reset_at=None,
+        )
+
     if users_db.is_byok_active(uid) and has_byok_keys():
         return ChatUsageQuota(
             plan='Free (BYOK)',

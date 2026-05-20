@@ -379,6 +379,8 @@ struct SettingsContentView: View {
   @AppStorage("dev_deepgram_api_key") private var devDeepgramKey: String = ""
   @State private var byokKeyStatuses: [BYOKProvider: BYOKValidator.Status] = [:]
   @State private var byokActivationError: String?
+  @State private var codexEnrollmentError: String?
+  @State private var codexEnrollmentBusy = false
 
   init(
     appState: AppState,
@@ -3205,6 +3207,8 @@ struct SettingsContentView: View {
       preferencesSubsection
       advancedCategoryHeader(title: "Troubleshooting", icon: "wrench.and.screwdriver")
       troubleshootingSubsection
+      advancedCategoryHeader(title: "ChatGPT plan", icon: "bubble.left.and.bubble.right")
+      chatGPTPlanSubsection
       advancedCategoryHeader(title: "Developer API Keys", icon: "key")
       developerKeysSubsection
 
@@ -5283,6 +5287,93 @@ struct SettingsContentView: View {
     formatter.dateStyle = .short
     formatter.timeStyle = .short
     return formatter
+  }
+
+  // MARK: - ChatGPT / Codex plan
+
+  private var chatGPTPlanSubsection: some View {
+    VStack(spacing: 20) {
+      settingsCard(settingId: "advanced.chatgpt.info") {
+        VStack(alignment: .leading, spacing: 10) {
+          HStack(spacing: 10) {
+            Image(systemName: CodexAuthService.isActive ? "checkmark.seal.fill" : "person.crop.circle.badge.checkmark")
+              .foregroundColor(CodexAuthService.isActive ? OmiColors.success : OmiColors.textTertiary)
+            Text(CodexAuthService.isActive ? "ChatGPT plan active" : "Use your ChatGPT subscription")
+              .scaledFont(size: 14, weight: .semibold)
+              .foregroundColor(OmiColors.textPrimary)
+          }
+          Text(
+            CodexAuthService.isActive
+              ? "LLM features use your ChatGPT/Codex subscription via a local proxy on this Mac. Memory search uses local wiki + keyword search (no embedding API). Live transcription is unchanged."
+              : "Sign in with ChatGPT to route chat and proactive AI through your subscription via a local proxy on this Mac. A Terminal window opens for Codex login — complete sign-in there and Omi will connect automatically. Unofficial community integration — use at your own risk per OpenAI terms. Tokens stay on this Mac."
+          )
+          .scaledFont(size: 12)
+          .foregroundColor(OmiColors.textTertiary)
+          if CodexProxyService.shared.isRunning {
+            Text("Proxy: \(CodexProxyService.defaultBaseURL)")
+              .scaledFont(size: 11)
+              .foregroundColor(OmiColors.textTertiary)
+          }
+        }
+      }
+
+      if let codexEnrollmentError {
+        settingsCard(settingId: "advanced.chatgpt.error") {
+          HStack(spacing: 10) {
+            Image(systemName: "exclamationmark.triangle.fill")
+              .foregroundColor(OmiColors.warning)
+            Text(codexEnrollmentError)
+              .scaledFont(size: 12)
+              .foregroundColor(OmiColors.textSecondary)
+            Spacer()
+          }
+        }
+      }
+
+      HStack(spacing: 12) {
+        if CodexAuthService.isActive {
+          Button(action: disconnectChatGPTPlan) {
+            Text("Disconnect")
+              .frame(maxWidth: .infinity)
+          }
+          .buttonStyle(.bordered)
+        } else {
+          Button(action: signInChatGPTPlan) {
+            Text(codexEnrollmentBusy ? "Signing in…" : "Sign in with ChatGPT")
+              .frame(maxWidth: .infinity)
+          }
+          .buttonStyle(.borderedProminent)
+          .disabled(codexEnrollmentBusy)
+        }
+      }
+    }
+  }
+
+  private func signInChatGPTPlan() {
+    guard !codexEnrollmentBusy else { return }
+    codexEnrollmentBusy = true
+    codexEnrollmentError = nil
+    Task {
+      do {
+        try await CodexEnrollmentCoordinator.connect()
+        await MainActor.run {
+          codexEnrollmentBusy = false
+          codexEnrollmentError = nil
+        }
+      } catch {
+        await MainActor.run {
+          codexEnrollmentBusy = false
+          codexEnrollmentError = error.localizedDescription
+        }
+      }
+    }
+  }
+
+  private func disconnectChatGPTPlan() {
+    Task {
+      await CodexEnrollmentCoordinator.disconnect()
+      await MainActor.run { codexEnrollmentError = nil }
+    }
   }
 
   // MARK: - Developer API Keys Subsection
