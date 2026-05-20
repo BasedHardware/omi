@@ -690,7 +690,10 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
     if (state == WalSyncDisplayState.syncing) {
       return const SizedBox.shrink();
     }
-    if (state == WalSyncDisplayState.failed) {
+    // Retry pill on both 'failed' (auto-retries exhausted, manual only) and
+    // 'retrying' (a previous attempt failed; auto-retry happens on next app
+    // relaunch / sync — this lets the user force it now without waiting).
+    if (state == WalSyncDisplayState.failed || state == WalSyncDisplayState.retrying) {
       return GestureDetector(
         onTap: () => context.read<SyncProvider>().syncWal(wal),
         child: Container(
