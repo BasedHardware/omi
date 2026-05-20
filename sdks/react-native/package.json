@@ -85,6 +85,8 @@
   "overrides": {
     "lodash": "^4.18.0",
     "tmp": "^0.2.4",
+    "proxy-agent": "^6.4.0",
+    "pac-proxy-agent": "^7.0.1",
     "pac-resolver": "^7.0.1"
   },
   "engines": {
