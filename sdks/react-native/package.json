@@ -82,6 +82,11 @@
     "base-64": "^1.0.0",
     "react-native-ble-plx": "^3.4.2"
   },
+  "overrides": {
+    "lodash": "^4.18.0",
+    "tmp": "^0.2.4",
+    "pac-resolver": "^7.0.1"
+  },
   "engines": {
     "node": ">= 16.0.0"
   },
