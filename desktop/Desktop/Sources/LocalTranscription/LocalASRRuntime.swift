@@ -360,6 +360,25 @@ struct LocalBackgroundTranscriptSnapshot: Equatable {
   }
 }
 
+enum LocalBackgroundSessionState: String, Equatable {
+  case recording
+  case transcribingBacklog = "transcribing_backlog"
+  case finalizing
+  case finalized
+  case failed
+}
+
+struct BackgroundConversationFinalizationPolicy {
+  enum Owner: Equatable {
+    case cloudBackend
+    case localBackground
+  }
+
+  func shouldForceProcessBackend(owner: Owner) -> Bool {
+    owner == .cloudBackend
+  }
+}
+
 struct LocalBackgroundAudioChunker {
   private var configuration: LocalBackgroundChunkerConfiguration
   private var buffer = Data()
@@ -490,6 +509,7 @@ final class LocalBackgroundTranscriptionSession {
   private var merger = LocalTranscriptMerger()
   private(set) var rawChunkResults: [LocalBackgroundASRRawChunkResult] = []
   private(set) var droppedChunkCount = 0
+  var pendingChunkCount: Int { pendingChunks.count }
 
   init(
     language: String,

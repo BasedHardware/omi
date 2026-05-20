@@ -722,6 +722,67 @@ final class BackgroundTranscriptionRoutingGuardTests: XCTestCase {
   }
 }
 
+final class LocalBackgroundLifecycleTests: XCTestCase {
+  func testLocalBackgroundStatesExposeLifecycleForDebugging() {
+    XCTAssertEqual(
+      Set(LocalBackgroundSessionState.allCasesForTest.map(\.rawValue)),
+      ["recording", "transcribing_backlog", "finalizing", "finalized", "failed"]
+    )
+  }
+
+  func testLocalFinalizationDoesNotForceProcessBackend() {
+    let policy = BackgroundConversationFinalizationPolicy()
+
+    XCTAssertFalse(policy.shouldForceProcessBackend(owner: .localBackground))
+    XCTAssertTrue(policy.shouldForceProcessBackend(owner: .cloudBackend))
+  }
+
+  func testLocalConversationTitleUsesDeterministicTranscriptPrefix() {
+    XCTAssertEqual(AppState.localConversationTitle(from: "  hello   local background  "), "hello local background")
+    XCTAssertEqual(AppState.localConversationTitle(from: "   "), "Local transcription")
+  }
+
+  func testLocalCompletedSessionConvertsToConversationPath() {
+    let session = TranscriptionSessionRecord(
+      id: 42,
+      startedAt: Date(timeIntervalSince1970: 100),
+      finishedAt: Date(timeIntervalSince1970: 130),
+      source: ConversationSource.desktop.rawValue,
+      language: "en",
+      status: .completed,
+      backendId: "local-42",
+      backendSynced: true,
+      createdAt: Date(timeIntervalSince1970: 100),
+      updatedAt: Date(timeIntervalSince1970: 130),
+      title: "Local background",
+      overview: "hello local background",
+      category: "other",
+      conversationStatus: .completed
+    )
+    let segment = TranscriptionSegmentRecord(
+      sessionId: 42,
+      speaker: 0,
+      text: "hello local background",
+      startTime: 0,
+      endTime: 2,
+      segmentOrder: 0,
+      segmentId: "local-bg-0-0.0"
+    )
+
+    let conversation = session.toServerConversation(segments: [segment])
+
+    XCTAssertEqual(conversation?.id, "local-42")
+    XCTAssertEqual(conversation?.status, .completed)
+    XCTAssertEqual(conversation?.transcriptSegments.first?.text, "hello local background")
+  }
+}
+
+extension LocalBackgroundSessionState {
+  fileprivate static var allCasesForTest: [LocalBackgroundSessionState] {
+    [.recording, .transcribingBacklog, .finalizing, .finalized, .failed]
+  }
+}
+
 final class TranscriptionProviderOnboardingAdvisorTests: XCTestCase {
   func testEligibleNativeAppleSiliconRecommendsLocalFirst() {
     let recommendation = TranscriptionProviderOnboardingAdvisor().recommendation(

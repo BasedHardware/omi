@@ -117,6 +117,36 @@ actor TranscriptionStorage {
         log("TranscriptionStorage: Completed session \(id) (backendId: \(backendId))")
     }
 
+    /// Mark a locally-transcribed session as completed without creating or reconciling a backend conversation.
+    func completeLocalSession(
+        id: Int64,
+        finishedAt: Date = Date(),
+        title: String,
+        overview: String,
+        category: String = "other"
+    ) async throws {
+        let db = try await ensureInitialized()
+
+        try await db.write { database in
+            guard var record = try TranscriptionSessionRecord.fetchOne(database, key: id) else {
+                throw TranscriptionStorageError.sessionNotFound
+            }
+
+            record.finishedAt = finishedAt
+            record.status = .completed
+            record.backendId = record.backendId ?? "local-\(id)"
+            record.backendSynced = true
+            record.title = title
+            record.overview = overview
+            record.category = category
+            record.conversationStatus = .completed
+            record.updatedAt = Date()
+            try record.update(database)
+        }
+
+        log("TranscriptionStorage: Completed local session \(id)")
+    }
+
     /// Mark session as failed with error.
     /// No-op if the session is already completed (prevents race with concurrent completion).
     func markSessionFailed(id: Int64, error: String) async throws {
