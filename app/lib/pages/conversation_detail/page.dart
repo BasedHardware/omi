@@ -577,6 +577,20 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
 
   @override
   Widget build(BuildContext context) {
+    // If the conversation can't be resolved (deleted under us / day group
+    // emptied), pop next frame and render an empty shell now. Avoids the
+    // throw-from-inside-AppBar layout cascade.
+    final detailProvider = context.watch<ConversationDetailProvider>();
+    if (detailProvider.conversationOrNull == null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        if (Navigator.of(context).canPop()) {
+          Navigator.of(context).pop();
+        }
+      });
+      return Scaffold(backgroundColor: Theme.of(context).colorScheme.primary);
+    }
+
     return PopScope(
       canPop: true,
       child: MessageListener<ConversationDetailProvider>(
