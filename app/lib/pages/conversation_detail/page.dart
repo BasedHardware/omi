@@ -78,6 +78,7 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
   bool _isSharing = false;
   bool _isTogglingStarred = false;
   bool _isDownloadingAudio = false;
+  bool _providerInitialized = false;
 
   // Search functionality
   bool _isSearching = false;
@@ -193,6 +194,7 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
 
       // Ensure the provider has the conversation data from the widget parameter
       provider.setCachedConversation(widget.conversation);
+      _providerInitialized = true;
 
       conversationProvider.groupConversationsByDate();
 
@@ -577,17 +579,18 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
 
   @override
   Widget build(BuildContext context) {
-    // If the conversation can't be resolved (deleted under us / day group
-    // emptied), pop next frame and render an empty shell now. Avoids the
-    // throw-from-inside-AppBar layout cascade.
+    // Empty shell on first build (before initState's setCachedConversation
+    // post-frame); after init, an unresolved conversation pops the route.
     final detailProvider = context.watch<ConversationDetailProvider>();
     if (detailProvider.conversationOrNull == null) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted) return;
-        if (Navigator.of(context).canPop()) {
-          Navigator.of(context).pop();
-        }
-      });
+      if (_providerInitialized) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted) return;
+          if (Navigator.of(context).canPop()) {
+            Navigator.of(context).pop();
+          }
+        });
+      }
       return Scaffold(backgroundColor: Theme.of(context).colorScheme.primary);
     }
 
