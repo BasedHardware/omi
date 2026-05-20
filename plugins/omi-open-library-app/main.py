@@ -215,6 +215,11 @@ async def get_omi_tools_manifest():
                             "description": "Maximum books to return. Defaults to 5, maximum 10.",
                         },
                     },
+                    "anyOf": [
+                        {"required": ["query"]},
+                        {"required": ["author"]},
+                        {"required": ["subject"]},
+                    ],
                 },
                 "auth_required": False,
                 "status_message": "Searching Open Library...",
@@ -236,6 +241,10 @@ async def get_omi_tools_manifest():
                             "description": "Optional ISBN-10 or ISBN-13 if the work ID is unknown.",
                         },
                     },
+                    "anyOf": [
+                        {"required": ["work_id"]},
+                        {"required": ["isbn"]},
+                    ],
                 },
                 "auth_required": False,
                 "status_message": "Fetching book details...",
@@ -395,5 +404,9 @@ async def search_subject(payload: dict[str, Any]):
         title = _clean_text(data.get("name")) or subject
         lines = [_format_subject_work(work, i + 1) for i, work in enumerate(works)]
         return ChatToolResponse(result=f"Open Library books for subject {title}:\n\n" + "\n\n".join(lines))
+    except httpx.HTTPStatusError as exc:
+        if exc.response.status_code == 404:
+            return ChatToolResponse(result=f"No Open Library subject found for {subject}.")
+        return ChatToolResponse(error=f"Open Library subject search failed: {exc}")
     except (httpx.HTTPError, ValueError) as exc:
         return ChatToolResponse(error=f"Open Library subject search failed: {exc}")
