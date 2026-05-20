@@ -147,7 +147,10 @@ async fn invoke_codex(
             .post(CODEX_RESPONSES_URL)
             .headers(hdrs.clone())
             .header(CONTENT_TYPE, HeaderValue::from_static("application/json"))
-            .header(header::ACCEPT, HeaderValue::from_static("text/event-stream"))
+            .header(
+                header::ACCEPT,
+                HeaderValue::from_static("text/event-stream"),
+            )
             .body(bytes.clone())
             .send()
             .await
@@ -313,7 +316,12 @@ fn apply_refresh_to_doc(disk: &mut AuthDisk, mut env: RefreshEnvelope) -> Result
         .filter(|t| !t.is_empty())
         .ok_or_else(|| "oauth refresh succeeded but omitted access_token".to_string())?;
 
-    if disk.doc.get("tokens").map(|t| t.is_object()).unwrap_or(false) {
+    if disk
+        .doc
+        .get("tokens")
+        .map(|t| t.is_object())
+        .unwrap_or(false)
+    {
         if let Some(tokens) = disk.doc.get_mut("tokens").and_then(Value::as_object_mut) {
             tokens.insert("access_token".to_string(), Value::String(new_access));
             if let Some(new_refresh) = env.refresh_token.take().filter(|t| !t.is_empty()) {
@@ -406,7 +414,8 @@ fn codex_payload_from_openai_chat(openai_body: &Value) -> Result<Value, String> 
             .ok_or_else(|| format!("messages[{idx}].role missing"))?;
 
         if role == "system" {
-            if let Some(text) = message_content_as_string(msg.get("content").unwrap_or(&Value::Null))?
+            if let Some(text) =
+                message_content_as_string(msg.get("content").unwrap_or(&Value::Null))?
             {
                 if !text.is_empty() {
                     instructions_parts.push(text);
@@ -534,7 +543,7 @@ fn normalize_message_content(raw: &Value, role: &str) -> Result<Value, String> {
                     parts
                         .iter()
                         .map(|part| normalize_content_part(part, text_type))
-                        .collect(),
+                        .collect::<Result<Vec<_>, _>>()?,
                 )
             }
         }
@@ -546,7 +555,7 @@ fn normalize_message_content(raw: &Value, role: &str) -> Result<Value, String> {
     })
 }
 
-fn normalize_content_part(part: &Value, default_type: &str) -> Value {
+fn normalize_content_part(part: &Value, default_type: &str) -> Result<Value, String> {
     match part {
         Value::Object(map) => {
             let mut out = map.clone();
@@ -555,12 +564,45 @@ fn normalize_content_part(part: &Value, default_type: &str) -> Value {
             } else if let Some(Value::String(kind)) = out.get("type") {
                 if kind == "text" {
                     out.insert("type".to_string(), Value::String(default_type.to_string()));
+                } else if kind == "image_url" {
+                    out.insert("type".to_string(), Value::String("input_image".to_string()));
+                    let image =
+                        out.get("image_url")
+                            .and_then(Value::as_object)
+                            .ok_or_else(|| {
+                                "image_url content part must include an object".to_string()
+                            })?;
+                    let url = image
+                        .get("url")
+                        .and_then(Value::as_str)
+                        .filter(|url| !url.is_empty())
+                        .ok_or_else(|| {
+                            "image_url content part must include image_url.url".to_string()
+                        })?
+                        .to_string();
+                    let detail = image
+                        .get("detail")
+                        .and_then(Value::as_str)
+                        .unwrap_or("auto")
+                        .to_string();
+                    if !matches!(detail.as_str(), "auto" | "low" | "high") {
+                        return Err(
+                            "image_url content part detail must be auto, low, or high".to_string()
+                        );
+                    }
+                    out.insert("image_url".to_string(), Value::String(url));
+                    out.insert("detail".to_string(), Value::String(detail));
+                    if let Some(text) = out.get("text").and_then(Value::as_str) {
+                        if text.is_empty() {
+                            out.remove("text");
+                        }
+                    }
                 }
             }
-            Value::Object(out)
+            Ok(Value::Object(out))
         }
-        Value::String(s) => json!({ "type": default_type, "text": s }),
-        other => other.clone(),
+        Value::String(s) => Ok(json!({ "type": default_type, "text": s })),
+        other => Ok(other.clone()),
     }
 }
 
@@ -795,5 +837,44 @@ mod tests {
             Value::from("Hello")
         );
         assert_eq!(out["model"], Value::from("gpt-output"));
+    }
+
+    #[test]
+    fn maps_openai_image_url_parts_to_codex_input_image() {
+        let openai = json!({
+            "model": "gpt-test",
+            "messages": [{
+                "role":"user",
+                "content":[
+                    {"type":"text","text":"describe this"},
+                    {"type":"image_url","image_url":{"url":"data:image/png;base64,abc","detail":"high"}}
+                ]
+            }]
+        });
+
+        let out = codex_payload_from_openai_chat(&openai).expect("mapping");
+        assert_eq!(
+            out["input"][0]["content"],
+            json!([
+                {"type":"input_text","text":"describe this"},
+                {"type":"input_image","image_url":"data:image/png;base64,abc","detail":"high"}
+            ])
+        );
+    }
+
+    #[test]
+    fn rejects_openai_image_url_parts_without_url() {
+        let openai = json!({
+            "model": "gpt-test",
+            "messages": [{
+                "role":"user",
+                "content":[
+                    {"type":"image_url","image_url":{"detail":"low"}}
+                ]
+            }]
+        });
+
+        let err = codex_payload_from_openai_chat(&openai).expect_err("missing URL should fail");
+        assert!(err.contains("image_url.url"));
     }
 }

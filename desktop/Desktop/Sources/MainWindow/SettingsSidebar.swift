@@ -160,6 +160,10 @@ struct SettingsSearchItem: Identifiable {
       keywords: ["subscription", "billing", "plan", "usage", "stripe", "architect", "unlimited"],
       section: .planUsage, icon: "creditcard", settingId: "planusage.overview"),
     SettingsSearchItem(
+      name: "Local Setup", subtitle: "Local daemon and bring-your-own provider keys",
+      keywords: ["local", "hybrid", "byok", "provider", "daemon", "on-device", "offline"],
+      section: .planUsage, icon: "desktopcomputer", settingId: "planusage.overview"),
+    SettingsSearchItem(
       name: "Current Plan", subtitle: "See your current subscription and renewal status",
       keywords: ["current plan", "renewal", "billing"], section: .planUsage, icon: "creditcard",
       settingId: "planusage.current"),
@@ -341,7 +345,14 @@ struct SettingsSidebar: View {
     guard !searchQuery.isEmpty else { return [] }
     let words = searchQuery.lowercased().split(separator: " ").map(String.init)
     guard !words.isEmpty else { return [] }
+    let isLocalMode = DesktopBackendEnvironment.selectedBackendTarget.mode == .localDaemon
     return SettingsSearchItem.allSearchableItems.filter { item in
+      // Hide the cloud "Plan and Usage" entry in local mode, and hide the
+      // "Local Setup" entry in cloud mode — they share the same section slot
+      // but represent different surfaces.
+      if isLocalMode && item.name == "Plan and Usage" { return false }
+      if !isLocalMode && item.name == "Local Setup" { return false }
+
       let nameLower = item.name.lowercased()
       let subtitleLower = item.subtitle.lowercased()
       let keywordsLower = item.keywords.map { $0.lowercased() }
@@ -506,6 +517,10 @@ struct SettingsSidebarItem: View {
 
   @State private var isHovered = false
 
+  private var isLocalHybridMode: Bool {
+    DesktopBackendEnvironment.selectedBackendTarget.mode == .localDaemon
+  }
+
   private var icon: String {
     switch section {
     case .general: return "gearshape"
@@ -514,13 +529,20 @@ struct SettingsSidebarItem: View {
     case .notifications: return "bell"
     case .privacy: return "lock.shield"
     case .account: return "person.circle"
-    case .planUsage: return "creditcard"
+    case .planUsage: return isLocalHybridMode ? "desktopcomputer" : "creditcard"
     case .aiChat: return "cpu"
     case .floatingBar: return "sparkles"
     case .shortcuts: return "keyboard"
     case .advanced: return "chart.bar"
     case .about: return "info.circle"
     }
+  }
+
+  private var displayName: String {
+    if section == .planUsage && isLocalHybridMode {
+      return "Local Setup"
+    }
+    return section.rawValue
   }
 
   var body: some View {
@@ -535,7 +557,7 @@ struct SettingsSidebarItem: View {
               .foregroundColor(isSelected ? OmiColors.textPrimary : OmiColors.textTertiary)
               .frame(width: iconWidth)
 
-            Text(section.rawValue)
+            Text(displayName)
               .scaledFont(size: 14, weight: isSelected ? .medium : .regular)
               .foregroundColor(isSelected ? OmiColors.textPrimary : OmiColors.textSecondary)
 

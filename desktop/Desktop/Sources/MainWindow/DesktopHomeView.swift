@@ -25,6 +25,7 @@ struct DesktopHomeView: View {
   @AppStorage("currentTierLevel") private var currentTierLevel = 0
   @AppStorage("onboardingStep") private var onboardingStep = 0
   @AppStorage("onboardingJustCompleted") private var onboardingJustCompleted = false
+  @AppStorage("hasSeenLocalWelcome") private var hasSeenLocalWelcome = false
 
   // Settings sidebar state
   @State private var selectedSettingsSection: SettingsContentView.SettingsSection = .general
@@ -74,12 +75,37 @@ struct DesktopHomeView: View {
           }
       } else if !appState.hasCompletedOnboarding {
         // State 2: Signed in but onboarding not complete
-        if shouldSkipOnboarding()
-          || DesktopBackendEnvironment.selectedBackendTarget.mode == .localDaemon
-        {
+        let isLocalDaemon =
+          DesktopBackendEnvironment.selectedBackendTarget.mode == .localDaemon
+
+        if shouldSkipOnboarding() {
           Color.clear.onAppear {
             log("DesktopHomeView: --skip-onboarding flag detected, skipping onboarding")
             appState.hasCompletedOnboarding = true
+          }
+        } else if isLocalDaemon {
+          if hasSeenLocalWelcome {
+            Color.clear.onAppear {
+              log("DesktopHomeView: Local daemon mode, welcome seen — skipping onboarding")
+              appState.hasCompletedOnboarding = true
+            }
+          } else {
+            LocalWelcomeView(
+              onGetStarted: {
+                log("DesktopHomeView: Local welcome completed — navigating to Local Setup")
+                hasSeenLocalWelcome = true
+                appState.hasCompletedOnboarding = true
+                selectedSettingsSection = .planUsage
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                  withAnimation(.easeInOut(duration: 0.2)) {
+                    selectedIndex = SidebarNavItem.settings.rawValue
+                  }
+                }
+              }
+            )
+            .onAppear {
+              log("DesktopHomeView: Showing LocalWelcomeView (first launch in local mode)")
+            }
           }
         } else {
           OnboardingView(
@@ -888,6 +914,101 @@ private struct ConversationsPageHost: View {
 
   var body: some View {
     ConversationsPage(appState: appState, selectedConversation: $selectedConversation)
+  }
+}
+
+// MARK: - Local Welcome
+
+/// One-screen orientation shown on the first launch in local-daemon mode.
+struct LocalWelcomeView: View {
+  let onGetStarted: () -> Void
+
+  var body: some View {
+    VStack(spacing: 0) {
+      Spacer()
+
+      VStack(spacing: 18) {
+        Image(systemName: "desktopcomputer")
+          .scaledFont(size: 44)
+          .foregroundColor(OmiColors.purplePrimary)
+
+        Text("Omi runs locally on this Mac")
+          .scaledFont(size: 26, weight: .semibold)
+          .foregroundColor(OmiColors.textPrimary)
+          .multilineTextAlignment(.center)
+
+        Text("A quick orientation before you get started.")
+          .scaledFont(size: 14)
+          .foregroundColor(OmiColors.textTertiary)
+          .multilineTextAlignment(.center)
+      }
+      .padding(.bottom, 36)
+
+      VStack(alignment: .leading, spacing: 18) {
+        LocalWelcomeBullet(
+          icon: "lock.shield.fill",
+          title: "Your data stays on this Mac",
+          detail: "Transcripts, memories, and AI calls run locally by default."
+        )
+        LocalWelcomeBullet(
+          icon: "key.fill",
+          title: "Bring your own AI keys",
+          detail: "Point Omi at any OpenAI-compatible endpoint — Ollama, LM Studio, or a hosted API."
+        )
+        LocalWelcomeBullet(
+          icon: "waveform",
+          title: "Background transcription is on-device",
+          detail: "Whisper runs in the background; no audio is sent to the cloud."
+        )
+      }
+      .padding(.horizontal, 32)
+      .frame(maxWidth: 520)
+
+      Spacer()
+
+      Button(action: onGetStarted) {
+        Text("Get started")
+          .scaledFont(size: 16, weight: .semibold)
+          .foregroundColor(.white)
+          .frame(width: 240, height: 48)
+          .background(
+            RoundedRectangle(cornerRadius: 10)
+              .fill(OmiColors.purplePrimary)
+          )
+      }
+      .buttonStyle(.plain)
+      .padding(.bottom, 60)
+    }
+    .frame(maxWidth: .infinity, maxHeight: .infinity)
+    .background(OmiColors.backgroundPrimary)
+  }
+}
+
+private struct LocalWelcomeBullet: View {
+  let icon: String
+  let title: String
+  let detail: String
+
+  var body: some View {
+    HStack(alignment: .top, spacing: 14) {
+      Image(systemName: icon)
+        .scaledFont(size: 18)
+        .foregroundColor(OmiColors.purplePrimary)
+        .frame(width: 24)
+
+      VStack(alignment: .leading, spacing: 4) {
+        Text(title)
+          .scaledFont(size: 15, weight: .medium)
+          .foregroundColor(OmiColors.textPrimary)
+
+        Text(detail)
+          .scaledFont(size: 13)
+          .foregroundColor(OmiColors.textTertiary)
+          .fixedSize(horizontal: false, vertical: true)
+      }
+
+      Spacer()
+    }
   }
 }
 

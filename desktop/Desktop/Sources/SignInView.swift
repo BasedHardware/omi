@@ -63,71 +63,73 @@ struct SignInView: View {
                         }
                         .buttonStyle(.plain)
                     }
-                    // Sign in with Apple (cloud mode only — hybrid local uses guest session)
-                    Button(action: {
-                        Task {
-                            do {
-                                try await AuthService.shared.signInWithApple()
-                            } catch is CancellationError {
-                                // swallow — user initiated
-                            } catch AuthError.cancelled {
-                                // swallow — user initiated
-                            } catch {
-                                let errorMsg = "Error: \(error.localizedDescription)"
-                                authState.error = errorMsg
-                                NSLog("OMI Sign in error: %@", errorMsg)
+                    if !isLocalHybridMode {
+                        // Sign in with Apple
+                        Button(action: {
+                            Task {
+                                do {
+                                    try await AuthService.shared.signInWithApple()
+                                } catch is CancellationError {
+                                    // swallow — user initiated
+                                } catch AuthError.cancelled {
+                                    // swallow — user initiated
+                                } catch {
+                                    let errorMsg = "Error: \(error.localizedDescription)"
+                                    authState.error = errorMsg
+                                    NSLog("OMI Sign in error: %@", errorMsg)
+                                }
                             }
+                        }) {
+                            HStack(spacing: 8) {
+                                Image(systemName: "applelogo")
+                                    .scaledFont(size: 18)
+                                Text("Sign in with Apple")
+                                    .scaledFont(size: 17, weight: .medium)
+                            }
+                            .foregroundColor(.black)
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 50)
+                            .background(Color.white)
+                            .cornerRadius(10)
                         }
-                    }) {
-                        HStack(spacing: 8) {
-                            Image(systemName: "applelogo")
-                                .scaledFont(size: 18)
-                            Text("Sign in with Apple")
-                                .scaledFont(size: 17, weight: .medium)
-                        }
-                        .foregroundColor(.black)
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 50)
-                        .background(Color.white)
-                        .cornerRadius(10)
-                    }
-                    .buttonStyle(.plain)
-                    .disabled(authState.isLoading || isLocalHybridMode)
+                        .buttonStyle(.plain)
+                        .disabled(authState.isLoading)
 
-                    // Sign in with Google
-                    Button(action: {
-                        Task {
-                            do {
-                                try await AuthService.shared.signInWithGoogle()
-                            } catch is CancellationError {
-                                // swallow — user initiated
-                            } catch AuthError.cancelled {
-                                // swallow — user initiated
-                            } catch {
-                                let errorMsg = "Error: \(error.localizedDescription)"
-                                authState.error = errorMsg
-                                NSLog("OMI Sign in error: %@", errorMsg)
+                        // Sign in with Google
+                        Button(action: {
+                            Task {
+                                do {
+                                    try await AuthService.shared.signInWithGoogle()
+                                } catch is CancellationError {
+                                    // swallow — user initiated
+                                } catch AuthError.cancelled {
+                                    // swallow — user initiated
+                                } catch {
+                                    let errorMsg = "Error: \(error.localizedDescription)"
+                                    authState.error = errorMsg
+                                    NSLog("OMI Sign in error: %@", errorMsg)
+                                }
                             }
+                        }) {
+                            HStack(spacing: 8) {
+                                GoogleLogo()
+                                    .frame(width: 18, height: 18)
+                                Text("Sign in with Google")
+                                    .scaledFont(size: 17, weight: .medium)
+                            }
+                            .foregroundColor(.black)
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 50)
+                            .background(Color.white)
+                            .cornerRadius(10)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 10)
+                                    .stroke(Color.gray.opacity(0.3), lineWidth: 1)
+                            )
                         }
-                    }) {
-                        HStack(spacing: 8) {
-                            GoogleLogo()
-                                .frame(width: 18, height: 18)
-                            Text("Sign in with Google")
-                                .scaledFont(size: 17, weight: .medium)
-                        }
-                        .foregroundColor(.black)
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 50)
-                        .background(Color.white)
-                        .cornerRadius(10)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 10)
-                                .stroke(Color.gray.opacity(0.3), lineWidth: 1)
-                        )
+                        .buttonStyle(.plain)
+                        .disabled(authState.isLoading)
                     }
-                    .buttonStyle(.plain)
-                    .disabled(authState.isLoading || isLocalHybridMode)
 
                     // Loading overlay for both buttons
                     if authState.isLoading {

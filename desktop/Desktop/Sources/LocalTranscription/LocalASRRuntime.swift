@@ -109,38 +109,34 @@ struct LocalASRHelperClient {
     input.fileHandleForWriting.write(requestData)
     try? input.fileHandleForWriting.close()
 
-    return try await withTimeout(seconds: timeoutSeconds) {
-      process.waitUntilExit()
-      let outputData = output.fileHandleForReading.readDataToEndOfFile()
-      if process.terminationStatus != 0 {
-        let errorText =
-          String(data: errors.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
-        throw TranscriptionService.TranscriptionError.webSocketError(
-          "Local ASR helper exited with status \(process.terminationStatus): \(errorText)"
-        )
+    let didExit = await waitForExit(process, timeoutSeconds: timeoutSeconds)
+    guard didExit else {
+      if process.isRunning {
+        process.terminate()
+        _ = await waitForExit(process, timeoutSeconds: 2)
       }
-      return try JSONDecoder.localASR.decode(LocalASRTranscriptionResponse.self, from: outputData)
+      throw TranscriptionService.TranscriptionError.webSocketError(
+        "Local ASR helper timed out after \(Int(timeoutSeconds))s"
+      )
     }
+
+    let outputData = output.fileHandleForReading.readDataToEndOfFile()
+    if process.terminationStatus != 0 {
+      let errorText =
+        String(data: errors.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
+      throw TranscriptionService.TranscriptionError.webSocketError(
+        "Local ASR helper exited with status \(process.terminationStatus): \(errorText)"
+      )
+    }
+    return try JSONDecoder.localASR.decode(LocalASRTranscriptionResponse.self, from: outputData)
   }
 
-  private func withTimeout<T: Sendable>(
-    seconds: TimeInterval,
-    operation: @escaping @Sendable () throws -> T
-  ) async throws -> T {
-    try await withThrowingTaskGroup(of: T.self) { group in
-      group.addTask {
-        try operation()
-      }
-      group.addTask {
-        try await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
-        throw CancellationError()
-      }
-      guard let result = try await group.next() else {
-        throw CancellationError()
-      }
-      group.cancelAll()
-      return result
+  private func waitForExit(_ process: Process, timeoutSeconds: TimeInterval) async -> Bool {
+    let deadline = Date().addingTimeInterval(timeoutSeconds)
+    while process.isRunning && Date() < deadline {
+      try? await Task.sleep(nanoseconds: 100_000_000)
     }
+    return !process.isRunning
   }
 }
 
@@ -393,6 +389,8 @@ struct LocalBackgroundChunkerConfiguration: Equatable {
   var overlapDuration: TimeInterval = 1
   var silenceWindowDuration: TimeInterval = 0.35
   var silenceAmplitudeThreshold: Int16 = 256
+  var speechPeakAmplitudeThreshold: Int16 = 512
+  var speechRMSAmplitudeThreshold: Double = 64
   var maxPendingChunks: Int = 4
 
   var maxChunkSamples: Int { max(1, Int(maxChunkDuration * Double(sampleRate))) }
@@ -652,6 +650,24 @@ final class LocalBackgroundTranscriptionSession {
   func transcribeNext() async throws -> LocalBackgroundASRRawChunkResult? {
     guard !pendingChunks.isEmpty else { return nil }
     let chunk = pendingChunks.removeFirst()
+    guard hasSpeechEnergy(chunk.audioData) else {
+      let response = LocalASRTranscriptionResponse(
+        requestId: makeRequestId(),
+        engine: plan.engine,
+        model: plan.model,
+        language: language,
+        segments: [],
+        fixture: false
+      )
+      let rawResult = LocalBackgroundASRRawChunkResult(
+        chunk: chunk,
+        response: response,
+        remappedSegments: [],
+        latencySeconds: 0
+      )
+      rawChunkResults.append(rawResult)
+      return rawResult
+    }
     let requestId = makeRequestId()
     let audioURL = temporaryDirectory.appendingPathComponent("\(requestId).pcm")
     try chunk.audioData.write(to: audioURL, options: .atomic)
@@ -735,6 +751,26 @@ final class LocalBackgroundTranscriptionSession {
       normalized.segmentId = "local-bg-\(chunk.sequence)-\(segment.id ?? "\(segment.start)")"
       return normalized
     }
+  }
+
+  private func hasSpeechEnergy(_ audioData: Data) -> Bool {
+    var peak = 0
+    var sumSquares = 0.0
+    var sampleCount = 0
+
+    audioData.withUnsafeBytes { rawBuffer in
+      for sample in rawBuffer.bindMemory(to: Int16.self) {
+        let magnitude = sample == Int16.min ? Int(Int16.max) : Int(abs(sample))
+        peak = max(peak, magnitude)
+        sumSquares += Double(magnitude * magnitude)
+        sampleCount += 1
+      }
+    }
+
+    guard sampleCount > 0 else { return false }
+    let rms = sqrt(sumSquares / Double(sampleCount))
+    return peak >= Int(configuration.speechPeakAmplitudeThreshold)
+      && rms >= configuration.speechRMSAmplitudeThreshold
   }
 }
 

@@ -157,6 +157,54 @@ final class TranscriptionProviderPolicyTests: XCTestCase {
   }
 }
 
+final class LocalASRHelperClientTests: XCTestCase {
+  func testTimeoutTerminatesHungHelperWithoutLeavingBlockingWaitTask() async throws {
+    let temporaryDirectory = FileManager.default.temporaryDirectory
+      .appendingPathComponent("LocalASRHelperClientTests-\(UUID().uuidString)", isDirectory: true)
+    try FileManager.default.createDirectory(
+      at: temporaryDirectory, withIntermediateDirectories: true)
+    defer {
+      try? FileManager.default.removeItem(at: temporaryDirectory)
+    }
+
+    let helperURL = temporaryDirectory.appendingPathComponent("hung-helper.sh")
+    try """
+    #!/bin/sh
+    sleep 5
+    printf '{"request_id":"timeout-test","engine":"mlx_whisper","model":"small","language":"en","segments":[],"fixture":false}'
+    """.write(to: helperURL, atomically: true, encoding: .utf8)
+    try FileManager.default.setAttributes(
+      [.posixPermissions: NSNumber(value: Int16(0o755))],
+      ofItemAtPath: helperURL.path
+    )
+
+    let audioURL = temporaryDirectory.appendingPathComponent("audio.pcm")
+    try Data(repeating: 0, count: 320).write(to: audioURL)
+
+    let client = LocalASRHelperClient(executableURL: helperURL, timeoutSeconds: 0.2)
+    let startedAt = Date()
+
+    do {
+      _ = try await client.transcribe(
+        LocalASRTranscriptionRequest(
+          requestId: "timeout-test",
+          audioPath: audioURL.path,
+          language: "en",
+          sampleRate: 16_000,
+          channels: 1,
+          engine: .mlxWhisper,
+          model: .small,
+          fixtureSegments: nil
+        )
+      )
+      XCTFail("Expected hung helper to time out")
+    } catch {
+      XCTAssertLessThan(Date().timeIntervalSince(startedAt), 2)
+      XCTAssertTrue(error.localizedDescription.contains("timed out"))
+    }
+  }
+}
+
 final class LocalASRAddonManifestTests: XCTestCase {
   func testRemoteManifestParsesRuntimeAndModels() throws {
     let json = """
@@ -535,6 +583,8 @@ final class LocalASRRuntimeTests: XCTestCase {
         overlapDuration: 0.2,
         silenceWindowDuration: 0.2,
         silenceAmplitudeThreshold: 1,
+        speechPeakAmplitudeThreshold: 1,
+        speechRMSAmplitudeThreshold: 1,
         maxPendingChunks: 4
       ),
       requestHandler: { request in
@@ -600,6 +650,52 @@ final class LocalASRRuntimeTests: XCTestCase {
       FileManager.default.fileExists(
         atPath: tempDirectory.appendingPathComponent("background-0.pcm").path)
     )
+  }
+
+  func testBackgroundSessionSkipsLowEnergyChunksBeforeWhisper() async throws {
+    var requestCount = 0
+    let session = LocalBackgroundTranscriptionSession(
+      language: "en",
+      plan: LocalTranscriptionPlan(engine: .mlxWhisper, model: .small, quality: .balanced),
+      configuration: LocalBackgroundChunkerConfiguration(
+        sampleRate: 10,
+        bytesPerSample: 2,
+        maxChunkDuration: 1,
+        minChunkDuration: 0.5,
+        overlapDuration: 0,
+        silenceWindowDuration: 0.2,
+        silenceAmplitudeThreshold: 1,
+        speechPeakAmplitudeThreshold: 100,
+        speechRMSAmplitudeThreshold: 50,
+        maxPendingChunks: 4
+      ),
+      requestHandler: { request in
+        requestCount += 1
+        return LocalASRTranscriptionResponse(
+          requestId: request.requestId,
+          engine: request.engine,
+          model: request.model,
+          language: request.language,
+          segments: [
+            LocalASRTranscriptSegment(
+              id: nil,
+              speaker: 0,
+              text: "hallucinated silence",
+              start: 0,
+              end: 1
+            )
+          ],
+          fixture: false
+        )
+      }
+    )
+
+    _ = session.append(pcmData: pcm(Array(repeating: 3, count: 10)), startTime: 0)
+    let result = try await tryUnwrap(session.transcribeNext())
+
+    XCTAssertEqual(requestCount, 0)
+    XCTAssertTrue(result.remappedSegments.isEmpty)
+    XCTAssertTrue(session.snapshot().joinedTranscript.isEmpty)
   }
 
   func testBackgroundPipelineCanExerciseRealHelperWhenRuntimeAvailable() async throws {

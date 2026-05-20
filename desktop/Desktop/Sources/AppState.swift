@@ -140,7 +140,11 @@ class AppState: ObservableObject {
 
   /// Trigger the monthly-limit popup. Safe to call repeatedly — SwiftUI's
   /// `@Published` dedupes identical-value writes automatically.
+  /// No-op in local daemon mode: there is no cloud subscription to upsell.
   func triggerUsageLimitPopup(reason: String) {
+    if DesktopBackendEnvironment.selectedBackendTarget.mode == .localDaemon {
+      return
+    }
     usageLimitReason = reason
     showUsageLimitPopup = true
   }
@@ -210,6 +214,7 @@ class AppState: ObservableObject {
   private var transcriptionService: TranscriptionService?
   private var localBackgroundSession: LocalBackgroundTranscriptionSession?
   private var localBackgroundASRTask: Task<Void, Never>?
+  private var localTranscriptionCapabilityProbeTask: Task<Void, Never>?
   private(set) var localBackgroundState: LocalBackgroundSessionState?
   private var localBackgroundSampleCursor: Int64 = 0
   @Published private(set) var transcriptionComparisonSnapshot =
@@ -1288,12 +1293,21 @@ class AppState: ObservableObject {
 
     // Use provided source or fall back to current setting
     let effectiveSource = source ?? audioSource
+    let providerSelection = AssistantSettings.shared.transcriptionProviderSelection
     let backgroundRouting = BackgroundTranscriptionRoutingGuard().decide(
-      selection: AssistantSettings.shared.transcriptionProviderSelection,
+      selection: providerSelection,
       capabilities: LocalTranscriptionCapabilityDetector(
         availableEngines: { LocalASRHelperLocator.detectedEngines() }
       ).detect()
     )
+
+    if shouldRefreshLocalTranscriptionCapabilities(
+      selection: providerSelection,
+      routing: backgroundRouting
+    ) {
+      refreshLocalTranscriptionCapabilitiesThenStart(source: effectiveSource)
+      return
+    }
 
     // Paywall hard-stop applies only to the cloud listen path. Local background
     // MLX/faster-whisper capture never opens `/v4/listen` and should keep
@@ -1459,6 +1473,46 @@ class AppState: ObservableObject {
     } catch {
       AnalyticsManager.shared.recordingError(error: error.localizedDescription)
       showAlert(title: "Transcription Error", message: error.localizedDescription)
+    }
+  }
+
+  private func shouldRefreshLocalTranscriptionCapabilities(
+    selection: TranscriptionProviderSelection,
+    routing: BackgroundTranscriptionRoutingDecision
+  ) -> Bool {
+    guard selection.mode != .cloud else { return false }
+    guard routing.localPlan == nil else { return false }
+    return LocalASRAddonManager.status().isInstalled
+  }
+
+  private func refreshLocalTranscriptionCapabilitiesThenStart(source: AudioSource) {
+    guard localTranscriptionCapabilityProbeTask == nil else {
+      log("Transcription: Waiting for local transcription capability probe")
+      return
+    }
+
+    log("Transcription: Refreshing local transcription capabilities before start")
+    localTranscriptionCapabilityProbeTask = Task { [weak self] in
+      let engines = await LocalASRHelperLocator.refreshDetectedEngines()
+      guard !Task.isCancelled else { return }
+
+      await MainActor.run {
+        guard let self else { return }
+        self.localTranscriptionCapabilityProbeTask = nil
+        guard !Task.isCancelled else { return }
+        let selection = AssistantSettings.shared.transcriptionProviderSelection
+        let refreshedRouting = BackgroundTranscriptionRoutingGuard().decide(
+          selection: selection,
+          capabilities: LocalTranscriptionCapabilityDetector(availableEngines: { engines }).detect()
+        )
+
+        if case .unavailable(let reason) = refreshedRouting.route {
+          self.openLocalTranscriptionRepair(message: reason)
+          return
+        }
+
+        self.startTranscription(source: source)
+      }
     }
   }
 
@@ -1691,21 +1745,21 @@ class AppState: ObservableObject {
 
   private func drainLocalBackgroundASRQueue() {
     guard localBackgroundASRTask == nil, let session = localBackgroundSession else { return }
-    localBackgroundASRTask = Task { [weak self, session] in
+    localBackgroundASRTask = Task { @MainActor [weak self, session] in
+      var didFail = false
       do {
         while let result = try await session.transcribeNext() {
-          await MainActor.run {
-            self?.applyLocalBackgroundSegments(result.remappedSegments)
-          }
+          self?.applyLocalBackgroundSegments(result.remappedSegments)
         }
       } catch {
-        await MainActor.run {
-          self?.localBackgroundState = .failed
-          logError("Transcription: Local background ASR failed", error: error)
-        }
+        didFail = true
+        self?.localBackgroundState = .failed
+        logError("Transcription: Local background ASR failed", error: error)
       }
-      await MainActor.run {
-        self?.localBackgroundASRTask = nil
+      guard let self else { return }
+      self.localBackgroundASRTask = nil
+      if !didFail && self.localBackgroundSession === session && session.pendingChunkCount > 0 {
+        self.drainLocalBackgroundASRQueue()
       }
     }
   }
@@ -1888,6 +1942,9 @@ class AppState: ObservableObject {
   /// triggers conversation processing on the backend side. We also call force-process to ensure
   /// the conversation is finalized, preventing the retry service from creating duplicates.
   func stopTranscription() {
+    localTranscriptionCapabilityProbeTask?.cancel()
+    localTranscriptionCapabilityProbeTask = nil
+
     if localBackgroundSession != nil {
       stopLocalBackgroundTranscription()
       return

@@ -66,4 +66,72 @@ final class TranscriptComparisonTests: XCTestCase {
     XCTAssertNotNil(snapshot.deepgram.error)
     XCTAssertNil(snapshot.wordDifferenceRate)
   }
+
+  @MainActor
+  func testComparisonHarnessGroupsProviderOutputByTimeBucket() throws {
+    var snapshots: [TranscriptionComparisonHarnessSnapshot] = []
+    let harness = TranscriptionComparisonHarness(
+      language: "en",
+      deepgramAPIKey: nil,
+      onSnapshot: { snapshots.append($0) }
+    )
+
+    harness.appendWhisperSegments([
+      segment(id: "w1", text: "first whisper window", start: 2, end: 4),
+      segment(id: "w2", text: "second whisper window", start: 35, end: 38),
+    ])
+    harness.appendDeepgramSegmentsForTesting([
+      segment(id: "d1", text: "first deepgram window", start: 3, end: 5),
+      segment(id: "d2", text: "second deepgram window", start: 36, end: 39),
+    ])
+
+    let buckets = try XCTUnwrap(snapshots.last?.timeBuckets)
+    XCTAssertEqual(buckets.count, 2)
+    XCTAssertEqual(buckets[0].startTime, 0, accuracy: 0.001)
+    XCTAssertEqual(buckets[0].endTime, 30, accuracy: 0.001)
+    XCTAssertEqual(buckets[0].whisperText, "first whisper window")
+    XCTAssertEqual(buckets[0].deepgramText, "first deepgram window")
+    XCTAssertEqual(buckets[1].startTime, 30, accuracy: 0.001)
+    XCTAssertEqual(buckets[1].whisperText, "second whisper window")
+    XCTAssertEqual(buckets[1].deepgramText, "second deepgram window")
+  }
+
+  @MainActor
+  func testComparisonHarnessScoresFullTranscriptWhenPreviewIsTruncated() throws {
+    var snapshots: [TranscriptionComparisonHarnessSnapshot] = []
+    let harness = TranscriptionComparisonHarness(
+      language: "en",
+      deepgramAPIKey: nil,
+      onSnapshot: { snapshots.append($0) }
+    )
+    let previewPadding = String(repeating: ".", count: 13_000)
+    let whisperText = "wrong \(previewPadding) same"
+    let deepgramText = "right \(previewPadding) same"
+
+    harness.appendWhisperSegments([segment(id: "w-long", text: whisperText, start: 0, end: 1)])
+    harness.appendDeepgramSegmentsForTesting([
+      segment(id: "d-long", text: deepgramText, start: 0, end: 1)
+    ])
+
+    let snapshot = try XCTUnwrap(snapshots.last)
+    XCTAssertLessThan(snapshot.whisper.transcript.count, whisperText.count)
+    XCTAssertEqual(snapshot.whisper.wordCount, 2)
+    XCTAssertEqual(try XCTUnwrap(snapshot.wordDifferenceRate), 0.5, accuracy: 0.0001)
+  }
+
+  private func segment(id: String, text: String, start: Double, end: Double)
+    -> NormalizedTranscriptSegment
+  {
+    NormalizedTranscriptSegment(
+      segmentId: id,
+      speaker: 0,
+      speakerLabel: nil,
+      text: text,
+      start: start,
+      end: end,
+      isUser: true,
+      personId: nil,
+      translations: []
+    )
+  }
 }

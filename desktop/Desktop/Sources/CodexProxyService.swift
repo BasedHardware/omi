@@ -21,6 +21,34 @@ enum CodexProxyEndpoints {
   }
 }
 
+private final class LockedCodexProxyStderrBuffer: @unchecked Sendable {
+  private let lock = NSLock()
+  private let limit: Int
+  private var data = Data()
+
+  init(limit: Int = 16 * 1024) {
+    self.limit = limit
+  }
+
+  func append(_ chunk: Data) {
+    guard !chunk.isEmpty else { return }
+    lock.lock()
+    data.append(chunk)
+    if data.count > limit {
+      data.removeFirst(data.count - limit)
+    }
+    lock.unlock()
+  }
+
+  func snapshot() -> String? {
+    lock.lock()
+    let snapshot = data
+    lock.unlock()
+    return String(data: snapshot, encoding: .utf8)?
+      .trimmingCharacters(in: .whitespacesAndNewlines)
+  }
+}
+
 /// Manages the loopback Codex OpenAI-compatible proxy (`desktop/codex-proxy`).
 @MainActor
 final class CodexProxyService: ObservableObject {
@@ -42,11 +70,28 @@ final class CodexProxyService: ObservableObject {
 
   private var process: Process?
   private var healthTask: Task<Void, Never>?
+  private var ensureTask: Task<Void, Never>?
+  private var stderrPipe: Pipe?
 
   private init() {}
 
   /// Start proxy when ChatGPT tier is active. Idempotent.
   func ensureRunning() async {
+    if let ensureTask {
+      await ensureTask.value
+      return
+    }
+
+    let task = Task { @MainActor [weak self] in
+      guard let self else { return }
+      await self.ensureRunningOnce()
+    }
+    ensureTask = task
+    await task.value
+    ensureTask = nil
+  }
+
+  private func ensureRunningOnce() async {
     guard CodexAuthService.isActive else {
       await stop()
       return
@@ -80,14 +125,20 @@ final class CodexProxyService: ObservableObject {
     env["OMI_CODEX_PROXY_PORT"] = String(Self.port)
     proc.environment = env
     let stderrPipe = Pipe()
+    let stderrBuffer = LockedCodexProxyStderrBuffer()
+    stderrPipe.fileHandleForReading.readabilityHandler = { handle in
+      stderrBuffer.append(handle.availableData)
+    }
     proc.standardError = stderrPipe
     proc.standardOutput = FileHandle.nullDevice
 
     do {
       try proc.run()
       process = proc
+      self.stderrPipe = stderrPipe
       for _ in 0..<50 {
         try? await Task.sleep(nanoseconds: 100_000_000)
+        guard !Task.isCancelled else { return }
         if await healthCheck() {
           isRunning = true
           lastError = nil
@@ -96,9 +147,7 @@ final class CodexProxyService: ObservableObject {
           return
         }
       }
-      let stderrData = stderrPipe.fileHandleForReading.readDataToEndOfFile()
-      let stderrHint = String(data: stderrData, encoding: .utf8)?
-        .trimmingCharacters(in: .whitespacesAndNewlines)
+      let stderrHint = stderrBuffer.snapshot()
       let detail =
         (stderrHint?.isEmpty == false)
         ? stderrHint!
@@ -107,6 +156,7 @@ final class CodexProxyService: ObservableObject {
       logError("CodexProxyService: failed to start — \(detail)")
       await stop()
     } catch {
+      stderrPipe.fileHandleForReading.readabilityHandler = nil
       lastError = error.localizedDescription
       await stop()
     }
@@ -115,6 +165,10 @@ final class CodexProxyService: ObservableObject {
   func stop() async {
     healthTask?.cancel()
     healthTask = nil
+    ensureTask?.cancel()
+    ensureTask = nil
+    stderrPipe?.fileHandleForReading.readabilityHandler = nil
+    stderrPipe = nil
     if let process, process.isRunning {
       process.terminate()
     }
@@ -127,6 +181,7 @@ final class CodexProxyService: ObservableObject {
     healthTask = Task {
       while !Task.isCancelled {
         try? await Task.sleep(nanoseconds: 15_000_000_000)
+        guard !Task.isCancelled else { return }
         guard CodexAuthService.isActive else {
           await stop()
           return

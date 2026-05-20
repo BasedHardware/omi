@@ -3,6 +3,31 @@ import Cocoa
 import Combine
 import CoreAudio
 
+final class LockedPTTAudioBuffer: @unchecked Sendable {
+  private let lock = NSLock()
+  private var data = Data()
+
+  func append(_ chunk: Data) {
+    lock.lock()
+    data.append(chunk)
+    lock.unlock()
+  }
+
+  func takeAll() -> Data {
+    lock.lock()
+    let snapshot = data
+    data = Data()
+    lock.unlock()
+    return snapshot
+  }
+
+  func clear() {
+    lock.lock()
+    data = Data()
+    lock.unlock()
+  }
+}
+
 /// Push-to-talk manager for voice input via the Option (⌥) key.
 ///
 /// State machine:
@@ -51,8 +76,7 @@ class PushToTalkManager: ObservableObject {
   private var shortcutCaptureSuspended = false
 
   // Batch mode: accumulate raw audio for post-recording transcription
-  private var batchAudioBuffer = Data()
-  private let batchAudioLock = NSLock()
+  private let batchAudioBuffer = LockedPTTAudioBuffer()
 
   // Live mode: timeout for waiting on final transcript after CloseStream
   private var liveFinalizationTimeout: DispatchWorkItem?
@@ -312,9 +336,7 @@ class PushToTalkManager: ObservableObject {
     transcriptSegments = []
     lastInterimText = ""
     currentContextSnapshot = nil
-    batchAudioLock.lock()
-    batchAudioBuffer = Data()
-    batchAudioLock.unlock()
+    batchAudioBuffer.clear()
     currentTranscriptionProvider = .cloud
     isCurrentSessionFollowUp = false
     updateBarState()
@@ -356,10 +378,7 @@ class PushToTalkManager: ObservableObject {
     if isBatchMode {
       // Batch mode: send accumulated audio to pre-recorded API
       log("PushToTalkManager: finalizing (batch) — mic stopped, transcribing recorded audio")
-      batchAudioLock.lock()
-      let audioData = batchAudioBuffer
-      batchAudioBuffer = Data()
-      batchAudioLock.unlock()
+      let audioData = batchAudioBuffer.takeAll()
 
       // Stop streaming service (was not used in batch mode, but clean up)
       stopAudioTranscription()
@@ -547,15 +566,15 @@ class PushToTalkManager: ObservableObject {
 
     if isBatchMode {
       // Batch mode: just capture audio into buffer, no streaming connection
-      batchAudioLock.lock()
-      batchAudioBuffer = Data()
-      batchAudioLock.unlock()
-      startMicCapture(batchMode: true)
+      batchAudioBuffer.clear()
+      startMicCapture(
+        batchMode: true,
+        audioHandler: { [batchAudioBuffer] audioData in
+          batchAudioBuffer.append(audioData)
+        }
+      )
       log("PushToTalkManager: started audio capture (batch mode)")
     } else {
-      // Live mode: start mic capture and stream to Deepgram
-      startMicCapture()
-
       do {
         let language = AssistantSettings.shared.effectiveTranscriptionLanguage
         let service = try TranscriptionService(
@@ -584,6 +603,12 @@ class PushToTalkManager: ObservableObject {
             }
           }
         )
+        startMicCapture(
+          batchMode: false,
+          audioHandler: { [weak service] audioData in
+            service?.sendAudio(audioData)
+          }
+        )
       } catch {
         logError("PushToTalkManager: failed to create TranscriptionService", error: error)
         stopListening()
@@ -591,7 +616,11 @@ class PushToTalkManager: ObservableObject {
     }
   }
 
-  private func startMicCapture(batchMode: Bool = false, overrideDeviceID: AudioDeviceID? = nil) {
+  private func startMicCapture(
+    batchMode: Bool = false,
+    overrideDeviceID: AudioDeviceID? = nil,
+    audioHandler: @escaping @Sendable (Data) -> Void
+  ) {
     if audioCaptureService == nil {
       if let override = overrideDeviceID {
         audioCaptureService = AudioCaptureService(overrideDeviceID: override)
@@ -613,17 +642,8 @@ class PushToTalkManager: ObservableObject {
       guard let self else { return }
       do {
         try await capture.startCapture(
-          onAudioChunk: { [weak self] audioData in
-            guard let self else { return }
-            if batchMode {
-              // Batch mode: accumulate audio in buffer
-              self.batchAudioLock.lock()
-              self.batchAudioBuffer.append(audioData)
-              self.batchAudioLock.unlock()
-            } else {
-              // Live mode: stream to Deepgram
-              self.transcriptionService?.sendAudio(audioData)
-            }
+          onAudioChunk: { audioData in
+            audioHandler(audioData)
           },
           onAudioLevel: { _ in }
         )
@@ -650,7 +670,23 @@ class PushToTalkManager: ObservableObject {
       "PushToTalkManager: silent-mic fallback — switching to built-in mic (deviceID=\(builtInID))")
     audioCaptureService?.stopCapture()
     audioCaptureService = nil
-    startMicCapture(batchMode: batchMode, overrideDeviceID: builtInID)
+    if batchMode {
+      startMicCapture(
+        batchMode: true,
+        overrideDeviceID: builtInID,
+        audioHandler: { [batchAudioBuffer] audioData in
+          batchAudioBuffer.append(audioData)
+        }
+      )
+    } else if let service = transcriptionService {
+      startMicCapture(
+        batchMode: false,
+        overrideDeviceID: builtInID,
+        audioHandler: { [weak service] audioData in
+          service?.sendAudio(audioData)
+        }
+      )
+    }
   }
 
   private func stopAudioTranscription() {

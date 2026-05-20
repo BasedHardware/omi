@@ -13,11 +13,26 @@ struct TranscriptionComparisonProviderSnapshot: Equatable {
   }
 }
 
+struct TranscriptionComparisonTimeBucketSnapshot: Equatable, Identifiable {
+  var id: String { "\(Int(startTime))-\(Int(endTime))" }
+  var startTime: Double
+  var endTime: Double
+  var whisperText: String
+  var deepgramText: String
+  var whisperSegmentCount: Int
+  var deepgramSegmentCount: Int
+
+  var hasContent: Bool {
+    !whisperText.isEmpty || !deepgramText.isEmpty
+  }
+}
+
 struct TranscriptionComparisonHarnessSnapshot: Equatable {
   var isRunning: Bool
   var startedAt: Date?
   var whisper: TranscriptionComparisonProviderSnapshot
   var deepgram: TranscriptionComparisonProviderSnapshot
+  var timeBuckets: [TranscriptionComparisonTimeBucketSnapshot]
   var wordDifferenceRate: Double?
   var characterDifferenceRate: Double?
 
@@ -26,6 +41,7 @@ struct TranscriptionComparisonHarnessSnapshot: Equatable {
     startedAt: nil,
     whisper: .empty(title: "Local Whisper"),
     deepgram: .empty(title: "Local Deepgram"),
+    timeBuckets: [],
     wordDifferenceRate: nil,
     characterDifferenceRate: nil
   )
@@ -34,6 +50,10 @@ struct TranscriptionComparisonHarnessSnapshot: Equatable {
 @MainActor
 final class TranscriptionComparisonHarness {
   static let enabledDefaultsKey = "dev_transcription_comparison_harness_enabled"
+  private static let transcriptPreviewLimit = 12_000
+  private static let bucketDuration: Double = 30
+  private static let maxBuckets = 8
+  private static let bucketTextLimit = 900
 
   static var isEnabled: Bool {
     #if DEBUG
@@ -75,6 +95,7 @@ final class TranscriptionComparisonHarness {
         title: "Local Deepgram",
         status: deepgramAPIKey == nil ? "Missing Deepgram API key" : "Connecting"
       ),
+      timeBuckets: [],
       wordDifferenceRate: nil,
       characterDifferenceRate: nil
     )
@@ -90,12 +111,14 @@ final class TranscriptionComparisonHarness {
         },
         onStatus: { [weak self] status in
           Task { @MainActor in
+            log("TranscriptionComparison: Deepgram \(status)")
             self?.deepgramStatus = status
             self?.publish()
           }
         },
         onError: { [weak self] error in
           Task { @MainActor in
+            logError("TranscriptionComparison: Deepgram error", error: error)
             self?.deepgramStatus = "Failed"
             self?.deepgramError = error.localizedDescription
             self?.publish()
@@ -122,6 +145,12 @@ final class TranscriptionComparisonHarness {
     merge(segments, into: &whisperSegments)
     publish()
   }
+
+  #if DEBUG
+    func appendDeepgramSegmentsForTesting(_ segments: [NormalizedTranscriptSegment]) {
+      appendDeepgramSegments(segments)
+    }
+  #endif
 
   func finish() {
     deepgramSession?.finish()
@@ -168,23 +197,28 @@ final class TranscriptionComparisonHarness {
   private func publish(isRunning: Bool? = nil) {
     let whisperText = joinedTranscript(whisperSegments)
     let deepgramText = joinedTranscript(deepgramSegments)
+    let whisperPreviewText = transcriptPreview(whisperText)
+    let deepgramPreviewText = transcriptPreview(deepgramText)
     snapshot = TranscriptionComparisonHarnessSnapshot(
       isRunning: isRunning ?? snapshot.isRunning,
       startedAt: snapshot.startedAt,
       whisper: providerSnapshot(
         title: "Local Whisper",
         status: whisperStatus,
-        transcript: whisperText,
+        transcript: whisperPreviewText,
         segments: whisperSegments,
+        wordCount: TranscriptComparison.normalizedWords(whisperText).count,
         error: whisperError
       ),
       deepgram: providerSnapshot(
         title: "Local Deepgram",
         status: deepgramStatus,
-        transcript: deepgramText,
+        transcript: deepgramPreviewText,
         segments: deepgramSegments,
+        wordCount: TranscriptComparison.normalizedWords(deepgramText).count,
         error: deepgramError
       ),
+      timeBuckets: timeBuckets(whisper: whisperSegments, deepgram: deepgramSegments),
       wordDifferenceRate: comparisonRate(
         reference: whisperText,
         hypothesis: deepgramText,
@@ -204,6 +238,7 @@ final class TranscriptionComparisonHarness {
     status: String,
     transcript: String,
     segments: [NormalizedTranscriptSegment],
+    wordCount: Int,
     error: String?
   ) -> TranscriptionComparisonProviderSnapshot {
     TranscriptionComparisonProviderSnapshot(
@@ -211,7 +246,7 @@ final class TranscriptionComparisonHarness {
       status: status,
       transcript: transcript,
       segmentCount: segments.count,
-      wordCount: TranscriptComparison.normalizedWords(transcript).count,
+      wordCount: wordCount,
       error: error
     )
   }
@@ -222,6 +257,64 @@ final class TranscriptionComparisonHarness {
       .joined(separator: " ")
       .replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
       .trimmingCharacters(in: .whitespacesAndNewlines)
+  }
+
+  private func transcriptPreview(_ joined: String) -> String {
+    guard joined.count > Self.transcriptPreviewLimit else { return joined }
+    return String(joined.suffix(Self.transcriptPreviewLimit))
+  }
+
+  private func timeBuckets(
+    whisper: [NormalizedTranscriptSegment],
+    deepgram: [NormalizedTranscriptSegment]
+  ) -> [TranscriptionComparisonTimeBucketSnapshot] {
+    let allSegments = whisper + deepgram
+    guard let maxEnd = allSegments.map(\.end).max(), maxEnd > 0 else { return [] }
+
+    let lastBucketIndex = max(0, Int(maxEnd / Self.bucketDuration))
+    let firstBucketIndex = max(0, lastBucketIndex - Self.maxBuckets + 1)
+
+    return (firstBucketIndex...lastBucketIndex).compactMap { index in
+      let start = Double(index) * Self.bucketDuration
+      let end = start + Self.bucketDuration
+      let whisperInBucket = segments(whisper, overlappingStart: start, end: end)
+      let deepgramInBucket = segments(deepgram, overlappingStart: start, end: end)
+      let bucket = TranscriptionComparisonTimeBucketSnapshot(
+        startTime: start,
+        endTime: end,
+        whisperText: bucketText(whisperInBucket),
+        deepgramText: bucketText(deepgramInBucket),
+        whisperSegmentCount: whisperInBucket.count,
+        deepgramSegmentCount: deepgramInBucket.count
+      )
+      return bucket.hasContent ? bucket : nil
+    }
+  }
+
+  private func segments(
+    _ segments: [NormalizedTranscriptSegment],
+    overlappingStart start: Double,
+    end: Double
+  ) -> [NormalizedTranscriptSegment] {
+    segments
+      .filter { $0.end > start && $0.start < end }
+      .sorted { lhs, rhs in
+        if lhs.start == rhs.start {
+          return lhs.end < rhs.end
+        }
+        return lhs.start < rhs.start
+      }
+  }
+
+  private func bucketText(_ segments: [NormalizedTranscriptSegment]) -> String {
+    let joined =
+      segments
+      .map(\.text)
+      .joined(separator: " ")
+      .replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
+      .trimmingCharacters(in: .whitespacesAndNewlines)
+    guard joined.count > Self.bucketTextLimit else { return joined }
+    return String(joined.prefix(Self.bucketTextLimit)) + "..."
   }
 
   private func comparisonRate(
@@ -272,9 +365,16 @@ final class DeepgramBackgroundTranscriptionSession {
   private let onError: (Error) -> Void
   private var webSocketTask: URLSessionWebSocketTask?
   private var urlSession: URLSession?
+  private let queue = DispatchQueue(label: "com.omi.transcription.deepgram-comparison")
   private var isConnected = false
-  private var pendingAudio = Data()
-  private let pendingAudioLimit = 16_000 * 2 * 5
+  private var pendingAudioChunks: [Data] = []
+  private var pendingAudioBytes = 0
+  private var isSendingAudio = false
+  private let pendingAudioLimit = 16_000 * 2 * 8
+  private var keepAliveTimer: DispatchSourceTimer?
+  private var shouldReconnect = false
+  private var isFinishing = false
+  private var reconnectAttempt = 0
 
   init(
     language: String,
@@ -291,7 +391,16 @@ final class DeepgramBackgroundTranscriptionSession {
   }
 
   func start() {
-    guard webSocketTask == nil else { return }
+    queue.async {
+      guard self.webSocketTask == nil else { return }
+      self.shouldReconnect = true
+      self.isFinishing = false
+      self.reconnectAttempt = 0
+      self.openSocket()
+    }
+  }
+
+  private func openSocket() {
     guard var components = URLComponents(string: "wss://api.deepgram.com/v1/listen") else {
       return
     }
@@ -324,54 +433,86 @@ final class DeepgramBackgroundTranscriptionSession {
 
     DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
       guard let self else { return }
-      guard self.webSocketTask?.state == .running else {
-        self.onStatus("Failed to connect")
-        return
+      self.queue.async {
+        guard self.webSocketTask?.state == .running else {
+          self.handleConnectionFailure(
+            NSError(
+              domain: "DeepgramBackgroundTranscriptionSession",
+              code: 1,
+              userInfo: [NSLocalizedDescriptionKey: "Failed to connect to Deepgram"]
+            )
+          )
+          return
+        }
+        self.isConnected = true
+        self.reconnectAttempt = 0
+        self.onStatus("Connected")
+        self.startKeepAliveTimer()
+        self.drainAudioQueue()
       }
-      self.isConnected = true
-      self.onStatus("Connected")
-      self.flushPendingAudio()
     }
   }
 
   func appendAudio(_ data: Data) {
-    guard isConnected else {
-      pendingAudio.append(data)
-      if pendingAudio.count > pendingAudioLimit {
-        pendingAudio.removeFirst(pendingAudio.count - pendingAudioLimit)
-      }
-      return
+    queue.async {
+      self.enqueueAudio(data)
+      self.drainAudioQueue()
     }
-    sendAudio(data)
   }
 
   func finish() {
-    guard isConnected else { return }
-    sendString("{\"type\":\"CloseStream\"}")
-    onStatus("Finalizing")
+    queue.async {
+      self.isFinishing = true
+      self.shouldReconnect = false
+      guard self.isConnected else {
+        self.stopKeepAliveTimer()
+        self.onStatus("Finalized")
+        return
+      }
+      self.sendString("{\"type\":\"CloseStream\"}")
+      self.onStatus("Finalizing")
+    }
   }
 
   func stop() {
-    isConnected = false
-    webSocketTask?.cancel(with: .normalClosure, reason: nil)
-    webSocketTask = nil
-    urlSession?.invalidateAndCancel()
-    urlSession = nil
-    pendingAudio.removeAll()
-    onStatus("Stopped")
+    queue.async {
+      self.shouldReconnect = false
+      self.isFinishing = false
+      self.isConnected = false
+      self.isSendingAudio = false
+      self.stopKeepAliveTimer()
+      self.webSocketTask?.cancel(with: .normalClosure, reason: nil)
+      self.webSocketTask = nil
+      self.urlSession?.invalidateAndCancel()
+      self.urlSession = nil
+      self.pendingAudioChunks.removeAll()
+      self.pendingAudioBytes = 0
+      self.onStatus("Stopped")
+    }
   }
 
-  private func flushPendingAudio() {
-    guard !pendingAudio.isEmpty else { return }
-    let audio = pendingAudio
-    pendingAudio.removeAll()
-    sendAudio(audio)
+  private func enqueueAudio(_ data: Data) {
+    pendingAudioChunks.append(data)
+    pendingAudioBytes += data.count
+    while pendingAudioBytes > pendingAudioLimit, !pendingAudioChunks.isEmpty {
+      pendingAudioBytes -= pendingAudioChunks.removeFirst().count
+    }
   }
 
-  private func sendAudio(_ data: Data) {
+  private func drainAudioQueue() {
+    guard isConnected, !isSendingAudio, !pendingAudioChunks.isEmpty else { return }
+    let data = pendingAudioChunks.removeFirst()
+    pendingAudioBytes -= data.count
+    isSendingAudio = true
     webSocketTask?.send(.data(data)) { [weak self] error in
-      if let error {
-        self?.onError(error)
+      guard let self else { return }
+      self.queue.async {
+        self.isSendingAudio = false
+        if let error {
+          self.handleConnectionFailure(error)
+          return
+        }
+        self.drainAudioQueue()
       }
     }
   }
@@ -379,7 +520,9 @@ final class DeepgramBackgroundTranscriptionSession {
   private func sendString(_ value: String) {
     webSocketTask?.send(.string(value)) { [weak self] error in
       if let error {
-        self?.onError(error)
+        self?.queue.async {
+          self?.handleConnectionFailure(error)
+        }
       }
     }
   }
@@ -392,10 +535,52 @@ final class DeepgramBackgroundTranscriptionSession {
         self.handleMessage(message)
         self.receiveMessage()
       case .failure(let error):
-        guard self.isConnected else { return }
-        self.isConnected = false
-        self.onError(error)
+        self.queue.async {
+          self.handleConnectionFailure(error)
+        }
       }
+    }
+  }
+
+  private func startKeepAliveTimer() {
+    stopKeepAliveTimer()
+    let timer = DispatchSource.makeTimerSource(queue: queue)
+    timer.schedule(deadline: .now() + 5, repeating: 5)
+    timer.setEventHandler { [weak self] in
+      guard let self, self.isConnected else { return }
+      self.sendString("{\"type\":\"KeepAlive\"}")
+    }
+    keepAliveTimer = timer
+    timer.resume()
+  }
+
+  private func stopKeepAliveTimer() {
+    keepAliveTimer?.cancel()
+    keepAliveTimer = nil
+  }
+
+  private func handleConnectionFailure(_ error: Error) {
+    guard shouldReconnect || isConnected else { return }
+    isConnected = false
+    isSendingAudio = false
+    stopKeepAliveTimer()
+    webSocketTask?.cancel(with: .goingAway, reason: nil)
+    webSocketTask = nil
+    urlSession?.invalidateAndCancel()
+    urlSession = nil
+
+    guard shouldReconnect, !isFinishing else {
+      onError(error)
+      return
+    }
+
+    reconnectAttempt += 1
+    let delay = min(10.0, pow(2.0, Double(min(reconnectAttempt, 3))))
+    onStatus("Reconnecting in \(Int(delay))s")
+    queue.asyncAfter(deadline: .now() + delay) { [weak self] in
+      guard let self, self.shouldReconnect, self.webSocketTask == nil else { return }
+      self.onStatus("Reconnecting")
+      self.openSocket()
     }
   }
 

@@ -10,13 +10,22 @@ struct SettingsPage: View {
   @Binding var highlightedSettingId: String?
   var chatProvider: ChatProvider? = nil
 
+  private var sectionDisplayTitle: String {
+    if selectedSection == .planUsage
+      && DesktopBackendEnvironment.selectedBackendTarget.mode == .localDaemon
+    {
+      return "Local Setup"
+    }
+    return selectedSection.rawValue
+  }
+
   var body: some View {
     ScrollViewReader { proxy in
       ScrollView {
         VStack(spacing: 0) {
           // Section header
           HStack {
-            Text(selectedSection.rawValue)
+            Text(sectionDisplayTitle)
               .scaledFont(size: 28, weight: .bold)
               .foregroundColor(OmiColors.textPrimary)
               .id(selectedSection)
@@ -378,6 +387,7 @@ struct SettingsContentView: View {
   @State private var showResetOnboardingAlert: Bool = false
   @State private var showRescanFilesAlert: Bool = false
   @State private var showDeleteAccountAlert: Bool = false
+  @State private var showHybridProviderSheet: Bool = false
 
   // Gmail Reader states
   @State private var gmailEmails: [GmailEmail] = []
@@ -1106,25 +1116,22 @@ struct SettingsContentView: View {
           VStack(spacing: 10) {
             transcriptionProviderOption(
               mode: .auto,
-              title: "Local Background First",
-              detail:
-                "Use local Whisper for continuous background transcription when available. If local is unavailable, this mode may use cloud transcription.",
+              title: "Automatic",
+              detail: "Use on-device transcription when possible, fall back to cloud.",
               icon: "sparkle.magnifyingglass"
             )
 
             transcriptionProviderOption(
               mode: .local,
-              title: "Local Background Only",
-              detail:
-                "Use on-device Whisper for continuous background transcription. If local ASR is unavailable, background transcription will fail instead of using cloud.",
+              title: "On-device only",
+              detail: "Never send audio to the cloud.",
               icon: "desktopcomputer"
             )
 
             transcriptionProviderOption(
               mode: .cloud,
-              title: "Cloud Transcription",
-              detail:
-                "Use the existing Omi cloud transcription path for live meetings and continuous background capture.",
+              title: "Cloud",
+              detail: "Use the Omi cloud for live meetings and background capture.",
               icon: "cloud.fill"
             )
           }
@@ -1137,9 +1144,9 @@ struct SettingsContentView: View {
                 .padding(.top, 1)
 
               Text(unavailableReason)
-              .scaledFont(size: 12)
-              .foregroundColor(OmiColors.warning)
-              .fixedSize(horizontal: false, vertical: true)
+                .scaledFont(size: 12)
+                .foregroundColor(OmiColors.warning)
+                .fixedSize(horizontal: false, vertical: true)
             }
             .padding(10)
             .background(
@@ -1619,9 +1626,12 @@ struct SettingsContentView: View {
             Text("Raw Local Transcription")
               .scaledFont(size: 15, weight: .semibold)
               .foregroundColor(OmiColors.textPrimary)
-            Text("Recent locally persisted sessions and raw segment text")
-              .scaledFont(size: 12)
-              .foregroundColor(OmiColors.textTertiary)
+            Text(
+              "Developer tool. Recent locally persisted sessions and raw segment text — not synced to cloud."
+            )
+            .scaledFont(size: 12)
+            .foregroundColor(OmiColors.textTertiary)
+            .fixedSize(horizontal: false, vertical: true)
           }
 
           Spacer()
@@ -1724,9 +1734,27 @@ struct SettingsContentView: View {
                 .foregroundColor(snapshot.isRunning ? OmiColors.success : OmiColors.textTertiary)
             }
 
-            HStack(alignment: .top, spacing: 12) {
-              comparisonProviderColumn(snapshot.whisper)
-              comparisonProviderColumn(snapshot.deepgram)
+            if snapshot.timeBuckets.isEmpty {
+              HStack(alignment: .top, spacing: 12) {
+                comparisonProviderColumn(snapshot.whisper)
+                comparisonProviderColumn(snapshot.deepgram)
+              }
+            } else {
+              VStack(alignment: .leading, spacing: 10) {
+                HStack {
+                  Text("Time-aligned output")
+                    .scaledFont(size: 12, weight: .semibold)
+                    .foregroundColor(OmiColors.textPrimary)
+                  Spacer()
+                  Text("Latest \(snapshot.timeBuckets.count) windows")
+                    .scaledFont(size: 10)
+                    .foregroundColor(OmiColors.textTertiary)
+                }
+
+                ForEach(snapshot.timeBuckets) { bucket in
+                  comparisonTimeBucketRow(bucket)
+                }
+              }
             }
           } else {
             Text(
@@ -1796,9 +1824,63 @@ struct SettingsContentView: View {
       .frame(maxWidth: .infinity, alignment: .topLeading)
     }
 
+    private func comparisonTimeBucketRow(
+      _ bucket: TranscriptionComparisonTimeBucketSnapshot
+    ) -> some View {
+      VStack(alignment: .leading, spacing: 8) {
+        HStack(spacing: 8) {
+          Text("\(formatComparisonTime(bucket.startTime))-\(formatComparisonTime(bucket.endTime))")
+            .scaledMonospacedFont(size: 11, weight: .semibold)
+            .foregroundColor(OmiColors.textSecondary)
+          Spacer()
+          Text("\(bucket.whisperSegmentCount) W / \(bucket.deepgramSegmentCount) D segments")
+            .scaledFont(size: 10)
+            .foregroundColor(OmiColors.textTertiary)
+        }
+
+        HStack(alignment: .top, spacing: 10) {
+          comparisonBucketTextBox(
+            title: "Whisper",
+            text: bucket.whisperText
+          )
+          comparisonBucketTextBox(
+            title: "Deepgram",
+            text: bucket.deepgramText
+          )
+        }
+      }
+      .padding(10)
+      .background(OmiColors.backgroundSecondary.opacity(0.45))
+      .clipShape(RoundedRectangle(cornerRadius: 8))
+    }
+
+    private func comparisonBucketTextBox(title: String, text: String) -> some View {
+      VStack(alignment: .leading, spacing: 6) {
+        Text(title)
+          .scaledFont(size: 10, weight: .semibold)
+          .foregroundColor(OmiColors.textTertiary)
+
+        Text(text.isEmpty ? "(no transcript)" : text)
+          .scaledMonospacedFont(size: 11)
+          .foregroundColor(text.isEmpty ? OmiColors.textTertiary : OmiColors.textSecondary)
+          .textSelection(.enabled)
+          .fixedSize(horizontal: false, vertical: true)
+          .frame(maxWidth: .infinity, alignment: .topLeading)
+      }
+      .padding(9)
+      .background(OmiColors.backgroundSecondary.opacity(0.8))
+      .clipShape(RoundedRectangle(cornerRadius: 7))
+      .frame(maxWidth: .infinity, alignment: .topLeading)
+    }
+
     private func formattedComparisonRate(_ value: Double?) -> String {
       guard let value else { return "n/a" }
       return "\(Int((value * 100).rounded()))%"
+    }
+
+    private func formatComparisonTime(_ seconds: Double) -> String {
+      let totalSeconds = max(0, Int(seconds.rounded(.down)))
+      return String(format: "%d:%02d", totalSeconds / 60, totalSeconds % 60)
     }
   #endif
 
@@ -2410,159 +2492,89 @@ struct SettingsContentView: View {
       }
 
       settingsCard(settingId: "planusage.local.checklist") {
-        VStack(alignment: .leading, spacing: 12) {
-          Text("Hybrid provider setup")
-            .scaledFont(size: 15, weight: .semibold)
-            .foregroundColor(OmiColors.textPrimary)
+        VStack(alignment: .leading, spacing: 14) {
+          HStack(alignment: .top) {
+            VStack(alignment: .leading, spacing: 4) {
+              Text("Providers")
+                .scaledFont(size: 15, weight: .semibold)
+                .foregroundColor(OmiColors.textPrimary)
 
-          Text(
-            "Bring your own AI endpoint, then assign models to local task slots. Keys are stored in the local daemon SQLite database on this Mac and sent only to URLs you configure—not Omi cloud proxies."
-          )
-          .scaledFont(size: 12)
-          .foregroundColor(OmiColors.textSecondary)
-          .fixedSize(horizontal: false, vertical: true)
-
-          ForEach(HybridProviderReadiness.rows(from: backendSettings)) { row in
-            HStack(alignment: .top, spacing: 10) {
-              Image(
-                systemName: row.status == .configured || row.status == .optionalFallback
-                  ? "checkmark.circle.fill" : "circle"
+              Text(
+                "Bring your own AI endpoint. Keys are stored on this Mac and sent only to URLs you configure."
               )
-              .foregroundColor(
-                row.status == .configured
-                  ? OmiColors.success
-                  : (row.status == .optionalFallback
-                    ? OmiColors.textTertiary : OmiColors.warning))
-              VStack(alignment: .leading, spacing: 2) {
-                Text(row.label)
-                  .scaledFont(size: 13, weight: .medium)
-                  .foregroundColor(OmiColors.textPrimary)
-                Text(row.detail)
-                  .scaledFont(size: 11)
-                  .foregroundColor(OmiColors.textTertiary)
-              }
-              Spacer()
+              .scaledFont(size: 12)
+              .foregroundColor(OmiColors.textSecondary)
+              .fixedSize(horizontal: false, vertical: true)
+            }
+
+            Spacer()
+
+            Button {
+              showHybridProviderSheet = true
+            } label: {
+              Text("Configure…")
+                .scaledFont(size: 13, weight: .semibold)
+            }
+            .buttonStyle(.borderedProminent)
+          }
+
+          VStack(spacing: 8) {
+            ForEach(HybridProviderReadiness.rows(from: backendSettings)) { row in
+              hybridProviderSummaryRow(row)
             }
           }
-
-          Button(action: applyLocalHybridProviderDefaults) {
-            Text("Apply local defaults")
-              .scaledFont(size: 13, weight: .semibold)
-          }
-          .buttonStyle(.borderedProminent)
-          .disabled(isSavingHybridProvider)
         }
       }
-
-      localHybridProvidersEditorCard
+    }
+    .sheet(isPresented: $showHybridProviderSheet) {
+      HybridProviderSetupSheet(
+        baseURL: $hybridAiBaseURL,
+        apiKey: $hybridAiApiKey,
+        chatModel: $hybridChatModel,
+        postTranscriptModel: $hybridAiModel,
+        proactiveModel: $hybridEmbedModel,
+        visionModel: $hybridVisionModel,
+        status: hybridProviderStatus,
+        isSaving: isSavingHybridProvider,
+        isTesting: isTestingHybridProvider,
+        applyDefaults: applyLocalHybridProviderDefaults,
+        save: saveHybridProviderPolicy,
+        test: testHybridProviderSlot,
+        dismiss: { showHybridProviderSheet = false }
+      )
     }
   }
 
-  private var localHybridProvidersEditorCard: some View {
-    settingsCard(settingId: "planusage.local.providers") {
-      VStack(alignment: .leading, spacing: 18) {
-        VStack(alignment: .leading, spacing: 8) {
-          Text("Provider account")
-            .scaledFont(size: 12, weight: .medium)
-            .foregroundColor(OmiColors.textTertiary)
-          TextField("Base URL", text: $hybridAiBaseURL)
-            .textFieldStyle(.roundedBorder)
-          SecureField("API key (optional on loopback)", text: $hybridAiApiKey)
-            .textFieldStyle(.roundedBorder)
-        }
+  @ViewBuilder
+  private func hybridProviderSummaryRow(_ row: HybridProviderReadiness.Row) -> some View {
+    let isConfigured = row.status == .configured
+    let isOptional = row.status == .optionalFallback
+    let chipColor: Color =
+      isConfigured
+      ? OmiColors.success
+      : (isOptional ? OmiColors.textTertiary : OmiColors.warning)
+    let chipIcon: String =
+      isConfigured
+      ? "checkmark.circle.fill"
+      : (isOptional ? "minus.circle.fill" : "exclamationmark.circle.fill")
 
-        Divider().background(OmiColors.backgroundQuaternary)
-
-        hybridSlotEditorBlock(
-          title: "Chat",
-          subtitle: "Direct Ask Omi chat",
-          model: $hybridChatModel,
-          slot: HybridProviderPolicy.chatSlot
-        )
-
-        Divider().background(OmiColors.backgroundQuaternary)
-
-        hybridSlotEditorBlock(
-          title: "Post-transcript processing",
-          subtitle: "Titles, summaries, memories, and action items",
-          model: $hybridAiModel,
-          slot: HybridProviderPolicy.postTranscriptSlot
-        )
-
-        Divider().background(OmiColors.backgroundQuaternary)
-
-        hybridSlotEditorBlock(
-          title: "Proactive assistants",
-          subtitle:
-            "Local assistant jobs; defaults to \(HybridProviderReadiness.defaultSmallModel())",
-          model: $hybridEmbedModel,
-          slot: HybridProviderPolicy.proactiveSlot
-        )
-
-        Divider().background(OmiColors.backgroundQuaternary)
-
-        hybridSlotEditorBlock(
-          title: "Vision, optional",
-          subtitle: "Leave blank to use local OCR text only",
-          model: $hybridVisionModel,
-          slot: HybridProviderPolicy.visionSlot,
-          optional: true
-        )
-
-        Divider().background(OmiColors.backgroundQuaternary)
-
-        VStack(alignment: .leading, spacing: 4) {
-          Text("Memory search")
-            .scaledFont(size: 12, weight: .medium)
-            .foregroundColor(OmiColors.textTertiary)
-          Text("Local wiki/FTS search uses local_wiki and does not require embeddings.")
-            .scaledFont(size: 11)
-            .foregroundColor(OmiColors.textSecondary)
-        }
-
-        if let hybridProviderStatus {
-          Text(hybridProviderStatus)
-            .scaledFont(size: 12)
-            .foregroundColor(OmiColors.textSecondary)
-            .textSelection(.enabled)
-        }
+    HStack(alignment: .top, spacing: 10) {
+      Image(systemName: chipIcon)
+        .scaledFont(size: 14)
+        .foregroundColor(chipColor)
+        .padding(.top, 1)
+      VStack(alignment: .leading, spacing: 2) {
+        Text(row.label)
+          .scaledFont(size: 13, weight: .medium)
+          .foregroundColor(OmiColors.textPrimary)
+        Text(row.detail)
+          .scaledFont(size: 11)
+          .foregroundColor(OmiColors.textTertiary)
+          .fixedSize(horizontal: false, vertical: true)
       }
+      Spacer()
     }
-  }
-
-  private func hybridSlotEditorBlock(
-    title: String,
-    subtitle: String,
-    model: Binding<String>,
-    slot: String,
-    optional: Bool = false
-  ) -> some View {
-    VStack(alignment: .leading, spacing: 8) {
-      Text(title)
-        .scaledFont(size: 12, weight: .medium)
-        .foregroundColor(OmiColors.textTertiary)
-      Text(subtitle)
-        .scaledFont(size: 11)
-        .foregroundColor(OmiColors.textSecondary)
-      TextField("Model", text: model)
-        .textFieldStyle(.roundedBorder)
-      HStack(spacing: 10) {
-        Button("Save") {
-          saveHybridProviderPolicy()
-        }
-        .buttonStyle(.bordered)
-        .disabled(isSavingHybridProvider)
-        Button("Test") {
-          testHybridProviderSlot(slot)
-        }
-        .buttonStyle(.bordered)
-        .disabled(
-          isTestingHybridProvider
-            || (optional
-              && model.wrappedValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-        )
-      }
-    }
+    .padding(.vertical, 4)
   }
 
   private var cloudPlanUsageSection: some View {
@@ -6044,7 +6056,7 @@ struct SettingsContentView: View {
               systemName: codexAuthStore.isActive
                 ? "checkmark.seal.fill" : "person.crop.circle.badge.checkmark"
             )
-              .foregroundColor(codexAuthStore.isActive ? OmiColors.success : OmiColors.textTertiary)
+            .foregroundColor(codexAuthStore.isActive ? OmiColors.success : OmiColors.textTertiary)
             Text(codexAuthStore.isActive ? "ChatGPT plan active" : "Use your ChatGPT subscription")
               .scaledFont(size: 14, weight: .semibold)
               .foregroundColor(OmiColors.textPrimary)
@@ -6060,8 +6072,8 @@ struct SettingsContentView: View {
             Text(
               "Active provider: \(HybridChatClient.currentRoute().displayName) via \(CodexProxyService.defaultBaseURL)"
             )
-              .scaledFont(size: 11)
-              .foregroundColor(OmiColors.success)
+            .scaledFont(size: 11)
+            .foregroundColor(OmiColors.success)
           } else if codexAuthStore.isEnrolled, let proxyError = codexProxyService.lastError {
             Text("Proxy not running: \(proxyError)")
               .scaledFont(size: 11)
@@ -6265,23 +6277,65 @@ struct SettingsContentView: View {
 
   @ViewBuilder
   private var byokStatusBanner: some View {
+    let isLocalMode = DesktopBackendEnvironment.selectedBackendTarget.mode == .localDaemon
+
     settingsCard(settingId: "advanced.devkeys.info") {
-      HStack(alignment: .top, spacing: 12) {
-        Image(systemName: hasAllBYOKKeys ? "checkmark.seal.fill" : "key.fill")
-          .foregroundColor(hasAllBYOKKeys ? OmiColors.success : OmiColors.textTertiary)
-        VStack(alignment: .leading, spacing: 4) {
-          Text(hasAllBYOKKeys ? "Free plan active" : "Use Omi free forever")
-            .scaledFont(size: 14, weight: .semibold)
-            .foregroundColor(OmiColors.textPrimary)
-          Text(
-            hasAllBYOKKeys
-              ? "You're paying your own providers. Omi skips the subscription charge. Keys stay on this Mac."
-              : "Provide all four keys (OpenAI, Anthropic, Gemini, Deepgram) to switch to the free plan. Keys stay on this Mac — we never store them on our servers."
+      if isLocalMode {
+        VStack(alignment: .leading, spacing: 10) {
+          HStack(alignment: .top, spacing: 12) {
+            Image(systemName: "key.fill")
+              .foregroundColor(OmiColors.textTertiary)
+            VStack(alignment: .leading, spacing: 4) {
+              Text("Direct client keys")
+                .scaledFont(size: 14, weight: .semibold)
+                .foregroundColor(OmiColors.textPrimary)
+              Text(
+                "Used by on-device features that bypass the local daemon — Gemini for embeddings, Deepgram for the transcription comparison harness, and OpenAI/Anthropic as fallbacks. Keys stay on this Mac."
+              )
+              .scaledFont(size: 12)
+              .foregroundColor(OmiColors.textTertiary)
+              .fixedSize(horizontal: false, vertical: true)
+            }
+            Spacer()
+          }
+
+          HStack(alignment: .top, spacing: 8) {
+            Image(systemName: "arrow.turn.down.right")
+              .scaledFont(size: 11)
+              .foregroundColor(OmiColors.purplePrimary)
+              .padding(.top, 2)
+            Text(
+              "For chat, post-transcript processing, and proactive assistant endpoints, configure providers in **Local Setup** instead."
+            )
+            .scaledFont(size: 11)
+            .foregroundColor(OmiColors.textSecondary)
+            .fixedSize(horizontal: false, vertical: true)
+            Spacer()
+          }
+          .padding(10)
+          .background(
+            RoundedRectangle(cornerRadius: 8)
+              .fill(OmiColors.purplePrimary.opacity(0.08))
           )
-          .scaledFont(size: 12)
-          .foregroundColor(OmiColors.textTertiary)
         }
-        Spacer()
+      } else {
+        HStack(alignment: .top, spacing: 12) {
+          Image(systemName: hasAllBYOKKeys ? "checkmark.seal.fill" : "key.fill")
+            .foregroundColor(hasAllBYOKKeys ? OmiColors.success : OmiColors.textTertiary)
+          VStack(alignment: .leading, spacing: 4) {
+            Text(hasAllBYOKKeys ? "Free plan active" : "Use Omi free forever")
+              .scaledFont(size: 14, weight: .semibold)
+              .foregroundColor(OmiColors.textPrimary)
+            Text(
+              hasAllBYOKKeys
+                ? "You're paying your own providers. Omi skips the subscription charge. Keys stay on this Mac."
+                : "Provide all four keys (OpenAI, Anthropic, Gemini, Deepgram) to switch to the free plan. Keys stay on this Mac — we never store them on our servers."
+            )
+            .scaledFont(size: 12)
+            .foregroundColor(OmiColors.textTertiary)
+          }
+          Spacer()
+        }
       }
     }
   }
