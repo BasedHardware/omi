@@ -1647,7 +1647,7 @@ struct SidebarAudioLevelIcon: View {
 
   /// Combined audio level (max of mic and system)
   private var combinedLevel: Float {
-    max(micLevel, systemLevel)
+    max(max(micLevel, systemLevel), 0.08)
   }
 
   var body: some View {

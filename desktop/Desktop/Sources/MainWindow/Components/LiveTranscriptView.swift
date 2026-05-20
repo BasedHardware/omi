@@ -49,9 +49,11 @@ struct RecordingBarAudioLevels: View {
             HStack(spacing: 6) {
                 Image(systemName: "mic.fill")
                     .scaledFont(size: 12)
-                    .foregroundColor(OmiColors.textTertiary)
+                    .foregroundColor(
+                        monitor.microphoneLevel > 0.01 ? OmiColors.success : OmiColors.textTertiary
+                    )
                 AudioLevelWaveformView(
-                    level: monitor.microphoneLevel,
+                    level: max(monitor.microphoneLevel, 0.08),
                     barCount: 8,
                     isActive: true
                 )
@@ -62,7 +64,7 @@ struct RecordingBarAudioLevels: View {
                     .scaledFont(size: 12)
                     .foregroundColor(OmiColors.textTertiary)
                 AudioLevelWaveformView(
-                    level: monitor.systemLevel,
+                    level: max(monitor.systemLevel, 0.04),
                     barCount: 8,
                     isActive: true
                 )

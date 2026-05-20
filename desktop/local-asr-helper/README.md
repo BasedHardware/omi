@@ -80,6 +80,10 @@ Use `--audio path/to/file.wav` or `--audio path/to/file.pcm` instead of
 `--deepgram-compare` flag is reserved as the explicit future extension point and
 requires `DEEPGRAM_API_KEY`; it is not required for local smoke validation.
 
+In the dev app, open Settings -> Advanced -> Dev Tools -> Raw Transcription
+History to inspect the recent locally persisted sessions and raw segment text.
+Use the Refresh button after stopping a local background recording.
+
 The dev desktop app build (`desktop/run.sh`) builds this helper and copies it to
 `<app>.app/Contents/Resources/local-asr-helper`, which is the bundled path used
 by `LocalASRHelperLocator`.

@@ -151,7 +151,7 @@ struct DesktopHomeView: View {
               // Auto-start transcription if enabled in settings.
               // If API keys aren't loaded yet, onChange below retries.
               if settings.transcriptionEnabled && !appState.isTranscribing {
-                if APIKeyService.keysAvailable {
+                if APIKeyService.keysAvailable || !backgroundTranscriptionNeedsAPIKeys(settings: settings) {
                   log("DesktopHomeView: Auto-starting transcription")
                   appState.startTranscription()
                 } else {
@@ -412,6 +412,16 @@ struct DesktopHomeView: View {
       notification in
       handleAutomationNavigation(notification)
     }
+  }
+
+  private func backgroundTranscriptionNeedsAPIKeys(settings: AssistantSettings) -> Bool {
+    let routing = BackgroundTranscriptionRoutingGuard().decide(
+      selection: settings.transcriptionProviderSelection,
+      capabilities: LocalTranscriptionCapabilityDetector(
+        availableEngines: { LocalASRHelperLocator.detectedEngines() }
+      ).detect()
+    )
+    return routing.requiresCloudEntitlement
   }
 
   /// Recursively find all NSHostingViews in a window and set sizingOptions to [],

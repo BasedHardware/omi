@@ -74,6 +74,38 @@ final class TranscriptionProviderPolicyTests: XCTestCase {
     XCTAssertNil(result.fallbackReason)
   }
 
+  func testLocalBackgroundRouteDoesNotRequireCloudEntitlement() {
+    let capabilities = LocalTranscriptionCapabilities(
+      processor: .nativeAppleSilicon,
+      physicalMemoryBytes: 16 * 1024 * 1024 * 1024,
+      availableEngines: [.mlxWhisper]
+    )
+
+    let decision = BackgroundTranscriptionRoutingGuard().decide(
+      selection: TranscriptionProviderSelection(mode: .local, quality: .fast),
+      capabilities: capabilities
+    )
+
+    XCTAssertNotNil(decision.localPlan)
+    XCTAssertFalse(decision.requiresCloudEntitlement)
+  }
+
+  func testAutoCloudFallbackRequiresCloudEntitlement() {
+    let capabilities = LocalTranscriptionCapabilities(
+      processor: .nativeAppleSilicon,
+      physicalMemoryBytes: 16 * 1024 * 1024 * 1024,
+      availableEngines: []
+    )
+
+    let decision = BackgroundTranscriptionRoutingGuard().decide(
+      selection: TranscriptionProviderSelection(mode: .auto, quality: .fast),
+      capabilities: capabilities
+    )
+
+    XCTAssertTrue(decision.useCloudBackend)
+    XCTAssertTrue(decision.requiresCloudEntitlement)
+  }
+
   func testAccurateUsesLargerModelsOnlyWhenMemoryAllows() {
     let lowMemory = LocalTranscriptionCapabilities(
       processor: .nativeAppleSilicon,

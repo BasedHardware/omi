@@ -589,6 +589,29 @@ actor TranscriptionStorage {
         }
     }
 
+    /// Get recent local transcription sessions with raw persisted segments for debugging.
+    func getRecentSessionsWithSegments(limit: Int = 8) async throws -> [TranscriptionSessionWithSegments] {
+        let db = try await ensureInitialized()
+
+        return try await db.read { database in
+            let sessions = try TranscriptionSessionRecord
+                .order(Column("startedAt").desc)
+                .limit(max(1, limit))
+                .fetchAll(database)
+
+            return try sessions.map { session in
+                guard let sessionId = session.id else {
+                    return TranscriptionSessionWithSegments(session: session, segments: [])
+                }
+                let segments = try TranscriptionSegmentRecord
+                    .filter(Column("sessionId") == sessionId)
+                    .order(Column("segmentOrder").asc)
+                    .fetchAll(database)
+                return TranscriptionSessionWithSegments(session: session, segments: segments)
+            }
+        }
+    }
+
     /// Get all sessions needing recovery (crashed, pending, or failed with retries left)
     func getSessionsNeedingRecovery() async throws -> [TranscriptionSessionRecord] {
         let db = try await ensureInitialized()

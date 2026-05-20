@@ -186,6 +186,9 @@ struct SettingsContentView: View {
   // Advanced stats
   @State private var advancedStats: UserStats?
   @State private var isLoadingStats = false
+  @State private var rawTranscriptionHistory: [TranscriptionSessionWithSegments] = []
+  @State private var isLoadingRawTranscriptionHistory = false
+  @State private var rawTranscriptionHistoryError: String?
   @State private var chatMessageCount: Int?
   @State private var isLoadingChatMessages = false
   @State private var showProfileAndStats = false
@@ -3557,6 +3560,98 @@ struct SettingsContentView: View {
           .clipShape(RoundedRectangle(cornerRadius: 8))
         }
       }
+
+      settingsCard(settingId: "advanced.devtools.rawtranscription") {
+        VStack(alignment: .leading, spacing: 14) {
+          HStack(spacing: 12) {
+            Image(systemName: "waveform.badge.magnifyingglass")
+              .scaledFont(size: 16)
+              .foregroundColor(OmiColors.purplePrimary)
+            VStack(alignment: .leading, spacing: 4) {
+              Text("Raw Transcription History")
+                .scaledFont(size: 15, weight: .semibold)
+                .foregroundColor(OmiColors.textPrimary)
+              Text("Inspect locally persisted sessions and segment text from background capture")
+                .scaledFont(size: 12)
+                .foregroundColor(OmiColors.textTertiary)
+            }
+            Spacer()
+            Button {
+              Task { await loadRawTranscriptionHistory() }
+            } label: {
+              HStack(spacing: 6) {
+                if isLoadingRawTranscriptionHistory {
+                  ProgressView().controlSize(.mini)
+                } else {
+                  Image(systemName: "arrow.clockwise")
+                    .scaledFont(size: 12, weight: .semibold)
+                }
+                Text("Refresh")
+                  .scaledFont(size: 13, weight: .medium)
+              }
+            }
+            .buttonStyle(.plain)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 6)
+            .background(OmiColors.backgroundSecondary)
+            .clipShape(RoundedRectangle(cornerRadius: 8))
+            .disabled(isLoadingRawTranscriptionHistory)
+          }
+
+          if let rawTranscriptionHistoryError {
+            Text(rawTranscriptionHistoryError)
+              .scaledFont(size: 12)
+              .foregroundColor(OmiColors.warning)
+          } else if rawTranscriptionHistory.isEmpty {
+            Text("No local transcription sessions found yet.")
+              .scaledFont(size: 12)
+              .foregroundColor(OmiColors.textTertiary)
+          } else {
+            VStack(alignment: .leading, spacing: 10) {
+              ForEach(rawTranscriptionHistory.indices, id: \.self) { index in
+                rawTranscriptionHistoryRow(rawTranscriptionHistory[index])
+              }
+            }
+          }
+        }
+        .task {
+          if rawTranscriptionHistory.isEmpty && rawTranscriptionHistoryError == nil {
+            await loadRawTranscriptionHistory()
+          }
+        }
+      }
+    }
+  }
+
+  private func rawTranscriptionHistoryRow(_ item: TranscriptionSessionWithSegments) -> some View {
+    VStack(alignment: .leading, spacing: 8) {
+      HStack(spacing: 8) {
+        Text("#\(item.session.id ?? -1)")
+          .scaledMonospacedFont(size: 11, weight: .semibold)
+          .foregroundColor(OmiColors.textSecondary)
+        Text(item.session.status.rawValue)
+          .scaledFont(size: 11, weight: .medium)
+          .foregroundColor(
+            item.session.status == .completed ? OmiColors.success : OmiColors.warning
+          )
+        Text(rawTranscriptionDateFormatter.string(from: item.session.startedAt))
+          .scaledFont(size: 11)
+          .foregroundColor(OmiColors.textTertiary)
+        Spacer()
+        Text("\(item.segments.count) segments")
+          .scaledFont(size: 11)
+          .foregroundColor(OmiColors.textTertiary)
+      }
+
+      Text(rawTranscriptionPreview(for: item))
+        .scaledMonospacedFont(size: 11)
+        .foregroundColor(OmiColors.textSecondary)
+        .lineLimit(8)
+        .textSelection(.enabled)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(10)
+        .background(OmiColors.backgroundSecondary.opacity(0.8))
+        .clipShape(RoundedRectangle(cornerRadius: 8))
     }
   }
 
@@ -5702,6 +5797,45 @@ struct SettingsContentView: View {
         codexEnrollmentError = nil
         codexAuthStore.notifyEnrollmentChanged()
       }
+    }
+  }
+
+  private var rawTranscriptionDateFormatter: DateFormatter {
+    let formatter = DateFormatter()
+    formatter.dateStyle = .short
+    formatter.timeStyle = .medium
+    return formatter
+  }
+
+  private func rawTranscriptionPreview(for item: TranscriptionSessionWithSegments) -> String {
+    let lines = item.segments.prefix(20).map { segment in
+      let speaker = segment.speakerLabel ?? "speaker \(segment.speaker)"
+      return String(
+        format: "[%.2f-%.2f] %@: %@",
+        segment.startTime,
+        segment.endTime,
+        speaker,
+        segment.text
+      )
+    }
+    if lines.isEmpty {
+      return "(no segments persisted)"
+    }
+    let suffix =
+      item.segments.count > lines.count ? "\n... \(item.segments.count - lines.count) more" : ""
+    return lines.joined(separator: "\n") + suffix
+  }
+
+  private func loadRawTranscriptionHistory() async {
+    isLoadingRawTranscriptionHistory = true
+    rawTranscriptionHistoryError = nil
+    defer { isLoadingRawTranscriptionHistory = false }
+
+    do {
+      rawTranscriptionHistory = try await TranscriptionStorage.shared.getRecentSessionsWithSegments(
+        limit: 8)
+    } catch {
+      rawTranscriptionHistoryError = error.localizedDescription
     }
   }
 

@@ -754,6 +754,10 @@ struct BackgroundTranscriptionRoutingDecision: Equatable {
     return false
   }
 
+  var requiresCloudEntitlement: Bool {
+    useCloudBackend
+  }
+
   var localPlan: LocalTranscriptionPlan? {
     if case .localWhisper(let plan) = route {
       return plan

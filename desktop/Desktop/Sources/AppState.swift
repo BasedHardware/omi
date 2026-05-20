@@ -1273,11 +1273,6 @@ class AppState: ObservableObject {
   func startTranscription(source: AudioSource? = nil) {
     guard !isTranscribing else { return }
 
-    // Paywall hard-stop: every code path that enables the mic + WS streaming
-    // funnels through here, including auto-restart from sleep and toggle
-    // shortcuts. Refuse to start and surface the upgrade popup.
-    if blockIfPaywalled() { return }
-
     // Use provided source or fall back to current setting
     let effectiveSource = source ?? audioSource
     let backgroundRouting = BackgroundTranscriptionRoutingGuard().decide(
@@ -1286,6 +1281,14 @@ class AppState: ObservableObject {
         availableEngines: { LocalASRHelperLocator.detectedEngines() }
       ).detect()
     )
+
+    // Paywall hard-stop applies only to the cloud listen path. Local background
+    // MLX/faster-whisper capture never opens `/v4/listen` and should keep
+    // working for users who selected a local provider.
+    if backgroundRouting.requiresCloudEntitlement && blockIfPaywalled(reason: "transcription") {
+      return
+    }
+
     if case .unavailable = backgroundRouting.route {
       let message =
         backgroundRouting.unsupportedLocalReason
