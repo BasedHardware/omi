@@ -8,7 +8,7 @@ import 'package:latlong2/latlong.dart';
 import 'package:share_plus/share_plus.dart';
 
 import 'package:omi/backend/http/api/conversations.dart' as conversations_api;
-import 'package:omi/backend/http/api/users.dart' show getDailySummary, setDailySummaryVisibility;
+import 'package:omi/backend/http/api/users.dart' show deleteDailySummary, getDailySummary, setDailySummaryVisibility;
 import 'package:omi/backend/schema/daily_summary.dart';
 import 'package:omi/pages/conversation_detail/maps_util.dart';
 import 'package:omi/pages/conversation_detail/page.dart';
