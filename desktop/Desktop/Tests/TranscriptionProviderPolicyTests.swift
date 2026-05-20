@@ -471,6 +471,36 @@ final class BackgroundTranscriptionRoutingGuardTests: XCTestCase {
   }
 }
 
+final class TranscriptionProviderOnboardingAdvisorTests: XCTestCase {
+  func testEligibleNativeAppleSiliconRecommendsLocalFirst() {
+    let recommendation = TranscriptionProviderOnboardingAdvisor().recommendation(
+      capabilities: LocalTranscriptionCapabilities(
+        processor: .nativeAppleSilicon,
+        physicalMemoryBytes: 16 * 1024 * 1024 * 1024,
+        availableEngines: [.mlxWhisper, .fasterWhisper]
+      )
+    )
+
+    XCTAssertTrue(recommendation.canRecommendLocal)
+    XCTAssertEqual(recommendation.recommendedSelection.mode, .auto)
+    XCTAssertTrue(recommendation.status.contains("MLX Whisper"))
+  }
+
+  func testUnavailableLocalEngineRecommendsCloudFallback() {
+    let recommendation = TranscriptionProviderOnboardingAdvisor().recommendation(
+      capabilities: LocalTranscriptionCapabilities(
+        processor: .intel,
+        physicalMemoryBytes: 8 * 1024 * 1024 * 1024,
+        availableEngines: []
+      )
+    )
+
+    XCTAssertFalse(recommendation.canRecommendLocal)
+    XCTAssertEqual(recommendation.recommendedSelection.mode, .cloud)
+    XCTAssertTrue(recommendation.status.contains("cloud"))
+  }
+}
+
 final class PTTTranscriptPostProcessorTests: XCTestCase {
   func testLocalModeBypassesLLMCleanup() async {
     var cleanupCalls = 0

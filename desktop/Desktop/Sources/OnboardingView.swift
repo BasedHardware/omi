@@ -502,7 +502,7 @@ struct OnboardingView: View {
       AnalyticsManager.shared.launchAtLoginChanged(enabled: true, source: "onboarding_complete")
     }
     startMonitoringIfNeeded()
-    appState.startTranscription()
+    startBackgroundTranscriptionIfAvailable()
 
     // Create welcome task
     Task {
@@ -524,6 +524,26 @@ struct OnboardingView: View {
     if !ProactiveAssistantsPlugin.shared.isMonitoring {
       ProactiveAssistantsPlugin.shared.startMonitoring { _, _ in }
     }
+  }
+
+  private func startBackgroundTranscriptionIfAvailable() {
+    let selection = AssistantSettings.shared.transcriptionProviderSelection
+    let capabilities = LocalTranscriptionCapabilityDetector(
+      availableEngines: { LocalASRHelperLocator.detectedEngines() }
+    ).detect()
+    let routing = BackgroundTranscriptionRoutingGuard().decide(
+      selection: selection,
+      capabilities: capabilities
+    )
+
+    guard routing.useCloudBackend else {
+      log(
+        "OnboardingView: skipping automatic background transcription start because local background capture is unavailable"
+      )
+      return
+    }
+
+    appState.startTranscription()
   }
 }
 

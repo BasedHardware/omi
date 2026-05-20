@@ -26,6 +26,14 @@ struct TranscriptionProviderSelection: Codable, Equatable {
   static let `default` = TranscriptionProviderSelection(mode: .auto, quality: .auto)
 }
 
+struct TranscriptionProviderOnboardingRecommendation: Equatable {
+  var recommendedSelection: TranscriptionProviderSelection
+  var canRecommendLocal: Bool
+  var title: String
+  var detail: String
+  var status: String
+}
+
 struct LocalTranscriptionCapabilities: Equatable {
   enum Processor: Equatable {
     case nativeAppleSilicon
@@ -176,6 +184,84 @@ struct TranscriptionProviderPolicy {
         return .largeV3Turbo
       }
       return gib >= 16 ? .medium : .small
+    }
+  }
+}
+
+struct TranscriptionProviderOnboardingAdvisor {
+  var policy: TranscriptionProviderPolicy = TranscriptionProviderPolicy()
+
+  func recommendation(
+    capabilities: LocalTranscriptionCapabilities,
+    quality: TranscriptionQualityPreset = .auto
+  ) -> TranscriptionProviderOnboardingRecommendation {
+    let localFirst = TranscriptionProviderSelection(mode: .auto, quality: quality)
+    let result = policy.resolve(selection: localFirst, capabilities: capabilities)
+
+    if result.usesLocal {
+      return TranscriptionProviderOnboardingRecommendation(
+        recommendedSelection: localFirst,
+        canRecommendLocal: true,
+        title: "Use Local Whisper",
+        detail:
+          "Recommended for this Mac. Voice notes stay on-device with local Whisper; background capture can use cloud when you choose it.",
+        status: Self.statusText(for: result)
+      )
+    }
+
+    return TranscriptionProviderOnboardingRecommendation(
+      recommendedSelection: TranscriptionProviderSelection(mode: .cloud, quality: quality),
+      canRecommendLocal: false,
+      title: "Use Cloud Transcription",
+      detail:
+        "Local Whisper is not available on this Mac yet. Cloud transcription keeps meetings and background capture working.",
+      status: result.fallbackReason ?? "Local Whisper is unavailable"
+    )
+  }
+
+  static func statusText(for result: TranscriptionProviderPolicyResult) -> String {
+    if result.usesCloud {
+      return result.fallbackReason ?? "Using Omi cloud transcription"
+    }
+
+    guard let engine = result.localEngine, let plan = result.localPlan else {
+      return "Using local transcription"
+    }
+
+    return "Using \(displayName(for: engine)) with \(displayName(for: plan.model))"
+  }
+
+  static func displayName(for mode: TranscriptionProviderKind) -> String {
+    switch mode {
+    case .auto: return "Local First"
+    case .local: return "Local Whisper Only"
+    case .cloud: return "Cloud Transcription"
+    }
+  }
+
+  static func displayName(for quality: TranscriptionQualityPreset) -> String {
+    switch quality {
+    case .auto: return "Auto"
+    case .fast: return "Fast"
+    case .balanced: return "Balanced"
+    case .accurate: return "Accurate"
+    }
+  }
+
+  static func displayName(for engine: LocalTranscriptionEngine) -> String {
+    switch engine {
+    case .mlxWhisper: return "MLX Whisper"
+    case .fasterWhisper: return "faster-whisper"
+    }
+  }
+
+  static func displayName(for model: LocalTranscriptionModel) -> String {
+    switch model {
+    case .tiny: return "Tiny"
+    case .base: return "Base"
+    case .small: return "Small"
+    case .medium: return "Medium"
+    case .largeV3Turbo: return "Large v3 Turbo"
     }
   }
 }

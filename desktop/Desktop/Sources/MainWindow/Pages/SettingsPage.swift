@@ -278,6 +278,8 @@ struct SettingsContentView: View {
   @State private var transcriptionAutoDetect: Bool = true
   @State private var transcriptionLanguage: String = "en"
   @State private var vadGateEnabled: Bool = false
+  @State private var transcriptionProviderSelection: TranscriptionProviderSelection
+  @State private var localTranscriptionCapabilities: LocalTranscriptionCapabilities
 
   // Multi-chat mode setting
   @AppStorage("multiChatEnabled") private var multiChatEnabled = false
@@ -447,6 +449,9 @@ struct SettingsContentView: View {
     _vadGateEnabled = State(initialValue: settings.vadGateEnabled)
     _transcriptionLanguage = State(initialValue: settings.transcriptionLanguage)
     _transcriptionAutoDetect = State(initialValue: settings.transcriptionAutoDetect)
+    _transcriptionProviderSelection = State(initialValue: settings.transcriptionProviderSelection)
+    _localTranscriptionCapabilities = State(
+      initialValue: SettingsContentView.detectLocalTranscriptionCapabilities())
   }
 
   /// Computed status text for notifications
@@ -515,6 +520,7 @@ struct SettingsContentView: View {
       chatProvider?.checkClaudeConnectionStatus()
       // Refresh notification permission state
       appState.checkNotificationPermission()
+      localTranscriptionCapabilities = SettingsContentView.detectLocalTranscriptionCapabilities()
     }
     .onReceive(NotificationCenter.default.publisher(for: .assistantMonitoringStateDidChange)) {
       notification in
@@ -1036,6 +1042,97 @@ struct SettingsContentView: View {
 
   private var transcriptionSection: some View {
     VStack(spacing: 20) {
+      // Provider
+      settingsCard(settingId: "transcription.provider") {
+        VStack(alignment: .leading, spacing: 16) {
+          HStack {
+            Image(systemName: "waveform.and.magnifyingglass")
+              .scaledFont(size: 16)
+              .foregroundColor(OmiColors.purplePrimary)
+
+            VStack(alignment: .leading, spacing: 4) {
+              Text("Transcription Provider")
+                .scaledFont(size: 15, weight: .medium)
+                .foregroundColor(OmiColors.textPrimary)
+
+              Text(transcriptionProviderStatusText)
+                .scaledFont(size: 13)
+                .foregroundColor(transcriptionProviderStatusColor)
+                .fixedSize(horizontal: false, vertical: true)
+            }
+
+            Spacer()
+
+            Picker(
+              "",
+              selection: Binding(
+                get: { transcriptionProviderSelection.quality },
+                set: { newValue in
+                  updateTranscriptionProviderSelection(
+                    TranscriptionProviderSelection(
+                      mode: transcriptionProviderSelection.mode,
+                      quality: newValue
+                    )
+                  )
+                }
+              )
+            ) {
+              ForEach(TranscriptionQualityPreset.allCases, id: \.rawValue) { quality in
+                Text(TranscriptionProviderOnboardingAdvisor.displayName(for: quality))
+                  .tag(quality)
+              }
+            }
+            .pickerStyle(.menu)
+            .frame(width: 130)
+          }
+
+          VStack(spacing: 10) {
+            transcriptionProviderOption(
+              mode: .auto,
+              title: "Local First",
+              detail: "Use local Whisper when available; otherwise use cloud transcription.",
+              icon: "sparkle.magnifyingglass"
+            )
+
+            transcriptionProviderOption(
+              mode: .local,
+              title: "Local Whisper Only",
+              detail: "Use on-device batch transcription. Background capture is not available yet.",
+              icon: "desktopcomputer"
+            )
+
+            transcriptionProviderOption(
+              mode: .cloud,
+              title: "Cloud Transcription",
+              detail:
+                "Use the existing Omi cloud transcription path for live meetings and background capture.",
+              icon: "cloud.fill"
+            )
+          }
+
+          if !backgroundTranscriptionRouting.useCloudBackend {
+            HStack(alignment: .top, spacing: 8) {
+              Image(systemName: "info.circle.fill")
+                .scaledFont(size: 12)
+                .foregroundColor(OmiColors.warning)
+                .padding(.top, 1)
+
+              Text(
+                "Local background transcription is not available yet. Push-to-Talk can use local Whisper; choose Cloud Transcription for continuous background capture."
+              )
+              .scaledFont(size: 12)
+              .foregroundColor(OmiColors.warning)
+              .fixedSize(horizontal: false, vertical: true)
+            }
+            .padding(10)
+            .background(
+              RoundedRectangle(cornerRadius: 8)
+                .fill(OmiColors.warning.opacity(0.1))
+            )
+          }
+        }
+      }
+
       // Language Mode
       settingsCard(settingId: "transcription.languagemode") {
         VStack(alignment: .leading, spacing: 16) {
@@ -1344,6 +1441,92 @@ struct SettingsContentView: View {
     DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
       self.appState.startTranscription()
     }
+  }
+
+  private static func detectLocalTranscriptionCapabilities() -> LocalTranscriptionCapabilities {
+    LocalTranscriptionCapabilityDetector(
+      availableEngines: { LocalASRHelperLocator.detectedEngines() }
+    ).detect()
+  }
+
+  private var resolvedTranscriptionProvider: TranscriptionProviderPolicyResult {
+    TranscriptionProviderPolicy().resolve(
+      selection: transcriptionProviderSelection,
+      capabilities: localTranscriptionCapabilities
+    )
+  }
+
+  private var backgroundTranscriptionRouting: BackgroundTranscriptionRoutingDecision {
+    BackgroundTranscriptionRoutingGuard().decide(
+      selection: transcriptionProviderSelection,
+      capabilities: localTranscriptionCapabilities
+    )
+  }
+
+  private var transcriptionProviderStatusText: String {
+    TranscriptionProviderOnboardingAdvisor.statusText(for: resolvedTranscriptionProvider)
+  }
+
+  private var transcriptionProviderStatusColor: Color {
+    resolvedTranscriptionProvider.usesLocal ? OmiColors.success : OmiColors.textTertiary
+  }
+
+  private func transcriptionProviderOption(
+    mode: TranscriptionProviderKind,
+    title: String,
+    detail: String,
+    icon: String
+  ) -> some View {
+    let isSelected = transcriptionProviderSelection.mode == mode
+
+    return Button(action: {
+      updateTranscriptionProviderSelection(
+        TranscriptionProviderSelection(mode: mode, quality: transcriptionProviderSelection.quality)
+      )
+    }) {
+      HStack(alignment: .top, spacing: 12) {
+        Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
+          .scaledFont(size: 20)
+          .foregroundColor(isSelected ? OmiColors.purplePrimary : OmiColors.textTertiary)
+
+        Image(systemName: icon)
+          .scaledFont(size: 15)
+          .foregroundColor(OmiColors.textSecondary)
+          .frame(width: 18)
+
+        VStack(alignment: .leading, spacing: 4) {
+          Text(title)
+            .scaledFont(size: 14, weight: .medium)
+            .foregroundColor(OmiColors.textPrimary)
+
+          Text(detail)
+            .scaledFont(size: 12)
+            .foregroundColor(OmiColors.textTertiary)
+            .fixedSize(horizontal: false, vertical: true)
+        }
+
+        Spacer(minLength: 12)
+      }
+      .padding(12)
+      .background(
+        RoundedRectangle(cornerRadius: 8)
+          .fill(isSelected ? OmiColors.purplePrimary.opacity(0.1) : Color.clear)
+          .overlay(
+            RoundedRectangle(cornerRadius: 8)
+              .stroke(
+                isSelected ? OmiColors.purplePrimary.opacity(0.3) : OmiColors.backgroundQuaternary,
+                lineWidth: 1)
+          )
+      )
+    }
+    .buttonStyle(.plain)
+  }
+
+  private func updateTranscriptionProviderSelection(_ selection: TranscriptionProviderSelection) {
+    guard selection != transcriptionProviderSelection else { return }
+    transcriptionProviderSelection = selection
+    AssistantSettings.shared.transcriptionProviderSelection = selection
+    restartTranscriptionIfNeeded()
   }
 
   // MARK: - Notifications Section
