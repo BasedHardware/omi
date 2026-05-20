@@ -8445,7 +8445,7 @@ class AppLocalizationsVi extends AppLocalizations {
   String get manageStorage => 'Quản lý lưu trữ';
 
   @override
-  String get safelyBackedUp => 'Đã sao lưu an toàn vào điện thoại';
+  String get safelyBackedUp => 'Cuộc trò chuyện đã tạo';
 
   @override
   String get notYetSynced => 'Chưa đồng bộ với điện thoại của bạn';
@@ -9273,7 +9273,7 @@ class AppLocalizationsVi extends AppLocalizations {
   String get syncStatusBackingUp => 'Đang sao lưu…';
 
   @override
-  String get syncStatusWaiting => 'Đang chờ sao lưu';
+  String get syncStatusWaiting => 'Đang chờ đồng bộ';
 
   @override
   String get syncStatusRetrying => 'Không xử lý được — đang thử lại';
@@ -9299,4 +9299,84 @@ class AppLocalizationsVi extends AppLocalizations {
   @override
   String get deleteWhileProcessingMessage =>
       'Bản ghi này đã được tải lên nhưng Omi vẫn đang tạo cuộc trò chuyện. Nếu bạn xóa ngay bây giờ và quá trình xử lý thất bại, sẽ không thể khôi phục. Vẫn xóa?';
+
+  @override
+  String get syncCardAllBackedUp => 'Tất cả bản ghi đã đồng bộ';
+
+  @override
+  String syncCardReadyCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count bản ghi sẵn sàng để đồng bộ',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get syncCardProcessing => 'Đang xử lý trên Omi…';
+
+  @override
+  String get syncCardWaitingInternet => 'Đang chờ kết nối Internet';
+
+  @override
+  String syncCardNeedsAttention(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count bản ghi cần chú ý',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get syncFlowIntro =>
+      'Bản ghi được lưu cục bộ, sau đó tải lên Omi để chuyển thành văn bản và biến thành cuộc trò chuyện.';
+
+  @override
+  String get syncStepUpload => 'Đồng bộ';
+
+  @override
+  String get syncStepUploadDesc => 'Bản ghi của bạn được gửi đến máy chủ của Omi';
+
+  @override
+  String get syncStepProcess => 'Chuyển lời';
+
+  @override
+  String get syncStepProcessDesc => 'Omi biến âm thanh thành một cuộc trò chuyện';
+
+  @override
+  String get syncStepBackedUp => 'Cuộc trò chuyện đã sẵn sàng';
+
+  @override
+  String get syncStepBackedUpDesc => 'Tìm trong mục Cuộc trò chuyện';
+
+  @override
+  String get syncFailureFootnote => 'Nếu xử lý thất bại, bản ghi sẽ tự động được thử lại trong lần đồng bộ tiếp theo.';
+
+  @override
+  String get syncStatusConversationCreated => 'Đã tạo cuộc trò chuyện';
+
+  @override
+  String get syncCardUploadingTitle => 'Đang tải lên Omi';
+
+  @override
+  String get syncCardDownloadingTitle => 'Đang tải xuống từ Omi';
+
+  @override
+  String syncCardProgressOf(int current, int total) {
+    return '$current trên $total';
+  }
+
+  @override
+  String get syncStatusOnDevice => 'Đang chờ trên Omi';
+
+  @override
+  String get syncStatusDownloadingFromDevice => 'Đang tải xuống từ Omi';
+
+  @override
+  String get newestFirst => 'Mới nhất trước';
+
+  @override
+  String get noSyncedRecordingsYet => 'Chưa có bản ghi nào được đồng bộ';
 }

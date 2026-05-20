@@ -8456,7 +8456,7 @@ class AppLocalizationsUk extends AppLocalizations {
   String get manageStorage => 'Керування сховищем';
 
   @override
-  String get safelyBackedUp => 'Безпечно збережено на вашому телефоні';
+  String get safelyBackedUp => 'Створені бесіди';
 
   @override
   String get notYetSynced => 'Ще не синхронізовано з вашим телефоном';
@@ -9287,7 +9287,7 @@ class AppLocalizationsUk extends AppLocalizations {
   String get syncStatusBackingUp => 'Резервне копіювання…';
 
   @override
-  String get syncStatusWaiting => 'Очікує резервного копіювання';
+  String get syncStatusWaiting => 'Очікує синхронізації';
 
   @override
   String get syncStatusRetrying => 'Не вдалося обробити — повтор';
@@ -9313,4 +9313,91 @@ class AppLocalizationsUk extends AppLocalizations {
   @override
   String get deleteWhileProcessingMessage =>
       'Цей запис завантажено, але Omi ще створює розмову. Якщо видалити його зараз і обробка не вдасться, відновити буде неможливо. Усе одно видалити?';
+
+  @override
+  String get syncCardAllBackedUp => 'Усі записи синхронізовано';
+
+  @override
+  String syncCardReadyCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count запису готові до синхронізації',
+      many: '$count записів готові до синхронізації',
+      few: '$count записи готові до синхронізації',
+      one: '1 запис готовий до синхронізації',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get syncCardProcessing => 'Обробка в Omi…';
+
+  @override
+  String get syncCardWaitingInternet => 'Очікування інтернету';
+
+  @override
+  String syncCardNeedsAttention(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count запису потребує уваги',
+      many: '$count записів потребують уваги',
+      few: '$count записи потребують уваги',
+      one: '$count запис потребує уваги',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get syncFlowIntro =>
+      'Записи зберігаються локально, а потім завантажуються до Omi, де їх розшифровують і перетворюють на розмови.';
+
+  @override
+  String get syncStepUpload => 'Синхронізація';
+
+  @override
+  String get syncStepUploadDesc => 'Ваш запис надсилається на сервер Omi';
+
+  @override
+  String get syncStepProcess => 'Транскрибування';
+
+  @override
+  String get syncStepProcessDesc => 'Omi перетворює звук на бесіду';
+
+  @override
+  String get syncStepBackedUp => 'Бесіда готова';
+
+  @override
+  String get syncStepBackedUpDesc => 'Знайдете її в розділі Бесіди';
+
+  @override
+  String get syncFailureFootnote =>
+      'Якщо обробка не вдасться, запис буде автоматично повторено під час наступної синхронізації.';
+
+  @override
+  String get syncStatusConversationCreated => 'Розмову створено';
+
+  @override
+  String get syncCardUploadingTitle => 'Завантаження в Omi';
+
+  @override
+  String get syncCardDownloadingTitle => 'Завантаження з Omi';
+
+  @override
+  String syncCardProgressOf(int current, int total) {
+    return '$current з $total';
+  }
+
+  @override
+  String get syncStatusOnDevice => 'Очікує на Omi';
+
+  @override
+  String get syncStatusDownloadingFromDevice => 'Завантаження з Omi';
+
+  @override
+  String get newestFirst => 'Спочатку нові';
+
+  @override
+  String get noSyncedRecordingsYet => 'Синхронізованих записів ще немає';
 }

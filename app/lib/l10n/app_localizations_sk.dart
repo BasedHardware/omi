@@ -8434,7 +8434,7 @@ class AppLocalizationsSk extends AppLocalizations {
   String get manageStorage => 'Spravovať úložisko';
 
   @override
-  String get safelyBackedUp => 'Bezpečne zálohované na vašom telefóne';
+  String get safelyBackedUp => 'Vytvorené konverzácie';
 
   @override
   String get notYetSynced => 'Zatiaľ nesynchronizované s vaším telefónom';
@@ -9261,7 +9261,7 @@ class AppLocalizationsSk extends AppLocalizations {
   String get syncStatusBackingUp => 'Zálohovanie…';
 
   @override
-  String get syncStatusWaiting => 'Čaká na zálohovanie';
+  String get syncStatusWaiting => 'Čaká na synchronizáciu';
 
   @override
   String get syncStatusRetrying => 'Spracovanie zlyhalo — opakuje sa';
@@ -9287,4 +9287,90 @@ class AppLocalizationsSk extends AppLocalizations {
   @override
   String get deleteWhileProcessingMessage =>
       'Táto nahrávka je nahraná, ale Omi ešte vytvára konverzáciu. Ak ju teraz odstránite a spracovanie zlyhá, nebude sa dať obnoviť. Napriek tomu odstrániť?';
+
+  @override
+  String get syncCardAllBackedUp => 'Všetky nahrávky synchronizované';
+
+  @override
+  String syncCardReadyCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count nahrávok pripravených na synchronizáciu',
+      many: '$count nahrávky pripravené na synchronizáciu',
+      few: '$count nahrávky pripravené na synchronizáciu',
+      one: '1 nahrávka pripravená na synchronizáciu',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get syncCardProcessing => 'Spracovanie v Omi…';
+
+  @override
+  String get syncCardWaitingInternet => 'Čaká sa na internet';
+
+  @override
+  String syncCardNeedsAttention(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count nahrávok si vyžaduje pozornosť',
+      many: '$count nahrávky si vyžadujú pozornosť',
+      few: '$count nahrávky si vyžadujú pozornosť',
+      one: '1 nahrávka si vyžaduje pozornosť',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get syncFlowIntro =>
+      'Nahrávky sa ukladajú lokálne a potom sa nahrávajú do Omi, kde sa prepíšu a premenia na konverzácie.';
+
+  @override
+  String get syncStepUpload => 'Synchronizácia';
+
+  @override
+  String get syncStepUploadDesc => 'Vaša nahrávka sa odosiela na server Omi';
+
+  @override
+  String get syncStepProcess => 'Prepis';
+
+  @override
+  String get syncStepProcessDesc => 'Omi premení zvuk na konverzáciu';
+
+  @override
+  String get syncStepBackedUp => 'Konverzácia je hotová';
+
+  @override
+  String get syncStepBackedUpDesc => 'Nájdeš ju v Konverzácie';
+
+  @override
+  String get syncFailureFootnote => 'Ak spracovanie zlyhá, nahrávka sa pri ďalšej synchronizácii automaticky zopakuje.';
+
+  @override
+  String get syncStatusConversationCreated => 'Konverzácia vytvorená';
+
+  @override
+  String get syncCardUploadingTitle => 'Nahráva sa do Omi';
+
+  @override
+  String get syncCardDownloadingTitle => 'Sťahuje sa z Omi';
+
+  @override
+  String syncCardProgressOf(int current, int total) {
+    return '$current z $total';
+  }
+
+  @override
+  String get syncStatusOnDevice => 'Čaká na Omi';
+
+  @override
+  String get syncStatusDownloadingFromDevice => 'Sťahuje sa z Omi';
+
+  @override
+  String get newestFirst => 'Najnovšie ako prvé';
+
+  @override
+  String get noSyncedRecordingsYet => 'Zatiaľ žiadne synchronizované nahrávky';
 }

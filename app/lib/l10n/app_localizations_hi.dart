@@ -8422,7 +8422,7 @@ class AppLocalizationsHi extends AppLocalizations {
   String get manageStorage => 'स्टोरेज प्रबंधित करें';
 
   @override
-  String get safelyBackedUp => 'आपके फोन पर सुरक्षित बैकअप';
+  String get safelyBackedUp => 'बातचीतें बनाई गईं';
 
   @override
   String get notYetSynced => 'अभी तक आपके फोन पर सिंक नहीं हुआ';
@@ -9253,7 +9253,7 @@ class AppLocalizationsHi extends AppLocalizations {
   String get syncStatusBackingUp => 'बैकअप हो रहा है…';
 
   @override
-  String get syncStatusWaiting => 'बैकअप की प्रतीक्षा में';
+  String get syncStatusWaiting => 'सिंक होने की प्रतीक्षा';
 
   @override
   String get syncStatusRetrying => 'प्रोसेस नहीं हो सका — फिर कोशिश हो रही है';
@@ -9279,4 +9279,87 @@ class AppLocalizationsHi extends AppLocalizations {
   @override
   String get deleteWhileProcessingMessage =>
       'यह रिकॉर्डिंग अपलोड हो गई है लेकिन Omi अभी भी बातचीत बना रहा है। यदि आप इसे अभी हटाते हैं और प्रोसेसिंग विफल होती है, तो इसे पुनर्प्राप्त नहीं किया जा सकेगा। फिर भी हटाएँ?';
+
+  @override
+  String get syncCardAllBackedUp => 'सभी रिकॉर्डिंग सिंक हो गईं';
+
+  @override
+  String syncCardReadyCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count रिकॉर्डिंग सिंक के लिए तैयार',
+      one: '1 रिकॉर्डिंग सिंक के लिए तैयार',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get syncCardProcessing => 'Omi पर प्रोसेस हो रहा है…';
+
+  @override
+  String get syncCardWaitingInternet => 'इंटरनेट का इंतज़ार';
+
+  @override
+  String syncCardNeedsAttention(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count रिकॉर्डिंग पर ध्यान देना ज़रूरी है',
+      one: '1 रिकॉर्डिंग पर ध्यान देना ज़रूरी है',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get syncFlowIntro =>
+      'रिकॉर्डिंग पहले लोकल रूप से सहेजी जाती हैं, फिर Omi पर अपलोड होती हैं जहाँ उन्हें ट्रांसक्राइब करके बातचीत में बदला जाता है।';
+
+  @override
+  String get syncStepUpload => 'सिंक';
+
+  @override
+  String get syncStepUploadDesc => 'आपकी रिकॉर्डिंग Omi के सर्वर पर भेजी जाती है';
+
+  @override
+  String get syncStepProcess => 'ट्रांसक्राइब';
+
+  @override
+  String get syncStepProcessDesc => 'Omi ऑडियो को बातचीत में बदल देता है';
+
+  @override
+  String get syncStepBackedUp => 'बातचीत तैयार';
+
+  @override
+  String get syncStepBackedUpDesc => 'इसे बातचीत में पाएँ';
+
+  @override
+  String get syncFailureFootnote =>
+      'यदि प्रोसेसिंग विफल हो, तो अगले सिंक में रिकॉर्डिंग अपने आप दोबारा आज़माई जाती है।';
+
+  @override
+  String get syncStatusConversationCreated => 'बातचीत बन गई';
+
+  @override
+  String get syncCardUploadingTitle => 'Omi पर अपलोड हो रहा है';
+
+  @override
+  String get syncCardDownloadingTitle => 'Omi से डाउनलोड हो रहा है';
+
+  @override
+  String syncCardProgressOf(int current, int total) {
+    return '$total में से $current';
+  }
+
+  @override
+  String get syncStatusOnDevice => 'Omi पर प्रतीक्षारत';
+
+  @override
+  String get syncStatusDownloadingFromDevice => 'Omi से डाउनलोड हो रहा है';
+
+  @override
+  String get newestFirst => 'सबसे नई पहले';
+
+  @override
+  String get noSyncedRecordingsYet => 'अभी तक कोई सिंक की गई रिकॉर्डिंग नहीं';
 }

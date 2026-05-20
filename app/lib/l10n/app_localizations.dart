@@ -15798,7 +15798,7 @@ abstract class AppLocalizations {
   /// Description for synced files in manage storage sheet
   ///
   /// In en, this message translates to:
-  /// **'Safely backed up to your phone'**
+  /// **'Conversations created'**
   String get safelyBackedUp;
 
   /// Description for pending files in manage storage sheet
@@ -17310,7 +17310,7 @@ abstract class AppLocalizations {
   /// No description provided for @syncStatusWaiting.
   ///
   /// In en, this message translates to:
-  /// **'Waiting to back up'**
+  /// **'Waiting to sync'**
   String get syncStatusWaiting;
 
   /// No description provided for @syncStatusRetrying.
@@ -17360,6 +17360,132 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'This recording is uploaded but Omi is still creating the conversation. If you delete it now and processing fails, it can\'t be recovered. Delete anyway?'**
   String get deleteWhileProcessingMessage;
+
+  /// No description provided for @syncCardAllBackedUp.
+  ///
+  /// In en, this message translates to:
+  /// **'All recordings synced'**
+  String get syncCardAllBackedUp;
+
+  /// Status card: pending recordings count
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 recording ready to sync} other{{count} recordings ready to sync}}'**
+  String syncCardReadyCount(int count);
+
+  /// No description provided for @syncCardProcessing.
+  ///
+  /// In en, this message translates to:
+  /// **'Processing on Omi…'**
+  String get syncCardProcessing;
+
+  /// No description provided for @syncCardWaitingInternet.
+  ///
+  /// In en, this message translates to:
+  /// **'Waiting for internet'**
+  String get syncCardWaitingInternet;
+
+  /// Status card: items that need user attention
+  ///
+  /// In en, this message translates to:
+  /// **'{count} recording{count, plural, =1{} other{s}} need attention'**
+  String syncCardNeedsAttention(int count);
+
+  /// No description provided for @syncFlowIntro.
+  ///
+  /// In en, this message translates to:
+  /// **'Recordings are stored locally, then uploaded to Omi where they\'re transcribed and turned into conversations.'**
+  String get syncFlowIntro;
+
+  /// No description provided for @syncStepUpload.
+  ///
+  /// In en, this message translates to:
+  /// **'Sync'**
+  String get syncStepUpload;
+
+  /// No description provided for @syncStepUploadDesc.
+  ///
+  /// In en, this message translates to:
+  /// **'Your recording is sent to Omi\'s server'**
+  String get syncStepUploadDesc;
+
+  /// No description provided for @syncStepProcess.
+  ///
+  /// In en, this message translates to:
+  /// **'Transcribe'**
+  String get syncStepProcess;
+
+  /// No description provided for @syncStepProcessDesc.
+  ///
+  /// In en, this message translates to:
+  /// **'Omi turns the audio into a conversation'**
+  String get syncStepProcessDesc;
+
+  /// No description provided for @syncStepBackedUp.
+  ///
+  /// In en, this message translates to:
+  /// **'Conversation ready'**
+  String get syncStepBackedUp;
+
+  /// No description provided for @syncStepBackedUpDesc.
+  ///
+  /// In en, this message translates to:
+  /// **'Find it under Conversations'**
+  String get syncStepBackedUpDesc;
+
+  /// No description provided for @syncFailureFootnote.
+  ///
+  /// In en, this message translates to:
+  /// **'If processing fails, your recording is retried automatically on the next sync.'**
+  String get syncFailureFootnote;
+
+  /// Row subtitle on the sync page for a fully synced recording: emphasises that processing succeeded and a conversation now exists.
+  ///
+  /// In en, this message translates to:
+  /// **'Conversation created'**
+  String get syncStatusConversationCreated;
+
+  /// Top status card: phase title when uploading audio batches to Omi (sub-line shows X of Y)
+  ///
+  /// In en, this message translates to:
+  /// **'Uploading to Omi'**
+  String get syncCardUploadingTitle;
+
+  /// Top status card: phase title when downloading recordings from the Omi device over BLE/Wi-Fi
+  ///
+  /// In en, this message translates to:
+  /// **'Downloading from Omi'**
+  String get syncCardDownloadingTitle;
+
+  /// Top status card: secondary progress line under the phase title.
+  ///
+  /// In en, this message translates to:
+  /// **'{current} of {total}'**
+  String syncCardProgressOf(int current, int total);
+
+  /// Row subtitle for a recording still on the Omi device (SD-card or flash page) that has not been downloaded to the phone yet.
+  ///
+  /// In en, this message translates to:
+  /// **'Waiting on Omi'**
+  String get syncStatusOnDevice;
+
+  /// Row subtitle for a recording currently being transferred from the Omi device to the phone.
+  ///
+  /// In en, this message translates to:
+  /// **'Downloading from Omi'**
+  String get syncStatusDownloadingFromDevice;
+
+  /// Subtle sort-order indicator next to the recordings list header so the user knows the newest items are at the top.
+  ///
+  /// In en, this message translates to:
+  /// **'Newest first'**
+  String get newestFirst;
+
+  /// Empty-state message when the Synced filter is active but no recording has finished backing up.
+  ///
+  /// In en, this message translates to:
+  /// **'No synced recordings yet'**
+  String get noSyncedRecordingsYet;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

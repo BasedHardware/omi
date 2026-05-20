@@ -8427,7 +8427,7 @@ class AppLocalizationsDa extends AppLocalizations {
   String get manageStorage => 'Administrer lager';
 
   @override
-  String get safelyBackedUp => 'Sikkert sikkerhedskopieret til din telefon';
+  String get safelyBackedUp => 'Samtaler oprettet';
 
   @override
   String get notYetSynced => 'Endnu ikke synkroniseret med din telefon';
@@ -9259,7 +9259,7 @@ class AppLocalizationsDa extends AppLocalizations {
   String get syncStatusBackingUp => 'Sikkerhedskopierer…';
 
   @override
-  String get syncStatusWaiting => 'Venter på sikkerhedskopiering';
+  String get syncStatusWaiting => 'Venter på synkronisering';
 
   @override
   String get syncStatusRetrying => 'Kunne ikke behandles — prøver igen';
@@ -9285,4 +9285,87 @@ class AppLocalizationsDa extends AppLocalizations {
   @override
   String get deleteWhileProcessingMessage =>
       'Denne optagelse er uploadet, men Omi opretter stadig samtalen. Hvis du sletter den nu, og behandlingen mislykkes, kan den ikke gendannes. Slet alligevel?';
+
+  @override
+  String get syncCardAllBackedUp => 'Alle optagelser synkroniseret';
+
+  @override
+  String syncCardReadyCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count optagelser klar til synkronisering',
+      one: '1 optagelse klar til synkronisering',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get syncCardProcessing => 'Behandler i Omi…';
+
+  @override
+  String get syncCardWaitingInternet => 'Venter på internet';
+
+  @override
+  String syncCardNeedsAttention(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count optagelser kræver opmærksomhed',
+      one: '1 optagelse kræver opmærksomhed',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get syncFlowIntro =>
+      'Optagelser gemmes lokalt og uploades derefter til Omi, hvor de transskriberes og bliver til samtaler.';
+
+  @override
+  String get syncStepUpload => 'Synkroniser';
+
+  @override
+  String get syncStepUploadDesc => 'Din optagelse sendes til Omis server';
+
+  @override
+  String get syncStepProcess => 'Transskriber';
+
+  @override
+  String get syncStepProcessDesc => 'Omi gør lyden til en samtale';
+
+  @override
+  String get syncStepBackedUp => 'Samtalen er klar';
+
+  @override
+  String get syncStepBackedUpDesc => 'Find den under Samtaler';
+
+  @override
+  String get syncFailureFootnote =>
+      'Hvis behandlingen mislykkes, prøves optagelsen automatisk igen ved næste synkronisering.';
+
+  @override
+  String get syncStatusConversationCreated => 'Samtale oprettet';
+
+  @override
+  String get syncCardUploadingTitle => 'Uploader til Omi';
+
+  @override
+  String get syncCardDownloadingTitle => 'Downloader fra Omi';
+
+  @override
+  String syncCardProgressOf(int current, int total) {
+    return '$current af $total';
+  }
+
+  @override
+  String get syncStatusOnDevice => 'Venter på Omi';
+
+  @override
+  String get syncStatusDownloadingFromDevice => 'Downloader fra Omi';
+
+  @override
+  String get newestFirst => 'Nyeste først';
+
+  @override
+  String get noSyncedRecordingsYet => 'Ingen synkroniserede optagelser endnu';
 }

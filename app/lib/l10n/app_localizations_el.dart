@@ -8506,7 +8506,7 @@ class AppLocalizationsEl extends AppLocalizations {
   String get manageStorage => 'Διαχείριση αποθήκευσης';
 
   @override
-  String get safelyBackedUp => 'Αποθηκεύτηκε με ασφάλεια στο τηλέφωνό σας';
+  String get safelyBackedUp => 'Συνομιλίες δημιουργήθηκαν';
 
   @override
   String get notYetSynced => 'Δεν έχει συγχρονιστεί ακόμα με το τηλέφωνό σας';
@@ -9338,7 +9338,7 @@ class AppLocalizationsEl extends AppLocalizations {
   String get syncStatusBackingUp => 'Δημιουργία αντιγράφου…';
 
   @override
-  String get syncStatusWaiting => 'Αναμονή για αντίγραφο';
+  String get syncStatusWaiting => 'Σε αναμονή συγχρονισμού';
 
   @override
   String get syncStatusRetrying => 'Αποτυχία επεξεργασίας — νέα προσπάθεια';
@@ -9364,4 +9364,87 @@ class AppLocalizationsEl extends AppLocalizations {
   @override
   String get deleteWhileProcessingMessage =>
       'Αυτή η ηχογράφηση μεταφορτώθηκε, αλλά το Omi δημιουργεί ακόμη τη συνομιλία. Αν τη διαγράψετε τώρα και η επεξεργασία αποτύχει, δεν θα μπορεί να ανακτηθεί. Διαγραφή ούτως ή άλλως;';
+
+  @override
+  String get syncCardAllBackedUp => 'Όλες οι ηχογραφήσεις συγχρονίστηκαν';
+
+  @override
+  String syncCardReadyCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count ηχογραφήσεις έτοιμες για συγχρονισμό',
+      one: '1 ηχογράφηση έτοιμη για συγχρονισμό',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get syncCardProcessing => 'Επεξεργασία στο Omi…';
+
+  @override
+  String get syncCardWaitingInternet => 'Αναμονή για σύνδεση';
+
+  @override
+  String syncCardNeedsAttention(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count ηχογραφήσεις χρειάζονται προσοχή',
+      one: '1 ηχογράφηση χρειάζεται προσοχή',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get syncFlowIntro =>
+      'Οι ηχογραφήσεις αποθηκεύονται τοπικά και στη συνέχεια μεταφορτώνονται στο Omi, όπου απομαγνητοφωνούνται και μετατρέπονται σε συνομιλίες.';
+
+  @override
+  String get syncStepUpload => 'Συγχρονισμός';
+
+  @override
+  String get syncStepUploadDesc => 'Η ηχογράφησή σας αποστέλλεται στον διακομιστή της Omi';
+
+  @override
+  String get syncStepProcess => 'Απομαγνητοφώνηση';
+
+  @override
+  String get syncStepProcessDesc => 'Το Omi μετατρέπει τον ήχο σε συνομιλία';
+
+  @override
+  String get syncStepBackedUp => 'Η συνομιλία είναι έτοιμη';
+
+  @override
+  String get syncStepBackedUpDesc => 'Θα τη βρείτε στο Συνομιλίες';
+
+  @override
+  String get syncFailureFootnote =>
+      'Αν η επεξεργασία αποτύχει, η ηχογράφηση επαναλαμβάνεται αυτόματα στον επόμενο συγχρονισμό.';
+
+  @override
+  String get syncStatusConversationCreated => 'Η συνομιλία δημιουργήθηκε';
+
+  @override
+  String get syncCardUploadingTitle => 'Μεταφόρτωση στο Omi';
+
+  @override
+  String get syncCardDownloadingTitle => 'Λήψη από το Omi';
+
+  @override
+  String syncCardProgressOf(int current, int total) {
+    return '$current από $total';
+  }
+
+  @override
+  String get syncStatusOnDevice => 'Σε αναμονή στο Omi';
+
+  @override
+  String get syncStatusDownloadingFromDevice => 'Λήψη από το Omi';
+
+  @override
+  String get newestFirst => 'Νεότερες πρώτα';
+
+  @override
+  String get noSyncedRecordingsYet => 'Δεν υπάρχουν ακόμα συγχρονισμένες εγγραφές';
 }

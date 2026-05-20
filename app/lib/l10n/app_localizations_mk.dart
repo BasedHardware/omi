@@ -8490,7 +8490,7 @@ class AppLocalizationsMk extends AppLocalizations {
   String get manageStorage => 'Управување со складирање';
 
   @override
-  String get safelyBackedUp => 'Безбедно резервирано на твојот телефон';
+  String get safelyBackedUp => 'Создадени разговори';
 
   @override
   String get notYetSynced => 'Сé уште не е синхронизирано на твојот телефон';
@@ -9322,7 +9322,7 @@ class AppLocalizationsMk extends AppLocalizations {
   String get syncStatusBackingUp => 'Се прави резервна копија…';
 
   @override
-  String get syncStatusWaiting => 'Чека резервна копија';
+  String get syncStatusWaiting => 'Чека синхронизација';
 
   @override
   String get syncStatusRetrying => 'Обработката не успеа — нов обид';
@@ -9348,4 +9348,87 @@ class AppLocalizationsMk extends AppLocalizations {
   @override
   String get deleteWhileProcessingMessage =>
       'Оваа снимка е поставена, но Omi сè уште го создава разговорот. Ако ја избришете сега и обработката не успее, не може да се врати. Сепак да се избрише?';
+
+  @override
+  String get syncCardAllBackedUp => 'Сите снимки се синхронизирани';
+
+  @override
+  String syncCardReadyCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count снимки спремни за синхронизација',
+      one: '1 снимка спремна за синхронизација',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get syncCardProcessing => 'Се обработува во Omi…';
+
+  @override
+  String get syncCardWaitingInternet => 'Се чека интернет';
+
+  @override
+  String syncCardNeedsAttention(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count снимки бараат внимание',
+      one: '$count снимка бара внимание',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get syncFlowIntro =>
+      'Снимките се чуваат локално, а потоа се прикачуваат на Omi каде што се транскрибираат и претвораат во разговори.';
+
+  @override
+  String get syncStepUpload => 'Синхронизација';
+
+  @override
+  String get syncStepUploadDesc => 'Вашиот запис се испраќа на серверот на Omi';
+
+  @override
+  String get syncStepProcess => 'Транскрипција';
+
+  @override
+  String get syncStepProcessDesc => 'Omi го претвора звукот во разговор';
+
+  @override
+  String get syncStepBackedUp => 'Разговорот е готов';
+
+  @override
+  String get syncStepBackedUpDesc => 'Најди го во Разговори';
+
+  @override
+  String get syncFailureFootnote =>
+      'Ако обработката не успее, снимката автоматски се повторува при следната синхронизација.';
+
+  @override
+  String get syncStatusConversationCreated => 'Разговорот е создаден';
+
+  @override
+  String get syncCardUploadingTitle => 'Се прикачува на Omi';
+
+  @override
+  String get syncCardDownloadingTitle => 'Се презема од Omi';
+
+  @override
+  String syncCardProgressOf(int current, int total) {
+    return '$current од $total';
+  }
+
+  @override
+  String get syncStatusOnDevice => 'Чека на Omi';
+
+  @override
+  String get syncStatusDownloadingFromDevice => 'Се презема од Omi';
+
+  @override
+  String get newestFirst => 'Прво најнови';
+
+  @override
+  String get noSyncedRecordingsYet => 'Сè уште нема синхронизирани записи';
 }

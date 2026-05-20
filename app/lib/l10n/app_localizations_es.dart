@@ -8461,7 +8461,7 @@ class AppLocalizationsEs extends AppLocalizations {
   String get manageStorage => 'Gestionar almacenamiento';
 
   @override
-  String get safelyBackedUp => 'Respaldado en tu teléfono';
+  String get safelyBackedUp => 'Conversaciones creadas';
 
   @override
   String get notYetSynced => 'Aún no sincronizado con tu teléfono';
@@ -9294,7 +9294,7 @@ class AppLocalizationsEs extends AppLocalizations {
   String get syncStatusBackingUp => 'Haciendo copia…';
 
   @override
-  String get syncStatusWaiting => 'Esperando la copia';
+  String get syncStatusWaiting => 'Esperando para sincronizar';
 
   @override
   String get syncStatusRetrying => 'No se pudo procesar — reintentando';
@@ -9320,4 +9320,87 @@ class AppLocalizationsEs extends AppLocalizations {
   @override
   String get deleteWhileProcessingMessage =>
       'Esta grabación se subió, pero Omi todavía está creando la conversación. Si la eliminas ahora y el procesamiento falla, no se podrá recuperar. ¿Eliminar de todos modos?';
+
+  @override
+  String get syncCardAllBackedUp => 'Todas las grabaciones sincronizadas';
+
+  @override
+  String syncCardReadyCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count grabaciones listas para sincronizar',
+      one: '1 grabación lista para sincronizar',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get syncCardProcessing => 'Procesando en Omi…';
+
+  @override
+  String get syncCardWaitingInternet => 'Esperando conexión';
+
+  @override
+  String syncCardNeedsAttention(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count grabaciones necesitan atención',
+      one: '1 grabación necesita atención',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get syncFlowIntro =>
+      'Las grabaciones se guardan localmente y luego se suben a Omi, donde se transcriben y se convierten en conversaciones.';
+
+  @override
+  String get syncStepUpload => 'Sincronizar';
+
+  @override
+  String get syncStepUploadDesc => 'Tu grabación se envía al servidor de Omi';
+
+  @override
+  String get syncStepProcess => 'Transcribir';
+
+  @override
+  String get syncStepProcessDesc => 'Omi convierte el audio en una conversación';
+
+  @override
+  String get syncStepBackedUp => 'Conversación lista';
+
+  @override
+  String get syncStepBackedUpDesc => 'La encontrarás en Conversaciones';
+
+  @override
+  String get syncFailureFootnote =>
+      'Si el procesamiento falla, la grabación se reintenta automáticamente en la próxima sincronización.';
+
+  @override
+  String get syncStatusConversationCreated => 'Conversación creada';
+
+  @override
+  String get syncCardUploadingTitle => 'Subiendo a Omi';
+
+  @override
+  String get syncCardDownloadingTitle => 'Descargando de Omi';
+
+  @override
+  String syncCardProgressOf(int current, int total) {
+    return '$current de $total';
+  }
+
+  @override
+  String get syncStatusOnDevice => 'Esperando en Omi';
+
+  @override
+  String get syncStatusDownloadingFromDevice => 'Descargando de Omi';
+
+  @override
+  String get newestFirst => 'Más recientes primero';
+
+  @override
+  String get noSyncedRecordingsYet => 'Aún no hay grabaciones sincronizadas';
 }

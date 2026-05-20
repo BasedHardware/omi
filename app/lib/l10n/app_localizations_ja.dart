@@ -8301,7 +8301,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get manageStorage => 'ストレージを管理';
 
   @override
-  String get safelyBackedUp => 'スマホに安全にバックアップ済み';
+  String get safelyBackedUp => '作成された会話';
 
   @override
   String get notYetSynced => 'まだスマホに同期されていません';
@@ -9123,7 +9123,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get syncStatusBackingUp => 'バックアップ中…';
 
   @override
-  String get syncStatusWaiting => 'バックアップ待ち';
+  String get syncStatusWaiting => '同期を待機中';
 
   @override
   String get syncStatusRetrying => '処理できませんでした — 再試行中';
@@ -9148,4 +9148,83 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get deleteWhileProcessingMessage => 'この録音はアップロード済みですが、Omi はまだ会話を作成しています。今削除して処理が失敗すると復元できません。それでも削除しますか？';
+
+  @override
+  String get syncCardAllBackedUp => 'すべての録音を同期済み';
+
+  @override
+  String syncCardReadyCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count 件の録音を同期できます',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get syncCardProcessing => 'Omiで処理中…';
+
+  @override
+  String get syncCardWaitingInternet => 'インターネット接続を待機中';
+
+  @override
+  String syncCardNeedsAttention(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '確認が必要な録音が$count件',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get syncFlowIntro => '録音はまず端末内に保存され、その後Omiにアップロードされて文字起こしされ、会話に変換されます。';
+
+  @override
+  String get syncStepUpload => '同期';
+
+  @override
+  String get syncStepUploadDesc => '録音はOmiのサーバーに送信されます';
+
+  @override
+  String get syncStepProcess => '文字起こし';
+
+  @override
+  String get syncStepProcessDesc => 'Omi が音声を会話に変換します';
+
+  @override
+  String get syncStepBackedUp => '会話の準備が完了';
+
+  @override
+  String get syncStepBackedUpDesc => '会話 から見つけられます';
+
+  @override
+  String get syncFailureFootnote => '処理に失敗した場合、次回の同期で録音が自動的に再試行されます。';
+
+  @override
+  String get syncStatusConversationCreated => '会話を作成しました';
+
+  @override
+  String get syncCardUploadingTitle => 'Omiへアップロード中';
+
+  @override
+  String get syncCardDownloadingTitle => 'Omiからダウンロード中';
+
+  @override
+  String syncCardProgressOf(int current, int total) {
+    return '$total件中$current件';
+  }
+
+  @override
+  String get syncStatusOnDevice => 'Omiで待機中';
+
+  @override
+  String get syncStatusDownloadingFromDevice => 'Omiからダウンロード中';
+
+  @override
+  String get newestFirst => '新しい順';
+
+  @override
+  String get noSyncedRecordingsYet => '同期済みの録音はまだありません';
 }

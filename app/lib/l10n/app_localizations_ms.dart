@@ -8467,7 +8467,7 @@ class AppLocalizationsMs extends AppLocalizations {
   String get manageStorage => 'Urus storan';
 
   @override
-  String get safelyBackedUp => 'Disandarkan dengan selamat ke telefon anda';
+  String get safelyBackedUp => 'Perbualan dicipta';
 
   @override
   String get notYetSynced => 'Belum disegerakkan ke telefon anda';
@@ -9297,7 +9297,7 @@ class AppLocalizationsMs extends AppLocalizations {
   String get syncStatusBackingUp => 'Menyandarkan…';
 
   @override
-  String get syncStatusWaiting => 'Menunggu sandaran';
+  String get syncStatusWaiting => 'Menunggu untuk segerak';
 
   @override
   String get syncStatusRetrying => 'Gagal diproses — mencuba semula';
@@ -9323,4 +9323,85 @@ class AppLocalizationsMs extends AppLocalizations {
   @override
   String get deleteWhileProcessingMessage =>
       'Rakaman ini telah dimuat naik tetapi Omi masih mencipta perbualan. Jika anda padam sekarang dan pemprosesan gagal, ia tidak dapat dipulihkan. Padam juga?';
+
+  @override
+  String get syncCardAllBackedUp => 'Semua rakaman tersegerak';
+
+  @override
+  String syncCardReadyCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count rakaman sedia untuk disegerakkan',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get syncCardProcessing => 'Memproses di Omi…';
+
+  @override
+  String get syncCardWaitingInternet => 'Menunggu internet';
+
+  @override
+  String syncCardNeedsAttention(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count rakaman memerlukan perhatian',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get syncFlowIntro =>
+      'Rakaman disimpan secara setempat, kemudian dimuat naik ke Omi untuk ditranskripsi dan ditukar menjadi perbualan.';
+
+  @override
+  String get syncStepUpload => 'Segerak';
+
+  @override
+  String get syncStepUploadDesc => 'Rakaman anda dihantar ke pelayan Omi';
+
+  @override
+  String get syncStepProcess => 'Transkripsi';
+
+  @override
+  String get syncStepProcessDesc => 'Omi mengubah audio menjadi perbualan';
+
+  @override
+  String get syncStepBackedUp => 'Perbualan siap';
+
+  @override
+  String get syncStepBackedUpDesc => 'Cari di bawah Perbualan';
+
+  @override
+  String get syncFailureFootnote =>
+      'Jika pemprosesan gagal, rakaman akan dicuba semula secara automatik pada penyegerakan seterusnya.';
+
+  @override
+  String get syncStatusConversationCreated => 'Perbualan dicipta';
+
+  @override
+  String get syncCardUploadingTitle => 'Memuat naik ke Omi';
+
+  @override
+  String get syncCardDownloadingTitle => 'Memuat turun dari Omi';
+
+  @override
+  String syncCardProgressOf(int current, int total) {
+    return '$current daripada $total';
+  }
+
+  @override
+  String get syncStatusOnDevice => 'Menunggu di Omi';
+
+  @override
+  String get syncStatusDownloadingFromDevice => 'Memuat turun dari Omi';
+
+  @override
+  String get newestFirst => 'Terbaharu dahulu';
+
+  @override
+  String get noSyncedRecordingsYet => 'Belum ada rakaman yang disegerakkan';
 }

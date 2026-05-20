@@ -8471,7 +8471,7 @@ class AppLocalizationsNl extends AppLocalizations {
   String get manageStorage => 'Opslag beheren';
 
   @override
-  String get safelyBackedUp => 'Veilig opgeslagen op uw telefoon';
+  String get safelyBackedUp => 'Aangemaakte gesprekken';
 
   @override
   String get notYetSynced => 'Nog niet gesynchroniseerd met uw telefoon';
@@ -9301,7 +9301,7 @@ class AppLocalizationsNl extends AppLocalizations {
   String get syncStatusBackingUp => 'Back-up maken…';
 
   @override
-  String get syncStatusWaiting => 'Wacht op back-up';
+  String get syncStatusWaiting => 'Wacht op synchronisatie';
 
   @override
   String get syncStatusRetrying => 'Verwerken mislukt — opnieuw proberen';
@@ -9327,4 +9327,87 @@ class AppLocalizationsNl extends AppLocalizations {
   @override
   String get deleteWhileProcessingMessage =>
       'Deze opname is geüpload maar Omi maakt het gesprek nog aan. Als je hem nu verwijdert en de verwerking mislukt, kan hij niet worden hersteld. Toch verwijderen?';
+
+  @override
+  String get syncCardAllBackedUp => 'Alle opnames gesynchroniseerd';
+
+  @override
+  String syncCardReadyCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count opnames klaar om te synchroniseren',
+      one: '1 opname klaar om te synchroniseren',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get syncCardProcessing => 'Verwerken bij Omi…';
+
+  @override
+  String get syncCardWaitingInternet => 'Wachten op internet';
+
+  @override
+  String syncCardNeedsAttention(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count opnamen vragen aandacht',
+      one: '1 opname vraagt aandacht',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get syncFlowIntro =>
+      'Opnamen worden lokaal bewaard en daarna geüpload naar Omi, waar ze worden getranscribeerd en omgezet in gesprekken.';
+
+  @override
+  String get syncStepUpload => 'Synchroniseren';
+
+  @override
+  String get syncStepUploadDesc => 'Je opname wordt naar Omi\'s server gestuurd';
+
+  @override
+  String get syncStepProcess => 'Transcriberen';
+
+  @override
+  String get syncStepProcessDesc => 'Omi maakt van de audio een gesprek';
+
+  @override
+  String get syncStepBackedUp => 'Gesprek klaar';
+
+  @override
+  String get syncStepBackedUpDesc => 'Te vinden onder Gesprekken';
+
+  @override
+  String get syncFailureFootnote =>
+      'Als de verwerking mislukt, wordt de opname automatisch opnieuw geprobeerd bij de volgende synchronisatie.';
+
+  @override
+  String get syncStatusConversationCreated => 'Gesprek aangemaakt';
+
+  @override
+  String get syncCardUploadingTitle => 'Uploaden naar Omi';
+
+  @override
+  String get syncCardDownloadingTitle => 'Downloaden van Omi';
+
+  @override
+  String syncCardProgressOf(int current, int total) {
+    return '$current van $total';
+  }
+
+  @override
+  String get syncStatusOnDevice => 'Wacht op Omi';
+
+  @override
+  String get syncStatusDownloadingFromDevice => 'Downloaden van Omi';
+
+  @override
+  String get newestFirst => 'Nieuwste eerst';
+
+  @override
+  String get noSyncedRecordingsYet => 'Nog geen gesynchroniseerde opnames';
 }

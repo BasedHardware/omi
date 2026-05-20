@@ -8481,7 +8481,7 @@ class AppLocalizationsHu extends AppLocalizations {
   String get manageStorage => 'Tárhely kezelése';
 
   @override
-  String get safelyBackedUp => 'Biztonságosan mentve a telefonjára';
+  String get safelyBackedUp => 'Beszélgetések létrehozva';
 
   @override
   String get notYetSynced => 'Még nincs szinkronizálva a telefonjával';
@@ -9312,7 +9312,7 @@ class AppLocalizationsHu extends AppLocalizations {
   String get syncStatusBackingUp => 'Biztonsági mentés…';
 
   @override
-  String get syncStatusWaiting => 'Mentésre vár';
+  String get syncStatusWaiting => 'Szinkronizálásra vár';
 
   @override
   String get syncStatusRetrying => 'A feldolgozás sikertelen — újrapróbálkozás';
@@ -9338,4 +9338,87 @@ class AppLocalizationsHu extends AppLocalizations {
   @override
   String get deleteWhileProcessingMessage =>
       'Ezt a felvételt feltöltöttük, de az Omi még készíti a beszélgetést. Ha most törli és a feldolgozás meghiúsul, nem állítható vissza. Mégis törli?';
+
+  @override
+  String get syncCardAllBackedUp => 'Minden felvétel szinkronizálva';
+
+  @override
+  String syncCardReadyCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count felvétel készen áll a szinkronizálásra',
+      one: '1 felvétel készen áll a szinkronizálásra',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get syncCardProcessing => 'Feldolgozás az Omiban…';
+
+  @override
+  String get syncCardWaitingInternet => 'Internetkapcsolatra várva';
+
+  @override
+  String syncCardNeedsAttention(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count felvétel figyelmet igényel',
+      one: '1 felvétel figyelmet igényel',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get syncFlowIntro =>
+      'A felvételek helyben tárolódnak, majd az Omiba kerülnek, ahol leiratot készítenek belőlük és beszélgetésekké alakítják őket.';
+
+  @override
+  String get syncStepUpload => 'Szinkronizálás';
+
+  @override
+  String get syncStepUploadDesc => 'A felvételed az Omi szerverére kerül';
+
+  @override
+  String get syncStepProcess => 'Átírás';
+
+  @override
+  String get syncStepProcessDesc => 'Az Omi a hangból beszélgetést készít';
+
+  @override
+  String get syncStepBackedUp => 'A beszélgetés kész';
+
+  @override
+  String get syncStepBackedUpDesc => 'A Beszélgetések között találod';
+
+  @override
+  String get syncFailureFootnote =>
+      'Ha a feldolgozás sikertelen, a felvételt a következő szinkronizálásnál automatikusan újrapróbáljuk.';
+
+  @override
+  String get syncStatusConversationCreated => 'Beszélgetés létrehozva';
+
+  @override
+  String get syncCardUploadingTitle => 'Feltöltés az Omira';
+
+  @override
+  String get syncCardDownloadingTitle => 'Letöltés az Omiról';
+
+  @override
+  String syncCardProgressOf(int current, int total) {
+    return '$current / $total';
+  }
+
+  @override
+  String get syncStatusOnDevice => 'Az Omin várakozik';
+
+  @override
+  String get syncStatusDownloadingFromDevice => 'Letöltés az Omiról';
+
+  @override
+  String get newestFirst => 'Legújabbak elöl';
+
+  @override
+  String get noSyncedRecordingsYet => 'Még nincsenek szinkronizált felvételek';
 }

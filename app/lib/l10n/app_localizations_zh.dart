@@ -8292,7 +8292,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get manageStorage => '管理存储';
 
   @override
-  String get safelyBackedUp => '已安全备份到您的手机';
+  String get safelyBackedUp => '已创建对话';
 
   @override
   String get notYetSynced => '尚未同步到您的手机';
@@ -9109,7 +9109,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get syncStatusBackingUp => '正在备份…';
 
   @override
-  String get syncStatusWaiting => '等待备份';
+  String get syncStatusWaiting => '等待同步';
 
   @override
   String get syncStatusRetrying => '无法处理 — 正在重试';
@@ -9134,4 +9134,83 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get deleteWhileProcessingMessage => '此录音已上传，但 Omi 仍在创建对话。如果现在删除且处理失败，将无法恢复。仍要删除吗？';
+
+  @override
+  String get syncCardAllBackedUp => '所有录音已同步';
+
+  @override
+  String syncCardReadyCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count 条录音可同步',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get syncCardProcessing => 'Omi 处理中…';
+
+  @override
+  String get syncCardWaitingInternet => '等待网络连接';
+
+  @override
+  String syncCardNeedsAttention(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count 条录音需要关注',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get syncFlowIntro => '录音先在本地保存,然后上传到 Omi,在那里被转写并整理为对话。';
+
+  @override
+  String get syncStepUpload => '同步';
+
+  @override
+  String get syncStepUploadDesc => '你的录音会发送到 Omi 的服务器';
+
+  @override
+  String get syncStepProcess => '转写';
+
+  @override
+  String get syncStepProcessDesc => 'Omi 将音频转为对话';
+
+  @override
+  String get syncStepBackedUp => '对话已就绪';
+
+  @override
+  String get syncStepBackedUpDesc => '在对话中找到';
+
+  @override
+  String get syncFailureFootnote => '若处理失败,录音将在下次同步时自动重试。';
+
+  @override
+  String get syncStatusConversationCreated => '对话已创建';
+
+  @override
+  String get syncCardUploadingTitle => '正在上传到 Omi';
+
+  @override
+  String get syncCardDownloadingTitle => '正在从 Omi 下载';
+
+  @override
+  String syncCardProgressOf(int current, int total) {
+    return '第 $current 项,共 $total 项';
+  }
+
+  @override
+  String get syncStatusOnDevice => '等待 Omi';
+
+  @override
+  String get syncStatusDownloadingFromDevice => '正在从 Omi 下载';
+
+  @override
+  String get newestFirst => '最新优先';
+
+  @override
+  String get noSyncedRecordingsYet => '还没有已同步的录音';
 }

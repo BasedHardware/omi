@@ -8400,7 +8400,7 @@ class AppLocalizationsTh extends AppLocalizations {
   String get manageStorage => 'จัดการพื้นที่จัดเก็บ';
 
   @override
-  String get safelyBackedUp => 'สำรองข้อมูลไว้ในโทรศัพท์อย่างปลอดภัย';
+  String get safelyBackedUp => 'บทสนทนาที่สร้างแล้ว';
 
   @override
   String get notYetSynced => 'ยังไม่ได้ซิงค์กับโทรศัพท์ของคุณ';
@@ -9226,7 +9226,7 @@ class AppLocalizationsTh extends AppLocalizations {
   String get syncStatusBackingUp => 'กำลังสำรองข้อมูล…';
 
   @override
-  String get syncStatusWaiting => 'รอการสำรองข้อมูล';
+  String get syncStatusWaiting => 'รอการซิงค์';
 
   @override
   String get syncStatusRetrying => 'ประมวลผลไม่สำเร็จ — กำลังลองใหม่';
@@ -9252,4 +9252,84 @@ class AppLocalizationsTh extends AppLocalizations {
   @override
   String get deleteWhileProcessingMessage =>
       'การบันทึกนี้อัปโหลดแล้วแต่ Omi ยังสร้างบทสนทนาอยู่ หากลบตอนนี้และการประมวลผลล้มเหลว จะกู้คืนไม่ได้ ลบต่อไปหรือไม่?';
+
+  @override
+  String get syncCardAllBackedUp => 'ซิงค์การบันทึกทั้งหมดแล้ว';
+
+  @override
+  String syncCardReadyCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'การบันทึก $count รายการพร้อมซิงค์',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get syncCardProcessing => 'กำลังประมวลผลบน Omi…';
+
+  @override
+  String get syncCardWaitingInternet => 'รออินเทอร์เน็ต';
+
+  @override
+  String syncCardNeedsAttention(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'การบันทึก $count รายการต้องการความสนใจ',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get syncFlowIntro =>
+      'การบันทึกจะถูกเก็บไว้ในเครื่องก่อน แล้วจึงอัปโหลดไปยัง Omi เพื่อถอดเสียงและแปลงเป็นบทสนทนา';
+
+  @override
+  String get syncStepUpload => 'ซิงค์';
+
+  @override
+  String get syncStepUploadDesc => 'การบันทึกของคุณถูกส่งไปยังเซิร์ฟเวอร์ของ Omi';
+
+  @override
+  String get syncStepProcess => 'ถอดเสียง';
+
+  @override
+  String get syncStepProcessDesc => 'Omi เปลี่ยนเสียงให้เป็นบทสนทนา';
+
+  @override
+  String get syncStepBackedUp => 'บทสนทนาพร้อมแล้ว';
+
+  @override
+  String get syncStepBackedUpDesc => 'ค้นหาได้ที่ การสนทนา';
+
+  @override
+  String get syncFailureFootnote => 'หากการประมวลผลล้มเหลว ระบบจะลองอีกครั้งโดยอัตโนมัติในการซิงค์ครั้งถัดไป';
+
+  @override
+  String get syncStatusConversationCreated => 'สร้างบทสนทนาแล้ว';
+
+  @override
+  String get syncCardUploadingTitle => 'กำลังอัปโหลดไปยัง Omi';
+
+  @override
+  String get syncCardDownloadingTitle => 'กำลังดาวน์โหลดจาก Omi';
+
+  @override
+  String syncCardProgressOf(int current, int total) {
+    return '$current จาก $total';
+  }
+
+  @override
+  String get syncStatusOnDevice => 'รอที่ Omi';
+
+  @override
+  String get syncStatusDownloadingFromDevice => 'กำลังดาวน์โหลดจาก Omi';
+
+  @override
+  String get newestFirst => 'ใหม่สุดก่อน';
+
+  @override
+  String get noSyncedRecordingsYet => 'ยังไม่มีการบันทึกที่ซิงค์แล้ว';
 }

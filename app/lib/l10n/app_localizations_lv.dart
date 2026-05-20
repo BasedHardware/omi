@@ -8461,7 +8461,7 @@ class AppLocalizationsLv extends AppLocalizations {
   String get manageStorage => 'Pārvaldīt krātuvi';
 
   @override
-  String get safelyBackedUp => 'Droši dublēts jūsu tālrunī';
+  String get safelyBackedUp => 'Izveidotās sarunas';
 
   @override
   String get notYetSynced => 'Vēl nav sinhronizēts ar jūsu tālruni';
@@ -9291,7 +9291,7 @@ class AppLocalizationsLv extends AppLocalizations {
   String get syncStatusBackingUp => 'Notiek dublēšana…';
 
   @override
-  String get syncStatusWaiting => 'Gaida dublēšanu';
+  String get syncStatusWaiting => 'Gaida sinhronizāciju';
 
   @override
   String get syncStatusRetrying => 'Neizdevās apstrādāt — mēģina vēlreiz';
@@ -9317,4 +9317,89 @@ class AppLocalizationsLv extends AppLocalizations {
   @override
   String get deleteWhileProcessingMessage =>
       'Šis ieraksts ir augšupielādēts, bet Omi vēl veido sarunu. Ja to tagad izdzēsīsiet un apstrāde neizdosies, to nevarēs atjaunot. Vai tomēr dzēst?';
+
+  @override
+  String get syncCardAllBackedUp => 'Visi ieraksti sinhronizēti';
+
+  @override
+  String syncCardReadyCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count ieraksti gatavi sinhronizācijai',
+      one: '$count ieraksts gatavs sinhronizācijai',
+      zero: '$count ierakstu gatavi sinhronizācijai',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get syncCardProcessing => 'Apstrādā Omi…';
+
+  @override
+  String get syncCardWaitingInternet => 'Gaida internetu';
+
+  @override
+  String syncCardNeedsAttention(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count ierakstiem nepieciešama uzmanība',
+      one: '$count ierakstam nepieciešama uzmanība',
+      zero: '$count ierakstu nepieciešama uzmanība',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get syncFlowIntro =>
+      'Ieraksti tiek saglabāti lokāli un pēc tam augšupielādēti Omi, kur tie tiek pārrakstīti un pārveidoti par sarunām.';
+
+  @override
+  String get syncStepUpload => 'Sinhronizēt';
+
+  @override
+  String get syncStepUploadDesc => 'Jūsu ieraksts tiek nosūtīts uz Omi serveri';
+
+  @override
+  String get syncStepProcess => 'Transkripcija';
+
+  @override
+  String get syncStepProcessDesc => 'Omi pārvērš audio sarunā';
+
+  @override
+  String get syncStepBackedUp => 'Saruna gatava';
+
+  @override
+  String get syncStepBackedUpDesc => 'Atrodi to sadaļā Sarunas';
+
+  @override
+  String get syncFailureFootnote =>
+      'Ja apstrāde neizdodas, ieraksts tiek automātiski mēģināts vēlreiz nākamajā sinhronizācijā.';
+
+  @override
+  String get syncStatusConversationCreated => 'Saruna izveidota';
+
+  @override
+  String get syncCardUploadingTitle => 'Augšupielādē Omi';
+
+  @override
+  String get syncCardDownloadingTitle => 'Lejupielādē no Omi';
+
+  @override
+  String syncCardProgressOf(int current, int total) {
+    return '$current no $total';
+  }
+
+  @override
+  String get syncStatusOnDevice => 'Gaida Omi';
+
+  @override
+  String get syncStatusDownloadingFromDevice => 'Lejupielādē no Omi';
+
+  @override
+  String get newestFirst => 'Vispirms jaunākie';
+
+  @override
+  String get noSyncedRecordingsYet => 'Vēl nav sinhronizētu ierakstu';
 }
