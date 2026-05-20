@@ -243,7 +243,7 @@ Environment flags (desktop process, not daemon):
 - `OMI_HYBRID_OPTIONAL_CLOUD_STT=1` — exposes `optionalCloudSTT` capability
 - `OMI_HYBRID_OPTIONAL_CLOUD_CHAT=1` — exposes `optionalCloudChat` capability
 
-Default hybrid optional tiers: both cloud toggles off. `run.sh` local mode defaults direct STT/embeddings/chat capability env flags on for GUI launches; hosted Listen and pi-mono remain disabled without explicit optional-cloud flags / cloud backends.
+Default hybrid optional tiers: both cloud toggles off. `run.sh` local mode defaults direct STT/chat capability env flags on for GUI launches and keeps direct embeddings off; this local profile uses local wiki/FTS memory search. Hosted Listen and pi-mono remain disabled without explicit optional-cloud flags / cloud backends.
 
 ## Local dev defaults (seed)
 

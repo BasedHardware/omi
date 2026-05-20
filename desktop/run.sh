@@ -26,7 +26,7 @@ Options (via environment variables):
   OMI_LOCAL_DAEMON_URL="..."      Local daemon URL (default: http://127.0.0.1:8765)
   OMI_HYBRID_DIRECT_STT_ENABLED   Hybrid Apple Speech live transcription in local daemon (default 1 in configure_local_daemon_mode when unset)
   OMI_HYBRID_DIRECT_CHAT_ENABLED   Hybrid OpenAI-compatible chat + daemon-backed sessions/messages (default 1 in configure_local_daemon_mode when unset)
-  OMI_HYBRID_DIRECT_EMBEDDINGS_ENABLED  Hybrid direct embeddings for Rewind/proactive features (default 1 in local bundle; requires embedding_provider)
+  OMI_HYBRID_DIRECT_EMBEDDINGS_ENABLED  Optional hybrid direct embeddings for vector search (default 0 in local bundle; local wiki search does not require embeddings)
 
 Required files for cloud backend mode:
   Backend-Rust/.env         Environment variables (copy from ../.env.example)
@@ -199,9 +199,9 @@ PY
     if [ -z "${OMI_HYBRID_DIRECT_CHAT_ENABLED+x}" ]; then
         export OMI_HYBRID_DIRECT_CHAT_ENABLED=1
     fi
-    # Optional direct embeddings for Rewind OCR vectors etc.: requires embedding_provider in daemon settings.
+    # Optional direct embeddings for vector search. Default off: this local profile uses local wiki/FTS memory search.
     if [ -z "${OMI_HYBRID_DIRECT_EMBEDDINGS_ENABLED+x}" ]; then
-        export OMI_HYBRID_DIRECT_EMBEDDINGS_ENABLED=1
+        export OMI_HYBRID_DIRECT_EMBEDDINGS_ENABLED=0
     fi
 }
 
@@ -663,12 +663,12 @@ if is_local_daemon_mode; then
     # GUI launches via `open` do not inherit shell exports — AppState.loadEnvironment() reads bundled .env.
     set_bundle_env "OMI_HYBRID_DIRECT_STT_ENABLED" "${OMI_HYBRID_DIRECT_STT_ENABLED:-1}"
     set_bundle_env "OMI_HYBRID_DIRECT_CHAT_ENABLED" "${OMI_HYBRID_DIRECT_CHAT_ENABLED:-1}"
-    set_bundle_env "OMI_HYBRID_DIRECT_EMBEDDINGS_ENABLED" "${OMI_HYBRID_DIRECT_EMBEDDINGS_ENABLED:-1}"
+    set_bundle_env "OMI_HYBRID_DIRECT_EMBEDDINGS_ENABLED" "${OMI_HYBRID_DIRECT_EMBEDDINGS_ENABLED:-0}"
     substep "OMI_DESKTOP_BACKEND_MODE=local"
     substep "OMI_LOCAL_DAEMON_URL=$OMI_LOCAL_DAEMON_URL"
     substep "OMI_HYBRID_DIRECT_STT_ENABLED=${OMI_HYBRID_DIRECT_STT_ENABLED:-1}"
     substep "OMI_HYBRID_DIRECT_CHAT_ENABLED=${OMI_HYBRID_DIRECT_CHAT_ENABLED:-1}"
-    substep "OMI_HYBRID_DIRECT_EMBEDDINGS_ENABLED=${OMI_HYBRID_DIRECT_EMBEDDINGS_ENABLED:-1}"
+    substep "OMI_HYBRID_DIRECT_EMBEDDINGS_ENABLED=${OMI_HYBRID_DIRECT_EMBEDDINGS_ENABLED:-0}"
 fi
 # Bootstrap FIREBASE_API_KEY — check env var first (yolo mode), then backend .env
 if ! grep -q "^FIREBASE_API_KEY=" "$APP_BUNDLE/Contents/Resources/.env"; then
