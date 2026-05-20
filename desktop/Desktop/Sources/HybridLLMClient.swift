@@ -9,6 +9,8 @@ actor HybridDaemonSettingsCache {
 
   private var cached: [LocalDaemonSetting]?
   private var fetchedAt: Date?
+  private var slotResolutions:
+    [String: (response: HybridProviderPolicy.SlotResolutionResponse, fetchedAt: Date)] = [:]
   private let ttlSeconds: TimeInterval = 45
 
   func settings() async throws -> [LocalDaemonSetting] {
@@ -24,6 +26,21 @@ actor HybridDaemonSettingsCache {
     let fresh = try await APIClient.shared.getSelectedBackendSettings()
     cached = fresh
     fetchedAt = Date()
+    return fresh
+  }
+
+  func slotResolution(_ slot: String) async throws -> HybridProviderPolicy.SlotResolutionResponse? {
+    if CodexAuthService.isActive {
+      return nil
+    }
+    guard DesktopBackendEnvironment.selectedBackendTarget.mode == .localDaemon else {
+      return nil
+    }
+    if let cached = slotResolutions[slot], Date().timeIntervalSince(cached.fetchedAt) < ttlSeconds {
+      return cached.response
+    }
+    let fresh = try await APIClient.shared.resolveSelectedBackendProviderSlot(slot)
+    slotResolutions[slot] = (fresh, Date())
     return fresh
   }
 }
@@ -48,7 +65,8 @@ enum HybridLLMClient {
     var errorDescription: String? {
       switch self {
       case .notConfigured:
-        return "Hybrid AI is not configured. Set ai_provider or chat_provider in Settings, or add a BYOK OpenAI key."
+        return
+          "Hybrid AI is not configured. Set ai_provider or chat_provider in Settings, or add a BYOK OpenAI key."
       case .invalidSettings:
         return "Hybrid provider settings are invalid."
       case .invalidResponse:
@@ -89,6 +107,28 @@ enum HybridLLMClient {
     }
     return loadOpenAICompatibleProvider(forKeys: ["ai_provider", "provider"], settings: settings)
       ?? byokOpenAIConfig()
+  }
+
+  /// Local proactive routing must be governed by the daemon's `proactive` slot.
+  static func resolveEffectiveProactiveConfig(
+    slotResolution: HybridProviderPolicy.SlotResolutionResponse?
+  ) -> ProviderConfig? {
+    if let codex = codexProviderConfig() {
+      return codex
+    }
+    guard let slotResolution else {
+      return nil
+    }
+    return HybridProviderPolicy.providerConfig(from: slotResolution)
+  }
+
+  static func resolveEffectiveProactiveConfig(settings: [LocalDaemonSetting]) -> ProviderConfig? {
+    resolveEffectiveProactiveConfig(
+      slotResolution: HybridProviderPolicy.resolveSlotFromSettings(
+        HybridProviderPolicy.proactiveSlot,
+        settings: settings
+      )
+    )
   }
 
   /// BYOK OpenAI → vendor endpoint (desktop hybrid escape hatch when daemon JSON is unset).
@@ -141,7 +181,8 @@ enum HybridLLMClient {
     return url
   }
 
-  private static func postJSON(url: URL, body: [String: Any], apiKey: String, timeout: TimeInterval) async throws
+  private static func postJSON(url: URL, body: [String: Any], apiKey: String, timeout: TimeInterval)
+    async throws
     -> [String: Any]
   {
     var request = URLRequest(url: url)
@@ -184,7 +225,8 @@ enum HybridLLMClient {
       ["role": "user", "content": content],
     ]
     return try await chatCompletionRaw(
-      config: config, messages: messages, jsonMode: jsonMode, tools: nil, toolChoice: nil, timeout: timeout)
+      config: config, messages: messages, jsonMode: jsonMode, tools: nil, toolChoice: nil,
+      timeout: timeout)
   }
 
   static func chatCompletionMultimodalJPEG(
@@ -206,7 +248,8 @@ enum HybridLLMClient {
       ["role": "user", "content": content],
     ]
     return try await chatCompletionRaw(
-      config: config, messages: messages, jsonMode: jsonMode, tools: nil, toolChoice: nil, timeout: timeout)
+      config: config, messages: messages, jsonMode: jsonMode, tools: nil, toolChoice: nil,
+      timeout: timeout)
   }
 
   private static func chatCompletionRaw(
@@ -232,7 +275,8 @@ enum HybridLLMClient {
       body["tool_choice"] = toolChoice
     }
 
-    let json = try await postJSON(url: try completionsURL(config: config), body: body, apiKey: config.apiKey, timeout: timeout)
+    let json = try await postJSON(
+      url: try completionsURL(config: config), body: body, apiKey: config.apiKey, timeout: timeout)
     return try extractAssistantText(from: json)
   }
 
@@ -285,7 +329,8 @@ enum HybridLLMClient {
       "temperature": 0.4,
     ]
 
-    let json = try await postJSON(url: try completionsURL(config: config), body: body, apiKey: config.apiKey, timeout: timeout)
+    let json = try await postJSON(
+      url: try completionsURL(config: config), body: body, apiKey: config.apiKey, timeout: timeout)
     return try parseToolChatResult(from: json)
   }
 
@@ -346,7 +391,8 @@ enum HybridLLMClient {
         for part in content.parts {
           if let fr = part.functionResponse {
             let toolCallId =
-              pendingToolCallIds.isEmpty ? "call_hybrid_fallback_\(fr.name)" : pendingToolCallIds.removeFirst()
+              pendingToolCallIds.isEmpty
+              ? "call_hybrid_fallback_\(fr.name)" : pendingToolCallIds.removeFirst()
             toolResults.append([
               "role": "tool",
               "tool_call_id": toolCallId,
@@ -422,7 +468,9 @@ enum HybridLLMClient {
     }
   }
 
-  private static func jsonSchema(from params: GeminiTool.FunctionDeclaration.Parameters) -> [String: Any]? {
+  private static func jsonSchema(from params: GeminiTool.FunctionDeclaration.Parameters) -> [String:
+    Any]?
+  {
     var properties: [String: Any] = [:]
     for (name, prop) in params.properties {
       if let nested = propJSONSchema(prop) {
@@ -437,7 +485,9 @@ enum HybridLLMClient {
     return schema
   }
 
-  private static func propJSONSchema(_ prop: GeminiTool.FunctionDeclaration.Parameters.Property) -> [String: Any]? {
+  private static func propJSONSchema(_ prop: GeminiTool.FunctionDeclaration.Parameters.Property)
+    -> [String: Any]?
+  {
     if let nested = prop.nestedProperties, let req = prop.nestedRequired {
       var childProps: [String: Any] = [:]
       for (k, v) in nested {
@@ -488,7 +538,8 @@ enum HybridLLMClient {
             return
           }
           let observations = (request.results as? [VNRecognizedTextObservation]) ?? []
-          let text = observations.compactMap { $0.topCandidates(1).first?.string }.joined(separator: "\n")
+          let text = observations.compactMap { $0.topCandidates(1).first?.string }.joined(
+            separator: "\n")
           continuation.resume(returning: text)
         }
         request.recognitionLevel = .accurate

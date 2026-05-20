@@ -19,4 +19,22 @@ enum HybridVisionProvider {
     }
     return true
   }
+
+  static func providerConfig(from response: HybridProviderPolicy.SlotResolutionResponse?)
+    -> HybridLLMClient.ProviderConfig?
+  {
+    guard let response else {
+      return nil
+    }
+    return HybridProviderPolicy.providerConfig(from: response)
+  }
+
+  static func providerConfig(settings: [LocalDaemonSetting]) -> HybridLLMClient.ProviderConfig? {
+    providerConfig(
+      from: HybridProviderPolicy.resolveSlotFromSettings(
+        HybridProviderPolicy.visionSlot,
+        settings: settings
+      )
+    )
+  }
 }

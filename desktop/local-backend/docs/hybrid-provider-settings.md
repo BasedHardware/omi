@@ -104,6 +104,24 @@ Desktop clients should prefer these daemon APIs over manual JSON editing:
 Callers should resolve `post_transcript`, `proactive`, and `chat` slots explicitly
 instead of duplicating the legacy setting-key scan order.
 
+## Proactive assistants
+
+In desktop local daemon mode, proactive assistant model calls resolve
+`GET /v1/provider-policy/resolve/proactive` and use the returned
+OpenAI-compatible provider account/model. The slot defaults to `gpt-5.4-mini`,
+but resolution is not actionable until the policy includes a provider account
+for that slot. The desktop client must surface the daemon's resolution reason
+instead of silently falling back to `chat_provider`, `ai_provider`, Omi-hosted
+Gemini proxy URLs, or Omi-hosted chat completion proxies.
+
+Screenshot-aware assistants resolve `GET /v1/provider-policy/resolve/vision`
+separately. When that slot resolves to an allowed provider, the assistant may
+send multimodal screenshot input to that provider. When the slot is missing or
+unavailable, the desktop app uses local macOS OCR/Rewind text from the captured
+screen and logs the OCR-only path. Local proactive memory/task/conversation
+context comes from local daemon/Rewind SQLite data and FTS-backed local wiki
+search; embedding provider readiness is not required.
+
 ## Post-transcript processing
 
 Finalized transcript jobs resolve `/v1/provider-policy/resolve/post_transcript`

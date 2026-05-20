@@ -260,6 +260,24 @@ actor APIClient {
     )
   }
 
+  func resolveSelectedBackendProviderSlot(_ slot: String) async throws
+    -> HybridProviderPolicy.SlotResolutionResponse
+  {
+    let target = selectedBackendTarget
+    guard target.mode == .localDaemon else {
+      throw APIError.featureUnavailable(
+        feature: "resolve_provider_slot",
+        reason: "Provider policy slots are only available in local daemon mode."
+      )
+    }
+    let encodedSlot = slot.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? slot
+    return try await get(
+      "v1/provider-policy/resolve/\(encodedSlot)",
+      requireAuth: false,
+      customBaseURL: target.baseURL
+    )
+  }
+
   // MARK: - Request Execution
 
   private func performRequest<T: Decodable>(_ request: URLRequest, retryOnUnauthorized: Bool)
@@ -2095,7 +2113,8 @@ extension APIClient {
     if selectedBackendTarget.mode == .localDaemon {
       throw APIError.featureUnavailable(
         feature: "memory_visibility",
-        reason: "Memory visibility controls are cloud-sharing metadata and are disabled in local daemon mode."
+        reason:
+          "Memory visibility controls are cloud-sharing metadata and are disabled in local daemon mode."
       )
     }
 
@@ -2128,7 +2147,8 @@ extension APIClient {
     if selectedBackendTarget.mode == .localDaemon {
       throw APIError.featureUnavailable(
         feature: "memory_read_status",
-        reason: "Bulk memory read status is cloud-only metadata and is disabled in local daemon mode."
+        reason:
+          "Bulk memory read status is cloud-only metadata and is disabled in local daemon mode."
       )
     }
 
@@ -2140,7 +2160,8 @@ extension APIClient {
     if selectedBackendTarget.mode == .localDaemon {
       throw APIError.featureUnavailable(
         feature: "memory_visibility",
-        reason: "Memory visibility controls are cloud-sharing metadata and are disabled in local daemon mode."
+        reason:
+          "Memory visibility controls are cloud-sharing metadata and are disabled in local daemon mode."
       )
     }
 
@@ -2156,7 +2177,8 @@ extension APIClient {
     if selectedBackendTarget.mode == .localDaemon {
       throw APIError.featureUnavailable(
         feature: "memory_bulk_delete",
-        reason: "Bulk memory deletion is not exposed by the local daemon yet. Delete individual local memories instead."
+        reason:
+          "Bulk memory deletion is not exposed by the local daemon yet. Delete individual local memories instead."
       )
     }
 
@@ -2786,7 +2808,8 @@ extension APIClient {
   /// Fetches staged tasks ordered by relevance score
   func getStagedTasks(limit: Int = 100, offset: Int = 0) async throws -> ActionItemsListResponse {
     if selectedBackendTarget.mode == .localDaemon {
-      let items = try await StagedTaskStorage.shared.getScoredStagedTasks(limit: limit, offset: offset)
+      let items = try await StagedTaskStorage.shared.getScoredStagedTasks(
+        limit: limit, offset: offset)
       return ActionItemsListResponse(items: items, hasMore: items.count == limit)
     }
 

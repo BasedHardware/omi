@@ -199,7 +199,9 @@ actor GeminiClient {
     if DesktopBackendEnvironment.selectedBackendTarget.mode == .localDaemon {
       return ""
     }
-    if let cString = getenv("OMI_DESKTOP_API_URL"), let url = String(validatingUTF8: cString), !url.isEmpty {
+    if let cString = getenv("OMI_DESKTOP_API_URL"), let url = String(validatingUTF8: cString),
+      !url.isEmpty
+    {
       return url.hasSuffix("/") ? url : url + "/"
     }
     return "https://api.omi.me/"
@@ -207,6 +209,7 @@ actor GeminiClient {
 
   enum GeminiClientError: LocalizedError {
     case missingAPIKey
+    case providerNotReady(String)
     case networkError(Error)
     case invalidResponse
     case apiError(String)
@@ -221,6 +224,8 @@ actor GeminiClient {
       switch self {
       case .missingAPIKey:
         return "AI features are not configured. Please update the app."
+      case .providerNotReady(let reason):
+        return "Local proactive AI is not ready: \(reason)"
       case .networkError:
         return "Could not reach AI service. Check your internet connection and try again."
       case .invalidResponse:
@@ -289,6 +294,70 @@ actor GeminiClient {
     }
   }
 
+  private func proactiveProviderConfig() async throws -> HybridLLMClient.ProviderConfig {
+    if CodexAuthService.isActive {
+      await CodexProxyService.shared.ensureRunning()
+      if let config = HybridLLMClient.codexProviderConfig() {
+        return config
+      }
+    }
+    let slotResolution: HybridProviderPolicy.SlotResolutionResponse?
+    do {
+      slotResolution = try await HybridDaemonSettingsCache.shared.slotResolution(
+        HybridProviderPolicy.proactiveSlot
+      )
+    } catch {
+      logError("GeminiClient: failed to resolve local proactive slot", error: error)
+      slotResolution = nil
+    }
+    if let resolution = slotResolution {
+      if let config = HybridLLMClient.resolveEffectiveProactiveConfig(slotResolution: resolution) {
+        return config
+      }
+      throw GeminiClientError.providerNotReady(resolution.resolution.reason)
+    }
+    let settings = try await HybridDaemonSettingsCache.shared.settings()
+    if let config = HybridLLMClient.resolveEffectiveProactiveConfig(settings: settings) {
+      return config
+    }
+    if let resolution = HybridProviderPolicy.resolveSlotFromSettings(
+      HybridProviderPolicy.proactiveSlot,
+      settings: settings
+    ) {
+      throw GeminiClientError.providerNotReady(resolution.resolution.reason)
+    }
+    throw GeminiClientError.providerNotReady(
+      "no proactive model slot is configured in provider_policy"
+    )
+  }
+
+  private func visionProviderConfig() async throws -> HybridLLMClient.ProviderConfig? {
+    let slotResolution: HybridProviderPolicy.SlotResolutionResponse?
+    do {
+      slotResolution = try await HybridDaemonSettingsCache.shared.slotResolution(
+        HybridProviderPolicy.visionSlot
+      )
+    } catch {
+      logError("GeminiClient: failed to resolve local vision slot", error: error)
+      slotResolution = nil
+    }
+    if let resolution = slotResolution {
+      if let config = HybridVisionProvider.providerConfig(from: resolution) {
+        return config
+      }
+      log(
+        "GeminiClient: local vision slot unavailable; using OCR-only screen context (\(resolution.resolution.reason))"
+      )
+      return nil
+    }
+    let settings = try await HybridDaemonSettingsCache.shared.settings()
+    if let config = HybridVisionProvider.providerConfig(settings: settings) {
+      return config
+    }
+    log("GeminiClient: no local vision slot configured; using OCR-only screen context")
+    return nil
+  }
+
   /// Text chat completion via hybrid OpenAI-compatible provider (or BYOK OpenAI).
   private func hybridChatText(
     systemPrompt: String,
@@ -296,13 +365,7 @@ actor GeminiClient {
     jsonMode: Bool,
     timeout: TimeInterval = 300
   ) async throws -> String {
-    if CodexAuthService.isActive {
-      await CodexProxyService.shared.ensureRunning()
-    }
-    let settings = try await HybridDaemonSettingsCache.shared.settings()
-    guard let config = HybridLLMClient.resolveEffectiveChatConfig(settings: settings) else {
-      throw GeminiClientError.missingAPIKey
-    }
+    let config = try await proactiveProviderConfig()
     do {
       return try await HybridLLMClient.chatCompletionText(
         config: config,
@@ -316,7 +379,7 @@ actor GeminiClient {
     }
   }
 
-  /// Multimodal when `vision_provider` is set; otherwise macOS Vision OCR + text JSON.
+  /// Multimodal when the daemon `vision` slot resolves; otherwise macOS Vision OCR + text JSON.
   private func hybridChatImageOrOCR(
     prompt: String,
     imageData: Data,
@@ -324,14 +387,8 @@ actor GeminiClient {
     jsonMode: Bool,
     timeout: TimeInterval = 300
   ) async throws -> String {
-    if CodexAuthService.isActive {
-      await CodexProxyService.shared.ensureRunning()
-    }
-    let settings = try await HybridDaemonSettingsCache.shared.settings()
-    guard let config = HybridLLMClient.resolveEffectiveChatConfig(settings: settings) else {
-      throw GeminiClientError.missingAPIKey
-    }
-    let visionConfig = HybridLLMClient.loadVisionProviderConfig(from: settings)
+    let config = try await proactiveProviderConfig()
+    let visionConfig = try await visionProviderConfig()
     do {
       if let visionConfig {
         return try await HybridLLMClient.chatCompletionMultimodalJPEG(
@@ -343,6 +400,7 @@ actor GeminiClient {
           timeout: timeout
         )
       }
+      log("GeminiClient: local proactive image request using OCR-only screen context")
       let ocr = try await HybridLLMClient.ScreenOCR.recognizeTextFromJPEG(imageData)
       let user =
         prompt
@@ -372,7 +430,6 @@ actor GeminiClient {
   private func proxyURL(action: String) -> URL {
     URL(string: "\(Self.proxyBaseURL)v1/proxy/gemini/models/\(model):\(action)")!
   }
-
 
   /// Log the raw API error message for debugging and throw a sanitized error.
   /// The `errorDescription` on GeminiClientError is user-friendly; this log preserves the raw detail.
@@ -423,7 +480,7 @@ actor GeminiClient {
           || lower.contains("internal error")
       case .networkError:
         return true
-      case .invalidResponse, .missingAPIKey:
+      case .invalidResponse, .missingAPIKey, .providerNotReady:
         return false
       }
     }
@@ -440,7 +497,9 @@ actor GeminiClient {
   /// Sleep with exponential backoff (2s, 8s) and log the retry attempt.
   private func retryBackoff(attempt: Int, error: Error) async {
     let delaySec = [2, 8][min(attempt, 1)]
-    log("GeminiClient: transient error, retrying in \(delaySec)s (attempt \(attempt + 2)/3): \(error.localizedDescription)")
+    log(
+      "GeminiClient: transient error, retrying in \(delaySec)s (attempt \(attempt + 2)/3): \(error.localizedDescription)"
+    )
     try? await Task.sleep(nanoseconds: UInt64(delaySec) * 1_000_000_000)
   }
 
@@ -492,7 +551,8 @@ actor GeminiClient {
             generationConfig: GeminiRequest.GenerationConfig(
               responseMimeType: "application/json",
               responseSchema: responseSchema,
-              thinkingConfig: ThinkingConfig(thinkingBudget: max(thinkingBudget, ThinkingConfig.minimumBudget(for: model)))
+              thinkingConfig: ThinkingConfig(
+                thinkingBudget: max(thinkingBudget, ThinkingConfig.minimumBudget(for: model)))
             )
           )
 
@@ -579,7 +639,8 @@ actor GeminiClient {
           generationConfig: GeminiRequest.GenerationConfig(
             responseMimeType: nil,
             responseSchema: nil,
-            thinkingConfig: ThinkingConfig(thinkingBudget: max(thinkingBudget, ThinkingConfig.minimumBudget(for: model)))
+            thinkingConfig: ThinkingConfig(
+              thinkingBudget: max(thinkingBudget, ThinkingConfig.minimumBudget(for: model)))
           )
         )
 
@@ -659,7 +720,8 @@ actor GeminiClient {
           generationConfig: GeminiRequest.GenerationConfig(
             responseMimeType: "application/json",
             responseSchema: responseSchema,
-            thinkingConfig: ThinkingConfig(thinkingBudget: max(thinkingBudget, ThinkingConfig.minimumBudget(for: model)))
+            thinkingConfig: ThinkingConfig(
+              thinkingBudget: max(thinkingBudget, ThinkingConfig.minimumBudget(for: model)))
           )
         )
 
@@ -711,7 +773,8 @@ actor GeminiClient {
       for part in content.parts {
         if let inline = part.inlineData {
           let mime = inline.mimeType.lowercased()
-          guard let rawImageData = Data(base64Encoded: inline.data, options: [.ignoreUnknownCharacters])
+          guard
+            let rawImageData = Data(base64Encoded: inline.data, options: [.ignoreUnknownCharacters])
           else {
             continue
           }
@@ -756,7 +819,6 @@ actor GeminiClient {
   }
 
 }
-
 
 // MARK: - Tool Calling Support
 
@@ -829,7 +891,9 @@ struct GeminiTool: Encodable {
           case nestedRequired = "required"
         }
 
-        init(type: String, description: String = "", enumValues: [String]? = nil, items: Items? = nil) {
+        init(
+          type: String, description: String = "", enumValues: [String]? = nil, items: Items? = nil
+        ) {
           self.type = type
           self.description = description.isEmpty ? nil : description
           self.enum = enumValues
@@ -856,7 +920,6 @@ struct GeminiTool: Encodable {
     }
   }
 }
-
 
 /// Result of a tool-enabled chat (may include tool calls)
 struct ToolChatResult {
@@ -1018,11 +1081,9 @@ extension GeminiClient {
     for attempt in 0...maxRetries {
       do {
         if transport == .hybridOpenAICompatible {
-          let settings = try await HybridDaemonSettingsCache.shared.settings()
-          guard let config = HybridLLMClient.resolveEffectiveChatConfig(settings: settings) else {
-            throw GeminiClientError.missingAPIKey
-          }
-          let allowVision = HybridVisionProvider.isConfigured(settings: settings)
+          let config = try await proactiveProviderConfig()
+          let visionConfig = try await visionProviderConfig()
+          let allowVision = visionConfig != nil
           do {
             let contentsForHybrid: [GeminiImageToolRequest.Content]
             if allowVision {
@@ -1031,7 +1092,7 @@ extension GeminiClient {
               contentsForHybrid = try await hybridContentsWithOCRInsteadOfImages(contents)
             }
             return try await HybridLLMClient.performGeminiCompatibleToolRound(
-              config: config,
+              config: visionConfig ?? config,
               systemPrompt: systemPrompt,
               contents: contentsForHybrid,
               tools: tools,
@@ -1059,7 +1120,8 @@ extension GeminiClient {
               parts: [.init(text: systemPrompt)]
             ),
             generationConfig: GeminiImageToolRequest.GenerationConfig(
-              thinkingConfig: ThinkingConfig(thinkingBudget: max(thinkingBudget, ThinkingConfig.minimumBudget(for: model)))
+              thinkingConfig: ThinkingConfig(
+                thinkingBudget: max(thinkingBudget, ThinkingConfig.minimumBudget(for: model)))
             ),
             tools: tools,
             toolConfig: toolConfig

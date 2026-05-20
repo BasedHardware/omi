@@ -81,6 +81,15 @@ deterministic fallbacks:
 Provider keys stay in local daemon settings and are not sent to Omi-hosted
 services.
 
+Proactive assistants in desktop local daemon mode resolve the daemon
+`proactive` model slot before making AI calls. They do not construct Omi-hosted
+Gemini or chat-completion proxy URLs in this mode, and they do not treat
+`chat_provider` or embeddings as readiness requirements for proactive work.
+Screenshot analysis resolves the optional `vision` slot separately; without a
+configured vision provider the desktop app uses local Rewind/macOS OCR text and
+records the OCR-only path in logs. Memory retrieval remains local wiki/FTS over
+the daemon/Rewind SQLite stores.
+
 ## Cloud Sync Boundary
 
 Cloud sync is a future optional adapter. The local database remains the source

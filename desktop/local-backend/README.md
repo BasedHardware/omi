@@ -136,6 +136,12 @@ Local processing resolves the `post_transcript` model slot from
 deterministic fallback metadata; with an OpenAI-compatible account it persists
 model-derived title, overview, memories, action items, and provenance.
 
+Desktop proactive assistants resolve `/v1/provider-policy/resolve/proactive`
+for local daemon AI calls and `/v1/provider-policy/resolve/vision` only for
+optional screenshot multimodal input. If `vision` is unavailable, assistants use
+local Rewind/macOS OCR text. This local path does not require Omi-hosted provider
+proxies, cloud screen-activity sync, or embedding provider readiness.
+
 ## Architecture And E2E Validation
 
 The durable MVP architecture note and validation checklist live in
