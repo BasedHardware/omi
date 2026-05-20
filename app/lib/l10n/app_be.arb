@@ -10770,5 +10770,9 @@
     "syncStatusOnDevice": "Чакае на Omi",
     "syncStatusDownloadingFromDevice": "Спампоўка з Omi",
     "newestFirst": "Спачатку новыя",
-    "noSyncedRecordingsYet": "Пакуль няма сінхранізаваных запісаў"
+    "noSyncedRecordingsYet": "Пакуль няма сінхранізаваных запісаў",
+    "morePaymentMethodsComingSoon": "Хутка з'явяцца новыя спосабы аплаты",
+    "@morePaymentMethodsComingSoon": {
+        "description": "Placeholder card text shown under available payment methods"
+    }
 }

@@ -9404,4 +9404,7 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get noSyncedRecordingsYet => 'Vēl nav sinhronizētu ierakstu';
+
+  @override
+  String get morePaymentMethodsComingSoon => 'Drīzumā vairāk maksājumu veidu';
 }

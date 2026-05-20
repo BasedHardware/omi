@@ -9416,4 +9416,7 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get noSyncedRecordingsYet => 'ಇನ್ನೂ ಸಿಂಕ್ ಆದ ರೆಕಾರ್ಡಿಂಗ್‌ಗಳಿಲ್ಲ';
+
+  @override
+  String get morePaymentMethodsComingSoon => 'ಶೀಘ್ರದಲ್ಲೇ ಹೆಚ್ಚಿನ ಪಾವತಿ ವಿಧಾನಗಳು';
 }

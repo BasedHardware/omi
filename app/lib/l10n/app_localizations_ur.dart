@@ -9401,4 +9401,7 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get noSyncedRecordingsYet => 'ابھی تک کوئی سنک شدہ ریکارڈنگ نہیں';
+
+  @override
+  String get morePaymentMethodsComingSoon => 'مزید ادائیگی کے طریقے جلد آرہے ہیں';
 }

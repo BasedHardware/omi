@@ -3100,5 +3100,9 @@
                 "type": "int"
             }
         }
+    },
+    "morePaymentMethodsComingSoon": "Daha fazla ödeme yöntemi yakında",
+    "@morePaymentMethodsComingSoon": {
+        "description": "Placeholder card text shown under available payment methods"
     }
 }

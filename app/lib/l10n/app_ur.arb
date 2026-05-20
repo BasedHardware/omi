@@ -10770,5 +10770,9 @@
     "syncStatusOnDevice": "Omi پر منتظر",
     "syncStatusDownloadingFromDevice": "Omi سے ڈاؤن لوڈ ہو رہا ہے",
     "newestFirst": "پہلے نئی ترین",
-    "noSyncedRecordingsYet": "ابھی تک کوئی سنک شدہ ریکارڈنگ نہیں"
+    "noSyncedRecordingsYet": "ابھی تک کوئی سنک شدہ ریکارڈنگ نہیں",
+    "morePaymentMethodsComingSoon": "مزید ادائیگی کے طریقے جلد آرہے ہیں",
+    "@morePaymentMethodsComingSoon": {
+        "description": "Placeholder card text shown under available payment methods"
+    }
 }

@@ -9384,4 +9384,7 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get noSyncedRecordingsYet => 'Zatím žádné synchronizované nahrávky';
+
+  @override
+  String get morePaymentMethodsComingSoon => 'Brzy přibudou další platební metody';
 }

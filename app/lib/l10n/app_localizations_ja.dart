@@ -9229,4 +9229,7 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get noSyncedRecordingsYet => '同期済みの録音はまだありません';
+
+  @override
+  String get morePaymentMethodsComingSoon => '他の支払い方法を近日追加予定';
 }

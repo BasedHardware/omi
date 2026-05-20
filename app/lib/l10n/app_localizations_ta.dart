@@ -9452,4 +9452,7 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get noSyncedRecordingsYet => 'ஒத்திசைக்கப்பட்ட பதிவுகள் இன்னும் இல்லை';
+
+  @override
+  String get morePaymentMethodsComingSoon => 'மேலும் கட்டண முறைகள் விரைவில்';
 }

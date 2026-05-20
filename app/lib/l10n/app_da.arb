@@ -3074,5 +3074,9 @@
                 "type": "int"
             }
         }
+    },
+    "morePaymentMethodsComingSoon": "Flere betalingsmetoder kommer snart",
+    "@morePaymentMethodsComingSoon": {
+        "description": "Placeholder card text shown under available payment methods"
     }
 }

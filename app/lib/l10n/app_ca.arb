@@ -3034,5 +3034,9 @@
                 "type": "int"
             }
         }
+    },
+    "morePaymentMethodsComingSoon": "Aviat hi haurà més mètodes de pagament",
+    "@morePaymentMethodsComingSoon": {
+        "description": "Placeholder card text shown under available payment methods"
     }
 }

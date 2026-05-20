@@ -9414,4 +9414,7 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String get noSyncedRecordingsYet => 'Пакуль няма сінхранізаваных запісаў';
+
+  @override
+  String get morePaymentMethodsComingSoon => 'Хутка з\'явяцца новыя спосабы аплаты';
 }

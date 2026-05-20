@@ -9383,4 +9383,7 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get noSyncedRecordingsYet => 'Ei vielä synkronoituja nauhoituksia';
+
+  @override
+  String get morePaymentMethodsComingSoon => 'Lisää maksutapoja tulossa pian';
 }

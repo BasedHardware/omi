@@ -9402,4 +9402,7 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get noSyncedRecordingsYet => 'Синхронізованих записів ще немає';
+
+  @override
+  String get morePaymentMethodsComingSoon => 'Незабаром більше способів оплати';
 }

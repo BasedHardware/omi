@@ -3032,5 +3032,9 @@
                 "type": "int"
             }
         }
+    },
+    "morePaymentMethodsComingSoon": "المزيد من طرق الدفع قريبًا",
+    "@morePaymentMethodsComingSoon": {
+        "description": "Placeholder card text shown under available payment methods"
     }
 }

@@ -9449,4 +9449,7 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get noSyncedRecordingsYet => 'Δεν υπάρχουν ακόμα συγχρονισμένες εγγραφές';
+
+  @override
+  String get morePaymentMethodsComingSoon => 'Σύντομα περισσότεροι τρόποι πληρωμής';
 }

@@ -9467,4 +9467,7 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get noSyncedRecordingsYet => 'Aucun enregistrement synchronisé pour l\'instant';
+
+  @override
+  String get morePaymentMethodsComingSoon => 'D\'autres moyens de paiement bientôt disponibles';
 }

@@ -10770,5 +10770,9 @@
     "syncStatusOnDevice": "ממתין ב-Omi",
     "syncStatusDownloadingFromDevice": "מוריד מ-Omi",
     "newestFirst": "החדשות ביותר תחילה",
-    "noSyncedRecordingsYet": "אין עדיין הקלטות מסונכרנות"
+    "noSyncedRecordingsYet": "אין עדיין הקלטות מסונכרנות",
+    "morePaymentMethodsComingSoon": "אמצעי תשלום נוספים בקרוב",
+    "@morePaymentMethodsComingSoon": {
+        "description": "Placeholder card text shown under available payment methods"
+    }
 }

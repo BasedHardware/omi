@@ -9231,4 +9231,7 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get noSyncedRecordingsYet => '아직 동기화된 녹음이 없습니다';
+
+  @override
+  String get morePaymentMethodsComingSoon => '더 많은 결제 수단이 곧 추가됩니다';
 }

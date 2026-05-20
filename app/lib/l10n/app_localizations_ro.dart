@@ -9429,4 +9429,7 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get noSyncedRecordingsYet => 'Încă nu există înregistrări sincronizate';
+
+  @override
+  String get morePaymentMethodsComingSoon => 'În curând mai multe metode de plată';
 }

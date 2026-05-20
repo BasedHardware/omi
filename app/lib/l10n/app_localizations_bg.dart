@@ -9419,4 +9419,7 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get noSyncedRecordingsYet => 'Все още няма синхронизирани записи';
+
+  @override
+  String get morePaymentMethodsComingSoon => 'Скоро ще има още методи на плащане';
 }

@@ -3066,5 +3066,9 @@
                 "type": "int"
             }
         }
+    },
+    "morePaymentMethodsComingSoon": "他の支払い方法を近日追加予定",
+    "@morePaymentMethodsComingSoon": {
+        "description": "Placeholder card text shown under available payment methods"
     }
 }

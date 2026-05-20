@@ -9411,4 +9411,7 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String get noSyncedRecordingsYet => 'Sinhroniziranih posnetkov še ni';
+
+  @override
+  String get morePaymentMethodsComingSoon => 'Kmalu več načinov plačila';
 }

@@ -9469,4 +9469,7 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get noSyncedRecordingsYet => 'Wala pang naka-sync na recording';
+
+  @override
+  String get morePaymentMethodsComingSoon => 'Mas maraming paraan ng pagbabayad na malapit nang dumating';
 }

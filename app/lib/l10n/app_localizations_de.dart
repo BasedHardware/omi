@@ -9461,4 +9461,7 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get noSyncedRecordingsYet => 'Noch keine synchronisierten Aufnahmen';
+
+  @override
+  String get morePaymentMethodsComingSoon => 'Weitere Zahlungsmethoden in Kürze';
 }

@@ -9412,4 +9412,7 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get noSyncedRecordingsYet => 'Nog geen gesynchroniseerde opnames';
+
+  @override
+  String get morePaymentMethodsComingSoon => 'Meer betaalmethoden binnenkort';
 }

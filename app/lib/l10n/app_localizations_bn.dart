@@ -9392,4 +9392,7 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String get noSyncedRecordingsYet => 'এখনও কোনো সিঙ্ক করা রেকর্ডিং নেই';
+
+  @override
+  String get morePaymentMethodsComingSoon => 'শীঘ্রই আরও পেমেন্ট পদ্ধতি আসছে';
 }

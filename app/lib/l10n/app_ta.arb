@@ -10770,5 +10770,9 @@
     "syncStatusOnDevice": "Omi-இல் காத்திருக்கிறது",
     "syncStatusDownloadingFromDevice": "Omi-இலிருந்து பதிவிறக்கப்படுகிறது",
     "newestFirst": "புதியவை முதலில்",
-    "noSyncedRecordingsYet": "ஒத்திசைக்கப்பட்ட பதிவுகள் இன்னும் இல்லை"
+    "noSyncedRecordingsYet": "ஒத்திசைக்கப்பட்ட பதிவுகள் இன்னும் இல்லை",
+    "morePaymentMethodsComingSoon": "மேலும் கட்டண முறைகள் விரைவில்",
+    "@morePaymentMethodsComingSoon": {
+        "description": "Placeholder card text shown under available payment methods"
+    }
 }

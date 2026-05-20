@@ -3087,5 +3087,9 @@
                 "type": "int"
             }
         }
+    },
+    "morePaymentMethodsComingSoon": "更多支付方式即将推出",
+    "@morePaymentMethodsComingSoon": {
+        "description": "Placeholder card text shown under available payment methods"
     }
 }

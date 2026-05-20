@@ -9375,4 +9375,7 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get noSyncedRecordingsYet => 'Zatiaľ žiadne synchronizované nahrávky';
+
+  @override
+  String get morePaymentMethodsComingSoon => 'Čoskoro ďalšie platobné metódy';
 }

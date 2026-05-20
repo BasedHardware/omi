@@ -3065,5 +3065,9 @@
                 "type": "int"
             }
         }
+    },
+    "morePaymentMethodsComingSoon": "더 많은 결제 수단이 곧 추가됩니다",
+    "@morePaymentMethodsComingSoon": {
+        "description": "Placeholder card text shown under available payment methods"
     }
 }

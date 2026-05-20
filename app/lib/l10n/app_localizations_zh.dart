@@ -9215,4 +9215,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get noSyncedRecordingsYet => '还没有已同步的录音';
+
+  @override
+  String get morePaymentMethodsComingSoon => '更多支付方式即将推出';
 }

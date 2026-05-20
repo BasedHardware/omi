@@ -9408,4 +9408,7 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get noSyncedRecordingsYet => 'Brak zsynchronizowanych nagrań';
+
+  @override
+  String get morePaymentMethodsComingSoon => 'Więcej metod płatności już wkrótce';
 }

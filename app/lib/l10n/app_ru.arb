@@ -3100,5 +3100,9 @@
                 "type": "int"
             }
         }
+    },
+    "morePaymentMethodsComingSoon": "Скоро добавим новые способы оплаты",
+    "@morePaymentMethodsComingSoon": {
+        "description": "Placeholder card text shown under available payment methods"
     }
 }

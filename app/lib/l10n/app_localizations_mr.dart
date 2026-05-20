@@ -9395,4 +9395,7 @@ class AppLocalizationsMr extends AppLocalizations {
 
   @override
   String get noSyncedRecordingsYet => 'अद्याप कोणतीही सिंक केलेली रेकॉर्डिंग नाही';
+
+  @override
+  String get morePaymentMethodsComingSoon => 'लवकरच आणखी पेमेंट पद्धती';
 }

@@ -11131,5 +11131,9 @@
     "noSyncedRecordingsYet": "No synced recordings yet",
     "@noSyncedRecordingsYet": {
         "description": "Empty-state message when the Synced filter is active but no recording has finished backing up."
+    },
+    "morePaymentMethodsComingSoon": "More payment methods coming soon",
+    "@morePaymentMethodsComingSoon": {
+        "description": "Placeholder card text shown under available payment methods"
     }
 }

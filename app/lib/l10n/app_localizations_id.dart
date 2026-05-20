@@ -9392,4 +9392,7 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get noSyncedRecordingsYet => 'Belum ada rekaman yang tersinkronisasi';
+
+  @override
+  String get morePaymentMethodsComingSoon => 'Metode pembayaran lainnya segera hadir';
 }

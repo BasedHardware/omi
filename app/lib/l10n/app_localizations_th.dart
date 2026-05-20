@@ -9334,4 +9334,7 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get noSyncedRecordingsYet => 'ยังไม่มีการบันทึกที่ซิงค์แล้ว';
+
+  @override
+  String get morePaymentMethodsComingSoon => 'วิธีการชำระเงินอื่นๆ เร็วๆ นี้';
 }

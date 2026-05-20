@@ -3107,5 +3107,9 @@
                 "type": "int"
             }
         }
+    },
+    "morePaymentMethodsComingSoon": "Metode pembayaran lainnya segera hadir",
+    "@morePaymentMethodsComingSoon": {
+        "description": "Placeholder card text shown under available payment methods"
     }
 }

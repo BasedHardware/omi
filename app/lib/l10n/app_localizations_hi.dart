@@ -9364,4 +9364,7 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get noSyncedRecordingsYet => 'अभी तक कोई सिंक की गई रिकॉर्डिंग नहीं';
+
+  @override
+  String get morePaymentMethodsComingSoon => 'जल्द ही और भुगतान विकल्प';
 }

@@ -9439,4 +9439,7 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String get noSyncedRecordingsYet => 'Nessuna registrazione sincronizzata';
+
+  @override
+  String get morePaymentMethodsComingSoon => 'Presto altri metodi di pagamento';
 }

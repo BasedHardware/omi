@@ -9397,4 +9397,7 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get noSyncedRecordingsYet => 'Sinchronizuotų įrašų dar nėra';
+
+  @override
+  String get morePaymentMethodsComingSoon => 'Netrukus daugiau mokėjimo būdų';
 }
