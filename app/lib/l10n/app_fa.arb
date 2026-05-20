@@ -10154,7 +10154,7 @@
     "@manageStorage": {
         "description": "Menu option and sheet title for managing recording storage"
     },
-    "safelyBackedUp": "به‌طور ایمن در تلفن شما پشتیبان‌گیری شد",
+    "safelyBackedUp": "گفتگوها ساخته شدند",
     "@safelyBackedUp": {
         "description": "Description for synced files in manage storage sheet"
     },
@@ -10736,7 +10736,7 @@
     "recapDeleteFailed": "حذف خلاصه ممکن نشد. بعداً دوباره تلاش کنید.",
     "syncStatusBackedUp": "پشتیبان‌گیری شد",
     "syncStatusBackingUp": "در حال پشتیبان‌گیری…",
-    "syncStatusWaiting": "در انتظار پشتیبان‌گیری",
+    "syncStatusWaiting": "در انتظار همگام‌سازی",
     "syncStatusRetrying": "پردازش ناموفق — تلاش مجدد",
     "syncStatusFailed": "ناموفق — روی تلاش مجدد بزنید",
     "syncStatusFileUnavailable": "فایل در دسترس نیست",
@@ -10744,5 +10744,26 @@
     "noRecordingsYet": "هنوز ضبطی وجود ندارد",
     "syncInProgress": "همگام‌سازی در حال انجام است",
     "deleteWhileProcessingTitle": "هنوز در حال پردازش",
-    "deleteWhileProcessingMessage": "این ضبط بارگذاری شده اما Omi هنوز در حال ساخت مکالمه است. اگر اکنون آن را حذف کنید و پردازش ناموفق شود، قابل بازیابی نخواهد بود. به‌هرحال حذف شود؟"
+    "deleteWhileProcessingMessage": "این ضبط بارگذاری شده اما Omi هنوز در حال ساخت مکالمه است. اگر اکنون آن را حذف کنید و پردازش ناموفق شود، قابل بازیابی نخواهد بود. به‌هرحال حذف شود؟",
+    "syncCardAllBackedUp": "همهٔ ضبط‌ها همگام شدند",
+    "syncCardReadyCount": "{count, plural, one{1 ضبط آمادهٔ همگام‌سازی} other{{count} ضبط آمادهٔ همگام‌سازی}}",
+    "syncCardProcessing": "در حال پردازش در Omi…",
+    "syncCardWaitingInternet": "در انتظار اتصال به اینترنت",
+    "syncCardNeedsAttention": "{count, plural, one{۱ ضبط نیازمند توجه است} other{{count} ضبط نیازمند توجه است}}",
+    "syncFlowIntro": "ضبط‌ها به‌صورت محلی ذخیره می‌شوند، سپس به Omi بارگذاری می‌شوند تا رونویسی و به مکالمه تبدیل شوند.",
+    "syncStepUpload": "همگام‌سازی",
+    "syncStepUploadDesc": "ضبط شما به سرور Omi فرستاده می‌شود",
+    "syncStepProcess": "رونویسی",
+    "syncStepProcessDesc": "Omi صدا را به یک گفتگو تبدیل می‌کند",
+    "syncStepBackedUp": "گفتگو آماده است",
+    "syncStepBackedUpDesc": "آن را در گفتگوها بیابید",
+    "syncFailureFootnote": "اگر پردازش ناموفق باشد، ضبط در همگام‌سازی بعدی به‌صورت خودکار دوباره امتحان می‌شود.",
+    "syncStatusConversationCreated": "مکالمه ایجاد شد",
+    "syncCardUploadingTitle": "در حال بارگذاری در Omi",
+    "syncCardDownloadingTitle": "در حال دانلود از Omi",
+    "syncCardProgressOf": "{current} از {total}",
+    "syncStatusOnDevice": "در انتظار Omi",
+    "syncStatusDownloadingFromDevice": "در حال دانلود از Omi",
+    "newestFirst": "ابتدا جدیدترین‌ها",
+    "noSyncedRecordingsYet": "هنوز ضبط همگام‌سازی‌شده‌ای وجود ندارد"
 }

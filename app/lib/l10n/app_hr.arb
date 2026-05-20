@@ -10154,7 +10154,7 @@
     "@manageStorage": {
         "description": "Menu option and sheet title for managing recording storage"
     },
-    "safelyBackedUp": "Sigurno pohranjeno na vašem telefonu",
+    "safelyBackedUp": "Razgovori stvoreni",
     "@safelyBackedUp": {
         "description": "Description for synced files in manage storage sheet"
     },
@@ -10736,7 +10736,7 @@
     "recapDeleteFailed": "Pregled nije moguće izbrisati. Pokušajte ponovno kasnije.",
     "syncStatusBackedUp": "Sigurnosno kopirano",
     "syncStatusBackingUp": "Izrada kopije…",
-    "syncStatusWaiting": "Čeka kopiranje",
+    "syncStatusWaiting": "Čeka sinkronizaciju",
     "syncStatusRetrying": "Obrada nije uspjela — ponovni pokušaj",
     "syncStatusFailed": "Neuspjelo — dodirnite Pokušaj ponovno",
     "syncStatusFileUnavailable": "Datoteka nije dostupna",
@@ -10744,5 +10744,26 @@
     "noRecordingsYet": "Još nema snimaka",
     "syncInProgress": "Sinkronizacija u tijeku",
     "deleteWhileProcessingTitle": "Još se obrađuje",
-    "deleteWhileProcessingMessage": "Ova je snimka učitana, ali Omi još stvara razgovor. Ako je sada izbrišete i obrada ne uspije, neće se moći vratiti. Svejedno izbrisati?"
+    "deleteWhileProcessingMessage": "Ova je snimka učitana, ali Omi još stvara razgovor. Ako je sada izbrišete i obrada ne uspije, neće se moći vratiti. Svejedno izbrisati?",
+    "syncCardAllBackedUp": "Sve snimke sinkronizirane",
+    "syncCardReadyCount": "{count, plural, one{1 snimka spremna za sinkronizaciju} few{{count} snimke spremne za sinkronizaciju} other{{count} snimaka spremno za sinkronizaciju}}",
+    "syncCardProcessing": "Obrada u Omi…",
+    "syncCardWaitingInternet": "Čekanje interneta",
+    "syncCardNeedsAttention": "{count, plural, one{{count} snimka zahtijeva pažnju} few{{count} snimke zahtijevaju pažnju} other{{count} snimaka zahtijeva pažnju}}",
+    "syncFlowIntro": "Snimke se pohranjuju lokalno, a zatim se prenose u Omi gdje se transkribiraju i pretvaraju u razgovore.",
+    "syncStepUpload": "Sinkronizacija",
+    "syncStepUploadDesc": "Vaša snimka šalje se na Omijev poslužitelj",
+    "syncStepProcess": "Transkripcija",
+    "syncStepProcessDesc": "Omi pretvara zvuk u razgovor",
+    "syncStepBackedUp": "Razgovor je spreman",
+    "syncStepBackedUpDesc": "Pronađi ga u Razgovori",
+    "syncFailureFootnote": "Ako obrada ne uspije, snimka se automatski ponavlja pri sljedećoj sinkronizaciji.",
+    "syncStatusConversationCreated": "Razgovor stvoren",
+    "syncCardUploadingTitle": "Slanje u Omi",
+    "syncCardDownloadingTitle": "Preuzimanje s Omi",
+    "syncCardProgressOf": "{current} od {total}",
+    "syncStatusOnDevice": "Čeka na Omi",
+    "syncStatusDownloadingFromDevice": "Preuzimanje s Omi",
+    "newestFirst": "Najnovije prvo",
+    "noSyncedRecordingsYet": "Još nema sinkroniziranih snimaka"
 }

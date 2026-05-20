@@ -10154,7 +10154,7 @@
     "@manageStorage": {
         "description": "Menu option and sheet title for managing recording storage"
     },
-    "safelyBackedUp": "Safely backed up sa iyong phone",
+    "safelyBackedUp": "Mga conversation na nalikha",
     "@safelyBackedUp": {
         "description": "Description for synced files in manage storage sheet"
     },
@@ -10736,7 +10736,7 @@
     "recapDeleteFailed": "Hindi maburahin ang recap. Subukan ulit mamaya.",
     "syncStatusBackedUp": "Na-back up na",
     "syncStatusBackingUp": "Nagba-back up…",
-    "syncStatusWaiting": "Naghihintay ng back up",
+    "syncStatusWaiting": "Naghihintay na mag-sync",
     "syncStatusRetrying": "Hindi naproseso — sinusubukang muli",
     "syncStatusFailed": "Nabigo — i-tap ang Subukan Muli",
     "syncStatusFileUnavailable": "Hindi available ang file",
@@ -10744,5 +10744,26 @@
     "noRecordingsYet": "Wala pang mga recording",
     "syncInProgress": "Kasalukuyang nagsi-sync",
     "deleteWhileProcessingTitle": "Pinoproseso pa rin",
-    "deleteWhileProcessingMessage": "Na-upload na ang recording na ito ngunit ginagawa pa ng Omi ang usapan. Kung buburahin mo ito ngayon at mabigo ang pagproseso, hindi na ito mababawi. Burahin pa rin?"
+    "deleteWhileProcessingMessage": "Na-upload na ang recording na ito ngunit ginagawa pa ng Omi ang usapan. Kung buburahin mo ito ngayon at mabigo ang pagproseso, hindi na ito mababawi. Burahin pa rin?",
+    "syncCardAllBackedUp": "Lahat ng recording ay na-sync na",
+    "syncCardReadyCount": "{count, plural, one{1 recording ang handa nang i-sync} other{{count} na recording ang handa nang i-sync}}",
+    "syncCardProcessing": "Pinoproseso sa Omi…",
+    "syncCardWaitingInternet": "Naghihintay ng internet",
+    "syncCardNeedsAttention": "{count, plural, one{1 recording ang kailangang asikasuhin} other{{count} recording ang kailangang asikasuhin}}",
+    "syncFlowIntro": "Iniimbak muna ang mga recording sa device, pagkatapos ay ina-upload sa Omi para i-transcribe at gawing mga usapan.",
+    "syncStepUpload": "I-sync",
+    "syncStepUploadDesc": "Ipinapadala ang iyong recording sa server ng Omi",
+    "syncStepProcess": "I-transcribe",
+    "syncStepProcessDesc": "Ginagawang conversation ng Omi ang audio",
+    "syncStepBackedUp": "Handa na ang conversation",
+    "syncStepBackedUpDesc": "Hanapin sa ilalim ng Mga Conversation",
+    "syncFailureFootnote": "Kung mabigo ang pagproseso, awtomatikong susubukan muli ang recording sa susunod na sync.",
+    "syncStatusConversationCreated": "Nagawa ang usapan",
+    "syncCardUploadingTitle": "Ina-upload sa Omi",
+    "syncCardDownloadingTitle": "Dina-download mula sa Omi",
+    "syncCardProgressOf": "{current} ng {total}",
+    "syncStatusOnDevice": "Naghihintay sa Omi",
+    "syncStatusDownloadingFromDevice": "Dina-download mula sa Omi",
+    "newestFirst": "Pinakabago muna",
+    "noSyncedRecordingsYet": "Wala pang naka-sync na recording"
 }

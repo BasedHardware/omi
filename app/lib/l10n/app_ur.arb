@@ -10154,7 +10154,7 @@
     "@manageStorage": {
         "description": "Menu option and sheet title for managing recording storage"
     },
-    "safelyBackedUp": "آپ کے فون میں محفوظ طریقے سے بیک اپ ہو گیا",
+    "safelyBackedUp": "تیار کی گئی بات چیتیں",
     "@safelyBackedUp": {
         "description": "Description for synced files in manage storage sheet"
     },
@@ -10736,7 +10736,7 @@
     "recapDeleteFailed": "خلاصہ حذف نہیں ہو سکا۔ بعد میں دوبارہ کوشش کریں۔",
     "syncStatusBackedUp": "بیک اپ ہو گیا",
     "syncStatusBackingUp": "بیک اپ ہو رہا ہے…",
-    "syncStatusWaiting": "بیک اپ کا انتظار",
+    "syncStatusWaiting": "سنک ہونے کا منتظر",
     "syncStatusRetrying": "پروسیس نہیں ہو سکا — دوبارہ کوشش",
     "syncStatusFailed": "ناکام — Retry دبائیں",
     "syncStatusFileUnavailable": "فائل دستیاب نہیں",
@@ -10744,5 +10744,26 @@
     "noRecordingsYet": "ابھی تک کوئی ریکارڈنگ نہیں",
     "syncInProgress": "سینک جاری ہے",
     "deleteWhileProcessingTitle": "ابھی پروسیسنگ جاری ہے",
-    "deleteWhileProcessingMessage": "یہ ریکارڈنگ اپ لوڈ ہو چکی ہے لیکن Omi ابھی گفتگو بنا رہا ہے۔ اگر آپ اسے ابھی حذف کریں اور پروسیسنگ ناکام ہو جائے تو اسے بحال نہیں کیا جا سکے گا۔ پھر بھی حذف کریں؟"
+    "deleteWhileProcessingMessage": "یہ ریکارڈنگ اپ لوڈ ہو چکی ہے لیکن Omi ابھی گفتگو بنا رہا ہے۔ اگر آپ اسے ابھی حذف کریں اور پروسیسنگ ناکام ہو جائے تو اسے بحال نہیں کیا جا سکے گا۔ پھر بھی حذف کریں؟",
+    "syncCardAllBackedUp": "تمام ریکارڈنگز سنک ہو گئیں",
+    "syncCardReadyCount": "{count, plural, one{1 ریکارڈنگ سنک کے لیے تیار} other{{count} ریکارڈنگز سنک کے لیے تیار}}",
+    "syncCardProcessing": "Omi پر پروسیس ہو رہا ہے…",
+    "syncCardWaitingInternet": "انٹرنیٹ کا انتظار",
+    "syncCardNeedsAttention": "{count, plural, one{1 ریکارڈنگ پر توجہ درکار ہے} other{{count} ریکارڈنگز پر توجہ درکار ہے}}",
+    "syncFlowIntro": "ریکارڈنگز پہلے مقامی طور پر محفوظ ہوتی ہیں، پھر Omi پر اپ لوڈ ہو کر تحریری شکل میں ڈھل کر گفتگو بن جاتی ہیں۔",
+    "syncStepUpload": "سنک",
+    "syncStepUploadDesc": "آپ کی ریکارڈنگ Omi کے سرور پر بھیجی جاتی ہے",
+    "syncStepProcess": "نقل",
+    "syncStepProcessDesc": "Omi آڈیو کو بات چیت میں بدل دیتا ہے",
+    "syncStepBackedUp": "بات چیت تیار",
+    "syncStepBackedUpDesc": "اسے بات چیتیں میں تلاش کریں",
+    "syncFailureFootnote": "اگر پروسیسنگ ناکام ہو، تو اگلی سنک پر ریکارڈنگ خودکار طور پر دوبارہ آزمائی جائے گی۔",
+    "syncStatusConversationCreated": "گفتگو بن گئی",
+    "syncCardUploadingTitle": "Omi پر اپ لوڈ ہو رہا ہے",
+    "syncCardDownloadingTitle": "Omi سے ڈاؤن لوڈ ہو رہا ہے",
+    "syncCardProgressOf": "{total} میں سے {current}",
+    "syncStatusOnDevice": "Omi پر منتظر",
+    "syncStatusDownloadingFromDevice": "Omi سے ڈاؤن لوڈ ہو رہا ہے",
+    "newestFirst": "پہلے نئی ترین",
+    "noSyncedRecordingsYet": "ابھی تک کوئی سنک شدہ ریکارڈنگ نہیں"
 }

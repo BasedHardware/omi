@@ -10154,7 +10154,7 @@
     "@manageStorage": {
         "description": "Menu option and sheet title for managing recording storage"
     },
-    "safelyBackedUp": "உங்கள் தொலைபேசিக்கு பாதுகாப்பாக வெச்சிவைக்கப்பட்டுள்ளது",
+    "safelyBackedUp": "உருவாக்கப்பட்ட உரையாடல்கள்",
     "@safelyBackedUp": {
         "description": "Description for synced files in manage storage sheet"
     },
@@ -10736,7 +10736,7 @@
     "recapDeleteFailed": "சுருக்கத்தை நீக்க இயலவில்லை. பிறகு மீண்டும் முயற்சிக்கவும்.",
     "syncStatusBackedUp": "காப்புப் பிரதி எடுக்கப்பட்டது",
     "syncStatusBackingUp": "காப்புப் பிரதி எடுக்கப்படுகிறது…",
-    "syncStatusWaiting": "காப்புப் பிரதிக்காகக் காத்திருக்கிறது",
+    "syncStatusWaiting": "ஒத்திசைவுக்காக காத்திருக்கிறது",
     "syncStatusRetrying": "செயலாக்க முடியவில்லை — மீண்டும் முயற்சிக்கிறது",
     "syncStatusFailed": "தோல்வி — Retry-ஐ அழுத்தவும்",
     "syncStatusFileUnavailable": "கோப்பு கிடைக்கவில்லை",
@@ -10744,5 +10744,26 @@
     "noRecordingsYet": "இன்னும் பதிவுகள் இல்லை",
     "syncInProgress": "ஒத்திசைவு நடைபெறுகிறது",
     "deleteWhileProcessingTitle": "இன்னும் செயலாக்கப்படுகிறது",
-    "deleteWhileProcessingMessage": "இந்தப் பதிவு பதிவேற்றப்பட்டது, ஆனால் Omi இன்னும் உரையாடலை உருவாக்குகிறது. இப்போது நீக்கி செயலாக்கம் தோல்வியடைந்தால், மீட்டெடுக்க முடியாது. அப்படியும் நீக்கவா?"
+    "deleteWhileProcessingMessage": "இந்தப் பதிவு பதிவேற்றப்பட்டது, ஆனால் Omi இன்னும் உரையாடலை உருவாக்குகிறது. இப்போது நீக்கி செயலாக்கம் தோல்வியடைந்தால், மீட்டெடுக்க முடியாது. அப்படியும் நீக்கவா?",
+    "syncCardAllBackedUp": "எல்லா பதிவுகளும் ஒத்திசைக்கப்பட்டன",
+    "syncCardReadyCount": "{count, plural, one{1 பதிவு ஒத்திசைக்கத் தயார்} other{{count} பதிவுகள் ஒத்திசைக்கத் தயார்}}",
+    "syncCardProcessing": "Omi-யில் செயலாக்கப்படுகிறது…",
+    "syncCardWaitingInternet": "இணையத்திற்காகக் காத்திருக்கிறது",
+    "syncCardNeedsAttention": "{count, plural, one{1 பதிவுக்குக் கவனம் தேவை} other{{count} பதிவுகளுக்குக் கவனம் தேவை}}",
+    "syncFlowIntro": "பதிவுகள் முதலில் சாதனத்தில் சேமிக்கப்பட்டு, பின்னர் Omi-க்கு பதிவேற்றப்பட்டு, அங்கு எழுத்துருவாக்கி உரையாடல்களாக மாற்றப்படுகின்றன.",
+    "syncStepUpload": "ஒத்திசை",
+    "syncStepUploadDesc": "உங்கள் பதிவு Omi இன் சேவையகத்திற்கு அனுப்பப்படுகிறது",
+    "syncStepProcess": "எழுத்துப் பெயர்ப்பு",
+    "syncStepProcessDesc": "Omi ஒலியை உரையாடலாக மாற்றுகிறது",
+    "syncStepBackedUp": "உரையாடல் தயார்",
+    "syncStepBackedUpDesc": "அதை உரையாடல்கள் பகுதியில் காணலாம்",
+    "syncFailureFootnote": "செயலாக்கம் தோல்வியடைந்தால், அடுத்த ஒத்திசைவில் பதிவு தானாகவே மீண்டும் முயற்சிக்கப்படும்.",
+    "syncStatusConversationCreated": "உரையாடல் உருவாக்கப்பட்டது",
+    "syncCardUploadingTitle": "Omi-க்கு பதிவேற்றப்படுகிறது",
+    "syncCardDownloadingTitle": "Omi-இலிருந்து பதிவிறக்கப்படுகிறது",
+    "syncCardProgressOf": "{total}-இல் {current}",
+    "syncStatusOnDevice": "Omi-இல் காத்திருக்கிறது",
+    "syncStatusDownloadingFromDevice": "Omi-இலிருந்து பதிவிறக்கப்படுகிறது",
+    "newestFirst": "புதியவை முதலில்",
+    "noSyncedRecordingsYet": "ஒத்திசைக்கப்பட்ட பதிவுகள் இன்னும் இல்லை"
 }

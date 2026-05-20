@@ -10154,7 +10154,7 @@
     "@manageStorage": {
         "description": "Menu option and sheet title for managing recording storage"
     },
-    "safelyBackedUp": "మీ ఫోన్‌కు సురక్షితంగా బ్యాకప్ చేయబడింది",
+    "safelyBackedUp": "సృష్టించిన సంభాషణలు",
     "@safelyBackedUp": {
         "description": "Description for synced files in manage storage sheet"
     },
@@ -10736,7 +10736,7 @@
     "recapDeleteFailed": "సారాంశాన్ని తొలగించలేకపోయాం. తర్వాత మళ్ళీ ప్రయత్నించండి.",
     "syncStatusBackedUp": "బ్యాకప్ అయింది",
     "syncStatusBackingUp": "బ్యాకప్ అవుతోంది…",
-    "syncStatusWaiting": "బ్యాకప్ కోసం వేచి ఉంది",
+    "syncStatusWaiting": "సింక్ కోసం వేచి ఉంది",
     "syncStatusRetrying": "ప్రాసెస్ చేయలేకపోయింది — మళ్లీ ప్రయత్నిస్తోంది",
     "syncStatusFailed": "విఫలమైంది — Retry నొక్కండి",
     "syncStatusFileUnavailable": "ఫైల్ అందుబాటులో లేదు",
@@ -10744,5 +10744,26 @@
     "noRecordingsYet": "ఇంకా రికార్డింగ్‌లు లేవు",
     "syncInProgress": "సింక్ జరుగుతోంది",
     "deleteWhileProcessingTitle": "ఇంకా ప్రాసెస్ అవుతోంది",
-    "deleteWhileProcessingMessage": "ఈ రికార్డింగ్ అప్‌లోడ్ అయింది కానీ Omi ఇంకా సంభాషణను సృష్టిస్తోంది. ఇప్పుడు తొలగిస్తే మరియు ప్రాసెసింగ్ విఫలమైతే, దాన్ని తిరిగి పొందలేరు. అయినా తొలగించాలా?"
+    "deleteWhileProcessingMessage": "ఈ రికార్డింగ్ అప్‌లోడ్ అయింది కానీ Omi ఇంకా సంభాషణను సృష్టిస్తోంది. ఇప్పుడు తొలగిస్తే మరియు ప్రాసెసింగ్ విఫలమైతే, దాన్ని తిరిగి పొందలేరు. అయినా తొలగించాలా?",
+    "syncCardAllBackedUp": "అన్ని రికార్డింగ్‌లు సింక్ అయ్యాయి",
+    "syncCardReadyCount": "{count, plural, one{1 రికార్డింగ్ సింక్‌కు సిద్ధంగా ఉంది} other{{count} రికార్డింగ్‌లు సింక్‌కు సిద్ధంగా ఉన్నాయి}}",
+    "syncCardProcessing": "Omiలో ప్రాసెస్ అవుతోంది…",
+    "syncCardWaitingInternet": "ఇంటర్నెట్ కోసం వేచి ఉంది",
+    "syncCardNeedsAttention": "{count, plural, one{1 రికార్డింగ్‌కు శ్రద్ధ అవసరం} other{{count} రికార్డింగ్‌లకు శ్రద్ధ అవసరం}}",
+    "syncFlowIntro": "రికార్డింగ్‌లు ముందుగా స్థానికంగా నిల్వ చేయబడతాయి, తర్వాత Omiకి అప్‌లోడ్ చేయబడి అక్కడ లిప్యంతరీకరించి సంభాషణలుగా మార్చబడతాయి.",
+    "syncStepUpload": "సింక్",
+    "syncStepUploadDesc": "మీ రికార్డింగ్ Omi సర్వర్‌కు పంపబడుతుంది",
+    "syncStepProcess": "లిప్యంతరీకరణ",
+    "syncStepProcessDesc": "Omi ఆడియోను సంభాషణగా మారుస్తుంది",
+    "syncStepBackedUp": "సంభాషణ సిద్ధంగా ఉంది",
+    "syncStepBackedUpDesc": "దీన్ని సంభాషణలు లో కనుగొనండి",
+    "syncFailureFootnote": "ప్రాసెసింగ్ విఫలమైతే, తదుపరి సింక్‌లో రికార్డింగ్ ఆటోమేటిక్‌గా మళ్లీ ప్రయత్నించబడుతుంది.",
+    "syncStatusConversationCreated": "సంభాషణ సృష్టించబడింది",
+    "syncCardUploadingTitle": "Omi కి అప్‌లోడ్ అవుతోంది",
+    "syncCardDownloadingTitle": "Omi నుండి డౌన్‌లోడ్ అవుతోంది",
+    "syncCardProgressOf": "{total}లో {current}",
+    "syncStatusOnDevice": "Omi లో వేచి ఉంది",
+    "syncStatusDownloadingFromDevice": "Omi నుండి డౌన్‌లోడ్ అవుతోంది",
+    "newestFirst": "కొత్తవి మొదట",
+    "noSyncedRecordingsYet": "ఇంకా సమకాలీకరించిన రికార్డింగ్‌లు లేవు"
 }
