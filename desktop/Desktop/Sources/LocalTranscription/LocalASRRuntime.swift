@@ -648,7 +648,7 @@ final class LocalBackgroundTranscriptionSession {
       var normalized = segment.normalized()
       normalized.start = chunk.startTime + segment.start
       normalized.end = chunk.startTime + segment.end
-      normalized.segmentId = normalized.segmentId ?? "local-bg-\(chunk.sequence)-\(segment.start)"
+      normalized.segmentId = "local-bg-\(chunk.sequence)-\(segment.id ?? "\(segment.start)")"
       return normalized
     }
   }

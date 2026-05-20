@@ -40,6 +40,46 @@ printf '{"request_id":"smoke-1","audio_path":"/tmp/omi-asr-smoke.pcm","language"
   | cargo run --quiet --manifest-path desktop/local-asr-helper/Cargo.toml
 ```
 
+Background pipeline harness:
+
+```bash
+# Deterministic fixture mode. Requires no local model or cloud credentials.
+desktop/local-asr-helper/local_background_asr_harness.py \
+  --generate-speech "hello local background transcription" \
+  --reference "hello local background transcription" \
+  --mode fixture \
+  --max-chunk-seconds 2 \
+  --output /tmp/omi-local-background-asr-report.json
+
+# Real local Whisper mode. Build the helper first or point at an existing helper.
+cargo build --manifest-path desktop/local-asr-helper/Cargo.toml
+OMI_LOCAL_ASR_HELPER_PATH="$PWD/desktop/local-asr-helper/target/debug/local-asr-helper" \
+  desktop/local-asr-helper/local_background_asr_harness.py \
+  --generate-speech "hello local background transcription" \
+  --reference "hello local background transcription" \
+  --mode local \
+  --engine mlx-whisper \
+  --model base \
+  --output /tmp/omi-local-background-asr-local-report.json
+```
+
+The harness is intentionally focused on the desktop background transcription
+path, not one-off helper invocation. It converts or generates 16 kHz mono PCM,
+runs the Swift `LocalBackgroundTranscriptionSession`, and writes JSON with:
+
+- chunk boundaries and overlap start times;
+- helper engine/model;
+- raw per-chunk Whisper/helper segments;
+- timestamp-remapped session-relative segments;
+- deterministic joined transcript;
+- latency and real-time-factor data;
+- optional WER/CER scores when `--reference` is provided.
+
+Use `--audio path/to/file.wav` or `--audio path/to/file.pcm` instead of
+`--generate-speech` to inspect a checked-in or manually recorded sample. The
+`--deepgram-compare` flag is reserved as the explicit future extension point and
+requires `DEEPGRAM_API_KEY`; it is not required for local smoke validation.
+
 The dev desktop app build (`desktop/run.sh`) builds this helper and copies it to
 `<app>.app/Contents/Resources/local-asr-helper`, which is the bundled path used
 by `LocalASRHelperLocator`.

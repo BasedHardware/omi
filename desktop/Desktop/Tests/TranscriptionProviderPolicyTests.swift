@@ -458,8 +458,10 @@ final class LocalASRRuntimeTests: XCTestCase {
 
     XCTAssertEqual(results.count, 2)
     XCTAssertEqual(results[0].remappedSegments[0].start, 5.0, accuracy: 0.001)
+    XCTAssertEqual(results[0].remappedSegments[0].segmentId, "local-bg-0-0.0")
     XCTAssertEqual(results[1].chunk.startTime, 5.8, accuracy: 0.001)
     XCTAssertEqual(results[1].remappedSegments[0].start, 5.8, accuracy: 0.001)
+    XCTAssertEqual(results[1].remappedSegments[0].segmentId, "local-bg-1-0.0")
     XCTAssertEqual(results[0].latencySeconds, 0.25, accuracy: 0.001)
     XCTAssertEqual(snapshot.rawChunkResults.count, 2)
     XCTAssertEqual(snapshot.joinedTranscript, "hello local whisper runs here")
