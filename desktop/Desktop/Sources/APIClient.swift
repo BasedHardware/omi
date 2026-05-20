@@ -111,6 +111,10 @@ actor APIClient {
       headers.merge(APIKeyService.byokHeaders()) { _, new in new }
     }
 
+    if let chatgptFingerprint = CodexAuthService.enrollmentFingerprintIfActive() {
+      headers["X-ChatGPT-Fingerprint"] = chatgptFingerprint
+    }
+
     return headers
   }
 

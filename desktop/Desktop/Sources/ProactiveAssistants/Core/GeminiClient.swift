@@ -191,8 +191,16 @@ actor GeminiClient {
     case hybridOpenAICompatible
   }
 
-  private let transport: Transport
   private let model: String
+
+  private var transport: Transport {
+    if DesktopBackendEnvironment.selectedBackendTarget.mode == .localDaemon
+      || CodexAuthService.isActive
+    {
+      return .hybridOpenAICompatible
+    }
+    return .geminiProxy
+  }
 
   /// Backend proxy base URL (from OMI_DESKTOP_API_URL env var)
   private static var proxyBaseURL: String {
@@ -269,16 +277,9 @@ actor GeminiClient {
   init(apiKey: String? = nil, model: String = ModelQoS.Gemini.proactive) throws {
     // BREAKING CHANGE (issue #5861): apiKey parameter is ignored for cloud proxy mode.
     self.model = model
-    if DesktopBackendEnvironment.selectedBackendTarget.mode == .localDaemon
-      || CodexAuthService.isActive
-    {
-      self.transport = .hybridOpenAICompatible
-      return
-    }
-    guard !Self.proxyBaseURL.isEmpty else {
+    if transport == .geminiProxy && Self.proxyBaseURL.isEmpty {
       throw GeminiClientError.missingAPIKey
     }
-    self.transport = .geminiProxy
   }
 
   private func mapHybridError(_ error: HybridLLMClient.ClientError) -> GeminiClientError {
