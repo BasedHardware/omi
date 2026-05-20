@@ -10770,5 +10770,9 @@
     "syncStatusOnDevice": "Čaka na Omi",
     "syncStatusDownloadingFromDevice": "Prenašanje iz Omi",
     "newestFirst": "Najprej najnovejši",
-    "noSyncedRecordingsYet": "Sinhroniziranih posnetkov še ni"
+    "noSyncedRecordingsYet": "Sinhroniziranih posnetkov še ni",
+    "morePaymentMethodsComingSoon": "Kmalu več načinov plačila",
+    "@morePaymentMethodsComingSoon": {
+        "description": "Placeholder card text shown under available payment methods"
+    }
 }

@@ -10770,5 +10770,9 @@
     "syncStatusOnDevice": "در انتظار Omi",
     "syncStatusDownloadingFromDevice": "در حال دانلود از Omi",
     "newestFirst": "ابتدا جدیدترین‌ها",
-    "noSyncedRecordingsYet": "هنوز ضبط همگام‌سازی‌شده‌ای وجود ندارد"
+    "noSyncedRecordingsYet": "هنوز ضبط همگام‌سازی‌شده‌ای وجود ندارد",
+    "morePaymentMethodsComingSoon": "روش‌های پرداخت بیشتر به‌زودی",
+    "@morePaymentMethodsComingSoon": {
+        "description": "Placeholder card text shown under available payment methods"
+    }
 }

@@ -3066,5 +3066,9 @@
                 "type": "int"
             }
         }
+    },
+    "morePaymentMethodsComingSoon": "जल्द ही और भुगतान विकल्प",
+    "@morePaymentMethodsComingSoon": {
+        "description": "Placeholder card text shown under available payment methods"
     }
 }

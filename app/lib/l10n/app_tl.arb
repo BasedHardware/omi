@@ -10770,5 +10770,9 @@
     "syncStatusOnDevice": "Naghihintay sa Omi",
     "syncStatusDownloadingFromDevice": "Dina-download mula sa Omi",
     "newestFirst": "Pinakabago muna",
-    "noSyncedRecordingsYet": "Wala pang naka-sync na recording"
+    "noSyncedRecordingsYet": "Wala pang naka-sync na recording",
+    "morePaymentMethodsComingSoon": "Mas maraming paraan ng pagbabayad na malapit nang dumating",
+    "@morePaymentMethodsComingSoon": {
+        "description": "Placeholder card text shown under available payment methods"
+    }
 }
