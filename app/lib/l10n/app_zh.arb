@@ -3064,7 +3064,7 @@
     "syncCardProcessing": "Omi 处理中…",
     "syncCardWaitingInternet": "等待网络连接",
     "syncCardNeedsAttention": "{count, plural, other{{count} 条录音需要关注}}",
-    "syncFlowIntro": "录音先在本地保存,然后上传到 Omi,在那里被转写并整理为对话。",
+    "syncFlowIntro": "录音从您的 Omi 设备传输到此手机并本地存储，然后上传到 Omi 的服务器，在那里被转写并转换为对话。",
     "syncStepUpload": "同步",
     "syncStepUploadDesc": "你的录音会发送到 Omi 的服务器",
     "syncStepProcess": "转写",

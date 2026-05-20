@@ -3011,7 +3011,7 @@
     "syncCardProcessing": "Zpracování v Omi…",
     "syncCardWaitingInternet": "Čekání na internet",
     "syncCardNeedsAttention": "{count, plural, one{1 nahrávka vyžaduje pozornost} few{{count} nahrávky vyžadují pozornost} many{{count} nahrávek vyžaduje pozornost} other{{count} nahrávek vyžaduje pozornost}}",
-    "syncFlowIntro": "Nahrávky se ukládají lokálně a poté se nahrávají do Omi, kde jsou přepsány a převedeny na konverzace.",
+    "syncFlowIntro": "Nahrávky se přenášejí z vašeho zařízení Omi do tohoto telefonu a ukládají se lokálně, poté se nahrávají na server Omi, kde se přepisují a převádějí na konverzace.",
     "syncStepUpload": "Synchronizace",
     "syncStepUploadDesc": "Vaše nahrávka se odesílá na server Omi",
     "syncStepProcess": "Přepis",

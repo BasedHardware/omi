@@ -3077,7 +3077,7 @@
     "syncCardProcessing": "Traitement sur Omi…",
     "syncCardWaitingInternet": "En attente d'Internet",
     "syncCardNeedsAttention": "{count, plural, one{1 enregistrement à vérifier} other{{count} enregistrements à vérifier}}",
-    "syncFlowIntro": "Les enregistrements sont d'abord stockés localement, puis envoyés à Omi qui les transcrit et les transforme en conversations.",
+    "syncFlowIntro": "Les enregistrements sont transférés de votre appareil Omi vers ce téléphone et stockés localement, puis téléversés sur le serveur d'Omi où ils sont transcrits et convertis en conversations.",
     "syncStepUpload": "Synchroniser",
     "syncStepUploadDesc": "Votre enregistrement est envoyé au serveur d'Omi",
     "syncStepProcess": "Transcription",

@@ -10750,7 +10750,7 @@
     "syncCardProcessing": "Omi پر پروسیس ہو رہا ہے…",
     "syncCardWaitingInternet": "انٹرنیٹ کا انتظار",
     "syncCardNeedsAttention": "{count, plural, one{1 ریکارڈنگ پر توجہ درکار ہے} other{{count} ریکارڈنگز پر توجہ درکار ہے}}",
-    "syncFlowIntro": "ریکارڈنگز پہلے مقامی طور پر محفوظ ہوتی ہیں، پھر Omi پر اپ لوڈ ہو کر تحریری شکل میں ڈھل کر گفتگو بن جاتی ہیں۔",
+    "syncFlowIntro": "ریکارڈنگز آپ کے Omi ڈیوائس سے اس فون پر منتقل ہوتی ہیں اور مقامی طور پر محفوظ کی جاتی ہیں، پھر Omi کے سرور پر اپ لوڈ کی جاتی ہیں جہاں انہیں نقل کر کے گفتگو میں تبدیل کیا جاتا ہے۔",
     "syncStepUpload": "سنک",
     "syncStepUploadDesc": "آپ کی ریکارڈنگ Omi کے سرور پر بھیجی جاتی ہے",
     "syncStepProcess": "نقل",

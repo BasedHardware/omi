@@ -3078,7 +3078,7 @@
     "syncCardProcessing": "Processando no Omi…",
     "syncCardWaitingInternet": "Aguardando conexão",
     "syncCardNeedsAttention": "{count, plural, one{1 gravação precisa de atenção} other{{count} gravações precisam de atenção}}",
-    "syncFlowIntro": "As gravações ficam salvas localmente e depois são enviadas ao Omi, onde são transcritas e transformadas em conversas.",
+    "syncFlowIntro": "As gravações são transferidas do seu dispositivo Omi para este telefone e armazenadas localmente, depois enviadas para o servidor da Omi, onde são transcritas e transformadas em conversas.",
     "syncStepUpload": "Sincronizar",
     "syncStepUploadDesc": "A tua gravação é enviada para o servidor da Omi",
     "syncStepProcess": "Transcrever",

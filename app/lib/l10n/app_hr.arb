@@ -10750,7 +10750,7 @@
     "syncCardProcessing": "Obrada u Omi…",
     "syncCardWaitingInternet": "Čekanje interneta",
     "syncCardNeedsAttention": "{count, plural, one{{count} snimka zahtijeva pažnju} few{{count} snimke zahtijevaju pažnju} other{{count} snimaka zahtijeva pažnju}}",
-    "syncFlowIntro": "Snimke se pohranjuju lokalno, a zatim se prenose u Omi gdje se transkribiraju i pretvaraju u razgovore.",
+    "syncFlowIntro": "Snimke se prenose s vašeg Omi uređaja na ovaj telefon i pohranjuju lokalno, zatim se učitavaju na Omijev poslužitelj gdje se transkribiraju i pretvaraju u razgovore.",
     "syncStepUpload": "Sinkronizacija",
     "syncStepUploadDesc": "Vaša snimka šalje se na Omijev poslužitelj",
     "syncStepProcess": "Transkripcija",

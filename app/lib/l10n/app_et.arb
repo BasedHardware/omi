@@ -3042,7 +3042,7 @@
     "syncCardProcessing": "Töötlemine Omis…",
     "syncCardWaitingInternet": "Ootan internetiühendust",
     "syncCardNeedsAttention": "{count, plural, one{1 salvestis vajab tähelepanu} other{{count} salvestist vajab tähelepanu}}",
-    "syncFlowIntro": "Salvestised hoitakse kohapeal ja seejärel laaditakse üles Omisse, kus need transkribeeritakse ja muudetakse vestlusteks.",
+    "syncFlowIntro": "Salvestused kantakse sinu Omi seadmest sellesse telefoni ja salvestatakse kohapeal, seejärel laaditakse üles Omi serverisse, kus need transkribeeritakse ja muudetakse vestlusteks.",
     "syncStepUpload": "Sünkrooni",
     "syncStepUploadDesc": "Sinu salvestis saadetakse Omi serverisse",
     "syncStepProcess": "Transkribeerimine",

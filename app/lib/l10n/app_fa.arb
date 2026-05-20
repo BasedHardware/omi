@@ -10750,7 +10750,7 @@
     "syncCardProcessing": "در حال پردازش در Omi…",
     "syncCardWaitingInternet": "در انتظار اتصال به اینترنت",
     "syncCardNeedsAttention": "{count, plural, one{۱ ضبط نیازمند توجه است} other{{count} ضبط نیازمند توجه است}}",
-    "syncFlowIntro": "ضبط‌ها به‌صورت محلی ذخیره می‌شوند، سپس به Omi بارگذاری می‌شوند تا رونویسی و به مکالمه تبدیل شوند.",
+    "syncFlowIntro": "ضبط‌ها از دستگاه Omi شما به این تلفن منتقل و به‌صورت محلی ذخیره می‌شوند، سپس به سرور Omi بارگذاری می‌شوند تا متن‌برداری شده و به مکالمه تبدیل شوند.",
     "syncStepUpload": "همگام‌سازی",
     "syncStepUploadDesc": "ضبط شما به سرور Omi فرستاده می‌شود",
     "syncStepProcess": "رونویسی",

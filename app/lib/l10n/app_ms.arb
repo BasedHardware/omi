@@ -3042,7 +3042,7 @@
     "syncCardProcessing": "Memproses di Omi…",
     "syncCardWaitingInternet": "Menunggu internet",
     "syncCardNeedsAttention": "{count, plural, other{{count} rakaman memerlukan perhatian}}",
-    "syncFlowIntro": "Rakaman disimpan secara setempat, kemudian dimuat naik ke Omi untuk ditranskripsi dan ditukar menjadi perbualan.",
+    "syncFlowIntro": "Rakaman dipindahkan daripada peranti Omi anda ke telefon ini dan disimpan secara setempat, kemudian dimuat naik ke pelayan Omi di mana ia ditranskripsikan dan ditukar menjadi perbualan.",
     "syncStepUpload": "Segerak",
     "syncStepUploadDesc": "Rakaman anda dihantar ke pelayan Omi",
     "syncStepProcess": "Transkripsi",

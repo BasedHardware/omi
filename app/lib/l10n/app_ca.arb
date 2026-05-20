@@ -3011,7 +3011,7 @@
     "syncCardProcessing": "Processant a Omi…",
     "syncCardWaitingInternet": "Esperant connexió",
     "syncCardNeedsAttention": "{count, plural, one{1 gravació requereix atenció} other{{count} gravacions requereixen atenció}}",
-    "syncFlowIntro": "Les gravacions es guarden localment i després es pugen a Omi, on es transcriuen i es converteixen en converses.",
+    "syncFlowIntro": "Els enregistraments es transfereixen del teu dispositiu Omi a aquest telèfon i s'emmagatzemen localment, després es pugen al servidor d'Omi on es transcriuen i es converteixen en converses.",
     "syncStepUpload": "Sincronitza",
     "syncStepUploadDesc": "La teva gravació s'envia al servidor d'Omi",
     "syncStepProcess": "Transcripció",

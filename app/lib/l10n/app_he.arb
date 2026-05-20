@@ -10750,7 +10750,7 @@
     "syncCardProcessing": "בעיבוד ב-Omi…",
     "syncCardWaitingInternet": "ממתין לאינטרנט",
     "syncCardNeedsAttention": "{count, plural, one{הקלטה אחת דורשת תשומת לב} two{2 הקלטות דורשות תשומת לב} many{{count} הקלטות דורשות תשומת לב} other{{count} הקלטות דורשות תשומת לב}}",
-    "syncFlowIntro": "ההקלטות נשמרות מקומית ולאחר מכן מועלות ל-Omi שם הן מתועתקות והופכות לשיחות.",
+    "syncFlowIntro": "ההקלטות מועברות ממכשיר Omi שלך לטלפון הזה ונשמרות מקומית, ולאחר מכן מועלות לשרת של Omi שם הן מתומללות והופכות לשיחות.",
     "syncStepUpload": "סנכרון",
     "syncStepUploadDesc": "ההקלטה שלך נשלחת לשרת של Omi",
     "syncStepProcess": "תמלול",

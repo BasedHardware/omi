@@ -3077,7 +3077,7 @@
     "syncCardProcessing": "Przetwarzanie w Omi…",
     "syncCardWaitingInternet": "Oczekiwanie na internet",
     "syncCardNeedsAttention": "{count, plural, one{1 nagranie wymaga uwagi} few{{count} nagrania wymagają uwagi} many{{count} nagrań wymaga uwagi} other{{count} nagrania wymaga uwagi}}",
-    "syncFlowIntro": "Nagrania są przechowywane lokalnie, a następnie przesyłane do Omi, gdzie są transkrybowane i zamieniane w rozmowy.",
+    "syncFlowIntro": "Nagrania są przesyłane z urządzenia Omi do tego telefonu i zapisywane lokalnie, a następnie wysyłane na serwer Omi, gdzie są transkrybowane i zamieniane w rozmowy.",
     "syncStepUpload": "Synchronizacja",
     "syncStepUploadDesc": "Twoje nagranie jest wysyłane na serwer Omi",
     "syncStepProcess": "Transkrypcja",

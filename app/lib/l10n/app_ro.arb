@@ -3042,7 +3042,7 @@
     "syncCardProcessing": "Procesare în Omi…",
     "syncCardWaitingInternet": "Se așteaptă internetul",
     "syncCardNeedsAttention": "{count, plural, one{1 înregistrare necesită atenție} few{{count} înregistrări necesită atenție} other{{count} de înregistrări necesită atenție}}",
-    "syncFlowIntro": "Înregistrările sunt păstrate local, apoi încărcate în Omi, unde sunt transcrise și transformate în conversații.",
+    "syncFlowIntro": "Înregistrările sunt transferate de pe dispozitivul Omi pe acest telefon și stocate local, apoi încărcate pe serverul Omi, unde sunt transcrise și transformate în conversații.",
     "syncStepUpload": "Sincronizare",
     "syncStepUploadDesc": "Înregistrarea ta este trimisă către serverul Omi",
     "syncStepProcess": "Transcriere",

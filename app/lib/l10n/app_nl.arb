@@ -3042,7 +3042,7 @@
     "syncCardProcessing": "Verwerken bij Omi…",
     "syncCardWaitingInternet": "Wachten op internet",
     "syncCardNeedsAttention": "{count, plural, one{1 opname vraagt aandacht} other{{count} opnamen vragen aandacht}}",
-    "syncFlowIntro": "Opnamen worden lokaal bewaard en daarna geüpload naar Omi, waar ze worden getranscribeerd en omgezet in gesprekken.",
+    "syncFlowIntro": "Opnames worden van je Omi-apparaat naar deze telefoon overgezet en lokaal opgeslagen, en vervolgens geüpload naar de server van Omi, waar ze worden getranscribeerd en omgezet in gesprekken.",
     "syncStepUpload": "Synchroniseren",
     "syncStepUploadDesc": "Je opname wordt naar Omi's server gestuurd",
     "syncStepProcess": "Transcriberen",

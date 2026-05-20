@@ -3042,7 +3042,7 @@
     "syncCardProcessing": "Elaborazione su Omi…",
     "syncCardWaitingInternet": "In attesa di connessione",
     "syncCardNeedsAttention": "{count, plural, one{1 registrazione richiede attenzione} other{{count} registrazioni richiedono attenzione}}",
-    "syncFlowIntro": "Le registrazioni vengono salvate localmente e poi caricate su Omi, dove vengono trascritte e trasformate in conversazioni.",
+    "syncFlowIntro": "Le registrazioni vengono trasferite dal tuo dispositivo Omi a questo telefono e memorizzate localmente, quindi caricate sul server di Omi, dove vengono trascritte e trasformate in conversazioni.",
     "syncStepUpload": "Sincronizza",
     "syncStepUploadDesc": "La tua registrazione viene inviata al server di Omi",
     "syncStepProcess": "Trascrizione",

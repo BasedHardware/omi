@@ -10750,7 +10750,7 @@
     "syncCardProcessing": "Pinoproseso sa Omi…",
     "syncCardWaitingInternet": "Naghihintay ng internet",
     "syncCardNeedsAttention": "{count, plural, one{1 recording ang kailangang asikasuhin} other{{count} recording ang kailangang asikasuhin}}",
-    "syncFlowIntro": "Iniimbak muna ang mga recording sa device, pagkatapos ay ina-upload sa Omi para i-transcribe at gawing mga usapan.",
+    "syncFlowIntro": "Inililipat ang mga recording mula sa iyong Omi device papunta sa telepono na ito at iniimbak nang lokal, pagkatapos ay ina-upload sa server ng Omi kung saan ito tina-transcribe at ginagawang mga pag-uusap.",
     "syncStepUpload": "I-sync",
     "syncStepUploadDesc": "Ipinapadala ang iyong recording sa server ng Omi",
     "syncStepProcess": "I-transcribe",

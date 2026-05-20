@@ -3042,7 +3042,7 @@
     "syncCardProcessing": "Omi에서 처리 중…",
     "syncCardWaitingInternet": "인터넷 연결 대기 중",
     "syncCardNeedsAttention": "{count, plural, other{확인이 필요한 녹음 {count}개}}",
-    "syncFlowIntro": "녹음은 기기에 저장된 다음 Omi에 업로드되어 텍스트로 변환되고 대화로 만들어집니다.",
+    "syncFlowIntro": "녹음은 Omi 기기에서 이 휴대전화로 전송되어 로컬에 저장된 후, Omi 서버로 업로드되어 텍스트로 변환되고 대화로 만들어집니다.",
     "syncStepUpload": "동기화",
     "syncStepUploadDesc": "녹음이 Omi 서버로 전송됩니다",
     "syncStepProcess": "전사",

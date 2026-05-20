@@ -3042,7 +3042,7 @@
     "syncCardProcessing": "Behandler i Omi…",
     "syncCardWaitingInternet": "Venter på internett",
     "syncCardNeedsAttention": "{count, plural, one{1 opptak krever oppmerksomhet} other{{count} opptak krever oppmerksomhet}}",
-    "syncFlowIntro": "Opptak lagres lokalt og lastes deretter opp til Omi, der de transkriberes og blir til samtaler.",
+    "syncFlowIntro": "Opptak overføres fra Omi-enheten din til denne telefonen og lagres lokalt, og lastes deretter opp til Omis server, der de transkriberes og gjøres om til samtaler.",
     "syncStepUpload": "Synkroniser",
     "syncStepUploadDesc": "Opptaket ditt sendes til Omis server",
     "syncStepProcess": "Transkriber",

@@ -3010,7 +3010,7 @@
     "syncCardProcessing": "Wird in Omi verarbeitet…",
     "syncCardWaitingInternet": "Warten auf Internet",
     "syncCardNeedsAttention": "{count, plural, one{1 Aufnahme benötigt Aufmerksamkeit} other{{count} Aufnahmen benötigen Aufmerksamkeit}}",
-    "syncFlowIntro": "Aufnahmen werden lokal gespeichert und anschließend zu Omi hochgeladen, wo sie transkribiert und in Gespräche umgewandelt werden.",
+    "syncFlowIntro": "Aufnahmen werden von deinem Omi-Gerät auf dieses Telefon übertragen und lokal gespeichert, anschließend auf den Server von Omi hochgeladen, wo sie transkribiert und in Unterhaltungen umgewandelt werden.",
     "syncStepUpload": "Synchronisieren",
     "syncStepUploadDesc": "Deine Aufnahme wird an Omis Server gesendet",
     "syncStepProcess": "Transkribieren",

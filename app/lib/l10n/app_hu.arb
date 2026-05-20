@@ -3138,7 +3138,7 @@
     "syncCardProcessing": "Feldolgozás az Omiban…",
     "syncCardWaitingInternet": "Internetkapcsolatra várva",
     "syncCardNeedsAttention": "{count, plural, one{1 felvétel figyelmet igényel} other{{count} felvétel figyelmet igényel}}",
-    "syncFlowIntro": "A felvételek helyben tárolódnak, majd az Omiba kerülnek, ahol leiratot készítenek belőlük és beszélgetésekké alakítják őket.",
+    "syncFlowIntro": "A felvételek átkerülnek az Omi eszközödről erre a telefonra, és helyileg tárolódnak, majd feltöltődnek az Omi szerverére, ahol átírják és beszélgetésekké alakítják őket.",
     "syncStepUpload": "Szinkronizálás",
     "syncStepUploadDesc": "A felvételed az Omi szerverére kerül",
     "syncStepProcess": "Átírás",

@@ -3051,7 +3051,7 @@
     "syncCardProcessing": "Behandler i Omi…",
     "syncCardWaitingInternet": "Venter på internet",
     "syncCardNeedsAttention": "{count, plural, one{1 optagelse kræver opmærksomhed} other{{count} optagelser kræver opmærksomhed}}",
-    "syncFlowIntro": "Optagelser gemmes lokalt og uploades derefter til Omi, hvor de transskriberes og bliver til samtaler.",
+    "syncFlowIntro": "Optagelser overføres fra din Omi-enhed til denne telefon og gemmes lokalt og uploades derefter til Omis server, hvor de transskriberes og omdannes til samtaler.",
     "syncStepUpload": "Synkroniser",
     "syncStepUploadDesc": "Din optagelse sendes til Omis server",
     "syncStepProcess": "Transskriber",

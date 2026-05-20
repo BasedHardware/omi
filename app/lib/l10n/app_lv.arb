@@ -3042,7 +3042,7 @@
     "syncCardProcessing": "Apstrādā Omi…",
     "syncCardWaitingInternet": "Gaida internetu",
     "syncCardNeedsAttention": "{count, plural, zero{{count} ierakstu nepieciešama uzmanība} one{{count} ierakstam nepieciešama uzmanība} other{{count} ierakstiem nepieciešama uzmanība}}",
-    "syncFlowIntro": "Ieraksti tiek saglabāti lokāli un pēc tam augšupielādēti Omi, kur tie tiek pārrakstīti un pārveidoti par sarunām.",
+    "syncFlowIntro": "Ieraksti tiek pārsūtīti no jūsu Omi ierīces uz šo tālruni un saglabāti lokāli, pēc tam augšupielādēti Omi serverī, kur tie tiek transkribēti un pārveidoti par sarunām.",
     "syncStepUpload": "Sinhronizēt",
     "syncStepUploadDesc": "Jūsu ieraksts tiek nosūtīts uz Omi serveri",
     "syncStepProcess": "Transkripcija",

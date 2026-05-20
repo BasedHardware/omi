@@ -3077,7 +3077,7 @@
     "syncCardProcessing": "Omi'de işleniyor…",
     "syncCardWaitingInternet": "İnternet bekleniyor",
     "syncCardNeedsAttention": "{count, plural, one{1 kayıt ilgi bekliyor} other{{count} kayıt ilgi bekliyor}}",
-    "syncFlowIntro": "Kayıtlar önce cihazda saklanır, ardından Omi'ye yüklenir; burada metne dökülerek konuşmalara dönüştürülür.",
+    "syncFlowIntro": "Kayıtlar Omi cihazınızdan bu telefona aktarılır ve yerel olarak saklanır, ardından Omi'nin sunucusuna yüklenerek metne dönüştürülür ve konuşmalara çevrilir.",
     "syncStepUpload": "Eşitle",
     "syncStepUploadDesc": "Kaydınız Omi'nin sunucusuna gönderilir",
     "syncStepProcess": "Yazıya dök",

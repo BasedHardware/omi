@@ -3043,7 +3043,7 @@
     "syncCardProcessing": "Omiで処理中…",
     "syncCardWaitingInternet": "インターネット接続を待機中",
     "syncCardNeedsAttention": "{count, plural, other{確認が必要な録音が{count}件}}",
-    "syncFlowIntro": "録音はまず端末内に保存され、その後Omiにアップロードされて文字起こしされ、会話に変換されます。",
+    "syncFlowIntro": "録音はOmiデバイスからこの電話に転送されてローカルに保存され、その後Omiのサーバーにアップロードされて文字起こしされ、会話に変換されます。",
     "syncStepUpload": "同期",
     "syncStepUploadDesc": "録音はOmiのサーバーに送信されます",
     "syncStepProcess": "文字起こし",

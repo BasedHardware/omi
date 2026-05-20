@@ -3042,7 +3042,7 @@
     "syncCardProcessing": "Käsitellään Omissa…",
     "syncCardWaitingInternet": "Odottaa verkkoyhteyttä",
     "syncCardNeedsAttention": "{count, plural, one{1 tallenne vaatii huomiota} other{{count} tallennetta vaatii huomiota}}",
-    "syncFlowIntro": "Tallenteet säilytetään paikallisesti ja ladataan sitten Omiin, jossa ne litteroidaan ja muutetaan keskusteluiksi.",
+    "syncFlowIntro": "Tallenteet siirretään Omi-laitteestasi tähän puhelimeen ja tallennetaan paikallisesti, minkä jälkeen ne ladataan Omin palvelimelle, jossa ne litteroidaan ja muunnetaan keskusteluiksi.",
     "syncStepUpload": "Synkronoi",
     "syncStepUploadDesc": "Tallenteesi lähetetään Omin palvelimelle",
     "syncStepProcess": "Litterointi",
