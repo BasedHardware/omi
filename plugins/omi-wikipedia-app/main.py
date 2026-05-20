@@ -36,8 +36,12 @@ class ChatToolResponse(BaseModel):
     error: Optional[str] = None
 
 
-def _safe_limit(limit: Optional[int]) -> int:
-    if limit is None:
+def _safe_limit(limit: Any) -> int:
+    if limit is None or limit == "":
+        return 5
+    try:
+        limit = int(limit)
+    except (TypeError, ValueError):
         return 5
     return max(1, min(limit, MAX_LIMIT))
 
@@ -115,6 +119,7 @@ async def get_omi_tools_manifest():
                 "endpoint": "/tools/search_articles",
                 "method": "POST",
                 "parameters": {
+                    "type": "object",
                     "properties": {
                         "query": {
                             "type": "string",
@@ -140,6 +145,7 @@ async def get_omi_tools_manifest():
                 "endpoint": "/tools/get_article_summary",
                 "method": "POST",
                 "parameters": {
+                    "type": "object",
                     "properties": {
                         "title": {
                             "type": "string",
@@ -161,6 +167,7 @@ async def get_omi_tools_manifest():
                 "endpoint": "/tools/get_random_article",
                 "method": "POST",
                 "parameters": {
+                    "type": "object",
                     "properties": {
                         "language": {
                             "type": "string",
