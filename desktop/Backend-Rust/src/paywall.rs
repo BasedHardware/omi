@@ -23,8 +23,14 @@ use tokio::sync::Mutex;
 use crate::byok;
 use crate::services::FirestoreService;
 
-/// Cache TTL for paywall results (5 minutes, matching previous Python-delegation cache).
+/// Cache TTL for an authoritative answer (5 minutes, matching the Python cache).
 const CACHE_TTL: Duration = Duration::from_secs(300);
+
+/// TTL for a fallback decision made when Firestore/Firebase-Auth was unreachable.
+/// Short so we recover fast once the dependency is healthy, and so the
+/// cost-leak window (when we fail open) or paying-user-friction window (when we
+/// fail closed) is bounded to seconds, not 5 minutes.
+const FALLBACK_TTL: Duration = Duration::from_secs(30);
 
 /// Trial length: 3 days in seconds (matches Python `TRIAL_LENGTH_SECONDS`).
 const TRIAL_LENGTH_SECONDS: i64 = 3 * 24 * 60 * 60;
@@ -32,7 +38,7 @@ const TRIAL_LENGTH_SECONDS: i64 = 3 * 24 * 60 * 60;
 #[derive(Debug, Clone, Copy)]
 struct CacheEntry {
     paywalled: bool,
-    cached_at: Instant,
+    expires_at: Instant,
 }
 
 /// Native paywall checker that reads directly from Firestore and Firebase Auth.
@@ -86,51 +92,73 @@ impl PaywallChecker {
         }
 
         let cache_key = uid.to_string();
+        let now = Instant::now();
 
-        // Cache hit
-        {
+        // Fresh cache hit; otherwise keep any expired value as last-known-good.
+        let stale: Option<bool> = {
             let cache = self.cache.lock().await;
-            if let Some(entry) = cache.get(&cache_key) {
-                if entry.cached_at.elapsed() < CACHE_TTL {
-                    return entry.paywalled;
-                }
+            match cache.get(&cache_key) {
+                Some(entry) if entry.expires_at > now => return entry.paywalled,
+                Some(entry) => Some(entry.paywalled),
+                None => None,
             }
-        }
+        };
 
-        let paywalled = self.check_trial_expired(uid).await;
+        // `None` = the check couldn't reach Firestore/Auth (indeterminate).
+        let (decision, ttl) = match self.check_trial_expired(uid).await {
+            Some(v) => (v, CACHE_TTL),
+            None => {
+                // Fail safe. The desktop backend only serves the macOS client,
+                // so "fail closed" = paywalled = cost-protective. Prefer the
+                // last-known-good value if we have one (keeps a known-paying
+                // user unblocked through a transient blip); otherwise fail
+                // closed so we don't hand out free LLM/STT during an outage.
+                let v = stale.unwrap_or(true);
+                tracing::warn!(
+                    "paywall: indeterminate check for uid={}, using fallback={} (last_known_good={:?})",
+                    uid,
+                    v,
+                    stale
+                );
+                (v, FALLBACK_TTL)
+            }
+        };
 
-        // Cache result
         let mut cache = self.cache.lock().await;
         cache.insert(
             cache_key,
             CacheEntry {
-                paywalled,
-                cached_at: Instant::now(),
+                paywalled: decision,
+                expires_at: now + ttl,
             },
         );
 
-        paywalled
+        decision
     }
 
     /// Core trial-expiry check. Mirrors Python `_is_trial_expired_uncached`.
-    /// Returns false (not paywalled) on any error (fail-open).
-    async fn check_trial_expired(&self, uid: &str) -> bool {
+    ///
+    /// Returns:
+    ///   - `Some(true)`  → definitively paywalled (basic plan, no BYOK, account >3d)
+    ///   - `Some(false)` → definitively NOT paywalled (paid plan, BYOK active, or in-trial)
+    ///   - `None`        → indeterminate (Firestore / Firebase-Auth read failed).
+    ///                     Caller decides the fail-safe behavior; we no longer
+    ///                     silently fail open here, which previously cached a
+    ///                     wrong `false` for 5 min and served free LLM/STT to
+    ///                     paywalled users on every transient dependency blip.
+    async fn check_trial_expired(&self, uid: &str) -> Option<bool> {
         // Step 1: Read effective subscription plan (checks current_period_end for paid plans)
         let plan = match self.firestore.get_user_effective_plan(uid).await {
             Ok(p) => p,
             Err(e) => {
-                tracing::warn!(
-                    "paywall: failed to read subscription plan for uid={}: {}, failing open",
-                    uid,
-                    e
-                );
-                return false;
+                tracing::warn!("paywall: failed to read subscription plan for uid={}: {}", uid, e);
+                return None;
             }
         };
 
         // Non-basic plan → not paywalled
         if plan != "basic" {
-            return false;
+            return Some(false);
         }
 
         // Step 2: Check BYOK active (with heartbeat TTL)
@@ -147,7 +175,7 @@ impl PaywallChecker {
             }
         };
         if byok_active {
-            return false;
+            return Some(false);
         }
 
         // Step 3: Check account age from Firebase Auth
@@ -158,26 +186,19 @@ impl PaywallChecker {
         {
             Ok(Some(ms)) => ms,
             Ok(None) => {
-                tracing::warn!(
-                    "paywall: no creation time for uid={}, failing open",
-                    uid
-                );
-                return false;
+                tracing::warn!("paywall: no creation time for uid={}", uid);
+                return None;
             }
             Err(e) => {
-                tracing::warn!(
-                    "paywall: failed to get creation time for uid={}: {}, failing open",
-                    uid,
-                    e
-                );
-                return false;
+                tracing::warn!("paywall: failed to get creation time for uid={}: {}", uid, e);
+                return None;
             }
         };
 
         let now_ms = chrono::Utc::now().timestamp() * 1000;
         let age_seconds = (now_ms - creation_ms) / 1000;
 
-        age_seconds > TRIAL_LENGTH_SECONDS
+        Some(age_seconds > TRIAL_LENGTH_SECONDS)
     }
 }
 
