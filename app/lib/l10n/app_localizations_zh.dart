@@ -6707,7 +6707,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get lowBatteryAlertTitle => '电池电量低警告';
 
   @override
-  String get lowBatteryAlertBody => '您的设备电池电量低。是时候充电了！🔋';
+  String lowBatteryAlertBody(int level) {
+    return '您的电池电量为 $level%。是时候充电了！🔋';
+  }
 
   @override
   String get batteryFullyChargedTitle => 'Omi已充满电';

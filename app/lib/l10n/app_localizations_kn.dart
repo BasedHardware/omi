@@ -6861,7 +6861,9 @@ class AppLocalizationsKn extends AppLocalizations {
   String get lowBatteryAlertTitle => 'ಕಡಿಮೆ ಬ್ಯಾಟರಿ ಎಚ್ಚರಿಕೆ';
 
   @override
-  String get lowBatteryAlertBody => 'ನಿಮ್ಮ ಸಾಧನವು ಬ್ಯಾಟರಿ ಕಡಿಮೆಯಿದೆ. ಚಾರ್ಜ್ ಮಾಡುವ ಸಮಯ! 🔋';
+  String lowBatteryAlertBody(int level) {
+    return 'ನಿಮ್ಮ ಬ್ಯಾಟರಿ $level% ನಲ್ಲಿದೆ. ಚಾರ್ಜ್ ಮಾಡುವ ಸಮಯ! 🔋';
+  }
 
   @override
   String get batteryFullyChargedTitle => 'Omi ಸಂಪೂರ್ಣ ಚಾರ್ಜ್ ಆಗಿದೆ';

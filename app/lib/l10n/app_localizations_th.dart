@@ -6803,7 +6803,9 @@ class AppLocalizationsTh extends AppLocalizations {
   String get lowBatteryAlertTitle => 'การแจ้งเตือนแบตเตอรี่ต่ำ';
 
   @override
-  String get lowBatteryAlertBody => 'แบตเตอรี่ของอุปกรณ์ของคุณต่ำ ถึงเวลาชาร์จแล้ว! 🔋';
+  String lowBatteryAlertBody(int level) {
+    return 'แบตเตอรี่ของคุณอยู่ที่ $level% ถึงเวลาชาร์จแล้ว! 🔋';
+  }
 
   @override
   String get batteryFullyChargedTitle => 'Omi ชาร์จเต็มแล้ว';

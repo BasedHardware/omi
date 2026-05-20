@@ -6861,7 +6861,9 @@ class AppLocalizationsBg extends AppLocalizations {
   String get lowBatteryAlertTitle => 'Предупреждение за изтощена батерия';
 
   @override
-  String get lowBatteryAlertBody => 'Батерията на устройството ви е изтощена. Време е за презареждане! 🔋';
+  String lowBatteryAlertBody(int level) {
+    return 'Батерията ви е на $level%. Време е за презареждане! 🔋';
+  }
 
   @override
   String get batteryFullyChargedTitle => 'Omi е напълно зареден';

@@ -6829,7 +6829,9 @@ class AppLocalizationsPt extends AppLocalizations {
   String get lowBatteryAlertTitle => 'Alerta de bateria fraca';
 
   @override
-  String get lowBatteryAlertBody => 'A bateria do seu dispositivo está fraca. Hora de recarregar! 🔋';
+  String lowBatteryAlertBody(int level) {
+    return 'Sua bateria está em $level%. Hora de recarregar! 🔋';
+  }
 
   @override
   String get batteryFullyChargedTitle => 'Omi está totalmente carregado';

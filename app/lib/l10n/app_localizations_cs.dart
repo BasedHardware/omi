@@ -6826,7 +6826,9 @@ class AppLocalizationsCs extends AppLocalizations {
   String get lowBatteryAlertTitle => 'Upozornění na vybitou baterii';
 
   @override
-  String get lowBatteryAlertBody => 'Baterie vašeho zařízení je vybitá. Je čas ji dobít! 🔋';
+  String lowBatteryAlertBody(int level) {
+    return 'Vaše baterie je na $level%. Je čas ji dobít! 🔋';
+  }
 
   @override
   String get batteryFullyChargedTitle => 'Omi je plně nabitý';

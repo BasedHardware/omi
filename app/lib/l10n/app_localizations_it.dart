@@ -6877,7 +6877,9 @@ class AppLocalizationsIt extends AppLocalizations {
   String get lowBatteryAlertTitle => 'Avviso batteria scarica';
 
   @override
-  String get lowBatteryAlertBody => 'La batteria del dispositivo è scarica. È ora di ricaricare! 🔋';
+  String lowBatteryAlertBody(int level) {
+    return 'La tua batteria è al $level%. È ora di ricaricare! 🔋';
+  }
 
   @override
   String get batteryFullyChargedTitle => 'Omi è completamente carico';

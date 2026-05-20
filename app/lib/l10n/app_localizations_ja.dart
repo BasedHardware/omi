@@ -6716,7 +6716,9 @@ class AppLocalizationsJa extends AppLocalizations {
   String get lowBatteryAlertTitle => 'バッテリー残量低下アラート';
 
   @override
-  String get lowBatteryAlertBody => 'デバイスのバッテリーが少なくなっています。充電してください！🔋';
+  String lowBatteryAlertBody(int level) {
+    return 'バッテリー残量は $level% です。充電してください！🔋';
+  }
 
   @override
   String get batteryFullyChargedTitle => 'Omiは満充電です';

@@ -6857,7 +6857,9 @@ class AppLocalizationsBe extends AppLocalizations {
   String get lowBatteryAlertTitle => 'Абвяшчэнне пра нізкі заряд батарэі';
 
   @override
-  String get lowBatteryAlertBody => 'Ваша прыстасаванне буквальна вычарпвае батарэю. Час пазарадзіць! 🔋';
+  String lowBatteryAlertBody(int level) {
+    return 'Ваша батарэя на $level%. Час пазарадзіць! 🔋';
+  }
 
   @override
   String get batteryFullyChargedTitle => 'Omi поўнасцю зараджаны';
