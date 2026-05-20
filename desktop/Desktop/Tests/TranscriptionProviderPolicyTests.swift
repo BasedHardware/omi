@@ -17,6 +17,7 @@ final class TranscriptionProviderPolicyTests: XCTestCase {
 
     XCTAssertEqual(result.provider, .local)
     XCTAssertEqual(result.localEngine, .mlxWhisper)
+    XCTAssertEqual(result.localPlan?.model, .small)
     XCTAssertNil(result.fallbackReason)
   }
 
@@ -34,6 +35,7 @@ final class TranscriptionProviderPolicyTests: XCTestCase {
 
     XCTAssertEqual(result.provider, .local)
     XCTAssertEqual(result.localEngine, .fasterWhisper)
+    XCTAssertEqual(result.localPlan?.model, .base)
   }
 
   func testAutoFallsBackToCloudWhenNoLocalEngineExists() {
@@ -50,6 +52,7 @@ final class TranscriptionProviderPolicyTests: XCTestCase {
 
     XCTAssertEqual(result.provider, .cloud)
     XCTAssertNil(result.localEngine)
+    XCTAssertNil(result.localPlan)
     XCTAssertNotNil(result.fallbackReason)
   }
 
@@ -67,7 +70,34 @@ final class TranscriptionProviderPolicyTests: XCTestCase {
 
     XCTAssertEqual(result.provider, .cloud)
     XCTAssertNil(result.localEngine)
+    XCTAssertNil(result.localPlan)
     XCTAssertNil(result.fallbackReason)
+  }
+
+  func testAccurateUsesLargerModelsOnlyWhenMemoryAllows() {
+    let lowMemory = LocalTranscriptionCapabilities(
+      processor: .nativeAppleSilicon,
+      physicalMemoryBytes: 8 * 1024 * 1024 * 1024,
+      availableEngines: [.mlxWhisper]
+    )
+    let highMemory = LocalTranscriptionCapabilities(
+      processor: .nativeAppleSilicon,
+      physicalMemoryBytes: 24 * 1024 * 1024 * 1024,
+      availableEngines: [.mlxWhisper]
+    )
+
+    let policy = TranscriptionProviderPolicy()
+    let lowMemoryResult = policy.resolve(
+      selection: TranscriptionProviderSelection(mode: .local, quality: .accurate),
+      capabilities: lowMemory
+    )
+    let highMemoryResult = policy.resolve(
+      selection: TranscriptionProviderSelection(mode: .local, quality: .accurate),
+      capabilities: highMemory
+    )
+
+    XCTAssertEqual(lowMemoryResult.localPlan?.model, .small)
+    XCTAssertEqual(highMemoryResult.localPlan?.model, .largeV3Turbo)
   }
 
   func testCapabilityDetectorDistinguishesRosettaFromNativeArm() {
@@ -149,5 +179,112 @@ final class SpeakerSegmentReducerTests: XCTestCase {
 
     XCTAssertEqual(reducer.totalSegmentCount, 3)
     XCTAssertEqual(reducer.segments.map(\.segmentId), ["s1", "s2"])
+  }
+}
+
+final class LocalASRRuntimeTests: XCTestCase {
+  func testHelperContractRoundTripsFixtureSegments() throws {
+    let request = LocalASRTranscriptionRequest(
+      requestId: "fixture-1",
+      audioPath: "/tmp/audio.pcm",
+      language: "en",
+      sampleRate: 16000,
+      channels: 1,
+      engine: .mlxWhisper,
+      model: .small,
+      fixtureSegments: [
+        LocalASRTranscriptSegment(id: "seg-1", speaker: 0, text: "hello local", start: 0, end: 1)
+      ]
+    )
+
+    let encoded = try JSONEncoder().encode(request)
+    let decoded = try JSONDecoder().decode(LocalASRTranscriptionRequest.self, from: encoded)
+
+    XCTAssertEqual(decoded, request)
+  }
+
+  func testDeterministicMergeDeduplicatesOverlappingChunksAndIsIdempotent() {
+    var merger = LocalTranscriptMerger()
+    let first = LocalASRTranscriptSegment(
+      id: nil,
+      speaker: 0,
+      text: "hello local whisper",
+      start: 0.0,
+      end: 2.0
+    ).normalized()
+    let duplicate = LocalASRTranscriptSegment(
+      id: nil,
+      speaker: 0,
+      text: "hello  local whisper",
+      start: 0.1,
+      end: 2.1
+    ).normalized()
+    let next = LocalASRTranscriptSegment(
+      id: "s2",
+      speaker: 0,
+      text: "next segment",
+      start: 2.2,
+      end: 3.0
+    ).normalized()
+
+    XCTAssertEqual(
+      merger.merge([first, next]).map(\.text), ["hello local whisper", "next segment"])
+    XCTAssertEqual(
+      merger.merge([duplicate, next]).map(\.text), ["hello local whisper", "next segment"])
+    XCTAssertEqual(merger.merge([first, next]).count, 2)
+  }
+
+  func testDeterministicMergeCombinesPartialOverlapByTokenBoundary() {
+    var merger = LocalTranscriptMerger()
+    let first = LocalASRTranscriptSegment(
+      id: "chunk-1",
+      speaker: 0,
+      text: "hello local whisper",
+      start: 0.0,
+      end: 2.0
+    ).normalized()
+    let second = LocalASRTranscriptSegment(
+      id: "chunk-2",
+      speaker: 0,
+      text: "whisper works offline",
+      start: 1.8,
+      end: 3.2
+    ).normalized()
+
+    let result = merger.merge([first, second])
+
+    XCTAssertEqual(result.count, 1)
+    XCTAssertEqual(result[0].text, "hello local whisper works offline")
+    XCTAssertEqual(result[0].start, 0.0)
+    XCTAssertEqual(result[0].end, 3.2)
+  }
+}
+
+final class PTTTranscriptPostProcessorTests: XCTestCase {
+  func testLocalModeBypassesLLMCleanup() async {
+    var cleanupCalls = 0
+    let result = await PTTTranscriptPostProcessor.process(
+      "raw local transcript",
+      keywords: ["Omi"],
+      provider: .local,
+      cleanup: { transcript, _ in
+        cleanupCalls += 1
+        return "\(transcript) cleaned"
+      }
+    )
+
+    XCTAssertEqual(result, "raw local transcript")
+    XCTAssertEqual(cleanupCalls, 0)
+  }
+
+  func testCloudModeUsesCleanup() async {
+    let result = await PTTTranscriptPostProcessor.process(
+      "raw cloud transcript",
+      keywords: [],
+      provider: .cloud,
+      cleanup: { transcript, _ in "\(transcript) cleaned" }
+    )
+
+    XCTAssertEqual(result, "raw cloud transcript cleaned")
   }
 }

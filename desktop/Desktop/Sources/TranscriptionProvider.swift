@@ -88,6 +88,7 @@ struct TranscriptionProviderPolicyResult: Equatable {
   var provider: TranscriptionProviderKind
   var quality: TranscriptionQualityPreset
   var localEngine: LocalTranscriptionEngine?
+  var localPlan: LocalTranscriptionPlan?
   var fallbackReason: String?
 
   var usesCloud: Bool {
@@ -109,43 +110,73 @@ struct TranscriptionProviderPolicy {
     switch selection.mode {
     case .cloud:
       return TranscriptionProviderPolicyResult(
-        provider: .cloud, quality: quality, localEngine: nil, fallbackReason: nil)
+        provider: .cloud, quality: quality, localEngine: nil, localPlan: nil, fallbackReason: nil)
     case .local:
-      if let engine = preferredLocalEngine(for: quality, capabilities: capabilities) {
+      if let plan = localPlan(for: quality, capabilities: capabilities) {
         return TranscriptionProviderPolicyResult(
-          provider: .local, quality: quality, localEngine: engine, fallbackReason: nil)
+          provider: .local, quality: quality, localEngine: plan.engine, localPlan: plan,
+          fallbackReason: nil)
       }
       return TranscriptionProviderPolicyResult(
         provider: .cloud,
         quality: quality,
         localEngine: nil,
+        localPlan: nil,
         fallbackReason: "No local transcription engine is available"
       )
     case .auto:
-      if let engine = preferredLocalEngine(for: quality, capabilities: capabilities) {
+      if let plan = localPlan(for: quality, capabilities: capabilities) {
         return TranscriptionProviderPolicyResult(
-          provider: .local, quality: quality, localEngine: engine, fallbackReason: nil)
+          provider: .local, quality: quality, localEngine: plan.engine, localPlan: plan,
+          fallbackReason: nil)
       }
       return TranscriptionProviderPolicyResult(
         provider: .cloud,
         quality: quality,
         localEngine: nil,
+        localPlan: nil,
         fallbackReason: "Auto mode fell back to cloud because no local engine is available"
       )
     }
   }
 
-  private func preferredLocalEngine(
-    for _: TranscriptionQualityPreset,
+  private func localPlan(
+    for quality: TranscriptionQualityPreset,
     capabilities: LocalTranscriptionCapabilities
-  ) -> LocalTranscriptionEngine? {
+  ) -> LocalTranscriptionPlan? {
+    let engine: LocalTranscriptionEngine
     if capabilities.canUseMLXWhisper {
-      return .mlxWhisper
+      engine = .mlxWhisper
+    } else if capabilities.canUseFasterWhisper {
+      engine = .fasterWhisper
+    } else {
+      return nil
     }
-    if capabilities.canUseFasterWhisper {
-      return .fasterWhisper
+
+    return LocalTranscriptionPlan(
+      engine: engine,
+      model: model(for: quality, engine: engine, memoryBytes: capabilities.physicalMemoryBytes),
+      quality: quality
+    )
+  }
+
+  private func model(
+    for quality: TranscriptionQualityPreset,
+    engine: LocalTranscriptionEngine,
+    memoryBytes: UInt64
+  ) -> LocalTranscriptionModel {
+    let gib = memoryBytes / (1024 * 1024 * 1024)
+    switch quality {
+    case .fast:
+      return .base
+    case .balanced, .auto:
+      return gib >= 8 ? .small : .base
+    case .accurate:
+      if engine == .mlxWhisper, gib >= 24 {
+        return .largeV3Turbo
+      }
+      return gib >= 16 ? .medium : .small
     }
-    return nil
   }
 }
 
