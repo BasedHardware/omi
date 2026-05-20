@@ -233,7 +233,7 @@ enum DesktopBackendEnvironment {
         "Apple Speech is not available for this Mac’s preferred languages (or Speech Recognition is off in System Settings). Set OMI_HYBRID_DIRECT_STT_ENABLED=1 to opt in when the engine is available."
     case .directChat:
       return
-        "Direct local chat requires OMI_HYBRID_DIRECT_CHAT_ENABLED=1 and a chat_provider in hybrid settings."
+        "Direct local chat requires OMI_HYBRID_DIRECT_CHAT_ENABLED=1 and a resolved chat slot in local provider policy."
     case .directEmbeddings:
       return
         "Direct local embeddings require OMI_HYBRID_DIRECT_EMBEDDINGS_ENABLED=1 and an embedding_provider in hybrid settings."

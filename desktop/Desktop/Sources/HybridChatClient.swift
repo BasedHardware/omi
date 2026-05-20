@@ -7,28 +7,56 @@ enum HybridChatClient {
     let baseURL: String
     let model: String
     let apiKey: String
+    let providerAccountID: String?
+    let providerKind: String?
+    let slotSource: String?
+    let resolutionReason: String?
+
+    init(
+      baseURL: String,
+      model: String,
+      apiKey: String,
+      providerAccountID: String? = nil,
+      providerKind: String? = nil,
+      slotSource: String? = nil,
+      resolutionReason: String? = nil
+    ) {
+      self.baseURL = baseURL
+      self.model = model
+      self.apiKey = apiKey
+      self.providerAccountID = providerAccountID
+      self.providerKind = providerKind
+      self.slotSource = slotSource
+      self.resolutionReason = resolutionReason
+    }
   }
 
   struct CompletionResult: Equatable {
     let text: String
     let model: String
+    let providerAccountID: String?
+    let providerKind: String?
+    let slotSource: String?
+    let resolutionReason: String?
     let inputTokens: Int
     let outputTokens: Int
   }
 
   enum ClientError: LocalizedError {
-    case notConfigured
+    case notConfigured(String)
     case invalidSettings
     case invalidResponse
     case providerError(String)
 
     var errorDescription: String? {
       switch self {
-      case .notConfigured:
-        return
-          "Hybrid direct chat is not configured. Set chat_provider or ai_provider in Settings → Plan and Usage (or run a local LLM at the default Ollama URL)."
+      case .notConfigured(let reason):
+        if reason.isEmpty {
+          return "Chat model slot is not configured. Configure the chat slot in local provider policy."
+        }
+        return "Chat model slot is not configured: \(reason)"
       case .invalidSettings:
-        return "chat_provider settings are invalid."
+        return "Chat provider policy settings are invalid."
       case .invalidResponse:
         return "Chat provider returned an unexpected response."
       case .providerError(let message):
@@ -50,74 +78,13 @@ enum HybridChatClient {
     return true
   }
 
-  /// Resolves Codex → chat_provider → ai_provider / provider (matches HybridLLMClient).
-  static func resolveEffectiveChatConfig(from settings: [LocalDaemonSetting]) -> ProviderConfig? {
-    if let codex = HybridLLMClient.codexProviderConfig() {
-      return ProviderConfig(
-        baseURL: codex.baseURL,
-        model: codex.model,
-        apiKey: codex.apiKey
-      )
-    }
-    if let chat = loadProviderConfig(from: settings, key: "chat_provider") {
-      return chat
-    }
-    if let ai = loadProviderConfig(from: settings, keys: ["ai_provider", "provider"]) {
-      return ai
-    }
-    return byokOpenAIConfig()
-  }
-
-  static func loadProviderConfig(from settings: [LocalDaemonSetting]) -> ProviderConfig? {
-    loadProviderConfig(from: settings, key: "chat_provider")
-  }
-
-  private static func loadProviderConfig(
-    from settings: [LocalDaemonSetting],
-    key: String
+  static func resolveEffectiveChatConfig(
+    from response: HybridProviderPolicy.SlotResolutionResponse
   ) -> ProviderConfig? {
-    loadProviderConfig(from: settings, keys: [key])
+    HybridProviderPolicy.chatProviderConfig(from: response)
   }
 
-  private static func loadProviderConfig(
-    from settings: [LocalDaemonSetting],
-    keys: [String]
-  ) -> ProviderConfig? {
-    guard let raw = settings.first(where: { keys.contains($0.key) })?.valueJson,
-      let data = raw.data(using: .utf8),
-      let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
-    else {
-      return nil
-    }
-    return parseOpenAICompatible(json: json)
-  }
-
-  private static func parseOpenAICompatible(json: [String: Any]) -> ProviderConfig? {
-    let kind = (json["kind"] as? String)?.lowercased() ?? ""
-    guard kind == "openai_compatible" || kind == "openai" else {
-      return nil
-    }
-    guard let baseURL = json["base_url"] as? String, !baseURL.isEmpty else {
-      return nil
-    }
-    let model = (json["model"] as? String) ?? HybridProviderReadiness.defaultModel()
-    let apiKey =
-      (json["api_key"] as? String) ?? (json["key"] as? String) ?? ""
-    return ProviderConfig(baseURL: baseURL, model: model, apiKey: apiKey)
-  }
-
-  private static func byokOpenAIConfig() -> ProviderConfig? {
-    guard let key = APIKeyService.byokKey(.openai), !key.isEmpty else {
-      return nil
-    }
-    let model =
-      ProcessInfo.processInfo.environment["OMI_HYBRID_BYOK_OPENAI_MODEL"].flatMap {
-        $0.trimmingCharacters(in: .whitespacesAndNewlines)
-      }.flatMap { $0.isEmpty ? nil : $0 } ?? "gpt-4o-mini"
-    return ProviderConfig(baseURL: "https://api.openai.com/v1", model: model, apiKey: key)
-  }
-
-  /// Loads daemon hybrid settings and completes one chat turn (non-streaming).
+  /// Resolves the daemon chat slot and completes one chat turn (non-streaming).
   static func completeFromDaemonSettings(
     systemPrompt: String,
     conversationMessages: [(role: String, text: String)],
@@ -126,12 +93,13 @@ enum HybridChatClient {
     if CodexAuthService.isActive {
       await CodexProxyService.shared.ensureRunning()
     }
-    let settings = try await APIClient.shared.getSelectedBackendSettings()
+    let resolution = try await APIClient.shared.resolveSelectedBackendProviderSlot(
+      HybridProviderPolicy.chatSlot)
     return try await complete(
       systemPrompt: systemPrompt,
       conversationMessages: conversationMessages,
       userMessage: userMessage,
-      settings: settings
+      slotResolution: resolution
     )
   }
 
@@ -139,16 +107,18 @@ enum HybridChatClient {
     systemPrompt: String,
     conversationMessages: [(role: String, text: String)],
     userMessage: String,
-    settings: [LocalDaemonSetting]
+    slotResolution: HybridProviderPolicy.SlotResolutionResponse,
+    session: URLSession = .shared
   ) async throws -> CompletionResult {
-    guard let config = resolveEffectiveChatConfig(from: settings) else {
-      throw ClientError.notConfigured
+    guard let config = resolveEffectiveChatConfig(from: slotResolution) else {
+      throw ClientError.notConfigured(slotResolution.resolution.reason)
     }
     return try await completeOpenAICompatible(
       config: config,
       systemPrompt: systemPrompt,
       conversationMessages: conversationMessages,
-      userMessage: userMessage
+      userMessage: userMessage,
+      session: session
     )
   }
 
@@ -167,7 +137,8 @@ enum HybridChatClient {
     config: ProviderConfig,
     systemPrompt: String,
     conversationMessages: [(role: String, text: String)],
-    userMessage: String
+    userMessage: String,
+    session: URLSession
   ) async throws -> CompletionResult {
     let base = config.baseURL.hasSuffix("/") ? String(config.baseURL.dropLast()) : config.baseURL
     guard let url = URL(string: "\(base)/chat/completions") else {
@@ -196,7 +167,7 @@ enum HybridChatClient {
     )
     request.httpBody = try JSONEncoder().encode(payload)
 
-    let (data, response) = try await URLSession.shared.data(for: request)
+    let (data, response) = try await session.data(for: request)
     guard let http = response as? HTTPURLResponse else {
       throw ClientError.invalidResponse
     }
@@ -233,6 +204,10 @@ enum HybridChatClient {
     return CompletionResult(
       text: content.trimmingCharacters(in: .whitespacesAndNewlines),
       model: returnedModel,
+      providerAccountID: config.providerAccountID,
+      providerKind: config.providerKind,
+      slotSource: config.slotSource,
+      resolutionReason: config.resolutionReason,
       inputTokens: inputTokens,
       outputTokens: outputTokens
     )

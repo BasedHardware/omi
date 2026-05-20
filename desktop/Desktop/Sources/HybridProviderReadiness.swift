@@ -64,7 +64,11 @@ enum HybridProviderReadiness {
             ?? "Direct STT unavailable")
       ))
 
-    let chatResolvable = HybridChatClient.resolveEffectiveChatConfig(from: settings) != nil
+    let chatResolution = HybridProviderPolicy.resolveSlotFromSettings(
+      HybridProviderPolicy.chatSlot,
+      settings: settings
+    )
+    let chatResolvable = chatResolution.flatMap(HybridChatClient.resolveEffectiveChatConfig) != nil
     let chatCap = DesktopBackendEnvironment.isCapability(.directChat, availableIn: .localDaemon)
     result.append(
       Row(
@@ -74,9 +78,9 @@ enum HybridProviderReadiness {
           ? .configured
           : (chatCap ? .missing : .capabilityOff),
         detail: chatResolvable
-          ? "Direct chat endpoint configured"
+          ? "Direct chat endpoint configured through provider policy"
           : (chatCap
-            ? "Set chat_provider or ai_provider in hybrid settings"
+            ? (chatResolution?.resolution.reason ?? "Configure the chat model slot")
             : (DesktopBackendEnvironment.unavailableReason(for: .directChat, in: .localDaemon)
               ?? "Direct chat disabled"))
       ))

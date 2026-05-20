@@ -2608,6 +2608,10 @@ A screenshot may be attached — use it silently only if relevant. Never mention
         var sqlRowsReturned = 0
         var sqlQueryCount = 0
         var hybridResolvedModel: String?
+        var hybridProviderAccountId: String?
+        var hybridProviderKind: String?
+        var hybridSlotSource: String?
+        var hybridSlotReason: String?
 
         do {
             if mayUseHybridDirectChat {
@@ -2681,6 +2685,10 @@ A screenshot may be attached — use it silently only if relevant. Never mention
                     userMessage: trimmedText
                 )
                 hybridResolvedModel = hybrid.model
+                hybridProviderAccountId = hybrid.providerAccountID
+                hybridProviderKind = hybrid.providerKind
+                hybridSlotSource = hybrid.slotSource
+                hybridSlotReason = hybrid.resolutionReason
                 let normalized = normalizeAssistantSentenceSpacing(hybrid.text)
                 queryResult = AgentBridge.QueryResult(
                     text: normalized,
@@ -2870,7 +2878,14 @@ A screenshot may be attached — use it silently only if relevant. Never mention
             let textToSave = queryResult.text.isEmpty ? messageText : queryResult.text
             if !textToSave.isEmpty {
                 do {
-                    let toolMetadata = serializeToolCallMetadata(messageId: aiMessageId)
+                    let toolMetadata = serializeAIMessageMetadata(
+                        messageId: aiMessageId,
+                        hybridModel: hybridResolvedModel,
+                        hybridProviderAccountId: hybridProviderAccountId,
+                        hybridProviderKind: hybridProviderKind,
+                        hybridSlotSource: hybridSlotSource,
+                        hybridSlotReason: hybridSlotReason
+                    )
                     let response = try await APIClient.shared.saveMessage(
                         text: textToSave,
                         sender: "ai",
@@ -3269,11 +3284,41 @@ A screenshot may be attached — use it silently only if relevant. Never mention
         }
     }
 
-    /// Serialize tool calls from a message's contentBlocks into a JSON metadata string.
-    /// Returns nil if there are no tool calls.
-    private func serializeToolCallMetadata(messageId: String) -> String? {
-        guard let index = messages.firstIndex(where: { $0.id == messageId }) else { return nil }
+    /// Serialize tool calls and resolved local-provider metadata into the persisted message JSON.
+    /// Returns nil when there is no extra metadata to store.
+    private func serializeAIMessageMetadata(
+        messageId: String,
+        hybridModel: String?,
+        hybridProviderAccountId: String?,
+        hybridProviderKind: String?,
+        hybridSlotSource: String?,
+        hybridSlotReason: String?
+    ) -> String? {
+        var metadata: [String: Any] = [:]
 
+        if let hybridModel = hybridModel {
+            var provider: [String: Any] = [
+                "slot": "chat",
+                "model": hybridModel,
+            ]
+            if let hybridProviderAccountId = hybridProviderAccountId {
+                provider["provider_account_id"] = hybridProviderAccountId
+            }
+            if let hybridProviderKind = hybridProviderKind {
+                provider["provider_kind"] = hybridProviderKind
+            }
+            if let hybridSlotSource = hybridSlotSource {
+                provider["source"] = hybridSlotSource
+            }
+            if let hybridSlotReason = hybridSlotReason {
+                provider["reason"] = hybridSlotReason
+            }
+            metadata["provider_policy"] = provider
+        }
+
+        guard let index = messages.firstIndex(where: { $0.id == messageId }) else {
+            return metadata.isEmpty ? nil : Self.encodeMetadata(metadata)
+        }
         var toolCalls: [[String: Any]] = []
         for block in messages[index].contentBlocks {
             if case .toolCall(_, let name, _, let toolUseId, let input, let output) = block {
@@ -3291,12 +3336,28 @@ A screenshot may be attached — use it silently only if relevant. Never mention
             }
         }
 
-        guard !toolCalls.isEmpty else { return nil }
+        if !toolCalls.isEmpty {
+            metadata["tool_calls"] = toolCalls
+        }
 
-        let metadata: [String: Any] = ["tool_calls": toolCalls]
+        return metadata.isEmpty ? nil : Self.encodeMetadata(metadata)
+    }
+
+    private static func encodeMetadata(_ metadata: [String: Any]) -> String? {
         guard let data = try? JSONSerialization.data(withJSONObject: metadata),
               let json = String(data: data, encoding: .utf8) else { return nil }
         return json
+    }
+
+    private func serializeToolCallMetadata(messageId: String) -> String? {
+        serializeAIMessageMetadata(
+            messageId: messageId,
+            hybridModel: nil,
+            hybridProviderAccountId: nil,
+            hybridProviderKind: nil,
+            hybridSlotSource: nil,
+            hybridSlotReason: nil
+        )
     }
 
     // MARK: - Message Rating

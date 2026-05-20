@@ -34,14 +34,34 @@ final class HybridLLMProviderConfigTests: XCTestCase {
     XCTAssertEqual(config?.model, "vlm")
   }
 
-  func testHybridChatClientFallsBackToAiProvider() throws {
-    let payload = """
-      [{"key":"ai_provider","value_json":"{\\"kind\\":\\"openai_compatible\\",\\"base_url\\":\\"http://ai.local/v1\\",\\"model\\":\\"m-ai\\"}","updated_at":"2026-05-19T12:00:00Z"}]
-      """
-    let settings = try decodeSettings(payload)
-    let config = HybridChatClient.resolveEffectiveChatConfig(from: settings)
-    XCTAssertEqual(config?.baseURL, "http://ai.local/v1")
-    XCTAssertEqual(config?.model, "m-ai")
+  func testHybridChatClientUsesChatProviderPolicySlot() throws {
+    let settings = try makeSettings([
+      (
+        "provider_policy",
+        [
+          "version": 1,
+          "provider_accounts": [
+            [
+              "id": "local-chat",
+              "kind": "openai_compatible",
+              "base_url": "http://chat.local/v1",
+              "api_key": "test-key",
+            ]
+          ],
+          "model_slots": [
+            "chat": [
+              "provider_account_id": "local-chat",
+              "model_id": "chat-model",
+            ]
+          ],
+        ]
+      )
+    ])
+    let response = try XCTUnwrap(HybridProviderPolicy.resolveSlotFromSettings("chat", settings: settings))
+    let config = HybridChatClient.resolveEffectiveChatConfig(from: response)
+    XCTAssertEqual(config?.baseURL, "http://chat.local/v1")
+    XCTAssertEqual(config?.model, "chat-model")
+    XCTAssertEqual(config?.providerAccountID, "local-chat")
   }
 
   func testProactiveUsesProviderPolicySlot() throws {

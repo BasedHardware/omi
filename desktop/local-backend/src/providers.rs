@@ -1187,6 +1187,7 @@ mod tests {
         let store = Store::open_in_memory()?;
 
         assert!(resolve_model_slot(&store, SLOT_PROACTIVE)?.is_none());
+        assert!(resolve_model_slot(&store, SLOT_CHAT)?.is_none());
         assert!(resolve_model_slot(&store, SLOT_VISION)?.is_none());
         let proactive = resolve_model_slot_result(&store, SLOT_PROACTIVE)?;
         assert!(!proactive.ok);
@@ -1202,6 +1203,102 @@ mod tests {
         let memory_search = resolve_model_slot(&store, SLOT_MEMORY_SEARCH)?.expect("memory");
         assert_eq!(memory_search.model_id, MODEL_LOCAL_WIKI);
         assert_eq!(memory_search.provider_account, None);
+
+        Ok(())
+    }
+
+    #[test]
+    fn chat_slot_resolution_switches_provider_account_and_model() -> Result<()> {
+        let store = Store::open_in_memory()?;
+        let account_a = ProviderAccount {
+            id: "local-a".to_string(),
+            kind: "openai_compatible".to_string(),
+            base_url: Some("http://127.0.0.1:11434/v1".to_string()),
+            api_key: None,
+            display_name: Some("Local A".to_string()),
+            capabilities: ProviderCapabilities {
+                chat_completions: true,
+                json_mode: true,
+                tool_calls: false,
+                vision: false,
+                speech_to_text: false,
+            },
+            subscription_integration: None,
+        };
+        let account_b = ProviderAccount {
+            id: "local-b".to_string(),
+            kind: "openai_compatible".to_string(),
+            base_url: Some("http://localhost:43210/v1".to_string()),
+            api_key: None,
+            display_name: Some("Local B".to_string()),
+            capabilities: ProviderCapabilities {
+                chat_completions: true,
+                json_mode: true,
+                tool_calls: false,
+                vision: false,
+                speech_to_text: false,
+            },
+            subscription_integration: None,
+        };
+        let mut slots = BTreeMap::new();
+        slots.insert(
+            SLOT_CHAT.to_string(),
+            ModelSlotTarget {
+                provider_account_id: Some(account_a.id.clone()),
+                model_id: "model-a".to_string(),
+                options: ModelSlotOptions::default(),
+            },
+        );
+        save_provider_policy(
+            &store,
+            ProviderPolicy {
+                version: PROVIDER_POLICY_VERSION,
+                provider_accounts: vec![account_a.clone(), account_b.clone()],
+                model_slots: slots,
+            },
+        )?;
+
+        let first = configured_openai_provider_for_slot(&store, SLOT_CHAT)?
+            .expect("chat provider should resolve");
+        let first_request = first
+            .provider
+            .build_chat_completions_request(vec![ChatMessage::user("hello")]);
+        assert_eq!(first.slot.provider_account.as_ref().unwrap().id, "local-a");
+        assert_eq!(
+            first_request.url,
+            "http://127.0.0.1:11434/v1/chat/completions"
+        );
+        assert_eq!(first_request.body["model"], "model-a");
+
+        let mut slots = BTreeMap::new();
+        slots.insert(
+            SLOT_CHAT.to_string(),
+            ModelSlotTarget {
+                provider_account_id: Some(account_b.id.clone()),
+                model_id: "model-b".to_string(),
+                options: ModelSlotOptions::default(),
+            },
+        );
+        save_provider_policy(
+            &store,
+            ProviderPolicy {
+                version: PROVIDER_POLICY_VERSION,
+                provider_accounts: vec![account_a, account_b],
+                model_slots: slots,
+            },
+        )?;
+
+        let second = configured_openai_provider_for_slot(&store, SLOT_CHAT)?
+            .expect("switched chat provider should resolve");
+        let second_request = second
+            .provider
+            .build_chat_completions_request(vec![ChatMessage::user("hello")]);
+        assert_eq!(second.slot.provider_account.as_ref().unwrap().id, "local-b");
+        assert_eq!(
+            second_request.url,
+            "http://localhost:43210/v1/chat/completions"
+        );
+        assert_eq!(second_request.body["model"], "model-b");
 
         Ok(())
     }

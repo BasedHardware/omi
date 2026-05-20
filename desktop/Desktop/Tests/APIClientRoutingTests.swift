@@ -1607,6 +1607,24 @@ final class APIClientRoutingTests: XCTestCase {
       label: "local saveMessage default session")
   }
 
+  func testLocalModeResolveChatSlotRoutesToLocalDaemonWithoutAuth() async {
+    setenv("OMI_DESKTOP_BACKEND_MODE", "local", 1)
+    setenv("OMI_LOCAL_DAEMON_URL", "http://127.0.0.1:8765", 1)
+    defer {
+      unsetenv("OMI_DESKTOP_BACKEND_MODE")
+      unsetenv("OMI_LOCAL_DAEMON_URL")
+    }
+    let client = await makeTestClient()
+    _ = try? await client.resolveSelectedBackendProviderSlot("chat")
+      as HybridProviderPolicy.SlotResolutionResponse
+    assertRoutes(
+      URLCapture.capturedRequests, host: "127.0.0.1", port: 8765,
+      pathContains: "v1/provider-policy/resolve/chat",
+      method: "GET",
+      label: "local resolve chat slot")
+    XCTAssertNil(URLCapture.capturedRequests.first?.headers["Authorization"])
+  }
+
   func testLocalModeGetMessagesForSessionRoutesToLocalDaemon() async {
     setenv("OMI_DESKTOP_BACKEND_MODE", "local", 1)
     setenv("OMI_LOCAL_DAEMON_URL", "http://127.0.0.1:8765", 1)

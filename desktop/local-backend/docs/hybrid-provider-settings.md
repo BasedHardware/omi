@@ -236,7 +236,7 @@ way.
 Environment flags (desktop process, not daemon):
 
 - `OMI_HYBRID_DIRECT_STT_ENABLED=1` — enables hybrid live transcription via Apple Speech in local daemon mode (also enabled by default when `desktop/run.sh` configures local mode; launcher writes this into bundled `.env` so GUI launches see it).
-- `OMI_HYBRID_DIRECT_CHAT_ENABLED=1` — enables hybrid OpenAI-compatible chat (`HybridChatClient`) when combined with `chat_provider`; sessions/messages persist via daemon SQLite (`run.sh` defaults this on in local mode).
+- `OMI_HYBRID_DIRECT_CHAT_ENABLED=1` — enables hybrid OpenAI-compatible chat (`HybridChatClient`) when the daemon `chat` slot resolves to a provider account; sessions/messages persist via daemon SQLite (`run.sh` defaults this on in local mode).
 - `OMI_HYBRID_OPTIONAL_CLOUD_STT=1` — exposes `optionalCloudSTT` capability
 - `OMI_HYBRID_OPTIONAL_CLOUD_CHAT=1` — exposes `optionalCloudChat` capability
 
@@ -258,8 +258,10 @@ When the daemon starts via `make serve-local` or `desktop/run.sh` in local mode,
 | `OMI_HYBRID_DEFAULT_PROVIDER_ACCOUNT_ID` | `local-openai-compatible` |
 
 The desktop app also calls `HybridProviderBootstrap.ensureDefaultsIfNeeded()` on
-local guest session startup. Chat resolves `chat_provider` → `ai_provider` → BYOK OpenAI
-(see `HybridChatClient`).
+local guest session startup. Ask Omi resolves
+`GET /v1/provider-policy/resolve/chat` before each local direct chat request and
+uses the returned provider account/model. Legacy `chat_provider` rows are only
+read by the daemon compatibility bridge when constructing the typed policy.
 
 Configure or override in **Settings → Plan and Usage** (local mode) or via `PUT /v1/settings`.
 

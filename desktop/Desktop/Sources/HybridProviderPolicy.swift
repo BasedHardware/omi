@@ -1,6 +1,7 @@
 import Foundation
 
 enum HybridProviderPolicy {
+  static let chatSlot = "chat"
   static let proactiveSlot = "proactive"
   static let visionSlot = "vision"
 
@@ -82,6 +83,29 @@ enum HybridProviderPolicy {
       baseURL: baseURL,
       model: resolved.modelID,
       apiKey: account.apiKey ?? ""
+    )
+  }
+
+  static func chatProviderConfig(from response: SlotResolutionResponse) -> HybridChatClient
+    .ProviderConfig?
+  {
+    guard response.resolution.ok,
+      let resolved = response.resolved,
+      let account = resolved.providerAccount,
+      let baseURL = account.baseURL?.trimmingCharacters(in: .whitespacesAndNewlines),
+      !baseURL.isEmpty,
+      isOpenAICompatible(kind: account.kind)
+    else {
+      return nil
+    }
+    return HybridChatClient.ProviderConfig(
+      baseURL: baseURL,
+      model: resolved.modelID,
+      apiKey: account.apiKey ?? "",
+      providerAccountID: account.id,
+      providerKind: account.kind,
+      slotSource: resolved.source,
+      resolutionReason: response.resolution.reason
     )
   }
 

@@ -3087,6 +3087,57 @@ mod tests {
     }
 
     #[test]
+    fn chat_sessions_and_messages_persist_after_reopen() -> Result<()> {
+        let temp = tempdir()?;
+        let db_path = temp.path().join("local.sqlite");
+        let session_id;
+
+        {
+            let store = Store::open(&db_path)?;
+            let session = store
+                .chat_sessions()
+                .create_session(Some("Local chat"), Some("desktop"))?;
+            session_id = session.id;
+            store.chat_sessions().append_message(
+                &session_id,
+                "hello",
+                "human",
+                Some("desktop"),
+                Some("{\"provider_policy\":{\"slot\":\"chat\",\"model\":\"model-a\"}}"),
+            )?;
+            store.chat_sessions().append_message(
+                &session_id,
+                "answer",
+                "ai",
+                Some("desktop"),
+                Some("{\"provider_policy\":{\"slot\":\"chat\",\"model\":\"model-a\",\"provider_account_id\":\"local-a\"}}"),
+            )?;
+        }
+
+        let reopened = Store::open(&db_path)?;
+        let session = reopened
+            .chat_sessions()
+            .get_session(&session_id)?
+            .expect("chat session should persist");
+        let messages =
+            reopened
+                .chat_sessions()
+                .list_messages(&session_id, Some("desktop"), 10, 0)?;
+
+        assert_eq!(session.title, "Local chat");
+        assert_eq!(session.message_count, 2);
+        assert_eq!(messages.len(), 2);
+        assert_eq!(messages[0].text, "answer");
+        assert!(messages[0]
+            .metadata
+            .as_deref()
+            .unwrap()
+            .contains("\"provider_account_id\":\"local-a\""));
+
+        Ok(())
+    }
+
+    #[test]
     fn duplicate_transcript_append_is_existing_or_conflict() -> Result<()> {
         let store = Store::open_in_memory()?;
         let conversation_id = deterministic_id("conv", &["session-duplicate-segment"]);
