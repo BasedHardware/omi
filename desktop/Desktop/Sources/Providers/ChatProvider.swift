@@ -2460,8 +2460,7 @@ A screenshot may be attached — use it silently only if relevant. Never mention
             usageLimiter.recordQuery()
         }
 
-        let localDaemon = DesktopBackendEnvironment.selectedBackendTarget.mode == .localDaemon
-        let mayUseHybridDirectChat = localDaemon && HybridChatClient.isEnabled()
+        let mayUseHybridDirectChat = HybridChatClient.isEnabled()
 
         // Ensure Claude / ACP bridge when not using hybrid direct chat. Hybrid path may
         // skip the bridge until multimodal attachments require ACP.

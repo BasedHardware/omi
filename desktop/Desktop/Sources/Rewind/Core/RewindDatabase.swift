@@ -2176,6 +2176,58 @@ actor RewindDatabase {
             print("[RewindDatabase] Migration: Added embedding_model/embedding_dim metadata for hybrid embedders")
         }
 
+        migrator.registerMigration("createMemoryWikiPages") { db in
+            try db.create(table: "memory_pages") { t in
+                t.autoIncrementedPrimaryKey("id")
+                t.column("slug", .text).notNull().unique()
+                t.column("title", .text).notNull()
+                t.column("body", .text).notNull()
+                t.column("tagsJson", .text)
+                t.column("linksJson", .text)
+                t.column("category", .text).notNull().defaults(to: "system")
+                t.column("sourceType", .text)
+                t.column("sourceId", .text)
+                t.column("createdAt", .datetime).notNull()
+                t.column("updatedAt", .datetime).notNull()
+            }
+            try db.create(index: "idx_memory_pages_slug", on: "memory_pages", columns: ["slug"])
+            try db.create(index: "idx_memory_pages_updated", on: "memory_pages", columns: ["updatedAt"])
+
+            try db.execute(sql: """
+                CREATE VIRTUAL TABLE memory_pages_fts USING fts5(
+                    title,
+                    body,
+                    tagsJson,
+                    content='memory_pages',
+                    content_rowid='id',
+                    tokenize='unicode61'
+                )
+                """)
+
+            try db.execute(sql: """
+                CREATE TRIGGER memory_pages_fts_ai AFTER INSERT ON memory_pages BEGIN
+                    INSERT INTO memory_pages_fts(rowid, title, body, tagsJson)
+                    VALUES (new.id, new.title, new.body, COALESCE(new.tagsJson, ''));
+                END
+                """)
+
+            try db.execute(sql: """
+                CREATE TRIGGER memory_pages_fts_ad AFTER DELETE ON memory_pages BEGIN
+                    INSERT INTO memory_pages_fts(memory_pages_fts, rowid, title, body, tagsJson)
+                    VALUES ('delete', old.id, old.title, old.body, COALESCE(old.tagsJson, ''));
+                END
+                """)
+
+            try db.execute(sql: """
+                CREATE TRIGGER memory_pages_fts_au AFTER UPDATE ON memory_pages BEGIN
+                    INSERT INTO memory_pages_fts(memory_pages_fts, rowid, title, body, tagsJson)
+                    VALUES ('delete', old.id, old.title, old.body, COALESCE(old.tagsJson, ''));
+                    INSERT INTO memory_pages_fts(rowid, title, body, tagsJson)
+                    VALUES (new.id, new.title, new.body, COALESCE(new.tagsJson, ''));
+                END
+                """)
+        }
+
         try migrator.migrate(queue)
     }
 

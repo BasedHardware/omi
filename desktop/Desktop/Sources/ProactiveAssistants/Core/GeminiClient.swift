@@ -264,7 +264,9 @@ actor GeminiClient {
   init(apiKey: String? = nil, model: String = ModelQoS.Gemini.proactive) throws {
     // BREAKING CHANGE (issue #5861): apiKey parameter is ignored for cloud proxy mode.
     self.model = model
-    if DesktopBackendEnvironment.selectedBackendTarget.mode == .localDaemon {
+    if DesktopBackendEnvironment.selectedBackendTarget.mode == .localDaemon
+      || CodexAuthService.isActive
+    {
       self.transport = .hybridOpenAICompatible
       return
     }
@@ -294,6 +296,9 @@ actor GeminiClient {
     jsonMode: Bool,
     timeout: TimeInterval = 300
   ) async throws -> String {
+    if CodexAuthService.isActive {
+      await CodexProxyService.shared.ensureRunning()
+    }
     let settings = try await HybridDaemonSettingsCache.shared.settings()
     guard let config = HybridLLMClient.resolveEffectiveChatConfig(settings: settings) else {
       throw GeminiClientError.missingAPIKey
@@ -319,6 +324,9 @@ actor GeminiClient {
     jsonMode: Bool,
     timeout: TimeInterval = 300
   ) async throws -> String {
+    if CodexAuthService.isActive {
+      await CodexProxyService.shared.ensureRunning()
+    }
     let settings = try await HybridDaemonSettingsCache.shared.settings()
     guard let config = HybridLLMClient.resolveEffectiveChatConfig(settings: settings) else {
       throw GeminiClientError.missingAPIKey

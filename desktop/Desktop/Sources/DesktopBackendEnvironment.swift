@@ -13,6 +13,7 @@ enum DesktopBackendEnvironment {
     case directSTT
     case directChat
     case directEmbeddings
+    case localMemoryWiki
     case optionalCloudSTT
     case optionalCloudChat
     case managedAgentVM
@@ -201,6 +202,8 @@ enum DesktopBackendEnvironment {
       return isAffirmative(currentEnvironmentValue("OMI_HYBRID_DIRECT_CHAT_ENABLED"))
     case .directEmbeddings:
       return isAffirmative(currentEnvironmentValue("OMI_HYBRID_DIRECT_EMBEDDINGS_ENABLED"))
+    case .localMemoryWiki:
+      return CodexAuthService.isActive || !MemorySearchMode.usesVectorEmbeddings
     case .optionalCloudSTT:
       return isAffirmative(currentEnvironmentValue("OMI_HYBRID_OPTIONAL_CLOUD_STT"))
     case .optionalCloudChat:
@@ -234,6 +237,8 @@ enum DesktopBackendEnvironment {
     case .directEmbeddings:
       return
         "Direct local embeddings require OMI_HYBRID_DIRECT_EMBEDDINGS_ENABLED=1 and an embedding_provider in hybrid settings."
+    case .localMemoryWiki:
+      return "Local memory wiki (FTS) is off while vector embeddings mode is enabled."
     case .optionalCloudSTT:
       return "Optional cloud speech-to-text is off. Set OMI_HYBRID_OPTIONAL_CLOUD_STT=1 to allow hosted Listen."
     case .optionalCloudChat:

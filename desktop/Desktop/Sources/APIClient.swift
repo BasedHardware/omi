@@ -5906,6 +5906,23 @@ extension APIClient {
     try await delete("v1/users/me/byok-active")
   }
 
+  /// Activate ChatGPT / Codex subscription tier (LLM only; fingerprint of account_id).
+  func activateChatGPT(fingerprint: String) async throws {
+    guard selectedBackendTarget.mode != .localDaemon else { return }
+    struct Request: Encodable {
+      let fingerprint: String
+    }
+    struct Empty: Decodable {}
+    let _: Empty = try await post(
+      "v1/users/me/chatgpt-active", body: Request(fingerprint: fingerprint)
+    )
+  }
+
+  func deactivateChatGPT() async throws {
+    guard selectedBackendTarget.mode != .localDaemon else { return }
+    try await delete("v1/users/me/chatgpt-active")
+  }
+
   /// Fetches all people for the current user
   func getPeople() async throws -> [Person] {
     return try await get("v1/users/people")

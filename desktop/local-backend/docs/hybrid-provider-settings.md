@@ -68,6 +68,17 @@ local guest session startup. Chat resolves `chat_provider` → `ai_provider` →
 
 Configure or override in **Settings → Plan and Usage** (local mode) or via `PUT /v1/settings`.
 
+## ChatGPT / Codex subscription (desktop)
+
+When the user connects **ChatGPT plan** in Settings → Advanced:
+
+- A loopback proxy (`desktop/codex-proxy`, default `http://127.0.0.1:10531/v1`) uses `~/.codex/auth.json` from Codex CLI login.
+- Daemon `chat_provider` and `ai_provider` are set to that URL (not `embedding_provider`).
+- Memory search uses **local wiki + FTS5** instead of vector embeddings unless `OMI_HYBRID_DIRECT_EMBEDDINGS_ENABLED=1`.
+- Deepgram / live transcription behavior is unchanged.
+
+Build proxy: `cd desktop/codex-proxy && cargo build --release`
+
 ## Test connection
 
 `POST /v1/settings/test-provider` with body `{ "key": "ai_provider" }` runs a minimal

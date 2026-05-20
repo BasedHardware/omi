@@ -20,6 +20,7 @@ enum HybridChatClient {
     case notConfigured
     case invalidSettings
     case invalidResponse
+    case providerError(String)
 
     var errorDescription: String? {
       switch self {
@@ -30,11 +31,16 @@ enum HybridChatClient {
         return "chat_provider settings are invalid."
       case .invalidResponse:
         return "Chat provider returned an unexpected response."
+      case .providerError(let message):
+        return message
       }
     }
   }
 
   static func isEnabled() -> Bool {
+    if CodexAuthService.isActive {
+      return true
+    }
     guard DesktopBackendEnvironment.selectedBackendTarget.mode == .localDaemon else {
       return false
     }
@@ -44,8 +50,15 @@ enum HybridChatClient {
     return true
   }
 
-  /// Resolves chat_provider → ai_provider / provider (matches HybridLLMClient).
+  /// Resolves Codex → chat_provider → ai_provider / provider (matches HybridLLMClient).
   static func resolveEffectiveChatConfig(from settings: [LocalDaemonSetting]) -> ProviderConfig? {
+    if let codex = HybridLLMClient.codexProviderConfig() {
+      return ProviderConfig(
+        baseURL: codex.baseURL,
+        model: codex.model,
+        apiKey: codex.apiKey
+      )
+    }
     if let chat = loadProviderConfig(from: settings, key: "chat_provider") {
       return chat
     }
@@ -110,6 +123,9 @@ enum HybridChatClient {
     conversationMessages: [(role: String, text: String)],
     userMessage: String
   ) async throws -> CompletionResult {
+    if CodexAuthService.isActive {
+      await CodexProxyService.shared.ensureRunning()
+    }
     let settings = try await APIClient.shared.getSelectedBackendSettings()
     return try await complete(
       systemPrompt: systemPrompt,
@@ -181,8 +197,11 @@ enum HybridChatClient {
     request.httpBody = try JSONEncoder().encode(payload)
 
     let (data, response) = try await URLSession.shared.data(for: request)
-    guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
+    guard let http = response as? HTTPURLResponse else {
       throw ClientError.invalidResponse
+    }
+    guard (200..<300).contains(http.statusCode) else {
+      throw ClientError.providerError(parseProviderErrorBody(data: data, statusCode: http.statusCode))
     }
     guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
       let choices = json["choices"] as? [[String: Any]],
@@ -217,5 +236,26 @@ enum HybridChatClient {
       inputTokens: inputTokens,
       outputTokens: outputTokens
     )
+  }
+
+  private static func parseProviderErrorBody(data: Data, statusCode: Int) -> String {
+    if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+      if let error = json["error"] as? [String: Any],
+        let message = error["message"] as? String,
+        !message.isEmpty
+      {
+        return message
+      }
+      if let detail = json["detail"] as? String, !detail.isEmpty {
+        return detail
+      }
+    }
+    let snippet =
+      String(data: data.prefix(400), encoding: .utf8)?
+      .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+    if snippet.isEmpty {
+      return "Chat provider request failed (HTTP \(statusCode))."
+    }
+    return "Chat provider request failed (HTTP \(statusCode)): \(snippet)"
   }
 }

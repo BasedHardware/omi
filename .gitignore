@@ -103,7 +103,9 @@ web/app/public/firebase-messaging-sw.js
 !app/pubspec.lock
 !app/ios/Podfile.lock
 !mcp/uv.lock
+desktop/codex-proxy/target/
 *.lock
+!desktop/codex-proxy/Cargo.lock
 *.log
 *.swo
 *.swp

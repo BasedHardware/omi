@@ -107,6 +107,9 @@ struct OMIApp: App {
         .withFontScaling()
         .onAppear {
           log("OmiApp: Main window content appeared (mode: \(Self.launchMode.rawValue))")
+          if CodexAuthService.isActive {
+            Task { await CodexProxyService.shared.ensureRunning() }
+          }
         }
     }
     .windowStyle(.titleBar)

@@ -12,6 +12,9 @@ actor HybridDaemonSettingsCache {
   private let ttlSeconds: TimeInterval = 45
 
   func settings() async throws -> [LocalDaemonSetting] {
+    if CodexAuthService.isActive {
+      return []
+    }
     guard DesktopBackendEnvironment.selectedBackendTarget.mode == .localDaemon else {
       return []
     }
@@ -66,8 +69,21 @@ enum HybridLLMClient {
     return loadOpenAICompatibleProvider(forKeys: ["vision_provider"], settings: settings)
   }
 
-  /// Primary chat routing for assistants: prefers chat_provider, then legacy ai_provider / provider.
+  /// ChatGPT / Codex subscription loopback proxy (when enrolled).
+  static func codexProviderConfig() -> ProviderConfig? {
+    guard CodexAuthService.isActive else { return nil }
+    return ProviderConfig(
+      baseURL: CodexProxyEndpoints.baseURL,
+      model: CodexAuthService.preferredModel,
+      apiKey: ""
+    )
+  }
+
+  /// Primary chat routing for assistants: Codex → chat_provider → ai_provider → BYOK OpenAI.
   static func resolveEffectiveChatConfig(settings: [LocalDaemonSetting]) -> ProviderConfig? {
+    if let codex = codexProviderConfig() {
+      return codex
+    }
     if let c = loadOpenAICompatibleProvider(forKeys: ["chat_provider"], settings: settings) {
       return c
     }
