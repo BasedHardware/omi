@@ -9,6 +9,31 @@ never through Omi Python/Rust proxies.
 The current durable policy key is `provider_policy`. Older raw provider keys are still
 read as a compatibility bridge while desktop UI migrates to the typed policy API.
 
+## Model catalog and provider policy
+
+The local daemon exposes a subscription/profile-aware catalog at
+`GET /v1/model-catalog`. Each entry reports:
+
+- model ID and display name;
+- compatible provider kinds and configured account IDs;
+- allowed task slots;
+- availability for the local profile/subscription state;
+- capability flags for JSON mode, tool calls, multimodal input, streaming, and
+  local/remote origin.
+
+Local profile defaults are centralized in this catalog/policy layer:
+
+| Slot | Default model | Account behavior |
+|------|---------------|------------------|
+| `post_transcript` | `gpt-5.4-mini` | selected by default; unusable until a provider account is configured |
+| `proactive` | `gpt-5.4-mini` | selected by default; unusable until a provider account is configured |
+| `chat` | profile/subscription default (`gpt-5.4-mini` for this profile) | configurable |
+| `memory_search` | `local_wiki` | always local; no embedding provider required |
+
+Slot resolution returns both the selected model and a readable reason. A slot can
+therefore report a default model while also explaining that it cannot run because no
+provider account or subscription integration is configured.
+
 ## Provider policy
 
 `provider_policy` is versioned JSON:
@@ -36,7 +61,7 @@ read as a compatibility bridge while desktop UI migrates to the typed policy API
   "model_slots": {
     "post_transcript": {
       "provider_account_id": "local-ollama",
-      "model_id": "llama3.2",
+      "model_id": "gpt-5.4-mini",
       "options": {
         "json_mode": true,
         "tool_support": false
@@ -72,7 +97,9 @@ Desktop clients should prefer these daemon APIs over manual JSON editing:
 - `GET /v1/provider-policy` returns the typed policy plus legacy-derived slots.
 - `PUT /v1/provider-policy` validates and persists the typed policy.
 - `GET /v1/provider-policy/resolve/{slot}` resolves one slot to its provider account,
-  model, options, and source (`provider_policy`, `legacy_setting`, or `default`).
+  model, options, source (`provider_policy`, `legacy_setting`, or `default`), and a
+  readable success/failure reason.
+- `GET /v1/model-catalog` returns the local model catalog and availability.
 
 Callers should resolve `post_transcript`, `proactive`, and `chat` slots explicitly
 instead of duplicating the legacy setting-key scan order.
@@ -139,13 +166,15 @@ Default hybrid optional tiers: both cloud toggles off. `run.sh` local mode defau
 When the daemon starts via `make serve-local` or `desktop/run.sh` in local mode,
 `desktop/local-backend/tools/seed_hybrid_defaults.sh` runs idempotently:
 
-- If `ai_provider` / `provider` is unset → sets OpenAI-compatible defaults.
-- If `chat_provider` is unset → sets the same defaults.
+- If `post_transcript`, `proactive`, or `chat` lacks a provider account, the script
+  creates/reuses a local OpenAI-compatible account and points those slots at it.
+- `memory_search` remains `local_wiki`.
 
 | Variable | Default |
 |----------|---------|
 | `OMI_HYBRID_DEFAULT_CHAT_BASE_URL` | `http://127.0.0.1:11434/v1` |
-| `OMI_HYBRID_DEFAULT_CHAT_MODEL` | `llama3.2` |
+| `OMI_HYBRID_DEFAULT_CHAT_MODEL` | `gpt-5.4-mini` |
+| `OMI_HYBRID_DEFAULT_PROVIDER_ACCOUNT_ID` | `local-openai-compatible` |
 
 The desktop app also calls `HybridProviderBootstrap.ensureDefaultsIfNeeded()` on
 local guest session startup. Chat resolves `chat_provider` → `ai_provider` → BYOK OpenAI

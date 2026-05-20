@@ -26,6 +26,7 @@ pub fn router() -> Router<AppState> {
         .route("/v1/profile", get(get_profile).put(update_profile))
         .route("/v1/settings", get(list_settings).put(update_settings))
         .route("/v1/settings/test-provider", post(test_provider))
+        .route("/v1/model-catalog", get(get_model_catalog))
         .route(
             "/v1/provider-policy",
             get(get_provider_policy).put(update_provider_policy),
@@ -883,6 +884,11 @@ async fn get_provider_policy(State(state): State<AppState>) -> ApiResult<Value> 
     Ok(Json(json!({ "provider_policy": policy })))
 }
 
+async fn get_model_catalog(State(state): State<AppState>) -> ApiResult<Value> {
+    let catalog = providers::model_catalog(&state.store).map_err(ApiError::internal)?;
+    Ok(Json(json!({ "models": catalog })))
+}
+
 async fn update_provider_policy(
     State(state): State<AppState>,
     Json(policy): Json<providers::ProviderPolicy>,
@@ -896,9 +902,12 @@ async fn resolve_provider_slot(
     State(state): State<AppState>,
     Path(slot): Path<String>,
 ) -> ApiResult<Value> {
-    let resolved =
-        providers::resolve_model_slot(&state.store, &slot).map_err(ApiError::internal)?;
-    Ok(Json(json!({ "resolved": resolved })))
+    let resolution =
+        providers::resolve_model_slot_result(&state.store, &slot).map_err(ApiError::internal)?;
+    Ok(Json(json!({
+        "resolved": resolution.resolved,
+        "resolution": resolution
+    })))
 }
 
 async fn list_processing_jobs(State(state): State<AppState>) -> ApiResult<Value> {

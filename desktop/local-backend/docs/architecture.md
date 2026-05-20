@@ -20,9 +20,9 @@ local daemon's critical path.
   transcript rows, FTS, sync metadata fields, and local profile/settings.
 - `src/processing.rs` owns durable job execution, deterministic fallback
   processing, and output persistence.
-- `src/providers.rs` owns direct provider adapters. The current adapter is
-  OpenAI-compatible chat completions and is configured only through local
-  settings.
+- `src/providers.rs` owns the model catalog, provider-account/model-slot policy,
+  and direct provider adapters. The current adapter is OpenAI-compatible chat
+  completions and is configured only through local settings/policy.
 
 ## Data Directory And Database
 
@@ -64,9 +64,14 @@ Remote AI/STT providers are allowed only when explicitly configured by the user
 or developer. The daemon talks directly to configured providers; it does not use
 Omi backend provider proxies.
 
-The MVP includes an OpenAI-compatible chat completions adapter with local
-settings for base URL, model, and API key. The processing pipeline still works
-without any provider key by using deterministic fallbacks:
+The MVP includes a subscription/profile-aware model catalog plus an
+OpenAI-compatible chat completions adapter with local settings for base URL,
+model, and API key. `post_transcript` and `proactive` default to the designated
+small model `gpt-5.4-mini`; `chat` uses the profile/subscription default and is
+configurable; `memory_search` defaults to `local_wiki` and requires no embedding
+provider. A default model slot can exist without a usable provider account, in
+which case resolution returns a readable reason and the processing pipeline uses
+deterministic fallbacks:
 
 - title: first meaningful transcript words, bounded length
 - overview: clipped transcript excerpt

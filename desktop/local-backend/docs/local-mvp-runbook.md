@@ -71,8 +71,10 @@ machine.
   `"service":"omi-local-backend"`.
 - Hybrid providers: `make serve-local` and `desktop/run.sh` (local mode) run
   `desktop/local-backend/tools/seed_hybrid_defaults.sh` when the daemon is healthy,
-  seeding `ai_provider` and `chat_provider` to `http://127.0.0.1:11434/v1` (Ollama) if unset.
-  Override with `OMI_HYBRID_DEFAULT_CHAT_BASE_URL` and `OMI_HYBRID_DEFAULT_CHAT_MODEL`.
+  seeding `post_transcript`, `proactive`, and `chat` model slots to a local
+  OpenAI-compatible account if those slots lack provider accounts. Override with
+  `OMI_HYBRID_DEFAULT_CHAT_BASE_URL`, `OMI_HYBRID_DEFAULT_CHAT_MODEL`, and
+  `OMI_HYBRID_DEFAULT_PROVIDER_ACCOUNT_ID`.
 
 ### Manual `run.sh` launch
 

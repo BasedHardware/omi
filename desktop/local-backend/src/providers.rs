@@ -54,6 +54,12 @@ pub const SLOT_VISION: &str = "vision";
 pub const SLOT_STT: &str = "stt";
 pub const SLOT_MEMORY_SEARCH: &str = "memory_search";
 
+pub const MODEL_GPT_5_4: &str = "gpt-5.4";
+pub const MODEL_GPT_5_4_MINI: &str = "gpt-5.4-mini";
+pub const MODEL_LLAMA_3_2: &str = "llama3.2";
+pub const MODEL_LOCAL_WIKI: &str = "local_wiki";
+pub const MODEL_WHISPER_1: &str = "whisper-1";
+
 const LEGACY_SLOT_KEYS: &[(&str, &[&str])] = &[
     (SLOT_POST_TRANSCRIPT, &["ai_provider", "provider"]),
     (SLOT_CHAT, &["chat_provider"]),
@@ -68,6 +74,39 @@ pub struct ProviderPolicy {
     pub provider_accounts: Vec<ProviderAccount>,
     #[serde(default)]
     pub model_slots: BTreeMap<String, ModelSlotTarget>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ModelCatalogEntry {
+    pub id: String,
+    pub display_name: String,
+    pub compatible_provider_kinds: Vec<String>,
+    pub compatible_provider_account_ids: Vec<String>,
+    pub allowed_slots: Vec<String>,
+    pub availability: ModelAvailability,
+    pub capabilities: ModelCapabilities,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ModelAvailability {
+    pub local_profile: bool,
+    pub subscription_required: Option<String>,
+    pub configured_account_required: bool,
+    pub available: bool,
+    pub reason: String,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ModelCapabilities {
+    #[serde(default)]
+    pub json_mode: bool,
+    #[serde(default)]
+    pub tool_calls: bool,
+    #[serde(default)]
+    pub multimodal_input: bool,
+    #[serde(default)]
+    pub streaming: bool,
+    pub origin: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -117,6 +156,14 @@ pub struct ResolvedModelSlot {
     pub model_id: String,
     pub options: ModelSlotOptions,
     pub source: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ModelSlotResolution {
+    pub slot: String,
+    pub ok: bool,
+    pub resolved: Option<ResolvedModelSlot>,
+    pub reason: String,
 }
 
 #[derive(Clone)]
@@ -223,6 +270,7 @@ pub fn load_provider_policy(store: &Store) -> Result<ProviderPolicy> {
         }
     };
     add_legacy_policy_bridge(store, &mut policy)?;
+    add_local_profile_defaults(&mut policy)?;
     Ok(policy)
 }
 
@@ -236,19 +284,23 @@ pub fn save_provider_policy(store: &Store, policy: ProviderPolicy) -> Result<Pro
 }
 
 pub fn resolve_model_slot(store: &Store, slot: &str) -> Result<Option<ResolvedModelSlot>> {
-    if slot == SLOT_MEMORY_SEARCH {
-        return Ok(Some(ResolvedModelSlot {
-            slot: SLOT_MEMORY_SEARCH.to_string(),
-            provider_account: None,
-            model_id: "local_wiki".to_string(),
-            options: ModelSlotOptions::default(),
-            source: "default".to_string(),
-        }));
+    let resolution = resolve_model_slot_result(store, slot)?;
+    if resolution.ok {
+        Ok(resolution.resolved)
+    } else {
+        Ok(None)
     }
+}
 
+pub fn resolve_model_slot_result(store: &Store, slot: &str) -> Result<ModelSlotResolution> {
     let policy = load_provider_policy(store)?;
     let Some(target) = policy.model_slots.get(slot) else {
-        return Ok(None);
+        return Ok(ModelSlotResolution {
+            slot: slot.to_string(),
+            ok: false,
+            resolved: None,
+            reason: format!("no model slot configured for {slot}"),
+        });
     };
     let account = match target.provider_account_id.as_deref() {
         Some(account_id) => Some(
@@ -263,7 +315,7 @@ pub fn resolve_model_slot(store: &Store, slot: &str) -> Result<Option<ResolvedMo
         ),
         None => None,
     };
-    Ok(Some(ResolvedModelSlot {
+    let resolved = ResolvedModelSlot {
         slot: slot.to_string(),
         provider_account: account,
         model_id: target.model_id.clone(),
@@ -277,7 +329,28 @@ pub fn resolve_model_slot(store: &Store, slot: &str) -> Result<Option<ResolvedMo
         } else {
             "provider_policy".to_string()
         },
-    }))
+    };
+    if slot != SLOT_MEMORY_SEARCH && resolved.provider_account.is_none() {
+        return Ok(ModelSlotResolution {
+            slot: slot.to_string(),
+            ok: false,
+            resolved: Some(resolved),
+            reason: format!(
+                "model slot {slot} selects {} but no provider account is configured",
+                target.model_id
+            ),
+        });
+    }
+    let reason = format!(
+        "{} resolved to {} from {}",
+        resolved.slot, resolved.model_id, resolved.source
+    );
+    Ok(ModelSlotResolution {
+        slot: slot.to_string(),
+        ok: true,
+        resolved: Some(resolved),
+        reason,
+    })
 }
 
 pub fn validate_provider_policy(policy: &ProviderPolicy) -> Result<()> {
@@ -307,6 +380,7 @@ pub fn validate_provider_policy(policy: &ProviderPolicy) -> Result<()> {
     ] {
         if let Some(target) = policy.model_slots.get(slot) {
             validate_model_slot_target(slot, target, &account_ids)?;
+            validate_model_allowed_for_slot(policy, slot, target)?;
         }
     }
     for slot in policy.model_slots.keys() {
@@ -355,7 +429,7 @@ fn add_legacy_policy_bridge(store: &Store, policy: &mut ProviderPolicy) -> Resul
             };
             let model_id = value["model"]
                 .as_str()
-                .unwrap_or("gpt-5.4-mini")
+                .unwrap_or(MODEL_GPT_5_4_MINI)
                 .to_string();
             policy.provider_accounts.push(account.clone());
             policy.model_slots.insert(
@@ -373,6 +447,257 @@ fn add_legacy_policy_bridge(store: &Store, policy: &mut ProviderPolicy) -> Resul
         }
     }
     Ok(())
+}
+
+pub fn model_catalog(store: &Store) -> Result<Vec<ModelCatalogEntry>> {
+    let policy = load_provider_policy(store)?;
+    Ok(model_catalog_for_policy(&policy))
+}
+
+pub fn model_catalog_for_policy(policy: &ProviderPolicy) -> Vec<ModelCatalogEntry> {
+    let account_ids: Vec<String> = policy
+        .provider_accounts
+        .iter()
+        .map(|account| account.id.clone())
+        .collect();
+    let mut entries = vec![
+        catalog_entry(
+            MODEL_GPT_5_4_MINI,
+            "GPT-5.4 mini",
+            &["openai", "openai_compatible"],
+            &account_ids,
+            &[SLOT_CHAT, SLOT_POST_TRANSCRIPT, SLOT_PROACTIVE],
+            ModelAvailability {
+                local_profile: true,
+                subscription_required: Some("chatgpt_plan".to_string()),
+                configured_account_required: true,
+                available: !account_ids.is_empty(),
+                reason: account_availability_reason(
+                    &account_ids,
+                    "requires a configured OpenAI-compatible account or ChatGPT plan integration",
+                ),
+            },
+            ModelCapabilities {
+                json_mode: true,
+                tool_calls: true,
+                multimodal_input: false,
+                streaming: true,
+                origin: "remote".to_string(),
+            },
+        ),
+        catalog_entry(
+            MODEL_GPT_5_4,
+            "GPT-5.4",
+            &["openai", "openai_compatible"],
+            &account_ids,
+            &[SLOT_CHAT],
+            ModelAvailability {
+                local_profile: true,
+                subscription_required: Some("chatgpt_plan".to_string()),
+                configured_account_required: true,
+                available: !account_ids.is_empty(),
+                reason: account_availability_reason(
+                    &account_ids,
+                    "requires a configured OpenAI-compatible account or ChatGPT plan integration",
+                ),
+            },
+            ModelCapabilities {
+                json_mode: true,
+                tool_calls: true,
+                multimodal_input: true,
+                streaming: true,
+                origin: "remote".to_string(),
+            },
+        ),
+        catalog_entry(
+            MODEL_LLAMA_3_2,
+            "Llama 3.2",
+            &["openai_compatible"],
+            &account_ids,
+            &[SLOT_CHAT, SLOT_POST_TRANSCRIPT, SLOT_PROACTIVE],
+            ModelAvailability {
+                local_profile: true,
+                subscription_required: None,
+                configured_account_required: true,
+                available: !account_ids.is_empty(),
+                reason: account_availability_reason(
+                    &account_ids,
+                    "requires a configured OpenAI-compatible local account",
+                ),
+            },
+            ModelCapabilities {
+                json_mode: true,
+                tool_calls: false,
+                multimodal_input: false,
+                streaming: true,
+                origin: "local".to_string(),
+            },
+        ),
+        catalog_entry(
+            MODEL_WHISPER_1,
+            "Whisper",
+            &["openai", "openai_compatible"],
+            &account_ids,
+            &[SLOT_STT],
+            ModelAvailability {
+                local_profile: true,
+                subscription_required: None,
+                configured_account_required: true,
+                available: !account_ids.is_empty(),
+                reason: account_availability_reason(
+                    &account_ids,
+                    "requires a configured speech-to-text account",
+                ),
+            },
+            ModelCapabilities {
+                json_mode: false,
+                tool_calls: false,
+                multimodal_input: false,
+                streaming: false,
+                origin: "remote".to_string(),
+            },
+        ),
+        catalog_entry(
+            MODEL_LOCAL_WIKI,
+            "Local wiki search",
+            &["local"],
+            &[],
+            &[SLOT_MEMORY_SEARCH],
+            ModelAvailability {
+                local_profile: true,
+                subscription_required: None,
+                configured_account_required: false,
+                available: true,
+                reason:
+                    "available from local SQLite/FTS memory search; no embedding provider required"
+                        .to_string(),
+            },
+            ModelCapabilities {
+                json_mode: false,
+                tool_calls: false,
+                multimodal_input: false,
+                streaming: false,
+                origin: "local".to_string(),
+            },
+        ),
+    ];
+    for (slot, target) in &policy.model_slots {
+        if entries.iter().any(|entry| entry.id == target.model_id) {
+            continue;
+        }
+        let Some(account_id) = target.provider_account_id.as_deref() else {
+            continue;
+        };
+        let Some(account) = policy
+            .provider_accounts
+            .iter()
+            .find(|account| account.id == account_id)
+        else {
+            continue;
+        };
+        if account
+            .base_url
+            .as_deref()
+            .is_some_and(|base_url| is_loopback_provider_base_url(base_url).unwrap_or(false))
+        {
+            entries.push(catalog_entry(
+                &target.model_id,
+                &target.model_id,
+                &[account.kind.as_str()],
+                std::slice::from_ref(&account.id),
+                &[slot.as_str()],
+                ModelAvailability {
+                    local_profile: true,
+                    subscription_required: None,
+                    configured_account_required: true,
+                    available: true,
+                    reason: "available through configured loopback provider account".to_string(),
+                },
+                ModelCapabilities {
+                    json_mode: account.capabilities.json_mode,
+                    tool_calls: account.capabilities.tool_calls,
+                    multimodal_input: account.capabilities.vision,
+                    streaming: account.capabilities.chat_completions,
+                    origin: "local".to_string(),
+                },
+            ));
+        }
+    }
+    entries
+}
+
+fn catalog_entry(
+    id: &str,
+    display_name: &str,
+    compatible_provider_kinds: &[&str],
+    compatible_provider_account_ids: &[String],
+    allowed_slots: &[&str],
+    availability: ModelAvailability,
+    capabilities: ModelCapabilities,
+) -> ModelCatalogEntry {
+    ModelCatalogEntry {
+        id: id.to_string(),
+        display_name: display_name.to_string(),
+        compatible_provider_kinds: compatible_provider_kinds
+            .iter()
+            .map(|value| value.to_string())
+            .collect(),
+        compatible_provider_account_ids: compatible_provider_account_ids.to_vec(),
+        allowed_slots: allowed_slots
+            .iter()
+            .map(|value| value.to_string())
+            .collect(),
+        availability,
+        capabilities,
+    }
+}
+
+fn account_availability_reason(account_ids: &[String], unavailable_reason: &str) -> String {
+    if account_ids.is_empty() {
+        unavailable_reason.to_string()
+    } else {
+        "available through configured provider policy account".to_string()
+    }
+}
+
+fn add_local_profile_defaults(policy: &mut ProviderPolicy) -> Result<()> {
+    policy
+        .model_slots
+        .entry(SLOT_POST_TRANSCRIPT.to_string())
+        .or_insert_with(|| default_model_slot_target(None, MODEL_GPT_5_4_MINI, true, false));
+    policy
+        .model_slots
+        .entry(SLOT_PROACTIVE.to_string())
+        .or_insert_with(|| default_model_slot_target(None, MODEL_GPT_5_4_MINI, true, false));
+    policy
+        .model_slots
+        .entry(SLOT_CHAT.to_string())
+        .or_insert_with(|| default_model_slot_target(None, MODEL_GPT_5_4_MINI, false, false));
+    policy
+        .model_slots
+        .entry(SLOT_MEMORY_SEARCH.to_string())
+        .or_insert_with(|| ModelSlotTarget {
+            provider_account_id: None,
+            model_id: MODEL_LOCAL_WIKI.to_string(),
+            options: ModelSlotOptions::default(),
+        });
+    validate_provider_policy(policy)
+}
+
+fn default_model_slot_target(
+    provider_account_id: Option<&str>,
+    model_id: &str,
+    json_mode: bool,
+    tool_support: bool,
+) -> ModelSlotTarget {
+    ModelSlotTarget {
+        provider_account_id: provider_account_id.map(ToString::to_string),
+        model_id: model_id.to_string(),
+        options: ModelSlotOptions {
+            json_mode: Some(json_mode),
+            tool_support: Some(tool_support),
+        },
+    }
 }
 
 fn legacy_provider_account(
@@ -457,10 +782,59 @@ fn validate_model_slot_target(
                 "model slot {slot} references missing provider account: {account_id}"
             ));
         }
-    } else if slot != SLOT_MEMORY_SEARCH {
+    }
+    Ok(())
+}
+
+fn validate_model_allowed_for_slot(
+    policy: &ProviderPolicy,
+    slot: &str,
+    target: &ModelSlotTarget,
+) -> Result<()> {
+    let catalog = model_catalog_for_policy(policy);
+    let entry = catalog
+        .iter()
+        .find(|entry| entry.id == target.model_id)
+        .ok_or_else(|| anyhow!("model slot {slot} uses unknown model: {}", target.model_id))?;
+    if !entry.allowed_slots.iter().any(|allowed| allowed == slot) {
         return Err(anyhow!(
-            "model slot {slot} requires provider_account_id unless it is memory_search"
+            "model {} is not allowed for slot {slot}",
+            target.model_id
         ));
+    }
+    if let Some(account_id) = target.provider_account_id.as_deref() {
+        let account = policy
+            .provider_accounts
+            .iter()
+            .find(|account| account.id == account_id)
+            .ok_or_else(|| {
+                anyhow!("model slot {slot} references missing provider account: {account_id}")
+            })?;
+        if !entry
+            .compatible_provider_kinds
+            .iter()
+            .any(|kind| kind == &account.kind)
+        {
+            return Err(anyhow!(
+                "model {} is not compatible with provider account {}",
+                target.model_id,
+                account.id
+            ));
+        }
+        if target.options.json_mode == Some(true)
+            && (!entry.capabilities.json_mode || !account.capabilities.json_mode)
+        {
+            return Err(anyhow!(
+                "model slot {slot} requires JSON mode but model/account does not support it"
+            ));
+        }
+        if target.options.tool_support == Some(true)
+            && (!entry.capabilities.tool_calls || !account.capabilities.tool_calls)
+        {
+            return Err(anyhow!(
+                "model slot {slot} requires tool calls but model/account does not support them"
+            ));
+        }
     }
     Ok(())
 }
@@ -504,24 +878,6 @@ pub fn validate_hybrid_provider_setting(key: &str, value: &Value) -> Result<()> 
         return Ok(());
     }
     validate_provider_setting(value)
-}
-
-pub fn is_provider_configured(value: &Value) -> bool {
-    if value.is_null() {
-        return false;
-    }
-    let kind = value["kind"].as_str().unwrap_or_default();
-    if kind != "openai" && kind != "openai_compatible" {
-        return false;
-    }
-    let api_key = value["api_key"]
-        .as_str()
-        .or_else(|| value["key"].as_str())
-        .unwrap_or_default();
-    !api_key.trim().is_empty()
-        || value["base_url"]
-            .as_str()
-            .is_some_and(|url| url.contains("127.0.0.1") || url.contains("localhost"))
 }
 
 fn is_openai_compatible_kind(kind: &str) -> bool {
@@ -730,10 +1086,17 @@ mod tests {
         };
 
         let saved = save_provider_policy(&store, policy.clone())?;
-        assert_eq!(saved, policy);
+        assert_eq!(
+            saved.model_slots[SLOT_POST_TRANSCRIPT],
+            policy.model_slots[SLOT_POST_TRANSCRIPT]
+        );
+        assert_eq!(
+            saved.model_slots[SLOT_PROACTIVE].model_id,
+            MODEL_GPT_5_4_MINI
+        );
 
         let loaded = load_provider_policy(&store)?;
-        assert_eq!(loaded, policy);
+        assert_eq!(loaded, saved);
 
         let resolved = resolve_model_slot(&store, SLOT_POST_TRANSCRIPT)?.expect("slot");
         assert_eq!(resolved.model_id, "llama3.2");
@@ -787,11 +1150,105 @@ mod tests {
     }
 
     #[test]
-    fn unresolved_slots_return_none() -> Result<()> {
+    fn default_slots_select_small_models_but_need_accounts() -> Result<()> {
         let store = Store::open_in_memory()?;
 
         assert!(resolve_model_slot(&store, SLOT_PROACTIVE)?.is_none());
         assert!(resolve_model_slot(&store, SLOT_VISION)?.is_none());
+        let proactive = resolve_model_slot_result(&store, SLOT_PROACTIVE)?;
+        assert!(!proactive.ok);
+        assert_eq!(
+            proactive
+                .resolved
+                .expect("default proactive model")
+                .model_id,
+            MODEL_GPT_5_4_MINI
+        );
+        assert!(proactive.reason.contains("no provider account"));
+
+        let memory_search = resolve_model_slot(&store, SLOT_MEMORY_SEARCH)?.expect("memory");
+        assert_eq!(memory_search.model_id, MODEL_LOCAL_WIKI);
+        assert_eq!(memory_search.provider_account, None);
+
+        Ok(())
+    }
+
+    #[test]
+    fn allowed_override_and_disallowed_slot_are_validated() -> Result<()> {
+        let account = ProviderAccount {
+            id: "openai-plan".to_string(),
+            kind: "openai_compatible".to_string(),
+            base_url: Some("https://api.openai.com/v1".to_string()),
+            api_key: None,
+            display_name: Some("OpenAI plan".to_string()),
+            capabilities: ProviderCapabilities {
+                chat_completions: true,
+                json_mode: true,
+                tool_calls: true,
+                vision: true,
+                speech_to_text: false,
+            },
+            subscription_integration: Some("chatgpt_plan".to_string()),
+        };
+        let mut slots = BTreeMap::new();
+        slots.insert(
+            SLOT_CHAT.to_string(),
+            ModelSlotTarget {
+                provider_account_id: Some(account.id.clone()),
+                model_id: MODEL_GPT_5_4.to_string(),
+                options: ModelSlotOptions {
+                    json_mode: Some(false),
+                    tool_support: Some(true),
+                },
+            },
+        );
+        let policy = ProviderPolicy {
+            version: PROVIDER_POLICY_VERSION,
+            provider_accounts: vec![account.clone()],
+            model_slots: slots,
+        };
+        validate_provider_policy(&policy)?;
+
+        let mut bad_slots = BTreeMap::new();
+        bad_slots.insert(
+            SLOT_POST_TRANSCRIPT.to_string(),
+            ModelSlotTarget {
+                provider_account_id: Some(account.id.clone()),
+                model_id: MODEL_WHISPER_1.to_string(),
+                options: ModelSlotOptions::default(),
+            },
+        );
+        let bad = ProviderPolicy {
+            version: PROVIDER_POLICY_VERSION,
+            provider_accounts: vec![account],
+            model_slots: bad_slots,
+        };
+        assert!(validate_provider_policy(&bad)
+            .unwrap_err()
+            .to_string()
+            .contains("not allowed"));
+
+        Ok(())
+    }
+
+    #[test]
+    fn model_catalog_reports_no_account_and_memory_search_needs_no_embeddings() -> Result<()> {
+        let store = Store::open_in_memory()?;
+        let catalog = model_catalog(&store)?;
+        let mini = catalog
+            .iter()
+            .find(|entry| entry.id == MODEL_GPT_5_4_MINI)
+            .expect("mini model");
+        assert!(!mini.availability.available);
+        assert!(mini.availability.configured_account_required);
+
+        let memory_search = catalog
+            .iter()
+            .find(|entry| entry.id == MODEL_LOCAL_WIKI)
+            .expect("local wiki model");
+        assert!(memory_search.availability.available);
+        assert!(!memory_search.availability.configured_account_required);
+        assert_eq!(memory_search.capabilities.origin, "local");
 
         Ok(())
     }

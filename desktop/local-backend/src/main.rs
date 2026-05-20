@@ -366,9 +366,23 @@ mod tests {
 
         let policy = request_json(app.clone(), Method::GET, "/v1/provider-policy", None).await?;
         assert_eq!(policy["provider_policy"]["version"], 1);
+        assert_eq!(
+            policy["provider_policy"]["model_slots"]["proactive"]["model_id"],
+            "gpt-5.4-mini"
+        );
+
+        let catalog = request_json(app.clone(), Method::GET, "/v1/model-catalog", None).await?;
+        assert!(
+            catalog["models"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|model| model["id"] == "local_wiki"
+                    && model["availability"]["available"] == true)
+        );
 
         let resolved = request_json(
-            app,
+            app.clone(),
             Method::GET,
             "/v1/provider-policy/resolve/post_transcript",
             None,
@@ -376,6 +390,20 @@ mod tests {
         .await?;
         assert_eq!(resolved["resolved"]["model_id"], "llama3.2");
         assert_eq!(resolved["resolved"]["source"], "provider_policy");
+        assert_eq!(resolved["resolution"]["ok"], true);
+
+        let proactive = request_json(
+            app,
+            Method::GET,
+            "/v1/provider-policy/resolve/proactive",
+            None,
+        )
+        .await?;
+        assert_eq!(proactive["resolution"]["ok"], false);
+        assert!(proactive["resolution"]["reason"]
+            .as_str()
+            .unwrap()
+            .contains("no provider account"));
 
         Ok(())
     }
