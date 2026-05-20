@@ -15,8 +15,7 @@ import 'package:omi/utils/waveform_utils.dart';
 
 enum WalStatusFilter { pending, synced }
 
-/// Segmented filter for the redesigned auto-sync page's unified list.
-enum WalDisplayFilter { all, pending, synced, issues }
+enum WalDisplayFilter { all, pending, synced }
 
 class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSyncProgressListener {
   // Services
@@ -102,10 +101,6 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
           return w.syncDisplayState != WalSyncDisplayState.synced;
         case WalDisplayFilter.synced:
           return w.syncDisplayState == WalSyncDisplayState.synced;
-        case WalDisplayFilter.issues:
-          return w.syncDisplayState == WalSyncDisplayState.failed ||
-              w.syncDisplayState == WalSyncDisplayState.corrupted ||
-              w.syncDisplayState == WalSyncDisplayState.retrying;
       }
     }
 
