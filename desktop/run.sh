@@ -450,7 +450,7 @@ if is_local_daemon_mode; then
         SEED_SCRIPT="$(cd "$(dirname "$0")/local-backend/tools" && pwd)/seed_hybrid_defaults.sh"
         if [ -x "$SEED_SCRIPT" ]; then
             substep "Seeding hybrid provider defaults (if unset)"
-            "$SEED_SCRIPT" || substep "Warning: hybrid provider seed failed (non-fatal)"
+            bash "$SEED_SCRIPT" || substep "Warning: hybrid provider seed failed (non-fatal)"
         fi
     fi
 fi

@@ -250,8 +250,17 @@ Default hybrid optional tiers: both cloud toggles off. `run.sh` local mode defau
 When the daemon starts via `make serve-local` or `desktop/run.sh` in local mode,
 `desktop/local-backend/tools/seed_hybrid_defaults.sh` runs idempotently:
 
-- If `post_transcript`, `proactive`, or `chat` lacks a provider account, the script
+- The typed `provider_policy` is the source of truth once it exists. Legacy
+  `ai_provider` / `chat_provider` settings are bridged only before a typed policy
+  has been created.
+- The seed script removes synthetic `legacy-*` accounts from the policy it writes,
+  so compatibility bridge output is not permanently materialized.
+- If the default local OpenAI-compatible endpoint is reachable, and
+  `post_transcript`, `proactive`, or `chat` lacks a provider account, the script
   creates/reuses a local OpenAI-compatible account and points those slots at it.
+- If the default endpoint is unavailable, the script leaves unconfigured slots
+  without provider accounts so post-transcript processing can use deterministic
+  fallback output instead of failing against a dead local model server.
 - `memory_search` remains `local_wiki`.
 
 | Variable | Default |

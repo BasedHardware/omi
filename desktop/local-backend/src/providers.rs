@@ -285,7 +285,8 @@ pub fn post_transcript_slot_resolution(store: &Store) -> Result<ModelSlotResolut
 }
 
 pub fn load_provider_policy(store: &Store) -> Result<ProviderPolicy> {
-    let mut policy = if let Some(setting) = store.settings().get(PROVIDER_POLICY_SETTING_KEY)? {
+    let policy_setting = store.settings().get(PROVIDER_POLICY_SETTING_KEY)?;
+    let mut policy = if let Some(setting) = policy_setting.as_ref() {
         let policy: ProviderPolicy = serde_json::from_str(&setting.value_json)
             .context("failed to parse provider_policy setting")?;
         if policy.version != PROVIDER_POLICY_VERSION {
@@ -302,7 +303,9 @@ pub fn load_provider_policy(store: &Store) -> Result<ProviderPolicy> {
             model_slots: BTreeMap::new(),
         }
     };
-    add_legacy_policy_bridge(store, &mut policy)?;
+    if policy_setting.is_none() {
+        add_legacy_policy_bridge(store, &mut policy)?;
+    }
     add_local_profile_defaults(&mut policy)?;
     Ok(policy)
 }
@@ -460,10 +463,7 @@ fn add_legacy_policy_bridge(store: &Store, policy: &mut ProviderPolicy) -> Resul
             let Some(account) = legacy_provider_account(slot, key, &value)? else {
                 continue;
             };
-            let model_id = value["model"]
-                .as_str()
-                .unwrap_or(MODEL_GPT_5_4_MINI)
-                .to_string();
+            let model_id = legacy_model_for_slot(slot, value["model"].as_str());
             policy.provider_accounts.push(account.clone());
             policy.model_slots.insert(
                 (*slot).to_string(),
@@ -480,6 +480,14 @@ fn add_legacy_policy_bridge(store: &Store, policy: &mut ProviderPolicy) -> Resul
         }
     }
     Ok(())
+}
+
+fn legacy_model_for_slot(slot: &str, model: Option<&str>) -> String {
+    let model = model.unwrap_or(MODEL_GPT_5_4_MINI);
+    if matches!(slot, SLOT_POST_TRANSCRIPT | SLOT_PROACTIVE) && model == MODEL_GPT_5_4 {
+        return MODEL_GPT_5_4_MINI.to_string();
+    }
+    model.to_string()
 }
 
 pub fn model_catalog(store: &Store) -> Result<Vec<ModelCatalogEntry>> {
@@ -1216,6 +1224,83 @@ mod tests {
         let memory_search = resolve_model_slot(&store, SLOT_MEMORY_SEARCH)?.expect("memory");
         assert_eq!(memory_search.provider_account, None);
         assert_eq!(memory_search.model_id, "local_wiki");
+
+        Ok(())
+    }
+
+    #[test]
+    fn legacy_gpt_5_4_settings_are_sanitized_for_json_slots() -> Result<()> {
+        let store = Store::open_in_memory()?;
+        let mut settings = Map::new();
+        settings.insert(
+            "chat_provider".to_string(),
+            json!({
+                "kind": "openai_compatible",
+                "base_url": "http://127.0.0.1:11434/v1",
+                "model": MODEL_GPT_5_4
+            }),
+        );
+        settings.insert(
+            "ai_provider".to_string(),
+            json!({
+                "kind": "openai_compatible",
+                "base_url": "http://127.0.0.1:11434/v1",
+                "model": MODEL_GPT_5_4
+            }),
+        );
+        store.settings().upsert_many(settings)?;
+
+        let policy = load_provider_policy(&store)?;
+        assert_eq!(policy.model_slots[SLOT_CHAT].model_id, MODEL_GPT_5_4);
+        assert_eq!(
+            policy.model_slots[SLOT_POST_TRANSCRIPT].model_id,
+            MODEL_GPT_5_4_MINI
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn typed_provider_policy_suppresses_legacy_settings_bridge() -> Result<()> {
+        let store = Store::open_in_memory()?;
+        let mut settings = Map::new();
+        settings.insert(
+            "ai_provider".to_string(),
+            json!({
+                "kind": "openai_compatible",
+                "base_url": "http://127.0.0.1:10531/v1",
+                "model": MODEL_GPT_5_4_MINI
+            }),
+        );
+        settings.insert(
+            PROVIDER_POLICY_SETTING_KEY.to_string(),
+            json!({
+                "version": PROVIDER_POLICY_VERSION,
+                "provider_accounts": [],
+                "model_slots": {
+                    "memory_search": {
+                        "provider_account_id": null,
+                        "model_id": MODEL_LOCAL_WIKI,
+                        "options": {}
+                    }
+                }
+            }),
+        );
+        store.settings().upsert_many(settings)?;
+
+        let policy = load_provider_policy(&store)?;
+        assert!(policy
+            .provider_accounts
+            .iter()
+            .all(|account| !account.id.starts_with("legacy-")));
+        assert_eq!(
+            policy.model_slots[SLOT_POST_TRANSCRIPT].provider_account_id,
+            None
+        );
+
+        let resolution = post_transcript_slot_resolution(&store)?;
+        assert!(!resolution.ok);
+        assert!(resolution.reason.contains("no provider account"));
 
         Ok(())
     }
