@@ -31,6 +31,7 @@ build/
 dist/
 .build/
 .swiftpm/
+**/target/
 
 # VS Code
 .vscode/*
