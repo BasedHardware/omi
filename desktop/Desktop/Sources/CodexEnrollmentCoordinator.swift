@@ -5,12 +5,15 @@ import Foundation
 @MainActor
 enum CodexEnrollmentCoordinator {
   enum EnrollmentError: LocalizedError {
+    case alreadyInProgress
     case authFileMissing
     case proxyFailed(String)
     case backendFailed(String)
 
     var errorDescription: String? {
       switch self {
+      case .alreadyInProgress:
+        return "Sign-in is already in progress. Wait a moment or complete login in Terminal."
       case .authFileMissing:
         return
           "Sign-in timed out. Complete login in Terminal, then try again."
@@ -74,7 +77,9 @@ enum CodexEnrollmentCoordinator {
 
   /// Sign in: use existing auth if present, otherwise open Codex login then poll.
   static func connect(pollSeconds: Int = 120) async throws {
-    guard !connectInFlight else { return }
+    guard !connectInFlight else {
+      throw EnrollmentError.alreadyInProgress
+    }
     connectInFlight = true
     defer {
       connectInFlight = false
@@ -116,6 +121,14 @@ enum CodexEnrollmentCoordinator {
     guard CodexProxyService.shared.isRunning else {
       CodexAuthService.clearEnrollment()
       throw EnrollmentError.proxyFailed(CodexProxyService.shared.lastError ?? "unknown")
+    }
+
+    if DesktopBackendEnvironment.selectedBackendTarget.mode == .localDaemon {
+      log("CodexEnrollmentCoordinator: local daemon mode — skipping cloud chatgpt-active enrollment")
+      await CodexProviderBootstrap.applyIfNeeded()
+      await FloatingBarUsageLimiter.shared.fetchPlan()
+      AppState.current?.isPaywalled = false
+      return
     }
 
     let fingerprint = CodexAuthService.enrollmentFingerprint(for: snapshot.accountId)

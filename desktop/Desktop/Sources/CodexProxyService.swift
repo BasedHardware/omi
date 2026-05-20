@@ -51,8 +51,16 @@ final class CodexProxyService: ObservableObject {
       await stop()
       return
     }
-    if isRunning, await healthCheck() { return }
-    await stop()
+    // Reuse an already-healthy proxy (e.g. from a prior session or manual start).
+    if await healthCheck() {
+      isRunning = true
+      lastError = nil
+      startHealthMonitor()
+      return
+    }
+    if isRunning {
+      await stop()
+    }
     guard let executable = resolveExecutableURL() else {
       lastError =
         "Codex proxy binary not found. Build with: cd desktop/codex-proxy && cargo build --release"
@@ -71,13 +79,14 @@ final class CodexProxyService: ObservableObject {
     var env = ProcessInfo.processInfo.environment
     env["OMI_CODEX_PROXY_PORT"] = String(Self.port)
     proc.environment = env
+    let stderrPipe = Pipe()
+    proc.standardError = stderrPipe
     proc.standardOutput = FileHandle.nullDevice
-    proc.standardError = FileHandle.nullDevice
 
     do {
       try proc.run()
       process = proc
-      for _ in 0..<30 {
+      for _ in 0..<50 {
         try? await Task.sleep(nanoseconds: 100_000_000)
         if await healthCheck() {
           isRunning = true
@@ -87,7 +96,15 @@ final class CodexProxyService: ObservableObject {
           return
         }
       }
-      lastError = "Codex proxy failed to start (health check timeout)."
+      let stderrData = stderrPipe.fileHandleForReading.readDataToEndOfFile()
+      let stderrHint = String(data: stderrData, encoding: .utf8)?
+        .trimmingCharacters(in: .whitespacesAndNewlines)
+      let detail =
+        (stderrHint?.isEmpty == false)
+        ? stderrHint!
+        : "Codex proxy failed to start (health check timeout)."
+      lastError = detail
+      logError("CodexProxyService: failed to start — \(detail)")
       await stop()
     } catch {
       lastError = error.localizedDescription

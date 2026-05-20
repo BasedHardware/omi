@@ -95,12 +95,16 @@ enum CodexAuthService {
     isEnrolled && loadSnapshot() != nil
   }
 
+  @MainActor
   static func markEnrolled() {
     UserDefaults.standard.set(true, forKey: enrolledKey)
+    CodexAuthStore.shared.notifyEnrollmentChanged()
   }
 
+  @MainActor
   static func clearEnrollment() {
     UserDefaults.standard.set(false, forKey: enrolledKey)
+    CodexAuthStore.shared.notifyEnrollmentChanged()
   }
 
   static func enrollmentFingerprintIfActive() -> String? {

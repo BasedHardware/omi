@@ -23,6 +23,7 @@ final class CodexAuthServiceTests: XCTestCase {
     XCTAssertEqual(fp, CodexAuthService.enrollmentFingerprint(for: "account-123"))
   }
 
+  @MainActor
   func testIsActiveRequiresEnrollmentAndSnapshot() {
     let tempAuth = makeTempCodexHomeWithoutAuth()
     defer { tempAuth.cleanup() }
@@ -67,6 +68,7 @@ final class CodexAuthServiceTests: XCTestCase {
     XCTAssertEqual(snap?.refreshToken, "test-refresh")
   }
 
+  @MainActor
   func testMemorySearchModeDefaultsToWikiWhenCodexEnrolled() {
     CodexAuthService.markEnrolled()
     XCTAssertEqual(MemorySearchMode.current, .localWiki)
@@ -85,6 +87,7 @@ final class CodexProxyConfigTests: XCTestCase {
     super.tearDown()
   }
 
+  @MainActor
   func testHybridLLMUsesDaemonSettingsWithoutAuthSnapshot() throws {
     let tempAuth = makeTempCodexHomeWithoutAuth()
     defer { tempAuth.cleanup() }

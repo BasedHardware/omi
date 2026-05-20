@@ -397,6 +397,8 @@ struct SettingsContentView: View {
   @State private var byokActivationError: String?
   @State private var codexEnrollmentError: String?
   @State private var codexEnrollmentBusy = false
+  @ObservedObject private var codexAuthStore = CodexAuthStore.shared
+  @ObservedObject private var codexProxyService = CodexProxyService.shared
 
   init(
     appState: AppState,
@@ -5385,21 +5387,29 @@ struct SettingsContentView: View {
       settingsCard(settingId: "advanced.chatgpt.info") {
         VStack(alignment: .leading, spacing: 10) {
           HStack(spacing: 10) {
-            Image(systemName: CodexAuthService.isActive ? "checkmark.seal.fill" : "person.crop.circle.badge.checkmark")
-              .foregroundColor(CodexAuthService.isActive ? OmiColors.success : OmiColors.textTertiary)
-            Text(CodexAuthService.isActive ? "ChatGPT plan active" : "Use your ChatGPT subscription")
+            Image(systemName: codexAuthStore.isActive ? "checkmark.seal.fill" : "person.crop.circle.badge.checkmark")
+              .foregroundColor(codexAuthStore.isActive ? OmiColors.success : OmiColors.textTertiary)
+            Text(codexAuthStore.isActive ? "ChatGPT plan active" : "Use your ChatGPT subscription")
               .scaledFont(size: 14, weight: .semibold)
               .foregroundColor(OmiColors.textPrimary)
           }
           Text(
-            CodexAuthService.isActive
+            codexAuthStore.isActive
               ? "LLM features use your ChatGPT/Codex subscription via a local proxy on this Mac. Memory search uses local wiki + keyword search (no embedding API). Live transcription is unchanged."
               : "Sign in with ChatGPT to route chat and proactive AI through your subscription via a local proxy on this Mac. A Terminal window opens for Codex login — complete sign-in there and Omi will connect automatically. Unofficial community integration — use at your own risk per OpenAI terms. Tokens stay on this Mac."
           )
           .scaledFont(size: 12)
           .foregroundColor(OmiColors.textTertiary)
-          if CodexProxyService.shared.isRunning {
+          if codexProxyService.isRunning {
             Text("Proxy: \(CodexProxyService.defaultBaseURL)")
+              .scaledFont(size: 11)
+              .foregroundColor(OmiColors.success)
+          } else if codexAuthStore.isEnrolled, let proxyError = codexProxyService.lastError {
+            Text("Proxy not running: \(proxyError)")
+              .scaledFont(size: 11)
+              .foregroundColor(OmiColors.warning)
+          } else if CodexAuthService.loadSnapshot() == nil {
+            Text("Complete Codex login in Terminal, then try again.")
               .scaledFont(size: 11)
               .foregroundColor(OmiColors.textTertiary)
           }
@@ -5420,7 +5430,7 @@ struct SettingsContentView: View {
       }
 
       HStack(spacing: 12) {
-        if CodexAuthService.isActive {
+        if codexAuthStore.isActive {
           Button(action: disconnectChatGPTPlan) {
             Text("Disconnect")
               .frame(maxWidth: .infinity)
@@ -5445,9 +5455,16 @@ struct SettingsContentView: View {
     Task {
       do {
         try await CodexEnrollmentCoordinator.connect()
+        await CodexProxyService.shared.ensureRunning()
         await MainActor.run {
           codexEnrollmentBusy = false
-          codexEnrollmentError = nil
+          codexAuthStore.notifyEnrollmentChanged()
+          if codexAuthStore.isActive, !codexProxyService.isRunning {
+            codexEnrollmentError =
+              codexProxyService.lastError ?? "Codex proxy did not start."
+          } else {
+            codexEnrollmentError = nil
+          }
         }
       } catch {
         await MainActor.run {
@@ -5461,7 +5478,10 @@ struct SettingsContentView: View {
   private func disconnectChatGPTPlan() {
     Task {
       await CodexEnrollmentCoordinator.disconnect()
-      await MainActor.run { codexEnrollmentError = nil }
+      await MainActor.run {
+        codexEnrollmentError = nil
+        codexAuthStore.notifyEnrollmentChanged()
+      }
     }
   }
 
