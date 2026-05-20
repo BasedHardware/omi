@@ -317,6 +317,189 @@ final class LocalASRRuntimeTests: XCTestCase {
     XCTAssertEqual(result.map(\.text), ["hello local whisper"])
   }
 
+  func testBackgroundChunkerUsesSilenceBoundaryAndOverlap() {
+    var chunker = LocalBackgroundAudioChunker(
+      configuration: LocalBackgroundChunkerConfiguration(
+        sampleRate: 10,
+        bytesPerSample: 2,
+        maxChunkDuration: 1.0,
+        minChunkDuration: 0.4,
+        overlapDuration: 0.2,
+        silenceWindowDuration: 0.2,
+        silenceAmplitudeThreshold: 2,
+        maxPendingChunks: 4
+      )
+    )
+    let samples: [Int16] = [20, 20, 20, 20, 0, 0, 20, 20, 20, 20, 20, 20]
+
+    let chunks = chunker.append(pcmData: pcm(samples), startTime: 3.0)
+    let final = chunker.flush()
+
+    XCTAssertEqual(chunks.count, 1)
+    XCTAssertEqual(chunks[0].sequence, 0)
+    XCTAssertEqual(chunks[0].startTime, 3.0, accuracy: 0.001)
+    XCTAssertEqual(chunks[0].endTime, 3.6, accuracy: 0.001)
+    XCTAssertLessThanOrEqual(chunks[0].duration, 1.0)
+    let finalChunk = tryUnwrap(final.first)
+    XCTAssertEqual(finalChunk.startTime, 3.4, accuracy: 0.001)
+    XCTAssertEqual(tryUnwrap(finalChunk.overlappedStartTime), 3.4, accuracy: 0.001)
+  }
+
+  func testBackgroundSessionAppliesBackpressureToPendingChunks() {
+    let session = LocalBackgroundTranscriptionSession(
+      language: "en",
+      plan: LocalTranscriptionPlan(engine: .mlxWhisper, model: .small, quality: .balanced),
+      configuration: LocalBackgroundChunkerConfiguration(
+        sampleRate: 10,
+        bytesPerSample: 2,
+        maxChunkDuration: 1,
+        minChunkDuration: 0.5,
+        overlapDuration: 0,
+        silenceWindowDuration: 0.2,
+        silenceAmplitudeThreshold: 1,
+        maxPendingChunks: 2
+      ),
+      requestHandler: { request in
+        LocalASRTranscriptionResponse(
+          requestId: request.requestId,
+          engine: request.engine,
+          model: request.model,
+          language: request.language,
+          segments: [],
+          fixture: false
+        )
+      }
+    )
+
+    let result = session.append(pcmData: pcm(Array(repeating: 10, count: 31)), startTime: 0)
+
+    XCTAssertEqual(result.enqueuedChunks.count, 3)
+    XCTAssertEqual(result.droppedChunks.map(\.sequence), [0])
+    XCTAssertEqual(result.pendingChunkCount, 2)
+    XCTAssertEqual(session.droppedChunkCount, 1)
+  }
+
+  func testBackgroundSessionRemapsRawChunkResultsAndMergesOverlap() async throws {
+    var capturedRequests: [LocalASRTranscriptionRequest] = []
+    var dates = [
+      Date(timeIntervalSince1970: 10),
+      Date(timeIntervalSince1970: 10.25),
+      Date(timeIntervalSince1970: 11),
+      Date(timeIntervalSince1970: 11.5),
+    ]
+    let tempDirectory = FileManager.default.temporaryDirectory.appendingPathComponent(
+      "LocalBackgroundSessionTests-\(UUID().uuidString)",
+      isDirectory: true
+    )
+    try FileManager.default.createDirectory(at: tempDirectory, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: tempDirectory) }
+
+    let session = LocalBackgroundTranscriptionSession(
+      language: "en",
+      plan: LocalTranscriptionPlan(engine: .mlxWhisper, model: .small, quality: .balanced),
+      configuration: LocalBackgroundChunkerConfiguration(
+        sampleRate: 10,
+        bytesPerSample: 2,
+        maxChunkDuration: 1,
+        minChunkDuration: 0.5,
+        overlapDuration: 0.2,
+        silenceWindowDuration: 0.2,
+        silenceAmplitudeThreshold: 1,
+        maxPendingChunks: 4
+      ),
+      requestHandler: { request in
+        capturedRequests.append(request)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: request.audioPath))
+        let sequence = capturedRequests.count - 1
+        let segments: [LocalASRTranscriptSegment]
+        if sequence == 0 {
+          segments = [
+            LocalASRTranscriptSegment(
+              id: nil,
+              speaker: 0,
+              text: "hello local whisper",
+              start: 0,
+              end: 1.0
+            )
+          ]
+        } else {
+          segments = [
+            LocalASRTranscriptSegment(
+              id: nil,
+              speaker: 0,
+              text: "whisper runs here",
+              start: 0.0,
+              end: 0.9
+            )
+          ]
+        }
+        return LocalASRTranscriptionResponse(
+          requestId: request.requestId,
+          engine: request.engine,
+          model: request.model,
+          language: request.language,
+          segments: segments,
+          fixture: false
+        )
+      },
+      temporaryDirectory: tempDirectory,
+      makeRequestId: {
+        "background-\(capturedRequests.count)"
+      },
+      now: {
+        dates.removeFirst()
+      }
+    )
+
+    _ = session.append(pcmData: pcm(Array(repeating: 10, count: 17)), startTime: 5)
+    _ = session.finishInput()
+    let results = try await session.transcribePending()
+    let snapshot = session.snapshot()
+
+    XCTAssertEqual(results.count, 2)
+    XCTAssertEqual(results[0].remappedSegments[0].start, 5.0, accuracy: 0.001)
+    XCTAssertEqual(results[1].chunk.startTime, 5.8, accuracy: 0.001)
+    XCTAssertEqual(results[1].remappedSegments[0].start, 5.8, accuracy: 0.001)
+    XCTAssertEqual(results[0].latencySeconds, 0.25, accuracy: 0.001)
+    XCTAssertEqual(snapshot.rawChunkResults.count, 2)
+    XCTAssertEqual(snapshot.joinedTranscript, "hello local whisper runs here")
+    XCTAssertEqual(capturedRequests.map(\.sampleRate), [10, 10])
+    XCTAssertFalse(
+      FileManager.default.fileExists(
+        atPath: tempDirectory.appendingPathComponent("background-0.pcm").path)
+    )
+  }
+
+  func testBackgroundPipelineCanExerciseRealHelperWhenRuntimeAvailable() async throws {
+    guard let helperURL = LocalASRHelperLocator.defaultExecutableURL() else {
+      throw XCTSkip("Local ASR helper executable is not available")
+    }
+    let engines = LocalASRHelperLocator.detectedEngines(executableURL: helperURL)
+    guard let engine = engines.first else {
+      throw XCTSkip("No real local ASR engine/model is available")
+    }
+
+    let session = LocalBackgroundTranscriptionSession(
+      language: "en",
+      plan: LocalTranscriptionPlan(engine: engine, model: .base, quality: .fast),
+      configuration: LocalBackgroundChunkerConfiguration(
+        maxChunkDuration: 0.5,
+        minChunkDuration: 0.25,
+        overlapDuration: 0,
+        maxPendingChunks: 2
+      ),
+      executableURL: helperURL,
+      timeoutSeconds: 20
+    )
+
+    _ = session.append(pcmData: pcm(Array(repeating: 0, count: 16000)), startTime: 0)
+    _ = session.finishInput()
+    let results = try await session.transcribePending()
+
+    XCTAssertFalse(results.isEmpty)
+    XCTAssertTrue(results.allSatisfy { !$0.response.fixture })
+  }
+
   func testDetectedEnginesUsesHelperCapabilityProbe() throws {
     let helper = try makeExecutableHelper(
       body:
@@ -353,6 +536,18 @@ final class LocalASRRuntimeTests: XCTestCase {
       try? FileManager.default.removeItem(at: directory)
     }
     return helper
+  }
+
+  private func pcm(_ samples: [Int16]) -> Data {
+    samples.withUnsafeBufferPointer { Data(buffer: $0) }
+  }
+
+  private func tryUnwrap<T>(_ value: T?, file: StaticString = #filePath, line: UInt = #line) -> T {
+    guard let value else {
+      XCTFail("Expected non-nil value", file: file, line: line)
+      fatalError("Expected non-nil value")
+    }
+    return value
   }
 }
 

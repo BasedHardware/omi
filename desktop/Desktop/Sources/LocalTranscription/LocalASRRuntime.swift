@@ -301,6 +301,339 @@ struct LocalASRBatchTranscriber {
   }
 }
 
+struct LocalBackgroundChunkerConfiguration: Equatable {
+  var sampleRate: Int = 16000
+  var bytesPerSample: Int = 2
+  var maxChunkDuration: TimeInterval = 15
+  var minChunkDuration: TimeInterval = 1
+  var overlapDuration: TimeInterval = 1
+  var silenceWindowDuration: TimeInterval = 0.35
+  var silenceAmplitudeThreshold: Int16 = 256
+  var maxPendingChunks: Int = 4
+
+  var maxChunkSamples: Int { max(1, Int(maxChunkDuration * Double(sampleRate))) }
+  var minChunkSamples: Int { max(1, Int(minChunkDuration * Double(sampleRate))) }
+  var overlapSamples: Int {
+    min(max(0, Int(overlapDuration * Double(sampleRate))), max(0, maxChunkSamples - 1))
+  }
+  var silenceWindowSamples: Int { max(1, Int(silenceWindowDuration * Double(sampleRate))) }
+}
+
+struct LocalBackgroundAudioChunk: Equatable {
+  var sequence: Int
+  var audioData: Data
+  var startTime: Double
+  var endTime: Double
+  var sampleRate: Int
+  var overlappedStartTime: Double?
+
+  var duration: Double {
+    endTime - startTime
+  }
+}
+
+struct LocalBackgroundIngestResult: Equatable {
+  var enqueuedChunks: [LocalBackgroundAudioChunk]
+  var droppedChunks: [LocalBackgroundAudioChunk]
+  var pendingChunkCount: Int
+}
+
+struct LocalBackgroundASRRawChunkResult: Equatable {
+  var chunk: LocalBackgroundAudioChunk
+  var response: LocalASRTranscriptionResponse
+  var remappedSegments: [NormalizedTranscriptSegment]
+  var latencySeconds: TimeInterval
+
+  var joinedText: String {
+    remappedSegments.map(\.text).joined(separator: " ")
+      .trimmingCharacters(in: .whitespacesAndNewlines)
+  }
+}
+
+struct LocalBackgroundTranscriptSnapshot: Equatable {
+  var rawChunkResults: [LocalBackgroundASRRawChunkResult]
+  var mergedSegments: [NormalizedTranscriptSegment]
+
+  var joinedTranscript: String {
+    mergedSegments.map(\.text).joined(separator: " ")
+      .trimmingCharacters(in: .whitespacesAndNewlines)
+  }
+}
+
+struct LocalBackgroundAudioChunker {
+  private var configuration: LocalBackgroundChunkerConfiguration
+  private var buffer = Data()
+  private var bufferStartTime: Double?
+  private var nextSequence = 0
+
+  init(configuration: LocalBackgroundChunkerConfiguration = LocalBackgroundChunkerConfiguration()) {
+    self.configuration = configuration
+  }
+
+  mutating func append(pcmData: Data, startTime: Double) -> [LocalBackgroundAudioChunk] {
+    guard !pcmData.isEmpty else { return [] }
+    if buffer.isEmpty {
+      bufferStartTime = startTime
+    }
+    buffer.append(alignedPCM(pcmData))
+    return emitBoundedChunks(flush: false)
+  }
+
+  mutating func flush() -> [LocalBackgroundAudioChunk] {
+    emitBoundedChunks(flush: true)
+  }
+
+  private mutating func emitBoundedChunks(flush: Bool) -> [LocalBackgroundAudioChunk] {
+    var chunks: [LocalBackgroundAudioChunk] = []
+    while sampleCount(in: buffer) >= configuration.maxChunkSamples
+      || (flush && sampleCount(in: buffer) > 0)
+    {
+      let availableSamples = sampleCount(in: buffer)
+      let cutSamples: Int
+      if flush {
+        cutSamples = availableSamples
+      } else {
+        cutSamples = cutSample(availableSamples: availableSamples)
+      }
+
+      guard cutSamples > 0, let startTime = bufferStartTime else { break }
+      let byteCount = cutSamples * configuration.bytesPerSample
+      let audioData = buffer.prefix(byteCount)
+      let endTime = startTime + Double(cutSamples) / Double(configuration.sampleRate)
+      let overlappedStartTime = nextSequence == 0 ? nil : startTime
+      chunks.append(
+        LocalBackgroundAudioChunk(
+          sequence: nextSequence,
+          audioData: Data(audioData),
+          startTime: startTime,
+          endTime: endTime,
+          sampleRate: configuration.sampleRate,
+          overlappedStartTime: overlappedStartTime
+        )
+      )
+      nextSequence += 1
+
+      if flush {
+        buffer.removeFirst(byteCount)
+        bufferStartTime = buffer.isEmpty ? nil : endTime
+      } else {
+        let retainFromSample = max(0, cutSamples - configuration.overlapSamples)
+        let retainFromByte = retainFromSample * configuration.bytesPerSample
+        buffer.removeFirst(retainFromByte)
+        bufferStartTime = startTime + Double(retainFromSample) / Double(configuration.sampleRate)
+      }
+    }
+    return chunks
+  }
+
+  private func cutSample(availableSamples: Int) -> Int {
+    let boundedSamples = min(availableSamples, configuration.maxChunkSamples)
+    if let silenceBoundary = lastSilenceBoundary(before: boundedSamples) {
+      return silenceBoundary
+    }
+    return boundedSamples
+  }
+
+  private func lastSilenceBoundary(before upperBound: Int) -> Int? {
+    let window = configuration.silenceWindowSamples
+    let minimum = configuration.minChunkSamples
+    guard upperBound >= minimum + window else { return nil }
+
+    let samples = int16Samples(from: buffer)
+    guard samples.count >= upperBound else { return nil }
+
+    var index = upperBound - window
+    while index >= minimum {
+      let range = index..<(index + window)
+      if range.allSatisfy({
+        abs(Int32(samples[$0])) <= Int32(configuration.silenceAmplitudeThreshold)
+      }) {
+        return index + window
+      }
+      index -= window
+    }
+    return nil
+  }
+
+  private func alignedPCM(_ data: Data) -> Data {
+    if data.count % configuration.bytesPerSample == 0 {
+      return data
+    }
+    return data.dropLast(data.count % configuration.bytesPerSample)
+  }
+
+  private func sampleCount(in data: Data) -> Int {
+    data.count / configuration.bytesPerSample
+  }
+
+  private func int16Samples(from data: Data) -> [Int16] {
+    data.withUnsafeBytes { rawBuffer in
+      Array(rawBuffer.bindMemory(to: Int16.self))
+    }
+  }
+}
+
+final class LocalBackgroundTranscriptionSession {
+  typealias RequestHandler = (LocalASRTranscriptionRequest) async throws
+    -> LocalASRTranscriptionResponse
+
+  private let language: String
+  private let plan: LocalTranscriptionPlan
+  private let configuration: LocalBackgroundChunkerConfiguration
+  private let requestHandler: RequestHandler
+  private let temporaryDirectory: URL
+  private let fileManager: FileManager
+  private let makeRequestId: () -> String
+  private let now: () -> Date
+  private var chunker: LocalBackgroundAudioChunker
+  private var pendingChunks: [LocalBackgroundAudioChunk] = []
+  private var merger = LocalTranscriptMerger()
+  private(set) var rawChunkResults: [LocalBackgroundASRRawChunkResult] = []
+  private(set) var droppedChunkCount = 0
+
+  init(
+    language: String,
+    plan: LocalTranscriptionPlan,
+    configuration: LocalBackgroundChunkerConfiguration = LocalBackgroundChunkerConfiguration(),
+    executableURL: URL,
+    timeoutSeconds: TimeInterval = 60,
+    temporaryDirectory: URL = FileManager.default.temporaryDirectory,
+    fileManager: FileManager = .default,
+    makeRequestId: @escaping () -> String = { UUID().uuidString },
+    now: @escaping () -> Date = Date.init
+  ) {
+    let client = LocalASRHelperClient(executableURL: executableURL, timeoutSeconds: timeoutSeconds)
+    self.language = language
+    self.plan = plan
+    self.configuration = configuration
+    self.requestHandler = { request in
+      try await client.transcribe(request)
+    }
+    self.temporaryDirectory = temporaryDirectory
+    self.fileManager = fileManager
+    self.makeRequestId = makeRequestId
+    self.now = now
+    self.chunker = LocalBackgroundAudioChunker(configuration: configuration)
+  }
+
+  init(
+    language: String,
+    plan: LocalTranscriptionPlan,
+    configuration: LocalBackgroundChunkerConfiguration = LocalBackgroundChunkerConfiguration(),
+    requestHandler: @escaping RequestHandler,
+    temporaryDirectory: URL = FileManager.default.temporaryDirectory,
+    fileManager: FileManager = .default,
+    makeRequestId: @escaping () -> String = { UUID().uuidString },
+    now: @escaping () -> Date = Date.init
+  ) {
+    self.language = language
+    self.plan = plan
+    self.configuration = configuration
+    self.requestHandler = requestHandler
+    self.temporaryDirectory = temporaryDirectory
+    self.fileManager = fileManager
+    self.makeRequestId = makeRequestId
+    self.now = now
+    self.chunker = LocalBackgroundAudioChunker(configuration: configuration)
+  }
+
+  func append(pcmData: Data, startTime: Double) -> LocalBackgroundIngestResult {
+    enqueue(chunker.append(pcmData: pcmData, startTime: startTime))
+  }
+
+  func finishInput() -> LocalBackgroundIngestResult {
+    enqueue(chunker.flush())
+  }
+
+  func transcribeNext() async throws -> LocalBackgroundASRRawChunkResult? {
+    guard !pendingChunks.isEmpty else { return nil }
+    let chunk = pendingChunks.removeFirst()
+    let requestId = makeRequestId()
+    let audioURL = temporaryDirectory.appendingPathComponent("\(requestId).pcm")
+    try chunk.audioData.write(to: audioURL, options: .atomic)
+    defer { try? fileManager.removeItem(at: audioURL) }
+
+    let started = now()
+    let response = try await requestHandler(
+      LocalASRTranscriptionRequest(
+        requestId: requestId,
+        audioPath: audioURL.path,
+        language: language,
+        sampleRate: configuration.sampleRate,
+        channels: 1,
+        engine: plan.engine,
+        model: plan.model,
+        fixtureSegments: nil
+      )
+    )
+    let latency = max(0, now().timeIntervalSince(started))
+    let remapped = remap(response.segments, chunk: chunk)
+    let merged = merger.merge(remapped)
+    let rawResult = LocalBackgroundASRRawChunkResult(
+      chunk: chunk,
+      response: response,
+      remappedSegments: remapped,
+      latencySeconds: latency
+    )
+    rawChunkResults.append(rawResult)
+    _ = merged
+    return rawResult
+  }
+
+  func transcribePending() async throws -> [LocalBackgroundASRRawChunkResult] {
+    var results: [LocalBackgroundASRRawChunkResult] = []
+    while let result = try await transcribeNext() {
+      results.append(result)
+    }
+    return results
+  }
+
+  func snapshot() -> LocalBackgroundTranscriptSnapshot {
+    LocalBackgroundTranscriptSnapshot(
+      rawChunkResults: rawChunkResults,
+      mergedSegments: merger.segments
+    )
+  }
+
+  private func enqueue(_ chunks: [LocalBackgroundAudioChunk]) -> LocalBackgroundIngestResult {
+    guard !chunks.isEmpty else {
+      return LocalBackgroundIngestResult(
+        enqueuedChunks: [],
+        droppedChunks: [],
+        pendingChunkCount: pendingChunks.count
+      )
+    }
+
+    pendingChunks.append(contentsOf: chunks)
+    var dropped: [LocalBackgroundAudioChunk] = []
+    if pendingChunks.count > configuration.maxPendingChunks {
+      let overflow = pendingChunks.count - configuration.maxPendingChunks
+      dropped = Array(pendingChunks.prefix(overflow))
+      pendingChunks.removeFirst(overflow)
+      droppedChunkCount += overflow
+    }
+
+    return LocalBackgroundIngestResult(
+      enqueuedChunks: chunks,
+      droppedChunks: dropped,
+      pendingChunkCount: pendingChunks.count
+    )
+  }
+
+  private func remap(
+    _ segments: [LocalASRTranscriptSegment],
+    chunk: LocalBackgroundAudioChunk
+  ) -> [NormalizedTranscriptSegment] {
+    segments.map { segment in
+      var normalized = segment.normalized()
+      normalized.start = chunk.startTime + segment.start
+      normalized.end = chunk.startTime + segment.end
+      normalized.segmentId = normalized.segmentId ?? "local-bg-\(chunk.sequence)-\(segment.start)"
+      return normalized
+    }
+  }
+}
+
 struct PTTBatchTranscriptionResult: Equatable {
   var provider: TranscriptionProviderKind
   var transcript: String?
