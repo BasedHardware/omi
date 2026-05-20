@@ -5,9 +5,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:latlong2/latlong.dart';
+import 'package:share_plus/share_plus.dart';
 
 import 'package:omi/backend/http/api/conversations.dart' as conversations_api;
-import 'package:omi/backend/http/api/users.dart';
+import 'package:omi/backend/http/api/users.dart' show getDailySummary, setDailySummaryVisibility;
 import 'package:omi/backend/schema/daily_summary.dart';
 import 'package:omi/pages/conversation_detail/maps_util.dart';
 import 'package:omi/pages/conversation_detail/page.dart';
@@ -28,6 +29,7 @@ class DailySummaryDetailPage extends StatefulWidget {
 class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with SingleTickerProviderStateMixin {
   DailySummary? _summary;
   bool _isLoading = true;
+  bool _isSharing = false;
   bool _isDeleting = false;
   late AnimationController _animationController;
   late Animation<double> _fadeAnimation;
@@ -90,6 +92,24 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
               ? _buildNotFound()
               : _buildContent(),
     );
+  }
+
+  Future<void> _shareSummary() async {
+    final summary = _summary;
+    if (summary == null || _isSharing) return;
+    setState(() => _isSharing = true);
+    try {
+      final shared = await setDailySummaryVisibility(widget.summaryId);
+      if (!shared) {
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Failed to share recap')));
+        return;
+      }
+      PlatformManager.instance.analytics.dailySummaryShared(summaryId: widget.summaryId, date: summary.date);
+      final url = 'https://h.omi.me/recaps/${widget.summaryId}';
+      await SharePlus.instance.share(ShareParams(uri: Uri.parse(url), subject: summary.headline));
+    } finally {
+      if (mounted) setState(() => _isSharing = false);
+    }
   }
 
   Future<void> _openConversation(String? conversationId) async {
@@ -289,6 +309,26 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
         onPressed: () => Navigator.pop(context),
       ),
       actions: [
+        Padding(
+          padding: const EdgeInsets.only(right: 8),
+          child: GestureDetector(
+            onTap: _isSharing ? null : _shareSummary,
+            child: Container(
+              width: 36,
+              height: 36,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(color: Colors.black.withValues(alpha: 0.3), shape: BoxShape.circle),
+              child: _isSharing
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(
+                          strokeWidth: 2, valueColor: AlwaysStoppedAnimation<Color>(Colors.white)),
+                    )
+                  : const Icon(Icons.share_outlined, color: Colors.white, size: 20),
+            ),
+          ),
+        ),
         IconButton(
           tooltip: context.l10n.deleteRecap,
           icon: Container(

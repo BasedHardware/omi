@@ -67,13 +67,12 @@ sys.modules['utils.log_sanitizer'].sanitize_pii = lambda x: x
 
 from routers.sync import decode_opus_file_to_wav, decode_files_to_wav  # noqa: E402
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
 #: One frame of fake Opus-encoded bytes (content doesn't matter — decoder is mocked).
-FAKE_OPUS_FRAME = b'\xAA\xBB\xCC' * 34  # 102 bytes
+FAKE_OPUS_FRAME = b'\xaa\xbb\xcc' * 34  # 102 bytes
 
 #: PCM returned by the mocked decoder: 320 bytes = 160 mono samples at 16-bit.
 #: 100 such frames = 16 000 samples = 1.0 s at 16 kHz.
@@ -279,7 +278,7 @@ class TestDecodeOpusFileToWav:
                 f.write(FAKE_OPUS_FRAME)
                 # Write a length prefix claiming 1000 bytes but only supply 10
                 f.write(struct.pack('<I', 1000))
-                f.write(b'\xAA' * 10)
+                f.write(b'\xaa' * 10)
 
             result = decode_opus_file_to_wav(bin_path, wav_path)
 
@@ -295,7 +294,7 @@ class TestDecodeOpusFileToWav:
             wav_path = os.path.join(d, 'trunc_first.wav')
             with open(bin_path, 'wb') as f:
                 f.write(struct.pack('<I', 500))  # Says 500 bytes
-                f.write(b'\xAA' * 10)            # Only 10 bytes follow
+                f.write(b'\xaa' * 10)  # Only 10 bytes follow
 
             result = decode_opus_file_to_wav(bin_path, wav_path)
 
@@ -329,7 +328,7 @@ class TestDecodeOpusFileToWav:
                 f.write(struct.pack('<I', len(FAKE_OPUS_FRAME)))
                 f.write(FAKE_OPUS_FRAME)
                 f.write(struct.pack('<I', 0xFFFFFFFF))  # 4 GB claimed
-                f.write(b'\xAA' * 20)                   # Only 20 bytes available
+                f.write(b'\xaa' * 20)  # Only 20 bytes available
 
             result = decode_opus_file_to_wav(bin_path, wav_path)
 
