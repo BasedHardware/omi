@@ -9327,4 +9327,7 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get morePaymentMethodsComingSoon => 'المزيد من طرق الدفع قريبًا';
+
+  @override
+  String get syncCardRateLimited => 'تم بلوغ حد الاستخدام العادل — ستُستأنف المزامنة تلقائيًا';
 }

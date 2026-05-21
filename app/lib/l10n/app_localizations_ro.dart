@@ -9427,4 +9427,8 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get morePaymentMethodsComingSoon => 'În curând mai multe metode de plată';
+
+  @override
+  String get syncCardRateLimited =>
+      'Limita de utilizare echitabilă a fost atinsă — sincronizarea va fi reluată automat';
 }

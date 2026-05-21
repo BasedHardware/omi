@@ -9415,4 +9415,7 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get morePaymentMethodsComingSoon => 'Скоро добавим новые способы оплаты';
+
+  @override
+  String get syncCardRateLimited => 'Достигнут лимит использования — синхронизация возобновится автоматически';
 }

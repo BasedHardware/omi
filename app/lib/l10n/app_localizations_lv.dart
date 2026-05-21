@@ -9402,4 +9402,8 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get morePaymentMethodsComingSoon => 'Drīzumā vairāk maksājumu veidu';
+
+  @override
+  String get syncCardRateLimited =>
+      'Sasniegts godīgas lietošanas ierobežojums — sinhronizācija turpināsies automātiski';
 }

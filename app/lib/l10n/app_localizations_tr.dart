@@ -9394,4 +9394,7 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get morePaymentMethodsComingSoon => 'Daha fazla ödeme yöntemi yakında';
+
+  @override
+  String get syncCardRateLimited => 'Adil kullanım sınırına ulaşıldı — eşitleme otomatik olarak sürdürülecek';
 }

@@ -9436,4 +9436,7 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get morePaymentMethodsComingSoon => 'Aviat hi haurà més mètodes de pagament';
+
+  @override
+  String get syncCardRateLimited => 'S\'ha assolit el límit d\'ús just — la sincronització es reprendrà automàticament';
 }

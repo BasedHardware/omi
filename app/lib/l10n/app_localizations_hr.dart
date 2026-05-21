@@ -9413,4 +9413,8 @@ class AppLocalizationsHr extends AppLocalizations {
 
   @override
   String get morePaymentMethodsComingSoon => 'Uskoro stižu novi načini plaćanja';
+
+  @override
+  String get syncCardRateLimited =>
+      'Dostignuto je ograničenje poštene upotrebe — sinkronizacija će se automatski nastaviti';
 }

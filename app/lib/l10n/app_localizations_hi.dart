@@ -9362,4 +9362,7 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get morePaymentMethodsComingSoon => 'जल्द ही और भुगतान विकल्प';
+
+  @override
+  String get syncCardRateLimited => 'उचित उपयोग की सीमा पूरी हो गई — सिंक अपने आप फिर से शुरू हो जाएगा';
 }

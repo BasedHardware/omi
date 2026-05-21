@@ -9400,4 +9400,7 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get morePaymentMethodsComingSoon => 'Незабаром більше способів оплати';
+
+  @override
+  String get syncCardRateLimited => 'Досягнуто ліміт використання — синхронізація відновиться автоматично';
 }

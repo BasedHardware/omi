@@ -9386,4 +9386,7 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get morePaymentMethodsComingSoon => 'Fler betalningsmetoder kommer snart';
+
+  @override
+  String get syncCardRateLimited => 'Gränsen för skälig användning har nåtts — synkroniseringen återupptas automatiskt';
 }

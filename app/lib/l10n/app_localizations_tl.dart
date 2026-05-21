@@ -9467,4 +9467,8 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get morePaymentMethodsComingSoon => 'Mas maraming paraan ng pagbabayad na malapit nang dumating';
+
+  @override
+  String get syncCardRateLimited =>
+      'Naabot na ang limitasyon ng patas na paggamit — awtomatikong magpapatuloy ang pag-sync';
 }

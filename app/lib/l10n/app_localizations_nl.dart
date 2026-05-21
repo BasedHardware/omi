@@ -9410,4 +9410,7 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get morePaymentMethodsComingSoon => 'Meer betaalmethoden binnenkort';
+
+  @override
+  String get syncCardRateLimited => 'Gebruikslimiet bereikt — synchronisatie wordt automatisch hervat';
 }

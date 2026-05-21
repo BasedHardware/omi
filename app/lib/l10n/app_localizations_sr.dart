@@ -9395,4 +9395,7 @@ class AppLocalizationsSr extends AppLocalizations {
 
   @override
   String get morePaymentMethodsComingSoon => 'Ускоро више начина плаћања';
+
+  @override
+  String get syncCardRateLimited => 'Достигнут је лимит фер коришћења — синхронизација ће се аутоматски наставити';
 }

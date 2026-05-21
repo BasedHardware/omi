@@ -9390,4 +9390,7 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get morePaymentMethodsComingSoon => 'Metode pembayaran lainnya segera hadir';
+
+  @override
+  String get syncCardRateLimited => 'Batas penggunaan wajar tercapai — sinkronisasi akan dilanjutkan secara otomatis';
 }

@@ -9379,4 +9379,7 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get morePaymentMethodsComingSoon => 'Sắp có thêm phương thức thanh toán';
+
+  @override
+  String get syncCardRateLimited => 'Đã đạt giới hạn sử dụng hợp lý — quá trình đồng bộ sẽ tự động tiếp tục';
 }

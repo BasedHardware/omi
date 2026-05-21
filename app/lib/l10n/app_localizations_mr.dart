@@ -9393,4 +9393,7 @@ class AppLocalizationsMr extends AppLocalizations {
 
   @override
   String get morePaymentMethodsComingSoon => 'लवकरच आणखी पेमेंट पद्धती';
+
+  @override
+  String get syncCardRateLimited => 'वाजवी वापराची मर्यादा गाठली — सिंक आपोआप पुन्हा सुरू होईल';
 }

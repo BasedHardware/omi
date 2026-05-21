@@ -9382,4 +9382,7 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get morePaymentMethodsComingSoon => 'Brzy přibudou další platební metody';
+
+  @override
+  String get syncCardRateLimited => 'Byl dosažen limit férového využití — synchronizace bude automaticky pokračovat';
 }

@@ -9407,4 +9407,7 @@ class AppLocalizationsBs extends AppLocalizations {
 
   @override
   String get morePaymentMethodsComingSoon => 'Uskoro stižu novi načini plaćanja';
+
+  @override
+  String get syncCardRateLimited => 'Dostignut je limit poštene upotrebe — sinkronizacija će se automatski nastaviti';
 }

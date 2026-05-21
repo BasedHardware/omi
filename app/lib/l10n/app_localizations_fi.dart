@@ -9381,4 +9381,7 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get morePaymentMethodsComingSoon => 'Lisää maksutapoja tulossa pian';
+
+  @override
+  String get syncCardRateLimited => 'Kohtuullisen käytön raja saavutettu — synkronointi jatkuu automaattisesti';
 }

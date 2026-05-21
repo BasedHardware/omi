@@ -9227,4 +9227,7 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get morePaymentMethodsComingSoon => '他の支払い方法を近日追加予定';
+
+  @override
+  String get syncCardRateLimited => '利用上限に達しました — 同期は自動的に再開されます';
 }

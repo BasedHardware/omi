@@ -17486,6 +17486,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'More payment methods coming soon'**
   String get morePaymentMethodsComingSoon;
+
+  /// Status card line when uploads are paused due to a fair-use/rate-limit (HTTP 429) cooldown. Reassures the user this is not an error and will resume on its own.
+  ///
+  /// In en, this message translates to:
+  /// **'Fair-use limit reached — syncing will resume automatically'**
+  String get syncCardRateLimited;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

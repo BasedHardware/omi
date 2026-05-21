@@ -9332,4 +9332,7 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get morePaymentMethodsComingSoon => 'วิธีการชำระเงินอื่นๆ เร็วๆ นี้';
+
+  @override
+  String get syncCardRateLimited => 'ถึงขีดจำกัดการใช้งานที่เป็นธรรมแล้ว — การซิงค์จะดำเนินต่อโดยอัตโนมัติ';
 }

@@ -9373,4 +9373,7 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get morePaymentMethodsComingSoon => 'Čoskoro ďalšie platobné metódy';
+
+  @override
+  String get syncCardRateLimited => 'Dosiahol sa limit férového využitia — synchronizácia bude automaticky pokračovať';
 }

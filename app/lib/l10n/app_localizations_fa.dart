@@ -9385,4 +9385,8 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get morePaymentMethodsComingSoon => 'روش‌های پرداخت بیشتر به‌زودی';
+
+  @override
+  String get syncCardRateLimited =>
+      'محدودیت استفاده منصفانه به پایان رسید — همگام‌سازی به‌طور خودکار از سر گرفته می‌شود';
 }

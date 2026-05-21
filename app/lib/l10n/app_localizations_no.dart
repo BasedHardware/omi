@@ -9378,4 +9378,7 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get morePaymentMethodsComingSoon => 'Flere betalingsmåter kommer snart';
+
+  @override
+  String get syncCardRateLimited => 'Grensen for rimelig bruk er nådd — synkroniseringen fortsetter automatisk';
 }

@@ -9404,4 +9404,8 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get morePaymentMethodsComingSoon => 'Lebih banyak kaedah pembayaran akan datang';
+
+  @override
+  String get syncCardRateLimited =>
+      'Had penggunaan saksama telah dicapai — penyegerakan akan disambung semula secara automatik';
 }

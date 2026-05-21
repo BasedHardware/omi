@@ -9379,4 +9379,7 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get morePaymentMethodsComingSoon => 'Peagi rohkem makseviise';
+
+  @override
+  String get syncCardRateLimited => 'Õiglase kasutuse piir on saavutatud — sünkroonimine jätkub automaatselt';
 }

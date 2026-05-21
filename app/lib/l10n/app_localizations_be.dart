@@ -9412,4 +9412,7 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String get morePaymentMethodsComingSoon => 'Хутка з\'явяцца новыя спосабы аплаты';
+
+  @override
+  String get syncCardRateLimited => 'Дасягнуты ліміт сумленнага выкарыстання — сінхранізацыя адновіцца аўтаматычна';
 }

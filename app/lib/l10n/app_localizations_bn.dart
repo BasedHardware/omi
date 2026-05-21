@@ -9390,4 +9390,7 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String get morePaymentMethodsComingSoon => 'শীঘ্রই আরও পেমেন্ট পদ্ধতি আসছে';
+
+  @override
+  String get syncCardRateLimited => 'ন্যায্য ব্যবহারের সীমা পৌঁছেছে — সিঙ্ক স্বয়ংক্রিয়ভাবে আবার শুরু হবে';
 }

@@ -9447,4 +9447,7 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get morePaymentMethodsComingSoon => 'Σύντομα περισσότεροι τρόποι πληρωμής';
+
+  @override
+  String get syncCardRateLimited => 'Συμπληρώθηκε το όριο εύλογης χρήσης — ο συγχρονισμός θα συνεχιστεί αυτόματα';
 }

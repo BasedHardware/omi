@@ -9450,4 +9450,7 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get morePaymentMethodsComingSoon => 'மேலும் கட்டண முறைகள் விரைவில்';
+
+  @override
+  String get syncCardRateLimited => 'நியாயமான பயன்பாட்டு வரம்பை அடைந்தது — ஒத்திசைவு தானாகவே மீண்டும் தொடரும்';
 }

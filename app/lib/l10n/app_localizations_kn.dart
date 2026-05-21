@@ -9414,4 +9414,7 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get morePaymentMethodsComingSoon => 'ಶೀಘ್ರದಲ್ಲೇ ಹೆಚ್ಚಿನ ಪಾವತಿ ವಿಧಾನಗಳು';
+
+  @override
+  String get syncCardRateLimited => 'ನ್ಯಾಯಯುತ ಬಳಕೆಯ ಮಿತಿ ತಲುಪಿದೆ — ಸಿಂಕ್ ಸ್ವಯಂಚಾಲಿತವಾಗಿ ಮುಂದುವರಿಯುತ್ತದೆ';
 }

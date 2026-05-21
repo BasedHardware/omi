@@ -9312,4 +9312,7 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get morePaymentMethodsComingSoon => 'אמצעי תשלום נוספים בקרוב';
+
+  @override
+  String get syncCardRateLimited => 'הגעת למגבלת השימוש ההוגן — הסנכרון יתחדש באופן אוטומטי';
 }

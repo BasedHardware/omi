@@ -9229,4 +9229,7 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get morePaymentMethodsComingSoon => '더 많은 결제 수단이 곧 추가됩니다';
+
+  @override
+  String get syncCardRateLimited => '공정 사용 한도에 도달했습니다 — 동기화가 자동으로 다시 시작됩니다';
 }

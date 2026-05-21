@@ -9399,4 +9399,7 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get morePaymentMethodsComingSoon => 'مزید ادائیگی کے طریقے جلد آرہے ہیں';
+
+  @override
+  String get syncCardRateLimited => 'منصفانہ استعمال کی حد پوری ہو گئی — ہم آہنگی خودکار طور پر دوبارہ شروع ہو جائے گی';
 }

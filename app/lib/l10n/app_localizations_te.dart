@@ -9431,4 +9431,7 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get morePaymentMethodsComingSoon => 'మరిన్ని చెల్లింపు పద్ధతులు త్వరలో';
+
+  @override
+  String get syncCardRateLimited => 'న్యాయమైన వినియోగ పరిమితి చేరుకుంది — సింక్ స్వయంచాలకంగా తిరిగి కొనసాగుతుంది';
 }

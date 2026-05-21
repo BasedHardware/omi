@@ -9421,4 +9421,8 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get morePaymentMethodsComingSoon => 'Hamarosan további fizetési módok';
+
+  @override
+  String get syncCardRateLimited =>
+      'Elérted a méltányos használati korlátot — a szinkronizálás automatikusan folytatódik';
 }

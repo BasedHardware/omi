@@ -9213,4 +9213,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get morePaymentMethodsComingSoon => '更多支付方式即将推出';
+
+  @override
+  String get syncCardRateLimited => '已达到合理使用上限 — 同步将自动恢复';
 }
