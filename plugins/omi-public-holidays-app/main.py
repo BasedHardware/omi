@@ -5,6 +5,7 @@ Provides chat tools for public holidays, upcoming holidays, long weekends, and
 supported country codes through the public Nager.Date API.
 """
 
+import json
 from contextlib import asynccontextmanager
 from typing import Any, Optional
 
@@ -112,7 +113,12 @@ async def _request_json(path: str) -> Any:
     client: httpx.AsyncClient = app.state.http_client
     response = await client.get(f"{NAGER_BASE_URL}{path}")
     response.raise_for_status()
-    return response.json()
+    if response.status_code == 204 or not response.content:
+        return []
+    try:
+        return response.json()
+    except json.JSONDecodeError as exc:
+        raise httpx.HTTPError("public holidays API returned invalid JSON") from exc
 
 
 @app.exception_handler(RequestValidationError)
@@ -250,6 +256,8 @@ async def get_long_weekends(request: LongWeekendRequest) -> ChatToolResponse:
 async def list_supported_countries() -> ChatToolResponse:
     try:
         countries = await _request_json("/AvailableCountries")
+        if not isinstance(countries, list) or not countries:
+            return ChatToolResponse(error="country list request returned no countries")
         lines = ["Supported countries:"]
         for item in countries:
             lines.append(f"- {item.get('countryCode')}: {item.get('name')}")
