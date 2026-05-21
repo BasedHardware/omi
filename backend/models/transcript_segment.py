@@ -1,5 +1,5 @@
 from datetime import timedelta
-from typing import Literal, Optional, List, Tuple
+from typing import Any, Literal, Optional, List, Tuple
 import uuid
 import re
 from pydantic import BaseModel, Field
@@ -74,6 +74,9 @@ class TranscriptSegment(BaseModel):
     speaker_identity_confidence: Optional[float] = None
     speaker_identity_source: Optional[str] = None
     speaker_identity_version: Optional[str] = None
+    speaker_identity_provenance: Optional[dict[str, Any]] = None
+    speaker_identity_candidates: Optional[List[dict[str, Any]]] = None
+    speaker_identity_text_hints: Optional[List[dict[str, Any]]] = None
 
     def __init__(self, **data):
         super().__init__(**data)

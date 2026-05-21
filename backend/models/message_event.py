@@ -154,6 +154,13 @@ class SpeakerLabelSuggestionEvent(MessageEvent):
     person_id: str
     person_name: str
     segment_id: str
+    version: int = 1
+    provider_cluster_id: Optional[str] = None
+    speaker_identity_state: Optional[str] = None
+    confidence: Optional[float] = None
+    source: Optional[str] = None
+    provenance: Optional[dict[str, Any]] = None
+    candidates: Optional[List[dict[str, Any]]] = None
 
     def to_json(self):
         j = self.model_dump(mode="json")

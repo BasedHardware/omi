@@ -24,9 +24,23 @@ def finalize_provider_run(**kwargs) -> None:
 
 
 def summarize_identity_confidences(confidences):
-    from database.transcription_provider_usage import summarize_identity_confidences as _summarize_identity_confidences
+    summary = {}
+    for confidence in confidences:
+        bucket = _identity_confidence_bucket(confidence)
+        summary[bucket] = summary.get(bucket, 0) + 1
+    return summary
 
-    return _summarize_identity_confidences(confidences)
+
+def _identity_confidence_bucket(confidence: Optional[float]) -> str:
+    if confidence is None:
+        return 'unknown'
+    if confidence >= 0.90:
+        return 'very_high'
+    if confidence >= 0.75:
+        return 'high'
+    if confidence >= 0.50:
+        return 'medium'
+    return 'low'
 
 
 def _deepgram_prerecorded_provider():

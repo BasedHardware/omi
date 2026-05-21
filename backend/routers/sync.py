@@ -76,13 +76,8 @@ from utils.fair_use import (
     FAIR_USE_ENABLED,
     FAIR_USE_RESTRICT_DAILY_DG_MS,
 )
-from utils.speaker_assignment import process_speaker_assigned_segments
-from utils.speaker_identification import detect_speaker_from_text
-from utils.stt.speaker_embedding import (
-    extract_embedding_from_bytes,
-    compare_embeddings,
-    SPEAKER_MATCH_THRESHOLD,
-)
+from utils.stt.background_speaker_identity import identify_background_speaker_clusters
+from utils.stt.speaker_embedding import extract_embedding_from_bytes
 from utils.subscription import has_transcription_credits
 
 logger = logging.getLogger(__name__)
@@ -822,111 +817,21 @@ def identify_speakers_for_segments(
     person_embeddings_cache: Dict[str, dict],
     uid: str,
 ) -> None:
-    """Identify speakers in transcript segments using voice embeddings and text detection.
+    """Identify background speakers once per provider cluster.
 
-    Modifies segments in-place by assigning person_id and is_user fields.
-
-    Steps:
-    1. Voice embedding matching (requires audio_bytes and non-empty cache):
-       For each unique speaker_id, find the longest segment (>=1s), extract audio clip,
-       get embedding, match against person_embeddings_cache.
-    2. Text-based detection ("I am X") runs independently for all unmatched speakers.
-    3. Apply assignments via process_speaker_assigned_segments.
+    Text self-introduction is retained as hint metadata only. It must not create
+    or apply a durable speaker identity without voice evidence.
     """
-    speaker_to_person_map: Dict[int, Tuple[str, str]] = {}
-    segment_person_assignment_map: Dict[str, str] = {}
-
-    # Group segments by speaker_id, find best (longest) segment per speaker for embedding
-    speaker_segments: Dict[int, List[TranscriptSegment]] = {}
-    for seg in transcript_segments:
-        sid = seg.speaker_id if seg.speaker_id is not None else 0
-        speaker_segments.setdefault(sid, []).append(seg)
-
-    # Voice embedding matching (only when audio and cached embeddings are available)
-    # Track matched person_ids so each person is only assigned to one speaker
-    # (diarization tells us speakers are distinct — no person can be two speakers).
-    matched_person_ids: set = set()
-
-    if audio_bytes and person_embeddings_cache:
-        # Sort speakers by best single segment duration (longest first) — this is the clip
-        # actually used for embedding, so it determines match quality.
-        # Note: matched_person_ids assumes diarization is correct (one person = one speaker).
-        # If diarization fragments one person across speaker IDs, only the best match wins.
-        sorted_speakers = sorted(
-            speaker_segments.items(),
-            key=lambda kv: max(s.end - s.start for s in kv[1]),
-            reverse=True,
-        )
-
-        for speaker_id, segments in sorted_speakers:
-            best_seg = max(segments, key=lambda s: s.end - s.start)
-            seg_duration = best_seg.end - best_seg.start
-
-            if seg_duration < SPEAKER_ID_MIN_AUDIO:
-                continue
-
-            clip_wav = _extract_speaker_clip_wav(audio_bytes, best_seg.start, best_seg.end)
-            if not clip_wav:
-                continue
-
-            try:
-                query_embedding = extract_embedding_from_bytes(clip_wav, "sync_speaker.wav")
-            except (ValueError, Exception) as e:
-                logger.info(f'Speaker ID: embedding extraction failed for speaker {speaker_id}: {e} uid={uid}')
-                continue
-
-            # Compare only against unmatched candidates (each person can be one speaker)
-            best_match = None
-            best_distance = float('inf')
-            for person_id, data in person_embeddings_cache.items():
-                if person_id in matched_person_ids:
-                    continue
-                distance = compare_embeddings(query_embedding, data['embedding'])
-                if distance < best_distance:
-                    best_distance = distance
-                    best_match = (person_id, data['name'])
-
-            if best_match and best_distance < SPEAKER_MATCH_THRESHOLD:
-                person_id, person_name = best_match
-                speaker_to_person_map[speaker_id] = (person_id, person_name)
-                segment_person_assignment_map[best_seg.id] = person_id
-                matched_person_ids.add(person_id)
-                logger.info(
-                    f'Speaker ID (sync): speaker {speaker_id} -> {person_id} '
-                    f'(distance={best_distance:.3f}) uid={uid}'
-                )
-
-    # Text-based detection runs independently for all unmatched speakers.
-    # For speaker_id > 0 (diarized): update both speaker_to_person_map and per-segment map.
-    # For speaker_id <= 0 (undiarized): only assign per-segment (avoid mapping all speaker_id=0
-    # segments to one person when diarization is inactive).
-    for speaker_id, segments in speaker_segments.items():
-        if speaker_id in speaker_to_person_map:
-            continue
-        for seg in segments:
-            detected_name = detect_speaker_from_text(seg.text)
-            if detected_name:
-                person = users_db.get_person_by_name(uid, detected_name)
-                if person:
-                    # Per-segment assignment always applies
-                    segment_person_assignment_map[seg.id] = person['id']
-                    # Update speaker map only when diarization is active
-                    if speaker_id > 0:
-                        speaker_to_person_map[speaker_id] = (person['id'], person['name'])
-                    logger.info(
-                        f'Speaker ID (sync): text detection speaker {speaker_id} -> '
-                        f'{person["id"]} via "{detected_name}" uid={uid}'
-                    )
-                    if speaker_id > 0:
-                        break  # One match per diarized speaker is enough
-
-    # Apply all assignments to segments
-    if speaker_to_person_map or segment_person_assignment_map:
-        process_speaker_assigned_segments(
-            transcript_segments,
-            segment_person_assignment_map,
-            speaker_to_person_map,
-        )
+    assignments = identify_background_speaker_clusters(
+        transcript_segments,
+        audio_bytes,
+        person_embeddings_cache or {},
+        embedding_extractor=extract_embedding_from_bytes,
+    )
+    identified_count = sum(1 for assignment in assignments.values() if assignment.state in ('identified', 'user'))
+    logger.info(
+        f'Speaker ID (sync): cluster identity assignments={len(assignments)} identified={identified_count} uid={uid}'
+    )
 
 
 def process_segment(
