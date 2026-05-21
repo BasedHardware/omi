@@ -8,7 +8,9 @@ finding recent papers by author through the public arXiv API.
 from contextlib import asynccontextmanager
 from datetime import datetime
 from html import unescape
+import asyncio
 import re
+import time
 from typing import Any, Optional
 from urllib.parse import quote_plus
 import xml.etree.ElementTree as ET
@@ -22,10 +24,13 @@ from pydantic import BaseModel
 ARXIV_API_URL = "https://export.arxiv.org/api/query"
 REQUEST_TIMEOUT_SECONDS = 12
 MAX_LIMIT = 10
+MIN_REQUEST_INTERVAL_SECONDS = 0.35
 USER_AGENT = "omi-arxiv-app/1.0 (https://omi.me)"
 ATOM_NS = {"atom": "http://www.w3.org/2005/Atom", "arxiv": "http://arxiv.org/schemas/atom"}
 
 _arxiv_client: Optional[httpx.AsyncClient] = None
+_arxiv_request_lock = asyncio.Lock()
+_last_arxiv_request_at = 0.0
 
 
 class ChatToolResponse(BaseModel):
@@ -107,7 +112,9 @@ def _safe_paper_id(value: Any) -> Optional[str]:
     candidate = candidate.removeprefix("https://arxiv.org/abs/")
     candidate = candidate.removeprefix("http://arxiv.org/abs/")
     candidate = candidate.removeprefix("arXiv:")
-    candidate = candidate.split("v", 1)[0] if re.match(r"^\d{4}\.\d{4,5}v\d+$", candidate) else candidate
+    versioned_new_id = re.match(r"^\d{4}\.\d{4,5}v\d+$", candidate)
+    versioned_legacy_id = re.match(r"^[a-z\-]+(\.[A-Z]{2})?/\d{7}v\d+$", candidate)
+    candidate = candidate.split("v", 1)[0] if versioned_new_id or versioned_legacy_id else candidate
     if re.fullmatch(r"\d{4}\.\d{4,5}", candidate) or re.fullmatch(r"[a-z\-]+(\.[A-Z]{2})?/\d{7}", candidate):
         return candidate
     return None
@@ -155,8 +162,9 @@ def _entry_arxiv_id(entry: ET.Element) -> str:
 def _format_entry(entry: ET.Element, index: int) -> str:
     paper_id = _entry_arxiv_id(entry)
     title = _entry_text(entry, "atom:title") or "Untitled"
-    authors = ", ".join(_entry_authors(entry)[:5]) or "unknown authors"
-    if len(_entry_authors(entry)) > 5:
+    all_authors = _entry_authors(entry)
+    authors = ", ".join(all_authors[:5]) or "unknown authors"
+    if len(all_authors) > 5:
         authors += ", et al."
     published = _date_only(_entry_text(entry, "atom:published"))
     updated = _date_only(_entry_text(entry, "atom:updated"))
@@ -183,9 +191,23 @@ def _parse_entries(feed_xml: str) -> list[ET.Element]:
     return root.findall("atom:entry", ATOM_NS)
 
 
+def _arxiv_http_error_message(exc: httpx.HTTPStatusError) -> str:
+    if exc.response.status_code == 429:
+        return "arXiv is rate limiting requests. Please try again in a moment."
+    if exc.response.status_code == 503:
+        return "arXiv is temporarily unavailable. Please try again shortly."
+    return f"arXiv returned HTTP {exc.response.status_code}."
+
+
 async def _request_arxiv(params: dict[str, Any]) -> str:
+    global _last_arxiv_request_at
     client = await _get_arxiv_client()
-    response = await client.get(ARXIV_API_URL, params=params)
+    async with _arxiv_request_lock:
+        elapsed = time.monotonic() - _last_arxiv_request_at
+        if elapsed < MIN_REQUEST_INTERVAL_SECONDS:
+            await asyncio.sleep(MIN_REQUEST_INTERVAL_SECONDS - elapsed)
+        response = await client.get(ARXIV_API_URL, params=params)
+        _last_arxiv_request_at = time.monotonic()
     response.raise_for_status()
     return response.text
 
@@ -345,6 +367,8 @@ async def search_papers(payload: dict[str, Any]):
         )
     except ET.ParseError:
         return ChatToolResponse(error="arXiv returned an unreadable Atom feed.")
+    except httpx.HTTPStatusError as exc:
+        return ChatToolResponse(error=_arxiv_http_error_message(exc))
     except httpx.HTTPError as exc:
         return ChatToolResponse(error=f"arXiv search failed: {exc}")
 
@@ -362,6 +386,8 @@ async def get_paper_details(payload: dict[str, Any]):
         return ChatToolResponse(result=_format_entry(entries[0], 1))
     except ET.ParseError:
         return ChatToolResponse(error="arXiv returned an unreadable Atom feed.")
+    except httpx.HTTPStatusError as exc:
+        return ChatToolResponse(error=_arxiv_http_error_message(exc))
     except httpx.HTTPError as exc:
         return ChatToolResponse(error=f"arXiv details request failed: {exc}")
 
@@ -393,5 +419,7 @@ async def search_author(payload: dict[str, Any]):
         )
     except ET.ParseError:
         return ChatToolResponse(error="arXiv returned an unreadable Atom feed.")
+    except httpx.HTTPStatusError as exc:
+        return ChatToolResponse(error=_arxiv_http_error_message(exc))
     except httpx.HTTPError as exc:
         return ChatToolResponse(error=f"arXiv author search failed: {exc}")
