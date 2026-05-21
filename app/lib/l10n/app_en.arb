@@ -11042,7 +11042,7 @@
         "description": "Snackbar shown when the recap delete API fails."
     },
     "syncStatusBackedUp": "Backed up",
-    "syncStatusBackingUp": "Backing up…",
+    "syncStatusBackingUp": "Syncing…",
     "syncStatusWaiting": "Waiting to sync",
     "syncStatusRetrying": "Couldn’t process — retrying",
     "syncStatusFailed": "Failed — tap Retry",
@@ -11124,5 +11124,9 @@
     "morePaymentMethodsComingSoon": "More payment methods coming soon",
     "@morePaymentMethodsComingSoon": {
         "description": "Placeholder card text shown under available payment methods"
+    },
+    "syncProcessingBackgroundHint": "This continues in the background — you can leave this screen.",
+    "@syncProcessingBackgroundHint": {
+        "description": "Reassurance line on the manual sync status card during the cloud-processing phase, so users do not think sync is stuck when there is no visible progress."
     }
 }
