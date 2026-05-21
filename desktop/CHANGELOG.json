@@ -1,8 +1,13 @@
 {
-  "unreleased": [
-    "Fixed \"Failed to load plan information\" on the Plan & Usage page when the backend response was missing usage fields"
-  ],
+  "unreleased": [],
   "releases": [
+    {
+      "version": "0.11.419",
+      "date": "2026-05-21",
+      "changes": [
+        "Fixed \"Failed to load plan information\" on the Plan & Usage page when the backend response was missing usage fields"
+      ]
+    },
     {
       "version": "0.11.417",
       "date": "2026-05-21",
