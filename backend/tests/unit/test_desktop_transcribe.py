@@ -114,6 +114,7 @@ for _ufull in [
     'utils.llm.goals',
     'utils.llm.usage_tracker',
     'utils.conversations',
+    'utils.conversations.factory',
     'utils.conversations.process_conversation',
     'utils.notifications',
     'utils.other.storage',
@@ -131,8 +132,21 @@ for _ufull in [
 ]:
     sys.modules.setdefault(_ufull, MagicMock())
 
+for _pkg_name in ['utils.conversations', 'utils.retrieval', 'utils.llm']:
+    if _pkg_name in sys.modules:
+        sys.modules[_pkg_name].__path__ = [_pkg_name.replace('.', '/')]
+
 # Force-import real models.chat (has no project deps, needed for FastAPI response_model)
 import importlib.util as _ilu
+
+_segment_spec = _ilu.spec_from_file_location(
+    'models.transcript_segment',
+    os.path.join(os.path.dirname(__file__), '..', '..', 'models', 'transcript_segment.py'),
+)
+_real_segment = _ilu.module_from_spec(_segment_spec)
+_segment_spec.loader.exec_module(_real_segment)
+sys.modules['models.transcript_segment'] = _real_segment
+setattr(_models_pkg, 'transcript_segment', _real_segment)
 
 _chat_spec = _ilu.spec_from_file_location(
     'models.chat', os.path.join(os.path.dirname(__file__), '..', '..', 'models', 'chat.py')
@@ -144,6 +158,9 @@ setattr(_models_pkg, 'chat', _real_chat)
 
 # Now safe to import the modules under test
 from utils.stt.pre_recorded import deepgram_prerecorded_from_bytes
+import utils.chat as _chat_mod
+
+setattr(sys.modules['utils'], 'chat', _chat_mod)
 
 # ---------------------------------------------------------------------------
 # deepgram_prerecorded_from_bytes: encoding/language/model options
@@ -436,11 +453,11 @@ class TestDeepgramPrerecordedFromBytesEdgeCases:
         """After 3 failed attempts, should raise RuntimeError."""
         mock_client.listen.rest.v.return_value.transcribe_file.side_effect = Exception('connection timeout')
 
-        with pytest.raises(RuntimeError, match='Deepgram transcription failed after 3 attempts'):
+        with pytest.raises(RuntimeError, match='Deepgram transcription failed after 2 attempts'):
             deepgram_prerecorded_from_bytes(b'\x00' * 100, encoding='linear16')
 
-        # Should have been called 3 times (attempts 0, 1, 2)
-        assert mock_client.listen.rest.v.return_value.transcribe_file.call_count == 3
+        # Should have been called 2 times (attempts 0, 1)
+        assert mock_client.listen.rest.v.return_value.transcribe_file.call_count == 2
 
     @patch('utils.stt.pre_recorded._deepgram_client')
     def test_return_language_empty_words_returns_detected_lang(self, mock_client):
@@ -465,10 +482,10 @@ class TestDeepgramPrerecordedFromBytesEdgeCases:
         mock_response.to_dict.return_value = {'results': {'channels': []}}
         mock_client.listen.rest.v.return_value.transcribe_file.return_value = mock_response
 
-        with pytest.raises(RuntimeError, match='Deepgram transcription failed after 3 attempts'):
+        with pytest.raises(RuntimeError, match='Deepgram transcription failed after 2 attempts'):
             deepgram_prerecorded_from_bytes(b'\x00' * 100)
 
-        assert mock_client.listen.rest.v.return_value.transcribe_file.call_count == 3
+        assert mock_client.listen.rest.v.return_value.transcribe_file.call_count == 2
 
 
 # ---------------------------------------------------------------------------
@@ -500,6 +517,10 @@ def _stub_router_deps():
         'utils.social',
         'utils.speaker_assignment',
         'utils.speaker_identification',
+        'utils.conversations.factory',
+        'utils.stt.provider_service',
+        'utils.stt.providers',
+        'utils.stt.background_speaker_identity',
         'utils.stt.speaker_embedding',
         'utils.stt.vad',
         'utils.stt.streaming',
@@ -512,6 +533,10 @@ def _stub_router_deps():
     rdb = sys.modules.get('database.redis_db')
     if rdb:
         rdb.check_rate_limit = MagicMock(return_value=(True, 99, 0))
+    subscription = sys.modules.get('utils.subscription')
+    if subscription:
+        subscription.is_trial_paywalled = MagicMock(return_value=False)
+        subscription.enforce_chat_quota = MagicMock()
 
 
 def _make_chat_client():

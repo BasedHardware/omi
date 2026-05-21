@@ -40,6 +40,8 @@ for submodule in [
     "calendar_meetings",
     "vector_db",
     "apps",
+    "announcements",
+    "user_usage",
     "llm_usage",
     "_client",
     "chat",
@@ -60,6 +62,12 @@ vector_db_mod.query_vectors_by_metadata = MagicMock(return_value=[])
 
 apps_mod = sys.modules["database.apps"]
 apps_mod.record_app_usage = MagicMock()
+
+announcements_mod = sys.modules["database.announcements"]
+announcements_mod.compare_versions = MagicMock(return_value=0)
+
+user_usage_mod = sys.modules["database.user_usage"]
+user_usage_mod.get_monthly_chat_usage = MagicMock()
 
 llm_usage_mod = sys.modules["database.llm_usage"]
 llm_usage_mod.record_llm_usage = MagicMock()
@@ -92,6 +100,10 @@ notifications_mod.get_mentor_notification_frequency = MagicMock(return_value=0)
 
 conversations_mod = sys.modules["database.conversations"]
 conversations_mod.get_conversations_by_id = MagicMock(return_value=[])
+
+users_mod = sys.modules["database.users"]
+users_mod.get_user_valid_subscription = MagicMock(return_value=None)
+users_mod.is_byok_active = MagicMock(return_value=False)
 
 from utils.llm import usage_tracker
 

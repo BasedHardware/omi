@@ -609,10 +609,11 @@ def test_llm_agent_model_kwargs_via_real_instantiation():
     # Read source, replace imports, exec in isolated namespace
     source = (BACKEND_DIR / "utils" / "llm" / "clients.py").read_text()
     source = source.replace("from langchain_openai import ChatOpenAI, OpenAIEmbeddings", "")
+    source = source.replace("from langchain_google_genai import ChatGoogleGenerativeAI", "")
     source = source.replace("import tiktoken", "")
     source = source.replace("import anthropic", "")
     source = source.replace("from langchain_core.output_parsers import PydanticOutputParser", "")
-    source = source.replace("from models.conversation import Structured", "")
+    source = source.replace("from models.structured import Structured", "")
     source = source.replace("from utils.llm.usage_tracker import get_usage_callback", "")
 
     # Create a fake anthropic module with AsyncAnthropic
@@ -622,6 +623,7 @@ def test_llm_agent_model_kwargs_via_real_instantiation():
     ns = {
         "os": os,
         "ChatOpenAI": FakeChatOpenAI,
+        "ChatGoogleGenerativeAI": FakeChatOpenAI,
         "OpenAIEmbeddings": FakeOpenAIEmbeddings,
         "tiktoken": fake_tiktoken,
         "anthropic": fake_anthropic,

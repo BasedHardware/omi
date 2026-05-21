@@ -64,6 +64,9 @@ for attr in [
     "delete_memory_vector",
     "upsert_vector2",
     "update_vector_metadata",
+    "upsert_action_item_vectors_batch",
+    "delete_action_item_vectors_batch",
+    "find_similar_action_items",
 ]:
     setattr(vector_db_mod, attr, MagicMock())
 
@@ -112,12 +115,13 @@ for name in [
     "utils.webhooks",
     "utils.task_sync",
     "utils.other.storage",
+    "utils.subscription",
 ]:
     if name not in sys.modules:
         sys.modules[name] = types.ModuleType(name)
 
 utils_apps = sys.modules["utils.apps"]
-for attr in ["get_available_apps", "update_personas_async", "sync_update_persona_prompt"]:
+for attr in ["get_available_apps", "update_personas_async", "update_persona_prompt", "sync_update_persona_prompt"]:
     setattr(utils_apps, attr, MagicMock())
 
 utils_analytics = sys.modules["utils.analytics"]
@@ -184,6 +188,9 @@ utils_task_sync.auto_sync_action_items_batch = MagicMock()
 
 utils_storage = sys.modules["utils.other.storage"]
 utils_storage.precache_conversation_audio = MagicMock()
+
+utils_subscription = sys.modules["utils.subscription"]
+utils_subscription.is_trial_paywalled = MagicMock(return_value=False)
 
 import importlib
 

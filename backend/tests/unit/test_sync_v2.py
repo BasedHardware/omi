@@ -1239,6 +1239,9 @@ class TestAsyncCoordinatorBehavioral:
             'utils.encryption',
             'utils.stt',
             'utils.stt.pre_recorded',
+            'utils.stt.provider_service',
+            'utils.stt.providers',
+            'utils.stt.background_speaker_identity',
             'utils.stt.vad',
             'utils.fair_use',
             'utils.subscription',
@@ -1294,6 +1297,8 @@ class TestAsyncCoordinatorBehavioral:
         sys.modules['utils.byok'].get_byok_keys = MagicMock(return_value={})
         sys.modules['utils.analytics'].record_usage = MagicMock()
         sys.modules['models.conversation_enums'].ConversationSource = MagicMock()
+        sys.modules['utils.stt.providers'].STTWorkload = MagicMock()
+        sys.modules['utils.stt.background_speaker_identity'].identify_background_speaker_clusters = MagicMock()
         sys.modules['utils.other.endpoints'].get_current_user_uid = MagicMock(return_value='test-uid')
         sys.modules['utils.subscription'].has_transcription_credits = MagicMock(return_value=True)
 
@@ -1679,6 +1684,9 @@ class TestV2EndpointExecution:
             'utils.encryption',
             'utils.stt',
             'utils.stt.pre_recorded',
+            'utils.stt.provider_service',
+            'utils.stt.providers',
+            'utils.stt.background_speaker_identity',
             'utils.stt.vad',
             'utils.fair_use',
             'utils.subscription',
@@ -1721,6 +1729,8 @@ class TestV2EndpointExecution:
         sys.modules['utils.fair_use'].FAIR_USE_ENABLED = False
         sys.modules['utils.fair_use'].FAIR_USE_RESTRICT_DAILY_DG_MS = 0
         sys.modules['utils.subscription'].has_transcription_credits = MagicMock(return_value=True)
+        sys.modules['utils.stt.providers'].STTWorkload = MagicMock()
+        sys.modules['utils.stt.background_speaker_identity'].identify_background_speaker_clusters = MagicMock()
 
         # Mock auth to return test uid
         sys.modules['utils.other.endpoints'].get_current_user_uid = MagicMock(return_value='test-uid')
@@ -2089,9 +2099,9 @@ class TestBulkheadExecutors:
         assert 'max_workers=16' in source
         assert 'postprocess_executor = MonitoredThreadPoolExecutor(' in source
         assert 'max_workers=24' in source
-        from utils.executors import storage_executor
-
-        assert storage_executor._max_workers == 96, "storage_executor must have 96 workers (#7376)"
+        storage_line = next(line for line in source.splitlines() if line.startswith('storage_executor = '))
+        assert 'MonitoredThreadPoolExecutor(' in storage_line
+        assert 'max_workers=96' in storage_line, "storage_executor must have 96 workers (#7376)"
 
     def test_all_executors_in_shutdown(self):
         source = self._read_executors_source()

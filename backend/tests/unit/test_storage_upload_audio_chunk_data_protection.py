@@ -23,8 +23,6 @@ _mock_gcs_storage.Client.return_value = _mock_gcs_client_instance
 sys.modules.setdefault("google.cloud.storage", _mock_gcs_storage)
 sys.modules.setdefault("google.cloud.storage.transfer_manager", MagicMock())
 sys.modules.setdefault("google.cloud.exceptions", MagicMock())
-sys.modules.setdefault("google.oauth2", MagicMock())
-sys.modules.setdefault("google.oauth2.service_account", MagicMock())
 
 # Now import the module under test
 from utils.other import storage as storage_mod
@@ -71,9 +69,10 @@ class TestUploadAudioChunkDataProtectionCache:
 
         mock_users_db.get_data_protection_level.assert_called_once_with('test-uid')
 
+    @patch.object(storage_mod, 'encode_pcm_to_opus', return_value=b'opus-data')
     @patch.object(storage_mod, 'users_db')
-    def test_standard_level_uploads_unencrypted(self, mock_users_db):
-        """Standard protection level should upload .bin (no encryption)."""
+    def test_standard_level_uploads_unencrypted(self, mock_users_db, mock_encode):
+        """Standard protection level should upload .opus (no encryption)."""
         _, mock_blob = self._setup_mock_bucket()
 
         path = storage_mod.upload_audio_chunk(
@@ -84,12 +83,15 @@ class TestUploadAudioChunkDataProtectionCache:
             data_protection_level='standard',
         )
 
-        assert path.endswith('.bin')
+        assert path.endswith('.opus')
+        mock_encode.assert_called_once_with(b'\x00' * 100)
         mock_blob.upload_from_string.assert_called_once()
+        assert mock_blob.upload_from_string.call_args[0][0] == b'opus-data'
 
+    @patch.object(storage_mod, 'encode_pcm_to_opus', return_value=b'opus-data')
     @patch.object(storage_mod, 'encryption')
     @patch.object(storage_mod, 'users_db')
-    def test_enhanced_level_uploads_encrypted(self, mock_users_db, mock_encryption):
+    def test_enhanced_level_uploads_encrypted(self, mock_users_db, mock_encryption, mock_encode):
         """Enhanced protection level should encrypt and upload .enc."""
         _, mock_blob = self._setup_mock_bucket()
         mock_encryption.encrypt_audio_chunk.return_value = b'\x01' * 120
@@ -103,7 +105,9 @@ class TestUploadAudioChunkDataProtectionCache:
         )
 
         assert path.endswith('.enc')
-        mock_encryption.encrypt_audio_chunk.assert_called_once_with(b'\x00' * 100, 'test-uid')
+        mock_encode.assert_called_once_with(b'\x00' * 100)
+        mock_encryption.encrypt_audio_chunk.assert_called_once_with(b'opus-data', 'test-uid')
+        mock_blob.upload_from_string.assert_called_once_with(b'\x01' * 120, content_type='application/octet-stream')
 
     @patch.object(storage_mod, 'users_db')
     def test_explicit_none_falls_back_to_db(self, mock_users_db):

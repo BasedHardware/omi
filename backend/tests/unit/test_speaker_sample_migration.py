@@ -1,4 +1,5 @@
 import asyncio
+import importlib
 import os
 import sys
 import types
@@ -21,7 +22,7 @@ class NotFound(Exception):
     pass
 
 
-_google_module = sys.modules.setdefault("google", types.ModuleType("google"))
+_google_module = importlib.import_module("google")
 _google_cloud_module = sys.modules.setdefault("google.cloud", types.ModuleType("google.cloud"))
 _google_exceptions_module = types.ModuleType("google.cloud.exceptions")
 _google_exceptions_module.NotFound = NotFound

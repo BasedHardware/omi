@@ -82,6 +82,8 @@ for mod_name in [
     if mod_name not in sys.modules:
         _stub_module(mod_name)
 
+sys.modules["database.auth"].get_user_name = MagicMock(return_value="Test User")
+
 # Stub database.action_items
 action_items_db = _stub_module("database.action_items")
 action_items_db.create_action_item = MagicMock(return_value="test-item-id")

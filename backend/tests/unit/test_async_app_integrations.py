@@ -36,6 +36,8 @@ for submod in [
     "calendar_meetings",
     "vector_db",
     "apps",
+    "announcements",
+    "user_usage",
     "llm_usage",
     "chat",
     "goals",
@@ -55,6 +57,8 @@ sys.modules["database.redis_db"].incr_daily_notification_count = MagicMock()
 sys.modules["database.redis_db"].get_daily_notification_count = MagicMock(return_value=0)
 sys.modules["database.vector_db"].query_vectors_by_metadata = MagicMock(return_value=[])
 sys.modules["database.apps"].record_app_usage = MagicMock()
+sys.modules["database.announcements"].compare_versions = MagicMock(return_value=0)
+sys.modules["database.user_usage"].get_monthly_chat_usage = MagicMock()
 sys.modules["database.llm_usage"].record_llm_usage = MagicMock()
 sys.modules["database.chat"].add_app_message = MagicMock(return_value={"id": "msg-1"})
 sys.modules["database.chat"].get_app_messages = MagicMock(return_value=[])
@@ -139,6 +143,14 @@ if "utils.executors" not in sys.modules:
     sys.modules["utils.executors"] = types.ModuleType("utils.executors")
 sys.modules["utils.executors"].critical_executor = _TPE(max_workers=2, thread_name_prefix="test-critical")
 sys.modules["utils.executors"].storage_executor = _TPE(max_workers=2, thread_name_prefix="test-storage")
+sys.modules["utils.executors"].db_executor = _TPE(max_workers=2, thread_name_prefix="test-db")
+
+
+async def _run_blocking(_executor, fn, *args, **kwargs):
+    return fn(*args, **kwargs)
+
+
+sys.modules["utils.executors"].run_blocking = _run_blocking
 
 import importlib
 

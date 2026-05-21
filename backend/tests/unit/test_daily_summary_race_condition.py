@@ -76,6 +76,7 @@ for name in [
     "utils.webhooks",
     "utils.conversations",
     "utils.conversations.factory",
+    "utils.subscription",
 ]:
     if name not in sys.modules:
         mod = _stub_module(name)
@@ -99,6 +100,9 @@ utils_notifications.send_notification = MagicMock()
 
 utils_webhooks = sys.modules["utils.webhooks"]
 utils_webhooks.day_summary_webhook = MagicMock()
+
+utils_subscription = sys.modules["utils.subscription"]
+utils_subscription.is_trial_paywalled = MagicMock(return_value=False)
 
 # Stub models
 for name in ["models.notification_message", "models.conversation"]:
