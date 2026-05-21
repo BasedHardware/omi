@@ -278,6 +278,9 @@ speaker identity is applied after provider normalization with the Omi embedding
 service. Low-confidence matches remain explicit unknown speakers; provider
 cluster metadata is preserved separately from `person_id` and `is_user`.
 
+Optional desktop BYOK for AssemblyAI applies only to async prerecorded workloads
+above; listen/realtime streaming in this pipeline remains Deepgram-only.
+
 ## 6. Event Wire Protocol
 
 ### Server → Client (JSON over WS text frames)

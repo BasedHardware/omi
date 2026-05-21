@@ -1,7 +1,8 @@
 """Per-request BYOK (Bring Your Own Keys) key plumbing.
 
 The desktop client sends user-provided API keys as headers on every request
-(`X-BYOK-OpenAI`, `X-BYOK-Anthropic`, `X-BYOK-Gemini`, `X-BYOK-Deepgram`).
+(`X-BYOK-OpenAI`, `X-BYOK-Anthropic`, `X-BYOK-Gemini`, `X-BYOK-Deepgram`, and
+optionally `X-BYOK-AssemblyAI` for async prerecorded STT).
 A FastAPI middleware stashes them in a per-request contextvar; the LLM/STT
 clients can then read them without re-reading the request object.
 
@@ -68,6 +69,7 @@ BYOK_HEADERS = {
     'anthropic': 'x-byok-anthropic',
     'gemini': 'x-byok-gemini',
     'deepgram': 'x-byok-deepgram',
+    'assemblyai': 'x-byok-assemblyai',
 }
 
 # Keys for the current request, if the client supplied them.

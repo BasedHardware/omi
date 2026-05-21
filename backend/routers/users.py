@@ -771,6 +771,7 @@ def get_user_usage_stats_endpoint(
 
 _SHA256_HEX_RE = re.compile(r'^[a-f0-9]{64}$')
 _BYOK_REQUIRED_PROVIDERS = {'openai', 'anthropic', 'gemini', 'deepgram'}
+_BYOK_ALLOWED_PROVIDERS = _BYOK_REQUIRED_PROVIDERS | {'assemblyai'}
 
 
 class BYOKActivateRequest(BaseModel):
@@ -792,7 +793,7 @@ def activate_byok_endpoint(data: BYOKActivateRequest, uid: str = Depends(auth.ge
             detail=f"Missing fingerprints for providers: {sorted(missing)}",
         )
     for provider, fp in data.fingerprints.items():
-        if provider not in _BYOK_REQUIRED_PROVIDERS:
+        if provider not in _BYOK_ALLOWED_PROVIDERS:
             raise HTTPException(status_code=400, detail=f"Unknown provider: {provider}")
         if not _SHA256_HEX_RE.match(fp):
             raise HTTPException(

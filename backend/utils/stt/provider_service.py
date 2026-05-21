@@ -84,7 +84,24 @@ def _deepgram_prerecorded_provider():
 
 
 def _assemblyai_prerecorded_provider():
-    return AssemblyAIAsyncTranscriptionProvider()
+    byok = get_byok_key('assemblyai') if get_byok_key else None
+    return AssemblyAIAsyncTranscriptionProvider(api_key=byok)
+
+
+def resolve_prerecorded_provider_for_request(workload: STTWorkload) -> STTProviderName:
+    """Pick prerecorded STT provider for this request, respecting BYOK headers.
+
+    When env flags select AssemblyAI but the BYOK user did not supply an Assembly
+    key, use Deepgram BYOK instead of Omi's server Assembly key.
+    """
+    selected = get_prerecorded_provider_name(workload)
+    if selected != STTProviderName.assemblyai:
+        return selected
+    if get_byok_key and get_byok_key('assemblyai'):
+        return STTProviderName.assemblyai
+    if get_byok_key and get_byok_key('deepgram'):
+        return STTProviderName.deepgram
+    return STTProviderName.assemblyai
 
 
 def _deepgram_client_for_request() -> DeepgramClient:
@@ -129,7 +146,7 @@ def transcribe_url(
     raw_audio_seconds: float = 0.0,
 ) -> PrerecordedTranscriptionResponse:
     workload = STTWorkload(workload)
-    provider_name = get_prerecorded_provider_name(workload)
+    provider_name = resolve_prerecorded_provider_for_request(workload)
     model = _model_for_provider(provider_name, model)
     provider = _get_prerecorded_provider(provider_name)
     started_at = datetime.now(timezone.utc)
@@ -221,7 +238,7 @@ def transcribe_bytes(
     raw_audio_seconds: float = 0.0,
 ) -> PrerecordedTranscriptionResponse:
     workload = STTWorkload(workload)
-    provider_name = get_prerecorded_provider_name(workload)
+    provider_name = resolve_prerecorded_provider_for_request(workload)
     model = _model_for_provider(provider_name, model)
     provider = _get_prerecorded_provider(provider_name)
     started_at = datetime.now(timezone.utc)

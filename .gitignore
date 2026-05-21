@@ -27,10 +27,15 @@ yarn.lock
 .packages
 .pub-cache/
 .pub/
+.swiftpm/
+
+# Build / compile artifacts (cross-ecosystem; prefer these over per-tool *.o/*.d rules)
 build/
 dist/
 .build/
-.swiftpm/
+target/
+**/.build-agent-*/
+**/.build-hybrid-*/
 
 # VS Code
 .vscode/*

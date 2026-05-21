@@ -43,6 +43,11 @@ enum BYOKValidator {
         url: URL(string: "https://api.deepgram.com/v1/projects")!,
         headers: ["Authorization": "Token \(trimmed)"]
       )
+    case .assemblyai:
+      return await ping(
+        url: URL(string: "https://api.assemblyai.com/v2/account")!,
+        headers: ["Authorization": trimmed]
+      )
     }
   }
 
