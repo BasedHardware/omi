@@ -29,10 +29,13 @@ class DummyBaseModel:
 
 
 class DummyRequest:
-    def __init__(self, payload):
+    def __init__(self, payload=None, json_error=None):
         self.payload = payload
+        self.json_error = json_error
 
     async def json(self):
+        if self.json_error:
+            raise self.json_error
         return self.payload
 
 
@@ -117,6 +120,7 @@ class UsgsEarthquakeAppTest(unittest.TestCase):
         self.assertEqual(captured_params["minmagnitude"], 4.0)
         self.assertEqual(captured_params["limit"], 3)
         self.assertEqual(captured_params["orderby"], "time")
+        self.assertNotIn("filters", result.data)
         event = result.data["earthquakes"][0]
         self.assertEqual(event["event_id"], "us7000test")
         self.assertEqual(event["magnitude"], 4.6)
@@ -136,6 +140,23 @@ class UsgsEarthquakeAppTest(unittest.TestCase):
 
         self.assertFalse(result.success)
         self.assertEqual(result.message, "latitude and longitude are required")
+
+    def test_tool_endpoints_return_structured_error_for_invalid_json(self):
+        handlers = [
+            main.tool_recent_earthquakes,
+            main.tool_nearby_earthquakes,
+            main.tool_earthquake_details,
+        ]
+
+        for handler in handlers:
+            with self.subTest(handler=handler.__name__):
+                result = asyncio.run(
+                    handler(DummyRequest(json_error=ValueError("bad json")))
+                )
+
+                self.assertFalse(result.success)
+                self.assertEqual(result.message, "Invalid or missing JSON body")
+                self.assertEqual(result.data, {"error": "invalid request body"})
 
 
 if __name__ == "__main__":

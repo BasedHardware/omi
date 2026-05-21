@@ -24,6 +24,7 @@ USGS_USER_AGENT = os.getenv(
 REQUEST_TIMEOUT_SECONDS = float(os.getenv("USGS_TIMEOUT_SECONDS", "8"))
 DATA_NOTE = "USGS earthquake data can be preliminary and may change after review."
 ORDER_BY_VALUES = {"time", "time-asc", "magnitude", "magnitude-asc"}
+INVALID_JSON_MESSAGE = "Invalid or missing JSON body"
 
 
 class ChatToolResponse(BaseModel):
@@ -97,6 +98,25 @@ def _safe_orderby(value: Any) -> str:
     return orderby
 
 
+def _invalid_json_response() -> ChatToolResponse:
+    return ChatToolResponse(
+        success=False,
+        message=INVALID_JSON_MESSAGE,
+        data={"error": "invalid request body"},
+    )
+
+
+async def _read_json_body(request: Request) -> tuple[Optional[Dict[str, Any]], Optional[ChatToolResponse]]:
+    try:
+        body = await request.json()
+    except ValueError:
+        return None, _invalid_json_response()
+
+    if not isinstance(body, dict):
+        return None, _invalid_json_response()
+    return body, None
+
+
 def _query_params(body: Dict[str, Any], default_hours: int = 24) -> Dict[str, Any]:
     hours = _safe_int(body.get("hours"), default=default_hours, minimum=1, maximum=168)
     return {
@@ -163,7 +183,6 @@ async def _list_earthquakes(params: Dict[str, Any]) -> Dict[str, Any]:
         "earthquakes": [_summarize_feature(feature) for feature in features],
         "count": len(features),
         "metadata": payload.get("metadata") or {},
-        "filters": params,
         "data_note": DATA_NOTE,
     }
 
@@ -283,7 +302,9 @@ async def get_manifest_alias():
 
 @app.post("/tools/recent_earthquakes", response_model=ChatToolResponse)
 async def tool_recent_earthquakes(request: Request):
-    body = await request.json()
+    body, error = await _read_json_body(request)
+    if error:
+        return error
     result = await _list_earthquakes(_query_params(body, default_hours=24))
     if "error" in result:
         return ChatToolResponse(success=False, message=result["error"], data=result)
@@ -299,7 +320,9 @@ async def tool_recent_earthquakes(request: Request):
 
 @app.post("/tools/nearby_earthquakes", response_model=ChatToolResponse)
 async def tool_nearby_earthquakes(request: Request):
-    body = await request.json()
+    body, error = await _read_json_body(request)
+    if error:
+        return error
     latitude = _parse_float(body.get("latitude"))
     longitude = _parse_float(body.get("longitude"))
     if latitude is None or longitude is None:
@@ -340,7 +363,9 @@ async def tool_nearby_earthquakes(request: Request):
 
 @app.post("/tools/earthquake_details", response_model=ChatToolResponse)
 async def tool_earthquake_details(request: Request):
-    body = await request.json()
+    body, error = await _read_json_body(request)
+    if error:
+        return error
     event_id = str(body.get("event_id") or "").strip()
     if not event_id:
         return ChatToolResponse(
