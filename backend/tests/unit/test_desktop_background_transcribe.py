@@ -141,7 +141,7 @@ def _client(monkeypatch, *, segments=None):
         return SimpleNamespace(
             result=ProviderTranscriptResult(provider='assemblyai', model='universal-2', words=[], utterances=[]),
             detected_language='en',
-            segments=default_segments,
+            segments=[segment.model_copy(deep=True) for segment in default_segments],
             run_id='run-1',
         )
 
@@ -234,6 +234,53 @@ def test_cluster_speaker_mapping_assigns_distinct_ids(monkeypatch):
     data = response.json()
     assert [segment['speaker_id'] for segment in data['segments']] == [0, 1]
     assert [segment['speaker'] for segment in data['segments']] == ['SPEAKER_00', 'SPEAKER_01']
+
+
+def test_background_transcribe_multi_chunk_offsets_persist_and_keep_speaker_map(monkeypatch):
+    client, mock_transcribe = _client(monkeypatch)
+    speaker_map_store = {}
+
+    def _redis_get(key):
+        return speaker_map_store.get(key)
+
+    def _redis_set(key, value, **_kwargs):
+        speaker_map_store[key] = value
+
+    monkeypatch.setattr(desktop_background.redis_db.r, 'get', _redis_get)
+    monkeypatch.setattr(desktop_background.redis_db.r, 'set', _redis_set)
+
+    responses = [
+        [TranscriptSegment(text='First.', is_user=False, start=0.1, end=1.0, provider_cluster_id='A')],
+        [TranscriptSegment(text='Second.', is_user=False, start=0.1, end=1.0, provider_cluster_id='B')],
+        [TranscriptSegment(text='Third.', is_user=False, start=0.1, end=1.0, provider_cluster_id='A')],
+    ]
+
+    def _transcribe_bytes(_audio_bytes, **_kwargs):
+        return SimpleNamespace(
+            result=ProviderTranscriptResult(provider='assemblyai', model='universal-2', words=[], utterances=[]),
+            detected_language='en',
+            segments=[segment.model_copy(deep=True) for segment in responses.pop(0)],
+            run_id='run-multi',
+        )
+
+    mock_transcribe.side_effect = _transcribe_bytes
+
+    for chunk_start_ms in (0, 14000, 28000):
+        response = client.post(
+            f'/v2/desktop/background-transcribe?conversation_id=conv-1&chunk_start_ms={chunk_start_ms}',
+            content=b'\x01\x00' * 1600,
+            headers={'Content-Type': 'application/octet-stream'},
+        )
+        assert response.status_code == 200
+        assert response.json()['provider'] == 'assemblyai'
+
+    appended_segments = [
+        call.args[2][0] for call in desktop_background.append_segments_to_in_progress_conversation.call_args_list
+    ]
+    assert [segment.start for segment in appended_segments] == [0.1, 14.1, 28.1]
+    assert [segment.end for segment in appended_segments] == [1.0, 15.0, 29.0]
+    assert [segment.speaker_id for segment in appended_segments] == [0, 1, 0]
+    assert [segment.speaker for segment in appended_segments] == ['SPEAKER_00', 'SPEAKER_01', 'SPEAKER_00']
 
 
 def test_byok_background_routing_uses_deepgram_when_only_deepgram_key(monkeypatch):

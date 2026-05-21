@@ -91,6 +91,41 @@ final class BackgroundTranscriptionTests: XCTestCase {
     XCTAssertEqual(session.snapshot().segments.count, 2)
   }
 
+  func testFifteenSecondContinuousSpeechProducesChunkThroughSession() async throws {
+    let configuration = BackgroundTranscriptionConfiguration()
+    var transcribedStarts: [Double] = []
+    let session = CloudBackgroundTranscriptionSession(configuration: configuration) { chunk in
+      transcribedStarts.append(chunk.startTime)
+      return [
+        Self.backendSegment(
+          id: "chunk-\(chunk.startTime)",
+          text: "continuous speech",
+          start: chunk.startTime,
+          end: chunk.startTime + 1
+        )
+      ]
+    }
+
+    let samplesPerFrame = configuration.sampleRate / 10
+    let frame = pcm(samples: Array(repeating: 1_000, count: samplesPerFrame))
+    var enqueuedChunks = 0
+
+    for frameIndex in 0..<160 {
+      let result = session.append(pcmData: frame, startTime: Double(frameIndex) / 10.0)
+      enqueuedChunks += result.enqueuedChunks
+    }
+
+    XCTAssertGreaterThanOrEqual(enqueuedChunks, 1)
+    XCTAssertGreaterThanOrEqual(session.pendingChunkCount, 1)
+
+    let first = try await session.transcribeNext()
+    XCTAssertNotNil(first)
+    XCTAssertEqual(first?.chunk.startTime, 0, accuracy: 0.001)
+    XCTAssertEqual(transcribedStarts, [0])
+    XCTAssertEqual(session.snapshot().processedChunkCount, 1)
+    XCTAssertEqual(session.snapshot().segments.count, 1)
+  }
+
   func testSessionFinishFlushesTail() async throws {
     let configuration = BackgroundTranscriptionConfiguration(
       sampleRate: 10,

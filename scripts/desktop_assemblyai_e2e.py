@@ -4,11 +4,19 @@
 By default this script exercises the same backend path as mobile offline sync
 (POST /v2/sync-local-files -> STTWorkload.sync). With --background-chunk it
 exercises desktop batch listen (POST /v2/desktop/background-transcribe ->
-STTWorkload.background) using raw PCM bytes.
+STTWorkload.background) using raw PCM bytes. With --background-batch it
+simulates desktop background chunking without launching the desktop app.
 
 Usage:
+  cd backend && DYLD_FALLBACK_LIBRARY_PATH="/opt/homebrew/lib" ./run-local.sh
+  # backend/.env:
+  #   LOCAL_DEVELOPMENT=true
+  #   ASSEMBLYAI_BACKGROUND_STT_ENABLED=true
+  #   ASSEMBLYAI_BACKGROUND_STT_WORKLOADS=sync,background,postprocess
+  #   ASSEMBLYAI_API_KEY=...
   python3 scripts/desktop_assemblyai_e2e.py [--api http://127.0.0.1:8080]
   python3 scripts/desktop_assemblyai_e2e.py --background-chunk [--api http://127.0.0.1:8080]
+  python3 scripts/desktop_assemblyai_e2e.py --background-batch [--api http://127.0.0.1:8080] [--language en] [--token TOKEN]
 """
 from __future__ import annotations
 
@@ -19,12 +27,18 @@ import subprocess
 import sys
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 import wave
 from pathlib import Path
 
 DEFAULTS_DOMAIN = "com.omi.desktop-dev"
 SAMPLE_MP3_URL = "https://storage.googleapis.com/aai-docs-samples/nbc.mp3"
+SAMPLE_RATE = 16000
+CHANNELS = 1
+BYTES_PER_SAMPLE = 2
+BACKGROUND_CHUNK_SECONDS = 15
+BACKGROUND_OVERLAP_SECONDS = 1
 
 
 def read_desktop_auth_token() -> str:
@@ -41,6 +55,23 @@ def read_desktop_auth_token() -> str:
             f"then retry (defaults domain: {DEFAULTS_DOMAIN})."
         )
     return token
+
+
+def require_backend_reachable(api_base: str) -> None:
+    url = f"{api_base.rstrip('/')}/docs"
+    try:
+        req = urllib.request.Request(url, method="GET")
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            if resp.status >= 500:
+                raise RuntimeError(f"Backend returned HTTP {resp.status}")
+    except (urllib.error.URLError, TimeoutError, RuntimeError) as exc:
+        raise SystemExit(
+            f"Backend is not reachable at {api_base}. Start the local backend first, for example:\n"
+            '  cd backend && DYLD_FALLBACK_LIBRARY_PATH="/opt/homebrew/lib" ./run-local.sh\n'
+            "Required backend env includes LOCAL_DEVELOPMENT=true, "
+            "ASSEMBLYAI_BACKGROUND_STT_ENABLED=true, and ASSEMBLYAI_API_KEY.\n"
+            f"Reachability error: {exc}"
+        )
 
 
 def mp3_to_pcm_bytes(mp3_path: Path, wav_path: Path, sample_rate: int = 16000) -> bytes:
@@ -115,6 +146,34 @@ def ensure_sample_pcm(workdir: Path) -> Path:
     return pcm_path
 
 
+def split_background_pcm_chunks(pcm: bytes) -> list[tuple[int, bytes]]:
+    """Mirror desktop's 15s chunks with 1s retained overlap.
+
+    Returns (chunk_start_ms, pcm_bytes). Hard cuts are intentional here; the
+    Swift chunker may cut earlier at silence, but hard-cut parity is enough to
+    prove multi-chunk backend persistence and offset handling.
+    """
+    bytes_per_second = SAMPLE_RATE * CHANNELS * BYTES_PER_SAMPLE
+    chunk_bytes = BACKGROUND_CHUNK_SECONDS * bytes_per_second
+    overlap_bytes = BACKGROUND_OVERLAP_SECONDS * bytes_per_second
+    stride_bytes = chunk_bytes - overlap_bytes
+    if stride_bytes <= 0:
+        raise ValueError("background chunk stride must be positive")
+
+    chunks: list[tuple[int, bytes]] = []
+    offset = 0
+    while offset < len(pcm):
+        chunk = pcm[offset : offset + chunk_bytes]
+        if not chunk:
+            break
+        start_ms = int(offset / bytes_per_second * 1000)
+        chunks.append((start_ms, chunk))
+        if offset + chunk_bytes >= len(pcm):
+            break
+        offset += stride_bytes
+    return chunks
+
+
 def json_request(
     url: str,
     token: str,
@@ -132,6 +191,16 @@ def json_request(
             "Authorization": f"Bearer {token}",
             "Content-Type": "application/json",
         },
+    )
+    with urllib.request.urlopen(req, timeout=timeout) as resp:
+        return json.loads(resp.read().decode())
+
+
+def get_json_request(url: str, token: str, *, timeout: int = 60) -> dict:
+    req = urllib.request.Request(
+        url,
+        method="GET",
+        headers={"Authorization": f"Bearer {token}"},
     )
     with urllib.request.urlopen(req, timeout=timeout) as resp:
         return json.loads(resp.read().decode())
@@ -185,6 +254,138 @@ def background_chunk_upload(api_base: str, token: str, pcm_path: Path) -> dict:
     return result
 
 
+def background_transcribe_chunk(
+    api_base: str,
+    token: str,
+    conversation_id: str,
+    chunk_start_ms: int,
+    chunk: bytes,
+    language: str,
+) -> dict:
+    transcribe_url = (
+        f"{api_base.rstrip('/')}/v2/desktop/background-transcribe"
+        f"?conversation_id={conversation_id}"
+        f"&chunk_start_ms={chunk_start_ms}"
+        f"&sample_rate={SAMPLE_RATE}"
+        f"&channels={CHANNELS}"
+        f"&language={urllib.parse.quote(language)}"
+    )
+    req = urllib.request.Request(
+        transcribe_url,
+        data=chunk,
+        method="POST",
+        headers={
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/octet-stream",
+        },
+    )
+    with urllib.request.urlopen(req, timeout=180) as resp:
+        return json.loads(resp.read().decode())
+
+
+def background_batch_upload(api_base: str, token: str, pcm_path: Path, language: str) -> dict:
+    require_backend_reachable(api_base)
+    api_base = api_base.rstrip("/")
+
+    start_url = f"{api_base}/v2/desktop/background-conversation/start"
+    started = json_request(start_url, token, payload={"language": language, "source": "desktop"})
+    conversation_id = started.get("conversation_id")
+    if not conversation_id:
+        raise RuntimeError(f"Unexpected background-conversation response: {started}")
+
+    chunks = split_background_pcm_chunks(pcm_path.read_bytes())
+    if len(chunks) < 2:
+        raise RuntimeError(f"Expected sample to produce at least 2 chunks, got {len(chunks)}")
+
+    total_segments = 0
+    non_empty_chunks = 0
+    previous_first_segment_start = None
+    snippet_parts: list[str] = []
+    chunk_summaries: list[dict] = []
+
+    for index, (chunk_start_ms, chunk) in enumerate(chunks, start=1):
+        duration_ms = int(len(chunk) / (SAMPLE_RATE * CHANNELS * BYTES_PER_SAMPLE) * 1000)
+        print(
+            f"Posting chunk {index}/{len(chunks)} "
+            f"start_ms={chunk_start_ms} duration_ms={duration_ms} bytes={len(chunk)} ..."
+        )
+        result = background_transcribe_chunk(api_base, token, conversation_id, chunk_start_ms, chunk, language)
+        provider = result.get("provider")
+        if provider != "assemblyai":
+            raise RuntimeError(f"Chunk {index} expected provider=assemblyai, got {provider!r}: {result}")
+
+        segments = result.get("segments") or []
+        for segment in segments:
+            if segment.get("start") is None or segment.get("end") is None:
+                raise RuntimeError(f"Chunk {index} returned segment without start/end: {segment}")
+            if segment["start"] + 0.001 < chunk_start_ms / 1000.0:
+                raise RuntimeError(
+                    f"Chunk {index} segment start {segment['start']} regressed before offset {chunk_start_ms / 1000.0}"
+                )
+
+        first_segment_start = next((segment["start"] for segment in segments if segment.get("start") is not None), None)
+        if first_segment_start is not None:
+            if previous_first_segment_start is not None and first_segment_start + 0.001 < previous_first_segment_start:
+                raise RuntimeError(
+                    f"Chunk {index} first segment start regressed: "
+                    f"{first_segment_start} < {previous_first_segment_start}"
+                )
+            previous_first_segment_start = first_segment_start
+
+        if segments:
+            non_empty_chunks += 1
+            snippet_parts.extend(segment.get("text", "") for segment in segments[:2])
+        total_segments += len(segments)
+        chunk_summaries.append(
+            {
+                "index": index,
+                "chunk_start_ms": chunk_start_ms,
+                "chunk_duration_ms": result.get("chunk_duration_ms"),
+                "segments": len(segments),
+                "run_id": result.get("run_id"),
+            }
+        )
+
+    if non_empty_chunks == 0 or total_segments == 0:
+        raise RuntimeError("Expected non-empty AssemblyAI segments from at least one chunk.")
+
+    before_finalize = get_json_request(f"{api_base}/v1/conversations/{conversation_id}", token)
+    persisted_before = before_finalize.get("transcript_segments") or []
+    if not persisted_before:
+        raise RuntimeError(f"Expected persisted transcript_segments before finalize: {before_finalize}")
+
+    finalize_status = None
+    finalize_body: dict | str | None = None
+    try:
+        finalize_body = json_request(f"{api_base}/v1/conversations", token, payload={}, timeout=240)
+        finalize_status = 200
+    except urllib.error.HTTPError as exc:
+        finalize_status = exc.code
+        body = exc.read().decode(errors="replace")
+        try:
+            finalize_body = json.loads(body)
+        except json.JSONDecodeError:
+            finalize_body = body
+        if exc.code != 404:
+            raise RuntimeError(f"Finalize failed: HTTP {exc.code}\n{body}") from exc
+
+    after_finalize = get_json_request(f"{api_base}/v1/conversations/{conversation_id}", token)
+    persisted_after = after_finalize.get("transcript_segments") or []
+    if not persisted_after:
+        raise RuntimeError(f"Expected transcript_segments on conversation after finalize: {after_finalize}")
+
+    return {
+        "conversation_id": conversation_id,
+        "chunks": chunk_summaries,
+        "total_segments_returned": total_segments,
+        "persisted_segments_before_finalize": len(persisted_before),
+        "persisted_segments_after_finalize": len(persisted_after),
+        "finalize_status": finalize_status,
+        "finalize_body": finalize_body,
+        "snippet": " ".join(part.strip() for part in snippet_parts if part.strip())[:300],
+    }
+
+
 def poll_job(api_base: str, token: str, job_id: str, timeout_s: int = 900) -> dict:
     url = f"{api_base.rstrip('/')}/v2/sync-local-files/{job_id}"
     deadline = time.time() + timeout_s
@@ -208,14 +409,25 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Desktop AssemblyAI E2E via sync-local-files")
     parser.add_argument("--api", default="http://127.0.0.1:8080", help="Local Python backend base URL")
     parser.add_argument("--workdir", default="/tmp/omi-assemblyai-e2e", help="Temp dir for sample audio")
+    parser.add_argument("--language", default="en", help="Language passed to background transcription")
+    parser.add_argument("--token", help="Firebase ID token; defaults to Omi Dev auth_idToken from macOS defaults")
     parser.add_argument(
         "--background-chunk",
         action="store_true",
         help="Exercise /v2/desktop/background-transcribe with raw PCM instead of sync-local-files",
     )
+    parser.add_argument(
+        "--background-batch",
+        action="store_true",
+        help="Exercise desktop background batch lifecycle with 15s/1s-overlap raw PCM chunks",
+    )
     args = parser.parse_args()
 
-    token = read_desktop_auth_token()
+    if args.background_chunk and args.background_batch:
+        print("Choose only one of --background-chunk or --background-batch.", file=sys.stderr)
+        return 2
+
+    token = args.token or read_desktop_auth_token()
 
     if args.background_chunk:
         pcm_path = ensure_sample_pcm(Path(args.workdir))
@@ -240,6 +452,32 @@ def main() -> int:
 
         print("\nBackground chunk succeeded with provider=assemblyai.")
         print(f"Conversation: {result.get('_conversation_id')}")
+        return 0
+
+    if args.background_batch:
+        pcm_path = ensure_sample_pcm(Path(args.workdir))
+        print(f"Posting simulated background batch from {pcm_path.name} to {args.api.rstrip('/')} ...")
+        try:
+            summary = background_batch_upload(args.api, token, pcm_path, args.language)
+        except urllib.error.HTTPError as exc:
+            body = exc.read().decode(errors="replace")
+            print(f"Background batch failed: HTTP {exc.code}\n{body}", file=sys.stderr)
+            return 1
+        except (RuntimeError, SystemExit) as exc:
+            print(str(exc), file=sys.stderr)
+            return 1
+
+        print("\nBackground batch succeeded with provider=assemblyai.")
+        print(f"Conversation: {summary['conversation_id']}")
+        print(f"Chunks uploaded: {len(summary['chunks'])}")
+        print(f"Segments returned by chunks: {summary['total_segments_returned']}")
+        print(f"Segments persisted before finalize: {summary['persisted_segments_before_finalize']}")
+        print(f"Segments persisted after finalize: {summary['persisted_segments_after_finalize']}")
+        print(f"Finalize status: HTTP {summary['finalize_status']}")
+        if summary["snippet"]:
+            print(f"Transcript snippet: {summary['snippet']}")
+        print("\nChunk summary:")
+        print(json.dumps(summary["chunks"], indent=2))
         return 0
 
     bin_path = ensure_sample_bin(Path(args.workdir))
