@@ -1,9 +1,14 @@
 {
-  "unreleased": [
-    "Fixed memories created on desktop showing up under \"Manual\" on mobile \u2014 they now appear under \"About You\" or \"Insights\" based on their type",
-    "Screen Capture and Microphone menu bar toggles now show as off when your trial has expired or you hit your usage limit, and tapping them brings up the upgrade prompt"
-  ],
+  "unreleased": [],
   "releases": [
+    {
+      "version": "0.11.414",
+      "date": "2026-05-21",
+      "changes": [
+        "Fixed memories created on desktop showing up under \"Manual\" on mobile \u2014 they now appear under \"About You\" or \"Insights\" based on their type",
+        "Screen Capture and Microphone menu bar toggles now show as off when your trial has expired or you hit your usage limit, and tapping them brings up the upgrade prompt"
+      ]
+    },
     {
       "version": "0.11.412",
       "date": "2026-05-20",
