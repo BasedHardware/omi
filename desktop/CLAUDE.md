@@ -137,6 +137,8 @@ This creates `/Applications/omi-fix-rewind.app` with bundle ID `com.omi.omi-fix-
 - Keep the name short and descriptive (it becomes both the app name and bundle ID suffix)
 - The named bundle gets its own permissions, database, and auth state — the user may need to re-grant permissions and sign in
 - To connect agent-swift: `agent-swift connect --bundle-id com.omi.omi-fix-rewind`
+- **Skip the web login:** sign into "Omi Dev" once, then `./scripts/omi-auth-dump.sh && ./scripts/omi-auth-seed.sh com.omi.omi-fix-rewind` clones the session so the named bundle boots signed-in
+- **Jump to a screen without clicking:** the automation bridge auto-enables on non-prod bundles — `./scripts/omi-ctl navigate <screen>` (e.g. `rewind`, `memories`, `settings rewind`). See "Fast-Path for Local Iteration" in `e2e/SKILL.md`.
 
 ### After Implementing Changes
 - `xcrun swift build` is for **compile checks only** — it does NOT start the backend
