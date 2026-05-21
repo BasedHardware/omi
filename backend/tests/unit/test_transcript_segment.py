@@ -1,6 +1,9 @@
 import pytest
+import sys
+import types
 
 from models.transcript_segment import TranscriptSegment
+from models.transcript_segment import ProviderTranscriptResult, ProviderTranscriptWord
 
 
 def _segment(text, speaker="SPEAKER_00", is_user=False, start=0.0, end=1.0):
@@ -17,6 +20,107 @@ def _concat_segments(segments):
 
 def _normalize_punctuation(text):
     return text.strip().replace("  ", " ").replace(" ,", ",").replace(" .", ".").replace(" ?", "?")
+
+
+def test_provider_transcript_result_preserves_opaque_cluster_ids():
+    result = ProviderTranscriptResult(
+        provider="test-provider",
+        model="async-large",
+        words=[
+            ProviderTranscriptWord(
+                text="hello",
+                start=0.0,
+                end=0.5,
+                provider_cluster_id="speaker-alpha",
+                speaker_label="SPEAKER_00",
+            )
+        ],
+    )
+
+    payload = result.model_dump()
+
+    assert payload["provider"] == "test-provider"
+    assert payload["model"] == "async-large"
+    assert payload["words"][0]["provider_cluster_id"] == "speaker-alpha"
+
+
+def test_transcript_segment_serializes_canonical_identity_metadata():
+    segment = TranscriptSegment(
+        text="Hello",
+        speaker="SPEAKER_07",
+        is_user=False,
+        person_id="person-1",
+        start=0.0,
+        end=1.0,
+        stt_provider="provider-a",
+        stt_model="model-b",
+        provider_cluster_id="cluster-x",
+        provider_speaker_label="SPEAKER_07",
+        speaker_identity_confidence=0.91,
+        speaker_identity_source="omi_speaker_embedding",
+        speaker_identity_version="v1",
+    )
+
+    payload = segment.model_dump()
+
+    assert payload["speaker_id"] == 7
+    assert payload["speaker"] == "SPEAKER_07"
+    assert payload["provider_cluster_id"] == "cluster-x"
+    assert payload["speaker_identity_state"] == "identified"
+    assert payload["speaker_identity_confidence"] == 0.91
+    assert payload["speaker_identity_source"] == "omi_speaker_embedding"
+
+
+def test_unknown_identity_is_explicit_and_legacy_zero_remains_ambiguous():
+    unknown = TranscriptSegment(
+        text="Hello",
+        speaker=None,
+        is_user=False,
+        person_id=None,
+        start=0.0,
+        end=1.0,
+        provider_cluster_id=None,
+        speaker_identity_state="unknown",
+    )
+    legacy = TranscriptSegment(text="Hi", speaker="SPEAKER_00", is_user=False, start=1.0, end=2.0)
+
+    assert unknown.speaker_id == 0
+    assert unknown.speaker_identity_state == "unknown"
+    assert legacy.speaker_id == 0
+    assert legacy.speaker_identity_state == "legacy_ambiguous"
+
+
+def test_postprocess_words_does_not_promote_malformed_speaker_to_speaker_zero():
+    deepgram = types.ModuleType("deepgram")
+    deepgram.DeepgramClient = lambda *args, **kwargs: object()
+    deepgram.DeepgramClientOptions = lambda *args, **kwargs: object()
+    byok = types.ModuleType("utils.byok")
+    byok.get_byok_key = lambda *args, **kwargs: None
+    endpoints = types.ModuleType("utils.other.endpoints")
+    endpoints.timeit = lambda fn: fn
+    sys.modules.setdefault("deepgram", deepgram)
+    sys.modules.setdefault("fal_client", types.ModuleType("fal_client"))
+    sys.modules.setdefault("utils.byok", byok)
+    sys.modules.setdefault("utils.other.endpoints", endpoints)
+
+    from utils.stt import pre_recorded
+
+    segments = pre_recorded.postprocess_words(
+        [
+            {
+                "timestamp": [0.0, 0.5],
+                "speaker": "provider-speaker-alpha",
+                "text": "hello",
+            }
+        ],
+        duration=1,
+    )
+
+    assert len(segments) == 1
+    assert segments[0].speaker is None
+    assert segments[0].speaker_id == 0
+    assert segments[0].provider_cluster_id == "provider-speaker-alpha"
+    assert segments[0].speaker_identity_state == "unknown"
 
 
 def test_forward_merge_on_short_incomplete_last_sentence():

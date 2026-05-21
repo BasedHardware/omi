@@ -4271,6 +4271,14 @@ impl FirestoreService {
                                                     end: seg.get("end")
                                                         .and_then(|s| s.as_f64())
                                                         .unwrap_or(0.0),
+                                                    stt_provider: seg.get("stt_provider").and_then(|s| s.as_str()).map(|s| s.to_string()),
+                                                    stt_model: seg.get("stt_model").and_then(|s| s.as_str()).map(|s| s.to_string()),
+                                                    provider_cluster_id: seg.get("provider_cluster_id").and_then(|s| s.as_str()).map(|s| s.to_string()),
+                                                    provider_speaker_label: seg.get("provider_speaker_label").and_then(|s| s.as_str()).map(|s| s.to_string()),
+                                                    speaker_identity_state: seg.get("speaker_identity_state").and_then(|s| s.as_str()).map(|s| s.to_string()),
+                                                    speaker_identity_confidence: seg.get("speaker_identity_confidence").and_then(|s| s.as_f64()),
+                                                    speaker_identity_source: seg.get("speaker_identity_source").and_then(|s| s.as_str()).map(|s| s.to_string()),
+                                                    speaker_identity_version: seg.get("speaker_identity_version").and_then(|s| s.as_str()).map(|s| s.to_string()),
                                                 })
                                             })
                                             .collect();
@@ -4319,6 +4327,14 @@ impl FirestoreService {
                                             end: seg.get("end")
                                                 .and_then(|s| s.as_f64())
                                                 .unwrap_or(0.0),
+                                            stt_provider: seg.get("stt_provider").and_then(|s| s.as_str()).map(|s| s.to_string()),
+                                            stt_model: seg.get("stt_model").and_then(|s| s.as_str()).map(|s| s.to_string()),
+                                            provider_cluster_id: seg.get("provider_cluster_id").and_then(|s| s.as_str()).map(|s| s.to_string()),
+                                            provider_speaker_label: seg.get("provider_speaker_label").and_then(|s| s.as_str()).map(|s| s.to_string()),
+                                            speaker_identity_state: seg.get("speaker_identity_state").and_then(|s| s.as_str()).map(|s| s.to_string()),
+                                            speaker_identity_confidence: seg.get("speaker_identity_confidence").and_then(|s| s.as_f64()),
+                                            speaker_identity_source: seg.get("speaker_identity_source").and_then(|s| s.as_str()).map(|s| s.to_string()),
+                                            speaker_identity_version: seg.get("speaker_identity_version").and_then(|s| s.as_str()).map(|s| s.to_string()),
                                         })
                                     })
                                     .collect();
@@ -4380,6 +4396,14 @@ impl FirestoreService {
                         person_id: self.parse_string(seg_fields, "person_id"),
                         start: self.parse_float(seg_fields, "start").unwrap_or(0.0),
                         end: self.parse_float(seg_fields, "end").unwrap_or(0.0),
+                        stt_provider: self.parse_string(seg_fields, "stt_provider"),
+                        stt_model: self.parse_string(seg_fields, "stt_model"),
+                        provider_cluster_id: self.parse_string(seg_fields, "provider_cluster_id"),
+                        provider_speaker_label: self.parse_string(seg_fields, "provider_speaker_label"),
+                        speaker_identity_state: self.parse_string(seg_fields, "speaker_identity_state"),
+                        speaker_identity_confidence: self.parse_float(seg_fields, "speaker_identity_confidence"),
+                        speaker_identity_source: self.parse_string(seg_fields, "speaker_identity_source"),
+                        speaker_identity_version: self.parse_string(seg_fields, "speaker_identity_version"),
                     })
                 })
                 .collect())
@@ -4444,6 +4468,14 @@ impl FirestoreService {
                         .get("end")
                         .and_then(|s| s.as_f64())
                         .unwrap_or(0.0),
+                    stt_provider: seg.get("stt_provider").and_then(|s| s.as_str()).map(|s| s.to_string()),
+                    stt_model: seg.get("stt_model").and_then(|s| s.as_str()).map(|s| s.to_string()),
+                    provider_cluster_id: seg.get("provider_cluster_id").and_then(|s| s.as_str()).map(|s| s.to_string()),
+                    provider_speaker_label: seg.get("provider_speaker_label").and_then(|s| s.as_str()).map(|s| s.to_string()),
+                    speaker_identity_state: seg.get("speaker_identity_state").and_then(|s| s.as_str()).map(|s| s.to_string()),
+                    speaker_identity_confidence: seg.get("speaker_identity_confidence").and_then(|s| s.as_f64()),
+                    speaker_identity_source: seg.get("speaker_identity_source").and_then(|s| s.as_str()).map(|s| s.to_string()),
+                    speaker_identity_version: seg.get("speaker_identity_version").and_then(|s| s.as_str()).map(|s| s.to_string()),
                 })
             })
             .collect())
@@ -4576,6 +4608,30 @@ impl FirestoreService {
                 }
                 if let Some(person_id) = &seg.person_id {
                     segment["person_id"] = json!(person_id);
+                }
+                if let Some(stt_provider) = &seg.stt_provider {
+                    segment["stt_provider"] = json!(stt_provider);
+                }
+                if let Some(stt_model) = &seg.stt_model {
+                    segment["stt_model"] = json!(stt_model);
+                }
+                if let Some(provider_cluster_id) = &seg.provider_cluster_id {
+                    segment["provider_cluster_id"] = json!(provider_cluster_id);
+                }
+                if let Some(provider_speaker_label) = &seg.provider_speaker_label {
+                    segment["provider_speaker_label"] = json!(provider_speaker_label);
+                }
+                if let Some(speaker_identity_state) = &seg.speaker_identity_state {
+                    segment["speaker_identity_state"] = json!(speaker_identity_state);
+                }
+                if let Some(speaker_identity_confidence) = seg.speaker_identity_confidence {
+                    segment["speaker_identity_confidence"] = json!(speaker_identity_confidence);
+                }
+                if let Some(speaker_identity_source) = &seg.speaker_identity_source {
+                    segment["speaker_identity_source"] = json!(speaker_identity_source);
+                }
+                if let Some(speaker_identity_version) = &seg.speaker_identity_version {
+                    segment["speaker_identity_version"] = json!(speaker_identity_version);
                 }
                 segment
             }).collect();

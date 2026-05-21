@@ -205,6 +205,40 @@ final class TranscriptSpeakerAssignmentTests: XCTestCase {
     XCTAssertTrue(segment.translations.isEmpty, "Translations should default to empty array when not present in JSON")
   }
 
+  func testTranscriptSegmentDecodesProviderIdentityMetadata() throws {
+    let json = """
+      {
+        "id": "seg_provider",
+        "text": "Hello",
+        "speaker": null,
+        "is_user": false,
+        "person_id": null,
+        "start": 0.0,
+        "end": 1.0,
+        "stt_provider": "provider-a",
+        "stt_model": "async-large",
+        "provider_cluster_id": "speaker-alpha",
+        "provider_speaker_label": null,
+        "speaker_identity_state": "unknown",
+        "speaker_identity_confidence": 0.42,
+        "speaker_identity_source": "omi_speaker_embedding",
+        "speaker_identity_version": "v1"
+      }
+      """.data(using: .utf8)!
+
+    let segment = try JSONDecoder().decode(TranscriptSegment.self, from: json)
+
+    XCTAssertNil(segment.speaker)
+    XCTAssertEqual(segment.speakerId, 0)
+    XCTAssertEqual(segment.sttProvider, "provider-a")
+    XCTAssertEqual(segment.sttModel, "async-large")
+    XCTAssertEqual(segment.providerClusterId, "speaker-alpha")
+    XCTAssertEqual(segment.speakerIdentityState, "unknown")
+    XCTAssertEqual(segment.speakerIdentityConfidence, 0.42)
+    XCTAssertEqual(segment.speakerIdentitySource, "omi_speaker_embedding")
+    XCTAssertEqual(segment.speakerIdentityVersion, "v1")
+  }
+
   func testSpeakerSegmentTranslationsPreserved() {
     let translations = [
       SegmentTranslation(lang: "en", text: "Hello"),

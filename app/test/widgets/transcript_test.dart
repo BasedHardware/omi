@@ -42,6 +42,37 @@ void main() {
     );
   }
 
+  group('TranscriptSegment compatibility metadata', () {
+    test('decodes provider speaker metadata without changing legacy fields', () {
+      final segment = TranscriptSegment.fromJson({
+        'id': 'seg-provider',
+        'text': 'Hello',
+        'speaker': null,
+        'speaker_id': 0,
+        'is_user': false,
+        'person_id': null,
+        'start': 0.0,
+        'end': 1.0,
+        'stt_provider': 'provider-a',
+        'stt_model': 'async-large',
+        'provider_cluster_id': 'speaker-alpha',
+        'provider_speaker_label': null,
+        'speaker_identity_state': 'unknown',
+        'speaker_identity_confidence': null,
+        'speaker_identity_source': null,
+        'speaker_identity_version': 'v1',
+      });
+
+      expect(segment.speaker, isNull);
+      expect(segment.speakerId, 0);
+      expect(segment.sttProvider, 'provider-a');
+      expect(segment.sttModel, 'async-large');
+      expect(segment.providerClusterId, 'speaker-alpha');
+      expect(segment.speakerIdentityState, 'unknown');
+      expect(segment.speakerIdentityVersion, 'v1');
+    });
+  });
+
   group('Speaker label display', () {
     testWidgets('shows person name when personId is set and in cache', (tester) async {
       final now = DateTime.now();

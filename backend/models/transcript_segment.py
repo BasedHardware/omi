@@ -1,5 +1,5 @@
 from datetime import timedelta
-from typing import Optional, List, Tuple
+from typing import Literal, Optional, List, Tuple
 import uuid
 import re
 from pydantic import BaseModel, Field
@@ -23,6 +23,38 @@ class Translation(BaseModel):
     text: str
 
 
+SpeakerIdentityState = Literal['unknown', 'legacy_ambiguous', 'unassigned', 'identified', 'user']
+
+
+class ProviderTranscriptWord(BaseModel):
+    text: str
+    start: float
+    end: float
+    provider_cluster_id: Optional[str] = None
+    speaker_label: Optional[str] = None
+    confidence: Optional[float] = None
+
+
+class ProviderTranscriptUtterance(BaseModel):
+    text: str
+    start: float
+    end: float
+    provider_cluster_id: Optional[str] = None
+    speaker_label: Optional[str] = None
+    confidence: Optional[float] = None
+    words: Optional[List[ProviderTranscriptWord]] = None
+
+
+class ProviderTranscriptResult(BaseModel):
+    provider: str
+    model: Optional[str] = None
+    language: Optional[str] = None
+    duration: Optional[float] = None
+    words: List[ProviderTranscriptWord] = []
+    utterances: List[ProviderTranscriptUtterance] = []
+    raw_provider_result_id: Optional[str] = None
+
+
 class TranscriptSegment(BaseModel):
     id: Optional[str] = None
     text: str
@@ -35,6 +67,13 @@ class TranscriptSegment(BaseModel):
     translations: Optional[List[Translation]] = []
     speech_profile_processed: bool = True
     stt_provider: Optional[str] = None
+    stt_model: Optional[str] = None
+    provider_cluster_id: Optional[str] = None
+    provider_speaker_label: Optional[str] = None
+    speaker_identity_state: SpeakerIdentityState = 'legacy_ambiguous'
+    speaker_identity_confidence: Optional[float] = None
+    speaker_identity_source: Optional[str] = None
+    speaker_identity_version: Optional[str] = None
 
     def __init__(self, **data):
         super().__init__(**data)
@@ -45,9 +84,15 @@ class TranscriptSegment(BaseModel):
             try:
                 self.speaker_id = int(self.speaker.split('_', 1)[1])
             except (ValueError, IndexError):
-                self.speaker_id = 0
-        else:
+                if self.speaker_id is None:
+                    self.speaker_id = 0
+        elif self.speaker_id is None:
             self.speaker_id = 0
+
+        if self.person_id and self.speaker_identity_state in ('legacy_ambiguous', 'unassigned', 'unknown'):
+            self.speaker_identity_state = 'user' if self.is_user else 'identified'
+        elif self.is_user and self.speaker_identity_state in ('legacy_ambiguous', 'unassigned', 'unknown'):
+            self.speaker_identity_state = 'user'
 
     def get_timestamp_string(self):
         start_duration = timedelta(seconds=int(self.start))

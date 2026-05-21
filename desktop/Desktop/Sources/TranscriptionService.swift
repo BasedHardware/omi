@@ -37,6 +37,14 @@ class TranscriptionService {
         let start: Double
         let end: Double
         let translations: [BackendTranslation]?
+        let stt_provider: String?
+        let stt_model: String?
+        let provider_cluster_id: String?
+        let provider_speaker_label: String?
+        let speaker_identity_state: String?
+        let speaker_identity_confidence: Double?
+        let speaker_identity_source: String?
+        let speaker_identity_version: String?
     }
 
     /// Message event (from `/v4/listen` only — not used by PTT transcribe-stream)

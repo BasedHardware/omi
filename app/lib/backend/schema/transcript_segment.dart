@@ -33,6 +33,13 @@ class TranscriptSegment {
   List<Translation> translations = [];
   bool speechProfileProcessed;
   String? sttProvider;
+  String? sttModel;
+  String? providerClusterId;
+  String? providerSpeakerLabel;
+  String speakerIdentityState;
+  double? speakerIdentityConfidence;
+  String? speakerIdentitySource;
+  String? speakerIdentityVersion;
 
   TranscriptSegment({
     required this.id,
@@ -45,6 +52,13 @@ class TranscriptSegment {
     required this.translations,
     this.speechProfileProcessed = true,
     this.sttProvider,
+    this.sttModel,
+    this.providerClusterId,
+    this.providerSpeakerLabel,
+    this.speakerIdentityState = 'legacy_ambiguous',
+    this.speakerIdentityConfidence,
+    this.speakerIdentitySource,
+    this.speakerIdentityVersion,
   }) {
     final parts = speaker?.split('_') ?? [];
     speakerId = parts.length > 1 ? (int.tryParse(parts[1]) ?? 0) : 0;
@@ -74,6 +88,15 @@ class TranscriptSegment {
       translations: json['translations'] != null ? Translation.fromJsonList(json['translations'] as List<dynamic>) : [],
       speechProfileProcessed: (json['speech_profile_processed'] ?? true) as bool,
       sttProvider: json['stt_provider'] as String?,
+      sttModel: json['stt_model'] as String?,
+      providerClusterId: json['provider_cluster_id'] as String?,
+      providerSpeakerLabel: json['provider_speaker_label'] as String?,
+      speakerIdentityState: (json['speaker_identity_state'] ?? 'legacy_ambiguous') as String,
+      speakerIdentityConfidence: json['speaker_identity_confidence'] != null
+          ? double.tryParse(json['speaker_identity_confidence'].toString())
+          : null,
+      speakerIdentitySource: json['speaker_identity_source'] as String?,
+      speakerIdentityVersion: json['speaker_identity_version'] as String?,
     );
   }
 
@@ -88,6 +111,13 @@ class TranscriptSegment {
       'end': end,
       'translations': translations.map((t) => t.toJson()).toList(),
       if (sttProvider != null) 'stt_provider': sttProvider,
+      if (sttModel != null) 'stt_model': sttModel,
+      if (providerClusterId != null) 'provider_cluster_id': providerClusterId,
+      if (providerSpeakerLabel != null) 'provider_speaker_label': providerSpeakerLabel,
+      'speaker_identity_state': speakerIdentityState,
+      if (speakerIdentityConfidence != null) 'speaker_identity_confidence': speakerIdentityConfidence,
+      if (speakerIdentitySource != null) 'speaker_identity_source': speakerIdentitySource,
+      if (speakerIdentityVersion != null) 'speaker_identity_version': speakerIdentityVersion,
     };
   }
 

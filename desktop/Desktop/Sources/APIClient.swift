@@ -826,6 +826,14 @@ struct TranscriptSegment: Codable, Identifiable {
   let start: Double
   let end: Double
   let translations: [TranscriptTranslation]
+  let sttProvider: String?
+  let sttModel: String?
+  let providerClusterId: String?
+  let providerSpeakerLabel: String?
+  let speakerIdentityState: String?
+  let speakerIdentityConfidence: Double?
+  let speakerIdentitySource: String?
+  let speakerIdentityVersion: String?
 
   var speakerId: Int {
     guard let speaker = speaker else { return 0 }
@@ -840,6 +848,14 @@ struct TranscriptSegment: Codable, Identifiable {
     case id, text, speaker
     case isUser = "is_user"
     case personId = "person_id"
+    case sttProvider = "stt_provider"
+    case sttModel = "stt_model"
+    case providerClusterId = "provider_cluster_id"
+    case providerSpeakerLabel = "provider_speaker_label"
+    case speakerIdentityState = "speaker_identity_state"
+    case speakerIdentityConfidence = "speaker_identity_confidence"
+    case speakerIdentitySource = "speaker_identity_source"
+    case speakerIdentityVersion = "speaker_identity_version"
     case start, end, translations
   }
 
@@ -856,6 +872,16 @@ struct TranscriptSegment: Codable, Identifiable {
     end = try container.decodeIfPresent(Double.self, forKey: .end) ?? 0
     translations =
       try container.decodeIfPresent([TranscriptTranslation].self, forKey: .translations) ?? []
+    sttProvider = try container.decodeIfPresent(String.self, forKey: .sttProvider)
+    sttModel = try container.decodeIfPresent(String.self, forKey: .sttModel)
+    providerClusterId = try container.decodeIfPresent(String.self, forKey: .providerClusterId)
+    providerSpeakerLabel = try container.decodeIfPresent(String.self, forKey: .providerSpeakerLabel)
+    speakerIdentityState =
+      try container.decodeIfPresent(String.self, forKey: .speakerIdentityState)
+    speakerIdentityConfidence =
+      try container.decodeIfPresent(Double.self, forKey: .speakerIdentityConfidence)
+    speakerIdentitySource = try container.decodeIfPresent(String.self, forKey: .speakerIdentitySource)
+    speakerIdentityVersion = try container.decodeIfPresent(String.self, forKey: .speakerIdentityVersion)
   }
 
   /// Memberwise initializer for creating from local storage
@@ -868,7 +894,15 @@ struct TranscriptSegment: Codable, Identifiable {
     personId: String?,
     start: Double,
     end: Double,
-    translations: [TranscriptTranslation] = []
+    translations: [TranscriptTranslation] = [],
+    sttProvider: String? = nil,
+    sttModel: String? = nil,
+    providerClusterId: String? = nil,
+    providerSpeakerLabel: String? = nil,
+    speakerIdentityState: String? = nil,
+    speakerIdentityConfidence: Double? = nil,
+    speakerIdentitySource: String? = nil,
+    speakerIdentityVersion: String? = nil
   ) {
     self.id = id
     self.backendId = backendId
@@ -879,6 +913,14 @@ struct TranscriptSegment: Codable, Identifiable {
     self.start = start
     self.end = end
     self.translations = translations
+    self.sttProvider = sttProvider
+    self.sttModel = sttModel
+    self.providerClusterId = providerClusterId
+    self.providerSpeakerLabel = providerSpeakerLabel
+    self.speakerIdentityState = speakerIdentityState
+    self.speakerIdentityConfidence = speakerIdentityConfidence
+    self.speakerIdentitySource = speakerIdentitySource
+    self.speakerIdentityVersion = speakerIdentityVersion
   }
 
   /// Formatted timestamp string (e.g., "00:01:30 - 00:01:45")

@@ -24,6 +24,22 @@ pub struct TranscriptSegment {
     pub start: f64,
     #[serde(default)]
     pub end: f64,
+    #[serde(default)]
+    pub stt_provider: Option<String>,
+    #[serde(default)]
+    pub stt_model: Option<String>,
+    #[serde(default)]
+    pub provider_cluster_id: Option<String>,
+    #[serde(default)]
+    pub provider_speaker_label: Option<String>,
+    #[serde(default)]
+    pub speaker_identity_state: Option<String>,
+    #[serde(default)]
+    pub speaker_identity_confidence: Option<f64>,
+    #[serde(default)]
+    pub speaker_identity_source: Option<String>,
+    #[serde(default)]
+    pub speaker_identity_version: Option<String>,
 }
 
 fn default_speaker() -> String {

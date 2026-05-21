@@ -30,6 +30,23 @@ def _deepgram_client_for_request() -> DeepgramClient:
     return _deepgram_client
 
 
+def _deepgram_speaker_fields(speaker_id) -> dict:
+    if speaker_id is None:
+        return {'speaker': None, 'provider_cluster_id': None, 'provider_speaker_label': None}
+
+    provider_cluster_id = str(speaker_id)
+    try:
+        speaker_label = f"SPEAKER_{int(speaker_id):02d}"
+    except (TypeError, ValueError):
+        speaker_label = None
+
+    return {
+        'speaker': speaker_label,
+        'provider_cluster_id': provider_cluster_id,
+        'provider_speaker_label': speaker_label,
+    }
+
+
 # Languages supported by nova-3
 _deepgram_nova3_languages = {
     "ar",
@@ -224,10 +241,15 @@ def deepgram_prerecorded(
         words = []
         for w in dg_words:
             speaker_id = w.get('speaker', 0)
+            speaker_fields = _deepgram_speaker_fields(speaker_id)
             words.append(
                 {
                     'timestamp': [w['start'], w['end']],
-                    'speaker': f"SPEAKER_{speaker_id:02d}" if speaker_id is not None else None,
+                    'speaker': speaker_fields['speaker'],
+                    'provider_cluster_id': speaker_fields['provider_cluster_id'],
+                    'provider_speaker_label': speaker_fields['provider_speaker_label'],
+                    'stt_provider': 'deepgram',
+                    'stt_model': model,
                     'text': w.get('punctuated_word', w['word']),
                 }
             )
@@ -358,10 +380,15 @@ def deepgram_prerecorded_from_bytes(
         words = []
         for w in dg_words:
             speaker_id = w.get('speaker', 0)
+            speaker_fields = _deepgram_speaker_fields(speaker_id)
             words.append(
                 {
                     'timestamp': [w['start'], w['end']],
-                    'speaker': f"SPEAKER_{speaker_id:02d}" if speaker_id is not None else None,
+                    'speaker': speaker_fields['speaker'],
+                    'provider_cluster_id': speaker_fields['provider_cluster_id'],
+                    'provider_speaker_label': speaker_fields['provider_speaker_label'],
+                    'stt_provider': 'deepgram',
+                    'stt_model': model,
                     'text': w.get('punctuated_word', w['word']),
                 }
             )
@@ -440,14 +467,21 @@ def _words_cleaning(words: List[dict]):
     for i, w in enumerate(words):
         # if w['timestamp'][0] == w['timestamp'][1]:
         #     continue
+        raw_speaker = w.get('speaker')
+        speaker = raw_speaker if isinstance(raw_speaker, str) and raw_speaker.startswith('SPEAKER_') else None
         words_cleaned.append(
             {
                 'start': round(w['timestamp'][0], 2),
                 'end': round(w['timestamp'][1] or w['timestamp'][0] + 1, 2),
-                'speaker': w['speaker'],
+                'speaker': speaker,
+                'provider_cluster_id': w.get('provider_cluster_id') or raw_speaker,
+                'provider_speaker_label': w.get('provider_speaker_label') or speaker,
+                'stt_provider': w.get('stt_provider'),
+                'stt_model': w.get('stt_model'),
                 'text': str(w['text']).strip(),
                 'is_user': False,
                 'person_id': None,
+                'speaker_identity_state': 'unassigned' if speaker else 'unknown',
             }
         )
 
@@ -470,10 +504,11 @@ def _words_cleaning(words: List[dict]):
                 speaker = prev_speaker
             elif next_speaker:
                 speaker = next_speaker
-            else:
-                speaker = 'SPEAKER_00'
 
             words_cleaned[i]['speaker'] = speaker
+            words_cleaned[i]['provider_speaker_label'] = speaker
+            if speaker:
+                words_cleaned[i]['speaker_identity_state'] = 'unassigned'
 
     # for chunk in words_cleaned:
     #     print(chunk)
@@ -527,6 +562,11 @@ def _segments_as_objects(segments: List[dict]) -> List[TranscriptSegment]:
             person_id=None,
             start=round(segment['start'] - starts_at, 2),
             end=round(segment['end'] - starts_at, 2),
+            stt_provider=segment.get('stt_provider'),
+            stt_model=segment.get('stt_model'),
+            provider_cluster_id=segment.get('provider_cluster_id'),
+            provider_speaker_label=segment.get('provider_speaker_label'),
+            speaker_identity_state='user' if segment['is_user'] else segment.get('speaker_identity_state', 'unknown'),
         )
         for segment in segments
     ]
