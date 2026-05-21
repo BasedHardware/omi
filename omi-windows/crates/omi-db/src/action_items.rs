@@ -66,4 +66,47 @@ impl Database {
         conn.execute("DELETE FROM action_items WHERE id = ?1", params![id])?;
         Ok(())
     }
+
+    /// Delete all completed action items.
+    pub fn delete_completed_action_items(&self) -> Result<usize> {
+        let conn = self.conn();
+        Ok(conn.execute("DELETE FROM action_items WHERE completed = 1", [])?)
+    }
+
+    /// Return open tasks as a compact numbered list for LLM dedup context.
+    pub fn list_open_action_items_for_dedup(&self, limit: usize) -> Result<String> {
+        let items = self.list_action_items(limit)?;
+        let open: Vec<_> = items.iter().filter(|i| !i.completed).collect();
+        if open.is_empty() { return Ok(String::new()); }
+        Ok(open.iter().enumerate()
+            .map(|(i, t)| format!("{}. {}", i + 1, t.content))
+            .collect::<Vec<_>>()
+            .join("\n"))
+    }
+
+    /// Check whether any existing open task is sufficiently similar to `content`.
+    pub fn has_similar_action_item(&self, content: &str, threshold: f64) -> Result<bool> {
+        let items = self.list_action_items(200)?;
+        let needle = action_word_tokens(content);
+        Ok(items.iter()
+            .filter(|i| !i.completed)
+            .any(|i| action_jaccard(&needle, &action_word_tokens(&i.content)) >= threshold))
+    }
+}
+
+// ── Dedup helpers ─────────────────────────────────────────────────────────────
+
+fn action_word_tokens(s: &str) -> std::collections::HashSet<String> {
+    s.to_lowercase()
+        .split(|c: char| !c.is_alphanumeric())
+        .filter(|w| w.len() > 2)
+        .map(str::to_string)
+        .collect()
+}
+
+fn action_jaccard(a: &std::collections::HashSet<String>, b: &std::collections::HashSet<String>) -> f64 {
+    if a.is_empty() && b.is_empty() { return 1.0; }
+    let inter = a.intersection(b).count() as f64;
+    let union = a.union(b).count() as f64;
+    if union == 0.0 { 0.0 } else { inter / union }
 }

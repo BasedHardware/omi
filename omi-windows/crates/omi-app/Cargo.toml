@@ -26,6 +26,7 @@ webbrowser = "0.8"
 urlencoding = "2.1"
 dotenvy = "0.15"
 base64 = "0.22"
+uuid = { version = "1", features = ["v4"] }
 
 # Global hotkeys & system tray (M7)
 global-hotkey = "0.6"

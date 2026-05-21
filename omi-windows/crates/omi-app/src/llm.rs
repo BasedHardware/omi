@@ -200,72 +200,135 @@ pub async fn process_conversation(
         tracing::info!("[LLM] Saved summary for {conversation_id}: \"{title}\"");
     }
 
-    // ── 2. Extract action items ───────────────────────────────────────────────
+// ── 2. Extract action items (dedup against open tasks) ───────────────────
+    let existing_tasks = db.list_open_action_items_for_dedup(100).unwrap_or_default();
+    let tasks_ctx = if existing_tasks.is_empty() {
+        String::new()
+    } else {
+        format!("\n\nAlready-captured open tasks — DO NOT duplicate any of these:\n{existing_tasks}")
+    };
+
     let action_prompt = format!(
-        "Extract any concrete action items, tasks, or to-dos mentioned in this conversation. \
-        Return a JSON array of strings, each being a clear, actionable task. \
-        Return [] if there are no action items.\n\nTranscript:\n{transcript}"
+        "Extract action items from this conversation transcript.\n\
+        \n\
+        RULES — follow every one strictly:\n\
+        1. Only extract tasks the USER explicitly committed to or was clearly assigned.\n\
+        2. Each task must start with a strong action verb (Send, Review, Schedule, Build, Fix…).\n\
+        3. Be specific: include names, deadlines, URLs, or key details when mentioned.\n\
+        4. DO NOT duplicate tasks already in the list below.\n\
+        5. DO NOT extract vague intentions (\"follow up\", \"look into\", \"think about\").\n\
+        6. DO NOT extract things that are already done or were completed during the conversation.\n\
+        7. Return a JSON array of strings. Return [] if nothing qualifies.\
+        {tasks_ctx}\n\n\
+        Transcript:\n{transcript}"
     );
 
     let action_result = complete(
         &api_key, &url, &model,
         vec![LlmMessage { role: "user".into(), content: action_prompt }],
-        Some(400),
+        Some(600),
     ).await;
 
     match action_result {
         Ok(text) => {
-            if let Ok(items) = serde_json::from_str::<Vec<String>>(&text) {
+            let json_str = strip_code_fences(text.trim());
+            if let Ok(items) = serde_json::from_str::<Vec<String>>(json_str) {
+                let (mut inserted, mut skipped) = (0usize, 0usize);
                 for item in &items {
                     let content = item.trim();
-                    if !content.is_empty() {
-                        if let Err(e) = db.insert_action_item(Some(conversation_id), content) {
-                            tracing::error!("[LLM] Failed to insert action item: {e}");
-                        }
+                    if content.is_empty() { continue; }
+                    // DB-level Jaccard similarity — skip if ≥55% token overlap with any open task
+                    if db.has_similar_action_item(content, 0.55).unwrap_or(false) {
+                        tracing::debug!("[LLM] Skipping duplicate task: {content}");
+                        skipped += 1;
+                        continue;
+                    }
+                    if let Err(e) = db.insert_action_item(Some(conversation_id), content) {
+                        tracing::error!("[LLM] Failed to insert action item: {e}");
+                    } else {
+                        inserted += 1;
                     }
                 }
-                tracing::info!("[LLM] Extracted {} action items for {conversation_id}", items.len());
+                tracing::info!("[LLM] Tasks for {conversation_id}: {inserted} new, {skipped} duplicate");
             } else {
-                tracing::warn!("[LLM] Could not parse action items JSON: {}", &text[..text.len().min(200)]);
+                tracing::warn!("[LLM] Could not parse action items JSON: {}", &text[..text.len().min(300)]);
             }
         }
         Err(e) => tracing::error!("[LLM] Action item extraction failed: {e}"),
     }
 
-    // ── 3. Extract memory bullets ─────────────────────────────────────────────
+    // ── 3. Extract memory bullets (dedup against existing memories) ───────────
+    let existing_mems = db.list_memories_for_dedup(150).unwrap_or_default();
+    let mems_ctx = if existing_mems.is_empty() {
+        String::new()
+    } else {
+        format!("\n\nAlready-stored memories — DO NOT duplicate, restate, or rephrase any of these:\n{existing_mems}")
+    };
+
     let memory_prompt = format!(
-        "Extract important facts, preferences, decisions, or commitments from this conversation \
-        that are worth remembering long-term. Return a JSON array of objects with \"content\" \
-        and \"category\" (one of: fact, preference, decision, task, other). \
-        Return an empty array [] if nothing is worth remembering.\n\n\
+        "Extract long-term memories from this conversation transcript.\n\
+        \n\
+        A memory is worth storing ONLY if ALL of the following are true:\n\
+        • Specific — contains a concrete name, number, date, product, place, or fact\n\
+        • Durable — still relevant and useful at least 4 weeks from now\n\
+        • Personal — reveals a user preference, decision, commitment, or relationship\n\
+        • New — not already captured in the existing memories list below\n\
+        \n\
+        DO NOT store:\n\
+        - Generic observations (\"user is working on X\")\n\
+        - Transient info (today's weather, current prices, the meeting just held)\n\
+        - Anything vague, obvious, or generic\n\
+        - Near-duplicates of existing memories (even if worded differently)\n\
+        - Summaries of the conversation itself\n\
+        \n\
+        For category use exactly one of: fact | preference | decision | commitment | relationship | technical\n\
+        Return a JSON array: [{{\"content\": \"<precise single sentence>\", \"category\": \"<category>\"}}]\n\
+        Return [] if nothing qualifies. Be ruthlessly selective — 0-2 memories per conversation is normal.\
+        {mems_ctx}\n\n\
         Transcript:\n{transcript}"
     );
 
     let memory_result = complete(
         &api_key, &url, &model,
         vec![LlmMessage { role: "user".into(), content: memory_prompt }],
-        Some(500),
+        Some(700),
     ).await;
 
     match memory_result {
         Ok(text) => {
-            if let Ok(items) = serde_json::from_str::<Vec<serde_json::Value>>(&text) {
+            let json_str = strip_code_fences(text.trim());
+            if let Ok(items) = serde_json::from_str::<Vec<serde_json::Value>>(json_str) {
+                let (mut inserted, mut skipped) = (0usize, 0usize);
                 for item in &items {
                     let content = item["content"].as_str().unwrap_or("").trim();
                     let category = item["category"].as_str();
-                    if !content.is_empty() {
-                        if let Err(e) = db.insert_memory(Some(conversation_id), content, category) {
-                            tracing::error!("[LLM] Failed to insert memory: {e}");
-                        }
+                    if content.is_empty() { continue; }
+                    // DB-level similarity check — skip if ≥45% token overlap
+                    if db.find_similar_memories(content, 0.45).map(|v| !v.is_empty()).unwrap_or(false) {
+                        tracing::debug!("[LLM] Skipping near-duplicate memory: {content}");
+                        skipped += 1;
+                        continue;
+                    }
+                    if let Err(e) = db.insert_memory(Some(conversation_id), content, category) {
+                        tracing::error!("[LLM] Failed to insert memory: {e}");
+                    } else {
+                        inserted += 1;
                     }
                 }
-                tracing::info!("[LLM] Extracted {} memories for {conversation_id}", items.len());
+                tracing::info!("[LLM] Memories for {conversation_id}: {inserted} new, {skipped} duplicate");
             } else {
-                tracing::warn!("[LLM] Could not parse memory JSON: {}", &text[..text.len().min(200)]);
+                tracing::warn!("[LLM] Could not parse memory JSON: {}", &text[..text.len().min(300)]);
             }
         }
         Err(e) => tracing::error!("[LLM] Memory extraction failed: {e}"),
     }
+}
+
+/// Strip markdown code fences from LLM output so JSON parsing is robust.
+fn strip_code_fences(s: &str) -> &str {
+    let s = s.trim_start_matches("```json").trim_start_matches("```");
+    let s = s.trim_end_matches("```");
+    s.trim()
 }
 
 /// Summarize a list of recent screen OCR excerpts into a short, focused text.
@@ -379,4 +442,57 @@ pub async fn extract_screenshot_artifacts(
             Ok(ScreenshotExtraction::default())
         }
     }
+}
+/// Run an LLM-assisted deduplication pass over all stored memories.
+/// Loads up to 200 memories, asks the model which IDs are near-duplicates,
+/// keeps the more specific one, deletes the rest.  Returns count of deleted.
+pub async fn deduplicate_memories(
+    db: &omi_db::Database,
+    cfg: &AppConfig,
+) -> Result<usize> {
+    let mems = db.list_memories(200)?;
+    if mems.len() < 2 {
+        return Ok(0);
+    }
+
+    let (api_key, url, model) = resolve_llm_endpoint(cfg);
+    if api_key.is_empty() {
+        anyhow::bail!("No LLM API key configured");
+    }
+
+    let numbered: String = mems.iter().enumerate()
+        .map(|(i, m)| format!("{}. [{}] {}", i + 1, m.category.as_deref().unwrap_or("general"), m.content))
+        .collect::<Vec<_>>()
+        .join("\n");
+
+    let prompt = format!(
+        "Below is a numbered list of stored memories. Identify groups of near-duplicate or \
+        redundant memories (same fact stated differently, one being a subset of another, etc.).\n\
+        For each group, keep the MOST SPECIFIC / DETAILED one and mark the others for deletion.\n\
+        Return a JSON array of 1-based indices to DELETE. Return [] if nothing should be removed.\n\
+        Only remove true duplicates — do not remove memories that are related but distinct.\n\n\
+        Memories:\n{numbered}"
+    );
+
+    let resp = complete(
+        &api_key, &url, &model,
+        vec![LlmMessage { role: "user".into(), content: prompt }],
+        Some(400),
+    ).await?;
+
+    let json_str = strip_code_fences(resp.trim());
+    let indices: Vec<usize> = serde_json::from_str(json_str)
+        .unwrap_or_default();
+
+    let mut deleted = 0usize;
+    for idx in &indices {
+        let i = idx.saturating_sub(1);
+        if let Some(m) = mems.get(i) {
+            if db.delete_memory(&m.id).is_ok() {
+                deleted += 1;
+                tracing::info!("[LLM] Dedup deleted memory: {}", &m.content[..m.content.len().min(80)]);
+            }
+        }
+    }
+    Ok(deleted)
 }

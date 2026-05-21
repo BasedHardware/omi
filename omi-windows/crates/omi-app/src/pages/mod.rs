@@ -1,10 +1,11 @@
-pub mod dashboard;
+pub mod agent;
+pub mod apps;
 pub mod chat;
 pub mod conversations;
-pub mod memories;
-pub mod tasks;
-pub mod rewind;
-pub mod apps;
+pub mod dashboard;
 pub mod focus;
+pub mod memories;
 pub mod persona;
+pub mod rewind;
 pub mod settings;
+pub mod tasks;

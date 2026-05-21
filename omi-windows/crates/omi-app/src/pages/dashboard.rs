@@ -1,7 +1,10 @@
+use std::sync::Arc;
+
 use dioxus::prelude::*;
 
 use crate::app::Db;
 use crate::config::AppConfig;
+use crate::proactive::ProactiveEngine;
 use crate::recording::{LiveTranscript, RecordingStatus, StopRecording};
 
 #[component]
@@ -11,6 +14,7 @@ pub fn DashboardPage() -> Element {
     let recording_status: Signal<RecordingStatus> = use_context();
     let live_transcript: Signal<LiveTranscript> = use_context();
     let mut stop_handle: Signal<Option<StopRecording>> = use_context();
+    let proactive_engine: Signal<Arc<ProactiveEngine>> = use_context();
 
     let is_recording = matches!(*recording_status.read(), RecordingStatus::Recording { .. });
     let is_idle = matches!(*recording_status.read(), RecordingStatus::Idle);
@@ -62,19 +66,15 @@ pub fn DashboardPage() -> Element {
                             let mut status = recording_status.clone();
                             let mut transcript = live_transcript.clone();
                             let mut stop_handle_clone = stop_handle.clone();
+                            let pe_restart = Some(proactive_engine.read().clone());
                             spawn(async move {
                                 // small pause to allow resources to release
                                 tokio::time::sleep(std::time::Duration::from_millis(400)).await;
                                 let (stop_tx, stop_rx) = tokio::sync::oneshot::channel::<()>();
                                 stop_handle_clone.set(Some(crate::recording::StopRecording::new(stop_tx)));
-                                crate::recording::start_recording(
-                                    api_key,
-                                    diarize,
-                                    db_val,
-                                    cfg,
-                                    stop_rx,
-                                    &mut status,
-                                    &mut transcript,
+                                crate::recording::start_recording_with_proactive(
+                                    api_key, diarize, db_val, cfg,
+                                    stop_rx, &mut status, &mut transcript, pe_restart,
                                 ).await;
                             });
                         },
@@ -95,15 +95,11 @@ pub fn DashboardPage() -> Element {
                             let (stop_tx, stop_rx) = tokio::sync::oneshot::channel::<()>();
                             // Store stop handle in global app context so it survives tab changes
                             stop_handle.set(Some(crate::recording::StopRecording::new(stop_tx)));
+                            let pe_start = Some(proactive_engine.read().clone());
                             spawn(async move {
-                                crate::recording::start_recording(
-                                    api_key,
-                                    diarize,
-                                    db_val,
-                                    cfg,
-                                    stop_rx,
-                                    &mut status,
-                                    &mut transcript,
+                                crate::recording::start_recording_with_proactive(
+                                    api_key, diarize, db_val, cfg,
+                                    stop_rx, &mut status, &mut transcript, pe_start,
                                 ).await;
                             });
                         },

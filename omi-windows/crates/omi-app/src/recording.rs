@@ -1,8 +1,11 @@
+use std::sync::Arc;
+
 use dioxus::prelude::*;
 use tokio::sync::{broadcast, oneshot};
 
 use crate::app::Db;
 use crate::config::AppConfig;
+use crate::proactive::ProactiveEngine;
 use omi_transcription::models::TranscriptSegment;
 use omi_transcription::streaming::DeepgramConfig;
 
@@ -44,6 +47,20 @@ pub async fn start_recording(
     stop_rx: tokio::sync::oneshot::Receiver<()>,
     status: &mut Signal<RecordingStatus>,
     transcript: &mut Signal<LiveTranscript>,
+) {
+    start_recording_with_proactive(api_key, diarize, db, cfg, stop_rx, status, transcript, None).await;
+}
+
+/// Internal: start recording + optionally fire proactive engine on completion.
+pub async fn start_recording_with_proactive(
+    api_key: String,
+    diarize: bool,
+    db: Option<Db>,
+    cfg: AppConfig,
+    stop_rx: tokio::sync::oneshot::Receiver<()>,
+    status: &mut Signal<RecordingStatus>,
+    transcript: &mut Signal<LiveTranscript>,
+    proactive: Option<Arc<ProactiveEngine>>,
 ) {
     // Clear previous transcript
     transcript.set(LiveTranscript::default());
@@ -203,8 +220,18 @@ pub async fn start_recording(
             tracing::info!("[RECORDING] Marked conversation {conv_id} as completed, launching summarization...");
             let db_clone = d.clone();
             let conv_id_clone = conv_id.clone();
+            let cfg_clone = cfg.clone();
+            let proactive_clone = proactive.clone();
             tokio::spawn(async move {
-                crate::llm::process_conversation(&db_clone, &conv_id_clone, &cfg).await;
+                crate::llm::process_conversation(&db_clone, &conv_id_clone, &cfg_clone).await;
+                // Fire proactive suggestions now that the conversation is processed
+                if let Some(engine) = proactive_clone {
+                    if let Ok(rt_dummy) = tokio::task::spawn_blocking(|| {
+                        crate::agent_runtime::AgentRuntime::new()
+                    }).await {
+                        engine.on_conversation_ended(&db_clone, &conv_id_clone, &cfg_clone, &rt_dummy).await;
+                    }
+                }
             });
         }
     }

@@ -1,11 +1,15 @@
+use std::sync::Arc;
+
 use dioxus::prelude::*;
 
+use crate::agent_runtime::AgentRuntime; // AgentStatus used via runtime.status()
 use crate::auth::AuthStatus;
 use crate::components::sidebar::Sidebar;
 use crate::components::floating_bar::FloatingBar;
 use crate::config::AppConfig;
 use crate::hotkey::HotkeyAction;
 use crate::pages;
+use crate::proactive::{ProactiveEngine, ProactiveEvent};
 use crate::recording::{LiveTranscript, RecordingStatus};
 use crate::recording::StopRecording;
 use crate::sidecar::BackendStatus;
@@ -22,6 +26,8 @@ pub enum Route {
     #[layout(AppLayout)]
         #[route("/")]
         Dashboard {},
+        #[route("/agent")]
+        Agent {},
         #[route("/chat")]
         Chat {},
         #[route("/conversations")]
@@ -88,6 +94,17 @@ pub fn App() -> Element {
         }
     });
 
+// ── Agent runtime (M9) ───────────────────────────────────────────────────────────────
+    let runtime = use_signal(|| AgentRuntime::new());
+
+    // Proactive suggestion engine + shared suggestion list
+    let (proactive_engine, proactive_rx) = ProactiveEngine::new();
+    let proactive_engine = Arc::new(proactive_engine);
+    let proactive_engine_signal = use_signal(|| proactive_engine.clone());
+    let suggestions: Signal<Vec<crate::proactive::Suggestion>> = use_signal(Vec::new);
+    // Prompt pre-filled from tapped suggestion pill (consumed by AgentPage)
+    let suggestion_prompt: Signal<Option<String>> = use_signal(|| None);
+
     // Provide all as global context
     use_context_provider(|| config);
     use_context_provider(|| auth_status);
@@ -97,6 +114,10 @@ pub fn App() -> Element {
     use_context_provider(|| stop_handle);
     use_context_provider(|| db);
     use_context_provider(|| floating_bar_visible);
+    use_context_provider(|| runtime);
+    use_context_provider(|| proactive_engine_signal);
+    use_context_provider(|| suggestions);
+    use_context_provider(|| suggestion_prompt);
 
     // ── Hotkey + tray listeners (use_hook = called once on mount) ───────────────
     {
@@ -106,6 +127,7 @@ pub fn App() -> Element {
         let live_t = live_transcript.clone();
         let cfg_hk = config.clone();
         let db_hk = db.clone();
+        let proactive_hk = proactive_engine.clone();
 
         use_hook(move || {
             let (hk_tx, mut hk_rx) = tokio::sync::broadcast::channel::<HotkeyAction>(8);
@@ -136,10 +158,11 @@ pub fn App() -> Element {
                                 let mut transcript = live_t.clone();
                                 let (stop_tx, stop_rx) = tokio::sync::oneshot::channel::<()>();
                                 stop_h.set(Some(StopRecording::new(stop_tx)));
+                                let pe = Some(proactive_hk.clone());
                                 spawn(async move {
-                                    crate::recording::start_recording(
+                                    crate::recording::start_recording_with_proactive(
                                         api_key, diarize, db_val, cfg,
-                                        stop_rx, &mut status, &mut transcript,
+                                        stop_rx, &mut status, &mut transcript, pe,
                                     )
                                     .await;
                                 });
@@ -168,6 +191,82 @@ pub fn App() -> Element {
             });
         });
     }
+
+    // ── Start agent runtime if enabled ───────────────────────────────────────────────
+    use_hook(move || {
+        let cfg = config.read().clone();
+        if cfg.agent_enabled {
+            let rt = runtime.read().clone();
+            let node = if cfg.node_path.is_empty() {
+                crate::agent_runtime::find_node()
+            } else {
+                Some(cfg.node_path.clone())
+            };
+            let script = if cfg.agent_script_path.is_empty() {
+                crate::agent_runtime::find_agent_script()
+            } else {
+                Some(cfg.agent_script_path.clone())
+            };
+            let model = {
+                let (_, _, m) = crate::llm::resolve_llm_endpoint(&cfg);
+                m
+            };
+            if let (Some(n), Some(s)) = (node, script) {
+                spawn(async move {
+                    if let Err(e) = rt.start(&n, &s, Some(&model)).await {
+                        tracing::error!("[AGENT] Failed to start: {e}");
+                    }
+                });
+            } else {
+                tracing::warn!("[AGENT] agent_enabled=true but Node.js or agent script not found");
+            }
+        }
+
+        // Proactive engine: consume events → update suggestions signal
+        let pe_arc = proactive_engine.clone();
+        let _db_for_proactive = db.clone();
+        let cfg_for_proactive = config.read().clone();
+        let tick_mins = cfg_for_proactive.proactive_tick_mins;
+
+        // Spawn tick task
+        {
+            let db_snap = db.read().clone();
+            if let Some(Db(ref d)) = db_snap {
+                crate::proactive::spawn_tick_task(
+                    pe_arc.clone(),
+                    d.clone(),
+                    cfg_for_proactive.clone(),
+                    tick_mins,
+                );
+            }
+        }
+
+        // Consume ProactiveEvent → update suggestions signal
+        let mut sug_sig = suggestions.clone();
+        let mut rx = proactive_rx;
+        spawn(async move {
+            loop {
+                match rx.recv().await {
+                    Ok(ProactiveEvent::NewSuggestion(s)) => {
+                        let mut list = sug_sig.read().clone();
+                        // Evict expired and keep max 5
+                        list.retain(|x: &crate::proactive::Suggestion| !x.is_expired());
+                        list.push(s);
+                        list.sort_by(|a, b| b.priority.cmp(&a.priority));
+                        list.truncate(5);
+                        sug_sig.set(list);
+                    }
+                    Ok(ProactiveEvent::Dismiss(id)) => {
+                        let mut list = sug_sig.read().clone();
+                        list.retain(|x| x.id != id);
+                        sug_sig.set(list);
+                    }
+                    Ok(ProactiveEvent::ClearAll) => sug_sig.set(Vec::new()),
+                    Err(_) => break,
+                }
+            }
+        });
+    });
 
     // Kick off the sidecar health poller once
     use_effect(move || {
@@ -249,6 +348,11 @@ fn Tasks() -> Element {
 #[component]
 fn Rewind() -> Element {
     pages::rewind::RewindPage()
+}
+
+#[component]
+fn Agent() -> Element {
+    rsx! { pages::agent::AgentPage {} }
 }
 
 #[component]

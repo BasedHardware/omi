@@ -1031,4 +1031,153 @@ body {
   flex: 1;
   white-space: pre-wrap;
   word-break: break-word;
+}/* -- Floating bar: proactive suggestion pills (M9) ----------------- */
+.fbar-pills {
+  position: absolute;
+  bottom: calc(100% + 10px);
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: center;
+  z-index: 10001;
+  width: max-content;
+  max-width: 520px;
 }
+.fbar-pill {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px 6px 14px;
+  background: rgba(26, 26, 26, 0.95);
+  border: 1px solid rgba(108, 92, 231, 0.35);
+  border-radius: 24px;
+  backdrop-filter: blur(10px);
+  font-size: 12px;
+  animation: pill-in 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+@keyframes pill-in {
+  from { opacity: 0; transform: translateY(8px) scale(0.95); }
+  to   { opacity: 1; transform: translateY(0)   scale(1); }
+}
+.fbar-pill-text { color: var(--text-primary); max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
+.fbar-pill-action { background: var(--accent); color: #fff; border: none; border-radius: 16px; font-size: 11px; font-weight: 600; padding: 3px 10px; cursor: pointer; transition: background 0.15s ease; white-space: nowrap; flex-shrink: 0; }
+.fbar-pill-action:hover { background: var(--accent-hover); }
+.fbar-pill-dismiss { background: transparent; border: none; color: var(--text-muted); font-size: 12px; cursor: pointer; padding: 0 2px; flex-shrink: 0; }
+.fbar-pill-dismiss:hover { color: var(--text-primary); }
+/* -- Agent page (M9) ----------------------------------------------- */
+.page-agent { display: flex; flex-direction: column; height: calc(100vh - 64px); max-width: 100%; }
+.agent-header { flex-shrink: 0; margin-bottom: 12px; }
+.agent-title-row { display: flex; align-items: center; gap: 12px; margin-bottom: 4px; }
+.agent-status-badge { font-size: 11px; font-weight: 700; padding: 2px 10px; border-radius: 12px; letter-spacing: 0.5px; text-transform: uppercase; }
+.agent-status-unavailable { background: rgba(102,102,102,0.2); color: var(--text-muted); }
+.agent-status-starting     { background: rgba(253,203,110,0.2); color: var(--warning); }
+.agent-status-ready        { background: rgba(0,184,148,0.15);  color: var(--success); }
+.agent-status-error        { background: rgba(225,112,85,0.2);  color: var(--error); }
+.agent-unavailable-hint { font-size: 12px; color: var(--warning); padding: 8px 12px; background: rgba(253,203,110,0.08); border: 1px solid rgba(253,203,110,0.2); border-radius: var(--radius); margin-top: 8px; }
+.agent-messages { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 16px; padding: 8px 0 16px; }
+.agent-empty { display: flex; flex-direction: column; align-items: center; justify-content: center; flex: 1; gap: 12px; text-align: center; color: var(--text-secondary); padding: 40px 20px; }
+.agent-empty-icon { font-size: 48px; }
+.agent-starter-chips { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin-top: 8px; }
+.chip { background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 20px; padding: 6px 14px; font-size: 12px; color: var(--text-secondary); cursor: pointer; transition: all 0.15s ease; }
+.chip:hover { border-color: var(--accent); color: var(--text-primary); background: var(--bg-hover); }
+.agent-msg { display: flex; gap: 10px; align-items: flex-start; }
+.agent-msg-user { justify-content: flex-end; }
+.agent-msg-agent, .agent-msg-tool, .agent-msg-system { justify-content: flex-start; }
+.agent-avatar { width: 28px; height: 28px; border-radius: 50%; background: linear-gradient(135deg, var(--accent), #a29bfe); display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 700; color: #fff; flex-shrink: 0; margin-top: 4px; }
+.agent-bubble-wrap { display: flex; flex-direction: column; gap: 4px; max-width: 72%; }
+.agent-bubble { padding: 10px 14px; border-radius: 12px; font-size: 13px; line-height: 1.6; word-break: break-word; white-space: pre-wrap; }
+.agent-bubble-user { background: var(--accent); color: #fff; border-bottom-right-radius: 4px; align-self: flex-end; max-width: 72%; }
+.agent-bubble-agent { background: var(--bg-secondary); border: 1px solid var(--border); border-bottom-left-radius: 4px; }
+.agent-bubble-agent.streaming { border-color: var(--accent); }
+.agent-cursor { color: var(--accent); animation: blink 0.8s step-end infinite; }
+@keyframes blink { 0%,100% { opacity:1; } 50% { opacity:0; } }
+.agent-tokens { font-size: 10px; color: var(--text-muted); padding-left: 4px; }
+.agent-msg-tool { padding-left: 38px; }
+.agent-tool-details { background: var(--bg-tertiary); border: 1px solid var(--border); border-radius: var(--radius); padding: 6px 12px; font-size: 12px; max-width: 520px; }
+.agent-tool-name { cursor: pointer; color: var(--text-secondary); font-weight: 600; user-select: none; }
+.tool-icon { color: var(--accent); }
+.agent-tool-input { font-size: 11px; color: var(--text-secondary); background: var(--bg-primary); border-radius: 4px; padding: 8px; margin-top: 6px; overflow-x: auto; max-height: 160px; }
+.agent-msg-system { padding-left: 38px; font-size: 12px; color: var(--text-muted); font-style: italic; }
+.agent-thinking { align-items: center; }
+.agent-thinking-dots { display: flex; gap: 5px; padding: 12px 16px; background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 12px; border-bottom-left-radius: 4px; }
+.agent-thinking-dots .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--accent); animation: thinking-bounce 1.2s ease-in-out infinite; }
+.agent-thinking-dots .dot:nth-child(2) { animation-delay: 0.2s; }
+.agent-thinking-dots .dot:nth-child(3) { animation-delay: 0.4s; }
+@keyframes thinking-bounce { 0%,60%,100% { transform:translateY(0); opacity:0.5; } 30% { transform:translateY(-6px); opacity:1; } }
+.agent-input-bar { display: flex; align-items: flex-end; gap: 8px; padding: 12px 0 0; border-top: 1px solid var(--border); flex-shrink: 0; }
+.agent-input { flex: 1; padding: 10px 14px; background: var(--bg-secondary); border: 1px solid var(--border); border-radius: var(--radius); color: var(--text-primary); font-size: 13px; font-family: inherit; resize: none; outline: none; line-height: 1.5; min-height: 40px; max-height: 140px; overflow-y: auto; transition: border-color 0.15s ease; }
+.agent-input:focus { border-color: var(--accent); }
+.agent-input::placeholder { color: var(--text-muted); }
+.agent-send-btn { flex-shrink: 0; padding: 9px 18px; }
+.agent-stop-btn { flex-shrink: 0; }
+/* -- Agent setup status (Settings page) --------------------------- */
+.agent-setup-status { display: flex; flex-direction: column; gap: 6px; margin: 8px 0 16px; padding: 12px; background: var(--bg-tertiary); border-radius: var(--radius); border: 1px solid var(--border); }
+.agent-setup-row { display: flex; align-items: center; gap: 8px; font-size: 12px; }
+.agent-setup-row.ok  { color: var(--success); }
+.agent-setup-row.warn { color: var(--warning); }
+.setup-icon { font-size: 14px; font-weight: 700; width: 16px; text-align: center; flex-shrink: 0; }
+/* -- Memories page (M6 overhaul) ----------------------------------- */
+.page-memories { max-width: 860px; }
+.memories-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 20px; }
+.memories-header-actions { display: flex; gap: 8px; align-items: center; }
+.mem-category-filters { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 20px; }
+.mem-filter-pill { background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 20px; padding: 4px 12px; font-size: 12px; font-weight: 500; color: var(--text-secondary); cursor: pointer; display: flex; align-items: center; gap: 5px; transition: all 0.15s ease; }
+.mem-filter-pill:hover { border-color: var(--accent); color: var(--text-primary); }
+.mem-filter-pill.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+.mem-filter-count { font-size: 10px; background: rgba(255,255,255,0.2); border-radius: 10px; padding: 1px 6px; }
+.mem-filter-pill:not(.active) .mem-filter-count { background: var(--bg-tertiary); color: var(--text-muted); }
+.memories-list { display: flex; flex-direction: column; gap: 8px; }
+.memory-card { display: flex; align-items: stretch; background: var(--bg-secondary); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; transition: border-color 0.15s ease; }
+.memory-card:hover { border-color: rgba(108,92,231,0.35); }
+.memory-card-accent { width: 4px; flex-shrink: 0; }
+.memory-card-body { flex: 1; padding: 12px 14px; min-width: 0; }
+.memory-meta { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+.memory-category-badge { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.4px; padding: 2px 7px; border-radius: 10px; }
+.memory-date { font-size: 11px; color: var(--text-muted); margin-left: auto; }
+.memory-content { font-size: 13px; line-height: 1.55; color: var(--text-primary); margin: 0; }
+.mem-delete-btn { background: transparent; border: none; color: transparent; font-size: 13px; padding: 0 12px; cursor: pointer; flex-shrink: 0; align-self: center; transition: color 0.15s ease; }
+.memory-card:hover .mem-delete-btn { color: var(--text-muted); }
+.mem-delete-btn:hover { color: var(--error) !important; }
+/* Category accent colors */
+.mem-cat-fact          { background-color: rgba(0,184,148,0.12); color: var(--success); }
+.mem-cat-fact.memory-card-accent { background: var(--success); }
+.mem-cat-preference    { background-color: rgba(108,92,231,0.12); color: var(--accent); }
+.mem-cat-preference.memory-card-accent { background: var(--accent); }
+.mem-cat-decision      { background-color: rgba(253,203,110,0.15); color: var(--warning); }
+.mem-cat-decision.memory-card-accent { background: var(--warning); }
+.mem-cat-commitment    { background-color: rgba(225,112,85,0.12); color: var(--error); }
+.mem-cat-commitment.memory-card-accent { background: var(--error); }
+.mem-cat-relationship  { background-color: rgba(116,185,255,0.12); color: #74b9ff; }
+.mem-cat-relationship.memory-card-accent { background: #74b9ff; }
+.mem-cat-technical     { background-color: rgba(162,155,254,0.12); color: #a29bfe; }
+.mem-cat-technical.memory-card-accent { background: #a29bfe; }
+.mem-cat-screenshot    { background-color: rgba(102,102,102,0.15); color: var(--text-secondary); }
+.mem-cat-screenshot.memory-card-accent { background: var(--text-muted); }
+.mem-cat-other         { background-color: rgba(102,102,102,0.10); color: var(--text-muted); }
+.mem-cat-other.memory-card-accent { background: var(--bg-tertiary); }
+/* -- Tasks page (M6 overhaul) -------------------------------------- */
+.page-tasks { max-width: 760px; }
+.tasks-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 20px; }
+.tasks-header-actions { display: flex; gap: 8px; }
+.task-filter-tabs { display: flex; gap: 0; margin-bottom: 20px; border-radius: var(--radius); overflow: hidden; border: 1px solid var(--border); width: fit-content; }
+.task-tab { background: var(--bg-secondary); border: none; padding: 7px 16px; font-size: 12px; font-weight: 600; color: var(--text-secondary); cursor: pointer; display: flex; align-items: center; gap: 5px; transition: all 0.15s ease; border-right: 1px solid var(--border); }
+.task-tab:last-child { border-right: none; }
+.task-tab:hover { background: var(--bg-hover); color: var(--text-primary); }
+.task-tab.active { background: var(--accent); color: #fff; }
+.task-tab-count { font-size: 10px; background: rgba(255,255,255,0.2); border-radius: 10px; padding: 1px 6px; }
+.task-tab:not(.active) .task-tab-count { background: var(--bg-tertiary); color: var(--text-muted); }
+.tasks-list { display: flex; flex-direction: column; gap: 4px; }
+.task-item { display: flex; align-items: center; gap: 10px; padding: 10px 14px; background: var(--bg-secondary); border: 1px solid var(--border); border-radius: var(--radius); transition: border-color 0.15s ease; }
+.task-item:hover { border-color: rgba(108,92,231,0.3); }
+.task-item.task-done { opacity: 0.55; }
+.task-check-label { display: flex; align-items: flex-start; gap: 10px; flex: 1; cursor: pointer; }
+.task-check-label input[type="checkbox"] { width: 16px; height: 16px; accent-color: var(--accent); flex-shrink: 0; margin-top: 2px; }
+.task-text { font-size: 13px; line-height: 1.5; color: var(--text-primary); }
+.task-text-done { text-decoration: line-through; color: var(--text-muted); }
+.task-meta { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+.task-date { font-size: 11px; }
+.task-delete-btn { background: transparent; border: none; color: transparent; font-size: 13px; cursor: pointer; padding: 2px 4px; transition: color 0.15s ease; }
+.task-item:hover .task-delete-btn { color: var(--text-muted); }
+.task-delete-btn:hover { color: var(--error) !important; }

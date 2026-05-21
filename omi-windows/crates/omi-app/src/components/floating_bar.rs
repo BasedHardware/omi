@@ -11,9 +11,9 @@
 ///   • Status pill showing the current recording state
 
 use dioxus::prelude::*;
-
-use crate::app::Db;
+use crate::app::{Db, Route};
 use crate::config::AppConfig;
+use crate::proactive::Suggestion;
 use crate::recording::{LiveTranscript, RecordingStatus, StopRecording};
 
 #[component]
@@ -24,6 +24,11 @@ pub fn FloatingBar() -> Element {
     let recording_status: Signal<RecordingStatus> = use_context();
     let live_transcript: Signal<LiveTranscript> = use_context();
     let mut stop_handle: Signal<Option<StopRecording>> = use_context();
+
+    // Agent suggestions (pills)
+    let suggestions: Signal<Vec<Suggestion>> = use_context();
+    let suggestion_prompt: Signal<Option<String>> = use_context();
+    let nav = use_navigator();
 
     let is_recording = matches!(*recording_status.read(), RecordingStatus::Recording { .. });
     let is_idle = matches!(*recording_status.read(), RecordingStatus::Idle);
@@ -170,6 +175,52 @@ pub fn FloatingBar() -> Element {
                         class: "fbar-btn fbar-btn-close",
                         onclick: move |_| ai_response.set(String::new()),
                         "✕"
+                    }
+                }
+            }
+
+            // ── Proactive suggestion pills ─────────────────────────────────────
+            if !suggestions.read().is_empty() {
+                div { class: "fbar-pills",
+                    for sug in suggestions.read().clone() {
+                        {
+                            let sug_id_action = sug.id.clone();
+                            let sug_id_dismiss = sug.id.clone();
+                            let sug_text = sug.text.clone();
+                            let sug_action = sug.action_label.clone();
+                            let sug_prompt = sug.agent_prompt.clone();
+                            let mut sug_sig_action = suggestions.clone();
+                            let mut sug_sig_dismiss = suggestions.clone();
+                            let mut sp = suggestion_prompt.clone();
+                            let nav2 = nav.clone();
+                            rsx! {
+                                div { class: "fbar-pill", key: "{sug_id_action}",
+                                    span { class: "fbar-pill-text", title: "{sug_text}", "{sug_text}" }
+                                    button {
+                                        class: "fbar-pill-action",
+                                        onclick: move |_| {
+                                            if let Some(ref p) = sug_prompt {
+                                                sp.set(Some(p.clone()));
+                                            }
+                                            nav2.push(Route::Agent {});
+                                            let mut list = sug_sig_action.read().clone();
+                                            list.retain(|x: &crate::proactive::Suggestion| x.id != sug_id_action);
+                                            sug_sig_action.set(list);
+                                        },
+                                        "{sug_action}"
+                                    }
+                                    button {
+                                        class: "fbar-pill-dismiss",
+                                        onclick: move |_| {
+                                            let mut list = sug_sig_dismiss.read().clone();
+                                            list.retain(|x: &crate::proactive::Suggestion| x.id != sug_id_dismiss);
+                                            sug_sig_dismiss.set(list);
+                                        },
+                                        "✕"
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
             }

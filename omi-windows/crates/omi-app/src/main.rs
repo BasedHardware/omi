@@ -1,5 +1,6 @@
 use dioxus::prelude::*;
 
+mod agent_runtime;
 mod app;
 mod auth;
 mod capture;
@@ -9,6 +10,7 @@ mod hooks;
 mod hotkey;
 mod llm;
 mod pages;
+mod proactive;
 mod recording;
 mod sidecar;
 mod tray;

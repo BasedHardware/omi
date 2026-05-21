@@ -100,6 +100,28 @@ pub struct AppConfig {
     /// User email
     #[serde(default)]
     pub user_email: String,
+
+    // ── Agent / M9 ────────────────────────────────────────────────────────────
+
+    /// Whether the local Node.js agent runtime is enabled.
+    #[serde(default)]
+    pub agent_enabled: bool,
+
+    /// Override path to the Node.js executable (empty = auto-detect).
+    #[serde(default)]
+    pub node_path: String,
+
+    /// Override path to the agent dist/index.js script (empty = auto-detect).
+    #[serde(default)]
+    pub agent_script_path: String,
+
+    /// Whether proactive suggestions are enabled.
+    #[serde(default = "default_true")]
+    pub proactive_agent_enabled: bool,
+
+    /// How often (in minutes) the proactive engine polls for idle reminders.
+    #[serde(default = "default_proactive_tick_mins")]
+    pub proactive_tick_mins: u64,
 }
 
 fn default_backend_url() -> String {
@@ -130,6 +152,8 @@ fn default_openai_model() -> String {
     "gpt-4o-mini".to_string()
 }
 
+fn default_proactive_tick_mins() -> u64 { 5 }
+
 impl Default for AppConfig {
     fn default() -> Self {
         Self {
@@ -156,6 +180,11 @@ impl Default for AppConfig {
             firebase_refresh_token: String::new(),
             user_display_name: String::new(),
             user_email: String::new(),
+            agent_enabled: false,
+            node_path: String::new(),
+            agent_script_path: String::new(),
+            proactive_agent_enabled: true,
+            proactive_tick_mins: default_proactive_tick_mins(),
         }
     }
 }

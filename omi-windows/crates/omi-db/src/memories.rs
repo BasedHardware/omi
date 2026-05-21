@@ -62,4 +62,46 @@ impl Database {
         conn.execute("DELETE FROM memories WHERE id = ?1", params![id])?;
         Ok(())
     }
+
+    /// Return existing memories whose content is sufficiently similar to `content`.
+    /// Uses a simple normalized overlap check on word tokens — no external deps.
+    pub fn find_similar_memories(&self, content: &str, threshold: f64) -> Result<Vec<Memory>> {
+        let all = self.list_memories(500)?;
+        let needle_words = word_tokens(content);
+        let similar = all.into_iter()
+            .filter(|m| {
+                let hay_words = word_tokens(&m.content);
+                jaccard(&needle_words, &hay_words) >= threshold
+            })
+            .collect();
+        Ok(similar)
+    }
+
+    /// Get all memories as a compact numbered list for LLM dedup context.
+    pub fn list_memories_for_dedup(&self, limit: usize) -> Result<String> {
+        let mems = self.list_memories(limit)?;
+        if mems.is_empty() { return Ok(String::new()); }
+        Ok(mems.iter().enumerate()
+            .map(|(i, m)| format!("{}. [{}] {}", i + 1,
+                m.category.as_deref().unwrap_or("general"), m.content))
+            .collect::<Vec<_>>()
+            .join("\n"))
+    }
+}
+
+// ── Dedup helpers ─────────────────────────────────────────────────────────────
+
+fn word_tokens(s: &str) -> std::collections::HashSet<String> {
+    s.to_lowercase()
+        .split(|c: char| !c.is_alphanumeric())
+        .filter(|w| w.len() > 2)
+        .map(str::to_string)
+        .collect()
+}
+
+fn jaccard(a: &std::collections::HashSet<String>, b: &std::collections::HashSet<String>) -> f64 {
+    if a.is_empty() && b.is_empty() { return 1.0; }
+    let inter = a.intersection(b).count() as f64;
+    let union = a.union(b).count() as f64;
+    if union == 0.0 { 0.0 } else { inter / union }
 }
