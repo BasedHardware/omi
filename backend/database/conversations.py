@@ -874,6 +874,36 @@ def update_conversation_segments(
         return
 
 
+def update_conversation_segments_and_background_chunks(
+    uid: str,
+    conversation_id: str,
+    segments: List[dict],
+    background_processed_chunks: Dict[str, dict],
+    finished_at: datetime = None,
+    data_protection_level: str = None,
+):
+    doc_ref = db.collection('users').document(uid).collection(conversations_collection).document(conversation_id)
+    if data_protection_level is not None:
+        doc_level = data_protection_level
+    else:
+        doc_snapshot = doc_ref.get(field_paths=['data_protection_level'])
+        if not doc_snapshot.exists:
+            return
+        doc_level = doc_snapshot.to_dict().get('data_protection_level', 'standard')
+    update_payload = {
+        'transcript_segments': segments,
+        'background_processed_chunks': background_processed_chunks,
+    }
+    if finished_at:
+        update_payload['finished_at'] = finished_at
+    prepared_payload = _prepare_conversation_for_write(update_payload, uid, doc_level)
+    try:
+        doc_ref.update(prepared_payload)
+    except NotFound:
+        # Document was deleted between cache read and write — safe to skip
+        return
+
+
 # ***********************************
 # ********** VISIBILITY *************
 # ***********************************

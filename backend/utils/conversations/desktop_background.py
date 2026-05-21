@@ -1,7 +1,8 @@
 import logging
 import uuid
+from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
-from typing import List, Optional
+from typing import Dict, List, Optional
 
 import database.calendar_meetings as calendar_db
 import database.conversations as conversations_db
@@ -14,12 +15,21 @@ from utils.conversations.factory import deserialize_conversation
 from utils.conversations.process_conversation import process_conversation
 
 logger = logging.getLogger(__name__)
+_MAX_BACKGROUND_CHUNK_RECORDS = 1000
 
 
 class DesktopBackgroundConversationError(ValueError):
     def __init__(self, message: str, status_code: int = 400):
         super().__init__(message)
         self.status_code = status_code
+
+
+@dataclass
+class DesktopBackgroundAppendResult:
+    appended: bool
+    duplicate: bool
+    segments: List[TranscriptSegment]
+    chunk_record: Optional[Dict]
 
 
 def create_in_progress_desktop_conversation(
@@ -94,6 +104,102 @@ def append_segments_to_in_progress_conversation(
         finished_at=finished_at,
     )
     return updated_segments
+
+
+def append_background_chunk_to_in_progress_conversation(
+    uid: str,
+    conversation_id: str,
+    chunk_id: str,
+    payload_hash: str,
+    segments: List[TranscriptSegment],
+    finished_at: datetime,
+    provider: Optional[str],
+    run_id: Optional[str],
+    chunk_start_ms: int,
+    chunk_duration_ms: int,
+) -> DesktopBackgroundAppendResult:
+    """Append one desktop background chunk once, keyed by stable client chunk_id."""
+    conversation_data = conversations_db.get_conversation(uid, conversation_id)
+    if not conversation_data:
+        raise DesktopBackgroundConversationError("conversation_id not found", status_code=404)
+
+    conversation = deserialize_conversation(conversation_data)
+    if conversation.status != ConversationStatus.in_progress:
+        raise DesktopBackgroundConversationError("conversation is not in_progress", status_code=409)
+
+    processed_chunks = dict(conversation.background_processed_chunks or {})
+    existing_record = processed_chunks.get(chunk_id)
+    if existing_record:
+        if existing_record.get('payload_hash') != payload_hash:
+            raise DesktopBackgroundConversationError("chunk_id payload mismatch", status_code=409)
+        conversations_db.update_conversation_finished_at(uid, conversation_id, finished_at)
+        logger.info(
+            "Duplicate desktop background chunk ignored uid=%s conversation_id=%s chunk_id=%s provider=%s",
+            uid,
+            conversation_id,
+            chunk_id,
+            existing_record.get('provider'),
+        )
+        return DesktopBackgroundAppendResult(
+            appended=False,
+            duplicate=True,
+            segments=[],
+            chunk_record=existing_record,
+        )
+
+    if segments:
+        conversation.transcript_segments, updated_segments, _removed_ids = TranscriptSegment.combine_segments(
+            conversation.transcript_segments,
+            segments,
+        )
+    else:
+        updated_segments = []
+
+    processed_chunks[chunk_id] = {
+        'chunk_id': chunk_id,
+        'payload_hash': payload_hash,
+        'provider': provider,
+        'run_id': run_id,
+        'segment_count': len(segments),
+        'chunk_start_ms': chunk_start_ms,
+        'chunk_duration_ms': chunk_duration_ms,
+        'accepted_at': finished_at.isoformat(),
+    }
+    processed_chunks = _prune_background_chunk_records(processed_chunks)
+
+    conversations_db.update_conversation_segments_and_background_chunks(
+        uid,
+        conversation.id,
+        [segment.dict() for segment in conversation.transcript_segments],
+        processed_chunks,
+        finished_at=finished_at,
+    )
+    return DesktopBackgroundAppendResult(
+        appended=True,
+        duplicate=False,
+        segments=updated_segments,
+        chunk_record=processed_chunks.get(chunk_id),
+    )
+
+
+def get_background_chunk_record(uid: str, conversation_id: str, chunk_id: str) -> Optional[Dict]:
+    conversation_data = conversations_db.get_conversation(uid, conversation_id)
+    if not conversation_data:
+        raise DesktopBackgroundConversationError("conversation_id not found", status_code=404)
+    if conversation_data.get('status') != ConversationStatus.in_progress:
+        raise DesktopBackgroundConversationError("conversation is not in_progress", status_code=409)
+    return (conversation_data.get('background_processed_chunks') or {}).get(chunk_id)
+
+
+def _prune_background_chunk_records(processed_chunks: Dict[str, Dict]) -> Dict[str, Dict]:
+    if len(processed_chunks) <= _MAX_BACKGROUND_CHUNK_RECORDS:
+        return processed_chunks
+
+    ordered = sorted(
+        processed_chunks.items(),
+        key=lambda item: (item[1].get('accepted_at') or '', item[0]),
+    )
+    return dict(ordered[-_MAX_BACKGROUND_CHUNK_RECORDS:])
 
 
 def finish_desktop_background_conversation(uid: str, conversation_id: str) -> Conversation:

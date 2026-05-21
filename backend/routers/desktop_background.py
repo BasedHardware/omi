@@ -1,3 +1,4 @@
+import hashlib
 import json
 import logging
 import os
@@ -17,9 +18,10 @@ from utils.analytics import record_usage
 from utils.chat import resolve_voice_message_language
 from utils.conversations.desktop_background import (
     DesktopBackgroundConversationError,
-    append_segments_to_in_progress_conversation,
+    append_background_chunk_to_in_progress_conversation,
     create_in_progress_desktop_conversation,
     finish_desktop_background_conversation,
+    get_background_chunk_record,
 )
 from utils.executors import db_executor, run_blocking, sync_executor
 from utils.fair_use import is_hard_restricted, record_speech_ms
@@ -209,15 +211,59 @@ async def background_transcribe(
 
     conversation_id = request.query_params.get("conversation_id")
     persist = _parse_persist(request.query_params.get("persist"), default=bool(conversation_id))
+    chunk_id = request.query_params.get("chunk_id")
+    encoding = request.query_params.get("encoding", "linear16")
     if persist:
         if not conversation_id:
             del audio_bytes
             raise HTTPException(status_code=400, detail='conversation_id is required when persist=true')
+        if not chunk_id:
+            del audio_bytes
+            raise HTTPException(status_code=400, detail='chunk_id is required when persist=true')
+        if not _is_valid_chunk_id(chunk_id):
+            del audio_bytes
+            raise HTTPException(status_code=422, detail='chunk_id is invalid')
         await _validate_in_progress_conversation(uid, conversation_id)
+
+    payload_hash = _background_chunk_payload_hash(audio_bytes, sample_rate, channels, encoding, chunk_start_ms)
+    if persist and conversation_id and chunk_id:
+        try:
+            existing_chunk = await run_blocking(
+                db_executor, get_background_chunk_record, uid, conversation_id, chunk_id
+            )
+        except DesktopBackgroundConversationError as e:
+            del audio_bytes
+            raise HTTPException(status_code=e.status_code, detail=str(e))
+        if existing_chunk:
+            del audio_bytes
+            if existing_chunk.get('payload_hash') != payload_hash:
+                logger.warning(
+                    "desktop_background_transcribe chunk payload conflict uid=%s conversation_id=%s chunk_id=%s",
+                    uid,
+                    conversation_id,
+                    chunk_id,
+                )
+                raise HTTPException(status_code=409, detail='chunk_id payload mismatch')
+            logger.info(
+                "desktop_background_transcribe duplicate chunk uid=%s conversation_id=%s chunk_id=%s provider=%s",
+                uid,
+                conversation_id,
+                chunk_id,
+                existing_chunk.get('provider'),
+            )
+            return {
+                "segments": [],
+                "language": None,
+                "provider": existing_chunk.get('provider'),
+                "run_id": existing_chunk.get('run_id'),
+                "chunk_duration_ms": existing_chunk.get('chunk_duration_ms'),
+                "chunk_id": chunk_id,
+                "duplicate": True,
+                "speaker_diagnostics": _speaker_diagnostics([]),
+            }
 
     language = resolve_voice_message_language(uid, request.query_params.get("language"))
     keywords = _parse_context_keywords(request.query_params.get("keywords"))
-    encoding = request.query_params.get("encoding", "linear16")
     duration_ms = compute_pcm_duration_ms(len(audio_bytes), sample_rate, channels)
     duration_sec = duration_ms / 1000.0
 
@@ -264,25 +310,37 @@ async def background_transcribe(
 
     finished_at = datetime.now(timezone.utc)
     if persist and conversation_id:
-        await run_blocking(
-            db_executor,
-            append_segments_to_in_progress_conversation,
-            uid,
-            conversation_id,
-            segments,
-            finished_at,
-        )
+        try:
+            append_result = await run_blocking(
+                db_executor,
+                append_background_chunk_to_in_progress_conversation,
+                uid,
+                conversation_id,
+                chunk_id,
+                payload_hash,
+                segments,
+                finished_at,
+                response.result.provider if response.result else None,
+                response.run_id,
+                chunk_start_ms,
+                duration_ms,
+            )
+        except DesktopBackgroundConversationError as e:
+            raise HTTPException(status_code=e.status_code, detail=str(e))
+        if append_result.duplicate:
+            segments = append_result.segments
 
     await run_blocking(db_executor, record_speech_ms, uid, duration_ms, source='background')
     await run_blocking(db_executor, record_usage, uid, transcription_seconds=duration_sec, speech_seconds=duration_sec)
     provider = response.result.provider if response.result else None
     logger.info(
         "desktop_background_transcribe completed uid=%s conversation_id=%s workload=background provider=%s run_id=%s "
-        "chunk_start_ms=%s chunk_duration_ms=%s segments=%s persisted=%s",
+        "chunk_id=%s chunk_start_ms=%s chunk_duration_ms=%s segments=%s persisted=%s",
         uid,
         conversation_id,
         provider,
         response.run_id,
+        chunk_id,
         chunk_start_ms,
         duration_ms,
         len(segments),
@@ -295,6 +353,8 @@ async def background_transcribe(
         "provider": provider,
         "run_id": response.run_id,
         "chunk_duration_ms": duration_ms,
+        "chunk_id": chunk_id,
+        "duplicate": False,
         "speaker_diagnostics": speaker_diagnostics,
     }
 
@@ -322,6 +382,32 @@ def _parse_context_keywords(raw: Optional[str]) -> List[str]:
         if len(keywords) >= 100:
             break
     return keywords
+
+
+def _is_valid_chunk_id(chunk_id: str) -> bool:
+    if len(chunk_id) < 8 or len(chunk_id) > 160:
+        return False
+    return all(char.isalnum() or char in ('-', '_') for char in chunk_id)
+
+
+def _background_chunk_payload_hash(
+    audio_bytes: bytes,
+    sample_rate: int,
+    channels: int,
+    encoding: str,
+    chunk_start_ms: int,
+) -> str:
+    hasher = hashlib.sha256()
+    hasher.update(str(sample_rate).encode('ascii'))
+    hasher.update(b':')
+    hasher.update(str(channels).encode('ascii'))
+    hasher.update(b':')
+    hasher.update(encoding.encode('utf-8'))
+    hasher.update(b':')
+    hasher.update(str(chunk_start_ms).encode('ascii'))
+    hasher.update(b':')
+    hasher.update(audio_bytes)
+    return hasher.hexdigest()
 
 
 async def _validate_in_progress_conversation(uid: str, conversation_id: str) -> None:

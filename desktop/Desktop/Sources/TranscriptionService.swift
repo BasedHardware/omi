@@ -1,4 +1,5 @@
 import Foundation
+import CryptoKit
 
 /// Service for real-time speech-to-text transcription.
 /// Conversation capture: Python backend `/v4/listen` WebSocket (speech profiles, speaker assignment, memory events).
@@ -666,6 +667,14 @@ extension TranscriptionService {
         let sanitizedKeywords = sanitizedContextKeywords(contextKeywords, includeDefaultOmi: false)
         var queryItems = [
             URLQueryItem(name: "conversation_id", value: conversationId),
+            URLQueryItem(
+                name: "chunk_id",
+                value: backgroundChunkId(
+                    conversationId: conversationId,
+                    chunkStartMs: chunkStartMs,
+                    audioData: audioData
+                )
+            ),
             URLQueryItem(name: "chunk_start_ms", value: String(chunkStartMs)),
             URLQueryItem(name: "language", value: language),
             URLQueryItem(name: "sample_rate", value: "16000"),
@@ -737,6 +746,17 @@ extension TranscriptionService {
         }
 
         throw lastError ?? TranscriptionError.invalidResponse
+    }
+
+    static func backgroundChunkId(
+        conversationId: String,
+        chunkStartMs: Int,
+        audioData: Data
+    ) -> String {
+        let digest = SHA256.hash(data: audioData)
+        let hashPrefix = digest.prefix(12).map { String(format: "%02x", $0) }.joined()
+        return "\(conversationId)-\(chunkStartMs)-\(audioData.count)-\(hashPrefix)"
+            .replacingOccurrences(of: #"[^A-Za-z0-9_-]"#, with: "_", options: .regularExpression)
     }
 
 }

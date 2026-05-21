@@ -42,9 +42,11 @@ sys.modules.setdefault(
     'utils.conversations.desktop_background',
     SimpleNamespace(
         DesktopBackgroundConversationError=_DesktopBackgroundConversationError,
+        append_background_chunk_to_in_progress_conversation=MagicMock(),
         append_segments_to_in_progress_conversation=MagicMock(),
         create_in_progress_desktop_conversation=MagicMock(return_value='conv-1'),
         finish_desktop_background_conversation=MagicMock(return_value={'id': 'conv-1', 'status': 'completed'}),
+        get_background_chunk_record=MagicMock(return_value=None),
     ),
 )
 sys.modules.setdefault(
@@ -140,7 +142,12 @@ def _client(monkeypatch, *, segments=None, person_embeddings_cache=None):
         'get_conversation',
         lambda _uid, _cid: {'id': _cid, 'status': 'in_progress'},
     )
-    monkeypatch.setattr(desktop_background, 'append_segments_to_in_progress_conversation', MagicMock(return_value=[]))
+    monkeypatch.setattr(desktop_background, 'get_background_chunk_record', MagicMock(return_value=None))
+    monkeypatch.setattr(
+        desktop_background,
+        'append_background_chunk_to_in_progress_conversation',
+        MagicMock(return_value=SimpleNamespace(appended=True, duplicate=False, segments=[], chunk_record=None)),
+    )
     monkeypatch.setattr(
         desktop_background,
         'finish_desktop_background_conversation',
@@ -340,7 +347,7 @@ def test_background_transcribe_returns_segments_with_offset(monkeypatch):
     client, _mock_transcribe = _client(monkeypatch)
 
     response = client.post(
-        '/v2/desktop/background-transcribe?conversation_id=conv-1&chunk_start_ms=12000',
+        '/v2/desktop/background-transcribe?conversation_id=conv-1&chunk_id=chunk-001&chunk_start_ms=12000',
         content=b'\x01\x00' * 1600,
         headers={'Content-Type': 'application/octet-stream'},
     )
@@ -381,7 +388,7 @@ def test_background_transcribe_wraps_linear16_pcm_as_wav(monkeypatch):
     client, mock_transcribe = _client(monkeypatch)
 
     response = client.post(
-        '/v2/desktop/background-transcribe?conversation_id=conv-1&chunk_start_ms=0&sample_rate=16000',
+        '/v2/desktop/background-transcribe?conversation_id=conv-1&chunk_id=chunk-001&chunk_start_ms=0&sample_rate=16000',
         content=b'\x01\x00' * 1600,
         headers={'Content-Type': 'application/octet-stream'},
     )
@@ -397,13 +404,79 @@ def test_background_transcribe_persists_segments(monkeypatch):
     client, _mock_transcribe = _client(monkeypatch)
 
     response = client.post(
-        '/v2/desktop/background-transcribe?conversation_id=conv-1&chunk_start_ms=0',
+        '/v2/desktop/background-transcribe?conversation_id=conv-1&chunk_id=chunk-001&chunk_start_ms=0',
         content=b'\x01\x00' * 1600,
         headers={'Content-Type': 'application/octet-stream'},
     )
 
     assert response.status_code == 200
-    desktop_background.append_segments_to_in_progress_conversation.assert_called_once()
+    desktop_background.append_background_chunk_to_in_progress_conversation.assert_called_once()
+
+
+def test_background_transcribe_requires_chunk_id_when_persisting(monkeypatch):
+    client, _mock_transcribe = _client(monkeypatch)
+
+    response = client.post(
+        '/v2/desktop/background-transcribe?conversation_id=conv-1&chunk_start_ms=0',
+        content=b'\x01\x00' * 1600,
+        headers={'Content-Type': 'application/octet-stream'},
+    )
+
+    assert response.status_code == 400
+    assert response.json()['detail'] == 'chunk_id is required when persist=true'
+
+
+def test_background_transcribe_duplicate_chunk_returns_success_without_appending(monkeypatch):
+    client, mock_transcribe = _client(monkeypatch)
+    payload = b'\x01\x00' * 1600
+    payload_hash = desktop_background._background_chunk_payload_hash(payload, 16000, 1, 'linear16', 0)
+    monkeypatch.setattr(
+        desktop_background,
+        'get_background_chunk_record',
+        MagicMock(
+            return_value={
+                'payload_hash': payload_hash,
+                'provider': 'assemblyai',
+                'run_id': 'run-previous',
+                'chunk_duration_ms': 100,
+            }
+        ),
+    )
+
+    response = client.post(
+        '/v2/desktop/background-transcribe?conversation_id=conv-1&chunk_id=chunk-001&chunk_start_ms=0',
+        content=payload,
+        headers={'Content-Type': 'application/octet-stream'},
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data['duplicate'] is True
+    assert data['segments'] == []
+    assert data['provider'] == 'assemblyai'
+    assert data['run_id'] == 'run-previous'
+    mock_transcribe.assert_not_called()
+    desktop_background.append_background_chunk_to_in_progress_conversation.assert_not_called()
+
+
+def test_background_transcribe_rejects_conflicting_duplicate_chunk(monkeypatch):
+    client, mock_transcribe = _client(monkeypatch)
+    monkeypatch.setattr(
+        desktop_background,
+        'get_background_chunk_record',
+        MagicMock(return_value={'payload_hash': 'different', 'provider': 'assemblyai'}),
+    )
+
+    response = client.post(
+        '/v2/desktop/background-transcribe?conversation_id=conv-1&chunk_id=chunk-001&chunk_start_ms=0',
+        content=b'\x01\x00' * 1600,
+        headers={'Content-Type': 'application/octet-stream'},
+    )
+
+    assert response.status_code == 409
+    assert response.json()['detail'] == 'chunk_id payload mismatch'
+    mock_transcribe.assert_not_called()
+    desktop_background.append_background_chunk_to_in_progress_conversation.assert_not_called()
 
 
 def test_background_transcribe_can_skip_persist_without_conversation(monkeypatch):
@@ -420,7 +493,7 @@ def test_background_transcribe_can_skip_persist_without_conversation(monkeypatch
     )
 
     assert response.status_code == 200
-    desktop_background.append_segments_to_in_progress_conversation.assert_not_called()
+    desktop_background.append_background_chunk_to_in_progress_conversation.assert_not_called()
     record_speech_ms.assert_called_once()
     record_usage.assert_called_once()
 
@@ -433,7 +506,7 @@ def test_cluster_speaker_mapping_assigns_distinct_ids(monkeypatch):
     client, _mock_transcribe = _client(monkeypatch, segments=segments)
 
     response = client.post(
-        '/v2/desktop/background-transcribe?conversation_id=conv-1&chunk_start_ms=0',
+        '/v2/desktop/background-transcribe?conversation_id=conv-1&chunk_id=chunk-001&chunk_start_ms=0',
         content=b'\x01\x00' * 1600,
         headers={'Content-Type': 'application/octet-stream'},
     )
@@ -477,7 +550,7 @@ def test_background_transcribe_multi_chunk_offsets_persist_and_keep_speaker_map(
 
     for chunk_start_ms in (0, 14000, 28000):
         response = client.post(
-            f'/v2/desktop/background-transcribe?conversation_id=conv-1&chunk_start_ms={chunk_start_ms}',
+            f'/v2/desktop/background-transcribe?conversation_id=conv-1&chunk_id=chunk-id-{chunk_start_ms}&chunk_start_ms={chunk_start_ms}',
             content=b'\x01\x00' * 1600,
             headers={'Content-Type': 'application/octet-stream'},
         )
@@ -485,7 +558,8 @@ def test_background_transcribe_multi_chunk_offsets_persist_and_keep_speaker_map(
         assert response.json()['provider'] == 'assemblyai'
 
     appended_segments = [
-        call.args[2][0] for call in desktop_background.append_segments_to_in_progress_conversation.call_args_list
+        call.args[4][0]
+        for call in desktop_background.append_background_chunk_to_in_progress_conversation.call_args_list
     ]
     assert [segment.start for segment in appended_segments] == [0.1, 14.1, 28.1]
     assert [segment.end for segment in appended_segments] == [1.0, 15.0, 29.0]
@@ -516,7 +590,7 @@ def test_background_transcribe_identifies_assemblyai_speaker_with_omi_user_embed
     monkeypatch.setattr(desktop_background, 'extract_embedding_from_bytes', lambda _audio, _filename: user_embedding)
 
     response = client.post(
-        '/v2/desktop/background-transcribe?conversation_id=conv-1&chunk_start_ms=12000',
+        '/v2/desktop/background-transcribe?conversation_id=conv-1&chunk_id=chunk-001&chunk_start_ms=12000',
         content=b'\x01\x00' * 16000 * 4,
         headers={'Content-Type': 'application/octet-stream'},
     )
@@ -551,7 +625,7 @@ def test_background_transcribe_rejects_empty_body(monkeypatch):
     client, _mock_transcribe = _client(monkeypatch)
 
     response = client.post(
-        '/v2/desktop/background-transcribe?conversation_id=conv-1&chunk_start_ms=0',
+        '/v2/desktop/background-transcribe?conversation_id=conv-1&chunk_id=chunk-001&chunk_start_ms=0',
         content=b'',
         headers={'Content-Type': 'application/octet-stream'},
     )
@@ -563,7 +637,7 @@ def test_background_transcribe_rejects_stereo_pcm_for_v1(monkeypatch):
     client, _mock_transcribe = _client(monkeypatch)
 
     response = client.post(
-        '/v2/desktop/background-transcribe?conversation_id=conv-1&chunk_start_ms=0&channels=2',
+        '/v2/desktop/background-transcribe?conversation_id=conv-1&chunk_id=chunk-001&chunk_start_ms=0&channels=2',
         content=b'\x01\x00' * 1600,
         headers={'Content-Type': 'application/octet-stream'},
     )
@@ -576,7 +650,7 @@ def test_background_transcribe_rejects_malformed_content_length(monkeypatch):
     client, _mock_transcribe = _client(monkeypatch)
 
     response = client.post(
-        '/v2/desktop/background-transcribe?conversation_id=conv-1&chunk_start_ms=0',
+        '/v2/desktop/background-transcribe?conversation_id=conv-1&chunk_id=chunk-001&chunk_start_ms=0',
         content=b'\x01\x00' * 1600,
         headers={'Content-Type': 'application/octet-stream', 'Content-Length': 'not-an-int'},
     )
@@ -589,7 +663,7 @@ def test_background_transcribe_rejects_invalid_conversation(monkeypatch):
     monkeypatch.setattr(desktop_background.conversations_db, 'get_conversation', lambda _uid, _cid: None)
 
     response = client.post(
-        '/v2/desktop/background-transcribe?conversation_id=missing&chunk_start_ms=0',
+        '/v2/desktop/background-transcribe?conversation_id=missing&chunk_id=chunk-001&chunk_start_ms=0',
         content=b'\x01\x00' * 1600,
         headers={'Content-Type': 'application/octet-stream'},
     )

@@ -437,6 +437,29 @@ final class BackgroundTranscriptionTests: XCTestCase {
     XCTAssertEqual(session.snapshot().droppedChunkCount, 1)
   }
 
+  func testBackgroundChunkIdIsStableAndPayloadSensitive() {
+    let first = TranscriptionService.backgroundChunkId(
+      conversationId: "conv.123",
+      chunkStartMs: 15_000,
+      audioData: Data([1, 2, 3, 4])
+    )
+    let retry = TranscriptionService.backgroundChunkId(
+      conversationId: "conv.123",
+      chunkStartMs: 15_000,
+      audioData: Data([1, 2, 3, 4])
+    )
+    let changedPayload = TranscriptionService.backgroundChunkId(
+      conversationId: "conv.123",
+      chunkStartMs: 15_000,
+      audioData: Data([1, 2, 3, 5])
+    )
+
+    XCTAssertEqual(first, retry)
+    XCTAssertNotEqual(first, changedPayload)
+    XCTAssertTrue(first.hasPrefix("conv_123-15000-4-"))
+    XCTAssertNil(first.range(of: #"[^A-Za-z0-9_-]"#, options: .regularExpression))
+  }
+
   func testTranscriptMergerDeduplicatesAndMergesOverlap() {
     var merger = BackgroundTranscriptMerger()
     let first = Self.backendSegment(id: "a", text: "hello world", speakerId: 0, start: 0, end: 2)
