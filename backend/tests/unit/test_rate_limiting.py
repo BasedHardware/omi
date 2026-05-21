@@ -331,6 +331,8 @@ class TestRouterPolicyMapping(unittest.TestCase):
             "chat:initial",
             "voice:message",
             "voice:transcribe",
+            "desktop:background_transcribe",
+            "desktop:background_conversation_finish",
             "file:upload",
             "agent:execute_tool",
             "mcp:sse",

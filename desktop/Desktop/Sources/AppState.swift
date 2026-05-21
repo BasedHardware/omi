@@ -15,13 +15,13 @@ struct SegmentTranslation: Identifiable {
 struct SpeakerSegment: Identifiable {
   /// Stable identity — uses backend segment ID when available, otherwise speaker + start time
   var id: String { segmentId ?? "\(speaker)-\(start)" }
-  var segmentId: String?   // Backend-assigned UUID
+  var segmentId: String?  // Backend-assigned UUID
   var speaker: Int
   var text: String
   var start: Double
   var end: Double
   var isUser: Bool = false
-  var personId: String?    // Backend-assigned person ID from speaker identification
+  var personId: String?  // Backend-assigned person ID from speaker identification
   var translations: [SegmentTranslation] = []
 }
 
@@ -170,10 +170,10 @@ class AppState: ObservableObject {
 
   func fetchTrialMetadata() {
     #if DEBUG
-    if let debugMode = UserDefaults.standard.string(forKey: "debug_trial_mode") {
-      applyDebugTrialMode(debugMode)
-      return
-    }
+      if let debugMode = UserDefaults.standard.string(forKey: "debug_trial_mode") {
+        applyDebugTrialMode(debugMode)
+        return
+      }
     #endif
 
     Task { @MainActor in
@@ -192,58 +192,63 @@ class AppState: ObservableObject {
   }
 
   #if DEBUG
-  private func applyDebugTrialMode(_ mode: String) {
-    let now = Int(Date().timeIntervalSince1970)
-    let features = ["unlimited_listening", "unlimited_transcription", "unlimited_memories", "unlimited_insights", "30_chat_questions_per_month"]
-    let dur = 3 * 24 * 3600
+    private func applyDebugTrialMode(_ mode: String) {
+      let now = Int(Date().timeIntervalSince1970)
+      let features = [
+        "unlimited_listening", "unlimited_transcription", "unlimited_memories",
+        "unlimited_insights", "30_chat_questions_per_month",
+      ]
+      let dur = 3 * 24 * 3600
 
-    func mock(remaining: Int, expired: Bool) -> TrialMetadataResponse {
-      TrialMetadataResponse(
-        trialStartedAt: now - (dur - remaining), trialEndsAt: now + remaining,
-        trialRemainingSeconds: remaining, trialExpired: expired,
-        trialDurationSeconds: dur, trialFeatures: features, planAfterTrial: "Free"
-      )
-    }
-
-    switch mode {
-    case "active":
-      self.trialMetadata = mock(remaining: 2 * 24 * 3600 + 3600, expired: false)
-    case "warning":
-      self.trialMetadata = mock(remaining: 12 * 3600, expired: false)
-    case "expiring":
-      self.trialMetadata = mock(remaining: 1800, expired: false)
-    case "expired":
-      self.trialMetadata = mock(remaining: 0, expired: true)
-    case "realtime":
-      let endKey = "debug_trial_end_time"
-      let rtDur = 120
-      var endTime = UserDefaults.standard.integer(forKey: endKey)
-      if endTime == 0 {
-        endTime = now + rtDur
-        UserDefaults.standard.set(endTime, forKey: endKey)
+      func mock(remaining: Int, expired: Bool) -> TrialMetadataResponse {
+        TrialMetadataResponse(
+          trialStartedAt: now - (dur - remaining), trialEndsAt: now + remaining,
+          trialRemainingSeconds: remaining, trialExpired: expired,
+          trialDurationSeconds: dur, trialFeatures: features, planAfterTrial: "Free"
+        )
       }
-      let remaining = max(0, endTime - now)
-      self.trialMetadata = TrialMetadataResponse(
-        trialStartedAt: endTime - rtDur, trialEndsAt: endTime,
-        trialRemainingSeconds: remaining, trialExpired: remaining == 0,
-        trialDurationSeconds: rtDur, trialFeatures: features, planAfterTrial: "Free"
-      )
-      if remaining == 0 && !self.isPaywalled { self.isPaywalled = true }
-    default:
-      break
+
+      switch mode {
+      case "active":
+        self.trialMetadata = mock(remaining: 2 * 24 * 3600 + 3600, expired: false)
+      case "warning":
+        self.trialMetadata = mock(remaining: 12 * 3600, expired: false)
+      case "expiring":
+        self.trialMetadata = mock(remaining: 1800, expired: false)
+      case "expired":
+        self.trialMetadata = mock(remaining: 0, expired: true)
+      case "realtime":
+        let endKey = "debug_trial_end_time"
+        let rtDur = 120
+        var endTime = UserDefaults.standard.integer(forKey: endKey)
+        if endTime == 0 {
+          endTime = now + rtDur
+          UserDefaults.standard.set(endTime, forKey: endKey)
+        }
+        let remaining = max(0, endTime - now)
+        self.trialMetadata = TrialMetadataResponse(
+          trialStartedAt: endTime - rtDur, trialEndsAt: endTime,
+          trialRemainingSeconds: remaining, trialExpired: remaining == 0,
+          trialDurationSeconds: rtDur, trialFeatures: features, planAfterTrial: "Free"
+        )
+        if remaining == 0 && !self.isPaywalled { self.isPaywalled = true }
+      default:
+        break
+      }
     }
-  }
   #endif
 
   func startTrialMetadataRefresh() {
     trialRefreshTimer?.invalidate()
     fetchTrialMetadata()
     #if DEBUG
-    let interval: TimeInterval = UserDefaults.standard.string(forKey: "debug_trial_mode") == "realtime" ? 10 : 60
+      let interval: TimeInterval =
+        UserDefaults.standard.string(forKey: "debug_trial_mode") == "realtime" ? 10 : 60
     #else
-    let interval: TimeInterval = 60
+      let interval: TimeInterval = 60
     #endif
-    trialRefreshTimer = Timer.scheduledTimer(withTimeInterval: interval, repeats: true) { [weak self] _ in
+    trialRefreshTimer = Timer.scheduledTimer(withTimeInterval: interval, repeats: true) {
+      [weak self] _ in
       Task { @MainActor in
         self?.fetchTrialMetadata()
       }
@@ -311,6 +316,8 @@ class AppState: ObservableObject {
   private var cloudBackgroundDrainTask: Task<Void, Never>?
   private var cloudBackgroundSampleCursor = 0
   private var isCloudBackgroundTranscription = false
+  private var isCloudBackgroundBackpressured = false
+  private var didLogCloudBackgroundBackpressure = false
   private var backgroundTranscriptMerger = BackgroundTranscriptMerger()
   private var speakerSegmentReducer = SpeakerSegmentReducer()
 
@@ -915,73 +922,73 @@ class AppState: ObservableObject {
     DispatchQueue.main.async { [weak self] in
       guard let self else { return }
       UNUserNotificationCenter.current().getNotificationSettings { settings in
-      DispatchQueue.main.async {
-        let isNowGranted = settings.authorizationStatus == .authorized
-        self.hasNotificationPermission = isNowGranted
-        self.notificationAlertStyle = settings.alertStyle
+        DispatchQueue.main.async {
+          let isNowGranted = settings.authorizationStatus == .authorized
+          self.hasNotificationPermission = isNowGranted
+          self.notificationAlertStyle = settings.alertStyle
 
-        // Log the current notification settings
-        let authStatus =
-          switch settings.authorizationStatus {
-          case .notDetermined: "notDetermined"
-          case .denied: "denied"
-          case .authorized: "authorized"
-          case .provisional: "provisional"
-          case .ephemeral: "ephemeral"
-          @unknown default: "unknown"
-          }
-        let alertStyleName =
-          switch settings.alertStyle {
-          case .none: "NONE (no banners)"
-          case .banner: "BANNER"
-          case .alert: "ALERT"
-          @unknown default: "unknown"
-          }
-        log(
-          "Notification settings: auth=\(authStatus), alertStyle=\(alertStyleName), sound=\(settings.soundSetting.rawValue), badge=\(settings.badgeSetting.rawValue)"
-        )
-
-        // Track notification settings in analytics only when they change
-        let soundEnabled = settings.soundSetting == .enabled
-        let badgeEnabled = settings.badgeSetting == .enabled
-        let settingsChanged =
-          authStatus != self.lastNotificationAuthStatus
-          || alertStyleName != self.lastNotificationAlertStyle
-          || soundEnabled != self.lastNotificationSoundEnabled
-          || badgeEnabled != self.lastNotificationBadgeEnabled
-
-        if settingsChanged {
-          AnalyticsManager.shared.notificationSettingsChecked(
-            authStatus: authStatus,
-            alertStyle: alertStyleName,
-            soundEnabled: soundEnabled,
-            badgeEnabled: badgeEnabled,
-            bannersDisabled: settings.alertStyle == .none
+          // Log the current notification settings
+          let authStatus =
+            switch settings.authorizationStatus {
+            case .notDetermined: "notDetermined"
+            case .denied: "denied"
+            case .authorized: "authorized"
+            case .provisional: "provisional"
+            case .ephemeral: "ephemeral"
+            @unknown default: "unknown"
+            }
+          let alertStyleName =
+            switch settings.alertStyle {
+            case .none: "NONE (no banners)"
+            case .banner: "BANNER"
+            case .alert: "ALERT"
+            @unknown default: "unknown"
+            }
+          log(
+            "Notification settings: auth=\(authStatus), alertStyle=\(alertStyleName), sound=\(settings.soundSetting.rawValue), badge=\(settings.badgeSetting.rawValue)"
           )
 
-          // Detect regression: was authorized, now reverted to notDetermined
-          // This happens on macOS 26+ where the OS silently revokes notification permission
-          if self.lastNotificationAuthStatus == "authorized" && authStatus == "notDetermined" {
-            log(
-              "Notification permission REGRESSED from authorized to notDetermined — triggering auto-repair"
+          // Track notification settings in analytics only when they change
+          let soundEnabled = settings.soundSetting == .enabled
+          let badgeEnabled = settings.badgeSetting == .enabled
+          let settingsChanged =
+            authStatus != self.lastNotificationAuthStatus
+            || alertStyleName != self.lastNotificationAlertStyle
+            || soundEnabled != self.lastNotificationSoundEnabled
+            || badgeEnabled != self.lastNotificationBadgeEnabled
+
+          if settingsChanged {
+            AnalyticsManager.shared.notificationSettingsChecked(
+              authStatus: authStatus,
+              alertStyle: alertStyleName,
+              soundEnabled: soundEnabled,
+              badgeEnabled: badgeEnabled,
+              bannersDisabled: settings.alertStyle == .none
             )
-            AnalyticsManager.shared.notificationRepairTriggered(
-              reason: "auth_regression",
-              previousStatus: "authorized",
-              currentStatus: "notDetermined"
-            )
-            self.repairNotificationRegistrationAndRetry()
+
+            // Detect regression: was authorized, now reverted to notDetermined
+            // This happens on macOS 26+ where the OS silently revokes notification permission
+            if self.lastNotificationAuthStatus == "authorized" && authStatus == "notDetermined" {
+              log(
+                "Notification permission REGRESSED from authorized to notDetermined — triggering auto-repair"
+              )
+              AnalyticsManager.shared.notificationRepairTriggered(
+                reason: "auth_regression",
+                previousStatus: "authorized",
+                currentStatus: "notDetermined"
+              )
+              self.repairNotificationRegistrationAndRetry()
+            }
+
+            // Update last known state
+            self.lastNotificationAuthStatus = authStatus
+            self.lastNotificationAlertStyle = alertStyleName
+            self.lastNotificationSoundEnabled = soundEnabled
+            self.lastNotificationBadgeEnabled = badgeEnabled
           }
 
-          // Update last known state
-          self.lastNotificationAuthStatus = authStatus
-          self.lastNotificationAlertStyle = alertStyleName
-          self.lastNotificationSoundEnabled = soundEnabled
-          self.lastNotificationBadgeEnabled = badgeEnabled
         }
-
       }
-    }
     }  // end DispatchQueue.main.async
   }
 
@@ -1405,12 +1412,16 @@ class AppState: ObservableObject {
         audioSource: effectiveSource
       )
       if routing == .cloudBatchAssembly {
+        let batchLanguage = AssistantSettings.shared.effectiveBatchTranscriptionLanguage
+        log(
+          "Transcription: Cloud background batch using language=\(batchLanguage) (autoDetect=\(AssistantSettings.shared.transcriptionAutoDetect), selected=\(AssistantSettings.shared.transcriptionLanguage))"
+        )
         isStartingTranscription = true
         cloudBackgroundStartTask?.cancel()
         cloudBackgroundStartTask = Task {
           await self.startCloudBackgroundTranscription(
             source: effectiveSource,
-            language: effectiveLanguage
+            language: batchLanguage
           )
         }
         return
@@ -1565,11 +1576,14 @@ class AppState: ObservableObject {
   private func startCloudBackgroundTranscription(source: AudioSource, language: String) async {
     defer { isStartingTranscription = false }
     do {
-      let conversationId = try await APIClient.shared.startBackgroundConversation(language: language)
+      let conversationId = try await APIClient.shared.startBackgroundConversation(
+        language: language)
       guard !Task.isCancelled else { return }
       cloudBackgroundConversationId = conversationId
       cloudBackgroundSampleCursor = 0
       isCloudBackgroundTranscription = true
+      isCloudBackgroundBackpressured = false
+      didLogCloudBackgroundBackpressure = false
       backgroundTranscriptMerger.reset()
       speakerSegmentReducer.reset()
       transcriptionService = nil
@@ -1586,20 +1600,25 @@ class AppState: ObservableObject {
       audioMixer = AudioMixer()
       vadGateService = nil
 
+      // AssemblyAI batch requests use an explicit selected language and no keyword prompt.
+      // `multi` and keyterms have both produced provider-side 400s on low-speech chunks.
       let resolvedLanguage = language
-      cloudBackgroundSession = CloudBackgroundTranscriptionSession { chunk in
+      cloudBackgroundSession = CloudBackgroundTranscriptionSession(
+        configuration: .cloudBatch
+      ) { chunk in
         try await TranscriptionService.batchTranscribeSegments(
           audioData: chunk.pcmData,
           conversationId: conversationId,
           chunkStartMs: max(0, Int((chunk.startTime * 1000.0).rounded())),
-          language: resolvedLanguage,
-          contextKeywords: AssistantSettings.shared.effectiveVocabulary
+          language: resolvedLanguage
         )
       }
 
       let systemAudioDisabled = UserDefaults.standard.bool(forKey: "disableSystemAudioCapture")
       if systemAudioDisabled {
-        log("Transcription: System audio capture DISABLED by user preference (disableSystemAudioCapture)")
+        log(
+          "Transcription: System audio capture DISABLED by user preference (disableSystemAudioCapture)"
+        )
       } else if #available(macOS 14.4, *) {
         systemAudioCaptureService = SystemAudioCaptureService()
         log("Transcription: System audio capture initialized for cloud background batch")
@@ -1622,7 +1641,9 @@ class AppState: ObservableObject {
       await startAudioCapture(source: source)
       await startCrashSafeTranscriptionSession(language: language)
 
-      maxRecordingTimer = Timer.scheduledTimer(withTimeInterval: maxRecordingDuration, repeats: false) {
+      maxRecordingTimer = Timer.scheduledTimer(
+        withTimeInterval: maxRecordingDuration, repeats: false
+      ) {
         [weak self] _ in
         Task { @MainActor in
           guard let self = self, self.isTranscribing else { return }
@@ -1634,13 +1655,45 @@ class AppState: ObservableObject {
       AnalyticsManager.shared.transcriptionStarted()
       log("Transcription: Started cloud background batch conversation \(conversationId)")
     } catch {
+      stopAudioCapture()
       isCloudBackgroundTranscription = false
       cloudBackgroundSession = nil
       cloudBackgroundConversationId = nil
+      isCloudBackgroundBackpressured = false
+      didLogCloudBackgroundBackpressure = false
       isTranscribing = false
+      AssistantSettings.shared.transcriptionEnabled = false
       AnalyticsManager.shared.recordingError(error: error.localizedDescription)
-      showAlert(title: "Transcription Error", message: error.localizedDescription)
+      logError("Transcription: Cloud background batch failed to start", error: error)
+      showAlert(title: "Audio Recording Not Started", message: cloudBackgroundStartFailureMessage(for: error))
     }
+  }
+
+  private func cloudBackgroundStartFailureMessage(for error: Error) -> String {
+    if let urlError = error as? URLError {
+      switch urlError.code {
+      case .networkConnectionLost, .cannotConnectToHost, .notConnectedToInternet, .timedOut:
+        return
+          "Audio Recording could not start because the transcription backend connection was unavailable. Check the backend or network, then turn Audio Recording back on to retry."
+      default:
+        break
+      }
+    }
+
+    if let apiError = error as? APIError {
+      switch apiError {
+      case .httpError(let statusCode):
+        return
+          "Audio Recording could not start because the transcription backend returned HTTP \(statusCode). Turn Audio Recording back on after the backend is healthy."
+      case .unauthorized:
+        return "Audio Recording could not start because your session needs to sign in again."
+      default:
+        break
+      }
+    }
+
+    return
+      "Audio Recording could not start. Turn Audio Recording back on after the transcription backend is healthy. Details: \(error.localizedDescription)"
   }
 
   private func startCrashSafeTranscriptionSession(language: String) async {
@@ -1690,10 +1743,12 @@ class AppState: ObservableObject {
     // Start the mixer — it sums mic + system into a mono stream and forwards it to
     // the active transcription transport.
     audioMixer?.start { [weak self] monoMixed in
-      if self?.isCloudBackgroundTranscription == true {
-        self?.handleMixedBackgroundAudio(monoMixed)
-      } else {
-        self?.transcriptionService?.sendAudio(monoMixed)
+      Task { @MainActor in
+        if self?.isCloudBackgroundTranscription == true {
+          self?.handleMixedBackgroundAudio(monoMixed)
+        } else {
+          self?.transcriptionService?.sendAudio(monoMixed)
+        }
       }
     }
 
@@ -1750,7 +1805,9 @@ class AppState: ObservableObject {
     silentMicFallbackInProgress = true
 
     guard let builtInID = AudioCaptureService.findBuiltInMicDeviceID() else {
-      log("Transcription: silent-mic detected but no built-in microphone available — leaving capture as-is")
+      log(
+        "Transcription: silent-mic detected but no built-in microphone available — leaving capture as-is"
+      )
       silentMicFallbackInProgress = false
       return
     }
@@ -1901,7 +1958,9 @@ class AppState: ObservableObject {
       // finalize the NEW conversation instead of the one we just stopped.
       // The retry service will reconcile the old session by timestamp matching.
       guard self.recordingGeneration == generationAtStop else {
-        log("Transcription: New recording started during delay, skipping force-process for session \(capturedSessionId.map(String.init) ?? "nil")")
+        log(
+          "Transcription: New recording started during delay, skipping force-process for session \(capturedSessionId.map(String.init) ?? "nil")"
+        )
         return
       }
 
@@ -1909,15 +1968,20 @@ class AppState: ObservableObject {
         if let conversation = try await APIClient.shared.forceProcessConversation() {
           // Validate the returned conversation matches the session we just stopped
           if let sessionId = capturedSessionId, let startTime = capturedStartTime,
-             let convStarted = conversation.startedAt,
-             abs(convStarted.timeIntervalSince(startTime)) < 10,
-             conversation.source == .desktop {
+            let convStarted = conversation.startedAt,
+            abs(convStarted.timeIntervalSince(startTime)) < 10,
+            conversation.source == .desktop
+          {
             try? await TranscriptionStorage.shared.markSessionCompleted(
               id: sessionId, backendId: conversation.id)
-            log("Transcription: Force-processed conversation \(conversation.id), session \(sessionId) completed")
+            log(
+              "Transcription: Force-processed conversation \(conversation.id), session \(sessionId) completed"
+            )
           } else if let sessionId = capturedSessionId, let startTime = capturedStartTime {
             // Force-process returned a different conversation — fall back to reconciliation
-            log("Transcription: Force-processed conversation \(conversation.id) does not match session \(sessionId), reconciling by timestamp")
+            log(
+              "Transcription: Force-processed conversation \(conversation.id) does not match session \(sessionId), reconciling by timestamp"
+            )
             await reconcileSession(sessionId: sessionId, startTime: startTime)
           }
         } else {
@@ -1962,6 +2026,15 @@ class AppState: ObservableObject {
     let startTime = Double(cloudBackgroundSampleCursor) / 16000.0
     cloudBackgroundSampleCursor += pcmData.count / 2
     let result = session.append(pcmData: pcmData, startTime: startTime)
+    if result.isBackpressured {
+      isCloudBackgroundBackpressured = true
+      if !didLogCloudBackgroundBackpressure {
+        didLogCloudBackgroundBackpressure = true
+        log(
+          "Transcription: Cloud background ASR backpressure active (\(result.pendingChunkCount) pending chunks); dropping new audio until backlog drains"
+        )
+      }
+    }
     if result.enqueuedChunks > 0 {
       drainCloudBackgroundASRQueue()
     }
@@ -1978,9 +2051,14 @@ class AppState: ObservableObject {
           let merged = backgroundTranscriptMerger.merge(result.segments)
           _ = speakerSegmentReducer.apply(merged)
           handleBackendSegments(merged)
+          if !session.isBackpressured && isCloudBackgroundBackpressured {
+            isCloudBackgroundBackpressured = false
+            didLogCloudBackgroundBackpressure = false
+            log("Transcription: Cloud background ASR backlog drained; resuming normal ingest")
+          }
         } catch {
           logError("Transcription: Cloud background chunk failed", error: error)
-          break
+          continue
         }
       }
     }
@@ -1995,7 +2073,9 @@ class AppState: ObservableObject {
       }
       try? await Task.sleep(nanoseconds: 250_000_000)
     }
-    log("Transcription: Cloud background backlog wait timed out with \(cloudBackgroundSession?.pendingChunkCount ?? 0) pending chunks")
+    log(
+      "Transcription: Cloud background backlog wait timed out with \(cloudBackgroundSession?.pendingChunkCount ?? 0) pending chunks"
+    )
   }
 
   private func stopCloudBackgroundTranscription(
@@ -2004,6 +2084,7 @@ class AppState: ObservableObject {
     generationAtStop: UInt64,
     forSettingsChange: Bool = false
   ) async {
+    let stoppedConversationId = cloudBackgroundConversationId
     stopAudioCapture()
     _ = cloudBackgroundSession?.finishInput()
     drainCloudBackgroundASRQueue()
@@ -2018,7 +2099,8 @@ class AppState: ObservableObject {
       Task {
         try? await Task.sleep(nanoseconds: 3_000_000_000)
         guard recordingGeneration == generationAtStop else { return }
-        await forceProcessStoppedConversation(
+        await finishStoppedCloudBackgroundConversation(
+          conversationId: stoppedConversationId,
           capturedSessionId: capturedSessionId,
           capturedStartTime: capturedStartTime,
           logPrefix: "Cloud background batch"
@@ -2030,11 +2112,14 @@ class AppState: ObservableObject {
 
     try? await Task.sleep(nanoseconds: 3_000_000_000)
     guard recordingGeneration == generationAtStop else {
-      log("Transcription: New recording started during cloud batch delay, skipping force-process for session \(capturedSessionId.map(String.init) ?? "nil")")
+      log(
+        "Transcription: New recording started during cloud batch delay, skipping force-process for session \(capturedSessionId.map(String.init) ?? "nil")"
+      )
       return
     }
 
-    await forceProcessStoppedConversation(
+    await finishStoppedCloudBackgroundConversation(
+      conversationId: stoppedConversationId,
       capturedSessionId: capturedSessionId,
       capturedStartTime: capturedStartTime,
       logPrefix: "Cloud background batch"
@@ -2051,6 +2136,8 @@ class AppState: ObservableObject {
     cloudBackgroundConversationId = nil
     cloudBackgroundSampleCursor = 0
     isCloudBackgroundTranscription = false
+    isCloudBackgroundBackpressured = false
+    didLogCloudBackgroundBackpressure = false
     backgroundTranscriptMerger.reset()
     speakerSegmentReducer.reset()
   }
@@ -2069,16 +2156,56 @@ class AppState: ObservableObject {
         {
           try? await TranscriptionStorage.shared.markSessionCompleted(
             id: sessionId, backendId: conversation.id)
-          log("Transcription: \(logPrefix) force-processed conversation \(conversation.id), session \(sessionId) completed")
+          log(
+            "Transcription: \(logPrefix) force-processed conversation \(conversation.id), session \(sessionId) completed"
+          )
         } else if let sessionId = capturedSessionId, let startTime = capturedStartTime {
-          log("Transcription: \(logPrefix) force-process returned different conversation \(conversation.id), reconciling session \(sessionId)")
+          log(
+            "Transcription: \(logPrefix) force-process returned different conversation \(conversation.id), reconciling session \(sessionId)"
+          )
           await reconcileSession(sessionId: sessionId, startTime: startTime)
         }
       } else if let sessionId = capturedSessionId, let startTime = capturedStartTime {
         await reconcileSession(sessionId: sessionId, startTime: startTime)
       }
     } catch {
-      logError("Transcription: \(logPrefix) force-process failed, retry service will reconcile", error: error)
+      logError(
+        "Transcription: \(logPrefix) force-process failed, retry service will reconcile",
+        error: error)
+    }
+  }
+
+  private func finishStoppedCloudBackgroundConversation(
+    conversationId: String?,
+    capturedSessionId: Int64?,
+    capturedStartTime: Date?,
+    logPrefix: String
+  ) async {
+    guard let conversationId else {
+      log("Transcription: \(logPrefix) missing backend conversation ID, reconciling")
+      if let sessionId = capturedSessionId, let startTime = capturedStartTime {
+        await reconcileSession(sessionId: sessionId, startTime: startTime)
+      }
+      return
+    }
+
+    do {
+      let conversation = try await APIClient.shared.finishBackgroundConversation(
+        conversationId: conversationId)
+      if let sessionId = capturedSessionId {
+        try? await TranscriptionStorage.shared.markSessionCompleted(
+          id: sessionId, backendId: conversation.id)
+        log(
+          "Transcription: \(logPrefix) finalized conversation \(conversation.id), session \(sessionId) completed"
+        )
+      }
+    } catch {
+      logError(
+        "Transcription: \(logPrefix) explicit finalization failed, retry service will reconcile",
+        error: error)
+      if let sessionId = capturedSessionId, let startTime = capturedStartTime {
+        await reconcileSession(sessionId: sessionId, startTime: startTime)
+      }
     }
   }
 
@@ -2102,7 +2229,9 @@ class AppState: ObservableObject {
           id: sessionId, backendId: match.id)
         log("Transcription: Reconciled session \(sessionId) → backend conversation \(match.id)")
       } else {
-        log("Transcription: No matching backend conversation found for session \(sessionId), leaving for retry")
+        log(
+          "Transcription: No matching backend conversation found for session \(sessionId), leaving for retry"
+        )
       }
     } catch {
       logError("Transcription: Reconciliation failed for session \(sessionId)", error: error)
@@ -2121,7 +2250,9 @@ class AppState: ObservableObject {
       return .discarded
     }
 
-    log("Transcription: Finishing conversation — disconnecting WebSocket to trigger backend processing")
+    log(
+      "Transcription: Finishing conversation — disconnecting WebSocket to trigger backend processing"
+    )
 
     // Capture state before rotation — memory_created event for this conversation
     // may arrive on the new WebSocket after currentSessionId and recordingStartTime have changed.
@@ -2236,6 +2367,7 @@ class AppState: ObservableObject {
 
   private func finishCloudBackgroundConversation() async -> FinishConversationResult {
     log("Transcription: Finishing cloud background batch conversation")
+    let finishedConversationId = cloudBackgroundConversationId
     let capturedSessionId = currentSessionId
     let capturedStartTime = recordingStartTime
     finishedSessionId = capturedSessionId
@@ -2256,7 +2388,8 @@ class AppState: ObservableObject {
       }
     }
 
-    await forceProcessStoppedConversation(
+    await finishStoppedCloudBackgroundConversation(
+      conversationId: finishedConversationId,
       capturedSessionId: capturedSessionId,
       capturedStartTime: capturedStartTime,
       logPrefix: "Cloud background batch rotation"
@@ -2277,7 +2410,8 @@ class AppState: ObservableObject {
     recordingStartTime = Date()
     RecordingTimer.shared.restart()
     maxRecordingTimer?.invalidate()
-    maxRecordingTimer = Timer.scheduledTimer(withTimeInterval: maxRecordingDuration, repeats: false) {
+    maxRecordingTimer = Timer.scheduledTimer(withTimeInterval: maxRecordingDuration, repeats: false)
+    {
       [weak self] _ in
       Task { @MainActor in
         guard let self = self, self.isTranscribing else { return }
@@ -2287,16 +2421,18 @@ class AppState: ObservableObject {
     }
 
     do {
-      let language = AssistantSettings.shared.effectiveTranscriptionLanguage
-      let conversationId = try await APIClient.shared.startBackgroundConversation(language: language)
+      let language = AssistantSettings.shared.effectiveBatchTranscriptionLanguage
+      let conversationId = try await APIClient.shared.startBackgroundConversation(
+        language: language)
       cloudBackgroundConversationId = conversationId
-      cloudBackgroundSession = CloudBackgroundTranscriptionSession { chunk in
+      cloudBackgroundSession = CloudBackgroundTranscriptionSession(
+        configuration: .cloudBatch
+      ) { chunk in
         try await TranscriptionService.batchTranscribeSegments(
           audioData: chunk.pcmData,
           conversationId: conversationId,
           chunkStartMs: max(0, Int((chunk.startTime * 1000.0).rounded())),
-          language: language,
-          contextKeywords: AssistantSettings.shared.effectiveVocabulary
+          language: language
         )
       }
       await startCrashSafeTranscriptionSession(language: language)
@@ -2306,7 +2442,8 @@ class AppState: ObservableObject {
       log("Transcription: Ready for next cloud background batch conversation \(conversationId)")
       return finishedHadSegments ? .saved : .discarded
     } catch {
-      logError("Transcription: Failed to start next cloud background batch conversation", error: error)
+      logError(
+        "Transcription: Failed to start next cloud background batch conversation", error: error)
       return .error(error.localizedDescription)
     }
   }
@@ -2813,7 +2950,7 @@ class AppState: ObservableObject {
       let idSet = Set(segmentIds)
       if let idx = conversations.firstIndex(where: { $0.id == conversationId }) {
         for segIdx in conversations[idx].transcriptSegments.indices
-          where idSet.contains(conversations[idx].transcriptSegments[segIdx].id) {
+        where idSet.contains(conversations[idx].transcriptSegments[segIdx].id) {
           let old = conversations[idx].transcriptSegments[segIdx]
           conversations[idx].transcriptSegments[segIdx] = TranscriptSegment(
             id: old.id,
@@ -3099,7 +3236,9 @@ class AppState: ObservableObject {
             // Always persist to SQLite — even if the segment was trimmed from
             // the in-memory window, the event payload has all fields needed
             if let sessionId = currentSessionId {
-              let mapped = newTranslations.map { TranscriptTranslation(lang: $0.lang, text: $0.text) }
+              let mapped = newTranslations.map {
+                TranscriptTranslation(lang: $0.lang, text: $0.text)
+              }
               var translationsJson: String?
               if let jsonData = try? JSONEncoder().encode(mapped) {
                 translationsJson = String(data: jsonData, encoding: .utf8)

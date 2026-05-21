@@ -27,11 +27,21 @@ database_client_stub.db = getattr(database_client_stub, 'db', MagicMock())
 database_client_stub.document_id_from_seed = getattr(database_client_stub, 'document_id_from_seed', MagicMock())
 sys.modules.setdefault('database.conversations', MagicMock())
 sys.modules.setdefault('database.redis_db', SimpleNamespace(r=MagicMock()))
+
+
+class _DesktopBackgroundConversationError(ValueError):
+    def __init__(self, message: str, status_code: int = 400):
+        super().__init__(message)
+        self.status_code = status_code
+
+
 sys.modules.setdefault(
     'utils.conversations.desktop_background',
     SimpleNamespace(
+        DesktopBackgroundConversationError=_DesktopBackgroundConversationError,
         append_segments_to_in_progress_conversation=MagicMock(),
         create_in_progress_desktop_conversation=MagicMock(return_value='conv-1'),
+        finish_desktop_background_conversation=MagicMock(return_value={'id': 'conv-1', 'status': 'completed'}),
     ),
 )
 sys.modules.setdefault(
@@ -118,6 +128,13 @@ def _client(monkeypatch, *, segments=None):
         lambda _uid, _cid: {'id': _cid, 'status': 'in_progress'},
     )
     monkeypatch.setattr(desktop_background, 'append_segments_to_in_progress_conversation', MagicMock(return_value=[]))
+    monkeypatch.setattr(
+        desktop_background,
+        'finish_desktop_background_conversation',
+        MagicMock(return_value={'id': 'conv-1', 'status': 'completed'}),
+    )
+    if not hasattr(desktop_background.redis_db, 'r'):
+        monkeypatch.setattr(desktop_background.redis_db, 'r', MagicMock(), raising=False)
     monkeypatch.setattr(desktop_background.redis_db.r, 'get', lambda _key: None)
     monkeypatch.setattr(desktop_background.redis_db.r, 'set', lambda *_args, **_kwargs: None)
 
@@ -167,6 +184,28 @@ def test_background_transcribe_returns_segments_with_offset(monkeypatch):
     assert data['segments'][0]['end'] == 13.2
     assert data['segments'][0]['speaker_id'] == 0
     assert data['segments'][0]['speaker'] == 'SPEAKER_00'
+
+
+def test_finish_background_conversation_uses_explicit_conversation_id(monkeypatch):
+    client, _mock_transcribe = _client(monkeypatch)
+
+    response = client.post('/v2/desktop/background-conversation/conv-1/finish')
+
+    assert response.status_code == 200
+    assert response.json()['id'] == 'conv-1'
+    desktop_background.finish_desktop_background_conversation.assert_called_once_with('test-uid', 'conv-1')
+
+
+def test_finish_background_conversation_maps_validation_error(monkeypatch):
+    client, _mock_transcribe = _client(monkeypatch)
+    desktop_background.finish_desktop_background_conversation.side_effect = (
+        desktop_background.DesktopBackgroundConversationError('conversation is not in_progress', status_code=409)
+    )
+
+    response = client.post('/v2/desktop/background-conversation/conv-1/finish')
+
+    assert response.status_code == 409
+    assert response.json()['detail'] == 'conversation is not in_progress'
 
 
 def test_background_transcribe_wraps_linear16_pcm_as_wav(monkeypatch):

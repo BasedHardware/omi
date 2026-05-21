@@ -1324,6 +1324,15 @@ extension APIClient {
     )
     return response.conversation_id
   }
+
+  /// Finish one explicit Python-backed desktop background batch conversation.
+  /// Endpoint: POST /v2/desktop/background-conversation/{conversation_id}/finish
+  func finishBackgroundConversation(conversationId: String) async throws -> ServerConversation {
+    try await post(
+      "v2/desktop/background-conversation/\(conversationId)/finish",
+      customBaseURL: nil
+    )
+  }
 }
 
 // MARK: - Memories API

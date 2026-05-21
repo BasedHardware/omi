@@ -1,4 +1,5 @@
 import XCTest
+
 @testable import Omi_Computer
 
 final class BackgroundTranscriptionTests: XCTestCase {
@@ -17,7 +18,8 @@ final class BackgroundTranscriptionTests: XCTestCase {
       )
     )
 
-    let chunks = chunker.append(pcmData: pcm(samples: Array(repeating: 1_000, count: 10) + [0, 0, 0]), startTime: 0)
+    let chunks = chunker.append(
+      pcmData: pcm(samples: Array(repeating: 1_000, count: 10) + [0, 0, 0]), startTime: 0)
 
     XCTAssertEqual(chunks.count, 1)
     XCTAssertEqual(chunks[0].startTime, 0)
@@ -46,7 +48,8 @@ final class BackgroundTranscriptionTests: XCTestCase {
       )
     )
 
-    let chunks = chunker.append(pcmData: pcm(samples: Array(repeating: 1_000, count: 12)), startTime: 3)
+    let chunks = chunker.append(
+      pcmData: pcm(samples: Array(repeating: 1_000, count: 12)), startTime: 3)
 
     XCTAssertEqual(chunks.count, 1)
     XCTAssertEqual(chunks[0].startTime, 3)
@@ -54,7 +57,7 @@ final class BackgroundTranscriptionTests: XCTestCase {
     XCTAssertEqual(sampleCount(chunker.finishInput()[0].pcmData), 4)
   }
 
-  func testSessionQueuesChunksAndSignalsBackpressureWithoutDropping() async throws {
+  func testSessionBackpressuresWhenPendingQueueIsFull() async throws {
     let configuration = BackgroundTranscriptionConfiguration(
       sampleRate: 10,
       maxChunkDuration: 1.0,
@@ -69,30 +72,56 @@ final class BackgroundTranscriptionTests: XCTestCase {
     var transcribedStarts: [Double] = []
     let session = CloudBackgroundTranscriptionSession(configuration: configuration) { chunk in
       transcribedStarts.append(chunk.startTime)
-      return [Self.backendSegment(id: "chunk-\(chunk.startTime)", text: "hello", start: chunk.startTime, end: chunk.startTime + 1)]
+      return [
+        Self.backendSegment(
+          id: "chunk-\(chunk.startTime)", text: "hello", start: chunk.startTime,
+          end: chunk.startTime + 1)
+      ]
     }
 
-    let result = session.append(pcmData: pcm(samples: Array(repeating: 1_000, count: 22)), startTime: 0)
+    let first = session.append(
+      pcmData: pcm(samples: Array(repeating: 1_000, count: 12)), startTime: 0)
+    let second = session.append(
+      pcmData: pcm(samples: Array(repeating: 1_000, count: 12)), startTime: 1.2)
 
-    XCTAssertEqual(result.enqueuedChunks, 2)
-    XCTAssertEqual(result.pendingChunkCount, 2)
-    XCTAssertTrue(result.isBackpressured)
-    XCTAssertEqual(session.pendingChunkCount, 2)
+    XCTAssertEqual(first.enqueuedChunks, 1)
+    XCTAssertEqual(first.pendingChunkCount, 1)
+    XCTAssertTrue(first.isBackpressured)
+    XCTAssertEqual(second.enqueuedChunks, 0)
+    XCTAssertEqual(second.pendingChunkCount, 1)
+    XCTAssertEqual(second.acceptedInputBytes, 0)
+    XCTAssertTrue(second.isBackpressured)
+    XCTAssertEqual(session.pendingChunkCount, 1)
+    XCTAssertTrue(transcribedStarts.isEmpty)
+  }
 
-    let first = try await session.transcribeNext()
-    let second = try await session.transcribeNext()
+  func testChunkerDoesNotLoopWhenOverlapEqualsMinimumCut() {
+    var chunker = BackgroundAudioChunker(
+      configuration: BackgroundTranscriptionConfiguration(
+        sampleRate: 10,
+        maxChunkDuration: 3.0,
+        minChunkDuration: 1.0,
+        overlapDuration: 1.0,
+        silenceWindowDuration: 0.2,
+        silenceAmplitudeThreshold: 10,
+        speechPeakAmplitudeThreshold: 100,
+        speechRMSAmplitudeThreshold: 20,
+        maxPendingChunks: 4
+      )
+    )
 
-    XCTAssertEqual(first?.chunk.startTime, 0)
-    XCTAssertEqual(second?.chunk.startTime, 1)
-    XCTAssertEqual(transcribedStarts, [0, 1])
-    let empty = try await session.transcribeNext()
-    XCTAssertNil(empty)
-    XCTAssertEqual(session.snapshot().processedChunkCount, 2)
-    XCTAssertEqual(session.snapshot().segments.count, 2)
+    let chunks = chunker.append(
+      pcmData: pcm(samples: Array(repeating: 1_000, count: 10) + [0, 0, 0]), startTime: 0)
+
+    XCTAssertEqual(chunks.count, 1)
+    XCTAssertEqual(sampleCount(chunks[0].pcmData), 11)
+    let final = chunker.finishInput()
+    XCTAssertEqual(final.count, 1)
+    XCTAssertEqual(sampleCount(final[0].pcmData), 12)
   }
 
   func testFifteenSecondContinuousSpeechProducesChunkThroughSession() async throws {
-    let configuration = BackgroundTranscriptionConfiguration()
+    let configuration = BackgroundTranscriptionConfiguration.cloudBatch
     var transcribedStarts: [Double] = []
     let session = CloudBackgroundTranscriptionSession(configuration: configuration) { chunk in
       transcribedStarts.append(chunk.startTime)
@@ -115,15 +144,169 @@ final class BackgroundTranscriptionTests: XCTestCase {
       enqueuedChunks += result.enqueuedChunks
     }
 
-    XCTAssertGreaterThanOrEqual(enqueuedChunks, 1)
-    XCTAssertGreaterThanOrEqual(session.pendingChunkCount, 1)
+    XCTAssertEqual(enqueuedChunks, 1)
+    XCTAssertEqual(session.pendingChunkCount, 1)
 
     let first = try await session.transcribeNext()
     XCTAssertNotNil(first)
-    XCTAssertEqual(first?.chunk.startTime, 0, accuracy: 0.001)
+    XCTAssertEqual(first!.chunk.startTime, 0, accuracy: 0.001)
+    XCTAssertEqual(sampleCount(first!.chunk.pcmData), configuration.sampleRate * 15)
     XCTAssertEqual(transcribedStarts, [0])
     XCTAssertEqual(session.snapshot().processedChunkCount, 1)
     XCTAssertEqual(session.snapshot().segments.count, 1)
+  }
+
+  func testCloudBatchDropsSilentChunksBeforeUpload() async throws {
+    let configuration = BackgroundTranscriptionConfiguration.cloudBatch
+    var uploadCount = 0
+    let session = CloudBackgroundTranscriptionSession(configuration: configuration) { chunk in
+      uploadCount += 1
+      return [
+        Self.backendSegment(
+          id: "chunk-\(chunk.startTime)",
+          text: "should not upload",
+          start: chunk.startTime,
+          end: chunk.startTime + 1
+        )
+      ]
+    }
+
+    let samplesPerFrame = configuration.sampleRate / 10
+    let frame = pcm(samples: Array(repeating: 0, count: samplesPerFrame))
+    var enqueuedChunks = 0
+
+    for frameIndex in 0..<160 {
+      let result = session.append(pcmData: frame, startTime: Double(frameIndex) / 10.0)
+      enqueuedChunks += result.enqueuedChunks
+    }
+
+    XCTAssertEqual(enqueuedChunks, 0)
+    XCTAssertEqual(session.pendingChunkCount, 0)
+    let uploaded = try await session.transcribeNext()
+    XCTAssertNil(uploaded)
+    XCTAssertEqual(uploadCount, 0)
+    XCTAssertEqual(session.snapshot().droppedChunkCount, 1)
+    XCTAssertEqual(session.snapshot().lastSpeechActivityDecision?.reason, .insufficientSpeech)
+  }
+
+  func testCloudBatchUploadsChunkWithMinimumSpeechEnergy() async throws {
+    let configuration = BackgroundTranscriptionConfiguration.cloudBatch
+    var uploadCount = 0
+    let session = CloudBackgroundTranscriptionSession(configuration: configuration) { chunk in
+      uploadCount += 1
+      return [
+        Self.backendSegment(
+          id: "chunk-\(chunk.startTime)",
+          text: "speech",
+          start: chunk.startTime,
+          end: chunk.startTime + 1
+        )
+      ]
+    }
+
+    let speechSamples = Array(
+      repeating: Int16(1_000), count: Int(Double(configuration.sampleRate) * 1.0))
+    let silenceSamples = Array(
+      repeating: Int16(0),
+      count: configuration.sampleRate * 16 - speechSamples.count
+    )
+    let result = session.append(
+      pcmData: pcm(samples: speechSamples + silenceSamples),
+      startTime: 0
+    )
+
+    XCTAssertEqual(result.enqueuedChunks, 1)
+    XCTAssertEqual(session.pendingChunkCount, 1)
+
+    let uploaded = try await session.transcribeNext()
+    XCTAssertEqual(uploaded?.chunk.startTime, 0)
+    XCTAssertEqual(uploadCount, 1)
+    XCTAssertEqual(session.snapshot().lastSpeechActivityDecision?.reason, .speechDetected)
+  }
+
+  func testCloudBatchRejectsEnergeticNonSpeechNoiseBeforeUpload() async throws {
+    let configuration = BackgroundTranscriptionConfiguration.cloudBatch
+    var uploadCount = 0
+    let session = CloudBackgroundTranscriptionSession(configuration: configuration) { chunk in
+      uploadCount += 1
+      return [
+        Self.backendSegment(
+          id: "chunk-\(chunk.startTime)",
+          text: "noise",
+          start: chunk.startTime,
+          end: chunk.startTime + 1
+        )
+      ]
+    }
+
+    let samples = (0..<(configuration.sampleRate * 16)).map { index -> Int16 in
+      index.isMultiple(of: 2) ? 2_000 : -2_000
+    }
+    let result = session.append(pcmData: pcm(samples: samples), startTime: 0)
+
+    XCTAssertEqual(result.enqueuedChunks, 0)
+    XCTAssertEqual(session.pendingChunkCount, 0)
+    let uploaded = try await session.transcribeNext()
+    XCTAssertNil(uploaded)
+    XCTAssertEqual(uploadCount, 0)
+    XCTAssertEqual(session.snapshot().droppedChunkCount, 1)
+    XCTAssertEqual(session.snapshot().lastSpeechActivityDecision?.reason, .energeticNonSpeech)
+    XCTAssertGreaterThan(
+      session.snapshot().lastSpeechActivityDecision?.rejectedHighZeroCrossingWindows ?? 0,
+      0
+    )
+  }
+
+  func testCloudBatchFinishSplitsLongTailAtFifteenSecondWindows() {
+    let configuration = BackgroundTranscriptionConfiguration.cloudBatch
+    var chunker = BackgroundAudioChunker(configuration: configuration)
+
+    let samples = Array(repeating: Int16(1_000), count: configuration.sampleRate * 31)
+    let chunks = chunker.append(pcmData: pcm(samples: samples), startTime: 0)
+    let final = chunker.finishInput()
+
+    XCTAssertEqual(chunks.count, 1)
+    XCTAssertEqual(sampleCount(chunks[0].pcmData), configuration.sampleRate * 15)
+    XCTAssertEqual(final.count, 2)
+    XCTAssertEqual(sampleCount(final[0].pcmData), configuration.sampleRate * 15)
+    XCTAssertLessThanOrEqual(sampleCount(final[1].pcmData), configuration.sampleRate * 2)
+    XCTAssertTrue(final[1].isFinal)
+  }
+
+  func testSessionFinishEnqueuesTailEvenWhenLiveQueueIsFull() async throws {
+    let configuration = BackgroundTranscriptionConfiguration(
+      sampleRate: 10,
+      maxChunkDuration: 1.0,
+      minChunkDuration: 1.0,
+      overlapDuration: 0,
+      silenceWindowDuration: 0.2,
+      silenceAmplitudeThreshold: 10,
+      speechPeakAmplitudeThreshold: 100,
+      speechRMSAmplitudeThreshold: 20,
+      maxPendingChunks: 1
+    )
+    let session = CloudBackgroundTranscriptionSession(configuration: configuration) { chunk in
+      [
+        Self.backendSegment(
+          id: "chunk-\(chunk.startTime)", text: "chunk", start: chunk.startTime,
+          end: chunk.startTime + 1)
+      ]
+    }
+
+    let append = session.append(
+      pcmData: pcm(samples: Array(repeating: 1_000, count: 16)), startTime: 0)
+    let finish = session.finishInput()
+
+    XCTAssertEqual(append.enqueuedChunks, 1)
+    XCTAssertEqual(finish.enqueuedChunks, 1)
+    XCTAssertEqual(finish.pendingChunkCount, 2)
+    XCTAssertTrue(finish.isBackpressured)
+
+    let first = try await session.transcribeNext()
+    let tail = try await session.transcribeNext()
+    XCTAssertEqual(first?.chunk.startTime, 0)
+    XCTAssertEqual(tail!.chunk.startTime, 1, accuracy: 0.001)
+    XCTAssertTrue(tail?.chunk.isFinal ?? false)
   }
 
   func testSessionFinishFlushesTail() async throws {
@@ -139,10 +322,15 @@ final class BackgroundTranscriptionTests: XCTestCase {
       maxPendingChunks: 4
     )
     let session = CloudBackgroundTranscriptionSession(configuration: configuration) { chunk in
-      [Self.backendSegment(id: "final", text: chunk.isFinal ? "final" : "not final", start: chunk.startTime, end: 1)]
+      [
+        Self.backendSegment(
+          id: "final", text: chunk.isFinal ? "final" : "not final", start: chunk.startTime, end: 1)
+      ]
     }
 
-    XCTAssertEqual(session.append(pcmData: pcm(samples: [1_000, 1_000, 1_000]), startTime: 2).enqueuedChunks, 0)
+    XCTAssertEqual(
+      session.append(pcmData: pcm(samples: [1_000, 1_000, 1_000]), startTime: 2).enqueuedChunks,
+      0)
     let finish = session.finishInput()
 
     XCTAssertTrue(finish.didFinishInput)
@@ -152,7 +340,7 @@ final class BackgroundTranscriptionTests: XCTestCase {
     XCTAssertTrue(result?.chunk.isFinal ?? false)
   }
 
-  func testSessionRetainsChunkWhenTranscriptionFails() async throws {
+  func testSessionDropsFailedChunkSoDrainCanContinue() async throws {
     let configuration = BackgroundTranscriptionConfiguration(
       sampleRate: 10,
       maxChunkDuration: 1.0,
@@ -164,16 +352,22 @@ final class BackgroundTranscriptionTests: XCTestCase {
       speechRMSAmplitudeThreshold: 20,
       maxPendingChunks: 4
     )
-    var shouldFail = true
     let session = CloudBackgroundTranscriptionSession(configuration: configuration) { chunk in
-      if shouldFail {
-        shouldFail = false
+      if chunk.startTime == 0 {
         throw NSError(domain: "test", code: 1)
       }
-      return [Self.backendSegment(id: "retry", text: "retried", start: chunk.startTime, end: chunk.startTime + 1)]
+      return [
+        Self.backendSegment(
+          id: "retry", text: "retried", start: chunk.startTime, end: chunk.startTime + 1)
+      ]
     }
 
-    XCTAssertEqual(session.append(pcmData: pcm(samples: Array(repeating: 1_000, count: 12)), startTime: 0).enqueuedChunks, 1)
+    XCTAssertEqual(
+      session.append(pcmData: pcm(samples: Array(repeating: 1_000, count: 12)), startTime: 0)
+        .enqueuedChunks, 1)
+    XCTAssertEqual(
+      session.append(pcmData: pcm(samples: Array(repeating: 1_000, count: 12)), startTime: 1.2)
+        .enqueuedChunks, 1)
 
     do {
       _ = try await session.transcribeNext()
@@ -182,22 +376,27 @@ final class BackgroundTranscriptionTests: XCTestCase {
       XCTAssertEqual(session.pendingChunkCount, 1)
     }
 
-    let retried = try await session.transcribeNext()
-    XCTAssertEqual(retried?.chunk.startTime, 0)
+    let next = try await session.transcribeNext()
+    XCTAssertEqual(next?.chunk.startTime, 1.0)
     XCTAssertEqual(session.pendingChunkCount, 0)
     XCTAssertEqual(session.snapshot().processedChunkCount, 1)
+    XCTAssertEqual(session.snapshot().droppedChunkCount, 1)
   }
 
   func testTranscriptMergerDeduplicatesAndMergesOverlap() {
     var merger = BackgroundTranscriptMerger()
     let first = Self.backendSegment(id: "a", text: "hello world", speakerId: 0, start: 0, end: 2)
-    let duplicate = Self.backendSegment(id: nil, text: "hello world", speakerId: 0, start: 0.5, end: 1.8)
-    let overlap = Self.backendSegment(id: "b", text: "world again", speakerId: 0, start: 1.5, end: 3)
+    let duplicate = Self.backendSegment(
+      id: nil, text: "hello world", speakerId: 0, start: 0.5, end: 1.8)
+    let overlap = Self.backendSegment(
+      id: "b", text: "world again", speakerId: 0, start: 1.5, end: 3)
 
     XCTAssertEqual(merger.merge([first]).count, 1)
-    XCTAssertEqual(merger.merge([duplicate]).count, 1)
-    let merged = merger.merge([overlap])
+    XCTAssertEqual(merger.merge([duplicate]).count, 0)
+    let changed = merger.merge([overlap])
+    let merged = merger.segments
 
+    XCTAssertEqual(changed.count, 1)
     XCTAssertEqual(merged.count, 1)
     XCTAssertEqual(merged[0].text, "hello world again")
     XCTAssertEqual(merged[0].start, 0)
@@ -216,7 +415,8 @@ final class BackgroundTranscriptionTests: XCTestCase {
     )
     _ = reducer.apply([original])
 
-    let update = Self.backendSegment(id: "seg-1", text: "hello again", speakerId: 1, start: 0, end: 2)
+    let update = Self.backendSegment(
+      id: "seg-1", text: "hello again", speakerId: 1, start: 0, end: 2)
     let result = reducer.apply([update])
 
     XCTAssertEqual(result.added, 0)
@@ -226,23 +426,27 @@ final class BackgroundTranscriptionTests: XCTestCase {
     XCTAssertEqual(reducer.segments[0].translations.first?.text, "hola")
   }
 
-  func testRoutingGuardOnlyAllowsCloudBatchForEnabledMicrophone() {
+  func testRoutingGuardUsesCloudBatchForMicrophoneWhenServerEnabled() {
     let guardrail = BackgroundTranscriptionRoutingGuard()
 
     XCTAssertEqual(
-      guardrail.decide(batchEnabled: true, serverAssemblyBackgroundEnabled: true, audioSource: .microphone),
+      guardrail.decide(
+        batchEnabled: true, serverAssemblyBackgroundEnabled: true, audioSource: .microphone),
       .cloudBatchAssembly
     )
     XCTAssertEqual(
-      guardrail.decide(batchEnabled: true, serverAssemblyBackgroundEnabled: true, audioSource: .bleDevice),
+      guardrail.decide(
+        batchEnabled: true, serverAssemblyBackgroundEnabled: true, audioSource: .bleDevice),
       .cloudListenStreaming(reason: "batch_microphone_only")
     )
     XCTAssertEqual(
-      guardrail.decide(batchEnabled: false, serverAssemblyBackgroundEnabled: true, audioSource: .microphone),
+      guardrail.decide(
+        batchEnabled: false, serverAssemblyBackgroundEnabled: true, audioSource: .microphone),
       .cloudListenStreaming(reason: "batch_disabled")
     )
     XCTAssertEqual(
-      guardrail.decide(batchEnabled: true, serverAssemblyBackgroundEnabled: false, audioSource: .microphone),
+      guardrail.decide(
+        batchEnabled: true, serverAssemblyBackgroundEnabled: false, audioSource: .microphone),
       .cloudListenStreaming(reason: "server_background_batch_disabled")
     )
   }

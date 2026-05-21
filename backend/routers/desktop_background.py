@@ -13,8 +13,10 @@ from models.transcript_segment import TranscriptSegment
 from utils.analytics import record_usage
 from utils.chat import resolve_voice_message_language
 from utils.conversations.desktop_background import (
+    DesktopBackgroundConversationError,
     append_segments_to_in_progress_conversation,
     create_in_progress_desktop_conversation,
+    finish_desktop_background_conversation,
 )
 from utils.executors import db_executor, run_blocking, sync_executor
 from utils.fair_use import is_hard_restricted, record_speech_ms
@@ -61,6 +63,22 @@ async def start_background_conversation(
         source,
     )
     return {"conversation_id": conversation_id}
+
+
+@router.post("/background-conversation/{conversation_id}/finish")
+async def finish_background_conversation(
+    conversation_id: str,
+    uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "desktop:background_conversation_finish")),
+):
+    try:
+        return await run_blocking(
+            db_executor,
+            finish_desktop_background_conversation,
+            uid,
+            conversation_id,
+        )
+    except DesktopBackgroundConversationError as e:
+        raise HTTPException(status_code=e.status_code, detail=str(e))
 
 
 @router.post("/background-transcribe")

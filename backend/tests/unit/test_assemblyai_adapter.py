@@ -81,6 +81,15 @@ def test_assemblyai_result_normalizes_utterances_words_and_speaker_clusters():
     assert result.words[1].provider_cluster_id == 'A'
 
 
+def test_assemblyai_result_does_not_report_multi_when_detection_returns_no_language():
+    transcript = _completed_transcript()
+    transcript.pop('language_code')
+
+    result = normalize_assemblyai_transcript_result(transcript, model='universal-2', language='multi')
+
+    assert result.language is None
+
+
 def test_assemblyai_transcribe_url_submits_diarization_and_polls_to_completion():
     fake_client = FakeClient(
         [

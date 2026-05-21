@@ -107,6 +107,8 @@ def get_fallback_prerecorded_provider_name(
 ) -> Optional[STTProviderName]:
     workload = STTWorkload(workload)
     provider = STTProviderName(provider)
+    if workload == STTWorkload.background and provider == STTProviderName.assemblyai:
+        return None
     fallback = _DEFAULT_PRERECORDED_WORKLOAD_PROVIDERS[workload]
     if provider != fallback:
         return fallback

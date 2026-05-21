@@ -11,7 +11,8 @@ struct BackgroundAudioChunker {
   private var buffer = Data()
   private var bufferStartTime: Double?
 
-  init(configuration: BackgroundTranscriptionConfiguration = BackgroundTranscriptionConfiguration()) {
+  init(configuration: BackgroundTranscriptionConfiguration = BackgroundTranscriptionConfiguration())
+  {
     self.configuration = configuration
   }
 
@@ -24,7 +25,7 @@ struct BackgroundAudioChunker {
     buffer.append(pcmData)
 
     var chunks: [BackgroundAudioChunk] = []
-    while let chunk = nextChunk(isFinal: false) {
+    while chunks.count < configuration.maxChunksPerAppend, let chunk = nextChunk(isFinal: false) {
       chunks.append(chunk)
     }
     return chunks
@@ -32,14 +33,22 @@ struct BackgroundAudioChunker {
 
   mutating func finishInput() -> [BackgroundAudioChunk] {
     guard !buffer.isEmpty else { return [] }
+    let maxBytes = configuration.alignedByteCount(for: configuration.maxChunkDuration)
+    var chunks: [BackgroundAudioChunk] = []
+
+    while buffer.count > maxBytes, let chunk = nextChunk(isFinal: false) {
+      chunks.append(chunk)
+    }
+
     let chunk = BackgroundAudioChunk(
       pcmData: buffer,
       startTime: bufferStartTime ?? 0,
       isFinal: true
     )
+    chunks.append(chunk)
     buffer.removeAll(keepingCapacity: false)
     bufferStartTime = nil
-    return [chunk]
+    return chunks
   }
 
   private mutating func nextChunk(isFinal: Bool) -> BackgroundAudioChunk? {
@@ -48,7 +57,13 @@ struct BackgroundAudioChunker {
     guard buffer.count >= minBytes else { return nil }
 
     let cutBytes: Int?
-    if let silenceCut = firstSilenceCut(minBytes: minBytes, maxBytes: min(buffer.count, maxBytes)) {
+    let overlapBytesAtMaxCut = effectiveOverlapBytes(forCutBytes: min(buffer.count, maxBytes))
+    let minimumProgressCutBytes = overlapBytesAtMaxCut + configuration.bytesPerSample
+
+    if let silenceCut = firstSilenceCut(
+      minBytes: max(minBytes, minimumProgressCutBytes),
+      maxBytes: min(buffer.count, maxBytes)
+    ) {
       cutBytes = silenceCut
     } else if buffer.count >= maxBytes {
       cutBytes = maxBytes
@@ -56,7 +71,9 @@ struct BackgroundAudioChunker {
       cutBytes = nil
     }
 
-    guard let cutBytes, cutBytes > 0 else { return nil }
+    guard let cutBytes, cutBytes - effectiveOverlapBytes(forCutBytes: cutBytes) > 0 else {
+      return nil
+    }
     return cut(at: cutBytes, isFinal: isFinal)
   }
 
@@ -69,16 +86,26 @@ struct BackgroundAudioChunker {
       isFinal: isFinal
     )
 
-    let overlapBytes = min(configuration.alignedByteCount(for: configuration.overlapDuration), cutBytes)
+    let overlapBytes = effectiveOverlapBytes(forCutBytes: cutBytes)
     let retainedStart = max(0, cutBytes - overlapBytes)
     let retained = buffer.suffix(buffer.count - retainedStart)
     buffer = Data(retained)
-    bufferStartTime = startTime + Double(retainedStart / configuration.bytesPerSample) / Double(configuration.sampleRate)
+    bufferStartTime =
+      startTime + Double(retainedStart / configuration.bytesPerSample)
+      / Double(configuration.sampleRate)
     return chunk
   }
 
+  private func effectiveOverlapBytes(forCutBytes cutBytes: Int) -> Int {
+    let requestedOverlap = configuration.alignedByteCount(for: configuration.overlapDuration)
+    let maxProgressSafeOverlap = max(0, cutBytes - configuration.bytesPerSample)
+    return min(requestedOverlap, maxProgressSafeOverlap).alignedToSample
+  }
+
   private func firstSilenceCut(minBytes: Int, maxBytes: Int) -> Int? {
-    let windowBytes = max(configuration.bytesPerSample, configuration.alignedByteCount(for: configuration.silenceWindowDuration))
+    let windowBytes = max(
+      configuration.bytesPerSample,
+      configuration.alignedByteCount(for: configuration.silenceWindowDuration))
     guard maxBytes >= minBytes + windowBytes else { return nil }
 
     var offset = minBytes.alignedToSample
@@ -109,7 +136,9 @@ struct BackgroundAudioChunker {
     var sumSquares = 0.0
     var count = 0
 
-    for offset in stride(from: 0, to: min(endOffset, buffer.count), by: configuration.bytesPerSample) {
+    for offset in stride(
+      from: 0, to: min(endOffset, buffer.count), by: configuration.bytesPerSample)
+    {
       let amplitude = sampleAmplitude(at: offset)
       peak = max(peak, amplitude)
       sumSquares += Double(amplitude * amplitude)

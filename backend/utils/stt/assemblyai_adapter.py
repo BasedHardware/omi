@@ -47,10 +47,11 @@ def normalize_assemblyai_transcript_result(
     if not words and utterances:
         words = [word for utterance in utterances for word in (utterance.words or [])]
 
+    requested_language = None if language == 'multi' else language
     return ProviderTranscriptResult(
         provider=STTProviderName.assemblyai.value,
         model=result.get('speech_model_used') or result.get('speech_model') or model,
-        language=_normalize_language(result.get('language_code') or language),
+        language=_normalize_language(result.get('language_code') or requested_language),
         duration=_seconds_float(result.get('audio_duration')),
         words=words,
         utterances=utterances,

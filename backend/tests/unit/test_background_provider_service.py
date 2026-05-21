@@ -238,11 +238,11 @@ def test_provider_service_records_retry_exhaustion_without_fallback(monkeypatch)
 
     with patch.object(
         provider_service, '_assemblyai_prerecorded_provider', return_value=assemblyai_provider
-    ), patch.object(provider_service, 'create_provider_run', return_value='run-aai'), patch.object(
+    ), patch.object(provider_service, '_deepgram_prerecorded_provider') as deepgram_provider, patch.object(
+        provider_service, 'create_provider_run', return_value='run-aai'
+    ), patch.object(
         provider_service, 'finalize_provider_run'
-    ) as finalize_run, patch.object(
-        provider_service, 'get_fallback_prerecorded_provider_name', return_value=None
-    ):
+    ) as finalize_run:
         with pytest.raises(RuntimeError, match='assemblyai transcription failed after 2 attempts'):
             provider_service.transcribe_url(
                 'https://example.test/audio.wav',
@@ -253,6 +253,7 @@ def test_provider_service_records_retry_exhaustion_without_fallback(monkeypatch)
             )
 
     assert assemblyai_provider.transcribe_url.call_count == 2
+    deepgram_provider.assert_not_called()
     finalize_run.assert_called_once()
     assert finalize_run.call_args.kwargs['run_id'] == 'run-aai'
     assert finalize_run.call_args.kwargs['provider'] == 'assemblyai'

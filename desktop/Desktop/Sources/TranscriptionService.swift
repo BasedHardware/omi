@@ -113,7 +113,10 @@ class TranscriptionService {
     /// (Cloud Run), which does not have /v2/voice-message/* or /v4/listen endpoints.
     private static let pythonBackendBaseURL: String = DesktopBackendEnvironment.pythonBaseURL()
 
-    private static func sanitizedContextKeywords(_ keywords: [String]) -> [String] {
+    private static func sanitizedContextKeywords(
+        _ keywords: [String],
+        includeDefaultOmi: Bool = true
+    ) -> [String] {
         let stopWords: Set<String> = [
             "about", "after", "again", "all", "also", "and", "app", "are", "ask", "back", "browser", "but", "can",
             "chat", "code", "done", "each", "for", "from", "get", "has", "have", "help", "here", "home", "how",
@@ -123,7 +126,8 @@ class TranscriptionService {
         ]
         var seen = Set<String>()
         var result: [String] = []
-        for keyword in ["Omi", "OMI"] + keywords {
+        let sourceKeywords = (includeDefaultOmi ? ["Omi", "OMI"] : []) + keywords
+        for keyword in sourceKeywords {
             let normalized = keyword
                 .replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
                 .trimmingCharacters(in: .whitespacesAndNewlines)
@@ -659,7 +663,7 @@ extension TranscriptionService {
         guard var components = URLComponents(string: baseURLString) else {
             throw TranscriptionError.connectionFailed(NSError(domain: "Invalid backend URL", code: -1))
         }
-        let sanitizedKeywords = sanitizedContextKeywords(contextKeywords)
+        let sanitizedKeywords = sanitizedContextKeywords(contextKeywords, includeDefaultOmi: false)
         var queryItems = [
             URLQueryItem(name: "conversation_id", value: conversationId),
             URLQueryItem(name: "chunk_start_ms", value: String(chunkStartMs)),

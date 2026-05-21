@@ -1253,7 +1253,7 @@ struct SettingsContentView: View {
                 .foregroundColor(OmiColors.textPrimary)
 
               Text(
-                "Transcribe microphone audio in chunks instead of live streaming. Requires server-side AssemblyAI."
+                "Transcribe microphone audio in selected-language chunks instead of live streaming. Requires server-side AssemblyAI."
               )
               .scaledFont(size: 13)
               .foregroundColor(OmiColors.textTertiary)

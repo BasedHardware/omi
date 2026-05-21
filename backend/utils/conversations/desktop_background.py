@@ -11,8 +11,15 @@ from models.conversation_enums import ConversationSource, ConversationStatus
 from models.structured import Structured
 from models.transcript_segment import TranscriptSegment
 from utils.conversations.factory import deserialize_conversation
+from utils.conversations.process_conversation import process_conversation
 
 logger = logging.getLogger(__name__)
+
+
+class DesktopBackgroundConversationError(ValueError):
+    def __init__(self, message: str, status_code: int = 400):
+        super().__init__(message)
+        self.status_code = status_code
 
 
 def create_in_progress_desktop_conversation(
@@ -87,6 +94,33 @@ def append_segments_to_in_progress_conversation(
         finished_at=finished_at,
     )
     return updated_segments
+
+
+def finish_desktop_background_conversation(uid: str, conversation_id: str) -> Conversation:
+    """Finalize one explicit desktop background conversation by ID."""
+    conversation_data = conversations_db.get_conversation(uid, conversation_id)
+    if not conversation_data:
+        raise DesktopBackgroundConversationError("conversation_id not found", status_code=404)
+
+    conversation = deserialize_conversation(conversation_data)
+    if conversation.status == ConversationStatus.completed:
+        return conversation
+    if conversation.status != ConversationStatus.in_progress:
+        raise DesktopBackgroundConversationError("conversation is not in_progress", status_code=409)
+
+    conversations_db.update_conversation_status(uid, conversation.id, ConversationStatus.processing)
+    processed_conversation = process_conversation(uid, conversation.language, conversation, force_process=True)
+
+    if redis_db.get_in_progress_conversation_id(uid) == conversation.id:
+        redis_db.remove_in_progress_conversation_id(uid)
+
+    logger.info(
+        "Finished desktop background conversation: %s uid=%s segments=%s",
+        conversation.id,
+        uid,
+        len(processed_conversation.transcript_segments),
+    )
+    return processed_conversation
 
 
 def _detect_current_desktop_meeting(uid: str) -> Optional[str]:
