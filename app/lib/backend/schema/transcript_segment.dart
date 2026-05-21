@@ -64,6 +64,10 @@ class TranscriptSegment {
     speakerId = parts.length > 1 ? (int.tryParse(parts[1]) ?? 0) : 0;
   }
 
+  bool get hasExplicitUnknownSpeakerIdentity => speakerIdentityState == 'unknown';
+
+  bool get hasLegacySpeakerLabel => speaker != null && speaker!.isNotEmpty;
+
   @override
   String toString() {
     return 'TranscriptSegment: {id: $id text: $text, speaker: $speakerId, isUser: $isUser, start: $start, end: $end}';
@@ -80,7 +84,7 @@ class TranscriptSegment {
     return TranscriptSegment(
       id: (json['id'] ?? '') as String,
       text: json['text'] as String,
-      speaker: (json['speaker'] ?? 'SPEAKER_00') as String,
+      speaker: json['speaker'] as String?,
       isUser: (json['is_user'] ?? false) as bool,
       personId: json['person_id'],
       start: double.tryParse(json['start'].toString()) ?? 0.0,
@@ -225,7 +229,7 @@ class TranscriptSegment {
         if (segment.personId != null && peopleMap.containsKey(segment.personId)) {
           speakerName = peopleMap[segment.personId]!;
         } else {
-          var displayId = '${getDisplaySpeakerId(segment.speakerId, segments)}';
+          var displayId = getDisplaySpeakerIdForSegment(segment, segments);
           speakerName = speakerLabelBuilder != null ? speakerLabelBuilder(displayId) : 'Speaker $displayId';
         }
         transcript += '$timestampStr $speakerName: $segmentText ';
@@ -271,5 +275,26 @@ class TranscriptSegment {
 
     // Normalize: subtract minimum and add 1 to make it 1-indexed
     return speakerId - minSpeakerId + 1;
+  }
+
+  static String getDisplaySpeakerIdForSegment(TranscriptSegment segment, List<TranscriptSegment> segments) {
+    if (segment.hasLegacySpeakerLabel) {
+      return '${getDisplaySpeakerId(segment.speakerId, segments)}';
+    }
+
+    final providerClusterId = segment.providerClusterId;
+    if (providerClusterId != null && providerClusterId.isNotEmpty) {
+      final clusterIds = <String>[];
+      for (final item in segments) {
+        final clusterId = item.providerClusterId;
+        if (!item.isUser && clusterId != null && clusterId.isNotEmpty && !clusterIds.contains(clusterId)) {
+          clusterIds.add(clusterId);
+        }
+      }
+      final index = clusterIds.indexOf(providerClusterId);
+      if (index >= 0) return '${index + 1}';
+    }
+
+    return '?';
   }
 }

@@ -12,10 +12,10 @@ pub struct TranscriptSegment {
     #[serde(default)]
     pub id: Option<String>,
     pub text: String,
-    #[serde(default = "default_speaker")]
-    pub speaker: String,
     #[serde(default)]
-    pub speaker_id: i32,
+    pub speaker: Option<String>,
+    #[serde(default)]
+    pub speaker_id: Option<i32>,
     #[serde(default)]
     pub is_user: bool,
     #[serde(default)]
@@ -42,10 +42,6 @@ pub struct TranscriptSegment {
     pub speaker_identity_version: Option<String>,
 }
 
-fn default_speaker() -> String {
-    "SPEAKER_00".to_string()
-}
-
 impl TranscriptSegment {
     /// Convert segments to transcript text for LLM processing
     /// Copied from Python segments_to_transcript_text
@@ -56,7 +52,10 @@ impl TranscriptSegment {
                 let speaker_name = if segment.is_user {
                     "User".to_string()
                 } else {
-                    format!("Speaker {}", segment.speaker_id)
+                    match segment.speaker_id {
+                        Some(speaker_id) => format!("Speaker {}", speaker_id),
+                        None => "Speaker ?".to_string(),
+                    }
                 };
                 format!("{}: {}", speaker_name, segment.text)
             })

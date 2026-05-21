@@ -71,6 +71,32 @@ void main() {
       expect(segment.speakerIdentityState, 'unknown');
       expect(segment.speakerIdentityVersion, 'v1');
     });
+
+    test('uses provider cluster labels when legacy speaker label is absent', () {
+      final first = TranscriptSegment.fromJson({
+        'id': 'seg-provider-a',
+        'text': 'Hello',
+        'speaker': null,
+        'is_user': false,
+        'start': 0.0,
+        'end': 1.0,
+        'provider_cluster_id': 'speaker-alpha',
+        'speaker_identity_state': 'unknown',
+      });
+      final second = TranscriptSegment.fromJson({
+        'id': 'seg-provider-b',
+        'text': 'Hi',
+        'speaker': null,
+        'is_user': false,
+        'start': 1.0,
+        'end': 2.0,
+        'provider_cluster_id': 'speaker-beta',
+        'speaker_identity_state': 'unknown',
+      });
+
+      expect(TranscriptSegment.getDisplaySpeakerIdForSegment(first, [first, second]), '1');
+      expect(TranscriptSegment.getDisplaySpeakerIdForSegment(second, [first, second]), '2');
+    });
   });
 
   group('Speaker label display', () {

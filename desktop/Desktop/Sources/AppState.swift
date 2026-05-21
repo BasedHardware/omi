@@ -2434,7 +2434,15 @@ class AppState: ObservableObject {
             personId: isUser ? nil : personId,
             start: old.start,
             end: old.end,
-            translations: old.translations
+            translations: old.translations,
+            sttProvider: old.sttProvider,
+            sttModel: old.sttModel,
+            providerClusterId: old.providerClusterId,
+            providerSpeakerLabel: old.providerSpeakerLabel,
+            speakerIdentityState: old.speakerIdentityState,
+            speakerIdentityConfidence: old.speakerIdentityConfidence,
+            speakerIdentitySource: old.speakerIdentitySource,
+            speakerIdentityVersion: old.speakerIdentityVersion
           )
         }
       }
@@ -2541,7 +2549,15 @@ class AppState: ObservableObject {
               isUser: segment.is_user,
               personId: segment.person_id,
               speakerLabel: segment.speaker,
-              translationsJson: translationsJson
+              translationsJson: translationsJson,
+              sttProvider: segment.stt_provider,
+              sttModel: segment.stt_model,
+              providerClusterId: segment.provider_cluster_id,
+              providerSpeakerLabel: segment.provider_speaker_label,
+              speakerIdentityState: segment.speaker_identity_state,
+              speakerIdentityConfidence: segment.speaker_identity_confidence,
+              speakerIdentitySource: segment.speaker_identity_source,
+              speakerIdentityVersion: segment.speaker_identity_version
             )
           } catch {
             logError("Transcription: Failed to persist segment to DB", error: error)
@@ -2709,7 +2725,15 @@ class AppState: ObservableObject {
                   isUser: translated.is_user,
                   personId: translated.person_id,
                   speakerLabel: translated.speaker,
-                  translationsJson: translationsJson
+                  translationsJson: translationsJson,
+                  sttProvider: translated.stt_provider,
+                  sttModel: translated.stt_model,
+                  providerClusterId: translated.provider_cluster_id,
+                  providerSpeakerLabel: translated.provider_speaker_label,
+                  speakerIdentityState: translated.speaker_identity_state,
+                  speakerIdentityConfidence: translated.speaker_identity_confidence,
+                  speakerIdentitySource: translated.speaker_identity_source,
+                  speakerIdentityVersion: translated.speaker_identity_version
                 )
               }
             }

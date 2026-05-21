@@ -844,6 +844,23 @@ struct TranscriptSegment: Codable, Identifiable {
     return 0
   }
 
+  var hasExplicitUnknownSpeakerIdentity: Bool {
+    speakerIdentityState == "unknown"
+  }
+
+  var displaySpeakerSuffix: String {
+    if speaker != nil {
+      return "\(speakerId)"
+    }
+    if let providerSpeakerLabel, !providerSpeakerLabel.isEmpty {
+      return providerSpeakerLabel
+    }
+    if let providerClusterId, !providerClusterId.isEmpty {
+      return providerClusterId
+    }
+    return "?"
+  }
+
   enum CodingKeys: String, CodingKey {
     case id, text, speaker
     case isUser = "is_user"

@@ -237,6 +237,8 @@ final class TranscriptSpeakerAssignmentTests: XCTestCase {
     XCTAssertEqual(segment.speakerIdentityConfidence, 0.42)
     XCTAssertEqual(segment.speakerIdentitySource, "omi_speaker_embedding")
     XCTAssertEqual(segment.speakerIdentityVersion, "v1")
+    XCTAssertTrue(segment.hasExplicitUnknownSpeakerIdentity)
+    XCTAssertEqual(segment.displaySpeakerSuffix, "speaker-alpha")
   }
 
   func testSpeakerSegmentTranslationsPreserved() {
@@ -347,6 +349,40 @@ final class TranscriptSpeakerAssignmentTests: XCTestCase {
     XCTAssertEqual(segment.translations[0].text, "Hello")
     XCTAssertEqual(segment.translations[1].lang, "es")
     XCTAssertEqual(segment.translations[1].text, "Hola")
+  }
+
+  func testTranscriptionSegmentRecordRoundTripWithProviderIdentityMetadata() {
+    let source = TranscriptSegment(
+      id: "seg_provider_rt",
+      backendId: "seg_provider_rt",
+      text: "Hello",
+      speaker: nil,
+      isUser: false,
+      personId: nil,
+      start: 0,
+      end: 1,
+      sttProvider: "provider-a",
+      sttModel: "async-large",
+      providerClusterId: "speaker-alpha",
+      providerSpeakerLabel: nil,
+      speakerIdentityState: "unknown",
+      speakerIdentityConfidence: 0.42,
+      speakerIdentitySource: "omi_speaker_embedding",
+      speakerIdentityVersion: "v1"
+    )
+
+    let record = TranscriptionSegmentRecord.from(source, sessionId: 1, segmentOrder: 0)
+    let segment = record.toTranscriptSegment()
+
+    XCTAssertNil(segment.speaker)
+    XCTAssertEqual(segment.displaySpeakerSuffix, "speaker-alpha")
+    XCTAssertEqual(segment.sttProvider, "provider-a")
+    XCTAssertEqual(segment.sttModel, "async-large")
+    XCTAssertEqual(segment.providerClusterId, "speaker-alpha")
+    XCTAssertEqual(segment.speakerIdentityState, "unknown")
+    XCTAssertEqual(segment.speakerIdentityConfidence, 0.42)
+    XCTAssertEqual(segment.speakerIdentitySource, "omi_speaker_embedding")
+    XCTAssertEqual(segment.speakerIdentityVersion, "v1")
   }
 
   func testTranscriptionSegmentRecordRoundTripNilTranslationsJson() {

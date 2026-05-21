@@ -299,7 +299,15 @@ actor TranscriptionStorage {
         isUser: Bool = false,
         personId: String? = nil,
         speakerLabel: String? = nil,
-        translationsJson: String? = nil
+        translationsJson: String? = nil,
+        sttProvider: String? = nil,
+        sttModel: String? = nil,
+        providerClusterId: String? = nil,
+        providerSpeakerLabel: String? = nil,
+        speakerIdentityState: String? = nil,
+        speakerIdentityConfidence: Double? = nil,
+        speakerIdentitySource: String? = nil,
+        speakerIdentityVersion: String? = nil
     ) async throws -> Int64 {
         let db = try await ensureInitialized()
 
@@ -311,10 +319,22 @@ actor TranscriptionStorage {
                         UPDATE transcription_segments
                         SET text = ?, speaker = ?, startTime = ?, endTime = ?, isUser = ?, personId = ?,
                             speakerLabel = COALESCE(?, speakerLabel),
-                            translationsJson = COALESCE(?, translationsJson)
+                            translationsJson = COALESCE(?, translationsJson),
+                            sttProvider = COALESCE(?, sttProvider),
+                            sttModel = COALESCE(?, sttModel),
+                            providerClusterId = COALESCE(?, providerClusterId),
+                            providerSpeakerLabel = COALESCE(?, providerSpeakerLabel),
+                            speakerIdentityState = COALESCE(?, speakerIdentityState),
+                            speakerIdentityConfidence = COALESCE(?, speakerIdentityConfidence),
+                            speakerIdentitySource = COALESCE(?, speakerIdentitySource),
+                            speakerIdentityVersion = COALESCE(?, speakerIdentityVersion)
                         WHERE sessionId = ? AND segmentId = ?
                         """,
-                    arguments: [text, speaker, startTime, endTime, isUser, personId, speakerLabel, translationsJson, sessionId, segId]
+                    arguments: [
+                        text, speaker, startTime, endTime, isUser, personId, speakerLabel, translationsJson,
+                        sttProvider, sttModel, providerClusterId, providerSpeakerLabel, speakerIdentityState,
+                        speakerIdentityConfidence, speakerIdentitySource, speakerIdentityVersion, sessionId, segId
+                    ]
                 )
                 return database.changesCount > 0
             }
@@ -343,7 +363,15 @@ actor TranscriptionStorage {
             speakerLabel: speakerLabel,
             isUser: isUser,
             personId: personId,
-            translationsJson: translationsJson
+            translationsJson: translationsJson,
+            sttProvider: sttProvider,
+            sttModel: sttModel,
+            providerClusterId: providerClusterId,
+            providerSpeakerLabel: providerSpeakerLabel,
+            speakerIdentityState: speakerIdentityState,
+            speakerIdentityConfidence: speakerIdentityConfidence,
+            speakerIdentitySource: speakerIdentitySource,
+            speakerIdentityVersion: speakerIdentityVersion
         )
 
         let record = try await db.write { database in

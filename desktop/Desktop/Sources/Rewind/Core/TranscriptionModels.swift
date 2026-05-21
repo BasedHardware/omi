@@ -193,6 +193,14 @@ struct TranscriptionSegmentRecord: Codable, FetchableRecord, PersistableRecord, 
     var isUser: Bool                      // Whether this segment is from the user
     var personId: String?                 // Associated person ID (if identified)
     var translationsJson: String?         // JSON-encoded [TranscriptTranslation]
+    var sttProvider: String?
+    var sttModel: String?
+    var providerClusterId: String?
+    var providerSpeakerLabel: String?
+    var speakerIdentityState: String?
+    var speakerIdentityConfidence: Double?
+    var speakerIdentitySource: String?
+    var speakerIdentityVersion: String?
 
     static let databaseTableName = "transcription_segments"
 
@@ -212,7 +220,15 @@ struct TranscriptionSegmentRecord: Codable, FetchableRecord, PersistableRecord, 
         speakerLabel: String? = nil,
         isUser: Bool = false,
         personId: String? = nil,
-        translationsJson: String? = nil
+        translationsJson: String? = nil,
+        sttProvider: String? = nil,
+        sttModel: String? = nil,
+        providerClusterId: String? = nil,
+        providerSpeakerLabel: String? = nil,
+        speakerIdentityState: String? = nil,
+        speakerIdentityConfidence: Double? = nil,
+        speakerIdentitySource: String? = nil,
+        speakerIdentityVersion: String? = nil
     ) {
         self.id = id
         self.sessionId = sessionId
@@ -228,6 +244,14 @@ struct TranscriptionSegmentRecord: Codable, FetchableRecord, PersistableRecord, 
         self.isUser = isUser
         self.personId = personId
         self.translationsJson = translationsJson
+        self.sttProvider = sttProvider
+        self.sttModel = sttModel
+        self.providerClusterId = providerClusterId
+        self.providerSpeakerLabel = providerSpeakerLabel
+        self.speakerIdentityState = speakerIdentityState
+        self.speakerIdentityConfidence = speakerIdentityConfidence
+        self.speakerIdentitySource = speakerIdentitySource
+        self.speakerIdentityVersion = speakerIdentityVersion
     }
 
     // MARK: - Persistence Callbacks
@@ -429,7 +453,15 @@ extension TranscriptionSegmentRecord {
             speakerLabel: segment.speaker,
             isUser: segment.isUser,
             personId: segment.personId,
-            translationsJson: translationsJson
+            translationsJson: translationsJson,
+            sttProvider: segment.sttProvider,
+            sttModel: segment.sttModel,
+            providerClusterId: segment.providerClusterId,
+            providerSpeakerLabel: segment.providerSpeakerLabel,
+            speakerIdentityState: segment.speakerIdentityState,
+            speakerIdentityConfidence: segment.speakerIdentityConfidence,
+            speakerIdentitySource: segment.speakerIdentitySource,
+            speakerIdentityVersion: segment.speakerIdentityVersion
         )
     }
 
@@ -448,7 +480,15 @@ extension TranscriptionSegmentRecord {
             personId: personId,
             start: startTime,
             end: endTime,
-            translations: translations
+            translations: translations,
+            sttProvider: sttProvider,
+            sttModel: sttModel,
+            providerClusterId: providerClusterId,
+            providerSpeakerLabel: providerSpeakerLabel,
+            speakerIdentityState: speakerIdentityState,
+            speakerIdentityConfidence: speakerIdentityConfidence,
+            speakerIdentitySource: speakerIdentitySource,
+            speakerIdentityVersion: speakerIdentityVersion
         )
     }
 }
