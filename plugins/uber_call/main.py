@@ -58,6 +58,7 @@ def omi_tools_manifest() -> dict[str, Any]:
                 "endpoint": "/api/call_uber",
                 "method": "POST",
                 "parameters": {
+                    "type": "object",
                     "properties": {
                         "destination": {
                             "type": "string",
@@ -115,24 +116,23 @@ def call_uber(payload: CallUberRequest) -> dict[str, str]:
     )
     pickup_address = payload.pickup_address or _geo_value(payload.geolocation, "formatted_address", "address")
 
-    pickup = build_location(
-        latitude=pickup_latitude,
-        longitude=pickup_longitude,
-        formatted_address=pickup_address,
-        nickname=(
-            "Current location"
-            if pickup_address or (pickup_latitude is not None and pickup_longitude is not None)
-            else None
-        ),
-    )
-    dropoff = build_location(
-        latitude=payload.dropoff_latitude,
-        longitude=payload.dropoff_longitude,
-        formatted_address=payload.dropoff_address or payload.destination,
-        nickname=payload.destination or payload.dropoff_address,
-    )
-
     try:
+        pickup = build_location(
+            latitude=pickup_latitude,
+            longitude=pickup_longitude,
+            formatted_address=pickup_address,
+            nickname=(
+                "Current location"
+                if pickup_address or (pickup_latitude is not None and pickup_longitude is not None)
+                else None
+            ),
+        )
+        dropoff = build_location(
+            latitude=payload.dropoff_latitude,
+            longitude=payload.dropoff_longitude,
+            formatted_address=payload.dropoff_address or payload.destination,
+            nickname=payload.destination or payload.dropoff_address,
+        )
         links = build_uber_deep_links(
             destination=payload.destination,
             pickup=pickup,
