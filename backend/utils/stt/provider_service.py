@@ -76,6 +76,13 @@ class PrerecordedTranscriptionResponse:
     run_id: Optional[str]
 
 
+class ProviderTranscriptionRetriesExhausted(RuntimeError):
+    def __init__(self, provider_error: Exception, retry_count: int):
+        super().__init__(str(provider_error))
+        self.provider_error = provider_error
+        self.retry_count = retry_count
+
+
 def resolve_prerecorded_language_model(language: Optional[str]) -> Tuple[str, str]:
     return get_deepgram_model_for_language(language or 'multi')
 
@@ -132,7 +139,16 @@ def transcribe_url(
             run_id=run_id,
         )
     except Exception as e:
-        _finalize_failed_run(run_id, provider_name.value, model, workload.value, started_at, e, raw_audio_seconds)
+        _finalize_failed_run(
+            run_id,
+            provider_name.value,
+            model,
+            workload.value,
+            started_at,
+            _provider_error_from_exception(e),
+            raw_audio_seconds,
+            retry_count=_retry_count_from_exception(e),
+        )
         fallback_provider_name = get_fallback_prerecorded_provider_name(provider_name, workload)
         if fallback_provider_name:
             logger.warning(
@@ -217,7 +233,16 @@ def transcribe_bytes(
             run_id=run_id,
         )
     except Exception as e:
-        _finalize_failed_run(run_id, provider_name.value, model, workload.value, started_at, e, raw_audio_seconds)
+        _finalize_failed_run(
+            run_id,
+            provider_name.value,
+            model,
+            workload.value,
+            started_at,
+            _provider_error_from_exception(e),
+            raw_audio_seconds,
+            retry_count=_retry_count_from_exception(e),
+        )
         fallback_provider_name = get_fallback_prerecorded_provider_name(provider_name, workload)
         if fallback_provider_name:
             logger.warning(
@@ -306,7 +331,16 @@ def _transcribe_url_with_provider(
             detected_language=detected_language,
         )
     except Exception as e:
-        _finalize_failed_run(run_id, provider_name.value, model, workload.value, started_at, e, raw_audio_seconds)
+        _finalize_failed_run(
+            run_id,
+            provider_name.value,
+            model,
+            workload.value,
+            started_at,
+            _provider_error_from_exception(e),
+            raw_audio_seconds,
+            retry_count=_retry_count_from_exception(e),
+        )
         raise RuntimeError(f'{provider_name.value} transcription failed after 2 attempts: {e}')
 
 
@@ -356,7 +390,16 @@ def _transcribe_bytes_with_provider(
             detected_language=detected_language,
         )
     except Exception as e:
-        _finalize_failed_run(run_id, provider_name.value, model, workload.value, started_at, e, raw_audio_seconds)
+        _finalize_failed_run(
+            run_id,
+            provider_name.value,
+            model,
+            workload.value,
+            started_at,
+            _provider_error_from_exception(e),
+            raw_audio_seconds,
+            retry_count=_retry_count_from_exception(e),
+        )
         raise RuntimeError(f'{provider_name.value} transcription failed after 2 attempts: {e}')
 
 
@@ -398,7 +441,8 @@ def _transcribe_url_with_retry(
     provider, audio_url: str, **kwargs
 ) -> Tuple[ProviderTranscriptResult, Optional[str], int]:
     last_error = None
-    for attempt in range(2):
+    max_attempts = 2
+    for attempt in range(max_attempts):
         try:
             result = provider.transcribe_url(audio_url, **kwargs)
             transcript_result, detected_language = _unpack_provider_result(result, kwargs.get('return_language'))
@@ -411,14 +455,15 @@ def _transcribe_url_with_retry(
                 provider.provider_name,
                 e,
             )
-    raise last_error
+    raise ProviderTranscriptionRetriesExhausted(last_error, max_attempts - 1)
 
 
 def _transcribe_bytes_with_retry(
     provider, audio_bytes: bytes, **kwargs
 ) -> Tuple[ProviderTranscriptResult, Optional[str], int]:
     last_error = None
-    for attempt in range(2):
+    max_attempts = 2
+    for attempt in range(max_attempts):
         try:
             result = provider.transcribe_bytes(audio_bytes, **kwargs)
             transcript_result, detected_language = _unpack_provider_result(result, kwargs.get('return_language'))
@@ -431,7 +476,19 @@ def _transcribe_bytes_with_retry(
                 provider.provider_name,
                 e,
             )
-    raise last_error
+    raise ProviderTranscriptionRetriesExhausted(last_error, max_attempts - 1)
+
+
+def _retry_count_from_exception(error: Exception) -> int:
+    if isinstance(error, ProviderTranscriptionRetriesExhausted):
+        return error.retry_count
+    return 0
+
+
+def _provider_error_from_exception(error: Exception) -> Exception:
+    if isinstance(error, ProviderTranscriptionRetriesExhausted):
+        return error.provider_error
+    return error
 
 
 def _unpack_provider_result(result, return_language: bool) -> Tuple[ProviderTranscriptResult, Optional[str]]:
@@ -532,6 +589,7 @@ def _finalize_failed_run(
     started_at: datetime,
     error: Exception,
     raw_audio_seconds: float,
+    retry_count: int = 0,
 ) -> None:
     if not run_id:
         return
@@ -544,6 +602,8 @@ def _finalize_failed_run(
             status='failed',
             started_at=started_at,
             raw_audio_seconds=raw_audio_seconds,
+            retry_count=retry_count,
+            fallback_count=0,
             error_class=error.__class__.__name__,
         )
     except Exception as finalize_error:

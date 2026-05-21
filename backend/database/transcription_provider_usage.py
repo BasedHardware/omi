@@ -193,6 +193,12 @@ def finalize_provider_run(
         'identity_confidence_summary': summary,
         'error_class': error_class,
         'artifact_refs': artifact_refs or {},
+        'fallback': _fallback_details(
+            fallback_count=fallback_count,
+            from_provider=fallback_provider,
+            to_provider=provider,
+            reason=fallback_reason,
+        ),
         'updated_at': completed_at,
     }
     _reject_forbidden_payload_keys(payload)
@@ -232,6 +238,21 @@ def finalize_provider_run(
         identified_speaker_cluster_count=identified_speaker_cluster_count,
         identity_confidence_summary=summary,
     )
+
+
+def _fallback_details(
+    fallback_count: int,
+    from_provider: Optional[str],
+    to_provider: str,
+    reason: str,
+) -> Optional[dict[str, Any]]:
+    if fallback_count <= 0:
+        return None
+    return {
+        'from_provider': from_provider or 'unknown',
+        'to_provider': to_provider,
+        'reason': reason,
+    }
 
 
 def increment_daily_rollup(

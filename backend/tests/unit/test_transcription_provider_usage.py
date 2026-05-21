@@ -139,6 +139,8 @@ def test_create_and_finalize_provider_run_writes_ledger_rollup_and_metrics(monke
     finalized = run_doc.set_calls[1]['data']
     assert finalized['status'] == 'success'
     assert finalized['timing']['latency_ms'] == 5000
+    assert finalized['retry_count'] == 1
+    assert finalized['fallback'] is None
     assert 'transcript_text' not in finalized
     assert 'words' not in finalized
 
@@ -150,6 +152,7 @@ def test_create_and_finalize_provider_run_writes_ledger_rollup_and_metrics(monke
     assert rollup['identity_confidence_counts.high'] == {'__increment': 2}
     assert emitted[0]['latency_seconds'] == 5.0
     assert emitted[0]['billable_seconds'] == 60.0
+    assert emitted[0]['retry_count'] == 1
 
 
 def test_rejects_transcript_text_and_chunk_payloads():
@@ -260,6 +263,122 @@ def test_fallback_metric_records_failed_provider_to_fallback_provider(monkeypatc
     )
 
     assert observed == [(('assemblyai', 'deepgram', 'sync', 'provider_failure', 1), {})]
+
+
+def test_fallback_ledger_rollup_and_metrics_share_provider_direction(monkeypatch):
+    fake_db = _FakeDb()
+    monkeypatch.setattr(usage, 'db', fake_db)
+    monkeypatch.setattr(usage.firestore, 'Increment', _inc)
+    observed_fallbacks = []
+    observed_retries = []
+    monkeypatch.setattr(usage, 'observe_transcription_provider_request', lambda *args, **kwargs: None)
+    monkeypatch.setattr(usage, 'observe_transcription_provider_audio_seconds', lambda *args, **kwargs: None)
+    monkeypatch.setattr(
+        usage,
+        'observe_transcription_provider_retry',
+        lambda *args, **kwargs: observed_retries.append((args, kwargs)) if args[4] > 0 else None,
+    )
+    monkeypatch.setattr(usage, 'observe_transcription_provider_speaker_clusters', lambda *args, **kwargs: None)
+    monkeypatch.setattr(usage, 'observe_transcription_provider_identity_confidence', lambda *args, **kwargs: None)
+    monkeypatch.setattr(
+        usage,
+        'observe_transcription_provider_fallback',
+        lambda *args, **kwargs: observed_fallbacks.append((args, kwargs)),
+    )
+
+    started_at = datetime(2026, 5, 21, 1, 0, 0, tzinfo=timezone.utc)
+    completed_at = datetime(2026, 5, 21, 1, 0, 2, tzinfo=timezone.utc)
+    usage.create_provider_run(
+        uid='user-1',
+        provider='deepgram',
+        model='nova-3',
+        workload='sync',
+        run_id='run-fallback',
+        started_at=started_at,
+    )
+    usage.finalize_provider_run(
+        run_id='run-fallback',
+        provider='deepgram',
+        model='nova-3',
+        workload='sync',
+        status='succeeded',
+        started_at=started_at,
+        completed_at=completed_at,
+        raw_audio_seconds=2.0,
+        speech_active_seconds=2.0,
+        billable_seconds=2.0,
+        retry_count=0,
+        fallback_count=1,
+        fallback_provider='assemblyai',
+        fallback_reason='provider_failure',
+    )
+
+    finalized = fake_db.docs[(usage.RUNS_COLLECTION, 'run-fallback')].set_calls[1]['data']
+    assert finalized['fallback'] == {
+        'from_provider': 'assemblyai',
+        'to_provider': 'deepgram',
+        'reason': 'provider_failure',
+    }
+    rollup = fake_db.docs[(usage.DAILY_USAGE_COLLECTION, '2026-05-21:deepgram:nova-3:sync')].set_calls[0]['data']
+    assert rollup['fallback_count'] == {'__increment': 1}
+    assert observed_fallbacks == [(('assemblyai', 'deepgram', 'sync', 'provider_failure', 1), {})]
+    assert observed_retries == []
+
+
+def test_failed_run_retry_count_rolls_up_and_emits_retry_metric(monkeypatch):
+    fake_db = _FakeDb()
+    monkeypatch.setattr(usage, 'db', fake_db)
+    monkeypatch.setattr(usage.firestore, 'Increment', _inc)
+    observed_retries = []
+    observed_fallbacks = []
+    monkeypatch.setattr(usage, 'observe_transcription_provider_request', lambda *args, **kwargs: None)
+    monkeypatch.setattr(usage, 'observe_transcription_provider_audio_seconds', lambda *args, **kwargs: None)
+    monkeypatch.setattr(
+        usage,
+        'observe_transcription_provider_retry',
+        lambda *args, **kwargs: observed_retries.append((args, kwargs)) if args[4] > 0 else None,
+    )
+    monkeypatch.setattr(usage, 'observe_transcription_provider_speaker_clusters', lambda *args, **kwargs: None)
+    monkeypatch.setattr(usage, 'observe_transcription_provider_identity_confidence', lambda *args, **kwargs: None)
+    monkeypatch.setattr(
+        usage,
+        'observe_transcription_provider_fallback',
+        lambda *args, **kwargs: observed_fallbacks.append((args, kwargs)),
+    )
+
+    started_at = datetime(2026, 5, 21, 1, 0, 0, tzinfo=timezone.utc)
+    completed_at = datetime(2026, 5, 21, 1, 0, 2, tzinfo=timezone.utc)
+    usage.create_provider_run(
+        uid='user-1',
+        provider='assemblyai',
+        model='universal-2',
+        workload='background',
+        run_id='run-failed',
+        started_at=started_at,
+    )
+    usage.finalize_provider_run(
+        run_id='run-failed',
+        provider='assemblyai',
+        model='universal-2',
+        workload='background',
+        status='failed',
+        started_at=started_at,
+        completed_at=completed_at,
+        raw_audio_seconds=2.0,
+        retry_count=1,
+        error_class='RuntimeError',
+    )
+
+    finalized = fake_db.docs[(usage.RUNS_COLLECTION, 'run-failed')].set_calls[1]['data']
+    assert finalized['retry_count'] == 1
+    assert finalized['fallback'] is None
+    rollup = fake_db.docs[(usage.DAILY_USAGE_COLLECTION, '2026-05-21:assemblyai:universal-2:background')].set_calls[0][
+        'data'
+    ]
+    assert rollup['retry_count'] == {'__increment': 1}
+    assert rollup['status_counts.failed'] == {'__increment': 1}
+    assert observed_retries == [(('assemblyai', 'universal-2', 'background', 'provider_retry', 1), {})]
+    assert observed_fallbacks == []
 
 
 def test_provider_metrics_source_does_not_define_forbidden_label_names():

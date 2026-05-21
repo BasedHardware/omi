@@ -214,11 +214,78 @@ def test_provider_service_falls_back_to_deepgram_when_assemblyai_fails(monkeypat
     assert finalize_run.call_args_list[0].kwargs['run_id'] == 'run-aai'
     assert finalize_run.call_args_list[0].kwargs['provider'] == 'assemblyai'
     assert finalize_run.call_args_list[0].kwargs['status'] == 'failed'
+    assert finalize_run.call_args_list[0].kwargs['retry_count'] == 1
+    assert finalize_run.call_args_list[0].kwargs['error_class'] == 'RuntimeError'
     assert finalize_run.call_args_list[1].kwargs['run_id'] == 'run-dg'
     assert finalize_run.call_args_list[1].kwargs['provider'] == 'deepgram'
     assert finalize_run.call_args_list[1].kwargs['fallback_count'] == 1
     assert finalize_run.call_args_list[1].kwargs['fallback_provider'] == 'assemblyai'
     assert finalize_run.call_args_list[1].kwargs['estimated_cost_usd'] == 0.00016
+
+
+def test_provider_service_records_retry_exhaustion_without_fallback(monkeypatch):
+    monkeypatch.setenv('ASSEMBLYAI_BACKGROUND_STT_ENABLED', 'true')
+    monkeypatch.setenv('ASSEMBLYAI_BACKGROUND_STT_WORKLOADS', 'background')
+
+    assemblyai_provider = MagicMock()
+    assemblyai_provider.provider_name = STTProviderName.assemblyai
+    assemblyai_provider.transcribe_url.side_effect = RuntimeError('AssemblyAI failed')
+
+    with patch.object(
+        provider_service, '_assemblyai_prerecorded_provider', return_value=assemblyai_provider
+    ), patch.object(provider_service, 'create_provider_run', return_value='run-aai'), patch.object(
+        provider_service, 'finalize_provider_run'
+    ) as finalize_run, patch.object(
+        provider_service, 'get_fallback_prerecorded_provider_name', return_value=None
+    ):
+        with pytest.raises(RuntimeError, match='assemblyai transcription failed after 2 attempts'):
+            provider_service.transcribe_url(
+                'https://example.test/audio.wav',
+                workload=STTWorkload.background,
+                uid='uid-1',
+                language='multi',
+                model='nova-3',
+            )
+
+    assert assemblyai_provider.transcribe_url.call_count == 2
+    finalize_run.assert_called_once()
+    assert finalize_run.call_args.kwargs['run_id'] == 'run-aai'
+    assert finalize_run.call_args.kwargs['provider'] == 'assemblyai'
+    assert finalize_run.call_args.kwargs['status'] == 'failed'
+    assert finalize_run.call_args.kwargs['retry_count'] == 1
+    assert finalize_run.call_args.kwargs['fallback_count'] == 0
+    assert finalize_run.call_args.kwargs['error_class'] == 'RuntimeError'
+
+
+def test_provider_service_records_successful_after_retry(monkeypatch):
+    monkeypatch.setenv('ASSEMBLYAI_BACKGROUND_STT_ENABLED', 'true')
+    monkeypatch.setenv('ASSEMBLYAI_BACKGROUND_STT_WORKLOADS', 'sync')
+
+    fake_provider = MagicMock()
+    fake_provider.provider_name = STTProviderName.assemblyai
+    fake_provider.transcribe_url.side_effect = [
+        RuntimeError('temporary AssemblyAI failure'),
+        (_provider_result(provider='assemblyai', model='universal-2'), 'en'),
+    ]
+
+    with patch.object(provider_service, '_assemblyai_prerecorded_provider', return_value=fake_provider), patch.object(
+        provider_service, 'create_provider_run', return_value='run-aai'
+    ), patch.object(provider_service, 'finalize_provider_run') as finalize_run:
+        response = provider_service.transcribe_url(
+            'https://example.test/audio.wav',
+            workload=STTWorkload.sync,
+            uid='uid-1',
+            return_language=True,
+            language='multi',
+            model='nova-3',
+        )
+
+    assert response.result.provider == 'assemblyai'
+    assert fake_provider.transcribe_url.call_count == 2
+    finalize_run.assert_called_once()
+    assert finalize_run.call_args.kwargs['status'] == 'succeeded'
+    assert finalize_run.call_args.kwargs['retry_count'] == 1
+    assert finalize_run.call_args.kwargs['fallback_count'] == 0
 
 
 def test_provider_service_records_zero_cost_for_zero_duration_success(monkeypatch):
