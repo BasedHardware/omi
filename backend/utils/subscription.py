@@ -242,6 +242,10 @@ LEGACY_PRICE_MAP = {
     # Old Unlimited ($19.99/mo, $199.99/yr) → PlanType.unlimited (now Neo)
     'price_1RtJPm1F8wnoWYvwhVJ38kLb': PlanType.unlimited,
     'price_1RtJQ71F8wnoWYvwKMPaGlGY': PlanType.unlimited,
+    # "Neo Monthly" ($20/mo). A live Neo price that isn't wired into the
+    # env-based plan definitions, so renewal webhooks were raising
+    # "unknown price ID" and dropping active Neo subscribers to free.
+    'price_1TNIHd1F8wnoWYvwkIrekcQZ': PlanType.unlimited,
     # Old Pro ($199/mo, $1999/yr) → PlanType.architect
     'price_1TAfBB1F8wnoWYvw8XBFM1dX': PlanType.architect,
     'price_1TLFac1F8wnoWYvwtPxZhtzE': PlanType.architect,
