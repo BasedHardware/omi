@@ -11,6 +11,7 @@ from deepgram.clients.live.v1 import LiveOptions
 from utils.byok import get_byok_key
 from utils.executors import sync_executor, run_blocking
 from utils.stt.safe_socket import KeepaliveConfig, SafeDeepgramSocket  # noqa: F401 — re-exported for backward compat
+from utils.stt.providers import STTProviderName
 from utils.stt.vad_gate import GatedDeepgramSocket
 import logging
 
@@ -276,6 +277,32 @@ async def process_audio_dg(
     if vad_gate is not None:
         return GatedDeepgramSocket(safe_conn, gate=vad_gate)
     return safe_conn
+
+
+class DeepgramStreamingTranscriptionProvider:
+    provider_name = STTProviderName.deepgram
+
+    async def connect_stream(
+        self,
+        stream_transcript,
+        language: str,
+        sample_rate: int,
+        channels: int,
+        model: str = 'nova-3',
+        keywords: List[str] = [],
+        vad_gate=None,
+        is_active: Optional[Callable[[], bool]] = None,
+    ):
+        return await process_audio_dg(
+            stream_transcript,
+            language,
+            sample_rate,
+            channels,
+            model=model,
+            keywords=keywords,
+            vad_gate=vad_gate,
+            is_active=is_active,
+        )
 
 
 # Calculate backoff with jitter

@@ -1,6 +1,5 @@
 import os
 from collections import defaultdict
-from io import BytesIO
 from typing import List, Optional, Sequence, Tuple, Union
 
 import fal_client
@@ -10,6 +9,11 @@ from deepgram import DeepgramClient, DeepgramClientOptions
 from models.transcript_segment import TranscriptSegment
 from utils.byok import get_byok_key
 from utils.other.endpoints import timeit
+from utils.stt.deepgram_adapter import (
+    DeepgramPrerecordedTranscriptionProvider,
+    deepgram_speaker_fields,
+    provider_result_to_legacy_words,
+)
 import logging
 
 _DG_TIMEOUT = httpx.Timeout(connect=10.0, read=120.0, write=30.0, pool=10.0)
@@ -31,20 +35,11 @@ def _deepgram_client_for_request() -> DeepgramClient:
 
 
 def _deepgram_speaker_fields(speaker_id) -> dict:
-    if speaker_id is None:
-        return {'speaker': None, 'provider_cluster_id': None, 'provider_speaker_label': None}
+    return deepgram_speaker_fields(speaker_id)
 
-    provider_cluster_id = str(speaker_id)
-    try:
-        speaker_label = f"SPEAKER_{int(speaker_id):02d}"
-    except (TypeError, ValueError):
-        speaker_label = None
 
-    return {
-        'speaker': speaker_label,
-        'provider_cluster_id': provider_cluster_id,
-        'provider_speaker_label': speaker_label,
-    }
+def _deepgram_prerecorded_provider() -> DeepgramPrerecordedTranscriptionProvider:
+    return DeepgramPrerecordedTranscriptionProvider(_deepgram_client_for_request, _DG_TIMEOUT)
 
 
 # Languages supported by nova-3
@@ -190,79 +185,20 @@ def deepgram_prerecorded(
     logger.info(f'deepgram_prerecorded {audio_url} {speakers_count} {attempts}')
 
     try:
-        # 'multi' language means auto-detection
-        is_multi = language == 'multi'
-        should_detect_language = return_language or is_multi
-        options = {
-            "model": model,
-            "smart_format": True,
-            "punctuate": True,
-            "diarize": diarize,
-            "detect_language": should_detect_language,
-            "utterances": True,
-        }
-        if language and not is_multi:
-            options["language"] = language
-
-        if keywords:
-            if model in ('nova-3',):
-                options["keyterm"] = list(keywords)
-            else:
-                options["keywords"] = list(keywords)
-
-        response = (
-            _deepgram_client_for_request()
-            .listen.rest.v("1")
-            .transcribe_url({"url": audio_url}, options, timeout=_DG_TIMEOUT)
+        result = _deepgram_prerecorded_provider().transcribe_url(
+            audio_url,
+            speakers_count=speakers_count,
+            return_language=return_language,
+            diarize=diarize,
+            language=language,
+            model=model,
+            keywords=keywords,
         )
-
-        # Extract words from response
-        result = response.to_dict()
-        channels = result.get('results', {}).get('channels', [])
-        if not channels:
-            raise Exception('No channels found in response')
-
-        alternatives = channels[0].get('alternatives', [])
-        if not alternatives:
-            raise Exception('No alternatives found in response')
-
-        dg_words = alternatives[0].get('words', [])
-        if not dg_words:
-            if return_language:
-                detected_lang = channels[0].get('detected_language', 'en')
-                if detected_lang and '-' in detected_lang:
-                    detected_lang = detected_lang.split('-')[0]
-                return [], detected_lang or 'en'
-            return []
-
-        # Convert Deepgram format to fal_whisperx compatible format
-        # Deepgram: {word, start, end, confidence, punctuated_word, speaker (int)}
-        # Expected: {timestamp: [start, end], speaker: 'SPEAKER_XX', text: 'word'}
-        words = []
-        for w in dg_words:
-            speaker_id = w.get('speaker', 0)
-            speaker_fields = _deepgram_speaker_fields(speaker_id)
-            words.append(
-                {
-                    'timestamp': [w['start'], w['end']],
-                    'speaker': speaker_fields['speaker'],
-                    'provider_cluster_id': speaker_fields['provider_cluster_id'],
-                    'provider_speaker_label': speaker_fields['provider_speaker_label'],
-                    'stt_provider': 'deepgram',
-                    'stt_model': model,
-                    'text': w.get('punctuated_word', w['word']),
-                }
-            )
-
         if return_language:
-            # Deepgram returns detected_language in the channel
-            detected_lang = channels[0].get('detected_language', 'en')
-            # Normalize language code (Deepgram might return 'en-US', we want 'en')
-            if detected_lang and '-' in detected_lang:
-                detected_lang = detected_lang.split('-')[0]
-            return words, detected_lang or 'en'
+            transcript_result, detected_language = result
+            return provider_result_to_legacy_words(transcript_result), detected_language
 
-        return words
+        return provider_result_to_legacy_words(result)
 
     except Exception as e:
         logger.error(f'Deepgram prerecorded error: {e}')
@@ -317,89 +253,33 @@ def deepgram_prerecorded_from_bytes(
         Or tuple of (words, language) if return_language=True
     """
     logger.info(
-        f'deepgram_prerecorded_from_bytes bytes_len={len(audio_bytes)} {sample_rate} {diarize} {attempts} encoding={encoding} language={language} model={model}'
+        'deepgram_prerecorded_from_bytes bytes_len=%s %s %s %s encoding=%s language=%s model=%s',
+        len(audio_bytes),
+        sample_rate,
+        diarize,
+        attempts,
+        encoding,
+        language,
+        model,
     )
 
     try:
-        is_multi = language == 'multi'
-        should_detect_language = return_language or is_multi
-        options = {
-            "model": model,
-            "smart_format": True,
-            "punctuate": True,
-            "diarize": diarize,
-            "utterances": True,
-            "detect_language": should_detect_language,
-        }
-        if language and not is_multi:
-            options["language"] = language
-
-        if keywords:
-            if str(model).startswith("nova-3"):
-                options["keyterm"] = list(keywords)
-            else:
-                options["keywords"] = list(keywords)
-
-        # For raw PCM, Deepgram needs encoding + sample_rate to interpret the bytes
-        if encoding:
-            options["encoding"] = encoding
-            options["sample_rate"] = sample_rate
-            options["channels"] = channels
-
-        # Wrap bytes in BytesIO for Deepgram client
-        audio_buffer = BytesIO(audio_bytes)
-        mimetype = "audio/raw" if encoding else "audio/wav"
-        source = {"buffer": audio_buffer, "mimetype": mimetype}
-
-        response = (
-            _deepgram_client_for_request().listen.rest.v("1").transcribe_file(source, options, timeout=_DG_TIMEOUT)
+        result = _deepgram_prerecorded_provider().transcribe_bytes(
+            audio_bytes,
+            sample_rate=sample_rate,
+            diarize=diarize,
+            encoding=encoding,
+            channels=channels,
+            language=language,
+            model=model,
+            return_language=return_language,
+            keywords=keywords,
         )
-
-        # Extract words from response
-        result = response.to_dict()
-        result_channels = result.get('results', {}).get('channels', [])
-        if not result_channels:
-            raise Exception('No channels found in response')
-
-        alternatives = result_channels[0].get('alternatives', [])
-        if not alternatives:
-            raise Exception('No alternatives found in response')
-
-        dg_words = alternatives[0].get('words', [])
-        if not dg_words:
-            if return_language:
-                detected_lang = result_channels[0].get('detected_language', 'en')
-                if detected_lang and '-' in detected_lang:
-                    detected_lang = detected_lang.split('-')[0]
-                return [], detected_lang or 'en'
-            return []
-
-        # Convert Deepgram format to standard format
-        # Deepgram: {word, start, end, confidence, punctuated_word, speaker (int)}
-        # Expected: {timestamp: [start, end], speaker: 'SPEAKER_XX', text: 'word'}
-        words = []
-        for w in dg_words:
-            speaker_id = w.get('speaker', 0)
-            speaker_fields = _deepgram_speaker_fields(speaker_id)
-            words.append(
-                {
-                    'timestamp': [w['start'], w['end']],
-                    'speaker': speaker_fields['speaker'],
-                    'provider_cluster_id': speaker_fields['provider_cluster_id'],
-                    'provider_speaker_label': speaker_fields['provider_speaker_label'],
-                    'stt_provider': 'deepgram',
-                    'stt_model': model,
-                    'text': w.get('punctuated_word', w['word']),
-                }
-            )
-
         if return_language:
-            detected_lang = result_channels[0].get('detected_language', 'en')
-            if detected_lang and '-' in detected_lang:
-                detected_lang = detected_lang.split('-')[0]
-            return words, detected_lang or 'en'
+            transcript_result, detected_language = result
+            return provider_result_to_legacy_words(transcript_result), detected_language
 
-        return words
+        return provider_result_to_legacy_words(result)
 
     except Exception as e:
         logger.error(f'Deepgram prerecorded from bytes error: {e}')

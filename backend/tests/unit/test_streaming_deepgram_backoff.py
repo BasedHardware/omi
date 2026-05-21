@@ -15,14 +15,18 @@ import pytest
 # Mock heavy dependencies before importing streaming module
 _mock_modules = {}
 for mod_name in [
+    'cachetools',
     'database',
     'database._client',
     'database.users',
+    'utils.http_client',
     'utils.other.storage',
     'deepgram',
     'deepgram.clients',
     'deepgram.clients.live',
     'deepgram.clients.live.v1',
+    'onnxruntime',
+    'pydub',
     'websockets',
     'websockets.exceptions',
 ]:
@@ -38,6 +42,20 @@ if 'deepgram' in _mock_modules:
     sys.modules['deepgram'].DeepgramClientOptions = MagicMock
     sys.modules['deepgram'].LiveTranscriptionEvents = MagicMock()
     sys.modules['deepgram.clients.live.v1'].LiveOptions = MagicMock
+
+if 'cachetools' in _mock_modules:
+
+    class FakeTTLCache(dict):
+        def __init__(self, maxsize=None, ttl=None):
+            super().__init__()
+
+    sys.modules['cachetools'].TTLCache = FakeTTLCache
+
+if 'pydub' in _mock_modules:
+    sys.modules['pydub'].AudioSegment = MagicMock
+
+if 'utils.http_client' in _mock_modules:
+    sys.modules['utils.http_client'].get_stt_client = MagicMock()
 
 from utils.stt.streaming import connect_to_deepgram_with_backoff, process_audio_dg  # noqa: E402
 from utils.stt.streaming import deepgram_options, deepgram_cloud_options  # noqa: E402
