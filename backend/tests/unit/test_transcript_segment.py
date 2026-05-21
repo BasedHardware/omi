@@ -113,7 +113,6 @@ def test_postprocess_words_does_not_promote_malformed_speaker_to_speaker_zero():
                 "text": "hello",
             }
         ],
-        duration=1,
     )
 
     assert len(segments) == 1

@@ -228,8 +228,8 @@ def _quality_for_segment(value: Optional[Union[SegmentQuality, dict]]) -> Option
 
 
 def _confidence_bucket(assignment: Optional[ClusterIdentityAssignment], quality: dict) -> Optional[str]:
-    if not assignment:
-        return 'low'
+    if assignment is None:
+        return None
     if assignment.person_id:
         return None
     if assignment.state == 'user' and assignment.confidence is not None and assignment.confidence >= 0.7:

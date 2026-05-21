@@ -297,125 +297,128 @@ class TestDeepgramPrerecordedFromBytesPCM:
 # ---------------------------------------------------------------------------
 
 
+def _mock_pcm_transcription(*, text=None, detected_language=None, words=None, segments=None):
+    from utils.stt.provider_service import PrerecordedTranscriptionResponse
+
+    if segments is None:
+        segment = MagicMock()
+        segment.text = text
+        segments = [segment] if text is not None else []
+    if words is None:
+        words = [{'timestamp': [0.0, 0.5], 'speaker': 'SPEAKER_00', 'text': text}] if text is not None else []
+    return PrerecordedTranscriptionResponse(
+        result=MagicMock(),
+        detected_language=detected_language,
+        segments=segments,
+        words=words,
+        run_id=None,
+    )
+
+
 class TestTranscribePcmBytes:
     """Verify transcribe_pcm_bytes passes language/model and propagates errors."""
 
-    @patch('utils.chat.postprocess_words')
-    @patch('utils.chat.deepgram_prerecorded_from_bytes')
-    @patch('utils.chat.get_deepgram_model_for_language')
-    def test_language_model_forwarded(self, mock_get_model, mock_dg, mock_postprocess):
-        """stt_language and stt_model should be passed to deepgram_prerecorded_from_bytes."""
+    @patch('utils.chat.stt_provider_service.transcribe_bytes')
+    @patch('utils.chat.stt_provider_service.resolve_prerecorded_language_model')
+    def test_language_model_forwarded(self, mock_resolve_model, mock_transcribe):
+        """stt_language and stt_model should be passed to transcribe_bytes."""
         from utils.chat import transcribe_pcm_bytes
 
-        mock_get_model.return_value = ('es', 'nova-3')
-        mock_dg.return_value = [{'timestamp': [0.0, 0.5], 'speaker': 'SPEAKER_00', 'text': 'Hola'}]
-        mock_seg = MagicMock()
-        mock_seg.text = 'Hola'
-        mock_postprocess.return_value = [mock_seg]
+        mock_resolve_model.return_value = ('es', 'nova-3')
+        mock_transcribe.return_value = _mock_pcm_transcription(text='Hola')
 
         text, lang = transcribe_pcm_bytes(b'\x00' * 100, 'test-uid', language='es')
 
-        mock_dg.assert_called_once()
-        call_kwargs = mock_dg.call_args[1]
+        mock_transcribe.assert_called_once()
+        call_kwargs = mock_transcribe.call_args[1]
         assert call_kwargs['language'] == 'es'
         assert call_kwargs['model'] == 'nova-3'
         assert call_kwargs['encoding'] == 'linear16'
         assert text == 'Hola'
 
-    @patch('utils.chat.deepgram_prerecorded_from_bytes')
-    @patch('utils.chat.get_deepgram_model_for_language')
-    def test_runtime_error_propagates(self, mock_get_model, mock_dg):
+    @patch('utils.chat.stt_provider_service.transcribe_bytes')
+    @patch('utils.chat.stt_provider_service.resolve_prerecorded_language_model')
+    def test_runtime_error_propagates(self, mock_resolve_model, mock_transcribe):
         """RuntimeError from Deepgram should propagate (not be caught)."""
         from utils.chat import transcribe_pcm_bytes
 
-        mock_get_model.return_value = ('en', 'nova-3')
-        mock_dg.side_effect = RuntimeError('Deepgram failed')
+        mock_resolve_model.return_value = ('en', 'nova-3')
+        mock_transcribe.side_effect = RuntimeError('Deepgram failed')
 
         with pytest.raises(RuntimeError, match='Deepgram failed'):
             transcribe_pcm_bytes(b'\x00' * 100, 'test-uid')
 
-    @patch('utils.chat.deepgram_prerecorded_from_bytes')
-    @patch('utils.chat.get_deepgram_model_for_language')
-    def test_empty_words_returns_none(self, mock_get_model, mock_dg):
+    @patch('utils.chat.stt_provider_service.transcribe_bytes')
+    @patch('utils.chat.stt_provider_service.resolve_prerecorded_language_model')
+    def test_empty_words_returns_none(self, mock_resolve_model, mock_transcribe):
         """Empty word list should return (None, language)."""
         from utils.chat import transcribe_pcm_bytes
 
-        mock_get_model.return_value = ('en', 'nova-3')
-        mock_dg.return_value = []
+        mock_resolve_model.return_value = ('en', 'nova-3')
+        mock_transcribe.return_value = _mock_pcm_transcription(text=None, words=[])
 
         text, lang = transcribe_pcm_bytes(b'\x00' * 100, 'test-uid', language='en')
         assert text is None
         assert lang == 'en'
 
-    @patch('utils.chat.postprocess_words')
-    @patch('utils.chat.deepgram_prerecorded_from_bytes')
-    @patch('utils.chat.get_deepgram_model_for_language')
-    def test_multi_language_returns_detected_language(self, mock_get_model, mock_dg, mock_postprocess):
+    @patch('utils.chat.stt_provider_service.transcribe_bytes')
+    @patch('utils.chat.stt_provider_service.resolve_prerecorded_language_model')
+    def test_multi_language_returns_detected_language(self, mock_resolve_model, mock_transcribe):
         """Multi-language mode should return the Deepgram-detected language, not hardcoded 'en'."""
         from utils.chat import transcribe_pcm_bytes
 
-        mock_get_model.return_value = ('multi', 'nova-3')
-        # return_language=True path returns (words, detected_lang)
-        mock_dg.return_value = ([{'timestamp': [0.0, 0.5], 'speaker': 'SPEAKER_00', 'text': 'Bonjour'}], 'fr')
-        mock_seg = MagicMock()
-        mock_seg.text = 'Bonjour'
-        mock_postprocess.return_value = [mock_seg]
+        mock_resolve_model.return_value = ('multi', 'nova-3')
+        mock_transcribe.return_value = _mock_pcm_transcription(text='Bonjour', detected_language='fr')
 
         text, lang = transcribe_pcm_bytes(b'\x00' * 100, 'test-uid', language='multi')
 
         assert text == 'Bonjour'
         assert lang == 'fr'
-        # Verify return_language=True was passed
-        call_kwargs = mock_dg.call_args[1]
+        call_kwargs = mock_transcribe.call_args[1]
         assert call_kwargs['return_language'] is True
 
-    @patch('utils.chat.postprocess_words')
-    @patch('utils.chat.deepgram_prerecorded_from_bytes')
-    @patch('utils.chat.get_deepgram_model_for_language')
-    def test_chinese_language_uses_nova3(self, mock_get_model, mock_dg, mock_postprocess):
+    @patch('utils.chat.stt_provider_service.transcribe_bytes')
+    @patch('utils.chat.stt_provider_service.resolve_prerecorded_language_model')
+    def test_chinese_language_uses_nova3(self, mock_resolve_model, mock_transcribe):
         """Chinese should use nova-3 model."""
         from utils.chat import transcribe_pcm_bytes
 
-        mock_get_model.return_value = ('zh', 'nova-3')
-        mock_dg.return_value = [{'timestamp': [0.0, 0.5], 'speaker': 'SPEAKER_00', 'text': '你好'}]
-        mock_seg = MagicMock()
-        mock_seg.text = '你好'
-        mock_postprocess.return_value = [mock_seg]
+        mock_resolve_model.return_value = ('zh', 'nova-3')
+        mock_transcribe.return_value = _mock_pcm_transcription(text='你好')
 
-        text, lang = transcribe_pcm_bytes(b'\x00' * 100, 'test-uid', language='zh')
+        transcribe_pcm_bytes(b'\x00' * 100, 'test-uid', language='zh')
 
-        call_kwargs = mock_dg.call_args[1]
+        call_kwargs = mock_transcribe.call_args[1]
         assert call_kwargs['model'] == 'nova-3'
         assert call_kwargs['language'] == 'zh'
 
-    @patch('utils.chat.postprocess_words')
-    @patch('utils.chat.deepgram_prerecorded_from_bytes')
-    @patch('utils.chat.get_deepgram_model_for_language')
-    def test_whitespace_only_transcript_returns_none(self, mock_get_model, mock_dg, mock_postprocess):
+    @patch('utils.chat.stt_provider_service.transcribe_bytes')
+    @patch('utils.chat.stt_provider_service.resolve_prerecorded_language_model')
+    def test_whitespace_only_transcript_returns_none(self, mock_resolve_model, mock_transcribe):
         """Whitespace-only transcript after postprocessing should return (None, language)."""
         from utils.chat import transcribe_pcm_bytes
 
-        mock_get_model.return_value = ('en', 'nova-3')
-        mock_dg.return_value = [{'timestamp': [0.0, 0.5], 'speaker': 'SPEAKER_00', 'text': ' '}]
-        mock_seg = MagicMock()
-        mock_seg.text = '   '
-        mock_postprocess.return_value = [mock_seg]
+        mock_resolve_model.return_value = ('en', 'nova-3')
+        mock_transcribe.return_value = _mock_pcm_transcription(text='   ')
 
         text, lang = transcribe_pcm_bytes(b'\x00' * 100, 'test-uid', language='en')
         assert text is None
         assert lang == 'en'
 
-    @patch('utils.chat.deepgram_prerecorded_from_bytes')
-    @patch('utils.chat.get_deepgram_model_for_language')
-    def test_postprocess_empty_returns_none(self, mock_get_model, mock_dg):
-        """postprocess_words returning empty list should return (None, language)."""
+    @patch('utils.chat.stt_provider_service.transcribe_bytes')
+    @patch('utils.chat.stt_provider_service.resolve_prerecorded_language_model')
+    def test_empty_segments_returns_none(self, mock_resolve_model, mock_transcribe):
+        """Empty segments should return (None, language)."""
         from utils.chat import transcribe_pcm_bytes
 
-        mock_get_model.return_value = ('en', 'nova-3')
-        mock_dg.return_value = [{'timestamp': [0.0, 0.5], 'speaker': 'SPEAKER_00', 'text': 'hello'}]
-        # postprocess_words is imported at module level; mock it
-        with patch('utils.chat.postprocess_words', return_value=[]):
-            text, lang = transcribe_pcm_bytes(b'\x00' * 100, 'test-uid', language='en')
+        mock_resolve_model.return_value = ('en', 'nova-3')
+        mock_transcribe.return_value = _mock_pcm_transcription(
+            text='hello',
+            words=[{'timestamp': [0.0, 0.5], 'speaker': 'SPEAKER_00', 'text': 'hello'}],
+            segments=[],
+        )
+
+        text, lang = transcribe_pcm_bytes(b'\x00' * 100, 'test-uid', language='en')
         assert text is None
         assert lang == 'en'
 

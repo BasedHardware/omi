@@ -366,7 +366,5 @@ def legacy_words_to_provider_result(words: List[dict]) -> ProviderTranscriptResu
     return ProviderTranscriptResult(provider=provider or 'unknown', model=model, words=provider_words)
 
 
-def postprocess_words(
-    words: List[dict], duration: int, skip_n_seconds: int = 0  # , merge_segments: bool = True
-) -> List[TranscriptSegment]:
+def postprocess_words(words: List[dict], skip_n_seconds: int = 0) -> List[TranscriptSegment]:
     return reconstruct_conversation(legacy_words_to_provider_result(words), skip_n_seconds=skip_n_seconds)
