@@ -10729,7 +10729,7 @@
     "recapDeletedSnackbar": "रीकॅप हटवले",
     "recapDeleteFailed": "रीकॅप हटवता आले नाही. नंतर पुन्हा प्रयत्न करा.",
     "syncStatusBackedUp": "बॅकअप झाला",
-    "syncStatusBackingUp": "बॅकअप होत आहे…",
+    "syncStatusBackingUp": "समन्वय करत आहे…",
     "syncStatusWaiting": "सिंक होण्याची प्रतीक्षा",
     "syncStatusRetrying": "प्रक्रिया करता आली नाही — पुन्हा प्रयत्न",
     "syncStatusFailed": "अयशस्वी — Retry दाबा",
@@ -10763,5 +10763,6 @@
     "morePaymentMethodsComingSoon": "लवकरच आणखी पेमेंट पद्धती",
     "@morePaymentMethodsComingSoon": {
         "description": "Placeholder card text shown under available payment methods"
-    }
+    },
+    "syncProcessingBackgroundHint": "हे पार्श्वभूमीत सुरू राहते — तुम्ही ही स्क्रीन सोडू शकता."
 }

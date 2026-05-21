@@ -3061,7 +3061,7 @@
     "recapDeletedSnackbar": "Сводка удалена",
     "recapDeleteFailed": "Не удалось удалить сводку. Повторите попытку позже.",
     "syncStatusBackedUp": "Сохранено в облаке",
-    "syncStatusBackingUp": "Резервное копирование…",
+    "syncStatusBackingUp": "Синхронизация…",
     "syncStatusWaiting": "Ожидает синхронизации",
     "syncStatusRetrying": "Не удалось обработать — повтор",
     "syncStatusFailed": "Ошибка — нажмите «Повторить»",
@@ -3103,5 +3103,6 @@
     "morePaymentMethodsComingSoon": "Скоро добавим новые способы оплаты",
     "@morePaymentMethodsComingSoon": {
         "description": "Placeholder card text shown under available payment methods"
-    }
+    },
+    "syncProcessingBackgroundHint": "Это продолжается в фоновом режиме — вы можете покинуть этот экран."
 }

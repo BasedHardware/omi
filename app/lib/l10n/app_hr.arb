@@ -10729,7 +10729,7 @@
     "recapDeletedSnackbar": "Pregled izbrisan",
     "recapDeleteFailed": "Pregled nije moguće izbrisati. Pokušajte ponovno kasnije.",
     "syncStatusBackedUp": "Sigurnosno kopirano",
-    "syncStatusBackingUp": "Izrada kopije…",
+    "syncStatusBackingUp": "Sinkronizacija…",
     "syncStatusWaiting": "Čeka sinkronizaciju",
     "syncStatusRetrying": "Obrada nije uspjela — ponovni pokušaj",
     "syncStatusFailed": "Neuspjelo — dodirnite Pokušaj ponovno",
@@ -10763,5 +10763,6 @@
     "morePaymentMethodsComingSoon": "Uskoro stižu novi načini plaćanja",
     "@morePaymentMethodsComingSoon": {
         "description": "Placeholder card text shown under available payment methods"
-    }
+    },
+    "syncProcessingBackgroundHint": "Ovo se nastavlja u pozadini — možete napustiti ovaj zaslon."
 }

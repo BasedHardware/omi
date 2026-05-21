@@ -2994,7 +2994,7 @@
     "recapDeletedSnackbar": "Zusammenfassung gelöscht",
     "recapDeleteFailed": "Zusammenfassung konnte nicht gelöscht werden. Versuche es später erneut.",
     "syncStatusBackedUp": "Gesichert",
-    "syncStatusBackingUp": "Wird gesichert…",
+    "syncStatusBackingUp": "Wird synchronisiert…",
     "syncStatusWaiting": "Wartet auf Synchronisierung",
     "syncStatusRetrying": "Verarbeitung fehlgeschlagen — wird wiederholt",
     "syncStatusFailed": "Fehlgeschlagen — auf Wiederholen tippen",
@@ -3036,5 +3036,6 @@
     "morePaymentMethodsComingSoon": "Weitere Zahlungsmethoden in Kürze",
     "@morePaymentMethodsComingSoon": {
         "description": "Placeholder card text shown under available payment methods"
-    }
+    },
+    "syncProcessingBackgroundHint": "Das läuft im Hintergrund weiter — du kannst diesen Bildschirm verlassen."
 }

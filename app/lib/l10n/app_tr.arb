@@ -3061,7 +3061,7 @@
     "recapDeletedSnackbar": "Özet silindi",
     "recapDeleteFailed": "Özet silinemedi. Daha sonra tekrar deneyin.",
     "syncStatusBackedUp": "Yedeklendi",
-    "syncStatusBackingUp": "Yedekleniyor…",
+    "syncStatusBackingUp": "Senkronize ediliyor…",
     "syncStatusWaiting": "Eşitleme bekleniyor",
     "syncStatusRetrying": "İşlenemedi — yeniden deneniyor",
     "syncStatusFailed": "Başarısız — Yeniden Dene'ye dokunun",
@@ -3103,5 +3103,6 @@
     "morePaymentMethodsComingSoon": "Daha fazla ödeme yöntemi yakında",
     "@morePaymentMethodsComingSoon": {
         "description": "Placeholder card text shown under available payment methods"
-    }
+    },
+    "syncProcessingBackgroundHint": "Bu işlem arka planda sürer — bu ekrandan ayrılabilirsiniz."
 }

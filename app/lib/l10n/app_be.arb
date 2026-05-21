@@ -10729,7 +10729,7 @@
     "recapDeletedSnackbar": "Агляд выдалены",
     "recapDeleteFailed": "Не атрымалася выдаліць агляд. Паспрабуйце пазней.",
     "syncStatusBackedUp": "Рэзервова захавана",
-    "syncStatusBackingUp": "Рэзервнае капіраванне…",
+    "syncStatusBackingUp": "Сінхранізацыя…",
     "syncStatusWaiting": "Чакае сінхранізацыі",
     "syncStatusRetrying": "Не атрымалася апрацаваць — паўтор",
     "syncStatusFailed": "Памылка — націсніце «Паўтарыць»",
@@ -10763,5 +10763,6 @@
     "morePaymentMethodsComingSoon": "Хутка з'явяцца новыя спосабы аплаты",
     "@morePaymentMethodsComingSoon": {
         "description": "Placeholder card text shown under available payment methods"
-    }
+    },
+    "syncProcessingBackgroundHint": "Працэс працягваецца ў фонавым рэжыме — вы можаце пакінуць гэты экран."
 }

@@ -10729,7 +10729,7 @@
     "recapDeletedSnackbar": "ಸಾರಾಂಶ ಅಳಿಸಲಾಗಿದೆ",
     "recapDeleteFailed": "ಸಾರಾಂಶವನ್ನು ಅಳಿಸಲು ಸಾಧ್ಯವಾಗಲಿಲ್ಲ. ನಂತರ ಪುನಃ ಪ್ರಯತ್ನಿಸಿ.",
     "syncStatusBackedUp": "ಬ್ಯಾಕಪ್ ಆಗಿದೆ",
-    "syncStatusBackingUp": "ಬ್ಯಾಕಪ್ ಆಗುತ್ತಿದೆ…",
+    "syncStatusBackingUp": "ಸಿಂಕ್ ಮಾಡುತ್ತಿದೆ…",
     "syncStatusWaiting": "ಸಿಂಕ್ ಆಗಲು ಕಾಯುತ್ತಿದೆ",
     "syncStatusRetrying": "ಪ್ರಕ್ರಿಯೆ ವಿಫಲ — ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಲಾಗುತ್ತಿದೆ",
     "syncStatusFailed": "ವಿಫಲ — Retry ಒತ್ತಿ",
@@ -10763,5 +10763,6 @@
     "morePaymentMethodsComingSoon": "ಶೀಘ್ರದಲ್ಲೇ ಹೆಚ್ಚಿನ ಪಾವತಿ ವಿಧಾನಗಳು",
     "@morePaymentMethodsComingSoon": {
         "description": "Placeholder card text shown under available payment methods"
-    }
+    },
+    "syncProcessingBackgroundHint": "ಇದು ಹಿನ್ನೆಲೆಯಲ್ಲಿ ಮುಂದುವರಿಯುತ್ತದೆ — ನೀವು ಈ ಪರದೆಯಿಂದ ಹೊರಹೋಗಬಹುದು."
 }

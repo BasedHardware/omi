@@ -3026,7 +3026,7 @@
     "recapDeletedSnackbar": "Yhteenveto poistettu",
     "recapDeleteFailed": "Yhteenvetoa ei voitu poistaa. Yritä myöhemmin uudelleen.",
     "syncStatusBackedUp": "Varmuuskopioitu",
-    "syncStatusBackingUp": "Varmuuskopioidaan…",
+    "syncStatusBackingUp": "Synkronoidaan…",
     "syncStatusWaiting": "Odottaa synkronointia",
     "syncStatusRetrying": "Käsittely epäonnistui — yritetään uudelleen",
     "syncStatusFailed": "Epäonnistui — napauta Yritä uudelleen",
@@ -3068,5 +3068,6 @@
     "morePaymentMethodsComingSoon": "Lisää maksutapoja tulossa pian",
     "@morePaymentMethodsComingSoon": {
         "description": "Placeholder card text shown under available payment methods"
-    }
+    },
+    "syncProcessingBackgroundHint": "Tämä jatkuu taustalla — voit poistua tästä näkymästä."
 }

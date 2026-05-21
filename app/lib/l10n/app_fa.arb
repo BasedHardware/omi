@@ -10729,7 +10729,7 @@
     "recapDeletedSnackbar": "خلاصه حذف شد",
     "recapDeleteFailed": "حذف خلاصه ممکن نشد. بعداً دوباره تلاش کنید.",
     "syncStatusBackedUp": "پشتیبان‌گیری شد",
-    "syncStatusBackingUp": "در حال پشتیبان‌گیری…",
+    "syncStatusBackingUp": "در حال هماهنگ‌سازی…",
     "syncStatusWaiting": "در انتظار همگام‌سازی",
     "syncStatusRetrying": "پردازش ناموفق — تلاش مجدد",
     "syncStatusFailed": "ناموفق — روی تلاش مجدد بزنید",
@@ -10763,5 +10763,6 @@
     "morePaymentMethodsComingSoon": "روش‌های پرداخت بیشتر به‌زودی",
     "@morePaymentMethodsComingSoon": {
         "description": "Placeholder card text shown under available payment methods"
-    }
+    },
+    "syncProcessingBackgroundHint": "این کار در پس‌زمینه ادامه می‌یابد — می‌توانید این صفحه را ترک کنید."
 }

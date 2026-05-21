@@ -10729,7 +10729,7 @@
     "recapDeletedSnackbar": "Povzetek izbrisan",
     "recapDeleteFailed": "Povzetka ni bilo mogoče izbrisati. Poskusite znova pozneje.",
     "syncStatusBackedUp": "Varnostno kopirano",
-    "syncStatusBackingUp": "Ustvarjanje kopije…",
+    "syncStatusBackingUp": "Sinhronizacija…",
     "syncStatusWaiting": "Čaka na sinhronizacijo",
     "syncStatusRetrying": "Obdelava ni uspela — vnovični poskus",
     "syncStatusFailed": "Ni uspelo — tapnite Poskusi znova",
@@ -10763,5 +10763,6 @@
     "morePaymentMethodsComingSoon": "Kmalu več načinov plačila",
     "@morePaymentMethodsComingSoon": {
         "description": "Placeholder card text shown under available payment methods"
-    }
+    },
+    "syncProcessingBackgroundHint": "To se nadaljuje v ozadju — ta zaslon lahko zapustite."
 }

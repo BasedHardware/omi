@@ -10729,7 +10729,7 @@
     "recapDeletedSnackbar": "சுருக்கம் நீக்கப்பட்டது",
     "recapDeleteFailed": "சுருக்கத்தை நீக்க இயலவில்லை. பிறகு மீண்டும் முயற்சிக்கவும்.",
     "syncStatusBackedUp": "காப்புப் பிரதி எடுக்கப்பட்டது",
-    "syncStatusBackingUp": "காப்புப் பிரதி எடுக்கப்படுகிறது…",
+    "syncStatusBackingUp": "ஒத்திசைக்கிறது…",
     "syncStatusWaiting": "ஒத்திசைவுக்காக காத்திருக்கிறது",
     "syncStatusRetrying": "செயலாக்க முடியவில்லை — மீண்டும் முயற்சிக்கிறது",
     "syncStatusFailed": "தோல்வி — Retry-ஐ அழுத்தவும்",
@@ -10763,5 +10763,6 @@
     "morePaymentMethodsComingSoon": "மேலும் கட்டண முறைகள் விரைவில்",
     "@morePaymentMethodsComingSoon": {
         "description": "Placeholder card text shown under available payment methods"
-    }
+    },
+    "syncProcessingBackgroundHint": "இது பின்னணியில் தொடர்கிறது — இந்தத் திரையிலிருந்து நீங்கள் வெளியேறலாம்."
 }

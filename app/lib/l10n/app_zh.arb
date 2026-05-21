@@ -3048,7 +3048,7 @@
     "recapDeletedSnackbar": "回顾已删除",
     "recapDeleteFailed": "无法删除回顾。请稍后重试。",
     "syncStatusBackedUp": "已备份",
-    "syncStatusBackingUp": "正在备份…",
+    "syncStatusBackingUp": "同步中…",
     "syncStatusWaiting": "等待同步",
     "syncStatusRetrying": "无法处理 — 正在重试",
     "syncStatusFailed": "失败 — 点按“重试”",
@@ -3090,5 +3090,6 @@
     "morePaymentMethodsComingSoon": "更多支付方式即将推出",
     "@morePaymentMethodsComingSoon": {
         "description": "Placeholder card text shown under available payment methods"
-    }
+    },
+    "syncProcessingBackgroundHint": "此过程会在后台继续 — 你可以离开此屏幕。"
 }

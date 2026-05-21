@@ -3027,7 +3027,7 @@
     "recapDeletedSnackbar": "Resumen eliminado",
     "recapDeleteFailed": "No se pudo eliminar el resumen. Inténtalo de nuevo más tarde.",
     "syncStatusBackedUp": "Copia de seguridad hecha",
-    "syncStatusBackingUp": "Haciendo copia…",
+    "syncStatusBackingUp": "Sincronizando…",
     "syncStatusWaiting": "Esperando para sincronizar",
     "syncStatusRetrying": "No se pudo procesar — reintentando",
     "syncStatusFailed": "Falló — toca Reintentar",
@@ -3069,5 +3069,6 @@
     "morePaymentMethodsComingSoon": "Próximamente más métodos de pago",
     "@morePaymentMethodsComingSoon": {
         "description": "Placeholder card text shown under available payment methods"
-    }
+    },
+    "syncProcessingBackgroundHint": "Esto continúa en segundo plano — puedes salir de esta pantalla."
 }

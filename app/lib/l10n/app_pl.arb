@@ -3061,7 +3061,7 @@
     "recapDeletedSnackbar": "Podsumowanie usunięte",
     "recapDeleteFailed": "Nie udało się usunąć podsumowania. Spróbuj ponownie później.",
     "syncStatusBackedUp": "Utworzono kopię",
-    "syncStatusBackingUp": "Tworzenie kopii…",
+    "syncStatusBackingUp": "Synchronizacja…",
     "syncStatusWaiting": "Oczekuje na synchronizację",
     "syncStatusRetrying": "Przetwarzanie nie powiodło się — ponawianie",
     "syncStatusFailed": "Niepowodzenie — naciśnij Ponów",
@@ -3103,5 +3103,6 @@
     "morePaymentMethodsComingSoon": "Więcej metod płatności już wkrótce",
     "@morePaymentMethodsComingSoon": {
         "description": "Placeholder card text shown under available payment methods"
-    }
+    },
+    "syncProcessingBackgroundHint": "To trwa w tle — możesz opuścić ten ekran."
 }

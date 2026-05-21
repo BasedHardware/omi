@@ -3026,7 +3026,7 @@
     "recapDeletedSnackbar": "Kopsavilkums dzēsts",
     "recapDeleteFailed": "Neizdevās dzēst kopsavilkumu. Mēģiniet vēlāk.",
     "syncStatusBackedUp": "Dublēts",
-    "syncStatusBackingUp": "Notiek dublēšana…",
+    "syncStatusBackingUp": "Sinhronizē…",
     "syncStatusWaiting": "Gaida sinhronizāciju",
     "syncStatusRetrying": "Neizdevās apstrādāt — mēģina vēlreiz",
     "syncStatusFailed": "Neizdevās — pieskarieties Mēģināt vēlreiz",
@@ -3068,5 +3068,6 @@
     "morePaymentMethodsComingSoon": "Drīzumā vairāk maksājumu veidu",
     "@morePaymentMethodsComingSoon": {
         "description": "Placeholder card text shown under available payment methods"
-    }
+    },
+    "syncProcessingBackgroundHint": "Tas turpinās fonā — varat pamest šo ekrānu."
 }

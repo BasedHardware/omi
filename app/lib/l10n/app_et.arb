@@ -3026,7 +3026,7 @@
     "recapDeletedSnackbar": "Kokkuvõte kustutatud",
     "recapDeleteFailed": "Kokkuvõtet ei saanud kustutada. Proovi hiljem uuesti.",
     "syncStatusBackedUp": "Varundatud",
-    "syncStatusBackingUp": "Varundamine…",
+    "syncStatusBackingUp": "Sünkroonimine…",
     "syncStatusWaiting": "Ootab sünkroonimist",
     "syncStatusRetrying": "Töötlemine ebaõnnestus — proovin uuesti",
     "syncStatusFailed": "Ebaõnnestus — puuduta Proovi uuesti",
@@ -3068,5 +3068,6 @@
     "morePaymentMethodsComingSoon": "Peagi rohkem makseviise",
     "@morePaymentMethodsComingSoon": {
         "description": "Placeholder card text shown under available payment methods"
-    }
+    },
+    "syncProcessingBackgroundHint": "See jätkub taustal — võite sellelt ekraanilt lahkuda."
 }

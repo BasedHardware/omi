@@ -3026,7 +3026,7 @@
     "recapDeletedSnackbar": "Rezumat șters",
     "recapDeleteFailed": "Rezumatul nu a putut fi șters. Încearcă din nou mai târziu.",
     "syncStatusBackedUp": "Copiat de rezervă",
-    "syncStatusBackingUp": "Se face copia de rezervă…",
+    "syncStatusBackingUp": "Se sincronizează…",
     "syncStatusWaiting": "Așteaptă sincronizarea",
     "syncStatusRetrying": "Procesarea a eșuat — se reîncearcă",
     "syncStatusFailed": "A eșuat — atinge Reîncearcă",
@@ -3068,5 +3068,6 @@
     "morePaymentMethodsComingSoon": "În curând mai multe metode de plată",
     "@morePaymentMethodsComingSoon": {
         "description": "Placeholder card text shown under available payment methods"
-    }
+    },
+    "syncProcessingBackgroundHint": "Acest lucru continuă în fundal — poți părăsi acest ecran."
 }

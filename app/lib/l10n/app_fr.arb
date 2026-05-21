@@ -3061,7 +3061,7 @@
     "recapDeletedSnackbar": "Résumé supprimé",
     "recapDeleteFailed": "Impossible de supprimer le résumé. Réessayez plus tard.",
     "syncStatusBackedUp": "Sauvegardé",
-    "syncStatusBackingUp": "Sauvegarde…",
+    "syncStatusBackingUp": "Synchronisation…",
     "syncStatusWaiting": "En attente de synchronisation",
     "syncStatusRetrying": "Échec du traitement — nouvelle tentative",
     "syncStatusFailed": "Échec — appuyez sur Réessayer",
@@ -3103,5 +3103,6 @@
     "morePaymentMethodsComingSoon": "D'autres moyens de paiement bientôt disponibles",
     "@morePaymentMethodsComingSoon": {
         "description": "Placeholder card text shown under available payment methods"
-    }
+    },
+    "syncProcessingBackgroundHint": "Cela continue en arrière-plan — vous pouvez quitter cet écran."
 }

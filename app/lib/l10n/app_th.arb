@@ -3026,7 +3026,7 @@
     "recapDeletedSnackbar": "ลบสรุปแล้ว",
     "recapDeleteFailed": "ไม่สามารถลบสรุปได้ ลองใหม่อีกครั้งภายหลัง",
     "syncStatusBackedUp": "สำรองข้อมูลแล้ว",
-    "syncStatusBackingUp": "กำลังสำรองข้อมูล…",
+    "syncStatusBackingUp": "กำลังซิงค์…",
     "syncStatusWaiting": "รอการซิงค์",
     "syncStatusRetrying": "ประมวลผลไม่สำเร็จ — กำลังลองใหม่",
     "syncStatusFailed": "ล้มเหลว — แตะ ลองใหม่",
@@ -3068,5 +3068,6 @@
     "morePaymentMethodsComingSoon": "วิธีการชำระเงินอื่นๆ เร็วๆ นี้",
     "@morePaymentMethodsComingSoon": {
         "description": "Placeholder card text shown under available payment methods"
-    }
+    },
+    "syncProcessingBackgroundHint": "การทำงานนี้ดำเนินต่อในเบื้องหลัง — คุณออกจากหน้าจอนี้ได้."
 }

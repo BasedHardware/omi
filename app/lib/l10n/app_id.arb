@@ -3068,7 +3068,7 @@
     "recapDeletedSnackbar": "Ringkasan dihapus",
     "recapDeleteFailed": "Tidak dapat menghapus ringkasan. Coba lagi nanti.",
     "syncStatusBackedUp": "Sudah dicadangkan",
-    "syncStatusBackingUp": "Mencadangkan…",
+    "syncStatusBackingUp": "Menyinkronkan…",
     "syncStatusWaiting": "Menunggu sinkronisasi",
     "syncStatusRetrying": "Gagal diproses — mencoba lagi",
     "syncStatusFailed": "Gagal — ketuk Coba Lagi",
@@ -3110,5 +3110,6 @@
     "morePaymentMethodsComingSoon": "Metode pembayaran lainnya segera hadir",
     "@morePaymentMethodsComingSoon": {
         "description": "Placeholder card text shown under available payment methods"
-    }
+    },
+    "syncProcessingBackgroundHint": "Ini berlanjut di latar belakang — Anda dapat meninggalkan layar ini."
 }

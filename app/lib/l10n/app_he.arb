@@ -10729,7 +10729,7 @@
     "recapDeletedSnackbar": "הסיכום נמחק",
     "recapDeleteFailed": "לא ניתן היה למחוק את הסיכום. נסה שוב מאוחר יותר.",
     "syncStatusBackedUp": "גובה",
-    "syncStatusBackingUp": "מגבה…",
+    "syncStatusBackingUp": "מסנכרן…",
     "syncStatusWaiting": "ממתין לסנכרון",
     "syncStatusRetrying": "העיבוד נכשל — מנסה שוב",
     "syncStatusFailed": "נכשל — הקש על נסה שוב",
@@ -10763,5 +10763,6 @@
     "morePaymentMethodsComingSoon": "אמצעי תשלום נוספים בקרוב",
     "@morePaymentMethodsComingSoon": {
         "description": "Placeholder card text shown under available payment methods"
-    }
+    },
+    "syncProcessingBackgroundHint": "התהליך נמשך ברקע — אפשר לצאת מהמסך הזה."
 }

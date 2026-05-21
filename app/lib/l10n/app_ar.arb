@@ -2993,7 +2993,7 @@
     "recapDeletedSnackbar": "تم حذف الملخص",
     "recapDeleteFailed": "تعذر حذف الملخص. حاول مرة أخرى لاحقًا.",
     "syncStatusBackedUp": "تم النسخ الاحتياطي",
-    "syncStatusBackingUp": "جارٍ النسخ الاحتياطي…",
+    "syncStatusBackingUp": "جارٍ المزامنة…",
     "syncStatusWaiting": "في انتظار المزامنة",
     "syncStatusRetrying": "تعذّرت المعالجة — جارٍ إعادة المحاولة",
     "syncStatusFailed": "فشل — اضغط إعادة المحاولة",
@@ -3035,5 +3035,6 @@
     "morePaymentMethodsComingSoon": "المزيد من طرق الدفع قريبًا",
     "@morePaymentMethodsComingSoon": {
         "description": "Placeholder card text shown under available payment methods"
-    }
+    },
+    "syncProcessingBackgroundHint": "تستمر العملية في الخلفية — يمكنك مغادرة هذه الشاشة."
 }

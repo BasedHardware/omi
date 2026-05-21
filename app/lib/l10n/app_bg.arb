@@ -2995,7 +2995,7 @@
     "recapDeletedSnackbar": "Резюмето е изтрито",
     "recapDeleteFailed": "Резюмето не може да бъде изтрито. Опитайте по-късно.",
     "syncStatusBackedUp": "Архивирано",
-    "syncStatusBackingUp": "Архивиране…",
+    "syncStatusBackingUp": "Синхронизиране…",
     "syncStatusWaiting": "Чака синхронизация",
     "syncStatusRetrying": "Неуспешна обработка — нов опит",
     "syncStatusFailed": "Неуспешно — натиснете „Опитай отново“",
@@ -3037,5 +3037,6 @@
     "morePaymentMethodsComingSoon": "Скоро ще има още методи на плащане",
     "@morePaymentMethodsComingSoon": {
         "description": "Placeholder card text shown under available payment methods"
-    }
+    },
+    "syncProcessingBackgroundHint": "Това продължава на заден план — можете да напуснете този екран."
 }

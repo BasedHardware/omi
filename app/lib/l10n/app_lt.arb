@@ -3026,7 +3026,7 @@
     "recapDeletedSnackbar": "Suvestinė ištrinta",
     "recapDeleteFailed": "Nepavyko ištrinti suvestinės. Bandykite vėliau.",
     "syncStatusBackedUp": "Sukurta atsarginė kopija",
-    "syncStatusBackingUp": "Kuriama atsarginė kopija…",
+    "syncStatusBackingUp": "Sinchronizuojama…",
     "syncStatusWaiting": "Laukiama sinchronizavimo",
     "syncStatusRetrying": "Nepavyko apdoroti — bandoma dar kartą",
     "syncStatusFailed": "Nepavyko — palieskite Bandyti dar kartą",
@@ -3068,5 +3068,6 @@
     "morePaymentMethodsComingSoon": "Netrukus daugiau mokėjimo būdų",
     "@morePaymentMethodsComingSoon": {
         "description": "Placeholder card text shown under available payment methods"
-    }
+    },
+    "syncProcessingBackgroundHint": "Tai tęsiasi fone — galite išeiti iš šio ekrano."
 }

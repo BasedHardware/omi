@@ -3026,7 +3026,7 @@
     "recapDeletedSnackbar": "Ringkasan dipadam",
     "recapDeleteFailed": "Tidak dapat memadam ringkasan. Cuba lagi kemudian.",
     "syncStatusBackedUp": "Telah disandarkan",
-    "syncStatusBackingUp": "Menyandarkan…",
+    "syncStatusBackingUp": "Menyegerakkan…",
     "syncStatusWaiting": "Menunggu untuk segerak",
     "syncStatusRetrying": "Gagal diproses — mencuba semula",
     "syncStatusFailed": "Gagal — ketik Cuba Lagi",
@@ -3068,5 +3068,6 @@
     "morePaymentMethodsComingSoon": "Lebih banyak kaedah pembayaran akan datang",
     "@morePaymentMethodsComingSoon": {
         "description": "Placeholder card text shown under available payment methods"
-    }
+    },
+    "syncProcessingBackgroundHint": "Ini berterusan di latar belakang — anda boleh meninggalkan skrin ini."
 }

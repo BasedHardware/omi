@@ -3122,7 +3122,7 @@
     "recapDeletedSnackbar": "Összefoglaló törölve",
     "recapDeleteFailed": "Nem sikerült törölni az összefoglalót. Próbáld újra később.",
     "syncStatusBackedUp": "Mentve",
-    "syncStatusBackingUp": "Biztonsági mentés…",
+    "syncStatusBackingUp": "Szinkronizálás…",
     "syncStatusWaiting": "Szinkronizálásra vár",
     "syncStatusRetrying": "A feldolgozás sikertelen — újrapróbálkozás",
     "syncStatusFailed": "Sikertelen — koppintson az Újra gombra",
@@ -3164,5 +3164,6 @@
     "morePaymentMethodsComingSoon": "Hamarosan további fizetési módok",
     "@morePaymentMethodsComingSoon": {
         "description": "Placeholder card text shown under available payment methods"
-    }
+    },
+    "syncProcessingBackgroundHint": "Ez a háttérben folytatódik — elhagyhatja ezt a képernyőt."
 }

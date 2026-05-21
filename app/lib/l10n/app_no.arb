@@ -3026,7 +3026,7 @@
     "recapDeletedSnackbar": "Oppsummering slettet",
     "recapDeleteFailed": "Kunne ikke slette oppsummeringen. Prøv igjen senere.",
     "syncStatusBackedUp": "Sikkerhetskopiert",
-    "syncStatusBackingUp": "Sikkerhetskopierer…",
+    "syncStatusBackingUp": "Synkroniserer…",
     "syncStatusWaiting": "Venter på synkronisering",
     "syncStatusRetrying": "Kunne ikke behandles — prøver igjen",
     "syncStatusFailed": "Mislyktes — trykk på Prøv igjen",
@@ -3068,5 +3068,6 @@
     "morePaymentMethodsComingSoon": "Flere betalingsmåter kommer snart",
     "@morePaymentMethodsComingSoon": {
         "description": "Placeholder card text shown under available payment methods"
-    }
+    },
+    "syncProcessingBackgroundHint": "Dette fortsetter i bakgrunnen — du kan forlate denne skjermen."
 }

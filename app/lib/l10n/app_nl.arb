@@ -3026,7 +3026,7 @@
     "recapDeletedSnackbar": "Samenvatting verwijderd",
     "recapDeleteFailed": "Kan de samenvatting niet verwijderen. Probeer het later opnieuw.",
     "syncStatusBackedUp": "Geback-upt",
-    "syncStatusBackingUp": "Back-up maken…",
+    "syncStatusBackingUp": "Synchroniseren…",
     "syncStatusWaiting": "Wacht op synchronisatie",
     "syncStatusRetrying": "Verwerken mislukt — opnieuw proberen",
     "syncStatusFailed": "Mislukt — tik op Opnieuw",
@@ -3068,5 +3068,6 @@
     "morePaymentMethodsComingSoon": "Meer betaalmethoden binnenkort",
     "@morePaymentMethodsComingSoon": {
         "description": "Placeholder card text shown under available payment methods"
-    }
+    },
+    "syncProcessingBackgroundHint": "Dit gaat op de achtergrond door — je kunt dit scherm verlaten."
 }

@@ -10729,7 +10729,7 @@
     "recapDeletedSnackbar": "సారాంశం తొలగించబడింది",
     "recapDeleteFailed": "సారాంశాన్ని తొలగించలేకపోయాం. తర్వాత మళ్ళీ ప్రయత్నించండి.",
     "syncStatusBackedUp": "బ్యాకప్ అయింది",
-    "syncStatusBackingUp": "బ్యాకప్ అవుతోంది…",
+    "syncStatusBackingUp": "సమన్వయం చేస్తోంది…",
     "syncStatusWaiting": "సింక్ కోసం వేచి ఉంది",
     "syncStatusRetrying": "ప్రాసెస్ చేయలేకపోయింది — మళ్లీ ప్రయత్నిస్తోంది",
     "syncStatusFailed": "విఫలమైంది — Retry నొక్కండి",
@@ -10763,5 +10763,6 @@
     "morePaymentMethodsComingSoon": "మరిన్ని చెల్లింపు పద్ధతులు త్వరలో",
     "@morePaymentMethodsComingSoon": {
         "description": "Placeholder card text shown under available payment methods"
-    }
+    },
+    "syncProcessingBackgroundHint": "ఇది నేపథ్యంలో కొనసాగుతుంది — మీరు ఈ స్క్రీన్ నుండి వెళ్లిపోవచ్చు."
 }

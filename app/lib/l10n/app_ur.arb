@@ -10729,7 +10729,7 @@
     "recapDeletedSnackbar": "خلاصہ حذف ہو گیا",
     "recapDeleteFailed": "خلاصہ حذف نہیں ہو سکا۔ بعد میں دوبارہ کوشش کریں۔",
     "syncStatusBackedUp": "بیک اپ ہو گیا",
-    "syncStatusBackingUp": "بیک اپ ہو رہا ہے…",
+    "syncStatusBackingUp": "ہم آہنگ کیا جا رہا ہے…",
     "syncStatusWaiting": "سنک ہونے کا منتظر",
     "syncStatusRetrying": "پروسیس نہیں ہو سکا — دوبارہ کوشش",
     "syncStatusFailed": "ناکام — Retry دبائیں",
@@ -10763,5 +10763,6 @@
     "morePaymentMethodsComingSoon": "مزید ادائیگی کے طریقے جلد آرہے ہیں",
     "@morePaymentMethodsComingSoon": {
         "description": "Placeholder card text shown under available payment methods"
-    }
+    },
+    "syncProcessingBackgroundHint": "یہ پس منظر میں جاری رہتا ہے — آپ اس اسکرین سے باہر جا سکتے ہیں۔"
 }

@@ -10729,7 +10729,7 @@
     "recapDeletedSnackbar": "Прегледот е избришан",
     "recapDeleteFailed": "Прегледот не може да се избрише. Обидете се повторно подоцна.",
     "syncStatusBackedUp": "Резервно зачувано",
-    "syncStatusBackingUp": "Се прави резервна копија…",
+    "syncStatusBackingUp": "Синхронизирање…",
     "syncStatusWaiting": "Чека синхронизација",
     "syncStatusRetrying": "Обработката не успеа — нов обид",
     "syncStatusFailed": "Неуспешно — допрете Обиди се повторно",
@@ -10763,5 +10763,6 @@
     "morePaymentMethodsComingSoon": "Наскоро повеќе начини на плаќање",
     "@morePaymentMethodsComingSoon": {
         "description": "Placeholder card text shown under available payment methods"
-    }
+    },
+    "syncProcessingBackgroundHint": "Ова продолжува во заднина — може да го напуштите овој екран."
 }

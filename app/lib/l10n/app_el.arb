@@ -3026,7 +3026,7 @@
     "recapDeletedSnackbar": "Η σύνοψη διαγράφηκε",
     "recapDeleteFailed": "Δεν ήταν δυνατή η διαγραφή της σύνοψης. Δοκιμάστε ξανά αργότερα.",
     "syncStatusBackedUp": "Δημιουργήθηκε αντίγραφο",
-    "syncStatusBackingUp": "Δημιουργία αντιγράφου…",
+    "syncStatusBackingUp": "Συγχρονισμός…",
     "syncStatusWaiting": "Σε αναμονή συγχρονισμού",
     "syncStatusRetrying": "Αποτυχία επεξεργασίας — νέα προσπάθεια",
     "syncStatusFailed": "Απέτυχε — πατήστε Επανάληψη",
@@ -3068,5 +3068,6 @@
     "morePaymentMethodsComingSoon": "Σύντομα περισσότεροι τρόποι πληρωμής",
     "@morePaymentMethodsComingSoon": {
         "description": "Placeholder card text shown under available payment methods"
-    }
+    },
+    "syncProcessingBackgroundHint": "Αυτό συνεχίζεται στο παρασκήνιο — μπορείτε να φύγετε από αυτήν την οθόνη."
 }

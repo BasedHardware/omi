@@ -3026,7 +3026,7 @@
     "recapDeletedSnackbar": "Sammanfattning raderad",
     "recapDeleteFailed": "Det gick inte att radera sammanfattningen. Försök igen senare.",
     "syncStatusBackedUp": "Säkerhetskopierad",
-    "syncStatusBackingUp": "Säkerhetskopierar…",
+    "syncStatusBackingUp": "Synkroniserar…",
     "syncStatusWaiting": "Väntar på synkronisering",
     "syncStatusRetrying": "Kunde inte bearbetas — försöker igen",
     "syncStatusFailed": "Misslyckades — tryck på Försök igen",
@@ -3068,5 +3068,6 @@
     "morePaymentMethodsComingSoon": "Fler betalningsmetoder kommer snart",
     "@morePaymentMethodsComingSoon": {
         "description": "Placeholder card text shown under available payment methods"
-    }
+    },
+    "syncProcessingBackgroundHint": "Detta fortsätter i bakgrunden — du kan lämna den här skärmen."
 }
