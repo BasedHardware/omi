@@ -9384,7 +9384,7 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get syncFlowIntro =>
-      'Els enregistraments es transfereixen del teu dispositiu Omi a aquest telèfon i s\'emmagatzemen localment, després es pugen al servidor d\'Omi on es transcriuen i es converteixen en converses.';
+      'Els enregistraments es transfereixen del teu dispositiu a aquest telèfon i s\'emmagatzemen localment, i després es pugen al servidor d\'Omi, on es transcriuen i es converteixen en converses.';
 
   @override
   String get syncStepUpload => 'Sincronitza';
@@ -9415,7 +9415,7 @@ class AppLocalizationsCa extends AppLocalizations {
   String get syncCardUploadingTitle => 'Pujant a Omi';
 
   @override
-  String get syncCardDownloadingTitle => 'Baixant des d\'Omi';
+  String get syncCardDownloadingTitle => 'S\'està baixant del teu dispositiu';
 
   @override
   String syncCardProgressOf(int current, int total) {
@@ -9423,10 +9423,10 @@ class AppLocalizationsCa extends AppLocalizations {
   }
 
   @override
-  String get syncStatusOnDevice => 'Esperant a Omi';
+  String get syncStatusOnDevice => 'Al teu dispositiu';
 
   @override
-  String get syncStatusDownloadingFromDevice => 'Baixant des d\'Omi';
+  String get syncStatusDownloadingFromDevice => 'S\'està baixant del teu dispositiu';
 
   @override
   String get newestFirst => 'Més recents primer';

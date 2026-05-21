@@ -9413,7 +9413,7 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get syncFlowIntro =>
-      'Les enregistrements sont transférés de votre appareil Omi vers ce téléphone et stockés localement, puis téléversés sur le serveur d\'Omi où ils sont transcrits et convertis en conversations.';
+      'Les enregistrements sont transférés de votre appareil vers ce téléphone et stockés localement, puis envoyés sur le serveur d\'Omi, où ils sont transcrits et transformés en conversations.';
 
   @override
   String get syncStepUpload => 'Synchroniser';
@@ -9444,7 +9444,7 @@ class AppLocalizationsFr extends AppLocalizations {
   String get syncCardUploadingTitle => 'Envoi vers Omi';
 
   @override
-  String get syncCardDownloadingTitle => 'Téléchargement depuis Omi';
+  String get syncCardDownloadingTitle => 'Téléchargement depuis votre appareil';
 
   @override
   String syncCardProgressOf(int current, int total) {
@@ -9452,10 +9452,10 @@ class AppLocalizationsFr extends AppLocalizations {
   }
 
   @override
-  String get syncStatusOnDevice => 'En attente sur Omi';
+  String get syncStatusOnDevice => 'Sur votre appareil';
 
   @override
-  String get syncStatusDownloadingFromDevice => 'Téléchargement depuis Omi';
+  String get syncStatusDownloadingFromDevice => 'Téléchargement depuis votre appareil';
 
   @override
   String get newestFirst => 'Plus récents d\'abord';

@@ -9326,7 +9326,7 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get syncFlowIntro =>
-      'Opptak overføres fra Omi-enheten din til denne telefonen og lagres lokalt, og lastes deretter opp til Omis server, der de transkriberes og gjøres om til samtaler.';
+      'Opptak overføres fra enheten din til denne telefonen og lagres lokalt, og lastes deretter opp til Omis server, der de transkriberes og blir til samtaler.';
 
   @override
   String get syncStepUpload => 'Synkroniser';
@@ -9357,7 +9357,7 @@ class AppLocalizationsNo extends AppLocalizations {
   String get syncCardUploadingTitle => 'Laster opp til Omi';
 
   @override
-  String get syncCardDownloadingTitle => 'Laster ned fra Omi';
+  String get syncCardDownloadingTitle => 'Laster ned fra enheten din';
 
   @override
   String syncCardProgressOf(int current, int total) {
@@ -9365,10 +9365,10 @@ class AppLocalizationsNo extends AppLocalizations {
   }
 
   @override
-  String get syncStatusOnDevice => 'Venter på Omi';
+  String get syncStatusOnDevice => 'På enheten din';
 
   @override
-  String get syncStatusDownloadingFromDevice => 'Laster ned fra Omi';
+  String get syncStatusDownloadingFromDevice => 'Laster ned fra enheten din';
 
   @override
   String get newestFirst => 'Nyeste først';

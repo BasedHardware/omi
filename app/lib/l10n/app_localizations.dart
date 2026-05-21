@@ -17388,7 +17388,7 @@ abstract class AppLocalizations {
   /// No description provided for @syncFlowIntro.
   ///
   /// In en, this message translates to:
-  /// **'Recordings are transferred from your Omi device to this phone and stored locally, then uploaded to Omi\'s server where they\'re transcribed and turned into conversations.'**
+  /// **'Recordings are transferred from your device to this phone and stored locally, then uploaded to Omi\'s server where they\'re transcribed and turned into conversations.'**
   String get syncFlowIntro;
 
   /// No description provided for @syncStepUpload.
@@ -17448,7 +17448,7 @@ abstract class AppLocalizations {
   /// Top status card: phase title when downloading recordings from the Omi device over BLE/Wi-Fi
   ///
   /// In en, this message translates to:
-  /// **'Downloading from Omi'**
+  /// **'Downloading from your device'**
   String get syncCardDownloadingTitle;
 
   /// Top status card: secondary progress line under the phase title.
@@ -17460,13 +17460,13 @@ abstract class AppLocalizations {
   /// Row subtitle for a recording still on the Omi device (SD-card or flash page) that has not been downloaded to the phone yet.
   ///
   /// In en, this message translates to:
-  /// **'Waiting on Omi'**
+  /// **'On your device'**
   String get syncStatusOnDevice;
 
   /// Row subtitle for a recording currently being transferred from the Omi device to the phone.
   ///
   /// In en, this message translates to:
-  /// **'Downloading from Omi'**
+  /// **'Downloading from your device'**
   String get syncStatusDownloadingFromDevice;
 
   /// Subtle sort-order indicator next to the recordings list header so the user knows the newest items are at the top.

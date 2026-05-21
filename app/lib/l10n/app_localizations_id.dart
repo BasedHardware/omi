@@ -9338,7 +9338,7 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get syncFlowIntro =>
-      'Rekaman ditransfer dari perangkat Omi Anda ke ponsel ini dan disimpan secara lokal, lalu diunggah ke server Omi tempat rekaman ditranskripsikan dan diubah menjadi percakapan.';
+      'Rekaman ditransfer dari perangkat Anda ke ponsel ini dan disimpan secara lokal, lalu diunggah ke server Omi tempat rekaman ditranskripsi dan diubah menjadi percakapan.';
 
   @override
   String get syncStepUpload => 'Sinkronkan';
@@ -9369,7 +9369,7 @@ class AppLocalizationsId extends AppLocalizations {
   String get syncCardUploadingTitle => 'Mengunggah ke Omi';
 
   @override
-  String get syncCardDownloadingTitle => 'Mengunduh dari Omi';
+  String get syncCardDownloadingTitle => 'Mengunduh dari perangkat Anda';
 
   @override
   String syncCardProgressOf(int current, int total) {
@@ -9377,10 +9377,10 @@ class AppLocalizationsId extends AppLocalizations {
   }
 
   @override
-  String get syncStatusOnDevice => 'Menunggu di Omi';
+  String get syncStatusOnDevice => 'Di perangkat Anda';
 
   @override
-  String get syncStatusDownloadingFromDevice => 'Mengunduh dari Omi';
+  String get syncStatusDownloadingFromDevice => 'Mengunduh dari perangkat Anda';
 
   @override
   String get newestFirst => 'Terbaru lebih dulu';

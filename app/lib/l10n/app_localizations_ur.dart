@@ -9347,7 +9347,7 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get syncFlowIntro =>
-      'ریکارڈنگز آپ کے Omi ڈیوائس سے اس فون پر منتقل ہوتی ہیں اور مقامی طور پر محفوظ کی جاتی ہیں، پھر Omi کے سرور پر اپ لوڈ کی جاتی ہیں جہاں انہیں نقل کر کے گفتگو میں تبدیل کیا جاتا ہے۔';
+      'ریکارڈنگز آپ کی ڈیوائس سے اس فون پر منتقل ہو کر مقامی طور پر محفوظ ہوتی ہیں، پھر Omi کے سرور پر اپ لوڈ کی جاتی ہیں جہاں انہیں نقل کر کے گفتگو میں تبدیل کیا جاتا ہے۔';
 
   @override
   String get syncStepUpload => 'سنک';
@@ -9378,7 +9378,7 @@ class AppLocalizationsUr extends AppLocalizations {
   String get syncCardUploadingTitle => 'Omi پر اپ لوڈ ہو رہا ہے';
 
   @override
-  String get syncCardDownloadingTitle => 'Omi سے ڈاؤن لوڈ ہو رہا ہے';
+  String get syncCardDownloadingTitle => 'آپ کی ڈیوائس سے ڈاؤن لوڈ ہو رہا ہے';
 
   @override
   String syncCardProgressOf(int current, int total) {
@@ -9386,10 +9386,10 @@ class AppLocalizationsUr extends AppLocalizations {
   }
 
   @override
-  String get syncStatusOnDevice => 'Omi پر منتظر';
+  String get syncStatusOnDevice => 'آپ کی ڈیوائس پر';
 
   @override
-  String get syncStatusDownloadingFromDevice => 'Omi سے ڈاؤن لوڈ ہو رہا ہے';
+  String get syncStatusDownloadingFromDevice => 'آپ کی ڈیوائس سے ڈاؤن لوڈ ہو رہا ہے';
 
   @override
   String get newestFirst => 'پہلے نئی ترین';

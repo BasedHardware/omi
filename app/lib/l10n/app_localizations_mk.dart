@@ -9379,7 +9379,7 @@ class AppLocalizationsMk extends AppLocalizations {
 
   @override
   String get syncFlowIntro =>
-      'Снимките се пренесуваат од вашиот Omi уред на овој телефон и се чуваат локално, потоа се прикачуваат на серверот на Omi, каде што се транскрибираат и претвораат во разговори.';
+      'Снимките се пренесуваат од вашиот уред на овој телефон и се складираат локално, а потоа се прикачуваат на серверот на Omi, каде што се транскрибираат и се претвораат во разговори.';
 
   @override
   String get syncStepUpload => 'Синхронизација';
@@ -9410,7 +9410,7 @@ class AppLocalizationsMk extends AppLocalizations {
   String get syncCardUploadingTitle => 'Се прикачува на Omi';
 
   @override
-  String get syncCardDownloadingTitle => 'Се презема од Omi';
+  String get syncCardDownloadingTitle => 'Се презема од вашиот уред';
 
   @override
   String syncCardProgressOf(int current, int total) {
@@ -9418,10 +9418,10 @@ class AppLocalizationsMk extends AppLocalizations {
   }
 
   @override
-  String get syncStatusOnDevice => 'Чека на Omi';
+  String get syncStatusOnDevice => 'На вашиот уред';
 
   @override
-  String get syncStatusDownloadingFromDevice => 'Се презема од Omi';
+  String get syncStatusDownloadingFromDevice => 'Се презема од вашиот уред';
 
   @override
   String get newestFirst => 'Прво најнови';

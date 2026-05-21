@@ -9327,7 +9327,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get syncFlowIntro =>
-      'Recordings are transferred from your Omi device to this phone and stored locally, then uploaded to Omi\'s server where they\'re transcribed and turned into conversations.';
+      'Recordings are transferred from your device to this phone and stored locally, then uploaded to Omi\'s server where they\'re transcribed and turned into conversations.';
 
   @override
   String get syncStepUpload => 'Sync';
@@ -9357,7 +9357,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get syncCardUploadingTitle => 'Uploading to Omi';
 
   @override
-  String get syncCardDownloadingTitle => 'Downloading from Omi';
+  String get syncCardDownloadingTitle => 'Downloading from your device';
 
   @override
   String syncCardProgressOf(int current, int total) {
@@ -9365,10 +9365,10 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
-  String get syncStatusOnDevice => 'Waiting on Omi';
+  String get syncStatusOnDevice => 'On your device';
 
   @override
-  String get syncStatusDownloadingFromDevice => 'Downloading from Omi';
+  String get syncStatusDownloadingFromDevice => 'Downloading from your device';
 
   @override
   String get newestFirst => 'Newest first';

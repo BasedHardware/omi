@@ -9178,7 +9178,7 @@ class AppLocalizationsKo extends AppLocalizations {
   }
 
   @override
-  String get syncFlowIntro => '녹음은 Omi 기기에서 이 휴대전화로 전송되어 로컬에 저장된 후, Omi 서버로 업로드되어 텍스트로 변환되고 대화로 만들어집니다.';
+  String get syncFlowIntro => '녹음은 기기에서 이 휴대폰으로 전송되어 로컬에 저장된 다음 Omi의 서버에 업로드되어 텍스트로 변환되고 대화로 만들어집니다.';
 
   @override
   String get syncStepUpload => '동기화';
@@ -9208,7 +9208,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get syncCardUploadingTitle => 'Omi에 업로드 중';
 
   @override
-  String get syncCardDownloadingTitle => 'Omi에서 다운로드 중';
+  String get syncCardDownloadingTitle => '기기에서 다운로드 중';
 
   @override
   String syncCardProgressOf(int current, int total) {
@@ -9216,10 +9216,10 @@ class AppLocalizationsKo extends AppLocalizations {
   }
 
   @override
-  String get syncStatusOnDevice => 'Omi에서 대기 중';
+  String get syncStatusOnDevice => '기기에 있음';
 
   @override
-  String get syncStatusDownloadingFromDevice => 'Omi에서 다운로드 중';
+  String get syncStatusDownloadingFromDevice => '기기에서 다운로드 중';
 
   @override
   String get newestFirst => '최신순';

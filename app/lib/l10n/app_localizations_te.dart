@@ -9379,7 +9379,7 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get syncFlowIntro =>
-      'రికార్డింగ్‌లు మీ Omi పరికరం నుండి ఈ ఫోన్‌కు బదిలీ చేయబడి స్థానికంగా నిల్వ చేయబడతాయి, ఆ తర్వాత Omi సర్వర్‌కు అప్‌లోడ్ చేయబడతాయి, అక్కడ అవి లిప్యంతరీకరించబడి సంభాషణలుగా మార్చబడతాయి.';
+      'రికార్డింగ్‌లు మీ పరికరం నుండి ఈ ఫోన్‌కు బదిలీ చేయబడి స్థానికంగా నిల్వ చేయబడతాయి, ఆ తర్వాత Omi సర్వర్‌కు అప్‌లోడ్ చేయబడతాయి, అక్కడ అవి లిప్యంతరీకరించబడి సంభాషణలుగా మార్చబడతాయి.';
 
   @override
   String get syncStepUpload => 'సింక్';
@@ -9410,7 +9410,7 @@ class AppLocalizationsTe extends AppLocalizations {
   String get syncCardUploadingTitle => 'Omi కి అప్‌లోడ్ అవుతోంది';
 
   @override
-  String get syncCardDownloadingTitle => 'Omi నుండి డౌన్‌లోడ్ అవుతోంది';
+  String get syncCardDownloadingTitle => 'మీ పరికరం నుండి డౌన్‌లోడ్ అవుతోంది';
 
   @override
   String syncCardProgressOf(int current, int total) {
@@ -9418,10 +9418,10 @@ class AppLocalizationsTe extends AppLocalizations {
   }
 
   @override
-  String get syncStatusOnDevice => 'Omi లో వేచి ఉంది';
+  String get syncStatusOnDevice => 'మీ పరికరంలో';
 
   @override
-  String get syncStatusDownloadingFromDevice => 'Omi నుండి డౌన్‌లోడ్ అవుతోంది';
+  String get syncStatusDownloadingFromDevice => 'మీ పరికరం నుండి డౌన్‌లోడ్ అవుతోంది';
 
   @override
   String get newestFirst => 'కొత్తవి మొదట';

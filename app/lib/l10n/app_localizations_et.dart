@@ -9327,7 +9327,7 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get syncFlowIntro =>
-      'Salvestused kantakse sinu Omi seadmest sellesse telefoni ja salvestatakse kohapeal, seejärel laaditakse üles Omi serverisse, kus need transkribeeritakse ja muudetakse vestlusteks.';
+      'Salvestised kantakse sinu seadmest sellesse telefoni ja salvestatakse kohapeal ning seejärel laaditakse üles Omi serverisse, kus need transkribeeritakse ja muudetakse vestlusteks.';
 
   @override
   String get syncStepUpload => 'Sünkrooni';
@@ -9358,7 +9358,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String get syncCardUploadingTitle => 'Üleslaadimine Omisse';
 
   @override
-  String get syncCardDownloadingTitle => 'Allalaadimine Omist';
+  String get syncCardDownloadingTitle => 'Allalaadimine sinu seadmest';
 
   @override
   String syncCardProgressOf(int current, int total) {
@@ -9366,10 +9366,10 @@ class AppLocalizationsEt extends AppLocalizations {
   }
 
   @override
-  String get syncStatusOnDevice => 'Ootab Omis';
+  String get syncStatusOnDevice => 'Sinu seadmes';
 
   @override
-  String get syncStatusDownloadingFromDevice => 'Allalaadimine Omist';
+  String get syncStatusDownloadingFromDevice => 'Allalaadimine sinu seadmest';
 
   @override
   String get newestFirst => 'Uusimad esmalt';

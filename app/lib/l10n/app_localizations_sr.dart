@@ -9344,7 +9344,7 @@ class AppLocalizationsSr extends AppLocalizations {
 
   @override
   String get syncFlowIntro =>
-      'Снимци се преносе са вашег Omi уређаја на овај телефон и чувају локално, а затим се отпремају на Omi сервер где се транскрибују и претварају у разговоре.';
+      'Снимци се преносе са вашег уређаја на овај телефон и чувају локално, а затим отпремају на Omi сервер где се транскрибују и претварају у разговоре.';
 
   @override
   String get syncStepUpload => 'Синхронизација';
@@ -9374,7 +9374,7 @@ class AppLocalizationsSr extends AppLocalizations {
   String get syncCardUploadingTitle => 'Отпремање на Omi';
 
   @override
-  String get syncCardDownloadingTitle => 'Преузимање са Omi';
+  String get syncCardDownloadingTitle => 'Преузимање са вашег уређаја';
 
   @override
   String syncCardProgressOf(int current, int total) {
@@ -9382,10 +9382,10 @@ class AppLocalizationsSr extends AppLocalizations {
   }
 
   @override
-  String get syncStatusOnDevice => 'Чека на Omi';
+  String get syncStatusOnDevice => 'На вашем уређају';
 
   @override
-  String get syncStatusDownloadingFromDevice => 'Преузимање са Omi';
+  String get syncStatusDownloadingFromDevice => 'Преузимање са вашег уређаја';
 
   @override
   String get newestFirst => 'Прво најновије';
