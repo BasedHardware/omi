@@ -1,5 +1,9 @@
 {
-  "unreleased": [],
+  "unreleased": [
+    "Reduced Sentry error noise: filter transient network/socket errors and rate-limit repeated identical errors so a single root cause no longer floods crash reporting",
+    "Fixed a database constraint crash when recording video-based screenshots with no legacy image path",
+    "Raised app-hang reporting threshold to 3s so only sustained freezes are flagged"
+  ],
   "releases": [
     {
       "version": "0.11.414",
