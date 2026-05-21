@@ -6,12 +6,12 @@ lookups using public Open-Meteo APIs.
 """
 
 from datetime import datetime
-from typing import Any, Optional
+from typing import Any, Literal, Optional
 
 import httpx
 from fastapi import FastAPI
 from fastapi.responses import HTMLResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 GEOCODING_URL = "https://geocoding-api.open-meteo.com/v1/search"
@@ -36,33 +36,22 @@ class ChatToolResponse(BaseModel):
 
 
 class CurrentWeatherRequest(BaseModel):
-    location: str
-    temperature_unit: str = "celsius"
+    location: str = Field(..., min_length=1, max_length=120)
+    temperature_unit: Literal["celsius", "fahrenheit"] = "celsius"
 
 
 class ForecastRequest(BaseModel):
-    location: str
-    days: int = 3
-    temperature_unit: str = "celsius"
+    location: str = Field(..., min_length=1, max_length=120)
+    days: int = Field(default=3, ge=1, le=MAX_FORECAST_DAYS)
+    temperature_unit: Literal["celsius", "fahrenheit"] = "celsius"
 
 
 class AirQualityRequest(BaseModel):
-    location: str
+    location: str = Field(..., min_length=1, max_length=120)
 
 
 def _clean_location(value: str) -> str:
     return " ".join(value.strip().split())
-
-
-def _normalize_temperature_unit(value: str) -> str:
-    unit = value.strip().lower()
-    if unit in {"fahrenheit", "f"}:
-        return "fahrenheit"
-    return "celsius"
-
-
-def _clamp_days(value: int) -> int:
-    return max(1, min(MAX_FORECAST_DAYS, value))
 
 
 def _format_number(value: Any, suffix: str = "") -> str:
@@ -141,11 +130,10 @@ async def _resolve_location(client: httpx.AsyncClient, location: str) -> tuple[O
     return results[0], None
 
 
-async def _request_json(url: str, params: dict[str, Any]) -> dict[str, Any]:
-    async with httpx.AsyncClient(timeout=REQUEST_TIMEOUT_SECONDS) as client:
-        response = await client.get(url, params=params)
-        response.raise_for_status()
-        return response.json()
+async def _request_json(client: httpx.AsyncClient, url: str, params: dict[str, Any]) -> dict[str, Any]:
+    response = await client.get(url, params=params)
+    response.raise_for_status()
+    return response.json()
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -231,7 +219,7 @@ async def omi_tools() -> dict[str, Any]:
 
 @app.post("/tools/get_current_weather", response_model=ChatToolResponse)
 async def get_current_weather(request: CurrentWeatherRequest) -> ChatToolResponse:
-    unit = _normalize_temperature_unit(request.temperature_unit)
+    unit = request.temperature_unit
 
     try:
         async with httpx.AsyncClient(timeout=REQUEST_TIMEOUT_SECONDS) as client:
@@ -240,6 +228,7 @@ async def get_current_weather(request: CurrentWeatherRequest) -> ChatToolRespons
                 return ChatToolResponse(error=error)
 
             payload = await _request_json(
+                client,
                 FORECAST_URL,
                 {
                     "latitude": place["latitude"],
@@ -281,8 +270,8 @@ async def get_current_weather(request: CurrentWeatherRequest) -> ChatToolRespons
 
 @app.post("/tools/get_weather_forecast", response_model=ChatToolResponse)
 async def get_weather_forecast(request: ForecastRequest) -> ChatToolResponse:
-    unit = _normalize_temperature_unit(request.temperature_unit)
-    days = _clamp_days(request.days)
+    unit = request.temperature_unit
+    days = request.days
 
     try:
         async with httpx.AsyncClient(timeout=REQUEST_TIMEOUT_SECONDS) as client:
@@ -291,6 +280,7 @@ async def get_weather_forecast(request: ForecastRequest) -> ChatToolResponse:
                 return ChatToolResponse(error=error)
 
             payload = await _request_json(
+                client,
                 FORECAST_URL,
                 {
                     "latitude": place["latitude"],
@@ -336,6 +326,7 @@ async def get_air_quality(request: AirQualityRequest) -> ChatToolResponse:
                 return ChatToolResponse(error=error)
 
             payload = await _request_json(
+                client,
                 AIR_QUALITY_URL,
                 {
                     "latitude": place["latitude"],
