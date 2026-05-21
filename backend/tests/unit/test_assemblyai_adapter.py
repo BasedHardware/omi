@@ -48,8 +48,8 @@ def _completed_transcript():
         'id': 'aai-transcript-1',
         'status': 'completed',
         'language_code': 'en_us',
-        'speech_model': 'universal-2',
-        'audio_duration': 2500,
+        'speech_model_used': 'universal-2',
+        'audio_duration': 2.5,
         'utterances': [
             {
                 'speaker': 'A',
@@ -111,6 +111,7 @@ def test_assemblyai_transcribe_url_submits_diarization_and_polls_to_completion()
     submit_payload = fake_client.requests[0][2]['json']
     assert submit_payload['audio_url'] == 'https://example.test/audio.wav'
     assert submit_payload['speaker_labels'] is True
+    assert submit_payload['speech_models'] == ['universal-2']
     assert submit_payload['speakers_expected'] == 2
     assert submit_payload['language_detection'] is True
     assert submit_payload['keyterms_prompt'] == ['Omi']

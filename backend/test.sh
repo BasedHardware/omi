@@ -14,6 +14,11 @@ pytest tests/unit/test_speaker_sample_migration.py -v
 pytest tests/unit/test_short_audio_embedding.py -v
 pytest tests/unit/test_users_add_sample_transaction.py -v
 pytest tests/unit/test_voice_message_language.py -v
+pytest tests/unit/test_assemblyai_adapter.py -v
+pytest tests/unit/test_background_provider_service.py -v
+pytest tests/unit/test_conversation_reconstructor.py -v
+pytest tests/unit/test_provider_evaluation.py -v
+pytest tests/unit/test_transcription_provider_usage.py -v
 pytest tests/unit/test_speaker_assignment.py -v
 pytest tests/unit/test_speaker_id_pipeline.py -v
 pytest tests/unit/test_user_speaker_embedding.py -v

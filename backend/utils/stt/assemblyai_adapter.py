@@ -49,9 +49,9 @@ def normalize_assemblyai_transcript_result(
 
     return ProviderTranscriptResult(
         provider=STTProviderName.assemblyai.value,
-        model=result.get('speech_model') or model,
+        model=result.get('speech_model_used') or result.get('speech_model') or model,
         language=_normalize_language(result.get('language_code') or language),
-        duration=_milliseconds_to_seconds(result.get('audio_duration')),
+        duration=_seconds_float(result.get('audio_duration')),
         words=words,
         utterances=utterances,
         raw_provider_result_id=result.get('id'),
@@ -88,6 +88,12 @@ def _milliseconds_to_seconds(value) -> float:
     if value is None:
         return 0.0
     return float(value) / 1000.0
+
+
+def _seconds_float(value) -> float:
+    if value is None:
+        return 0.0
+    return float(value)
 
 
 def _normalize_language(language: Optional[str]) -> Optional[str]:
@@ -200,7 +206,7 @@ class AssemblyAIAsyncTranscriptionProvider:
             'format_text': True,
         }
         if model:
-            payload['speech_model'] = model
+            payload['speech_models'] = [model] if isinstance(model, str) else list(model)
         if speakers_count:
             payload['speakers_expected'] = speakers_count
         if language and language != 'multi':

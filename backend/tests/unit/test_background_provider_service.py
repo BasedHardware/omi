@@ -1,5 +1,6 @@
 import os
 import sys
+import types
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -11,6 +12,7 @@ for mod_name in ['deepgram', 'deepgram.clients', 'deepgram.clients.live', 'deepg
 
 sys.modules['deepgram'].DeepgramClient = MagicMock
 sys.modules['deepgram'].DeepgramClientOptions = MagicMock
+sys.modules.setdefault('database._client', types.SimpleNamespace(db=MagicMock()))
 
 os.environ.setdefault('DEEPGRAM_API_KEY', 'fake-for-test')
 
