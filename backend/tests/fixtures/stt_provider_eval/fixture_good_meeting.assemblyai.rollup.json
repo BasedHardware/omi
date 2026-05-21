@@ -1,0 +1,12 @@
+{
+  "run_count": 1,
+  "status_counts": {
+    "succeeded": 1
+  },
+  "raw_audio_seconds": 5.0,
+  "speech_active_seconds": 4.5,
+  "billable_seconds": 5.0,
+  "estimated_cost_usd": 0.00020,
+  "retry_count": 0,
+  "fallback_count": 0
+}

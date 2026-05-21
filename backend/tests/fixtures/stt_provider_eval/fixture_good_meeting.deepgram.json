@@ -1,0 +1,23 @@
+{
+  "segments": [
+    {
+      "text": "We should launch the beta next Monday.",
+      "start": 0.0,
+      "end": 2.2,
+      "provider_cluster_id": "0",
+      "provider_speaker_label": "SPEAKER_00",
+      "person_id": "person_alex",
+      "speaker_identity_state": "identified",
+      "speaker_identity_confidence": 0.91
+    },
+    {
+      "text": "I will prepare the dashboard before then.",
+      "start": 2.5,
+      "end": 4.8,
+      "provider_cluster_id": "1",
+      "provider_speaker_label": "SPEAKER_01",
+      "speaker_identity_state": "unknown",
+      "speaker_identity_confidence": 0.42
+    }
+  ]
+}

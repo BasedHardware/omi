@@ -1,0 +1,23 @@
+{
+  "segments": [
+    {
+      "text": "We should launch the beta next Monday.",
+      "start": 0.1,
+      "end": 2.3,
+      "provider_cluster_id": "A",
+      "provider_speaker_label": "ASSEMBLYAI_SPEAKER_A",
+      "person_id": "person_alex",
+      "speaker_identity_state": "identified",
+      "speaker_identity_confidence": 0.88
+    },
+    {
+      "text": "I will prepare the dashboard before then.",
+      "start": 2.6,
+      "end": 4.9,
+      "provider_cluster_id": "B",
+      "provider_speaker_label": "ASSEMBLYAI_SPEAKER_B",
+      "speaker_identity_state": "unknown",
+      "speaker_identity_confidence": 0.46
+    }
+  ]
+}
