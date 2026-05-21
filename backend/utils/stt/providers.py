@@ -1,3 +1,4 @@
+import os
 from enum import Enum
 from typing import Callable, List, Optional, Protocol, Sequence, Tuple, Union
 
@@ -5,6 +6,7 @@ from models.transcript_segment import ProviderTranscriptResult
 
 
 class STTProviderName(str, Enum):
+    assemblyai = 'assemblyai'
     deepgram = 'deepgram'
 
 
@@ -69,12 +71,18 @@ class SpeakerIdentityProvider(Protocol):
     provider_name: str
 
 
-_PRERECORDED_WORKLOAD_PROVIDERS = {
+_DEFAULT_PRERECORDED_WORKLOAD_PROVIDERS = {
     STTWorkload.background: STTProviderName.deepgram,
     STTWorkload.postprocess: STTProviderName.deepgram,
     STTWorkload.ptt: STTProviderName.deepgram,
     STTWorkload.sync: STTProviderName.deepgram,
     STTWorkload.voice_message: STTProviderName.deepgram,
+}
+
+_ASSEMBLYAI_ELIGIBLE_WORKLOADS = {
+    STTWorkload.background,
+    STTWorkload.postprocess,
+    STTWorkload.sync,
 }
 
 _STREAMING_WORKLOAD_PROVIDERS = {
@@ -84,8 +92,42 @@ _STREAMING_WORKLOAD_PROVIDERS = {
 
 
 def get_prerecorded_provider_name(workload: STTWorkload) -> STTProviderName:
-    return _PRERECORDED_WORKLOAD_PROVIDERS[STTWorkload(workload)]
+    workload = STTWorkload(workload)
+    if _assemblyai_background_enabled() and workload in _assemblyai_enabled_workloads():
+        return STTProviderName.assemblyai
+    return _DEFAULT_PRERECORDED_WORKLOAD_PROVIDERS[workload]
 
 
 def get_streaming_provider_name(workload: STTWorkload) -> STTProviderName:
     return _STREAMING_WORKLOAD_PROVIDERS[STTWorkload(workload)]
+
+
+def get_fallback_prerecorded_provider_name(
+    provider: STTProviderName, workload: STTWorkload
+) -> Optional[STTProviderName]:
+    workload = STTWorkload(workload)
+    provider = STTProviderName(provider)
+    fallback = _DEFAULT_PRERECORDED_WORKLOAD_PROVIDERS[workload]
+    if provider != fallback:
+        return fallback
+    return None
+
+
+def _assemblyai_background_enabled() -> bool:
+    return os.getenv('ASSEMBLYAI_BACKGROUND_STT_ENABLED', 'false').lower() == 'true'
+
+
+def _assemblyai_enabled_workloads() -> set[STTWorkload]:
+    configured = os.getenv('ASSEMBLYAI_BACKGROUND_STT_WORKLOADS', 'sync,background,postprocess')
+    workloads = set()
+    for raw_value in configured.split(','):
+        value = raw_value.strip()
+        if not value:
+            continue
+        try:
+            workload = STTWorkload(value)
+        except ValueError:
+            continue
+        if workload in _ASSEMBLYAI_ELIGIBLE_WORKLOADS:
+            workloads.add(workload)
+    return workloads

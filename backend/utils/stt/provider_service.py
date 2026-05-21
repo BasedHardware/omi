@@ -1,12 +1,19 @@
 import logging
+import os
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import List, Optional, Sequence, Tuple
 
 from models.transcript_segment import ProviderTranscriptResult, TranscriptSegment
+from utils.stt.assemblyai_adapter import AssemblyAIAsyncTranscriptionProvider
 from utils.stt.conversation_reconstructor import reconstruct_conversation
 from utils.stt.deepgram_adapter import provider_result_to_legacy_words
-from utils.stt.providers import STTProviderName, STTWorkload, get_prerecorded_provider_name
+from utils.stt.providers import (
+    STTProviderName,
+    STTWorkload,
+    get_fallback_prerecorded_provider_name,
+    get_prerecorded_provider_name,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -49,6 +56,10 @@ def _deepgram_prerecorded_provider():
     return _provider()
 
 
+def _assemblyai_prerecorded_provider():
+    return AssemblyAIAsyncTranscriptionProvider()
+
+
 def get_deepgram_model_for_language(language: str) -> Tuple[str, str]:
     from utils.stt.pre_recorded import get_deepgram_model_for_language as _get_deepgram_model_for_language
 
@@ -84,6 +95,7 @@ def transcribe_url(
 ) -> PrerecordedTranscriptionResponse:
     workload = STTWorkload(workload)
     provider_name = get_prerecorded_provider_name(workload)
+    model = _model_for_provider(provider_name, model)
     provider = _get_prerecorded_provider(provider_name)
     started_at = datetime.now(timezone.utc)
     run_id = _create_run(uid, provider_name.value, model, workload.value, conversation_id, started_at)
@@ -120,6 +132,31 @@ def transcribe_url(
         )
     except Exception as e:
         _finalize_failed_run(run_id, provider_name.value, model, workload.value, started_at, e, raw_audio_seconds)
+        fallback_provider_name = get_fallback_prerecorded_provider_name(provider_name, workload)
+        if fallback_provider_name:
+            logger.warning(
+                'provider prerecorded url transcription falling back workload=%s from_provider=%s to_provider=%s: %s',
+                workload.value,
+                provider_name.value,
+                fallback_provider_name.value,
+                e,
+            )
+            return _transcribe_url_with_provider(
+                fallback_provider_name,
+                audio_url,
+                workload,
+                uid=uid,
+                conversation_id=conversation_id,
+                speakers_count=speakers_count,
+                return_language=return_language,
+                diarize=diarize,
+                language=language,
+                model=_model_for_provider(fallback_provider_name, model),
+                keywords=keywords,
+                skip_n_seconds=skip_n_seconds,
+                raw_audio_seconds=raw_audio_seconds,
+                fallback_from_provider=provider_name.value,
+            )
         raise RuntimeError(f'{provider_name.value} transcription failed after 2 attempts: {e}')
 
 
@@ -141,6 +178,7 @@ def transcribe_bytes(
 ) -> PrerecordedTranscriptionResponse:
     workload = STTWorkload(workload)
     provider_name = get_prerecorded_provider_name(workload)
+    model = _model_for_provider(provider_name, model)
     provider = _get_prerecorded_provider(provider_name)
     started_at = datetime.now(timezone.utc)
     run_id = _create_run(uid, provider_name.value, model, workload.value, conversation_id, started_at)
@@ -179,13 +217,180 @@ def transcribe_bytes(
         )
     except Exception as e:
         _finalize_failed_run(run_id, provider_name.value, model, workload.value, started_at, e, raw_audio_seconds)
+        fallback_provider_name = get_fallback_prerecorded_provider_name(provider_name, workload)
+        if fallback_provider_name:
+            logger.warning(
+                'provider prerecorded bytes transcription falling back workload=%s from_provider=%s to_provider=%s: %s',
+                workload.value,
+                provider_name.value,
+                fallback_provider_name.value,
+                e,
+            )
+            return _transcribe_bytes_with_provider(
+                fallback_provider_name,
+                audio_bytes,
+                workload,
+                uid=uid,
+                conversation_id=conversation_id,
+                sample_rate=sample_rate,
+                diarize=diarize,
+                encoding=encoding,
+                channels=channels,
+                language=language,
+                model=_model_for_provider(fallback_provider_name, model),
+                return_language=return_language,
+                keywords=keywords,
+                skip_n_seconds=skip_n_seconds,
+                raw_audio_seconds=raw_audio_seconds,
+                fallback_from_provider=provider_name.value,
+            )
         raise RuntimeError(f'{provider_name.value} transcription failed after 2 attempts: {e}')
 
 
 def _get_prerecorded_provider(provider_name: STTProviderName):
+    if provider_name == STTProviderName.assemblyai:
+        return _assemblyai_prerecorded_provider()
     if provider_name == STTProviderName.deepgram:
         return _deepgram_prerecorded_provider()
     raise ValueError(f'Unsupported prerecorded STT provider: {provider_name}')
+
+
+def _model_for_provider(provider_name: STTProviderName, requested_model: str) -> str:
+    if provider_name == STTProviderName.assemblyai and str(requested_model or '').startswith('nova-'):
+        return os.getenv('ASSEMBLYAI_STT_MODEL', 'universal-2')
+    if provider_name == STTProviderName.deepgram and str(requested_model or '').startswith('universal-'):
+        return 'nova-3'
+    return requested_model
+
+
+def _transcribe_url_with_provider(
+    provider_name: STTProviderName,
+    audio_url: str,
+    workload: STTWorkload,
+    uid: Optional[str] = None,
+    conversation_id: Optional[str] = None,
+    speakers_count: int = None,
+    return_language: bool = False,
+    diarize: bool = True,
+    language: Optional[str] = None,
+    model: str = 'nova-3',
+    keywords: Optional[Sequence[str]] = None,
+    skip_n_seconds: int = 0,
+    raw_audio_seconds: float = 0.0,
+    fallback_from_provider: Optional[str] = None,
+) -> PrerecordedTranscriptionResponse:
+    provider = _get_prerecorded_provider(provider_name)
+    started_at = datetime.now(timezone.utc)
+    run_id = _create_run(uid, provider_name.value, model, workload.value, conversation_id, started_at)
+    try:
+        provider_result, detected_language, retry_count = _transcribe_url_with_retry(
+            provider,
+            audio_url,
+            speakers_count=speakers_count,
+            return_language=return_language,
+            diarize=diarize,
+            language=language,
+            model=model,
+            keywords=keywords,
+        )
+        return _build_success_response(
+            run_id,
+            provider_result,
+            workload,
+            started_at,
+            retry_count,
+            raw_audio_seconds,
+            skip_n_seconds,
+            fallback_from_provider=fallback_from_provider,
+            detected_language=detected_language,
+        )
+    except Exception as e:
+        _finalize_failed_run(run_id, provider_name.value, model, workload.value, started_at, e, raw_audio_seconds)
+        raise RuntimeError(f'{provider_name.value} transcription failed after 2 attempts: {e}')
+
+
+def _transcribe_bytes_with_provider(
+    provider_name: STTProviderName,
+    audio_bytes: bytes,
+    workload: STTWorkload,
+    uid: Optional[str] = None,
+    conversation_id: Optional[str] = None,
+    sample_rate: int = 16000,
+    diarize: bool = True,
+    encoding: Optional[str] = None,
+    channels: int = 1,
+    language: Optional[str] = None,
+    model: str = 'nova-3',
+    return_language: bool = False,
+    keywords: Optional[Sequence[str]] = None,
+    skip_n_seconds: int = 0,
+    raw_audio_seconds: float = 0.0,
+    fallback_from_provider: Optional[str] = None,
+) -> PrerecordedTranscriptionResponse:
+    provider = _get_prerecorded_provider(provider_name)
+    started_at = datetime.now(timezone.utc)
+    run_id = _create_run(uid, provider_name.value, model, workload.value, conversation_id, started_at)
+    try:
+        provider_result, detected_language, retry_count = _transcribe_bytes_with_retry(
+            provider,
+            audio_bytes,
+            sample_rate=sample_rate,
+            diarize=diarize,
+            encoding=encoding,
+            channels=channels,
+            language=language,
+            model=model,
+            return_language=return_language,
+            keywords=keywords,
+        )
+        return _build_success_response(
+            run_id,
+            provider_result,
+            workload,
+            started_at,
+            retry_count,
+            raw_audio_seconds,
+            skip_n_seconds,
+            fallback_from_provider=fallback_from_provider,
+            detected_language=detected_language,
+        )
+    except Exception as e:
+        _finalize_failed_run(run_id, provider_name.value, model, workload.value, started_at, e, raw_audio_seconds)
+        raise RuntimeError(f'{provider_name.value} transcription failed after 2 attempts: {e}')
+
+
+def _build_success_response(
+    run_id: Optional[str],
+    provider_result: ProviderTranscriptResult,
+    workload: STTWorkload,
+    started_at: datetime,
+    retry_count: int,
+    raw_audio_seconds: float,
+    skip_n_seconds: int,
+    fallback_from_provider: Optional[str] = None,
+    detected_language: Optional[str] = None,
+) -> PrerecordedTranscriptionResponse:
+    segments = reconstruct_conversation(provider_result, skip_n_seconds=skip_n_seconds)
+    words = provider_result_to_legacy_words(provider_result)
+    _finalize_run(
+        run_id,
+        provider_result,
+        workload,
+        started_at,
+        'succeeded',
+        retry_count=retry_count,
+        raw_audio_seconds=raw_audio_seconds or provider_result.duration or 0.0,
+        segments=segments,
+        fallback_count=1 if fallback_from_provider else 0,
+        fallback_provider=fallback_from_provider,
+    )
+    return PrerecordedTranscriptionResponse(
+        result=provider_result,
+        detected_language=detected_language,
+        segments=segments,
+        words=words,
+        run_id=run_id,
+    )
 
 
 def _transcribe_url_with_retry(
@@ -269,6 +474,8 @@ def _finalize_run(
     retry_count: int,
     raw_audio_seconds: float,
     segments: List[TranscriptSegment],
+    fallback_count: int = 0,
+    fallback_provider: Optional[str] = None,
 ) -> None:
     if not run_id:
         return
@@ -288,6 +495,7 @@ def _finalize_run(
             speech_active_seconds=raw_audio_seconds,
             billable_seconds=raw_audio_seconds,
             retry_count=retry_count,
+            fallback_count=fallback_count,
             transcript_segment_count=len(segments),
             transcript_word_count=len(result.words),
             speaker_cluster_count=len(clusters),
@@ -295,9 +503,17 @@ def _finalize_run(
                 {segment.provider_cluster_id for segment in segments if segment.person_id}
             ),
             identity_confidence_summary=summarize_identity_confidences(confidences),
+            artifact_refs=_provider_artifact_refs(result),
+            fallback_provider=fallback_provider,
         )
     except Exception as e:
         logger.warning('failed to finalize transcription provider run ledger run_id=%s: %s', run_id, e)
+
+
+def _provider_artifact_refs(result: ProviderTranscriptResult) -> dict[str, str]:
+    if not result.raw_provider_result_id:
+        return {}
+    return {'provider_result_id': result.raw_provider_result_id}
 
 
 def _finalize_failed_run(
