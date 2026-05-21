@@ -29,12 +29,11 @@ _STORAGE_CHUNK_SEM = threading.BoundedSemaphore(32)
 _PRECACHE_FILE_SEM = threading.BoundedSemaphore(4)
 _CHUNK_WINDOW_SIZE = 8
 
-# Duplicate merge tracking — logs when the same audio file is merged concurrently
-# or re-merged within a short window. Data for future architecture decisions.
 _merge_tracker_lock = threading.Lock()
-_active_merges: dict[str, float] = {}  # cache_path → start timestamp
-_recent_merges: dict[str, tuple[float, str]] = {}  # cache_path → (completion_time, caller)
-_RECENT_MERGE_WINDOW = 300  # 5 minutes
+_active_merges: dict[str, float] = {}
+_recent_merges: dict[str, tuple[float, str]] = {}
+_RECENT_MERGE_WINDOW = 300
+_MERGE_TRACKER_MAX = 2000
 
 # Opus encoding constants
 OPUS_SAMPLE_RATE = 16000
@@ -893,9 +892,10 @@ def get_or_create_merged_audio(
     cache_path = get_cached_merged_audio_path(uid, conversation_id, audio_file_id)
     cache_blob = bucket.blob(cache_path)
 
-    # Check if cached version exists and is not expired
+    n_chunks = len(timestamps)
+    log_ctx = f'uid={uid} convo={conversation_id} file={audio_file_id} caller={caller} chunks={n_chunks}'
+
     if cache_blob.exists():
-        # Check custom metadata for expiry
         cache_blob.reload()
         metadata = cache_blob.metadata or {}
         expires_at_str = metadata.get('expires_at')
@@ -904,33 +904,28 @@ def get_or_create_merged_audio(
             try:
                 expires_at = datetime.datetime.fromisoformat(expires_at_str)
                 if datetime.datetime.now(datetime.timezone.utc) < expires_at:
-                    logger.info(f"[MERGE-CACHE-HIT] caller={caller} path={cache_path} chunks={len(timestamps)}")
+                    logger.info(f'audio_merge cache_hit {log_ctx}')
                     return cache_blob.download_as_bytes(), True
                 else:
-                    logger.warning(f"[MERGE-CACHE-EXPIRED] caller={caller} path={cache_path}")
+                    logger.info(f'audio_merge cache_expired {log_ctx}')
             except (ValueError, TypeError):
                 pass
 
-    # Cache miss — check for duplicate/concurrent merge attempts
     now = time.monotonic()
     with _merge_tracker_lock:
         if cache_path in _active_merges:
             elapsed = now - _active_merges[cache_path]
-            logger.warning(
-                f"[MERGE-DUPLICATE-CONCURRENT] caller={caller} path={cache_path} "
-                f"chunks={len(timestamps)} already_running_for={elapsed:.1f}s"
-            )
+            logger.warning(f'audio_merge duplicate_concurrent {log_ctx} running_for={elapsed:.1f}s')
         if cache_path in _recent_merges:
             prev_time, prev_caller = _recent_merges[cache_path]
             age = now - prev_time
             if age < _RECENT_MERGE_WINDOW:
-                logger.warning(
-                    f"[MERGE-DUPLICATE-RECENT] caller={caller} path={cache_path} "
-                    f"chunks={len(timestamps)} prev_caller={prev_caller} prev_age={age:.1f}s"
-                )
+                logger.warning(f'audio_merge duplicate_recent {log_ctx} prev_caller={prev_caller} age={age:.0f}s')
         _active_merges[cache_path] = now
+        if len(_active_merges) > _MERGE_TRACKER_MAX:
+            _active_merges.clear()
 
-    logger.info(f"[MERGE-CACHE-MISS] caller={caller} path={cache_path} chunks={len(timestamps)}")
+    logger.info(f'audio_merge cache_miss {log_ctx}')
 
     merge_start = time.monotonic()
     try:
@@ -942,8 +937,7 @@ def get_or_create_merged_audio(
         with _merge_tracker_lock:
             _active_merges.pop(cache_path, None)
             _recent_merges[cache_path] = (time.monotonic(), caller)
-            # Evict stale entries to prevent unbounded growth
-            if len(_recent_merges) > 1000:
+            if len(_recent_merges) > _MERGE_TRACKER_MAX:
                 cutoff = time.monotonic() - _RECENT_MERGE_WINDOW
                 stale = [k for k, (t, _) in _recent_merges.items() if t < cutoff]
                 for k in stale:
@@ -952,10 +946,8 @@ def get_or_create_merged_audio(
     wav_data = pcm_to_wav_func(pcm_data)
     del pcm_data
 
-    logger.info(
-        f"[MERGE-COMPLETE] caller={caller} path={cache_path} "
-        f"chunks={len(timestamps)} duration={merge_duration:.1f}s size={len(wav_data)}"
-    )
+    wav_kb = len(wav_data) // 1024
+    logger.info(f'audio_merge complete {log_ctx} duration={merge_duration:.1f}s size={wav_kb}KB')
 
     def _upload_to_cache():
         try:
@@ -965,9 +957,9 @@ def get_or_create_merged_audio(
                 'audio_file_id': audio_file_id,
             }
             cache_blob.upload_from_string(wav_data, content_type='audio/wav')
-            logger.info(f"[MERGE-CACHED] caller={caller} path={cache_path}")
+            logger.info(f'audio_merge cached {log_ctx}')
         except Exception as e:
-            logger.error(f"[MERGE-CACHE-UPLOAD-FAILED] caller={caller} path={cache_path}: {e}")
+            logger.error(f'audio_merge cache_upload_failed {log_ctx}: {e}')
 
     storage_executor.submit(_upload_to_cache)
 
