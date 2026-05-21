@@ -2306,7 +2306,11 @@ actor RewindDatabase {
         }
 
         return try dbQueue.write { db -> Screenshot in
-            let record = screenshot
+            var record = screenshot
+            // The `imagePath` column is NOT NULL in the schema, but the model field is
+            // optional (nil for video-based screenshots). Coalesce nil → "" so a video
+            // screenshot never trips a NOT NULL constraint violation on insert.
+            if record.imagePath == nil { record.imagePath = "" }
             try record.insert(db)
             return record
         }
