@@ -1,8 +1,13 @@
 {
-  "unreleased": [
-    "Fixed memories created on desktop showing up under \"Manual\" on mobile \u2014 they now appear under \"About You\" or \"Insights\" based on their type"
-  ],
+  "unreleased": [],
   "releases": [
+    {
+      "version": "0.11.413",
+      "date": "2026-05-21",
+      "changes": [
+        "Fixed memories created on desktop showing up under \"Manual\" on mobile \u2014 they now appear under \"About You\" or \"Insights\" based on their type"
+      ]
+    },
     {
       "version": "0.11.411",
       "date": "2026-05-18",
