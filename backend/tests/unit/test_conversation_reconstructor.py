@@ -48,6 +48,26 @@ def test_reconstructs_word_only_provider_result_with_stable_ordering_and_cluster
     assert segments[1].provider_cluster_id == 'cluster-b'
 
 
+def test_reconstructs_label_only_provider_result_without_collapsing_clusters():
+    result = ProviderTranscriptResult(
+        provider='test-provider',
+        model='async-model',
+        words=[
+            _word('hello', 0.0, 0.4, label='A'),
+            _word('there', 0.5, 0.8, label='A'),
+            _word('hi', 1.0, 1.2, label='B'),
+        ],
+    )
+
+    segments = reconstruct_conversation(result)
+
+    assert [segment.text for segment in segments] == ['Hello there', 'Hi']
+    assert segments[0].provider_cluster_id is None
+    assert segments[0].provider_speaker_label == 'A'
+    assert segments[0].speaker_identity_state == 'unknown'
+    assert segments[1].provider_speaker_label == 'B'
+
+
 def test_reconstructs_utterance_only_provider_result_with_explicit_unknown_identity():
     result = ProviderTranscriptResult(
         provider='assemblyai',

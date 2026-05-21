@@ -334,6 +334,44 @@ def purge_provider_runs_for_user(uid: str, batch_size: int = 400) -> int:
     return deleted
 
 
+def update_provider_run_identity_metrics(
+    run_id: str,
+    provider: str,
+    model: str,
+    workload: str,
+    identified_speaker_cluster_count: int,
+    identity_confidence_summary: Optional[dict[str, Any]] = None,
+) -> None:
+    ref = _run_ref(run_id)
+    snapshot = ref.get()
+    if not snapshot.exists:
+        return
+    data = snapshot.to_dict() or {}
+    previous_identified = data.get('identified_speaker_cluster_count', 0) or 0
+    previous_summary = data.get('identity_confidence_summary') or {}
+    summary = identity_confidence_summary or {}
+    completed_at = (data.get('timing') or {}).get('completed_at') or _utc_now()
+
+    ref.set(
+        {
+            'identified_speaker_cluster_count': identified_speaker_cluster_count,
+            'identity_confidence_summary': summary,
+            'updated_at': _utc_now(),
+        },
+        merge=True,
+    )
+
+    rollup_update = {
+        'identified_speaker_cluster_count': firestore.Increment(identified_speaker_cluster_count - previous_identified),
+        'last_updated': _utc_now(),
+    }
+    for bucket in set(previous_summary) | set(summary):
+        delta = (summary.get(bucket, 0) or 0) - (previous_summary.get(bucket, 0) or 0)
+        if delta:
+            rollup_update[f'identity_confidence_counts.{bucket}'] = firestore.Increment(delta)
+    _rollup_ref(utc_day_bucket(completed_at), provider, model, workload).set(rollup_update, merge=True)
+
+
 def emit_provider_run_metrics(
     provider: str,
     model: str,

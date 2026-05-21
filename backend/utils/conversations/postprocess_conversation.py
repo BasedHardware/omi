@@ -101,6 +101,16 @@ def postprocess_conversation(
             _handle_segment_embedding_matching(uid, file_path, conversation.transcript_segments, aseg)
         else:
             _handle_segment_embedding_matching(uid, file_path, fal_segments, aseg)
+            try:
+                stt_provider_service.update_provider_run_identity_metrics(
+                    transcription.run_id,
+                    transcription.result.provider,
+                    transcription.result.model or 'unknown',
+                    STTWorkload.postprocess,
+                    fal_segments,
+                )
+            except Exception as e:
+                logger.warning(f'Speaker ID (postprocess): identity metric update failed for {conversation_id}: {e}')
 
         # Store both models results.
         conversations_db.store_model_segments_result(

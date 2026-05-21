@@ -90,6 +90,31 @@ def test_unknown_identity_is_explicit_and_legacy_zero_remains_ambiguous():
     assert legacy.speaker_identity_state == "legacy_ambiguous"
 
 
+def test_segments_as_string_uses_provider_label_for_unknown_cluster_display():
+    segments = [
+        TranscriptSegment(
+            text="hello",
+            is_user=False,
+            start=0.0,
+            end=1.0,
+            provider_speaker_label="A",
+            speaker_identity_state="unknown",
+        ),
+        TranscriptSegment(
+            text="there",
+            is_user=False,
+            start=1.0,
+            end=2.0,
+            provider_speaker_label="B",
+            speaker_identity_state="unknown",
+        ),
+    ]
+
+    transcript = TranscriptSegment.segments_as_string(segments)
+
+    assert transcript == "Speaker 1: hello\n\nSpeaker 2: there"
+
+
 def test_postprocess_words_does_not_promote_malformed_speaker_to_speaker_zero():
     deepgram = types.ModuleType("deepgram")
     deepgram.DeepgramClient = lambda *args, **kwargs: object()

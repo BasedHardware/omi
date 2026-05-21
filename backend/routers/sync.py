@@ -880,6 +880,7 @@ def process_segment(
             language=stt_language,
             model=stt_model,
             keywords=vocabulary if vocabulary else None,
+            raw_audio_seconds=get_wav_duration(path),
         )
         words = transcription.words
         detected_language = transcription.detected_language or stt_language
@@ -903,6 +904,16 @@ def process_segment(
         finally:
             if audio_bytes:
                 del audio_bytes
+        try:
+            stt_provider_service.update_provider_run_identity_metrics(
+                transcription.run_id,
+                transcription.result.provider,
+                transcription.result.model or 'unknown',
+                STTWorkload.sync,
+                transcript_segments,
+            )
+        except Exception as e:
+            logger.warning(f'Speaker ID (sync): identity metric update failed for {path}: {e}')
 
         timestamp = get_timestamp_from_path(path)
         segment_end_timestamp = timestamp + transcript_segments[-1].end

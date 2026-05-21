@@ -275,6 +275,9 @@ def apply_cluster_identity_assignments(
         elif assignment.person_id:
             segment.is_user = False
             segment.person_id = assignment.person_id
+        else:
+            segment.is_user = False
+            segment.person_id = None
 
 
 def _group_segments_by_cluster(transcript_segments: List[TranscriptSegment]) -> Dict[str, List[TranscriptSegment]]:

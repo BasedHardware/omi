@@ -108,6 +108,15 @@ class TranscriptSegment(BaseModel):
             user_name = 'User'
         transcript = ''
         people_map = {person.id: person.name for person in people} if people else {}
+        provider_cluster_display_ids = {}
+        next_provider_display_id = 1
+        for segment in segments:
+            provider_cluster_key = _provider_display_cluster_key(segment)
+            if segment.is_user or not provider_cluster_key:
+                continue
+            if provider_cluster_key not in provider_cluster_display_ids:
+                provider_cluster_display_ids[provider_cluster_key] = next_provider_display_id
+                next_provider_display_id += 1
         include_timestamps = include_timestamps and TranscriptSegment.can_display_seconds(segments)
         for segment in segments:
             segment_text = segment.text.strip()
@@ -117,7 +126,11 @@ class TranscriptSegment(BaseModel):
                 if segment.person_id and segment.person_id in people_map:
                     speaker_name = people_map[segment.person_id]
                 else:
-                    speaker_name = f'Speaker {segment.speaker_id}'
+                    provider_cluster_key = _provider_display_cluster_key(segment)
+                    if provider_cluster_key in provider_cluster_display_ids:
+                        speaker_name = f'Speaker {provider_cluster_display_ids[provider_cluster_key]}'
+                    else:
+                        speaker_name = f'Speaker {segment.speaker_id}'
             transcript += f'{timestamp_str}{speaker_name}: {segment_text}\n\n'
 
         return transcript.strip()
@@ -274,6 +287,14 @@ class TranscriptSegment(BaseModel):
             )
 
         return segments, joined_similar_segments, removed_ids
+
+
+def _provider_display_cluster_key(segment: TranscriptSegment) -> Optional[str]:
+    if not segment.provider_cluster_id and not segment.provider_speaker_label:
+        return None
+    if segment.speaker_id not in (None, 0):
+        return None
+    return segment.provider_cluster_id or segment.provider_speaker_label
 
 
 class ImprovedTranscriptSegment(BaseModel):

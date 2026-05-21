@@ -95,6 +95,57 @@ def test_provider_result_words_are_grouped_into_cluster_segments():
     assert summary['speaker_cluster_count'] == 2
 
 
+def test_unknown_identity_counts_as_low_confidence():
+    summary = summarize_provider_output(
+        'assemblyai',
+        {
+            'transcript': {
+                'segments': [
+                    {
+                        'text': 'hello',
+                        'provider_cluster_id': 'A',
+                        'speaker_identity_state': 'unknown',
+                        'speaker_identity_confidence': None,
+                    }
+                ]
+            }
+        },
+    )
+
+    assert summary['low_confidence_identity_count'] == 1
+
+
+def test_low_confidence_identity_counts_clusters_not_segments():
+    summary = summarize_provider_output(
+        'assemblyai',
+        {
+            'transcript': {
+                'segments': [
+                    {
+                        'text': 'hello',
+                        'provider_cluster_id': 'A',
+                        'speaker_identity_state': 'unknown',
+                    },
+                    {
+                        'text': 'again',
+                        'provider_cluster_id': 'A',
+                        'speaker_identity_state': 'unknown',
+                    },
+                    {
+                        'text': 'there',
+                        'provider_cluster_id': 'B',
+                        'speaker_identity_state': 'identified',
+                        'speaker_identity_confidence': 0.9,
+                    },
+                ]
+            }
+        },
+    )
+
+    assert summary['low_confidence_identity_count'] == 1
+    assert summary['low_confidence_identity_rate'] == 0.5
+
+
 def test_compact_markdown_report_is_review_friendly():
     report = build_comparison_report([_load_fixture_case()])
     markdown = compact_markdown_report(report)

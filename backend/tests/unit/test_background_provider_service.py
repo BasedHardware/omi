@@ -176,7 +176,7 @@ def test_provider_service_uses_assemblyai_for_enabled_sync_workload(monkeypatch)
     assert finalize_run.call_args.kwargs['provider'] == 'assemblyai'
     assert finalize_run.call_args.kwargs['artifact_refs'] == {}
     assert finalize_run.call_args.kwargs['billable_seconds'] == 2.0
-    assert finalize_run.call_args.kwargs['estimated_cost_usd'] == 0.00008333
+    assert finalize_run.call_args.kwargs['estimated_cost_usd'] == 0.00009444
 
 
 def test_provider_service_falls_back_to_deepgram_when_assemblyai_fails(monkeypatch):
@@ -205,6 +205,7 @@ def test_provider_service_falls_back_to_deepgram_when_assemblyai_fails(monkeypat
             conversation_id='conversation-1',
             language='multi',
             model='nova-3',
+            raw_audio_seconds=2.0,
         )
 
     assert response.result.provider == 'deepgram'
@@ -216,6 +217,8 @@ def test_provider_service_falls_back_to_deepgram_when_assemblyai_fails(monkeypat
     assert finalize_run.call_args_list[0].kwargs['status'] == 'failed'
     assert finalize_run.call_args_list[0].kwargs['retry_count'] == 1
     assert finalize_run.call_args_list[0].kwargs['error_class'] == 'RuntimeError'
+    assert finalize_run.call_args_list[0].kwargs['billable_seconds'] == 2.0
+    assert finalize_run.call_args_list[0].kwargs['estimated_cost_usd'] == 0.00009444
     assert finalize_run.call_args_list[1].kwargs['run_id'] == 'run-dg'
     assert finalize_run.call_args_list[1].kwargs['provider'] == 'deepgram'
     assert finalize_run.call_args_list[1].kwargs['fallback_count'] == 1
@@ -320,7 +323,7 @@ def test_prerecorded_cost_estimator_uses_provider_defaults_and_unknown_provider_
             workload='background',
             billable_seconds=60.0,
         )
-        == 0.0025
+        == 0.00283333
     )
     assert (
         estimate_prerecorded_provider_cost_usd(
@@ -340,6 +343,58 @@ def test_prerecorded_cost_estimator_uses_provider_defaults_and_unknown_provider_
         )
         == 0.0
     )
+
+
+def test_provider_service_counts_user_identity_as_identified_cluster():
+    result = _provider_result(provider='assemblyai', model='universal-2')
+    segments = provider_service.reconstruct_conversation(result)
+    segments[0].is_user = True
+    segments[0].speaker_identity_state = 'user'
+
+    with patch.object(provider_service, 'finalize_provider_run') as finalize_run:
+        provider_service._finalize_run(
+            'run-user',
+            result,
+            STTWorkload.sync,
+            provider_service.datetime.now(provider_service.timezone.utc),
+            'succeeded',
+            retry_count=0,
+            raw_audio_seconds=2.0,
+            segments=segments,
+        )
+
+    assert finalize_run.call_args.kwargs['identified_speaker_cluster_count'] == 1
+
+
+def test_provider_service_counts_label_only_identified_clusters():
+    result = ProviderTranscriptResult(
+        provider='assemblyai',
+        model='universal-2',
+        duration=2.0,
+        words=[
+            ProviderTranscriptWord(text='hello', start=0.0, end=0.4, speaker_label='A'),
+            ProviderTranscriptWord(text='again', start=0.5, end=0.8, speaker_label='A'),
+            ProviderTranscriptWord(text='there', start=1.0, end=1.4, speaker_label='B'),
+        ],
+    )
+    segments = provider_service.reconstruct_conversation(result)
+    segments[0].person_id = 'person-a'
+    segments[0].speaker_identity_state = 'identified'
+
+    with patch.object(provider_service, 'finalize_provider_run') as finalize_run:
+        provider_service._finalize_run(
+            'run-labels',
+            result,
+            STTWorkload.sync,
+            provider_service.datetime.now(provider_service.timezone.utc),
+            'succeeded',
+            retry_count=0,
+            raw_audio_seconds=2.0,
+            segments=segments,
+        )
+
+    assert finalize_run.call_args.kwargs['speaker_cluster_count'] == 2
+    assert finalize_run.call_args.kwargs['identified_speaker_cluster_count'] == 1
 
 
 def test_provider_service_live_assemblyai_smoke_records_ledger_when_credentials_are_present(monkeypatch):

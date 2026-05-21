@@ -184,9 +184,9 @@ class ConversationReconstructor:
 
         speaker_counts = {}
         speaker_sources: Iterable[Tuple[float, Optional[str]]] = (
-            [(word.start, word.provider_cluster_id) for word in result.words]
+            [(word.start, self._word_cluster_key(word)) for word in result.words]
             if result.words
-            else [(utterance.start, utterance.provider_cluster_id) for utterance in result.utterances]
+            else [(utterance.start, self._utterance_cluster_key(utterance)) for utterance in result.utterances]
         )
         for start, provider_cluster_id in sorted(speaker_sources, key=lambda item: item[0]):
             if start >= skip_n_seconds:
@@ -217,13 +217,13 @@ class ConversationReconstructor:
 
     def _should_merge_word(self, previous: _SegmentCandidate, word: ProviderTranscriptWord) -> bool:
         return (
-            previous.provider_cluster_id == word.provider_cluster_id
+            self._candidate_cluster_key(previous) == self._word_cluster_key(word)
             and word.start - previous.end < self.max_same_cluster_gap_seconds
         )
 
     def _should_merge_candidate(self, previous: _SegmentCandidate, candidate: _SegmentCandidate) -> bool:
         return (
-            previous.provider_cluster_id == candidate.provider_cluster_id
+            self._candidate_cluster_key(previous) == self._candidate_cluster_key(candidate)
             and candidate.start - previous.end < self.max_same_cluster_gap_seconds
         )
 
@@ -235,7 +235,7 @@ class ConversationReconstructor:
         candidate_text = self._normalize_text(candidate.text)
         return (
             bool(previous_text and candidate_text)
-            and previous.provider_cluster_id == candidate.provider_cluster_id
+            and self._candidate_cluster_key(previous) == self._candidate_cluster_key(candidate)
             and (previous_text == candidate_text or previous_text in candidate_text or candidate_text in previous_text)
         )
 
@@ -250,6 +250,15 @@ class ConversationReconstructor:
         if speaker_label:
             return 'unassigned'
         return 'unknown'
+
+    def _candidate_cluster_key(self, candidate: _SegmentCandidate) -> Optional[str]:
+        return candidate.provider_cluster_id or candidate.speaker_label
+
+    def _word_cluster_key(self, word: ProviderTranscriptWord) -> Optional[str]:
+        return word.provider_cluster_id or word.speaker_label
+
+    def _utterance_cluster_key(self, utterance: ProviderTranscriptUtterance) -> Optional[str]:
+        return utterance.provider_cluster_id or utterance.speaker_label
 
     def _normalize_text(self, text: str) -> str:
         return ' '.join(text.lower().split())

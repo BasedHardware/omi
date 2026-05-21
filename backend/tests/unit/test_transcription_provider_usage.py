@@ -38,6 +38,7 @@ class _FakeSnapshot:
     def __init__(self, data):
         self._data = data
         self.reference = MagicMock()
+        self.exists = data is not None
 
     def to_dict(self):
         return self._data
@@ -50,6 +51,12 @@ class _FakeDoc:
 
     def set(self, data, merge=False):
         self.set_calls.append({'data': data, 'merge': merge})
+
+    def get(self):
+        data = {}
+        for call in self.set_calls:
+            data.update(call['data'])
+        return _FakeSnapshot(data if self.set_calls else None)
 
 
 class _FakeCollection:
@@ -379,6 +386,53 @@ def test_failed_run_retry_count_rolls_up_and_emits_retry_metric(monkeypatch):
     assert rollup['status_counts.failed'] == {'__increment': 1}
     assert observed_retries == [(('assemblyai', 'universal-2', 'background', 'provider_retry', 1), {})]
     assert observed_fallbacks == []
+
+
+def test_update_provider_run_identity_metrics_updates_doc_and_rollup_delta(monkeypatch):
+    fake_db = _FakeDb()
+    monkeypatch.setattr(usage, 'db', fake_db)
+    monkeypatch.setattr(usage.firestore, 'Increment', _inc)
+    started_at = datetime(2026, 5, 21, 1, 0, 0, tzinfo=timezone.utc)
+    completed_at = datetime(2026, 5, 21, 1, 0, 2, tzinfo=timezone.utc)
+    usage.create_provider_run(
+        uid='user-1',
+        provider='assemblyai',
+        model='universal-2',
+        workload='sync',
+        run_id='run-identity',
+        started_at=started_at,
+    )
+    usage.finalize_provider_run(
+        run_id='run-identity',
+        provider='assemblyai',
+        model='universal-2',
+        workload='sync',
+        status='succeeded',
+        started_at=started_at,
+        completed_at=completed_at,
+        speaker_cluster_count=2,
+        identified_speaker_cluster_count=0,
+        identity_confidence_summary={'unknown': 2},
+    )
+
+    usage.update_provider_run_identity_metrics(
+        run_id='run-identity',
+        provider='assemblyai',
+        model='universal-2',
+        workload='sync',
+        identified_speaker_cluster_count=1,
+        identity_confidence_summary={'very_high': 1, 'unknown': 1},
+    )
+
+    run_doc = fake_db.docs[(usage.RUNS_COLLECTION, 'run-identity')]
+    update = run_doc.set_calls[-1]['data']
+    assert update['identified_speaker_cluster_count'] == 1
+    assert update['identity_confidence_summary'] == {'very_high': 1, 'unknown': 1}
+    rollup_doc = fake_db.docs[(usage.DAILY_USAGE_COLLECTION, '2026-05-21:assemblyai:universal-2:sync')]
+    rollup_delta = rollup_doc.set_calls[-1]['data']
+    assert rollup_delta['identified_speaker_cluster_count'] == {'__increment': 1}
+    assert rollup_delta['identity_confidence_counts.very_high'] == {'__increment': 1}
+    assert rollup_delta['identity_confidence_counts.unknown'] == {'__increment': -1}
 
 
 def test_provider_metrics_source_does_not_define_forbidden_label_names():

@@ -104,6 +104,26 @@ def test_low_confidence_cluster_remains_explicitly_unknown_with_candidate_metada
     assert segments[0].speaker_identity_confidence is None
 
 
+def test_unknown_assignment_demotes_stale_person_identity():
+    query_embedding = np.array([[1.0, 0.0]], dtype=np.float32)
+    distant_embedding = np.array([[0.0, 1.0]], dtype=np.float32)
+    segments = [_segment('a1', 0.0, 3.0)]
+    segments[0].person_id = 'stale-person'
+    segments[0].speaker_identity_state = 'identified'
+    cache = {'person-distant': {'embedding': distant_embedding, 'name': 'Distant'}}
+
+    identify_background_speaker_clusters(
+        segments,
+        _wav_bytes(),
+        cache,
+        embedding_extractor=lambda _audio, _filename: query_embedding,
+    )
+
+    assert segments[0].speaker_identity_state == 'unknown'
+    assert segments[0].person_id is None
+    assert segments[0].is_user is False
+
+
 def test_text_self_introduction_is_hint_only_without_voice_assignment():
     segments = [_segment('intro', 0.0, 3.0, text='I am Alice and I joined the call.')]
 

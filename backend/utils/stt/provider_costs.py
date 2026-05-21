@@ -11,26 +11,28 @@ class PrerecordedProviderCostRate:
 
 
 # Pay-as-you-go public STT pricing, checked 2026-05-21.
-# Add-on features and customer-specific committed-use discounts are intentionally
-# excluded until their usage is represented explicitly in provider run metadata.
+# AssemblyAI background runs use speaker_labels=True, so the pre-recorded
+# diarization add-on is included in AssemblyAI rates here.
+# Customer-specific committed-use discounts are intentionally excluded.
 _PRERECORDED_STT_COST_RATES: dict[str, dict[str, PrerecordedProviderCostRate]] = {
     STTProviderName.assemblyai.value: {
-        # AssemblyAI pricing: Universal-2 $0.15/hr, Universal-3 Pro $0.21/hr.
+        # AssemblyAI pricing: Universal-2 $0.15/hr, Universal-3 Pro $0.21/hr,
+        # plus pre-recorded Speaker Diarization $0.02/hr.
         'universal-2': PrerecordedProviderCostRate(
-            usd_per_billable_second=0.15 / 3600,
-            source='assemblyai_prerecorded_payg_2026_05_21',
+            usd_per_billable_second=0.17 / 3600,
+            source='assemblyai_prerecorded_diarized_payg_2026_05_21',
         ),
         'universal-3-pro': PrerecordedProviderCostRate(
-            usd_per_billable_second=0.21 / 3600,
-            source='assemblyai_prerecorded_payg_2026_05_21',
+            usd_per_billable_second=0.23 / 3600,
+            source='assemblyai_prerecorded_diarized_payg_2026_05_21',
         ),
         'u3-pro': PrerecordedProviderCostRate(
-            usd_per_billable_second=0.21 / 3600,
-            source='assemblyai_prerecorded_payg_2026_05_21',
+            usd_per_billable_second=0.23 / 3600,
+            source='assemblyai_prerecorded_diarized_payg_2026_05_21',
         ),
         'default': PrerecordedProviderCostRate(
-            usd_per_billable_second=0.15 / 3600,
-            source='assemblyai_prerecorded_default_2026_05_21',
+            usd_per_billable_second=0.17 / 3600,
+            source='assemblyai_prerecorded_diarized_default_2026_05_21',
         ),
     },
     STTProviderName.deepgram.value: {

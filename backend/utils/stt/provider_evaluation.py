@@ -112,12 +112,17 @@ def summarize_provider_output(provider: str, payload: dict[str, Any]) -> dict[st
             or segment.get('speaker_identity_state') in ('identified', 'user')
         )
     }
-    identity_confidences = [
-        segment.get('speaker_identity_confidence')
-        for segment in segments
-        if segment.get('speaker_identity_confidence') is not None
-    ]
-    low_confidence_count = sum(1 for confidence in identity_confidences if float(confidence) < 0.50)
+    low_confidence_clusters = set()
+    for segment in segments:
+        cluster_id = _cluster_id(segment)
+        if not cluster_id:
+            continue
+        state = segment.get('speaker_identity_state')
+        confidence = segment.get('speaker_identity_confidence')
+        if state == 'unknown':
+            low_confidence_clusters.add(cluster_id)
+        elif confidence is not None and float(confidence) < 0.50:
+            low_confidence_clusters.add(cluster_id)
     return {
         'provider': provider,
         'segments': segments,
@@ -127,10 +132,8 @@ def summarize_provider_output(provider: str, payload: dict[str, Any]) -> dict[st
         'speaker_cluster_count': len(clusters),
         'identified_speaker_cluster_count': len(identified_clusters),
         'unknown_speaker_cluster_count': max(len(clusters) - len(identified_clusters), 0),
-        'low_confidence_identity_count': low_confidence_count,
-        'low_confidence_identity_rate': (
-            low_confidence_count / len(identity_confidences) if identity_confidences else 0.0
-        ),
+        'low_confidence_identity_count': len(low_confidence_clusters),
+        'low_confidence_identity_rate': (len(low_confidence_clusters) / len(clusters) if clusters else 0.0),
         'raw_audio_seconds': _number_from_ledger(ledger, 'raw_audio_seconds'),
         'speech_active_seconds': _number_from_ledger(ledger, 'speech_active_seconds'),
         'billable_seconds': _number_from_ledger(ledger, 'billable_seconds'),

@@ -538,9 +538,7 @@ def _finalize_run(
     if not run_id:
         return
     billable_seconds = raw_audio_seconds
-    clusters = {
-        item.provider_cluster_id for item in list(result.words) + list(result.utterances) if item.provider_cluster_id
-    }
+    clusters = {_segment_cluster_key(segment) for segment in segments if _segment_cluster_key(segment)}
     confidences = [segment.speaker_identity_confidence for segment in segments]
     try:
         finalize_provider_run(
@@ -564,9 +562,7 @@ def _finalize_run(
             transcript_segment_count=len(segments),
             transcript_word_count=len(result.words),
             speaker_cluster_count=len(clusters),
-            identified_speaker_cluster_count=len(
-                {segment.provider_cluster_id for segment in segments if segment.person_id}
-            ),
+            identified_speaker_cluster_count=_identified_cluster_count(segments),
             identity_confidence_summary=summarize_identity_confidences(confidences),
             artifact_refs=_provider_artifact_refs(result),
             fallback_provider=fallback_provider,
@@ -593,6 +589,7 @@ def _finalize_failed_run(
 ) -> None:
     if not run_id:
         return
+    billable_seconds = raw_audio_seconds
     try:
         finalize_provider_run(
             run_id=run_id,
@@ -602,6 +599,14 @@ def _finalize_failed_run(
             status='failed',
             started_at=started_at,
             raw_audio_seconds=raw_audio_seconds,
+            speech_active_seconds=raw_audio_seconds,
+            billable_seconds=billable_seconds,
+            estimated_cost_usd=estimate_prerecorded_provider_cost_usd(
+                provider=provider,
+                model=model,
+                workload=workload,
+                billable_seconds=billable_seconds,
+            ),
             retry_count=retry_count,
             fallback_count=0,
             error_class=error.__class__.__name__,
@@ -610,3 +615,44 @@ def _finalize_failed_run(
         logger.warning(
             'failed to finalize failed transcription provider run ledger run_id=%s: %s', run_id, finalize_error
         )
+
+
+def update_provider_run_identity_metrics(
+    run_id: Optional[str],
+    provider: str,
+    model: str,
+    workload: STTWorkload,
+    segments: List[TranscriptSegment],
+) -> None:
+    if not run_id:
+        return
+    try:
+        from database.transcription_provider_usage import update_provider_run_identity_metrics as _update_identity
+
+        _update_identity(
+            run_id=run_id,
+            provider=provider,
+            model=model or 'unknown',
+            workload=STTWorkload(workload).value,
+            identified_speaker_cluster_count=_identified_cluster_count(segments),
+            identity_confidence_summary=summarize_identity_confidences(
+                [segment.speaker_identity_confidence for segment in segments]
+            ),
+        )
+    except Exception as e:
+        logger.warning('failed to update transcription provider identity metrics run_id=%s: %s', run_id, e)
+
+
+def _identified_cluster_count(segments: List[TranscriptSegment]) -> int:
+    return len(
+        {
+            _segment_cluster_key(segment)
+            for segment in segments
+            if _segment_cluster_key(segment)
+            and (segment.person_id or segment.is_user or segment.speaker_identity_state in ('identified', 'user'))
+        }
+    )
+
+
+def _segment_cluster_key(segment: TranscriptSegment) -> Optional[str]:
+    return segment.provider_cluster_id or segment.provider_speaker_label
