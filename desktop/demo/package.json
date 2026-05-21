@@ -28,6 +28,10 @@
     "upgrade": "remotion upgrade",
     "lint": "eslint src && tsc"
   },
+  "overrides": {
+    "postcss": "^8.5.10",
+    "ws": "^8.20.1"
+  },
   "sideEffects": [
     "*.css"
   ]
