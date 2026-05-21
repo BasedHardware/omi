@@ -1482,12 +1482,20 @@ class CaptureProvider extends ChangeNotifier
       return;
     }
 
+    // Honor an active fair-use cooldown: don't fire uploads that will just be
+    // 429'd, which amplifies the throttle and mislabels recordings as failed.
+    if (SyncRateLimiter.instance.isLimited) {
+      Logger.debug('Auto-sync WAL ${wal.id}: rate-limited until ${SyncRateLimiter.instance.until}, skipping');
+      return;
+    }
+
     // Upload only — no poll-to-terminal, no in-method retry loop. On 202 the
     // WAL becomes `uploaded` and the SyncReconciler resolves the job out of
     // band; on real failure we bump retryCount so orphan recovery / the next
     // sync retries (the local file is retained until confirmed synced).
     try {
       final result = await uploadLocalFilesV2([file], conversationId: conversationId);
+      SyncRateLimiter.instance.clear();
       if (result.completed != null) {
         // 200 fast-path: server already produced the result.
         await phoneSync.markWalSyncedAndPersist(wal);
@@ -1498,6 +1506,12 @@ class CaptureProvider extends ChangeNotifier
         await phoneSync.persistRetryMetadata(wal); // persists the WAL list
         SyncReconciler.instance.poke();
       }
+    } on SyncRateLimitedException catch (e) {
+      // Fair-use throttle — pause uploads, do NOT bump retryCount (it's not a
+      // content failure). The WAL stays `miss`/'waiting' and syncs once the
+      // cooldown clears.
+      SyncRateLimiter.instance.markLimited(retryAfterSeconds: e.retryAfterSeconds);
+      Logger.debug('Auto-sync WAL ${wal.id}: rate-limited, paused until ${SyncRateLimiter.instance.until}');
     } on SocketException {
       Logger.debug('Auto-sync WAL ${wal.id}: network error, aborting without incrementing retryCount');
     } catch (e) {
