@@ -353,8 +353,15 @@ class TestGetConversationsText:
 class TestSearchConversationsText:
     def setup_method(self):
         vector_db.query_vectors.reset_mock()
+        vector_db.query_vectors.side_effect = None
         vector_db.query_vectors.return_value = []
+
+        conversations_db.get_conversations.reset_mock()
+        conversations_db.get_conversations.side_effect = None
+        conversations_db.get_conversations.return_value = []
+
         conversations_db.get_conversations_by_id.reset_mock()
+        conversations_db.get_conversations_by_id.side_effect = None
         conversations_db.get_conversations_by_id.return_value = []
 
     def test_no_results(self):
@@ -389,6 +396,96 @@ class TestSearchConversationsText:
         assert call_kwargs[1]['starts_at'] == 0
         assert call_kwargs[1]['ends_at'] is not None
 
+    def test_lexical_rank_prioritizes_title_and_overview_matches(self):
+        conversations = [
+            {
+                "id": "conv-transcript",
+                "structured": {"title": "Random catchup", "overview": "General discussion"},
+                "transcript_segments": [{"text": "We briefly mentioned ERPNext once."}],
+                "is_locked": False,
+            },
+            {
+                "id": "conv-title",
+                "structured": {"title": "ERPNext CRM automation", "overview": "Lead pipeline work"},
+                "transcript_segments": [],
+                "is_locked": False,
+            },
+        ]
+
+        ranked_ids = conversations_svc._rank_conversations_lexically("ERPNext", conversations, limit=2)
+
+        assert ranked_ids == ["conv-title", "conv-transcript"]
+
+    def test_search_uses_lexical_fallback_when_vector_returns_empty(self):
+        vector_db.query_vectors.return_value = []
+
+        fallback_candidates = [
+            {
+                "id": "conv-erp",
+                "structured": {"title": "CRM Automation", "overview": "Discussed ERPNext lead pipeline"},
+                "transcript_segments": [],
+                "is_locked": False,
+            }
+        ]
+        conversations_db.get_conversations.return_value = fallback_candidates
+        conversations_db.get_conversations_by_id.return_value = fallback_candidates
+
+        result = conversations_svc.search_conversations_text(
+            uid="uid-1",
+            query="ERPNext",
+            limit=5,
+            include_transcript=False,
+        )
+
+        assert "Found 1 conversations matching 'ERPNext' via lexical retrieval" in result
+        conversations_db.get_conversations.assert_called_once()
+        conversations_db.get_conversations_by_id.assert_called_once_with("uid-1", ["conv-erp"])
+
+    def test_search_lexical_fallback_matches_transcript_text(self):
+        vector_db.query_vectors.return_value = []
+
+        fallback_candidates = [
+            {
+                "id": "conv-iim",
+                "structured": {"title": "Research notes", "overview": "Chatbot evaluation"},
+                "transcript_segments": [{"text": "Today we discussed IIM Ranchi and intent classification."}],
+                "is_locked": False,
+            }
+        ]
+        conversations_db.get_conversations.return_value = fallback_candidates
+        conversations_db.get_conversations_by_id.return_value = fallback_candidates
+
+        result = conversations_svc.search_conversations_text(
+            uid="uid-1",
+            query="IIM Ranchi",
+            limit=5,
+            include_transcript=False,
+        )
+
+        assert "Found 1 conversations matching 'IIM Ranchi' via lexical retrieval" in result
+        conversations_db.get_conversations_by_id.assert_called_once_with("uid-1", ["conv-iim"])
+
+    def test_search_lexical_fallback_filters_locked_candidates(self):
+        vector_db.query_vectors.return_value = []
+
+        conversations_db.get_conversations.return_value = [
+            {
+                "id": "conv-locked",
+                "structured": {"title": "ERPNext", "overview": "ERPNext implementation details"},
+                "transcript_segments": [],
+                "is_locked": True,
+            }
+        ]
+
+        result = conversations_svc.search_conversations_text(
+            uid="uid-1",
+            query="ERPNext",
+            limit=5,
+            include_transcript=False,
+        )
+
+        assert "No conversations found matching 'ERPNext'" in result
+        conversations_db.get_conversations_by_id.assert_not_called()
 
 # ===========================================================================
 # Tests: get_memories_text
