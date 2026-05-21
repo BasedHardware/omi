@@ -35,7 +35,11 @@ from database.redis_db import (
     set_user_data_protection_level,
     get_generic_cache,
     set_generic_cache,
+    get_daily_summary_uid,
+    store_daily_summary_to_uid,
+    remove_daily_summary_to_uid,
 )
+
 from database.users import (
     get_user_transcription_preferences,
     set_user_transcription_preferences,
@@ -824,7 +828,6 @@ def _byok_unlimited_subscription() -> Subscription:
             transcription_seconds=None,
             words_transcribed=None,
             insights_gained=None,
-            memories_created=None,
         ),
     )
 
@@ -854,8 +857,6 @@ def get_user_subscription_endpoint(
             words_transcribed_limit=0,
             insights_gained_used=0,
             insights_gained_limit=0,
-            memories_created_used=0,
-            memories_created_limit=0,
             available_plans=[],
             show_subscription_ui=False,
             phone_call_quota=unlimited_phone_quota,
@@ -870,7 +871,6 @@ def get_user_subscription_endpoint(
                 transcription_seconds=None,
                 words_transcribed=None,
                 insights_gained=None,
-                memories_created=None,
             ),
         )
         return UserSubscriptionResponse(
@@ -881,8 +881,6 @@ def get_user_subscription_endpoint(
             words_transcribed_limit=0,
             insights_gained_used=0,
             insights_gained_limit=0,
-            memories_created_used=0,
-            memories_created_limit=0,
             available_plans=[],
             show_subscription_ui=False,
             phone_call_quota=unlimited_phone_quota,
@@ -926,13 +924,11 @@ def get_user_subscription_endpoint(
     transcription_seconds_used = usage.get('transcription_seconds', 0)
     words_transcribed_used = usage.get('words_transcribed', 0)
     insights_gained_used = usage.get('insights_gained', 0)
-    memories_created_used = usage.get('memories_created', 0)
 
     # Get limits from subscription (0 means unlimited)
     transcription_seconds_limit = subscription.limits.transcription_seconds or 0
     words_transcribed_limit = subscription.limits.words_transcribed or 0
     insights_gained_limit = subscription.limits.insights_gained or 0
-    memories_created_limit = subscription.limits.memories_created or 0
 
     # Build available plans. Version-gated: new clients see Operator + Architect,
     # old clients get legacy plan names. Legacy plans filtered from purchase catalog.
@@ -1029,8 +1025,6 @@ def get_user_subscription_endpoint(
         words_transcribed_limit=words_transcribed_limit,
         insights_gained_used=insights_gained_used,
         insights_gained_limit=insights_gained_limit,
-        memories_created_used=memories_created_used,
-        memories_created_limit=memories_created_limit,
         available_plans=available_plans,
         show_subscription_ui=show_subscription_ui,
         chat_quota_used=round(chat_snapshot['used'], 4),
@@ -1323,18 +1317,63 @@ def get_daily_summary(summary_id: str, uid: str = Depends(auth.get_current_user_
     return summary
 
 
+@router.patch('/v1/users/daily-summaries/{summary_id}/visibility', tags=['v1'])
+def set_daily_summary_visibility(summary_id: str, value: str, uid: str = Depends(auth.get_current_user_uid)):
+    """
+    Set the visibility of a daily summary. Use value='shared' to make it shareable.
+    """
+    if value not in ('shared', 'private'):
+        raise HTTPException(status_code=400, detail="Invalid visibility value. Must be 'shared' or 'private'")
+    summary = daily_summaries_db.get_daily_summary(uid, summary_id)
+    if not summary:
+        raise HTTPException(status_code=404, detail='Daily summary not found')
+    daily_summaries_db.set_daily_summary_visibility(uid, summary_id, value)
+    if value == 'private':
+        remove_daily_summary_to_uid(summary_id)
+    else:
+        store_daily_summary_to_uid(summary_id, uid)
+    return {'status': 'Ok'}
+
+
 @router.delete('/v1/users/daily-summaries/{summary_id}', tags=['v1'])
 def delete_daily_summary(summary_id: str, uid: str = Depends(auth.get_current_user_uid)):
     """
     Delete a daily summary by ID.
     """
-    # Verify it exists first
     summary = daily_summaries_db.get_daily_summary(uid, summary_id)
     if not summary:
         raise HTTPException(status_code=404, detail='Daily summary not found')
 
     daily_summaries_db.delete_daily_summary(uid, summary_id)
     return {'status': 'ok'}
+
+
+@router.get('/v1/daily-summaries/{summary_id}/shared', tags=['v1'])
+def get_shared_daily_summary(summary_id: str):
+    """
+    Public endpoint to retrieve a daily summary for sharing. No auth required.
+    """
+    uid = get_daily_summary_uid(summary_id)
+    if not uid:
+        raise HTTPException(status_code=404, detail='Daily summary not found')
+
+    summary = daily_summaries_db.get_daily_summary(uid, summary_id)
+    if not summary or summary.get('visibility') != 'shared':
+        raise HTTPException(status_code=404, detail='Daily summary not found')
+
+    _PUBLIC_FIELDS = {
+        'id',
+        'date',
+        'headline',
+        'overview',
+        'day_emoji',
+        'stats',
+        'highlights',
+        'action_items',
+        'decisions_made',
+        'knowledge_nuggets',
+    }
+    return {k: v for k, v in summary.items() if k in _PUBLIC_FIELDS}
 
 
 # ***********************************

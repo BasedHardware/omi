@@ -410,7 +410,6 @@ BASIC_TIER_MINUTES_LIMIT_PER_MONTH = int(os.getenv('BASIC_TIER_MINUTES_LIMIT_PER
 BASIC_TIER_MONTHLY_SECONDS_LIMIT = BASIC_TIER_MINUTES_LIMIT_PER_MONTH * 60
 BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH = int(os.getenv('BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH', '0'))
 BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH = int(os.getenv('BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH', '0'))
-BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH = int(os.getenv('BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH', '0'))
 
 # Chat caps per plan. Env-overridable for ops.
 FREE_CHAT_QUESTIONS_PER_MONTH = int(os.getenv('FREE_CHAT_QUESTIONS_PER_MONTH', '30'))
@@ -563,7 +562,6 @@ def get_basic_plan_limits() -> PlanLimits:
         transcription_seconds=BASIC_TIER_MONTHLY_SECONDS_LIMIT,
         words_transcribed=BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH,
         insights_gained=BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH,
-        memories_created=BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH,
         chat_questions_per_month=FREE_CHAT_QUESTIONS_PER_MONTH,
     )
 
@@ -587,7 +585,6 @@ def get_plan_limits(plan: PlanType) -> PlanLimits:
             transcription_seconds=None,
             words_transcribed=None,
             insights_gained=None,
-            memories_created=None,
             chat_questions_per_month=OPERATOR_CHAT_QUESTIONS_PER_MONTH,
         )
     if plan == PlanType.unlimited:
@@ -595,7 +592,6 @@ def get_plan_limits(plan: PlanType) -> PlanLimits:
             transcription_seconds=None,
             words_transcribed=None,
             insights_gained=None,
-            memories_created=None,
             chat_questions_per_month=NEO_CHAT_QUESTIONS_PER_MONTH,
         )
     if plan == PlanType.architect:
@@ -603,7 +599,6 @@ def get_plan_limits(plan: PlanType) -> PlanLimits:
             transcription_seconds=None,
             words_transcribed=None,
             insights_gained=None,
-            memories_created=None,
             chat_cost_usd_per_month=ARCHITECT_CHAT_COST_USD_PER_MONTH,
         )
     return get_basic_plan_limits()

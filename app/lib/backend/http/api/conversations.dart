@@ -309,104 +309,92 @@ Future<bool> deleteConversationActionItem(String conversationId, ActionItem item
   return response.statusCode == 204;
 }
 
-/// v2 async sync: POST files → 202 with job_id, then poll until terminal.
-/// Returns the same SyncLocalFilesResponse as v1 once processing is confirmed complete.
-typedef SyncJobPollCallback = void Function(SyncJobStatusResponse status);
+/// Outcome of an upload-only POST to /v2/sync-local-files.
+/// Exactly one of [jobId] (HTTP 202 — audio received, processing in the
+/// background; reconcile later) or [completed] (HTTP 200 fast-path — server
+/// already returned the result synchronously) is non-null.
+class UploadFilesResult {
+  final String? jobId;
+  final SyncLocalFilesResponse? completed;
 
-Future<SyncLocalFilesResponse> syncLocalFilesV2(
+  const UploadFilesResult._(this.jobId, this.completed);
+  factory UploadFilesResult.queued(String jobId) => UploadFilesResult._(jobId, null);
+  factory UploadFilesResult.done(SyncLocalFilesResponse result) => UploadFilesResult._(null, result);
+
+  bool get isQueued => jobId != null;
+}
+
+/// Upload-only: POST files and return as soon as the server acknowledges
+/// (HTTP 202 with a job_id, or the 200 fast-path with a finished result).
+/// Does NOT wait for server-side processing — the caller marks the WAL
+/// `uploaded` and a reconciler resolves [jobId] later via [fetchSyncJobStatus].
+/// Error-status mapping matches the old polling path so callers' retry logic
+/// is unchanged.
+Future<UploadFilesResult> uploadLocalFilesV2(
   List<File> files, {
   UploadProgressCallback? onUploadProgress,
-  SyncJobPollCallback? onPollProgress,
   String? conversationId,
 }) async {
+  var url = '${Env.apiBaseUrl}v2/sync-local-files';
+  if (conversationId != null) {
+    url += '?conversation_id=${Uri.encodeQueryComponent(conversationId)}';
+  }
+  var response = await makeMultipartApiCall(url: url, files: files, onUploadProgress: onUploadProgress);
+
+  if (response.statusCode == 200) {
+    // Fast-path: server processed synchronously and returned the result.
+    return UploadFilesResult.done(SyncLocalFilesResponse.fromJson(jsonDecode(response.body)));
+  }
+  if (response.statusCode == 202) {
+    final start = SyncJobStartResponse.fromJson(jsonDecode(response.body));
+    if (start.jobId.isEmpty) {
+      throw Exception('Upload accepted but no job id returned');
+    }
+    return UploadFilesResult.queued(start.jobId);
+  }
+  if (response.statusCode == 400) {
+    throw Exception('Audio file could not be processed by server');
+  } else if (response.statusCode == 413) {
+    throw Exception('Audio file is too large to upload');
+  } else if (response.statusCode == 429) {
+    throw Exception('Rate limited or budget exhausted');
+  } else if (response.statusCode >= 500) {
+    throw Exception('Server is temporarily unavailable');
+  }
+  throw Exception('Upload failed unexpectedly');
+}
+
+/// Why a single job-status fetch did not yield a usable status.
+/// - [notFound]  : 404/403 — job expired, unknown, or not ours. Unrecoverable
+///                 for this job_id; the caller must fall back to re-upload.
+/// - [transient] : network/5xx/null — retry later, job may still be alive.
+enum SyncJobFetchOutcome { ok, notFound, transient }
+
+class SyncJobFetch {
+  final SyncJobFetchOutcome outcome;
+  final SyncJobStatusResponse? status;
+  const SyncJobFetch(this.outcome, [this.status]);
+}
+
+/// Single GET of a sync job's status — no polling loop. The reconciler owns
+/// the polling cadence and decides what to do per [SyncJobFetchOutcome].
+Future<SyncJobFetch> fetchSyncJobStatus(String jobId) async {
+  final response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v2/sync-local-files/$jobId',
+    headers: {},
+    method: 'GET',
+    body: '',
+  );
+  if (response == null) return const SyncJobFetch(SyncJobFetchOutcome.transient);
+  if (response.statusCode == 404 || response.statusCode == 403) {
+    return const SyncJobFetch(SyncJobFetchOutcome.notFound);
+  }
+  if (response.statusCode != 200) return const SyncJobFetch(SyncJobFetchOutcome.transient);
   try {
-    // Step 1: Submit files
-    var url = '${Env.apiBaseUrl}v2/sync-local-files';
-    if (conversationId != null) {
-      url += '?conversation_id=${Uri.encodeQueryComponent(conversationId)}';
-    }
-    var response = await makeMultipartApiCall(url: url, files: files, onUploadProgress: onUploadProgress);
-
-    // Fast-path responses (no async job created)
-    if (response.statusCode == 200) {
-      return SyncLocalFilesResponse.fromJson(jsonDecode(response.body));
-    }
-
-    if (response.statusCode != 202) {
-      if (response.statusCode == 400) {
-        throw Exception('Audio file could not be processed by server');
-      } else if (response.statusCode == 413) {
-        throw Exception('Audio file is too large to upload');
-      } else if (response.statusCode == 429) {
-        throw Exception('Rate limited or budget exhausted');
-      } else if (response.statusCode >= 500) {
-        throw Exception('Server is temporarily unavailable');
-      } else {
-        throw Exception('Upload failed unexpectedly');
-      }
-    }
-
-    // Step 2: Poll for completion
-    var startResponse = SyncJobStartResponse.fromJson(jsonDecode(response.body));
-    var jobId = startResponse.jobId;
-    var pollInterval = Duration(milliseconds: startResponse.pollAfterMs);
-
-    const maxPolls = 120; // 120 x 3s = 6 minutes max
-    for (var i = 0; i < maxPolls; i++) {
-      await Future.delayed(pollInterval);
-
-      var pollResponse = await makeApiCall(
-        url: '${Env.apiBaseUrl}v2/sync-local-files/$jobId',
-        headers: {},
-        method: 'GET',
-        body: '',
-      );
-
-      if (pollResponse == null) {
-        Logger.debug('syncLocalFilesV2 poll failed: null response');
-        continue; // Retry on transient errors
-      }
-
-      // Terminal errors — don't retry
-      if (pollResponse.statusCode == 404) {
-        throw Exception('Sync job not found or expired');
-      }
-      if (pollResponse.statusCode == 403) {
-        throw Exception('Not authorized to view this sync job');
-      }
-      if (pollResponse.statusCode != 200) {
-        Logger.debug('syncLocalFilesV2 poll failed: ${pollResponse.statusCode}');
-        continue; // Retry on transient errors
-      }
-
-      var jobStatus = SyncJobStatusResponse.fromJson(jsonDecode(pollResponse.body));
-
-      // Report poll progress to caller for UI updates
-      onPollProgress?.call(jobStatus);
-
-      if (jobStatus.isTerminal) {
-        // All segments failed → throw to match v1's 500 behavior (WAL stays retryable)
-        if (jobStatus.status == 'failed') {
-          throw Exception(jobStatus.error ?? 'Sync job failed');
-        }
-        // Success or partial failure → return result
-        if (jobStatus.result != null) {
-          return jobStatus.result!;
-        }
-        return SyncLocalFilesResponse(
-          newConversationIds: [],
-          updatedConversationIds: [],
-          failedSegments: jobStatus.failedSegments,
-          totalSegments: jobStatus.totalSegments,
-        );
-      }
-    }
-
-    // Polling timed out — don't mark as synced
-    throw Exception('Sync job timed out waiting for results');
+    return SyncJobFetch(SyncJobFetchOutcome.ok, SyncJobStatusResponse.fromJson(jsonDecode(response.body)));
   } catch (e) {
-    Logger.debug('syncLocalFilesV2 error: $e');
-    rethrow;
+    Logger.debug('fetchSyncJobStatus parse error: $e');
+    return const SyncJobFetch(SyncJobFetchOutcome.transient);
   }
 }
 

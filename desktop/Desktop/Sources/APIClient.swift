@@ -1538,18 +1538,25 @@ struct CreateMemoryResponse: Codable {
 }
 
 /// One item in a POST /v3/memories/batch payload. Mirrors the `Memory` model
-/// in `backend/models/memories.py` (the server hardcodes category=manual on
-/// batch creation, so we intentionally don't send it).
+/// in `backend/models/memories.py`. The server honors `category`, so batch
+/// imports default to `.system` ("About You") rather than landing in "Manual".
 struct MemoryBatchItem: Encodable {
   let content: String
   let visibility: String
+  let category: String
   let tags: [String]
   let headline: String?
 
-  init(content: String, visibility: String = "private", tags: [String] = [], headline: String? = nil)
-  {
+  init(
+    content: String,
+    visibility: String = "private",
+    category: MemoryCategory = .system,
+    tags: [String] = [],
+    headline: String? = nil
+  ) {
     self.content = content
     self.visibility = visibility
+    self.category = category.rawValue
     self.tags = tags
     self.headline = headline
   }
@@ -3843,6 +3850,26 @@ struct UserSubscriptionResponse: Codable {
     case memoriesCreatedLimit = "memories_created_limit"
     case availablePlans = "available_plans"
     case showSubscriptionUI = "show_subscription_ui"
+  }
+
+  // Defensive decode: only `subscription` is required. The usage counters and
+  // plan catalog default when absent so a backend that's behind on schema
+  // (notably the dev backend the beta channel routes to, which can lag prod or
+  // omit newer fields like `memories_created_used`) doesn't blank the entire
+  // Plan & Usage page with "Failed to load plan information."
+  init(from decoder: Decoder) throws {
+    let c = try decoder.container(keyedBy: CodingKeys.self)
+    subscription = try c.decode(UserSubscriptionInfo.self, forKey: .subscription)
+    transcriptionSecondsUsed = try c.decodeIfPresent(Int.self, forKey: .transcriptionSecondsUsed) ?? 0
+    transcriptionSecondsLimit = try c.decodeIfPresent(Int.self, forKey: .transcriptionSecondsLimit) ?? 0
+    wordsTranscribedUsed = try c.decodeIfPresent(Int.self, forKey: .wordsTranscribedUsed) ?? 0
+    wordsTranscribedLimit = try c.decodeIfPresent(Int.self, forKey: .wordsTranscribedLimit) ?? 0
+    insightsGainedUsed = try c.decodeIfPresent(Int.self, forKey: .insightsGainedUsed) ?? 0
+    insightsGainedLimit = try c.decodeIfPresent(Int.self, forKey: .insightsGainedLimit) ?? 0
+    memoriesCreatedUsed = try c.decodeIfPresent(Int.self, forKey: .memoriesCreatedUsed) ?? 0
+    memoriesCreatedLimit = try c.decodeIfPresent(Int.self, forKey: .memoriesCreatedLimit) ?? 0
+    availablePlans = try c.decodeIfPresent([SubscriptionPlanOption].self, forKey: .availablePlans) ?? []
+    showSubscriptionUI = try c.decodeIfPresent(Bool.self, forKey: .showSubscriptionUI) ?? true
   }
 }
 

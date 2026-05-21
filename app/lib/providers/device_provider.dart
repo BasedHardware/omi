@@ -168,7 +168,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
           final ctx = globalNavigatorKey.currentContext;
           NotificationService.instance.createNotification(
             title: ctx?.l10n.lowBatteryAlertTitle ?? "Low Battery Alert",
-            body: ctx?.l10n.lowBatteryAlertBody ?? "Your device is running low on battery. Time for a recharge! 🔋",
+            body: ctx?.l10n.lowBatteryAlertBody(value) ?? "Your battery is at $value%. Time for a recharge! 🔋",
           );
         } else if (batteryLevel > 20) {
           _hasLowBatteryAlerted = false;

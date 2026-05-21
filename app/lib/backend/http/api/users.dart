@@ -518,6 +518,16 @@ Future<DailySummary?> getDailySummary(String summaryId) async {
   }
 }
 
+Future<bool> setDailySummaryVisibility(String summaryId, {String visibility = 'shared'}) async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/users/daily-summaries/$summaryId/visibility?value=$visibility',
+    headers: {},
+    method: 'PATCH',
+    body: '',
+  );
+  return response?.statusCode == 200;
+}
+
 /// Delete a daily summary by id. Returns true on success.
 /// Backend route: DELETE /v1/users/daily-summaries/{summary_id}.
 Future<bool> deleteDailySummary(String summaryId) async {

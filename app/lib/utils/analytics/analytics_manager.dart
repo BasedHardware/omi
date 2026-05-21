@@ -1473,6 +1473,10 @@ class AnalyticsManager {
     track('Daily Summary Notification Opened', properties: {'summary_id': summaryId, 'date': date});
   }
 
+  void dailySummaryShared({required String summaryId, required String date}) {
+    track('Daily Summary Shared', properties: {'summary_id': summaryId, 'date': date});
+  }
+
   void dailySummaryConversationClicked({
     required String summaryId,
     required String conversationId,
