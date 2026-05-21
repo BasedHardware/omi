@@ -529,6 +529,29 @@ def test_provider_service_counts_label_only_identified_clusters():
 
     assert finalize_run.call_args.kwargs['speaker_cluster_count'] == 2
     assert finalize_run.call_args.kwargs['identified_speaker_cluster_count'] == 1
+    assert finalize_run.call_args.kwargs['provider_speaker_count'] == 2
+    assert finalize_run.call_args.kwargs['mapped_speaker_count'] == 1
+    assert finalize_run.call_args.kwargs['mapped_person_count'] == 1
+    assert finalize_run.call_args.kwargs['unmapped_speaker_count'] == 1
+
+
+def test_provider_service_preserves_assemblyai_labels_for_identity_metrics():
+    result = ProviderTranscriptResult(
+        provider='assemblyai',
+        model='universal-2',
+        duration=4.0,
+        words=[
+            ProviderTranscriptWord(text='alice', start=0.0, end=0.5, speaker_label='A'),
+            ProviderTranscriptWord(text='speaks', start=0.6, end=1.0, speaker_label='A'),
+            ProviderTranscriptWord(text='bob', start=2.0, end=2.4, speaker_label='B'),
+            ProviderTranscriptWord(text='replies', start=2.5, end=3.0, speaker_label='B'),
+        ],
+    )
+    segments = provider_service.reconstruct_conversation(result)
+
+    assert [segment.provider_speaker_label for segment in segments] == ['A', 'B']
+    assert {segment.speaker_id for segment in segments} == {0}
+    assert provider_service.speaker_identity_metrics(segments)['provider_speaker_count'] == 2
 
 
 def test_provider_service_live_assemblyai_smoke_records_ledger_when_credentials_are_present(monkeypatch):

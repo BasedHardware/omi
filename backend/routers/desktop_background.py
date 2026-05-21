@@ -31,6 +31,7 @@ from utils.speaker_identification import _pcm_to_wav_bytes
 from utils.stt.background_speaker_identity import USER_SELF_PERSON_ID, identify_background_speaker_clusters
 from utils.stt.provider_service import (
     resolve_prerecorded_provider_for_request,
+    speaker_identity_metrics,
     transcribe_bytes,
     update_provider_run_identity_metrics,
 )
@@ -434,42 +435,51 @@ async def _identify_speakers(
     run_id: Optional[str],
 ) -> None:
     """Apply Omi speaker identity to AssemblyAI background chunk-local segments."""
+    identity_metric_update_status = 'succeeded'
+    identity_metric_update_skipped_reason = None
     try:
         person_embeddings_cache = await run_blocking(db_executor, _build_person_embeddings_cache, uid)
         if not person_embeddings_cache:
-            return
-        assignments = await run_blocking(
-            sync_executor,
-            identify_background_speaker_clusters,
-            segments,
-            audio_bytes,
-            person_embeddings_cache,
-            extract_embedding_from_bytes,
-        )
-        identified_count = sum(1 for assignment in assignments.values() if assignment.state in ('identified', 'user'))
-        logger.info(
-            "Speaker ID (desktop background): cluster assignments=%s identified=%s uid=%s conversation_id=%s",
-            len(assignments),
-            identified_count,
-            uid,
-            conversation_id,
-        )
-        await run_blocking(
-            db_executor,
-            update_provider_run_identity_metrics,
-            run_id,
-            provider or 'unknown',
-            model or 'unknown',
-            STTWorkload.background,
-            segments,
-        )
+            identity_metric_update_status = 'skipped'
+            identity_metric_update_skipped_reason = 'missing_candidate_embeddings'
+        else:
+            assignments = await run_blocking(
+                sync_executor,
+                identify_background_speaker_clusters,
+                segments,
+                audio_bytes,
+                person_embeddings_cache,
+                extract_embedding_from_bytes,
+            )
+            identified_count = sum(
+                1 for assignment in assignments.values() if assignment.state in ('identified', 'user')
+            )
+            logger.info(
+                "Speaker ID (desktop background): cluster assignments=%s identified=%s uid=%s conversation_id=%s",
+                len(assignments),
+                identified_count,
+                uid,
+                conversation_id,
+            )
     except Exception as e:
+        identity_metric_update_status = 'failed'
         logger.warning(
             "Speaker ID (desktop background): identification failed uid=%s conversation_id=%s: %s",
             uid,
             conversation_id,
             e,
         )
+    await run_blocking(
+        db_executor,
+        update_provider_run_identity_metrics,
+        run_id,
+        provider or 'unknown',
+        model or 'unknown',
+        STTWorkload.background,
+        segments,
+        identity_metric_update_status,
+        identity_metric_update_skipped_reason,
+    )
 
 
 def _build_person_embeddings_cache(uid: str) -> Dict[str, dict]:
@@ -539,11 +549,17 @@ def _speaker_diagnostics(segments: List[TranscriptSegment], prefix: str = "") ->
         {str(segment.provider_speaker_label) for segment in segments if segment.provider_speaker_label is not None}
     )
     mapped_speakers = sorted({int(segment.speaker_id) for segment in segments if segment.speaker_id is not None})
+    identity_metrics = speaker_identity_metrics(segments)
     return {
         f"{prefix}provider_cluster_count": len(provider_clusters),
         f"{prefix}provider_clusters": provider_clusters[:20],
         f"{prefix}provider_speaker_label_count": len(provider_labels),
         f"{prefix}provider_speaker_labels": provider_labels[:20],
+        f"{prefix}provider_speaker_count": identity_metrics['provider_speaker_count'],
+        f"{prefix}mapped_speaker_count": identity_metrics['mapped_speaker_count'],
+        f"{prefix}mapped_person_count": identity_metrics['mapped_person_count'],
+        f"{prefix}unmapped_speaker_count": identity_metrics['unmapped_speaker_count'],
+        f"{prefix}embedding_extraction_failure_count": identity_metrics['embedding_extraction_failure_count'],
         f"{prefix}speaker_id_count": len(mapped_speakers),
         f"{prefix}speaker_ids": mapped_speakers[:20],
     }

@@ -412,6 +412,10 @@ def test_update_provider_run_identity_metrics_updates_doc_and_rollup_delta(monke
         completed_at=completed_at,
         speaker_cluster_count=2,
         identified_speaker_cluster_count=0,
+        provider_speaker_count=2,
+        mapped_speaker_count=0,
+        mapped_person_count=0,
+        unmapped_speaker_count=2,
         identity_confidence_summary={'unknown': 2},
     )
 
@@ -421,16 +425,32 @@ def test_update_provider_run_identity_metrics_updates_doc_and_rollup_delta(monke
         model='universal-2',
         workload='sync',
         identified_speaker_cluster_count=1,
+        provider_speaker_count=2,
+        mapped_speaker_count=1,
+        mapped_person_count=1,
+        unmapped_speaker_count=1,
+        embedding_extraction_failure_count=1,
+        identity_metric_update_status='succeeded',
         identity_confidence_summary={'very_high': 1, 'unknown': 1},
     )
 
     run_doc = fake_db.docs[(usage.RUNS_COLLECTION, 'run-identity')]
     update = run_doc.set_calls[-1]['data']
     assert update['identified_speaker_cluster_count'] == 1
+    assert update['provider_speaker_count'] == 2
+    assert update['mapped_speaker_count'] == 1
+    assert update['mapped_person_count'] == 1
+    assert update['unmapped_speaker_count'] == 1
+    assert update['embedding_extraction_failure_count'] == 1
+    assert update['identity_metric_update']['status'] == 'succeeded'
     assert update['identity_confidence_summary'] == {'very_high': 1, 'unknown': 1}
     rollup_doc = fake_db.docs[(usage.DAILY_USAGE_COLLECTION, '2026-05-21:assemblyai:universal-2:sync')]
     rollup_delta = rollup_doc.set_calls[-1]['data']
     assert rollup_delta['identified_speaker_cluster_count'] == {'__increment': 1}
+    assert rollup_delta['mapped_speaker_count'] == {'__increment': 1}
+    assert rollup_delta['mapped_person_count'] == {'__increment': 1}
+    assert rollup_delta['unmapped_speaker_count'] == {'__increment': -1}
+    assert rollup_delta['embedding_extraction_failure_count'] == {'__increment': 1}
     assert rollup_delta['identity_confidence_counts.very_high'] == {'__increment': 1}
     assert rollup_delta['identity_confidence_counts.unknown'] == {'__increment': -1}
 

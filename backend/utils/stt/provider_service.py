@@ -606,6 +606,7 @@ def _finalize_run(
     billable_seconds = raw_audio_seconds
     clusters = {_segment_cluster_key(segment) for segment in segments if _segment_cluster_key(segment)}
     confidences = [segment.speaker_identity_confidence for segment in segments]
+    identity_metrics = speaker_identity_metrics(segments)
     try:
         finalize_provider_run(
             run_id=run_id,
@@ -630,6 +631,11 @@ def _finalize_run(
             speaker_cluster_count=len(clusters),
             identified_speaker_cluster_count=_identified_cluster_count(segments),
             identity_confidence_summary=summarize_identity_confidences(confidences),
+            provider_speaker_count=identity_metrics['provider_speaker_count'],
+            mapped_speaker_count=identity_metrics['mapped_speaker_count'],
+            mapped_person_count=identity_metrics['mapped_person_count'],
+            unmapped_speaker_count=identity_metrics['unmapped_speaker_count'],
+            embedding_extraction_failure_count=identity_metrics['embedding_extraction_failure_count'],
             artifact_refs=_provider_artifact_refs(result),
             fallback_provider=fallback_provider,
         )
@@ -689,6 +695,8 @@ def update_provider_run_identity_metrics(
     model: str,
     workload: STTWorkload,
     segments: List[TranscriptSegment],
+    identity_metric_update_status: str = 'succeeded',
+    identity_metric_update_skipped_reason: Optional[str] = None,
 ) -> None:
     if not run_id:
         return
@@ -700,6 +708,7 @@ def update_provider_run_identity_metrics(
         )
         return
     try:
+        identity_metrics = speaker_identity_metrics(segments)
         _db_update_provider_run_identity_metrics(
             run_id=run_id,
             provider=provider,
@@ -709,9 +718,44 @@ def update_provider_run_identity_metrics(
             identity_confidence_summary=summarize_identity_confidences(
                 [segment.speaker_identity_confidence for segment in segments]
             ),
+            provider_speaker_count=identity_metrics['provider_speaker_count'],
+            mapped_speaker_count=identity_metrics['mapped_speaker_count'],
+            mapped_person_count=identity_metrics['mapped_person_count'],
+            unmapped_speaker_count=identity_metrics['unmapped_speaker_count'],
+            embedding_extraction_failure_count=identity_metrics['embedding_extraction_failure_count'],
+            identity_metric_update_status=identity_metric_update_status,
+            identity_metric_update_skipped_reason=identity_metric_update_skipped_reason,
         )
     except Exception as e:
         logger.warning('failed to update transcription provider identity metrics run_id=%s: %s', run_id, e)
+
+
+def speaker_identity_metrics(segments: List[TranscriptSegment]) -> dict:
+    provider_speakers = {_segment_cluster_key(segment) for segment in segments if _segment_cluster_key(segment)}
+    mapped_speakers = {
+        _segment_cluster_key(segment)
+        for segment in segments
+        if _segment_cluster_key(segment)
+        and (segment.person_id or segment.is_user or segment.speaker_identity_state in ('identified', 'user'))
+    }
+    mapped_people = {
+        segment.person_id or 'user'
+        for segment in segments
+        if segment.person_id or segment.is_user or segment.speaker_identity_state == 'user'
+    }
+    embedding_failures = {
+        _segment_cluster_key(segment)
+        for segment in segments
+        if _segment_cluster_key(segment)
+        and (segment.speaker_identity_provenance or {}).get('reason') == 'embedding_extraction_failed'
+    }
+    return {
+        'provider_speaker_count': len(provider_speakers),
+        'mapped_speaker_count': len(mapped_speakers),
+        'mapped_person_count': len(mapped_people),
+        'unmapped_speaker_count': max(len(provider_speakers) - len(mapped_speakers), 0),
+        'embedding_extraction_failure_count': len(embedding_failures),
+    }
 
 
 def _identified_cluster_count(segments: List[TranscriptSegment]) -> int:

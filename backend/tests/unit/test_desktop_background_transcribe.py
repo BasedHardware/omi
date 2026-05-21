@@ -86,6 +86,50 @@ sys.modules.setdefault(
     'utils.stt.provider_service',
     SimpleNamespace(
         resolve_prerecorded_provider_for_request=MagicMock(),
+        speaker_identity_metrics=lambda segments: {
+            'provider_speaker_count': len(
+                {
+                    segment.provider_cluster_id or segment.provider_speaker_label
+                    for segment in segments
+                    if segment.provider_cluster_id or segment.provider_speaker_label
+                }
+            ),
+            'mapped_speaker_count': len(
+                {
+                    segment.provider_cluster_id or segment.provider_speaker_label
+                    for segment in segments
+                    if (segment.provider_cluster_id or segment.provider_speaker_label)
+                    and (
+                        segment.person_id or segment.is_user or segment.speaker_identity_state in ('identified', 'user')
+                    )
+                }
+            ),
+            'mapped_person_count': len(
+                {
+                    segment.person_id or 'user'
+                    for segment in segments
+                    if segment.person_id or segment.is_user or segment.speaker_identity_state == 'user'
+                }
+            ),
+            'unmapped_speaker_count': len(
+                {
+                    segment.provider_cluster_id or segment.provider_speaker_label
+                    for segment in segments
+                    if segment.provider_cluster_id or segment.provider_speaker_label
+                }
+            )
+            - len(
+                {
+                    segment.provider_cluster_id or segment.provider_speaker_label
+                    for segment in segments
+                    if (segment.provider_cluster_id or segment.provider_speaker_label)
+                    and (
+                        segment.person_id or segment.is_user or segment.speaker_identity_state in ('identified', 'user')
+                    )
+                }
+            ),
+            'embedding_extraction_failure_count': 0,
+        },
         transcribe_bytes=MagicMock(),
         update_provider_run_identity_metrics=MagicMock(),
     ),
@@ -517,6 +561,51 @@ def test_cluster_speaker_mapping_assigns_distinct_ids(monkeypatch):
     assert [segment['speaker'] for segment in data['segments']] == ['SPEAKER_00', 'SPEAKER_01']
     assert data['speaker_diagnostics']['provider_cluster_count'] == 2
     assert data['speaker_diagnostics']['mapped_speaker_ids'] == [0, 1]
+    assert data['speaker_diagnostics']['provider_speaker_count'] == 2
+    assert data['speaker_diagnostics']['mapped_provider_speaker_count'] == 2
+
+
+def test_assemblyai_label_only_speakers_do_not_collapse_to_single_local_speaker(monkeypatch):
+    segments = [
+        TranscriptSegment(
+            text='Alice starts.',
+            is_user=False,
+            start=0.0,
+            end=2.0,
+            provider_speaker_label='A',
+            speaker_identity_state='unassigned',
+            stt_provider='assemblyai',
+            stt_model='universal-2',
+        ),
+        TranscriptSegment(
+            text='Bob replies.',
+            is_user=False,
+            start=2.0,
+            end=4.0,
+            provider_speaker_label='B',
+            speaker_identity_state='unassigned',
+            stt_provider='assemblyai',
+            stt_model='universal-2',
+        ),
+    ]
+    client, _mock_transcribe = _client(monkeypatch, segments=segments)
+
+    response = client.post(
+        '/v2/desktop/background-transcribe?conversation_id=conv-1&chunk_id=chunk-001&chunk_start_ms=0',
+        content=b'\x01\x00' * 1600,
+        headers={'Content-Type': 'application/octet-stream'},
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert [segment['provider_speaker_label'] for segment in data['segments']] == ['A', 'B']
+    assert [segment['speaker_id'] for segment in data['segments']] == [0, 1]
+    assert data['speaker_diagnostics']['provider_speaker_label_count'] == 2
+    assert data['speaker_diagnostics']['mapped_speaker_ids'] == [0, 1]
+    assert data['speaker_diagnostics']['mapped_unmapped_speaker_count'] == 2
+    desktop_background.update_provider_run_identity_metrics.assert_called_once()
+    assert desktop_background.update_provider_run_identity_metrics.call_args.args[5] == 'skipped'
+    assert desktop_background.update_provider_run_identity_metrics.call_args.args[6] == 'missing_candidate_embeddings'
 
 
 def test_background_transcribe_multi_chunk_offsets_persist_and_keep_speaker_map(monkeypatch):

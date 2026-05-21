@@ -131,6 +131,16 @@ def create_provider_run(
         'transcript_word_count': 0,
         'speaker_cluster_count': 0,
         'identified_speaker_cluster_count': 0,
+        'provider_speaker_count': 0,
+        'mapped_speaker_count': 0,
+        'mapped_person_count': 0,
+        'unmapped_speaker_count': 0,
+        'embedding_extraction_failure_count': 0,
+        'identity_metric_update': {
+            'status': 'pending',
+            'skipped_reason': None,
+            'updated_at': None,
+        },
         'identity_confidence_summary': {},
         'error_class': None,
         'created_at': now,
@@ -160,6 +170,11 @@ def finalize_provider_run(
     transcript_word_count: int = 0,
     speaker_cluster_count: int = 0,
     identified_speaker_cluster_count: int = 0,
+    provider_speaker_count: int = 0,
+    mapped_speaker_count: int = 0,
+    mapped_person_count: int = 0,
+    unmapped_speaker_count: int = 0,
+    embedding_extraction_failure_count: int = 0,
     identity_confidence_summary: Optional[dict[str, Any]] = None,
     error_class: Optional[str] = None,
     artifact_refs: Optional[dict[str, str]] = None,
@@ -190,6 +205,11 @@ def finalize_provider_run(
         'transcript_word_count': transcript_word_count,
         'speaker_cluster_count': speaker_cluster_count,
         'identified_speaker_cluster_count': identified_speaker_cluster_count,
+        'provider_speaker_count': provider_speaker_count,
+        'mapped_speaker_count': mapped_speaker_count,
+        'mapped_person_count': mapped_person_count,
+        'unmapped_speaker_count': unmapped_speaker_count,
+        'embedding_extraction_failure_count': embedding_extraction_failure_count,
         'identity_confidence_summary': summary,
         'error_class': error_class,
         'artifact_refs': artifact_refs or {},
@@ -219,6 +239,11 @@ def finalize_provider_run(
         transcript_word_count=transcript_word_count,
         speaker_cluster_count=speaker_cluster_count,
         identified_speaker_cluster_count=identified_speaker_cluster_count,
+        provider_speaker_count=provider_speaker_count,
+        mapped_speaker_count=mapped_speaker_count,
+        mapped_person_count=mapped_person_count,
+        unmapped_speaker_count=unmapped_speaker_count,
+        embedding_extraction_failure_count=embedding_extraction_failure_count,
         identity_confidence_summary=summary,
     )
     emit_provider_run_metrics(
@@ -271,6 +296,11 @@ def increment_daily_rollup(
     transcript_word_count: int = 0,
     speaker_cluster_count: int = 0,
     identified_speaker_cluster_count: int = 0,
+    provider_speaker_count: int = 0,
+    mapped_speaker_count: int = 0,
+    mapped_person_count: int = 0,
+    unmapped_speaker_count: int = 0,
+    embedding_extraction_failure_count: int = 0,
     identity_confidence_summary: Optional[dict[str, Any]] = None,
 ) -> None:
     update = {
@@ -290,6 +320,11 @@ def increment_daily_rollup(
         'transcript_word_count': firestore.Increment(transcript_word_count),
         'speaker_cluster_count': firestore.Increment(speaker_cluster_count),
         'identified_speaker_cluster_count': firestore.Increment(identified_speaker_cluster_count),
+        'provider_speaker_count': firestore.Increment(provider_speaker_count),
+        'mapped_speaker_count': firestore.Increment(mapped_speaker_count),
+        'mapped_person_count': firestore.Increment(mapped_person_count),
+        'unmapped_speaker_count': firestore.Increment(unmapped_speaker_count),
+        'embedding_extraction_failure_count': firestore.Increment(embedding_extraction_failure_count),
         'last_updated': _utc_now(),
     }
     for bucket, count in (identity_confidence_summary or {}).items():
@@ -341,6 +376,13 @@ def update_provider_run_identity_metrics(
     workload: str,
     identified_speaker_cluster_count: int,
     identity_confidence_summary: Optional[dict[str, Any]] = None,
+    provider_speaker_count: int = 0,
+    mapped_speaker_count: int = 0,
+    mapped_person_count: int = 0,
+    unmapped_speaker_count: int = 0,
+    embedding_extraction_failure_count: int = 0,
+    identity_metric_update_status: str = 'succeeded',
+    identity_metric_update_skipped_reason: Optional[str] = None,
 ) -> None:
     ref = _run_ref(run_id)
     snapshot = ref.get()
@@ -348,6 +390,11 @@ def update_provider_run_identity_metrics(
         return
     data = snapshot.to_dict() or {}
     previous_identified = data.get('identified_speaker_cluster_count', 0) or 0
+    previous_provider_speakers = data.get('provider_speaker_count', data.get('speaker_cluster_count', 0)) or 0
+    previous_mapped_speakers = data.get('mapped_speaker_count', previous_identified) or 0
+    previous_mapped_people = data.get('mapped_person_count', 0) or 0
+    previous_unmapped_speakers = data.get('unmapped_speaker_count', 0) or 0
+    previous_embedding_failures = data.get('embedding_extraction_failure_count', 0) or 0
     previous_summary = data.get('identity_confidence_summary') or {}
     summary = identity_confidence_summary or {}
     completed_at = (data.get('timing') or {}).get('completed_at') or _utc_now()
@@ -355,6 +402,16 @@ def update_provider_run_identity_metrics(
     ref.set(
         {
             'identified_speaker_cluster_count': identified_speaker_cluster_count,
+            'provider_speaker_count': provider_speaker_count,
+            'mapped_speaker_count': mapped_speaker_count,
+            'mapped_person_count': mapped_person_count,
+            'unmapped_speaker_count': unmapped_speaker_count,
+            'embedding_extraction_failure_count': embedding_extraction_failure_count,
+            'identity_metric_update': {
+                'status': identity_metric_update_status,
+                'skipped_reason': identity_metric_update_skipped_reason,
+                'updated_at': _utc_now(),
+            },
             'identity_confidence_summary': summary,
             'updated_at': _utc_now(),
         },
@@ -363,6 +420,13 @@ def update_provider_run_identity_metrics(
 
     rollup_update = {
         'identified_speaker_cluster_count': firestore.Increment(identified_speaker_cluster_count - previous_identified),
+        'provider_speaker_count': firestore.Increment(provider_speaker_count - previous_provider_speakers),
+        'mapped_speaker_count': firestore.Increment(mapped_speaker_count - previous_mapped_speakers),
+        'mapped_person_count': firestore.Increment(mapped_person_count - previous_mapped_people),
+        'unmapped_speaker_count': firestore.Increment(unmapped_speaker_count - previous_unmapped_speakers),
+        'embedding_extraction_failure_count': firestore.Increment(
+            embedding_extraction_failure_count - previous_embedding_failures
+        ),
         'last_updated': _utc_now(),
     }
     for bucket in set(previous_summary) | set(summary):
@@ -444,6 +508,11 @@ def _empty_rollup(day: str, provider: str, model: str, workload: str) -> dict[st
         'transcript_word_count': 0,
         'speaker_cluster_count': 0,
         'identified_speaker_cluster_count': 0,
+        'provider_speaker_count': 0,
+        'mapped_speaker_count': 0,
+        'mapped_person_count': 0,
+        'unmapped_speaker_count': 0,
+        'embedding_extraction_failure_count': 0,
         'identity_confidence_counts': {},
         'last_updated': _utc_now(),
     }
@@ -464,6 +533,11 @@ def _add_run_to_rollup(rollup: dict[str, Any], data: dict[str, Any]) -> None:
         'transcript_word_count',
         'speaker_cluster_count',
         'identified_speaker_cluster_count',
+        'provider_speaker_count',
+        'mapped_speaker_count',
+        'mapped_person_count',
+        'unmapped_speaker_count',
+        'embedding_extraction_failure_count',
     ):
         rollup[field] += data.get(field, 0) or 0
     for bucket, count in (data.get('identity_confidence_summary') or {}).items():

@@ -911,6 +911,8 @@ def process_segment(
                 transcription.result.model or 'unknown',
                 STTWorkload.sync,
                 transcript_segments,
+                'skipped' if not person_embeddings_cache else 'succeeded',
+                'missing_candidate_embeddings' if not person_embeddings_cache else None,
             )
         except Exception as e:
             logger.warning(f'Speaker ID (sync): identity metric update failed for {path}: {e}')
