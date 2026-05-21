@@ -109,6 +109,11 @@ After any Swift UI edit, verify programmatically with [agent-swift](https://gith
 
 Requires: Accessibility permission for Terminal.app (System Settings → Privacy & Security → Accessibility).
 
+Fast-path (skip the slow parts): a signed-in session can be cloned between dev bundles, and a local control bridge jumps straight to any screen — so you avoid the web login and sidebar click-through. See "Fast-Path for Local Iteration" in `desktop/e2e/SKILL.md`:
+- `cd desktop && ./scripts/omi-auth-dump.sh` once, then `./scripts/omi-auth-seed.sh com.omi.<bundle>` → boots signed-in, no browser.
+- `./scripts/omi-ctl navigate <screen>` → jump to a screen in ~150ms (bridge auto-enabled on non-prod bundles; `omi-ctl screens` lists targets).
+- Use the seeded-auth/onboarding shortcut for iterating on other screens only — validate auth/onboarding flows and flow-walker E2E with the real flow.
+
 Edit → Verify → Evidence loop:
 1. Edit code, rebuild: `cd desktop && ./run.sh`
 2. Connect: `agent-swift connect --bundle-id com.omi.desktop-dev`
