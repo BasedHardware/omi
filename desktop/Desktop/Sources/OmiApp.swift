@@ -299,6 +299,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
       // App code already handles HTTP errors and reports meaningful ones explicitly.
       options.enableCaptureFailedRequests = false
       options.maxBreadcrumbs = 100
+      // App-hang detection fires on the main thread stalling. The default 2s threshold
+      // flags transient jank (disk/IPC stalls, GC-like dealloc storms) that dominates
+      // event volume without being individually actionable. Raise to 3s so only
+      // sustained freezes — the ones users actually feel — are reported.
+      options.appHangTimeoutInterval = 3.0
       options.beforeSend = { event in
         // Allow user feedback through from all builds (dev + prod)
         if event.message?.formatted.hasPrefix("User Report") == true { return event }
@@ -311,17 +316,42 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         {
           return nil
         }
-        // Filter out NSURLErrorCancelled (-999) — these are intentional cancellations
-        // (e.g. proactive assistants cancelling in-flight Gemini requests on context switch)
+        // Filter out transient network/socket errors captured as exceptions —
+        // offline, timeouts, dropped connections, cancellations. These are not
+        // actionable app bugs and dominate event volume. (logError filters the
+        // message-event path; this covers SDK-auto and legacy exception captures.)
+        // NSURLErrorDomain: -999 cancelled, -1001 timeout, -1003/-1004 host/connect,
+        // -1005 lost, -1009 offline, -1011 bad response, -1020 not allowed.
+        // NSPOSIXErrorDomain: 54 reset, 57 not connected, 89 cancelled.
+        let transientNetworkCodes: [(domain: String, codes: [String])] = [
+          (
+            "NSURLErrorDomain",
+            ["-999", "-1001", "-1003", "-1004", "-1005", "-1009", "-1011", "-1020"]
+          ),
+          ("NSPOSIXErrorDomain", ["54", "57", "89"]),
+        ]
         if let exceptions = event.exceptions,
           exceptions.contains(where: { exc in
             let value = exc.value ?? ""
-            return exc.type == "NSURLErrorDomain" && (
-              value.contains("Code=-999") || value.contains("Code: -999")
-            )
+            return transientNetworkCodes.contains { entry in
+              exc.type == entry.domain
+                && entry.codes.contains { value.contains("Code=\($0)") || value.contains("Code: \($0)") }
+            }
           })
         {
           return nil
+        }
+        // Filter out backend Gemini key-expiry/auth failures. These mean the
+        // server-side API key needs rotation — a backend config issue, not a
+        // per-client bug. A single expired key otherwise floods Sentry with one
+        // event per request across every user.
+        if let message = event.message?.formatted {
+          let lower = message.lowercased()
+          if lower.contains("api key expired") || lower.contains("renew the api key")
+            || lower.contains("api_key_invalid")
+          {
+            return nil
+          }
         }
         // Filter out AuthError.notSignedIn — this is thrown when token refresh transiently
         // fails (network blip, expired token mid-refresh). The user is still signed in per
