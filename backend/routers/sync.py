@@ -61,7 +61,8 @@ from utils import encryption
 from utils.byok import get_byok_keys, set_byok_keys
 from utils.http_client import _get_semaphore
 from utils.log_sanitizer import sanitize
-from utils.stt.pre_recorded import deepgram_prerecorded, get_deepgram_model_for_language, postprocess_words
+from utils.stt import provider_service as stt_provider_service
+from utils.stt.providers import STTWorkload
 from utils.stt.vad import vad_is_empty
 from utils.fair_use import (
     record_speech_ms,
@@ -957,29 +958,33 @@ def process_segment(
         single_language_mode = prefs.get('single_language_mode', False)
 
         if single_language_mode and user_language:
-            dg_language, dg_model = get_deepgram_model_for_language(user_language)
+            stt_language, stt_model = stt_provider_service.resolve_prerecorded_language_model(user_language)
         else:
-            dg_language, dg_model = get_deepgram_model_for_language('multi')
+            stt_language, stt_model = stt_provider_service.resolve_prerecorded_language_model('multi')
 
         # When single-language mode is active, trust the user's language choice
         # rather than Deepgram's detection (avoids overriding explicit selection).
         use_return_language = not (single_language_mode and user_language)
-        words, detected_language = deepgram_prerecorded(
+        transcription = stt_provider_service.transcribe_url(
             url,
+            workload=STTWorkload.sync,
+            uid=uid,
+            conversation_id=target_conversation_id,
             speakers_count=3,
-            attempts=0,
-            return_language=True,
-            language=dg_language,
-            model=dg_model,
+            return_language=use_return_language,
+            language=stt_language,
+            model=stt_model,
             keywords=vocabulary if vocabulary else None,
         )
+        words = transcription.words
+        detected_language = transcription.detected_language or stt_language
         language = user_language if (single_language_mode and user_language) else detected_language
         if not words:
             # DG processed audio successfully but found no speech (silence/noise).
             # Real DG failures now raise RuntimeError and are caught by the except block.
             logger.info(f'No transcript words for segment {path} (silence or noise-only audio)')
             return
-        transcript_segments: List[TranscriptSegment] = postprocess_words(words, 0)
+        transcript_segments: List[TranscriptSegment] = transcription.segments
         if not transcript_segments:
             logger.warning(f'Postprocessing returned empty for segment {path} (words present but no segments)')
             return
