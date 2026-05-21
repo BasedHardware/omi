@@ -5,6 +5,8 @@ from types import SimpleNamespace
 import wave
 from unittest.mock import MagicMock
 
+import numpy as np
+
 os.environ.setdefault('DEEPGRAM_API_KEY', 'fake-for-test')
 
 for mod_name in ['deepgram', 'deepgram.clients', 'deepgram.clients.live', 'deepgram.clients.live.v1']:
@@ -26,6 +28,7 @@ database_client_stub = sys.modules.setdefault('database._client', SimpleNamespac
 database_client_stub.db = getattr(database_client_stub, 'db', MagicMock())
 database_client_stub.document_id_from_seed = getattr(database_client_stub, 'document_id_from_seed', MagicMock())
 sys.modules.setdefault('database.conversations', MagicMock())
+sys.modules.setdefault('database.users', MagicMock())
 sys.modules.setdefault('database.redis_db', SimpleNamespace(r=MagicMock()))
 
 
@@ -75,7 +78,10 @@ def _pcm_to_wav_bytes(pcm_data: bytes, sample_rate: int) -> bytes:
 
 
 sys.modules.setdefault('utils.speaker_identification', SimpleNamespace(_pcm_to_wav_bytes=_pcm_to_wav_bytes))
-sys.modules.setdefault('utils.stt.provider_service', SimpleNamespace(transcribe_bytes=MagicMock()))
+sys.modules.setdefault(
+    'utils.stt.provider_service',
+    SimpleNamespace(transcribe_bytes=MagicMock(), update_provider_run_identity_metrics=MagicMock()),
+)
 sys.modules.setdefault(
     'utils.voice_duration_limiter',
     SimpleNamespace(
@@ -107,7 +113,7 @@ if 'utils.stt' in sys.modules and hasattr(sys.modules['utils.stt'], 'provider_se
     delattr(sys.modules['utils.stt'], 'provider_service')
 
 
-def _client(monkeypatch, *, segments=None):
+def _client(monkeypatch, *, segments=None, person_embeddings_cache=None):
     app = FastAPI()
     app.include_router(desktop_background.router)
     for route in app.routes:
@@ -137,6 +143,12 @@ def _client(monkeypatch, *, segments=None):
         monkeypatch.setattr(desktop_background.redis_db, 'r', MagicMock(), raising=False)
     monkeypatch.setattr(desktop_background.redis_db.r, 'get', lambda _key: None)
     monkeypatch.setattr(desktop_background.redis_db.r, 'set', lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(
+        desktop_background,
+        '_build_person_embeddings_cache',
+        lambda _uid: person_embeddings_cache or {},
+    )
+    monkeypatch.setattr(desktop_background, 'update_provider_run_identity_metrics', MagicMock())
 
     default_segments = segments or [
         TranscriptSegment(
@@ -320,6 +332,48 @@ def test_background_transcribe_multi_chunk_offsets_persist_and_keep_speaker_map(
     assert [segment.end for segment in appended_segments] == [1.0, 15.0, 29.0]
     assert [segment.speaker_id for segment in appended_segments] == [0, 1, 0]
     assert [segment.speaker for segment in appended_segments] == ['SPEAKER_00', 'SPEAKER_01', 'SPEAKER_00']
+
+
+def test_background_transcribe_identifies_assemblyai_speaker_with_omi_user_embedding(monkeypatch):
+    user_embedding = np.array([[1.0, 0.0]], dtype=np.float32)
+    segments = [
+        TranscriptSegment(
+            text='This is my voice.',
+            is_user=False,
+            start=0.0,
+            end=3.0,
+            provider_cluster_id='A',
+            provider_speaker_label='ASSEMBLYAI_SPEAKER_A',
+            speaker_identity_state='unassigned',
+            stt_provider='assemblyai',
+            stt_model='universal-2',
+        )
+    ]
+    client, _mock_transcribe = _client(
+        monkeypatch,
+        segments=segments,
+        person_embeddings_cache={'user': {'embedding': user_embedding, 'name': 'User'}},
+    )
+    monkeypatch.setattr(desktop_background, 'extract_embedding_from_bytes', lambda _audio, _filename: user_embedding)
+
+    response = client.post(
+        '/v2/desktop/background-transcribe?conversation_id=conv-1&chunk_start_ms=12000',
+        content=b'\x01\x00' * 16000 * 4,
+        headers={'Content-Type': 'application/octet-stream'},
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    segment = data['segments'][0]
+    assert segment['stt_provider'] == 'assemblyai'
+    assert segment['provider_cluster_id'] == 'A'
+    assert segment['is_user'] is True
+    assert segment['person_id'] is None
+    assert segment['speaker_identity_state'] == 'user'
+    assert segment['speaker_identity_source'] == 'omi_speaker_embedding'
+    assert segment['speaker_identity_provenance']['provider_cluster_id'] == 'A'
+    assert segment['start'] == 12.0
+    desktop_background.update_provider_run_identity_metrics.assert_called_once()
 
 
 def test_byok_background_routing_uses_deepgram_when_only_deepgram_key(monkeypatch):

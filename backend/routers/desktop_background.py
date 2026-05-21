@@ -3,10 +3,12 @@ import logging
 from datetime import datetime, timezone
 from typing import Dict, List, Optional
 
+import numpy as np
 from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from pydantic import BaseModel
 
 import database.conversations as conversations_db
+import database.users as users_db
 from database import redis_db
 from models.conversation_enums import ConversationSource, ConversationStatus
 from models.transcript_segment import TranscriptSegment
@@ -22,7 +24,9 @@ from utils.executors import db_executor, run_blocking, sync_executor
 from utils.fair_use import is_hard_restricted, record_speech_ms
 from utils.other import endpoints as auth
 from utils.speaker_identification import _pcm_to_wav_bytes
-from utils.stt.provider_service import transcribe_bytes
+from utils.stt.background_speaker_identity import USER_SELF_PERSON_ID, identify_background_speaker_clusters
+from utils.stt.provider_service import transcribe_bytes, update_provider_run_identity_metrics
+from utils.stt.speaker_embedding import extract_embedding_from_bytes
 from utils.stt.providers import STTWorkload
 from utils.subscription import has_transcription_credits, is_trial_paywalled
 from utils.voice_duration_limiter import compute_pcm_duration_ms
@@ -176,6 +180,16 @@ async def background_transcribe(
         del audio_bytes
 
     segments = response.segments
+    if conversation_id and segments:
+        await _identify_speakers(
+            uid=uid,
+            conversation_id=conversation_id,
+            audio_bytes=audio_for_stt,
+            segments=segments,
+            provider=response.result.provider if response.result else None,
+            model=response.result.model if response.result else None,
+            run_id=response.run_id,
+        )
     _apply_chunk_offset(segments, chunk_start_ms / 1000.0)
     if conversation_id:
         _apply_speaker_ids(conversation_id, segments)
@@ -253,6 +267,74 @@ def _apply_chunk_offset(segments: List[TranscriptSegment], offset_sec: float) ->
     for segment in segments:
         segment.start += offset_sec
         segment.end += offset_sec
+
+
+async def _identify_speakers(
+    uid: str,
+    conversation_id: str,
+    audio_bytes: bytes,
+    segments: List[TranscriptSegment],
+    provider: Optional[str],
+    model: Optional[str],
+    run_id: Optional[str],
+) -> None:
+    """Apply Omi speaker identity to AssemblyAI background chunk-local segments."""
+    try:
+        person_embeddings_cache = await run_blocking(db_executor, _build_person_embeddings_cache, uid)
+        if not person_embeddings_cache:
+            return
+        assignments = await run_blocking(
+            sync_executor,
+            identify_background_speaker_clusters,
+            segments,
+            audio_bytes,
+            person_embeddings_cache,
+            extract_embedding_from_bytes,
+        )
+        identified_count = sum(1 for assignment in assignments.values() if assignment.state in ('identified', 'user'))
+        logger.info(
+            "Speaker ID (desktop background): cluster assignments=%s identified=%s uid=%s conversation_id=%s",
+            len(assignments),
+            identified_count,
+            uid,
+            conversation_id,
+        )
+        await run_blocking(
+            db_executor,
+            update_provider_run_identity_metrics,
+            run_id,
+            provider or 'unknown',
+            model or 'unknown',
+            STTWorkload.background,
+            segments,
+        )
+    except Exception as e:
+        logger.warning(
+            "Speaker ID (desktop background): identification failed uid=%s conversation_id=%s: %s",
+            uid,
+            conversation_id,
+            e,
+        )
+
+
+def _build_person_embeddings_cache(uid: str) -> Dict[str, dict]:
+    cache: Dict[str, dict] = {}
+
+    embedding_list = users_db.get_user_speaker_embedding(uid)
+    if embedding_list:
+        user_embedding = np.array(embedding_list, dtype=np.float32).reshape(1, -1)
+        cache[USER_SELF_PERSON_ID] = {'embedding': user_embedding, 'name': 'User'}
+
+    people = users_db.get_people(uid)
+    for person in people or []:
+        embedding = person.get('speaker_embedding')
+        if embedding and person.get('speech_samples'):
+            cache[person['id']] = {
+                'embedding': np.array(embedding, dtype=np.float32).reshape(1, -1),
+                'name': person['name'],
+            }
+
+    return cache
 
 
 def _apply_speaker_ids(conversation_id: str, segments: List[TranscriptSegment]) -> None:
