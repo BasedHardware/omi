@@ -9310,7 +9310,7 @@ class AppLocalizationsRo extends AppLocalizations {
   String get syncStatusBackedUp => 'Copiat de rezervă';
 
   @override
-  String get syncStatusBackingUp => 'Se face copia de rezervă…';
+  String get syncStatusBackingUp => 'Se sincronizează…';
 
   @override
   String get syncStatusWaiting => 'Așteaptă sincronizarea';
@@ -9427,4 +9427,7 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get morePaymentMethodsComingSoon => 'În curând mai multe metode de plată';
+
+  @override
+  String get syncProcessingBackgroundHint => 'Acest lucru continuă în fundal — poți părăsi acest ecran.';
 }

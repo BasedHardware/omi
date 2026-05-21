@@ -9296,7 +9296,7 @@ class AppLocalizationsRu extends AppLocalizations {
   String get syncStatusBackedUp => 'Сохранено в облаке';
 
   @override
-  String get syncStatusBackingUp => 'Резервное копирование…';
+  String get syncStatusBackingUp => 'Синхронизация…';
 
   @override
   String get syncStatusWaiting => 'Ожидает синхронизации';
@@ -9415,4 +9415,7 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get morePaymentMethodsComingSoon => 'Скоро добавим новые способы оплаты';
+
+  @override
+  String get syncProcessingBackgroundHint => 'Это продолжается в фоновом режиме — вы можете покинуть этот экран.';
 }

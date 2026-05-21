@@ -9276,7 +9276,7 @@ class AppLocalizationsLt extends AppLocalizations {
   String get syncStatusBackedUp => 'Sukurta atsarginė kopija';
 
   @override
-  String get syncStatusBackingUp => 'Kuriama atsarginė kopija…';
+  String get syncStatusBackingUp => 'Sinchronizuojama…';
 
   @override
   String get syncStatusWaiting => 'Laukiama sinchronizavimo';
@@ -9395,4 +9395,7 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get morePaymentMethodsComingSoon => 'Netrukus daugiau mokėjimo būdų';
+
+  @override
+  String get syncProcessingBackgroundHint => 'Tai tęsiasi fone — galite išeiti iš šio ekrano.';
 }

@@ -9281,7 +9281,7 @@ class AppLocalizationsUk extends AppLocalizations {
   String get syncStatusBackedUp => 'Збережено в резерв';
 
   @override
-  String get syncStatusBackingUp => 'Резервне копіювання…';
+  String get syncStatusBackingUp => 'Синхронізація…';
 
   @override
   String get syncStatusWaiting => 'Очікує синхронізації';
@@ -9400,4 +9400,7 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get morePaymentMethodsComingSoon => 'Незабаром більше способів оплати';
+
+  @override
+  String get syncProcessingBackgroundHint => 'Це триває у фоновому режимі — ви можете залишити цей екран.';
 }

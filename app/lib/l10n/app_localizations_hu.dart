@@ -9306,7 +9306,7 @@ class AppLocalizationsHu extends AppLocalizations {
   String get syncStatusBackedUp => 'Mentve';
 
   @override
-  String get syncStatusBackingUp => 'Biztonsági mentés…';
+  String get syncStatusBackingUp => 'Szinkronizálás…';
 
   @override
   String get syncStatusWaiting => 'Szinkronizálásra vár';
@@ -9421,4 +9421,7 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get morePaymentMethodsComingSoon => 'Hamarosan további fizetési módok';
+
+  @override
+  String get syncProcessingBackgroundHint => 'Ez a háttérben folytatódik — elhagyhatja ezt a képernyőt.';
 }

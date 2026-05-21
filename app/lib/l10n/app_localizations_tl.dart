@@ -9352,7 +9352,7 @@ class AppLocalizationsTl extends AppLocalizations {
   String get syncStatusBackedUp => 'Na-back up na';
 
   @override
-  String get syncStatusBackingUp => 'Nagba-back up…';
+  String get syncStatusBackingUp => 'Sine-sync…';
 
   @override
   String get syncStatusWaiting => 'Naghihintay na mag-sync';
@@ -9467,4 +9467,7 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get morePaymentMethodsComingSoon => 'Mas maraming paraan ng pagbabayad na malapit nang dumating';
+
+  @override
+  String get syncProcessingBackgroundHint => 'Magpapatuloy ito sa background — puwede mong iwan ang screen na ito.';
 }

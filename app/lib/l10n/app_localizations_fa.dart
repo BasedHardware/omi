@@ -9270,7 +9270,7 @@ class AppLocalizationsFa extends AppLocalizations {
   String get syncStatusBackedUp => 'پشتیبان‌گیری شد';
 
   @override
-  String get syncStatusBackingUp => 'در حال پشتیبان‌گیری…';
+  String get syncStatusBackingUp => 'در حال هماهنگ‌سازی…';
 
   @override
   String get syncStatusWaiting => 'در انتظار همگام‌سازی';
@@ -9385,4 +9385,7 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get morePaymentMethodsComingSoon => 'روش‌های پرداخت بیشتر به‌زودی';
+
+  @override
+  String get syncProcessingBackgroundHint => 'این کار در پس‌زمینه ادامه می‌یابد — می‌توانید این صفحه را ترک کنید.';
 }

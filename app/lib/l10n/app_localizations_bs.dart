@@ -9291,7 +9291,7 @@ class AppLocalizationsBs extends AppLocalizations {
   String get syncStatusBackedUp => 'Sigurnosno kopirano';
 
   @override
-  String get syncStatusBackingUp => 'Pravljenje kopije…';
+  String get syncStatusBackingUp => 'Sinhronizujem…';
 
   @override
   String get syncStatusWaiting => 'Čeka sinkronizaciju';
@@ -9407,4 +9407,7 @@ class AppLocalizationsBs extends AppLocalizations {
 
   @override
   String get morePaymentMethodsComingSoon => 'Uskoro stižu novi načini plaćanja';
+
+  @override
+  String get syncProcessingBackgroundHint => 'Ovo se nastavlja u pozadini — možete napustiti ovaj ekran.';
 }

@@ -9264,7 +9264,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String get syncStatusBackedUp => 'Varundatud';
 
   @override
-  String get syncStatusBackingUp => 'Varundamine…';
+  String get syncStatusBackingUp => 'Sünkroonimine…';
 
   @override
   String get syncStatusWaiting => 'Ootab sünkroonimist';
@@ -9379,4 +9379,7 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get morePaymentMethodsComingSoon => 'Peagi rohkem makseviise';
+
+  @override
+  String get syncProcessingBackgroundHint => 'See jätkub taustal — võite sellelt ekraanilt lahkuda.';
 }

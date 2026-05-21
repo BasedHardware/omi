@@ -9271,7 +9271,7 @@ class AppLocalizationsSv extends AppLocalizations {
   String get syncStatusBackedUp => 'Säkerhetskopierad';
 
   @override
-  String get syncStatusBackingUp => 'Säkerhetskopierar…';
+  String get syncStatusBackingUp => 'Synkroniserar…';
 
   @override
   String get syncStatusWaiting => 'Väntar på synkronisering';
@@ -9386,4 +9386,7 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get morePaymentMethodsComingSoon => 'Fler betalningsmetoder kommer snart';
+
+  @override
+  String get syncProcessingBackgroundHint => 'Detta fortsätter i bakgrunden — du kan lämna den här skärmen.';
 }

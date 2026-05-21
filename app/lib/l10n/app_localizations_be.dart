@@ -9293,7 +9293,7 @@ class AppLocalizationsBe extends AppLocalizations {
   String get syncStatusBackedUp => 'Рэзервова захавана';
 
   @override
-  String get syncStatusBackingUp => 'Рэзервнае капіраванне…';
+  String get syncStatusBackingUp => 'Сінхранізацыя…';
 
   @override
   String get syncStatusWaiting => 'Чакае сінхранізацыі';
@@ -9412,4 +9412,7 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String get morePaymentMethodsComingSoon => 'Хутка з\'явяцца новыя спосабы аплаты';
+
+  @override
+  String get syncProcessingBackgroundHint => 'Працэс працягваецца ў фонавым рэжыме — вы можаце пакінуць гэты экран.';
 }

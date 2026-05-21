@@ -9266,7 +9266,7 @@ class AppLocalizationsFi extends AppLocalizations {
   String get syncStatusBackedUp => 'Varmuuskopioitu';
 
   @override
-  String get syncStatusBackingUp => 'Varmuuskopioidaan…';
+  String get syncStatusBackingUp => 'Synkronoidaan…';
 
   @override
   String get syncStatusWaiting => 'Odottaa synkronointia';
@@ -9381,4 +9381,7 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get morePaymentMethodsComingSoon => 'Lisää maksutapoja tulossa pian';
+
+  @override
+  String get syncProcessingBackgroundHint => 'Tämä jatkuu taustalla — voit poistua tästä näkymästä.';
 }

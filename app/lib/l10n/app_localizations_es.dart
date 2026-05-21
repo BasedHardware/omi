@@ -9288,7 +9288,7 @@ class AppLocalizationsEs extends AppLocalizations {
   String get syncStatusBackedUp => 'Copia de seguridad hecha';
 
   @override
-  String get syncStatusBackingUp => 'Haciendo copia…';
+  String get syncStatusBackingUp => 'Sincronizando…';
 
   @override
   String get syncStatusWaiting => 'Esperando para sincronizar';
@@ -9403,4 +9403,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get morePaymentMethodsComingSoon => 'Próximamente más métodos de pago';
+
+  @override
+  String get syncProcessingBackgroundHint => 'Esto continúa en segundo plano — puedes salir de esta pantalla.';
 }

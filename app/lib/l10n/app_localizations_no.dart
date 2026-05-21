@@ -9263,7 +9263,7 @@ class AppLocalizationsNo extends AppLocalizations {
   String get syncStatusBackedUp => 'Sikkerhetskopiert';
 
   @override
-  String get syncStatusBackingUp => 'Sikkerhetskopierer…';
+  String get syncStatusBackingUp => 'Synkroniserer…';
 
   @override
   String get syncStatusWaiting => 'Venter på synkronisering';
@@ -9378,4 +9378,7 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get morePaymentMethodsComingSoon => 'Flere betalingsmåter kommer snart';
+
+  @override
+  String get syncProcessingBackgroundHint => 'Dette fortsetter i bakgrunnen — du kan forlate denne skjermen.';
 }

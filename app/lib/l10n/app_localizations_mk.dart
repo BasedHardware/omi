@@ -9316,7 +9316,7 @@ class AppLocalizationsMk extends AppLocalizations {
   String get syncStatusBackedUp => 'Резервно зачувано';
 
   @override
-  String get syncStatusBackingUp => 'Се прави резервна копија…';
+  String get syncStatusBackingUp => 'Синхронизирање…';
 
   @override
   String get syncStatusWaiting => 'Чека синхронизација';
@@ -9431,4 +9431,7 @@ class AppLocalizationsMk extends AppLocalizations {
 
   @override
   String get morePaymentMethodsComingSoon => 'Наскоро повеќе начини на плаќање';
+
+  @override
+  String get syncProcessingBackgroundHint => 'Ова продолжува во заднина — може да го напуштите овој екран.';
 }

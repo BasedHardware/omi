@@ -9332,7 +9332,7 @@ class AppLocalizationsEl extends AppLocalizations {
   String get syncStatusBackedUp => 'Δημιουργήθηκε αντίγραφο';
 
   @override
-  String get syncStatusBackingUp => 'Δημιουργία αντιγράφου…';
+  String get syncStatusBackingUp => 'Συγχρονισμός…';
 
   @override
   String get syncStatusWaiting => 'Σε αναμονή συγχρονισμού';
@@ -9447,4 +9447,8 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get morePaymentMethodsComingSoon => 'Σύντομα περισσότεροι τρόποι πληρωμής';
+
+  @override
+  String get syncProcessingBackgroundHint =>
+      'Αυτό συνεχίζεται στο παρασκήνιο — μπορείτε να φύγετε από αυτήν την οθόνη.';
 }

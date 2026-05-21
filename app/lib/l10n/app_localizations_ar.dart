@@ -9205,7 +9205,7 @@ class AppLocalizationsAr extends AppLocalizations {
   String get syncStatusBackedUp => 'تم النسخ الاحتياطي';
 
   @override
-  String get syncStatusBackingUp => 'جارٍ النسخ الاحتياطي…';
+  String get syncStatusBackingUp => 'جارٍ المزامنة…';
 
   @override
   String get syncStatusWaiting => 'في انتظار المزامنة';
@@ -9327,4 +9327,7 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get morePaymentMethodsComingSoon => 'المزيد من طرق الدفع قريبًا';
+
+  @override
+  String get syncProcessingBackgroundHint => 'تستمر العملية في الخلفية — يمكنك مغادرة هذه الشاشة.';
 }

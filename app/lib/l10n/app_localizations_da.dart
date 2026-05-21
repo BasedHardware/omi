@@ -9253,7 +9253,7 @@ class AppLocalizationsDa extends AppLocalizations {
   String get syncStatusBackedUp => 'Sikkerhedskopieret';
 
   @override
-  String get syncStatusBackingUp => 'Sikkerhedskopierer…';
+  String get syncStatusBackingUp => 'Synkroniserer…';
 
   @override
   String get syncStatusWaiting => 'Venter på synkronisering';
@@ -9368,4 +9368,7 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get morePaymentMethodsComingSoon => 'Flere betalingsmetoder kommer snart';
+
+  @override
+  String get syncProcessingBackgroundHint => 'Det fortsætter i baggrunden — du kan forlade denne skærm.';
 }

@@ -9279,7 +9279,7 @@ class AppLocalizationsTr extends AppLocalizations {
   String get syncStatusBackedUp => 'Yedeklendi';
 
   @override
-  String get syncStatusBackingUp => 'Yedekleniyor…';
+  String get syncStatusBackingUp => 'Senkronize ediliyor…';
 
   @override
   String get syncStatusWaiting => 'Eşitleme bekleniyor';
@@ -9394,4 +9394,7 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get morePaymentMethodsComingSoon => 'Daha fazla ödeme yöntemi yakında';
+
+  @override
+  String get syncProcessingBackgroundHint => 'Bu işlem arka planda sürer — bu ekrandan ayrılabilirsiniz.';
 }

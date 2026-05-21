@@ -17298,7 +17298,7 @@ abstract class AppLocalizations {
   /// No description provided for @syncStatusBackingUp.
   ///
   /// In en, this message translates to:
-  /// **'Backing up…'**
+  /// **'Syncing…'**
   String get syncStatusBackingUp;
 
   /// No description provided for @syncStatusWaiting.
@@ -17486,6 +17486,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'More payment methods coming soon'**
   String get morePaymentMethodsComingSoon;
+
+  /// Reassurance line on the manual sync status card during the cloud-processing phase, so users do not think sync is stuck when there is no visible progress.
+  ///
+  /// In en, this message translates to:
+  /// **'This continues in the background — you can leave this screen.'**
+  String get syncProcessingBackgroundHint;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

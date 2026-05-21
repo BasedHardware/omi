@@ -9279,7 +9279,7 @@ class AppLocalizationsSr extends AppLocalizations {
   String get syncStatusBackedUp => 'Направљена резервна копија';
 
   @override
-  String get syncStatusBackingUp => 'Прави се резервна копија…';
+  String get syncStatusBackingUp => 'Синхронизација…';
 
   @override
   String get syncStatusWaiting => 'Чека синхронизацију';
@@ -9395,4 +9395,7 @@ class AppLocalizationsSr extends AppLocalizations {
 
   @override
   String get morePaymentMethodsComingSoon => 'Ускоро више начина плаћања';
+
+  @override
+  String get syncProcessingBackgroundHint => 'Ово се наставља у позадини — можете напустити овај екран.';
 }

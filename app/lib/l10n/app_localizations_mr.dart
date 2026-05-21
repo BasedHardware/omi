@@ -9278,7 +9278,7 @@ class AppLocalizationsMr extends AppLocalizations {
   String get syncStatusBackedUp => 'बॅकअप झाला';
 
   @override
-  String get syncStatusBackingUp => 'बॅकअप होत आहे…';
+  String get syncStatusBackingUp => 'समन्वय करत आहे…';
 
   @override
   String get syncStatusWaiting => 'सिंक होण्याची प्रतीक्षा';
@@ -9393,4 +9393,7 @@ class AppLocalizationsMr extends AppLocalizations {
 
   @override
   String get morePaymentMethodsComingSoon => 'लवकरच आणखी पेमेंट पद्धती';
+
+  @override
+  String get syncProcessingBackgroundHint => 'हे पार्श्वभूमीत सुरू राहते — तुम्ही ही स्क्रीन सोडू शकता.';
 }

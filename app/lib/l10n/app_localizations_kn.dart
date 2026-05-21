@@ -9299,7 +9299,7 @@ class AppLocalizationsKn extends AppLocalizations {
   String get syncStatusBackedUp => 'ಬ್ಯಾಕಪ್ ಆಗಿದೆ';
 
   @override
-  String get syncStatusBackingUp => 'ಬ್ಯಾಕಪ್ ಆಗುತ್ತಿದೆ…';
+  String get syncStatusBackingUp => 'ಸಿಂಕ್ ಮಾಡುತ್ತಿದೆ…';
 
   @override
   String get syncStatusWaiting => 'ಸಿಂಕ್ ಆಗಲು ಕಾಯುತ್ತಿದೆ';
@@ -9414,4 +9414,7 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get morePaymentMethodsComingSoon => 'ಶೀಘ್ರದಲ್ಲೇ ಹೆಚ್ಚಿನ ಪಾವತಿ ವಿಧಾನಗಳು';
+
+  @override
+  String get syncProcessingBackgroundHint => 'ಇದು ಹಿನ್ನೆಲೆಯಲ್ಲಿ ಮುಂದುವರಿಯುತ್ತದೆ — ನೀವು ಈ ಪರದೆಯಿಂದ ಹೊರಹೋಗಬಹುದು.';
 }

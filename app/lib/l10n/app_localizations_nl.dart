@@ -9295,7 +9295,7 @@ class AppLocalizationsNl extends AppLocalizations {
   String get syncStatusBackedUp => 'Geback-upt';
 
   @override
-  String get syncStatusBackingUp => 'Back-up maken…';
+  String get syncStatusBackingUp => 'Synchroniseren…';
 
   @override
   String get syncStatusWaiting => 'Wacht op synchronisatie';
@@ -9410,4 +9410,7 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get morePaymentMethodsComingSoon => 'Meer betaalmethoden binnenkort';
+
+  @override
+  String get syncProcessingBackgroundHint => 'Dit gaat op de achtergrond door — je kunt dit scherm verlaten.';
 }

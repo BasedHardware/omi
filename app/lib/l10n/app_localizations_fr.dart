@@ -9350,7 +9350,7 @@ class AppLocalizationsFr extends AppLocalizations {
   String get syncStatusBackedUp => 'Sauvegardé';
 
   @override
-  String get syncStatusBackingUp => 'Sauvegarde…';
+  String get syncStatusBackingUp => 'Synchronisation…';
 
   @override
   String get syncStatusWaiting => 'En attente de synchronisation';
@@ -9465,4 +9465,7 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get morePaymentMethodsComingSoon => 'D\'autres moyens de paiement bientôt disponibles';
+
+  @override
+  String get syncProcessingBackgroundHint => 'Cela continue en arrière-plan — vous pouvez quitter cet écran.';
 }

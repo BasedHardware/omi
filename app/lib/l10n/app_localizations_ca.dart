@@ -9321,7 +9321,7 @@ class AppLocalizationsCa extends AppLocalizations {
   String get syncStatusBackedUp => 'Còpia feta';
 
   @override
-  String get syncStatusBackingUp => 'Fent còpia…';
+  String get syncStatusBackingUp => 'Sincronitzant…';
 
   @override
   String get syncStatusWaiting => 'Esperant a sincronitzar';
@@ -9436,4 +9436,7 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get morePaymentMethodsComingSoon => 'Aviat hi haurà més mètodes de pagament';
+
+  @override
+  String get syncProcessingBackgroundHint => 'Això continua en segon pla — pots sortir d\'aquesta pantalla.';
 }

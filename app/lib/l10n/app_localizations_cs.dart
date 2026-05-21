@@ -9263,7 +9263,7 @@ class AppLocalizationsCs extends AppLocalizations {
   String get syncStatusBackedUp => 'Zálohováno';
 
   @override
-  String get syncStatusBackingUp => 'Zálohování…';
+  String get syncStatusBackingUp => 'Synchronizace…';
 
   @override
   String get syncStatusWaiting => 'Čeká na synchronizaci';
@@ -9382,4 +9382,7 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get morePaymentMethodsComingSoon => 'Brzy přibudou další platební metody';
+
+  @override
+  String get syncProcessingBackgroundHint => 'Pokračuje to na pozadí — tuto obrazovku můžete opustit.';
 }

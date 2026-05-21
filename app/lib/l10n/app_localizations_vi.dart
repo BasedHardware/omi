@@ -9267,7 +9267,7 @@ class AppLocalizationsVi extends AppLocalizations {
   String get syncStatusBackedUp => 'Đã sao lưu';
 
   @override
-  String get syncStatusBackingUp => 'Đang sao lưu…';
+  String get syncStatusBackingUp => 'Đang đồng bộ…';
 
   @override
   String get syncStatusWaiting => 'Đang chờ đồng bộ';
@@ -9379,4 +9379,7 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get morePaymentMethodsComingSoon => 'Sắp có thêm phương thức thanh toán';
+
+  @override
+  String get syncProcessingBackgroundHint => 'Quá trình này tiếp tục chạy nền — bạn có thể rời khỏi màn hình này.';
 }

@@ -9194,7 +9194,7 @@ class AppLocalizationsHe extends AppLocalizations {
   String get syncStatusBackedUp => 'גובה';
 
   @override
-  String get syncStatusBackingUp => 'מגבה…';
+  String get syncStatusBackingUp => 'מסנכרן…';
 
   @override
   String get syncStatusWaiting => 'ממתין לסנכרון';
@@ -9312,4 +9312,7 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get morePaymentMethodsComingSoon => 'אמצעי תשלום נוספים בקרוב';
+
+  @override
+  String get syncProcessingBackgroundHint => 'התהליך נמשך ברקע — אפשר לצאת מהמסך הזה.';
 }

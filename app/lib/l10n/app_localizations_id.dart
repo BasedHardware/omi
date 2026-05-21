@@ -9277,7 +9277,7 @@ class AppLocalizationsId extends AppLocalizations {
   String get syncStatusBackedUp => 'Sudah dicadangkan';
 
   @override
-  String get syncStatusBackingUp => 'Mencadangkan…';
+  String get syncStatusBackingUp => 'Menyinkronkan…';
 
   @override
   String get syncStatusWaiting => 'Menunggu sinkronisasi';
@@ -9390,4 +9390,7 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get morePaymentMethodsComingSoon => 'Metode pembayaran lainnya segera hadir';
+
+  @override
+  String get syncProcessingBackgroundHint => 'Ini berlanjut di latar belakang — Anda dapat meninggalkan layar ini.';
 }

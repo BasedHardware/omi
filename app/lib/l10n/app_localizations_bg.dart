@@ -9302,7 +9302,7 @@ class AppLocalizationsBg extends AppLocalizations {
   String get syncStatusBackedUp => 'Архивирано';
 
   @override
-  String get syncStatusBackingUp => 'Архивиране…';
+  String get syncStatusBackingUp => 'Синхронизиране…';
 
   @override
   String get syncStatusWaiting => 'Чака синхронизация';
@@ -9417,4 +9417,7 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get morePaymentMethodsComingSoon => 'Скоро ще има още методи на плащане';
+
+  @override
+  String get syncProcessingBackgroundHint => 'Това продължава на заден план — можете да напуснете този екран.';
 }

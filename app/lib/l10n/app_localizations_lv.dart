@@ -9285,7 +9285,7 @@ class AppLocalizationsLv extends AppLocalizations {
   String get syncStatusBackedUp => 'Dublēts';
 
   @override
-  String get syncStatusBackingUp => 'Notiek dublēšana…';
+  String get syncStatusBackingUp => 'Sinhronizē…';
 
   @override
   String get syncStatusWaiting => 'Gaida sinhronizāciju';
@@ -9402,4 +9402,7 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get morePaymentMethodsComingSoon => 'Drīzumā vairāk maksājumu veidu';
+
+  @override
+  String get syncProcessingBackgroundHint => 'Tas turpinās fonā — varat pamest šo ekrānu.';
 }

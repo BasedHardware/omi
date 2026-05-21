@@ -9335,7 +9335,7 @@ class AppLocalizationsTa extends AppLocalizations {
   String get syncStatusBackedUp => 'காப்புப் பிரதி எடுக்கப்பட்டது';
 
   @override
-  String get syncStatusBackingUp => 'காப்புப் பிரதி எடுக்கப்படுகிறது…';
+  String get syncStatusBackingUp => 'ஒத்திசைக்கிறது…';
 
   @override
   String get syncStatusWaiting => 'ஒத்திசைவுக்காக காத்திருக்கிறது';
@@ -9450,4 +9450,7 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get morePaymentMethodsComingSoon => 'மேலும் கட்டண முறைகள் விரைவில்';
+
+  @override
+  String get syncProcessingBackgroundHint => 'இது பின்னணியில் தொடர்கிறது — இந்தத் திரையிலிருந்து நீங்கள் வெளியேறலாம்.';
 }

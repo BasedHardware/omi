@@ -9255,7 +9255,7 @@ class AppLocalizationsSk extends AppLocalizations {
   String get syncStatusBackedUp => 'Zálohované';
 
   @override
-  String get syncStatusBackingUp => 'Zálohovanie…';
+  String get syncStatusBackingUp => 'Synchronizuje sa…';
 
   @override
   String get syncStatusWaiting => 'Čaká na synchronizáciu';
@@ -9373,4 +9373,7 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get morePaymentMethodsComingSoon => 'Čoskoro ďalšie platobné metódy';
+
+  @override
+  String get syncProcessingBackgroundHint => 'Pokračuje to na pozadí — túto obrazovku môžete opustiť.';
 }

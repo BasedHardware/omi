@@ -9117,7 +9117,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get syncStatusBackedUp => 'バックアップ済み';
 
   @override
-  String get syncStatusBackingUp => 'バックアップ中…';
+  String get syncStatusBackingUp => '同期中…';
 
   @override
   String get syncStatusWaiting => '同期を待機中';
@@ -9227,4 +9227,7 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get morePaymentMethodsComingSoon => '他の支払い方法を近日追加予定';
+
+  @override
+  String get syncProcessingBackgroundHint => 'この処理はバックグラウンドで続きます — この画面から移動してかまいません。';
 }

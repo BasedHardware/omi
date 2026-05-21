@@ -9316,7 +9316,7 @@ class AppLocalizationsTe extends AppLocalizations {
   String get syncStatusBackedUp => 'బ్యాకప్ అయింది';
 
   @override
-  String get syncStatusBackingUp => 'బ్యాకప్ అవుతోంది…';
+  String get syncStatusBackingUp => 'సమన్వయం చేస్తోంది…';
 
   @override
   String get syncStatusWaiting => 'సింక్ కోసం వేచి ఉంది';
@@ -9431,4 +9431,7 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get morePaymentMethodsComingSoon => 'మరిన్ని చెల్లింపు పద్ధతులు త్వరలో';
+
+  @override
+  String get syncProcessingBackgroundHint => 'ఇది నేపథ్యంలో కొనసాగుతుంది — మీరు ఈ స్క్రీన్ నుండి వెళ్లిపోవచ్చు.';
 }

@@ -9103,7 +9103,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get syncStatusBackedUp => '已备份';
 
   @override
-  String get syncStatusBackingUp => '正在备份…';
+  String get syncStatusBackingUp => '同步中…';
 
   @override
   String get syncStatusWaiting => '等待同步';
@@ -9213,4 +9213,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get morePaymentMethodsComingSoon => '更多支付方式即将推出';
+
+  @override
+  String get syncProcessingBackgroundHint => '此过程会在后台继续 — 你可以离开此屏幕。';
 }

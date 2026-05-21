@@ -9291,7 +9291,7 @@ class AppLocalizationsMs extends AppLocalizations {
   String get syncStatusBackedUp => 'Telah disandarkan';
 
   @override
-  String get syncStatusBackingUp => 'Menyandarkan…';
+  String get syncStatusBackingUp => 'Menyegerakkan…';
 
   @override
   String get syncStatusWaiting => 'Menunggu untuk segerak';
@@ -9404,4 +9404,7 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get morePaymentMethodsComingSoon => 'Lebih banyak kaedah pembayaran akan datang';
+
+  @override
+  String get syncProcessingBackgroundHint => 'Ini berterusan di latar belakang — anda boleh meninggalkan skrin ini.';
 }

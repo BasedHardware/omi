@@ -9118,7 +9118,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get syncStatusBackedUp => '백업됨';
 
   @override
-  String get syncStatusBackingUp => '백업 중…';
+  String get syncStatusBackingUp => '동기화 중…';
 
   @override
   String get syncStatusWaiting => '동기화 대기 중';
@@ -9229,4 +9229,7 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get morePaymentMethodsComingSoon => '더 많은 결제 수단이 곧 추가됩니다';
+
+  @override
+  String get syncProcessingBackgroundHint => '이 작업은 백그라운드에서 계속됩니다 — 이 화면을 벗어나도 됩니다.';
 }

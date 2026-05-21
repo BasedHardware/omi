@@ -9275,7 +9275,7 @@ class AppLocalizationsBn extends AppLocalizations {
   String get syncStatusBackedUp => 'ব্যাকআপ হয়েছে';
 
   @override
-  String get syncStatusBackingUp => 'ব্যাকআপ চলছে…';
+  String get syncStatusBackingUp => 'সিঙ্ক করা হচ্ছে…';
 
   @override
   String get syncStatusWaiting => 'সিঙ্কের অপেক্ষায়';
@@ -9390,4 +9390,7 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String get morePaymentMethodsComingSoon => 'শীঘ্রই আরও পেমেন্ট পদ্ধতি আসছে';
+
+  @override
+  String get syncProcessingBackgroundHint => 'এটি ব্যাকগ্রাউন্ডে চলতে থাকে — আপনি এই স্ক্রিন থেকে চলে যেতে পারেন।';
 }

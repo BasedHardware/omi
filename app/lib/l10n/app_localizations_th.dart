@@ -9220,7 +9220,7 @@ class AppLocalizationsTh extends AppLocalizations {
   String get syncStatusBackedUp => 'สำรองข้อมูลแล้ว';
 
   @override
-  String get syncStatusBackingUp => 'กำลังสำรองข้อมูล…';
+  String get syncStatusBackingUp => 'กำลังซิงค์…';
 
   @override
   String get syncStatusWaiting => 'รอการซิงค์';
@@ -9332,4 +9332,7 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get morePaymentMethodsComingSoon => 'วิธีการชำระเงินอื่นๆ เร็วๆ นี้';
+
+  @override
+  String get syncProcessingBackgroundHint => 'การทำงานนี้ดำเนินต่อในเบื้องหลัง — คุณออกจากหน้าจอนี้ได้.';
 }
