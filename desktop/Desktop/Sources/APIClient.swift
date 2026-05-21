@@ -1351,7 +1351,14 @@ struct DesktopCapabilitiesResponse: Codable {
 
 struct DesktopBackgroundBatchCapability: Codable {
   let enabled: Bool
+  let mode: String?
   let provider: String
+  let primaryProvider: String?
+  let effectiveProvider: String?
+  let fallbackProvider: String?
+  let fallbackEnabled: Bool?
+  let fallbackAvailable: Bool?
+  let reason: String?
   let sampleRate: Int
   let channels: Int
   let encoding: String
@@ -1359,7 +1366,14 @@ struct DesktopBackgroundBatchCapability: Codable {
 
   enum CodingKeys: String, CodingKey {
     case enabled
+    case mode
     case provider
+    case primaryProvider = "primary_provider"
+    case effectiveProvider = "effective_provider"
+    case fallbackProvider = "fallback_provider"
+    case fallbackEnabled = "fallback_enabled"
+    case fallbackAvailable = "fallback_available"
+    case reason
     case sampleRate = "sample_rate"
     case channels
     case encoding

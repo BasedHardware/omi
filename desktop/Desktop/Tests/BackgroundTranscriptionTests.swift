@@ -480,23 +480,149 @@ final class BackgroundTranscriptionTests: XCTestCase {
     XCTAssertEqual(reducer.segments[0].translations.first?.text, "hola")
   }
 
-  func testRoutingGuardUsesCloudBatchForMicrophoneWhenServerEnabled() {
+  func testRoutingGuardUsesCloudBatchForMicrophoneWhenCapabilityUsable() {
     let guardrail = BackgroundTranscriptionRoutingGuard()
 
     XCTAssertEqual(
       guardrail.decide(
-        serverAssemblyBackgroundEnabled: true, audioSource: .microphone),
+        backgroundBatchCapability: Self.backgroundBatchCapability(
+          enabled: true, effectiveProvider: "assemblyai"),
+        audioSource: .microphone),
       .cloudBatchAssembly
     )
     XCTAssertEqual(
       guardrail.decide(
-        serverAssemblyBackgroundEnabled: true, audioSource: .bleDevice),
+        backgroundBatchCapability: Self.backgroundBatchCapability(
+          enabled: true, effectiveProvider: "assemblyai"),
+        audioSource: .bleDevice),
       .cloudListenStreaming(reason: "batch_microphone_only")
     )
     XCTAssertEqual(
       guardrail.decide(
-        serverAssemblyBackgroundEnabled: false, audioSource: .microphone),
+        backgroundBatchCapability: Self.backgroundBatchCapability(
+          enabled: false, effectiveProvider: nil, reason: "missing_assemblyai_api_key"),
+        audioSource: .microphone),
+      .cloudListenStreaming(reason: "missing_assemblyai_api_key")
+    )
+    XCTAssertEqual(
+      guardrail.decide(
+        backgroundBatchCapability: nil,
+        audioSource: .microphone),
+      .cloudListenStreaming(reason: "server_background_batch_capability_unavailable")
+    )
+    XCTAssertEqual(
+      guardrail.decide(
+        backgroundBatchCapability: Self.backgroundBatchCapability(
+          enabled: true, effectiveProvider: nil, reason: "no_usable_batch_provider"),
+        audioSource: .microphone),
+      .cloudListenStreaming(reason: "no_usable_batch_provider")
+    )
+    XCTAssertEqual(
+      guardrail.decide(
+        backgroundBatchCapability: Self.backgroundBatchCapability(
+          enabled: true, effectiveProvider: "unknown-provider"),
+        audioSource: .microphone),
+      .cloudListenStreaming(reason: "server_background_batch_provider_unsupported")
+    )
+    XCTAssertTrue(
+      guardrail.shouldFallbackToStreamingAfterBatchStartupFailure(
+        audioSource: .microphone,
+        captureStarted: false
+      )
+    )
+    XCTAssertFalse(
+      guardrail.shouldFallbackToStreamingAfterBatchStartupFailure(
+        audioSource: .microphone,
+        captureStarted: true
+      )
+    )
+    XCTAssertFalse(
+      guardrail.shouldFallbackToStreamingAfterBatchStartupFailure(
+        audioSource: .bleDevice,
+        captureStarted: false
+      )
+    )
+  }
+
+  func testDesktopCapabilitiesDecodeEffectiveProviderFields() throws {
+    let json = Data(
+      """
+      {
+        "background_batch": {
+          "enabled": true,
+          "mode": "deepgram_fallback",
+          "provider": "assemblyai",
+          "primary_provider": "assemblyai",
+          "effective_provider": "deepgram",
+          "fallback_provider": "deepgram",
+          "fallback_enabled": true,
+          "fallback_available": true,
+          "workload": "background",
+          "reason": "fallback_deepgram_available",
+          "sample_rate": 16000,
+          "channels": 1,
+          "encoding": "linear16",
+          "max_chunk_seconds": 15
+        }
+      }
+      """.utf8)
+
+    let decoded = try JSONDecoder().decode(DesktopCapabilitiesResponse.self, from: json)
+
+    XCTAssertTrue(decoded.backgroundBatch.enabled)
+    XCTAssertEqual(decoded.backgroundBatch.mode, "deepgram_fallback")
+    XCTAssertEqual(decoded.backgroundBatch.primaryProvider, "assemblyai")
+    XCTAssertEqual(decoded.backgroundBatch.effectiveProvider, "deepgram")
+    XCTAssertEqual(decoded.backgroundBatch.fallbackProvider, "deepgram")
+    XCTAssertEqual(decoded.backgroundBatch.reason, "fallback_deepgram_available")
+  }
+
+  func testOlderDesktopCapabilitiesDecodeWithoutEffectiveProviderFields() throws {
+    let json = Data(
+      """
+      {
+        "background_batch": {
+          "enabled": false,
+          "provider": "assemblyai",
+          "sample_rate": 16000,
+          "channels": 1,
+          "encoding": "linear16",
+          "max_chunk_seconds": 15
+        }
+      }
+      """.utf8)
+
+    let decoded = try JSONDecoder().decode(DesktopCapabilitiesResponse.self, from: json)
+
+    XCTAssertFalse(decoded.backgroundBatch.enabled)
+    XCTAssertNil(decoded.backgroundBatch.effectiveProvider)
+    XCTAssertEqual(
+      BackgroundTranscriptionRoutingGuard().decide(
+        backgroundBatchCapability: decoded.backgroundBatch,
+        audioSource: .microphone),
       .cloudListenStreaming(reason: "server_background_batch_disabled")
+    )
+  }
+
+  private static func backgroundBatchCapability(
+    enabled: Bool,
+    effectiveProvider: String?,
+    reason: String? = nil
+  ) -> DesktopBackgroundBatchCapability {
+    DesktopBackgroundBatchCapability(
+      enabled: enabled,
+      mode: enabled ? "assemblyai_primary" : "disabled",
+      provider: "assemblyai",
+      primaryProvider: "assemblyai",
+      effectiveProvider: effectiveProvider,
+      fallbackProvider: "deepgram",
+      fallbackEnabled: true,
+      fallbackAvailable: true,
+      reason: reason,
+      sampleRate: 16000,
+      channels: 1,
+      encoding: "linear16",
+      maxChunkSeconds: 15
     )
   }
 

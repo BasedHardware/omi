@@ -337,6 +337,7 @@ class AppState: ObservableObject {
   private var cloudBackgroundStartTask: Task<Void, Never>?
   private var cloudBackgroundDrainTask: Task<Void, Never>?
   private var cloudBackgroundSampleCursor = 0
+  private var forceNextTranscriptionStartStreaming = false
   private var isCloudBackgroundTranscription = false
   private var isCloudBackgroundBackpressured = false
   private var didLogCloudBackgroundBackpressure = false
@@ -1431,11 +1432,9 @@ class AppState: ObservableObject {
         "Transcription: Using language=\(effectiveLanguage) (autoDetect=\(AssistantSettings.shared.transcriptionAutoDetect), selected=\(AssistantSettings.shared.transcriptionLanguage))"
       )
 
-      let routing = BackgroundTranscriptionRoutingGuard().decide(
-        serverAssemblyBackgroundEnabled: true,
-        audioSource: effectiveSource
-      )
-      if routing == .cloudBatchAssembly {
+      let shouldAttemptCloudBatch = effectiveSource == .microphone && !forceNextTranscriptionStartStreaming
+      forceNextTranscriptionStartStreaming = false
+      if shouldAttemptCloudBatch {
         let batchLanguage = AssistantSettings.shared.effectiveBatchTranscriptionLanguage
         log(
           "Transcription: Cloud background batch using language=\(batchLanguage) (autoDetect=\(AssistantSettings.shared.transcriptionAutoDetect), selected=\(AssistantSettings.shared.transcriptionLanguage))"
@@ -1594,15 +1593,17 @@ class AppState: ObservableObject {
     defer { isStartingTranscription = false }
     do {
       let capabilities = try await APIClient.shared.getDesktopCapabilities()
-      guard capabilities.backgroundBatch.enabled
-        && capabilities.backgroundBatch.provider.lowercased() == "assemblyai"
-      else {
+      let routing = BackgroundTranscriptionRoutingGuard().decide(
+        backgroundBatchCapability: capabilities.backgroundBatch,
+        audioSource: source
+      )
+      guard routing == .cloudBatchAssembly else {
         throw NSError(
           domain: "Omi.CloudBackgroundTranscription",
           code: 1,
           userInfo: [
             NSLocalizedDescriptionKey:
-              "Server background batch transcription is not enabled for AssemblyAI."
+              "Server background batch transcription is not available."
           ]
         )
       }
@@ -1694,9 +1695,19 @@ class AppState: ObservableObject {
       didLogCloudBackgroundBackpressure = false
       isTranscribing = false
       AssistantSettings.shared.transcriptionEnabled = false
-      AnalyticsManager.shared.recordingError(error: error.localizedDescription)
       logError("Transcription: Cloud background batch failed to start", error: error)
-      showAlert(title: "Audio Recording Not Started", message: cloudBackgroundStartFailureMessage(for: error))
+      if BackgroundTranscriptionRoutingGuard().shouldFallbackToStreamingAfterBatchStartupFailure(
+        audioSource: source,
+        captureStarted: false
+      ) {
+        isStartingTranscription = false
+        forceNextTranscriptionStartStreaming = true
+        startTranscription(source: source)
+        log("Transcription: Fell back to streaming after cloud background batch startup failed")
+      } else {
+        AnalyticsManager.shared.recordingError(error: error.localizedDescription)
+        showAlert(title: "Audio Recording Not Started", message: cloudBackgroundStartFailureMessage(for: error))
+      }
     }
   }
 

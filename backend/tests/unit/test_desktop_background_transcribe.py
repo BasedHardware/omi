@@ -203,7 +203,12 @@ def test_desktop_capabilities_reports_assemblyai_background_when_key_available(m
     data = response.json()['background_batch']
     assert data['enabled'] is True
     assert data['provider'] == 'assemblyai'
+    assert data['primary_provider'] == 'assemblyai'
+    assert data['effective_provider'] == 'assemblyai'
+    assert data['mode'] == 'assemblyai_primary'
     assert data['fallback_provider'] == 'deepgram'
+    assert data['fallback_enabled'] is True
+    assert data['fallback_available'] is True
     assert data['workload'] == 'background'
     assert data['reason'] is None
 
@@ -226,7 +231,12 @@ def test_desktop_capabilities_allows_background_batch_with_deepgram_fallback(mon
     data = response.json()['background_batch']
     assert data['enabled'] is True
     assert data['provider'] == 'assemblyai'
+    assert data['primary_provider'] == 'assemblyai'
+    assert data['effective_provider'] == 'deepgram'
+    assert data['mode'] == 'deepgram_fallback'
     assert data['fallback_provider'] == 'deepgram'
+    assert data['fallback_enabled'] is True
+    assert data['fallback_available'] is True
     assert data['reason'] == 'fallback_deepgram_available'
 
 
@@ -248,8 +258,82 @@ def test_desktop_capabilities_reports_missing_assemblyai_key_when_fallback_disab
     data = response.json()['background_batch']
     assert data['enabled'] is False
     assert data['provider'] == 'assemblyai'
+    assert data['effective_provider'] is None
+    assert data['mode'] == 'disabled'
     assert data['fallback_provider'] is None
+    assert data['fallback_enabled'] is False
     assert data['reason'] == 'missing_assemblyai_api_key'
+
+
+def test_desktop_capabilities_reports_no_usable_batch_provider_without_any_key(monkeypatch):
+    client, _mock_transcribe = _client(monkeypatch)
+    monkeypatch.setenv('ASSEMBLYAI_PRERECORDED_STT_ENABLED', 'true')
+    monkeypatch.setenv('ASSEMBLYAI_PRERECORDED_STT_WORKLOADS', 'sync,background,postprocess')
+    monkeypatch.delenv('ASSEMBLYAI_API_KEY', raising=False)
+    monkeypatch.delenv('DEEPGRAM_API_KEY', raising=False)
+    monkeypatch.setattr(
+        desktop_background,
+        'resolve_prerecorded_provider_for_request',
+        lambda _workload: STTProviderName.assemblyai,
+    )
+
+    response = client.get('/v2/desktop/capabilities')
+
+    assert response.status_code == 200
+    data = response.json()['background_batch']
+    assert data['enabled'] is False
+    assert data['primary_provider'] == 'assemblyai'
+    assert data['effective_provider'] is None
+    assert data['fallback_provider'] == 'deepgram'
+    assert data['fallback_available'] is False
+    assert data['reason'] == 'missing_assemblyai_api_key'
+
+
+def test_desktop_capabilities_uses_byok_assemblyai(monkeypatch):
+    client, _mock_transcribe = _client(monkeypatch)
+    monkeypatch.setenv('ASSEMBLYAI_PRERECORDED_STT_ENABLED', 'true')
+    monkeypatch.setenv('ASSEMBLYAI_PRERECORDED_STT_WORKLOADS', 'sync,background,postprocess')
+    monkeypatch.delenv('ASSEMBLYAI_API_KEY', raising=False)
+    monkeypatch.setattr(
+        desktop_background, 'get_byok_key', lambda provider: 'aai-user-key' if provider == 'assemblyai' else None
+    )
+    monkeypatch.setattr(
+        desktop_background,
+        'resolve_prerecorded_provider_for_request',
+        lambda _workload: STTProviderName.assemblyai,
+    )
+
+    response = client.get('/v2/desktop/capabilities')
+
+    assert response.status_code == 200
+    data = response.json()['background_batch']
+    assert data['enabled'] is True
+    assert data['effective_provider'] == 'assemblyai'
+    assert data['mode'] == 'assemblyai_primary'
+
+
+def test_desktop_capabilities_uses_byok_deepgram_fallback(monkeypatch):
+    client, _mock_transcribe = _client(monkeypatch)
+    monkeypatch.setenv('ASSEMBLYAI_PRERECORDED_STT_ENABLED', 'true')
+    monkeypatch.setenv('ASSEMBLYAI_PRERECORDED_STT_WORKLOADS', 'sync,background,postprocess')
+    monkeypatch.delenv('ASSEMBLYAI_API_KEY', raising=False)
+    monkeypatch.delenv('DEEPGRAM_API_KEY', raising=False)
+    monkeypatch.setattr(
+        desktop_background, 'get_byok_key', lambda provider: 'dg-user-key' if provider == 'deepgram' else None
+    )
+    monkeypatch.setattr(
+        desktop_background,
+        'resolve_prerecorded_provider_for_request',
+        lambda _workload: STTProviderName.deepgram,
+    )
+
+    response = client.get('/v2/desktop/capabilities')
+
+    assert response.status_code == 200
+    data = response.json()['background_batch']
+    assert data['enabled'] is True
+    assert data['effective_provider'] == 'deepgram'
+    assert data['mode'] == 'deepgram_fallback'
 
 
 def test_background_transcribe_returns_segments_with_offset(monkeypatch):
