@@ -1,7 +1,6 @@
 import sys
 from unittest.mock import MagicMock
 
-
 for mod_name in ['deepgram', 'deepgram.clients', 'deepgram.clients.live', 'deepgram.clients.live.v1']:
     if mod_name not in sys.modules:
         sys.modules[mod_name] = MagicMock()

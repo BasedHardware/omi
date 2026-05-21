@@ -9,7 +9,6 @@ from utils.stt.provider_evaluation import (
     summarize_provider_output,
 )
 
-
 FIXTURE_DIR = Path(__file__).resolve().parents[1] / 'fixtures' / 'stt_provider_eval'
 
 

@@ -1,6 +1,5 @@
 from typing import Tuple
 
-
 # Languages supported by nova-3.
 DEEPGRAM_NOVA3_LANGUAGES = {
     "ar",
