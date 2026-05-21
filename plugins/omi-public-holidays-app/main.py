@@ -101,9 +101,12 @@ def _format_holiday(holiday: dict[str, Any]) -> str:
 
 
 def _format_long_weekend(item: dict[str, Any]) -> str:
-    bridge_days = item.get("bridgeDays") or []
+    raw_bridge_days = item.get("bridgeDays")
+    bridge_days = raw_bridge_days if isinstance(raw_bridge_days, list) else []
     if bridge_days:
         bridge_text = f"; bridge day: {', '.join(bridge_days)}"
+    elif item.get("needBridgeDay"):
+        bridge_text = "; bridge day needed"
     else:
         bridge_text = "; no bridge day needed"
     return f"- {item.get('startDate')} to {item.get('endDate')}: {item.get('dayCount')} days{bridge_text}"
