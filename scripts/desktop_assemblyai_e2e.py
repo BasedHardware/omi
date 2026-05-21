@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import struct
 import subprocess
 import sys
@@ -55,6 +56,44 @@ def read_desktop_auth_token() -> str:
             f"then retry (defaults domain: {DEFAULTS_DOMAIN})."
         )
     return token
+
+
+def read_backend_admin_key() -> str | None:
+    admin_key = os.getenv("ADMIN_KEY")
+    if admin_key:
+        return admin_key
+
+    env_path = Path(__file__).resolve().parents[1] / "backend" / ".env"
+    if not env_path.exists():
+        return None
+
+    for line in env_path.read_text().splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#") or not stripped.startswith("ADMIN_KEY="):
+            continue
+        return stripped.split("=", 1)[1].strip().strip('"').strip("'") or None
+    return None
+
+
+def resolve_auth_token(args: argparse.Namespace) -> str:
+    if args.token:
+        return args.token
+
+    if args.background_chunk or args.background_batch:
+        if args.use_desktop_auth:
+            print("Using Omi Dev desktop auth; this will persist sample transcripts to the signed-in local account.")
+            return read_desktop_auth_token()
+
+        admin_key = read_backend_admin_key()
+        if not admin_key:
+            raise SystemExit(
+                "Background e2e persists transcript segments. Set ADMIN_KEY in backend/.env, pass --token, "
+                "or pass --use-desktop-auth to explicitly use the signed-in Omi Dev account."
+            )
+        print(f"Using isolated local e2e uid={args.e2e_uid}.")
+        return f"{admin_key}{args.e2e_uid}"
+
+    return read_desktop_auth_token()
 
 
 def require_backend_reachable(api_base: str) -> None:
@@ -410,7 +449,23 @@ def main() -> int:
     parser.add_argument("--api", default="http://127.0.0.1:8080", help="Local Python backend base URL")
     parser.add_argument("--workdir", default="/tmp/omi-assemblyai-e2e", help="Temp dir for sample audio")
     parser.add_argument("--language", default="en", help="Language passed to background transcription")
-    parser.add_argument("--token", help="Firebase ID token; defaults to Omi Dev auth_idToken from macOS defaults")
+    parser.add_argument(
+        "--token",
+        help=(
+            "Firebase ID token or ADMIN_KEY-prefixed uid. Background modes default to an isolated local e2e uid; "
+            "sync mode defaults to Omi Dev auth_idToken from macOS defaults."
+        ),
+    )
+    parser.add_argument(
+        "--e2e-uid",
+        default="desktop-assemblyai-e2e",
+        help="Isolated local uid used by background modes when ADMIN_KEY is available and --token is omitted.",
+    )
+    parser.add_argument(
+        "--use-desktop-auth",
+        action="store_true",
+        help="For background modes, explicitly persist sample transcripts to the signed-in Omi Dev account.",
+    )
     parser.add_argument(
         "--background-chunk",
         action="store_true",
@@ -427,7 +482,7 @@ def main() -> int:
         print("Choose only one of --background-chunk or --background-batch.", file=sys.stderr)
         return 2
 
-    token = args.token or read_desktop_auth_token()
+    token = resolve_auth_token(args)
 
     if args.background_chunk:
         pcm_path = ensure_sample_pcm(Path(args.workdir))
