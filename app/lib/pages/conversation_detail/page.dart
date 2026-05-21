@@ -1438,8 +1438,7 @@ class _TranscriptWidgetsState extends State<TranscriptWidgets> with AutomaticKee
                 final segment = segments[segmentIndex];
                 final person =
                     segment.personId != null ? SharedPreferencesUtil().getPersonById(segment.personId!) : null;
-                final speakerName =
-                    person?.name ??
+                final speakerName = person?.name ??
                     context.l10n.speakerWithId(TranscriptSegment.getDisplaySpeakerIdForSegment(segment, segments));
                 PlatformManager.instance.analytics.editSegmentTextStarted();
                 bool saved = false;
