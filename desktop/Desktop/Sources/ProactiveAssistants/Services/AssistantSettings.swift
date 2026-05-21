@@ -29,7 +29,7 @@ class AssistantSettings {
     private let defaultTranscriptionAutoDetect = true
     private let defaultTranscriptionVocabulary: [String] = []
     private let defaultVadGateEnabled = false
-    private let defaultBatchTranscriptionEnabled = false
+    private let defaultBatchTranscriptionEnabled = true
 
     private init() {
         // Register defaults
@@ -200,7 +200,7 @@ class AssistantSettings {
 
     /// Whether cloud batch transcription mode is enabled for microphone background audio.
     var batchTranscriptionEnabled: Bool {
-        get { UserDefaults.standard.bool(forKey: batchTranscriptionEnabledKey) }
+        get { true }
         set {
             UserDefaults.standard.set(newValue, forKey: batchTranscriptionEnabledKey)
             NotificationCenter.default.post(name: .transcriptionSettingsDidChange, object: nil)

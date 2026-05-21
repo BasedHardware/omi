@@ -31,6 +31,7 @@ final class CloudBackgroundTranscriptionSession {
   private let speechActivityDetector: SpeechActivityDetector
   private var chunker: BackgroundAudioChunker
   private var pendingChunks: [BackgroundAudioChunk] = []
+  private var pendingChunkAttempts: [Int] = []
   private var processedChunkCount = 0
   private var droppedChunkCount = 0
   private var isInputFinished = false
@@ -87,6 +88,7 @@ final class CloudBackgroundTranscriptionSession {
         continue
       }
       pendingChunks.append(chunk)
+      pendingChunkAttempts.append(0)
       enqueuedChunks += 1
     }
     return BackgroundIngestResult(
@@ -116,6 +118,7 @@ final class CloudBackgroundTranscriptionSession {
         continue
       }
       pendingChunks.append(chunk)
+      pendingChunkAttempts.append(0)
       enqueuedChunks += 1
     }
     isInputFinished = true
@@ -130,14 +133,23 @@ final class CloudBackgroundTranscriptionSession {
 
   func transcribeNext() async throws -> BackgroundTranscriptionResult? {
     guard !pendingChunks.isEmpty else { return nil }
-    let chunk = pendingChunks.removeFirst()
+    let chunk = pendingChunks[0]
     do {
       let segments = try await transcribe(chunk)
+      pendingChunks.removeFirst()
+      pendingChunkAttempts.removeFirst()
       processedChunkCount += 1
       processedSegments.append(contentsOf: segments)
       return BackgroundTranscriptionResult(chunk: chunk, segments: segments)
     } catch {
-      droppedChunkCount += 1
+      let attempts = (pendingChunkAttempts.first ?? 0) + 1
+      if attempts >= configuration.maxChunkTranscriptionAttempts {
+        pendingChunks.removeFirst()
+        pendingChunkAttempts.removeFirst()
+        droppedChunkCount += 1
+      } else {
+        pendingChunkAttempts[0] = attempts
+      }
       throw error
     }
   }

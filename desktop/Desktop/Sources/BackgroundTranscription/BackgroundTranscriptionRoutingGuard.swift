@@ -7,13 +7,9 @@ enum BackgroundTranscriptionRoutingDecision: Equatable {
 
 struct BackgroundTranscriptionRoutingGuard {
   func decide(
-    batchEnabled: Bool,
     serverAssemblyBackgroundEnabled: Bool,
     audioSource: AudioSource
   ) -> BackgroundTranscriptionRoutingDecision {
-    guard batchEnabled else {
-      return .cloudListenStreaming(reason: "batch_disabled")
-    }
     guard serverAssemblyBackgroundEnabled else {
       return .cloudListenStreaming(reason: "server_background_batch_disabled")
     }

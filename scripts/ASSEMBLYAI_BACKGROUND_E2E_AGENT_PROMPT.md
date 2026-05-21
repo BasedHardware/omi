@@ -21,7 +21,7 @@ Branch work adds **desktop always-on Audio Recording via AssemblyAI batch chunks
 [`scripts/desktop_assemblyai_e2e.py`](scripts/desktop_assemblyai_e2e.py):
 
 ```bash
-# Requires: local backend on :8080, ASSEMBLYAI_BACKGROUND_STT_ENABLED=true, Omi Dev signed in
+# Requires: local backend on :8080, ASSEMBLYAI_PRERECORDED_STT_ENABLED=true, Omi Dev signed in
 python3 scripts/desktop_assemblyai_e2e.py --background-chunk --api http://127.0.0.1:8080
 ```
 
@@ -87,7 +87,7 @@ Extend [`scripts/desktop_assemblyai_e2e.py`](scripts/desktop_assemblyai_e2e.py) 
 6. **Document** in script header how to run locally:
    ```bash
    cd backend && DYLD_FALLBACK_LIBRARY_PATH="/opt/homebrew/lib" ./run-local.sh
-   # .env: ASSEMBLYAI_BACKGROUND_STT_ENABLED=true, ASSEMBLYAI_API_KEY=...
+   # .env: ASSEMBLYAI_PRERECORDED_STT_ENABLED=true, ASSEMBLYAI_API_KEY=...
    python3 scripts/desktop_assemblyai_e2e.py --background-batch
    ```
 
@@ -152,8 +152,8 @@ You are done when:
 
 ```bash
 # backend/.env (required)
-ASSEMBLYAI_BACKGROUND_STT_ENABLED=true
-ASSEMBLYAI_BACKGROUND_STT_WORKLOADS=sync,background,postprocess
+ASSEMBLYAI_PRERECORDED_STT_ENABLED=true
+ASSEMBLYAI_PRERECORDED_STT_WORKLOADS=sync,background,postprocess
 ASSEMBLYAI_API_KEY=<key>
 LOCAL_DEVELOPMENT=true
 ```

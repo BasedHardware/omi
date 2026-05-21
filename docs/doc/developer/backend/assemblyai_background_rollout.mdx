@@ -8,7 +8,7 @@ description: "Rollout gates, feature flags, instrumentation, and rollback for th
 
 ## Scope
 
-AssemblyAI is the MVP async/background prerecorded provider. Deepgram remains
+AssemblyAI is the MVP async prerecorded provider. Deepgram remains
 the provider for mobile/BLE `/v4/listen`, realtime assistant streaming,
 Hold-to-Talk streaming, and voice-message finalize semantics.
 
@@ -26,13 +26,15 @@ Ineligible latency-sensitive workloads stay on Deepgram:
 
 ## Feature Flags And Environment
 
-AssemblyAI is disabled by default.
+AssemblyAI is enabled by default for eligible prerecorded workloads when
+credentials are configured.
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
 | `ASSEMBLYAI_API_KEY` | unset | Required before any AssemblyAI request can run. |
-| `ASSEMBLYAI_BACKGROUND_STT_ENABLED` | `false` | Main rollout switch. Set to `true` only for canary/smoke cohorts first. |
-| `ASSEMBLYAI_BACKGROUND_STT_WORKLOADS` | `sync,background,postprocess` | Comma-separated eligible background workloads. Unknown or ineligible values are ignored. |
+| `ASSEMBLYAI_PRERECORDED_STT_ENABLED` | `true` | Main rollout switch for passive prerecorded workloads. |
+| `ASSEMBLYAI_PRERECORDED_STT_WORKLOADS` | `sync,background,postprocess` | Comma-separated eligible prerecorded workloads. Unknown or ineligible values are ignored. |
+| `ASSEMBLYAI_PRERECORDED_STT_FALLBACK_ENABLED` | `true` | Use Deepgram when AssemblyAI is unavailable or fails and Deepgram credentials are usable. |
 | `ASSEMBLYAI_STT_MODEL` | `universal-2` | AssemblyAI model used when a Deepgram `nova-*` model request is routed to AssemblyAI. |
 | `ASSEMBLYAI_BASE_URL` | `https://api.assemblyai.com` | Provider API base URL. |
 | `ASSEMBLYAI_POLL_INTERVAL_SECONDS` | `3` | Poll interval for async transcript completion. |
@@ -41,9 +43,9 @@ AssemblyAI is disabled by default.
 
 ## Routing And Fallback
 
-`backend/utils/stt/providers.py` owns provider selection. Background workloads
+`backend/utils/stt/providers.py` owns provider selection. Eligible workloads
 use AssemblyAI only when the main flag is enabled and the workload is in
-`ASSEMBLYAI_BACKGROUND_STT_WORKLOADS`; otherwise they use Deepgram.
+`ASSEMBLYAI_PRERECORDED_STT_WORKLOADS`; otherwise they use Deepgram.
 
 Desktop Audio Recording uses the background workload through:
 
@@ -57,12 +59,14 @@ stable numeric `speaker_id` values per conversation, and appends segments to the
 in-progress conversation when `persist=true`.
 
 Deepgram is the prerecorded fallback provider. If AssemblyAI fails, times out,
-or exhausts retries for an eligible background workload, the failed AssemblyAI
+or exhausts retries for an eligible prerecorded workload, the failed AssemblyAI
 run is finalized in the provider ledger and the request retries through
-Deepgram with fallback metadata.
+Deepgram with fallback metadata. If AssemblyAI credentials are missing before
+the request starts, provider resolution skips directly to Deepgram when
+fallback is enabled and Deepgram credentials are usable.
 
-Rollback is to set `ASSEMBLYAI_BACKGROUND_STT_ENABLED=false` or remove the
-affected workload from `ASSEMBLYAI_BACKGROUND_STT_WORKLOADS`. No client deploy
+Rollback is to set `ASSEMBLYAI_PRERECORDED_STT_ENABLED=false` or remove the
+affected workload from `ASSEMBLYAI_PRERECORDED_STT_WORKLOADS`. No client deploy
 is required for rollback.
 
 ## BYOK (Bring Your Own Keys)

@@ -10,6 +10,7 @@ struct BackgroundTranscriptionConfiguration: Equatable {
   var speechPeakAmplitudeThreshold: Int = 512
   var speechRMSAmplitudeThreshold: Int = 64
   var maxPendingChunks: Int = 4
+  var maxChunkTranscriptionAttempts: Int = 3
   var requiresSpeechBeforeUpload: Bool = false
   var speechActivityDetection = SpeechActivityDetectionConfiguration()
 
@@ -33,6 +34,7 @@ struct BackgroundTranscriptionConfiguration: Equatable {
       minChunkDuration: 15.0,
       overlapDuration: 0.5,
       maxPendingChunks: 8,
+      maxChunkTranscriptionAttempts: 3,
       requiresSpeechBeforeUpload: true,
       speechActivityDetection: SpeechActivityDetectionConfiguration(
         windowDuration: 0.02,

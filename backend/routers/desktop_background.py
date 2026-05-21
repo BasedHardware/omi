@@ -1,5 +1,6 @@
 import json
 import logging
+import os
 from datetime import datetime, timezone
 from typing import Dict, List, Optional
 
@@ -23,11 +24,16 @@ from utils.conversations.desktop_background import (
 from utils.executors import db_executor, run_blocking, sync_executor
 from utils.fair_use import is_hard_restricted, record_speech_ms
 from utils.other import endpoints as auth
+from utils.byok import get_byok_key
 from utils.speaker_identification import _pcm_to_wav_bytes
 from utils.stt.background_speaker_identity import USER_SELF_PERSON_ID, identify_background_speaker_clusters
-from utils.stt.provider_service import transcribe_bytes, update_provider_run_identity_metrics
+from utils.stt.provider_service import (
+    resolve_prerecorded_provider_for_request,
+    transcribe_bytes,
+    update_provider_run_identity_metrics,
+)
 from utils.stt.speaker_embedding import extract_embedding_from_bytes
-from utils.stt.providers import STTWorkload
+from utils.stt.providers import STTProviderName, STTWorkload, get_fallback_prerecorded_provider_name
 from utils.subscription import has_transcription_credits, is_trial_paywalled
 from utils.voice_duration_limiter import compute_pcm_duration_ms
 
@@ -42,6 +48,35 @@ _SPEAKER_MAP_TTL_SECONDS = 60 * 60 * 24
 class BackgroundConversationStartRequest(BaseModel):
     language: Optional[str] = None
     source: Optional[str] = "desktop"
+
+
+@router.get("/capabilities")
+async def desktop_capabilities(uid: str = Depends(auth.get_current_user_uid)):
+    background_provider = resolve_prerecorded_provider_for_request(STTWorkload.background)
+    assemblyai_key_available = bool(os.getenv('ASSEMBLYAI_API_KEY') or get_byok_key('assemblyai'))
+    fallback_provider = get_fallback_prerecorded_provider_name(background_provider, STTWorkload.background)
+    fallback_available = fallback_provider == STTProviderName.deepgram
+    enabled = background_provider == STTProviderName.assemblyai and (assemblyai_key_available or fallback_available)
+    reason = None
+    if background_provider != STTProviderName.assemblyai:
+        reason = f'provider_{background_provider.value}'
+    elif not assemblyai_key_available and fallback_available:
+        reason = 'fallback_deepgram_available'
+    elif not assemblyai_key_available:
+        reason = 'missing_assemblyai_api_key'
+    return {
+        "background_batch": {
+            "enabled": enabled,
+            "provider": background_provider.value,
+            "fallback_provider": fallback_provider.value if fallback_provider else None,
+            "workload": STTWorkload.background.value,
+            "reason": reason,
+            "sample_rate": 16000,
+            "channels": 1,
+            "encoding": "linear16",
+            "max_chunk_seconds": 15,
+        }
+    }
 
 
 @router.post("/background-conversation/start")
@@ -180,6 +215,7 @@ async def background_transcribe(
         del audio_bytes
 
     segments = response.segments
+    speaker_diagnostics = _speaker_diagnostics(segments)
     if conversation_id and segments:
         await _identify_speakers(
             uid=uid,
@@ -193,6 +229,7 @@ async def background_transcribe(
     _apply_chunk_offset(segments, chunk_start_ms / 1000.0)
     if conversation_id:
         _apply_speaker_ids(conversation_id, segments)
+    speaker_diagnostics.update(_speaker_diagnostics(segments, prefix="mapped_"))
 
     finished_at = datetime.now(timezone.utc)
     if persist and conversation_id:
@@ -227,6 +264,7 @@ async def background_transcribe(
         "provider": provider,
         "run_id": response.run_id,
         "chunk_duration_ms": duration_ms,
+        "speaker_diagnostics": speaker_diagnostics,
     }
 
 
@@ -374,3 +412,21 @@ def _load_speaker_map(conversation_id: str) -> Dict[str, int]:
 
 def _store_speaker_map(conversation_id: str, speaker_map: Dict[str, int]) -> None:
     redis_db.r.set(_speaker_map_key(conversation_id), json.dumps(speaker_map), ex=_SPEAKER_MAP_TTL_SECONDS)
+
+
+def _speaker_diagnostics(segments: List[TranscriptSegment], prefix: str = "") -> Dict[str, object]:
+    provider_clusters = sorted(
+        {str(segment.provider_cluster_id) for segment in segments if segment.provider_cluster_id is not None}
+    )
+    provider_labels = sorted(
+        {str(segment.provider_speaker_label) for segment in segments if segment.provider_speaker_label is not None}
+    )
+    mapped_speakers = sorted({int(segment.speaker_id) for segment in segments if segment.speaker_id is not None})
+    return {
+        f"{prefix}provider_cluster_count": len(provider_clusters),
+        f"{prefix}provider_clusters": provider_clusters[:20],
+        f"{prefix}provider_speaker_label_count": len(provider_labels),
+        f"{prefix}provider_speaker_labels": provider_labels[:20],
+        f"{prefix}speaker_id_count": len(mapped_speakers),
+        f"{prefix}speaker_ids": mapped_speakers[:20],
+    }

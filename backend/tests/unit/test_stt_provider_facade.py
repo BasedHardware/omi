@@ -145,15 +145,22 @@ def test_deepgram_adapter_preserves_prerecorded_request_options():
     assert detected_language == 'en'
 
 
-def test_provider_routing_keeps_all_current_workloads_on_deepgram():
+def test_provider_routing_uses_assemblyai_only_for_passive_prerecorded_workloads_by_default(monkeypatch):
+    monkeypatch.delenv('ASSEMBLYAI_PRERECORDED_STT_ENABLED', raising=False)
+    monkeypatch.delenv('ASSEMBLYAI_PRERECORDED_STT_WORKLOADS', raising=False)
+
     assert get_streaming_provider_name(STTWorkload.ptt) == STTProviderName.deepgram
     assert get_streaming_provider_name(STTWorkload.realtime) == STTProviderName.deepgram
 
     for workload in [
         STTWorkload.background,
         STTWorkload.postprocess,
-        STTWorkload.ptt,
         STTWorkload.sync,
+    ]:
+        assert get_prerecorded_provider_name(workload) == STTProviderName.assemblyai
+
+    for workload in [
+        STTWorkload.ptt,
         STTWorkload.voice_message,
     ]:
         assert get_prerecorded_provider_name(workload) == STTProviderName.deepgram

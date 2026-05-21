@@ -11,8 +11,8 @@ Usage:
   cd backend && DYLD_FALLBACK_LIBRARY_PATH="/opt/homebrew/lib" ./run-local.sh
   # backend/.env:
   #   LOCAL_DEVELOPMENT=true
-  #   ASSEMBLYAI_BACKGROUND_STT_ENABLED=true
-  #   ASSEMBLYAI_BACKGROUND_STT_WORKLOADS=sync,background,postprocess
+  #   ASSEMBLYAI_PRERECORDED_STT_ENABLED=true
+  #   ASSEMBLYAI_PRERECORDED_STT_WORKLOADS=sync,background,postprocess
   #   ASSEMBLYAI_API_KEY=...
   python3 scripts/desktop_assemblyai_e2e.py [--api http://127.0.0.1:8080]
   python3 scripts/desktop_assemblyai_e2e.py --background-chunk [--api http://127.0.0.1:8080]
@@ -108,7 +108,7 @@ def require_backend_reachable(api_base: str) -> None:
             f"Backend is not reachable at {api_base}. Start the local backend first, for example:\n"
             '  cd backend && DYLD_FALLBACK_LIBRARY_PATH="/opt/homebrew/lib" ./run-local.sh\n'
             "Required backend env includes LOCAL_DEVELOPMENT=true, "
-            "ASSEMBLYAI_BACKGROUND_STT_ENABLED=true, and ASSEMBLYAI_API_KEY.\n"
+            "ASSEMBLYAI_PRERECORDED_STT_ENABLED=true, and ASSEMBLYAI_API_KEY.\n"
             f"Reachability error: {exc}"
         )
 

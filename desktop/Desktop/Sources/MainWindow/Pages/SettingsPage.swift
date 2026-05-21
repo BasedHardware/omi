@@ -261,7 +261,6 @@ struct SettingsContentView: View {
   @State private var transcriptionAutoDetect: Bool = true
   @State private var transcriptionLanguage: String = "en"
   @State private var vadGateEnabled: Bool = false
-  @State private var batchTranscriptionEnabled: Bool = false
 
   // Multi-chat mode setting
   @AppStorage("multiChatEnabled") private var multiChatEnabled = false
@@ -426,7 +425,6 @@ struct SettingsContentView: View {
       initialValue: MemoryAssistantSettings.shared.notificationsEnabled)
     _memoryExcludedApps = State(initialValue: MemoryAssistantSettings.shared.excludedApps)
     _vadGateEnabled = State(initialValue: settings.vadGateEnabled)
-    _batchTranscriptionEnabled = State(initialValue: settings.batchTranscriptionEnabled)
     _transcriptionLanguage = State(initialValue: settings.transcriptionLanguage)
     _transcriptionAutoDetect = State(initialValue: settings.transcriptionAutoDetect)
   }
@@ -1236,39 +1234,6 @@ struct SettingsContentView: View {
           Text("Press Enter or click + to add • Click × to remove")
             .scaledFont(size: 11)
             .foregroundColor(OmiColors.textTertiary)
-        }
-      }
-
-      // Cloud batch transcription
-      settingsCard(settingId: "transcription.batch") {
-        VStack(alignment: .leading, spacing: 12) {
-          HStack {
-            Image(systemName: "waveform.path.ecg.rectangle")
-              .scaledFont(size: 16)
-              .foregroundColor(OmiColors.purplePrimary)
-
-            VStack(alignment: .leading, spacing: 4) {
-              Text("Batch transcription (AssemblyAI)")
-                .scaledFont(size: 15, weight: .medium)
-                .foregroundColor(OmiColors.textPrimary)
-
-              Text(
-                "Transcribe microphone audio in selected-language chunks instead of live streaming. Requires server-side AssemblyAI."
-              )
-              .scaledFont(size: 13)
-              .foregroundColor(OmiColors.textTertiary)
-              .fixedSize(horizontal: false, vertical: true)
-            }
-
-            Spacer()
-
-            Toggle("", isOn: $batchTranscriptionEnabled)
-              .toggleStyle(.switch)
-              .onChange(of: batchTranscriptionEnabled) { _, newValue in
-                AssistantSettings.shared.batchTranscriptionEnabled = newValue
-                restartTranscriptionIfNeeded()
-              }
-          }
         }
       }
 
@@ -6964,7 +6929,6 @@ struct SettingsContentView: View {
     transcriptionAutoDetect = AssistantSettings.shared.transcriptionAutoDetect
     vocabularyList = AssistantSettings.shared.transcriptionVocabulary
     vadGateEnabled = AssistantSettings.shared.vadGateEnabled
-    batchTranscriptionEnabled = AssistantSettings.shared.batchTranscriptionEnabled
 
     Task {
       do {

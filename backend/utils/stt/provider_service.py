@@ -16,6 +16,7 @@ from utils.stt.provider_costs import estimate_prerecorded_provider_cost_usd
 from utils.stt.providers import (
     STTProviderName,
     STTWorkload,
+    assemblyai_prerecorded_fallback_enabled,
     get_fallback_prerecorded_provider_name,
     get_prerecorded_provider_name,
 )
@@ -92,16 +93,28 @@ def resolve_prerecorded_provider_for_request(workload: STTWorkload) -> STTProvid
     """Pick prerecorded STT provider for this request, respecting BYOK headers.
 
     When env flags select AssemblyAI but the BYOK user did not supply an Assembly
-    key, use Deepgram BYOK instead of Omi's server Assembly key.
+    key, use Deepgram BYOK instead of Omi's server Assembly key. When server
+    AssemblyAI credentials are absent, skip directly to Deepgram if fallback is
+    enabled and a usable Deepgram key is available.
     """
     selected = get_prerecorded_provider_name(workload)
     if selected != STTProviderName.assemblyai:
         return selected
-    if get_byok_key and get_byok_key('assemblyai'):
+    assemblyai_byok = get_byok_key('assemblyai') if get_byok_key else None
+    deepgram_byok = get_byok_key('deepgram') if get_byok_key else None
+    if assemblyai_byok:
         return STTProviderName.assemblyai
-    if get_byok_key and get_byok_key('deepgram'):
+    if deepgram_byok and assemblyai_prerecorded_fallback_enabled():
+        return STTProviderName.deepgram
+    if os.getenv('ASSEMBLYAI_API_KEY'):
+        return STTProviderName.assemblyai
+    if assemblyai_prerecorded_fallback_enabled() and _has_deepgram_key_for_request():
         return STTProviderName.deepgram
     return STTProviderName.assemblyai
+
+
+def _has_deepgram_key_for_request() -> bool:
+    return bool((get_byok_key('deepgram') if get_byok_key else None) or os.getenv('DEEPGRAM_API_KEY'))
 
 
 def _deepgram_client_for_request() -> DeepgramClient:
@@ -193,7 +206,7 @@ def transcribe_url(
             raw_audio_seconds,
             retry_count=_retry_count_from_exception(e),
         )
-        fallback_provider_name = get_fallback_prerecorded_provider_name(provider_name, workload)
+        fallback_provider_name = _resolve_usable_fallback_prerecorded_provider(provider_name, workload)
         if fallback_provider_name:
             logger.warning(
                 'provider prerecorded url transcription falling back workload=%s from_provider=%s to_provider=%s: %s',
@@ -287,7 +300,7 @@ def transcribe_bytes(
             raw_audio_seconds,
             retry_count=_retry_count_from_exception(e),
         )
-        fallback_provider_name = get_fallback_prerecorded_provider_name(provider_name, workload)
+        fallback_provider_name = _resolve_usable_fallback_prerecorded_provider(provider_name, workload)
         if fallback_provider_name:
             logger.warning(
                 'provider prerecorded bytes transcription falling back workload=%s from_provider=%s to_provider=%s: %s',
@@ -323,6 +336,15 @@ def _get_prerecorded_provider(provider_name: STTProviderName):
     if provider_name == STTProviderName.deepgram:
         return _deepgram_prerecorded_provider()
     raise ValueError(f'Unsupported prerecorded STT provider: {provider_name}')
+
+
+def _resolve_usable_fallback_prerecorded_provider(
+    provider_name: STTProviderName, workload: STTWorkload
+) -> Optional[STTProviderName]:
+    fallback_provider_name = get_fallback_prerecorded_provider_name(provider_name, workload)
+    if fallback_provider_name == STTProviderName.deepgram and not _has_deepgram_key_for_request():
+        return None
+    return fallback_provider_name
 
 
 def _model_for_provider(provider_name: STTProviderName, requested_model: str) -> str:

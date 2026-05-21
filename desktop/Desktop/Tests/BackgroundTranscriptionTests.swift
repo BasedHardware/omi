@@ -340,7 +340,7 @@ final class BackgroundTranscriptionTests: XCTestCase {
     XCTAssertTrue(result?.chunk.isFinal ?? false)
   }
 
-  func testSessionDropsFailedChunkSoDrainCanContinue() async throws {
+  func testSessionRetainsFailedChunkForRetry() async throws {
     let configuration = BackgroundTranscriptionConfiguration(
       sampleRate: 10,
       maxChunkDuration: 1.0,
@@ -350,7 +350,52 @@ final class BackgroundTranscriptionTests: XCTestCase {
       silenceAmplitudeThreshold: 10,
       speechPeakAmplitudeThreshold: 100,
       speechRMSAmplitudeThreshold: 20,
-      maxPendingChunks: 4
+      maxPendingChunks: 4,
+      maxChunkTranscriptionAttempts: 3
+    )
+    var shouldFail = true
+    let session = CloudBackgroundTranscriptionSession(configuration: configuration) { chunk in
+      if shouldFail {
+        shouldFail = false
+        throw NSError(domain: "test", code: 1)
+      }
+      return [
+        Self.backendSegment(
+          id: "retry", text: "retried", start: chunk.startTime, end: chunk.startTime + 1)
+      ]
+    }
+
+    XCTAssertEqual(
+      session.append(pcmData: pcm(samples: Array(repeating: 1_000, count: 12)), startTime: 0)
+        .enqueuedChunks, 1)
+
+    do {
+      _ = try await session.transcribeNext()
+      XCTFail("Expected first transcription attempt to fail")
+    } catch {
+      XCTAssertEqual(session.pendingChunkCount, 1)
+      XCTAssertEqual(session.snapshot().droppedChunkCount, 0)
+    }
+
+    let retried = try await session.transcribeNext()
+    XCTAssertEqual(retried?.chunk.startTime, 0)
+    XCTAssertEqual(session.pendingChunkCount, 0)
+    XCTAssertEqual(session.snapshot().processedChunkCount, 1)
+    XCTAssertEqual(session.snapshot().droppedChunkCount, 0)
+  }
+
+  func testSessionRetriesFailedChunkBeforeDroppingSoDrainCanContinue() async throws {
+    let configuration = BackgroundTranscriptionConfiguration(
+      sampleRate: 10,
+      maxChunkDuration: 1.0,
+      minChunkDuration: 0.5,
+      overlapDuration: 0,
+      silenceWindowDuration: 0.2,
+      silenceAmplitudeThreshold: 10,
+      speechPeakAmplitudeThreshold: 100,
+      speechRMSAmplitudeThreshold: 20,
+      maxPendingChunks: 4,
+      maxChunkTranscriptionAttempts: 2
     )
     let session = CloudBackgroundTranscriptionSession(configuration: configuration) { chunk in
       if chunk.startTime == 0 {
@@ -373,7 +418,16 @@ final class BackgroundTranscriptionTests: XCTestCase {
       _ = try await session.transcribeNext()
       XCTFail("Expected first transcription attempt to fail")
     } catch {
+      XCTAssertEqual(session.pendingChunkCount, 2)
+      XCTAssertEqual(session.snapshot().droppedChunkCount, 0)
+    }
+
+    do {
+      _ = try await session.transcribeNext()
+      XCTFail("Expected second transcription attempt to fail and drop the chunk")
+    } catch {
       XCTAssertEqual(session.pendingChunkCount, 1)
+      XCTAssertEqual(session.snapshot().droppedChunkCount, 1)
     }
 
     let next = try await session.transcribeNext()
@@ -431,22 +485,17 @@ final class BackgroundTranscriptionTests: XCTestCase {
 
     XCTAssertEqual(
       guardrail.decide(
-        batchEnabled: true, serverAssemblyBackgroundEnabled: true, audioSource: .microphone),
+        serverAssemblyBackgroundEnabled: true, audioSource: .microphone),
       .cloudBatchAssembly
     )
     XCTAssertEqual(
       guardrail.decide(
-        batchEnabled: true, serverAssemblyBackgroundEnabled: true, audioSource: .bleDevice),
+        serverAssemblyBackgroundEnabled: true, audioSource: .bleDevice),
       .cloudListenStreaming(reason: "batch_microphone_only")
     )
     XCTAssertEqual(
       guardrail.decide(
-        batchEnabled: false, serverAssemblyBackgroundEnabled: true, audioSource: .microphone),
-      .cloudListenStreaming(reason: "batch_disabled")
-    )
-    XCTAssertEqual(
-      guardrail.decide(
-        batchEnabled: true, serverAssemblyBackgroundEnabled: false, audioSource: .microphone),
+        serverAssemblyBackgroundEnabled: false, audioSource: .microphone),
       .cloudListenStreaming(reason: "server_background_batch_disabled")
     )
   }

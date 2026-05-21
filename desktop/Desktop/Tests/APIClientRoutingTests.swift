@@ -307,6 +307,14 @@ final class APIClientRoutingTests: XCTestCase {
                      label: "finishBackgroundConversation")
     }
 
+    func testDesktopCapabilitiesRoutesToPython() async {
+        let client = await makeTestClient()
+        _ = try? await client.getDesktopCapabilities() as DesktopCapabilitiesResponse
+        assertRoutes(URLCapture.capturedRequests, host: "python-test", port: 9001,
+                     pathContains: "v2/desktop/capabilities", method: "GET",
+                     label: "getDesktopCapabilities")
+    }
+
     // -- Conversations: manual URL(string: baseURL + ...) paths (PATCH → Python) --
 
     func testSetConversationStarredRoutesToPython() async {

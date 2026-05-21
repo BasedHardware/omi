@@ -1333,6 +1333,38 @@ extension APIClient {
       customBaseURL: nil
     )
   }
+
+  /// Fetch Python backend desktop transcription capabilities.
+  /// Endpoint: GET /v2/desktop/capabilities
+  func getDesktopCapabilities() async throws -> DesktopCapabilitiesResponse {
+    try await get("v2/desktop/capabilities", customBaseURL: nil)
+  }
+}
+
+struct DesktopCapabilitiesResponse: Codable {
+  let backgroundBatch: DesktopBackgroundBatchCapability
+
+  enum CodingKeys: String, CodingKey {
+    case backgroundBatch = "background_batch"
+  }
+}
+
+struct DesktopBackgroundBatchCapability: Codable {
+  let enabled: Bool
+  let provider: String
+  let sampleRate: Int
+  let channels: Int
+  let encoding: String
+  let maxChunkSeconds: Int
+
+  enum CodingKeys: String, CodingKey {
+    case enabled
+    case provider
+    case sampleRate = "sample_rate"
+    case channels
+    case encoding
+    case maxChunkSeconds = "max_chunk_seconds"
+  }
 }
 
 // MARK: - Memories API

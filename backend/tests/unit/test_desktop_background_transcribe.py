@@ -51,6 +51,7 @@ sys.modules.setdefault(
     'utils.chat', SimpleNamespace(resolve_voice_message_language=lambda _uid, language: language or 'en')
 )
 sys.modules.setdefault('utils.analytics', SimpleNamespace(record_usage=lambda *_args, **_kwargs: None))
+sys.modules.setdefault('utils.byok', SimpleNamespace(get_byok_key=lambda _provider: None))
 sys.modules.setdefault(
     'utils.fair_use',
     SimpleNamespace(
@@ -78,9 +79,14 @@ def _pcm_to_wav_bytes(pcm_data: bytes, sample_rate: int) -> bytes:
 
 
 sys.modules.setdefault('utils.speaker_identification', SimpleNamespace(_pcm_to_wav_bytes=_pcm_to_wav_bytes))
+sys.modules.setdefault('utils.stt.speaker_embedding', SimpleNamespace(extract_embedding_from_bytes=MagicMock()))
 sys.modules.setdefault(
     'utils.stt.provider_service',
-    SimpleNamespace(transcribe_bytes=MagicMock(), update_provider_run_identity_metrics=MagicMock()),
+    SimpleNamespace(
+        resolve_prerecorded_provider_for_request=MagicMock(),
+        transcribe_bytes=MagicMock(),
+        update_provider_run_identity_metrics=MagicMock(),
+    ),
 )
 sys.modules.setdefault(
     'utils.voice_duration_limiter',
@@ -127,6 +133,7 @@ def _client(monkeypatch, *, segments=None, person_embeddings_cache=None):
     monkeypatch.setattr(desktop_background, 'has_transcription_credits', lambda *_args, **_kwargs: True)
     monkeypatch.setattr(desktop_background, 'record_speech_ms', lambda *_args, **_kwargs: None)
     monkeypatch.setattr(desktop_background, 'record_usage', lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(desktop_background, 'get_byok_key', lambda _provider: None)
     monkeypatch.setattr(desktop_background, 'resolve_voice_message_language', lambda _uid, language: language or 'en')
     monkeypatch.setattr(
         desktop_background.conversations_db,
@@ -177,6 +184,72 @@ def _client(monkeypatch, *, segments=None, person_embeddings_cache=None):
     mock_transcribe = MagicMock(side_effect=_transcribe_bytes)
     monkeypatch.setattr(desktop_background, 'transcribe_bytes', mock_transcribe)
     return TestClient(app), mock_transcribe
+
+
+def test_desktop_capabilities_reports_assemblyai_background_when_key_available(monkeypatch):
+    client, _mock_transcribe = _client(monkeypatch)
+    monkeypatch.setenv('ASSEMBLYAI_PRERECORDED_STT_ENABLED', 'true')
+    monkeypatch.setenv('ASSEMBLYAI_PRERECORDED_STT_WORKLOADS', 'sync,background,postprocess')
+    monkeypatch.setenv('ASSEMBLYAI_API_KEY', 'server-aai-key')
+    monkeypatch.setattr(
+        desktop_background,
+        'resolve_prerecorded_provider_for_request',
+        lambda _workload: STTProviderName.assemblyai,
+    )
+
+    response = client.get('/v2/desktop/capabilities')
+
+    assert response.status_code == 200
+    data = response.json()['background_batch']
+    assert data['enabled'] is True
+    assert data['provider'] == 'assemblyai'
+    assert data['fallback_provider'] == 'deepgram'
+    assert data['workload'] == 'background'
+    assert data['reason'] is None
+
+
+def test_desktop_capabilities_allows_background_batch_with_deepgram_fallback(monkeypatch):
+    client, _mock_transcribe = _client(monkeypatch)
+    monkeypatch.setenv('ASSEMBLYAI_PRERECORDED_STT_ENABLED', 'true')
+    monkeypatch.setenv('ASSEMBLYAI_PRERECORDED_STT_WORKLOADS', 'sync,background,postprocess')
+    monkeypatch.delenv('ASSEMBLYAI_PRERECORDED_STT_FALLBACK_ENABLED', raising=False)
+    monkeypatch.delenv('ASSEMBLYAI_API_KEY', raising=False)
+    monkeypatch.setattr(
+        desktop_background,
+        'resolve_prerecorded_provider_for_request',
+        lambda _workload: STTProviderName.assemblyai,
+    )
+
+    response = client.get('/v2/desktop/capabilities')
+
+    assert response.status_code == 200
+    data = response.json()['background_batch']
+    assert data['enabled'] is True
+    assert data['provider'] == 'assemblyai'
+    assert data['fallback_provider'] == 'deepgram'
+    assert data['reason'] == 'fallback_deepgram_available'
+
+
+def test_desktop_capabilities_reports_missing_assemblyai_key_when_fallback_disabled(monkeypatch):
+    client, _mock_transcribe = _client(monkeypatch)
+    monkeypatch.setenv('ASSEMBLYAI_PRERECORDED_STT_ENABLED', 'true')
+    monkeypatch.setenv('ASSEMBLYAI_PRERECORDED_STT_WORKLOADS', 'sync,background,postprocess')
+    monkeypatch.setenv('ASSEMBLYAI_PRERECORDED_STT_FALLBACK_ENABLED', 'false')
+    monkeypatch.delenv('ASSEMBLYAI_API_KEY', raising=False)
+    monkeypatch.setattr(
+        desktop_background,
+        'resolve_prerecorded_provider_for_request',
+        lambda _workload: STTProviderName.assemblyai,
+    )
+
+    response = client.get('/v2/desktop/capabilities')
+
+    assert response.status_code == 200
+    data = response.json()['background_batch']
+    assert data['enabled'] is False
+    assert data['provider'] == 'assemblyai'
+    assert data['fallback_provider'] is None
+    assert data['reason'] == 'missing_assemblyai_api_key'
 
 
 def test_background_transcribe_returns_segments_with_offset(monkeypatch):
@@ -285,6 +358,8 @@ def test_cluster_speaker_mapping_assigns_distinct_ids(monkeypatch):
     data = response.json()
     assert [segment['speaker_id'] for segment in data['segments']] == [0, 1]
     assert [segment['speaker'] for segment in data['segments']] == ['SPEAKER_00', 'SPEAKER_01']
+    assert data['speaker_diagnostics']['provider_cluster_count'] == 2
+    assert data['speaker_diagnostics']['mapped_speaker_ids'] == [0, 1]
 
 
 def test_background_transcribe_multi_chunk_offsets_persist_and_keep_speaker_map(monkeypatch):
@@ -379,8 +454,8 @@ def test_background_transcribe_identifies_assemblyai_speaker_with_omi_user_embed
 def test_byok_background_routing_uses_deepgram_when_only_deepgram_key(monkeypatch):
     from utils.stt import provider_service
 
-    monkeypatch.setenv('ASSEMBLYAI_BACKGROUND_STT_ENABLED', 'true')
-    monkeypatch.setenv('ASSEMBLYAI_BACKGROUND_STT_WORKLOADS', 'sync,background,postprocess')
+    monkeypatch.setenv('ASSEMBLYAI_PRERECORDED_STT_ENABLED', 'true')
+    monkeypatch.setenv('ASSEMBLYAI_PRERECORDED_STT_WORKLOADS', 'sync,background,postprocess')
     monkeypatch.setattr(provider_service, 'get_byok_key', lambda provider: {'deepgram': 'dg-user-key'}.get(provider))
 
     provider = provider_service.resolve_prerecorded_provider_for_request(STTWorkload.background)

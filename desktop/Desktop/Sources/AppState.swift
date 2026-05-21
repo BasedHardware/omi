@@ -1432,8 +1432,7 @@ class AppState: ObservableObject {
       )
 
       let routing = BackgroundTranscriptionRoutingGuard().decide(
-        batchEnabled: AssistantSettings.shared.batchTranscriptionEnabled,
-        serverAssemblyBackgroundEnabled: Self.isServerBackgroundBatchEnabled,
+        serverAssemblyBackgroundEnabled: true,
         audioSource: effectiveSource
       )
       if routing == .cloudBatchAssembly {
@@ -1591,16 +1590,23 @@ class AppState: ObservableObject {
     }
   }
 
-  private static var isServerBackgroundBatchEnabled: Bool {
-    let baseURL = DesktopBackendEnvironment.pythonBaseURL().lowercased()
-    return baseURL.contains("127.0.0.1")
-      || baseURL.contains("localhost")
-      || baseURL.contains("omiapi.com")
-  }
-
   private func startCloudBackgroundTranscription(source: AudioSource, language: String) async {
     defer { isStartingTranscription = false }
     do {
+      let capabilities = try await APIClient.shared.getDesktopCapabilities()
+      guard capabilities.backgroundBatch.enabled
+        && capabilities.backgroundBatch.provider.lowercased() == "assemblyai"
+      else {
+        throw NSError(
+          domain: "Omi.CloudBackgroundTranscription",
+          code: 1,
+          userInfo: [
+            NSLocalizedDescriptionKey:
+              "Server background batch transcription is not enabled for AssemblyAI."
+          ]
+        )
+      }
+
       let conversationId = try await APIClient.shared.startBackgroundConversation(
         language: language)
       guard !Task.isCancelled else { return }
@@ -2083,7 +2089,7 @@ class AppState: ObservableObject {
           }
         } catch {
           logError("Transcription: Cloud background chunk failed", error: error)
-          continue
+          try? await Task.sleep(nanoseconds: 1_000_000_000)
         }
       }
     }

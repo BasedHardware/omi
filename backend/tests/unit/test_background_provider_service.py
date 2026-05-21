@@ -15,6 +15,7 @@ sys.modules['deepgram'].DeepgramClientOptions = MagicMock
 sys.modules.setdefault('database._client', types.SimpleNamespace(db=MagicMock()))
 
 os.environ.setdefault('DEEPGRAM_API_KEY', 'fake-for-test')
+os.environ.setdefault('ASSEMBLYAI_API_KEY', 'fake-for-test')
 
 from models.transcript_segment import ProviderTranscriptResult, ProviderTranscriptWord  # noqa: E402
 from utils.stt import provider_service  # noqa: E402
@@ -47,7 +48,8 @@ def _provider_result(provider='deepgram', model='nova-3'):
     )
 
 
-def test_provider_service_transcribes_sync_upload_and_finalizes_deepgram_run():
+def test_provider_service_transcribes_sync_upload_and_finalizes_deepgram_run(monkeypatch):
+    monkeypatch.setenv('ASSEMBLYAI_PRERECORDED_STT_ENABLED', 'false')
     fake_provider = MagicMock()
     fake_provider.provider_name = STTProviderName.deepgram
     fake_provider.transcribe_url.return_value = (_provider_result(), 'en')
@@ -82,7 +84,8 @@ def test_provider_service_transcribes_sync_upload_and_finalizes_deepgram_run():
     assert finalize_run.call_args.kwargs['estimated_cost_usd'] == 0.00016
 
 
-def test_provider_service_finalizes_background_run_on_deepgram_default():
+def test_provider_service_finalizes_background_run_on_deepgram_when_assemblyai_disabled(monkeypatch):
+    monkeypatch.setenv('ASSEMBLYAI_PRERECORDED_STT_ENABLED', 'false')
     fake_provider = MagicMock()
     fake_provider.provider_name = STTProviderName.deepgram
     fake_provider.transcribe_url.return_value = _provider_result()
@@ -106,14 +109,23 @@ def test_provider_service_finalizes_background_run_on_deepgram_default():
     assert finalize_run.call_args.kwargs['estimated_cost_usd'] == 0.00076
 
 
+def test_background_routing_selects_assemblyai_by_default(monkeypatch):
+    monkeypatch.delenv('ASSEMBLYAI_PRERECORDED_STT_ENABLED', raising=False)
+    monkeypatch.delenv('ASSEMBLYAI_PRERECORDED_STT_WORKLOADS', raising=False)
+
+    assert get_prerecorded_provider_name(STTWorkload.sync) == STTProviderName.assemblyai
+    assert get_prerecorded_provider_name(STTWorkload.background) == STTProviderName.assemblyai
+    assert get_prerecorded_provider_name(STTWorkload.postprocess) == STTProviderName.assemblyai
+
+
 def test_prerecorded_ptt_and_realtime_related_workloads_stay_deepgram():
     assert get_prerecorded_provider_name(STTWorkload.ptt) == STTProviderName.deepgram
     assert get_prerecorded_provider_name(STTWorkload.voice_message) == STTProviderName.deepgram
 
 
 def test_background_routing_can_select_assemblyai_without_moving_latency_critical_workloads(monkeypatch):
-    monkeypatch.setenv('ASSEMBLYAI_BACKGROUND_STT_ENABLED', 'true')
-    monkeypatch.setenv('ASSEMBLYAI_BACKGROUND_STT_WORKLOADS', 'sync,background,postprocess,ptt,realtime')
+    monkeypatch.setenv('ASSEMBLYAI_PRERECORDED_STT_ENABLED', 'true')
+    monkeypatch.setenv('ASSEMBLYAI_PRERECORDED_STT_WORKLOADS', 'sync,background,postprocess,ptt,realtime')
 
     assert get_prerecorded_provider_name(STTWorkload.sync) == STTProviderName.assemblyai
     assert get_prerecorded_provider_name(STTWorkload.background) == STTProviderName.assemblyai
@@ -145,8 +157,8 @@ def test_background_call_sites_use_provider_service_layer():
 
 
 def test_provider_service_uses_assemblyai_for_enabled_sync_workload(monkeypatch):
-    monkeypatch.setenv('ASSEMBLYAI_BACKGROUND_STT_ENABLED', 'true')
-    monkeypatch.setenv('ASSEMBLYAI_BACKGROUND_STT_WORKLOADS', 'sync')
+    monkeypatch.setenv('ASSEMBLYAI_PRERECORDED_STT_ENABLED', 'true')
+    monkeypatch.setenv('ASSEMBLYAI_PRERECORDED_STT_WORKLOADS', 'sync')
 
     fake_provider = MagicMock()
     fake_provider.provider_name = STTProviderName.assemblyai
@@ -182,8 +194,8 @@ def test_provider_service_uses_assemblyai_for_enabled_sync_workload(monkeypatch)
 
 
 def test_provider_service_falls_back_to_deepgram_when_assemblyai_fails(monkeypatch):
-    monkeypatch.setenv('ASSEMBLYAI_BACKGROUND_STT_ENABLED', 'true')
-    monkeypatch.setenv('ASSEMBLYAI_BACKGROUND_STT_WORKLOADS', 'sync')
+    monkeypatch.setenv('ASSEMBLYAI_PRERECORDED_STT_ENABLED', 'true')
+    monkeypatch.setenv('ASSEMBLYAI_PRERECORDED_STT_WORKLOADS', 'sync')
 
     assemblyai_provider = MagicMock()
     assemblyai_provider.provider_name = STTProviderName.assemblyai
@@ -228,9 +240,128 @@ def test_provider_service_falls_back_to_deepgram_when_assemblyai_fails(monkeypat
     assert finalize_run.call_args_list[1].kwargs['estimated_cost_usd'] == 0.00016
 
 
-def test_provider_service_records_retry_exhaustion_without_fallback(monkeypatch):
-    monkeypatch.setenv('ASSEMBLYAI_BACKGROUND_STT_ENABLED', 'true')
-    monkeypatch.setenv('ASSEMBLYAI_BACKGROUND_STT_WORKLOADS', 'background')
+def test_provider_service_falls_back_to_deepgram_for_background_when_assemblyai_fails(monkeypatch):
+    monkeypatch.setenv('ASSEMBLYAI_PRERECORDED_STT_ENABLED', 'true')
+    monkeypatch.setenv('ASSEMBLYAI_PRERECORDED_STT_WORKLOADS', 'background')
+    monkeypatch.delenv('ASSEMBLYAI_PRERECORDED_STT_FALLBACK_ENABLED', raising=False)
+
+    assemblyai_provider = MagicMock()
+    assemblyai_provider.provider_name = STTProviderName.assemblyai
+    assemblyai_provider.transcribe_url.side_effect = RuntimeError('AssemblyAI failed')
+
+    deepgram_provider = MagicMock()
+    deepgram_provider.provider_name = STTProviderName.deepgram
+    deepgram_provider.transcribe_url.return_value = _provider_result()
+
+    with patch.object(
+        provider_service, '_assemblyai_prerecorded_provider', return_value=assemblyai_provider
+    ), patch.object(provider_service, '_deepgram_prerecorded_provider', return_value=deepgram_provider), patch.object(
+        provider_service, 'create_provider_run', side_effect=['run-aai', 'run-dg']
+    ), patch.object(
+        provider_service, 'finalize_provider_run'
+    ) as finalize_run:
+        response = provider_service.transcribe_url(
+            'https://example.test/background.wav',
+            workload=STTWorkload.background,
+            uid='uid-1',
+            language='multi',
+            model='nova-3',
+            raw_audio_seconds=2.0,
+        )
+
+    assert response.result.provider == 'deepgram'
+    assert assemblyai_provider.transcribe_url.call_count == 2
+    deepgram_provider.transcribe_url.assert_called_once()
+    assert finalize_run.call_args_list[0].kwargs['provider'] == 'assemblyai'
+    assert finalize_run.call_args_list[0].kwargs['status'] == 'failed'
+    assert finalize_run.call_args_list[1].kwargs['provider'] == 'deepgram'
+    assert finalize_run.call_args_list[1].kwargs['fallback_count'] == 1
+    assert finalize_run.call_args_list[1].kwargs['fallback_provider'] == 'assemblyai'
+
+
+def test_provider_service_skips_missing_assemblyai_key_when_deepgram_fallback_is_usable(monkeypatch):
+    monkeypatch.setenv('ASSEMBLYAI_PRERECORDED_STT_ENABLED', 'true')
+    monkeypatch.setenv('ASSEMBLYAI_PRERECORDED_STT_WORKLOADS', 'sync')
+    monkeypatch.delenv('ASSEMBLYAI_API_KEY', raising=False)
+    monkeypatch.setenv('DEEPGRAM_API_KEY', 'dg-server-key')
+
+    deepgram_provider = MagicMock()
+    deepgram_provider.provider_name = STTProviderName.deepgram
+    deepgram_provider.transcribe_url.return_value = _provider_result()
+
+    with patch.object(provider_service, '_assemblyai_prerecorded_provider') as assemblyai_provider, patch.object(
+        provider_service, '_deepgram_prerecorded_provider', return_value=deepgram_provider
+    ), patch.object(provider_service, 'create_provider_run', return_value='run-dg'), patch.object(
+        provider_service, 'finalize_provider_run'
+    ) as finalize_run:
+        response = provider_service.transcribe_url(
+            'https://example.test/audio.wav',
+            workload=STTWorkload.sync,
+            uid='uid-1',
+            language='multi',
+            model='nova-3',
+        )
+
+    assert response.result.provider == 'deepgram'
+    assemblyai_provider.assert_not_called()
+    deepgram_provider.transcribe_url.assert_called_once()
+    assert finalize_run.call_args.kwargs['provider'] == 'deepgram'
+    assert finalize_run.call_args.kwargs['fallback_count'] == 0
+
+
+def test_provider_service_reports_missing_assemblyai_key_when_fallback_disabled(monkeypatch):
+    monkeypatch.setenv('ASSEMBLYAI_PRERECORDED_STT_ENABLED', 'true')
+    monkeypatch.setenv('ASSEMBLYAI_PRERECORDED_STT_WORKLOADS', 'sync')
+    monkeypatch.setenv('ASSEMBLYAI_PRERECORDED_STT_FALLBACK_ENABLED', 'false')
+    monkeypatch.delenv('ASSEMBLYAI_API_KEY', raising=False)
+    monkeypatch.setenv('DEEPGRAM_API_KEY', 'dg-server-key')
+
+    with patch.object(provider_service, '_deepgram_prerecorded_provider') as deepgram_provider, patch.object(
+        provider_service, 'create_provider_run', return_value='run-aai'
+    ), patch.object(provider_service, 'finalize_provider_run') as finalize_run:
+        with pytest.raises(RuntimeError, match='ASSEMBLYAI_API_KEY is not configured'):
+            provider_service.transcribe_url(
+                'https://example.test/audio.wav',
+                workload=STTWorkload.sync,
+                uid='uid-1',
+                language='multi',
+                model='nova-3',
+            )
+
+    deepgram_provider.assert_not_called()
+    assert finalize_run.call_args.kwargs['provider'] == 'assemblyai'
+    assert finalize_run.call_args.kwargs['status'] == 'failed'
+    assert finalize_run.call_args.kwargs['error_class'] == 'AssemblyAIProviderError'
+
+
+def test_provider_service_reports_missing_assemblyai_key_when_no_fallback_key_is_usable(monkeypatch):
+    monkeypatch.setenv('ASSEMBLYAI_PRERECORDED_STT_ENABLED', 'true')
+    monkeypatch.setenv('ASSEMBLYAI_PRERECORDED_STT_WORKLOADS', 'sync')
+    monkeypatch.delenv('ASSEMBLYAI_API_KEY', raising=False)
+    monkeypatch.delenv('DEEPGRAM_API_KEY', raising=False)
+
+    with patch.object(provider_service, '_deepgram_prerecorded_provider') as deepgram_provider, patch.object(
+        provider_service, 'create_provider_run', return_value='run-aai'
+    ), patch.object(provider_service, 'finalize_provider_run') as finalize_run:
+        with pytest.raises(RuntimeError, match='ASSEMBLYAI_API_KEY is not configured'):
+            provider_service.transcribe_url(
+                'https://example.test/audio.wav',
+                workload=STTWorkload.sync,
+                uid='uid-1',
+                language='multi',
+                model='nova-3',
+            )
+
+    deepgram_provider.assert_not_called()
+    assert finalize_run.call_args.kwargs['provider'] == 'assemblyai'
+    assert finalize_run.call_args.kwargs['status'] == 'failed'
+    assert finalize_run.call_args.kwargs['error_class'] == 'AssemblyAIProviderError'
+
+
+def test_provider_service_records_background_retry_exhaustion_when_fallback_disabled(monkeypatch):
+    monkeypatch.setenv('ASSEMBLYAI_PRERECORDED_STT_ENABLED', 'true')
+    monkeypatch.setenv('ASSEMBLYAI_PRERECORDED_STT_WORKLOADS', 'background')
+    monkeypatch.setenv('ASSEMBLYAI_PRERECORDED_STT_FALLBACK_ENABLED', 'false')
 
     assemblyai_provider = MagicMock()
     assemblyai_provider.provider_name = STTProviderName.assemblyai
@@ -264,8 +395,8 @@ def test_provider_service_records_retry_exhaustion_without_fallback(monkeypatch)
 
 
 def test_provider_service_records_successful_after_retry(monkeypatch):
-    monkeypatch.setenv('ASSEMBLYAI_BACKGROUND_STT_ENABLED', 'true')
-    monkeypatch.setenv('ASSEMBLYAI_BACKGROUND_STT_WORKLOADS', 'sync')
+    monkeypatch.setenv('ASSEMBLYAI_PRERECORDED_STT_ENABLED', 'true')
+    monkeypatch.setenv('ASSEMBLYAI_PRERECORDED_STT_WORKLOADS', 'sync')
 
     fake_provider = MagicMock()
     fake_provider.provider_name = STTProviderName.assemblyai
@@ -295,8 +426,8 @@ def test_provider_service_records_successful_after_retry(monkeypatch):
 
 
 def test_provider_service_records_zero_cost_for_zero_duration_success(monkeypatch):
-    monkeypatch.setenv('ASSEMBLYAI_BACKGROUND_STT_ENABLED', 'true')
-    monkeypatch.setenv('ASSEMBLYAI_BACKGROUND_STT_WORKLOADS', 'sync')
+    monkeypatch.setenv('ASSEMBLYAI_PRERECORDED_STT_ENABLED', 'true')
+    monkeypatch.setenv('ASSEMBLYAI_PRERECORDED_STT_WORKLOADS', 'sync')
 
     fake_provider = MagicMock()
     fake_provider.provider_name = STTProviderName.assemblyai
@@ -406,8 +537,8 @@ def test_provider_service_live_assemblyai_smoke_records_ledger_when_credentials_
     if not api_key or not audio_url:
         pytest.skip('ASSEMBLYAI_API_KEY and ASSEMBLYAI_SMOKE_AUDIO_URL are required for live smoke')
 
-    monkeypatch.setenv('ASSEMBLYAI_BACKGROUND_STT_ENABLED', 'true')
-    monkeypatch.setenv('ASSEMBLYAI_BACKGROUND_STT_WORKLOADS', 'sync')
+    monkeypatch.setenv('ASSEMBLYAI_PRERECORDED_STT_ENABLED', 'true')
+    monkeypatch.setenv('ASSEMBLYAI_PRERECORDED_STT_WORKLOADS', 'sync')
 
     with patch.object(provider_service, 'create_provider_run', return_value='run-aai-live') as create_run, patch.object(
         provider_service, 'finalize_provider_run'

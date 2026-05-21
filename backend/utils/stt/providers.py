@@ -93,7 +93,7 @@ _STREAMING_WORKLOAD_PROVIDERS = {
 
 def get_prerecorded_provider_name(workload: STTWorkload) -> STTProviderName:
     workload = STTWorkload(workload)
-    if _assemblyai_background_enabled() and workload in _assemblyai_enabled_workloads():
+    if _assemblyai_prerecorded_enabled() and workload in _assemblyai_enabled_workloads():
         return STTProviderName.assemblyai
     return _DEFAULT_PRERECORDED_WORKLOAD_PROVIDERS[workload]
 
@@ -107,7 +107,11 @@ def get_fallback_prerecorded_provider_name(
 ) -> Optional[STTProviderName]:
     workload = STTWorkload(workload)
     provider = STTProviderName(provider)
-    if workload == STTWorkload.background and provider == STTProviderName.assemblyai:
+    if (
+        workload in _ASSEMBLYAI_ELIGIBLE_WORKLOADS
+        and provider == STTProviderName.assemblyai
+        and not assemblyai_prerecorded_fallback_enabled()
+    ):
         return None
     fallback = _DEFAULT_PRERECORDED_WORKLOAD_PROVIDERS[workload]
     if provider != fallback:
@@ -115,12 +119,16 @@ def get_fallback_prerecorded_provider_name(
     return None
 
 
-def _assemblyai_background_enabled() -> bool:
-    return os.getenv('ASSEMBLYAI_BACKGROUND_STT_ENABLED', 'false').lower() == 'true'
+def _assemblyai_prerecorded_enabled() -> bool:
+    return os.getenv('ASSEMBLYAI_PRERECORDED_STT_ENABLED', 'true').lower() == 'true'
+
+
+def assemblyai_prerecorded_fallback_enabled() -> bool:
+    return os.getenv('ASSEMBLYAI_PRERECORDED_STT_FALLBACK_ENABLED', 'true').lower() == 'true'
 
 
 def _assemblyai_enabled_workloads() -> set[STTWorkload]:
-    configured = os.getenv('ASSEMBLYAI_BACKGROUND_STT_WORKLOADS', 'sync,background,postprocess')
+    configured = os.getenv('ASSEMBLYAI_PRERECORDED_STT_WORKLOADS', 'sync,background,postprocess')
     workloads = set()
     for raw_value in configured.split(','):
         value = raw_value.strip()

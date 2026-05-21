@@ -21,8 +21,9 @@ from utils.stt.providers import STTProviderName, STTWorkload, get_prerecorded_pr
 
 @pytest.fixture(autouse=True)
 def _enable_assemblyai_routing(monkeypatch):
-    monkeypatch.setenv('ASSEMBLYAI_BACKGROUND_STT_ENABLED', 'true')
-    monkeypatch.setenv('ASSEMBLYAI_BACKGROUND_STT_WORKLOADS', 'sync,background,postprocess')
+    monkeypatch.setenv('ASSEMBLYAI_PRERECORDED_STT_ENABLED', 'true')
+    monkeypatch.setenv('ASSEMBLYAI_PRERECORDED_STT_WORKLOADS', 'sync,background,postprocess')
+    monkeypatch.setenv('ASSEMBLYAI_API_KEY', 'aa-server-key')
 
 
 def test_env_selects_assemblyai_for_sync():
@@ -67,6 +68,27 @@ def test_resolve_uses_assemblyai_for_background_when_byok_assembly_header_presen
 
 @patch('utils.stt.provider_service.get_byok_key', return_value=None)
 def test_resolve_uses_server_assembly_when_no_byok_headers(_mock_get_key):
+    assert provider_service.resolve_prerecorded_provider_for_request(STTWorkload.sync) == STTProviderName.assemblyai
+
+
+@patch('utils.stt.provider_service.get_byok_key')
+def test_resolve_uses_server_deepgram_when_server_assembly_missing_and_fallback_enabled(mock_get_key, monkeypatch):
+    monkeypatch.delenv('ASSEMBLYAI_API_KEY', raising=False)
+    monkeypatch.setenv('DEEPGRAM_API_KEY', 'dg-server-key')
+    mock_get_key.return_value = None
+
+    assert provider_service.resolve_prerecorded_provider_for_request(STTWorkload.sync) == STTProviderName.deepgram
+
+
+@patch('utils.stt.provider_service.get_byok_key')
+def test_resolve_keeps_assemblyai_selected_when_server_assembly_missing_and_fallback_disabled(
+    mock_get_key, monkeypatch
+):
+    monkeypatch.delenv('ASSEMBLYAI_API_KEY', raising=False)
+    monkeypatch.setenv('DEEPGRAM_API_KEY', 'dg-server-key')
+    monkeypatch.setenv('ASSEMBLYAI_PRERECORDED_STT_FALLBACK_ENABLED', 'false')
+    mock_get_key.return_value = None
+
     assert provider_service.resolve_prerecorded_provider_for_request(STTWorkload.sync) == STTProviderName.assemblyai
 
 

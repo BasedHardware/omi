@@ -6,7 +6,7 @@ description: "Sequence diagrams for the /v4/listen WebSocket and Pusher processi
 
 # Listen + Pusher Pipeline — Sequence Diagrams
 
-> Last updated: 2026-05-21 (AssemblyAI background STT MVP)
+> Last updated: 2026-05-21 (AssemblyAI prerecorded STT MVP)
 >
 > These diagrams document the real behavior observed during E2E testing with
 > live services (backend, pusher, Deepgram, AssemblyAI, embedding API). Update
@@ -230,9 +230,10 @@ sequenceDiagram
 
 Realtime listen and Hold-to-Talk streaming remain Deepgram paths. Background
 prerecorded transcription routes through `utils/stt/provider_service.py`, which
-selects Deepgram by default and can select AssemblyAI only when
-`ASSEMBLYAI_BACKGROUND_STT_ENABLED=true` and the workload is listed in
-`ASSEMBLYAI_BACKGROUND_STT_WORKLOADS`.
+selects AssemblyAI by default for eligible prerecorded workloads when
+`ASSEMBLYAI_PRERECORDED_STT_ENABLED=true` and the workload is listed in
+`ASSEMBLYAI_PRERECORDED_STT_WORKLOADS`. Deepgram remains the fallback when
+AssemblyAI is disabled, unavailable, or fails and fallback is enabled.
 
 Desktop Audio Recording can use the batch background path instead of `/v4/listen`
 when the desktop batch setting is enabled and the client is pointed at a backend
@@ -276,13 +277,13 @@ sequenceDiagram
         Deepgram-->>ProviderService: Transcript with words and speaker labels
     end
 
-    alt AssemblyAI fails, times out, or exhausts retries for sync/postprocess
+    alt AssemblyAI fails, times out, or exhausts retries
         ProviderService->>Firestore: Finalize failed AssemblyAI provider run
         ProviderService->>Deepgram: Fallback prerecorded transcript request
         Deepgram-->>ProviderService: Transcript result
     end
 
-    Note over ProviderService: AssemblyAI background workload fails closed;<br/>it does not fall back to Deepgram during desktop cloud batch.
+    Note over ProviderService: Missing AssemblyAI credentials skip directly<br/>to Deepgram when fallback credentials are usable.
 
 ProviderService->>ProviderService: Normalize provider result and reconstruct canonical segments
     ProviderService->>EmbeddingAPI: Extract cluster samples for Omi speaker identity
