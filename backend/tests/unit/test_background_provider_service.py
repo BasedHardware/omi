@@ -16,6 +16,7 @@ os.environ.setdefault('DEEPGRAM_API_KEY', 'fake-for-test')
 
 from models.transcript_segment import ProviderTranscriptResult, ProviderTranscriptWord  # noqa: E402
 from utils.stt import provider_service  # noqa: E402
+from utils.stt.provider_costs import estimate_prerecorded_provider_cost_usd  # noqa: E402
 from utils.stt.providers import STTProviderName, STTWorkload, get_prerecorded_provider_name  # noqa: E402
 
 
@@ -76,6 +77,7 @@ def test_provider_service_transcribes_sync_upload_and_finalizes_deepgram_run():
     assert finalize_run.call_args.kwargs['workload'] == 'sync'
     assert finalize_run.call_args.kwargs['status'] == 'succeeded'
     assert finalize_run.call_args.kwargs['transcript_segment_count'] == 1
+    assert finalize_run.call_args.kwargs['estimated_cost_usd'] == 0.00016
 
 
 def test_provider_service_finalizes_background_run_on_deepgram_default():
@@ -99,6 +101,7 @@ def test_provider_service_finalizes_background_run_on_deepgram_default():
     assert finalize_run.call_args.kwargs['workload'] == 'background'
     assert finalize_run.call_args.kwargs['provider'] == 'deepgram'
     assert finalize_run.call_args.kwargs['raw_audio_seconds'] == 9.5
+    assert finalize_run.call_args.kwargs['estimated_cost_usd'] == 0.00076
 
 
 def test_prerecorded_ptt_and_realtime_related_workloads_stay_deepgram():
@@ -172,6 +175,8 @@ def test_provider_service_uses_assemblyai_for_enabled_sync_workload(monkeypatch)
     finalize_run.assert_called_once()
     assert finalize_run.call_args.kwargs['provider'] == 'assemblyai'
     assert finalize_run.call_args.kwargs['artifact_refs'] == {}
+    assert finalize_run.call_args.kwargs['billable_seconds'] == 2.0
+    assert finalize_run.call_args.kwargs['estimated_cost_usd'] == 0.00008333
 
 
 def test_provider_service_falls_back_to_deepgram_when_assemblyai_fails(monkeypatch):
@@ -213,6 +218,61 @@ def test_provider_service_falls_back_to_deepgram_when_assemblyai_fails(monkeypat
     assert finalize_run.call_args_list[1].kwargs['provider'] == 'deepgram'
     assert finalize_run.call_args_list[1].kwargs['fallback_count'] == 1
     assert finalize_run.call_args_list[1].kwargs['fallback_provider'] == 'assemblyai'
+    assert finalize_run.call_args_list[1].kwargs['estimated_cost_usd'] == 0.00016
+
+
+def test_provider_service_records_zero_cost_for_zero_duration_success(monkeypatch):
+    monkeypatch.setenv('ASSEMBLYAI_BACKGROUND_STT_ENABLED', 'true')
+    monkeypatch.setenv('ASSEMBLYAI_BACKGROUND_STT_WORKLOADS', 'sync')
+
+    fake_provider = MagicMock()
+    fake_provider.provider_name = STTProviderName.assemblyai
+    provider_result = _provider_result(provider='assemblyai', model='universal-2')
+    provider_result.duration = 0.0
+    fake_provider.transcribe_url.return_value = provider_result
+
+    with patch.object(provider_service, '_assemblyai_prerecorded_provider', return_value=fake_provider), patch.object(
+        provider_service, 'create_provider_run', return_value='run-zero'
+    ), patch.object(provider_service, 'finalize_provider_run') as finalize_run:
+        provider_service.transcribe_url(
+            'https://example.test/zero.wav',
+            workload=STTWorkload.sync,
+            uid='uid-1',
+            raw_audio_seconds=0.0,
+        )
+
+    assert finalize_run.call_args.kwargs['billable_seconds'] == 0.0
+    assert finalize_run.call_args.kwargs['estimated_cost_usd'] == 0.0
+
+
+def test_prerecorded_cost_estimator_uses_provider_defaults_and_unknown_provider_zero():
+    assert (
+        estimate_prerecorded_provider_cost_usd(
+            provider='assemblyai',
+            model='future-model',
+            workload='background',
+            billable_seconds=60.0,
+        )
+        == 0.0025
+    )
+    assert (
+        estimate_prerecorded_provider_cost_usd(
+            provider='deepgram',
+            model='future-model',
+            workload='background',
+            billable_seconds=60.0,
+        )
+        == 0.0048
+    )
+    assert (
+        estimate_prerecorded_provider_cost_usd(
+            provider='unknown-provider',
+            model='future-model',
+            workload='background',
+            billable_seconds=60.0,
+        )
+        == 0.0
+    )
 
 
 def test_provider_service_live_assemblyai_smoke_records_ledger_when_credentials_are_present(monkeypatch):

@@ -146,6 +146,7 @@ def test_create_and_finalize_provider_run_writes_ledger_rollup_and_metrics(monke
     rollup = rollup_doc.set_calls[0]['data']
     assert rollup['run_count'] == {'__increment': 1}
     assert rollup['raw_audio_seconds'] == {'__increment': 60.0}
+    assert rollup['estimated_cost_usd'] == {'__increment': 0.37}
     assert rollup['identity_confidence_counts.high'] == {'__increment': 2}
     assert emitted[0]['latency_seconds'] == 5.0
     assert emitted[0]['billable_seconds'] == 60.0

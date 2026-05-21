@@ -8,6 +8,7 @@ from models.transcript_segment import ProviderTranscriptResult, TranscriptSegmen
 from utils.stt.assemblyai_adapter import AssemblyAIAsyncTranscriptionProvider
 from utils.stt.conversation_reconstructor import reconstruct_conversation
 from utils.stt.deepgram_adapter import provider_result_to_legacy_words
+from utils.stt.provider_costs import estimate_prerecorded_provider_cost_usd
 from utils.stt.providers import (
     STTProviderName,
     STTWorkload,
@@ -479,6 +480,7 @@ def _finalize_run(
 ) -> None:
     if not run_id:
         return
+    billable_seconds = raw_audio_seconds
     clusters = {
         item.provider_cluster_id for item in list(result.words) + list(result.utterances) if item.provider_cluster_id
     }
@@ -493,7 +495,13 @@ def _finalize_run(
             started_at=started_at,
             raw_audio_seconds=raw_audio_seconds,
             speech_active_seconds=raw_audio_seconds,
-            billable_seconds=raw_audio_seconds,
+            billable_seconds=billable_seconds,
+            estimated_cost_usd=estimate_prerecorded_provider_cost_usd(
+                provider=result.provider,
+                model=result.model,
+                workload=workload.value,
+                billable_seconds=billable_seconds,
+            ),
             retry_count=retry_count,
             fallback_count=fallback_count,
             transcript_segment_count=len(segments),
