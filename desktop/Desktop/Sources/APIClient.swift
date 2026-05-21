@@ -3764,6 +3764,26 @@ struct UserSubscriptionResponse: Codable {
     case availablePlans = "available_plans"
     case showSubscriptionUI = "show_subscription_ui"
   }
+
+  // Defensive decode: only `subscription` is required. The usage counters and
+  // plan catalog default when absent so a backend that's behind on schema
+  // (notably the dev backend the beta channel routes to, which can lag prod or
+  // omit newer fields like `memories_created_used`) doesn't blank the entire
+  // Plan & Usage page with "Failed to load plan information."
+  init(from decoder: Decoder) throws {
+    let c = try decoder.container(keyedBy: CodingKeys.self)
+    subscription = try c.decode(UserSubscriptionInfo.self, forKey: .subscription)
+    transcriptionSecondsUsed = try c.decodeIfPresent(Int.self, forKey: .transcriptionSecondsUsed) ?? 0
+    transcriptionSecondsLimit = try c.decodeIfPresent(Int.self, forKey: .transcriptionSecondsLimit) ?? 0
+    wordsTranscribedUsed = try c.decodeIfPresent(Int.self, forKey: .wordsTranscribedUsed) ?? 0
+    wordsTranscribedLimit = try c.decodeIfPresent(Int.self, forKey: .wordsTranscribedLimit) ?? 0
+    insightsGainedUsed = try c.decodeIfPresent(Int.self, forKey: .insightsGainedUsed) ?? 0
+    insightsGainedLimit = try c.decodeIfPresent(Int.self, forKey: .insightsGainedLimit) ?? 0
+    memoriesCreatedUsed = try c.decodeIfPresent(Int.self, forKey: .memoriesCreatedUsed) ?? 0
+    memoriesCreatedLimit = try c.decodeIfPresent(Int.self, forKey: .memoriesCreatedLimit) ?? 0
+    availablePlans = try c.decodeIfPresent([SubscriptionPlanOption].self, forKey: .availablePlans) ?? []
+    showSubscriptionUI = try c.decodeIfPresent(Bool.self, forKey: .showSubscriptionUI) ?? true
+  }
 }
 
 struct CheckoutSessionResponse: Codable {
