@@ -6,6 +6,7 @@ the public Open Food Facts API.
 """
 
 import os
+import re
 from typing import Any, Dict, List, Optional
 
 import requests
@@ -81,6 +82,26 @@ def _normalize_tags(tags: Any) -> List[str]:
     if not isinstance(tags, list):
         return []
     return [item for item in (_normalize_tag(tag) for tag in tags) if item]
+
+
+async def _json_body(request: Request) -> tuple[Dict[str, Any], Optional[str]]:
+    try:
+        body = await request.json()
+    except ValueError:
+        return {}, "request body must be valid JSON"
+
+    if not isinstance(body, dict):
+        return {}, "request body must be a JSON object"
+
+    return body, None
+
+
+def _invalid_body_response(message: str) -> ChatToolResponse:
+    return ChatToolResponse(
+        success=False,
+        message=message,
+        data={"error": message},
+    )
 
 
 def _nutrient(product: Dict[str, Any], key: str) -> Optional[Any]:
@@ -196,6 +217,24 @@ def _collect_foods_from_body(body: Dict[str, Any]) -> Dict[str, Any]:
     return {"products": products, "errors": errors}
 
 
+def _ingredient_mentions_term(ingredients: str, term: str) -> bool:
+    term = str(term or "").lower().strip()
+    if not term:
+        return False
+
+    normalized = ingredients.lower()
+    pattern = re.compile(rf"(?<![a-z]){re.escape(term)}(?![a-z])")
+    for match in pattern.finditer(normalized):
+        after = normalized[match.end() : match.end() + 8]
+        before = normalized[max(0, match.start() - 8) : match.start()]
+        if after.startswith("-free") or after.startswith(" free"):
+            continue
+        if before.endswith("no ") or before.endswith("non-"):
+            continue
+        return True
+    return False
+
+
 @app.get("/health")
 async def health():
     return {"status": "ok", "service": "omi-openfoodfacts-app"}
@@ -298,7 +337,10 @@ async def get_manifest_alias():
 
 @app.post("/tools/search_foods", response_model=ChatToolResponse)
 async def tool_search_foods(request: Request):
-    body = await request.json()
+    body, error = await _json_body(request)
+    if error:
+        return _invalid_body_response(error)
+
     page_size = _safe_int(body.get("page_size"), default=5)
     result = _search_foods(body.get("query", ""), page_size)
     if "error" in result:
@@ -320,7 +362,10 @@ async def tool_search_foods(request: Request):
 
 @app.post("/tools/lookup_barcode", response_model=ChatToolResponse)
 async def tool_lookup_barcode(request: Request):
-    body = await request.json()
+    body, error = await _json_body(request)
+    if error:
+        return _invalid_body_response(error)
+
     result = _lookup_barcode(body.get("barcode", ""))
     if "error" in result:
         return ChatToolResponse(success=False, message=result["error"], data=result)
@@ -335,7 +380,10 @@ async def tool_lookup_barcode(request: Request):
 
 @app.post("/tools/compare_foods", response_model=ChatToolResponse)
 async def tool_compare_foods(request: Request):
-    body = await request.json()
+    body, error = await _json_body(request)
+    if error:
+        return _invalid_body_response(error)
+
     result = _collect_foods_from_body(body)
     if "error" in result:
         return ChatToolResponse(success=False, message=result["error"], data=result)
@@ -350,7 +398,10 @@ async def tool_compare_foods(request: Request):
 
 @app.post("/tools/check_allergens", response_model=ChatToolResponse)
 async def tool_check_allergens(request: Request):
-    body = await request.json()
+    body, error = await _json_body(request)
+    if error:
+        return _invalid_body_response(error)
+
     avoid = body.get("avoid") or []
     if not isinstance(avoid, list) or not avoid:
         return ChatToolResponse(
@@ -385,7 +436,9 @@ async def tool_check_allergens(request: Request):
     matches = sorted(
         term
         for term in avoid_terms
-        if term in known_allergens or term in traces or term in ingredients
+        if term in known_allergens
+        or term in traces
+        or _ingredient_mentions_term(ingredients, term)
     )
 
     data = {
