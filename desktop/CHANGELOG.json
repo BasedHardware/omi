@@ -1,5 +1,7 @@
 {
-  "unreleased": [],
+  "unreleased": [
+    "Fixed \"Failed to load plan information\" on the Plan & Usage page when the backend response was missing usage fields"
+  ],
   "releases": [
     {
       "version": "0.11.416",
