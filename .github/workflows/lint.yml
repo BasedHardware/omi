@@ -108,7 +108,7 @@ jobs:
         if: steps.changed.outputs.has_frontend == 'true' || steps.changed.outputs.has_personas == 'true'
         uses: actions/setup-node@v4
         with:
-          node-version: '18'
+          node-version: '22'
           cache: 'npm'
           cache-dependency-path: |
             web/frontend/package-lock.json
