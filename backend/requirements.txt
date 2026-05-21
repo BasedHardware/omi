@@ -80,7 +80,7 @@ httpx-sse==0.4.0
 huggingface-hub==0.24.5
 humanfriendly==10.0
 hyperframe==6.1.0
-idna==3.7
+idna==3.15
 ipython==8.26.0
 jedi==0.19.1
 Jinja2==3.1.6
