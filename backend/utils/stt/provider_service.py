@@ -4,9 +4,13 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import List, Optional, Sequence, Tuple
 
+import httpx
+from deepgram import DeepgramClient, DeepgramClientOptions
+
 from models.transcript_segment import ProviderTranscriptResult, TranscriptSegment
 from utils.stt.assemblyai_adapter import AssemblyAIAsyncTranscriptionProvider
 from utils.stt.conversation_reconstructor import reconstruct_conversation
+from utils.stt.deepgram_adapter import DeepgramPrerecordedTranscriptionProvider
 from utils.stt.deepgram_adapter import provider_result_to_legacy_words
 from utils.stt.provider_costs import estimate_prerecorded_provider_cost_usd
 from utils.stt.providers import (
@@ -15,20 +19,44 @@ from utils.stt.providers import (
     get_fallback_prerecorded_provider_name,
     get_prerecorded_provider_name,
 )
+from utils.stt.deepgram_config import get_deepgram_model_for_language
+
+try:
+    from utils.byok import get_byok_key
+except ImportError:
+    get_byok_key = None
+
+try:
+    from database.transcription_provider_usage import (
+        create_provider_run as _db_create_provider_run,
+        finalize_provider_run as _db_finalize_provider_run,
+        update_provider_run_identity_metrics as _db_update_provider_run_identity_metrics,
+    )
+
+    _PROVIDER_USAGE_IMPORT_ERROR = None
+except ImportError as e:
+    _db_create_provider_run = None
+    _db_finalize_provider_run = None
+    _db_update_provider_run_identity_metrics = None
+    _PROVIDER_USAGE_IMPORT_ERROR = e
 
 logger = logging.getLogger(__name__)
 
+_DG_TIMEOUT = httpx.Timeout(connect=10.0, read=120.0, write=30.0, pool=10.0)
+_DEEPGRAM_OPTIONS = DeepgramClientOptions(options={"keepalive": "true"})
+_DEEPGRAM_CLIENT = DeepgramClient(os.getenv('DEEPGRAM_API_KEY'), _DEEPGRAM_OPTIONS)
+
 
 def create_provider_run(**kwargs) -> str:
-    from database.transcription_provider_usage import create_provider_run as _create_provider_run
-
-    return _create_provider_run(**kwargs)
+    if _db_create_provider_run is None:
+        raise _PROVIDER_USAGE_IMPORT_ERROR
+    return _db_create_provider_run(**kwargs)
 
 
 def finalize_provider_run(**kwargs) -> None:
-    from database.transcription_provider_usage import finalize_provider_run as _finalize_provider_run
-
-    _finalize_provider_run(**kwargs)
+    if _db_finalize_provider_run is None:
+        raise _PROVIDER_USAGE_IMPORT_ERROR
+    _db_finalize_provider_run(**kwargs)
 
 
 def summarize_identity_confidences(confidences):
@@ -52,19 +80,18 @@ def _identity_confidence_bucket(confidence: Optional[float]) -> str:
 
 
 def _deepgram_prerecorded_provider():
-    from utils.stt.pre_recorded import _deepgram_prerecorded_provider as _provider
-
-    return _provider()
+    return DeepgramPrerecordedTranscriptionProvider(_deepgram_client_for_request, _DG_TIMEOUT)
 
 
 def _assemblyai_prerecorded_provider():
     return AssemblyAIAsyncTranscriptionProvider()
 
 
-def get_deepgram_model_for_language(language: str) -> Tuple[str, str]:
-    from utils.stt.pre_recorded import get_deepgram_model_for_language as _get_deepgram_model_for_language
-
-    return _get_deepgram_model_for_language(language)
+def _deepgram_client_for_request() -> DeepgramClient:
+    byok = get_byok_key('deepgram') if get_byok_key else None
+    if byok:
+        return DeepgramClient(byok, _DEEPGRAM_OPTIONS)
+    return _DEEPGRAM_CLIENT
 
 
 @dataclass
@@ -626,10 +653,15 @@ def update_provider_run_identity_metrics(
 ) -> None:
     if not run_id:
         return
+    if _db_update_provider_run_identity_metrics is None:
+        logger.warning(
+            'failed to update transcription provider identity metrics run_id=%s: %s',
+            run_id,
+            _PROVIDER_USAGE_IMPORT_ERROR,
+        )
+        return
     try:
-        from database.transcription_provider_usage import update_provider_run_identity_metrics as _update_identity
-
-        _update_identity(
+        _db_update_provider_run_identity_metrics(
             run_id=run_id,
             provider=provider,
             model=model or 'unknown',
