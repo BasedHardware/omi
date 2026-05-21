@@ -3068,5 +3068,6 @@
     "morePaymentMethodsComingSoon": "Незабаром більше способів оплати",
     "@morePaymentMethodsComingSoon": {
         "description": "Placeholder card text shown under available payment methods"
-    }
+    },
+    "syncCardRateLimited": "Досягнуто ліміт використання — синхронізація відновиться автоматично"
 }

@@ -10763,5 +10763,6 @@
     "morePaymentMethodsComingSoon": "روش‌های پرداخت بیشتر به‌زودی",
     "@morePaymentMethodsComingSoon": {
         "description": "Placeholder card text shown under available payment methods"
-    }
+    },
+    "syncCardRateLimited": "محدودیت استفاده منصفانه به پایان رسید — همگام‌سازی به‌طور خودکار از سر گرفته می‌شود"
 }

@@ -10763,5 +10763,6 @@
     "morePaymentMethodsComingSoon": "Хутка з'явяцца новыя спосабы аплаты",
     "@morePaymentMethodsComingSoon": {
         "description": "Placeholder card text shown under available payment methods"
-    }
+    },
+    "syncCardRateLimited": "Дасягнуты ліміт сумленнага выкарыстання — сінхранізацыя адновіцца аўтаматычна"
 }

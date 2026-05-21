@@ -3073,5 +3073,6 @@
     "morePaymentMethodsComingSoon": "Sắp có thêm phương thức thanh toán",
     "@morePaymentMethodsComingSoon": {
         "description": "Placeholder card text shown under available payment methods"
-    }
+    },
+    "syncCardRateLimited": "Đã đạt giới hạn sử dụng hợp lý — quá trình đồng bộ sẽ tự động tiếp tục"
 }

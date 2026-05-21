@@ -3103,5 +3103,6 @@
     "morePaymentMethodsComingSoon": "Daha fazla ödeme yöntemi yakında",
     "@morePaymentMethodsComingSoon": {
         "description": "Placeholder card text shown under available payment methods"
-    }
+    },
+    "syncCardRateLimited": "Adil kullanım sınırına ulaşıldı — eşitleme otomatik olarak sürdürülecek"
 }

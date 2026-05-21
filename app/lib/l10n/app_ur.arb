@@ -10763,5 +10763,6 @@
     "morePaymentMethodsComingSoon": "مزید ادائیگی کے طریقے جلد آرہے ہیں",
     "@morePaymentMethodsComingSoon": {
         "description": "Placeholder card text shown under available payment methods"
-    }
+    },
+    "syncCardRateLimited": "منصفانہ استعمال کی حد پوری ہو گئی — ہم آہنگی خودکار طور پر دوبارہ شروع ہو جائے گی"
 }

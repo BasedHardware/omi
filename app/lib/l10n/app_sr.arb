@@ -10763,5 +10763,6 @@
     "morePaymentMethodsComingSoon": "Ускоро више начина плаћања",
     "@morePaymentMethodsComingSoon": {
         "description": "Placeholder card text shown under available payment methods"
-    }
+    },
+    "syncCardRateLimited": "Достигнут је лимит фер коришћења — синхронизација ће се аутоматски наставити"
 }

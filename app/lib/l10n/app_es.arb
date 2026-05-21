@@ -3069,5 +3069,6 @@
     "morePaymentMethodsComingSoon": "Próximamente más métodos de pago",
     "@morePaymentMethodsComingSoon": {
         "description": "Placeholder card text shown under available payment methods"
-    }
+    },
+    "syncCardRateLimited": "Se alcanzó el límite de uso — la sincronización se reanudará automáticamente"
 }

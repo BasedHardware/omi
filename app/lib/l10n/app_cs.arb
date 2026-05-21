@@ -3037,5 +3037,6 @@
     "morePaymentMethodsComingSoon": "Brzy přibudou další platební metody",
     "@morePaymentMethodsComingSoon": {
         "description": "Placeholder card text shown under available payment methods"
-    }
+    },
+    "syncCardRateLimited": "Byl dosažen limit férového využití — synchronizace bude automaticky pokračovat"
 }

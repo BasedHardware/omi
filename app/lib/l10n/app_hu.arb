@@ -3164,5 +3164,6 @@
     "morePaymentMethodsComingSoon": "Hamarosan további fizetési módok",
     "@morePaymentMethodsComingSoon": {
         "description": "Placeholder card text shown under available payment methods"
-    }
+    },
+    "syncCardRateLimited": "Elérted a méltányos használati korlátot — a szinkronizálás automatikusan folytatódik"
 }

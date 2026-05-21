@@ -10763,5 +10763,6 @@
     "morePaymentMethodsComingSoon": "אמצעי תשלום נוספים בקרוב",
     "@morePaymentMethodsComingSoon": {
         "description": "Placeholder card text shown under available payment methods"
-    }
+    },
+    "syncCardRateLimited": "הגעת למגבלת השימוש ההוגן — הסנכרון יתחדש באופן אוטומטי"
 }

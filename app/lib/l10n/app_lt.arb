@@ -3068,5 +3068,6 @@
     "morePaymentMethodsComingSoon": "Netrukus daugiau mokėjimo būdų",
     "@morePaymentMethodsComingSoon": {
         "description": "Placeholder card text shown under available payment methods"
-    }
+    },
+    "syncCardRateLimited": "Pasiekta sąžiningo naudojimo riba — sinchronizavimas bus tęsiamas automatiškai"
 }

@@ -10763,5 +10763,6 @@
     "morePaymentMethodsComingSoon": "लवकरच आणखी पेमेंट पद्धती",
     "@morePaymentMethodsComingSoon": {
         "description": "Placeholder card text shown under available payment methods"
-    }
+    },
+    "syncCardRateLimited": "वाजवी वापराची मर्यादा गाठली — सिंक आपोआप पुन्हा सुरू होईल"
 }

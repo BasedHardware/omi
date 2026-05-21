@@ -10763,5 +10763,6 @@
     "morePaymentMethodsComingSoon": "ಶೀಘ್ರದಲ್ಲೇ ಹೆಚ್ಚಿನ ಪಾವತಿ ವಿಧಾನಗಳು",
     "@morePaymentMethodsComingSoon": {
         "description": "Placeholder card text shown under available payment methods"
-    }
+    },
+    "syncCardRateLimited": "ನ್ಯಾಯಯುತ ಬಳಕೆಯ ಮಿತಿ ತಲುಪಿದೆ — ಸಿಂಕ್ ಸ್ವಯಂಚಾಲಿತವಾಗಿ ಮುಂದುವರಿಯುತ್ತದೆ"
 }

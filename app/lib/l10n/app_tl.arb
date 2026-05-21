@@ -10763,5 +10763,6 @@
     "morePaymentMethodsComingSoon": "Mas maraming paraan ng pagbabayad na malapit nang dumating",
     "@morePaymentMethodsComingSoon": {
         "description": "Placeholder card text shown under available payment methods"
-    }
+    },
+    "syncCardRateLimited": "Naabot na ang limitasyon ng patas na paggamit — awtomatikong magpapatuloy ang pag-sync"
 }

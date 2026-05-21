@@ -3068,5 +3068,6 @@
     "morePaymentMethodsComingSoon": "Drīzumā vairāk maksājumu veidu",
     "@morePaymentMethodsComingSoon": {
         "description": "Placeholder card text shown under available payment methods"
-    }
+    },
+    "syncCardRateLimited": "Sasniegts godīgas lietošanas ierobežojums — sinhronizācija turpināsies automātiski"
 }
