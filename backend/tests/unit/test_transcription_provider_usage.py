@@ -229,6 +229,38 @@ def test_metrics_reject_high_cardinality_labels():
         metrics._provider_metric_labels(provider='assemblyai', transcript_text='hello world')
 
 
+def test_fallback_metric_records_failed_provider_to_fallback_provider(monkeypatch):
+    observed = []
+    monkeypatch.setattr(usage, 'observe_transcription_provider_request', lambda *args, **kwargs: None)
+    monkeypatch.setattr(usage, 'observe_transcription_provider_audio_seconds', lambda *args, **kwargs: None)
+    monkeypatch.setattr(usage, 'observe_transcription_provider_retry', lambda *args, **kwargs: None)
+    monkeypatch.setattr(usage, 'observe_transcription_provider_speaker_clusters', lambda *args, **kwargs: None)
+    monkeypatch.setattr(usage, 'observe_transcription_provider_identity_confidence', lambda *args, **kwargs: None)
+    monkeypatch.setattr(
+        usage,
+        'observe_transcription_provider_fallback',
+        lambda *args, **kwargs: observed.append((args, kwargs)),
+    )
+
+    usage.emit_provider_run_metrics(
+        provider='deepgram',
+        model='nova-3',
+        workload='sync',
+        status='succeeded',
+        latency_seconds=1.0,
+        raw_audio_seconds=2.0,
+        speech_active_seconds=2.0,
+        billable_seconds=2.0,
+        retry_count=0,
+        fallback_count=1,
+        speaker_cluster_count=0,
+        identified_speaker_cluster_count=0,
+        fallback_provider='assemblyai',
+    )
+
+    assert observed == [(('assemblyai', 'deepgram', 'sync', 'provider_failure', 1), {})]
+
+
 def test_provider_metrics_source_does_not_define_forbidden_label_names():
     forbidden_labels = {
         "['provider', 'model', 'workload', 'user_id']",

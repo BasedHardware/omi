@@ -342,8 +342,8 @@ def emit_provider_run_metrics(
     observe_transcription_provider_retry(provider, model, workload, 'provider_retry', retry_count)
     if fallback_count > 0:
         observe_transcription_provider_fallback(
-            provider,
             fallback_provider or 'unknown',
+            provider,
             workload,
             fallback_reason,
             fallback_count,
