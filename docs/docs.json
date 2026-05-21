@@ -35,6 +35,7 @@
                   "doc/developer/backend/chat_system",
                   "doc/developer/backend/StoringConversations",
                   "doc/developer/backend/transcription",
+                  "doc/developer/backend/assemblyai_background_rollout",
                   "doc/developer/backend/listen_pusher_pipeline"
                 ],
                 "icon": "server"
