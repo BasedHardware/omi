@@ -794,7 +794,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     // Quick toggles for screen capture and audio recording.
     // When paywalled (trial expired / usage limit hit) both render OFF — the
     // features can't run, and tapping a toggle surfaces the upgrade popup.
-    let paywalled = UserDefaults.standard.bool(forKey: "desktop_isPaywalled")
+    let paywalled = AppState.isPaywalledEffective
     let screenCaptureItem = NSMenuItem()
     let screenCaptureView = makeToggleItemView(
       title: "Screen Capture",
@@ -1004,7 +1004,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     if enabled {
       // Paywall gate: trial expired / usage limit hit. Refuse to enable,
       // revert the toggle, and surface the same upgrade popup as everywhere else.
-      if UserDefaults.standard.bool(forKey: "desktop_isPaywalled") {
+      if AppState.isPaywalledEffective {
         sender.state = .off
         NotificationCenter.default.post(
           name: .showUsageLimitPopup, object: nil, userInfo: ["reason": "trial_expired"])
@@ -1041,7 +1041,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     // Paywall gate: trial expired / usage limit hit. Refuse to enable,
     // revert the toggle, and surface the same upgrade popup as everywhere else.
-    if enabled && UserDefaults.standard.bool(forKey: "desktop_isPaywalled") {
+    if enabled && AppState.isPaywalledEffective {
       sender.state = .off
       NotificationCenter.default.post(
         name: .showUsageLimitPopup, object: nil, userInfo: ["reason": "trial_expired"])
@@ -1063,7 +1063,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     AnalyticsManager.shared.menuBarOpened()
     // Refresh toggle states to match current runtime state. When paywalled,
     // force both OFF — the features can't run until the user upgrades.
-    let paywalled = UserDefaults.standard.bool(forKey: "desktop_isPaywalled")
+    let paywalled = AppState.isPaywalledEffective
     screenCaptureSwitch?.state =
       (!paywalled && ProactiveAssistantsPlugin.shared.isMonitoring) ? .on : .off
     audioRecordingSwitch?.state =
