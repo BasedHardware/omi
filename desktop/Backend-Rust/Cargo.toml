@@ -17,7 +17,7 @@ serde_json = "1"
 reqwest = { version = "0.11", features = ["json", "stream"] }
 
 # Authentication
-jsonwebtoken = "9"
+jsonwebtoken = "10"
 
 # Utilities
 dotenvy = "0.15"
