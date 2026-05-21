@@ -5,12 +5,14 @@ Provides chat tools for currency conversion, latest reference rates, and
 supported-currency lookup through the public Frankfurter API.
 """
 
+from contextlib import asynccontextmanager
 from decimal import Decimal, InvalidOperation
 from typing import Any, Optional
 
 import httpx
-from fastapi import FastAPI
-from fastapi.responses import HTMLResponse
+from fastapi import FastAPI, Request
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import HTMLResponse, JSONResponse
 from pydantic import BaseModel, Field, field_validator
 
 
@@ -19,10 +21,18 @@ REQUEST_TIMEOUT_SECONDS = 10
 MAX_TARGET_CURRENCIES = 10
 
 
+@asynccontextmanager
+async def lifespan(app_instance: FastAPI):
+    async with httpx.AsyncClient(timeout=REQUEST_TIMEOUT_SECONDS) as client:
+        app_instance.state.http_client = client
+        yield
+
+
 app = FastAPI(
     title="Omi Frankfurter Currency Integration",
     description="Convert currencies and check reference exchange rates from Omi chat tools",
     version="1.0.0",
+    lifespan=lifespan,
 )
 
 
@@ -102,10 +112,20 @@ def _format_decimal(value: Decimal | float | int) -> str:
 
 
 async def _request_json(path: str, params: dict[str, Any] | None = None) -> dict[str, Any]:
-    async with httpx.AsyncClient(timeout=REQUEST_TIMEOUT_SECONDS) as client:
-        response = await client.get(f"{FRANKFURTER_BASE_URL}{path}", params=params)
-        response.raise_for_status()
-        return response.json()
+    client: httpx.AsyncClient = app.state.http_client
+    response = await client.get(f"{FRANKFURTER_BASE_URL}{path}", params=params)
+    response.raise_for_status()
+    return response.json()
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(_: Request, exc: RequestValidationError) -> JSONResponse:
+    first_error = exc.errors()[0] if exc.errors() else {}
+    location = ".".join(str(part) for part in first_error.get("loc", []) if part != "body")
+    message = first_error.get("msg", "invalid request")
+    detail = f"{location}: {message}" if location else message
+    response = ChatToolResponse(error=f"invalid tool request: {detail}")
+    return JSONResponse(status_code=200, content=response.model_dump())
 
 
 @app.get("/", response_class=HTMLResponse)
