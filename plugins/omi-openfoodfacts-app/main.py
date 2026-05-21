@@ -12,6 +12,7 @@ from typing import Any, Dict, List, Optional
 import requests
 from fastapi import FastAPI, Request
 from pydantic import BaseModel
+from starlette.concurrency import run_in_threadpool
 
 
 OPENFOODFACTS_BASE_URL = os.getenv(
@@ -157,12 +158,18 @@ def _openfoodfacts_get(path: str, params: Optional[Dict[str, Any]] = None) -> Di
         return {"error": "Open Food Facts returned a non-JSON response"}
 
 
-def _lookup_barcode(barcode: str) -> Dict[str, Any]:
+async def _openfoodfacts_get_async(
+    path: str, params: Optional[Dict[str, Any]] = None
+) -> Dict[str, Any]:
+    return await run_in_threadpool(_openfoodfacts_get, path, params)
+
+
+async def _lookup_barcode(barcode: str) -> Dict[str, Any]:
     cleaned = "".join(char for char in str(barcode or "") if char.isdigit())
     if not cleaned:
         return {"error": "barcode is required"}
 
-    payload = _openfoodfacts_get(
+    payload = await _openfoodfacts_get_async(
         f"/api/v2/product/{cleaned}.json",
         {"fields": PRODUCT_FIELDS},
     )
@@ -173,12 +180,12 @@ def _lookup_barcode(barcode: str) -> Dict[str, Any]:
     return {"product": _summarize_product(payload["product"])}
 
 
-def _search_foods(query: str, page_size: int) -> Dict[str, Any]:
+async def _search_foods(query: str, page_size: int) -> Dict[str, Any]:
     query = str(query or "").strip()
     if not query:
         return {"error": "query is required"}
 
-    payload = _openfoodfacts_get(
+    payload = await _openfoodfacts_get_async(
         "/api/v2/search",
         {
             "search_terms": query,
@@ -198,7 +205,7 @@ def _search_foods(query: str, page_size: int) -> Dict[str, Any]:
     }
 
 
-def _collect_foods_from_body(body: Dict[str, Any]) -> Dict[str, Any]:
+async def _collect_foods_from_body(body: Dict[str, Any]) -> Dict[str, Any]:
     barcodes = body.get("barcodes") or []
     if not isinstance(barcodes, list):
         return {"error": "barcodes must be a list"}
@@ -206,7 +213,7 @@ def _collect_foods_from_body(body: Dict[str, Any]) -> Dict[str, Any]:
     products = []
     errors = []
     for barcode in barcodes[:5]:
-        result = _lookup_barcode(str(barcode))
+        result = await _lookup_barcode(str(barcode))
         if "product" in result:
             products.append(result["product"])
         else:
@@ -342,7 +349,7 @@ async def tool_search_foods(request: Request):
         return _invalid_body_response(error)
 
     page_size = _safe_int(body.get("page_size"), default=5)
-    result = _search_foods(body.get("query", ""), page_size)
+    result = await _search_foods(body.get("query", ""), page_size)
     if "error" in result:
         return ChatToolResponse(success=False, message=result["error"], data=result)
 
@@ -366,7 +373,7 @@ async def tool_lookup_barcode(request: Request):
     if error:
         return _invalid_body_response(error)
 
-    result = _lookup_barcode(body.get("barcode", ""))
+    result = await _lookup_barcode(body.get("barcode", ""))
     if "error" in result:
         return ChatToolResponse(success=False, message=result["error"], data=result)
 
@@ -384,7 +391,7 @@ async def tool_compare_foods(request: Request):
     if error:
         return _invalid_body_response(error)
 
-    result = _collect_foods_from_body(body)
+    result = await _collect_foods_from_body(body)
     if "error" in result:
         return ChatToolResponse(success=False, message=result["error"], data=result)
 
@@ -411,12 +418,12 @@ async def tool_check_allergens(request: Request):
         )
 
     if body.get("barcode"):
-        lookup = _lookup_barcode(body.get("barcode"))
+        lookup = await _lookup_barcode(body.get("barcode"))
         if "error" in lookup:
             return ChatToolResponse(success=False, message=lookup["error"], data=lookup)
         product = lookup["product"]
     else:
-        search = _search_foods(body.get("query", ""), 1)
+        search = await _search_foods(body.get("query", ""), 1)
         if "error" in search:
             return ChatToolResponse(success=False, message=search["error"], data=search)
         products = search.get("products", [])
