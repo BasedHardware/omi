@@ -9,8 +9,8 @@ description: "Rollout gates, feature flags, instrumentation, and rollback for th
 ## Scope
 
 AssemblyAI is the MVP async/background prerecorded provider. Deepgram remains
-the provider for `/v4/listen`, realtime assistant streaming, Hold-to-Talk
-streaming, and voice-message finalize semantics.
+the provider for mobile/BLE `/v4/listen`, realtime assistant streaming,
+Hold-to-Talk streaming, and voice-message finalize semantics.
 
 Eligible AssemblyAI workloads are:
 
@@ -45,6 +45,17 @@ AssemblyAI is disabled by default.
 use AssemblyAI only when the main flag is enabled and the workload is in
 `ASSEMBLYAI_BACKGROUND_STT_WORKLOADS`; otherwise they use Deepgram.
 
+Desktop Audio Recording uses the background workload through:
+
+- `POST /v2/desktop/background-conversation/start`
+- `POST /v2/desktop/background-transcribe`
+- `POST /v1/conversations` for finalization
+
+The chunk endpoint accepts raw PCM, wraps linear16 PCM as WAV before provider
+upload, applies the chunk timeline offset, maps provider speaker clusters to
+stable numeric `speaker_id` values per conversation, and appends segments to the
+in-progress conversation when `persist=true`.
+
 Deepgram is the prerecorded fallback provider. If AssemblyAI fails, times out,
 or exhausts retries for an eligible background workload, the failed AssemblyAI
 run is finalized in the provider ledger and the request retries through
@@ -72,8 +83,8 @@ If a user enrolls an optional Assembly fingerprint in Firestore, they must send
 `x-byok-assemblyai` on requests that send other BYOK headers. Clearing the
 Assembly key requires re-activation with fingerprints that omit `assemblyai`.
 
-Listen/realtime STT is unchanged (Deepgram only). Assembly BYOK does not affect
-`/v4/listen`.
+Listen/realtime STT is unchanged for mobile/BLE (Deepgram only). Assembly BYOK
+does not affect `/v4/listen`.
 
 ## Storage And Identity
 

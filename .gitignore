@@ -9,7 +9,9 @@ myenv/
 venv/
 .DS_Store
 dump/
-/scripts/
+/scripts/*
+!/scripts/desktop_assemblyai_e2e.py
+!/scripts/ASSEMBLYAI_BACKGROUND_E2E_AGENT_PROMPT.md
 *.zip
 *.wav
 node_modules

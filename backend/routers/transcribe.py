@@ -34,7 +34,6 @@ from utils.speaker_assignment import (
     should_update_speaker_to_person_map,
 )
 import database.conversations as conversations_db
-import database.calendar_meetings as calendar_db
 import database.users as user_db
 from utils.byok import get_byok_keys, extract_byok_from_websocket, set_byok_keys
 from database.users import get_user_transcription_preferences
@@ -43,8 +42,8 @@ from database.redis_db import check_credits_invalidation
 from models.conversation import Conversation
 from models.conversation_enums import ConversationSource, ConversationStatus
 from utils.conversations.factory import deserialize_conversation
+from utils.conversations.desktop_background import create_in_progress_desktop_conversation
 from models.conversation_photo import ConversationPhoto
-from models.structured import Structured
 from models.transcript_segment import TranscriptSegment
 from models.message_event import (
     ConversationEvent,
@@ -798,61 +797,14 @@ async def _stream_handler(
                 logger.error(f"Invalid conversation source '{source}', defaulting to 'omi' {uid} {session_id}")
                 conversation_source = ConversationSource.omi
 
-        new_conversation_id = str(uuid.uuid4())
-        stub_conversation = Conversation(
-            id=new_conversation_id,
-            created_at=datetime.now(timezone.utc),
-            started_at=datetime.now(timezone.utc),
-            finished_at=datetime.now(timezone.utc),
-            structured=Structured(),
-            language=language,
-            transcript_segments=[],
-            photos=[],
-            status=ConversationStatus.in_progress,
+        new_conversation_id = create_in_progress_desktop_conversation(
+            uid,
+            language,
             source=conversation_source,
             private_cloud_sync_enabled=private_cloud_sync_enabled,
             call_id=call_id if is_multi_channel else None,
+            session_id=session_id,
         )
-        conversations_db.upsert_conversation(uid, conversation_data=stub_conversation.dict())
-        redis_db.set_in_progress_conversation_id(uid, new_conversation_id)
-
-        detected_meeting_id = None
-
-        # Only check for meetings if source is desktop
-        if conversation_source == ConversationSource.desktop:
-            now = datetime.now(timezone.utc)
-            # Check ±2 minute window
-            time_window = timedelta(minutes=2)
-            start_range = now - time_window
-            end_range = now + time_window
-
-            meetings = calendar_db.get_meetings_in_time_range(uid, start_range, end_range)
-
-            if len(meetings) == 1:
-                # Exactly one meeting found
-                detected_meeting_id = meetings[0]['id']
-            elif len(meetings) > 1:
-                closest_meeting = None
-                smallest_diff = None
-
-                for meeting in meetings:
-                    # Calculate absolute time difference between meeting start and now
-                    time_diff = abs((meeting['start_time'] - now).total_seconds())
-
-                    if smallest_diff is None or time_diff < smallest_diff:
-                        smallest_diff = time_diff
-                        closest_meeting = meeting
-
-                if closest_meeting:
-                    detected_meeting_id = closest_meeting['id']
-                    logger.info(
-                        f"Selected closest meeting: {closest_meeting['title']} (diff: {smallest_diff}s) {uid} {session_id}"
-                    )
-
-        # Store meeting association if auto-detected
-        if detected_meeting_id:
-            redis_db.set_conversation_meeting_id(new_conversation_id, detected_meeting_id)
-
         current_conversation_id = new_conversation_id
 
         logger.info(f"Created new stub conversation: {new_conversation_id} {uid} {session_id}")

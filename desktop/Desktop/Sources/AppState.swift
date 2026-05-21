@@ -42,6 +42,7 @@ class AppState: ObservableObject {
 
   // Transcription state
   @Published var isTranscribing = false
+  @Published private(set) var isStartingTranscription = false
   /// Monotonically increasing counter — incremented each time a new recording starts.
   /// Used to detect if a new recording began during the post-stop force-process delay.
   private(set) var recordingGeneration: UInt64 = 0
@@ -304,6 +305,14 @@ class AppState: ObservableObject {
   private var systemAudioCaptureService: Any?  // SystemAudioCaptureService (macOS 14.4+)
   private var audioMixer: AudioMixer?
   private var vadGateService: VADGateService?
+  private var cloudBackgroundSession: CloudBackgroundTranscriptionSession?
+  private var cloudBackgroundConversationId: String?
+  private var cloudBackgroundStartTask: Task<Void, Never>?
+  private var cloudBackgroundDrainTask: Task<Void, Never>?
+  private var cloudBackgroundSampleCursor = 0
+  private var isCloudBackgroundTranscription = false
+  private var backgroundTranscriptMerger = BackgroundTranscriptMerger()
+  private var speakerSegmentReducer = SpeakerSegmentReducer()
 
   // Speaker segments for diarized transcription (sliding window — older segments are in SQLite)
   private var speakerSegments: [SpeakerSegment] = []
@@ -1349,7 +1358,7 @@ class AppState: ObservableObject {
 
   /// Toggle transcription on/off
   func toggleTranscription() {
-    if isTranscribing {
+    if isTranscribing || isStartingTranscription {
       stopTranscription()
     } else {
       startTranscription()
@@ -1359,7 +1368,7 @@ class AppState: ObservableObject {
   /// Start real-time transcription
   /// - Parameter source: Audio source to use (defaults to current audioSource setting)
   func startTranscription(source: AudioSource? = nil) {
-    guard !isTranscribing else { return }
+    guard !isTranscribing && !isStartingTranscription else { return }
 
     // Paywall hard-stop: every code path that enables the mic + WS streaming
     // funnels through here, including auto-restart from sleep and toggle
@@ -1389,6 +1398,23 @@ class AppState: ObservableObject {
       log(
         "Transcription: Using language=\(effectiveLanguage) (autoDetect=\(AssistantSettings.shared.transcriptionAutoDetect), selected=\(AssistantSettings.shared.transcriptionLanguage))"
       )
+
+      let routing = BackgroundTranscriptionRoutingGuard().decide(
+        batchEnabled: AssistantSettings.shared.batchTranscriptionEnabled,
+        serverAssemblyBackgroundEnabled: Self.isServerBackgroundBatchEnabled,
+        audioSource: effectiveSource
+      )
+      if routing == .cloudBatchAssembly {
+        isStartingTranscription = true
+        cloudBackgroundStartTask?.cancel()
+        cloudBackgroundStartTask = Task {
+          await self.startCloudBackgroundTranscription(
+            source: effectiveSource,
+            language: effectiveLanguage
+          )
+        }
+        return
+      }
 
       // Always streaming via Python backend /v4/listen
       transcriptionService = try TranscriptionService(language: effectiveLanguage)
@@ -1507,10 +1533,14 @@ class AppState: ObservableObject {
         Task { @MainActor in
           guard let self = self, self.isTranscribing else { return }
           log("Transcription: 4-hour limit reached - restarting session")
-          // Stop and restart (WebSocket close triggers backend conversation processing)
-          self.stopAudioCapture()
-          self.clearTranscriptionState()
-          self.startTranscription()
+          if self.isCloudBackgroundTranscription {
+            _ = await self.finishConversation()
+          } else {
+            // Stop and restart (WebSocket close triggers backend conversation processing)
+            self.stopAudioCapture()
+            self.clearTranscriptionState()
+            self.startTranscription()
+          }
         }
       }
 
@@ -1522,6 +1552,110 @@ class AppState: ObservableObject {
     } catch {
       AnalyticsManager.shared.recordingError(error: error.localizedDescription)
       showAlert(title: "Transcription Error", message: error.localizedDescription)
+    }
+  }
+
+  private static var isServerBackgroundBatchEnabled: Bool {
+    let baseURL = DesktopBackendEnvironment.pythonBaseURL().lowercased()
+    return baseURL.contains("127.0.0.1")
+      || baseURL.contains("localhost")
+      || baseURL.contains("omiapi.com")
+  }
+
+  private func startCloudBackgroundTranscription(source: AudioSource, language: String) async {
+    defer { isStartingTranscription = false }
+    do {
+      let conversationId = try await APIClient.shared.startBackgroundConversation(language: language)
+      guard !Task.isCancelled else { return }
+      cloudBackgroundConversationId = conversationId
+      cloudBackgroundSampleCursor = 0
+      isCloudBackgroundTranscription = true
+      backgroundTranscriptMerger.reset()
+      speakerSegmentReducer.reset()
+      transcriptionService = nil
+
+      if source == .bleDevice, let device = DeviceProvider.shared.connectedDevice {
+        currentConversationSource = ConversationSource.from(deviceType: device.type)
+        recordingInputDeviceName = device.displayName
+      } else {
+        currentConversationSource = .desktop
+        recordingInputDeviceName = AudioCaptureService.getCurrentMicrophoneName()
+      }
+
+      audioCaptureService = AudioCaptureService()
+      audioMixer = AudioMixer()
+      vadGateService = nil
+
+      let resolvedLanguage = language
+      cloudBackgroundSession = CloudBackgroundTranscriptionSession { chunk in
+        try await TranscriptionService.batchTranscribeSegments(
+          audioData: chunk.pcmData,
+          conversationId: conversationId,
+          chunkStartMs: max(0, Int((chunk.startTime * 1000.0).rounded())),
+          language: resolvedLanguage,
+          contextKeywords: AssistantSettings.shared.effectiveVocabulary
+        )
+      }
+
+      let systemAudioDisabled = UserDefaults.standard.bool(forKey: "disableSystemAudioCapture")
+      if systemAudioDisabled {
+        log("Transcription: System audio capture DISABLED by user preference (disableSystemAudioCapture)")
+      } else if #available(macOS 14.4, *) {
+        systemAudioCaptureService = SystemAudioCaptureService()
+        log("Transcription: System audio capture initialized for cloud background batch")
+      }
+
+      isTranscribing = true
+      recordingGeneration &+= 1
+      AssistantSettings.shared.transcriptionEnabled = true
+      audioSource = source
+      currentTranscript = ""
+      speakerSegments = []
+      totalSegmentCount = 0
+      totalWordCount = 0
+      liveSpeakerPersonMap = [:]
+      LiveTranscriptMonitor.shared.clear()
+      recordingStartTime = Date()
+      AudioLevelMonitor.shared.reset()
+      RecordingTimer.shared.start()
+
+      await startAudioCapture(source: source)
+      await startCrashSafeTranscriptionSession(language: language)
+
+      maxRecordingTimer = Timer.scheduledTimer(withTimeInterval: maxRecordingDuration, repeats: false) {
+        [weak self] _ in
+        Task { @MainActor in
+          guard let self = self, self.isTranscribing else { return }
+          log("Transcription: 4-hour limit reached - rotating cloud background batch conversation")
+          _ = await self.finishConversation()
+        }
+      }
+
+      AnalyticsManager.shared.transcriptionStarted()
+      log("Transcription: Started cloud background batch conversation \(conversationId)")
+    } catch {
+      isCloudBackgroundTranscription = false
+      cloudBackgroundSession = nil
+      cloudBackgroundConversationId = nil
+      isTranscribing = false
+      AnalyticsManager.shared.recordingError(error: error.localizedDescription)
+      showAlert(title: "Transcription Error", message: error.localizedDescription)
+    }
+  }
+
+  private func startCrashSafeTranscriptionSession(language: String) async {
+    do {
+      let sessionId = try await TranscriptionStorage.shared.startSession(
+        source: currentConversationSource.rawValue,
+        language: language,
+        timezone: TimeZone.current.identifier,
+        inputDeviceName: recordingInputDeviceName
+      )
+      currentSessionId = sessionId
+      LiveNotesMonitor.shared.startSession(sessionId: sessionId)
+      log("Transcription: Created DB session \(sessionId)")
+    } catch {
+      logError("Transcription: Failed to create DB session", error: error)
     }
   }
 
@@ -1554,9 +1688,13 @@ class AppState: ObservableObject {
     }
 
     // Start the mixer — it sums mic + system into a mono stream and forwards it to
-    // the transcription WebSocket.
+    // the active transcription transport.
     audioMixer?.start { [weak self] monoMixed in
-      self?.transcriptionService?.sendAudio(monoMixed)
+      if self?.isCloudBackgroundTranscription == true {
+        self?.handleMixedBackgroundAudio(monoMixed)
+      } else {
+        self?.transcriptionService?.sendAudio(monoMixed)
+      }
     }
 
     do {
@@ -1719,6 +1857,31 @@ class AppState: ObservableObject {
   /// triggers conversation processing on the backend side. We also call force-process to ensure
   /// the conversation is finalized, preventing the retry service from creating duplicates.
   func stopTranscription() {
+    if isStartingTranscription {
+      cloudBackgroundStartTask?.cancel()
+      cloudBackgroundStartTask = nil
+      isStartingTranscription = false
+      isCloudBackgroundTranscription = false
+      cloudBackgroundSession = nil
+      cloudBackgroundConversationId = nil
+      AssistantSettings.shared.transcriptionEnabled = false
+      return
+    }
+
+    if isCloudBackgroundTranscription {
+      let capturedSessionId = currentSessionId
+      let capturedStartTime = recordingStartTime
+      let generationAtStop = recordingGeneration
+      Task {
+        await self.stopCloudBackgroundTranscription(
+          capturedSessionId: capturedSessionId,
+          capturedStartTime: capturedStartTime,
+          generationAtStop: generationAtStop
+        )
+      }
+      return
+    }
+
     // Capture session metadata BEFORE clearing state (clearTranscriptionState sets sessionId to nil)
     let capturedSessionId = currentSessionId
     let capturedStartTime = recordingStartTime
@@ -1773,6 +1936,152 @@ class AppState: ObservableObject {
     }
   }
 
+  func restartTranscriptionAfterSettingsChange() async {
+    guard isTranscribing || isStartingTranscription else { return }
+
+    if isCloudBackgroundTranscription {
+      let capturedSessionId = currentSessionId
+      let capturedStartTime = recordingStartTime
+      let generationAtStop = recordingGeneration
+      await stopCloudBackgroundTranscription(
+        capturedSessionId: capturedSessionId,
+        capturedStartTime: capturedStartTime,
+        generationAtStop: generationAtStop,
+        forSettingsChange: true
+      )
+    } else {
+      stopTranscription()
+      try? await Task.sleep(nanoseconds: 1_000_000_000)
+    }
+
+    startTranscription()
+  }
+
+  private func handleMixedBackgroundAudio(_ pcmData: Data) {
+    guard let session = cloudBackgroundSession else { return }
+    let startTime = Double(cloudBackgroundSampleCursor) / 16000.0
+    cloudBackgroundSampleCursor += pcmData.count / 2
+    let result = session.append(pcmData: pcmData, startTime: startTime)
+    if result.enqueuedChunks > 0 {
+      drainCloudBackgroundASRQueue()
+    }
+  }
+
+  private func drainCloudBackgroundASRQueue() {
+    guard cloudBackgroundDrainTask == nil else { return }
+    cloudBackgroundDrainTask = Task { @MainActor in
+      defer { cloudBackgroundDrainTask = nil }
+      while !Task.isCancelled {
+        guard let session = cloudBackgroundSession else { break }
+        do {
+          guard let result = try await session.transcribeNext() else { break }
+          let merged = backgroundTranscriptMerger.merge(result.segments)
+          _ = speakerSegmentReducer.apply(merged)
+          handleBackendSegments(merged)
+        } catch {
+          logError("Transcription: Cloud background chunk failed", error: error)
+          break
+        }
+      }
+    }
+  }
+
+  private func waitForCloudBackgroundBacklog(timeout: TimeInterval = 60) async {
+    let deadline = Date().addingTimeInterval(timeout)
+    while Date() < deadline {
+      drainCloudBackgroundASRQueue()
+      if cloudBackgroundSession?.pendingChunkCount ?? 0 == 0 && cloudBackgroundDrainTask == nil {
+        return
+      }
+      try? await Task.sleep(nanoseconds: 250_000_000)
+    }
+    log("Transcription: Cloud background backlog wait timed out with \(cloudBackgroundSession?.pendingChunkCount ?? 0) pending chunks")
+  }
+
+  private func stopCloudBackgroundTranscription(
+    capturedSessionId: Int64?,
+    capturedStartTime: Date?,
+    generationAtStop: UInt64,
+    forSettingsChange: Bool = false
+  ) async {
+    stopAudioCapture()
+    _ = cloudBackgroundSession?.finishInput()
+    drainCloudBackgroundASRQueue()
+    await waitForCloudBackgroundBacklog(timeout: forSettingsChange ? 5 : 60)
+
+    clearCloudBackgroundState()
+    clearTranscriptionState()
+    silentMicFallbackInProgress = false
+
+    if forSettingsChange {
+      // Finalize the stopped conversation in the background so settings UI stays responsive.
+      Task {
+        try? await Task.sleep(nanoseconds: 3_000_000_000)
+        guard recordingGeneration == generationAtStop else { return }
+        await forceProcessStoppedConversation(
+          capturedSessionId: capturedSessionId,
+          capturedStartTime: capturedStartTime,
+          logPrefix: "Cloud background batch"
+        )
+        await loadConversations()
+      }
+      return
+    }
+
+    try? await Task.sleep(nanoseconds: 3_000_000_000)
+    guard recordingGeneration == generationAtStop else {
+      log("Transcription: New recording started during cloud batch delay, skipping force-process for session \(capturedSessionId.map(String.init) ?? "nil")")
+      return
+    }
+
+    await forceProcessStoppedConversation(
+      capturedSessionId: capturedSessionId,
+      capturedStartTime: capturedStartTime,
+      logPrefix: "Cloud background batch"
+    )
+    await loadConversations()
+  }
+
+  private func clearCloudBackgroundState() {
+    cloudBackgroundStartTask?.cancel()
+    cloudBackgroundStartTask = nil
+    cloudBackgroundDrainTask?.cancel()
+    cloudBackgroundDrainTask = nil
+    cloudBackgroundSession = nil
+    cloudBackgroundConversationId = nil
+    cloudBackgroundSampleCursor = 0
+    isCloudBackgroundTranscription = false
+    backgroundTranscriptMerger.reset()
+    speakerSegmentReducer.reset()
+  }
+
+  private func forceProcessStoppedConversation(
+    capturedSessionId: Int64?,
+    capturedStartTime: Date?,
+    logPrefix: String
+  ) async {
+    do {
+      if let conversation = try await APIClient.shared.forceProcessConversation() {
+        if let sessionId = capturedSessionId, let startTime = capturedStartTime,
+          let convStarted = conversation.startedAt,
+          abs(convStarted.timeIntervalSince(startTime)) < 10,
+          conversation.source == .desktop
+        {
+          try? await TranscriptionStorage.shared.markSessionCompleted(
+            id: sessionId, backendId: conversation.id)
+          log("Transcription: \(logPrefix) force-processed conversation \(conversation.id), session \(sessionId) completed")
+        } else if let sessionId = capturedSessionId, let startTime = capturedStartTime {
+          log("Transcription: \(logPrefix) force-process returned different conversation \(conversation.id), reconciling session \(sessionId)")
+          await reconcileSession(sessionId: sessionId, startTime: startTime)
+        }
+      } else if let sessionId = capturedSessionId, let startTime = capturedStartTime {
+        await reconcileSession(sessionId: sessionId, startTime: startTime)
+      }
+    } catch {
+      logError("Transcription: \(logPrefix) force-process failed, retry service will reconcile", error: error)
+    }
+  }
+
   /// Reconcile a local session by checking if a matching conversation exists on the backend.
   /// If found, marks the session as completed. Otherwise leaves it as pendingUpload for retry.
   private func reconcileSession(sessionId: Int64, startTime: Date) async {
@@ -1803,6 +2112,10 @@ class AppState: ObservableObject {
   /// Finish the current conversation and keep recording for a new one.
   /// Disconnects the WebSocket (triggers backend conversation processing) then reconnects.
   func finishConversation() async -> FinishConversationResult {
+    if isCloudBackgroundTranscription {
+      return await finishCloudBackgroundConversation()
+    }
+
     guard totalSegmentCount > 0 || !speakerSegments.isEmpty else {
       log("Transcription: No segments to finish")
       return .discarded
@@ -1919,6 +2232,83 @@ class AppState: ObservableObject {
 
     log("Transcription: Ready for next conversation")
     return .saved
+  }
+
+  private func finishCloudBackgroundConversation() async -> FinishConversationResult {
+    log("Transcription: Finishing cloud background batch conversation")
+    let capturedSessionId = currentSessionId
+    let capturedStartTime = recordingStartTime
+    finishedSessionId = capturedSessionId
+    finishedRecordingStartTime = capturedStartTime
+
+    stopAudioCapture()
+    _ = cloudBackgroundSession?.finishInput()
+    drainCloudBackgroundASRQueue()
+    await waitForCloudBackgroundBacklog()
+    let finishedHadSegments = totalSegmentCount > 0 || !speakerSegments.isEmpty
+
+    if let sessionId = currentSessionId {
+      do {
+        try await TranscriptionStorage.shared.finishSession(id: sessionId)
+        log("Transcription: Finished DB session \(sessionId) before cloud batch rotation")
+      } catch {
+        logError("Transcription: Failed to finish DB session \(sessionId)", error: error)
+      }
+    }
+
+    await forceProcessStoppedConversation(
+      capturedSessionId: capturedSessionId,
+      capturedStartTime: capturedStartTime,
+      logPrefix: "Cloud background batch rotation"
+    )
+
+    currentSessionId = nil
+    speakerSegments = []
+    totalSegmentCount = 0
+    totalWordCount = 0
+    liveSpeakerPersonMap = [:]
+    LiveTranscriptMonitor.shared.clear()
+    LiveNotesMonitor.shared.endSession()
+    LiveNotesMonitor.shared.clear()
+    backgroundTranscriptMerger.reset()
+    speakerSegmentReducer.reset()
+    cloudBackgroundSampleCursor = 0
+
+    recordingStartTime = Date()
+    RecordingTimer.shared.restart()
+    maxRecordingTimer?.invalidate()
+    maxRecordingTimer = Timer.scheduledTimer(withTimeInterval: maxRecordingDuration, repeats: false) {
+      [weak self] _ in
+      Task { @MainActor in
+        guard let self = self, self.isTranscribing else { return }
+        log("Transcription: 4-hour limit reached - rotating cloud background batch conversation")
+        _ = await self.finishConversation()
+      }
+    }
+
+    do {
+      let language = AssistantSettings.shared.effectiveTranscriptionLanguage
+      let conversationId = try await APIClient.shared.startBackgroundConversation(language: language)
+      cloudBackgroundConversationId = conversationId
+      cloudBackgroundSession = CloudBackgroundTranscriptionSession { chunk in
+        try await TranscriptionService.batchTranscribeSegments(
+          audioData: chunk.pcmData,
+          conversationId: conversationId,
+          chunkStartMs: max(0, Int((chunk.startTime * 1000.0).rounded())),
+          language: language,
+          contextKeywords: AssistantSettings.shared.effectiveVocabulary
+        )
+      }
+      await startCrashSafeTranscriptionSession(language: language)
+      await startAudioCapture(source: audioSource)
+      isTranscribing = true
+      await loadConversations()
+      log("Transcription: Ready for next cloud background batch conversation \(conversationId)")
+      return finishedHadSegments ? .saved : .discarded
+    } catch {
+      logError("Transcription: Failed to start next cloud background batch conversation", error: error)
+      return .error(error.localizedDescription)
+    }
   }
 
   /// Stop audio capture services (but keep transcript data for saving)

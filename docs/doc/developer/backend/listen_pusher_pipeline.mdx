@@ -234,6 +234,14 @@ selects Deepgram by default and can select AssemblyAI only when
 `ASSEMBLYAI_BACKGROUND_STT_ENABLED=true` and the workload is listed in
 `ASSEMBLYAI_BACKGROUND_STT_WORKLOADS`.
 
+Desktop Audio Recording can use the batch background path instead of `/v4/listen`
+when the desktop batch setting is enabled and the client is pointed at a backend
+with AssemblyAI background support. The desktop client creates a stub
+conversation with `POST /v2/desktop/background-conversation/start`, sends raw
+mono PCM chunks to `POST /v2/desktop/background-transcribe`, and still finalizes
+with `POST /v1/conversations`. Mobile listen, BLE listen, and PTT continue to use
+their existing Deepgram paths.
+
 Eligible AssemblyAI workloads are `sync`, `background`, and `postprocess`.
 Latency-critical workloads (`realtime`, streaming `ptt`, and
 `voice_message`) continue to use Deepgram and the existing websocket/finalize
@@ -250,8 +258,8 @@ sequenceDiagram
     participant Firestore
     participant Metrics as /metrics
 
-    Client->>Backend: Upload background audio or sync audio URL
-    Backend->>ProviderService: transcribe_url/workload=sync|background|postprocess
+    Client->>Backend: Upload sync audio URL or desktop PCM background chunk
+    Backend->>ProviderService: transcribe_url/transcribe_bytes workload=sync|background|postprocess
     alt AssemblyAI enabled for workload
         ProviderService->>AssemblyAI: Submit async prerecorded transcript request
         AssemblyAI-->>ProviderService: Completed transcript with utterances, words, speaker labels
@@ -266,7 +274,7 @@ sequenceDiagram
         Deepgram-->>ProviderService: Transcript result
     end
 
-    ProviderService->>ProviderService: Normalize provider result and reconstruct canonical segments
+ProviderService->>ProviderService: Normalize provider result and reconstruct canonical segments
     ProviderService->>EmbeddingAPI: Extract cluster samples for Omi speaker identity
     ProviderService->>Firestore: Store canonical transcript segments and provider run ledger
     ProviderService->>Firestore: Increment daily provider usage rollup

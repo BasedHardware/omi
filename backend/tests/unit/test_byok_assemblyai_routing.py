@@ -36,6 +36,12 @@ def test_resolve_uses_deepgram_byok_when_no_assembly_header(mock_get_key):
 
 
 @patch('utils.stt.provider_service.get_byok_key')
+def test_resolve_uses_deepgram_byok_for_background_when_no_assembly_header(mock_get_key):
+    mock_get_key.side_effect = lambda provider: {'deepgram': 'dg-user-key'}.get(provider)
+    assert provider_service.resolve_prerecorded_provider_for_request(STTWorkload.background) == STTProviderName.deepgram
+
+
+@patch('utils.stt.provider_service.get_byok_key')
 def test_resolve_uses_assemblyai_when_byok_assembly_header_present(mock_get_key):
     keys = {'assemblyai': 'aa-user-key', 'deepgram': 'dg-user-key'}
 
@@ -44,6 +50,19 @@ def test_resolve_uses_assemblyai_when_byok_assembly_header_present(mock_get_key)
 
     mock_get_key.side_effect = _lookup
     assert provider_service.resolve_prerecorded_provider_for_request(STTWorkload.sync) == STTProviderName.assemblyai
+
+
+@patch('utils.stt.provider_service.get_byok_key')
+def test_resolve_uses_assemblyai_for_background_when_byok_assembly_header_present(mock_get_key):
+    keys = {'assemblyai': 'aa-user-key', 'deepgram': 'dg-user-key'}
+
+    def _lookup(provider):
+        return keys.get(provider)
+
+    mock_get_key.side_effect = _lookup
+    assert (
+        provider_service.resolve_prerecorded_provider_for_request(STTWorkload.background) == STTProviderName.assemblyai
+    )
 
 
 @patch('utils.stt.provider_service.get_byok_key', return_value=None)

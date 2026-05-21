@@ -1284,6 +1284,10 @@ extension APIClient {
     let conversation: ServerConversation
   }
 
+  struct StartBackgroundConversationResponse: Decodable {
+    let conversation_id: String
+  }
+
   /// Force-process the current in-progress conversation on the Python backend.
   /// Endpoint: POST /v1/conversations (Python backend)
   /// This is the same endpoint the mobile app uses when stopping phone mic recording.
@@ -1304,6 +1308,21 @@ extension APIClient {
       // 404 = no in-progress conversation found — WS close handler already processed it
       return nil
     }
+  }
+
+  /// Start a Python-backed in-progress conversation for desktop background batch transcription.
+  /// Endpoint: POST /v2/desktop/background-conversation/start
+  func startBackgroundConversation(language: String) async throws -> String {
+    struct StartBackgroundConversationRequest: Encodable {
+      let language: String
+    }
+
+    let response: StartBackgroundConversationResponse = try await post(
+      "v2/desktop/background-conversation/start",
+      body: StartBackgroundConversationRequest(language: language),
+      customBaseURL: nil
+    )
+    return response.conversation_id
   }
 }
 

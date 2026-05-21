@@ -14,6 +14,7 @@ from fastapi import FastAPI
 
 from routers import (
     chat,
+    desktop_background,
     firmware,
     transcribe,
     notifications,
@@ -86,6 +87,7 @@ MultiPartParser.max_part_size = 200 * 1024 * 1024  # 200 MB
 app = FastAPI()
 
 app.include_router(transcribe.router)
+app.include_router(desktop_background.router)
 app.include_router(conversations.router)
 app.include_router(action_items.router)
 app.include_router(task_integrations.router)
