@@ -303,7 +303,6 @@
     "minsUsedThisMonth": "Bu ay {limit} dakikadan {used} kullanıldı",
     "wordsUsedThisMonth": "Bu ay {limit} kelimeden {used} kullanıldı",
     "insightsUsedThisMonth": "Bu ay {limit} içgörüden {used} elde edildi",
-    "memoriesUsedThisMonth": "Bu ay {limit} anıdan {used} oluşturuldu",
     "visibility": "Görünürlük",
     "visibilitySubtitle": "Listenizde hangi konuşmaların görüneceğini kontrol edin",
     "showShortConversations": "Kısa Konuşmaları Göster",

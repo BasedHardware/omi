@@ -966,11 +966,6 @@ class AppLocalizationsTe extends AppLocalizations {
   }
 
   @override
-  String memoriesUsedThisMonth(String used, String limit) {
-    return '$used యొక్క $limit జ్ఞాపకాలు ఈ నెలలో సృష్టించబడ్డాయి';
-  }
-
-  @override
   String get visibility => 'దృశ్యమానత';
 
   @override

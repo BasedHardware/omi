@@ -965,11 +965,6 @@ class AppLocalizationsEt extends AppLocalizations {
   }
 
   @override
-  String memoriesUsedThisMonth(String used, String limit) {
-    return '$used/$limit mälestust loodud sel kuul';
-  }
-
-  @override
   String get visibility => 'Nähtavus';
 
   @override

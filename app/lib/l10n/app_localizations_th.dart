@@ -961,11 +961,6 @@ class AppLocalizationsTh extends AppLocalizations {
   }
 
   @override
-  String memoriesUsedThisMonth(String used, String limit) {
-    return 'สร้างความทรงจำ $used จาก $limit รายการในเดือนนี้';
-  }
-
-  @override
   String get visibility => 'การมองเห็น';
 
   @override

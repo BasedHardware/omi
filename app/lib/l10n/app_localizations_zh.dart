@@ -950,11 +950,6 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String memoriesUsedThisMonth(String used, String limit) {
-    return '本月创建 $used/$limit 条记忆';
-  }
-
-  @override
   String get visibility => '可见性';
 
   @override

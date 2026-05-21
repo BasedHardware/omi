@@ -827,7 +827,6 @@ def _byok_unlimited_subscription() -> Subscription:
             transcription_seconds=None,
             words_transcribed=None,
             insights_gained=None,
-            memories_created=None,
         ),
     )
 
@@ -857,8 +856,6 @@ def get_user_subscription_endpoint(
             words_transcribed_limit=0,
             insights_gained_used=0,
             insights_gained_limit=0,
-            memories_created_used=0,
-            memories_created_limit=0,
             available_plans=[],
             show_subscription_ui=False,
             phone_call_quota=unlimited_phone_quota,
@@ -873,7 +870,6 @@ def get_user_subscription_endpoint(
                 transcription_seconds=None,
                 words_transcribed=None,
                 insights_gained=None,
-                memories_created=None,
             ),
         )
         return UserSubscriptionResponse(
@@ -884,8 +880,6 @@ def get_user_subscription_endpoint(
             words_transcribed_limit=0,
             insights_gained_used=0,
             insights_gained_limit=0,
-            memories_created_used=0,
-            memories_created_limit=0,
             available_plans=[],
             show_subscription_ui=False,
             phone_call_quota=unlimited_phone_quota,
@@ -929,13 +923,11 @@ def get_user_subscription_endpoint(
     transcription_seconds_used = usage.get('transcription_seconds', 0)
     words_transcribed_used = usage.get('words_transcribed', 0)
     insights_gained_used = usage.get('insights_gained', 0)
-    memories_created_used = usage.get('memories_created', 0)
 
     # Get limits from subscription (0 means unlimited)
     transcription_seconds_limit = subscription.limits.transcription_seconds or 0
     words_transcribed_limit = subscription.limits.words_transcribed or 0
     insights_gained_limit = subscription.limits.insights_gained or 0
-    memories_created_limit = subscription.limits.memories_created or 0
 
     # Build available plans. Version-gated: new clients see Operator + Architect,
     # old clients get legacy plan names. Legacy plans filtered from purchase catalog.
@@ -1032,8 +1024,6 @@ def get_user_subscription_endpoint(
         words_transcribed_limit=words_transcribed_limit,
         insights_gained_used=insights_gained_used,
         insights_gained_limit=insights_gained_limit,
-        memories_created_used=memories_created_used,
-        memories_created_limit=memories_created_limit,
         available_plans=available_plans,
         show_subscription_ui=show_subscription_ui,
         chat_quota_used=round(chat_snapshot['used'], 4),

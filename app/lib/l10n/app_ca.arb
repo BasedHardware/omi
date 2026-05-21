@@ -303,7 +303,6 @@
     "minsUsedThisMonth": "{used} de {limit} min utilitzats aquest mes",
     "wordsUsedThisMonth": "{used} de {limit} paraules utilitzades aquest mes",
     "insightsUsedThisMonth": "{used} de {limit} informacions obtingudes aquest mes",
-    "memoriesUsedThisMonth": "{used} de {limit} records creats aquest mes",
     "visibility": "Visibilitat",
     "visibilitySubtitle": "Controleu quines converses apareixen a la vostra llista",
     "showShortConversations": "Mostrar converses curtes",

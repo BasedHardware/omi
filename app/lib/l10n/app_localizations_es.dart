@@ -963,11 +963,6 @@ class AppLocalizationsEs extends AppLocalizations {
   }
 
   @override
-  String memoriesUsedThisMonth(String used, String limit) {
-    return '$used de $limit recuerdos hechos este mes';
-  }
-
-  @override
   String get visibility => 'Visibilidad';
 
   @override
@@ -8191,56 +8186,56 @@ class AppLocalizationsEs extends AppLocalizations {
   String get phoneCallsWithOmi => 'Llamadas con Omi';
 
   @override
-  String get phoneCallsSubtitle => 'Haz llamadas con transcripcion en tiempo real';
+  String get phoneCallsSubtitle => 'Haz llamadas con transcripción en tiempo real';
 
   @override
-  String get phoneSetupStep1Title => 'Verifica tu numero de telefono';
+  String get phoneSetupStep1Title => 'Verifica tu número de teléfono';
 
   @override
   String get phoneSetupStep1Subtitle => 'Te llamaremos para confirmar que es tuyo';
 
   @override
-  String get phoneSetupStep2Title => 'Ingresa un codigo de verificacion';
+  String get phoneSetupStep2Title => 'Ingresa un código de verificación';
 
   @override
-  String get phoneSetupStep2Subtitle => 'Un codigo corto que ingresaras en la llamada';
+  String get phoneSetupStep2Subtitle => 'Un código corto que ingresarás en la llamada';
 
   @override
   String get phoneSetupStep3Title => 'Comienza a llamar a tus contactos';
 
   @override
-  String get phoneSetupStep3Subtitle => 'Con transcripcion en vivo integrada';
+  String get phoneSetupStep3Subtitle => 'Con transcripción en vivo integrada';
 
   @override
   String get phoneGetStarted => 'Comenzar';
 
   @override
   String get callRecordingConsentDisclaimer =>
-      'La grabacion de llamadas puede requerir consentimiento en tu jurisdiccion';
+      'La grabación de llamadas puede requerir consentimiento en tu jurisdicción';
 
   @override
-  String get enterYourNumber => 'Ingresa tu numero';
+  String get enterYourNumber => 'Ingresa tu número';
 
   @override
-  String get phoneNumberCallerIdHint => 'Una vez verificado, este sera tu identificador de llamada';
+  String get phoneNumberCallerIdHint => 'Una vez verificado, este será tu identificador de llamada';
 
   @override
-  String get phoneNumberHint => 'Numero de telefono';
+  String get phoneNumberHint => 'Número de teléfono';
 
   @override
-  String get failedToStartVerification => 'No se pudo iniciar la verificacion';
+  String get failedToStartVerification => 'No se pudo iniciar la verificación';
 
   @override
   String get phoneContinue => 'Continuar';
 
   @override
-  String get verifyYourNumber => 'Verifica tu numero';
+  String get verifyYourNumber => 'Verifica tu número';
 
   @override
   String get answerTheCallFrom => 'Contesta la llamada de';
 
   @override
-  String get onTheCallEnterThisCode => 'En la llamada, ingresa este codigo';
+  String get onTheCallEnterThisCode => 'En la llamada, ingresa este código';
 
   @override
   String get followTheVoiceInstructions => 'Sigue las instrucciones de voz';
@@ -8264,7 +8259,7 @@ class AppLocalizationsEs extends AppLocalizations {
   String get phoneTryAgain => 'Intentar de nuevo';
 
   @override
-  String get phonePageTitle => 'Telefono';
+  String get phonePageTitle => 'Teléfono';
 
   @override
   String get phoneContactsTab => 'Contactos';
@@ -8285,7 +8280,7 @@ class AppLocalizationsEs extends AppLocalizations {
   String get phoneNoContactsFound => 'No se encontraron contactos';
 
   @override
-  String get phoneEnterNumber => 'Ingresa numero';
+  String get phoneEnterNumber => 'Ingresa número';
 
   @override
   String get failedToStartCall => 'No se pudo iniciar la llamada';
@@ -8303,7 +8298,7 @@ class AppLocalizationsEs extends AppLocalizations {
   String get callStateFailed => 'Llamada fallida';
 
   @override
-  String get transcriptPlaceholder => 'La transcripcion aparecera aqui...';
+  String get transcriptPlaceholder => 'La transcripción aparecerá aquí...';
 
   @override
   String get phoneUnmute => 'Activar sonido';
@@ -8318,7 +8313,7 @@ class AppLocalizationsEs extends AppLocalizations {
   String get phoneEndCall => 'Finalizar';
 
   @override
-  String get phoneCallSettingsTitle => 'Configuracion de llamadas';
+  String get phoneCallSettingsTitle => 'Configuración de llamadas';
 
   @override
   String get showPhoneCallButtonTitle => 'Mostrar botón de llamada';
@@ -8327,13 +8322,13 @@ class AppLocalizationsEs extends AppLocalizations {
   String get showPhoneCallButtonDesc => 'Mostrar el botón de llamada telefónica en la pantalla de inicio';
 
   @override
-  String get yourVerifiedNumbers => 'Tus numeros verificados';
+  String get yourVerifiedNumbers => 'Tus números verificados';
 
   @override
-  String get verifiedNumbersDescription => 'Cuando llames a alguien, veran este numero en su telefono';
+  String get verifiedNumbersDescription => 'Cuando llames a alguien, verán este número en su teléfono';
 
   @override
-  String get noVerifiedNumbers => 'Sin numeros verificados';
+  String get noVerifiedNumbers => 'Sin números verificados';
 
   @override
   String deletePhoneNumberConfirm(String phoneNumber) {
@@ -8341,7 +8336,7 @@ class AppLocalizationsEs extends AppLocalizations {
   }
 
   @override
-  String get deletePhoneNumberWarning => 'Tendras que verificar de nuevo para hacer llamadas';
+  String get deletePhoneNumberWarning => 'Tendrás que verificar de nuevo para hacer llamadas';
 
   @override
   String get phoneDeleteButton => 'Eliminar';
@@ -8373,13 +8368,13 @@ class AppLocalizationsEs extends AppLocalizations {
   String get callAlreadyInProgress => 'Ya hay una llamada en curso';
 
   @override
-  String get failedToGetCallToken => 'No se pudo obtener el token. Verifica tu numero primero.';
+  String get failedToGetCallToken => 'No se pudo obtener el token. Verifica tu número primero.';
 
   @override
   String get failedToInitializeCallService => 'No se pudo inicializar el servicio de llamadas';
 
   @override
-  String get speakerLabelYou => 'Tu';
+  String get speakerLabelYou => 'Tú';
 
   @override
   String get speakerLabelUnknown => 'Desconocido';

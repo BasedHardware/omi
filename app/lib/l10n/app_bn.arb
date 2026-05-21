@@ -1160,17 +1160,6 @@
             }
         }
     },
-    "memoriesUsedThisMonth": "এই মাসে {limit} স্মৃতির মধ্যে {used} তৈরি হয়েছে",
-    "@memoriesUsedThisMonth": {
-        "placeholders": {
-            "used": {
-                "type": "String"
-            },
-            "limit": {
-                "type": "String"
-            }
-        }
-    },
     "visibility": "দৃশ্যমানতা",
     "visibilitySubtitle": "নিয়ন্ত্রণ করুন কোন কথোপকথনগুলি আপনার তালিকায় উপস্থিত হয়",
     "showShortConversations": "সংক্ষিপ্ত কথোপকথন দেখান",

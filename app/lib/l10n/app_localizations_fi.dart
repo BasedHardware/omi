@@ -962,11 +962,6 @@ class AppLocalizationsFi extends AppLocalizations {
   }
 
   @override
-  String memoriesUsedThisMonth(String used, String limit) {
-    return '$used/$limit muistoa luotu tässä kuussa';
-  }
-
-  @override
   String get visibility => 'Näkyvyys';
 
   @override

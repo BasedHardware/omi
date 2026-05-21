@@ -303,7 +303,6 @@
     "minsUsedThisMonth": "{used} no {limit} min izmantots šomēnes",
     "wordsUsedThisMonth": "{used} no {limit} vārdiem izmantots šomēnes",
     "insightsUsedThisMonth": "{used} no {limit} ieskatiem iegūts šomēnes",
-    "memoriesUsedThisMonth": "{used} no {limit} atmiņām izveidots šomēnes",
     "visibility": "Redzamība",
     "visibilitySubtitle": "Kontrolējiet, kuras sarunas parādās jūsu sarakstā",
     "showShortConversations": "Rādīt īsas sarunas",

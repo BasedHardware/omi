@@ -966,11 +966,6 @@ class AppLocalizationsTr extends AppLocalizations {
   }
 
   @override
-  String memoriesUsedThisMonth(String used, String limit) {
-    return 'Bu ay $limit anıdan $used oluşturuldu';
-  }
-
-  @override
   String get visibility => 'Görünürlük';
 
   @override

@@ -1160,17 +1160,6 @@
             }
         }
     },
-    "memoriesUsedThisMonth": "{used} ng {limit} alaala na nabuo sa buwan na ito",
-    "@memoriesUsedThisMonth": {
-        "placeholders": {
-            "used": {
-                "type": "String"
-            },
-            "limit": {
-                "type": "String"
-            }
-        }
-    },
     "visibility": "Visibility",
     "visibilitySubtitle": "Kontrolin kung aling mga pag-uusap ang lilitaw sa iyong lista",
     "showShortConversations": "Ipakita ang Short Conversations",

@@ -1160,17 +1160,6 @@
             }
         }
     },
-    "memoriesUsedThisMonth": "{used} од {limit} успомена направљено овог месеца",
-    "@memoriesUsedThisMonth": {
-        "placeholders": {
-            "used": {
-                "type": "String"
-            },
-            "limit": {
-                "type": "String"
-            }
-        }
-    },
     "visibility": "Видљивост",
     "visibilitySubtitle": "Контролиши који разговори се приказују у твојој листи",
     "showShortConversations": "Прикажи кратке разговоре",

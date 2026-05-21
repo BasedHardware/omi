@@ -966,11 +966,6 @@ class AppLocalizationsMk extends AppLocalizations {
   }
 
   @override
-  String memoriesUsedThisMonth(String used, String limit) {
-    return '$used од $limit спомени креирани овој месец';
-  }
-
-  @override
   String get visibility => 'Видливост';
 
   @override

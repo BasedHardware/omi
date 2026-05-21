@@ -964,11 +964,6 @@ class AppLocalizationsLt extends AppLocalizations {
   }
 
   @override
-  String memoriesUsedThisMonth(String used, String limit) {
-    return 'Šį mėnesį sukurta $used iš $limit prisiminimų';
-  }
-
-  @override
   String get visibility => 'Matomumas';
 
   @override

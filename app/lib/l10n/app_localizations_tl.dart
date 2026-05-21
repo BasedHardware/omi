@@ -967,11 +967,6 @@ class AppLocalizationsTl extends AppLocalizations {
   }
 
   @override
-  String memoriesUsedThisMonth(String used, String limit) {
-    return '$used ng $limit alaala na nabuo sa buwan na ito';
-  }
-
-  @override
   String get visibility => 'Visibility';
 
   @override

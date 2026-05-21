@@ -303,7 +303,6 @@
     "minsUsedThisMonth": "ใช้ไป {used} จาก {limit} นาทีในเดือนนี้",
     "wordsUsedThisMonth": "ใช้ไป {used} จาก {limit} คำในเดือนนี้",
     "insightsUsedThisMonth": "ได้รับข้อมูลเชิงลึก {used} จาก {limit} รายการในเดือนนี้",
-    "memoriesUsedThisMonth": "สร้างความทรงจำ {used} จาก {limit} รายการในเดือนนี้",
     "visibility": "การมองเห็น",
     "visibilitySubtitle": "ควบคุมว่าบทสนทนาใดจะปรากฏในรายการของคุณ",
     "showShortConversations": "แสดงบทสนทนาสั้น",

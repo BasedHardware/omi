@@ -303,7 +303,6 @@
     "minsUsedThisMonth": "{used} z {limit} min použitých tento mesiac",
     "wordsUsedThisMonth": "{used} z {limit} slov použitých tento mesiac",
     "insightsUsedThisMonth": "{used} z {limit} postrehov získaných tento mesiac",
-    "memoriesUsedThisMonth": "{used} z {limit} spomienok vytvorených tento mesiac",
     "visibility": "Viditeľnosť",
     "visibilitySubtitle": "Kontrolujte, ktoré konverzácie sa zobrazia vo vašom zozname",
     "showShortConversations": "Zobraziť krátke konverzácie",

@@ -1160,17 +1160,6 @@
             }
         }
     },
-    "memoriesUsedThisMonth": "या महिन्यात {used} of {limit} स्मृती तयार केली",
-    "@memoriesUsedThisMonth": {
-        "placeholders": {
-            "used": {
-                "type": "String"
-            },
-            "limit": {
-                "type": "String"
-            }
-        }
-    },
     "visibility": "दृश्यमानता",
     "visibilitySubtitle": "कोण संभाषण आपल्या सूचीमध्ये दिसतात हे नियंत्रण करा",
     "showShortConversations": "लघु संभाषण दाखवा",

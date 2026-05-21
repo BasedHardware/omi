@@ -303,7 +303,6 @@
     "minsUsedThisMonth": "{used} από {limit} λεπτά χρησιμοποιήθηκαν αυτόν τον μήνα",
     "wordsUsedThisMonth": "{used} από {limit} λέξεις χρησιμοποιήθηκαν αυτόν τον μήνα",
     "insightsUsedThisMonth": "{used} από {limit} πληροφορίες αποκτήθηκαν αυτόν τον μήνα",
-    "memoriesUsedThisMonth": "{used} από {limit} αναμνήσεις δημιουργήθηκαν αυτόν τον μήνα",
     "visibility": "Ορατότητα",
     "visibilitySubtitle": "Ελέγξτε ποιες συνομιλίες εμφανίζονται στη λίστα σας",
     "showShortConversations": "Εμφάνιση Σύντομων Συνομιλιών",

@@ -965,11 +965,6 @@ class AppLocalizationsNo extends AppLocalizations {
   }
 
   @override
-  String memoriesUsedThisMonth(String used, String limit) {
-    return '$used av $limit minner opprettet denne måneden';
-  }
-
-  @override
   String get visibility => 'Synlighet';
 
   @override

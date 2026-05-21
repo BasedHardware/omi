@@ -952,11 +952,6 @@ class AppLocalizationsJa extends AppLocalizations {
   }
 
   @override
-  String memoriesUsedThisMonth(String used, String limit) {
-    return '今月 $limit個中$used個の記憶作成済み';
-  }
-
-  @override
   String get visibility => '表示設定';
 
   @override

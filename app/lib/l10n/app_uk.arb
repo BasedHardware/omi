@@ -303,7 +303,6 @@
     "minsUsedThisMonth": "{used} з {limit} хв використано цього місяця",
     "wordsUsedThisMonth": "{used} з {limit} слів використано цього місяця",
     "insightsUsedThisMonth": "{used} з {limit} insights отримано цього місяця",
-    "memoriesUsedThisMonth": "{used} з {limit} спогадів створено цього місяця",
     "visibility": "Видимість",
     "visibilitySubtitle": "Керуйте тим, які розмови відображаються у вашому списку",
     "showShortConversations": "Показувати короткі розмови",

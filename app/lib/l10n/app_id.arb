@@ -303,7 +303,6 @@
     "minsUsedThisMonth": "{used} dari {limit} menit terpakai bulan ini",
     "wordsUsedThisMonth": "{used} dari {limit} kata terpakai bulan ini",
     "insightsUsedThisMonth": "{used} dari {limit} wawasan diperoleh bulan ini",
-    "memoriesUsedThisMonth": "{used} dari {limit} memori dibuat bulan ini",
     "visibility": "Visibilitas",
     "visibilitySubtitle": "Kontrol percakapan mana yang muncul di daftar Anda",
     "showShortConversations": "Tampilkan Percakapan Pendek",

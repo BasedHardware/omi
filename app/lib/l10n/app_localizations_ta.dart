@@ -968,11 +968,6 @@ class AppLocalizationsTa extends AppLocalizations {
   }
 
   @override
-  String memoriesUsedThisMonth(String used, String limit) {
-    return '$used / $limit நினைவுகள் இந்த மாதம் உருவாக்கப்பட்டுள்ளன';
-  }
-
-  @override
   String get visibility => 'দৃশ்যমानতা';
 
   @override

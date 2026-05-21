@@ -303,7 +303,6 @@
     "minsUsedThisMonth": "{used} av {limit} min använt denna månad",
     "wordsUsedThisMonth": "{used} av {limit} ord använt denna månad",
     "insightsUsedThisMonth": "{used} av {limit} insikter vunna denna månad",
-    "memoriesUsedThisMonth": "{used} av {limit} minnen skapade denna månad",
     "visibility": "Synlighet",
     "visibilitySubtitle": "Kontrollera vilka konversationer som visas i din lista",
     "showShortConversations": "Visa korta konversationer",

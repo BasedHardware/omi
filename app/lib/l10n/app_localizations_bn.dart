@@ -964,11 +964,6 @@ class AppLocalizationsBn extends AppLocalizations {
   }
 
   @override
-  String memoriesUsedThisMonth(String used, String limit) {
-    return 'এই মাসে $limit স্মৃতির মধ্যে $used তৈরি হয়েছে';
-  }
-
-  @override
   String get visibility => 'দৃশ্যমানতা';
 
   @override

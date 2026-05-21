@@ -962,11 +962,6 @@ class AppLocalizationsPt extends AppLocalizations {
   }
 
   @override
-  String memoriesUsedThisMonth(String used, String limit) {
-    return '$used de $limit memórias este mês';
-  }
-
-  @override
   String get visibility => 'Visibilidade';
 
   @override

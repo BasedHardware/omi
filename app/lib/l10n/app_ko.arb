@@ -303,7 +303,6 @@
     "minsUsedThisMonth": "이번 달 {limit}분 중 {used}분 사용",
     "wordsUsedThisMonth": "이번 달 {limit}단어 중 {used}단어 사용",
     "insightsUsedThisMonth": "이번 달 {limit}개 중 {used}개의 인사이트 획득",
-    "memoriesUsedThisMonth": "이번 달 {limit}개 중 {used}개의 기억 생성",
     "visibility": "공개 설정",
     "visibilitySubtitle": "목록에 표시할 대화 제어",
     "showShortConversations": "짧은 대화 표시",

@@ -965,11 +965,6 @@ class AppLocalizationsKn extends AppLocalizations {
   }
 
   @override
-  String memoriesUsedThisMonth(String used, String limit) {
-    return '$used of $limit ಸ್ಮೃತಿಗಳು ಈ ತಿಂಗಳು ರಚಿತ';
-  }
-
-  @override
   String get visibility => 'ಗೋಚರತೆ';
 
   @override

@@ -966,11 +966,6 @@ class AppLocalizationsVi extends AppLocalizations {
   }
 
   @override
-  String memoriesUsedThisMonth(String used, String limit) {
-    return 'Đã tạo $used trong số $limit ký ức trong tháng này';
-  }
-
-  @override
   String get visibility => 'Hiển thị';
 
   @override

@@ -1166,17 +1166,6 @@
             }
         }
     },
-    "memoriesUsedThisMonth": "{used} of {limit} memories created this month",
-    "@memoriesUsedThisMonth": {
-        "placeholders": {
-            "used": {
-                "type": "String"
-            },
-            "limit": {
-                "type": "String"
-            }
-        }
-    },
     "visibility": "Visibility",
     "visibilitySubtitle": "Control which conversations appear in your list",
     "showShortConversations": "Show Short Conversations",
