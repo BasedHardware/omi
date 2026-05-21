@@ -958,11 +958,6 @@ class AppLocalizationsAr extends AppLocalizations {
   }
 
   @override
-  String memoriesUsedThisMonth(String used, String limit) {
-    return '$used من $limit ذكرى تم إنشاؤها هذا الشهر';
-  }
-
-  @override
   String get visibility => 'الظهور';
 
   @override

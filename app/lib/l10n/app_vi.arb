@@ -303,7 +303,6 @@
     "minsUsedThisMonth": "Đã sử dụng {used} trong số {limit} phút trong tháng này",
     "wordsUsedThisMonth": "Đã sử dụng {used} trong số {limit} từ trong tháng này",
     "insightsUsedThisMonth": "Đã thu được {used} trong số {limit} thông tin chi tiết trong tháng này",
-    "memoriesUsedThisMonth": "Đã tạo {used} trong số {limit} ký ức trong tháng này",
     "visibility": "Hiển thị",
     "visibilitySubtitle": "Kiểm soát cuộc trò chuyện nào xuất hiện trong danh sách của bạn",
     "showShortConversations": "Hiển thị cuộc trò chuyện ngắn",

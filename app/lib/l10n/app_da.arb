@@ -303,7 +303,6 @@
     "minsUsedThisMonth": "{used} af {limit} min brugt denne måned",
     "wordsUsedThisMonth": "{used} af {limit} ord brugt denne måned",
     "insightsUsedThisMonth": "{used} af {limit} indsigter opnået denne måned",
-    "memoriesUsedThisMonth": "{used} af {limit} minder oprettet denne måned",
     "visibility": "Synlighed",
     "visibilitySubtitle": "Styr hvilke samtaler der vises i din liste",
     "showShortConversations": "Vis korte samtaler",

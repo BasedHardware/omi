@@ -1160,17 +1160,6 @@
             }
         }
     },
-    "memoriesUsedThisMonth": "{used} od {limit} spominov ustvarjenih ta mesec",
-    "@memoriesUsedThisMonth": {
-        "placeholders": {
-            "used": {
-                "type": "String"
-            },
-            "limit": {
-                "type": "String"
-            }
-        }
-    },
     "visibility": "Vidljivost",
     "visibilitySubtitle": "Nadzor, kateri pogovori se pojavljajo na vaši seznamu",
     "showShortConversations": "Prikaži kratke pogovore",

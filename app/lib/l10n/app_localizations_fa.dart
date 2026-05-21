@@ -965,11 +965,6 @@ class AppLocalizationsFa extends AppLocalizations {
   }
 
   @override
-  String memoriesUsedThisMonth(String used, String limit) {
-    return '$used از $limit یادداشت این ماه ایجاد‌شده است';
-  }
-
-  @override
   String get visibility => 'دید';
 
   @override

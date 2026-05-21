@@ -305,7 +305,6 @@
     "minsUsedThisMonth": "本月已用 {used}/{limit} 分钟",
     "wordsUsedThisMonth": "本月已用 {used}/{limit} 单词",
     "insightsUsedThisMonth": "本月获得 {used}/{limit} 条见解",
-    "memoriesUsedThisMonth": "本月创建 {used}/{limit} 条记忆",
     "visibility": "可见性",
     "visibilitySubtitle": "控制哪些对话显示在列表中",
     "showShortConversations": "显示简短对话",

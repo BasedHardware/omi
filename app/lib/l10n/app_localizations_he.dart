@@ -960,11 +960,6 @@ class AppLocalizationsHe extends AppLocalizations {
   }
 
   @override
-  String memoriesUsedThisMonth(String used, String limit) {
-    return '$used מתוך $limit זיכרונות שנוצרו החודש';
-  }
-
-  @override
   String get visibility => 'יכולת הראות';
 
   @override

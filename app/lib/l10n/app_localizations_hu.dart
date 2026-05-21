@@ -969,11 +969,6 @@ class AppLocalizationsHu extends AppLocalizations {
   }
 
   @override
-  String memoriesUsedThisMonth(String used, String limit) {
-    return '$used / $limit emlék létrehozva ebben a hónapban';
-  }
-
-  @override
   String get visibility => 'Láthatóság';
 
   @override

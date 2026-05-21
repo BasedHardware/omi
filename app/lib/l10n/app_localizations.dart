@@ -2007,12 +2007,6 @@ abstract class AppLocalizations {
   /// **'{used} of {limit} insights gained this month'**
   String insightsUsedThisMonth(String used, String limit);
 
-  /// No description provided for @memoriesUsedThisMonth.
-  ///
-  /// In en, this message translates to:
-  /// **'{used} of {limit} memories created this month'**
-  String memoriesUsedThisMonth(String used, String limit);
-
   /// Label for memory visibility selection section
   ///
   /// In en, this message translates to:

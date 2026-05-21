@@ -1160,17 +1160,6 @@
             }
         }
     },
-    "memoriesUsedThisMonth": "اس ماہ {used} کے {limit} یادیں بنائی گئیں",
-    "@memoriesUsedThisMonth": {
-        "placeholders": {
-            "used": {
-                "type": "String"
-            },
-            "limit": {
-                "type": "String"
-            }
-        }
-    },
     "visibility": "نمائش",
     "visibilitySubtitle": "کنٹرول کریں کہ کون سی بات چیتیں آپ کی فہرست میں نظر آتی ہیں",
     "showShortConversations": "مختصر بات چیتیں دکھائیں",

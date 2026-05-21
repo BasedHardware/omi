@@ -965,11 +965,6 @@ class AppLocalizationsBe extends AppLocalizations {
   }
 
   @override
-  String memoriesUsedThisMonth(String used, String limit) {
-    return '$used з $limit ўспаміны створаны гэты месяц';
-  }
-
-  @override
   String get visibility => 'Рыштатнасць';
 
   @override

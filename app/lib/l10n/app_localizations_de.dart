@@ -970,11 +970,6 @@ class AppLocalizationsDe extends AppLocalizations {
   }
 
   @override
-  String memoriesUsedThisMonth(String used, String limit) {
-    return '$used von $limit Erinnerungen diesen Monat erstellt';
-  }
-
-  @override
   String get visibility => 'Sichtbarkeit';
 
   @override

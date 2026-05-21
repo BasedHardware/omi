@@ -951,11 +951,6 @@ class AppLocalizationsKo extends AppLocalizations {
   }
 
   @override
-  String memoriesUsedThisMonth(String used, String limit) {
-    return '이번 달 $limit개 중 $used개의 기억 생성';
-  }
-
-  @override
   String get visibility => '공개 설정';
 
   @override

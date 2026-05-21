@@ -969,11 +969,6 @@ class AppLocalizationsEl extends AppLocalizations {
   }
 
   @override
-  String memoriesUsedThisMonth(String used, String limit) {
-    return '$used από $limit αναμνήσεις δημιουργήθηκαν αυτόν τον μήνα';
-  }
-
-  @override
   String get visibility => 'Ορατότητα';
 
   @override

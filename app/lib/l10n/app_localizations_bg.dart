@@ -967,11 +967,6 @@ class AppLocalizationsBg extends AppLocalizations {
   }
 
   @override
-  String memoriesUsedThisMonth(String used, String limit) {
-    return '$used от $limit спомена създадени този месец';
-  }
-
-  @override
   String get visibility => 'Видимост';
 
   @override

@@ -1160,17 +1160,6 @@
             }
         }
     },
-    "memoriesUsedThisMonth": "{used} యొక్క {limit} జ్ఞాపకాలు ఈ నెలలో సృష్టించబడ్డాయి",
-    "@memoriesUsedThisMonth": {
-        "placeholders": {
-            "used": {
-                "type": "String"
-            },
-            "limit": {
-                "type": "String"
-            }
-        }
-    },
     "visibility": "దృశ్యమానత",
     "visibilitySubtitle": "ఎటువంటి సంభాషణలు మీ జాబితాలో కనిపించాలో నియంత్రించండి",
     "showShortConversations": "చిన్న సంభాషణలను చూపండి",

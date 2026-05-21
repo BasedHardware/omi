@@ -303,7 +303,6 @@
     "minsUsedThisMonth": "{used} من {limit} دقيقة مستخدمة هذا الشهر",
     "wordsUsedThisMonth": "{used} من {limit} كلمة مستخدمة هذا الشهر",
     "insightsUsedThisMonth": "{used} من {limit} رؤية تم اكتسابها هذا الشهر",
-    "memoriesUsedThisMonth": "{used} من {limit} ذكرى تم إنشاؤها هذا الشهر",
     "visibility": "الظهور",
     "visibilitySubtitle": "تحكم في المحادثات التي تظهر في قائمتك",
     "showShortConversations": "إظهار المحادثات القصيرة",

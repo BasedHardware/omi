@@ -303,7 +303,6 @@
     "minsUsedThisMonth": "{used} van {limit} min gebruikt deze maand",
     "wordsUsedThisMonth": "{used} van {limit} woorden gebruikt deze maand",
     "insightsUsedThisMonth": "{used} van {limit} inzichten verkregen deze maand",
-    "memoriesUsedThisMonth": "{used} van {limit} herinneringen aangemaakt deze maand",
     "visibility": "Zichtbaarheid",
     "visibilitySubtitle": "Bepaal welke gesprekken in je lijst verschijnen",
     "showShortConversations": "Korte gesprekken tonen",

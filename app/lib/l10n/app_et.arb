@@ -303,7 +303,6 @@
     "minsUsedThisMonth": "{used}/{limit} min kasutatud sel kuul",
     "wordsUsedThisMonth": "{used}/{limit} sõna kasutatud sel kuul",
     "insightsUsedThisMonth": "{used}/{limit} ülevaadet saadud sel kuul",
-    "memoriesUsedThisMonth": "{used}/{limit} mälestust loodud sel kuul",
     "visibility": "Nähtavus",
     "visibilitySubtitle": "Kontrollige, millised vestlused teie loendis kuvatakse",
     "showShortConversations": "Kuva lühikesed vestlused",

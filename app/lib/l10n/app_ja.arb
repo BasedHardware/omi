@@ -305,7 +305,6 @@
     "minsUsedThisMonth": "今月 {limit}分中{used}分使用済み",
     "wordsUsedThisMonth": "今月 {limit}語中{used}語使用済み",
     "insightsUsedThisMonth": "今月 {limit}個中{used}個のインサイト取得済み",
-    "memoriesUsedThisMonth": "今月 {limit}個中{used}個の記憶作成済み",
     "visibility": "表示設定",
     "visibilitySubtitle": "リストに表示する会話を管理します",
     "showShortConversations": "短い会話を表示",

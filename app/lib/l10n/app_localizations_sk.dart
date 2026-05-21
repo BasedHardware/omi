@@ -967,11 +967,6 @@ class AppLocalizationsSk extends AppLocalizations {
   }
 
   @override
-  String memoriesUsedThisMonth(String used, String limit) {
-    return '$used z $limit spomienok vytvorených tento mesiac';
-  }
-
-  @override
   String get visibility => 'Viditeľnosť';
 
   @override

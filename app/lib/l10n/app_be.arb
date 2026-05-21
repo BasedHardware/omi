@@ -1160,17 +1160,6 @@
             }
         }
     },
-    "memoriesUsedThisMonth": "{used} з {limit} ўспаміны створаны гэты месяц",
-    "@memoriesUsedThisMonth": {
-        "placeholders": {
-            "used": {
-                "type": "String"
-            },
-            "limit": {
-                "type": "String"
-            }
-        }
-    },
     "visibility": "Рыштатнасць",
     "visibilitySubtitle": "Кантраляйце, якія размовы з'яўляюцца ў вашым спісе",
     "showShortConversations": "Паказаць коротка размовы",

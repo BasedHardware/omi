@@ -1160,17 +1160,6 @@
             }
         }
     },
-    "memoriesUsedThisMonth": "{used} of {limit} ಸ್ಮೃತಿಗಳು ಈ ತಿಂಗಳು ರಚಿತ",
-    "@memoriesUsedThisMonth": {
-        "placeholders": {
-            "used": {
-                "type": "String"
-            },
-            "limit": {
-                "type": "String"
-            }
-        }
-    },
     "visibility": "ಗೋಚರತೆ",
     "visibilitySubtitle": "ನಿಮ್ಮ ಪಟ್ಟಿಯಲ್ಲಿ ಯಾವ ಸಂವಾದ ಕಾಣಿಸಬೇಕೆ ತಿ ನಿಯಂತ್ರಿಸಿ",
     "showShortConversations": "ಸಂಕ್ಷಿಪ್ತ ಸಂವಾದ ತೋರಿಸಿ",

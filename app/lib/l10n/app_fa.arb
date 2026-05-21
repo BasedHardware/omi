@@ -1160,17 +1160,6 @@
             }
         }
     },
-    "memoriesUsedThisMonth": "{used} از {limit} یادداشت این ماه ایجاد‌شده است",
-    "@memoriesUsedThisMonth": {
-        "placeholders": {
-            "used": {
-                "type": "String"
-            },
-            "limit": {
-                "type": "String"
-            }
-        }
-    },
     "visibility": "دید",
     "visibilitySubtitle": "کنترل کنید کدام گفتگوها در لیست شما نمایش داده شوند",
     "showShortConversations": "نمایش گفتگوهای کوتاه",

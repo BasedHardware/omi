@@ -965,11 +965,6 @@ class AppLocalizationsLv extends AppLocalizations {
   }
 
   @override
-  String memoriesUsedThisMonth(String used, String limit) {
-    return '$used no $limit atmiņām izveidots šomēnes';
-  }
-
-  @override
   String get visibility => 'Redzamība';
 
   @override

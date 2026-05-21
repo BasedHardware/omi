@@ -303,7 +303,6 @@
     "minsUsedThisMonth": "{used} din {limit} minute utilizate luna aceasta",
     "wordsUsedThisMonth": "{used} din {limit} cuvinte utilizate luna aceasta",
     "insightsUsedThisMonth": "{used} din {limit} perspective obținute luna aceasta",
-    "memoriesUsedThisMonth": "{used} din {limit} amintiri create luna aceasta",
     "visibility": "Vizibilitate",
     "visibilitySubtitle": "Controlează care conversații apar în lista ta",
     "showShortConversations": "Afișează conversații scurte",

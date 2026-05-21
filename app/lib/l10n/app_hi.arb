@@ -305,7 +305,6 @@
     "minsUsedThisMonth": "इस महीने {used}/{limit} मिनट उपयोग किए गए",
     "wordsUsedThisMonth": "इस महीने {used}/{limit} शब्द उपयोग किए गए",
     "insightsUsedThisMonth": "इस महीने {used}/{limit} अंतर्दृष्टि प्राप्त कीं",
-    "memoriesUsedThisMonth": "इस महीने {used}/{limit} यादें बनाईं",
     "visibility": "दृश्यता",
     "visibilitySubtitle": "नियंत्रित करें कि आपकी सूची में कौन सी बातचीत दिखाई दे",
     "showShortConversations": "छोटी बातचीत दिखाएं",

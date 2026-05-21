@@ -303,7 +303,6 @@
     "minsUsedThisMonth": "{used} от {limit} мин използвани този месец",
     "wordsUsedThisMonth": "{used} от {limit} думи използвани този месец",
     "insightsUsedThisMonth": "{used} от {limit} прозрения получени този месец",
-    "memoriesUsedThisMonth": "{used} от {limit} спомена създадени този месец",
     "visibility": "Видимост",
     "visibilitySubtitle": "Контролирайте кои разговори се появяват във вашия списък",
     "showShortConversations": "Показвай кратки разговори",

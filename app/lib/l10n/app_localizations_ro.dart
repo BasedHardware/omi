@@ -968,11 +968,6 @@ class AppLocalizationsRo extends AppLocalizations {
   }
 
   @override
-  String memoriesUsedThisMonth(String used, String limit) {
-    return '$used din $limit amintiri create luna aceasta';
-  }
-
-  @override
   String get visibility => 'Vizibilitate';
 
   @override

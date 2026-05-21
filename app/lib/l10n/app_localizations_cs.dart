@@ -964,11 +964,6 @@ class AppLocalizationsCs extends AppLocalizations {
   }
 
   @override
-  String memoriesUsedThisMonth(String used, String limit) {
-    return 'Tento měsíc vytvořeno $used z $limit vzpomínek';
-  }
-
-  @override
   String get visibility => 'Viditelnost';
 
   @override

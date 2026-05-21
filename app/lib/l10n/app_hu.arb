@@ -303,7 +303,6 @@
     "minsUsedThisMonth": "{used} / {limit} perc felhasználva ebben a hónapban",
     "wordsUsedThisMonth": "{used} / {limit} szó felhasználva ebben a hónapban",
     "insightsUsedThisMonth": "{used} / {limit} betekintés nyerve ebben a hónapban",
-    "memoriesUsedThisMonth": "{used} / {limit} emlék létrehozva ebben a hónapban",
     "visibility": "Láthatóság",
     "visibilitySubtitle": "Szabályozd, mely beszélgetések jelenjenek meg a listában",
     "showShortConversations": "Rövid beszélgetések megjelenítése",

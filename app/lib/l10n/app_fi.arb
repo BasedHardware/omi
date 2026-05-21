@@ -303,7 +303,6 @@
     "minsUsedThisMonth": "{used}/{limit} min käytetty tässä kuussa",
     "wordsUsedThisMonth": "{used}/{limit} sanaa käytetty tässä kuussa",
     "insightsUsedThisMonth": "{used}/{limit} näkemystä saavutettu tässä kuussa",
-    "memoriesUsedThisMonth": "{used}/{limit} muistoa luotu tässä kuussa",
     "visibility": "Näkyvyys",
     "visibilitySubtitle": "Hallitse mitä keskusteluja näkyy luettelossasi",
     "showShortConversations": "Näytä lyhyet keskustelut",

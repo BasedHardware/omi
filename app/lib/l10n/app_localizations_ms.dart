@@ -965,11 +965,6 @@ class AppLocalizationsMs extends AppLocalizations {
   }
 
   @override
-  String memoriesUsedThisMonth(String used, String limit) {
-    return '$used daripada $limit ingatan dicipta bulan ini';
-  }
-
-  @override
   String get visibility => 'Keterlihatan';
 
   @override

@@ -303,7 +303,6 @@
     "minsUsedThisMonth": "Использовано {used} из {limit} минут в этом месяце",
     "wordsUsedThisMonth": "Использовано {used} из {limit} слов в этом месяце",
     "insightsUsedThisMonth": "Получено {used} из {limit} инсайтов в этом месяце",
-    "memoriesUsedThisMonth": "Создано {used} из {limit} воспоминаний в этом месяце",
     "visibility": "Видимость",
     "visibilitySubtitle": "Контролируйте, какие разговоры появляются в вашем списке",
     "showShortConversations": "Показывать короткие разговоры",

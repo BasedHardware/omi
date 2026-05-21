@@ -1160,17 +1160,6 @@
             }
         }
     },
-    "memoriesUsedThisMonth": "{used} / {limit} நினைவுகள் இந்த மாதம் உருவாக்கப்பட்டுள்ளன",
-    "@memoriesUsedThisMonth": {
-        "placeholders": {
-            "used": {
-                "type": "String"
-            },
-            "limit": {
-                "type": "String"
-            }
-        }
-    },
     "visibility": "দৃশ்যমानতা",
     "visibilitySubtitle": "உங்கள் பட்டியலில் எந்த உரையாடல்கள் தோன்றுகிறது என்பதைக் கட்டுப்படுத்தவும்",
     "showShortConversations": "குறு உரையாடல்களைக் காட்டவும்",

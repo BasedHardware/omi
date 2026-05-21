@@ -305,7 +305,6 @@
     "minsUsedThisMonth": "{used} von {limit} Min. diesen Monat genutzt",
     "wordsUsedThisMonth": "{used} von {limit} Wörtern diesen Monat genutzt",
     "insightsUsedThisMonth": "{used} von {limit} Erkenntnissen diesen Monat gewonnen",
-    "memoriesUsedThisMonth": "{used} von {limit} Erinnerungen diesen Monat erstellt",
     "visibility": "Sichtbarkeit",
     "visibilitySubtitle": "Steuern Sie, welche Unterhaltungen in Ihrer Liste erscheinen",
     "showShortConversations": "Kurze Unterhaltungen anzeigen",
