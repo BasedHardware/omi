@@ -11,7 +11,6 @@ class PlanLimits {
   final int? transcriptionSeconds;
   final int? wordsTranscribed;
   final int? insightsGained;
-  final int? memoriesCreated;
   final int? chatQuestionsPerMonth;
   final double? chatCostUsdPerMonth;
 
@@ -19,7 +18,6 @@ class PlanLimits {
     this.transcriptionSeconds,
     this.wordsTranscribed,
     this.insightsGained,
-    this.memoriesCreated,
     this.chatQuestionsPerMonth,
     this.chatCostUsdPerMonth,
   });
@@ -128,8 +126,6 @@ class UserSubscriptionResponse {
   final int wordsTranscribedLimit;
   final int insightsGainedUsed;
   final int insightsGainedLimit;
-  final int memoriesCreatedUsed;
-  final int memoriesCreatedLimit;
   @JsonKey(defaultValue: [])
   final List<SubscriptionPlan> availablePlans;
   @JsonKey(defaultValue: true)
@@ -153,8 +149,6 @@ class UserSubscriptionResponse {
     required this.wordsTranscribedLimit,
     required this.insightsGainedUsed,
     required this.insightsGainedLimit,
-    required this.memoriesCreatedUsed,
-    required this.memoriesCreatedLimit,
     this.availablePlans = const [],
     this.showSubscriptionUi = true,
     this.chatQuotaUsed = 0.0,
