@@ -8,6 +8,42 @@ allowed-tools: Bash, Read, Glob, Grep
 
 This skill teaches you the Omi desktop macOS app's navigation structure, screen architecture, and SwiftUI patterns. Use it when developing features (to understand how the app works), fixing bugs (to navigate to the affected screen), or verifying changes (to confirm your code works in the live app).
 
+## Fast-Path for Local Iteration (start here)
+
+Two things make iterating on the desktop app slow: signing in (web OAuth) and clicking through the UI to reach a screen. Both are solved — use these before reaching for `agent-swift`.
+
+### 1. Skip the web login (seed auth once, reuse forever)
+Dev/named bundles store auth in UserDefaults (not Keychain), so a signed-in session can be cloned between bundles. Sign in **once** in "Omi Dev", then replay it into any test bundle:
+```bash
+cd desktop
+./scripts/omi-auth-dump.sh                                  # capture Omi Dev's session -> tmp/desktop-auth.json
+./scripts/omi-auth-seed.sh com.omi.omi-myfeature           # replay into a named bundle (run BEFORE launch)
+```
+The seeded bundle boots already signed-in and past onboarding — no browser. The captured Firebase idToken expires (~1h); re-run `omi-auth-dump.sh` after signing in again if backend calls start 401ing. **Scope:** this is for dev iteration only — when validating the onboarding or auth flows themselves (or running flow-walker E2E), use the real flow per Guard Conditions below.
+
+### 2. Jump straight to any screen (automation bridge)
+The app runs a local HTTP control bridge (`DesktopAutomationBridge.swift`) that **auto-enables on every non-production bundle** (off on prod). `scripts/omi-ctl` drives it — jump to a screen in ~150ms instead of clicking through the sidebar:
+```bash
+./scripts/omi-ctl wait-ready                 # block until app reaches "main" state
+./scripts/omi-ctl navigate rewind            # jump to the Rewind screen
+./scripts/omi-ctl navigate settings rewind   # Settings page, Rewind sub-section
+./scripts/omi-ctl state                       # read selected tab / auth / onboarding state as JSON
+./scripts/omi-ctl screens                     # list valid targets
+```
+Disable with `OMI_DISABLE_LOCAL_AUTOMATION=1` to run a dev build "clean". Running several named bundles at once? Give each its own `OMI_AUTOMATION_PORT` (default 47777).
+
+### The full loop
+```bash
+cd desktop
+OMI_APP_NAME="omi-myfeature" ./run.sh &                 # build + launch once
+./scripts/omi-auth-seed.sh com.omi.omi-myfeature        # (first run, or after re-dump) — relaunch to apply
+./scripts/omi-ctl wait-ready
+./scripts/omi-ctl navigate memories                      # jump to the screen you changed
+agent-swift connect --bundle-id com.omi.omi-myfeature    # then drive/inspect with agent-swift
+agent-swift snapshot -i --json
+```
+After a code change, an incremental `xcrun swift build` + relaunch is fast — the slow parts (login, navigation) are gone. For pure visual checks without launching at all, SwiftUI snapshot tests are an option, but most pages are entangled with `AppState.shared`/Firebase singletons, so the live-app bridge loop above is usually the better path.
+
 ## How to Explore the App
 
 You can interact with the running app via `agent-swift` — a CLI that clicks elements, reads the accessibility tree, and captures screenshots through the macOS Accessibility API. Works with any macOS app, no app-side instrumentation needed.
@@ -163,8 +199,7 @@ After making changes, verify them in the live app:
 
 **NEVER:**
 - Kill or restart the production Omi app
-- Use development env vars to bypass auth — test real auth flows
-- Set `hasCompletedOnboarding` to skip onboarding — test the real flow
+- Enable the automation bridge or seed auth on the production bundle (`com.omi.computer-macos`) — both are gated to non-production builds; keep it that way
 - Modify source code to make tests pass — report the failure instead
 
-**NOTE:** The beta app (`com.omi.computer-macos`) is the standard target for flow-walker E2E testing. The dev app (`com.omi.desktop-dev`) is for local development only.
+**When validating auth or onboarding themselves, or running flow-walker E2E:** drive the real flows — do NOT use the seeded-auth / `hasCompletedOnboarding` fast-path, which exists only for iterating on *other* screens. The beta app (`com.omi.computer-macos`) is the standard target for flow-walker E2E testing; the dev app (`com.omi.desktop-dev`) and named `omi-*` bundles are for local development only.
