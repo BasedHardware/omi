@@ -230,7 +230,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
               '](assets/',
               '](https://raw.githubusercontent.com/BasedHardware/Omi/main/plugins/instructions/${app.id}/assets/',
             );
-            setState(() => instructionsMarkdown = value);
+            if (mounted) setState(() => instructionsMarkdown = value);
           });
         }
       }
