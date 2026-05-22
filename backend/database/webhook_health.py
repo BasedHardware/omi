@@ -17,6 +17,7 @@ _CACHE_MAX_SIZE = 10000
 _cache_lock = threading.Lock()
 _disabled_cache: dict[str, tuple[bool, float]] = {}
 _success_last_write: dict[str, float] = {}
+_failure_since_last_success: set = set()
 
 
 def _evict_oldest(d: dict):
@@ -130,6 +131,8 @@ def record_app_webhook_failure(app_id: str, status_code: int, error: str) -> int
     Returns graduated response action:
     0 = no action, 1 = day1 warn, 2 = day2 warn, 3 = auto-disable
     """
+    with _cache_lock:
+        _failure_since_last_success.add(app_id)
     try:
         key = f'app_webhook_health:{app_id}'
         now_ts = int(time.time())
@@ -143,15 +146,18 @@ def record_app_webhook_failure(app_id: str, status_code: int, error: str) -> int
 def record_app_webhook_success(app_id: str):
     """Record a successful webhook delivery. Debounced to once per 60s per app.
 
-    Only updates last_success_at (does not reset failure tracking). Debouncing is safe
-    because this field is observability-only — the graduated failure response uses
-    first_failure_at, not last_success_at.
+    Bypasses debounce when a failure occurred since the last success write — the Lua
+    script needs last_success_at > first_failure_at to reset the failure window.
     """
     now = time.monotonic()
     with _cache_lock:
-        last = _success_last_write.get(app_id)
-        if last is not None and (now - last) < _SUCCESS_DEBOUNCE:
-            return
+        had_failure = app_id in _failure_since_last_success
+        if had_failure:
+            _failure_since_last_success.discard(app_id)
+        else:
+            last = _success_last_write.get(app_id)
+            if last is not None and (now - last) < _SUCCESS_DEBOUNCE:
+                return
         _success_last_write[app_id] = now
         if len(_success_last_write) > _CACHE_MAX_SIZE:
             _evict_oldest(_success_last_write)
@@ -169,6 +175,7 @@ def clear_app_webhook_health(app_id: str):
     with _cache_lock:
         _disabled_cache.pop(app_id, None)
         _success_last_write.pop(app_id, None)
+        _failure_since_last_success.discard(app_id)
     try:
         key = f'app_webhook_health:{app_id}'
         r.delete(key)
