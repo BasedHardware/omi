@@ -84,7 +84,7 @@ class WalListItem extends StatelessWidget {
     }
   }
 
-  Widget _trailing(BuildContext context, SyncProvider syncProvider) {
+  Widget _trailing(BuildContext context, SyncProvider syncProvider, bool hasError) {
     if (wal.isSyncing) {
       return const SizedBox(
         width: 16,
@@ -93,7 +93,7 @@ class WalListItem extends StatelessWidget {
       );
     }
     final st = wal.syncDisplayState;
-    if (st == WalSyncDisplayState.failed || st == WalSyncDisplayState.retrying) {
+    if (hasError || st == WalSyncDisplayState.failed || st == WalSyncDisplayState.retrying) {
       return GestureDetector(
         onTap: () => syncProvider.syncWal(wal),
         child: Container(
@@ -182,7 +182,7 @@ class WalListItem extends StatelessWidget {
                           ),
                         ),
                         const SizedBox(width: 10),
-                        _trailing(context, syncProvider),
+                        _trailing(context, syncProvider, hasError),
                       ],
                     ),
                     if (showBar) ...[
