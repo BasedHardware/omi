@@ -232,9 +232,12 @@ class SyncPage extends StatefulWidget {
 }
 
 class _SyncPageState extends State<SyncPage> {
+  Future<bool>? _wifiSupported;
+
   @override
   void initState() {
     super.initState();
+    _wifiSupported = ServiceManager.instance().wal.getSyncs().sdcard.isWifiSyncSupported();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<SyncProvider>().refreshWals();
     });
@@ -989,7 +992,7 @@ class _SyncPageState extends State<SyncPage> {
                         const SizedBox(height: 16),
                         _buildConversationsCreatedCard(syncProvider),
                         FutureBuilder<bool>(
-                          future: ServiceManager.instance().wal.getSyncs().sdcard.isWifiSyncSupported(),
+                          future: _wifiSupported,
                           builder: (context, wifiSnapshot) {
                             return _buildSettingsCard(showTransferMethod: wifiSnapshot.data ?? false);
                           },
