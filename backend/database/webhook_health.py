@@ -1,5 +1,5 @@
-import json
 import logging
+import threading
 import time
 from datetime import datetime, timezone
 from typing import Optional
@@ -10,6 +10,27 @@ from database.redis_db import r
 logger = logging.getLogger(__name__)
 
 _HEALTH_TTL = 7 * 86400  # 7 days
+_CACHE_TTL = 60  # seconds — in-memory cache for disabled checks
+_SUCCESS_DEBOUNCE = 60  # seconds — min interval between success writes per app
+_CACHE_MAX_SIZE = 10000
+
+_cache_lock = threading.Lock()
+_disabled_cache: dict[str, tuple[bool, float]] = {}
+_success_last_write: dict[str, float] = {}
+
+
+def _evict_oldest(d: dict):
+    """Drop the oldest 20% of entries by timestamp. Caller must hold _cache_lock."""
+    n = len(d) // 5
+    if n < 1:
+        n = 1
+    if d and isinstance(next(iter(d.values())), tuple):
+        oldest = sorted(d, key=lambda k: d[k][1])[:n]
+    else:
+        oldest = sorted(d, key=lambda k: d[k])[:n]
+    for k in oldest:
+        del d[k]
+
 
 # Lua script: atomically record a failure and return graduated response action.
 # Returns: 0 = no action, 1 = day1 warn, 2 = day2 warn, 3 = disable
@@ -102,12 +123,20 @@ def record_app_webhook_failure(app_id: str, status_code: int, error: str) -> int
 
 
 def record_app_webhook_success(app_id: str):
-    """Record a successful webhook delivery. Updates last_success_at without resetting failure tracking.
+    """Record a successful webhook delivery. Debounced to once per 60s per app.
 
-    Failure state is tracked independently so that a healthy endpoint on the same app
-    cannot prevent auto-disable of a broken endpoint. The key TTLs out naturally (7 days)
-    or is explicitly cleared on re-enable.
+    Only updates last_success_at (does not reset failure tracking). Debouncing is safe
+    because this field is observability-only — the graduated failure response uses
+    first_failure_at, not last_success_at.
     """
+    now = time.monotonic()
+    with _cache_lock:
+        last = _success_last_write.get(app_id)
+        if last is not None and (now - last) < _SUCCESS_DEBOUNCE:
+            return
+        _success_last_write[app_id] = now
+        if len(_success_last_write) > _CACHE_MAX_SIZE:
+            _evict_oldest(_success_last_write)
     try:
         key = f'app_webhook_health:{app_id}'
         now_ts = int(time.time())
@@ -119,6 +148,9 @@ def record_app_webhook_success(app_id: str):
 
 def clear_app_webhook_health(app_id: str):
     """Clear all webhook health state for an app. Used on re-enable."""
+    with _cache_lock:
+        _disabled_cache.pop(app_id, None)
+        _success_last_write.pop(app_id, None)
     try:
         key = f'app_webhook_health:{app_id}'
         r.delete(key)
@@ -127,11 +159,23 @@ def clear_app_webhook_health(app_id: str):
 
 
 def is_app_webhook_disabled(app_id: str) -> bool:
-    """Check if an app's webhook has been auto-disabled."""
+    """Check if an app's webhook has been auto-disabled. Cached in-memory for 60s."""
+    now = time.monotonic()
+    with _cache_lock:
+        cached = _disabled_cache.get(app_id)
+        if cached is not None:
+            value, ts = cached
+            if (now - ts) < _CACHE_TTL:
+                return value
     try:
         key = f'app_webhook_health:{app_id}'
         val = r.hget(key, 'disabled')
-        return val == b'1'
+        result = val == b'1'
+        with _cache_lock:
+            _disabled_cache[app_id] = (result, now)
+            if len(_disabled_cache) > _CACHE_MAX_SIZE:
+                _evict_oldest(_disabled_cache)
+        return result
     except Exception:
         return False
 
@@ -150,6 +194,8 @@ def get_app_webhook_health(app_id: str) -> Optional[dict]:
 
 def disable_app_in_firestore(app_id: str, error: str, failure_hours: int):
     """Mark an app as disabled in Firestore due to webhook failures."""
+    with _cache_lock:
+        _disabled_cache[app_id] = (True, time.monotonic())
     try:
         apps_collection = 'plugins_data'
         app_ref = db.collection(apps_collection).document(app_id)
