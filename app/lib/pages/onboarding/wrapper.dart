@@ -286,6 +286,7 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
       ),
       AiConsentWidget(
         onAgree: () async {
+          if (!mounted) return;
           SharedPreferencesUtil().aiConsentGiven = true;
           PlatformManager.instance.analytics.onboardingStepCompleted('AI Consent');
           // If the server says this user already completed onboarding, jump
