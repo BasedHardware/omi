@@ -14,6 +14,11 @@ _CACHE_TTL = 60  # seconds — in-memory cache for disabled checks
 _SUCCESS_DEBOUNCE = 60  # seconds — min interval between success writes per app
 _CACHE_MAX_SIZE = 10000
 
+ENDPOINT_REALTIME = 'realtime'
+ENDPOINT_CHAT_TOOL = 'chat_tool'
+ENDPOINT_MCP_TOOL = 'mcp_tool'
+_ALL_ENDPOINTS = [ENDPOINT_REALTIME, ENDPOINT_CHAT_TOOL, ENDPOINT_MCP_TOOL]
+
 _cache_lock = threading.Lock()
 _disabled_cache: dict[str, tuple[bool, float]] = {}
 
@@ -123,17 +128,22 @@ def _get_failure_script():
     return _record_failure_script
 
 
-def record_app_webhook_failure(app_id: str, status_code: int, error: str) -> int:
-    """Record a webhook failure for a marketplace app.
+def record_app_webhook_failure(app_id: str, status_code: int, error: str, endpoint: str = ENDPOINT_REALTIME) -> int:
+    """Record a webhook failure for a marketplace app endpoint.
 
     Returns graduated response action:
     0 = no action, 1 = day1 warn, 2 = day2 warn, 3 = auto-disable
     """
     try:
-        key = f'app_webhook_health:{app_id}'
+        key = f'app_webhook_health:{app_id}:{endpoint}'
         now_ts = int(time.time())
         script = _get_failure_script()
-        return int(script(keys=[key], args=[now_ts, str(status_code), error[:200], _HEALTH_TTL]))
+        action = int(script(keys=[key], args=[now_ts, str(status_code), error[:200], _HEALTH_TTL]))
+        if action == 3:
+            r.setex(f'app_webhook_disabled:{app_id}', _HEALTH_TTL, '1')
+            with _cache_lock:
+                _disabled_cache[app_id] = (True, time.monotonic())
+        return action
     except Exception as e:
         logger.warning(f'record_app_webhook_failure redis error app_id={app_id}: {e}')
         return 0
@@ -182,14 +192,14 @@ def _get_success_script():
     return _record_success_script
 
 
-def record_app_webhook_success(app_id: str):
-    """Record a successful webhook delivery. Debounced atomically in Redis.
+def record_app_webhook_success(app_id: str, endpoint: str = ENDPOINT_REALTIME):
+    """Record a successful webhook delivery for a specific endpoint. Debounced atomically in Redis.
 
     Uses a Lua script that bypasses debounce when a failure exists without a newer
     success (recovery case). Works correctly across multiple pods.
     """
     try:
-        key = f'app_webhook_health:{app_id}'
+        key = f'app_webhook_health:{app_id}:{endpoint}'
         now_ts = int(time.time())
         script = _get_success_script()
         script(keys=[key], args=[now_ts, _SUCCESS_DEBOUNCE, _HEALTH_TTL])
@@ -202,8 +212,10 @@ def clear_app_webhook_health(app_id: str):
     with _cache_lock:
         _disabled_cache.pop(app_id, None)
     try:
-        key = f'app_webhook_health:{app_id}'
-        r.delete(key)
+        keys_to_delete = [f'app_webhook_disabled:{app_id}']
+        for ep in _ALL_ENDPOINTS:
+            keys_to_delete.append(f'app_webhook_health:{app_id}:{ep}')
+        r.delete(*keys_to_delete)
     except Exception as e:
         logger.warning(f'clear_app_webhook_health redis error app_id={app_id}: {e}')
 
@@ -218,8 +230,8 @@ def is_app_webhook_disabled(app_id: str) -> bool:
             if (now - ts) < _CACHE_TTL:
                 return value
     try:
-        key = f'app_webhook_health:{app_id}'
-        val = r.hget(key, 'disabled')
+        key = f'app_webhook_disabled:{app_id}'
+        val = r.get(key)
         result = val == b'1'
         with _cache_lock:
             _disabled_cache[app_id] = (result, now)
@@ -230,14 +242,22 @@ def is_app_webhook_disabled(app_id: str) -> bool:
         return False
 
 
-def get_app_webhook_health(app_id: str) -> Optional[dict]:
-    """Get full health state for an app's webhook. Returns None if no data."""
+def get_app_webhook_health(app_id: str, endpoint: Optional[str] = None) -> Optional[dict]:
+    """Get health state for an app's webhook endpoint(s). Returns None if no data."""
     try:
-        key = f'app_webhook_health:{app_id}'
-        data = r.hgetall(key)
-        if not data:
-            return None
-        return {k.decode(): v.decode() for k, v in data.items()}
+        if endpoint:
+            key = f'app_webhook_health:{app_id}:{endpoint}'
+            data = r.hgetall(key)
+            if not data:
+                return None
+            return {k.decode(): v.decode() for k, v in data.items()}
+        result = {}
+        for ep in _ALL_ENDPOINTS:
+            key = f'app_webhook_health:{app_id}:{ep}'
+            data = r.hgetall(key)
+            if data:
+                result[ep] = {k.decode(): v.decode() for k, v in data.items()}
+        return result if result else None
     except Exception:
         return None
 
