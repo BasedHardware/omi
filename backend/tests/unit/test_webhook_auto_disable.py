@@ -150,13 +150,18 @@ class TestAppWebhookHealthLuaScript:
         assert result == 2
 
     def test_disable_returns_3(self):
-        """After 72h of failures, should return 3 (auto-disable)."""
+        """After 72h of failures, should return 3 (auto-disable) and set app-level disabled key."""
         from database.webhook_health import record_app_webhook_failure
 
         mock_script = MagicMock(return_value=3)
-        with patch("database.webhook_health._get_failure_script", return_value=mock_script):
+        mock_r = MagicMock()
+        with (
+            patch("database.webhook_health._get_failure_script", return_value=mock_script),
+            patch("database.webhook_health.r", mock_r),
+        ):
             result = record_app_webhook_failure("app-1", 500, "Internal Server Error")
         assert result == 3
+        mock_r.setex.assert_called_once_with('app_webhook_disabled:app-1', 7 * 86400, '1')
 
     def test_redis_error_returns_no_action(self):
         """Redis errors should fail open (return 0, never auto-disable)."""
@@ -184,7 +189,7 @@ class TestAppWebhookSuccessReset:
     """Test that success records via Lua script without resetting failure state."""
 
     def test_success_calls_lua_script(self):
-        """record_app_webhook_success should invoke the success Lua script."""
+        """record_app_webhook_success should invoke the success Lua script with endpoint key."""
         from database.webhook_health import record_app_webhook_success
 
         mock_script = MagicMock(return_value=1)
@@ -192,7 +197,7 @@ class TestAppWebhookSuccessReset:
             record_app_webhook_success("app-1")
         mock_script.assert_called_once()
         args = mock_script.call_args
-        assert args.kwargs['keys'] == ['app_webhook_health:app-1']
+        assert args.kwargs['keys'] == ['app_webhook_health:app-1:realtime']
 
     def test_success_redis_error_does_not_raise(self):
         """Redis errors during success recording should be swallowed."""
@@ -216,7 +221,7 @@ class TestIsAppWebhookDisabled:
         from database.webhook_health import is_app_webhook_disabled
 
         mock_r = MagicMock()
-        mock_r.hget.return_value = b'1'
+        mock_r.get.return_value = b'1'
         with patch("database.webhook_health.r", mock_r):
             assert is_app_webhook_disabled("app-1") is True
 
@@ -224,7 +229,7 @@ class TestIsAppWebhookDisabled:
         from database.webhook_health import is_app_webhook_disabled
 
         mock_r = MagicMock()
-        mock_r.hget.return_value = b'0'
+        mock_r.get.return_value = b'0'
         with patch("database.webhook_health.r", mock_r):
             assert is_app_webhook_disabled("app-1") is False
 
@@ -232,7 +237,7 @@ class TestIsAppWebhookDisabled:
         from database.webhook_health import is_app_webhook_disabled
 
         mock_r = MagicMock()
-        mock_r.hget.return_value = None
+        mock_r.get.return_value = None
         with patch("database.webhook_health.r", mock_r):
             assert is_app_webhook_disabled("app-1") is False
 
@@ -241,7 +246,7 @@ class TestIsAppWebhookDisabled:
         from database.webhook_health import is_app_webhook_disabled
 
         mock_r = MagicMock()
-        mock_r.hget.side_effect = Exception("Redis timeout")
+        mock_r.get.side_effect = Exception("Redis timeout")
         with patch("database.webhook_health.r", mock_r):
             assert is_app_webhook_disabled("app-1") is False
 
@@ -255,7 +260,12 @@ class TestClearAppWebhookHealth:
         mock_r = MagicMock()
         with patch("database.webhook_health.r", mock_r):
             clear_app_webhook_health("app-1")
-        mock_r.delete.assert_called_once_with('app_webhook_health:app-1')
+        mock_r.delete.assert_called_once()
+        deleted_keys = mock_r.delete.call_args[0]
+        assert 'app_webhook_disabled:app-1' in deleted_keys
+        assert 'app_webhook_health:app-1:realtime' in deleted_keys
+        assert 'app_webhook_health:app-1:chat_tool' in deleted_keys
+        assert 'app_webhook_health:app-1:mcp_tool' in deleted_keys
 
     def test_clear_redis_error_does_not_raise(self):
         from database.webhook_health import clear_app_webhook_health
@@ -423,13 +433,28 @@ class TestGetAppWebhookHealth:
         from database.webhook_health import get_app_webhook_health
 
         mock_r = MagicMock()
+        ep_data = {
+            b'failure_count': b'5',
+            b'last_status': b'500',
+            b'disabled': b'0',
+        }
+        mock_r.hgetall.side_effect = [ep_data, {}, {}]
+        with patch("database.webhook_health.r", mock_r):
+            result = get_app_webhook_health("app-1")
+        assert 'realtime' in result
+        assert result['realtime'] == {'failure_count': '5', 'last_status': '500', 'disabled': '0'}
+
+    def test_returns_single_endpoint_data(self):
+        from database.webhook_health import get_app_webhook_health
+
+        mock_r = MagicMock()
         mock_r.hgetall.return_value = {
             b'failure_count': b'5',
             b'last_status': b'500',
             b'disabled': b'0',
         }
         with patch("database.webhook_health.r", mock_r):
-            result = get_app_webhook_health("app-1")
+            result = get_app_webhook_health("app-1", endpoint="chat_tool")
         assert result == {'failure_count': '5', 'last_status': '500', 'disabled': '0'}
 
     def test_returns_none_when_no_data(self):
@@ -448,6 +473,15 @@ class TestGetAppWebhookHealth:
         mock_r.hgetall.side_effect = Exception("Redis error")
         with patch("database.webhook_health.r", mock_r):
             result = get_app_webhook_health("app-1")
+        assert result is None
+
+    def test_returns_none_for_single_endpoint_no_data(self):
+        from database.webhook_health import get_app_webhook_health
+
+        mock_r = MagicMock()
+        mock_r.hgetall.return_value = {}
+        with patch("database.webhook_health.r", mock_r):
+            result = get_app_webhook_health("app-1", endpoint="chat_tool")
         assert result is None
 
 
@@ -537,7 +571,7 @@ class TestChatToolCircuitBreaker:
 
         assert result == "ok"
         mock_cb.record_success.assert_called_once()
-        mock_success.assert_called_once_with("app-1")
+        mock_success.assert_called_once_with("app-1", "chat_tool")
 
     @pytest.mark.asyncio
     async def test_failure_records_health(self):
@@ -575,7 +609,7 @@ class TestChatToolCircuitBreaker:
             result = await mod._call_tool_endpoint({}, config, tool, "app-1")
 
         mock_cb.record_failure.assert_called_once()
-        mock_fail.assert_called_once_with("app-1", 500, "HTTP 500")
+        mock_fail.assert_called_once_with("app-1", 500, "HTTP 500", "chat_tool")
 
     @pytest.mark.asyncio
     async def test_timeout_records_failure(self):
@@ -611,7 +645,7 @@ class TestChatToolCircuitBreaker:
 
         assert "Timeout" in result
         mock_cb.record_failure.assert_called_once()
-        mock_fail.assert_called_once_with("app-1", 0, "TimeoutException")
+        mock_fail.assert_called_once_with("app-1", 0, "TimeoutException", "chat_tool")
 
 
 def _load_validate_helper():
@@ -1175,6 +1209,7 @@ class TestMarketplaceIntegrationHealthPaths:
         mock_fail.assert_called_once()
         assert mock_fail.call_args[0][0] == 'app-1'
         assert mock_fail.call_args[0][2] == 'ConnectError'
+        assert mock_fail.call_args[0][3] == 'chat_tool'
 
 
 class TestDevWebhookEdgeCases:
@@ -1274,7 +1309,7 @@ class TestMCPToolHealthTracking:
         ):
             result = await structured_tool.coroutine()
         assert result == "result ok"
-        mock_success.assert_called_once_with("app-mcp-1")
+        mock_success.assert_called_once_with("app-mcp-1", "mcp_tool")
 
     @pytest.mark.asyncio
     async def test_mcp_failure_records_health(self):
@@ -1366,42 +1401,42 @@ class TestDisabledCacheInMemory:
         with self.wh._cache_lock:
             self.wh._disabled_cache.clear()
 
-    def test_caches_false_avoids_repeated_hget(self):
+    def test_caches_false_avoids_repeated_get(self):
         mock_r = MagicMock()
-        mock_r.hget.return_value = b'0'
+        mock_r.get.return_value = b'0'
         with patch.object(self.wh, 'r', mock_r):
             r1 = self.wh.is_app_webhook_disabled("app-cache-1")
             r2 = self.wh.is_app_webhook_disabled("app-cache-1")
         assert r1 is False
         assert r2 is False
-        assert mock_r.hget.call_count == 1
+        assert mock_r.get.call_count == 1
 
-    def test_caches_true_avoids_repeated_hget(self):
+    def test_caches_true_avoids_repeated_get(self):
         mock_r = MagicMock()
-        mock_r.hget.return_value = b'1'
+        mock_r.get.return_value = b'1'
         with patch.object(self.wh, 'r', mock_r):
             r1 = self.wh.is_app_webhook_disabled("app-cache-2")
             r2 = self.wh.is_app_webhook_disabled("app-cache-2")
         assert r1 is True
         assert r2 is True
-        assert mock_r.hget.call_count == 1
+        assert mock_r.get.call_count == 1
 
     def test_cache_expires_after_ttl(self):
         mock_r = MagicMock()
-        mock_r.hget.return_value = b'0'
+        mock_r.get.return_value = b'0'
         with patch.object(self.wh, 'r', mock_r):
             self.wh.is_app_webhook_disabled("app-cache-3")
             with self.wh._cache_lock:
                 entry = self.wh._disabled_cache["app-cache-3"]
                 self.wh._disabled_cache["app-cache-3"] = (entry[0], entry[1] - 61)
-            mock_r.hget.return_value = b'1'
+            mock_r.get.return_value = b'1'
             result = self.wh.is_app_webhook_disabled("app-cache-3")
         assert result is True
-        assert mock_r.hget.call_count == 2
+        assert mock_r.get.call_count == 2
 
     def test_redis_error_returns_false_not_cached(self):
         mock_r = MagicMock()
-        mock_r.hget.side_effect = Exception("Redis down")
+        mock_r.get.side_effect = Exception("Redis down")
         with patch.object(self.wh, 'r', mock_r):
             r1 = self.wh.is_app_webhook_disabled("app-cache-4")
         assert r1 is False
@@ -1409,7 +1444,7 @@ class TestDisabledCacheInMemory:
 
     def test_clear_invalidates_disabled_cache(self):
         mock_r = MagicMock()
-        mock_r.hget.return_value = b'1'
+        mock_r.get.return_value = b'1'
         with patch.object(self.wh, 'r', mock_r):
             self.wh.is_app_webhook_disabled("app-cache-5")
             assert "app-cache-5" in self.wh._disabled_cache
@@ -1420,7 +1455,7 @@ class TestDisabledCacheInMemory:
 
     def test_disable_in_firestore_sets_cache_true(self):
         mock_r = MagicMock()
-        mock_r.hget.return_value = b'0'
+        mock_r.get.return_value = b'0'
         mock_db = MagicMock()
         with patch.object(self.wh, 'r', mock_r), patch.object(self.wh, 'db', mock_db):
             self.wh.is_app_webhook_disabled("app-cache-6")
@@ -1429,7 +1464,7 @@ class TestDisabledCacheInMemory:
             assert self.wh._disabled_cache["app-cache-6"][0] is True
             result = self.wh.is_app_webhook_disabled("app-cache-6")
         assert result is True
-        assert mock_r.hget.call_count == 1
+        assert mock_r.get.call_count == 1
 
 
 class TestSuccessDebounce:
@@ -1550,7 +1585,7 @@ class TestCacheEviction:
 
     def test_disabled_cache_evicts_when_over_max(self):
         mock_r = MagicMock()
-        mock_r.hget.return_value = b'0'
+        mock_r.get.return_value = b'0'
         original_max = self.wh._CACHE_MAX_SIZE
         try:
             self.wh._CACHE_MAX_SIZE = 5
@@ -1560,3 +1595,93 @@ class TestCacheEviction:
             assert len(self.wh._disabled_cache) <= 6
         finally:
             self.wh._CACHE_MAX_SIZE = original_max
+
+
+class TestPerEndpointHealthIsolation:
+    """Regression: healthy endpoint A must NOT reset failure window for broken endpoint B."""
+
+    def test_endpoint_a_success_does_not_mask_endpoint_b_failure(self):
+        """Chat tool fails for 72h while realtime webhook succeeds — should still disable."""
+        from database.webhook_health import (
+            record_app_webhook_failure,
+            record_app_webhook_success,
+            ENDPOINT_REALTIME,
+            ENDPOINT_CHAT_TOOL,
+        )
+
+        mock_fail_script = MagicMock(side_effect=[0, 1, 2, 3])
+        mock_success_script = MagicMock(return_value=1)
+        mock_r = MagicMock()
+        with (
+            patch("database.webhook_health._get_failure_script", return_value=mock_fail_script),
+            patch("database.webhook_health._get_success_script", return_value=mock_success_script),
+            patch("database.webhook_health.r", mock_r),
+        ):
+            record_app_webhook_failure("app-1", 500, "error", ENDPOINT_CHAT_TOOL)
+            record_app_webhook_success("app-1", ENDPOINT_REALTIME)
+            record_app_webhook_failure("app-1", 500, "error", ENDPOINT_CHAT_TOOL)
+            record_app_webhook_success("app-1", ENDPOINT_REALTIME)
+            record_app_webhook_failure("app-1", 500, "error", ENDPOINT_CHAT_TOOL)
+            record_app_webhook_success("app-1", ENDPOINT_REALTIME)
+            result = record_app_webhook_failure("app-1", 500, "error", ENDPOINT_CHAT_TOOL)
+
+        assert result == 3
+
+        fail_keys = [c.kwargs['keys'][0] for c in mock_fail_script.call_args_list]
+        success_keys = [c.kwargs['keys'][0] for c in mock_success_script.call_args_list]
+        assert all(k == 'app_webhook_health:app-1:chat_tool' for k in fail_keys)
+        assert all(k == 'app_webhook_health:app-1:realtime' for k in success_keys)
+
+        mock_r.setex.assert_called_once_with('app_webhook_disabled:app-1', 7 * 86400, '1')
+
+    def test_different_endpoints_use_different_redis_keys(self):
+        """Each endpoint surface gets its own Redis key."""
+        from database.webhook_health import (
+            record_app_webhook_failure,
+            record_app_webhook_success,
+            ENDPOINT_REALTIME,
+            ENDPOINT_CHAT_TOOL,
+            ENDPOINT_MCP_TOOL,
+        )
+
+        mock_fail_script = MagicMock(return_value=0)
+        mock_success_script = MagicMock(return_value=1)
+        with (
+            patch("database.webhook_health._get_failure_script", return_value=mock_fail_script),
+            patch("database.webhook_health._get_success_script", return_value=mock_success_script),
+        ):
+            record_app_webhook_failure("app-1", 500, "err", ENDPOINT_REALTIME)
+            record_app_webhook_failure("app-1", 500, "err", ENDPOINT_CHAT_TOOL)
+            record_app_webhook_failure("app-1", 500, "err", ENDPOINT_MCP_TOOL)
+            record_app_webhook_success("app-1", ENDPOINT_REALTIME)
+            record_app_webhook_success("app-1", ENDPOINT_CHAT_TOOL)
+
+        fail_keys = [c.kwargs['keys'][0] for c in mock_fail_script.call_args_list]
+        success_keys = [c.kwargs['keys'][0] for c in mock_success_script.call_args_list]
+        assert fail_keys == [
+            'app_webhook_health:app-1:realtime',
+            'app_webhook_health:app-1:chat_tool',
+            'app_webhook_health:app-1:mcp_tool',
+        ]
+        assert success_keys == [
+            'app_webhook_health:app-1:realtime',
+            'app_webhook_health:app-1:chat_tool',
+        ]
+
+    def test_disable_on_any_endpoint_sets_app_level_flag(self):
+        """When any endpoint triggers disable (action=3), app-level disabled key is set."""
+        from database.webhook_health import record_app_webhook_failure, ENDPOINT_MCP_TOOL, _disabled_cache, _cache_lock
+
+        mock_fail_script = MagicMock(return_value=3)
+        mock_r = MagicMock()
+        with _cache_lock:
+            _disabled_cache.clear()
+        with (
+            patch("database.webhook_health._get_failure_script", return_value=mock_fail_script),
+            patch("database.webhook_health.r", mock_r),
+        ):
+            result = record_app_webhook_failure("app-mcp-1", 500, "error", ENDPOINT_MCP_TOOL)
+        assert result == 3
+        mock_r.setex.assert_called_once_with('app_webhook_disabled:app-mcp-1', 7 * 86400, '1')
+        with _cache_lock:
+            assert _disabled_cache.get("app-mcp-1", (None,))[0] is True
