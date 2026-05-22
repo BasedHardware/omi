@@ -40,10 +40,8 @@ class _SyncedConversationListItemState extends State<SyncedConversationListItem>
 
   @override
   void initState() {
-    setState(() {
-      conversation = widget.conversation;
-    });
     super.initState();
+    conversation = widget.conversation;
   }
 
   @override
