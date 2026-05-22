@@ -25,6 +25,7 @@ pub const HEADER_OPENAI: &str = "x-byok-openai";
 pub const HEADER_ANTHROPIC: &str = "x-byok-anthropic";
 pub const HEADER_GEMINI: &str = "x-byok-gemini";
 pub const HEADER_DEEPGRAM: &str = "x-byok-deepgram";
+pub const HEADER_ASSEMBLYAI: &str = "x-byok-assemblyai";
 
 /// All four required BYOK headers. Python's `_request_has_all_byok_keys()` checks
 /// the same set — a fully enrolled BYOK user sends all four on every request.
@@ -41,6 +42,7 @@ const HEADER_TO_PROVIDER: &[(&str, &str)] = &[
     (HEADER_ANTHROPIC, "anthropic"),
     (HEADER_GEMINI, "gemini"),
     (HEADER_DEEPGRAM, "deepgram"),
+    (HEADER_ASSEMBLYAI, "assemblyai"),
 ];
 
 /// Heartbeat TTL: BYOK is considered inactive if last_seen_at is older than this.

@@ -52,7 +52,8 @@ backend (main.py)
   ├── ws ──► pusher (pusher/)
   ├── ──────► diarizer (diarizer/)
   ├── ──────► vad (modal/)
-  └── ──────► deepgram (self-hosted or cloud)
+  ├── ──────► deepgram (self-hosted or cloud)
+  └── ──────► assemblyai (cloud, background async when enabled)
 
 pusher
   ├── ──────► diarizer (diarizer/)

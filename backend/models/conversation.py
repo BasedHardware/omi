@@ -92,6 +92,7 @@ class Conversation(BaseModel):
     plugins_results: List[PluginResult] = []
 
     external_data: Optional[Dict] = None
+    background_processed_chunks: Dict[str, Dict] = Field(default_factory=dict)
     app_id: Optional[str] = None
 
     discarded: bool = False

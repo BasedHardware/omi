@@ -47,13 +47,13 @@ _stub_modules = [
     'utils.other.storage',
     'utils.encryption',
     'utils.stt.pre_recorded',
+    'utils.stt.speaker_embedding',
     'utils.stt.vad',
     'utils.fair_use',
     'utils.subscription',
     'utils.log_sanitizer',
     'utils.executors',
     'pydub',
-    'numpy',
     'httpx',
 ]
 for _mod in _stub_modules:

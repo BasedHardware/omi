@@ -7,6 +7,8 @@ Verifies that:
 """
 
 import asyncio
+import sys
+import types
 import unittest
 from unittest.mock import patch, MagicMock
 
@@ -14,6 +16,21 @@ from fastapi import FastAPI, WebSocket, WebSocketException, Depends
 from fastapi.testclient import TestClient
 from firebase_admin.auth import InvalidIdTokenError
 from starlette.websockets import WebSocketDisconnect
+
+database_mod = types.ModuleType("database")
+database_mod.__path__ = []
+sys.modules.setdefault("database", database_mod)
+
+redis_db_mod = types.ModuleType("database.redis_db")
+redis_db_mod.check_rate_limit = MagicMock(return_value=True)
+redis_db_mod.try_acquire_listen_lock = MagicMock(return_value=True)
+sys.modules.setdefault("database.redis_db", redis_db_mod)
+setattr(database_mod, "redis_db", redis_db_mod)
+
+users_db_mod = types.ModuleType("database.users")
+users_db_mod.record_user_platform = MagicMock()
+sys.modules.setdefault("database.users", users_db_mod)
+setattr(database_mod, "users", users_db_mod)
 
 from utils.other.endpoints import get_current_user_uid_ws_listen, get_current_user_uid_ws, get_current_user_uid
 

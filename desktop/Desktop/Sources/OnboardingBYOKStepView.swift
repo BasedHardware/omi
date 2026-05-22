@@ -138,7 +138,7 @@ struct OnboardingBYOKStepView: View {
       .gemini: geminiKey,
       .deepgram: deepgramKey,
     ]
-    for provider in BYOKProvider.allCases {
+    for provider in keysToCheck.keys {
       keyStatuses[provider] = .checking
     }
     let results = await BYOKValidator.validateAll(keysToCheck)
@@ -156,12 +156,7 @@ struct OnboardingBYOKStepView: View {
 
     // Step 2: all four authenticate — flip the backend flag.
     do {
-      try await APIClient.shared.activateBYOK(fingerprints: BYOKProvider.allCases.reduce(into: [:]) {
-        acc, provider in
-        if let key = APIKeyService.byokKey(provider) {
-          acc[provider.rawValue] = APIKeyService.byokFingerprint(key)
-        }
-      })
+      try await APIClient.shared.activateBYOK(fingerprints: APIKeyService.byokActivationFingerprints)
       // Refresh the in-memory quota snapshot — otherwise the client keeps
       // blocking chat against the stale basic-tier 30-message cap.
       await FloatingBarUsageLimiter.shared.fetchPlan()

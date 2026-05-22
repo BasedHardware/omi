@@ -1,5 +1,7 @@
 {
-  "unreleased": [],
+  "unreleased": [
+    "Added optional AssemblyAI API key in Developer API Keys for BYOK async transcription (sync, background, postprocess) when enabled server-side; four-key free plan unchanged"
+  ],
   "releases": [
     {
       "version": "0.11.419",

@@ -1,6 +1,8 @@
 import sys
 import types
 
+sys.modules.setdefault("database._client", types.SimpleNamespace(db=None))
+sys.modules.setdefault("database.announcements", types.SimpleNamespace(compare_versions=lambda _a, _b: 0))
 sys.modules.setdefault("database.users", types.SimpleNamespace())
 sys.modules.setdefault("database.user_usage", types.SimpleNamespace())
 

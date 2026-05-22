@@ -19,12 +19,8 @@ from utils.conversation_helpers import extract_memory_ids
 from utils.notifications import send_notification
 from utils.other.storage import get_syncing_file_temporal_signed_url, delete_syncing_temporal_file
 from utils.retrieval.graph import execute_graph_chat, execute_graph_chat_stream
-from utils.stt.pre_recorded import (
-    deepgram_prerecorded,
-    deepgram_prerecorded_from_bytes,
-    postprocess_words,
-    get_deepgram_model_for_language,
-)
+from utils.stt import provider_service as stt_provider_service
+from utils.stt.providers import STTWorkload
 from utils.llm.usage_tracker import track_usage, set_usage_context, reset_usage_context, Features
 import logging
 
@@ -73,27 +69,28 @@ def transcribe_voice_message_segment(
     if not language:
         language = resolve_voice_message_language(uid, None)
 
-    # Get the appropriate Deepgram model for this language
-    stt_language, stt_model = get_deepgram_model_for_language(language)
+    stt_language, stt_model = stt_provider_service.resolve_prerecorded_language_model(language)
 
     is_multi = stt_language == 'multi'
     try:
-        if is_multi:
-            words, detected_language = deepgram_prerecorded(
-                url, diarize=False, language=stt_language, return_language=True, model=stt_model
-            )
-        else:
-            words = deepgram_prerecorded(
-                url, diarize=False, language=stt_language, return_language=False, model=stt_model
-            )
-            detected_language = stt_language
+        transcription = stt_provider_service.transcribe_url(
+            url,
+            workload=STTWorkload.voice_message,
+            uid=uid,
+            diarize=False,
+            language=stt_language,
+            return_language=is_multi,
+            model=stt_model,
+        )
+        words = transcription.words
+        detected_language = transcription.detected_language if is_multi else stt_language
     except RuntimeError as e:
         logger.error(f'Voice message transcription failed for {path}: {e}')
         return None, stt_language if not is_multi else 'en'
     if not words:
         logger.info('no words')
         return None, detected_language
-    transcript_segments: List[TranscriptSegment] = postprocess_words(words, 0)
+    transcript_segments: List[TranscriptSegment] = transcription.segments
     del words
     if not transcript_segments:
         logger.error('failed to get deepgram segments')
@@ -125,41 +122,31 @@ def transcribe_pcm_bytes(
     if not language:
         language = resolve_voice_message_language(uid, None)
 
-    stt_language, stt_model = get_deepgram_model_for_language(language)
+    stt_language, stt_model = stt_provider_service.resolve_prerecorded_language_model(language)
     is_multi = stt_language == 'multi'
 
     # Let RuntimeError propagate so the router can distinguish backend failure from no-speech
-    if is_multi:
-        result = deepgram_prerecorded_from_bytes(
-            audio_bytes,
-            sample_rate=sample_rate,
-            diarize=False,
-            encoding=encoding,
-            channels=channels,
-            language=stt_language,
-            model=stt_model,
-            return_language=True,
-            keywords=keywords,
-        )
-        words, detected_language = result
-    else:
-        words = deepgram_prerecorded_from_bytes(
-            audio_bytes,
-            sample_rate=sample_rate,
-            diarize=False,
-            encoding=encoding,
-            channels=channels,
-            language=stt_language,
-            model=stt_model,
-            keywords=keywords,
-        )
-        detected_language = stt_language
+    transcription = stt_provider_service.transcribe_bytes(
+        audio_bytes,
+        workload=STTWorkload.ptt,
+        uid=uid,
+        sample_rate=sample_rate,
+        diarize=False,
+        encoding=encoding,
+        channels=channels,
+        language=stt_language,
+        model=stt_model,
+        return_language=is_multi,
+        keywords=keywords,
+    )
+    words = transcription.words
+    detected_language = transcription.detected_language if is_multi else stt_language
 
     if not words:
         logger.info('transcribe_pcm_bytes: no words')
         return None, detected_language
 
-    transcript_segments: List[TranscriptSegment] = postprocess_words(words, 0)
+    transcript_segments: List[TranscriptSegment] = transcription.segments
     del words
     if not transcript_segments:
         logger.error('transcribe_pcm_bytes: failed to get segments')
@@ -190,15 +177,22 @@ def process_voice_message_segment(
     if not language:
         language = resolve_voice_message_language(uid, None)
 
-    # Get the appropriate Deepgram model for this language
-    stt_language, stt_model = get_deepgram_model_for_language(language)
+    stt_language, stt_model = stt_provider_service.resolve_prerecorded_language_model(language)
 
     try:
-        words = deepgram_prerecorded(url, diarize=False, language=stt_language, model=stt_model)
+        transcription = stt_provider_service.transcribe_url(
+            url,
+            workload=STTWorkload.voice_message,
+            uid=uid,
+            diarize=False,
+            language=stt_language,
+            model=stt_model,
+        )
+        words = transcription.words
     except RuntimeError as e:
         logger.error(f'Voice message transcription failed for {path}: {e}')
         return []
-    transcript_segments: List[TranscriptSegment] = postprocess_words(words, 0)
+    transcript_segments: List[TranscriptSegment] = transcription.segments
     del words
     if not transcript_segments:
         logger.error('failed to get deepgram segments')
@@ -264,15 +258,22 @@ async def process_voice_message_segment_stream(
     if not language:
         language = resolve_voice_message_language(uid, None)
 
-    # Get the appropriate Deepgram model for this language
-    stt_language, stt_model = get_deepgram_model_for_language(language)
+    stt_language, stt_model = stt_provider_service.resolve_prerecorded_language_model(language)
 
     try:
-        words = deepgram_prerecorded(url, diarize=False, language=stt_language, model=stt_model)
+        transcription = stt_provider_service.transcribe_url(
+            url,
+            workload=STTWorkload.voice_message,
+            uid=uid,
+            diarize=False,
+            language=stt_language,
+            model=stt_model,
+        )
+        words = transcription.words
     except RuntimeError as e:
         logger.error(f'Voice message transcription failed for {path}: {e}')
         return
-    transcript_segments: List[TranscriptSegment] = postprocess_words(words, 0)
+    transcript_segments: List[TranscriptSegment] = transcription.segments
     del words
     if not transcript_segments:
         logger.error('failed to get deepgram segments')

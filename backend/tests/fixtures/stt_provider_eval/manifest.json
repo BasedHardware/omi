@@ -1,0 +1,11 @@
+{
+  "cases": [
+    {
+      "id": "fixture_good_meeting",
+      "deepgram_fixture": "fixture_good_meeting.deepgram.json",
+      "assemblyai_fixture": "fixture_good_meeting.assemblyai.json",
+      "deepgram_rollup": "fixture_good_meeting.deepgram.rollup.json",
+      "assemblyai_rollup": "fixture_good_meeting.assemblyai.rollup.json"
+    }
+  ]
+}

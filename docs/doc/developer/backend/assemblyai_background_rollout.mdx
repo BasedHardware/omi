@@ -1,0 +1,135 @@
+---
+title: "AssemblyAI Background Transcription Rollout"
+icon: "waveform"
+description: "Rollout gates, feature flags, instrumentation, and rollback for the AssemblyAI async background transcription MVP."
+---
+
+# AssemblyAI Background Transcription Rollout
+
+## Scope
+
+AssemblyAI is the MVP async prerecorded provider. Deepgram remains
+the provider for mobile/BLE `/v4/listen`, realtime assistant streaming,
+Hold-to-Talk streaming, and voice-message finalize semantics.
+
+Eligible AssemblyAI workloads are:
+
+- `sync`
+- `background`
+- `postprocess`
+
+Ineligible latency-sensitive workloads stay on Deepgram:
+
+- `realtime`
+- streaming `ptt`
+- `voice_message`
+
+## Feature Flags And Environment
+
+AssemblyAI is enabled by default for eligible prerecorded workloads when
+credentials are configured.
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `ASSEMBLYAI_API_KEY` | unset | Required before any AssemblyAI request can run. |
+| `ASSEMBLYAI_PRERECORDED_STT_ENABLED` | `true` | Main rollout switch for passive prerecorded workloads. |
+| `ASSEMBLYAI_PRERECORDED_STT_WORKLOADS` | `sync,background,postprocess` | Comma-separated eligible prerecorded workloads. Unknown or ineligible values are ignored. |
+| `ASSEMBLYAI_PRERECORDED_STT_FALLBACK_ENABLED` | `true` | Use Deepgram when AssemblyAI is unavailable or fails and Deepgram credentials are usable. |
+| `ASSEMBLYAI_STT_MODEL` | `universal-2` | AssemblyAI model used when a Deepgram `nova-*` model request is routed to AssemblyAI. |
+| `ASSEMBLYAI_BASE_URL` | `https://api.assemblyai.com` | Provider API base URL. |
+| `ASSEMBLYAI_POLL_INTERVAL_SECONDS` | `3` | Poll interval for async transcript completion. |
+| `ASSEMBLYAI_MAX_POLL_SECONDS` | `900` | Max wait before the async run times out and can fall back. |
+| `ASSEMBLYAI_SMOKE_AUDIO_URL` | unset | Optional live smoke-test audio URL. |
+
+## Routing And Fallback
+
+`backend/utils/stt/providers.py` owns provider selection. Eligible workloads
+use AssemblyAI only when the main flag is enabled and the workload is in
+`ASSEMBLYAI_PRERECORDED_STT_WORKLOADS`; otherwise they use Deepgram.
+
+Desktop Audio Recording uses the background workload through:
+
+- `POST /v2/desktop/background-conversation/start`
+- `POST /v2/desktop/background-transcribe`
+- `POST /v1/conversations` for finalization
+
+The chunk endpoint accepts raw PCM, wraps linear16 PCM as WAV before provider
+upload, applies the chunk timeline offset, maps provider speaker clusters to
+stable numeric `speaker_id` values per conversation, and appends segments to the
+in-progress conversation when `persist=true`.
+
+Deepgram is the prerecorded fallback provider. If AssemblyAI fails, times out,
+or exhausts retries for an eligible prerecorded workload, the failed AssemblyAI
+run is finalized in the provider ledger and the request retries through
+Deepgram with fallback metadata. If AssemblyAI credentials are missing before
+the request starts, provider resolution skips directly to Deepgram when
+fallback is enabled and Deepgram credentials are usable.
+
+Rollback is to set `ASSEMBLYAI_PRERECORDED_STT_ENABLED=false` or remove the
+affected workload from `ASSEMBLYAI_PRERECORDED_STT_WORKLOADS`. No client deploy
+is required for rollback.
+
+## BYOK (Bring Your Own Keys)
+
+Desktop BYOK users still require four keys (OpenAI, Anthropic, Gemini, Deepgram)
+for the free plan. AssemblyAI is an **optional fifth** key (`X-BYOK-AssemblyAI`).
+
+**Deploy backend routing before enabling Assembly for BYOK cohorts.** `resolve_prerecorded_provider_for_request()` in `backend/utils/stt/provider_service.py` applies:
+
+| Flags select Assembly? | Request headers | Provider used |
+| --- | --- | --- |
+| No | any | Deepgram (BYOK or server) |
+| Yes | `x-byok-assemblyai` | AssemblyAI with user key |
+| Yes | `x-byok-deepgram` only | Deepgram BYOK (avoids billing Omi's Assembly key) |
+| Yes | neither | AssemblyAI with server `ASSEMBLYAI_API_KEY` |
+
+If a user enrolls an optional Assembly fingerprint in Firestore, they must send
+`x-byok-assemblyai` on requests that send other BYOK headers. Clearing the
+Assembly key requires re-activation with fingerprints that omit `assemblyai`.
+
+Listen/realtime STT is unchanged for mobile/BLE (Deepgram only). Assembly BYOK
+does not affect `/v4/listen`.
+
+## Storage And Identity
+
+Provider output is normalized into `ProviderTranscriptResult` and reconstructed
+into canonical `TranscriptSegment` records before conversation storage.
+Provider-local speaker labels are stored as `provider_cluster_id` and
+`provider_speaker_label`; they do not become canonical identity.
+
+Canonical speaker identity is assigned after normalization with the Omi speaker
+embedding service. Low-confidence clusters remain explicitly unknown rather
+than being mapped to a fake person or to `speaker_id=0`.
+
+Provider run ledgers live in `transcription_provider_runs`, and daily rollups
+live in `transcription_provider_usage_daily`. Ledger payload guards reject raw
+audio bytes, transcript text, words, utterances, and similar high-risk payloads.
+
+## Dashboards And Reports
+
+Expected rollout dashboards should use `/metrics` counters and histograms for:
+
+- `transcription_provider_requests_total`
+- `transcription_provider_latency_seconds`
+- `transcription_provider_retries_total`
+- `transcription_provider_fallbacks_total`
+- `transcription_provider_audio_seconds_total`
+- `transcription_provider_billable_seconds_total`
+- `transcription_provider_speaker_clusters_total`
+- `transcription_provider_identity_confidence_total`
+
+Expected cost and quality review should inspect:
+
+- `transcription_provider_usage_daily` by provider, model, workload, and day.
+- `transcription_provider_runs` for canary failures, fallback direction, retry counts, latency, billable seconds, and estimated cost.
+- `backend/scripts/stt/provider_comparison_gate.py` reports for transcript drift, speaker cluster stability, identity quality, fallback rate, failure rate, and economics.
+
+Fixture validation:
+
+```bash
+cd backend
+python3 scripts/stt/provider_comparison_gate.py --manifest tests/fixtures/stt_provider_eval/manifest.json
+```
+
+Live validation requires `DEEPGRAM_API_KEY`, `ASSEMBLYAI_API_KEY`, and manifest
+cases with `audio_url` or `audio_file`.

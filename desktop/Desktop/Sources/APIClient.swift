@@ -826,6 +826,14 @@ struct TranscriptSegment: Codable, Identifiable {
   let start: Double
   let end: Double
   let translations: [TranscriptTranslation]
+  let sttProvider: String?
+  let sttModel: String?
+  let providerClusterId: String?
+  let providerSpeakerLabel: String?
+  let speakerIdentityState: String?
+  let speakerIdentityConfidence: Double?
+  let speakerIdentitySource: String?
+  let speakerIdentityVersion: String?
 
   var speakerId: Int {
     guard let speaker = speaker else { return 0 }
@@ -836,10 +844,35 @@ struct TranscriptSegment: Codable, Identifiable {
     return 0
   }
 
+  var hasExplicitUnknownSpeakerIdentity: Bool {
+    speakerIdentityState == "unknown"
+  }
+
+  var displaySpeakerSuffix: String {
+    if speaker != nil {
+      return "\(speakerId)"
+    }
+    if let providerSpeakerLabel, !providerSpeakerLabel.isEmpty {
+      return providerSpeakerLabel
+    }
+    if let providerClusterId, !providerClusterId.isEmpty {
+      return providerClusterId
+    }
+    return "?"
+  }
+
   enum CodingKeys: String, CodingKey {
     case id, text, speaker
     case isUser = "is_user"
     case personId = "person_id"
+    case sttProvider = "stt_provider"
+    case sttModel = "stt_model"
+    case providerClusterId = "provider_cluster_id"
+    case providerSpeakerLabel = "provider_speaker_label"
+    case speakerIdentityState = "speaker_identity_state"
+    case speakerIdentityConfidence = "speaker_identity_confidence"
+    case speakerIdentitySource = "speaker_identity_source"
+    case speakerIdentityVersion = "speaker_identity_version"
     case start, end, translations
   }
 
@@ -856,6 +889,16 @@ struct TranscriptSegment: Codable, Identifiable {
     end = try container.decodeIfPresent(Double.self, forKey: .end) ?? 0
     translations =
       try container.decodeIfPresent([TranscriptTranslation].self, forKey: .translations) ?? []
+    sttProvider = try container.decodeIfPresent(String.self, forKey: .sttProvider)
+    sttModel = try container.decodeIfPresent(String.self, forKey: .sttModel)
+    providerClusterId = try container.decodeIfPresent(String.self, forKey: .providerClusterId)
+    providerSpeakerLabel = try container.decodeIfPresent(String.self, forKey: .providerSpeakerLabel)
+    speakerIdentityState =
+      try container.decodeIfPresent(String.self, forKey: .speakerIdentityState)
+    speakerIdentityConfidence =
+      try container.decodeIfPresent(Double.self, forKey: .speakerIdentityConfidence)
+    speakerIdentitySource = try container.decodeIfPresent(String.self, forKey: .speakerIdentitySource)
+    speakerIdentityVersion = try container.decodeIfPresent(String.self, forKey: .speakerIdentityVersion)
   }
 
   /// Memberwise initializer for creating from local storage
@@ -868,7 +911,15 @@ struct TranscriptSegment: Codable, Identifiable {
     personId: String?,
     start: Double,
     end: Double,
-    translations: [TranscriptTranslation] = []
+    translations: [TranscriptTranslation] = [],
+    sttProvider: String? = nil,
+    sttModel: String? = nil,
+    providerClusterId: String? = nil,
+    providerSpeakerLabel: String? = nil,
+    speakerIdentityState: String? = nil,
+    speakerIdentityConfidence: Double? = nil,
+    speakerIdentitySource: String? = nil,
+    speakerIdentityVersion: String? = nil
   ) {
     self.id = id
     self.backendId = backendId
@@ -879,6 +930,14 @@ struct TranscriptSegment: Codable, Identifiable {
     self.start = start
     self.end = end
     self.translations = translations
+    self.sttProvider = sttProvider
+    self.sttModel = sttModel
+    self.providerClusterId = providerClusterId
+    self.providerSpeakerLabel = providerSpeakerLabel
+    self.speakerIdentityState = speakerIdentityState
+    self.speakerIdentityConfidence = speakerIdentityConfidence
+    self.speakerIdentitySource = speakerIdentitySource
+    self.speakerIdentityVersion = speakerIdentityVersion
   }
 
   /// Formatted timestamp string (e.g., "00:01:30 - 00:01:45")
@@ -1225,6 +1284,10 @@ extension APIClient {
     let conversation: ServerConversation
   }
 
+  struct StartBackgroundConversationResponse: Decodable {
+    let conversation_id: String
+  }
+
   /// Force-process the current in-progress conversation on the Python backend.
   /// Endpoint: POST /v1/conversations (Python backend)
   /// This is the same endpoint the mobile app uses when stopping phone mic recording.
@@ -1245,6 +1308,76 @@ extension APIClient {
       // 404 = no in-progress conversation found — WS close handler already processed it
       return nil
     }
+  }
+
+  /// Start a Python-backed in-progress conversation for desktop background batch transcription.
+  /// Endpoint: POST /v2/desktop/background-conversation/start
+  func startBackgroundConversation(language: String) async throws -> String {
+    struct StartBackgroundConversationRequest: Encodable {
+      let language: String
+    }
+
+    let response: StartBackgroundConversationResponse = try await post(
+      "v2/desktop/background-conversation/start",
+      body: StartBackgroundConversationRequest(language: language),
+      customBaseURL: nil
+    )
+    return response.conversation_id
+  }
+
+  /// Finish one explicit Python-backed desktop background batch conversation.
+  /// Endpoint: POST /v2/desktop/background-conversation/{conversation_id}/finish
+  func finishBackgroundConversation(conversationId: String) async throws -> ServerConversation {
+    try await post(
+      "v2/desktop/background-conversation/\(conversationId)/finish",
+      customBaseURL: nil
+    )
+  }
+
+  /// Fetch Python backend desktop transcription capabilities.
+  /// Endpoint: GET /v2/desktop/capabilities
+  func getDesktopCapabilities() async throws -> DesktopCapabilitiesResponse {
+    try await get("v2/desktop/capabilities", customBaseURL: nil)
+  }
+}
+
+struct DesktopCapabilitiesResponse: Codable {
+  let backgroundBatch: DesktopBackgroundBatchCapability
+
+  enum CodingKeys: String, CodingKey {
+    case backgroundBatch = "background_batch"
+  }
+}
+
+struct DesktopBackgroundBatchCapability: Codable {
+  let enabled: Bool
+  let mode: String?
+  let provider: String
+  let primaryProvider: String?
+  let effectiveProvider: String?
+  let fallbackProvider: String?
+  let fallbackEnabled: Bool?
+  let fallbackAvailable: Bool?
+  let reason: String?
+  let sampleRate: Int
+  let channels: Int
+  let encoding: String
+  let maxChunkSeconds: Int
+
+  enum CodingKeys: String, CodingKey {
+    case enabled
+    case mode
+    case provider
+    case primaryProvider = "primary_provider"
+    case effectiveProvider = "effective_provider"
+    case fallbackProvider = "fallback_provider"
+    case fallbackEnabled = "fallback_enabled"
+    case fallbackAvailable = "fallback_available"
+    case reason
+    case sampleRate = "sample_rate"
+    case channels
+    case encoding
+    case maxChunkSeconds = "max_chunk_seconds"
   }
 }
 

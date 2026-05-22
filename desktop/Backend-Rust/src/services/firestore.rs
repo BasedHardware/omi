@@ -4254,11 +4254,10 @@ impl FirestoreService {
                                                     text: seg.get("text")?.as_str()?.to_string(),
                                                     speaker: seg.get("speaker")
                                                         .and_then(|s| s.as_str())
-                                                        .unwrap_or("SPEAKER_00")
-                                                        .to_string(),
+                                                        .map(|s| s.to_string()),
                                                     speaker_id: seg.get("speaker_id")
                                                         .and_then(|s| s.as_i64())
-                                                        .unwrap_or(0) as i32,
+                                                        .map(|s| s as i32),
                                                     is_user: seg.get("is_user")
                                                         .and_then(|s| s.as_bool())
                                                         .unwrap_or(false),
@@ -4271,6 +4270,14 @@ impl FirestoreService {
                                                     end: seg.get("end")
                                                         .and_then(|s| s.as_f64())
                                                         .unwrap_or(0.0),
+                                                    stt_provider: seg.get("stt_provider").and_then(|s| s.as_str()).map(|s| s.to_string()),
+                                                    stt_model: seg.get("stt_model").and_then(|s| s.as_str()).map(|s| s.to_string()),
+                                                    provider_cluster_id: seg.get("provider_cluster_id").and_then(|s| s.as_str()).map(|s| s.to_string()),
+                                                    provider_speaker_label: seg.get("provider_speaker_label").and_then(|s| s.as_str()).map(|s| s.to_string()),
+                                                    speaker_identity_state: seg.get("speaker_identity_state").and_then(|s| s.as_str()).map(|s| s.to_string()),
+                                                    speaker_identity_confidence: seg.get("speaker_identity_confidence").and_then(|s| s.as_f64()),
+                                                    speaker_identity_source: seg.get("speaker_identity_source").and_then(|s| s.as_str()).map(|s| s.to_string()),
+                                                    speaker_identity_version: seg.get("speaker_identity_version").and_then(|s| s.as_str()).map(|s| s.to_string()),
                                                 })
                                             })
                                             .collect();
@@ -4302,11 +4309,10 @@ impl FirestoreService {
                                             text: seg.get("text")?.as_str()?.to_string(),
                                             speaker: seg.get("speaker")
                                                 .and_then(|s| s.as_str())
-                                                .unwrap_or("SPEAKER_00")
-                                                .to_string(),
+                                                .map(|s| s.to_string()),
                                             speaker_id: seg.get("speaker_id")
                                                 .and_then(|s| s.as_i64())
-                                                .unwrap_or(0) as i32,
+                                                .map(|s| s as i32),
                                             is_user: seg.get("is_user")
                                                 .and_then(|s| s.as_bool())
                                                 .unwrap_or(false),
@@ -4319,6 +4325,14 @@ impl FirestoreService {
                                             end: seg.get("end")
                                                 .and_then(|s| s.as_f64())
                                                 .unwrap_or(0.0),
+                                            stt_provider: seg.get("stt_provider").and_then(|s| s.as_str()).map(|s| s.to_string()),
+                                            stt_model: seg.get("stt_model").and_then(|s| s.as_str()).map(|s| s.to_string()),
+                                            provider_cluster_id: seg.get("provider_cluster_id").and_then(|s| s.as_str()).map(|s| s.to_string()),
+                                            provider_speaker_label: seg.get("provider_speaker_label").and_then(|s| s.as_str()).map(|s| s.to_string()),
+                                            speaker_identity_state: seg.get("speaker_identity_state").and_then(|s| s.as_str()).map(|s| s.to_string()),
+                                            speaker_identity_confidence: seg.get("speaker_identity_confidence").and_then(|s| s.as_f64()),
+                                            speaker_identity_source: seg.get("speaker_identity_source").and_then(|s| s.as_str()).map(|s| s.to_string()),
+                                            speaker_identity_version: seg.get("speaker_identity_version").and_then(|s| s.as_str()).map(|s| s.to_string()),
                                         })
                                     })
                                     .collect();
@@ -4374,12 +4388,20 @@ impl FirestoreService {
                     Some(TranscriptSegment {
                         id: self.parse_string(seg_fields, "id"),
                         text: self.parse_string(seg_fields, "text").unwrap_or_default(),
-                        speaker: self.parse_string(seg_fields, "speaker").unwrap_or_else(|| "SPEAKER_00".to_string()),
-                        speaker_id: self.parse_int(seg_fields, "speaker_id").unwrap_or(0),
+                        speaker: self.parse_string(seg_fields, "speaker"),
+                        speaker_id: self.parse_int(seg_fields, "speaker_id"),
                         is_user: self.parse_bool(seg_fields, "is_user").unwrap_or(false),
                         person_id: self.parse_string(seg_fields, "person_id"),
                         start: self.parse_float(seg_fields, "start").unwrap_or(0.0),
                         end: self.parse_float(seg_fields, "end").unwrap_or(0.0),
+                        stt_provider: self.parse_string(seg_fields, "stt_provider"),
+                        stt_model: self.parse_string(seg_fields, "stt_model"),
+                        provider_cluster_id: self.parse_string(seg_fields, "provider_cluster_id"),
+                        provider_speaker_label: self.parse_string(seg_fields, "provider_speaker_label"),
+                        speaker_identity_state: self.parse_string(seg_fields, "speaker_identity_state"),
+                        speaker_identity_confidence: self.parse_float(seg_fields, "speaker_identity_confidence"),
+                        speaker_identity_source: self.parse_string(seg_fields, "speaker_identity_source"),
+                        speaker_identity_version: self.parse_string(seg_fields, "speaker_identity_version"),
                     })
                 })
                 .collect())
@@ -4422,12 +4444,11 @@ impl FirestoreService {
                     speaker: seg
                         .get("speaker")
                         .and_then(|s| s.as_str())
-                        .unwrap_or("SPEAKER_00")
-                        .to_string(),
+                        .map(|s| s.to_string()),
                     speaker_id: seg
                         .get("speaker_id")
                         .and_then(|s| s.as_i64())
-                        .unwrap_or(0) as i32,
+                        .map(|s| s as i32),
                     is_user: seg
                         .get("is_user")
                         .and_then(|s| s.as_bool())
@@ -4444,6 +4465,14 @@ impl FirestoreService {
                         .get("end")
                         .and_then(|s| s.as_f64())
                         .unwrap_or(0.0),
+                    stt_provider: seg.get("stt_provider").and_then(|s| s.as_str()).map(|s| s.to_string()),
+                    stt_model: seg.get("stt_model").and_then(|s| s.as_str()).map(|s| s.to_string()),
+                    provider_cluster_id: seg.get("provider_cluster_id").and_then(|s| s.as_str()).map(|s| s.to_string()),
+                    provider_speaker_label: seg.get("provider_speaker_label").and_then(|s| s.as_str()).map(|s| s.to_string()),
+                    speaker_identity_state: seg.get("speaker_identity_state").and_then(|s| s.as_str()).map(|s| s.to_string()),
+                    speaker_identity_confidence: seg.get("speaker_identity_confidence").and_then(|s| s.as_f64()),
+                    speaker_identity_source: seg.get("speaker_identity_source").and_then(|s| s.as_str()).map(|s| s.to_string()),
+                    speaker_identity_version: seg.get("speaker_identity_version").and_then(|s| s.as_str()).map(|s| s.to_string()),
                 })
             })
             .collect())
@@ -4576,6 +4605,30 @@ impl FirestoreService {
                 }
                 if let Some(person_id) = &seg.person_id {
                     segment["person_id"] = json!(person_id);
+                }
+                if let Some(stt_provider) = &seg.stt_provider {
+                    segment["stt_provider"] = json!(stt_provider);
+                }
+                if let Some(stt_model) = &seg.stt_model {
+                    segment["stt_model"] = json!(stt_model);
+                }
+                if let Some(provider_cluster_id) = &seg.provider_cluster_id {
+                    segment["provider_cluster_id"] = json!(provider_cluster_id);
+                }
+                if let Some(provider_speaker_label) = &seg.provider_speaker_label {
+                    segment["provider_speaker_label"] = json!(provider_speaker_label);
+                }
+                if let Some(speaker_identity_state) = &seg.speaker_identity_state {
+                    segment["speaker_identity_state"] = json!(speaker_identity_state);
+                }
+                if let Some(speaker_identity_confidence) = seg.speaker_identity_confidence {
+                    segment["speaker_identity_confidence"] = json!(speaker_identity_confidence);
+                }
+                if let Some(speaker_identity_source) = &seg.speaker_identity_source {
+                    segment["speaker_identity_source"] = json!(speaker_identity_source);
+                }
+                if let Some(speaker_identity_version) = &seg.speaker_identity_version {
+                    segment["speaker_identity_version"] = json!(speaker_identity_version);
                 }
                 segment
             }).collect();
@@ -9267,8 +9320,6 @@ impl FirestoreService {
             .map(|seg| {
                 let mut fields = json!({
                     "text": {"stringValue": seg.text},
-                    "speaker": {"stringValue": seg.speaker},
-                    "speaker_id": {"integerValue": seg.speaker_id.to_string()},
                     "is_user": {"booleanValue": seg.is_user},
                     "start": {"doubleValue": seg.start},
                     "end": {"doubleValue": seg.end}
@@ -9276,8 +9327,38 @@ impl FirestoreService {
                 if let Some(ref id) = seg.id {
                     fields["id"] = json!({"stringValue": id});
                 }
+                if let Some(ref speaker) = seg.speaker {
+                    fields["speaker"] = json!({"stringValue": speaker});
+                }
+                if let Some(speaker_id) = seg.speaker_id {
+                    fields["speaker_id"] = json!({"integerValue": speaker_id.to_string()});
+                }
                 if let Some(ref pid) = seg.person_id {
                     fields["person_id"] = json!({"stringValue": pid});
+                }
+                if let Some(ref stt_provider) = seg.stt_provider {
+                    fields["stt_provider"] = json!({"stringValue": stt_provider});
+                }
+                if let Some(ref stt_model) = seg.stt_model {
+                    fields["stt_model"] = json!({"stringValue": stt_model});
+                }
+                if let Some(ref provider_cluster_id) = seg.provider_cluster_id {
+                    fields["provider_cluster_id"] = json!({"stringValue": provider_cluster_id});
+                }
+                if let Some(ref provider_speaker_label) = seg.provider_speaker_label {
+                    fields["provider_speaker_label"] = json!({"stringValue": provider_speaker_label});
+                }
+                if let Some(ref speaker_identity_state) = seg.speaker_identity_state {
+                    fields["speaker_identity_state"] = json!({"stringValue": speaker_identity_state});
+                }
+                if let Some(speaker_identity_confidence) = seg.speaker_identity_confidence {
+                    fields["speaker_identity_confidence"] = json!({"doubleValue": speaker_identity_confidence});
+                }
+                if let Some(ref speaker_identity_source) = seg.speaker_identity_source {
+                    fields["speaker_identity_source"] = json!({"stringValue": speaker_identity_source});
+                }
+                if let Some(ref speaker_identity_version) = seg.speaker_identity_version {
+                    fields["speaker_identity_version"] = json!({"stringValue": speaker_identity_version});
                 }
                 json!({"mapValue": {"fields": fields}})
             })
@@ -9968,6 +10049,85 @@ mod tests {
         assert_eq!(id.len(), 20);
         assert_eq!(id, document_id_from_seed("test content"));
         assert_ne!(id, document_id_from_seed("different content"));
+    }
+
+    fn test_firestore_service() -> FirestoreService {
+        FirestoreService {
+            client: Client::new(),
+            project_id: "test-project".to_string(),
+            credentials: None,
+            cached_token: Arc::new(RwLock::new(None)),
+            encryption_secret: None,
+        }
+    }
+
+    #[test]
+    fn parse_plain_transcript_segments_preserves_explicit_unknown_identity() {
+        let service = test_firestore_service();
+        let fields = json!({
+            "transcript_segments": {
+                "arrayValue": {
+                    "values": [{
+                        "mapValue": {
+                            "fields": {
+                                "id": {"stringValue": "seg-provider"},
+                                "text": {"stringValue": "Hello"},
+                                "is_user": {"booleanValue": false},
+                                "start": {"doubleValue": 0.0},
+                                "end": {"doubleValue": 1.0},
+                                "stt_provider": {"stringValue": "provider-a"},
+                                "stt_model": {"stringValue": "async-large"},
+                                "provider_cluster_id": {"stringValue": "speaker-alpha"},
+                                "speaker_identity_state": {"stringValue": "unknown"},
+                                "speaker_identity_confidence": {"doubleValue": 0.42},
+                                "speaker_identity_source": {"stringValue": "omi_speaker_embedding"},
+                                "speaker_identity_version": {"stringValue": "v1"}
+                            }
+                        }
+                    }]
+                }
+            }
+        });
+
+        let segments = service.parse_transcript_segments(&fields, "uid").unwrap();
+        assert_eq!(segments.len(), 1);
+        assert_eq!(segments[0].speaker, None);
+        assert_eq!(segments[0].speaker_id, None);
+        assert_eq!(segments[0].provider_cluster_id.as_deref(), Some("speaker-alpha"));
+        assert_eq!(segments[0].speaker_identity_state.as_deref(), Some("unknown"));
+        assert_eq!(segments[0].speaker_identity_confidence, Some(0.42));
+        assert_eq!(segments[0].speaker_identity_source.as_deref(), Some("omi_speaker_embedding"));
+        assert_eq!(segments[0].speaker_identity_version.as_deref(), Some("v1"));
+    }
+
+    #[test]
+    fn parse_plain_transcript_segments_preserves_legacy_speaker_fields() {
+        let service = test_firestore_service();
+        let fields = json!({
+            "transcript_segments": {
+                "arrayValue": {
+                    "values": [{
+                        "mapValue": {
+                            "fields": {
+                                "id": {"stringValue": "seg-legacy"},
+                                "text": {"stringValue": "Hello"},
+                                "speaker": {"stringValue": "SPEAKER_00"},
+                                "speaker_id": {"integerValue": "0"},
+                                "is_user": {"booleanValue": false},
+                                "start": {"doubleValue": 0.0},
+                                "end": {"doubleValue": 1.0}
+                            }
+                        }
+                    }]
+                }
+            }
+        });
+
+        let segments = service.parse_transcript_segments(&fields, "uid").unwrap();
+        assert_eq!(segments.len(), 1);
+        assert_eq!(segments[0].speaker.as_deref(), Some("SPEAKER_00"));
+        assert_eq!(segments[0].speaker_id, Some(0));
+        assert_eq!(segments[0].speaker_identity_state, None);
     }
 
     // --- Firestore BYOK state parsing tests ---

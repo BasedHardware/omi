@@ -12,10 +12,10 @@ pub struct TranscriptSegment {
     #[serde(default)]
     pub id: Option<String>,
     pub text: String,
-    #[serde(default = "default_speaker")]
-    pub speaker: String,
     #[serde(default)]
-    pub speaker_id: i32,
+    pub speaker: Option<String>,
+    #[serde(default)]
+    pub speaker_id: Option<i32>,
     #[serde(default)]
     pub is_user: bool,
     #[serde(default)]
@@ -24,10 +24,22 @@ pub struct TranscriptSegment {
     pub start: f64,
     #[serde(default)]
     pub end: f64,
-}
-
-fn default_speaker() -> String {
-    "SPEAKER_00".to_string()
+    #[serde(default)]
+    pub stt_provider: Option<String>,
+    #[serde(default)]
+    pub stt_model: Option<String>,
+    #[serde(default)]
+    pub provider_cluster_id: Option<String>,
+    #[serde(default)]
+    pub provider_speaker_label: Option<String>,
+    #[serde(default)]
+    pub speaker_identity_state: Option<String>,
+    #[serde(default)]
+    pub speaker_identity_confidence: Option<f64>,
+    #[serde(default)]
+    pub speaker_identity_source: Option<String>,
+    #[serde(default)]
+    pub speaker_identity_version: Option<String>,
 }
 
 impl TranscriptSegment {
@@ -40,7 +52,10 @@ impl TranscriptSegment {
                 let speaker_name = if segment.is_user {
                     "User".to_string()
                 } else {
-                    format!("Speaker {}", segment.speaker_id)
+                    match segment.speaker_id {
+                        Some(speaker_id) => format!("Speaker {}", speaker_id),
+                        None => "Speaker ?".to_string(),
+                    }
                 };
                 format!("{}: {}", speaker_name, segment.text)
             })

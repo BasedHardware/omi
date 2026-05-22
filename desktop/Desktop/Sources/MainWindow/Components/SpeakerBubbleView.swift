@@ -27,7 +27,7 @@ struct SpeakerBubbleView: View {
     private var speakerLabel: String {
         if isUser { return "You" }
         if let name = personName { return name }
-        return "Speaker \(segment.speakerId)"
+        return "Speaker \(segment.displaySpeakerSuffix)"
     }
 
     private var avatarInitial: String {
@@ -35,7 +35,7 @@ struct SpeakerBubbleView: View {
         if let name = personName, let first = name.first {
             return String(first).uppercased()
         }
-        return String(segment.speakerId)
+        return segment.speaker == nil ? "?" : String(segment.speakerId)
     }
 
     var body: some View {

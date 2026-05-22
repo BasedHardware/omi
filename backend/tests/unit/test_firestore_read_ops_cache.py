@@ -629,8 +629,8 @@ class TestWebhookInvalidationCoverage:
         """checkout.session.completed path must call set_credits_invalidation_signal."""
         source = self._read_source(self.PAYMENT_SOURCE_FILE)
         # The invalidation call should appear after _update_subscription_from_session
-        idx_update = source.find('_update_subscription_from_session(uid, session)')
-        idx_signal = source.find('set_credits_invalidation_signal(uid)', idx_update)
+        idx_update = source.find('_update_subscription_from_session, uid, session')
+        idx_signal = source.find('set_credits_invalidation_signal, uid', idx_update)
         assert (
             idx_signal > idx_update
         ), "set_credits_invalidation_signal must be called after _update_subscription_from_session"
@@ -653,16 +653,16 @@ class TestWebhookInvalidationCoverage:
         idx_scheduled = source.find("Scheduled upgrade completed for user")
         assert idx_scheduled > 0
         # Find the invalidation call before the log line (it's called right after update)
-        section = source[idx_scheduled - 200 : idx_scheduled]
-        assert 'set_credits_invalidation_signal(uid)' in section
+        section = source[idx_scheduled - 500 : idx_scheduled]
+        assert 'set_credits_invalidation_signal, uid' in section
 
     def test_schedule_canceled_calls_invalidation(self):
         """subscription_schedule.canceled must call set_credits_invalidation_signal."""
         source = self._read_source(self.PAYMENT_SOURCE_FILE)
         idx_canceled = source.find("Subscription schedule canceled for user")
         assert idx_canceled > 0
-        section = source[idx_canceled - 200 : idx_canceled]
-        assert 'set_credits_invalidation_signal(uid)' in section
+        section = source[idx_canceled - 300 : idx_canceled]
+        assert 'set_credits_invalidation_signal, uid' in section
 
     def test_transcribe_imports_invalidation_check(self):
         """transcribe.py must import check_credits_invalidation."""

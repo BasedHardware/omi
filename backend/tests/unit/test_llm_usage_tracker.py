@@ -3,6 +3,7 @@ Unit tests for LLM usage tracking.
 """
 
 import os
+import importlib
 import sys
 import types
 from unittest.mock import MagicMock
@@ -19,7 +20,7 @@ mock_client_module.db = mock_db
 sys.modules["database._client"] = mock_client_module
 sys.modules["stripe"] = MagicMock()
 
-_google_module = sys.modules.setdefault("google", types.ModuleType("google"))
+_google_module = importlib.import_module("google")
 _google_cloud_module = sys.modules.setdefault("google.cloud", types.ModuleType("google.cloud"))
 _google_firestore_module = types.ModuleType("google.cloud.firestore")
 _google_firestore_module.Increment = lambda x: {"__increment": x}

@@ -82,6 +82,7 @@ field_filter_stub = sys.modules["google.cloud.firestore_v1.base_query"]
 field_filter_stub.FieldFilter = MagicMock()
 sys.modules["google.cloud.firestore_v1"].FieldFilter = field_filter_stub.FieldFilter
 sys.modules["google.cloud.firestore_v1"].transactional = lambda f: f
+sys.modules["database.redis_db"].try_acquire_user_platform_write_lock = MagicMock(return_value=True)
 
 # Add backend dir to sys.path
 sys.path.insert(0, str(BACKEND_DIR))
@@ -1694,7 +1695,7 @@ class TestGenerateTitleEndpoint:
             session_id='s1',
             messages=[TitleMessageInput(text='hi', sender='human'), TitleMessageInput(text='hello', sender='ai')],
         )
-        with patch.dict('sys.modules', {'utils.llm.clients': MagicMock(llm_mini=mock_llm)}):
+        with patch.dict('sys.modules', {'utils.llm.clients': MagicMock(get_llm=MagicMock(return_value=mock_llm))}):
             result = generate_session_title(request, uid='u1')
 
         assert result == {'title': 'Project Discussion'}
@@ -1713,7 +1714,7 @@ class TestGenerateTitleEndpoint:
             session_id='s1',
             messages=[TitleMessageInput(text='hi', sender='human')],
         )
-        with patch.dict('sys.modules', {'utils.llm.clients': MagicMock(llm_mini=mock_llm)}):
+        with patch.dict('sys.modules', {'utils.llm.clients': MagicMock(get_llm=MagicMock(return_value=mock_llm))}):
             result = generate_session_title(request, uid='u1')
 
         assert result == {'title': 'New Chat'}

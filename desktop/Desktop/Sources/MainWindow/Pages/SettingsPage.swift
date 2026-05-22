@@ -377,6 +377,7 @@ struct SettingsContentView: View {
   @AppStorage("dev_anthropic_api_key") private var devAnthropicKey: String = ""
   @AppStorage("dev_openai_api_key") private var devOpenAIKey: String = ""
   @AppStorage("dev_deepgram_api_key") private var devDeepgramKey: String = ""
+  @AppStorage("dev_assemblyai_api_key") private var devAssemblyAIKey: String = ""
   @State private var byokKeyStatuses: [BYOKProvider: BYOKValidator.Status] = [:]
   @State private var byokActivationError: String?
 
@@ -1069,7 +1070,7 @@ struct SettingsContentView: View {
           }
           .buttonStyle(.plain)
 
-          // Single Language option
+          // Single Language option (picker must stay outside Button — nested controls freeze SwiftUI)
           Button(action: {
             transcriptionAutoDetect = false
             AssistantSettings.shared.transcriptionAutoDetect = false
@@ -1090,33 +1091,6 @@ struct SettingsContentView: View {
                 Text("Best for speaking in one specific language")
                   .scaledFont(size: 12)
                   .foregroundColor(OmiColors.textTertiary)
-
-                // Language picker (only shown when single language is selected)
-                if !transcriptionAutoDetect {
-                  HStack {
-                    Text("Language:")
-                      .scaledFont(size: 12)
-                      .foregroundColor(OmiColors.textTertiary)
-
-                    Picker("", selection: $transcriptionLanguage) {
-                      ForEach(languageOptions, id: \.0) { option in
-                        Text(option.1).tag(option.0)
-                      }
-                    }
-                    .pickerStyle(.menu)
-                    .frame(width: 180)
-                    .onChange(of: transcriptionLanguage) { _, newValue in
-                      AssistantSettings.shared.transcriptionLanguage = newValue
-                      let supportsMulti = AssistantSettings.supportsAutoDetect(newValue)
-                      transcriptionAutoDetect = supportsMulti
-                      AssistantSettings.shared.transcriptionAutoDetect = supportsMulti
-                      updateTranscriptionPreferences(singleLanguageMode: !supportsMulti)
-                      updateLanguage(newValue)
-                      restartTranscriptionIfNeeded()
-                    }
-                  }
-                  .padding(.top, 4)
-                }
               }
 
               Spacer()
@@ -1135,6 +1109,33 @@ struct SettingsContentView: View {
             )
           }
           .buttonStyle(.plain)
+
+          if !transcriptionAutoDetect {
+            HStack(spacing: 12) {
+              Text("Language:")
+                .scaledFont(size: 12)
+                .foregroundColor(OmiColors.textTertiary)
+
+              Picker("", selection: $transcriptionLanguage) {
+                ForEach(languageOptions, id: \.0) { option in
+                  Text(option.1).tag(option.0)
+                }
+              }
+              .pickerStyle(.menu)
+              .frame(width: 180)
+              .onChange(of: transcriptionLanguage) { _, newValue in
+                applyTranscriptionLanguageChange(newValue)
+              }
+
+              Spacer()
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .background(
+              RoundedRectangle(cornerRadius: 8)
+                .fill(OmiColors.backgroundSecondary)
+            )
+          }
 
           // Info about language support
           HStack(spacing: 8) {
@@ -1303,16 +1304,22 @@ struct SettingsContentView: View {
     updateTranscriptionPreferences(vocabulary: vocabularyList.joined(separator: ", "))
   }
 
+  private func applyTranscriptionLanguageChange(_ newValue: String) {
+    AssistantSettings.shared.transcriptionLanguage = newValue
+    let supportsMulti = AssistantSettings.supportsAutoDetect(newValue)
+    transcriptionAutoDetect = supportsMulti
+    AssistantSettings.shared.transcriptionAutoDetect = supportsMulti
+    updateTranscriptionPreferences(singleLanguageMode: !supportsMulti)
+    updateLanguage(newValue)
+    restartTranscriptionIfNeeded()
+  }
+
   /// Restart transcription if currently running to apply new settings
   private func restartTranscriptionIfNeeded() {
-    guard appState.isTranscribing else { return }
+    guard appState.isTranscribing || appState.isStartingTranscription else { return }
 
-    // Stop and restart to apply new language settings
-    appState.stopTranscription()
-
-    // Wait a moment for cleanup, then restart
-    DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
-      self.appState.startTranscription()
+    Task {
+      await appState.restartTranscriptionAfterSettingsChange()
     }
   }
 
@@ -2138,7 +2145,7 @@ struct SettingsContentView: View {
               .foregroundColor(OmiColors.textPrimary)
             Text(
               APIKeyService.isByokActive
-                ? "You're using your own OpenAI, Anthropic, Gemini, and Deepgram keys. No subscription."
+                ? "You're using your own OpenAI, Anthropic, Gemini, and Deepgram keys. No subscription. Add an optional AssemblyAI key for async transcription when enabled on our servers."
                 : "Provide your own OpenAI, Anthropic, Gemini, and Deepgram keys to skip the subscription entirely."
             )
             .scaledFont(size: 12)
@@ -5318,9 +5325,18 @@ struct SettingsContentView: View {
       developerKeyField(
         provider: .deepgram,
         title: "Deepgram API Key",
-        subtitle: "For live transcription.",
+        subtitle: "For live transcription and prerecorded fallback.",
         settingId: "advanced.devkeys.deepgram",
         value: $devDeepgramKey
+      )
+
+      developerKeyField(
+        provider: .assemblyai,
+        title: "AssemblyAI API Key",
+        subtitle:
+          "Optional. For async transcription (sync, background, postprocess) when enabled server-side. Live listening still uses Deepgram.",
+        settingId: "advanced.devkeys.assemblyai",
+        value: $devAssemblyAIKey
       )
 
       if let byokActivationError {
@@ -5354,11 +5370,12 @@ struct SettingsContentView: View {
     .onChange(of: devAnthropicKey) { _, _ in refreshBYOKActivation() }
     .onChange(of: devGeminiKey) { _, _ in refreshBYOKActivation() }
     .onChange(of: devDeepgramKey) { _, _ in refreshBYOKActivation() }
+    .onChange(of: devAssemblyAIKey) { _, _ in refreshBYOKActivation() }
   }
 
   private var hasAnyBYOKKey: Bool {
     !devOpenAIKey.isEmpty || !devAnthropicKey.isEmpty || !devGeminiKey.isEmpty
-      || !devDeepgramKey.isEmpty
+      || !devDeepgramKey.isEmpty || !devAssemblyAIKey.isEmpty
   }
 
   private var hasAllBYOKKeys: Bool {
@@ -5378,8 +5395,8 @@ struct SettingsContentView: View {
             .foregroundColor(OmiColors.textPrimary)
           Text(
             hasAllBYOKKeys
-              ? "You're paying your own providers. Omi skips the subscription charge. Keys stay on this Mac."
-              : "Provide all four keys (OpenAI, Anthropic, Gemini, Deepgram) to switch to the free plan. Keys stay on this Mac — we never store them on our servers."
+              ? "You're paying your own providers. Omi skips the subscription charge. Keys stay on this Mac. AssemblyAI is optional for async transcription."
+              : "Provide all four keys (OpenAI, Anthropic, Gemini, Deepgram) to switch to the free plan. AssemblyAI is optional. Keys stay on this Mac — we never store them on our servers."
           )
           .scaledFont(size: 12)
           .foregroundColor(OmiColors.textTertiary)
@@ -5394,6 +5411,7 @@ struct SettingsContentView: View {
     devAnthropicKey = ""
     devGeminiKey = ""
     devDeepgramKey = ""
+    devAssemblyAIKey = ""
     Task {
       try? await APIClient.shared.deactivateBYOK()
     }
@@ -5402,33 +5420,39 @@ struct SettingsContentView: View {
   private func refreshBYOKActivation() {
     Task {
       if APIKeyService.isByokActive {
-        // Validate before flipping the backend flag — otherwise we'd put the
-        // user on the free plan with dead keys and every chat would 401.
-        let snapshot = APIKeyService.byokSnapshot.reduce(into: [BYOKProvider: String]()) {
-          acc, entry in acc[entry.key] = entry.value.key
+        // Validate required four before flipping the backend flag.
+        let requiredSnapshot = BYOKProvider.requiredForFreePlan.reduce(into: [BYOKProvider: String]()) {
+          acc, provider in
+          if let key = APIKeyService.byokKey(provider) {
+            acc[provider] = key
+          }
         }
-        let results = await BYOKValidator.validateAll(snapshot)
-        let allOk = results.allSatisfy {
-          if case .ok = $0.value { return true }
+        var keysToValidate = requiredSnapshot
+        if let assemblyKey = APIKeyService.byokKey(.assemblyai) {
+          keysToValidate[.assemblyai] = assemblyKey
+        }
+        let results = await BYOKValidator.validateAll(keysToValidate)
+        let requiredOk = BYOKProvider.requiredForFreePlan.allSatisfy {
+          if case .ok = results[$0] ?? .notChecked { return true }
           return false
         }
-        if allOk {
-          let fingerprints = APIKeyService.byokSnapshot.reduce(into: [String: String]()) {
-            acc, entry in acc[entry.key.rawValue] = entry.value.fingerprint
-          }
-          try? await APIClient.shared.activateBYOK(fingerprints: fingerprints)
+        if requiredOk {
+          try? await APIClient.shared.activateBYOK(fingerprints: APIKeyService.byokActivationFingerprints)
           await FloatingBarUsageLimiter.shared.fetchPlan()
           await MainActor.run {
-            // Clear any sticky paywall flag from a prior `freemium_threshold_reached`
-            // event — once all 4 BYOK keys validate, the user is on the free BYOK
-            // plan and shouldn't be locked out of capture/transcription anymore.
             AppState.current?.isPaywalled = false
             byokKeyStatuses = results
-            byokActivationError = nil
+            if case .failed(let msg) = results[.assemblyai] ?? .notChecked {
+              byokActivationError =
+                "Optional AssemblyAI key was rejected: \(msg). Free plan is still active with your four required keys."
+            } else {
+              byokActivationError = nil
+            }
           }
         } else {
-          let failed = results.filter {
-            if case .ok = $0.value { return false }
+          let failed = results.filter { provider, status in
+            guard BYOKProvider.requiredForFreePlan.contains(provider) else { return false }
+            if case .ok = status { return false }
             return true
           }
           let names = failed.keys.map(\.displayName).sorted().joined(separator: ", ")
@@ -5437,7 +5461,7 @@ struct SettingsContentView: View {
           await MainActor.run {
             byokKeyStatuses = results
             byokActivationError =
-              "Rejected by provider: \(names). Free plan stays off until all 4 keys authenticate."
+              "Rejected by provider: \(names). Free plan stays off until all 4 required keys authenticate."
           }
         }
       } else {

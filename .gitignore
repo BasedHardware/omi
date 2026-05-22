@@ -9,7 +9,9 @@ myenv/
 venv/
 .DS_Store
 dump/
-/scripts/
+/scripts/*
+!/scripts/desktop_assemblyai_e2e.py
+!/scripts/ASSEMBLYAI_BACKGROUND_E2E_AGENT_PROMPT.md
 *.zip
 *.wav
 node_modules
@@ -27,10 +29,15 @@ yarn.lock
 .packages
 .pub-cache/
 .pub/
+.swiftpm/
+
+# Build / compile artifacts (cross-ecosystem; prefer these over per-tool *.o/*.d rules)
 build/
 dist/
 .build/
-.swiftpm/
+target/
+**/.build-agent-*/
+**/.build-hybrid-*/
 
 # VS Code
 .vscode/*

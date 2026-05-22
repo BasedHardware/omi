@@ -15,7 +15,8 @@ from utils.conversations.factory import deserialize_conversation
 from models.transcript_segment import TranscriptSegment
 from utils.conversations.process_conversation import process_conversation, process_user_emotion
 from utils.other.storage import upload_postprocessing_audio, delete_postprocessing_audio, upload_conversation_recording
-from utils.stt.pre_recorded import deepgram_prerecorded, postprocess_words
+from utils.stt import provider_service as stt_provider_service
+from utils.stt.providers import STTWorkload
 from utils.stt.speech_profile import get_speech_profile_matching_predictions
 from utils.stt.vad import vad_is_empty
 import logging
@@ -79,8 +80,15 @@ def postprocess_conversation(
             upload_conversation_recording(file_path, uid, conversation_id)
 
         speakers_count = len(set([segment.speaker for segment in conversation.transcript_segments]))
-        words = deepgram_prerecorded(signed_url, speakers_count=speakers_count)
-        fal_segments = postprocess_words(words, aseg.duration_seconds)
+        transcription = stt_provider_service.transcribe_url(
+            signed_url,
+            workload=STTWorkload.postprocess,
+            uid=uid,
+            conversation_id=conversation_id,
+            speakers_count=speakers_count,
+            raw_audio_seconds=aseg.duration_seconds,
+        )
+        fal_segments = transcription.segments
 
         # if new transcript is 90% shorter than the original, cancel post-processing, smth wrong with audio or FAL
         count = len(''.join([segment.text.strip() for segment in conversation.transcript_segments]))
@@ -93,6 +101,16 @@ def postprocess_conversation(
             _handle_segment_embedding_matching(uid, file_path, conversation.transcript_segments, aseg)
         else:
             _handle_segment_embedding_matching(uid, file_path, fal_segments, aseg)
+            try:
+                stt_provider_service.update_provider_run_identity_metrics(
+                    transcription.run_id,
+                    transcription.result.provider,
+                    transcription.result.model or 'unknown',
+                    STTWorkload.postprocess,
+                    fal_segments,
+                )
+            except Exception as e:
+                logger.warning(f'Speaker ID (postprocess): identity metric update failed for {conversation_id}: {e}')
 
         # Store both models results.
         conversations_db.store_model_segments_result(

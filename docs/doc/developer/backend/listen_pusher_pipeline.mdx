@@ -6,11 +6,11 @@ description: "Sequence diagrams for the /v4/listen WebSocket and Pusher processi
 
 # Listen + Pusher Pipeline — Sequence Diagrams
 
-> Last updated: 2026-03-28 (PR #6061 — remove local fallback)
+> Last updated: 2026-05-21 (AssemblyAI prerecorded STT MVP)
 >
 > These diagrams document the real behavior observed during E2E testing with
-> live services (backend, pusher, Deepgram, embedding API). Update when the
-> pipeline changes.
+> live services (backend, pusher, Deepgram, AssemblyAI, embedding API). Update
+> when the pipeline changes.
 
 ## 1. Connection + Streaming + Transcription
 
@@ -226,6 +226,80 @@ sequenceDiagram
     Note over Pusher: In LOCAL_DEVELOPMENT mode,<br/>GCS upload fails (no prod creds).<br/>Conversation lifecycle still works.
 ```
 
+## 5.1 Background / Sync Upload Transcription
+
+Realtime listen and Hold-to-Talk streaming remain Deepgram paths. Background
+prerecorded transcription routes through `utils/stt/provider_service.py`, which
+selects AssemblyAI by default for eligible prerecorded workloads when
+`ASSEMBLYAI_PRERECORDED_STT_ENABLED=true` and the workload is listed in
+`ASSEMBLYAI_PRERECORDED_STT_WORKLOADS`. Deepgram remains the fallback when
+AssemblyAI is disabled, unavailable, or fails and fallback is enabled.
+
+Desktop Audio Recording can use the batch background path instead of `/v4/listen`
+when the desktop batch setting is enabled and the client is pointed at a backend
+with AssemblyAI background support. The desktop client creates a stub
+conversation with `POST /v2/desktop/background-conversation/start`, sends raw
+mono PCM chunks to `POST /v2/desktop/background-transcribe`, and finalizes that
+explicit conversation with
+`POST /v2/desktop/background-conversation/{conversation_id}/finish`. Mobile
+listen, BLE listen, and PTT continue to use their existing Deepgram paths.
+
+For cloud batch, the desktop client buffers roughly 15s PCM chunks with 0.5s
+overlap, drops chunks that do not contain sustained speech activity before
+uploading, and uses backpressure instead of stopping recording when AssemblyAI
+is slower than realtime. AssemblyAI batch requests use the selected single
+language rather than `multi` to avoid provider-side language-detection failures
+on low-speech audio.
+
+Eligible AssemblyAI workloads are `sync`, `background`, and `postprocess`.
+Latency-critical workloads (`realtime`, streaming `ptt`, and
+`voice_message`) continue to use Deepgram and the existing websocket/finalize
+semantics.
+
+```mermaid
+sequenceDiagram
+    participant Client
+    participant Backend as Backend
+    participant ProviderService as Provider Service
+    participant AssemblyAI
+    participant Deepgram
+    participant EmbeddingAPI as Embedding API
+    participant Firestore
+    participant Metrics as /metrics
+
+    Client->>Backend: Upload sync audio URL or desktop PCM background chunk
+    Backend->>ProviderService: transcribe_url/transcribe_bytes workload=sync|background|postprocess
+    alt AssemblyAI enabled for workload
+        ProviderService->>AssemblyAI: Submit async prerecorded transcript request
+        AssemblyAI-->>ProviderService: Completed transcript with utterances, words, speaker labels
+    else AssemblyAI disabled or workload ineligible
+        ProviderService->>Deepgram: Prerecorded transcript request
+        Deepgram-->>ProviderService: Transcript with words and speaker labels
+    end
+
+    alt AssemblyAI fails, times out, or exhausts retries
+        ProviderService->>Firestore: Finalize failed AssemblyAI provider run
+        ProviderService->>Deepgram: Fallback prerecorded transcript request
+        Deepgram-->>ProviderService: Transcript result
+    end
+
+    Note over ProviderService: Missing AssemblyAI credentials skip directly<br/>to Deepgram when fallback credentials are usable.
+
+ProviderService->>ProviderService: Normalize provider result and reconstruct canonical segments
+    ProviderService->>EmbeddingAPI: Extract cluster samples for Omi speaker identity
+    ProviderService->>Firestore: Store canonical transcript segments and provider run ledger
+    ProviderService->>Firestore: Increment daily provider usage rollup
+    ProviderService->>Metrics: Emit provider request, latency, retry, fallback, audio seconds, clusters, identity confidence
+```
+
+AssemblyAI speaker labels are provider/session-local cluster IDs. Canonical
+speaker identity is applied after provider normalization with the Omi embedding
+service. Low-confidence matches remain explicit unknown speakers; provider
+cluster metadata is preserved separately from `person_id` and `is_user`.
+
+Optional desktop BYOK for AssemblyAI applies only to async prerecorded workloads
+above; listen/realtime streaming in this pipeline remains Deepgram-only.
+
 ## 6. Event Wire Protocol
 
 ### Server → Client (JSON over WS text frames)
@@ -283,4 +357,3 @@ Both `transcribe.py` and `pusher.py` use an `asyncio.wait(FIRST_COMPLETED)` supe
 - Finite task normal completion (e.g. `process_pending_conversations`, `speaker_identification_task`)
 
 After supervisor exit, remaining tasks drain with `BG_DRAIN_TIMEOUT` (30s) before force-cancel. The connection gauge (`inc`/`dec`) is always paired in `try`/`finally`.
-

@@ -28,8 +28,6 @@ _mock_gcs_storage.Client.return_value = _mock_gcs_client_instance
 sys.modules.setdefault("google.cloud.storage", _mock_gcs_storage)
 sys.modules.setdefault("google.cloud.storage.transfer_manager", MagicMock())
 sys.modules.setdefault("google.cloud.exceptions", MagicMock())
-sys.modules.setdefault("google.oauth2", MagicMock())
-sys.modules.setdefault("google.oauth2.service_account", MagicMock())
 
 from utils.other import storage as storage_mod
 

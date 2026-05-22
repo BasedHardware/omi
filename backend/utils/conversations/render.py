@@ -37,13 +37,26 @@ def populate_speaker_names(uid: str, conversations: List[Dict]) -> None:
         people_map = {p['id']: p['name'] for p in people_data}
 
     for conv in conversations:
+        provider_cluster_display_ids = {}
+        next_provider_display_id = 1
+        for seg in conv.get('transcript_segments', []):
+            provider_cluster_key = _provider_display_cluster_key(seg)
+            if seg.get('is_user') or not provider_cluster_key:
+                continue
+            if provider_cluster_key not in provider_cluster_display_ids:
+                provider_cluster_display_ids[provider_cluster_key] = next_provider_display_id
+                next_provider_display_id += 1
         for seg in conv.get('transcript_segments', []):
             if seg.get('is_user'):
                 seg['speaker_name'] = user_name
             elif seg.get('person_id') and seg['person_id'] in people_map:
                 seg['speaker_name'] = people_map[seg['person_id']]
             else:
-                seg['speaker_name'] = f"Speaker {seg.get('speaker_id', 0)}"
+                provider_cluster_key = _provider_display_cluster_key(seg)
+                if provider_cluster_key in provider_cluster_display_ids:
+                    seg['speaker_name'] = f"Speaker {provider_cluster_display_ids[provider_cluster_key]}"
+                else:
+                    seg['speaker_name'] = f"Speaker {seg.get('speaker_id', 0)}"
 
 
 def populate_folder_names(uid: str, conversations: List[Dict]) -> None:
@@ -67,6 +80,27 @@ def populate_folder_names(uid: str, conversations: List[Dict]) -> None:
     for conv in conversations:
         folder_id = conv.get('folder_id')
         conv['folder_name'] = folder_map.get(folder_id) if folder_id else None
+
+
+def _provider_display_cluster_key(segment: Dict[str, Any]) -> str | None:
+    if not segment.get('provider_cluster_id') and not segment.get('provider_speaker_label'):
+        return None
+    if _legacy_speaker_id(segment) not in (None, 0):
+        return None
+    return segment.get('provider_cluster_id') or segment.get('provider_speaker_label')
+
+
+def _legacy_speaker_id(segment: Dict[str, Any]) -> int | None:
+    speaker_id = segment.get('speaker_id')
+    if speaker_id is not None:
+        return speaker_id
+    speaker = segment.get('speaker')
+    if not speaker:
+        return None
+    try:
+        return int(str(speaker).split('_', 1)[1])
+    except (ValueError, IndexError):
+        return 0
 
 
 # ---------------------------------------------------------------------------

@@ -245,7 +245,7 @@ class TestWebhookClearFairUseSourceLevel:
         # The clear call should appear between checkout handler and the next event type
         next_event_idx = source.find("customer.subscription.updated", checkout_idx)
         block = source[checkout_idx:next_event_idx]
-        assert 'clear_fair_use_on_upgrade(uid)' in block
+        assert 'clear_fair_use_on_upgrade, uid' in block
 
     def test_subscription_event_calls_clear(self):
         """customer.subscription.* path must call clear_fair_use_on_upgrade."""
@@ -254,7 +254,7 @@ class TestWebhookClearFairUseSourceLevel:
         assert sub_idx != -1, "customer.subscription handler not found"
         next_event_idx = source.find("subscription_schedule.completed", sub_idx)
         block = source[sub_idx:next_event_idx]
-        assert 'clear_fair_use_on_upgrade(uid)' in block
+        assert 'clear_fair_use_on_upgrade, uid' in block
 
     def test_schedule_completed_calls_clear(self):
         """subscription_schedule.completed path must call clear_fair_use_on_upgrade."""
@@ -262,5 +262,5 @@ class TestWebhookClearFairUseSourceLevel:
         schedule_idx = source.find("'subscription_schedule.completed'")
         assert schedule_idx != -1, "subscription_schedule handler not found"
         # Get a reasonable block after the schedule handler
-        block = source[schedule_idx : schedule_idx + 1500]
-        assert 'clear_fair_use_on_upgrade(uid)' in block
+        block = source[schedule_idx : schedule_idx + 2500]
+        assert 'clear_fair_use_on_upgrade, uid' in block

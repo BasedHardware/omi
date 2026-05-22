@@ -1,4 +1,5 @@
 import Foundation
+import CryptoKit
 
 /// Service for real-time speech-to-text transcription.
 /// Conversation capture: Python backend `/v4/listen` WebSocket (speech profiles, speaker assignment, memory events).
@@ -37,6 +38,14 @@ class TranscriptionService {
         let start: Double
         let end: Double
         let translations: [BackendTranslation]?
+        let stt_provider: String?
+        let stt_model: String?
+        let provider_cluster_id: String?
+        let provider_speaker_label: String?
+        let speaker_identity_state: String?
+        let speaker_identity_confidence: Double?
+        let speaker_identity_source: String?
+        let speaker_identity_version: String?
     }
 
     /// Message event (from `/v4/listen` only — not used by PTT transcribe-stream)
@@ -105,7 +114,10 @@ class TranscriptionService {
     /// (Cloud Run), which does not have /v2/voice-message/* or /v4/listen endpoints.
     private static let pythonBackendBaseURL: String = DesktopBackendEnvironment.pythonBaseURL()
 
-    private static func sanitizedContextKeywords(_ keywords: [String]) -> [String] {
+    private static func sanitizedContextKeywords(
+        _ keywords: [String],
+        includeDefaultOmi: Bool = true
+    ) -> [String] {
         let stopWords: Set<String> = [
             "about", "after", "again", "all", "also", "and", "app", "are", "ask", "back", "browser", "but", "can",
             "chat", "code", "done", "each", "for", "from", "get", "has", "have", "help", "here", "home", "how",
@@ -115,7 +127,8 @@ class TranscriptionService {
         ]
         var seen = Set<String>()
         var result: [String] = []
-        for keyword in ["Omi", "OMI"] + keywords {
+        let sourceKeywords = (includeDefaultOmi ? ["Omi", "OMI"] : []) + keywords
+        for keyword in sourceKeywords {
             let normalized = keyword
                 .replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
                 .trimmingCharacters(in: .whitespacesAndNewlines)
@@ -635,10 +648,129 @@ extension TranscriptionService {
         return transcript
     }
 
+    /// Transcribe a background recording chunk through the Python backend `/v2/desktop/background-transcribe`.
+    /// This is used by cloud batch background transcription only; PTT stays on `batchTranscribe`.
+    static func batchTranscribeSegments(
+        audioData: Data,
+        conversationId: String,
+        chunkStartMs: Int,
+        language: String,
+        contextKeywords: [String] = []
+    ) async throws -> [BackendSegment] {
+        let authService = await MainActor.run { AuthService.shared }
+        let authHeader = try await authService.getAuthHeader()
+        let baseURLString = "\(pythonBackendBaseURL)v2/desktop/background-transcribe"
+
+        guard var components = URLComponents(string: baseURLString) else {
+            throw TranscriptionError.connectionFailed(NSError(domain: "Invalid backend URL", code: -1))
+        }
+        let sanitizedKeywords = sanitizedContextKeywords(contextKeywords, includeDefaultOmi: false)
+        var queryItems = [
+            URLQueryItem(name: "conversation_id", value: conversationId),
+            URLQueryItem(
+                name: "chunk_id",
+                value: backgroundChunkId(
+                    conversationId: conversationId,
+                    chunkStartMs: chunkStartMs,
+                    audioData: audioData
+                )
+            ),
+            URLQueryItem(name: "chunk_start_ms", value: String(chunkStartMs)),
+            URLQueryItem(name: "language", value: language),
+            URLQueryItem(name: "sample_rate", value: "16000"),
+            URLQueryItem(name: "encoding", value: "linear16"),
+            URLQueryItem(name: "channels", value: "1"),
+        ]
+        if !sanitizedKeywords.isEmpty {
+            queryItems.append(URLQueryItem(name: "keywords", value: sanitizedKeywords.joined(separator: ",")))
+        }
+        components.queryItems = queryItems
+
+        guard let url = components.url else {
+            throw TranscriptionError.connectionFailed(NSError(domain: "Invalid URL", code: -1))
+        }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue(authHeader, forHTTPHeaderField: "Authorization")
+        request.setValue("application/octet-stream", forHTTPHeaderField: "Content-Type")
+        request.setValue("desktop", forHTTPHeaderField: "X-App-Platform")
+        for (provider, entry) in APIKeyService.byokSnapshot {
+            request.setValue(entry.key, forHTTPHeaderField: provider.headerName)
+        }
+        request.httpBody = audioData
+
+        var lastError: Error?
+        for attempt in 0..<3 {
+            let data: Data
+            let response: URLResponse
+            do {
+                log("TranscriptionService: Background batch transcribing \(audioData.count) bytes at \(chunkStartMs)ms, attempt=\(attempt + 1), contextKeywords=\(sanitizedKeywords.count)")
+                (data, response) = try await URLSession.shared.data(for: request)
+            } catch {
+                lastError = error
+                if attempt == 2 {
+                    break
+                }
+                let delayNs = UInt64(pow(2.0, Double(attempt)) * 250_000_000)
+                try await Task.sleep(nanoseconds: delayNs)
+                continue
+            }
+
+            guard let httpResponse = response as? HTTPURLResponse else {
+                throw TranscriptionError.invalidResponse
+            }
+
+            if httpResponse.statusCode == 200 {
+                let decoded = try JSONDecoder().decode(BackgroundTranscribeResponse.self, from: data)
+                let provider = decoded.provider ?? "unknown"
+                log("TranscriptionService: Background batch transcription completed provider=\(provider), run_id=\(decoded.run_id ?? "nil"), segments=\(decoded.segments.count), chunkStartMs=\(chunkStartMs)")
+                if provider != "assemblyai" {
+                    log("TranscriptionService: Background batch expected AssemblyAI but backend returned provider=\(provider)")
+                }
+                return decoded.segments
+            }
+
+            let body = String(data: data, encoding: .utf8) ?? "no body"
+            logError("TranscriptionService: Background batch transcription failed with status \(httpResponse.statusCode): \(body)", error: nil)
+            if httpResponse.statusCode == 413 {
+                throw TranscriptionError.payloadTooLarge
+            }
+            if !(500...599).contains(httpResponse.statusCode) {
+                throw TranscriptionError.invalidResponse
+            }
+
+            lastError = TranscriptionError.invalidResponse
+            let delayNs = UInt64(pow(2.0, Double(attempt)) * 250_000_000)
+            try await Task.sleep(nanoseconds: delayNs)
+        }
+
+        throw lastError ?? TranscriptionError.invalidResponse
+    }
+
+    static func backgroundChunkId(
+        conversationId: String,
+        chunkStartMs: Int,
+        audioData: Data
+    ) -> String {
+        let digest = SHA256.hash(data: audioData)
+        let hashPrefix = digest.prefix(12).map { String(format: "%02x", $0) }.joined()
+        return "\(conversationId)-\(chunkStartMs)-\(audioData.count)-\(hashPrefix)"
+            .replacingOccurrences(of: #"[^A-Za-z0-9_-]"#, with: "_", options: .regularExpression)
+    }
+
 }
 
 /// Response model for Python backend `/v2/voice-message/transcribe` (batch PTT)
 private struct PythonTranscribeResponse: Decodable {
     let transcript: String
     let language: String?
+}
+
+/// Response model for Python backend `/v2/desktop/background-transcribe`.
+struct BackgroundTranscribeResponse: Decodable {
+    let segments: [TranscriptionService.BackendSegment]
+    let language: String?
+    let provider: String?
+    let run_id: String?
 }

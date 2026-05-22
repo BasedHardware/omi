@@ -113,7 +113,7 @@ class TestWebSocketExtraction:
         ws.headers = headers
         return ws
 
-    def test_extracts_all_four_headers(self):
+    def test_extracts_all_byok_headers_including_assemblyai(self):
         from utils.byok import extract_byok_from_websocket
 
         ws = self._make_ws(
@@ -122,10 +122,17 @@ class TestWebSocketExtraction:
                 'x-byok-anthropic': 'sk-a',
                 'x-byok-gemini': 'sk-g',
                 'x-byok-deepgram': 'sk-d',
+                'x-byok-assemblyai': 'sk-aa',
             }
         )
         keys = extract_byok_from_websocket(ws)
-        assert keys == {'openai': 'sk-o', 'anthropic': 'sk-a', 'gemini': 'sk-g', 'deepgram': 'sk-d'}
+        assert keys == {
+            'openai': 'sk-o',
+            'anthropic': 'sk-a',
+            'gemini': 'sk-g',
+            'deepgram': 'sk-d',
+            'assemblyai': 'sk-aa',
+        }
 
     def test_returns_empty_when_no_headers(self):
         from utils.byok import extract_byok_from_websocket
@@ -400,10 +407,10 @@ class TestTranscriptionCreditBYOKBypass:
 
 
 class TestBYOKHeadersConstant:
-    def test_headers_has_all_four_providers(self):
+    def test_headers_has_required_and_optional_providers(self):
         from utils.byok import BYOK_HEADERS
 
-        assert set(BYOK_HEADERS.keys()) == {'openai', 'anthropic', 'gemini', 'deepgram'}
+        assert set(BYOK_HEADERS.keys()) == {'openai', 'anthropic', 'gemini', 'deepgram', 'assemblyai'}
 
     def test_headers_are_lowercase(self):
         from utils.byok import BYOK_HEADERS
@@ -550,10 +557,26 @@ class TestBYOKActivationValidation:
 
     def test_production_constants_match(self):
         """Verify the test regex matches the production regex."""
-        from routers.users import _SHA256_HEX_RE as prod_re, _BYOK_REQUIRED_PROVIDERS as prod_providers
+        from routers.users import (
+            _BYOK_ALLOWED_PROVIDERS as prod_allowed,
+            _BYOK_REQUIRED_PROVIDERS as prod_required,
+            _SHA256_HEX_RE as prod_re,
+        )
 
         assert prod_re.pattern == _SHA256_HEX_RE.pattern
-        assert prod_providers == {'openai', 'anthropic', 'gemini', 'deepgram'}
+        assert prod_required == {'openai', 'anthropic', 'gemini', 'deepgram'}
+        assert prod_allowed == prod_required | {'assemblyai'}
+
+    @patch('routers.users.users_db')
+    def test_optional_assemblyai_fingerprint_accepted(self, mock_users_db):
+        from routers.users import BYOKActivateRequest, activate_byok_endpoint
+
+        fps = self._valid_fingerprints()
+        fps['assemblyai'] = hashlib.sha256(b'sk-assemblyai').hexdigest()
+        data = BYOKActivateRequest(fingerprints=fps)
+        result = activate_byok_endpoint(data, uid='test-uid')
+        assert result == {'active': True}
+        mock_users_db.set_byok_active.assert_called_once_with('test-uid', fps)
 
 
 # ---------------------------------------------------------------------------

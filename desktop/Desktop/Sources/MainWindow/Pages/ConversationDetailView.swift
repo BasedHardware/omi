@@ -717,7 +717,15 @@ struct ConversationDetailView: View {
                 personId: isUser ? nil : personId,
                 start: oldSegment.start,
                 end: oldSegment.end,
-                translations: oldSegment.translations
+                translations: oldSegment.translations,
+                sttProvider: oldSegment.sttProvider,
+                sttModel: oldSegment.sttModel,
+                providerClusterId: oldSegment.providerClusterId,
+                providerSpeakerLabel: oldSegment.providerSpeakerLabel,
+                speakerIdentityState: oldSegment.speakerIdentityState,
+                speakerIdentityConfidence: oldSegment.speakerIdentityConfidence,
+                speakerIdentitySource: oldSegment.speakerIdentitySource,
+                speakerIdentityVersion: oldSegment.speakerIdentityVersion
             )
         }
         loadedConversation = updatedConversation

@@ -16,6 +16,7 @@ for mod_name in [
     'database.users',
     'database.user_usage',
     'database.conversations',
+    'utils.subscription',
     'firebase_admin',
     'firebase_admin.messaging',
 ]:
@@ -28,6 +29,8 @@ sys.modules['database.redis_db'].r = _mock_redis
 
 # Stub database._client.db
 sys.modules['database._client'].db = MagicMock()
+sys.modules['utils.subscription'].has_transcription_credits = MagicMock(return_value=True)
+sys.modules['utils.subscription'].is_paid_plan = MagicMock(return_value=True)
 
 import utils.fair_use as fair_use_mod
 
@@ -258,7 +261,11 @@ class TestSyncEndpointCodeStructure:
     def test_no_402_block(self):
         """sync.py must not raise 402 (lock instead of block)."""
         source = self._read_sync_source()
-        assert 'status_code=402' not in source
+        for function_name in ('sync_local_files', 'sync_local_files_v2'):
+            start = source.index(f'async def {function_name}(')
+            next_route = source.find('\n@router.', start + 1)
+            body = source[start:] if next_route == -1 else source[start:next_route]
+            assert 'status_code=402' not in body
 
     def test_should_lock_flag_exists(self):
         """sync.py must use should_lock flag for credit-exhausted locking."""

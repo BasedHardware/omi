@@ -81,7 +81,7 @@ class TestThreadPoolExecutorUsed:
         filepath = os.path.join(BACKEND_DIR, 'utils', 'retrieval', 'rag.py')
         with open(filepath) as f:
             source = f.read()
-        assert 'critical_executor' in source
+        assert 'db_executor' in source
 
     def test_sync_uses_shared_executor_or_gather(self):
         filepath = os.path.join(BACKEND_DIR, 'routers', 'sync.py')
@@ -195,12 +195,12 @@ class TestAsyncSTTVariants:
             assert 'get_stt_client' in source, f"{filename} should use shared get_stt_client()"
 
     def test_stt_async_offloads_file_io(self):
-        """Async STT variants should offload file reads via run_in_executor."""
+        """Async STT variants should offload file reads via run_blocking."""
         for filename in ['speaker_embedding.py', 'vad.py', 'speech_profile.py']:
             filepath = os.path.join(BACKEND_DIR, 'utils', 'stt', filename)
             with open(filepath) as f:
                 source = f.read()
-            assert 'run_in_executor' in source, f"{filename} should offload file I/O via run_in_executor"
+            assert 'run_blocking(storage_executor' in source, f"{filename} should offload file I/O via storage_executor"
 
 
 class TestAsyncSTTBehavior:
@@ -236,8 +236,8 @@ class TestAsyncSTTBehavior:
             import importlib
 
             mod = importlib.import_module('utils.stt.vad')
-            # _local_vad should be called via run_in_executor(critical_executor, ...)
-            with patch.object(mod, '_local_vad', return_value=[]) as mock_local:
+            # _run_file_vad should be called via run_blocking(sync_executor, ...)
+            with patch.object(mod, '_run_file_vad', return_value=[]) as mock_local:
                 result = await mod.async_vad_is_empty('/tmp/nonexistent.wav')
                 mock_local.assert_called_once_with('/tmp/nonexistent.wav')
                 assert result is True  # empty segments = True

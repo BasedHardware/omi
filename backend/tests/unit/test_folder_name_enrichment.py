@@ -295,6 +295,19 @@ class TestAddSpeakerNames:
         populate_speaker_names('uid1', conversations)
         assert conversations[0]['transcript_segments'][0]['speaker_name'] == 'Speaker 0'
 
+    def test_provider_label_unknown_cluster_gets_stable_display_name(self):
+        conversations = [
+            {
+                'transcript_segments': [
+                    {'text': 'hi', 'provider_speaker_label': 'A', 'speaker_id': 0},
+                    {'text': 'there', 'provider_speaker_label': 'B', 'speaker_id': 0},
+                ]
+            }
+        ]
+        populate_speaker_names('uid1', conversations)
+        assert conversations[0]['transcript_segments'][0]['speaker_name'] == 'Speaker 1'
+        assert conversations[0]['transcript_segments'][1]['speaker_name'] == 'Speaker 2'
+
     def test_user_profile_missing_name_falls_back_to_user(self):
         _mock_get_user_profile.return_value = {"name": None}
         conversations = [{'transcript_segments': [{'text': 'hi', 'is_user': True, 'speaker_id': 0}]}]

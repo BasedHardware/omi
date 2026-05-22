@@ -1,5 +1,5 @@
 from datetime import timedelta
-from typing import Optional, List, Tuple
+from typing import Any, Literal, Optional, List, Tuple
 import uuid
 import re
 from pydantic import BaseModel, Field
@@ -23,6 +23,38 @@ class Translation(BaseModel):
     text: str
 
 
+SpeakerIdentityState = Literal['unknown', 'legacy_ambiguous', 'unassigned', 'identified', 'user']
+
+
+class ProviderTranscriptWord(BaseModel):
+    text: str
+    start: float
+    end: float
+    provider_cluster_id: Optional[str] = None
+    speaker_label: Optional[str] = None
+    confidence: Optional[float] = None
+
+
+class ProviderTranscriptUtterance(BaseModel):
+    text: str
+    start: float
+    end: float
+    provider_cluster_id: Optional[str] = None
+    speaker_label: Optional[str] = None
+    confidence: Optional[float] = None
+    words: Optional[List[ProviderTranscriptWord]] = None
+
+
+class ProviderTranscriptResult(BaseModel):
+    provider: str
+    model: Optional[str] = None
+    language: Optional[str] = None
+    duration: Optional[float] = None
+    words: List[ProviderTranscriptWord] = []
+    utterances: List[ProviderTranscriptUtterance] = []
+    raw_provider_result_id: Optional[str] = None
+
+
 class TranscriptSegment(BaseModel):
     id: Optional[str] = None
     text: str
@@ -35,6 +67,16 @@ class TranscriptSegment(BaseModel):
     translations: Optional[List[Translation]] = []
     speech_profile_processed: bool = True
     stt_provider: Optional[str] = None
+    stt_model: Optional[str] = None
+    provider_cluster_id: Optional[str] = None
+    provider_speaker_label: Optional[str] = None
+    speaker_identity_state: SpeakerIdentityState = 'legacy_ambiguous'
+    speaker_identity_confidence: Optional[float] = None
+    speaker_identity_source: Optional[str] = None
+    speaker_identity_version: Optional[str] = None
+    speaker_identity_provenance: Optional[dict[str, Any]] = None
+    speaker_identity_candidates: Optional[List[dict[str, Any]]] = None
+    speaker_identity_text_hints: Optional[List[dict[str, Any]]] = None
 
     def __init__(self, **data):
         super().__init__(**data)
@@ -45,9 +87,15 @@ class TranscriptSegment(BaseModel):
             try:
                 self.speaker_id = int(self.speaker.split('_', 1)[1])
             except (ValueError, IndexError):
-                self.speaker_id = 0
-        else:
+                if self.speaker_id is None:
+                    self.speaker_id = 0
+        elif self.speaker_id is None:
             self.speaker_id = 0
+
+        if self.person_id and self.speaker_identity_state in ('legacy_ambiguous', 'unassigned', 'unknown'):
+            self.speaker_identity_state = 'user' if self.is_user else 'identified'
+        elif self.is_user and self.speaker_identity_state in ('legacy_ambiguous', 'unassigned', 'unknown'):
+            self.speaker_identity_state = 'user'
 
     def get_timestamp_string(self):
         start_duration = timedelta(seconds=int(self.start))
@@ -60,6 +108,15 @@ class TranscriptSegment(BaseModel):
             user_name = 'User'
         transcript = ''
         people_map = {person.id: person.name for person in people} if people else {}
+        provider_cluster_display_ids = {}
+        next_provider_display_id = 1
+        for segment in segments:
+            provider_cluster_key = _provider_display_cluster_key(segment)
+            if segment.is_user or not provider_cluster_key:
+                continue
+            if provider_cluster_key not in provider_cluster_display_ids:
+                provider_cluster_display_ids[provider_cluster_key] = next_provider_display_id
+                next_provider_display_id += 1
         include_timestamps = include_timestamps and TranscriptSegment.can_display_seconds(segments)
         for segment in segments:
             segment_text = segment.text.strip()
@@ -69,7 +126,11 @@ class TranscriptSegment(BaseModel):
                 if segment.person_id and segment.person_id in people_map:
                     speaker_name = people_map[segment.person_id]
                 else:
-                    speaker_name = f'Speaker {segment.speaker_id}'
+                    provider_cluster_key = _provider_display_cluster_key(segment)
+                    if provider_cluster_key in provider_cluster_display_ids:
+                        speaker_name = f'Speaker {provider_cluster_display_ids[provider_cluster_key]}'
+                    else:
+                        speaker_name = f'Speaker {segment.speaker_id}'
             transcript += f'{timestamp_str}{speaker_name}: {segment_text}\n\n'
 
         return transcript.strip()
@@ -226,6 +287,14 @@ class TranscriptSegment(BaseModel):
             )
 
         return segments, joined_similar_segments, removed_ids
+
+
+def _provider_display_cluster_key(segment: TranscriptSegment) -> Optional[str]:
+    if not segment.provider_cluster_id and not segment.provider_speaker_label:
+        return None
+    if segment.speaker_id not in (None, 0):
+        return None
+    return segment.provider_cluster_id or segment.provider_speaker_label
 
 
 class ImprovedTranscriptSegment(BaseModel):

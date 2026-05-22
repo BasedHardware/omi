@@ -20,6 +20,10 @@ enum BYOKProvider: String, CaseIterable {
     case anthropic
     case gemini
     case deepgram
+    case assemblyai
+
+    /// Providers required for the BYOK free plan (subscription bypass).
+    static let requiredForFreePlan: [BYOKProvider] = [.openai, .anthropic, .gemini, .deepgram]
 
     var storageKey: String {
         switch self {
@@ -27,6 +31,7 @@ enum BYOKProvider: String, CaseIterable {
         case .anthropic: return "dev_anthropic_api_key"
         case .gemini: return "dev_gemini_api_key"
         case .deepgram: return "dev_deepgram_api_key"
+        case .assemblyai: return "dev_assemblyai_api_key"
         }
     }
 
@@ -36,6 +41,7 @@ enum BYOKProvider: String, CaseIterable {
         case .anthropic: return "X-BYOK-Anthropic"
         case .gemini: return "X-BYOK-Gemini"
         case .deepgram: return "X-BYOK-Deepgram"
+        case .assemblyai: return "X-BYOK-AssemblyAI"
         }
     }
 
@@ -45,7 +51,12 @@ enum BYOKProvider: String, CaseIterable {
         case .anthropic: return "Anthropic"
         case .gemini: return "Gemini"
         case .deepgram: return "Deepgram"
+        case .assemblyai: return "AssemblyAI"
         }
+    }
+
+    var isRequiredForFreePlan: Bool {
+        Self.requiredForFreePlan.contains(self)
     }
 }
 @MainActor
@@ -183,11 +194,22 @@ final class APIKeyService: ObservableObject {
         nonEmptyStatic(UserDefaults.standard.string(forKey: provider.storageKey))
     }
 
-    /// True when the user has supplied keys for all four BYOK providers.
+    /// True when the user has supplied keys for all four required BYOK providers.
     /// The subscription-bypass gate: when this is true, the user is on the free
     /// plan and we attach their keys to every backend request.
     nonisolated static var isByokActive: Bool {
-        BYOKProvider.allCases.allSatisfy { byokKey($0) != nil }
+        BYOKProvider.requiredForFreePlan.allSatisfy { byokKey($0) != nil }
+    }
+
+    /// Fingerprints to send on BYOK activation (required four + optional Assembly when set).
+    nonisolated static var byokActivationFingerprints: [String: String] {
+        var out: [String: String] = [:]
+        for provider in BYOKProvider.allCases {
+            if let key = byokKey(provider) {
+                out[provider.rawValue] = byokFingerprint(key)
+            }
+        }
+        return out
     }
 
     /// SHA-256 fingerprint of a key, used by the backend to detect when the

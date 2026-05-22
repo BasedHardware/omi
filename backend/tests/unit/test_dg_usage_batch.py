@@ -75,6 +75,7 @@ class TestDgUsageBatchingBehavior:
             'database.users',
             'database.user_usage',
             'database.conversations',
+            'utils.subscription',
             'firebase_admin',
             'firebase_admin.messaging',
         ]:
@@ -83,6 +84,8 @@ class TestDgUsageBatchingBehavior:
 
         sys.modules['database._client'].db = MagicMock()
         sys.modules['database.redis_db'].r = MagicMock()
+        sys.modules['utils.subscription'].has_transcription_credits = MagicMock(return_value=True)
+        sys.modules['utils.subscription'].is_paid_plan = MagicMock(return_value=True)
 
         os.environ.setdefault('FAIR_USE_ENABLED', 'true')
         os.environ.setdefault('ENCRYPTION_SECRET', 'test-secret-key-that-is-long-enough-for-encryption-32ch')

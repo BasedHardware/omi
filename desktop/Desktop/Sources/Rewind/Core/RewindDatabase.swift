@@ -2156,6 +2156,19 @@ actor RewindDatabase {
             }
         }
 
+        migrator.registerMigration("addCanonicalSpeakerMetadata") { db in
+            try db.alter(table: "transcription_segments") { t in
+                t.add(column: "sttProvider", .text)
+                t.add(column: "sttModel", .text)
+                t.add(column: "providerClusterId", .text)
+                t.add(column: "providerSpeakerLabel", .text)
+                t.add(column: "speakerIdentityState", .text)
+                t.add(column: "speakerIdentityConfidence", .double)
+                t.add(column: "speakerIdentitySource", .text)
+                t.add(column: "speakerIdentityVersion", .text)
+            }
+        }
+
         try migrator.migrate(queue)
     }
 

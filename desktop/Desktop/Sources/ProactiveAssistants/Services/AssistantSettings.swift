@@ -29,7 +29,7 @@ class AssistantSettings {
     private let defaultTranscriptionAutoDetect = true
     private let defaultTranscriptionVocabulary: [String] = []
     private let defaultVadGateEnabled = false
-    private let defaultBatchTranscriptionEnabled = false
+    private let defaultBatchTranscriptionEnabled = true
 
     private init() {
         // Register defaults
@@ -156,6 +156,12 @@ class AssistantSettings {
         return transcriptionLanguage
     }
 
+    /// AssemblyAI prerecorded language detection is brittle on short or low-speech chunks.
+    /// Cloud batch uses the selected single language even when streaming auto-detect is enabled.
+    var effectiveBatchTranscriptionLanguage: String {
+        return transcriptionLanguage
+    }
+
     /// Custom vocabulary for improved transcription accuracy
     /// Array of words/terms that DeepGram should recognize (Nova-3 limit: 500 tokens total)
     var transcriptionVocabulary: [String] {
@@ -183,20 +189,20 @@ class AssistantSettings {
         }
     }
 
-    /// Whether batch transcription mode is enabled (transcribes audio in chunks at silence boundaries)
-    var batchTranscriptionEnabled: Bool {
-        get { UserDefaults.standard.bool(forKey: batchTranscriptionEnabledKey) }
-        set {
-            UserDefaults.standard.set(newValue, forKey: batchTranscriptionEnabledKey)
-            NotificationCenter.default.post(name: .transcriptionSettingsDidChange, object: nil)
-        }
-    }
-
     /// Whether local VAD gate is enabled to skip silence and reduce Deepgram usage
     var vadGateEnabled: Bool {
         get { UserDefaults.standard.bool(forKey: vadGateEnabledKey) }
         set {
             UserDefaults.standard.set(newValue, forKey: vadGateEnabledKey)
+            NotificationCenter.default.post(name: .transcriptionSettingsDidChange, object: nil)
+        }
+    }
+
+    /// Whether cloud batch transcription mode is enabled for microphone background audio.
+    var batchTranscriptionEnabled: Bool {
+        get { true }
+        set {
+            UserDefaults.standard.set(newValue, forKey: batchTranscriptionEnabledKey)
             NotificationCenter.default.post(name: .transcriptionSettingsDidChange, object: nil)
         }
     }

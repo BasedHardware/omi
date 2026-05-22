@@ -42,6 +42,23 @@ final class ListenProtocolTests: XCTestCase {
         XCTAssertFalse(seg.is_user)
     }
 
+    func testDecodeSegmentWithProviderIdentityMetadata() throws {
+        let json = """
+        [{"id":"seg-1","text":"hello","speaker":null,"speaker_id":null,"is_user":false,"person_id":null,"start":0.0,"end":1.0,"provider_cluster_id":"speaker-alpha","speaker_identity_state":"unknown","stt_provider":"provider-a","stt_model":"async-large"}]
+        """
+        let data = json.data(using: .utf8)!
+        let segments = try JSONDecoder().decode([TranscriptionService.BackendSegment].self, from: data)
+
+        XCTAssertEqual(segments.count, 1)
+        let seg = segments[0]
+        XCTAssertNil(seg.speaker)
+        XCTAssertNil(seg.speaker_id)
+        XCTAssertEqual(seg.provider_cluster_id, "speaker-alpha")
+        XCTAssertEqual(seg.speaker_identity_state, "unknown")
+        XCTAssertEqual(seg.stt_provider, "provider-a")
+        XCTAssertEqual(seg.stt_model, "async-large")
+    }
+
     func testDecodeMultipleSegments() throws {
         let json = """
         [

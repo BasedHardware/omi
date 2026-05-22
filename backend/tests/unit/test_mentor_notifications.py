@@ -116,6 +116,9 @@ tracker_mod.get_usage_callback = MagicMock(return_value=[])
 tracker_mod.track_usage = MagicMock()
 tracker_mod.Features = MagicMock()
 
+subscription_mod = _stub_module("utils.subscription")
+subscription_mod.is_trial_paywalled = MagicMock(return_value=False)
+
 # Stub utils.llms.memory (get_prompt_memories)
 llms_mod = _stub_module("utils.llms")
 if not hasattr(llms_mod, '__path__'):

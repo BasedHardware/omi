@@ -61,7 +61,8 @@ from utils import encryption
 from utils.byok import get_byok_keys, set_byok_keys
 from utils.http_client import _get_semaphore
 from utils.log_sanitizer import sanitize
-from utils.stt.pre_recorded import deepgram_prerecorded, get_deepgram_model_for_language, postprocess_words
+from utils.stt import provider_service as stt_provider_service
+from utils.stt.providers import STTWorkload
 from utils.stt.vad import vad_is_empty
 from utils.fair_use import (
     record_speech_ms,
@@ -75,13 +76,8 @@ from utils.fair_use import (
     FAIR_USE_ENABLED,
     FAIR_USE_RESTRICT_DAILY_DG_MS,
 )
-from utils.speaker_assignment import process_speaker_assigned_segments
-from utils.speaker_identification import detect_speaker_from_text
-from utils.stt.speaker_embedding import (
-    extract_embedding_from_bytes,
-    compare_embeddings,
-    SPEAKER_MATCH_THRESHOLD,
-)
+from utils.stt.background_speaker_identity import identify_background_speaker_clusters
+from utils.stt.speaker_embedding import extract_embedding_from_bytes
 from utils.subscription import has_transcription_credits
 
 logger = logging.getLogger(__name__)
@@ -821,111 +817,21 @@ def identify_speakers_for_segments(
     person_embeddings_cache: Dict[str, dict],
     uid: str,
 ) -> None:
-    """Identify speakers in transcript segments using voice embeddings and text detection.
+    """Identify background speakers once per provider cluster.
 
-    Modifies segments in-place by assigning person_id and is_user fields.
-
-    Steps:
-    1. Voice embedding matching (requires audio_bytes and non-empty cache):
-       For each unique speaker_id, find the longest segment (>=1s), extract audio clip,
-       get embedding, match against person_embeddings_cache.
-    2. Text-based detection ("I am X") runs independently for all unmatched speakers.
-    3. Apply assignments via process_speaker_assigned_segments.
+    Text self-introduction is retained as hint metadata only. It must not create
+    or apply a durable speaker identity without voice evidence.
     """
-    speaker_to_person_map: Dict[int, Tuple[str, str]] = {}
-    segment_person_assignment_map: Dict[str, str] = {}
-
-    # Group segments by speaker_id, find best (longest) segment per speaker for embedding
-    speaker_segments: Dict[int, List[TranscriptSegment]] = {}
-    for seg in transcript_segments:
-        sid = seg.speaker_id if seg.speaker_id is not None else 0
-        speaker_segments.setdefault(sid, []).append(seg)
-
-    # Voice embedding matching (only when audio and cached embeddings are available)
-    # Track matched person_ids so each person is only assigned to one speaker
-    # (diarization tells us speakers are distinct — no person can be two speakers).
-    matched_person_ids: set = set()
-
-    if audio_bytes and person_embeddings_cache:
-        # Sort speakers by best single segment duration (longest first) — this is the clip
-        # actually used for embedding, so it determines match quality.
-        # Note: matched_person_ids assumes diarization is correct (one person = one speaker).
-        # If diarization fragments one person across speaker IDs, only the best match wins.
-        sorted_speakers = sorted(
-            speaker_segments.items(),
-            key=lambda kv: max(s.end - s.start for s in kv[1]),
-            reverse=True,
-        )
-
-        for speaker_id, segments in sorted_speakers:
-            best_seg = max(segments, key=lambda s: s.end - s.start)
-            seg_duration = best_seg.end - best_seg.start
-
-            if seg_duration < SPEAKER_ID_MIN_AUDIO:
-                continue
-
-            clip_wav = _extract_speaker_clip_wav(audio_bytes, best_seg.start, best_seg.end)
-            if not clip_wav:
-                continue
-
-            try:
-                query_embedding = extract_embedding_from_bytes(clip_wav, "sync_speaker.wav")
-            except (ValueError, Exception) as e:
-                logger.info(f'Speaker ID: embedding extraction failed for speaker {speaker_id}: {e} uid={uid}')
-                continue
-
-            # Compare only against unmatched candidates (each person can be one speaker)
-            best_match = None
-            best_distance = float('inf')
-            for person_id, data in person_embeddings_cache.items():
-                if person_id in matched_person_ids:
-                    continue
-                distance = compare_embeddings(query_embedding, data['embedding'])
-                if distance < best_distance:
-                    best_distance = distance
-                    best_match = (person_id, data['name'])
-
-            if best_match and best_distance < SPEAKER_MATCH_THRESHOLD:
-                person_id, person_name = best_match
-                speaker_to_person_map[speaker_id] = (person_id, person_name)
-                segment_person_assignment_map[best_seg.id] = person_id
-                matched_person_ids.add(person_id)
-                logger.info(
-                    f'Speaker ID (sync): speaker {speaker_id} -> {person_id} '
-                    f'(distance={best_distance:.3f}) uid={uid}'
-                )
-
-    # Text-based detection runs independently for all unmatched speakers.
-    # For speaker_id > 0 (diarized): update both speaker_to_person_map and per-segment map.
-    # For speaker_id <= 0 (undiarized): only assign per-segment (avoid mapping all speaker_id=0
-    # segments to one person when diarization is inactive).
-    for speaker_id, segments in speaker_segments.items():
-        if speaker_id in speaker_to_person_map:
-            continue
-        for seg in segments:
-            detected_name = detect_speaker_from_text(seg.text)
-            if detected_name:
-                person = users_db.get_person_by_name(uid, detected_name)
-                if person:
-                    # Per-segment assignment always applies
-                    segment_person_assignment_map[seg.id] = person['id']
-                    # Update speaker map only when diarization is active
-                    if speaker_id > 0:
-                        speaker_to_person_map[speaker_id] = (person['id'], person['name'])
-                    logger.info(
-                        f'Speaker ID (sync): text detection speaker {speaker_id} -> '
-                        f'{person["id"]} via "{detected_name}" uid={uid}'
-                    )
-                    if speaker_id > 0:
-                        break  # One match per diarized speaker is enough
-
-    # Apply all assignments to segments
-    if speaker_to_person_map or segment_person_assignment_map:
-        process_speaker_assigned_segments(
-            transcript_segments,
-            segment_person_assignment_map,
-            speaker_to_person_map,
-        )
+    assignments = identify_background_speaker_clusters(
+        transcript_segments,
+        audio_bytes,
+        person_embeddings_cache or {},
+        embedding_extractor=extract_embedding_from_bytes,
+    )
+    identified_count = sum(1 for assignment in assignments.values() if assignment.state in ('identified', 'user'))
+    logger.info(
+        f'Speaker ID (sync): cluster identity assignments={len(assignments)} identified={identified_count} uid={uid}'
+    )
 
 
 def process_segment(
@@ -957,29 +863,34 @@ def process_segment(
         single_language_mode = prefs.get('single_language_mode', False)
 
         if single_language_mode and user_language:
-            dg_language, dg_model = get_deepgram_model_for_language(user_language)
+            stt_language, stt_model = stt_provider_service.resolve_prerecorded_language_model(user_language)
         else:
-            dg_language, dg_model = get_deepgram_model_for_language('multi')
+            stt_language, stt_model = stt_provider_service.resolve_prerecorded_language_model('multi')
 
         # When single-language mode is active, trust the user's language choice
         # rather than Deepgram's detection (avoids overriding explicit selection).
         use_return_language = not (single_language_mode and user_language)
-        words, detected_language = deepgram_prerecorded(
+        transcription = stt_provider_service.transcribe_url(
             url,
+            workload=STTWorkload.sync,
+            uid=uid,
+            conversation_id=target_conversation_id,
             speakers_count=3,
-            attempts=0,
-            return_language=True,
-            language=dg_language,
-            model=dg_model,
+            return_language=use_return_language,
+            language=stt_language,
+            model=stt_model,
             keywords=vocabulary if vocabulary else None,
+            raw_audio_seconds=get_wav_duration(path),
         )
+        words = transcription.words
+        detected_language = transcription.detected_language or stt_language
         language = user_language if (single_language_mode and user_language) else detected_language
         if not words:
             # DG processed audio successfully but found no speech (silence/noise).
             # Real DG failures now raise RuntimeError and are caught by the except block.
             logger.info(f'No transcript words for segment {path} (silence or noise-only audio)')
             return
-        transcript_segments: List[TranscriptSegment] = postprocess_words(words, 0)
+        transcript_segments: List[TranscriptSegment] = transcription.segments
         if not transcript_segments:
             logger.warning(f'Postprocessing returned empty for segment {path} (words present but no segments)')
             return
@@ -993,6 +904,18 @@ def process_segment(
         finally:
             if audio_bytes:
                 del audio_bytes
+        try:
+            stt_provider_service.update_provider_run_identity_metrics(
+                transcription.run_id,
+                transcription.result.provider,
+                transcription.result.model or 'unknown',
+                STTWorkload.sync,
+                transcript_segments,
+                'skipped' if not person_embeddings_cache else 'succeeded',
+                'missing_candidate_embeddings' if not person_embeddings_cache else None,
+            )
+        except Exception as e:
+            logger.warning(f'Speaker ID (sync): identity metric update failed for {path}: {e}')
 
         timestamp = get_timestamp_from_path(path)
         segment_end_timestamp = timestamp + transcript_segments[-1].end
