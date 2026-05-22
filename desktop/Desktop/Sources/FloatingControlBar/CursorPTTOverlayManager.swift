@@ -77,7 +77,7 @@ final class CursorPTTOverlayManager {
             .receive(on: DispatchQueue.main)
             .sink { [weak self] message in
                 guard let self else { return }
-                self.overlayState.streamingText = message?.text ?? ""
+                self.overlayState.streamingText = Self.sanitizeForCursorBubble(message?.text ?? "")
                 if let message, message.isStreaming {
                     // New content arriving — cancel any stale auto-dismiss timer
                     self.autoDismissWork?.cancel()
@@ -107,6 +107,63 @@ final class CursorPTTOverlayManager {
         resetContent()
         overlayState.phase = .idle
         panel?.ignoresMouseEvents = true
+    }
+
+    func startExecution(_ planDescription: String, totalSteps: Int) {
+        autoDismissWork?.cancel()
+        autoDismissWork = nil
+        cancelResponseSubscriptions()
+        transcriptCancellable = nil
+        overlayState.executingPlanDescription = planDescription
+        overlayState.executingStepDescription = ""
+        overlayState.executingStepIndex = 0
+        overlayState.executingTotalSteps = totalSteps
+        overlayState.phase = .executing
+        panel?.ignoresMouseEvents = false
+    }
+
+    func updateExecutingStep(_ stepDescription: String, stepIndex: Int) {
+        overlayState.executingStepDescription = stepDescription
+        overlayState.executingStepIndex = stepIndex
+    }
+
+    func cancelExecution() {
+        overlayState.phase = .idle
+        overlayState.executingPlanDescription = ""
+        overlayState.executingStepDescription = ""
+        panel?.ignoresMouseEvents = true
+    }
+
+    func finishExecution() {
+        overlayState.executingStepDescription = "done"
+        scheduleAutoDismiss(after: 0.8)
+    }
+
+    // MARK: - Cursor-Bubble Sanitization
+
+    /// Strip the `<computer_use>...</computer_use>` block from streaming text
+    /// so the cursor bubble only carries the plain-English preamble. The
+    /// plan window already visualizes the steps separately.
+    static func sanitizeForCursorBubble(_ raw: String) -> String {
+        // Fast path: no opener anywhere, nothing to do.
+        guard raw.contains("<") else { return raw }
+
+        var cleaned = raw
+        let openTag = OmiComputerUseTool.openTag
+
+        // Drop everything from the first opener onward — covers both the
+        // "complete block" and "mid-stream, no closer yet" cases.
+        if let openRange = cleaned.range(of: openTag) {
+            cleaned = String(cleaned[..<openRange.lowerBound])
+        } else if let lastLT = cleaned.lastIndex(of: "<"),
+                  openTag.hasPrefix(String(cleaned[lastLT...]))
+        {
+            // Pre-opener: trailing "<" / "<c" / "<comp"… while the model
+            // is partway through emitting the tag.
+            cleaned = String(cleaned[..<lastLT])
+        }
+
+        return cleaned.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     // MARK: - Panel

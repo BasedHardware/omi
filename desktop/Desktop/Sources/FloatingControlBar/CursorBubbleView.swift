@@ -8,6 +8,7 @@ struct CursorBubbleView: View {
     @State private var isSpinning = false
     @State private var blinkVisible = true
     @State private var dotIndex = 0
+    @State private var executingPulse = false
 
     /// Offset so indicator sits below-right of cursor tip.
     private let offset = CGPoint(x: 22, y: -6)
@@ -51,6 +52,8 @@ struct CursorBubbleView: View {
             processingView
         case .responding, .notifying:
             respondingBubble
+        case .executing:
+            executingCard
         }
     }
 
@@ -66,6 +69,8 @@ struct CursorBubbleView: View {
 
     // MARK: - Listening
 
+    private var listeningAccent: Color { Color.red }
+
     private var listeningView: some View {
         HStack(alignment: .top, spacing: 0) {
             pulsingDot
@@ -79,17 +84,17 @@ struct CursorBubbleView: View {
     private var pulsingDot: some View {
         ZStack {
             Circle()
-                .stroke(Color.indigo.opacity(isPulsingRings ? 0.15 : 0.04), lineWidth: 1)
+                .stroke(listeningAccent.opacity(isPulsingRings ? 0.15 : 0.04), lineWidth: 1)
                 .frame(width: isPulsingRings ? 44 : 38, height: isPulsingRings ? 44 : 38)
                 .animation(.easeInOut(duration: 1.2).repeatForever(autoreverses: true), value: isPulsingRings)
             Circle()
-                .stroke(Color.indigo.opacity(isPulsingRings ? 0.32 : 0.10), lineWidth: 1.5)
+                .stroke(listeningAccent.opacity(isPulsingRings ? 0.32 : 0.10), lineWidth: 1.5)
                 .frame(width: isPulsingRings ? 30 : 26, height: isPulsingRings ? 30 : 26)
                 .animation(.easeInOut(duration: 1.2).repeatForever(autoreverses: true).delay(0.12), value: isPulsingRings)
             Circle()
-                .fill(Color.indigo)
+                .fill(listeningAccent)
                 .frame(width: 8, height: 8)
-                .shadow(color: Color.indigo.opacity(0.9), radius: 4)
+                .shadow(color: listeningAccent.opacity(0.9), radius: 4)
         }
         .frame(width: 44, height: 44)
         .onAppear { isPulsingRings = true }
@@ -100,7 +105,7 @@ struct CursorBubbleView: View {
         VStack(alignment: .leading, spacing: 2) {
             Text("You")
                 .font(.system(size: 9, weight: .semibold))
-                .foregroundColor(Color.indigo.opacity(0.8))
+                .foregroundColor(listeningAccent.opacity(0.8))
                 .textCase(.uppercase)
                 .tracking(0.5)
             Text(state.transcriptText)
@@ -111,7 +116,7 @@ struct CursorBubbleView: View {
         .frame(maxWidth: bubbleMaxWidth, alignment: .leading)
         .padding(.horizontal, 10)
         .padding(.vertical, 7)
-        .background(bubble(border: Color.indigo.opacity(0.3)))
+        .background(bubble(border: listeningAccent.opacity(0.3)))
         .environment(\.colorScheme, .dark)
     }
 
@@ -232,6 +237,83 @@ struct CursorBubbleView: View {
             .animation(.easeInOut(duration: 0.6).repeatForever(autoreverses: true), value: blinkVisible)
             .onAppear { blinkVisible = false }
             .onDisappear { blinkVisible = true }
+    }
+
+    // MARK: - Executing
+
+    private var executingCard: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            // Header: indigo dot + "omi" label
+            HStack(spacing: 4) {
+                Circle()
+                    .fill(Color.indigo)
+                    .frame(width: 5, height: 5)
+                Text("omi")
+                    .font(.system(size: 9, weight: .semibold, design: .monospaced))
+                    .foregroundColor(Color.indigo.opacity(0.9))
+                    .textCase(.uppercase)
+                    .tracking(0.5)
+            }
+            .padding(.bottom, 4)
+
+            // Plan description
+            if !state.executingPlanDescription.isEmpty {
+                Text(state.executingPlanDescription)
+                    .font(.system(size: 10))
+                    .foregroundColor(.secondary)
+                    .italic()
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.bottom, 6)
+            }
+
+            // Current step description
+            if !state.executingStepDescription.isEmpty {
+                Text(state.executingStepDescription)
+                    .font(.system(size: 13))
+                    .foregroundColor(.primary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.bottom, 6)
+            }
+
+            // Progress dots — only when multi-step
+            if state.executingTotalSteps > 1 {
+                HStack(spacing: 5) {
+                    ForEach(0..<state.executingTotalSteps, id: \.self) { i in
+                        if i < state.executingStepIndex {
+                            // Completed step — filled indigo
+                            Circle()
+                                .fill(Color.indigo)
+                                .frame(width: 6, height: 6)
+                        } else if i == state.executingStepIndex {
+                            // Current step — pulsing filled
+                            Circle()
+                                .fill(Color.indigo)
+                                .frame(width: 6, height: 6)
+                                .opacity(executingPulse ? 0.4 : 1.0)
+                                .animation(.easeInOut(duration: 0.7).repeatForever(autoreverses: true), value: executingPulse)
+                        } else {
+                            // Upcoming step — empty circle
+                            Circle()
+                                .stroke(Color.indigo.opacity(0.35), lineWidth: 1)
+                                .frame(width: 6, height: 6)
+                        }
+                    }
+                }
+                .onAppear { executingPulse = true }
+                .onDisappear { executingPulse = false }
+                .padding(.bottom, 6)
+            }
+
+            // Bottom hint
+            Text("esc · cancel")
+                .font(.system(size: 9, design: .monospaced))
+                .foregroundColor(.primary.opacity(0.3))
+        }
+        .frame(maxWidth: bubbleMaxWidth, alignment: .leading)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .background(bubble(border: Color.indigo.opacity(0.4)))
+        .environment(\.colorScheme, .dark)
     }
 
     // MARK: - Shared
