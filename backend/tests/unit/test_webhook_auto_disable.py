@@ -1450,7 +1450,7 @@ class TestDisabledCacheInMemory:
             self.wh.is_app_webhook_disabled("app-cache-3")
             with self.wh._cache_lock:
                 entry = self.wh._disabled_cache["app-cache-3"]
-                self.wh._disabled_cache["app-cache-3"] = (entry[0], entry[1] - 61)
+                self.wh._disabled_cache["app-cache-3"] = (entry[0], entry[1] - 61, entry[2])
             mock_r.get.return_value = b'1'
             result = self.wh.is_app_webhook_disabled("app-cache-3")
         assert result is True
@@ -1469,11 +1469,11 @@ class TestDisabledCacheInMemory:
         mock_r.get.return_value = b'1'
         with patch.object(self.wh, 'r', mock_r):
             self.wh.is_app_webhook_disabled("app-cache-5")
-            assert "app-cache-5" in self.wh._disabled_cache
+            assert self.wh._disabled_cache["app-cache-5"][0] is True
         mock_r2 = MagicMock()
         with patch.object(self.wh, 'r', mock_r2):
             self.wh.clear_app_webhook_health("app-cache-5")
-        assert "app-cache-5" not in self.wh._disabled_cache
+        assert self.wh._disabled_cache["app-cache-5"][0] is False
 
     def test_disable_in_firestore_sets_cache_true(self):
         mock_r = MagicMock()
@@ -1487,6 +1487,85 @@ class TestDisabledCacheInMemory:
             result = self.wh.is_app_webhook_disabled("app-cache-6")
         assert result is True
         assert mock_r.get.call_count == 1
+
+
+class TestCacheRaceSafety:
+    """Regression: authoritative cache writes must not be overwritten by stale Redis reads."""
+
+    def setup_method(self):
+        from database import webhook_health
+
+        self.wh = webhook_health
+        with self.wh._cache_lock:
+            self.wh._disabled_cache.clear()
+
+    def test_stale_read_does_not_overwrite_disable(self):
+        """Simulate: is_app_webhook_disabled reads Redis (False), then disable bumps gen.
+        The stale read must not overwrite the authoritative True."""
+        mock_r = MagicMock()
+        mock_r.get.return_value = b'0'
+        with patch.object(self.wh, 'r', mock_r):
+            self.wh.is_app_webhook_disabled("app-race-1")
+        assert self.wh._disabled_cache["app-race-1"][0] is False
+        pre_gen = self.wh._disabled_cache["app-race-1"][2]
+
+        mock_r2 = MagicMock()
+        with patch.object(self.wh, 'r', mock_r2):
+            with self.wh._cache_lock:
+                gen = self.wh._disabled_cache.get("app-race-1", (False, 0, 0))[2] + 1
+                self.wh._disabled_cache["app-race-1"] = (True, self.wh.time.monotonic(), gen)
+
+        mock_r3 = MagicMock()
+        mock_r3.get.return_value = b'0'
+        now = self.wh.time.monotonic()
+        with self.wh._cache_lock:
+            entry = self.wh._disabled_cache["app-race-1"]
+            self.wh._disabled_cache["app-race-1"] = (entry[0], entry[1] - 61, entry[2])
+
+        with patch.object(self.wh, 'r', mock_r3):
+            result = self.wh.is_app_webhook_disabled("app-race-1")
+        assert result is False
+        assert self.wh._disabled_cache["app-race-1"][0] is False
+
+    def test_stale_read_does_not_overwrite_clear(self):
+        """Simulate: is_app_webhook_disabled starts Redis read, clear bumps gen.
+        The stale read must not repopulate True after clear."""
+        mock_r = MagicMock()
+        mock_r.get.return_value = b'1'
+        with patch.object(self.wh, 'r', mock_r):
+            self.wh.is_app_webhook_disabled("app-race-2")
+        assert self.wh._disabled_cache["app-race-2"][0] is True
+
+        mock_r2 = MagicMock()
+        with patch.object(self.wh, 'r', mock_r2):
+            self.wh.clear_app_webhook_health("app-race-2")
+        assert self.wh._disabled_cache["app-race-2"][0] is False
+        clear_gen = self.wh._disabled_cache["app-race-2"][2]
+
+        with self.wh._cache_lock:
+            entry = self.wh._disabled_cache["app-race-2"]
+            self.wh._disabled_cache["app-race-2"] = (entry[0], entry[1] - 61, entry[2])
+
+        mock_r3 = MagicMock()
+        mock_r3.get.return_value = b'1'
+        with patch.object(self.wh, 'r', mock_r3):
+            result = self.wh.is_app_webhook_disabled("app-race-2")
+        assert result is True
+        assert self.wh._disabled_cache["app-race-2"][2] == clear_gen
+
+    def test_generation_increments_on_disable(self):
+        """record_app_webhook_failure action=3 bumps generation."""
+        mock_script = MagicMock(return_value=3)
+        mock_r = MagicMock()
+        with (
+            patch("database.webhook_health._get_failure_script", return_value=mock_script),
+            patch("database.webhook_health.r", mock_r),
+        ):
+            self.wh.record_app_webhook_failure("app-race-3", 500, "error")
+        entry = self.wh._disabled_cache.get("app-race-3")
+        assert entry is not None
+        assert entry[0] is True
+        assert entry[2] == 1
 
 
 class TestSuccessDebounce:
