@@ -35,7 +35,7 @@ class _SyncedConversationListItemState extends State<SyncedConversationListItem>
 
   void setReprocessing(bool value) {
     isReprocessing = value;
-    setState(() {});
+    if (mounted) setState(() {});
   }
 
   @override
@@ -102,6 +102,7 @@ class _SyncedConversationListItemState extends State<SyncedConversationListItem>
                         onTap: () async {
                           setReprocessing(true);
                           var mem = await reProcessConversationServer(conversation.id);
+                          if (!mounted) return;
                           if (mem != null) {
                             setState(() {
                               conversation = mem;
