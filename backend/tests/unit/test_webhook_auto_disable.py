@@ -920,6 +920,7 @@ class TestLuaTimeProgression:
                     {
                         'first_failure_at': now_ts,
                         'last_failure_at': now_ts,
+                        'last_success_at': '',
                         'failure_count': 1,
                         'last_status': status,
                         'last_error': error,
@@ -1054,6 +1055,27 @@ class TestLuaTimeProgression:
         self._lua_sim(state, t0 + 86400, '500', 'error')  # day1 warn
         self._lua_sim(state, t0 + 172800, '500', 'error')  # day2 warn
         result = self._lua_sim(state, t0 + 259200, '500', 'error')
+        assert result == 3
+        assert state['disabled'] == '1'
+
+    def test_same_second_success_failure_does_not_prevent_disable(self):
+        """Regression: failure@100 -> success@200 -> failure@200 -> 72h failure must disable.
+
+        If reset branch doesn't clear last_success_at, the stale success timestamp
+        keeps resetting the failure window on every subsequent failure.
+        """
+        state = {}
+        t0 = 1_700_000_000
+
+        self._lua_sim(state, t0, '500', 'error')
+        state['last_success_at'] = str(t0 + 100)
+        assert self._lua_sim(state, t0 + 100, '500', 'error') == 0
+        assert state['first_failure_at'] == t0 + 100
+        assert state['last_success_at'] == ''
+
+        self._lua_sim(state, t0 + 100 + 86400, '500', 'error')  # day1 warn
+        self._lua_sim(state, t0 + 100 + 172800, '500', 'error')  # day2 warn
+        result = self._lua_sim(state, t0 + 100 + 259200, '500', 'error')
         assert result == 3
         assert state['disabled'] == '1'
 
