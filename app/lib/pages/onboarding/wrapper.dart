@@ -73,6 +73,7 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
       vsync: this,
     ); // Auth, AiConsent, Name, Lang, FoundOmi, Permissions, Review, Welcome, FindDevices, SpeechProfile, KnowledgeGraph, Complete
     _controller!.addListener(() {
+      if (!mounted) return;
       setState(() {});
       // Update background image when page changes
       _updateBackgroundImage(_controller!.index);
@@ -267,6 +268,7 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
     List<Widget> pages = [
       AuthComponent(
         onSignIn: () async {
+          if (!mounted) return;
           PlatformManager.instance.analytics.onboardingStepCompleted('Auth');
           context.read<HomeProvider>().setupHasSpeakerProfile();
           IntercomManager.instance.loginIdentifiedUser(SharedPreferencesUtil().uid);
