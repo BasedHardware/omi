@@ -20,7 +20,7 @@ ENDPOINT_MCP_TOOL = 'mcp_tool'
 _ALL_ENDPOINTS = [ENDPOINT_REALTIME, ENDPOINT_CHAT_TOOL, ENDPOINT_MCP_TOOL]
 
 _cache_lock = threading.Lock()
-_disabled_cache: dict[str, tuple[bool, float]] = {}
+_disabled_cache: dict[str, tuple[bool, float, int]] = {}  # (value, timestamp, generation)
 
 
 def _evict_oldest(d: dict):
@@ -143,7 +143,8 @@ def record_app_webhook_failure(app_id: str, status_code: int, error: str, endpoi
         if action == 3:
             r.setex(f'app_webhook_disabled:{app_id}', _HEALTH_TTL, '1')
             with _cache_lock:
-                _disabled_cache[app_id] = (True, time.monotonic())
+                gen = _disabled_cache.get(app_id, (False, 0, 0))[2] + 1
+                _disabled_cache[app_id] = (True, time.monotonic(), gen)
         return action
     except Exception as e:
         logger.warning(f'record_app_webhook_failure redis error app_id={app_id}: {e}')
@@ -211,7 +212,8 @@ def record_app_webhook_success(app_id: str, endpoint: str = ENDPOINT_REALTIME):
 def clear_app_webhook_health(app_id: str):
     """Clear all webhook health state for an app. Used on re-enable."""
     with _cache_lock:
-        _disabled_cache.pop(app_id, None)
+        gen = _disabled_cache.get(app_id, (False, 0, 0))[2] + 1
+        _disabled_cache[app_id] = (False, time.monotonic(), gen)
     try:
         keys_to_delete = [f'app_webhook_disabled:{app_id}']
         for ep in _ALL_ENDPOINTS:
@@ -227,17 +229,21 @@ def is_app_webhook_disabled(app_id: str) -> bool:
     with _cache_lock:
         cached = _disabled_cache.get(app_id)
         if cached is not None:
-            value, ts = cached
+            value, ts, _gen = cached
             if (now - ts) < _CACHE_TTL:
                 return value
+        pre_gen = cached[2] if cached else 0
     try:
         key = f'app_webhook_disabled:{app_id}'
         val = r.get(key)
         result = val == b'1'
         with _cache_lock:
-            _disabled_cache[app_id] = (result, now)
-            if len(_disabled_cache) > _CACHE_MAX_SIZE:
-                _evict_oldest(_disabled_cache)
+            cur = _disabled_cache.get(app_id)
+            cur_gen = cur[2] if cur else 0
+            if cur_gen == pre_gen:
+                _disabled_cache[app_id] = (result, now, pre_gen)
+                if len(_disabled_cache) > _CACHE_MAX_SIZE:
+                    _evict_oldest(_disabled_cache)
         return result
     except Exception:
         return False
@@ -266,7 +272,8 @@ def get_app_webhook_health(app_id: str, endpoint: Optional[str] = None) -> Optio
 def disable_app_in_firestore(app_id: str, error: str, failure_hours: int):
     """Mark an app as disabled in Firestore due to webhook failures."""
     with _cache_lock:
-        _disabled_cache[app_id] = (True, time.monotonic())
+        gen = _disabled_cache.get(app_id, (False, 0, 0))[2] + 1
+        _disabled_cache[app_id] = (True, time.monotonic(), gen)
     try:
         apps_collection = 'plugins_data'
         app_ref = db.collection(apps_collection).document(app_id)
