@@ -69,6 +69,7 @@ if last_success and last_success ~= '' then
         redis.call('HSET', key,
             'first_failure_at', now_ts,
             'last_failure_at', now_ts,
+            'last_success_at', '',
             'failure_count', 1,
             'last_status', status,
             'last_error', error_msg,
