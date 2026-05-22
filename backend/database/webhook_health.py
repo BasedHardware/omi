@@ -57,6 +57,25 @@ if not first or first == '' then
     return 0
 end
 
+local first_ts = tonumber(first)
+local last_success = redis.call('HGET', key, 'last_success_at')
+if last_success and last_success ~= '' then
+    local last_success_ts = tonumber(last_success)
+    if last_success_ts and last_success_ts > first_ts then
+        redis.call('HSET', key,
+            'first_failure_at', now_ts,
+            'last_failure_at', now_ts,
+            'failure_count', 1,
+            'last_status', status,
+            'last_error', error_msg,
+            'notified_day1', '0',
+            'notified_day2', '0',
+            'disabled', '0')
+        redis.call('EXPIRE', key, ttl)
+        return 0
+    end
+end
+
 redis.call('HSET', key,
     'last_failure_at', now_ts,
     'last_status', status,
@@ -64,7 +83,6 @@ redis.call('HSET', key,
 redis.call('HINCRBY', key, 'failure_count', 1)
 redis.call('EXPIRE', key, ttl)
 
-local first_ts = tonumber(first)
 local elapsed = now_ts - first_ts
 
 if elapsed >= 259200 then
