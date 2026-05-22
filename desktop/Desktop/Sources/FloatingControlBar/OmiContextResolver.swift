@@ -52,8 +52,9 @@ final class OmiContextResolver {
         var focusedRef: CFTypeRef?
         guard AXUIElementCopyAttributeValue(system, kAXFocusedUIElementAttribute as CFString, &focusedRef) == .success,
               let focusedRef = focusedRef else { return "" }
+        let axElement = focusedRef as! AXUIElement
         var selRef: CFTypeRef?
-        guard AXUIElementCopyAttributeValue(focusedRef as! AXUIElement, kAXSelectedTextAttribute as CFString, &selRef) == .success,
+        guard AXUIElementCopyAttributeValue(axElement, kAXSelectedTextAttribute as CFString, &selRef) == .success,
               let sel = selRef as? String, !sel.isEmpty else { return "" }
         return sel
     }

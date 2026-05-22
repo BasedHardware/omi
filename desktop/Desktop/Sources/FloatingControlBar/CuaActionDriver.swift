@@ -48,15 +48,11 @@ final class CuaActionDriver: OmiActionDriver {
             }
         }
 
-        // Fallback — clipboard staging
         log("CuaActionDriver: falling back to clipboard paste for type")
         let pasteboard = NSPasteboard.general
-        let previous = pasteboard.string(forType: .string)
-
         pasteboard.clearContents()
         pasteboard.setString(text, forType: .string)
 
-        // Post Cmd+V (key code 9)
         let src = CGEventSource(stateID: .hidSystemState)
         let keyDown = CGEvent(keyboardEventSource: src, virtualKey: 9, keyDown: true)
         let keyUp   = CGEvent(keyboardEventSource: src, virtualKey: 9, keyDown: false)
@@ -64,13 +60,6 @@ final class CuaActionDriver: OmiActionDriver {
         keyUp?.flags   = .maskCommand
         keyDown?.post(tap: .cghidEventTap)
         keyUp?.post(tap: .cghidEventTap)
-
-        try await Task.sleep(for: .milliseconds(100))
-
-        if let previous {
-            pasteboard.clearContents()
-            pasteboard.setString(previous, forType: .string)
-        }
     }
 
     // MARK: - pressShortcut
@@ -127,7 +116,8 @@ final class CuaActionDriver: OmiActionDriver {
         }
 
         let mouseLocation = NSEvent.mouseLocation
-        let screenHeight = NSScreen.screens.first?.frame.height ?? 0
+        let targetScreen = NSScreen.screens.first(where: { $0.frame.contains(mouseLocation) }) ?? NSScreen.main ?? NSScreen.screens.first
+        let screenHeight = targetScreen?.frame.height ?? 0
         let cgPoint = CGPoint(x: mouseLocation.x, y: screenHeight - mouseLocation.y)
 
         var scroll1: Int32 = 0

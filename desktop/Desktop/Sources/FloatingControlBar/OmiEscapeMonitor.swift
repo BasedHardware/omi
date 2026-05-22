@@ -7,17 +7,17 @@ final class OmiEscapeMonitor {
     private var onCancel: (() -> Void)?
     private init() {}
 
+    // Global monitor fires even when Omi is in the background (which is always the
+    // case during plan execution). Trade-off: global monitors cannot consume events,
+    // so ESC also propagates to the frontmost app.
     func arm(onCancel: @escaping () -> Void) {
         // Disarm any existing monitor first (safety)
         disarm()
         self.onCancel = onCancel
-        monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
-            // Escape keyCode is 53
+        monitor = NSEvent.addGlobalMonitorForEvents(matching: .keyDown) { [weak self] event in
             if event.keyCode == 53 {
                 self?.fire()
-                return nil  // consume the event
             }
-            return event
         }
         log("OmiEscapeMonitor: armed")
     }

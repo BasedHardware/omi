@@ -2766,7 +2766,7 @@ A screenshot may be attached — use it silently only if relevant. Never mention
                 // Strip computer_use tag from final text and fire executor
                 if let computeResult = OmiComputerUseTool.parse(from: messageText) {
                     messageText = computeResult.cleanText
-                    OmiActionExecutor.shared.execute(plan: computeResult.plan, transcript: "")
+                    OmiActionExecutor.shared.execute(plan: computeResult.plan, transcript: trimmedText)
                     log("OmiComputerUseTool: fired executor for plan '\(computeResult.plan.description)'")
                 }
 
