@@ -641,7 +641,7 @@ class _SyncPageState extends State<SyncPage> {
           titleColor = Colors.orangeAccent;
           break;
         case SyncPhase.idle:
-          title = l.syncCardProcessing;
+          title = l.syncCardUploadingTitle;
           subtitle = _progressLine(s, speedStr);
           if (syncProvider.isSdCardSyncing) {
             action = _statusActionPill(l.cancel, Colors.redAccent, () => _showCancelSyncDialog(context, syncProvider));
