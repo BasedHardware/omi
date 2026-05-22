@@ -1786,3 +1786,269 @@ class TestPerEndpointHealthIsolation:
         mock_r.setex.assert_called_once_with('app_webhook_disabled:app-mcp-1', 7 * 86400, '1')
         with _cache_lock:
             assert _disabled_cache.get("app-mcp-1", (None,))[0] is True
+
+
+class TestFakeRedisFailureLua:
+    """Execute the real failure Lua script against fakeredis to verify atomic behavior."""
+
+    @pytest.fixture(autouse=True)
+    def _setup(self):
+        import fakeredis
+
+        self.fr = fakeredis.FakeRedis()
+        from database.webhook_health import _RECORD_FAILURE_LUA, _HEALTH_TTL
+
+        self.script = self.fr.register_script(_RECORD_FAILURE_LUA)
+        self.ttl = _HEALTH_TTL
+
+    def _run(self, app_id, now_ts, status, error):
+        key = f'app_webhook_health:{app_id}:realtime'
+        return int(self.script(keys=[key], args=[now_ts, str(status), error[:200], self.ttl]))
+
+    def _hgetall(self, app_id):
+        key = f'app_webhook_health:{app_id}:realtime'
+        data = self.fr.hgetall(key)
+        return {k.decode(): v.decode() for k, v in data.items()}
+
+    def test_graduated_timeline(self):
+        t0 = 1_700_000_000
+        assert self._run("app-lua", t0, 500, "err") == 0
+        assert self._run("app-lua", t0 + 86400, 500, "err") == 1
+        assert self._run("app-lua", t0 + 86401, 500, "err") == 0
+        assert self._run("app-lua", t0 + 172800, 500, "err") == 2
+        assert self._run("app-lua", t0 + 172801, 500, "err") == 0
+        assert self._run("app-lua", t0 + 259200, 500, "err") == 3
+        assert self._run("app-lua", t0 + 259201, 500, "err") == 0
+        state = self._hgetall("app-lua")
+        assert state['disabled'] == '1'
+        assert int(state['failure_count']) >= 7
+
+    def test_success_resets_window(self):
+        t0 = 1_700_000_000
+        self._run("app-reset", t0, 500, "err")
+        key = 'app_webhook_health:app-reset:realtime'
+        self.fr.hset(key, 'last_success_at', str(t0 + 3600))
+        assert self._run("app-reset", t0 + 259200, 500, "err") == 0
+        state = self._hgetall("app-reset")
+        assert state['disabled'] == '0'
+        assert int(state['first_failure_at']) == t0 + 259200
+
+    def test_same_second_success_failure_clears_last_success(self):
+        t0 = 1_700_000_000
+        self._run("app-ss", t0, 500, "err")
+        key = 'app_webhook_health:app-ss:realtime'
+        self.fr.hset(key, 'last_success_at', str(t0 + 100))
+        self._run("app-ss", t0 + 100, 500, "err")
+        state = self._hgetall("app-ss")
+        assert state['last_success_at'] == ''
+        assert int(state['first_failure_at']) == t0 + 100
+
+    def test_ttl_set_on_key(self):
+        self._run("app-ttl", 1_700_000_000, 500, "err")
+        key = 'app_webhook_health:app-ttl:realtime'
+        ttl = self.fr.ttl(key)
+        assert ttl > 0
+        assert ttl <= self.ttl
+
+    def test_error_truncated_to_200(self):
+        self._run("app-trunc", 1_700_000_000, 500, "x" * 500)
+        state = self._hgetall("app-trunc")
+        assert len(state['last_error']) <= 200
+
+
+class TestFakeRedisSuccessLua:
+    """Execute the real success Lua script against fakeredis."""
+
+    @pytest.fixture(autouse=True)
+    def _setup(self):
+        import fakeredis
+
+        self.fr = fakeredis.FakeRedis()
+        from database.webhook_health import _RECORD_SUCCESS_LUA, _HEALTH_TTL, _SUCCESS_DEBOUNCE
+
+        self.script = self.fr.register_script(_RECORD_SUCCESS_LUA)
+        self.ttl = _HEALTH_TTL
+        self.debounce = _SUCCESS_DEBOUNCE
+
+    def _run(self, app_id, now_ts):
+        key = f'app_webhook_health:{app_id}:realtime'
+        return int(self.script(keys=[key], args=[now_ts, self.debounce, self.ttl]))
+
+    def test_first_success_writes(self):
+        assert self._run("app-s1", 1000) == 1
+        val = self.fr.hget('app_webhook_health:app-s1:realtime', 'last_success_at')
+        assert val == b'1000'
+
+    def test_debounce_within_window(self):
+        self._run("app-s2", 1000)
+        assert self._run("app-s2", 1030) == 0
+
+    def test_debounce_after_window(self):
+        self._run("app-s3", 1000)
+        assert self._run("app-s3", 1061) == 1
+
+    def test_recovery_bypasses_debounce(self):
+        key = 'app_webhook_health:app-s4:realtime'
+        self.fr.hset(key, mapping={'last_success_at': '1000', 'first_failure_at': '1030'})
+        assert self._run("app-s4", 1040) == 1
+        val = self.fr.hget(key, 'last_success_at')
+        assert val == b'1040'
+
+    def test_ttl_set_on_key(self):
+        self._run("app-sttl", 1000)
+        ttl = self.fr.ttl('app_webhook_health:app-sttl:realtime')
+        assert ttl > 0
+
+
+class TestFakeRedisDevFailureLua:
+    """Execute the real dev failure Lua script against fakeredis."""
+
+    @pytest.fixture(autouse=True)
+    def _setup(self):
+        import fakeredis
+
+        self.fr = fakeredis.FakeRedis()
+        from database.webhook_health import _DEV_RECORD_FAILURE_LUA, _HEALTH_TTL, _DEV_FAILURE_THRESHOLD
+
+        self.script = self.fr.register_script(_DEV_RECORD_FAILURE_LUA)
+        self.ttl = _HEALTH_TTL
+        self.threshold = _DEV_FAILURE_THRESHOLD
+
+    def _run(self, uid, wtype, now_ts, status, error):
+        key = f'dev_webhook_health:{uid}:{wtype}'
+        return int(self.script(keys=[key], args=[now_ts, str(status), error[:200], self.ttl, self.threshold]))
+
+    def test_below_threshold_no_disable(self):
+        for i in range(99):
+            assert self._run("uid-1", "memory_created", 1000 + i, 500, "err") == 0
+
+    def test_at_threshold_disables(self):
+        for i in range(99):
+            self._run("uid-2", "memory_created", 1000 + i, 500, "err")
+        assert self._run("uid-2", "memory_created", 2000, 500, "err") == 1
+        val = self.fr.hget('dev_webhook_health:uid-2:memory_created', 'disabled')
+        assert val == b'1'
+
+    def test_already_disabled_returns_0(self):
+        for i in range(100):
+            self._run("uid-3", "memory_created", 1000 + i, 500, "err")
+        assert self._run("uid-3", "memory_created", 2000, 500, "err") == 0
+
+    def test_success_reset_then_fail_again(self):
+        for i in range(50):
+            self._run("uid-4", "realtime_transcript", 1000 + i, 500, "err")
+        key = 'dev_webhook_health:uid-4:realtime_transcript'
+        self.fr.hset(key, mapping={'failure_count': '0', 'disabled': '0'})
+        for i in range(99):
+            self._run("uid-4", "realtime_transcript", 2000 + i, 500, "err")
+        assert self._run("uid-4", "realtime_transcript", 3000, 500, "err") == 1
+
+
+class TestDevWebhookIntegrationPaths:
+    """Test developer webhook health tracking integration in utils/webhooks.py."""
+
+    @pytest.mark.asyncio
+    async def test_conversation_created_records_success(self):
+        from utils.webhooks import conversation_created_webhook
+
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {}
+
+        mock_client = AsyncMock()
+        mock_client.post = AsyncMock(return_value=mock_response)
+
+        mock_cb = MagicMock()
+        mock_cb.allow_request.return_value = True
+
+        from database.webhook_health import record_dev_webhook_success
+
+        with (
+            patch("utils.webhooks.record_dev_webhook_success") as mock_success,
+            patch("utils.webhooks.get_webhook_client", return_value=mock_client),
+            patch("utils.webhooks.get_webhook_circuit_breaker", return_value=mock_cb),
+            patch("utils.webhooks.get_webhook_semaphore", return_value=AsyncMock()),
+        ):
+            mock_sem = AsyncMock()
+            mock_sem.__aenter__ = AsyncMock()
+            mock_sem.__aexit__ = AsyncMock()
+            with patch("utils.webhooks.get_webhook_semaphore", return_value=mock_sem):
+                mock_memory = MagicMock()
+                mock_memory.is_locked = False
+                with (
+                    patch("utils.webhooks.conversation_to_dict", return_value={}),
+                    patch("utils.webhooks.populate_speaker_names"),
+                    patch("utils.webhooks.populate_folder_names"),
+                ):
+                    await conversation_created_webhook("uid-1", mock_memory)
+        mock_success.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_conversation_created_records_failure(self):
+        from utils.webhooks import conversation_created_webhook
+
+        mock_response = MagicMock()
+        mock_response.status_code = 500
+
+        mock_client = AsyncMock()
+        mock_client.post = AsyncMock(return_value=mock_response)
+
+        mock_cb = MagicMock()
+        mock_cb.allow_request.return_value = True
+
+        mock_sem = AsyncMock()
+        mock_sem.__aenter__ = AsyncMock()
+        mock_sem.__aexit__ = AsyncMock()
+
+        with (
+            patch("utils.webhooks.record_dev_webhook_failure", return_value=False) as mock_fail,
+            patch("utils.webhooks.get_webhook_client", return_value=mock_client),
+            patch("utils.webhooks.get_webhook_circuit_breaker", return_value=mock_cb),
+            patch("utils.webhooks.get_webhook_semaphore", return_value=mock_sem),
+        ):
+            mock_memory = MagicMock()
+            mock_memory.is_locked = False
+            with (
+                patch("utils.webhooks.conversation_to_dict", return_value={}),
+                patch("utils.webhooks.populate_speaker_names"),
+                patch("utils.webhooks.populate_folder_names"),
+            ):
+                await conversation_created_webhook("uid-1", mock_memory)
+        mock_fail.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_conversation_created_auto_disables(self):
+        """Auto-disable should trigger when failure threshold exceeded."""
+        from utils.webhooks import conversation_created_webhook
+
+        mock_response = MagicMock()
+        mock_response.status_code = 500
+
+        mock_client = AsyncMock()
+        mock_client.post = AsyncMock(return_value=mock_response)
+
+        mock_cb = MagicMock()
+        mock_cb.allow_request.return_value = True
+
+        mock_sem = AsyncMock()
+        mock_sem.__aenter__ = AsyncMock()
+        mock_sem.__aexit__ = AsyncMock()
+
+        with (
+            patch("utils.webhooks.record_dev_webhook_failure", return_value=True) as mock_fail,
+            patch("utils.webhooks.disable_user_webhook_db") as mock_disable,
+            patch("utils.webhooks.send_notification") as mock_notify,
+            patch("utils.webhooks.get_webhook_client", return_value=mock_client),
+            patch("utils.webhooks.get_webhook_circuit_breaker", return_value=mock_cb),
+            patch("utils.webhooks.get_webhook_semaphore", return_value=mock_sem),
+        ):
+            mock_memory = MagicMock()
+            mock_memory.is_locked = False
+            with (
+                patch("utils.webhooks.conversation_to_dict", return_value={}),
+                patch("utils.webhooks.populate_speaker_names"),
+                patch("utils.webhooks.populate_folder_names"),
+            ):
+                await conversation_created_webhook("uid-1", mock_memory)
+        mock_disable.assert_called_once()
+        mock_notify.assert_called_once()
