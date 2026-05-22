@@ -3026,7 +3026,7 @@
     "recapDeletedSnackbar": "Підсумок видалено",
     "recapDeleteFailed": "Не вдалося видалити підсумок. Спробуйте пізніше.",
     "syncStatusBackedUp": "Збережено в резерв",
-    "syncStatusBackingUp": "Резервне копіювання…",
+    "syncStatusBackingUp": "Синхронізація…",
     "syncStatusWaiting": "Очікує синхронізації",
     "syncStatusRetrying": "Не вдалося обробити — повтор",
     "syncStatusFailed": "Помилка — натисніть «Повторити»",
@@ -3041,7 +3041,7 @@
     "syncCardProcessing": "Обробка в Omi…",
     "syncCardWaitingInternet": "Очікування інтернету",
     "syncCardNeedsAttention": "{count, plural, one{{count} запис потребує уваги} few{{count} записи потребують уваги} many{{count} записів потребують уваги} other{{count} запису потребує уваги}}",
-    "syncFlowIntro": "Записи передаються з вашого пристрою Omi на цей телефон і зберігаються локально, а потім завантажуються на сервер Omi, де їх транскрибують і перетворюють на розмови.",
+    "syncFlowIntro": "Записи передаються з вашого пристрою на цей телефон і зберігаються локально, а потім завантажуються на сервер Omi, де вони транскрибуються та перетворюються на розмови.",
     "syncStepUpload": "Синхронізація",
     "syncStepUploadDesc": "Ваш запис надсилається на сервер Omi",
     "syncStepProcess": "Транскрибування",
@@ -3051,10 +3051,10 @@
     "syncFailureFootnote": "Якщо обробка не вдасться, запис буде автоматично повторено під час наступної синхронізації.",
     "syncStatusConversationCreated": "Розмову створено",
     "syncCardUploadingTitle": "Завантаження в Omi",
-    "syncCardDownloadingTitle": "Завантаження з Omi",
+    "syncCardDownloadingTitle": "Завантаження з вашого пристрою",
     "syncCardProgressOf": "{current} з {total}",
-    "syncStatusOnDevice": "Очікує на Omi",
-    "syncStatusDownloadingFromDevice": "Завантаження з Omi",
+    "syncStatusOnDevice": "На вашому пристрої",
+    "syncStatusDownloadingFromDevice": "Завантаження з вашого пристрою",
     "newestFirst": "Спочатку нові",
     "noSyncedRecordingsYet": "Синхронізованих записів ще немає",
     "@lowBatteryAlertBody": {
@@ -3068,5 +3068,6 @@
     "morePaymentMethodsComingSoon": "Незабаром більше способів оплати",
     "@morePaymentMethodsComingSoon": {
         "description": "Placeholder card text shown under available payment methods"
-    }
+    },
+    "syncProcessingBackgroundHint": "Це триває у фоновому режимі — ви можете залишити цей екран."
 }

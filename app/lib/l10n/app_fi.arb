@@ -3026,7 +3026,7 @@
     "recapDeletedSnackbar": "Yhteenveto poistettu",
     "recapDeleteFailed": "Yhteenvetoa ei voitu poistaa. Yritä myöhemmin uudelleen.",
     "syncStatusBackedUp": "Varmuuskopioitu",
-    "syncStatusBackingUp": "Varmuuskopioidaan…",
+    "syncStatusBackingUp": "Synkronoidaan…",
     "syncStatusWaiting": "Odottaa synkronointia",
     "syncStatusRetrying": "Käsittely epäonnistui — yritetään uudelleen",
     "syncStatusFailed": "Epäonnistui — napauta Yritä uudelleen",
@@ -3041,7 +3041,7 @@
     "syncCardProcessing": "Käsitellään Omissa…",
     "syncCardWaitingInternet": "Odottaa verkkoyhteyttä",
     "syncCardNeedsAttention": "{count, plural, one{1 tallenne vaatii huomiota} other{{count} tallennetta vaatii huomiota}}",
-    "syncFlowIntro": "Tallenteet siirretään Omi-laitteestasi tähän puhelimeen ja tallennetaan paikallisesti, minkä jälkeen ne ladataan Omin palvelimelle, jossa ne litteroidaan ja muunnetaan keskusteluiksi.",
+    "syncFlowIntro": "Tallenteet siirretään laitteeltasi tähän puhelimeen ja tallennetaan paikallisesti, minkä jälkeen ne ladataan Omin palvelimelle, jossa ne litteroidaan ja muunnetaan keskusteluiksi.",
     "syncStepUpload": "Synkronoi",
     "syncStepUploadDesc": "Tallenteesi lähetetään Omin palvelimelle",
     "syncStepProcess": "Litterointi",
@@ -3051,10 +3051,10 @@
     "syncFailureFootnote": "Jos käsittely epäonnistuu, tallenne yritetään automaattisesti uudelleen seuraavan synkronoinnin yhteydessä.",
     "syncStatusConversationCreated": "Keskustelu luotu",
     "syncCardUploadingTitle": "Lähetetään Omiin",
-    "syncCardDownloadingTitle": "Ladataan Omista",
+    "syncCardDownloadingTitle": "Ladataan laitteeltasi",
     "syncCardProgressOf": "{current} / {total}",
-    "syncStatusOnDevice": "Odottaa Omissa",
-    "syncStatusDownloadingFromDevice": "Ladataan Omista",
+    "syncStatusOnDevice": "Laitteellasi",
+    "syncStatusDownloadingFromDevice": "Ladataan laitteeltasi",
     "newestFirst": "Uusimmat ensin",
     "noSyncedRecordingsYet": "Ei vielä synkronoituja nauhoituksia",
     "@lowBatteryAlertBody": {
@@ -3068,5 +3068,6 @@
     "morePaymentMethodsComingSoon": "Lisää maksutapoja tulossa pian",
     "@morePaymentMethodsComingSoon": {
         "description": "Placeholder card text shown under available payment methods"
-    }
+    },
+    "syncProcessingBackgroundHint": "Tämä jatkuu taustalla — voit poistua tästä näkymästä."
 }

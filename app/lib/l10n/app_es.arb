@@ -3027,7 +3027,7 @@
     "recapDeletedSnackbar": "Resumen eliminado",
     "recapDeleteFailed": "No se pudo eliminar el resumen. Inténtalo de nuevo más tarde.",
     "syncStatusBackedUp": "Copia de seguridad hecha",
-    "syncStatusBackingUp": "Haciendo copia…",
+    "syncStatusBackingUp": "Sincronizando…",
     "syncStatusWaiting": "Esperando para sincronizar",
     "syncStatusRetrying": "No se pudo procesar — reintentando",
     "syncStatusFailed": "Falló — toca Reintentar",
@@ -3042,7 +3042,7 @@
     "syncCardProcessing": "Procesando en Omi…",
     "syncCardWaitingInternet": "Esperando conexión",
     "syncCardNeedsAttention": "{count, plural, one{1 grabación necesita atención} other{{count} grabaciones necesitan atención}}",
-    "syncFlowIntro": "Las grabaciones se transfieren desde tu dispositivo Omi a este teléfono y se almacenan localmente, y luego se suben al servidor de Omi, donde se transcriben y se convierten en conversaciones.",
+    "syncFlowIntro": "Las grabaciones se transfieren desde tu dispositivo a este teléfono y se almacenan localmente, y luego se suben al servidor de Omi, donde se transcriben y se convierten en conversaciones.",
     "syncStepUpload": "Sincronizar",
     "syncStepUploadDesc": "Tu grabación se envía al servidor de Omi",
     "syncStepProcess": "Transcribir",
@@ -3052,10 +3052,10 @@
     "syncFailureFootnote": "Si el procesamiento falla, la grabación se reintenta automáticamente en la próxima sincronización.",
     "syncStatusConversationCreated": "Conversación creada",
     "syncCardUploadingTitle": "Subiendo a Omi",
-    "syncCardDownloadingTitle": "Descargando de Omi",
+    "syncCardDownloadingTitle": "Descargando desde tu dispositivo",
     "syncCardProgressOf": "{current} de {total}",
-    "syncStatusOnDevice": "Esperando en Omi",
-    "syncStatusDownloadingFromDevice": "Descargando de Omi",
+    "syncStatusOnDevice": "En tu dispositivo",
+    "syncStatusDownloadingFromDevice": "Descargando desde tu dispositivo",
     "newestFirst": "Más recientes primero",
     "noSyncedRecordingsYet": "Aún no hay grabaciones sincronizadas",
     "@lowBatteryAlertBody": {
@@ -3069,5 +3069,6 @@
     "morePaymentMethodsComingSoon": "Próximamente más métodos de pago",
     "@morePaymentMethodsComingSoon": {
         "description": "Placeholder card text shown under available payment methods"
-    }
+    },
+    "syncProcessingBackgroundHint": "Esto continúa en segundo plano — puedes salir de esta pantalla."
 }

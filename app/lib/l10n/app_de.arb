@@ -2994,7 +2994,7 @@
     "recapDeletedSnackbar": "Zusammenfassung gelöscht",
     "recapDeleteFailed": "Zusammenfassung konnte nicht gelöscht werden. Versuche es später erneut.",
     "syncStatusBackedUp": "Gesichert",
-    "syncStatusBackingUp": "Wird gesichert…",
+    "syncStatusBackingUp": "Wird synchronisiert…",
     "syncStatusWaiting": "Wartet auf Synchronisierung",
     "syncStatusRetrying": "Verarbeitung fehlgeschlagen — wird wiederholt",
     "syncStatusFailed": "Fehlgeschlagen — auf Wiederholen tippen",
@@ -3009,7 +3009,7 @@
     "syncCardProcessing": "Wird in Omi verarbeitet…",
     "syncCardWaitingInternet": "Warten auf Internet",
     "syncCardNeedsAttention": "{count, plural, one{1 Aufnahme benötigt Aufmerksamkeit} other{{count} Aufnahmen benötigen Aufmerksamkeit}}",
-    "syncFlowIntro": "Aufnahmen werden von deinem Omi-Gerät auf dieses Telefon übertragen und lokal gespeichert, anschließend auf den Server von Omi hochgeladen, wo sie transkribiert und in Unterhaltungen umgewandelt werden.",
+    "syncFlowIntro": "Aufnahmen werden von deinem Gerät auf dieses Telefon übertragen und lokal gespeichert und dann auf Omis Server hochgeladen, wo sie transkribiert und in Gespräche umgewandelt werden.",
     "syncStepUpload": "Synchronisieren",
     "syncStepUploadDesc": "Deine Aufnahme wird an Omis Server gesendet",
     "syncStepProcess": "Transkribieren",
@@ -3019,10 +3019,10 @@
     "syncFailureFootnote": "Schlägt die Verarbeitung fehl, wird die Aufnahme bei der nächsten Synchronisierung automatisch erneut versucht.",
     "syncStatusConversationCreated": "Gespräch erstellt",
     "syncCardUploadingTitle": "Wird zu Omi hochgeladen",
-    "syncCardDownloadingTitle": "Wird von Omi heruntergeladen",
+    "syncCardDownloadingTitle": "Wird von deinem Gerät heruntergeladen",
     "syncCardProgressOf": "{current} von {total}",
-    "syncStatusOnDevice": "Wartet auf Omi",
-    "syncStatusDownloadingFromDevice": "Wird von Omi heruntergeladen",
+    "syncStatusOnDevice": "Auf deinem Gerät",
+    "syncStatusDownloadingFromDevice": "Wird von deinem Gerät heruntergeladen",
     "newestFirst": "Neueste zuerst",
     "noSyncedRecordingsYet": "Noch keine synchronisierten Aufnahmen",
     "@lowBatteryAlertBody": {
@@ -3036,5 +3036,6 @@
     "morePaymentMethodsComingSoon": "Weitere Zahlungsmethoden in Kürze",
     "@morePaymentMethodsComingSoon": {
         "description": "Placeholder card text shown under available payment methods"
-    }
+    },
+    "syncProcessingBackgroundHint": "Das läuft im Hintergrund weiter — du kannst diesen Bildschirm verlassen."
 }

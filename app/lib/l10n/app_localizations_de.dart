@@ -9344,7 +9344,7 @@ class AppLocalizationsDe extends AppLocalizations {
   String get syncStatusBackedUp => 'Gesichert';
 
   @override
-  String get syncStatusBackingUp => 'Wird gesichert…';
+  String get syncStatusBackingUp => 'Wird synchronisiert…';
 
   @override
   String get syncStatusWaiting => 'Wartet auf Synchronisierung';
@@ -9407,7 +9407,7 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get syncFlowIntro =>
-      'Aufnahmen werden von deinem Omi-Gerät auf dieses Telefon übertragen und lokal gespeichert, anschließend auf den Server von Omi hochgeladen, wo sie transkribiert und in Unterhaltungen umgewandelt werden.';
+      'Aufnahmen werden von deinem Gerät auf dieses Telefon übertragen und lokal gespeichert und dann auf Omis Server hochgeladen, wo sie transkribiert und in Gespräche umgewandelt werden.';
 
   @override
   String get syncStepUpload => 'Synchronisieren';
@@ -9438,7 +9438,7 @@ class AppLocalizationsDe extends AppLocalizations {
   String get syncCardUploadingTitle => 'Wird zu Omi hochgeladen';
 
   @override
-  String get syncCardDownloadingTitle => 'Wird von Omi heruntergeladen';
+  String get syncCardDownloadingTitle => 'Wird von deinem Gerät heruntergeladen';
 
   @override
   String syncCardProgressOf(int current, int total) {
@@ -9446,10 +9446,10 @@ class AppLocalizationsDe extends AppLocalizations {
   }
 
   @override
-  String get syncStatusOnDevice => 'Wartet auf Omi';
+  String get syncStatusOnDevice => 'Auf deinem Gerät';
 
   @override
-  String get syncStatusDownloadingFromDevice => 'Wird von Omi heruntergeladen';
+  String get syncStatusDownloadingFromDevice => 'Wird von deinem Gerät heruntergeladen';
 
   @override
   String get newestFirst => 'Neueste zuerst';
@@ -9459,4 +9459,7 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get morePaymentMethodsComingSoon => 'Weitere Zahlungsmethoden in Kürze';
+
+  @override
+  String get syncProcessingBackgroundHint => 'Das läuft im Hintergrund weiter — du kannst diesen Bildschirm verlassen.';
 }

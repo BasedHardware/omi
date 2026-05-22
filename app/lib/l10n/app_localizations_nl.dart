@@ -9295,7 +9295,7 @@ class AppLocalizationsNl extends AppLocalizations {
   String get syncStatusBackedUp => 'Geback-upt';
 
   @override
-  String get syncStatusBackingUp => 'Back-up maken…';
+  String get syncStatusBackingUp => 'Synchroniseren…';
 
   @override
   String get syncStatusWaiting => 'Wacht op synchronisatie';
@@ -9358,7 +9358,7 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get syncFlowIntro =>
-      'Opnames worden van je Omi-apparaat naar deze telefoon overgezet en lokaal opgeslagen, en vervolgens geüpload naar de server van Omi, waar ze worden getranscribeerd en omgezet in gesprekken.';
+      'Opnamen worden van je apparaat naar deze telefoon overgezet en lokaal opgeslagen en vervolgens geüpload naar de server van Omi, waar ze worden getranscribeerd en omgezet in gesprekken.';
 
   @override
   String get syncStepUpload => 'Synchroniseren';
@@ -9389,7 +9389,7 @@ class AppLocalizationsNl extends AppLocalizations {
   String get syncCardUploadingTitle => 'Uploaden naar Omi';
 
   @override
-  String get syncCardDownloadingTitle => 'Downloaden van Omi';
+  String get syncCardDownloadingTitle => 'Downloaden van je apparaat';
 
   @override
   String syncCardProgressOf(int current, int total) {
@@ -9397,10 +9397,10 @@ class AppLocalizationsNl extends AppLocalizations {
   }
 
   @override
-  String get syncStatusOnDevice => 'Wacht op Omi';
+  String get syncStatusOnDevice => 'Op je apparaat';
 
   @override
-  String get syncStatusDownloadingFromDevice => 'Downloaden van Omi';
+  String get syncStatusDownloadingFromDevice => 'Downloaden van je apparaat';
 
   @override
   String get newestFirst => 'Nieuwste eerst';
@@ -9410,4 +9410,7 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get morePaymentMethodsComingSoon => 'Meer betaalmethoden binnenkort';
+
+  @override
+  String get syncProcessingBackgroundHint => 'Dit gaat op de achtergrond door — je kunt dit scherm verlaten.';
 }

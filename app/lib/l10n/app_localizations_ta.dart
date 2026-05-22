@@ -9335,7 +9335,7 @@ class AppLocalizationsTa extends AppLocalizations {
   String get syncStatusBackedUp => 'காப்புப் பிரதி எடுக்கப்பட்டது';
 
   @override
-  String get syncStatusBackingUp => 'காப்புப் பிரதி எடுக்கப்படுகிறது…';
+  String get syncStatusBackingUp => 'ஒத்திசைக்கிறது…';
 
   @override
   String get syncStatusWaiting => 'ஒத்திசைவுக்காக காத்திருக்கிறது';
@@ -9398,7 +9398,7 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get syncFlowIntro =>
-      'பதிவுகள் உங்கள் Omi சாதனத்திலிருந்து இந்த தொலைபேசிக்கு மாற்றப்பட்டு உள்ளூரில் சேமிக்கப்படுகின்றன, பின்னர் Omi-இன் சேவையகத்திற்கு பதிவேற்றப்படுகின்றன, அங்கு அவை எழுத்துப்படுத்தப்பட்டு உரையாடல்களாக மாற்றப்படுகின்றன.';
+      'பதிவுகள் உங்கள் சாதனத்திலிருந்து இந்த தொலைபேசிக்கு மாற்றப்பட்டு உள்ளூரில் சேமிக்கப்படுகின்றன, பின்னர் Omi இன் சேவையகத்திற்கு பதிவேற்றப்பட்டு, அங்கு அவை எழுத்துப்பெயர்க்கப்பட்டு உரையாடல்களாக மாற்றப்படுகின்றன.';
 
   @override
   String get syncStepUpload => 'ஒத்திசை';
@@ -9429,7 +9429,7 @@ class AppLocalizationsTa extends AppLocalizations {
   String get syncCardUploadingTitle => 'Omi-க்கு பதிவேற்றப்படுகிறது';
 
   @override
-  String get syncCardDownloadingTitle => 'Omi-இலிருந்து பதிவிறக்கப்படுகிறது';
+  String get syncCardDownloadingTitle => 'உங்கள் சாதனத்திலிருந்து பதிவிறக்கப்படுகிறது';
 
   @override
   String syncCardProgressOf(int current, int total) {
@@ -9437,10 +9437,10 @@ class AppLocalizationsTa extends AppLocalizations {
   }
 
   @override
-  String get syncStatusOnDevice => 'Omi-இல் காத்திருக்கிறது';
+  String get syncStatusOnDevice => 'உங்கள் சாதனத்தில்';
 
   @override
-  String get syncStatusDownloadingFromDevice => 'Omi-இலிருந்து பதிவிறக்கப்படுகிறது';
+  String get syncStatusDownloadingFromDevice => 'உங்கள் சாதனத்திலிருந்து பதிவிறக்கப்படுகிறது';
 
   @override
   String get newestFirst => 'புதியவை முதலில்';
@@ -9450,4 +9450,7 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get morePaymentMethodsComingSoon => 'மேலும் கட்டண முறைகள் விரைவில்';
+
+  @override
+  String get syncProcessingBackgroundHint => 'இது பின்னணியில் தொடர்கிறது — இந்தத் திரையிலிருந்து நீங்கள் வெளியேறலாம்.';
 }

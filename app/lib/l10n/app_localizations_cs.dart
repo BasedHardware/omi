@@ -9263,7 +9263,7 @@ class AppLocalizationsCs extends AppLocalizations {
   String get syncStatusBackedUp => 'Zálohováno';
 
   @override
-  String get syncStatusBackingUp => 'Zálohování…';
+  String get syncStatusBackingUp => 'Synchronizace…';
 
   @override
   String get syncStatusWaiting => 'Čeká na synchronizaci';
@@ -9330,7 +9330,7 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get syncFlowIntro =>
-      'Nahrávky se přenášejí z vašeho zařízení Omi do tohoto telefonu a ukládají se lokálně, poté se nahrávají na server Omi, kde se přepisují a převádějí na konverzace.';
+      'Nahrávky se přenášejí z vašeho zařízení do tohoto telefonu a ukládají se místně, poté se nahrávají na server Omi, kde se přepisují a mění v konverzace.';
 
   @override
   String get syncStepUpload => 'Synchronizace';
@@ -9361,7 +9361,7 @@ class AppLocalizationsCs extends AppLocalizations {
   String get syncCardUploadingTitle => 'Nahrávání do Omi';
 
   @override
-  String get syncCardDownloadingTitle => 'Stahování z Omi';
+  String get syncCardDownloadingTitle => 'Stahování z vašeho zařízení';
 
   @override
   String syncCardProgressOf(int current, int total) {
@@ -9369,10 +9369,10 @@ class AppLocalizationsCs extends AppLocalizations {
   }
 
   @override
-  String get syncStatusOnDevice => 'Čeká na Omi';
+  String get syncStatusOnDevice => 'Ve vašem zařízení';
 
   @override
-  String get syncStatusDownloadingFromDevice => 'Stahování z Omi';
+  String get syncStatusDownloadingFromDevice => 'Stahování z vašeho zařízení';
 
   @override
   String get newestFirst => 'Nejnovější první';
@@ -9382,4 +9382,7 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get morePaymentMethodsComingSoon => 'Brzy přibudou další platební metody';
+
+  @override
+  String get syncProcessingBackgroundHint => 'Pokračuje to na pozadí — tuto obrazovku můžete opustit.';
 }

@@ -3031,7 +3031,7 @@
     "recapDeletedSnackbar": "Zhrnutie odstránené",
     "recapDeleteFailed": "Zhrnutie sa nepodarilo odstrániť. Skúste neskôr.",
     "syncStatusBackedUp": "Zálohované",
-    "syncStatusBackingUp": "Zálohovanie…",
+    "syncStatusBackingUp": "Synchronizuje sa…",
     "syncStatusWaiting": "Čaká na synchronizáciu",
     "syncStatusRetrying": "Spracovanie zlyhalo — opakuje sa",
     "syncStatusFailed": "Zlyhalo — ťuknite na Skúsiť znova",
@@ -3046,7 +3046,7 @@
     "syncCardProcessing": "Spracovanie v Omi…",
     "syncCardWaitingInternet": "Čaká sa na internet",
     "syncCardNeedsAttention": "{count, plural, one{1 nahrávka si vyžaduje pozornosť} few{{count} nahrávky si vyžadujú pozornosť} many{{count} nahrávky si vyžadujú pozornosť} other{{count} nahrávok si vyžaduje pozornosť}}",
-    "syncFlowIntro": "Nahrávky sa prenášajú z vášho zariadenia Omi do tohto telefónu a ukladajú sa lokálne, potom sa nahrávajú na server Omi, kde sa prepisujú a menia na konverzácie.",
+    "syncFlowIntro": "Nahrávky sa prenášajú z vášho zariadenia do tohto telefónu a ukladajú sa lokálne, potom sa nahrávajú na server Omi, kde sa prepisujú a menia na konverzácie.",
     "syncStepUpload": "Synchronizácia",
     "syncStepUploadDesc": "Vaša nahrávka sa odosiela na server Omi",
     "syncStepProcess": "Prepis",
@@ -3056,10 +3056,10 @@
     "syncFailureFootnote": "Ak spracovanie zlyhá, nahrávka sa pri ďalšej synchronizácii automaticky zopakuje.",
     "syncStatusConversationCreated": "Konverzácia vytvorená",
     "syncCardUploadingTitle": "Nahráva sa do Omi",
-    "syncCardDownloadingTitle": "Sťahuje sa z Omi",
+    "syncCardDownloadingTitle": "Sťahovanie z vášho zariadenia",
     "syncCardProgressOf": "{current} z {total}",
-    "syncStatusOnDevice": "Čaká na Omi",
-    "syncStatusDownloadingFromDevice": "Sťahuje sa z Omi",
+    "syncStatusOnDevice": "Vo vašom zariadení",
+    "syncStatusDownloadingFromDevice": "Sťahovanie z vášho zariadenia",
     "newestFirst": "Najnovšie ako prvé",
     "noSyncedRecordingsYet": "Zatiaľ žiadne synchronizované nahrávky",
     "@lowBatteryAlertBody": {
@@ -3073,5 +3073,6 @@
     "morePaymentMethodsComingSoon": "Čoskoro ďalšie platobné metódy",
     "@morePaymentMethodsComingSoon": {
         "description": "Placeholder card text shown under available payment methods"
-    }
+    },
+    "syncProcessingBackgroundHint": "Pokračuje to na pozadí — túto obrazovku môžete opustiť."
 }

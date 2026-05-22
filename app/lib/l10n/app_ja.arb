@@ -3027,7 +3027,7 @@
     "recapDeletedSnackbar": "リキャップを削除しました",
     "recapDeleteFailed": "リキャップを削除できませんでした。後でもう一度お試しください。",
     "syncStatusBackedUp": "バックアップ済み",
-    "syncStatusBackingUp": "バックアップ中…",
+    "syncStatusBackingUp": "同期中…",
     "syncStatusWaiting": "同期を待機中",
     "syncStatusRetrying": "処理できませんでした — 再試行中",
     "syncStatusFailed": "失敗 — 「再試行」をタップ",
@@ -3042,7 +3042,7 @@
     "syncCardProcessing": "Omiで処理中…",
     "syncCardWaitingInternet": "インターネット接続を待機中",
     "syncCardNeedsAttention": "{count, plural, other{確認が必要な録音が{count}件}}",
-    "syncFlowIntro": "録音はOmiデバイスからこの電話に転送されてローカルに保存され、その後Omiのサーバーにアップロードされて文字起こしされ、会話に変換されます。",
+    "syncFlowIntro": "録音はデバイスからこの電話に転送されてローカルに保存され、その後 Omi のサーバーにアップロードされて文字起こしされ、会話に変換されます。",
     "syncStepUpload": "同期",
     "syncStepUploadDesc": "録音はOmiのサーバーに送信されます",
     "syncStepProcess": "文字起こし",
@@ -3052,10 +3052,10 @@
     "syncFailureFootnote": "処理に失敗した場合、次回の同期で録音が自動的に再試行されます。",
     "syncStatusConversationCreated": "会話を作成しました",
     "syncCardUploadingTitle": "Omiへアップロード中",
-    "syncCardDownloadingTitle": "Omiからダウンロード中",
+    "syncCardDownloadingTitle": "デバイスからダウンロード中",
     "syncCardProgressOf": "{total}件中{current}件",
-    "syncStatusOnDevice": "Omiで待機中",
-    "syncStatusDownloadingFromDevice": "Omiからダウンロード中",
+    "syncStatusOnDevice": "デバイス上",
+    "syncStatusDownloadingFromDevice": "デバイスからダウンロード中",
     "newestFirst": "新しい順",
     "noSyncedRecordingsYet": "同期済みの録音はまだありません",
     "@lowBatteryAlertBody": {
@@ -3069,5 +3069,6 @@
     "morePaymentMethodsComingSoon": "他の支払い方法を近日追加予定",
     "@morePaymentMethodsComingSoon": {
         "description": "Placeholder card text shown under available payment methods"
-    }
+    },
+    "syncProcessingBackgroundHint": "この処理はバックグラウンドで続きます — この画面から移動してかまいません。"
 }

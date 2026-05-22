@@ -3068,7 +3068,7 @@
     "recapDeletedSnackbar": "Ringkasan dihapus",
     "recapDeleteFailed": "Tidak dapat menghapus ringkasan. Coba lagi nanti.",
     "syncStatusBackedUp": "Sudah dicadangkan",
-    "syncStatusBackingUp": "Mencadangkan…",
+    "syncStatusBackingUp": "Menyinkronkan…",
     "syncStatusWaiting": "Menunggu sinkronisasi",
     "syncStatusRetrying": "Gagal diproses — mencoba lagi",
     "syncStatusFailed": "Gagal — ketuk Coba Lagi",
@@ -3083,7 +3083,7 @@
     "syncCardProcessing": "Memproses di Omi…",
     "syncCardWaitingInternet": "Menunggu internet",
     "syncCardNeedsAttention": "{count, plural, other{{count} rekaman perlu perhatian}}",
-    "syncFlowIntro": "Rekaman ditransfer dari perangkat Omi Anda ke ponsel ini dan disimpan secara lokal, lalu diunggah ke server Omi tempat rekaman ditranskripsikan dan diubah menjadi percakapan.",
+    "syncFlowIntro": "Rekaman ditransfer dari perangkat Anda ke ponsel ini dan disimpan secara lokal, lalu diunggah ke server Omi tempat rekaman ditranskripsi dan diubah menjadi percakapan.",
     "syncStepUpload": "Sinkronkan",
     "syncStepUploadDesc": "Rekamanmu dikirim ke server Omi",
     "syncStepProcess": "Transkripsi",
@@ -3093,10 +3093,10 @@
     "syncFailureFootnote": "Jika pemrosesan gagal, rekaman akan dicoba ulang otomatis pada sinkronisasi berikutnya.",
     "syncStatusConversationCreated": "Percakapan dibuat",
     "syncCardUploadingTitle": "Mengunggah ke Omi",
-    "syncCardDownloadingTitle": "Mengunduh dari Omi",
+    "syncCardDownloadingTitle": "Mengunduh dari perangkat Anda",
     "syncCardProgressOf": "{current} dari {total}",
-    "syncStatusOnDevice": "Menunggu di Omi",
-    "syncStatusDownloadingFromDevice": "Mengunduh dari Omi",
+    "syncStatusOnDevice": "Di perangkat Anda",
+    "syncStatusDownloadingFromDevice": "Mengunduh dari perangkat Anda",
     "newestFirst": "Terbaru lebih dulu",
     "noSyncedRecordingsYet": "Belum ada rekaman yang tersinkronisasi",
     "@lowBatteryAlertBody": {
@@ -3110,5 +3110,6 @@
     "morePaymentMethodsComingSoon": "Metode pembayaran lainnya segera hadir",
     "@morePaymentMethodsComingSoon": {
         "description": "Placeholder card text shown under available payment methods"
-    }
+    },
+    "syncProcessingBackgroundHint": "Ini berlanjut di latar belakang — Anda dapat meninggalkan layar ini."
 }

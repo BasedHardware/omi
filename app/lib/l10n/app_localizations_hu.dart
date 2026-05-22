@@ -9306,7 +9306,7 @@ class AppLocalizationsHu extends AppLocalizations {
   String get syncStatusBackedUp => 'Mentve';
 
   @override
-  String get syncStatusBackingUp => 'Biztonsági mentés…';
+  String get syncStatusBackingUp => 'Szinkronizálás…';
 
   @override
   String get syncStatusWaiting => 'Szinkronizálásra vár';
@@ -9369,7 +9369,7 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get syncFlowIntro =>
-      'A felvételek átkerülnek az Omi eszközödről erre a telefonra, és helyileg tárolódnak, majd feltöltődnek az Omi szerverére, ahol átírják és beszélgetésekké alakítják őket.';
+      'A felvételek az eszközödről erre a telefonra kerülnek át, és helyben tárolódnak, majd feltöltődnek az Omi szerverére, ahol leiratot készít belőlük, és beszélgetésekké alakítja őket.';
 
   @override
   String get syncStepUpload => 'Szinkronizálás';
@@ -9400,7 +9400,7 @@ class AppLocalizationsHu extends AppLocalizations {
   String get syncCardUploadingTitle => 'Feltöltés az Omira';
 
   @override
-  String get syncCardDownloadingTitle => 'Letöltés az Omiról';
+  String get syncCardDownloadingTitle => 'Letöltés az eszközödről';
 
   @override
   String syncCardProgressOf(int current, int total) {
@@ -9408,10 +9408,10 @@ class AppLocalizationsHu extends AppLocalizations {
   }
 
   @override
-  String get syncStatusOnDevice => 'Az Omin várakozik';
+  String get syncStatusOnDevice => 'Az eszközödön';
 
   @override
-  String get syncStatusDownloadingFromDevice => 'Letöltés az Omiról';
+  String get syncStatusDownloadingFromDevice => 'Letöltés az eszközödről';
 
   @override
   String get newestFirst => 'Legújabbak elöl';
@@ -9421,4 +9421,7 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get morePaymentMethodsComingSoon => 'Hamarosan további fizetési módok';
+
+  @override
+  String get syncProcessingBackgroundHint => 'Ez a háttérben folytatódik — elhagyhatja ezt a képernyőt.';
 }

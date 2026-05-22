@@ -3026,7 +3026,7 @@
     "recapDeletedSnackbar": "Kopsavilkums dzēsts",
     "recapDeleteFailed": "Neizdevās dzēst kopsavilkumu. Mēģiniet vēlāk.",
     "syncStatusBackedUp": "Dublēts",
-    "syncStatusBackingUp": "Notiek dublēšana…",
+    "syncStatusBackingUp": "Sinhronizē…",
     "syncStatusWaiting": "Gaida sinhronizāciju",
     "syncStatusRetrying": "Neizdevās apstrādāt — mēģina vēlreiz",
     "syncStatusFailed": "Neizdevās — pieskarieties Mēģināt vēlreiz",
@@ -3041,7 +3041,7 @@
     "syncCardProcessing": "Apstrādā Omi…",
     "syncCardWaitingInternet": "Gaida internetu",
     "syncCardNeedsAttention": "{count, plural, zero{{count} ierakstu nepieciešama uzmanība} one{{count} ierakstam nepieciešama uzmanība} other{{count} ierakstiem nepieciešama uzmanība}}",
-    "syncFlowIntro": "Ieraksti tiek pārsūtīti no jūsu Omi ierīces uz šo tālruni un saglabāti lokāli, pēc tam augšupielādēti Omi serverī, kur tie tiek transkribēti un pārveidoti par sarunām.",
+    "syncFlowIntro": "Ieraksti tiek pārsūtīti no jūsu ierīces uz šo tālruni un saglabāti lokāli, pēc tam augšupielādēti Omi serverī, kur tie tiek transkribēti un pārveidoti par sarunām.",
     "syncStepUpload": "Sinhronizēt",
     "syncStepUploadDesc": "Jūsu ieraksts tiek nosūtīts uz Omi serveri",
     "syncStepProcess": "Transkripcija",
@@ -3051,10 +3051,10 @@
     "syncFailureFootnote": "Ja apstrāde neizdodas, ieraksts tiek automātiski mēģināts vēlreiz nākamajā sinhronizācijā.",
     "syncStatusConversationCreated": "Saruna izveidota",
     "syncCardUploadingTitle": "Augšupielādē Omi",
-    "syncCardDownloadingTitle": "Lejupielādē no Omi",
+    "syncCardDownloadingTitle": "Lejupielāde no jūsu ierīces",
     "syncCardProgressOf": "{current} no {total}",
-    "syncStatusOnDevice": "Gaida Omi",
-    "syncStatusDownloadingFromDevice": "Lejupielādē no Omi",
+    "syncStatusOnDevice": "Jūsu ierīcē",
+    "syncStatusDownloadingFromDevice": "Lejupielāde no jūsu ierīces",
     "newestFirst": "Vispirms jaunākie",
     "noSyncedRecordingsYet": "Vēl nav sinhronizētu ierakstu",
     "@lowBatteryAlertBody": {
@@ -3068,5 +3068,6 @@
     "morePaymentMethodsComingSoon": "Drīzumā vairāk maksājumu veidu",
     "@morePaymentMethodsComingSoon": {
         "description": "Placeholder card text shown under available payment methods"
-    }
+    },
+    "syncProcessingBackgroundHint": "Tas turpinās fonā — varat pamest šo ekrānu."
 }

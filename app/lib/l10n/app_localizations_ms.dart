@@ -9291,7 +9291,7 @@ class AppLocalizationsMs extends AppLocalizations {
   String get syncStatusBackedUp => 'Telah disandarkan';
 
   @override
-  String get syncStatusBackingUp => 'Menyandarkan…';
+  String get syncStatusBackingUp => 'Menyegerakkan…';
 
   @override
   String get syncStatusWaiting => 'Menunggu untuk segerak';
@@ -9352,7 +9352,7 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get syncFlowIntro =>
-      'Rakaman dipindahkan daripada peranti Omi anda ke telefon ini dan disimpan secara setempat, kemudian dimuat naik ke pelayan Omi di mana ia ditranskripsikan dan ditukar menjadi perbualan.';
+      'Rakaman dipindahkan daripada peranti anda ke telefon ini dan disimpan secara setempat, kemudian dimuat naik ke pelayan Omi tempat ia ditranskripsikan dan ditukar menjadi perbualan.';
 
   @override
   String get syncStepUpload => 'Segerak';
@@ -9383,7 +9383,7 @@ class AppLocalizationsMs extends AppLocalizations {
   String get syncCardUploadingTitle => 'Memuat naik ke Omi';
 
   @override
-  String get syncCardDownloadingTitle => 'Memuat turun dari Omi';
+  String get syncCardDownloadingTitle => 'Memuat turun daripada peranti anda';
 
   @override
   String syncCardProgressOf(int current, int total) {
@@ -9391,10 +9391,10 @@ class AppLocalizationsMs extends AppLocalizations {
   }
 
   @override
-  String get syncStatusOnDevice => 'Menunggu di Omi';
+  String get syncStatusOnDevice => 'Pada peranti anda';
 
   @override
-  String get syncStatusDownloadingFromDevice => 'Memuat turun dari Omi';
+  String get syncStatusDownloadingFromDevice => 'Memuat turun daripada peranti anda';
 
   @override
   String get newestFirst => 'Terbaharu dahulu';
@@ -9404,4 +9404,7 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get morePaymentMethodsComingSoon => 'Lebih banyak kaedah pembayaran akan datang';
+
+  @override
+  String get syncProcessingBackgroundHint => 'Ini berterusan di latar belakang — anda boleh meninggalkan skrin ini.';
 }

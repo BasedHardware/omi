@@ -3061,7 +3061,7 @@
     "recapDeletedSnackbar": "Podsumowanie usunięte",
     "recapDeleteFailed": "Nie udało się usunąć podsumowania. Spróbuj ponownie później.",
     "syncStatusBackedUp": "Utworzono kopię",
-    "syncStatusBackingUp": "Tworzenie kopii…",
+    "syncStatusBackingUp": "Synchronizacja…",
     "syncStatusWaiting": "Oczekuje na synchronizację",
     "syncStatusRetrying": "Przetwarzanie nie powiodło się — ponawianie",
     "syncStatusFailed": "Niepowodzenie — naciśnij Ponów",
@@ -3076,7 +3076,7 @@
     "syncCardProcessing": "Przetwarzanie w Omi…",
     "syncCardWaitingInternet": "Oczekiwanie na internet",
     "syncCardNeedsAttention": "{count, plural, one{1 nagranie wymaga uwagi} few{{count} nagrania wymagają uwagi} many{{count} nagrań wymaga uwagi} other{{count} nagrania wymaga uwagi}}",
-    "syncFlowIntro": "Nagrania są przesyłane z urządzenia Omi do tego telefonu i zapisywane lokalnie, a następnie wysyłane na serwer Omi, gdzie są transkrybowane i zamieniane w rozmowy.",
+    "syncFlowIntro": "Nagrania są przenoszone z Twojego urządzenia do tego telefonu i przechowywane lokalnie, a następnie przesyłane na serwer Omi, gdzie są transkrybowane i zamieniane w rozmowy.",
     "syncStepUpload": "Synchronizacja",
     "syncStepUploadDesc": "Twoje nagranie jest wysyłane na serwer Omi",
     "syncStepProcess": "Transkrypcja",
@@ -3086,10 +3086,10 @@
     "syncFailureFootnote": "Jeśli przetwarzanie się nie powiedzie, nagranie zostanie automatycznie ponowione przy kolejnej synchronizacji.",
     "syncStatusConversationCreated": "Rozmowa utworzona",
     "syncCardUploadingTitle": "Przesyłanie do Omi",
-    "syncCardDownloadingTitle": "Pobieranie z Omi",
+    "syncCardDownloadingTitle": "Pobieranie z Twojego urządzenia",
     "syncCardProgressOf": "{current} z {total}",
-    "syncStatusOnDevice": "Czeka na Omi",
-    "syncStatusDownloadingFromDevice": "Pobieranie z Omi",
+    "syncStatusOnDevice": "Na Twoim urządzeniu",
+    "syncStatusDownloadingFromDevice": "Pobieranie z Twojego urządzenia",
     "newestFirst": "Najpierw najnowsze",
     "noSyncedRecordingsYet": "Brak zsynchronizowanych nagrań",
     "@lowBatteryAlertBody": {
@@ -3103,5 +3103,6 @@
     "morePaymentMethodsComingSoon": "Więcej metod płatności już wkrótce",
     "@morePaymentMethodsComingSoon": {
         "description": "Placeholder card text shown under available payment methods"
-    }
+    },
+    "syncProcessingBackgroundHint": "To trwa w tle — możesz opuścić ten ekran."
 }

@@ -9103,7 +9103,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get syncStatusBackedUp => '已备份';
 
   @override
-  String get syncStatusBackingUp => '正在备份…';
+  String get syncStatusBackingUp => '同步中…';
 
   @override
   String get syncStatusWaiting => '等待同步';
@@ -9162,7 +9162,7 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String get syncFlowIntro => '录音从您的 Omi 设备传输到此手机并本地存储，然后上传到 Omi 的服务器，在那里被转写并转换为对话。';
+  String get syncFlowIntro => '录音从你的设备传输到这部手机并存储在本地，然后上传到 Omi 的服务器，在那里被转录并转化为对话。';
 
   @override
   String get syncStepUpload => '同步';
@@ -9192,7 +9192,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get syncCardUploadingTitle => '正在上传到 Omi';
 
   @override
-  String get syncCardDownloadingTitle => '正在从 Omi 下载';
+  String get syncCardDownloadingTitle => '正在从你的设备下载';
 
   @override
   String syncCardProgressOf(int current, int total) {
@@ -9200,10 +9200,10 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String get syncStatusOnDevice => '等待 Omi';
+  String get syncStatusOnDevice => '在你的设备上';
 
   @override
-  String get syncStatusDownloadingFromDevice => '正在从 Omi 下载';
+  String get syncStatusDownloadingFromDevice => '正在从你的设备下载';
 
   @override
   String get newestFirst => '最新优先';
@@ -9213,4 +9213,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get morePaymentMethodsComingSoon => '更多支付方式即将推出';
+
+  @override
+  String get syncProcessingBackgroundHint => '此过程会在后台继续 — 你可以离开此屏幕。';
 }

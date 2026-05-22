@@ -3027,7 +3027,7 @@
     "recapDeletedSnackbar": "रीकैप हटा दी गई",
     "recapDeleteFailed": "रीकैप हटाई नहीं जा सकी। बाद में पुनः प्रयास करें।",
     "syncStatusBackedUp": "बैकअप हो गया",
-    "syncStatusBackingUp": "बैकअप हो रहा है…",
+    "syncStatusBackingUp": "सिंक हो रहा है…",
     "syncStatusWaiting": "सिंक होने की प्रतीक्षा",
     "syncStatusRetrying": "प्रोसेस नहीं हो सका — फिर कोशिश हो रही है",
     "syncStatusFailed": "विफल — Retry दबाएँ",
@@ -3042,7 +3042,7 @@
     "syncCardProcessing": "Omi पर प्रोसेस हो रहा है…",
     "syncCardWaitingInternet": "इंटरनेट का इंतज़ार",
     "syncCardNeedsAttention": "{count, plural, one{1 रिकॉर्डिंग पर ध्यान देना ज़रूरी है} other{{count} रिकॉर्डिंग पर ध्यान देना ज़रूरी है}}",
-    "syncFlowIntro": "रिकॉर्डिंग आपके Omi डिवाइस से इस फ़ोन पर स्थानांतरित होती हैं और स्थानीय रूप से संग्रहीत होती हैं, फिर Omi के सर्वर पर अपलोड की जाती हैं जहाँ उन्हें प्रतिलेखित किया जाता है और बातचीत में बदला जाता है।",
+    "syncFlowIntro": "रिकॉर्डिंग आपके डिवाइस से इस फोन में स्थानांतरित होकर स्थानीय रूप से सहेजी जाती हैं, फिर Omi के सर्वर पर अपलोड की जाती हैं, जहाँ उन्हें ट्रांसक्राइब करके बातचीत में बदला जाता है।",
     "syncStepUpload": "सिंक",
     "syncStepUploadDesc": "आपकी रिकॉर्डिंग Omi के सर्वर पर भेजी जाती है",
     "syncStepProcess": "ट्रांसक्राइब",
@@ -3052,10 +3052,10 @@
     "syncFailureFootnote": "यदि प्रोसेसिंग विफल हो, तो अगले सिंक में रिकॉर्डिंग अपने आप दोबारा आज़माई जाती है।",
     "syncStatusConversationCreated": "बातचीत बन गई",
     "syncCardUploadingTitle": "Omi पर अपलोड हो रहा है",
-    "syncCardDownloadingTitle": "Omi से डाउनलोड हो रहा है",
+    "syncCardDownloadingTitle": "आपके डिवाइस से डाउनलोड हो रहा है",
     "syncCardProgressOf": "{total} में से {current}",
-    "syncStatusOnDevice": "Omi पर प्रतीक्षारत",
-    "syncStatusDownloadingFromDevice": "Omi से डाउनलोड हो रहा है",
+    "syncStatusOnDevice": "आपके डिवाइस पर",
+    "syncStatusDownloadingFromDevice": "आपके डिवाइस से डाउनलोड हो रहा है",
     "newestFirst": "सबसे नई पहले",
     "noSyncedRecordingsYet": "अभी तक कोई सिंक की गई रिकॉर्डिंग नहीं",
     "@lowBatteryAlertBody": {
@@ -3069,5 +3069,6 @@
     "morePaymentMethodsComingSoon": "जल्द ही और भुगतान विकल्प",
     "@morePaymentMethodsComingSoon": {
         "description": "Placeholder card text shown under available payment methods"
-    }
+    },
+    "syncProcessingBackgroundHint": "यह बैकग्राउंड में जारी रहता है — आप इस स्क्रीन से बाहर जा सकते हैं।"
 }

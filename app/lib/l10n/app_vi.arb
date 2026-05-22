@@ -3031,7 +3031,7 @@
     "recapDeletedSnackbar": "Đã xóa tóm tắt",
     "recapDeleteFailed": "Không thể xóa tóm tắt. Vui lòng thử lại sau.",
     "syncStatusBackedUp": "Đã sao lưu",
-    "syncStatusBackingUp": "Đang sao lưu…",
+    "syncStatusBackingUp": "Đang đồng bộ…",
     "syncStatusWaiting": "Đang chờ đồng bộ",
     "syncStatusRetrying": "Không xử lý được — đang thử lại",
     "syncStatusFailed": "Thất bại — nhấn Thử lại",
@@ -3046,7 +3046,7 @@
     "syncCardProcessing": "Đang xử lý trên Omi…",
     "syncCardWaitingInternet": "Đang chờ kết nối Internet",
     "syncCardNeedsAttention": "{count, plural, other{{count} bản ghi cần chú ý}}",
-    "syncFlowIntro": "Bản ghi được chuyển từ thiết bị Omi của bạn sang điện thoại này và lưu cục bộ, sau đó được tải lên máy chủ của Omi để phiên âm và chuyển thành cuộc trò chuyện.",
+    "syncFlowIntro": "Bản ghi được chuyển từ thiết bị của bạn sang điện thoại này và lưu trữ cục bộ, sau đó tải lên máy chủ của Omi, nơi chúng được phiên âm và chuyển thành cuộc trò chuyện.",
     "syncStepUpload": "Đồng bộ",
     "syncStepUploadDesc": "Bản ghi của bạn được gửi đến máy chủ của Omi",
     "syncStepProcess": "Chuyển lời",
@@ -3056,10 +3056,10 @@
     "syncFailureFootnote": "Nếu xử lý thất bại, bản ghi sẽ tự động được thử lại trong lần đồng bộ tiếp theo.",
     "syncStatusConversationCreated": "Đã tạo cuộc trò chuyện",
     "syncCardUploadingTitle": "Đang tải lên Omi",
-    "syncCardDownloadingTitle": "Đang tải xuống từ Omi",
+    "syncCardDownloadingTitle": "Đang tải xuống từ thiết bị của bạn",
     "syncCardProgressOf": "{current} trên {total}",
-    "syncStatusOnDevice": "Đang chờ trên Omi",
-    "syncStatusDownloadingFromDevice": "Đang tải xuống từ Omi",
+    "syncStatusOnDevice": "Trên thiết bị của bạn",
+    "syncStatusDownloadingFromDevice": "Đang tải xuống từ thiết bị của bạn",
     "newestFirst": "Mới nhất trước",
     "noSyncedRecordingsYet": "Chưa có bản ghi nào được đồng bộ",
     "@lowBatteryAlertBody": {
@@ -3073,5 +3073,6 @@
     "morePaymentMethodsComingSoon": "Sắp có thêm phương thức thanh toán",
     "@morePaymentMethodsComingSoon": {
         "description": "Placeholder card text shown under available payment methods"
-    }
+    },
+    "syncProcessingBackgroundHint": "Quá trình này tiếp tục chạy nền — bạn có thể rời khỏi màn hình này."
 }

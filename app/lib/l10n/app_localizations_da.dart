@@ -9253,7 +9253,7 @@ class AppLocalizationsDa extends AppLocalizations {
   String get syncStatusBackedUp => 'Sikkerhedskopieret';
 
   @override
-  String get syncStatusBackingUp => 'Sikkerhedskopierer…';
+  String get syncStatusBackingUp => 'Synkroniserer…';
 
   @override
   String get syncStatusWaiting => 'Venter på synkronisering';
@@ -9316,7 +9316,7 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get syncFlowIntro =>
-      'Optagelser overføres fra din Omi-enhed til denne telefon og gemmes lokalt og uploades derefter til Omis server, hvor de transskriberes og omdannes til samtaler.';
+      'Optagelser overføres fra din enhed til denne telefon og gemmes lokalt og uploades derefter til Omis server, hvor de transskriberes og bliver til samtaler.';
 
   @override
   String get syncStepUpload => 'Synkroniser';
@@ -9347,7 +9347,7 @@ class AppLocalizationsDa extends AppLocalizations {
   String get syncCardUploadingTitle => 'Uploader til Omi';
 
   @override
-  String get syncCardDownloadingTitle => 'Downloader fra Omi';
+  String get syncCardDownloadingTitle => 'Downloader fra din enhed';
 
   @override
   String syncCardProgressOf(int current, int total) {
@@ -9355,10 +9355,10 @@ class AppLocalizationsDa extends AppLocalizations {
   }
 
   @override
-  String get syncStatusOnDevice => 'Venter på Omi';
+  String get syncStatusOnDevice => 'På din enhed';
 
   @override
-  String get syncStatusDownloadingFromDevice => 'Downloader fra Omi';
+  String get syncStatusDownloadingFromDevice => 'Downloader fra din enhed';
 
   @override
   String get newestFirst => 'Nyeste først';
@@ -9368,4 +9368,7 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get morePaymentMethodsComingSoon => 'Flere betalingsmetoder kommer snart';
+
+  @override
+  String get syncProcessingBackgroundHint => 'Det fortsætter i baggrunden — du kan forlade denne skærm.';
 }

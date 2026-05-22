@@ -10729,7 +10729,7 @@
     "recapDeletedSnackbar": "Burado na ang recap",
     "recapDeleteFailed": "Hindi maburahin ang recap. Subukan ulit mamaya.",
     "syncStatusBackedUp": "Na-back up na",
-    "syncStatusBackingUp": "Nagba-back up…",
+    "syncStatusBackingUp": "Sine-sync…",
     "syncStatusWaiting": "Naghihintay na mag-sync",
     "syncStatusRetrying": "Hindi naproseso — sinusubukang muli",
     "syncStatusFailed": "Nabigo — i-tap ang Subukan Muli",
@@ -10744,7 +10744,7 @@
     "syncCardProcessing": "Pinoproseso sa Omi…",
     "syncCardWaitingInternet": "Naghihintay ng internet",
     "syncCardNeedsAttention": "{count, plural, one{1 recording ang kailangang asikasuhin} other{{count} recording ang kailangang asikasuhin}}",
-    "syncFlowIntro": "Inililipat ang mga recording mula sa iyong Omi device papunta sa telepono na ito at iniimbak nang lokal, pagkatapos ay ina-upload sa server ng Omi kung saan ito tina-transcribe at ginagawang mga pag-uusap.",
+    "syncFlowIntro": "Ang mga recording ay inililipat mula sa iyong device patungo sa telepono na ito at iniimbak nang lokal, pagkatapos ay ina-upload sa server ng Omi kung saan tina-transcribe ang mga ito at ginagawang mga pag-uusap.",
     "syncStepUpload": "I-sync",
     "syncStepUploadDesc": "Ipinapadala ang iyong recording sa server ng Omi",
     "syncStepProcess": "I-transcribe",
@@ -10754,14 +10754,15 @@
     "syncFailureFootnote": "Kung mabigo ang pagproseso, awtomatikong susubukan muli ang recording sa susunod na sync.",
     "syncStatusConversationCreated": "Nagawa ang usapan",
     "syncCardUploadingTitle": "Ina-upload sa Omi",
-    "syncCardDownloadingTitle": "Dina-download mula sa Omi",
+    "syncCardDownloadingTitle": "Dina-download mula sa iyong device",
     "syncCardProgressOf": "{current} ng {total}",
-    "syncStatusOnDevice": "Naghihintay sa Omi",
-    "syncStatusDownloadingFromDevice": "Dina-download mula sa Omi",
+    "syncStatusOnDevice": "Nasa iyong device",
+    "syncStatusDownloadingFromDevice": "Dina-download mula sa iyong device",
     "newestFirst": "Pinakabago muna",
     "noSyncedRecordingsYet": "Wala pang naka-sync na recording",
     "morePaymentMethodsComingSoon": "Mas maraming paraan ng pagbabayad na malapit nang dumating",
     "@morePaymentMethodsComingSoon": {
         "description": "Placeholder card text shown under available payment methods"
-    }
+    },
+    "syncProcessingBackgroundHint": "Magpapatuloy ito sa background — puwede mong iwan ang screen na ito."
 }
