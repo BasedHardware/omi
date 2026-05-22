@@ -34,7 +34,7 @@ final class OmiActionExecutor {
             Task { @MainActor in self?.cancel() }
         }
 
-        CursorPTTOverlayManager.shared.startExecution(resolved.description, totalSteps: resolved.steps.count)
+        CursorPTTOverlayManager.shared.startExecution()
         OmiPlanWindow.shared.startExecution(
             planDescription: resolved.description,
             steps: resolved.steps.map { $0.stepDescription }
@@ -45,7 +45,6 @@ final class OmiActionExecutor {
         for (index, step) in resolved.steps.enumerated() {
             guard !Task.isCancelled else { break }
 
-            CursorPTTOverlayManager.shared.updateExecutingStep(step.stepDescription, stepIndex: index)
             OmiPlanWindow.shared.updateStep(index: index)
             log("OmiActionExecutor: step \(index + 1)/\(resolved.steps.count) — \(step.stepDescription)")
 

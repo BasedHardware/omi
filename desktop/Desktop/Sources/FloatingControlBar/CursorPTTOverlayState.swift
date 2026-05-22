@@ -18,8 +18,4 @@ final class CursorPTTOverlayState: ObservableObject {
     @Published var transcriptText: String = ""
     @Published var displayedQuery: String = ""
     @Published var cursorPosition: CGPoint = .zero
-    @Published var executingPlanDescription: String = ""
-    @Published var executingStepDescription: String = ""
-    @Published var executingStepIndex: Int = 0
-    @Published var executingTotalSteps: Int = 0
 }

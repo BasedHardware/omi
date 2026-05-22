@@ -109,33 +109,21 @@ final class CursorPTTOverlayManager {
         panel?.ignoresMouseEvents = true
     }
 
-    func startExecution(_ planDescription: String, totalSteps: Int) {
+    func startExecution() {
         autoDismissWork?.cancel()
         autoDismissWork = nil
         cancelResponseSubscriptions()
         transcriptCancellable = nil
-        overlayState.executingPlanDescription = planDescription
-        overlayState.executingStepDescription = ""
-        overlayState.executingStepIndex = 0
-        overlayState.executingTotalSteps = totalSteps
         overlayState.phase = .executing
         panel?.ignoresMouseEvents = false
     }
 
-    func updateExecutingStep(_ stepDescription: String, stepIndex: Int) {
-        overlayState.executingStepDescription = stepDescription
-        overlayState.executingStepIndex = stepIndex
-    }
-
     func cancelExecution() {
         overlayState.phase = .idle
-        overlayState.executingPlanDescription = ""
-        overlayState.executingStepDescription = ""
         panel?.ignoresMouseEvents = true
     }
 
     func finishExecution() {
-        overlayState.executingStepDescription = "done"
         scheduleAutoDismiss(after: 0.8)
     }
 

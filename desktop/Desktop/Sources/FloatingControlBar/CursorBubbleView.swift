@@ -8,7 +8,6 @@ struct CursorBubbleView: View {
     @State private var isSpinning = false
     @State private var blinkVisible = true
     @State private var dotIndex = 0
-    @State private var executingPulse = false
 
     /// Offset so indicator sits below-right of cursor tip.
     private let offset = CGPoint(x: 22, y: -6)
@@ -242,76 +241,16 @@ struct CursorBubbleView: View {
     // MARK: - Executing
 
     private var executingCard: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            // Header: indigo dot + "omi" label
-            HStack(spacing: 4) {
-                Circle()
-                    .fill(Color.indigo)
-                    .frame(width: 5, height: 5)
-                Text("omi")
-                    .font(.system(size: 9, weight: .semibold, design: .monospaced))
-                    .foregroundColor(Color.indigo.opacity(0.9))
-                    .textCase(.uppercase)
-                    .tracking(0.5)
-            }
-            .padding(.bottom, 4)
-
-            // Plan description
-            if !state.executingPlanDescription.isEmpty {
-                Text(state.executingPlanDescription)
-                    .font(.system(size: 10))
-                    .foregroundColor(.secondary)
-                    .italic()
-                    .fixedSize(horizontal: false, vertical: true)
-                    .padding(.bottom, 6)
-            }
-
-            // Current step description
-            if !state.executingStepDescription.isEmpty {
-                Text(state.executingStepDescription)
-                    .font(.system(size: 13))
-                    .foregroundColor(.primary)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .padding(.bottom, 6)
-            }
-
-            // Progress dots — only when multi-step
-            if state.executingTotalSteps > 1 {
-                HStack(spacing: 5) {
-                    ForEach(0..<state.executingTotalSteps, id: \.self) { i in
-                        if i < state.executingStepIndex {
-                            // Completed step — filled indigo
-                            Circle()
-                                .fill(Color.indigo)
-                                .frame(width: 6, height: 6)
-                        } else if i == state.executingStepIndex {
-                            // Current step — pulsing filled
-                            Circle()
-                                .fill(Color.indigo)
-                                .frame(width: 6, height: 6)
-                                .opacity(executingPulse ? 0.4 : 1.0)
-                                .animation(.easeInOut(duration: 0.7).repeatForever(autoreverses: true), value: executingPulse)
-                        } else {
-                            // Upcoming step — empty circle
-                            Circle()
-                                .stroke(Color.indigo.opacity(0.35), lineWidth: 1)
-                                .frame(width: 6, height: 6)
-                        }
-                    }
-                }
-                .onAppear { executingPulse = true }
-                .onDisappear { executingPulse = false }
-                .padding(.bottom, 6)
-            }
-
-            // Bottom hint
+        HStack(spacing: 6) {
+            Circle()
+                .fill(Color.indigo)
+                .frame(width: 5, height: 5)
             Text("esc · cancel")
                 .font(.system(size: 9, design: .monospaced))
                 .foregroundColor(.primary.opacity(0.3))
         }
-        .frame(maxWidth: bubbleMaxWidth, alignment: .leading)
-        .padding(.horizontal, 12)
-        .padding(.vertical, 10)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
         .background(bubble(border: Color.indigo.opacity(0.4)))
         .environment(\.colorScheme, .dark)
     }
