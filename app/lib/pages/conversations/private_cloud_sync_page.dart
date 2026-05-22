@@ -26,17 +26,17 @@ class _PrivateCloudSyncPageState extends State<PrivateCloudSyncPage> {
     setState(() => _isSaving = true);
     try {
       await context.read<UserProvider>().setPrivateCloudSync(value);
+      if (!mounted) return;
       setState(() => _isSaving = false);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(value ? context.l10n.cloudStorageEnabled : context.l10n.cloudStorageDisabled),
-            backgroundColor: Colors.green,
-          ),
-        );
-      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(value ? context.l10n.cloudStorageEnabled : context.l10n.cloudStorageDisabled),
+          backgroundColor: Colors.green,
+        ),
+      );
     } catch (e) {
       print('Error toggling cloud storage: $e');
+      if (!mounted) return;
       setState(() => _isSaving = false);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
