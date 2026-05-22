@@ -183,6 +183,12 @@ class TestAppWebhookHealthLuaScript:
 class TestAppWebhookSuccessReset:
     """Test that success resets all failure state."""
 
+    def setup_method(self):
+        from database import webhook_health
+
+        with webhook_health._cache_lock:
+            webhook_health._success_last_write.clear()
+
     def test_success_updates_last_success_without_resetting_failures(self):
         """record_app_webhook_success should update last_success_at without clearing failure state."""
         from database.webhook_health import record_app_webhook_success
@@ -208,6 +214,12 @@ class TestAppWebhookSuccessReset:
 
 class TestIsAppWebhookDisabled:
     """Test the disabled check function."""
+
+    def setup_method(self):
+        from database import webhook_health
+
+        with webhook_health._cache_lock:
+            webhook_health._disabled_cache.clear()
 
     def test_disabled_returns_true(self):
         from database.webhook_health import is_app_webhook_disabled
@@ -1293,3 +1305,182 @@ class TestDevWebhookManualReEnable:
         assert mapping['disabled'] == '0'
         assert mapping['last_error'] == ''
         mock_r.expire.assert_called_once()
+
+
+class TestDisabledCacheInMemory:
+    """Test in-memory cache for is_app_webhook_disabled."""
+
+    def setup_method(self):
+        from database import webhook_health
+
+        self.wh = webhook_health
+        with self.wh._cache_lock:
+            self.wh._disabled_cache.clear()
+            self.wh._success_last_write.clear()
+
+    def test_caches_false_avoids_repeated_hget(self):
+        mock_r = MagicMock()
+        mock_r.hget.return_value = b'0'
+        with patch.object(self.wh, 'r', mock_r):
+            r1 = self.wh.is_app_webhook_disabled("app-cache-1")
+            r2 = self.wh.is_app_webhook_disabled("app-cache-1")
+        assert r1 is False
+        assert r2 is False
+        assert mock_r.hget.call_count == 1
+
+    def test_caches_true_avoids_repeated_hget(self):
+        mock_r = MagicMock()
+        mock_r.hget.return_value = b'1'
+        with patch.object(self.wh, 'r', mock_r):
+            r1 = self.wh.is_app_webhook_disabled("app-cache-2")
+            r2 = self.wh.is_app_webhook_disabled("app-cache-2")
+        assert r1 is True
+        assert r2 is True
+        assert mock_r.hget.call_count == 1
+
+    def test_cache_expires_after_ttl(self):
+        mock_r = MagicMock()
+        mock_r.hget.return_value = b'0'
+        with patch.object(self.wh, 'r', mock_r):
+            self.wh.is_app_webhook_disabled("app-cache-3")
+            with self.wh._cache_lock:
+                entry = self.wh._disabled_cache["app-cache-3"]
+                self.wh._disabled_cache["app-cache-3"] = (entry[0], entry[1] - 61)
+            mock_r.hget.return_value = b'1'
+            result = self.wh.is_app_webhook_disabled("app-cache-3")
+        assert result is True
+        assert mock_r.hget.call_count == 2
+
+    def test_redis_error_returns_false_not_cached(self):
+        mock_r = MagicMock()
+        mock_r.hget.side_effect = Exception("Redis down")
+        with patch.object(self.wh, 'r', mock_r):
+            r1 = self.wh.is_app_webhook_disabled("app-cache-4")
+        assert r1 is False
+        assert "app-cache-4" not in self.wh._disabled_cache
+
+    def test_clear_invalidates_disabled_cache(self):
+        mock_r = MagicMock()
+        mock_r.hget.return_value = b'1'
+        with patch.object(self.wh, 'r', mock_r):
+            self.wh.is_app_webhook_disabled("app-cache-5")
+            assert "app-cache-5" in self.wh._disabled_cache
+            self.wh.clear_app_webhook_health("app-cache-5")
+            assert "app-cache-5" not in self.wh._disabled_cache
+
+    def test_disable_in_firestore_sets_cache_true(self):
+        mock_r = MagicMock()
+        mock_r.hget.return_value = b'0'
+        mock_db = MagicMock()
+        with patch.object(self.wh, 'r', mock_r), patch.object(self.wh, 'db', mock_db):
+            self.wh.is_app_webhook_disabled("app-cache-6")
+            assert self.wh._disabled_cache["app-cache-6"][0] is False
+            self.wh.disable_app_in_firestore("app-cache-6", "test error", 72)
+            assert self.wh._disabled_cache["app-cache-6"][0] is True
+            result = self.wh.is_app_webhook_disabled("app-cache-6")
+        assert result is True
+        assert mock_r.hget.call_count == 1
+
+
+class TestSuccessDebounce:
+    """Test debounced success recording."""
+
+    def setup_method(self):
+        from database import webhook_health
+
+        self.wh = webhook_health
+        with self.wh._cache_lock:
+            self.wh._disabled_cache.clear()
+            self.wh._success_last_write.clear()
+
+    def test_first_success_writes_to_redis(self):
+        mock_r = MagicMock()
+        with patch.object(self.wh, 'r', mock_r):
+            self.wh.record_app_webhook_success("app-deb-1")
+        assert mock_r.hset.call_count == 1
+        assert mock_r.expire.call_count == 1
+
+    def test_second_success_within_window_skips_redis(self):
+        mock_r = MagicMock()
+        with patch.object(self.wh, 'r', mock_r):
+            self.wh.record_app_webhook_success("app-deb-2")
+            self.wh.record_app_webhook_success("app-deb-2")
+        assert mock_r.hset.call_count == 1
+
+    def test_success_after_debounce_window_writes_again(self):
+        mock_r = MagicMock()
+        with patch.object(self.wh, 'r', mock_r):
+            self.wh.record_app_webhook_success("app-deb-3")
+            with self.wh._cache_lock:
+                self.wh._success_last_write["app-deb-3"] -= 61
+            self.wh.record_app_webhook_success("app-deb-3")
+        assert mock_r.hset.call_count == 2
+
+    def test_different_apps_independent(self):
+        mock_r = MagicMock()
+        with patch.object(self.wh, 'r', mock_r):
+            self.wh.record_app_webhook_success("app-deb-4a")
+            self.wh.record_app_webhook_success("app-deb-4b")
+        assert mock_r.hset.call_count == 2
+
+    def test_clear_resets_debounce(self):
+        mock_r = MagicMock()
+        with patch.object(self.wh, 'r', mock_r):
+            self.wh.record_app_webhook_success("app-deb-5")
+            self.wh.clear_app_webhook_health("app-deb-5")
+            self.wh.record_app_webhook_success("app-deb-5")
+        assert mock_r.hset.call_count == 2
+
+    def test_failure_not_debounced(self):
+        mock_script = MagicMock(return_value=0)
+        with patch("database.webhook_health._get_failure_script", return_value=mock_script):
+            self.wh.record_app_webhook_failure("app-deb-6", 500, "error")
+            self.wh.record_app_webhook_failure("app-deb-6", 500, "error")
+        assert mock_script.call_count == 2
+
+    def test_dev_webhook_success_not_debounced(self):
+        """Dev webhook success resets failure_count — must NOT be debounced."""
+        mock_r = MagicMock()
+        with patch.object(self.wh, 'r', mock_r):
+            self.wh.record_dev_webhook_success("uid-1", "realtime_transcript")
+            self.wh.record_dev_webhook_success("uid-1", "realtime_transcript")
+        assert mock_r.hset.call_count == 2
+
+
+class TestCacheEviction:
+    """Test cache size cap and eviction."""
+
+    def setup_method(self):
+        from database import webhook_health
+
+        self.wh = webhook_health
+        with self.wh._cache_lock:
+            self.wh._disabled_cache.clear()
+            self.wh._success_last_write.clear()
+
+    def test_disabled_cache_evicts_when_over_max(self):
+        import time as _time
+
+        mock_r = MagicMock()
+        mock_r.hget.return_value = b'0'
+        original_max = self.wh._CACHE_MAX_SIZE
+        try:
+            self.wh._CACHE_MAX_SIZE = 5
+            with patch.object(self.wh, 'r', mock_r):
+                for i in range(7):
+                    self.wh.is_app_webhook_disabled(f"evict-app-{i}")
+            assert len(self.wh._disabled_cache) <= 6
+        finally:
+            self.wh._CACHE_MAX_SIZE = original_max
+
+    def test_success_debounce_evicts_when_over_max(self):
+        mock_r = MagicMock()
+        original_max = self.wh._CACHE_MAX_SIZE
+        try:
+            self.wh._CACHE_MAX_SIZE = 5
+            with patch.object(self.wh, 'r', mock_r):
+                for i in range(7):
+                    self.wh.record_app_webhook_success(f"evict-success-{i}")
+            assert len(self.wh._success_last_write) <= 6
+        finally:
+            self.wh._CACHE_MAX_SIZE = original_max
