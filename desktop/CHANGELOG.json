@@ -1,8 +1,13 @@
 {
-  "unreleased": [
-    "Fixed BYOK chat on the free plan: the desktop now forwards your provider keys to chat requests, so chat no longer hits the trial paywall and runs on your own keys"
-  ],
+  "unreleased": [],
   "releases": [
+    {
+      "version": "0.11.420",
+      "date": "2026-05-22",
+      "changes": [
+        "Fixed BYOK chat on the free plan: the desktop now forwards your provider keys to chat requests, so chat no longer hits the trial paywall and runs on your own keys"
+      ]
+    },
     {
       "version": "0.11.419",
       "date": "2026-05-21",
