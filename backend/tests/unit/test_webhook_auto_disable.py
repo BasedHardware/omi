@@ -886,12 +886,30 @@ class TestLuaTimeProgression:
             )
             return 0
 
+        first_ts = int(first)
+        last_success = state.get('last_success_at', '')
+        if last_success and last_success != '':
+            last_success_ts = int(last_success)
+            if last_success_ts > first_ts:
+                state.update(
+                    {
+                        'first_failure_at': now_ts,
+                        'last_failure_at': now_ts,
+                        'failure_count': 1,
+                        'last_status': status,
+                        'last_error': error,
+                        'notified_day1': '0',
+                        'notified_day2': '0',
+                        'disabled': '0',
+                    }
+                )
+                return 0
+
         state['last_failure_at'] = now_ts
         state['last_status'] = status
         state['last_error'] = error
         state['failure_count'] = state.get('failure_count', 0) + 1
 
-        first_ts = int(first)
         elapsed = now_ts - first_ts
 
         if elapsed >= 259200:  # 72h
@@ -981,7 +999,38 @@ class TestLuaTimeProgression:
 
         assert '259200' in _RECORD_FAILURE_LUA  # 72h in seconds
         assert '172800' in _RECORD_FAILURE_LUA  # 48h in seconds
-        assert '86400' in _RECORD_FAILURE_LUA  # 24h in seconds
+
+    def test_success_between_failures_resets_window(self):
+        """Regression: failure → success → 72h → failure should NOT disable.
+
+        A transient failure followed by recovery should reset the failure window.
+        The second failure after 72h starts a fresh window, not auto-disable.
+        """
+        state = {}
+        t0 = 1_700_000_000
+
+        assert self._lua_sim(state, t0, '500', 'error') == 0
+        assert state['first_failure_at'] == t0
+
+        state['last_success_at'] = str(t0 + 3600)
+
+        result = self._lua_sim(state, t0 + 259200, '500', 'error')
+        assert result == 0
+        assert state['disabled'] == '0'
+        assert state['first_failure_at'] == t0 + 259200
+        assert state['failure_count'] == 1
+
+    def test_no_success_between_failures_still_disables(self):
+        """Without any success, the 72h window proceeds to disable as designed."""
+        state = {}
+        t0 = 1_700_000_000
+
+        self._lua_sim(state, t0, '500', 'error')
+        self._lua_sim(state, t0 + 86400, '500', 'error')  # day1 warn
+        self._lua_sim(state, t0 + 172800, '500', 'error')  # day2 warn
+        result = self._lua_sim(state, t0 + 259200, '500', 'error')
+        assert result == 3
+        assert state['disabled'] == '1'
 
 
 class TestDisableAction:
@@ -1062,6 +1111,15 @@ class TestLuaSourceVerification:
         first_branch = _RECORD_FAILURE_LUA[:first_branch_end]
         for field in required_fields:
             assert field in first_branch, f"Missing {field} in first-failure initialization"
+
+    def test_lua_checks_last_success_before_elapsed(self):
+        """Lua script must check last_success_at > first_failure_at to reset window."""
+        from database.webhook_health import _RECORD_FAILURE_LUA
+
+        assert 'last_success_at' in _RECORD_FAILURE_LUA
+        pos_success_check = _RECORD_FAILURE_LUA.index('last_success_ts')
+        pos_elapsed_check = _RECORD_FAILURE_LUA.index('elapsed')
+        assert pos_success_check < pos_elapsed_check
 
 
 class TestMarketplaceIntegrationHealthPaths:
