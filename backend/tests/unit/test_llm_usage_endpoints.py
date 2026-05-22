@@ -53,6 +53,9 @@ for attr in [
     "set_user_data_protection_level",
     "get_generic_cache",
     "set_generic_cache",
+    "get_daily_summary_uid",
+    "store_daily_summary_to_uid",
+    "remove_daily_summary_to_uid",
     "set_speech_profile_duration",
     "r",
 ]:

@@ -21,6 +21,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import struct
@@ -301,9 +302,12 @@ def background_transcribe_chunk(
     chunk: bytes,
     language: str,
 ) -> dict:
+    chunk_hash = hashlib.sha256(chunk).hexdigest()
+    chunk_id = f"{conversation_id}-{chunk_start_ms}-{len(chunk)}-{chunk_hash[:16]}"
     transcribe_url = (
         f"{api_base.rstrip('/')}/v2/desktop/background-transcribe"
         f"?conversation_id={conversation_id}"
+        f"&chunk_id={urllib.parse.quote(chunk_id)}"
         f"&chunk_start_ms={chunk_start_ms}"
         f"&sample_rate={SAMPLE_RATE}"
         f"&channels={CHANNELS}"
