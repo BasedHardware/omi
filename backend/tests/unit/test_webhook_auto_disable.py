@@ -1375,6 +1375,7 @@ class TestDisabledCacheInMemory:
         with self.wh._cache_lock:
             self.wh._disabled_cache.clear()
             self.wh._success_last_write.clear()
+            self.wh._failure_since_last_success.clear()
 
     def test_caches_false_avoids_repeated_hget(self):
         mock_r = MagicMock()
@@ -1450,6 +1451,7 @@ class TestSuccessDebounce:
         with self.wh._cache_lock:
             self.wh._disabled_cache.clear()
             self.wh._success_last_write.clear()
+            self.wh._failure_since_last_success.clear()
 
     def test_first_success_writes_to_redis(self):
         mock_r = MagicMock()
@@ -1504,6 +1506,39 @@ class TestSuccessDebounce:
             self.wh.record_dev_webhook_success("uid-1", "realtime_transcript")
         assert mock_r.hset.call_count == 2
 
+    def test_success_after_failure_bypasses_debounce(self):
+        """Regression: success → failure → success (within debounce) must write to Redis.
+
+        The Lua script needs last_success_at > first_failure_at to reset the failure
+        window. If the post-failure success is dropped by debounce, the failure window
+        stays open and can falsely auto-disable after 72h.
+        """
+        mock_r = MagicMock()
+        mock_script = MagicMock(return_value=0)
+        with (
+            patch.object(self.wh, 'r', mock_r),
+            patch("database.webhook_health._get_failure_script", return_value=mock_script),
+        ):
+            self.wh.record_app_webhook_success("app-deb-bypass")
+            assert mock_r.hset.call_count == 1
+            self.wh.record_app_webhook_failure("app-deb-bypass", 500, "error")
+            self.wh.record_app_webhook_success("app-deb-bypass")
+            assert mock_r.hset.call_count == 2
+
+    def test_two_successes_after_failure_second_debounced(self):
+        """After failure→success bypasses debounce, next success is debounced normally."""
+        mock_r = MagicMock()
+        mock_script = MagicMock(return_value=0)
+        with (
+            patch.object(self.wh, 'r', mock_r),
+            patch("database.webhook_health._get_failure_script", return_value=mock_script),
+        ):
+            self.wh.record_app_webhook_failure("app-deb-seq", 500, "error")
+            self.wh.record_app_webhook_success("app-deb-seq")
+            assert mock_r.hset.call_count == 1
+            self.wh.record_app_webhook_success("app-deb-seq")
+            assert mock_r.hset.call_count == 1
+
 
 class TestCacheEviction:
     """Test cache size cap and eviction."""
@@ -1515,6 +1550,7 @@ class TestCacheEviction:
         with self.wh._cache_lock:
             self.wh._disabled_cache.clear()
             self.wh._success_last_write.clear()
+            self.wh._failure_since_last_success.clear()
 
     def test_disabled_cache_evicts_when_over_max(self):
         import time as _time
