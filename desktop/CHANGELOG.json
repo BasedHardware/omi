@@ -1,5 +1,7 @@
 {
-  "unreleased": [],
+  "unreleased": [
+    "Fixed BYOK chat on the free plan: the desktop now forwards your provider keys to chat requests, so chat no longer hits the trial paywall and runs on your own keys"
+  ],
   "releases": [
     {
       "version": "0.11.419",

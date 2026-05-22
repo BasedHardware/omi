@@ -17,7 +17,10 @@ serde_json = "1"
 reqwest = { version = "0.11", features = ["json", "stream"] }
 
 # Authentication
-jsonwebtoken = "10"
+# v10's default features omit a crypto backend, so token verification panics at
+# runtime ("Could not automatically determine the process-level CryptoProvider").
+# Enable the pure-Rust backend explicitly (no system libs, portable).
+jsonwebtoken = { version = "10", features = ["rust_crypto"] }
 
 # Utilities
 dotenvy = "0.15"
