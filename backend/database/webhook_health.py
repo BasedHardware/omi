@@ -16,8 +16,6 @@ _CACHE_MAX_SIZE = 10000
 
 _cache_lock = threading.Lock()
 _disabled_cache: dict[str, tuple[bool, float]] = {}
-_success_last_write: dict[str, float] = {}
-_failure_since_last_success: set = set()
 
 
 def _evict_oldest(d: dict):
@@ -62,7 +60,7 @@ local first_ts = tonumber(first)
 local last_success = redis.call('HGET', key, 'last_success_at')
 if last_success and last_success ~= '' then
     local last_success_ts = tonumber(last_success)
-    if last_success_ts and last_success_ts > first_ts then
+    if last_success_ts and last_success_ts >= first_ts then
         redis.call('HSET', key,
             'first_failure_at', now_ts,
             'last_failure_at', now_ts,
@@ -131,8 +129,6 @@ def record_app_webhook_failure(app_id: str, status_code: int, error: str) -> int
     Returns graduated response action:
     0 = no action, 1 = day1 warn, 2 = day2 warn, 3 = auto-disable
     """
-    with _cache_lock:
-        _failure_since_last_success.add(app_id)
     try:
         key = f'app_webhook_health:{app_id}'
         now_ts = int(time.time())
@@ -143,29 +139,60 @@ def record_app_webhook_failure(app_id: str, status_code: int, error: str) -> int
         return 0
 
 
-def record_app_webhook_success(app_id: str):
-    """Record a successful webhook delivery. Debounced to once per 60s per app.
+# Lua script: atomically record success with debounce and recovery detection.
+# Returns: 1 = written, 0 = debounced (skipped)
+_RECORD_SUCCESS_LUA = """
+local key = KEYS[1]
+local now_ts = tonumber(ARGV[1])
+local debounce_secs = tonumber(ARGV[2])
+local ttl = tonumber(ARGV[3])
 
-    Bypasses debounce when a failure occurred since the last success write — the Lua
-    script needs last_success_at > first_failure_at to reset the failure window.
+local first_failure = redis.call('HGET', key, 'first_failure_at')
+local last_success = redis.call('HGET', key, 'last_success_at')
+
+if first_failure and first_failure ~= '' then
+    local ff = tonumber(first_failure)
+    local ls = (last_success and last_success ~= '') and tonumber(last_success) or 0
+    if ff >= ls then
+        redis.call('HSET', key, 'last_success_at', now_ts)
+        redis.call('EXPIRE', key, ttl)
+        return 1
+    end
+end
+
+if last_success and last_success ~= '' then
+    local ls = tonumber(last_success)
+    if ls and (now_ts - ls) < debounce_secs then
+        return 0
+    end
+end
+
+redis.call('HSET', key, 'last_success_at', now_ts)
+redis.call('EXPIRE', key, ttl)
+return 1
+"""
+
+_record_success_script = None
+
+
+def _get_success_script():
+    global _record_success_script
+    if _record_success_script is None:
+        _record_success_script = r.register_script(_RECORD_SUCCESS_LUA)
+    return _record_success_script
+
+
+def record_app_webhook_success(app_id: str):
+    """Record a successful webhook delivery. Debounced atomically in Redis.
+
+    Uses a Lua script that bypasses debounce when a failure exists without a newer
+    success (recovery case). Works correctly across multiple pods.
     """
-    now = time.monotonic()
-    with _cache_lock:
-        had_failure = app_id in _failure_since_last_success
-        if had_failure:
-            _failure_since_last_success.discard(app_id)
-        else:
-            last = _success_last_write.get(app_id)
-            if last is not None and (now - last) < _SUCCESS_DEBOUNCE:
-                return
-        _success_last_write[app_id] = now
-        if len(_success_last_write) > _CACHE_MAX_SIZE:
-            _evict_oldest(_success_last_write)
     try:
         key = f'app_webhook_health:{app_id}'
         now_ts = int(time.time())
-        r.hset(key, 'last_success_at', str(now_ts))
-        r.expire(key, _HEALTH_TTL)
+        script = _get_success_script()
+        script(keys=[key], args=[now_ts, _SUCCESS_DEBOUNCE, _HEALTH_TTL])
     except Exception as e:
         logger.warning(f'record_app_webhook_success redis error app_id={app_id}: {e}')
 
@@ -174,8 +201,6 @@ def clear_app_webhook_health(app_id: str):
     """Clear all webhook health state for an app. Used on re-enable."""
     with _cache_lock:
         _disabled_cache.pop(app_id, None)
-        _success_last_write.pop(app_id, None)
-        _failure_since_last_success.discard(app_id)
     try:
         key = f'app_webhook_health:{app_id}'
         r.delete(key)
