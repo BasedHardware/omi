@@ -181,34 +181,25 @@ class TestAppWebhookHealthLuaScript:
 
 
 class TestAppWebhookSuccessReset:
-    """Test that success resets all failure state."""
+    """Test that success records via Lua script without resetting failure state."""
 
-    def setup_method(self):
-        from database import webhook_health
-
-        with webhook_health._cache_lock:
-            webhook_health._success_last_write.clear()
-
-    def test_success_updates_last_success_without_resetting_failures(self):
-        """record_app_webhook_success should update last_success_at without clearing failure state."""
+    def test_success_calls_lua_script(self):
+        """record_app_webhook_success should invoke the success Lua script."""
         from database.webhook_health import record_app_webhook_success
 
-        mock_r = MagicMock()
-        with patch("database.webhook_health.r", mock_r):
+        mock_script = MagicMock(return_value=1)
+        with patch("database.webhook_health._get_success_script", return_value=mock_script):
             record_app_webhook_success("app-1")
-
-        mock_r.hset.assert_called_once()
-        args = mock_r.hset.call_args
-        assert args[0][0] == 'app_webhook_health:app-1'
-        assert args[0][1] == 'last_success_at'
+        mock_script.assert_called_once()
+        args = mock_script.call_args
+        assert args.kwargs['keys'] == ['app_webhook_health:app-1']
 
     def test_success_redis_error_does_not_raise(self):
         """Redis errors during success recording should be swallowed."""
         from database.webhook_health import record_app_webhook_success
 
-        mock_r = MagicMock()
-        mock_r.hset.side_effect = Exception("Redis down")
-        with patch("database.webhook_health.r", mock_r):
+        mock_script = MagicMock(side_effect=Exception("Redis down"))
+        with patch("database.webhook_health._get_success_script", return_value=mock_script):
             record_app_webhook_success("app-1")
 
 
@@ -890,7 +881,7 @@ class TestLuaTimeProgression:
         last_success = state.get('last_success_at', '')
         if last_success and last_success != '':
             last_success_ts = int(last_success)
-            if last_success_ts > first_ts:
+            if last_success_ts >= first_ts:
                 state.update(
                     {
                         'first_failure_at': now_ts,
@@ -1374,8 +1365,6 @@ class TestDisabledCacheInMemory:
         self.wh = webhook_health
         with self.wh._cache_lock:
             self.wh._disabled_cache.clear()
-            self.wh._success_last_write.clear()
-            self.wh._failure_since_last_success.clear()
 
     def test_caches_false_avoids_repeated_hget(self):
         mock_r = MagicMock()
@@ -1424,8 +1413,10 @@ class TestDisabledCacheInMemory:
         with patch.object(self.wh, 'r', mock_r):
             self.wh.is_app_webhook_disabled("app-cache-5")
             assert "app-cache-5" in self.wh._disabled_cache
+        mock_r2 = MagicMock()
+        with patch.object(self.wh, 'r', mock_r2):
             self.wh.clear_app_webhook_health("app-cache-5")
-            assert "app-cache-5" not in self.wh._disabled_cache
+        assert "app-cache-5" not in self.wh._disabled_cache
 
     def test_disable_in_firestore_sets_cache_true(self):
         mock_r = MagicMock()
@@ -1442,54 +1433,18 @@ class TestDisabledCacheInMemory:
 
 
 class TestSuccessDebounce:
-    """Test debounced success recording."""
+    """Test success Lua script debounce and recovery bypass logic."""
 
     def setup_method(self):
         from database import webhook_health
 
         self.wh = webhook_health
-        with self.wh._cache_lock:
-            self.wh._disabled_cache.clear()
-            self.wh._success_last_write.clear()
-            self.wh._failure_since_last_success.clear()
 
-    def test_first_success_writes_to_redis(self):
-        mock_r = MagicMock()
-        with patch.object(self.wh, 'r', mock_r):
+    def test_success_calls_lua_script(self):
+        mock_script = MagicMock(return_value=1)
+        with patch("database.webhook_health._get_success_script", return_value=mock_script):
             self.wh.record_app_webhook_success("app-deb-1")
-        assert mock_r.hset.call_count == 1
-        assert mock_r.expire.call_count == 1
-
-    def test_second_success_within_window_skips_redis(self):
-        mock_r = MagicMock()
-        with patch.object(self.wh, 'r', mock_r):
-            self.wh.record_app_webhook_success("app-deb-2")
-            self.wh.record_app_webhook_success("app-deb-2")
-        assert mock_r.hset.call_count == 1
-
-    def test_success_after_debounce_window_writes_again(self):
-        mock_r = MagicMock()
-        with patch.object(self.wh, 'r', mock_r):
-            self.wh.record_app_webhook_success("app-deb-3")
-            with self.wh._cache_lock:
-                self.wh._success_last_write["app-deb-3"] -= 61
-            self.wh.record_app_webhook_success("app-deb-3")
-        assert mock_r.hset.call_count == 2
-
-    def test_different_apps_independent(self):
-        mock_r = MagicMock()
-        with patch.object(self.wh, 'r', mock_r):
-            self.wh.record_app_webhook_success("app-deb-4a")
-            self.wh.record_app_webhook_success("app-deb-4b")
-        assert mock_r.hset.call_count == 2
-
-    def test_clear_resets_debounce(self):
-        mock_r = MagicMock()
-        with patch.object(self.wh, 'r', mock_r):
-            self.wh.record_app_webhook_success("app-deb-5")
-            self.wh.clear_app_webhook_health("app-deb-5")
-            self.wh.record_app_webhook_success("app-deb-5")
-        assert mock_r.hset.call_count == 2
+        assert mock_script.call_count == 1
 
     def test_failure_not_debounced(self):
         mock_script = MagicMock(return_value=0)
@@ -1506,38 +1461,81 @@ class TestSuccessDebounce:
             self.wh.record_dev_webhook_success("uid-1", "realtime_transcript")
         assert mock_r.hset.call_count == 2
 
-    def test_success_after_failure_bypasses_debounce(self):
-        """Regression: success → failure → success (within debounce) must write to Redis.
 
-        The Lua script needs last_success_at > first_failure_at to reset the failure
-        window. If the post-failure success is dropped by debounce, the failure window
-        stays open and can falsely auto-disable after 72h.
+class TestSuccessLuaScript:
+    """Test the success Lua script logic via Python state machine."""
+
+    @staticmethod
+    def _lua_success_sim(state: dict, now_ts: int, debounce: int) -> int:
+        """Python equivalent of _RECORD_SUCCESS_LUA."""
+        first_failure = state.get('first_failure_at', '')
+        last_success = state.get('last_success_at', '')
+
+        if first_failure and first_failure != '':
+            ff = int(first_failure)
+            ls = int(last_success) if (last_success and last_success != '') else 0
+            if ff >= ls:
+                state['last_success_at'] = str(now_ts)
+                return 1
+
+        if last_success and last_success != '':
+            ls = int(last_success)
+            if (now_ts - ls) < debounce:
+                return 0
+
+        state['last_success_at'] = str(now_ts)
+        return 1
+
+    def test_first_success_writes(self):
+        state = {}
+        assert self._lua_success_sim(state, 1000, 60) == 1
+        assert state['last_success_at'] == '1000'
+
+    def test_second_success_within_window_debounced(self):
+        state = {'last_success_at': '1000'}
+        assert self._lua_success_sim(state, 1030, 60) == 0
+        assert state['last_success_at'] == '1000'
+
+    def test_success_after_window_writes(self):
+        state = {'last_success_at': '1000'}
+        assert self._lua_success_sim(state, 1061, 60) == 1
+        assert state['last_success_at'] == '1061'
+
+    def test_recovery_success_bypasses_debounce(self):
+        """Success at t=0, failure at t=30, success at t=40 must write (recovery)."""
+        state = {'last_success_at': '1000', 'first_failure_at': '1030'}
+        assert self._lua_success_sim(state, 1040, 60) == 1
+        assert state['last_success_at'] == '1040'
+
+    def test_same_second_recovery_writes(self):
+        """Failure and success in the same second — >= ensures recovery writes."""
+        state = {'last_success_at': '999', 'first_failure_at': '1000'}
+        assert self._lua_success_sim(state, 1000, 60) == 1
+        assert state['last_success_at'] == '1000'
+
+    def test_after_recovery_debounce_resumes(self):
+        """Once recovery success is written, subsequent successes debounce normally."""
+        state = {'last_success_at': '1040', 'first_failure_at': '1030'}
+        assert self._lua_success_sim(state, 1050, 60) == 0
+
+    def test_different_apps_independent(self):
+        state_a = {}
+        state_b = {}
+        assert self._lua_success_sim(state_a, 1000, 60) == 1
+        assert self._lua_success_sim(state_b, 1000, 60) == 1
+
+    def test_multi_pod_recovery_sequence(self):
+        """Regression: success(pod A) → failure(pod B) → success(pod A) must write.
+
+        Even though pod A doesn't know about pod B's failure, the Lua script
+        checks Redis state atomically.
         """
-        mock_r = MagicMock()
-        mock_script = MagicMock(return_value=0)
-        with (
-            patch.object(self.wh, 'r', mock_r),
-            patch("database.webhook_health._get_failure_script", return_value=mock_script),
-        ):
-            self.wh.record_app_webhook_success("app-deb-bypass")
-            assert mock_r.hset.call_count == 1
-            self.wh.record_app_webhook_failure("app-deb-bypass", 500, "error")
-            self.wh.record_app_webhook_success("app-deb-bypass")
-            assert mock_r.hset.call_count == 2
-
-    def test_two_successes_after_failure_second_debounced(self):
-        """After failure→success bypasses debounce, next success is debounced normally."""
-        mock_r = MagicMock()
-        mock_script = MagicMock(return_value=0)
-        with (
-            patch.object(self.wh, 'r', mock_r),
-            patch("database.webhook_health._get_failure_script", return_value=mock_script),
-        ):
-            self.wh.record_app_webhook_failure("app-deb-seq", 500, "error")
-            self.wh.record_app_webhook_success("app-deb-seq")
-            assert mock_r.hset.call_count == 1
-            self.wh.record_app_webhook_success("app-deb-seq")
-            assert mock_r.hset.call_count == 1
+        state = {}
+        self._lua_success_sim(state, 1000, 60)
+        state['first_failure_at'] = '1030'
+        state['failure_count'] = '1'
+        assert self._lua_success_sim(state, 1040, 60) == 1
+        assert state['last_success_at'] == '1040'
 
 
 class TestCacheEviction:
@@ -1549,12 +1547,8 @@ class TestCacheEviction:
         self.wh = webhook_health
         with self.wh._cache_lock:
             self.wh._disabled_cache.clear()
-            self.wh._success_last_write.clear()
-            self.wh._failure_since_last_success.clear()
 
     def test_disabled_cache_evicts_when_over_max(self):
-        import time as _time
-
         mock_r = MagicMock()
         mock_r.hget.return_value = b'0'
         original_max = self.wh._CACHE_MAX_SIZE
@@ -1564,17 +1558,5 @@ class TestCacheEviction:
                 for i in range(7):
                     self.wh.is_app_webhook_disabled(f"evict-app-{i}")
             assert len(self.wh._disabled_cache) <= 6
-        finally:
-            self.wh._CACHE_MAX_SIZE = original_max
-
-    def test_success_debounce_evicts_when_over_max(self):
-        mock_r = MagicMock()
-        original_max = self.wh._CACHE_MAX_SIZE
-        try:
-            self.wh._CACHE_MAX_SIZE = 5
-            with patch.object(self.wh, 'r', mock_r):
-                for i in range(7):
-                    self.wh.record_app_webhook_success(f"evict-success-{i}")
-            assert len(self.wh._success_last_write) <= 6
         finally:
             self.wh._CACHE_MAX_SIZE = original_max
