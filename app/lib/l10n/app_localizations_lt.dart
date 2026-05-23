@@ -9398,4 +9398,10 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get syncProcessingBackgroundHint => 'Tai tęsiasi fone — galite išeiti iš šio ekrano.';
+
+  @override
+  String get syncCardRateLimited => 'Pasiekta sąžiningo naudojimo riba — sinchronizavimas bus tęsiamas automatiškai';
+
+  @override
+  String get syncCardBackendBusy => 'Omi serveriai užimti — jūsų įrašai bus sinchronizuoti, kai atsilaisvins pajėgumai';
 }

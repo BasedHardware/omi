@@ -9439,4 +9439,11 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get syncProcessingBackgroundHint => 'Això continua en segon pla — pots sortir d\'aquesta pantalla.';
+
+  @override
+  String get syncCardRateLimited => 'S\'ha assolit el límit d\'ús just — la sincronització es reprendrà automàticament';
+
+  @override
+  String get syncCardBackendBusy =>
+      'Els servidors d\'Omi estan saturats — els enregistraments se sincronitzaran quan hi hagi capacitat disponible';
 }

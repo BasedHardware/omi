@@ -6,7 +6,13 @@ import 'package:omi/services/wals/wal.dart';
 
 // Re-export for convenience
 export 'package:omi/backend/http/api/conversations.dart'
-    show uploadLocalFilesV2, UploadFilesResult, fetchSyncJobStatus, SyncJobFetch, SyncJobFetchOutcome;
+    show
+        uploadLocalFilesV2,
+        UploadFilesResult,
+        fetchSyncJobStatus,
+        SyncJobFetch,
+        SyncJobFetchOutcome,
+        SyncRateLimitedException;
 
 abstract class IWalSyncProgressListener {
   void onWalSyncedProgress(

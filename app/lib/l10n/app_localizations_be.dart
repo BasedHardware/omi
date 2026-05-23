@@ -9415,4 +9415,10 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String get syncProcessingBackgroundHint => 'Працэс працягваецца ў фонавым рэжыме — вы можаце пакінуць гэты экран.';
+
+  @override
+  String get syncCardRateLimited => 'Дасягнуты ліміт сумленнага выкарыстання — сінхранізацыя адновіцца аўтаматычна';
+
+  @override
+  String get syncCardBackendBusy => 'Серверы Omi загружаныя — вашы запісы сінхранізуюцца, калі з\'явіцца магчымасць';
 }

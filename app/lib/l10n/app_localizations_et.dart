@@ -9382,4 +9382,10 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get syncProcessingBackgroundHint => 'See jätkub taustal — võite sellelt ekraanilt lahkuda.';
+
+  @override
+  String get syncCardRateLimited => 'Õiglase kasutuse piir on saavutatud — sünkroonimine jätkub automaatselt';
+
+  @override
+  String get syncCardBackendBusy => 'Omi serverid on hõivatud — sinu salvestised sünkroonitakse, kui maht vabaneb';
 }

@@ -9376,4 +9376,11 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get syncProcessingBackgroundHint => 'Pokračuje to na pozadí — túto obrazovku môžete opustiť.';
+
+  @override
+  String get syncCardRateLimited => 'Dosiahol sa limit férového využitia — synchronizácia bude automaticky pokračovať';
+
+  @override
+  String get syncCardBackendBusy =>
+      'Servery Omi sú vyťažené — vaše nahrávky sa zosynchronizujú, hneď ako sa uvoľní kapacita';
 }

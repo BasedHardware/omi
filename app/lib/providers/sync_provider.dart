@@ -58,6 +58,11 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
 
   List<Wal> get syncedWals => _allWals.where((w) => w.status == WalStatus.synced).toList();
 
+  /// True while a fair-use (429) cooldown is active — uploads are paused.
+  bool get isRateLimited => SyncRateLimiter.instance.isLimited;
+  DateTime? get rateLimitedUntil => SyncRateLimiter.instance.until;
+  RateLimitReason? get rateLimitReason => SyncRateLimiter.instance.reason;
+
   List<Wal> get filteredByStatusWals {
     if (_statusFilter == WalStatusFilter.pending) {
       return pendingWals;
@@ -200,6 +205,7 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
   SyncProvider() {
     _walService.subscribe(this, this);
     _audioPlayerUtils.addListener(_onAudioPlayerStateChanged);
+    SyncRateLimiter.instance.addListener(notifyListeners);
     _initializeProvider();
   }
 
@@ -318,6 +324,10 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
   }
 
   Future<void> syncWals({IWifiConnectionListener? connectionListener}) async {
+    if (SyncRateLimiter.instance.isLimited) {
+      notifyListeners();
+      return;
+    }
     _cancelAutoUploadIfNeeded();
     _updateSyncState(_syncState.toIdle());
     _totalWalsToProcess = missingWals.length;
@@ -329,6 +339,10 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
   }
 
   Future<void> syncWal(Wal wal, {IWifiConnectionListener? connectionListener}) async {
+    if (SyncRateLimiter.instance.isLimited) {
+      notifyListeners();
+      return;
+    }
     _cancelAutoUploadIfNeeded();
     _updateSyncState(_syncState.toIdle());
     await _performSync(

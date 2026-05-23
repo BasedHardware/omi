@@ -9440,4 +9440,11 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String get syncProcessingBackgroundHint => 'L\'operazione continua in background — puoi lasciare questa schermata.';
+
+  @override
+  String get syncCardRateLimited => 'Limite di utilizzo raggiunto — la sincronizzazione riprenderà automaticamente';
+
+  @override
+  String get syncCardBackendBusy =>
+      'I server di Omi sono sovraccarichi — le tue registrazioni verranno sincronizzate appena tornerà disponibile capacità';
 }

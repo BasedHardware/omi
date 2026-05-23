@@ -9405,4 +9405,12 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get syncProcessingBackgroundHint => 'Tas turpinās fonā — varat pamest šo ekrānu.';
+
+  @override
+  String get syncCardRateLimited =>
+      'Sasniegts godīgas lietošanas ierobežojums — sinhronizācija turpināsies automātiski';
+
+  @override
+  String get syncCardBackendBusy =>
+      'Omi serveri ir noslogoti — jūsu ieraksti tiks sinhronizēti, tiklīdz atbrīvosies jauda';
 }

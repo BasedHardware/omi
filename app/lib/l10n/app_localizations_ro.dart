@@ -9430,4 +9430,12 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get syncProcessingBackgroundHint => 'Acest lucru continuă în fundal — poți părăsi acest ecran.';
+
+  @override
+  String get syncCardRateLimited =>
+      'Limita de utilizare echitabilă a fost atinsă — sincronizarea va fi reluată automat';
+
+  @override
+  String get syncCardBackendBusy =>
+      'Serverele Omi sunt aglomerate — înregistrările tale se vor sincroniza imediat ce se eliberează capacitate';
 }

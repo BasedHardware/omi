@@ -17492,6 +17492,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'This continues in the background — you can leave this screen.'**
   String get syncProcessingBackgroundHint;
+
+  /// Status card line when uploads are paused due to a fair-use/rate-limit (HTTP 429) cooldown. Reassures the user this is not an error and will resume on its own.
+  ///
+  /// In en, this message translates to:
+  /// **'Fair-use limit reached — syncing will resume automatically'**
+  String get syncCardRateLimited;
+
+  /// Status card line when the backend stale-guard has flagged queued jobs (i.e. workers are saturated, not the user being rate-limited). Distinct from the 429 fair-use case.
+  ///
+  /// In en, this message translates to:
+  /// **'Omi servers are busy — your recordings will sync once capacity returns'**
+  String get syncCardBackendBusy;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

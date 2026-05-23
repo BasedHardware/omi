@@ -9413,4 +9413,11 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get syncProcessingBackgroundHint => 'Dit gaat op de achtergrond door — je kunt dit scherm verlaten.';
+
+  @override
+  String get syncCardRateLimited => 'Gebruikslimiet bereikt — synchronisatie wordt automatisch hervat';
+
+  @override
+  String get syncCardBackendBusy =>
+      'De servers van Omi zijn druk — je opnames worden gesynchroniseerd zodra er weer capaciteit is';
 }

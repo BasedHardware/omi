@@ -9384,4 +9384,11 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get syncProcessingBackgroundHint => 'Tämä jatkuu taustalla — voit poistua tästä näkymästä.';
+
+  @override
+  String get syncCardRateLimited => 'Kohtuullisen käytön raja saavutettu — synkronointi jatkuu automaattisesti';
+
+  @override
+  String get syncCardBackendBusy =>
+      'Omin palvelimet ovat ruuhkautuneet — tallenteesi synkronoidaan, kun kapasiteettia vapautuu';
 }

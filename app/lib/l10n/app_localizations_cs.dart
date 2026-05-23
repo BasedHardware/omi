@@ -9385,4 +9385,11 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get syncProcessingBackgroundHint => 'Pokračuje to na pozadí — tuto obrazovku můžete opustit.';
+
+  @override
+  String get syncCardRateLimited => 'Byl dosažen limit férového využití — synchronizace bude automaticky pokračovat';
+
+  @override
+  String get syncCardBackendBusy =>
+      'Servery Omi jsou vytížené — vaše nahrávky se synchronizují, jakmile bude k dispozici kapacita';
 }

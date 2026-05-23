@@ -3069,5 +3069,7 @@
     "@morePaymentMethodsComingSoon": {
         "description": "Placeholder card text shown under available payment methods"
     },
-    "syncProcessingBackgroundHint": "Tas turpinās fonā — varat pamest šo ekrānu."
+    "syncProcessingBackgroundHint": "Tas turpinās fonā — varat pamest šo ekrānu.",
+    "syncCardRateLimited": "Sasniegts godīgas lietošanas ierobežojums — sinhronizācija turpināsies automātiski",
+    "syncCardBackendBusy": "Omi serveri ir noslogoti — jūsu ieraksti tiks sinhronizēti, tiklīdz atbrīvosies jauda"
 }

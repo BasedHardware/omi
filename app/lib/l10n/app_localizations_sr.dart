@@ -9398,4 +9398,11 @@ class AppLocalizationsSr extends AppLocalizations {
 
   @override
   String get syncProcessingBackgroundHint => 'Ово се наставља у позадини — можете напустити овај екран.';
+
+  @override
+  String get syncCardRateLimited => 'Достигнут је лимит фер коришћења — синхронизација ће се аутоматски наставити';
+
+  @override
+  String get syncCardBackendBusy =>
+      'Omi сервери су заузети — ваши снимци ће се синхронизовати чим се ослободи капацитет';
 }

@@ -1,9 +1,11 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:http/http.dart' as http;
 import 'package:omi/backend/http/shared.dart';
 import 'package:omi/backend/schema/schema.dart';
 import 'package:omi/env/env.dart';
+import 'package:omi/utils/debug_log_manager.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 
@@ -324,6 +326,24 @@ class UploadFilesResult {
   bool get isQueued => jobId != null;
 }
 
+/// Thrown when an upload is rejected by fair-use throttling (HTTP 429).
+/// [retryAfterSeconds] is the server's Retry-After when provided.
+class SyncRateLimitedException implements Exception {
+  final int? retryAfterSeconds;
+  SyncRateLimitedException([this.retryAfterSeconds]);
+
+  @override
+  String toString() => 'SyncRateLimitedException(retryAfter=$retryAfterSeconds)';
+}
+
+/// Parse a Retry-After header expressed in delta-seconds. Returns null for an
+/// absent or non-integer (HTTP-date) value; the caller falls back to a default.
+int? _parseRetryAfterSeconds(http.Response response) {
+  final raw = response.headers['retry-after'];
+  if (raw == null) return null;
+  return int.tryParse(raw.trim());
+}
+
 /// Upload-only: POST files and return as soon as the server acknowledges
 /// (HTTP 202 with a job_id, or the 200 fast-path with a finished result).
 /// Does NOT wait for server-side processing — the caller marks the WAL
@@ -357,7 +377,9 @@ Future<UploadFilesResult> uploadLocalFilesV2(
   } else if (response.statusCode == 413) {
     throw Exception('Audio file is too large to upload');
   } else if (response.statusCode == 429) {
-    throw Exception('Rate limited or budget exhausted');
+    // Fair-use throttle, not a content failure. Surface it typed so callers
+    // can back off (honoring Retry-After) instead of burning the retry budget.
+    throw SyncRateLimitedException(_parseRetryAfterSeconds(response));
   } else if (response.statusCode >= 500) {
     throw Exception('Server is temporarily unavailable');
   }
@@ -385,11 +407,20 @@ Future<SyncJobFetch> fetchSyncJobStatus(String jobId) async {
     method: 'GET',
     body: '',
   );
-  if (response == null) return const SyncJobFetch(SyncJobFetchOutcome.transient);
+  if (response == null) {
+    DebugLogManager.logEvent('fetch_sync_job_status', {'jobId': jobId, 'httpStatus': null, 'outcome': 'transient'});
+    return const SyncJobFetch(SyncJobFetchOutcome.transient);
+  }
   if (response.statusCode == 404 || response.statusCode == 403) {
+    DebugLogManager.logEvent(
+        'fetch_sync_job_status', {'jobId': jobId, 'httpStatus': response.statusCode, 'outcome': 'notFound'});
     return const SyncJobFetch(SyncJobFetchOutcome.notFound);
   }
-  if (response.statusCode != 200) return const SyncJobFetch(SyncJobFetchOutcome.transient);
+  if (response.statusCode != 200) {
+    DebugLogManager.logEvent(
+        'fetch_sync_job_status', {'jobId': jobId, 'httpStatus': response.statusCode, 'outcome': 'transient'});
+    return const SyncJobFetch(SyncJobFetchOutcome.transient);
+  }
   try {
     return SyncJobFetch(SyncJobFetchOutcome.ok, SyncJobStatusResponse.fromJson(jsonDecode(response.body)));
   } catch (e) {

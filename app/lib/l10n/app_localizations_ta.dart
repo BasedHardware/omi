@@ -9453,4 +9453,11 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get syncProcessingBackgroundHint => 'இது பின்னணியில் தொடர்கிறது — இந்தத் திரையிலிருந்து நீங்கள் வெளியேறலாம்.';
+
+  @override
+  String get syncCardRateLimited => 'நியாயமான பயன்பாட்டு வரம்பை அடைந்தது — ஒத்திசைவு தானாகவே மீண்டும் தொடரும்';
+
+  @override
+  String get syncCardBackendBusy =>
+      'Omi சேவையகங்கள் பணிமிகுதியில் உள்ளன — திறன் கிடைத்தவுடன் உங்கள் பதிவுகள் ஒத்திசைக்கப்படும்';
 }

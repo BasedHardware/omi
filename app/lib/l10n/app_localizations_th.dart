@@ -9335,4 +9335,10 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get syncProcessingBackgroundHint => 'การทำงานนี้ดำเนินต่อในเบื้องหลัง — คุณออกจากหน้าจอนี้ได้.';
+
+  @override
+  String get syncCardRateLimited => 'ถึงขีดจำกัดการใช้งานที่เป็นธรรมแล้ว — การซิงค์จะดำเนินต่อโดยอัตโนมัติ';
+
+  @override
+  String get syncCardBackendBusy => 'เซิร์ฟเวอร์ของ Omi กำลังคับคั่ง — การบันทึกของคุณจะซิงค์เมื่อมีพื้นที่ว่างกลับมา';
 }

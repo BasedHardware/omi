@@ -3036,5 +3036,7 @@
     "@morePaymentMethodsComingSoon": {
         "description": "Placeholder card text shown under available payment methods"
     },
-    "syncProcessingBackgroundHint": "تستمر العملية في الخلفية — يمكنك مغادرة هذه الشاشة."
+    "syncProcessingBackgroundHint": "تستمر العملية في الخلفية — يمكنك مغادرة هذه الشاشة.",
+    "syncCardRateLimited": "تم بلوغ حد الاستخدام العادل — ستُستأنف المزامنة تلقائيًا",
+    "syncCardBackendBusy": "خوادم Omi مشغولة الآن — ستتم مزامنة تسجيلاتك عند توفر السعة"
 }

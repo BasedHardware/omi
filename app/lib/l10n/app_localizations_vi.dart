@@ -9382,4 +9382,11 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get syncProcessingBackgroundHint => 'Quá trình này tiếp tục chạy nền — bạn có thể rời khỏi màn hình này.';
+
+  @override
+  String get syncCardRateLimited => 'Đã đạt giới hạn sử dụng hợp lý — quá trình đồng bộ sẽ tự động tiếp tục';
+
+  @override
+  String get syncCardBackendBusy =>
+      'Máy chủ Omi đang quá tải — bản ghi của bạn sẽ được đồng bộ khi dung lượng được khôi phục';
 }

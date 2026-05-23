@@ -9216,4 +9216,10 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get syncProcessingBackgroundHint => '此过程会在后台继续 — 你可以离开此屏幕。';
+
+  @override
+  String get syncCardRateLimited => '已达到合理使用上限 — 同步将自动恢复';
+
+  @override
+  String get syncCardBackendBusy => 'Omi 服务器繁忙 — 容量恢复后将自动同步你的录音';
 }

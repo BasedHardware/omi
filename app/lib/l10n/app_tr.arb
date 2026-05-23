@@ -3104,5 +3104,7 @@
     "@morePaymentMethodsComingSoon": {
         "description": "Placeholder card text shown under available payment methods"
     },
-    "syncProcessingBackgroundHint": "Bu işlem arka planda sürer — bu ekrandan ayrılabilirsiniz."
+    "syncProcessingBackgroundHint": "Bu işlem arka planda sürer — bu ekrandan ayrılabilirsiniz.",
+    "syncCardRateLimited": "Adil kullanım sınırına ulaşıldı — eşitleme otomatik olarak sürdürülecek",
+    "syncCardBackendBusy": "Omi sunucuları yoğun — kapasite boşaldığında kayıtlarınız eşitlenecek"
 }

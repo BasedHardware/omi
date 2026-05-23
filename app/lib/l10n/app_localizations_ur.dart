@@ -9402,4 +9402,10 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get syncProcessingBackgroundHint => 'یہ پس منظر میں جاری رہتا ہے — آپ اس اسکرین سے باہر جا سکتے ہیں۔';
+
+  @override
+  String get syncCardRateLimited => 'منصفانہ استعمال کی حد پوری ہو گئی — ہم آہنگی خودکار طور پر دوبارہ شروع ہو جائے گی';
+
+  @override
+  String get syncCardBackendBusy => 'Omi کے سرورز مصروف ہیں — گنجائش بحال ہوتے ہی آپ کی ریکارڈنگز سنک ہو جائیں گی';
 }

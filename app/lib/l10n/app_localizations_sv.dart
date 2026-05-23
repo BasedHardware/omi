@@ -9389,4 +9389,11 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get syncProcessingBackgroundHint => 'Detta fortsätter i bakgrunden — du kan lämna den här skärmen.';
+
+  @override
+  String get syncCardRateLimited => 'Gränsen för skälig användning har nåtts — synkroniseringen återupptas automatiskt';
+
+  @override
+  String get syncCardBackendBusy =>
+      'Omis servrar är hårt belastade — dina inspelningar synkroniseras så snart kapacitet frigörs';
 }

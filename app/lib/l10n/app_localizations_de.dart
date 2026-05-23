@@ -9462,4 +9462,11 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get syncProcessingBackgroundHint => 'Das läuft im Hintergrund weiter — du kannst diesen Bildschirm verlassen.';
+
+  @override
+  String get syncCardRateLimited => 'Nutzungslimit erreicht — die Synchronisierung wird automatisch fortgesetzt';
+
+  @override
+  String get syncCardBackendBusy =>
+      'Omis Server sind ausgelastet — deine Aufnahmen werden synchronisiert, sobald wieder Kapazität verfügbar ist';
 }

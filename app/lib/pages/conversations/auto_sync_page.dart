@@ -112,7 +112,7 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
     final hasAnyRecording = p.displaySortedWals.isNotEmpty;
 
     final isActive = s.isSyncing || s.isFetchingConversations;
-    final bool showSpinner = isActive || uploaded > 0;
+    final bool showSpinner = (isActive || uploaded > 0) && !p.isRateLimited;
 
     String title;
     String? progressText;
@@ -144,6 +144,9 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
           title = s.isFetchingConversations ? l.syncCardProcessing : l.syncCardUploadingTitle;
       }
       action = _statusActionPill(l.cancel, Colors.redAccent, () => _confirmCancel(context, p));
+    } else if (p.isRateLimited) {
+      title = p.rateLimitReason == RateLimitReason.backendBusy ? l.syncCardBackendBusy : l.syncCardRateLimited;
+      titleColor = Colors.orangeAccent;
     } else if (uploaded > 0) {
       // Uploads finished, reconciler is resolving jobs in the background.
       title = l.syncCardProcessing;

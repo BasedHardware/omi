@@ -9407,4 +9407,12 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get syncProcessingBackgroundHint => 'Ini berterusan di latar belakang — anda boleh meninggalkan skrin ini.';
+
+  @override
+  String get syncCardRateLimited =>
+      'Had penggunaan saksama telah dicapai — penyegerakan akan disambung semula secara automatik';
+
+  @override
+  String get syncCardBackendBusy =>
+      'Pelayan Omi sedang sibuk — rakaman anda akan disegerakkan apabila kapasiti tersedia semula';
 }

@@ -3069,5 +3069,7 @@
     "@morePaymentMethodsComingSoon": {
         "description": "Placeholder card text shown under available payment methods"
     },
-    "syncProcessingBackgroundHint": "Dette fortsetter i bakgrunnen — du kan forlate denne skjermen."
+    "syncProcessingBackgroundHint": "Dette fortsetter i bakgrunnen — du kan forlate denne skjermen.",
+    "syncCardRateLimited": "Grensen for rimelig bruk er nådd — synkroniseringen fortsetter automatisk",
+    "syncCardBackendBusy": "Omis servere er travle — opptakene dine synkroniseres så snart kapasiteten er tilbake"
 }

@@ -9388,4 +9388,11 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get syncProcessingBackgroundHint => 'این کار در پس‌زمینه ادامه می‌یابد — می‌توانید این صفحه را ترک کنید.';
+
+  @override
+  String get syncCardRateLimited =>
+      'محدودیت استفاده منصفانه به پایان رسید — همگام‌سازی به‌طور خودکار از سر گرفته می‌شود';
+
+  @override
+  String get syncCardBackendBusy => 'سرورهای Omi شلوغ هستند — ضبط‌های شما به‌محض آزاد شدن ظرفیت همگام‌سازی می‌شوند';
 }

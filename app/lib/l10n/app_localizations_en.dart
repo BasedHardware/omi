@@ -9381,4 +9381,10 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get syncProcessingBackgroundHint => 'This continues in the background — you can leave this screen.';
+
+  @override
+  String get syncCardRateLimited => 'Fair-use limit reached — syncing will resume automatically';
+
+  @override
+  String get syncCardBackendBusy => 'Omi servers are busy — your recordings will sync once capacity returns';
 }

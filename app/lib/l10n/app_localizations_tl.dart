@@ -9470,4 +9470,12 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get syncProcessingBackgroundHint => 'Magpapatuloy ito sa background — puwede mong iwan ang screen na ito.';
+
+  @override
+  String get syncCardRateLimited =>
+      'Naabot na ang limitasyon ng patas na paggamit — awtomatikong magpapatuloy ang pag-sync';
+
+  @override
+  String get syncCardBackendBusy =>
+      'Abala ang mga server ng Omi — masi-sync ang iyong mga recording kapag may bakanteng kapasidad na muli';
 }

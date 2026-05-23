@@ -9468,4 +9468,11 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get syncProcessingBackgroundHint => 'Cela continue en arrière-plan — vous pouvez quitter cet écran.';
+
+  @override
+  String get syncCardRateLimited => 'Limite d\'utilisation atteinte — la synchronisation reprendra automatiquement';
+
+  @override
+  String get syncCardBackendBusy =>
+      'Les serveurs Omi sont saturés — vos enregistrements se synchroniseront dès que la capacité sera rétablie';
 }

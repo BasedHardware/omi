@@ -9403,4 +9403,11 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get syncProcessingBackgroundHint => 'Це триває у фоновому режимі — ви можете залишити цей екран.';
+
+  @override
+  String get syncCardRateLimited => 'Досягнуто ліміт використання — синхронізація відновиться автоматично';
+
+  @override
+  String get syncCardBackendBusy =>
+      'Сервери Omi перевантажені — ваші записи синхронізуються, щойно з\'явиться доступна потужність';
 }

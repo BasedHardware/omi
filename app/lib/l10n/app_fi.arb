@@ -3069,5 +3069,7 @@
     "@morePaymentMethodsComingSoon": {
         "description": "Placeholder card text shown under available payment methods"
     },
-    "syncProcessingBackgroundHint": "Tämä jatkuu taustalla — voit poistua tästä näkymästä."
+    "syncProcessingBackgroundHint": "Tämä jatkuu taustalla — voit poistua tästä näkymästä.",
+    "syncCardRateLimited": "Kohtuullisen käytön raja saavutettu — synkronointi jatkuu automaattisesti",
+    "syncCardBackendBusy": "Omin palvelimet ovat ruuhkautuneet — tallenteesi synkronoidaan, kun kapasiteettia vapautuu"
 }

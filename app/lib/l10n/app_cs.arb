@@ -3038,5 +3038,7 @@
     "@morePaymentMethodsComingSoon": {
         "description": "Placeholder card text shown under available payment methods"
     },
-    "syncProcessingBackgroundHint": "Pokračuje to na pozadí — tuto obrazovku můžete opustit."
+    "syncProcessingBackgroundHint": "Pokračuje to na pozadí — tuto obrazovku můžete opustit.",
+    "syncCardRateLimited": "Byl dosažen limit férového využití — synchronizace bude automaticky pokračovat",
+    "syncCardBackendBusy": "Servery Omi jsou vytížené — vaše nahrávky se synchronizují, jakmile bude k dispozici kapacita"
 }

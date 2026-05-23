@@ -13,9 +13,16 @@ import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/services/audio_sources/audio_source.dart';
 import 'package:omi/services/wals/wal.dart';
 import 'package:omi/services/wals/wal_interfaces.dart';
+import 'package:omi/services/wals/sync_rate_limiter.dart';
 import 'package:omi/utils/debug_log_manager.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/wal_file_manager.dart';
+
+/// Error string the backend's stale guard sets when a job sits queued past
+/// STALE_THRESHOLD_SECONDS without ever reaching a worker. See backend issue
+/// #7469 — if this string changes, update here and keep the structural check
+/// below ('failed' with totalSegments==0) as the durable signal.
+const _kBackendBusyErrorHint = 'background worker likely died';
 
 class LocalWalSyncImpl implements LocalWalSync {
   List<Wal> _wals = const [];
@@ -521,6 +528,12 @@ class LocalWalSyncImpl implements LocalWalSync {
       return null;
     }
 
+    if (SyncRateLimiter.instance.isLimited) {
+      Logger.debug('Local upload: rate-limited until ${SyncRateLimiter.instance.until}, skipping');
+      DebugLogManager.logEvent('local_upload_rate_limited', {'until': '${SyncRateLimiter.instance.until}'});
+      return null;
+    }
+
     DebugLogManager.logEvent('local_upload_started', {'walCount': wals.length});
 
     var resp = SyncLocalFilesResponse(newConversationIds: [], updatedConversationIds: []);
@@ -629,6 +642,7 @@ class LocalWalSyncImpl implements LocalWalSync {
         // job_id later. Only WALs that actually became files (batchWals) are
         // mutated — corrupted ones already short-circuited above.
         final result = await uploadLocalFilesV2(files);
+        SyncRateLimiter.instance.clear();
 
         if (result.completed != null) {
           // 200 fast-path: server processed synchronously and returned a result.
@@ -668,6 +682,20 @@ class LocalWalSyncImpl implements LocalWalSync {
         batchesCompleted++;
         // Count WALs no longer needing upload (uploaded or already synced).
         filesUploaded = wals.where((w) => w.status == WalStatus.uploaded || w.status == WalStatus.synced).length;
+      } on SyncRateLimitedException catch (e) {
+        // Fair-use throttle. Pause uploads and stop the batch loop — continuing
+        // would just re-hit the wall. WALs stay `miss` (not bumped to retry),
+        // and sync resumes once the cooldown clears.
+        SyncRateLimiter.instance.markLimited(retryAfterSeconds: e.retryAfterSeconds);
+        DebugLogManager.logEvent('local_upload_rate_limited', {'until': '${SyncRateLimiter.instance.until}'});
+        for (final wal in batchWals) {
+          wal.isSyncing = false;
+          wal.syncStartedAt = null;
+          wal.syncEtaSeconds = null;
+        }
+        await _saveWalsToFile();
+        listener.onWalUpdated();
+        break;
       } catch (e) {
         print('Local WAL upload batch failed: $e, continuing with remaining files');
         batchesFailed++;
@@ -761,6 +789,7 @@ class LocalWalSyncImpl implements LocalWalSync {
     try {
       // Upload only — no poll-to-terminal. Reconciler resolves the job later.
       final result = await uploadLocalFilesV2([walFile]);
+      SyncRateLimiter.instance.clear();
 
       if (result.completed != null) {
         final r = result.completed!;
@@ -789,6 +818,17 @@ class LocalWalSyncImpl implements LocalWalSync {
         DebugLogManager.logInfo('Single WAL uploaded; reconciler will finish', {'walId': wal.id});
         listener.onWalUpdated();
       }
+    } on SyncRateLimitedException catch (e) {
+      // Fair-use throttle — pause and leave the WAL `miss`, don't surface as an
+      // error. Resumes when the cooldown clears.
+      SyncRateLimiter.instance.markLimited(retryAfterSeconds: e.retryAfterSeconds);
+      DebugLogManager.logEvent('single_wal_rate_limited', {'walId': wal.id});
+      walToSync.isSyncing = false;
+      walToSync.syncStartedAt = null;
+      walToSync.syncEtaSeconds = null;
+      await _saveWalsToFile();
+      listener.onWalUpdated();
+      return resp;
     } catch (e) {
       Logger.debug('Single WAL upload failed: $e');
       DebugLogManager.logError(e, null, 'Single WAL upload failed: ${e.toString()}', {'walId': wal.id});
@@ -844,27 +884,54 @@ class LocalWalSyncImpl implements LocalWalSync {
       );
 
       for (final (members, fetch) in fetched) {
+        final jobId = members.first.jobId;
+        final memberWalIds = members.map((w) => w.id).toList();
         switch (fetch.outcome) {
           case SyncJobFetchOutcome.transient:
             // Network/5xx — leave as `uploaded`, retry on the next pass.
+            DebugLogManager.logEvent('reconcile_poll', {
+              'jobId': jobId,
+              'memberWalIds': memberWalIds,
+              'outcome': 'transient',
+            });
             break;
           case SyncJobFetchOutcome.notFound:
             // Job expired or unknown. Recover from the retained local file.
             for (final w in members) {
               changed = true;
+              final hadJob = w.jobId;
               w.jobId = null;
-              if (await _localFileExists(w)) {
+              final fileExists = await _localFileExists(w);
+              if (fileExists) {
                 w.status = WalStatus.miss; // re-upload next sync (dedup-safe)
                 w.retryCount += 1;
                 w.lastRetryAt = nowSecs;
               } else {
                 w.status = WalStatus.corrupted; // nothing left to recover
               }
+              DebugLogManager.logEvent('reconcile_revert', {
+                'walId': w.id,
+                'jobId': hadJob,
+                'outcome': 'not_found',
+                'fileExists': fileExists,
+                'newStatus': w.status.name,
+                'retryCount': w.retryCount,
+              });
             }
             break;
           case SyncJobFetchOutcome.ok:
             final s = fetch.status!;
-            if (!s.isTerminal) break; // still queued/processing — check later
+            if (!s.isTerminal) {
+              DebugLogManager.logEvent('reconcile_poll', {
+                'jobId': jobId,
+                'memberWalIds': memberWalIds,
+                'outcome': 'non_terminal',
+                'serverStatus': s.status,
+                'processedSegments': s.processedSegments,
+                'totalSegments': s.totalSegments,
+              });
+              break; // still queued/processing — check later
+            }
             if (s.result != null) {
               resp.newConversationIds.addAll(
                 s.result!.newConversationIds.where((id) => !resp.newConversationIds.contains(id)),
@@ -876,6 +943,13 @@ class LocalWalSyncImpl implements LocalWalSync {
               );
             }
             if (s.status == 'completed') {
+              DebugLogManager.logEvent('reconcile_poll', {
+                'jobId': jobId,
+                'memberWalIds': memberWalIds,
+                'outcome': 'completed',
+                'newConversations': s.result?.newConversationIds.length ?? 0,
+                'updatedConversations': s.result?.updatedConversationIds.length ?? 0,
+              });
               for (final w in members) {
                 changed = true;
                 w.status = WalStatus.synced;
@@ -883,16 +957,35 @@ class LocalWalSyncImpl implements LocalWalSync {
                 listener.onWalSynced(w);
               }
             } else {
-              // 'partial_failure' / 'failed'. Batched mapping means we can't
-              // attribute a failed segment to a specific member, so revert all
-              // members for re-upload — the server dedups segments that already
-              // succeeded, so completed work is not duplicated.
+              // status='failed' with totalSegments==0 can only come from the
+              // backend stale guard (mark_job_completed only sets 'failed'
+              // when total>0). String hint is a fallback if the structural
+              // signal ever becomes ambiguous.
+              final backendBusy =
+                  (s.status == 'failed' && s.totalSegments == 0) || (s.error ?? '').contains(_kBackendBusyErrorHint);
+              if (backendBusy) {
+                SyncRateLimiter.instance.markLimited(retryAfterSeconds: 600, reason: RateLimitReason.backendBusy);
+              }
               for (final w in members) {
                 changed = true;
+                final hadJob = w.jobId;
                 w.status = WalStatus.miss;
                 w.jobId = null;
-                w.retryCount += 1;
-                w.lastRetryAt = nowSecs;
+                if (!backendBusy) {
+                  w.retryCount += 1;
+                  w.lastRetryAt = nowSecs;
+                }
+                DebugLogManager.logEvent('reconcile_revert', {
+                  'walId': w.id,
+                  'jobId': hadJob,
+                  'outcome': s.status,
+                  'serverError': s.error,
+                  'failedSegments': s.failedSegments,
+                  'totalSegments': s.totalSegments,
+                  'retryCount': w.retryCount,
+                  'backendBusy': backendBusy,
+                  'retryCountBumped': !backendBusy,
+                });
               }
             }
             break;

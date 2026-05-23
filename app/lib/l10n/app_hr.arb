@@ -10764,5 +10764,7 @@
     "@morePaymentMethodsComingSoon": {
         "description": "Placeholder card text shown under available payment methods"
     },
-    "syncProcessingBackgroundHint": "Ovo se nastavlja u pozadini — možete napustiti ovaj zaslon."
+    "syncProcessingBackgroundHint": "Ovo se nastavlja u pozadini — možete napustiti ovaj zaslon.",
+    "syncCardRateLimited": "Dostignuto je ograničenje poštene upotrebe — sinkronizacija će se automatski nastaviti",
+    "syncCardBackendBusy": "Omi poslužitelji su zauzeti — vaše snimke će se sinkronizirati čim se oslobodi kapacitet"
 }

@@ -9417,4 +9417,11 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get syncProcessingBackgroundHint => 'ಇದು ಹಿನ್ನೆಲೆಯಲ್ಲಿ ಮುಂದುವರಿಯುತ್ತದೆ — ನೀವು ಈ ಪರದೆಯಿಂದ ಹೊರಹೋಗಬಹುದು.';
+
+  @override
+  String get syncCardRateLimited => 'ನ್ಯಾಯಯುತ ಬಳಕೆಯ ಮಿತಿ ತಲುಪಿದೆ — ಸಿಂಕ್ ಸ್ವಯಂಚಾಲಿತವಾಗಿ ಮುಂದುವರಿಯುತ್ತದೆ';
+
+  @override
+  String get syncCardBackendBusy =>
+      'Omi ಸರ್ವರ್‌ಗಳು ಬ್ಯುಸಿಯಾಗಿವೆ — ಸಾಮರ್ಥ್ಯ ಲಭ್ಯವಾದ ತಕ್ಷಣ ನಿಮ್ಮ ರೆಕಾರ್ಡಿಂಗ್‌ಗಳು ಸಿಂಕ್ ಆಗುತ್ತವೆ';
 }

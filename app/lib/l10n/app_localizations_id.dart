@@ -9393,4 +9393,11 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get syncProcessingBackgroundHint => 'Ini berlanjut di latar belakang — Anda dapat meninggalkan layar ini.';
+
+  @override
+  String get syncCardRateLimited => 'Batas penggunaan wajar tercapai — sinkronisasi akan dilanjutkan secara otomatis';
+
+  @override
+  String get syncCardBackendBusy =>
+      'Server Omi sedang sibuk — rekamanmu akan disinkronkan setelah kapasitas tersedia kembali';
 }

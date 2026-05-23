@@ -3069,5 +3069,7 @@
     "@morePaymentMethodsComingSoon": {
         "description": "Placeholder card text shown under available payment methods"
     },
-    "syncProcessingBackgroundHint": "Ini berterusan di latar belakang — anda boleh meninggalkan skrin ini."
+    "syncProcessingBackgroundHint": "Ini berterusan di latar belakang — anda boleh meninggalkan skrin ini.",
+    "syncCardRateLimited": "Had penggunaan saksama telah dicapai — penyegerakan akan disambung semula secara automatik",
+    "syncCardBackendBusy": "Pelayan Omi sedang sibuk — rakaman anda akan disegerakkan apabila kapasiti tersedia semula"
 }
