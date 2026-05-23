@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:omi/backend/preferences.dart';
 
 /// Account-global cooldown for fair-use throttling (HTTP 429) on sync uploads.
@@ -7,7 +8,7 @@ import 'package:omi/backend/preferences.dart';
 /// amplifies the 429 storm, and burns each recording's retry budget so a
 /// throttle is mislabelled as "couldn't process". Persisted so a relaunch
 /// during the window doesn't immediately resume hammering.
-class SyncRateLimiter {
+class SyncRateLimiter extends ChangeNotifier {
   SyncRateLimiter._();
   static final SyncRateLimiter instance = SyncRateLimiter._();
 
@@ -30,8 +31,12 @@ class SyncRateLimiter {
     final secs = (retryAfterSeconds != null && retryAfterSeconds > 0) ? retryAfterSeconds : _defaultCooldownSeconds;
     final untilMs = DateTime.now().add(Duration(seconds: secs)).millisecondsSinceEpoch;
     SharedPreferencesUtil().saveInt(_prefKey, untilMs);
+    notifyListeners();
   }
 
   /// Clear the cooldown after any successful upload.
-  void clear() => SharedPreferencesUtil().saveInt(_prefKey, 0);
+  void clear() {
+    SharedPreferencesUtil().saveInt(_prefKey, 0);
+    notifyListeners();
+  }
 }
