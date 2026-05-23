@@ -123,7 +123,8 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
     // Convert the canvas to a new image and then to bytes
     final watermarkedImage = await recorder.endRecording().toImage(image.width, image.height);
     final ByteData? byteData = await watermarkedImage.toByteData(format: ui.ImageByteFormat.png);
-    final Uint8List pngBytes = byteData!.buffer.asUint8List();
+    if (byteData == null) return;
+    final Uint8List pngBytes = byteData.buffer.asUint8List();
 
     final tempDir = await getTemporaryDirectory();
     final file = await File('${tempDir.path}/omi_usage.png').create();
@@ -194,7 +195,7 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
       shareText = baseText;
     }
 
-    await SharePlus.instance.share(ShareParams(files: [XFile(file.path)], text: shareText));
+    await SharePlus.instance.share(ShareParams(files: [XFile(file.path)], subject: periodTitle, text: shareText));
   }
 
   String _getPeriodForIndex(int index) {
