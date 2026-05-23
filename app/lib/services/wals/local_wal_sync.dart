@@ -18,6 +18,12 @@ import 'package:omi/utils/debug_log_manager.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/wal_file_manager.dart';
 
+/// Error string the backend's stale guard sets when a job sits queued past
+/// STALE_THRESHOLD_SECONDS without ever reaching a worker. See backend issue
+/// #7469 — if this string changes, update here and keep the structural check
+/// below ('failed' with totalSegments==0) as the durable signal.
+const _kBackendBusyErrorHint = 'background worker likely died';
+
 class LocalWalSyncImpl implements LocalWalSync {
   List<Wal> _wals = const [];
 
@@ -951,19 +957,12 @@ class LocalWalSyncImpl implements LocalWalSync {
                 listener.onWalSynced(w);
               }
             } else {
-              // 'partial_failure' / 'failed'. Batched mapping means we can't
-              // attribute a failed segment to a specific member, so revert all
-              // members for re-upload — the server dedups segments that already
-              // succeeded, so completed work is not duplicated.
-              //
-              // Backend-busy detection: when the server's stale guard marks a
-              // queued job 'failed' with this specific error, the job never
-              // even reached a worker — it's a backend-capacity issue, not a
-              // content failure. Don't bump retryCount (which would mislabel
-              // the recording as 'failed'), and pause uploads via the rate
-              // limiter so we stop submitting more jobs that will also stale
-              // out. UI surfaces this as 'Backend busy' (distinct from 429).
-              final backendBusy = (s.error ?? '').contains('background worker likely died');
+              // status='failed' with totalSegments==0 can only come from the
+              // backend stale guard (mark_job_completed only sets 'failed'
+              // when total>0). String hint is a fallback if the structural
+              // signal ever becomes ambiguous.
+              final backendBusy =
+                  (s.status == 'failed' && s.totalSegments == 0) || (s.error ?? '').contains(_kBackendBusyErrorHint);
               if (backendBusy) {
                 SyncRateLimiter.instance.markLimited(retryAfterSeconds: 600, reason: RateLimitReason.backendBusy);
               }
