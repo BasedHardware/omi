@@ -878,27 +878,54 @@ class LocalWalSyncImpl implements LocalWalSync {
       );
 
       for (final (members, fetch) in fetched) {
+        final jobId = members.first.jobId;
+        final memberWalIds = members.map((w) => w.id).toList();
         switch (fetch.outcome) {
           case SyncJobFetchOutcome.transient:
             // Network/5xx — leave as `uploaded`, retry on the next pass.
+            DebugLogManager.logEvent('reconcile_poll', {
+              'jobId': jobId,
+              'memberWalIds': memberWalIds,
+              'outcome': 'transient',
+            });
             break;
           case SyncJobFetchOutcome.notFound:
             // Job expired or unknown. Recover from the retained local file.
             for (final w in members) {
               changed = true;
+              final hadJob = w.jobId;
               w.jobId = null;
-              if (await _localFileExists(w)) {
+              final fileExists = await _localFileExists(w);
+              if (fileExists) {
                 w.status = WalStatus.miss; // re-upload next sync (dedup-safe)
                 w.retryCount += 1;
                 w.lastRetryAt = nowSecs;
               } else {
                 w.status = WalStatus.corrupted; // nothing left to recover
               }
+              DebugLogManager.logEvent('reconcile_revert', {
+                'walId': w.id,
+                'jobId': hadJob,
+                'outcome': 'not_found',
+                'fileExists': fileExists,
+                'newStatus': w.status.name,
+                'retryCount': w.retryCount,
+              });
             }
             break;
           case SyncJobFetchOutcome.ok:
             final s = fetch.status!;
-            if (!s.isTerminal) break; // still queued/processing — check later
+            if (!s.isTerminal) {
+              DebugLogManager.logEvent('reconcile_poll', {
+                'jobId': jobId,
+                'memberWalIds': memberWalIds,
+                'outcome': 'non_terminal',
+                'serverStatus': s.status,
+                'processedSegments': s.processedSegments,
+                'totalSegments': s.totalSegments,
+              });
+              break; // still queued/processing — check later
+            }
             if (s.result != null) {
               resp.newConversationIds.addAll(
                 s.result!.newConversationIds.where((id) => !resp.newConversationIds.contains(id)),
@@ -910,6 +937,13 @@ class LocalWalSyncImpl implements LocalWalSync {
               );
             }
             if (s.status == 'completed') {
+              DebugLogManager.logEvent('reconcile_poll', {
+                'jobId': jobId,
+                'memberWalIds': memberWalIds,
+                'outcome': 'completed',
+                'newConversations': s.result?.newConversationIds.length ?? 0,
+                'updatedConversations': s.result?.updatedConversationIds.length ?? 0,
+              });
               for (final w in members) {
                 changed = true;
                 w.status = WalStatus.synced;
@@ -921,12 +955,38 @@ class LocalWalSyncImpl implements LocalWalSync {
               // attribute a failed segment to a specific member, so revert all
               // members for re-upload — the server dedups segments that already
               // succeeded, so completed work is not duplicated.
+              //
+              // Backend-busy detection: when the server's stale guard marks a
+              // queued job 'failed' with this specific error, the job never
+              // even reached a worker — it's a backend-capacity issue, not a
+              // content failure. Don't bump retryCount (which would mislabel
+              // the recording as 'failed'), and pause uploads via the rate
+              // limiter so we stop submitting more jobs that will also stale
+              // out. UI surfaces this as 'Backend busy' (distinct from 429).
+              final backendBusy = (s.error ?? '').contains('background worker likely died');
+              if (backendBusy) {
+                SyncRateLimiter.instance.markLimited(retryAfterSeconds: 600, reason: RateLimitReason.backendBusy);
+              }
               for (final w in members) {
                 changed = true;
+                final hadJob = w.jobId;
                 w.status = WalStatus.miss;
                 w.jobId = null;
-                w.retryCount += 1;
-                w.lastRetryAt = nowSecs;
+                if (!backendBusy) {
+                  w.retryCount += 1;
+                  w.lastRetryAt = nowSecs;
+                }
+                DebugLogManager.logEvent('reconcile_revert', {
+                  'walId': w.id,
+                  'jobId': hadJob,
+                  'outcome': s.status,
+                  'serverError': s.error,
+                  'failedSegments': s.failedSegments,
+                  'totalSegments': s.totalSegments,
+                  'retryCount': w.retryCount,
+                  'backendBusy': backendBusy,
+                  'retryCountBumped': !backendBusy,
+                });
               }
             }
             break;
