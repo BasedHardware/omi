@@ -61,6 +61,7 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
   /// True while a fair-use (429) cooldown is active — uploads are paused.
   bool get isRateLimited => SyncRateLimiter.instance.isLimited;
   DateTime? get rateLimitedUntil => SyncRateLimiter.instance.until;
+  RateLimitReason? get rateLimitReason => SyncRateLimiter.instance.reason;
 
   List<Wal> get filteredByStatusWals {
     if (_statusFilter == WalStatusFilter.pending) {
