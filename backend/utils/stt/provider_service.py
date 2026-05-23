@@ -14,9 +14,11 @@ from utils.stt.deepgram_adapter import DeepgramPrerecordedTranscriptionProvider
 from utils.stt.deepgram_adapter import provider_result_to_legacy_words
 from utils.stt.provider_costs import estimate_prerecorded_provider_cost_usd
 from utils.stt.providers import (
+    BackgroundProviderMode,
     STTProviderName,
     STTWorkload,
     assemblyai_prerecorded_fallback_enabled,
+    get_background_provider_mode,
     get_fallback_prerecorded_provider_name,
     get_prerecorded_provider_name,
 )
@@ -117,6 +119,10 @@ def _has_deepgram_key_for_request() -> bool:
     return bool((get_byok_key('deepgram') if get_byok_key else None) or os.getenv('DEEPGRAM_API_KEY'))
 
 
+def _has_assemblyai_key_for_request() -> bool:
+    return bool((get_byok_key('assemblyai') if get_byok_key else None) or os.getenv('ASSEMBLYAI_API_KEY'))
+
+
 def _deepgram_client_for_request() -> DeepgramClient:
     byok = get_byok_key('deepgram') if get_byok_key else None
     if byok:
@@ -133,6 +139,18 @@ class PrerecordedTranscriptionResponse:
     run_id: Optional[str]
 
 
+@dataclass(frozen=True)
+class BackgroundProviderPolicy:
+    mode: BackgroundProviderMode
+    primary_provider: STTProviderName
+    effective_provider: Optional[STTProviderName]
+    fallback_provider: Optional[STTProviderName]
+    fallback_enabled: bool
+    fallback_available: bool
+    enabled: bool
+    reason: Optional[str]
+
+
 class ProviderTranscriptionRetriesExhausted(RuntimeError):
     def __init__(self, provider_error: Exception, retry_count: int):
         super().__init__(str(provider_error))
@@ -142,6 +160,48 @@ class ProviderTranscriptionRetriesExhausted(RuntimeError):
 
 def resolve_prerecorded_language_model(language: Optional[str]) -> Tuple[str, str]:
     return get_deepgram_model_for_language(language or 'multi')
+
+
+def resolve_background_provider_policy() -> BackgroundProviderPolicy:
+    mode = get_background_provider_mode()
+    primary_provider = get_prerecorded_provider_name(STTWorkload.background)
+    effective_provider = resolve_prerecorded_provider_for_request(STTWorkload.background)
+    fallback_provider = get_fallback_prerecorded_provider_name(primary_provider, STTWorkload.background)
+
+    assemblyai_key_available = _has_assemblyai_key_for_request()
+    deepgram_key_available = _has_deepgram_key_for_request()
+    fallback_available = fallback_provider == STTProviderName.deepgram and deepgram_key_available
+
+    usable_provider = None
+    reason = None
+    if effective_provider == STTProviderName.assemblyai:
+        if assemblyai_key_available:
+            usable_provider = STTProviderName.assemblyai
+        elif fallback_available:
+            usable_provider = STTProviderName.deepgram
+            reason = 'fallback_deepgram_available'
+        else:
+            reason = 'missing_assemblyai_api_key'
+    elif effective_provider == STTProviderName.deepgram:
+        if deepgram_key_available:
+            usable_provider = STTProviderName.deepgram
+            if mode == BackgroundProviderMode.shadow_only:
+                reason = 'shadow_only'
+        else:
+            reason = 'missing_deepgram_api_key'
+    else:
+        reason = 'no_usable_batch_provider'
+
+    return BackgroundProviderPolicy(
+        mode=mode,
+        primary_provider=primary_provider,
+        effective_provider=usable_provider,
+        fallback_provider=fallback_provider,
+        fallback_enabled=fallback_provider is not None,
+        fallback_available=fallback_available,
+        enabled=usable_provider is not None,
+        reason=reason,
+    )
 
 
 def transcribe_url(

@@ -20,7 +20,13 @@ os.environ.setdefault('ASSEMBLYAI_API_KEY', 'fake-for-test')
 from models.transcript_segment import ProviderTranscriptResult, ProviderTranscriptWord  # noqa: E402
 from utils.stt import provider_service  # noqa: E402
 from utils.stt.provider_costs import estimate_prerecorded_provider_cost_usd  # noqa: E402
-from utils.stt.providers import STTProviderName, STTWorkload, get_prerecorded_provider_name  # noqa: E402
+from utils.stt.providers import (  # noqa: E402
+    BackgroundProviderMode,
+    STTProviderName,
+    STTWorkload,
+    get_background_provider_mode,
+    get_prerecorded_provider_name,
+)
 
 
 def _provider_result(provider='deepgram', model='nova-3'):
@@ -109,13 +115,54 @@ def test_provider_service_finalizes_background_run_on_deepgram_when_assemblyai_d
     assert finalize_run.call_args.kwargs['estimated_cost_usd'] == 0.00076
 
 
-def test_background_routing_selects_assemblyai_by_default(monkeypatch):
+def test_background_routing_defaults_to_shadow_only_deepgram_until_rollout_gates_pass(monkeypatch):
     monkeypatch.delenv('ASSEMBLYAI_PRERECORDED_STT_ENABLED', raising=False)
     monkeypatch.delenv('ASSEMBLYAI_PRERECORDED_STT_WORKLOADS', raising=False)
+    monkeypatch.delenv('ASSEMBLYAI_BACKGROUND_PROVIDER_MODE', raising=False)
 
     assert get_prerecorded_provider_name(STTWorkload.sync) == STTProviderName.assemblyai
-    assert get_prerecorded_provider_name(STTWorkload.background) == STTProviderName.assemblyai
+    assert get_background_provider_mode() == BackgroundProviderMode.shadow_only
+    assert get_prerecorded_provider_name(STTWorkload.background) == STTProviderName.deepgram
     assert get_prerecorded_provider_name(STTWorkload.postprocess) == STTProviderName.assemblyai
+
+
+def test_background_routing_selects_assemblyai_when_background_gate_allows(monkeypatch):
+    monkeypatch.setenv('ASSEMBLYAI_PRERECORDED_STT_ENABLED', 'true')
+    monkeypatch.setenv('ASSEMBLYAI_PRERECORDED_STT_WORKLOADS', 'background')
+    monkeypatch.setenv('ASSEMBLYAI_BACKGROUND_PROVIDER_MODE', 'assemblyai')
+
+    assert get_prerecorded_provider_name(STTWorkload.background) == STTProviderName.assemblyai
+
+
+def test_background_routing_supports_deepgram_override_and_shadow_only(monkeypatch):
+    monkeypatch.setenv('ASSEMBLYAI_PRERECORDED_STT_ENABLED', 'true')
+    monkeypatch.setenv('ASSEMBLYAI_PRERECORDED_STT_WORKLOADS', 'background')
+
+    monkeypatch.setenv('ASSEMBLYAI_BACKGROUND_PROVIDER_MODE', 'deepgram')
+    assert get_prerecorded_provider_name(STTWorkload.background) == STTProviderName.deepgram
+
+    monkeypatch.setenv('ASSEMBLYAI_BACKGROUND_PROVIDER_MODE', 'shadow_only')
+    assert get_prerecorded_provider_name(STTWorkload.background) == STTProviderName.deepgram
+
+
+def test_background_routing_honors_disabled_rollout_gate_and_workload_allowlist(monkeypatch):
+    monkeypatch.setenv('ASSEMBLYAI_BACKGROUND_PROVIDER_MODE', 'assemblyai')
+    monkeypatch.setenv('ASSEMBLYAI_PRERECORDED_STT_ENABLED', 'false')
+    monkeypatch.setenv('ASSEMBLYAI_PRERECORDED_STT_WORKLOADS', 'background')
+
+    assert get_prerecorded_provider_name(STTWorkload.background) == STTProviderName.deepgram
+
+    monkeypatch.setenv('ASSEMBLYAI_PRERECORDED_STT_ENABLED', 'true')
+    monkeypatch.setenv('ASSEMBLYAI_PRERECORDED_STT_WORKLOADS', 'sync,postprocess')
+
+    assert get_prerecorded_provider_name(STTWorkload.background) == STTProviderName.deepgram
+
+
+def test_background_routing_invalid_mode_fails_safe_to_shadow_only(monkeypatch):
+    monkeypatch.setenv('ASSEMBLYAI_BACKGROUND_PROVIDER_MODE', 'invalid-mode')
+
+    assert get_background_provider_mode() == BackgroundProviderMode.shadow_only
+    assert get_prerecorded_provider_name(STTWorkload.background) == STTProviderName.deepgram
 
 
 def test_prerecorded_ptt_and_realtime_related_workloads_stay_deepgram():
@@ -126,6 +173,7 @@ def test_prerecorded_ptt_and_realtime_related_workloads_stay_deepgram():
 def test_background_routing_can_select_assemblyai_without_moving_latency_critical_workloads(monkeypatch):
     monkeypatch.setenv('ASSEMBLYAI_PRERECORDED_STT_ENABLED', 'true')
     monkeypatch.setenv('ASSEMBLYAI_PRERECORDED_STT_WORKLOADS', 'sync,background,postprocess,ptt,realtime')
+    monkeypatch.setenv('ASSEMBLYAI_BACKGROUND_PROVIDER_MODE', 'assemblyai')
 
     assert get_prerecorded_provider_name(STTWorkload.sync) == STTProviderName.assemblyai
     assert get_prerecorded_provider_name(STTWorkload.background) == STTProviderName.assemblyai
@@ -243,6 +291,7 @@ def test_provider_service_falls_back_to_deepgram_when_assemblyai_fails(monkeypat
 def test_provider_service_falls_back_to_deepgram_for_background_when_assemblyai_fails(monkeypatch):
     monkeypatch.setenv('ASSEMBLYAI_PRERECORDED_STT_ENABLED', 'true')
     monkeypatch.setenv('ASSEMBLYAI_PRERECORDED_STT_WORKLOADS', 'background')
+    monkeypatch.setenv('ASSEMBLYAI_BACKGROUND_PROVIDER_MODE', 'assemblyai')
     monkeypatch.delenv('ASSEMBLYAI_PRERECORDED_STT_FALLBACK_ENABLED', raising=False)
 
     assemblyai_provider = MagicMock()
@@ -309,6 +358,37 @@ def test_provider_service_skips_missing_assemblyai_key_when_deepgram_fallback_is
     assert finalize_run.call_args.kwargs['fallback_count'] == 0
 
 
+def test_provider_service_skips_missing_background_assemblyai_key_when_deepgram_fallback_is_usable(monkeypatch):
+    monkeypatch.setenv('ASSEMBLYAI_PRERECORDED_STT_ENABLED', 'true')
+    monkeypatch.setenv('ASSEMBLYAI_PRERECORDED_STT_WORKLOADS', 'background')
+    monkeypatch.setenv('ASSEMBLYAI_BACKGROUND_PROVIDER_MODE', 'assemblyai')
+    monkeypatch.delenv('ASSEMBLYAI_API_KEY', raising=False)
+    monkeypatch.setenv('DEEPGRAM_API_KEY', 'dg-server-key')
+
+    deepgram_provider = MagicMock()
+    deepgram_provider.provider_name = STTProviderName.deepgram
+    deepgram_provider.transcribe_url.return_value = _provider_result()
+
+    with patch.object(provider_service, '_assemblyai_prerecorded_provider') as assemblyai_provider, patch.object(
+        provider_service, '_deepgram_prerecorded_provider', return_value=deepgram_provider
+    ), patch.object(provider_service, 'create_provider_run', return_value='run-dg'), patch.object(
+        provider_service, 'finalize_provider_run'
+    ) as finalize_run:
+        response = provider_service.transcribe_url(
+            'https://example.test/background.wav',
+            workload=STTWorkload.background,
+            uid='uid-1',
+            language='multi',
+            model='nova-3',
+        )
+
+    assert response.result.provider == 'deepgram'
+    assemblyai_provider.assert_not_called()
+    deepgram_provider.transcribe_url.assert_called_once()
+    assert finalize_run.call_args.kwargs['provider'] == 'deepgram'
+    assert finalize_run.call_args.kwargs['fallback_count'] == 0
+
+
 def test_provider_service_reports_missing_assemblyai_key_when_fallback_disabled(monkeypatch):
     monkeypatch.setenv('ASSEMBLYAI_PRERECORDED_STT_ENABLED', 'true')
     monkeypatch.setenv('ASSEMBLYAI_PRERECORDED_STT_WORKLOADS', 'sync')
@@ -361,6 +441,7 @@ def test_provider_service_reports_missing_assemblyai_key_when_no_fallback_key_is
 def test_provider_service_records_background_retry_exhaustion_when_fallback_disabled(monkeypatch):
     monkeypatch.setenv('ASSEMBLYAI_PRERECORDED_STT_ENABLED', 'true')
     monkeypatch.setenv('ASSEMBLYAI_PRERECORDED_STT_WORKLOADS', 'background')
+    monkeypatch.setenv('ASSEMBLYAI_BACKGROUND_PROVIDER_MODE', 'assemblyai')
     monkeypatch.setenv('ASSEMBLYAI_PRERECORDED_STT_FALLBACK_ENABLED', 'false')
 
     assemblyai_provider = MagicMock()

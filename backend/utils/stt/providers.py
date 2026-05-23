@@ -19,6 +19,12 @@ class STTWorkload(str, Enum):
     voice_message = 'voice_message'
 
 
+class BackgroundProviderMode(str, Enum):
+    assemblyai = 'assemblyai'
+    deepgram = 'deepgram'
+    shadow_only = 'shadow_only'
+
+
 class PrerecordedSTTProvider(Protocol):
     provider_name: STTProviderName
 
@@ -93,6 +99,14 @@ _STREAMING_WORKLOAD_PROVIDERS = {
 
 def get_prerecorded_provider_name(workload: STTWorkload) -> STTProviderName:
     workload = STTWorkload(workload)
+    if workload == STTWorkload.background:
+        if (
+            get_background_provider_mode() == BackgroundProviderMode.assemblyai
+            and _assemblyai_prerecorded_enabled()
+            and workload in _assemblyai_enabled_workloads()
+        ):
+            return STTProviderName.assemblyai
+        return STTProviderName.deepgram
     if _assemblyai_prerecorded_enabled() and workload in _assemblyai_enabled_workloads():
         return STTProviderName.assemblyai
     return _DEFAULT_PRERECORDED_WORKLOAD_PROVIDERS[workload]
@@ -125,6 +139,14 @@ def _assemblyai_prerecorded_enabled() -> bool:
 
 def assemblyai_prerecorded_fallback_enabled() -> bool:
     return os.getenv('ASSEMBLYAI_PRERECORDED_STT_FALLBACK_ENABLED', 'true').lower() == 'true'
+
+
+def get_background_provider_mode() -> BackgroundProviderMode:
+    configured = os.getenv('ASSEMBLYAI_BACKGROUND_PROVIDER_MODE', BackgroundProviderMode.shadow_only.value)
+    try:
+        return BackgroundProviderMode(configured.strip().lower())
+    except ValueError:
+        return BackgroundProviderMode.shadow_only
 
 
 def _assemblyai_enabled_workloads() -> set[STTWorkload]:

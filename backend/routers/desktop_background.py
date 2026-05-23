@@ -1,7 +1,6 @@
 import hashlib
 import json
 import logging
-import os
 from datetime import datetime, timezone
 from typing import Dict, List, Optional
 
@@ -26,22 +25,16 @@ from utils.conversations.desktop_background import (
 from utils.executors import db_executor, run_blocking, sync_executor
 from utils.fair_use import is_hard_restricted, record_speech_ms
 from utils.other import endpoints as auth
-from utils.byok import get_byok_key
 from utils.speaker_identification import _pcm_to_wav_bytes
 from utils.stt.background_speaker_identity import USER_SELF_PERSON_ID, identify_background_speaker_clusters
 from utils.stt.provider_service import (
-    resolve_prerecorded_provider_for_request,
+    resolve_background_provider_policy,
     speaker_identity_metrics,
     transcribe_bytes,
     update_provider_run_identity_metrics,
 )
 from utils.stt.speaker_embedding import extract_embedding_from_bytes
-from utils.stt.providers import (
-    STTProviderName,
-    STTWorkload,
-    get_fallback_prerecorded_provider_name,
-    get_prerecorded_provider_name,
-)
+from utils.stt.providers import STTWorkload
 from utils.subscription import has_transcription_credits, is_trial_paywalled
 from utils.voice_duration_limiter import compute_pcm_duration_ms
 
@@ -61,51 +54,24 @@ class BackgroundConversationStartRequest(BaseModel):
 
 @router.get("/capabilities")
 async def desktop_capabilities(uid: str = Depends(auth.get_current_user_uid)):
-    primary_provider = get_prerecorded_provider_name(STTWorkload.background)
-    effective_provider = resolve_prerecorded_provider_for_request(STTWorkload.background)
-    fallback_provider = get_fallback_prerecorded_provider_name(primary_provider, STTWorkload.background)
-
-    assemblyai_key_available = bool(get_byok_key('assemblyai') or os.getenv('ASSEMBLYAI_API_KEY'))
-    deepgram_key_available = bool(get_byok_key('deepgram') or os.getenv('DEEPGRAM_API_KEY'))
-    fallback_available = fallback_provider == STTProviderName.deepgram and deepgram_key_available
-
-    if effective_provider == STTProviderName.assemblyai and not assemblyai_key_available and fallback_available:
-        effective_provider = STTProviderName.deepgram
-
-    usable_provider = None
-    if effective_provider == STTProviderName.assemblyai and assemblyai_key_available:
-        usable_provider = STTProviderName.assemblyai
-    elif effective_provider == STTProviderName.deepgram and deepgram_key_available:
-        usable_provider = STTProviderName.deepgram
-
-    enabled = usable_provider is not None
-    mode = 'disabled'
-    reason = None
-    if usable_provider == STTProviderName.assemblyai:
-        mode = 'assemblyai_primary'
-    elif usable_provider == STTProviderName.deepgram and primary_provider == STTProviderName.assemblyai:
+    policy = resolve_background_provider_policy()
+    mode = policy.mode.value
+    if not policy.enabled:
+        mode = 'disabled'
+    elif policy.reason == 'fallback_deepgram_available':
         mode = 'deepgram_fallback'
-        reason = 'fallback_deepgram_available'
-    elif usable_provider == STTProviderName.deepgram:
-        mode = 'deepgram_primary'
-    elif primary_provider == STTProviderName.assemblyai and not assemblyai_key_available:
-        reason = 'missing_assemblyai_api_key'
-    elif primary_provider == STTProviderName.deepgram and not deepgram_key_available:
-        reason = 'missing_deepgram_api_key'
-    else:
-        reason = 'no_usable_batch_provider'
     return {
         "background_batch": {
-            "enabled": enabled,
+            "enabled": policy.enabled,
             "mode": mode,
-            "provider": primary_provider.value,
-            "primary_provider": primary_provider.value,
-            "effective_provider": usable_provider.value if usable_provider else None,
-            "fallback_provider": fallback_provider.value if fallback_provider else None,
-            "fallback_enabled": fallback_provider is not None,
-            "fallback_available": fallback_available,
+            "provider": policy.primary_provider.value,
+            "primary_provider": policy.primary_provider.value,
+            "effective_provider": policy.effective_provider.value if policy.effective_provider else None,
+            "fallback_provider": policy.fallback_provider.value if policy.fallback_provider else None,
+            "fallback_enabled": policy.fallback_enabled,
+            "fallback_available": policy.fallback_available,
             "workload": STTWorkload.background.value,
-            "reason": reason,
+            "reason": policy.reason,
             "sample_rate": 16000,
             "channels": 1,
             "encoding": "linear16",

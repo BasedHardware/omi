@@ -86,6 +86,7 @@ sys.modules.setdefault(
     'utils.stt.provider_service',
     SimpleNamespace(
         resolve_prerecorded_provider_for_request=MagicMock(),
+        resolve_background_provider_policy=MagicMock(),
         speaker_identity_metrics=lambda segments: {
             'provider_speaker_count': len(
                 {
@@ -158,7 +159,7 @@ from fastapi.testclient import TestClient
 
 from models.transcript_segment import ProviderTranscriptResult, TranscriptSegment
 from routers import desktop_background
-from utils.stt.providers import STTProviderName, STTWorkload
+from utils.stt.providers import BackgroundProviderMode, STTProviderName, STTWorkload
 
 sys.modules.pop('utils.stt.provider_service', None)
 if 'utils.stt' in sys.modules and hasattr(sys.modules['utils.stt'], 'provider_service'):
@@ -179,7 +180,6 @@ def _client(monkeypatch, *, segments=None, person_embeddings_cache=None):
     monkeypatch.setattr(desktop_background, 'has_transcription_credits', lambda *_args, **_kwargs: True)
     monkeypatch.setattr(desktop_background, 'record_speech_ms', lambda *_args, **_kwargs: None)
     monkeypatch.setattr(desktop_background, 'record_usage', lambda *_args, **_kwargs: None)
-    monkeypatch.setattr(desktop_background, 'get_byok_key', lambda _provider: None)
     monkeypatch.setattr(desktop_background, 'resolve_voice_message_language', lambda _uid, language: language or 'en')
     monkeypatch.setattr(
         desktop_background.conversations_db,
@@ -239,13 +239,19 @@ def _client(monkeypatch, *, segments=None, person_embeddings_cache=None):
 
 def test_desktop_capabilities_reports_assemblyai_background_when_key_available(monkeypatch):
     client, _mock_transcribe = _client(monkeypatch)
-    monkeypatch.setenv('ASSEMBLYAI_PRERECORDED_STT_ENABLED', 'true')
-    monkeypatch.setenv('ASSEMBLYAI_PRERECORDED_STT_WORKLOADS', 'sync,background,postprocess')
-    monkeypatch.setenv('ASSEMBLYAI_API_KEY', 'server-aai-key')
     monkeypatch.setattr(
         desktop_background,
-        'resolve_prerecorded_provider_for_request',
-        lambda _workload: STTProviderName.assemblyai,
+        'resolve_background_provider_policy',
+        lambda: SimpleNamespace(
+            mode=BackgroundProviderMode.assemblyai,
+            primary_provider=STTProviderName.assemblyai,
+            effective_provider=STTProviderName.assemblyai,
+            fallback_provider=STTProviderName.deepgram,
+            fallback_enabled=True,
+            fallback_available=True,
+            enabled=True,
+            reason=None,
+        ),
     )
 
     response = client.get('/v2/desktop/capabilities')
@@ -256,7 +262,7 @@ def test_desktop_capabilities_reports_assemblyai_background_when_key_available(m
     assert data['provider'] == 'assemblyai'
     assert data['primary_provider'] == 'assemblyai'
     assert data['effective_provider'] == 'assemblyai'
-    assert data['mode'] == 'assemblyai_primary'
+    assert data['mode'] == 'assemblyai'
     assert data['fallback_provider'] == 'deepgram'
     assert data['fallback_enabled'] is True
     assert data['fallback_available'] is True
@@ -266,14 +272,19 @@ def test_desktop_capabilities_reports_assemblyai_background_when_key_available(m
 
 def test_desktop_capabilities_allows_background_batch_with_deepgram_fallback(monkeypatch):
     client, _mock_transcribe = _client(monkeypatch)
-    monkeypatch.setenv('ASSEMBLYAI_PRERECORDED_STT_ENABLED', 'true')
-    monkeypatch.setenv('ASSEMBLYAI_PRERECORDED_STT_WORKLOADS', 'sync,background,postprocess')
-    monkeypatch.delenv('ASSEMBLYAI_PRERECORDED_STT_FALLBACK_ENABLED', raising=False)
-    monkeypatch.delenv('ASSEMBLYAI_API_KEY', raising=False)
     monkeypatch.setattr(
         desktop_background,
-        'resolve_prerecorded_provider_for_request',
-        lambda _workload: STTProviderName.assemblyai,
+        'resolve_background_provider_policy',
+        lambda: SimpleNamespace(
+            mode=BackgroundProviderMode.assemblyai,
+            primary_provider=STTProviderName.assemblyai,
+            effective_provider=STTProviderName.deepgram,
+            fallback_provider=STTProviderName.deepgram,
+            fallback_enabled=True,
+            fallback_available=True,
+            enabled=True,
+            reason='fallback_deepgram_available',
+        ),
     )
 
     response = client.get('/v2/desktop/capabilities')
@@ -293,14 +304,19 @@ def test_desktop_capabilities_allows_background_batch_with_deepgram_fallback(mon
 
 def test_desktop_capabilities_reports_missing_assemblyai_key_when_fallback_disabled(monkeypatch):
     client, _mock_transcribe = _client(monkeypatch)
-    monkeypatch.setenv('ASSEMBLYAI_PRERECORDED_STT_ENABLED', 'true')
-    monkeypatch.setenv('ASSEMBLYAI_PRERECORDED_STT_WORKLOADS', 'sync,background,postprocess')
-    monkeypatch.setenv('ASSEMBLYAI_PRERECORDED_STT_FALLBACK_ENABLED', 'false')
-    monkeypatch.delenv('ASSEMBLYAI_API_KEY', raising=False)
     monkeypatch.setattr(
         desktop_background,
-        'resolve_prerecorded_provider_for_request',
-        lambda _workload: STTProviderName.assemblyai,
+        'resolve_background_provider_policy',
+        lambda: SimpleNamespace(
+            mode=BackgroundProviderMode.assemblyai,
+            primary_provider=STTProviderName.assemblyai,
+            effective_provider=None,
+            fallback_provider=None,
+            fallback_enabled=False,
+            fallback_available=False,
+            enabled=False,
+            reason='missing_assemblyai_api_key',
+        ),
     )
 
     response = client.get('/v2/desktop/capabilities')
@@ -318,14 +334,19 @@ def test_desktop_capabilities_reports_missing_assemblyai_key_when_fallback_disab
 
 def test_desktop_capabilities_reports_no_usable_batch_provider_without_any_key(monkeypatch):
     client, _mock_transcribe = _client(monkeypatch)
-    monkeypatch.setenv('ASSEMBLYAI_PRERECORDED_STT_ENABLED', 'true')
-    monkeypatch.setenv('ASSEMBLYAI_PRERECORDED_STT_WORKLOADS', 'sync,background,postprocess')
-    monkeypatch.delenv('ASSEMBLYAI_API_KEY', raising=False)
-    monkeypatch.delenv('DEEPGRAM_API_KEY', raising=False)
     monkeypatch.setattr(
         desktop_background,
-        'resolve_prerecorded_provider_for_request',
-        lambda _workload: STTProviderName.assemblyai,
+        'resolve_background_provider_policy',
+        lambda: SimpleNamespace(
+            mode=BackgroundProviderMode.assemblyai,
+            primary_provider=STTProviderName.assemblyai,
+            effective_provider=None,
+            fallback_provider=STTProviderName.deepgram,
+            fallback_enabled=True,
+            fallback_available=False,
+            enabled=False,
+            reason='missing_assemblyai_api_key',
+        ),
     )
 
     response = client.get('/v2/desktop/capabilities')
@@ -342,16 +363,19 @@ def test_desktop_capabilities_reports_no_usable_batch_provider_without_any_key(m
 
 def test_desktop_capabilities_uses_byok_assemblyai(monkeypatch):
     client, _mock_transcribe = _client(monkeypatch)
-    monkeypatch.setenv('ASSEMBLYAI_PRERECORDED_STT_ENABLED', 'true')
-    monkeypatch.setenv('ASSEMBLYAI_PRERECORDED_STT_WORKLOADS', 'sync,background,postprocess')
-    monkeypatch.delenv('ASSEMBLYAI_API_KEY', raising=False)
-    monkeypatch.setattr(
-        desktop_background, 'get_byok_key', lambda provider: 'aai-user-key' if provider == 'assemblyai' else None
-    )
     monkeypatch.setattr(
         desktop_background,
-        'resolve_prerecorded_provider_for_request',
-        lambda _workload: STTProviderName.assemblyai,
+        'resolve_background_provider_policy',
+        lambda: SimpleNamespace(
+            mode=BackgroundProviderMode.assemblyai,
+            primary_provider=STTProviderName.assemblyai,
+            effective_provider=STTProviderName.assemblyai,
+            fallback_provider=STTProviderName.deepgram,
+            fallback_enabled=True,
+            fallback_available=False,
+            enabled=True,
+            reason=None,
+        ),
     )
 
     response = client.get('/v2/desktop/capabilities')
@@ -360,22 +384,24 @@ def test_desktop_capabilities_uses_byok_assemblyai(monkeypatch):
     data = response.json()['background_batch']
     assert data['enabled'] is True
     assert data['effective_provider'] == 'assemblyai'
-    assert data['mode'] == 'assemblyai_primary'
+    assert data['mode'] == 'assemblyai'
 
 
 def test_desktop_capabilities_uses_byok_deepgram_fallback(monkeypatch):
     client, _mock_transcribe = _client(monkeypatch)
-    monkeypatch.setenv('ASSEMBLYAI_PRERECORDED_STT_ENABLED', 'true')
-    monkeypatch.setenv('ASSEMBLYAI_PRERECORDED_STT_WORKLOADS', 'sync,background,postprocess')
-    monkeypatch.delenv('ASSEMBLYAI_API_KEY', raising=False)
-    monkeypatch.delenv('DEEPGRAM_API_KEY', raising=False)
-    monkeypatch.setattr(
-        desktop_background, 'get_byok_key', lambda provider: 'dg-user-key' if provider == 'deepgram' else None
-    )
     monkeypatch.setattr(
         desktop_background,
-        'resolve_prerecorded_provider_for_request',
-        lambda _workload: STTProviderName.deepgram,
+        'resolve_background_provider_policy',
+        lambda: SimpleNamespace(
+            mode=BackgroundProviderMode.assemblyai,
+            primary_provider=STTProviderName.assemblyai,
+            effective_provider=STTProviderName.deepgram,
+            fallback_provider=STTProviderName.deepgram,
+            fallback_enabled=True,
+            fallback_available=True,
+            enabled=True,
+            reason='fallback_deepgram_available',
+        ),
     )
 
     response = client.get('/v2/desktop/capabilities')
@@ -385,6 +411,34 @@ def test_desktop_capabilities_uses_byok_deepgram_fallback(monkeypatch):
     assert data['enabled'] is True
     assert data['effective_provider'] == 'deepgram'
     assert data['mode'] == 'deepgram_fallback'
+
+
+def test_desktop_capabilities_reports_shadow_only_mode(monkeypatch):
+    client, _mock_transcribe = _client(monkeypatch)
+    monkeypatch.setattr(
+        desktop_background,
+        'resolve_background_provider_policy',
+        lambda: SimpleNamespace(
+            mode=BackgroundProviderMode.shadow_only,
+            primary_provider=STTProviderName.deepgram,
+            effective_provider=STTProviderName.deepgram,
+            fallback_provider=None,
+            fallback_enabled=False,
+            fallback_available=False,
+            enabled=True,
+            reason='shadow_only',
+        ),
+    )
+
+    response = client.get('/v2/desktop/capabilities')
+
+    assert response.status_code == 200
+    data = response.json()['background_batch']
+    assert data['enabled'] is True
+    assert data['provider'] == 'deepgram'
+    assert data['effective_provider'] == 'deepgram'
+    assert data['mode'] == 'shadow_only'
+    assert data['reason'] == 'shadow_only'
 
 
 def test_background_transcribe_returns_segments_with_offset(monkeypatch):
@@ -749,6 +803,7 @@ def test_byok_background_routing_uses_deepgram_when_only_deepgram_key(monkeypatc
 
     monkeypatch.setenv('ASSEMBLYAI_PRERECORDED_STT_ENABLED', 'true')
     monkeypatch.setenv('ASSEMBLYAI_PRERECORDED_STT_WORKLOADS', 'sync,background,postprocess')
+    monkeypatch.setenv('ASSEMBLYAI_BACKGROUND_PROVIDER_MODE', 'assemblyai')
     monkeypatch.setattr(provider_service, 'get_byok_key', lambda provider: {'deepgram': 'dg-user-key'}.get(provider))
 
     provider = provider_service.resolve_prerecorded_provider_for_request(STTWorkload.background)

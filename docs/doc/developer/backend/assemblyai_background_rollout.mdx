@@ -8,9 +8,16 @@ description: "Rollout gates, feature flags, instrumentation, and rollback for th
 
 ## Scope
 
-AssemblyAI is the MVP async prerecorded provider. Deepgram remains
-the provider for mobile/BLE `/v4/listen`, realtime assistant streaming,
-Hold-to-Talk streaming, and voice-message finalize semantics.
+AssemblyAI is the intended async background provider, but broad background
+defaulting is still gated. Current saved-provider benchmark evidence favors
+Deepgram on cost-adjusted speaker quality: Deepgram reached 99.79% speaker
+purity at about $0.264/hour, while AssemblyAI reached 95.91% at about
+$0.734/hour. The rollout path must close or explicitly mitigate that gap before
+AssemblyAI becomes the broad default.
+
+Deepgram remains the provider for mobile/BLE `/v4/listen`, realtime assistant
+streaming, Hold-to-Talk streaming, voice-message finalize semantics, and
+background fallback.
 
 Eligible AssemblyAI workloads are:
 
@@ -26,12 +33,14 @@ Ineligible latency-sensitive workloads stay on Deepgram:
 
 ## Feature Flags And Environment
 
-AssemblyAI is enabled by default for eligible prerecorded workloads when
-credentials are configured.
+AssemblyAI remains enabled by default for eligible non-background prerecorded
+workloads when credentials are configured. Desktop background has its own
+provider mode so canary rollout can be controlled independently.
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
 | `ASSEMBLYAI_API_KEY` | unset | Required before any AssemblyAI request can run. |
+| `ASSEMBLYAI_BACKGROUND_PROVIDER_MODE` | `shadow_only` | Desktop background policy mode: `assemblyai`, `deepgram`, or `shadow_only`. `shadow_only` keeps production background requests on Deepgram while the AssemblyAI path is prepared for canary evidence. |
 | `ASSEMBLYAI_PRERECORDED_STT_ENABLED` | `true` | Main rollout switch for passive prerecorded workloads. |
 | `ASSEMBLYAI_PRERECORDED_STT_WORKLOADS` | `sync,background,postprocess` | Comma-separated eligible prerecorded workloads. Unknown or ineligible values are ignored. |
 | `ASSEMBLYAI_PRERECORDED_STT_FALLBACK_ENABLED` | `true` | Use Deepgram when AssemblyAI is unavailable or fails and Deepgram credentials are usable. |
@@ -43,9 +52,20 @@ credentials are configured.
 
 ## Routing And Fallback
 
-`backend/utils/stt/providers.py` owns provider selection. Eligible workloads
-use AssemblyAI only when the main flag is enabled and the workload is in
-`ASSEMBLYAI_PRERECORDED_STT_WORKLOADS`; otherwise they use Deepgram.
+`backend/utils/stt/providers.py` owns provider selection, and
+`backend/utils/stt/provider_service.py` resolves request-level credentials and
+fallbacks. Eligible non-background workloads use AssemblyAI only when the main
+flag is enabled and the workload is in `ASSEMBLYAI_PRERECORDED_STT_WORKLOADS`;
+otherwise they use Deepgram.
+
+Desktop background routing is controlled by
+`ASSEMBLYAI_BACKGROUND_PROVIDER_MODE`:
+
+| Mode | Runtime provider | Use |
+| --- | --- | --- |
+| `shadow_only` | Deepgram | Default until TICKET-026 evals and TICKET-028 canary gates are rollout-ready. |
+| `assemblyai` | AssemblyAI when credentials and workload gates allow it; Deepgram fallback when configured and usable. | Canary and eventual default mode. |
+| `deepgram` | Deepgram | Kill switch or explicit opt-out without a code deploy. |
 
 Desktop Audio Recording uses the background workload through:
 
@@ -63,11 +83,15 @@ or exhausts retries for an eligible prerecorded workload, the failed AssemblyAI
 run is finalized in the provider ledger and the request retries through
 Deepgram with fallback metadata. If AssemblyAI credentials are missing before
 the request starts, provider resolution skips directly to Deepgram when
-fallback is enabled and Deepgram credentials are usable.
+fallback is enabled and Deepgram credentials are usable. If fallback is disabled
+or no Deepgram key is usable, the AssemblyAI request fails closed and records
+the failed provider run.
 
-Rollback is to set `ASSEMBLYAI_PRERECORDED_STT_ENABLED=false` or remove the
-affected workload from `ASSEMBLYAI_PRERECORDED_STT_WORKLOADS`. No client deploy
-is required for rollback.
+Rollback for background is to set `ASSEMBLYAI_BACKGROUND_PROVIDER_MODE=deepgram`
+or `shadow_only`. The broader kill switch is
+`ASSEMBLYAI_PRERECORDED_STT_ENABLED=false` or removing the affected workload
+from `ASSEMBLYAI_PRERECORDED_STT_WORKLOADS`. No client deploy is required for
+rollback.
 
 ## BYOK (Bring Your Own Keys)
 
