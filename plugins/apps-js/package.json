@@ -34,11 +34,14 @@
     "node-fetch-commonjs": "^3.3.2",
     "openai": "^4.28.0",
     "redis": "^4.7.1",
-    "uuid": "^11.1.0"
+    "uuid": "^11.1.1"
   },
   "devDependencies": {
     "jest": "^29.7.0",
     "nodemon": "^3.0.2",
     "supertest": "^6.3.4"
+  },
+  "overrides": {
+    "uuid": "$uuid"
   }
 }
