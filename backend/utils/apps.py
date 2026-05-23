@@ -6,8 +6,10 @@ import secrets
 from collections import defaultdict
 from datetime import datetime, timezone
 from typing import List, Tuple, Dict, Any
+from urllib.parse import urlparse
 
 import httpx
+from fastapi import HTTPException
 from database.cache import get_memory_cache, get_pubsub_manager
 from database.redis_db import delete_generic_cache
 from database.apps import (
@@ -82,6 +84,63 @@ logger = logging.getLogger(__name__)
 MarketplaceAppReviewUIDs = (
     os.getenv('MARKETPLACE_APP_REVIEWERS').split(',') if os.getenv('MARKETPLACE_APP_REVIEWERS') else []
 )
+
+
+def validate_app_endpoints_for_reenable(app_dict: dict, update_dict: dict, app_id: str):
+    """Validate all configured endpoints before allowing a disabled app to be re-enabled.
+
+    Raises HTTPException(400) if any endpoint is unreachable or unhealthy.
+    """
+    updated_ext = (
+        (update_dict.get('external_integration') or {})
+        if isinstance(update_dict.get('external_integration'), dict)
+        else {}
+    )
+    existing_ext = app_dict.get('external_integration') or {}
+    endpoints_to_check = []
+    seen_urls = set()
+    webhook_url = updated_ext.get('webhook_url') or existing_ext.get('webhook_url', '')
+    if webhook_url:
+        endpoints_to_check.append(('webhook', webhook_url, 'POST', True))
+        seen_urls.add(webhook_url)
+    mcp_url = updated_ext.get('mcp_server_url') or existing_ext.get('mcp_server_url', '')
+    if mcp_url:
+        endpoints_to_check.append(('MCP server', mcp_url, 'POST', False))
+        seen_urls.add(mcp_url)
+    chat_tools = update_dict.get('chat_tools') or app_dict.get('chat_tools') or []
+    for tool in chat_tools:
+        ep = tool.get('endpoint', '') if isinstance(tool, dict) else getattr(tool, 'endpoint', '')
+        if ep and ep not in seen_urls:
+            endpoints_to_check.append(('chat tool', ep, 'HEAD', False))
+            seen_urls.add(ep)
+    if not endpoints_to_check:
+        raise HTTPException(
+            status_code=400,
+            detail='No configured endpoints found. Add a webhook URL, MCP server, or chat tool before re-enabling.',
+        )
+    for label, url, method, require_2xx in endpoints_to_check:
+        try:
+            resp = httpx.request(method, url, json={}, timeout=10.0, follow_redirects=True)
+            if require_2xx and (resp.status_code < 200 or resp.status_code >= 300):
+                raise HTTPException(
+                    status_code=400,
+                    detail=f'{label.capitalize()} endpoint returned {resp.status_code}. Fix it before re-enabling.',
+                )
+        except httpx.TimeoutException:
+            raise HTTPException(
+                status_code=400, detail=f'{label.capitalize()} endpoint timed out. Fix it before re-enabling.'
+            )
+        except httpx.ConnectError:
+            raise HTTPException(
+                status_code=400, detail=f'Cannot connect to {label} endpoint. Fix it before re-enabling.'
+            )
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.warning(f'{label.capitalize()} health check failed for {app_id}: {e}')
+            raise HTTPException(
+                status_code=400, detail=f'{label.capitalize()} health check failed. Fix it before re-enabling.'
+            )
 
 
 # ********************************
@@ -260,6 +319,8 @@ def get_available_apps(uid: str, include_reviews: bool = False) -> List[App]:
     apps_review = get_apps_reviews(app_ids) if include_reviews else {}
 
     for app in all_apps:
+        if app.get('disabled'):
+            continue
         # Copy dict to avoid mutating cached objects
         app_dict = dict(app)
         app_dict['enabled'] = app['id'] in user_enabled
@@ -386,6 +447,8 @@ def get_approved_available_apps(include_reviews: bool = False) -> list[App]:
 
         apps = []
         for app in all_apps:
+            if app.get('disabled'):
+                continue
             app_dict = app
             app_dict['installs'] = apps_installs.get(app['id'], 0)
             if include_reviews:

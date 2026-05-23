@@ -22,6 +22,7 @@ from database import (
     users as users_db,
 )
 from database.app_review_config import should_hide_subscription_ui
+from database.webhook_health import record_dev_webhook_success
 from database.conversations import get_in_progress_conversation, get_conversation
 from database.redis_db import (
     cache_user_geolocation,
@@ -234,6 +235,7 @@ def disable_user_webhook_endpoint(wtype: WebhookType, uid: str = Depends(auth.ge
 @router.post('/v1/users/developer/webhook/{wtype}/enable', tags=['v1'])
 def enable_user_webhook_endpoint(wtype: WebhookType, uid: str = Depends(auth.get_current_user_uid)):
     enable_user_webhook_db(uid, wtype)
+    record_dev_webhook_success(uid, wtype.value)
     return {'status': 'ok'}
 
 
