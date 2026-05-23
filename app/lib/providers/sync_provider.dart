@@ -204,6 +204,7 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
   SyncProvider() {
     _walService.subscribe(this, this);
     _audioPlayerUtils.addListener(_onAudioPlayerStateChanged);
+    SyncRateLimiter.instance.addListener(notifyListeners);
     _initializeProvider();
   }
 
@@ -322,6 +323,10 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
   }
 
   Future<void> syncWals({IWifiConnectionListener? connectionListener}) async {
+    if (SyncRateLimiter.instance.isLimited) {
+      notifyListeners();
+      return;
+    }
     _cancelAutoUploadIfNeeded();
     _updateSyncState(_syncState.toIdle());
     _totalWalsToProcess = missingWals.length;
@@ -333,6 +338,10 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
   }
 
   Future<void> syncWal(Wal wal, {IWifiConnectionListener? connectionListener}) async {
+    if (SyncRateLimiter.instance.isLimited) {
+      notifyListeners();
+      return;
+    }
     _cancelAutoUploadIfNeeded();
     _updateSyncState(_syncState.toIdle());
     await _performSync(
