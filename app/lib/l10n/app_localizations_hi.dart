@@ -9368,4 +9368,7 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get syncCardRateLimited => 'उचित उपयोग की सीमा पूरी हो गई — सिंक अपने आप फिर से शुरू हो जाएगा';
+
+  @override
+  String get syncCardBackendBusy => 'Omi के सर्वर व्यस्त हैं — क्षमता उपलब्ध होते ही आपकी रिकॉर्डिंग सिंक हो जाएंगी';
 }

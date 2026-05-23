@@ -9416,4 +9416,8 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get syncCardRateLimited => 'Gebruikslimiet bereikt — synchronisatie wordt automatisch hervat';
+
+  @override
+  String get syncCardBackendBusy =>
+      'De servers van Omi zijn druk — je opnames worden gesynchroniseerd zodra er weer capaciteit is';
 }

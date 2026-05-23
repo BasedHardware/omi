@@ -9399,4 +9399,7 @@ class AppLocalizationsMr extends AppLocalizations {
 
   @override
   String get syncCardRateLimited => 'वाजवी वापराची मर्यादा गाठली — सिंक आपोआप पुन्हा सुरू होईल';
+
+  @override
+  String get syncCardBackendBusy => 'Omi चे सर्व्हर व्यस्त आहेत — क्षमता उपलब्ध होताच तुमची रेकॉर्डिंग्ज सिंक होतील';
 }

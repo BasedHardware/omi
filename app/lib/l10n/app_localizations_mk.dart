@@ -9437,4 +9437,8 @@ class AppLocalizationsMk extends AppLocalizations {
 
   @override
   String get syncCardRateLimited => 'Достигнат е лимитот за фер користење — синхронизацијата автоматски ќе продолжи';
+
+  @override
+  String get syncCardBackendBusy =>
+      'Серверите на Omi се преоптоварени — вашите снимки ќе се синхронизираат штом ќе се ослободи капацитет';
 }

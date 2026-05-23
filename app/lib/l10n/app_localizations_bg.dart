@@ -9424,4 +9424,8 @@ class AppLocalizationsBg extends AppLocalizations {
   @override
   String get syncCardRateLimited =>
       'Достигнат е лимитът за честно ползване — синхронизирането ще се възобнови автоматично';
+
+  @override
+  String get syncCardBackendBusy =>
+      'Сървърите на Omi са натоварени — записите ви ще се синхронизират, когато се освободи капацитет';
 }

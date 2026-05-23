@@ -9428,4 +9428,8 @@ class AppLocalizationsHu extends AppLocalizations {
   @override
   String get syncCardRateLimited =>
       'Elérted a méltányos használati korlátot — a szinkronizálás automatikusan folytatódik';
+
+  @override
+  String get syncCardBackendBusy =>
+      'Az Omi szerverei leterheltek — a felvételeid szinkronizálódnak, amint felszabadul a kapacitás';
 }

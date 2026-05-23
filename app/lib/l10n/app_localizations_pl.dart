@@ -9413,4 +9413,8 @@ class AppLocalizationsPl extends AppLocalizations {
   @override
   String get syncCardRateLimited =>
       'Osiągnięto limit uczciwego użytkowania — synchronizacja zostanie wznowiona automatycznie';
+
+  @override
+  String get syncCardBackendBusy =>
+      'Serwery Omi są obciążone — twoje nagrania zsynchronizują się, gdy zwolni się przepustowość';
 }

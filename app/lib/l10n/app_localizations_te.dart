@@ -9437,4 +9437,8 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get syncCardRateLimited => 'న్యాయమైన వినియోగ పరిమితి చేరుకుంది — సింక్ స్వయంచాలకంగా తిరిగి కొనసాగుతుంది';
+
+  @override
+  String get syncCardBackendBusy =>
+      'Omi సర్వర్‌లు బిజీగా ఉన్నాయి — సామర్థ్యం అందుబాటులోకి వచ్చిన వెంటనే మీ రికార్డింగ్‌లు సింక్ అవుతాయి';
 }

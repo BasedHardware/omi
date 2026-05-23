@@ -9400,4 +9400,7 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get syncCardRateLimited => 'Adil kullanım sınırına ulaşıldı — eşitleme otomatik olarak sürdürülecek';
+
+  @override
+  String get syncCardBackendBusy => 'Omi sunucuları yoğun — kapasite boşaldığında kayıtlarınız eşitlenecek';
 }

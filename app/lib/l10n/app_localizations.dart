@@ -17498,6 +17498,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Fair-use limit reached — syncing will resume automatically'**
   String get syncCardRateLimited;
+
+  /// Status card line when the backend stale-guard has flagged queued jobs (i.e. workers are saturated, not the user being rate-limited). Distinct from the 429 fair-use case.
+  ///
+  /// In en, this message translates to:
+  /// **'Omi servers are busy — your recordings will sync once capacity returns'**
+  String get syncCardBackendBusy;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

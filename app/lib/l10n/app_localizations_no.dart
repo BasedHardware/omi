@@ -9384,4 +9384,8 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get syncCardRateLimited => 'Grensen for rimelig bruk er nådd — synkroniseringen fortsetter automatisk';
+
+  @override
+  String get syncCardBackendBusy =>
+      'Omis servere er travle — opptakene dine synkroniseres så snart kapasiteten er tilbake';
 }

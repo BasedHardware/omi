@@ -9333,4 +9333,7 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get syncCardRateLimited => 'تم بلوغ حد الاستخدام العادل — ستُستأنف المزامنة تلقائيًا';
+
+  @override
+  String get syncCardBackendBusy => 'خوادم Omi مشغولة الآن — ستتم مزامنة تسجيلاتك عند توفر السعة';
 }

@@ -9396,4 +9396,7 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String get syncCardRateLimited => 'ন্যায্য ব্যবহারের সীমা পৌঁছেছে — সিঙ্ক স্বয়ংক্রিয়ভাবে আবার শুরু হবে';
+
+  @override
+  String get syncCardBackendBusy => 'Omi-এর সার্ভার ব্যস্ত — সক্ষমতা ফিরে এলে আপনার রেকর্ডিংগুলি সিঙ্ক হয়ে যাবে';
 }

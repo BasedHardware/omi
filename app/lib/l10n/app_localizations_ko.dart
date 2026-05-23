@@ -9235,4 +9235,7 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get syncCardRateLimited => '공정 사용 한도에 도달했습니다 — 동기화가 자동으로 다시 시작됩니다';
+
+  @override
+  String get syncCardBackendBusy => 'Omi 서버가 혼잡합니다 — 용량이 확보되는 대로 녹음이 동기화됩니다';
 }

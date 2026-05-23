@@ -9420,4 +9420,8 @@ class AppLocalizationsHr extends AppLocalizations {
   @override
   String get syncCardRateLimited =>
       'Dostignuto je ograničenje poštene upotrebe — sinkronizacija će se automatski nastaviti';
+
+  @override
+  String get syncCardBackendBusy =>
+      'Omi poslužitelji su zauzeti — vaše snimke će se sinkronizirati čim se oslobodi kapacitet';
 }
