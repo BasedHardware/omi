@@ -286,6 +286,7 @@ sequenceDiagram
     Note over ProviderService: Missing AssemblyAI credentials skip directly<br/>to Deepgram when fallback credentials are usable.
 
 ProviderService->>ProviderService: Normalize provider result and reconstruct canonical segments
+    ProviderService->>ProviderService: Split repeated non-contiguous provider clusters inside each chunk
     ProviderService->>EmbeddingAPI: Extract cluster samples for Omi speaker identity
     ProviderService->>Firestore: Store canonical transcript segments and provider run ledger
     ProviderService->>Firestore: Increment daily provider usage rollup
@@ -296,6 +297,11 @@ AssemblyAI speaker labels are provider/session-local cluster IDs. Canonical
 speaker identity is applied after provider normalization with the Omi embedding
 service. Low-confidence matches remain explicit unknown speakers; provider
 cluster metadata is preserved separately from `person_id` and `is_user`.
+For desktop background chunks, unresolved provider clusters are scoped by
+provider and `chunk_id`; repeated non-contiguous uses of the same provider
+cluster inside one chunk are split before embedding identity matching. This
+prevents rapid turn-taking from assigning multiple real speakers to one
+app-visible speaker just because the provider reused `A`, `B`, `0`, or `1`.
 
 Optional desktop BYOK for AssemblyAI applies only to async prerecorded workloads
 above; listen/realtime streaming in this pipeline remains Deepgram-only.

@@ -565,6 +565,52 @@ def test_cluster_speaker_mapping_assigns_distinct_ids(monkeypatch):
     assert data['speaker_diagnostics']['mapped_provider_speaker_count'] == 2
 
 
+def test_noncontiguous_same_provider_cluster_splits_inside_chunk(monkeypatch):
+    segments = [
+        TranscriptSegment(text='Alice starts.', is_user=False, start=0.0, end=1.0, provider_cluster_id='A'),
+        TranscriptSegment(text='Bob replies.', is_user=False, start=1.1, end=2.0, provider_cluster_id='B'),
+        TranscriptSegment(text='Carol follows.', is_user=False, start=2.1, end=3.0, provider_cluster_id='A'),
+    ]
+    client, _mock_transcribe = _client(monkeypatch, segments=segments)
+
+    response = client.post(
+        '/v2/desktop/background-transcribe?conversation_id=conv-1&chunk_id=chunk-001&chunk_start_ms=0',
+        content=b'\x01\x00' * 1600,
+        headers={'Content-Type': 'application/octet-stream'},
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert [segment['speaker_id'] for segment in data['segments']] == [0, 1, 2]
+    assert [segment['provider_cluster_id'] for segment in data['segments']] == [
+        'A::local_part:1',
+        'B',
+        'A::local_part:2',
+    ]
+    assert data['speaker_diagnostics']['provider_cluster_count'] == 3
+
+
+def test_contiguous_same_provider_cluster_stays_together_inside_chunk(monkeypatch):
+    segments = [
+        TranscriptSegment(text='Alice starts.', is_user=False, start=0.0, end=1.0, provider_cluster_id='A'),
+        TranscriptSegment(text='Alice continues.', is_user=False, start=1.1, end=2.0, provider_cluster_id='A'),
+        TranscriptSegment(text='Bob replies.', is_user=False, start=2.1, end=3.0, provider_cluster_id='B'),
+    ]
+    client, _mock_transcribe = _client(monkeypatch, segments=segments)
+
+    response = client.post(
+        '/v2/desktop/background-transcribe?conversation_id=conv-1&chunk_id=chunk-001&chunk_start_ms=0',
+        content=b'\x01\x00' * 1600,
+        headers={'Content-Type': 'application/octet-stream'},
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert [segment['speaker_id'] for segment in data['segments']] == [0, 0, 1]
+    assert [segment['provider_cluster_id'] for segment in data['segments']] == ['A', 'A', 'B']
+    assert data['speaker_diagnostics']['provider_cluster_count'] == 2
+
+
 def test_assemblyai_label_only_speakers_do_not_collapse_to_single_local_speaker(monkeypatch):
     segments = [
         TranscriptSegment(

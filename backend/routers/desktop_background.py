@@ -51,6 +51,7 @@ router = APIRouter(prefix="/v2/desktop", tags=["desktop-background"])
 
 _MAX_PCM_BODY_BYTES = 200_000_000
 _SPEAKER_MAP_TTL_SECONDS = 60 * 60 * 24
+_LOCAL_CLUSTER_SPLIT_MARKER = "::local_part:"
 
 
 class BackgroundConversationStartRequest(BaseModel):
@@ -293,6 +294,7 @@ async def background_transcribe(
         del audio_bytes
 
     segments = response.segments
+    _split_noncontiguous_provider_clusters(segments)
     speaker_diagnostics = _speaker_diagnostics(segments)
     if conversation_id and segments:
         await _identify_speakers(
@@ -423,6 +425,52 @@ def _apply_chunk_offset(segments: List[TranscriptSegment], offset_sec: float) ->
     for segment in segments:
         segment.start += offset_sec
         segment.end += offset_sec
+
+
+def _split_noncontiguous_provider_clusters(segments: List[TranscriptSegment]) -> None:
+    """Split reused provider clusters into local contiguous groups.
+
+    Batched providers can reuse the same cluster label for rapid, non-contiguous turns
+    inside a chunk. Omi treats provider labels as hints, so split those groups before
+    identity matching and final speaker_id assignment.
+    """
+    groups: list[tuple[str, list[TranscriptSegment]]] = []
+    current_cluster = None
+    current_group: list[TranscriptSegment] = []
+    for segment in sorted(segments, key=lambda item: (item.start, item.end)):
+        cluster = _raw_provider_cluster_key(segment)
+        if not cluster:
+            if current_group and current_cluster is not None:
+                groups.append((current_cluster, current_group))
+                current_group = []
+                current_cluster = None
+            continue
+        if current_group and cluster != current_cluster:
+            groups.append((current_cluster, current_group))
+            current_group = []
+        current_cluster = cluster
+        current_group.append(segment)
+    if current_group and current_cluster is not None:
+        groups.append((current_cluster, current_group))
+
+    group_counts: Dict[str, int] = {}
+    for cluster, _group_segments in groups:
+        group_counts[cluster] = group_counts.get(cluster, 0) + 1
+
+    group_indexes: Dict[str, int] = {}
+    for cluster, group_segments in groups:
+        if group_counts[cluster] <= 1:
+            continue
+        group_index = group_indexes.get(cluster, 0) + 1
+        group_indexes[cluster] = group_index
+        local_cluster = f'{cluster}{_LOCAL_CLUSTER_SPLIT_MARKER}{group_index}'
+        for segment in group_segments:
+            segment.provider_cluster_id = local_cluster
+
+
+def _raw_provider_cluster_key(segment: TranscriptSegment) -> Optional[str]:
+    cluster = segment.provider_cluster_id or segment.provider_speaker_label
+    return str(cluster) if cluster is not None else None
 
 
 async def _identify_speakers(

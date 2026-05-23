@@ -101,6 +101,63 @@ Canonical speaker identity is assigned after normalization with the Omi speaker
 embedding service. Low-confidence clusters remain explicitly unknown rather
 than being mapped to a fake person or to `speaker_id=0`.
 
+### Speaker Detection Contract
+
+AssemblyAI and Deepgram speaker labels are provider-local diarization hints.
+They are not stable people, and they are not safe to compare across prerecorded
+jobs. AssemblyAI labels such as `A`/`B` and Deepgram labels such as `0`/`1`
+can reset on every uploaded chunk.
+
+Desktop background transcription therefore uses a split-then-reconcile flow:
+
+1. Normalize provider words and utterances.
+2. Reconstruct `TranscriptSegment` records with provider cluster metadata.
+3. Split repeated non-contiguous provider clusters inside the chunk into local
+   contiguous groups before identity matching.
+4. Match each local group to known Omi user/person embeddings when clean
+   samples exist.
+5. Assign final app-visible `speaker_id` values from durable identity when
+   available, otherwise from a chunk-scoped provider key.
+
+The chunk-scoped unresolved key is:
+
+```text
+provider:{provider}:chunk:{chunk_id}:cluster:{provider_cluster_id}
+```
+
+Known Omi identities intentionally ignore the chunk scope:
+
+```text
+identity:user
+identity:person:{person_id}
+```
+
+This is deliberate. False speaker merges are more damaging than temporary
+anonymous-speaker fragmentation. The product should prefer splitting uncertain
+provider clusters first, then merging only with Omi identity evidence,
+high-confidence embeddings, or explicit user corrections.
+
+### Benchmark Learnings
+
+The AssemblyAI rollout benchmark found:
+
+- Fixed 15s batches expose provider-label resets; raw `A`/`B` labels must not
+  carry across chunks.
+- Longer AssemblyAI batches reduced request count but often collapsed speakers
+  in fast-turn or overlap-heavy synthetic sessions.
+- Batch-size, silence-gap, speech-duration, embedding-span, overlap-tolerance,
+  and match-threshold sweeps did not beat the chunk-scoped baseline.
+- The strongest improvement came from splitting non-contiguous same-cluster
+  groups inside a chunk. That fixed rapid turn-taking cases where one provider
+  cluster contained multiple true speakers.
+- Graph clustering and anonymous reconciliation are useful as reconciliation
+  structures, but they cannot repair a provider cluster that already contains
+  multiple speakers unless the cluster is split first.
+
+The current landed rule is: provider clusters are local hints, repeated
+non-contiguous groups are split, and stable app identity comes from Omi
+evidence rather than provider labels.
+
 Provider run ledgers live in `transcription_provider_runs`, and daily rollups
 live in `transcription_provider_usage_daily`. Ledger payload guards reject raw
 audio bytes, transcript text, words, utterances, and similar high-risk payloads.
