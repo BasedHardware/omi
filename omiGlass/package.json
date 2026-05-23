@@ -43,7 +43,8 @@
   "overrides": {
     "tar": "^7.5.11",
     "@xmldom/xmldom": "^0.8.13",
-    "postcss": "^8.5.10"
+    "postcss": "^8.5.10",
+    "uuid": "^11.1.1"
   },
   "private": true
 }
