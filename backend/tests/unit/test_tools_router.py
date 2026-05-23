@@ -487,6 +487,7 @@ class TestSearchConversationsText:
         assert "No conversations found matching 'ERPNext'" in result
         conversations_db.get_conversations_by_id.assert_not_called()
 
+
 # ===========================================================================
 # Tests: get_memories_text
 # ===========================================================================
