@@ -843,7 +843,7 @@ def download_audio_chunks_and_merge(
                 gap_samples = int(gap_seconds * sample_rate)
                 silence_bytes = bytes(gap_samples * 2)  # Zero bytes for silence
                 merged_data.extend(silence_bytes)
-                logger.info(f"Filled {gap_seconds:.3f}s gap ({len(silence_bytes)} bytes) before chunk at {timestamp}")
+                logger.debug(f"Filled {gap_seconds:.3f}s gap ({len(silence_bytes)} bytes) before chunk at {timestamp}")
 
             merged_data.extend(pcm_data)
 
@@ -904,10 +904,10 @@ def get_or_create_merged_audio(
             try:
                 expires_at = datetime.datetime.fromisoformat(expires_at_str)
                 if datetime.datetime.now(datetime.timezone.utc) < expires_at:
-                    logger.info(f'audio_merge cache_hit {log_ctx}')
+                    logger.debug(f'audio_merge cache_hit {log_ctx}')
                     return cache_blob.download_as_bytes(), True
                 else:
-                    logger.info(f'audio_merge cache_expired {log_ctx}')
+                    logger.debug(f'audio_merge cache_expired {log_ctx}')
             except (ValueError, TypeError):
                 pass
 
