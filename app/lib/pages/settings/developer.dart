@@ -16,7 +16,6 @@ import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/pages/home/firmware_mixin.dart';
 import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/preferences.dart';
-import 'package:omi/services/wals.dart';
 import 'package:omi/env/env.dart';
 import 'package:omi/models/stt_provider.dart';
 import 'package:omi/pages/settings/conversation_timeout_dialog.dart';
@@ -816,31 +815,6 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
                           ),
                         ],
                       ],
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  GestureDetector(
-                    onTap: () {
-                      SyncRateLimiter.instance.markLimited(retryAfterSeconds: 60);
-                      AppSnackbar.showSnackbar('Rate limit simulated for 60s');
-                    },
-                    child: Container(
-                      padding: const EdgeInsets.all(16),
-                      decoration:
-                          BoxDecoration(color: const Color(0xFF1C1C1E), borderRadius: BorderRadius.circular(12)),
-                      child: Row(
-                        children: [
-                          FaIcon(FontAwesomeIcons.gauge, color: Colors.orange.shade300, size: 16),
-                          const SizedBox(width: 12),
-                          const Expanded(
-                            child: Text(
-                              'Simulate sync rate limit (60s)',
-                              style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w500),
-                            ),
-                          ),
-                          FaIcon(FontAwesomeIcons.chevronRight, color: Colors.grey.shade600, size: 12),
-                        ],
-                      ),
                     ),
                   ),
                   const SizedBox(height: 12),
