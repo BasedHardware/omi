@@ -145,9 +145,7 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
       }
       action = _statusActionPill(l.cancel, Colors.redAccent, () => _confirmCancel(context, p));
     } else if (p.isRateLimited) {
-      // Fair-use cooldown — uploads paused. Not an error; no Sync pill (it
-      // wouldn't go through). Amber text signals "needs awareness, not broken".
-      title = l.syncCardRateLimited;
+      title = p.rateLimitReason == RateLimitReason.backendBusy ? l.syncCardBackendBusy : l.syncCardRateLimited;
       titleColor = Colors.orangeAccent;
     } else if (uploaded > 0) {
       // Uploads finished, reconciler is resolving jobs in the background.
