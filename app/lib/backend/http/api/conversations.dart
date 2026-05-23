@@ -5,6 +5,7 @@ import 'package:http/http.dart' as http;
 import 'package:omi/backend/http/shared.dart';
 import 'package:omi/backend/schema/schema.dart';
 import 'package:omi/env/env.dart';
+import 'package:omi/utils/debug_log_manager.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 
@@ -406,11 +407,20 @@ Future<SyncJobFetch> fetchSyncJobStatus(String jobId) async {
     method: 'GET',
     body: '',
   );
-  if (response == null) return const SyncJobFetch(SyncJobFetchOutcome.transient);
+  if (response == null) {
+    DebugLogManager.logEvent('fetch_sync_job_status', {'jobId': jobId, 'httpStatus': null, 'outcome': 'transient'});
+    return const SyncJobFetch(SyncJobFetchOutcome.transient);
+  }
   if (response.statusCode == 404 || response.statusCode == 403) {
+    DebugLogManager.logEvent(
+        'fetch_sync_job_status', {'jobId': jobId, 'httpStatus': response.statusCode, 'outcome': 'notFound'});
     return const SyncJobFetch(SyncJobFetchOutcome.notFound);
   }
-  if (response.statusCode != 200) return const SyncJobFetch(SyncJobFetchOutcome.transient);
+  if (response.statusCode != 200) {
+    DebugLogManager.logEvent(
+        'fetch_sync_job_status', {'jobId': jobId, 'httpStatus': response.statusCode, 'outcome': 'transient'});
+    return const SyncJobFetch(SyncJobFetchOutcome.transient);
+  }
   try {
     return SyncJobFetch(SyncJobFetchOutcome.ok, SyncJobStatusResponse.fromJson(jsonDecode(response.body)));
   } catch (e) {
