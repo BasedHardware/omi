@@ -652,7 +652,8 @@ class _SyncPageState extends State<SyncPage> {
           break;
       }
     } else if (syncProvider.isRateLimited) {
-      title = l.syncCardRateLimited;
+      title =
+          syncProvider.rateLimitReason == RateLimitReason.backendBusy ? l.syncCardBackendBusy : l.syncCardRateLimited;
       titleColor = Colors.orangeAccent;
     } else if (uploaded > 0) {
       title = l.syncCardProcessing;
