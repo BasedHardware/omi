@@ -9352,7 +9352,7 @@ class AppLocalizationsTl extends AppLocalizations {
   String get syncStatusBackedUp => 'Na-back up na';
 
   @override
-  String get syncStatusBackingUp => 'Nagba-back up…';
+  String get syncStatusBackingUp => 'Sine-sync…';
 
   @override
   String get syncStatusWaiting => 'Naghihintay na mag-sync';
@@ -9415,7 +9415,7 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get syncFlowIntro =>
-      'Inililipat ang mga recording mula sa iyong Omi device papunta sa telepono na ito at iniimbak nang lokal, pagkatapos ay ina-upload sa server ng Omi kung saan ito tina-transcribe at ginagawang mga pag-uusap.';
+      'Ang mga recording ay inililipat mula sa iyong device patungo sa telepono na ito at iniimbak nang lokal, pagkatapos ay ina-upload sa server ng Omi kung saan tina-transcribe ang mga ito at ginagawang mga pag-uusap.';
 
   @override
   String get syncStepUpload => 'I-sync';
@@ -9446,7 +9446,7 @@ class AppLocalizationsTl extends AppLocalizations {
   String get syncCardUploadingTitle => 'Ina-upload sa Omi';
 
   @override
-  String get syncCardDownloadingTitle => 'Dina-download mula sa Omi';
+  String get syncCardDownloadingTitle => 'Dina-download mula sa iyong device';
 
   @override
   String syncCardProgressOf(int current, int total) {
@@ -9454,10 +9454,10 @@ class AppLocalizationsTl extends AppLocalizations {
   }
 
   @override
-  String get syncStatusOnDevice => 'Naghihintay sa Omi';
+  String get syncStatusOnDevice => 'Nasa iyong device';
 
   @override
-  String get syncStatusDownloadingFromDevice => 'Dina-download mula sa Omi';
+  String get syncStatusDownloadingFromDevice => 'Dina-download mula sa iyong device';
 
   @override
   String get newestFirst => 'Pinakabago muna';
@@ -9467,6 +9467,9 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get morePaymentMethodsComingSoon => 'Mas maraming paraan ng pagbabayad na malapit nang dumating';
+
+  @override
+  String get syncProcessingBackgroundHint => 'Magpapatuloy ito sa background — puwede mong iwan ang screen na ito.';
 
   @override
   String get syncCardRateLimited =>

@@ -9285,7 +9285,7 @@ class AppLocalizationsLv extends AppLocalizations {
   String get syncStatusBackedUp => 'Dublēts';
 
   @override
-  String get syncStatusBackingUp => 'Notiek dublēšana…';
+  String get syncStatusBackingUp => 'Sinhronizē…';
 
   @override
   String get syncStatusWaiting => 'Gaida sinhronizāciju';
@@ -9350,7 +9350,7 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get syncFlowIntro =>
-      'Ieraksti tiek pārsūtīti no jūsu Omi ierīces uz šo tālruni un saglabāti lokāli, pēc tam augšupielādēti Omi serverī, kur tie tiek transkribēti un pārveidoti par sarunām.';
+      'Ieraksti tiek pārsūtīti no jūsu ierīces uz šo tālruni un saglabāti lokāli, pēc tam augšupielādēti Omi serverī, kur tie tiek transkribēti un pārveidoti par sarunām.';
 
   @override
   String get syncStepUpload => 'Sinhronizēt';
@@ -9381,7 +9381,7 @@ class AppLocalizationsLv extends AppLocalizations {
   String get syncCardUploadingTitle => 'Augšupielādē Omi';
 
   @override
-  String get syncCardDownloadingTitle => 'Lejupielādē no Omi';
+  String get syncCardDownloadingTitle => 'Lejupielāde no jūsu ierīces';
 
   @override
   String syncCardProgressOf(int current, int total) {
@@ -9389,10 +9389,10 @@ class AppLocalizationsLv extends AppLocalizations {
   }
 
   @override
-  String get syncStatusOnDevice => 'Gaida Omi';
+  String get syncStatusOnDevice => 'Jūsu ierīcē';
 
   @override
-  String get syncStatusDownloadingFromDevice => 'Lejupielādē no Omi';
+  String get syncStatusDownloadingFromDevice => 'Lejupielāde no jūsu ierīces';
 
   @override
   String get newestFirst => 'Vispirms jaunākie';
@@ -9402,6 +9402,9 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get morePaymentMethodsComingSoon => 'Drīzumā vairāk maksājumu veidu';
+
+  @override
+  String get syncProcessingBackgroundHint => 'Tas turpinās fonā — varat pamest šo ekrānu.';
 
   @override
   String get syncCardRateLimited =>

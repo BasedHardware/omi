@@ -3026,7 +3026,7 @@
     "recapDeletedSnackbar": "Η σύνοψη διαγράφηκε",
     "recapDeleteFailed": "Δεν ήταν δυνατή η διαγραφή της σύνοψης. Δοκιμάστε ξανά αργότερα.",
     "syncStatusBackedUp": "Δημιουργήθηκε αντίγραφο",
-    "syncStatusBackingUp": "Δημιουργία αντιγράφου…",
+    "syncStatusBackingUp": "Συγχρονισμός…",
     "syncStatusWaiting": "Σε αναμονή συγχρονισμού",
     "syncStatusRetrying": "Αποτυχία επεξεργασίας — νέα προσπάθεια",
     "syncStatusFailed": "Απέτυχε — πατήστε Επανάληψη",
@@ -3041,7 +3041,7 @@
     "syncCardProcessing": "Επεξεργασία στο Omi…",
     "syncCardWaitingInternet": "Αναμονή για σύνδεση",
     "syncCardNeedsAttention": "{count, plural, one{1 ηχογράφηση χρειάζεται προσοχή} other{{count} ηχογραφήσεις χρειάζονται προσοχή}}",
-    "syncFlowIntro": "Οι ηχογραφήσεις μεταφέρονται από τη συσκευή Omi σας σε αυτό το τηλέφωνο και αποθηκεύονται τοπικά, στη συνέχεια ανεβαίνουν στον διακομιστή της Omi όπου απομαγνητοφωνούνται και μετατρέπονται σε συνομιλίες.",
+    "syncFlowIntro": "Οι ηχογραφήσεις μεταφέρονται από τη συσκευή σας σε αυτό το τηλέφωνο και αποθηκεύονται τοπικά, και στη συνέχεια μεταφορτώνονται στον διακομιστή του Omi, όπου απομαγνητοφωνούνται και μετατρέπονται σε συνομιλίες.",
     "syncStepUpload": "Συγχρονισμός",
     "syncStepUploadDesc": "Η ηχογράφησή σας αποστέλλεται στον διακομιστή της Omi",
     "syncStepProcess": "Απομαγνητοφώνηση",
@@ -3051,10 +3051,10 @@
     "syncFailureFootnote": "Αν η επεξεργασία αποτύχει, η ηχογράφηση επαναλαμβάνεται αυτόματα στον επόμενο συγχρονισμό.",
     "syncStatusConversationCreated": "Η συνομιλία δημιουργήθηκε",
     "syncCardUploadingTitle": "Μεταφόρτωση στο Omi",
-    "syncCardDownloadingTitle": "Λήψη από το Omi",
+    "syncCardDownloadingTitle": "Λήψη από τη συσκευή σας",
     "syncCardProgressOf": "{current} από {total}",
-    "syncStatusOnDevice": "Σε αναμονή στο Omi",
-    "syncStatusDownloadingFromDevice": "Λήψη από το Omi",
+    "syncStatusOnDevice": "Στη συσκευή σας",
+    "syncStatusDownloadingFromDevice": "Λήψη από τη συσκευή σας",
     "newestFirst": "Νεότερες πρώτα",
     "noSyncedRecordingsYet": "Δεν υπάρχουν ακόμα συγχρονισμένες εγγραφές",
     "@lowBatteryAlertBody": {
@@ -3069,5 +3069,6 @@
     "@morePaymentMethodsComingSoon": {
         "description": "Placeholder card text shown under available payment methods"
     },
+    "syncProcessingBackgroundHint": "Αυτό συνεχίζεται στο παρασκήνιο — μπορείτε να φύγετε από αυτήν την οθόνη.",
     "syncCardRateLimited": "Συμπληρώθηκε το όριο εύλογης χρήσης — ο συγχρονισμός θα συνεχιστεί αυτόματα"
 }

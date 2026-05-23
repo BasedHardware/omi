@@ -9296,7 +9296,7 @@ class AppLocalizationsRu extends AppLocalizations {
   String get syncStatusBackedUp => 'Сохранено в облаке';
 
   @override
-  String get syncStatusBackingUp => 'Резервное копирование…';
+  String get syncStatusBackingUp => 'Синхронизация…';
 
   @override
   String get syncStatusWaiting => 'Ожидает синхронизации';
@@ -9363,7 +9363,7 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get syncFlowIntro =>
-      'Записи передаются с вашего устройства Omi на этот телефон и сохраняются локально, затем загружаются на сервер Omi, где они расшифровываются и превращаются в разговоры.';
+      'Записи передаются с вашего устройства на этот телефон и хранятся локально, а затем загружаются на сервер Omi, где они расшифровываются и превращаются в разговоры.';
 
   @override
   String get syncStepUpload => 'Синхронизация';
@@ -9394,7 +9394,7 @@ class AppLocalizationsRu extends AppLocalizations {
   String get syncCardUploadingTitle => 'Загрузка в Omi';
 
   @override
-  String get syncCardDownloadingTitle => 'Загрузка с Omi';
+  String get syncCardDownloadingTitle => 'Загрузка с вашего устройства';
 
   @override
   String syncCardProgressOf(int current, int total) {
@@ -9402,10 +9402,10 @@ class AppLocalizationsRu extends AppLocalizations {
   }
 
   @override
-  String get syncStatusOnDevice => 'Ожидает на Omi';
+  String get syncStatusOnDevice => 'На вашем устройстве';
 
   @override
-  String get syncStatusDownloadingFromDevice => 'Загрузка с Omi';
+  String get syncStatusDownloadingFromDevice => 'Загрузка с вашего устройства';
 
   @override
   String get newestFirst => 'Сначала новые';
@@ -9415,6 +9415,9 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get morePaymentMethodsComingSoon => 'Скоро добавим новые способы оплаты';
+
+  @override
+  String get syncProcessingBackgroundHint => 'Это продолжается в фоновом режиме — вы можете покинуть этот экран.';
 
   @override
   String get syncCardRateLimited => 'Достигнут лимит использования — синхронизация возобновится автоматически';

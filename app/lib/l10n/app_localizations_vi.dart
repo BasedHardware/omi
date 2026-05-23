@@ -9267,7 +9267,7 @@ class AppLocalizationsVi extends AppLocalizations {
   String get syncStatusBackedUp => 'Đã sao lưu';
 
   @override
-  String get syncStatusBackingUp => 'Đang sao lưu…';
+  String get syncStatusBackingUp => 'Đang đồng bộ…';
 
   @override
   String get syncStatusWaiting => 'Đang chờ đồng bộ';
@@ -9328,7 +9328,7 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get syncFlowIntro =>
-      'Bản ghi được chuyển từ thiết bị Omi của bạn sang điện thoại này và lưu cục bộ, sau đó được tải lên máy chủ của Omi để phiên âm và chuyển thành cuộc trò chuyện.';
+      'Bản ghi được chuyển từ thiết bị của bạn sang điện thoại này và lưu trữ cục bộ, sau đó tải lên máy chủ của Omi, nơi chúng được phiên âm và chuyển thành cuộc trò chuyện.';
 
   @override
   String get syncStepUpload => 'Đồng bộ';
@@ -9358,7 +9358,7 @@ class AppLocalizationsVi extends AppLocalizations {
   String get syncCardUploadingTitle => 'Đang tải lên Omi';
 
   @override
-  String get syncCardDownloadingTitle => 'Đang tải xuống từ Omi';
+  String get syncCardDownloadingTitle => 'Đang tải xuống từ thiết bị của bạn';
 
   @override
   String syncCardProgressOf(int current, int total) {
@@ -9366,10 +9366,10 @@ class AppLocalizationsVi extends AppLocalizations {
   }
 
   @override
-  String get syncStatusOnDevice => 'Đang chờ trên Omi';
+  String get syncStatusOnDevice => 'Trên thiết bị của bạn';
 
   @override
-  String get syncStatusDownloadingFromDevice => 'Đang tải xuống từ Omi';
+  String get syncStatusDownloadingFromDevice => 'Đang tải xuống từ thiết bị của bạn';
 
   @override
   String get newestFirst => 'Mới nhất trước';
@@ -9379,6 +9379,9 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get morePaymentMethodsComingSoon => 'Sắp có thêm phương thức thanh toán';
+
+  @override
+  String get syncProcessingBackgroundHint => 'Quá trình này tiếp tục chạy nền — bạn có thể rời khỏi màn hình này.';
 
   @override
   String get syncCardRateLimited => 'Đã đạt giới hạn sử dụng hợp lý — quá trình đồng bộ sẽ tự động tiếp tục';

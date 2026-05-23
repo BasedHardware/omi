@@ -3035,7 +3035,7 @@
     "recapDeletedSnackbar": "Opsummering slettet",
     "recapDeleteFailed": "Kunne ikke slette opsummeringen. Prøv igen senere.",
     "syncStatusBackedUp": "Sikkerhedskopieret",
-    "syncStatusBackingUp": "Sikkerhedskopierer…",
+    "syncStatusBackingUp": "Synkroniserer…",
     "syncStatusWaiting": "Venter på synkronisering",
     "syncStatusRetrying": "Kunne ikke behandles — prøver igen",
     "syncStatusFailed": "Mislykkedes — tryk på Prøv igen",
@@ -3050,7 +3050,7 @@
     "syncCardProcessing": "Behandler i Omi…",
     "syncCardWaitingInternet": "Venter på internet",
     "syncCardNeedsAttention": "{count, plural, one{1 optagelse kræver opmærksomhed} other{{count} optagelser kræver opmærksomhed}}",
-    "syncFlowIntro": "Optagelser overføres fra din Omi-enhed til denne telefon og gemmes lokalt og uploades derefter til Omis server, hvor de transskriberes og omdannes til samtaler.",
+    "syncFlowIntro": "Optagelser overføres fra din enhed til denne telefon og gemmes lokalt og uploades derefter til Omis server, hvor de transskriberes og bliver til samtaler.",
     "syncStepUpload": "Synkroniser",
     "syncStepUploadDesc": "Din optagelse sendes til Omis server",
     "syncStepProcess": "Transskriber",
@@ -3060,10 +3060,10 @@
     "syncFailureFootnote": "Hvis behandlingen mislykkes, prøves optagelsen automatisk igen ved næste synkronisering.",
     "syncStatusConversationCreated": "Samtale oprettet",
     "syncCardUploadingTitle": "Uploader til Omi",
-    "syncCardDownloadingTitle": "Downloader fra Omi",
+    "syncCardDownloadingTitle": "Downloader fra din enhed",
     "syncCardProgressOf": "{current} af {total}",
-    "syncStatusOnDevice": "Venter på Omi",
-    "syncStatusDownloadingFromDevice": "Downloader fra Omi",
+    "syncStatusOnDevice": "På din enhed",
+    "syncStatusDownloadingFromDevice": "Downloader fra din enhed",
     "newestFirst": "Nyeste først",
     "noSyncedRecordingsYet": "Ingen synkroniserede optagelser endnu",
     "@lowBatteryAlertBody": {
@@ -3078,5 +3078,6 @@
     "@morePaymentMethodsComingSoon": {
         "description": "Placeholder card text shown under available payment methods"
     },
+    "syncProcessingBackgroundHint": "Det fortsætter i baggrunden — du kan forlade denne skærm.",
     "syncCardRateLimited": "Grænsen for rimelig brug er nået — synkroniseringen genoptages automatisk"
 }

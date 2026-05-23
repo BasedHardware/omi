@@ -9275,7 +9275,7 @@ class AppLocalizationsBn extends AppLocalizations {
   String get syncStatusBackedUp => 'ব্যাকআপ হয়েছে';
 
   @override
-  String get syncStatusBackingUp => 'ব্যাকআপ চলছে…';
+  String get syncStatusBackingUp => 'সিঙ্ক করা হচ্ছে…';
 
   @override
   String get syncStatusWaiting => 'সিঙ্কের অপেক্ষায়';
@@ -9338,7 +9338,7 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String get syncFlowIntro =>
-      'রেকর্ডিংগুলি আপনার Omi ডিভাইস থেকে এই ফোনে স্থানান্তরিত হয় এবং স্থানীয়ভাবে সংরক্ষিত হয়, তারপর Omi-এর সার্ভারে আপলোড করা হয় যেখানে সেগুলি প্রতিলিপি করা হয় এবং কথোপকথনে রূপান্তরিত হয়।';
+      'রেকর্ডিংগুলো আপনার ডিভাইস থেকে এই ফোনে স্থানান্তরিত হয় এবং স্থানীয়ভাবে সংরক্ষিত হয়, এরপর Omi এর সার্ভারে আপলোড করা হয় যেখানে সেগুলো প্রতিলিপি করা হয় এবং কথোপকথনে পরিণত হয়।';
 
   @override
   String get syncStepUpload => 'সিঙ্ক';
@@ -9369,7 +9369,7 @@ class AppLocalizationsBn extends AppLocalizations {
   String get syncCardUploadingTitle => 'Omi-তে আপলোড হচ্ছে';
 
   @override
-  String get syncCardDownloadingTitle => 'Omi থেকে ডাউনলোড হচ্ছে';
+  String get syncCardDownloadingTitle => 'আপনার ডিভাইস থেকে ডাউনলোড হচ্ছে';
 
   @override
   String syncCardProgressOf(int current, int total) {
@@ -9377,10 +9377,10 @@ class AppLocalizationsBn extends AppLocalizations {
   }
 
   @override
-  String get syncStatusOnDevice => 'Omi-এ অপেক্ষমাণ';
+  String get syncStatusOnDevice => 'আপনার ডিভাইসে';
 
   @override
-  String get syncStatusDownloadingFromDevice => 'Omi থেকে ডাউনলোড হচ্ছে';
+  String get syncStatusDownloadingFromDevice => 'আপনার ডিভাইস থেকে ডাউনলোড হচ্ছে';
 
   @override
   String get newestFirst => 'নতুনগুলি আগে';
@@ -9390,6 +9390,9 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String get morePaymentMethodsComingSoon => 'শীঘ্রই আরও পেমেন্ট পদ্ধতি আসছে';
+
+  @override
+  String get syncProcessingBackgroundHint => 'এটি ব্যাকগ্রাউন্ডে চলতে থাকে — আপনি এই স্ক্রিন থেকে চলে যেতে পারেন।';
 
   @override
   String get syncCardRateLimited => 'ন্যায্য ব্যবহারের সীমা পৌঁছেছে — সিঙ্ক স্বয়ংক্রিয়ভাবে আবার শুরু হবে';

@@ -3026,7 +3026,7 @@
     "recapDeletedSnackbar": "Ringkasan dipadam",
     "recapDeleteFailed": "Tidak dapat memadam ringkasan. Cuba lagi kemudian.",
     "syncStatusBackedUp": "Telah disandarkan",
-    "syncStatusBackingUp": "Menyandarkan…",
+    "syncStatusBackingUp": "Menyegerakkan…",
     "syncStatusWaiting": "Menunggu untuk segerak",
     "syncStatusRetrying": "Gagal diproses — mencuba semula",
     "syncStatusFailed": "Gagal — ketik Cuba Lagi",
@@ -3041,7 +3041,7 @@
     "syncCardProcessing": "Memproses di Omi…",
     "syncCardWaitingInternet": "Menunggu internet",
     "syncCardNeedsAttention": "{count, plural, other{{count} rakaman memerlukan perhatian}}",
-    "syncFlowIntro": "Rakaman dipindahkan daripada peranti Omi anda ke telefon ini dan disimpan secara setempat, kemudian dimuat naik ke pelayan Omi di mana ia ditranskripsikan dan ditukar menjadi perbualan.",
+    "syncFlowIntro": "Rakaman dipindahkan daripada peranti anda ke telefon ini dan disimpan secara setempat, kemudian dimuat naik ke pelayan Omi tempat ia ditranskripsikan dan ditukar menjadi perbualan.",
     "syncStepUpload": "Segerak",
     "syncStepUploadDesc": "Rakaman anda dihantar ke pelayan Omi",
     "syncStepProcess": "Transkripsi",
@@ -3051,10 +3051,10 @@
     "syncFailureFootnote": "Jika pemprosesan gagal, rakaman akan dicuba semula secara automatik pada penyegerakan seterusnya.",
     "syncStatusConversationCreated": "Perbualan dicipta",
     "syncCardUploadingTitle": "Memuat naik ke Omi",
-    "syncCardDownloadingTitle": "Memuat turun dari Omi",
+    "syncCardDownloadingTitle": "Memuat turun daripada peranti anda",
     "syncCardProgressOf": "{current} daripada {total}",
-    "syncStatusOnDevice": "Menunggu di Omi",
-    "syncStatusDownloadingFromDevice": "Memuat turun dari Omi",
+    "syncStatusOnDevice": "Pada peranti anda",
+    "syncStatusDownloadingFromDevice": "Memuat turun daripada peranti anda",
     "newestFirst": "Terbaharu dahulu",
     "noSyncedRecordingsYet": "Belum ada rakaman yang disegerakkan",
     "@lowBatteryAlertBody": {
@@ -3069,5 +3069,6 @@
     "@morePaymentMethodsComingSoon": {
         "description": "Placeholder card text shown under available payment methods"
     },
+    "syncProcessingBackgroundHint": "Ini berterusan di latar belakang — anda boleh meninggalkan skrin ini.",
     "syncCardRateLimited": "Had penggunaan saksama telah dicapai — penyegerakan akan disambung semula secara automatik"
 }

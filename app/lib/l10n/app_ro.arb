@@ -3026,7 +3026,7 @@
     "recapDeletedSnackbar": "Rezumat șters",
     "recapDeleteFailed": "Rezumatul nu a putut fi șters. Încearcă din nou mai târziu.",
     "syncStatusBackedUp": "Copiat de rezervă",
-    "syncStatusBackingUp": "Se face copia de rezervă…",
+    "syncStatusBackingUp": "Se sincronizează…",
     "syncStatusWaiting": "Așteaptă sincronizarea",
     "syncStatusRetrying": "Procesarea a eșuat — se reîncearcă",
     "syncStatusFailed": "A eșuat — atinge Reîncearcă",
@@ -3041,7 +3041,7 @@
     "syncCardProcessing": "Procesare în Omi…",
     "syncCardWaitingInternet": "Se așteaptă internetul",
     "syncCardNeedsAttention": "{count, plural, one{1 înregistrare necesită atenție} few{{count} înregistrări necesită atenție} other{{count} de înregistrări necesită atenție}}",
-    "syncFlowIntro": "Înregistrările sunt transferate de pe dispozitivul Omi pe acest telefon și stocate local, apoi încărcate pe serverul Omi, unde sunt transcrise și transformate în conversații.",
+    "syncFlowIntro": "Înregistrările sunt transferate de pe dispozitivul tău pe acest telefon și stocate local, apoi încărcate pe serverul Omi, unde sunt transcrise și transformate în conversații.",
     "syncStepUpload": "Sincronizare",
     "syncStepUploadDesc": "Înregistrarea ta este trimisă către serverul Omi",
     "syncStepProcess": "Transcriere",
@@ -3051,10 +3051,10 @@
     "syncFailureFootnote": "Dacă procesarea eșuează, înregistrarea se reia automat la următoarea sincronizare.",
     "syncStatusConversationCreated": "Conversație creată",
     "syncCardUploadingTitle": "Se încarcă pe Omi",
-    "syncCardDownloadingTitle": "Se descarcă de pe Omi",
+    "syncCardDownloadingTitle": "Se descarcă de pe dispozitivul tău",
     "syncCardProgressOf": "{current} din {total}",
-    "syncStatusOnDevice": "Așteaptă pe Omi",
-    "syncStatusDownloadingFromDevice": "Se descarcă de pe Omi",
+    "syncStatusOnDevice": "Pe dispozitivul tău",
+    "syncStatusDownloadingFromDevice": "Se descarcă de pe dispozitivul tău",
     "newestFirst": "Cele mai noi primele",
     "noSyncedRecordingsYet": "Încă nu există înregistrări sincronizate",
     "@lowBatteryAlertBody": {
@@ -3069,5 +3069,6 @@
     "@morePaymentMethodsComingSoon": {
         "description": "Placeholder card text shown under available payment methods"
     },
+    "syncProcessingBackgroundHint": "Acest lucru continuă în fundal — poți părăsi acest ecran.",
     "syncCardRateLimited": "Limita de utilizare echitabilă a fost atinsă — sincronizarea va fi reluată automat"
 }

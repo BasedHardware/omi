@@ -10729,7 +10729,7 @@
     "recapDeletedSnackbar": "Агляд выдалены",
     "recapDeleteFailed": "Не атрымалася выдаліць агляд. Паспрабуйце пазней.",
     "syncStatusBackedUp": "Рэзервова захавана",
-    "syncStatusBackingUp": "Рэзервнае капіраванне…",
+    "syncStatusBackingUp": "Сінхранізацыя…",
     "syncStatusWaiting": "Чакае сінхранізацыі",
     "syncStatusRetrying": "Не атрымалася апрацаваць — паўтор",
     "syncStatusFailed": "Памылка — націсніце «Паўтарыць»",
@@ -10744,7 +10744,7 @@
     "syncCardProcessing": "Апрацоўка ў Omi…",
     "syncCardWaitingInternet": "Чаканне інтэрнэту",
     "syncCardNeedsAttention": "{count, plural, one{{count} запіс патрабуе ўвагі} few{{count} запісы патрабуюць увагі} many{{count} запісаў патрабуюць увагі} other{{count} запісу патрабуе ўвагі}}",
-    "syncFlowIntro": "Запісы перадаюцца з вашай прылады Omi на гэты тэлефон і захоўваюцца лакальна, затым загружаюцца на сервер Omi, дзе яны транскрыбуюцца і ператвараюцца ў размовы.",
+    "syncFlowIntro": "Запісы перадаюцца з вашага прыбора на гэты тэлефон і захоўваюцца лакальна, а потым загружаюцца на сервер Omi, дзе яны транскрыбуюцца і ператвараюцца ў размовы.",
     "syncStepUpload": "Сінхранізацыя",
     "syncStepUploadDesc": "Ваш запіс адпраўляецца на сервер Omi",
     "syncStepProcess": "Транскрыпцыя",
@@ -10754,15 +10754,16 @@
     "syncFailureFootnote": "Калі апрацоўка не атрымаецца, запіс будзе аўтаматычна паўторны падчас наступнай сінхранізацыі.",
     "syncStatusConversationCreated": "Размова створана",
     "syncCardUploadingTitle": "Запампоўка ў Omi",
-    "syncCardDownloadingTitle": "Спампоўка з Omi",
+    "syncCardDownloadingTitle": "Загрузка з вашага прыбора",
     "syncCardProgressOf": "{current} з {total}",
-    "syncStatusOnDevice": "Чакае на Omi",
-    "syncStatusDownloadingFromDevice": "Спампоўка з Omi",
+    "syncStatusOnDevice": "На вашым прыборы",
+    "syncStatusDownloadingFromDevice": "Загрузка з вашага прыбора",
     "newestFirst": "Спачатку новыя",
     "noSyncedRecordingsYet": "Пакуль няма сінхранізаваных запісаў",
     "morePaymentMethodsComingSoon": "Хутка з'явяцца новыя спосабы аплаты",
     "@morePaymentMethodsComingSoon": {
         "description": "Placeholder card text shown under available payment methods"
     },
+    "syncProcessingBackgroundHint": "Працэс працягваецца ў фонавым рэжыме — вы можаце пакінуць гэты экран.",
     "syncCardRateLimited": "Дасягнуты ліміт сумленнага выкарыстання — сінхранізацыя адновіцца аўтаматычна"
 }

@@ -9279,7 +9279,7 @@ class AppLocalizationsTr extends AppLocalizations {
   String get syncStatusBackedUp => 'Yedeklendi';
 
   @override
-  String get syncStatusBackingUp => 'Yedekleniyor…';
+  String get syncStatusBackingUp => 'Senkronize ediliyor…';
 
   @override
   String get syncStatusWaiting => 'Eşitleme bekleniyor';
@@ -9342,7 +9342,7 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get syncFlowIntro =>
-      'Kayıtlar Omi cihazınızdan bu telefona aktarılır ve yerel olarak saklanır, ardından Omi\'nin sunucusuna yüklenerek metne dönüştürülür ve konuşmalara çevrilir.';
+      'Kayıtlar cihazınızdan bu telefona aktarılıp yerel olarak saklanır, ardından Omi\'nin sunucusuna yüklenir; burada deşifre edilip görüşmelere dönüştürülür.';
 
   @override
   String get syncStepUpload => 'Eşitle';
@@ -9373,7 +9373,7 @@ class AppLocalizationsTr extends AppLocalizations {
   String get syncCardUploadingTitle => 'Omi\'ye yükleniyor';
 
   @override
-  String get syncCardDownloadingTitle => 'Omi\'den indiriliyor';
+  String get syncCardDownloadingTitle => 'Cihazınızdan indiriliyor';
 
   @override
   String syncCardProgressOf(int current, int total) {
@@ -9381,10 +9381,10 @@ class AppLocalizationsTr extends AppLocalizations {
   }
 
   @override
-  String get syncStatusOnDevice => 'Omi\'de bekliyor';
+  String get syncStatusOnDevice => 'Cihazınızda';
 
   @override
-  String get syncStatusDownloadingFromDevice => 'Omi\'den indiriliyor';
+  String get syncStatusDownloadingFromDevice => 'Cihazınızdan indiriliyor';
 
   @override
   String get newestFirst => 'Önce en yeniler';
@@ -9394,6 +9394,9 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get morePaymentMethodsComingSoon => 'Daha fazla ödeme yöntemi yakında';
+
+  @override
+  String get syncProcessingBackgroundHint => 'Bu işlem arka planda sürer — bu ekrandan ayrılabilirsiniz.';
 
   @override
   String get syncCardRateLimited => 'Adil kullanım sınırına ulaşıldı — eşitleme otomatik olarak sürdürülecek';

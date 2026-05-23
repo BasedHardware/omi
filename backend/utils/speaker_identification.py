@@ -385,9 +385,9 @@ async def extract_speaker_samples(
                 )
                 continue
 
-            # Download, merge, and extract
+            # Download, merge, and extract (sync_executor avoids parent-child deadlock on storage_executor, #7387)
             merged = await run_blocking(
-                storage_executor,
+                sync_executor,
                 download_audio_chunks_and_merge,
                 uid,
                 conversation_id,

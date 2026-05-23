@@ -1,7 +1,7 @@
 import asyncio
 from datetime import datetime, time, timedelta
 
-from utils.executors import storage_executor, run_blocking
+from utils.executors import postprocess_executor, run_blocking
 
 import pytz
 
@@ -175,7 +175,7 @@ def _send_summary_notification(user_data: tuple):
     )
 
     # Also send webhook with the full summary data (day_summary_webhook is async, so wrap in asyncio.run)
-    storage_executor.submit(asyncio.run, day_summary_webhook(uid, str(summary_data)))
+    postprocess_executor.submit(asyncio.run, day_summary_webhook(uid, str(summary_data)))
 
     tokens = user_data[1] if len(user_data) > 1 else None
     send_notification(
@@ -184,8 +184,14 @@ def _send_summary_notification(user_data: tuple):
 
 
 async def _send_bulk_summary_notification(users: list):
-    tasks = [run_blocking(storage_executor, _send_summary_notification, user_tokens) for user_tokens in users]
-    await asyncio.gather(*tasks)
+    _BATCH_SIZE = 8
+    for i in range(0, len(users), _BATCH_SIZE):
+        batch = users[i : i + _BATCH_SIZE]
+        tasks = [run_blocking(postprocess_executor, _send_summary_notification, user_tokens) for user_tokens in batch]
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+        for j, result in enumerate(results):
+            if isinstance(result, Exception):
+                logger.error(f"Daily summary failed for user batch[{i + j}]: {result}")
 
 
 async def send_daily_notification():

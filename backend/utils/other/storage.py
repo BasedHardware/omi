@@ -3,9 +3,11 @@ import io
 import json
 import os
 import struct
+import threading
+import time
 import wave
 from typing import List
-from concurrent.futures import as_completed
+from concurrent.futures import as_completed, wait, FIRST_COMPLETED
 
 from utils.executors import postprocess_executor, storage_executor
 
@@ -21,6 +23,17 @@ from database import users as users_db
 import logging
 
 logger = logging.getLogger(__name__)
+
+# Per-request fan-out limits for storage_executor (#7387)
+_STORAGE_CHUNK_SEM = threading.BoundedSemaphore(32)
+_PRECACHE_FILE_SEM = threading.BoundedSemaphore(4)
+_CHUNK_WINDOW_SIZE = 8
+
+_merge_tracker_lock = threading.Lock()
+_active_merges: dict[str, float] = {}
+_recent_merges: dict[str, tuple[float, str]] = {}
+_RECENT_MERGE_WINDOW = 300
+_MERGE_TRACKER_MAX = 2000
 
 # Opus encoding constants
 OPUS_SAMPLE_RATE = 16000
@@ -753,32 +766,60 @@ def download_audio_chunks_and_merge(
         logger.warning(f"Warning: Chunk not found for timestamp {formatted_timestamp}")
         return (timestamp, None)
 
-    # Download all data in parallel
+    # Download data with bounded concurrency (sliding window + global semaphore, #7387)
     chunk_results = {}
 
-    # Determine which timestamps need individual downloads vs batch downloads
     individual_timestamps = [ts for ts in timestamps if round(ts, 3) not in ts_to_batch_path]
-    unique_batch_paths = set(ts_to_batch_path.values())
+    unique_batch_paths = list(set(ts_to_batch_path.values()))
 
-    # Submit individual chunk downloads via shared storage executor
-    individual_futures = {storage_executor.submit(download_single_chunk, ts): ts for ts in individual_timestamps}
+    # Build unified job list: ('individual', ts) or ('batch', path)
+    jobs = [('individual', ts) for ts in individual_timestamps] + [('batch', p) for p in unique_batch_paths]
 
-    # Submit batch blob downloads (once per unique path)
-    batch_futures = {storage_executor.submit(_download_and_decode_blob, path): path for path in unique_batch_paths}
+    def _submit_job(job):
+        kind, key = job
+        _STORAGE_CHUNK_SEM.acquire()
+        try:
+            if kind == 'individual':
+                f = storage_executor.submit(download_single_chunk, key)
+            else:
+                f = storage_executor.submit(_download_and_decode_blob, key)
+            f.add_done_callback(lambda _: _STORAGE_CHUNK_SEM.release())
+            return (f, kind, key)
+        except Exception:
+            _STORAGE_CHUNK_SEM.release()
+            raise
 
-    # Collect individual results
-    for future in as_completed(individual_futures):
-        timestamp, pcm_data = future.result()
-        if pcm_data is not None:
-            chunk_results[timestamp] = pcm_data
+    # Sliding window: at most _CHUNK_WINDOW_SIZE in-flight per call
+    pending = {}
+    job_iter = iter(jobs)
+    for job in job_iter:
+        finfo = _submit_job(job)
+        pending[finfo[0]] = finfo
+        if len(pending) >= _CHUNK_WINDOW_SIZE:
+            break
 
-    # Collect batch results — assign full batch data at the batch's start timestamp
-    for future in as_completed(batch_futures):
-        path = batch_futures[future]
-        pcm_data = future.result()
-        if pcm_data is not None:
-            batch_info = batch_paths[path]
-            chunk_results[batch_info['timestamp']] = pcm_data
+    while pending:
+        done, _ = wait(pending.keys(), return_when=FIRST_COMPLETED)
+        for future in done:
+            _, kind, key = pending.pop(future)
+            try:
+                if kind == 'individual':
+                    timestamp, pcm_data = future.result()
+                    if pcm_data is not None:
+                        chunk_results[timestamp] = pcm_data
+                else:
+                    pcm_data = future.result()
+                    if pcm_data is not None:
+                        batch_info = batch_paths[key]
+                        chunk_results[batch_info['timestamp']] = pcm_data
+            except Exception as e:
+                logger.warning(f"Chunk download failed ({kind}={key}): {e}")
+
+        for job in job_iter:
+            finfo = _submit_job(job)
+            pending[finfo[0]] = finfo
+            if len(pending) >= _CHUNK_WINDOW_SIZE:
+                break
 
     # Merge chunks
     merged_data = bytearray()
@@ -802,7 +843,7 @@ def download_audio_chunks_and_merge(
                 gap_samples = int(gap_seconds * sample_rate)
                 silence_bytes = bytes(gap_samples * 2)  # Zero bytes for silence
                 merged_data.extend(silence_bytes)
-                logger.info(f"Filled {gap_seconds:.3f}s gap ({len(silence_bytes)} bytes) before chunk at {timestamp}")
+                logger.debug(f"Filled {gap_seconds:.3f}s gap ({len(silence_bytes)} bytes) before chunk at {timestamp}")
 
             merged_data.extend(pcm_data)
 
@@ -838,19 +879,11 @@ def get_or_create_merged_audio(
     pcm_to_wav_func,
     fill_gaps: bool = True,
     sample_rate: int = 16000,
+    caller: str = 'unknown',
 ) -> tuple[bytes, bool]:
     """
     Get merged audio from cache or create it.
     Cached files are stored in GCS with 1-day TTL (via lifecycle policy).
-
-    Args:
-        uid: User ID
-        conversation_id: Conversation ID
-        audio_file_id: Audio file ID
-        timestamps: List of chunk timestamps
-        pcm_to_wav_func: Function to convert PCM to WAV
-        fill_gaps: If True, insert silence between chunks to maintain time alignment. Default True.
-        sample_rate: Audio sample rate in Hz (default 16000)
 
     Returns:
         Tuple of (audio_data_bytes, was_cached)
@@ -859,9 +892,10 @@ def get_or_create_merged_audio(
     cache_path = get_cached_merged_audio_path(uid, conversation_id, audio_file_id)
     cache_blob = bucket.blob(cache_path)
 
-    # Check if cached version exists and is not expired
+    n_chunks = len(timestamps)
+    log_ctx = f'uid={uid} convo={conversation_id} file={audio_file_id} caller={caller} chunks={n_chunks}'
+
     if cache_blob.exists():
-        # Check custom metadata for expiry
         cache_blob.reload()
         metadata = cache_blob.metadata or {}
         expires_at_str = metadata.get('expires_at')
@@ -870,27 +904,51 @@ def get_or_create_merged_audio(
             try:
                 expires_at = datetime.datetime.fromisoformat(expires_at_str)
                 if datetime.datetime.now(datetime.timezone.utc) < expires_at:
-                    # Cache is valid, return it
-                    logger.info(f"Serving merged audio from cache: {cache_path}")
+                    logger.debug(f'audio_merge cache_hit {log_ctx}')
                     return cache_blob.download_as_bytes(), True
                 else:
-                    logger.warning(f"Cache expired for: {cache_path}")
+                    logger.debug(f'audio_merge cache_expired {log_ctx}')
             except (ValueError, TypeError):
                 pass
 
-    # Cache miss or expired - create new merged file
-    logger.info(f"Cache miss, merging audio for: {cache_path}")
+    now = time.monotonic()
+    with _merge_tracker_lock:
+        if cache_path in _active_merges:
+            elapsed = now - _active_merges[cache_path]
+            logger.warning(f'audio_merge duplicate_concurrent {log_ctx} running_for={elapsed:.1f}s')
+        if cache_path in _recent_merges:
+            prev_time, prev_caller = _recent_merges[cache_path]
+            age = now - prev_time
+            if age < _RECENT_MERGE_WINDOW:
+                logger.warning(f'audio_merge duplicate_recent {log_ctx} prev_caller={prev_caller} age={age:.0f}s')
+        _active_merges[cache_path] = now
+        if len(_active_merges) > _MERGE_TRACKER_MAX:
+            _active_merges.clear()
 
-    # Download and merge chunks
-    pcm_data = download_audio_chunks_and_merge(
-        uid, conversation_id, timestamps, fill_gaps=fill_gaps, sample_rate=sample_rate
-    )
+    logger.info(f'audio_merge cache_miss {log_ctx}')
 
-    # Convert to WAV
+    merge_start = time.monotonic()
+    try:
+        pcm_data = download_audio_chunks_and_merge(
+            uid, conversation_id, timestamps, fill_gaps=fill_gaps, sample_rate=sample_rate
+        )
+    finally:
+        merge_duration = time.monotonic() - merge_start
+        with _merge_tracker_lock:
+            _active_merges.pop(cache_path, None)
+            _recent_merges[cache_path] = (time.monotonic(), caller)
+            if len(_recent_merges) > _MERGE_TRACKER_MAX:
+                cutoff = time.monotonic() - _RECENT_MERGE_WINDOW
+                stale = [k for k, (t, _) in _recent_merges.items() if t < cutoff]
+                for k in stale:
+                    del _recent_merges[k]
+
     wav_data = pcm_to_wav_func(pcm_data)
-    del pcm_data  # Free PCM data immediately after WAV conversion
+    del pcm_data
 
-    # Upload to cache in background thread with 3-day TTL
+    wav_kb = len(wav_data) // 1024
+    logger.info(f'audio_merge complete {log_ctx} duration={merge_duration:.1f}s size={wav_kb}KB')
+
     def _upload_to_cache():
         try:
             expires_at = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(days=3)
@@ -899,9 +957,9 @@ def get_or_create_merged_audio(
                 'audio_file_id': audio_file_id,
             }
             cache_blob.upload_from_string(wav_data, content_type='audio/wav')
-            logger.info(f"Cached merged audio at: {cache_path}")
+            logger.info(f'audio_merge cached {log_ctx}')
         except Exception as e:
-            logger.error(f"Error uploading audio cache: {e}")
+            logger.error(f'audio_merge cache_upload_failed {log_ctx}: {e}')
 
     storage_executor.submit(_upload_to_cache)
 
@@ -990,11 +1048,21 @@ def precache_conversation_audio(
                     pcm_to_wav_func=_pcm_to_wav,
                     fill_gaps=fill_gaps,
                     sample_rate=sample_rate,
+                    caller='process_conversation',
                 )
             except Exception as e:
                 logger.error(f"[PRECACHE] Error caching audio file {af.get('id')}: {e}")
 
-        futures = [storage_executor.submit(_cache_single, af) for af in audio_files]
+        futures = []
+        for af in audio_files:
+            _PRECACHE_FILE_SEM.acquire()
+            try:
+                f = storage_executor.submit(_cache_single, af)
+                f.add_done_callback(lambda _: _PRECACHE_FILE_SEM.release())
+                futures.append(f)
+            except Exception:
+                _PRECACHE_FILE_SEM.release()
+                raise
         for future in as_completed(futures):
             try:
                 future.result()

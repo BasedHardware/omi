@@ -9284,7 +9284,7 @@ class AppLocalizationsUr extends AppLocalizations {
   String get syncStatusBackedUp => 'بیک اپ ہو گیا';
 
   @override
-  String get syncStatusBackingUp => 'بیک اپ ہو رہا ہے…';
+  String get syncStatusBackingUp => 'ہم آہنگ کیا جا رہا ہے…';
 
   @override
   String get syncStatusWaiting => 'سنک ہونے کا منتظر';
@@ -9347,7 +9347,7 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get syncFlowIntro =>
-      'ریکارڈنگز آپ کے Omi ڈیوائس سے اس فون پر منتقل ہوتی ہیں اور مقامی طور پر محفوظ کی جاتی ہیں، پھر Omi کے سرور پر اپ لوڈ کی جاتی ہیں جہاں انہیں نقل کر کے گفتگو میں تبدیل کیا جاتا ہے۔';
+      'ریکارڈنگز آپ کی ڈیوائس سے اس فون پر منتقل ہو کر مقامی طور پر محفوظ ہوتی ہیں، پھر Omi کے سرور پر اپ لوڈ کی جاتی ہیں جہاں انہیں نقل کر کے گفتگو میں تبدیل کیا جاتا ہے۔';
 
   @override
   String get syncStepUpload => 'سنک';
@@ -9378,7 +9378,7 @@ class AppLocalizationsUr extends AppLocalizations {
   String get syncCardUploadingTitle => 'Omi پر اپ لوڈ ہو رہا ہے';
 
   @override
-  String get syncCardDownloadingTitle => 'Omi سے ڈاؤن لوڈ ہو رہا ہے';
+  String get syncCardDownloadingTitle => 'آپ کی ڈیوائس سے ڈاؤن لوڈ ہو رہا ہے';
 
   @override
   String syncCardProgressOf(int current, int total) {
@@ -9386,10 +9386,10 @@ class AppLocalizationsUr extends AppLocalizations {
   }
 
   @override
-  String get syncStatusOnDevice => 'Omi پر منتظر';
+  String get syncStatusOnDevice => 'آپ کی ڈیوائس پر';
 
   @override
-  String get syncStatusDownloadingFromDevice => 'Omi سے ڈاؤن لوڈ ہو رہا ہے';
+  String get syncStatusDownloadingFromDevice => 'آپ کی ڈیوائس سے ڈاؤن لوڈ ہو رہا ہے';
 
   @override
   String get newestFirst => 'پہلے نئی ترین';
@@ -9399,6 +9399,9 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get morePaymentMethodsComingSoon => 'مزید ادائیگی کے طریقے جلد آرہے ہیں';
+
+  @override
+  String get syncProcessingBackgroundHint => 'یہ پس منظر میں جاری رہتا ہے — آپ اس اسکرین سے باہر جا سکتے ہیں۔';
 
   @override
   String get syncCardRateLimited => 'منصفانہ استعمال کی حد پوری ہو گئی — ہم آہنگی خودکار طور پر دوبارہ شروع ہو جائے گی';

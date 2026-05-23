@@ -9297,7 +9297,7 @@ class AppLocalizationsHr extends AppLocalizations {
   String get syncStatusBackedUp => 'Sigurnosno kopirano';
 
   @override
-  String get syncStatusBackingUp => 'Izrada kopije…';
+  String get syncStatusBackingUp => 'Sinkronizacija…';
 
   @override
   String get syncStatusWaiting => 'Čeka sinkronizaciju';
@@ -9362,7 +9362,7 @@ class AppLocalizationsHr extends AppLocalizations {
 
   @override
   String get syncFlowIntro =>
-      'Snimke se prenose s vašeg Omi uređaja na ovaj telefon i pohranjuju lokalno, zatim se učitavaju na Omijev poslužitelj gdje se transkribiraju i pretvaraju u razgovore.';
+      'Snimke se prenose s vašeg uređaja na ovaj telefon i pohranjuju lokalno, a zatim učitavaju na Omijev poslužitelj gdje se transkribiraju i pretvaraju u razgovore.';
 
   @override
   String get syncStepUpload => 'Sinkronizacija';
@@ -9392,7 +9392,7 @@ class AppLocalizationsHr extends AppLocalizations {
   String get syncCardUploadingTitle => 'Slanje u Omi';
 
   @override
-  String get syncCardDownloadingTitle => 'Preuzimanje s Omi';
+  String get syncCardDownloadingTitle => 'Preuzimanje s vašeg uređaja';
 
   @override
   String syncCardProgressOf(int current, int total) {
@@ -9400,10 +9400,10 @@ class AppLocalizationsHr extends AppLocalizations {
   }
 
   @override
-  String get syncStatusOnDevice => 'Čeka na Omi';
+  String get syncStatusOnDevice => 'Na vašem uređaju';
 
   @override
-  String get syncStatusDownloadingFromDevice => 'Preuzimanje s Omi';
+  String get syncStatusDownloadingFromDevice => 'Preuzimanje s vašeg uređaja';
 
   @override
   String get newestFirst => 'Najnovije prvo';
@@ -9413,6 +9413,9 @@ class AppLocalizationsHr extends AppLocalizations {
 
   @override
   String get morePaymentMethodsComingSoon => 'Uskoro stižu novi načini plaćanja';
+
+  @override
+  String get syncProcessingBackgroundHint => 'Ovo se nastavlja u pozadini — možete napustiti ovaj zaslon.';
 
   @override
   String get syncCardRateLimited =>

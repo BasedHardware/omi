@@ -9270,7 +9270,7 @@ class AppLocalizationsFa extends AppLocalizations {
   String get syncStatusBackedUp => 'پشتیبان‌گیری شد';
 
   @override
-  String get syncStatusBackingUp => 'در حال پشتیبان‌گیری…';
+  String get syncStatusBackingUp => 'در حال هماهنگ‌سازی…';
 
   @override
   String get syncStatusWaiting => 'در انتظار همگام‌سازی';
@@ -9333,7 +9333,7 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get syncFlowIntro =>
-      'ضبط‌ها از دستگاه Omi شما به این تلفن منتقل و به‌صورت محلی ذخیره می‌شوند، سپس به سرور Omi بارگذاری می‌شوند تا متن‌برداری شده و به مکالمه تبدیل شوند.';
+      'ضبط‌ها از دستگاه شما به این تلفن منتقل و به‌صورت محلی ذخیره می‌شوند، سپس به سرور Omi بارگذاری می‌شوند تا رونویسی و به گفت‌وگو تبدیل شوند.';
 
   @override
   String get syncStepUpload => 'همگام‌سازی';
@@ -9364,7 +9364,7 @@ class AppLocalizationsFa extends AppLocalizations {
   String get syncCardUploadingTitle => 'در حال بارگذاری در Omi';
 
   @override
-  String get syncCardDownloadingTitle => 'در حال دانلود از Omi';
+  String get syncCardDownloadingTitle => 'در حال دانلود از دستگاه شما';
 
   @override
   String syncCardProgressOf(int current, int total) {
@@ -9372,10 +9372,10 @@ class AppLocalizationsFa extends AppLocalizations {
   }
 
   @override
-  String get syncStatusOnDevice => 'در انتظار Omi';
+  String get syncStatusOnDevice => 'روی دستگاه شما';
 
   @override
-  String get syncStatusDownloadingFromDevice => 'در حال دانلود از Omi';
+  String get syncStatusDownloadingFromDevice => 'در حال دانلود از دستگاه شما';
 
   @override
   String get newestFirst => 'ابتدا جدیدترین‌ها';
@@ -9385,6 +9385,9 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get morePaymentMethodsComingSoon => 'روش‌های پرداخت بیشتر به‌زودی';
+
+  @override
+  String get syncProcessingBackgroundHint => 'این کار در پس‌زمینه ادامه می‌یابد — می‌توانید این صفحه را ترک کنید.';
 
   @override
   String get syncCardRateLimited =>

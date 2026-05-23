@@ -9276,7 +9276,7 @@ class AppLocalizationsLt extends AppLocalizations {
   String get syncStatusBackedUp => 'Sukurta atsarginė kopija';
 
   @override
-  String get syncStatusBackingUp => 'Kuriama atsarginė kopija…';
+  String get syncStatusBackingUp => 'Sinchronizuojama…';
 
   @override
   String get syncStatusWaiting => 'Laukiama sinchronizavimo';
@@ -9343,7 +9343,7 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get syncFlowIntro =>
-      'Įrašai perduodami iš jūsų Omi įrenginio į šį telefoną ir saugomi vietoje, paskui įkeliami į Omi serverį, kur jie transkribuojami ir paverčiami pokalbiais.';
+      'Įrašai perkeliami iš jūsų įrenginio į šį telefoną ir saugomi vietoje, o paskui įkeliami į Omi serverį, kur jie transkribuojami ir paverčiami pokalbiais.';
 
   @override
   String get syncStepUpload => 'Sinchronizuoti';
@@ -9374,7 +9374,7 @@ class AppLocalizationsLt extends AppLocalizations {
   String get syncCardUploadingTitle => 'Įkeliama į Omi';
 
   @override
-  String get syncCardDownloadingTitle => 'Atsisiunčiama iš Omi';
+  String get syncCardDownloadingTitle => 'Atsisiunčiama iš jūsų įrenginio';
 
   @override
   String syncCardProgressOf(int current, int total) {
@@ -9382,10 +9382,10 @@ class AppLocalizationsLt extends AppLocalizations {
   }
 
   @override
-  String get syncStatusOnDevice => 'Laukia Omi';
+  String get syncStatusOnDevice => 'Jūsų įrenginyje';
 
   @override
-  String get syncStatusDownloadingFromDevice => 'Atsisiunčiama iš Omi';
+  String get syncStatusDownloadingFromDevice => 'Atsisiunčiama iš jūsų įrenginio';
 
   @override
   String get newestFirst => 'Pirma naujausi';
@@ -9395,6 +9395,9 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get morePaymentMethodsComingSoon => 'Netrukus daugiau mokėjimo būdų';
+
+  @override
+  String get syncProcessingBackgroundHint => 'Tai tęsiasi fone — galite išeiti iš šio ekrano.';
 
   @override
   String get syncCardRateLimited => 'Pasiekta sąžiningo naudojimo riba — sinchronizavimas bus tęsiamas automatiškai';

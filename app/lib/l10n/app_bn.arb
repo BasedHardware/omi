@@ -10729,7 +10729,7 @@
     "recapDeletedSnackbar": "রিক্যাপ মুছে ফেলা হয়েছে",
     "recapDeleteFailed": "রিক্যাপ মুছে ফেলা যায়নি। পরে আবার চেষ্টা করুন।",
     "syncStatusBackedUp": "ব্যাকআপ হয়েছে",
-    "syncStatusBackingUp": "ব্যাকআপ চলছে…",
+    "syncStatusBackingUp": "সিঙ্ক করা হচ্ছে…",
     "syncStatusWaiting": "সিঙ্কের অপেক্ষায়",
     "syncStatusRetrying": "প্রক্রিয়া করা যায়নি — আবার চেষ্টা চলছে",
     "syncStatusFailed": "ব্যর্থ — Retry চাপুন",
@@ -10744,7 +10744,7 @@
     "syncCardProcessing": "Omi-তে প্রক্রিয়াজাত হচ্ছে…",
     "syncCardWaitingInternet": "ইন্টারনেটের জন্য অপেক্ষা",
     "syncCardNeedsAttention": "{count, plural, one{১টি রেকর্ডিংয়ের প্রতি মনোযোগ প্রয়োজন} other{{count}টি রেকর্ডিংয়ের প্রতি মনোযোগ প্রয়োজন}}",
-    "syncFlowIntro": "রেকর্ডিংগুলি আপনার Omi ডিভাইস থেকে এই ফোনে স্থানান্তরিত হয় এবং স্থানীয়ভাবে সংরক্ষিত হয়, তারপর Omi-এর সার্ভারে আপলোড করা হয় যেখানে সেগুলি প্রতিলিপি করা হয় এবং কথোপকথনে রূপান্তরিত হয়।",
+    "syncFlowIntro": "রেকর্ডিংগুলো আপনার ডিভাইস থেকে এই ফোনে স্থানান্তরিত হয় এবং স্থানীয়ভাবে সংরক্ষিত হয়, এরপর Omi এর সার্ভারে আপলোড করা হয় যেখানে সেগুলো প্রতিলিপি করা হয় এবং কথোপকথনে পরিণত হয়।",
     "syncStepUpload": "সিঙ্ক",
     "syncStepUploadDesc": "আপনার রেকর্ডিং Omi-এর সার্ভারে পাঠানো হয়",
     "syncStepProcess": "ট্রান্সক্রিপশন",
@@ -10754,15 +10754,16 @@
     "syncFailureFootnote": "প্রক্রিয়াজাতকরণ ব্যর্থ হলে, পরবর্তী সিঙ্কে রেকর্ডিংটি স্বয়ংক্রিয়ভাবে পুনরায় চেষ্টা করা হয়।",
     "syncStatusConversationCreated": "কথোপকথন তৈরি হয়েছে",
     "syncCardUploadingTitle": "Omi-তে আপলোড হচ্ছে",
-    "syncCardDownloadingTitle": "Omi থেকে ডাউনলোড হচ্ছে",
+    "syncCardDownloadingTitle": "আপনার ডিভাইস থেকে ডাউনলোড হচ্ছে",
     "syncCardProgressOf": "{total}-এর মধ্যে {current}",
-    "syncStatusOnDevice": "Omi-এ অপেক্ষমাণ",
-    "syncStatusDownloadingFromDevice": "Omi থেকে ডাউনলোড হচ্ছে",
+    "syncStatusOnDevice": "আপনার ডিভাইসে",
+    "syncStatusDownloadingFromDevice": "আপনার ডিভাইস থেকে ডাউনলোড হচ্ছে",
     "newestFirst": "নতুনগুলি আগে",
     "noSyncedRecordingsYet": "এখনও কোনো সিঙ্ক করা রেকর্ডিং নেই",
     "morePaymentMethodsComingSoon": "শীঘ্রই আরও পেমেন্ট পদ্ধতি আসছে",
     "@morePaymentMethodsComingSoon": {
         "description": "Placeholder card text shown under available payment methods"
     },
+    "syncProcessingBackgroundHint": "এটি ব্যাকগ্রাউন্ডে চলতে থাকে — আপনি এই স্ক্রিন থেকে চলে যেতে পারেন।",
     "syncCardRateLimited": "ন্যায্য ব্যবহারের সীমা পৌঁছেছে — সিঙ্ক স্বয়ংক্রিয়ভাবে আবার শুরু হবে"
 }

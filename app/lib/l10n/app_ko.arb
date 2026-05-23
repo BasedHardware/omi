@@ -3026,7 +3026,7 @@
     "recapDeletedSnackbar": "요약을 삭제했습니다",
     "recapDeleteFailed": "요약을 삭제할 수 없습니다. 나중에 다시 시도해 주세요.",
     "syncStatusBackedUp": "백업됨",
-    "syncStatusBackingUp": "백업 중…",
+    "syncStatusBackingUp": "동기화 중…",
     "syncStatusWaiting": "동기화 대기 중",
     "syncStatusRetrying": "처리하지 못함 — 다시 시도 중",
     "syncStatusFailed": "실패 — 다시 시도를 누르세요",
@@ -3041,7 +3041,7 @@
     "syncCardProcessing": "Omi에서 처리 중…",
     "syncCardWaitingInternet": "인터넷 연결 대기 중",
     "syncCardNeedsAttention": "{count, plural, other{확인이 필요한 녹음 {count}개}}",
-    "syncFlowIntro": "녹음은 Omi 기기에서 이 휴대전화로 전송되어 로컬에 저장된 후, Omi 서버로 업로드되어 텍스트로 변환되고 대화로 만들어집니다.",
+    "syncFlowIntro": "녹음은 기기에서 이 휴대폰으로 전송되어 로컬에 저장된 다음 Omi의 서버에 업로드되어 텍스트로 변환되고 대화로 만들어집니다.",
     "syncStepUpload": "동기화",
     "syncStepUploadDesc": "녹음이 Omi 서버로 전송됩니다",
     "syncStepProcess": "전사",
@@ -3051,10 +3051,10 @@
     "syncFailureFootnote": "처리에 실패하면 다음 동기화 시 녹음이 자동으로 다시 시도됩니다.",
     "syncStatusConversationCreated": "대화가 생성되었습니다",
     "syncCardUploadingTitle": "Omi에 업로드 중",
-    "syncCardDownloadingTitle": "Omi에서 다운로드 중",
+    "syncCardDownloadingTitle": "기기에서 다운로드 중",
     "syncCardProgressOf": "{total}개 중 {current}개",
-    "syncStatusOnDevice": "Omi에서 대기 중",
-    "syncStatusDownloadingFromDevice": "Omi에서 다운로드 중",
+    "syncStatusOnDevice": "기기에 있음",
+    "syncStatusDownloadingFromDevice": "기기에서 다운로드 중",
     "newestFirst": "최신순",
     "noSyncedRecordingsYet": "아직 동기화된 녹음이 없습니다",
     "@lowBatteryAlertBody": {
@@ -3069,5 +3069,6 @@
     "@morePaymentMethodsComingSoon": {
         "description": "Placeholder card text shown under available payment methods"
     },
+    "syncProcessingBackgroundHint": "이 작업은 백그라운드에서 계속됩니다 — 이 화면을 벗어나도 됩니다.",
     "syncCardRateLimited": "공정 사용 한도에 도달했습니다 — 동기화가 자동으로 다시 시작됩니다"
 }

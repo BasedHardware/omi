@@ -55,6 +55,7 @@ from utils.other.storage import (
     download_audio_chunks_and_merge,
     get_or_create_merged_audio,
     get_merged_audio_signed_url,
+    _PRECACHE_FILE_SEM,
 )
 
 from utils import encryption
@@ -161,7 +162,9 @@ def parse_range_header(range_header: str, file_size: int) -> tuple[int, int] | N
 # **********************************************
 
 
-def _precache_audio_file(uid: str, conversation_id: str, audio_file: dict, fill_gaps: bool = True):
+def _precache_audio_file(
+    uid: str, conversation_id: str, audio_file: dict, fill_gaps: bool = True, caller: str = 'precache_endpoint'
+):
     """Pre-cache a single audio file."""
     try:
         audio_file_id = audio_file.get('id')
@@ -177,8 +180,8 @@ def _precache_audio_file(uid: str, conversation_id: str, audio_file: dict, fill_
             pcm_to_wav_func=pcm_to_wav,
             fill_gaps=fill_gaps,
             sample_rate=AUDIO_SAMPLE_RATE,
+            caller=caller,
         )
-        logger.info(f"Pre-cached audio file: {audio_file_id}")
     except Exception as e:
         logger.error(f"Error pre-caching audio file {audio_file.get('id')}: {e}")
 
@@ -202,12 +205,21 @@ def precache_conversation_audio_endpoint(
     if not audio_files:
         return {"status": "no_audio", "message": "No audio files in conversation"}
 
-    # Start background parallel pre-caching for all audio files using storage_executor
+    # Start background parallel pre-caching with bounded concurrency (#7387)
     def _precache_all_parallel():
         logger.info(f"Pre-caching all {len(audio_files)} audio files for conversation {conversation_id} (parallel)")
-        futures = [
-            submit_with_context(storage_executor, _precache_audio_file, uid, conversation_id, af) for af in audio_files
-        ]
+        futures = []
+        for af in audio_files:
+            _PRECACHE_FILE_SEM.acquire()
+            try:
+                f = submit_with_context(
+                    storage_executor, _precache_audio_file, uid, conversation_id, af, caller='precache_endpoint'
+                )
+                f.add_done_callback(lambda _: _PRECACHE_FILE_SEM.release())
+                futures.append(f)
+            except Exception:
+                _PRECACHE_FILE_SEM.release()
+                raise
         for future in futures:
             try:
                 future.result()
@@ -267,7 +279,7 @@ def get_audio_signed_urls_endpoint(
             # First uncached file: cache synchronously for immediate playback
             if not first_uncached_handled:
                 first_uncached_handled = True
-                _precache_audio_file(uid, conversation_id, af)
+                _precache_audio_file(uid, conversation_id, af, caller='sync_urls_first')
                 # Get signed URL after caching
                 signed_url = get_merged_audio_signed_url(uid, conversation_id, audio_file_id)
                 if signed_url:
@@ -304,10 +316,18 @@ def get_audio_signed_urls_endpoint(
     if uncached_files:
 
         def _cache_uncached_parallel():
-            futures = [
-                submit_with_context(storage_executor, _precache_audio_file, uid, conversation_id, af)
-                for af in uncached_files
-            ]
+            futures = []
+            for af in uncached_files:
+                _PRECACHE_FILE_SEM.acquire()
+                try:
+                    f = submit_with_context(
+                        storage_executor, _precache_audio_file, uid, conversation_id, af, caller='sync_urls_bg'
+                    )
+                    f.add_done_callback(lambda _: _PRECACHE_FILE_SEM.release())
+                    futures.append(f)
+                except Exception:
+                    _PRECACHE_FILE_SEM.release()
+                    raise
             for future in futures:
                 try:
                     future.result()
@@ -379,6 +399,7 @@ def download_audio_file_endpoint(
                 pcm_to_wav_func=pcm_to_wav,
                 fill_gaps=True,
                 sample_rate=AUDIO_SAMPLE_RATE,
+                caller='sync_download',
             )
             content_type = "audio/wav"
             extension = "wav"

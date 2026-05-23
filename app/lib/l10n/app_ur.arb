@@ -10729,7 +10729,7 @@
     "recapDeletedSnackbar": "خلاصہ حذف ہو گیا",
     "recapDeleteFailed": "خلاصہ حذف نہیں ہو سکا۔ بعد میں دوبارہ کوشش کریں۔",
     "syncStatusBackedUp": "بیک اپ ہو گیا",
-    "syncStatusBackingUp": "بیک اپ ہو رہا ہے…",
+    "syncStatusBackingUp": "ہم آہنگ کیا جا رہا ہے…",
     "syncStatusWaiting": "سنک ہونے کا منتظر",
     "syncStatusRetrying": "پروسیس نہیں ہو سکا — دوبارہ کوشش",
     "syncStatusFailed": "ناکام — Retry دبائیں",
@@ -10744,7 +10744,7 @@
     "syncCardProcessing": "Omi پر پروسیس ہو رہا ہے…",
     "syncCardWaitingInternet": "انٹرنیٹ کا انتظار",
     "syncCardNeedsAttention": "{count, plural, one{1 ریکارڈنگ پر توجہ درکار ہے} other{{count} ریکارڈنگز پر توجہ درکار ہے}}",
-    "syncFlowIntro": "ریکارڈنگز آپ کے Omi ڈیوائس سے اس فون پر منتقل ہوتی ہیں اور مقامی طور پر محفوظ کی جاتی ہیں، پھر Omi کے سرور پر اپ لوڈ کی جاتی ہیں جہاں انہیں نقل کر کے گفتگو میں تبدیل کیا جاتا ہے۔",
+    "syncFlowIntro": "ریکارڈنگز آپ کی ڈیوائس سے اس فون پر منتقل ہو کر مقامی طور پر محفوظ ہوتی ہیں، پھر Omi کے سرور پر اپ لوڈ کی جاتی ہیں جہاں انہیں نقل کر کے گفتگو میں تبدیل کیا جاتا ہے۔",
     "syncStepUpload": "سنک",
     "syncStepUploadDesc": "آپ کی ریکارڈنگ Omi کے سرور پر بھیجی جاتی ہے",
     "syncStepProcess": "نقل",
@@ -10754,15 +10754,16 @@
     "syncFailureFootnote": "اگر پروسیسنگ ناکام ہو، تو اگلی سنک پر ریکارڈنگ خودکار طور پر دوبارہ آزمائی جائے گی۔",
     "syncStatusConversationCreated": "گفتگو بن گئی",
     "syncCardUploadingTitle": "Omi پر اپ لوڈ ہو رہا ہے",
-    "syncCardDownloadingTitle": "Omi سے ڈاؤن لوڈ ہو رہا ہے",
+    "syncCardDownloadingTitle": "آپ کی ڈیوائس سے ڈاؤن لوڈ ہو رہا ہے",
     "syncCardProgressOf": "{total} میں سے {current}",
-    "syncStatusOnDevice": "Omi پر منتظر",
-    "syncStatusDownloadingFromDevice": "Omi سے ڈاؤن لوڈ ہو رہا ہے",
+    "syncStatusOnDevice": "آپ کی ڈیوائس پر",
+    "syncStatusDownloadingFromDevice": "آپ کی ڈیوائس سے ڈاؤن لوڈ ہو رہا ہے",
     "newestFirst": "پہلے نئی ترین",
     "noSyncedRecordingsYet": "ابھی تک کوئی سنک شدہ ریکارڈنگ نہیں",
     "morePaymentMethodsComingSoon": "مزید ادائیگی کے طریقے جلد آرہے ہیں",
     "@morePaymentMethodsComingSoon": {
         "description": "Placeholder card text shown under available payment methods"
     },
+    "syncProcessingBackgroundHint": "یہ پس منظر میں جاری رہتا ہے — آپ اس اسکرین سے باہر جا سکتے ہیں۔",
     "syncCardRateLimited": "منصفانہ استعمال کی حد پوری ہو گئی — ہم آہنگی خودکار طور پر دوبارہ شروع ہو جائے گی"
 }

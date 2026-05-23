@@ -3026,7 +3026,7 @@
     "recapDeletedSnackbar": "Kokkuvõte kustutatud",
     "recapDeleteFailed": "Kokkuvõtet ei saanud kustutada. Proovi hiljem uuesti.",
     "syncStatusBackedUp": "Varundatud",
-    "syncStatusBackingUp": "Varundamine…",
+    "syncStatusBackingUp": "Sünkroonimine…",
     "syncStatusWaiting": "Ootab sünkroonimist",
     "syncStatusRetrying": "Töötlemine ebaõnnestus — proovin uuesti",
     "syncStatusFailed": "Ebaõnnestus — puuduta Proovi uuesti",
@@ -3041,7 +3041,7 @@
     "syncCardProcessing": "Töötlemine Omis…",
     "syncCardWaitingInternet": "Ootan internetiühendust",
     "syncCardNeedsAttention": "{count, plural, one{1 salvestis vajab tähelepanu} other{{count} salvestist vajab tähelepanu}}",
-    "syncFlowIntro": "Salvestused kantakse sinu Omi seadmest sellesse telefoni ja salvestatakse kohapeal, seejärel laaditakse üles Omi serverisse, kus need transkribeeritakse ja muudetakse vestlusteks.",
+    "syncFlowIntro": "Salvestised kantakse sinu seadmest sellesse telefoni ja salvestatakse kohapeal ning seejärel laaditakse üles Omi serverisse, kus need transkribeeritakse ja muudetakse vestlusteks.",
     "syncStepUpload": "Sünkrooni",
     "syncStepUploadDesc": "Sinu salvestis saadetakse Omi serverisse",
     "syncStepProcess": "Transkribeerimine",
@@ -3051,10 +3051,10 @@
     "syncFailureFootnote": "Kui töötlemine ebaõnnestub, proovitakse salvestist järgmise sünkroonimise käigus automaatselt uuesti.",
     "syncStatusConversationCreated": "Vestlus loodud",
     "syncCardUploadingTitle": "Üleslaadimine Omisse",
-    "syncCardDownloadingTitle": "Allalaadimine Omist",
+    "syncCardDownloadingTitle": "Allalaadimine sinu seadmest",
     "syncCardProgressOf": "{current} / {total}",
-    "syncStatusOnDevice": "Ootab Omis",
-    "syncStatusDownloadingFromDevice": "Allalaadimine Omist",
+    "syncStatusOnDevice": "Sinu seadmes",
+    "syncStatusDownloadingFromDevice": "Allalaadimine sinu seadmest",
     "newestFirst": "Uusimad esmalt",
     "noSyncedRecordingsYet": "Sünkroonitud salvestisi pole veel",
     "@lowBatteryAlertBody": {
@@ -3069,5 +3069,6 @@
     "@morePaymentMethodsComingSoon": {
         "description": "Placeholder card text shown under available payment methods"
     },
+    "syncProcessingBackgroundHint": "See jätkub taustal — võite sellelt ekraanilt lahkuda.",
     "syncCardRateLimited": "Õiglase kasutuse piir on saavutatud — sünkroonimine jätkub automaatselt"
 }

@@ -10729,7 +10729,7 @@
     "recapDeletedSnackbar": "Прегледот е избришан",
     "recapDeleteFailed": "Прегледот не може да се избрише. Обидете се повторно подоцна.",
     "syncStatusBackedUp": "Резервно зачувано",
-    "syncStatusBackingUp": "Се прави резервна копија…",
+    "syncStatusBackingUp": "Синхронизирање…",
     "syncStatusWaiting": "Чека синхронизација",
     "syncStatusRetrying": "Обработката не успеа — нов обид",
     "syncStatusFailed": "Неуспешно — допрете Обиди се повторно",
@@ -10744,7 +10744,7 @@
     "syncCardProcessing": "Се обработува во Omi…",
     "syncCardWaitingInternet": "Се чека интернет",
     "syncCardNeedsAttention": "{count, plural, one{{count} снимка бара внимание} other{{count} снимки бараат внимание}}",
-    "syncFlowIntro": "Снимките се пренесуваат од вашиот Omi уред на овој телефон и се чуваат локално, потоа се прикачуваат на серверот на Omi, каде што се транскрибираат и претвораат во разговори.",
+    "syncFlowIntro": "Снимките се пренесуваат од вашиот уред на овој телефон и се складираат локално, а потоа се прикачуваат на серверот на Omi, каде што се транскрибираат и се претвораат во разговори.",
     "syncStepUpload": "Синхронизација",
     "syncStepUploadDesc": "Вашиот запис се испраќа на серверот на Omi",
     "syncStepProcess": "Транскрипција",
@@ -10754,15 +10754,16 @@
     "syncFailureFootnote": "Ако обработката не успее, снимката автоматски се повторува при следната синхронизација.",
     "syncStatusConversationCreated": "Разговорот е создаден",
     "syncCardUploadingTitle": "Се прикачува на Omi",
-    "syncCardDownloadingTitle": "Се презема од Omi",
+    "syncCardDownloadingTitle": "Се презема од вашиот уред",
     "syncCardProgressOf": "{current} од {total}",
-    "syncStatusOnDevice": "Чека на Omi",
-    "syncStatusDownloadingFromDevice": "Се презема од Omi",
+    "syncStatusOnDevice": "На вашиот уред",
+    "syncStatusDownloadingFromDevice": "Се презема од вашиот уред",
     "newestFirst": "Прво најнови",
     "noSyncedRecordingsYet": "Сè уште нема синхронизирани записи",
     "morePaymentMethodsComingSoon": "Наскоро повеќе начини на плаќање",
     "@morePaymentMethodsComingSoon": {
         "description": "Placeholder card text shown under available payment methods"
     },
+    "syncProcessingBackgroundHint": "Ова продолжува во заднина — може да го напуштите овој екран.",
     "syncCardRateLimited": "Достигнат е лимитот за фер користење — синхронизацијата автоматски ќе продолжи"
 }

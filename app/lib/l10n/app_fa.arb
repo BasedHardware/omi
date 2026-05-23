@@ -10729,7 +10729,7 @@
     "recapDeletedSnackbar": "خلاصه حذف شد",
     "recapDeleteFailed": "حذف خلاصه ممکن نشد. بعداً دوباره تلاش کنید.",
     "syncStatusBackedUp": "پشتیبان‌گیری شد",
-    "syncStatusBackingUp": "در حال پشتیبان‌گیری…",
+    "syncStatusBackingUp": "در حال هماهنگ‌سازی…",
     "syncStatusWaiting": "در انتظار همگام‌سازی",
     "syncStatusRetrying": "پردازش ناموفق — تلاش مجدد",
     "syncStatusFailed": "ناموفق — روی تلاش مجدد بزنید",
@@ -10744,7 +10744,7 @@
     "syncCardProcessing": "در حال پردازش در Omi…",
     "syncCardWaitingInternet": "در انتظار اتصال به اینترنت",
     "syncCardNeedsAttention": "{count, plural, one{۱ ضبط نیازمند توجه است} other{{count} ضبط نیازمند توجه است}}",
-    "syncFlowIntro": "ضبط‌ها از دستگاه Omi شما به این تلفن منتقل و به‌صورت محلی ذخیره می‌شوند، سپس به سرور Omi بارگذاری می‌شوند تا متن‌برداری شده و به مکالمه تبدیل شوند.",
+    "syncFlowIntro": "ضبط‌ها از دستگاه شما به این تلفن منتقل و به‌صورت محلی ذخیره می‌شوند، سپس به سرور Omi بارگذاری می‌شوند تا رونویسی و به گفت‌وگو تبدیل شوند.",
     "syncStepUpload": "همگام‌سازی",
     "syncStepUploadDesc": "ضبط شما به سرور Omi فرستاده می‌شود",
     "syncStepProcess": "رونویسی",
@@ -10754,15 +10754,16 @@
     "syncFailureFootnote": "اگر پردازش ناموفق باشد، ضبط در همگام‌سازی بعدی به‌صورت خودکار دوباره امتحان می‌شود.",
     "syncStatusConversationCreated": "مکالمه ایجاد شد",
     "syncCardUploadingTitle": "در حال بارگذاری در Omi",
-    "syncCardDownloadingTitle": "در حال دانلود از Omi",
+    "syncCardDownloadingTitle": "در حال دانلود از دستگاه شما",
     "syncCardProgressOf": "{current} از {total}",
-    "syncStatusOnDevice": "در انتظار Omi",
-    "syncStatusDownloadingFromDevice": "در حال دانلود از Omi",
+    "syncStatusOnDevice": "روی دستگاه شما",
+    "syncStatusDownloadingFromDevice": "در حال دانلود از دستگاه شما",
     "newestFirst": "ابتدا جدیدترین‌ها",
     "noSyncedRecordingsYet": "هنوز ضبط همگام‌سازی‌شده‌ای وجود ندارد",
     "morePaymentMethodsComingSoon": "روش‌های پرداخت بیشتر به‌زودی",
     "@morePaymentMethodsComingSoon": {
         "description": "Placeholder card text shown under available payment methods"
     },
+    "syncProcessingBackgroundHint": "این کار در پس‌زمینه ادامه می‌یابد — می‌توانید این صفحه را ترک کنید.",
     "syncCardRateLimited": "محدودیت استفاده منصفانه به پایان رسید — همگام‌سازی به‌طور خودکار از سر گرفته می‌شود"
 }

@@ -9310,7 +9310,7 @@ class AppLocalizationsRo extends AppLocalizations {
   String get syncStatusBackedUp => 'Copiat de rezervă';
 
   @override
-  String get syncStatusBackingUp => 'Se face copia de rezervă…';
+  String get syncStatusBackingUp => 'Se sincronizează…';
 
   @override
   String get syncStatusWaiting => 'Așteaptă sincronizarea';
@@ -9375,7 +9375,7 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get syncFlowIntro =>
-      'Înregistrările sunt transferate de pe dispozitivul Omi pe acest telefon și stocate local, apoi încărcate pe serverul Omi, unde sunt transcrise și transformate în conversații.';
+      'Înregistrările sunt transferate de pe dispozitivul tău pe acest telefon și stocate local, apoi încărcate pe serverul Omi, unde sunt transcrise și transformate în conversații.';
 
   @override
   String get syncStepUpload => 'Sincronizare';
@@ -9406,7 +9406,7 @@ class AppLocalizationsRo extends AppLocalizations {
   String get syncCardUploadingTitle => 'Se încarcă pe Omi';
 
   @override
-  String get syncCardDownloadingTitle => 'Se descarcă de pe Omi';
+  String get syncCardDownloadingTitle => 'Se descarcă de pe dispozitivul tău';
 
   @override
   String syncCardProgressOf(int current, int total) {
@@ -9414,10 +9414,10 @@ class AppLocalizationsRo extends AppLocalizations {
   }
 
   @override
-  String get syncStatusOnDevice => 'Așteaptă pe Omi';
+  String get syncStatusOnDevice => 'Pe dispozitivul tău';
 
   @override
-  String get syncStatusDownloadingFromDevice => 'Se descarcă de pe Omi';
+  String get syncStatusDownloadingFromDevice => 'Se descarcă de pe dispozitivul tău';
 
   @override
   String get newestFirst => 'Cele mai noi primele';
@@ -9427,6 +9427,9 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get morePaymentMethodsComingSoon => 'În curând mai multe metode de plată';
+
+  @override
+  String get syncProcessingBackgroundHint => 'Acest lucru continuă în fundal — poți părăsi acest ecran.';
 
   @override
   String get syncCardRateLimited =>

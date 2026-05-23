@@ -9332,7 +9332,7 @@ class AppLocalizationsEl extends AppLocalizations {
   String get syncStatusBackedUp => 'Δημιουργήθηκε αντίγραφο';
 
   @override
-  String get syncStatusBackingUp => 'Δημιουργία αντιγράφου…';
+  String get syncStatusBackingUp => 'Συγχρονισμός…';
 
   @override
   String get syncStatusWaiting => 'Σε αναμονή συγχρονισμού';
@@ -9395,7 +9395,7 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get syncFlowIntro =>
-      'Οι ηχογραφήσεις μεταφέρονται από τη συσκευή Omi σας σε αυτό το τηλέφωνο και αποθηκεύονται τοπικά, στη συνέχεια ανεβαίνουν στον διακομιστή της Omi όπου απομαγνητοφωνούνται και μετατρέπονται σε συνομιλίες.';
+      'Οι ηχογραφήσεις μεταφέρονται από τη συσκευή σας σε αυτό το τηλέφωνο και αποθηκεύονται τοπικά, και στη συνέχεια μεταφορτώνονται στον διακομιστή του Omi, όπου απομαγνητοφωνούνται και μετατρέπονται σε συνομιλίες.';
 
   @override
   String get syncStepUpload => 'Συγχρονισμός';
@@ -9426,7 +9426,7 @@ class AppLocalizationsEl extends AppLocalizations {
   String get syncCardUploadingTitle => 'Μεταφόρτωση στο Omi';
 
   @override
-  String get syncCardDownloadingTitle => 'Λήψη από το Omi';
+  String get syncCardDownloadingTitle => 'Λήψη από τη συσκευή σας';
 
   @override
   String syncCardProgressOf(int current, int total) {
@@ -9434,10 +9434,10 @@ class AppLocalizationsEl extends AppLocalizations {
   }
 
   @override
-  String get syncStatusOnDevice => 'Σε αναμονή στο Omi';
+  String get syncStatusOnDevice => 'Στη συσκευή σας';
 
   @override
-  String get syncStatusDownloadingFromDevice => 'Λήψη από το Omi';
+  String get syncStatusDownloadingFromDevice => 'Λήψη από τη συσκευή σας';
 
   @override
   String get newestFirst => 'Νεότερες πρώτα';
@@ -9447,6 +9447,10 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get morePaymentMethodsComingSoon => 'Σύντομα περισσότεροι τρόποι πληρωμής';
+
+  @override
+  String get syncProcessingBackgroundHint =>
+      'Αυτό συνεχίζεται στο παρασκήνιο — μπορείτε να φύγετε από αυτήν την οθόνη.';
 
   @override
   String get syncCardRateLimited => 'Συμπληρώθηκε το όριο εύλογης χρήσης — ο συγχρονισμός θα συνεχιστεί αυτόματα';

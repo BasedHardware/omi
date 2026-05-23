@@ -9293,7 +9293,7 @@ class AppLocalizationsBe extends AppLocalizations {
   String get syncStatusBackedUp => 'Рэзервова захавана';
 
   @override
-  String get syncStatusBackingUp => 'Рэзервнае капіраванне…';
+  String get syncStatusBackingUp => 'Сінхранізацыя…';
 
   @override
   String get syncStatusWaiting => 'Чакае сінхранізацыі';
@@ -9360,7 +9360,7 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String get syncFlowIntro =>
-      'Запісы перадаюцца з вашай прылады Omi на гэты тэлефон і захоўваюцца лакальна, затым загружаюцца на сервер Omi, дзе яны транскрыбуюцца і ператвараюцца ў размовы.';
+      'Запісы перадаюцца з вашага прыбора на гэты тэлефон і захоўваюцца лакальна, а потым загружаюцца на сервер Omi, дзе яны транскрыбуюцца і ператвараюцца ў размовы.';
 
   @override
   String get syncStepUpload => 'Сінхранізацыя';
@@ -9391,7 +9391,7 @@ class AppLocalizationsBe extends AppLocalizations {
   String get syncCardUploadingTitle => 'Запампоўка ў Omi';
 
   @override
-  String get syncCardDownloadingTitle => 'Спампоўка з Omi';
+  String get syncCardDownloadingTitle => 'Загрузка з вашага прыбора';
 
   @override
   String syncCardProgressOf(int current, int total) {
@@ -9399,10 +9399,10 @@ class AppLocalizationsBe extends AppLocalizations {
   }
 
   @override
-  String get syncStatusOnDevice => 'Чакае на Omi';
+  String get syncStatusOnDevice => 'На вашым прыборы';
 
   @override
-  String get syncStatusDownloadingFromDevice => 'Спампоўка з Omi';
+  String get syncStatusDownloadingFromDevice => 'Загрузка з вашага прыбора';
 
   @override
   String get newestFirst => 'Спачатку новыя';
@@ -9412,6 +9412,9 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String get morePaymentMethodsComingSoon => 'Хутка з\'явяцца новыя спосабы аплаты';
+
+  @override
+  String get syncProcessingBackgroundHint => 'Працэс працягваецца ў фонавым рэжыме — вы можаце пакінуць гэты экран.';
 
   @override
   String get syncCardRateLimited => 'Дасягнуты ліміт сумленнага выкарыстання — сінхранізацыя адновіцца аўтаматычна';

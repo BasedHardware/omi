@@ -9271,7 +9271,7 @@ class AppLocalizationsPt extends AppLocalizations {
   String get syncStatusBackedUp => 'Backup concluído';
 
   @override
-  String get syncStatusBackingUp => 'Fazendo backup…';
+  String get syncStatusBackingUp => 'Sincronizando…';
 
   @override
   String get syncStatusWaiting => 'Aguardando para sincronizar';
@@ -9334,7 +9334,7 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get syncFlowIntro =>
-      'As gravações são transferidas do seu dispositivo Omi para este telefone e armazenadas localmente, depois enviadas para o servidor da Omi, onde são transcritas e transformadas em conversas.';
+      'As gravações são transferidas do seu dispositivo para este telefone e armazenadas localmente, depois enviadas para o servidor da Omi, onde são transcritas e transformadas em conversas.';
 
   @override
   String get syncStepUpload => 'Sincronizar';
@@ -9365,7 +9365,7 @@ class AppLocalizationsPt extends AppLocalizations {
   String get syncCardUploadingTitle => 'Enviando para Omi';
 
   @override
-  String get syncCardDownloadingTitle => 'Baixando de Omi';
+  String get syncCardDownloadingTitle => 'A transferir do seu dispositivo';
 
   @override
   String syncCardProgressOf(int current, int total) {
@@ -9373,10 +9373,10 @@ class AppLocalizationsPt extends AppLocalizations {
   }
 
   @override
-  String get syncStatusOnDevice => 'Aguardando no Omi';
+  String get syncStatusOnDevice => 'No seu dispositivo';
 
   @override
-  String get syncStatusDownloadingFromDevice => 'Baixando de Omi';
+  String get syncStatusDownloadingFromDevice => 'A transferir do seu dispositivo';
 
   @override
   String get newestFirst => 'Mais recentes primeiro';
@@ -9386,6 +9386,9 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get morePaymentMethodsComingSoon => 'Em breve mais métodos de pagamento';
+
+  @override
+  String get syncProcessingBackgroundHint => 'Isto continua em segundo plano — pode sair deste ecrã.';
 
   @override
   String get syncCardRateLimited => 'Limite de uso atingido — a sincronização será retomada automaticamente';

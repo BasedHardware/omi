@@ -10729,7 +10729,7 @@
     "recapDeletedSnackbar": "ಸಾರಾಂಶ ಅಳಿಸಲಾಗಿದೆ",
     "recapDeleteFailed": "ಸಾರಾಂಶವನ್ನು ಅಳಿಸಲು ಸಾಧ್ಯವಾಗಲಿಲ್ಲ. ನಂತರ ಪುನಃ ಪ್ರಯತ್ನಿಸಿ.",
     "syncStatusBackedUp": "ಬ್ಯಾಕಪ್ ಆಗಿದೆ",
-    "syncStatusBackingUp": "ಬ್ಯಾಕಪ್ ಆಗುತ್ತಿದೆ…",
+    "syncStatusBackingUp": "ಸಿಂಕ್ ಮಾಡುತ್ತಿದೆ…",
     "syncStatusWaiting": "ಸಿಂಕ್ ಆಗಲು ಕಾಯುತ್ತಿದೆ",
     "syncStatusRetrying": "ಪ್ರಕ್ರಿಯೆ ವಿಫಲ — ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಲಾಗುತ್ತಿದೆ",
     "syncStatusFailed": "ವಿಫಲ — Retry ಒತ್ತಿ",
@@ -10744,7 +10744,7 @@
     "syncCardProcessing": "Omi ಯಲ್ಲಿ ಪ್ರಕ್ರಿಯೆಗೊಳ್ಳುತ್ತಿದೆ…",
     "syncCardWaitingInternet": "ಇಂಟರ್ನೆಟ್‌ಗಾಗಿ ಕಾಯುತ್ತಿದೆ",
     "syncCardNeedsAttention": "{count, plural, one{1 ರೆಕಾರ್ಡಿಂಗ್‌ಗೆ ಗಮನ ಅಗತ್ಯ} other{{count} ರೆಕಾರ್ಡಿಂಗ್‌ಗಳಿಗೆ ಗಮನ ಅಗತ್ಯ}}",
-    "syncFlowIntro": "ರೆಕಾರ್ಡಿಂಗ್‌ಗಳು ನಿಮ್ಮ Omi ಸಾಧನದಿಂದ ಈ ಫೋನ್‌ಗೆ ವರ್ಗಾವಣೆಯಾಗಿ ಸ್ಥಳೀಯವಾಗಿ ಸಂಗ್ರಹವಾಗುತ್ತವೆ, ನಂತರ Omi ಸರ್ವರ್‌ಗೆ ಅಪ್‌ಲೋಡ್ ಆಗುತ್ತವೆ, ಅಲ್ಲಿ ಅವನ್ನು ಲಿಪ್ಯಂತರ ಮಾಡಿ ಸಂಭಾಷಣೆಗಳಾಗಿ ಪರಿವರ್ತಿಸಲಾಗುತ್ತದೆ.",
+    "syncFlowIntro": "ರೆಕಾರ್ಡಿಂಗ್‌ಗಳನ್ನು ನಿಮ್ಮ ಸಾಧನದಿಂದ ಈ ಫೋನ್‌ಗೆ ವರ್ಗಾಯಿಸಿ ಸ್ಥಳೀಯವಾಗಿ ಸಂಗ್ರಹಿಸಲಾಗುತ್ತದೆ, ನಂತರ Omi ನ ಸರ್ವರ್‌ಗೆ ಅಪ್‌ಲೋಡ್ ಮಾಡಲಾಗುತ್ತದೆ, ಅಲ್ಲಿ ಅವುಗಳನ್ನು ಲಿಪ್ಯಂತರ ಮಾಡಿ ಸಂಭಾಷಣೆಗಳಾಗಿ ಪರಿವರ್ತಿಸಲಾಗುತ್ತದೆ.",
     "syncStepUpload": "ಸಿಂಕ್",
     "syncStepUploadDesc": "ನಿಮ್ಮ ರೆಕಾರ್ಡಿಂಗ್ Omi ಸರ್ವರ್‌ಗೆ ಕಳುಹಿಸಲಾಗುತ್ತದೆ",
     "syncStepProcess": "ಪ್ರತಿಲಿಪಿ",
@@ -10754,15 +10754,16 @@
     "syncFailureFootnote": "ಪ್ರಕ್ರಿಯೆ ವಿಫಲವಾದರೆ, ಮುಂದಿನ ಸಿಂಕ್‌ನಲ್ಲಿ ರೆಕಾರ್ಡಿಂಗ್ ಸ್ವಯಂಚಾಲಿತವಾಗಿ ಮರುಪ್ರಯತ್ನವಾಗುತ್ತದೆ.",
     "syncStatusConversationCreated": "ಸಂಭಾಷಣೆ ರಚಿಸಲಾಗಿದೆ",
     "syncCardUploadingTitle": "Omi ಗೆ ಅಪ್‌ಲೋಡ್ ಮಾಡಲಾಗುತ್ತಿದೆ",
-    "syncCardDownloadingTitle": "Omi ಯಿಂದ ಡೌನ್‌ಲೋಡ್ ಆಗುತ್ತಿದೆ",
+    "syncCardDownloadingTitle": "ನಿಮ್ಮ ಸಾಧನದಿಂದ ಡೌನ್‌ಲೋಡ್ ಆಗುತ್ತಿದೆ",
     "syncCardProgressOf": "{total} ರಲ್ಲಿ {current}",
-    "syncStatusOnDevice": "Omi ನಲ್ಲಿ ಕಾಯುತ್ತಿದೆ",
-    "syncStatusDownloadingFromDevice": "Omi ಯಿಂದ ಡೌನ್‌ಲೋಡ್ ಆಗುತ್ತಿದೆ",
+    "syncStatusOnDevice": "ನಿಮ್ಮ ಸಾಧನದಲ್ಲಿ",
+    "syncStatusDownloadingFromDevice": "ನಿಮ್ಮ ಸಾಧನದಿಂದ ಡೌನ್‌ಲೋಡ್ ಆಗುತ್ತಿದೆ",
     "newestFirst": "ಹೊಸದು ಮೊದಲು",
     "noSyncedRecordingsYet": "ಇನ್ನೂ ಸಿಂಕ್ ಆದ ರೆಕಾರ್ಡಿಂಗ್‌ಗಳಿಲ್ಲ",
     "morePaymentMethodsComingSoon": "ಶೀಘ್ರದಲ್ಲೇ ಹೆಚ್ಚಿನ ಪಾವತಿ ವಿಧಾನಗಳು",
     "@morePaymentMethodsComingSoon": {
         "description": "Placeholder card text shown under available payment methods"
     },
+    "syncProcessingBackgroundHint": "ಇದು ಹಿನ್ನೆಲೆಯಲ್ಲಿ ಮುಂದುವರಿಯುತ್ತದೆ — ನೀವು ಈ ಪರದೆಯಿಂದ ಹೊರಹೋಗಬಹುದು.",
     "syncCardRateLimited": "ನ್ಯಾಯಯುತ ಬಳಕೆಯ ಮಿತಿ ತಲುಪಿದೆ — ಸಿಂಕ್ ಸ್ವಯಂಚಾಲಿತವಾಗಿ ಮುಂದುವರಿಯುತ್ತದೆ"
 }

@@ -9255,7 +9255,7 @@ class AppLocalizationsSk extends AppLocalizations {
   String get syncStatusBackedUp => 'Zálohované';
 
   @override
-  String get syncStatusBackingUp => 'Zálohovanie…';
+  String get syncStatusBackingUp => 'Synchronizuje sa…';
 
   @override
   String get syncStatusWaiting => 'Čaká na synchronizáciu';
@@ -9322,7 +9322,7 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get syncFlowIntro =>
-      'Nahrávky sa prenášajú z vášho zariadenia Omi do tohto telefónu a ukladajú sa lokálne, potom sa nahrávajú na server Omi, kde sa prepisujú a menia na konverzácie.';
+      'Nahrávky sa prenášajú z vášho zariadenia do tohto telefónu a ukladajú sa lokálne, potom sa nahrávajú na server Omi, kde sa prepisujú a menia na konverzácie.';
 
   @override
   String get syncStepUpload => 'Synchronizácia';
@@ -9352,7 +9352,7 @@ class AppLocalizationsSk extends AppLocalizations {
   String get syncCardUploadingTitle => 'Nahráva sa do Omi';
 
   @override
-  String get syncCardDownloadingTitle => 'Sťahuje sa z Omi';
+  String get syncCardDownloadingTitle => 'Sťahovanie z vášho zariadenia';
 
   @override
   String syncCardProgressOf(int current, int total) {
@@ -9360,10 +9360,10 @@ class AppLocalizationsSk extends AppLocalizations {
   }
 
   @override
-  String get syncStatusOnDevice => 'Čaká na Omi';
+  String get syncStatusOnDevice => 'Vo vašom zariadení';
 
   @override
-  String get syncStatusDownloadingFromDevice => 'Sťahuje sa z Omi';
+  String get syncStatusDownloadingFromDevice => 'Sťahovanie z vášho zariadenia';
 
   @override
   String get newestFirst => 'Najnovšie ako prvé';
@@ -9373,6 +9373,9 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get morePaymentMethodsComingSoon => 'Čoskoro ďalšie platobné metódy';
+
+  @override
+  String get syncProcessingBackgroundHint => 'Pokračuje to na pozadí — túto obrazovku môžete opustiť.';
 
   @override
   String get syncCardRateLimited => 'Dosiahol sa limit férového využitia — synchronizácia bude automaticky pokračovať';

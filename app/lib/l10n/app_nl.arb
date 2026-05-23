@@ -3026,7 +3026,7 @@
     "recapDeletedSnackbar": "Samenvatting verwijderd",
     "recapDeleteFailed": "Kan de samenvatting niet verwijderen. Probeer het later opnieuw.",
     "syncStatusBackedUp": "Geback-upt",
-    "syncStatusBackingUp": "Back-up maken…",
+    "syncStatusBackingUp": "Synchroniseren…",
     "syncStatusWaiting": "Wacht op synchronisatie",
     "syncStatusRetrying": "Verwerken mislukt — opnieuw proberen",
     "syncStatusFailed": "Mislukt — tik op Opnieuw",
@@ -3041,7 +3041,7 @@
     "syncCardProcessing": "Verwerken bij Omi…",
     "syncCardWaitingInternet": "Wachten op internet",
     "syncCardNeedsAttention": "{count, plural, one{1 opname vraagt aandacht} other{{count} opnamen vragen aandacht}}",
-    "syncFlowIntro": "Opnames worden van je Omi-apparaat naar deze telefoon overgezet en lokaal opgeslagen, en vervolgens geüpload naar de server van Omi, waar ze worden getranscribeerd en omgezet in gesprekken.",
+    "syncFlowIntro": "Opnamen worden van je apparaat naar deze telefoon overgezet en lokaal opgeslagen en vervolgens geüpload naar de server van Omi, waar ze worden getranscribeerd en omgezet in gesprekken.",
     "syncStepUpload": "Synchroniseren",
     "syncStepUploadDesc": "Je opname wordt naar Omi's server gestuurd",
     "syncStepProcess": "Transcriberen",
@@ -3051,10 +3051,10 @@
     "syncFailureFootnote": "Als de verwerking mislukt, wordt de opname automatisch opnieuw geprobeerd bij de volgende synchronisatie.",
     "syncStatusConversationCreated": "Gesprek aangemaakt",
     "syncCardUploadingTitle": "Uploaden naar Omi",
-    "syncCardDownloadingTitle": "Downloaden van Omi",
+    "syncCardDownloadingTitle": "Downloaden van je apparaat",
     "syncCardProgressOf": "{current} van {total}",
-    "syncStatusOnDevice": "Wacht op Omi",
-    "syncStatusDownloadingFromDevice": "Downloaden van Omi",
+    "syncStatusOnDevice": "Op je apparaat",
+    "syncStatusDownloadingFromDevice": "Downloaden van je apparaat",
     "newestFirst": "Nieuwste eerst",
     "noSyncedRecordingsYet": "Nog geen gesynchroniseerde opnames",
     "@lowBatteryAlertBody": {
@@ -3069,5 +3069,6 @@
     "@morePaymentMethodsComingSoon": {
         "description": "Placeholder card text shown under available payment methods"
     },
+    "syncProcessingBackgroundHint": "Dit gaat op de achtergrond door — je kunt dit scherm verlaten.",
     "syncCardRateLimited": "Gebruikslimiet bereikt — synchronisatie wordt automatisch hervat"
 }

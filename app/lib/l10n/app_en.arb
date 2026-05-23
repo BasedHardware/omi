@@ -11042,7 +11042,7 @@
         "description": "Snackbar shown when the recap delete API fails."
     },
     "syncStatusBackedUp": "Backed up",
-    "syncStatusBackingUp": "Backing up…",
+    "syncStatusBackingUp": "Syncing…",
     "syncStatusWaiting": "Waiting to sync",
     "syncStatusRetrying": "Couldn’t process — retrying",
     "syncStatusFailed": "Failed — tap Retry",
@@ -11073,7 +11073,7 @@
             }
         }
     },
-    "syncFlowIntro": "Recordings are transferred from your Omi device to this phone and stored locally, then uploaded to Omi's server where they're transcribed and turned into conversations.",
+    "syncFlowIntro": "Recordings are transferred from your device to this phone and stored locally, then uploaded to Omi's server where they're transcribed and turned into conversations.",
     "syncStepUpload": "Sync",
     "syncStepUploadDesc": "Your recording is sent to Omi's server",
     "syncStepProcess": "Transcribe",
@@ -11089,7 +11089,7 @@
     "@syncCardUploadingTitle": {
         "description": "Top status card: phase title when uploading audio batches to Omi (sub-line shows X of Y)"
     },
-    "syncCardDownloadingTitle": "Downloading from Omi",
+    "syncCardDownloadingTitle": "Downloading from your device",
     "@syncCardDownloadingTitle": {
         "description": "Top status card: phase title when downloading recordings from the Omi device over BLE/Wi-Fi"
     },
@@ -11105,11 +11105,11 @@
             }
         }
     },
-    "syncStatusOnDevice": "Waiting on Omi",
+    "syncStatusOnDevice": "On your device",
     "@syncStatusOnDevice": {
         "description": "Row subtitle for a recording still on the Omi device (SD-card or flash page) that has not been downloaded to the phone yet."
     },
-    "syncStatusDownloadingFromDevice": "Downloading from Omi",
+    "syncStatusDownloadingFromDevice": "Downloading from your device",
     "@syncStatusDownloadingFromDevice": {
         "description": "Row subtitle for a recording currently being transferred from the Omi device to the phone."
     },
@@ -11124,6 +11124,10 @@
     "morePaymentMethodsComingSoon": "More payment methods coming soon",
     "@morePaymentMethodsComingSoon": {
         "description": "Placeholder card text shown under available payment methods"
+    },
+    "syncProcessingBackgroundHint": "This continues in the background — you can leave this screen.",
+    "@syncProcessingBackgroundHint": {
+        "description": "Reassurance line on the manual sync status card during the cloud-processing phase, so users do not think sync is stuck when there is no visible progress."
     },
     "syncCardRateLimited": "Fair-use limit reached — syncing will resume automatically",
     "@syncCardRateLimited": {

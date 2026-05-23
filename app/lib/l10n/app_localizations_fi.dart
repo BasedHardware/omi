@@ -9266,7 +9266,7 @@ class AppLocalizationsFi extends AppLocalizations {
   String get syncStatusBackedUp => 'Varmuuskopioitu';
 
   @override
-  String get syncStatusBackingUp => 'Varmuuskopioidaan…';
+  String get syncStatusBackingUp => 'Synkronoidaan…';
 
   @override
   String get syncStatusWaiting => 'Odottaa synkronointia';
@@ -9329,7 +9329,7 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get syncFlowIntro =>
-      'Tallenteet siirretään Omi-laitteestasi tähän puhelimeen ja tallennetaan paikallisesti, minkä jälkeen ne ladataan Omin palvelimelle, jossa ne litteroidaan ja muunnetaan keskusteluiksi.';
+      'Tallenteet siirretään laitteeltasi tähän puhelimeen ja tallennetaan paikallisesti, minkä jälkeen ne ladataan Omin palvelimelle, jossa ne litteroidaan ja muunnetaan keskusteluiksi.';
 
   @override
   String get syncStepUpload => 'Synkronoi';
@@ -9360,7 +9360,7 @@ class AppLocalizationsFi extends AppLocalizations {
   String get syncCardUploadingTitle => 'Lähetetään Omiin';
 
   @override
-  String get syncCardDownloadingTitle => 'Ladataan Omista';
+  String get syncCardDownloadingTitle => 'Ladataan laitteeltasi';
 
   @override
   String syncCardProgressOf(int current, int total) {
@@ -9368,10 +9368,10 @@ class AppLocalizationsFi extends AppLocalizations {
   }
 
   @override
-  String get syncStatusOnDevice => 'Odottaa Omissa';
+  String get syncStatusOnDevice => 'Laitteellasi';
 
   @override
-  String get syncStatusDownloadingFromDevice => 'Ladataan Omista';
+  String get syncStatusDownloadingFromDevice => 'Ladataan laitteeltasi';
 
   @override
   String get newestFirst => 'Uusimmat ensin';
@@ -9381,6 +9381,9 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get morePaymentMethodsComingSoon => 'Lisää maksutapoja tulossa pian';
+
+  @override
+  String get syncProcessingBackgroundHint => 'Tämä jatkuu taustalla — voit poistua tästä näkymästä.';
 
   @override
   String get syncCardRateLimited => 'Kohtuullisen käytön raja saavutettu — synkronointi jatkuu automaattisesti';

@@ -2995,7 +2995,7 @@
     "recapDeletedSnackbar": "Shrnutí smazáno",
     "recapDeleteFailed": "Shrnutí se nepodařilo smazat. Zkuste to znovu později.",
     "syncStatusBackedUp": "Zálohováno",
-    "syncStatusBackingUp": "Zálohování…",
+    "syncStatusBackingUp": "Synchronizace…",
     "syncStatusWaiting": "Čeká na synchronizaci",
     "syncStatusRetrying": "Zpracování selhalo — opakuji",
     "syncStatusFailed": "Selhalo — klepněte na Opakovat",
@@ -3010,7 +3010,7 @@
     "syncCardProcessing": "Zpracování v Omi…",
     "syncCardWaitingInternet": "Čekání na internet",
     "syncCardNeedsAttention": "{count, plural, one{1 nahrávka vyžaduje pozornost} few{{count} nahrávky vyžadují pozornost} many{{count} nahrávek vyžaduje pozornost} other{{count} nahrávek vyžaduje pozornost}}",
-    "syncFlowIntro": "Nahrávky se přenášejí z vašeho zařízení Omi do tohoto telefonu a ukládají se lokálně, poté se nahrávají na server Omi, kde se přepisují a převádějí na konverzace.",
+    "syncFlowIntro": "Nahrávky se přenášejí z vašeho zařízení do tohoto telefonu a ukládají se místně, poté se nahrávají na server Omi, kde se přepisují a mění v konverzace.",
     "syncStepUpload": "Synchronizace",
     "syncStepUploadDesc": "Vaše nahrávka se odesílá na server Omi",
     "syncStepProcess": "Přepis",
@@ -3020,10 +3020,10 @@
     "syncFailureFootnote": "Pokud zpracování selže, nahrávka se při příští synchronizaci automaticky zopakuje.",
     "syncStatusConversationCreated": "Konverzace vytvořena",
     "syncCardUploadingTitle": "Nahrávání do Omi",
-    "syncCardDownloadingTitle": "Stahování z Omi",
+    "syncCardDownloadingTitle": "Stahování z vašeho zařízení",
     "syncCardProgressOf": "{current} z {total}",
-    "syncStatusOnDevice": "Čeká na Omi",
-    "syncStatusDownloadingFromDevice": "Stahování z Omi",
+    "syncStatusOnDevice": "Ve vašem zařízení",
+    "syncStatusDownloadingFromDevice": "Stahování z vašeho zařízení",
     "newestFirst": "Nejnovější první",
     "noSyncedRecordingsYet": "Zatím žádné synchronizované nahrávky",
     "@lowBatteryAlertBody": {
@@ -3038,5 +3038,6 @@
     "@morePaymentMethodsComingSoon": {
         "description": "Placeholder card text shown under available payment methods"
     },
+    "syncProcessingBackgroundHint": "Pokračuje to na pozadí — tuto obrazovku můžete opustit.",
     "syncCardRateLimited": "Byl dosažen limit férového využití — synchronizace bude automaticky pokračovat"
 }

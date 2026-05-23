@@ -3122,7 +3122,7 @@
     "recapDeletedSnackbar": "Összefoglaló törölve",
     "recapDeleteFailed": "Nem sikerült törölni az összefoglalót. Próbáld újra később.",
     "syncStatusBackedUp": "Mentve",
-    "syncStatusBackingUp": "Biztonsági mentés…",
+    "syncStatusBackingUp": "Szinkronizálás…",
     "syncStatusWaiting": "Szinkronizálásra vár",
     "syncStatusRetrying": "A feldolgozás sikertelen — újrapróbálkozás",
     "syncStatusFailed": "Sikertelen — koppintson az Újra gombra",
@@ -3137,7 +3137,7 @@
     "syncCardProcessing": "Feldolgozás az Omiban…",
     "syncCardWaitingInternet": "Internetkapcsolatra várva",
     "syncCardNeedsAttention": "{count, plural, one{1 felvétel figyelmet igényel} other{{count} felvétel figyelmet igényel}}",
-    "syncFlowIntro": "A felvételek átkerülnek az Omi eszközödről erre a telefonra, és helyileg tárolódnak, majd feltöltődnek az Omi szerverére, ahol átírják és beszélgetésekké alakítják őket.",
+    "syncFlowIntro": "A felvételek az eszközödről erre a telefonra kerülnek át, és helyben tárolódnak, majd feltöltődnek az Omi szerverére, ahol leiratot készít belőlük, és beszélgetésekké alakítja őket.",
     "syncStepUpload": "Szinkronizálás",
     "syncStepUploadDesc": "A felvételed az Omi szerverére kerül",
     "syncStepProcess": "Átírás",
@@ -3147,10 +3147,10 @@
     "syncFailureFootnote": "Ha a feldolgozás sikertelen, a felvételt a következő szinkronizálásnál automatikusan újrapróbáljuk.",
     "syncStatusConversationCreated": "Beszélgetés létrehozva",
     "syncCardUploadingTitle": "Feltöltés az Omira",
-    "syncCardDownloadingTitle": "Letöltés az Omiról",
+    "syncCardDownloadingTitle": "Letöltés az eszközödről",
     "syncCardProgressOf": "{current} / {total}",
-    "syncStatusOnDevice": "Az Omin várakozik",
-    "syncStatusDownloadingFromDevice": "Letöltés az Omiról",
+    "syncStatusOnDevice": "Az eszközödön",
+    "syncStatusDownloadingFromDevice": "Letöltés az eszközödről",
     "newestFirst": "Legújabbak elöl",
     "noSyncedRecordingsYet": "Még nincsenek szinkronizált felvételek",
     "@lowBatteryAlertBody": {
@@ -3165,5 +3165,6 @@
     "@morePaymentMethodsComingSoon": {
         "description": "Placeholder card text shown under available payment methods"
     },
+    "syncProcessingBackgroundHint": "Ez a háttérben folytatódik — elhagyhatja ezt a képernyőt.",
     "syncCardRateLimited": "Elérted a méltányos használati korlátot — a szinkronizálás automatikusan folytatódik"
 }

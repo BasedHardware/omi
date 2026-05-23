@@ -9117,7 +9117,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get syncStatusBackedUp => 'バックアップ済み';
 
   @override
-  String get syncStatusBackingUp => 'バックアップ中…';
+  String get syncStatusBackingUp => '同期中…';
 
   @override
   String get syncStatusWaiting => '同期を待機中';
@@ -9176,7 +9176,7 @@ class AppLocalizationsJa extends AppLocalizations {
   }
 
   @override
-  String get syncFlowIntro => '録音はOmiデバイスからこの電話に転送されてローカルに保存され、その後Omiのサーバーにアップロードされて文字起こしされ、会話に変換されます。';
+  String get syncFlowIntro => '録音はデバイスからこの電話に転送されてローカルに保存され、その後 Omi のサーバーにアップロードされて文字起こしされ、会話に変換されます。';
 
   @override
   String get syncStepUpload => '同期';
@@ -9206,7 +9206,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get syncCardUploadingTitle => 'Omiへアップロード中';
 
   @override
-  String get syncCardDownloadingTitle => 'Omiからダウンロード中';
+  String get syncCardDownloadingTitle => 'デバイスからダウンロード中';
 
   @override
   String syncCardProgressOf(int current, int total) {
@@ -9214,10 +9214,10 @@ class AppLocalizationsJa extends AppLocalizations {
   }
 
   @override
-  String get syncStatusOnDevice => 'Omiで待機中';
+  String get syncStatusOnDevice => 'デバイス上';
 
   @override
-  String get syncStatusDownloadingFromDevice => 'Omiからダウンロード中';
+  String get syncStatusDownloadingFromDevice => 'デバイスからダウンロード中';
 
   @override
   String get newestFirst => '新しい順';
@@ -9227,6 +9227,9 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get morePaymentMethodsComingSoon => '他の支払い方法を近日追加予定';
+
+  @override
+  String get syncProcessingBackgroundHint => 'この処理はバックグラウンドで続きます — この画面から移動してかまいません。';
 
   @override
   String get syncCardRateLimited => '利用上限に達しました — 同期は自動的に再開されます';

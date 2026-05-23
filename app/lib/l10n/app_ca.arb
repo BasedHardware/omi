@@ -2995,7 +2995,7 @@
     "recapDeletedSnackbar": "Resum esborrat",
     "recapDeleteFailed": "No s'ha pogut esborrar el resum. Torna-ho a provar més tard.",
     "syncStatusBackedUp": "Còpia feta",
-    "syncStatusBackingUp": "Fent còpia…",
+    "syncStatusBackingUp": "Sincronitzant…",
     "syncStatusWaiting": "Esperant a sincronitzar",
     "syncStatusRetrying": "No s'ha pogut processar — reintentant",
     "syncStatusFailed": "Ha fallat — toca Reintenta",
@@ -3010,7 +3010,7 @@
     "syncCardProcessing": "Processant a Omi…",
     "syncCardWaitingInternet": "Esperant connexió",
     "syncCardNeedsAttention": "{count, plural, one{1 gravació requereix atenció} other{{count} gravacions requereixen atenció}}",
-    "syncFlowIntro": "Els enregistraments es transfereixen del teu dispositiu Omi a aquest telèfon i s'emmagatzemen localment, després es pugen al servidor d'Omi on es transcriuen i es converteixen en converses.",
+    "syncFlowIntro": "Els enregistraments es transfereixen del teu dispositiu a aquest telèfon i s'emmagatzemen localment, i després es pugen al servidor d'Omi, on es transcriuen i es converteixen en converses.",
     "syncStepUpload": "Sincronitza",
     "syncStepUploadDesc": "La teva gravació s'envia al servidor d'Omi",
     "syncStepProcess": "Transcripció",
@@ -3020,10 +3020,10 @@
     "syncFailureFootnote": "Si el processament falla, la gravació es torna a intentar automàticament a la propera sincronització.",
     "syncStatusConversationCreated": "Conversa creada",
     "syncCardUploadingTitle": "Pujant a Omi",
-    "syncCardDownloadingTitle": "Baixant des d'Omi",
+    "syncCardDownloadingTitle": "S'està baixant del teu dispositiu",
     "syncCardProgressOf": "{current} de {total}",
-    "syncStatusOnDevice": "Esperant a Omi",
-    "syncStatusDownloadingFromDevice": "Baixant des d'Omi",
+    "syncStatusOnDevice": "Al teu dispositiu",
+    "syncStatusDownloadingFromDevice": "S'està baixant del teu dispositiu",
     "newestFirst": "Més recents primer",
     "noSyncedRecordingsYet": "Encara no hi ha enregistraments sincronitzats",
     "@lowBatteryAlertBody": {
@@ -3038,5 +3038,6 @@
     "@morePaymentMethodsComingSoon": {
         "description": "Placeholder card text shown under available payment methods"
     },
+    "syncProcessingBackgroundHint": "Això continua en segon pla — pots sortir d'aquesta pantalla.",
     "syncCardRateLimited": "S'ha assolit el límit d'ús just — la sincronització es reprendrà automàticament"
 }

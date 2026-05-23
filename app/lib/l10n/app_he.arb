@@ -10729,7 +10729,7 @@
     "recapDeletedSnackbar": "הסיכום נמחק",
     "recapDeleteFailed": "לא ניתן היה למחוק את הסיכום. נסה שוב מאוחר יותר.",
     "syncStatusBackedUp": "גובה",
-    "syncStatusBackingUp": "מגבה…",
+    "syncStatusBackingUp": "מסנכרן…",
     "syncStatusWaiting": "ממתין לסנכרון",
     "syncStatusRetrying": "העיבוד נכשל — מנסה שוב",
     "syncStatusFailed": "נכשל — הקש על נסה שוב",
@@ -10744,7 +10744,7 @@
     "syncCardProcessing": "בעיבוד ב-Omi…",
     "syncCardWaitingInternet": "ממתין לאינטרנט",
     "syncCardNeedsAttention": "{count, plural, one{הקלטה אחת דורשת תשומת לב} two{2 הקלטות דורשות תשומת לב} many{{count} הקלטות דורשות תשומת לב} other{{count} הקלטות דורשות תשומת לב}}",
-    "syncFlowIntro": "ההקלטות מועברות ממכשיר Omi שלך לטלפון הזה ונשמרות מקומית, ולאחר מכן מועלות לשרת של Omi שם הן מתומללות והופכות לשיחות.",
+    "syncFlowIntro": "ההקלטות מועברות מהמכשיר שלך לטלפון הזה ונשמרות מקומית, ולאחר מכן מועלות לשרת של Omi, שם הן מתומללות והופכות לשיחות.",
     "syncStepUpload": "סנכרון",
     "syncStepUploadDesc": "ההקלטה שלך נשלחת לשרת של Omi",
     "syncStepProcess": "תמלול",
@@ -10754,15 +10754,16 @@
     "syncFailureFootnote": "אם העיבוד נכשל, ההקלטה תנוסה שוב באופן אוטומטי בסנכרון הבא.",
     "syncStatusConversationCreated": "השיחה נוצרה",
     "syncCardUploadingTitle": "מעלה ל-Omi",
-    "syncCardDownloadingTitle": "מוריד מ-Omi",
+    "syncCardDownloadingTitle": "מוריד מהמכשיר שלך",
     "syncCardProgressOf": "{current} מתוך {total}",
-    "syncStatusOnDevice": "ממתין ב-Omi",
-    "syncStatusDownloadingFromDevice": "מוריד מ-Omi",
+    "syncStatusOnDevice": "במכשיר שלך",
+    "syncStatusDownloadingFromDevice": "מוריד מהמכשיר שלך",
     "newestFirst": "החדשות ביותר תחילה",
     "noSyncedRecordingsYet": "אין עדיין הקלטות מסונכרנות",
     "morePaymentMethodsComingSoon": "אמצעי תשלום נוספים בקרוב",
     "@morePaymentMethodsComingSoon": {
         "description": "Placeholder card text shown under available payment methods"
     },
+    "syncProcessingBackgroundHint": "התהליך נמשך ברקע — אפשר לצאת מהמסך הזה.",
     "syncCardRateLimited": "הגעת למגבלת השימוש ההוגן — הסנכרון יתחדש באופן אוטומטי"
 }

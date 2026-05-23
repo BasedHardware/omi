@@ -405,9 +405,10 @@ class TestNotificationWebhookWiring:
         with open(os.path.join(backend_dir, 'utils', 'other', 'notifications.py')) as f:
             src = f.read()
 
-        # Verify the exact wiring pattern
-        assert 'storage_executor.submit(asyncio.run, day_summary_webhook(' in src
+        # Verify the exact wiring pattern (postprocess_executor, not storage_executor, #7387)
+        assert 'postprocess_executor.submit(asyncio.run, day_summary_webhook(' in src
         assert 'critical_executor' not in src
+        assert 'storage_executor' not in src
 
 
 class TestPrivateCloudQueueCap:

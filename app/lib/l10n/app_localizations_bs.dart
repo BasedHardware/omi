@@ -9291,7 +9291,7 @@ class AppLocalizationsBs extends AppLocalizations {
   String get syncStatusBackedUp => 'Sigurnosno kopirano';
 
   @override
-  String get syncStatusBackingUp => 'Pravljenje kopije…';
+  String get syncStatusBackingUp => 'Sinhronizujem…';
 
   @override
   String get syncStatusWaiting => 'Čeka sinkronizaciju';
@@ -9356,7 +9356,7 @@ class AppLocalizationsBs extends AppLocalizations {
 
   @override
   String get syncFlowIntro =>
-      'Snimci se prenose s vašeg Omi uređaja na ovaj telefon i pohranjuju lokalno, a zatim se učitavaju na Omijev server gdje se transkribuju i pretvaraju u razgovore.';
+      'Snimci se prenose s vašeg uređaja na ovaj telefon i pohranjuju lokalno, a zatim učitavaju na Omijev server gdje se transkribiraju i pretvaraju u razgovore.';
 
   @override
   String get syncStepUpload => 'Sinkronizacija';
@@ -9386,7 +9386,7 @@ class AppLocalizationsBs extends AppLocalizations {
   String get syncCardUploadingTitle => 'Slanje na Omi';
 
   @override
-  String get syncCardDownloadingTitle => 'Preuzimanje sa Omi';
+  String get syncCardDownloadingTitle => 'Preuzimanje s vašeg uređaja';
 
   @override
   String syncCardProgressOf(int current, int total) {
@@ -9394,10 +9394,10 @@ class AppLocalizationsBs extends AppLocalizations {
   }
 
   @override
-  String get syncStatusOnDevice => 'Čeka na Omi';
+  String get syncStatusOnDevice => 'Na vašem uređaju';
 
   @override
-  String get syncStatusDownloadingFromDevice => 'Preuzimanje sa Omi';
+  String get syncStatusDownloadingFromDevice => 'Preuzimanje s vašeg uređaja';
 
   @override
   String get newestFirst => 'Prvo najnoviji';
@@ -9407,6 +9407,9 @@ class AppLocalizationsBs extends AppLocalizations {
 
   @override
   String get morePaymentMethodsComingSoon => 'Uskoro stižu novi načini plaćanja';
+
+  @override
+  String get syncProcessingBackgroundHint => 'Ovo se nastavlja u pozadini — možete napustiti ovaj ekran.';
 
   @override
   String get syncCardRateLimited => 'Dostignut je limit poštene upotrebe — sinkronizacija će se automatski nastaviti';

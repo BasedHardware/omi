@@ -3061,7 +3061,7 @@
     "recapDeletedSnackbar": "Özet silindi",
     "recapDeleteFailed": "Özet silinemedi. Daha sonra tekrar deneyin.",
     "syncStatusBackedUp": "Yedeklendi",
-    "syncStatusBackingUp": "Yedekleniyor…",
+    "syncStatusBackingUp": "Senkronize ediliyor…",
     "syncStatusWaiting": "Eşitleme bekleniyor",
     "syncStatusRetrying": "İşlenemedi — yeniden deneniyor",
     "syncStatusFailed": "Başarısız — Yeniden Dene'ye dokunun",
@@ -3076,7 +3076,7 @@
     "syncCardProcessing": "Omi'de işleniyor…",
     "syncCardWaitingInternet": "İnternet bekleniyor",
     "syncCardNeedsAttention": "{count, plural, one{1 kayıt ilgi bekliyor} other{{count} kayıt ilgi bekliyor}}",
-    "syncFlowIntro": "Kayıtlar Omi cihazınızdan bu telefona aktarılır ve yerel olarak saklanır, ardından Omi'nin sunucusuna yüklenerek metne dönüştürülür ve konuşmalara çevrilir.",
+    "syncFlowIntro": "Kayıtlar cihazınızdan bu telefona aktarılıp yerel olarak saklanır, ardından Omi'nin sunucusuna yüklenir; burada deşifre edilip görüşmelere dönüştürülür.",
     "syncStepUpload": "Eşitle",
     "syncStepUploadDesc": "Kaydınız Omi'nin sunucusuna gönderilir",
     "syncStepProcess": "Yazıya dök",
@@ -3086,10 +3086,10 @@
     "syncFailureFootnote": "İşlem başarısız olursa, kayıt bir sonraki eşitlemede otomatik olarak yeniden denenir.",
     "syncStatusConversationCreated": "Konuşma oluşturuldu",
     "syncCardUploadingTitle": "Omi'ye yükleniyor",
-    "syncCardDownloadingTitle": "Omi'den indiriliyor",
+    "syncCardDownloadingTitle": "Cihazınızdan indiriliyor",
     "syncCardProgressOf": "{total} / {current}",
-    "syncStatusOnDevice": "Omi'de bekliyor",
-    "syncStatusDownloadingFromDevice": "Omi'den indiriliyor",
+    "syncStatusOnDevice": "Cihazınızda",
+    "syncStatusDownloadingFromDevice": "Cihazınızdan indiriliyor",
     "newestFirst": "Önce en yeniler",
     "noSyncedRecordingsYet": "Henüz senkronize edilmiş kayıt yok",
     "@lowBatteryAlertBody": {
@@ -3104,5 +3104,6 @@
     "@morePaymentMethodsComingSoon": {
         "description": "Placeholder card text shown under available payment methods"
     },
+    "syncProcessingBackgroundHint": "Bu işlem arka planda sürer — bu ekrandan ayrılabilirsiniz.",
     "syncCardRateLimited": "Adil kullanım sınırına ulaşıldı — eşitleme otomatik olarak sürdürülecek"
 }
