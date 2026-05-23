@@ -24,6 +24,7 @@ class SyncRateLimiter extends ChangeNotifier {
   static const String _prefKeyUntil = 'syncRateLimitedUntilMs';
   static const String _prefKeyReason = 'syncRateLimitedReason';
   static const int _defaultCooldownSeconds = 1800; // 30 minutes
+  static const int _maxCooldownSeconds = 24 * 60 * 60; // hard ceiling — guard against a misconfigured Retry-After
 
   bool get isLimited {
     final until = SharedPreferencesUtil().getInt(_prefKeyUntil);
@@ -45,7 +46,9 @@ class SyncRateLimiter extends ChangeNotifier {
   /// otherwise falls back to a 30-minute cooldown. [reason] picks the
   /// user-facing message ("Fair-use limit reached" vs "Backend busy").
   void markLimited({int? retryAfterSeconds, RateLimitReason reason = RateLimitReason.rateLimit}) {
-    final secs = (retryAfterSeconds != null && retryAfterSeconds > 0) ? retryAfterSeconds : _defaultCooldownSeconds;
+    final requested =
+        (retryAfterSeconds != null && retryAfterSeconds > 0) ? retryAfterSeconds : _defaultCooldownSeconds;
+    final secs = requested > _maxCooldownSeconds ? _maxCooldownSeconds : requested;
     final untilMs = DateTime.now().add(Duration(seconds: secs)).millisecondsSinceEpoch;
     SharedPreferencesUtil().saveInt(_prefKeyUntil, untilMs);
     SharedPreferencesUtil().saveString(_prefKeyReason, reason.name);
