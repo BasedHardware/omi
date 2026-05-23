@@ -1,6 +1,15 @@
 import 'package:flutter/foundation.dart';
 import 'package:omi/backend/preferences.dart';
 
+/// Why uploads are currently paused.
+/// - [rateLimit]   : server returned HTTP 429 (fair-use cap).
+/// - [backendBusy] : server marked a job `failed` with the stale-guard error
+///                   ("Job timed out (background worker likely died)") — i.e.
+///                   the job sat queued because the backend pipeline is
+///                   saturated and never picked it up. Not the user's fault;
+///                   no `retryCount` bump and the UI surfaces this distinctly.
+enum RateLimitReason { rateLimit, backendBusy }
+
 /// Account-global cooldown for fair-use throttling (HTTP 429) on sync uploads.
 ///
 /// When the server rate-limits uploads, the app must stop firing requests
@@ -12,31 +21,41 @@ class SyncRateLimiter extends ChangeNotifier {
   SyncRateLimiter._();
   static final SyncRateLimiter instance = SyncRateLimiter._();
 
-  static const String _prefKey = 'syncRateLimitedUntilMs';
+  static const String _prefKeyUntil = 'syncRateLimitedUntilMs';
+  static const String _prefKeyReason = 'syncRateLimitedReason';
   static const int _defaultCooldownSeconds = 1800; // 30 minutes
 
   bool get isLimited {
-    final until = SharedPreferencesUtil().getInt(_prefKey);
+    final until = SharedPreferencesUtil().getInt(_prefKeyUntil);
     return until > 0 && DateTime.now().millisecondsSinceEpoch < until;
   }
 
   DateTime? get until {
-    final ms = SharedPreferencesUtil().getInt(_prefKey);
+    final ms = SharedPreferencesUtil().getInt(_prefKeyUntil);
     return ms > 0 ? DateTime.fromMillisecondsSinceEpoch(ms) : null;
   }
 
+  RateLimitReason? get reason {
+    if (!isLimited) return null;
+    final name = SharedPreferencesUtil().getString(_prefKeyReason);
+    return RateLimitReason.values.asNameMap()[name] ?? RateLimitReason.rateLimit;
+  }
+
   /// Pause uploads. Honors the server's Retry-After (seconds) when present,
-  /// otherwise falls back to a 30-minute cooldown.
-  void markLimited({int? retryAfterSeconds}) {
+  /// otherwise falls back to a 30-minute cooldown. [reason] picks the
+  /// user-facing message ("Fair-use limit reached" vs "Backend busy").
+  void markLimited({int? retryAfterSeconds, RateLimitReason reason = RateLimitReason.rateLimit}) {
     final secs = (retryAfterSeconds != null && retryAfterSeconds > 0) ? retryAfterSeconds : _defaultCooldownSeconds;
     final untilMs = DateTime.now().add(Duration(seconds: secs)).millisecondsSinceEpoch;
-    SharedPreferencesUtil().saveInt(_prefKey, untilMs);
+    SharedPreferencesUtil().saveInt(_prefKeyUntil, untilMs);
+    SharedPreferencesUtil().saveString(_prefKeyReason, reason.name);
     notifyListeners();
   }
 
   /// Clear the cooldown after any successful upload.
   void clear() {
-    SharedPreferencesUtil().saveInt(_prefKey, 0);
+    SharedPreferencesUtil().saveInt(_prefKeyUntil, 0);
+    SharedPreferencesUtil().saveString(_prefKeyReason, '');
     notifyListeners();
   }
 }
