@@ -112,7 +112,7 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
     final hasAnyRecording = p.displaySortedWals.isNotEmpty;
 
     final isActive = s.isSyncing || s.isFetchingConversations;
-    final bool showSpinner = isActive || uploaded > 0;
+    final bool showSpinner = (isActive || uploaded > 0) && !p.isRateLimited;
 
     String title;
     String? progressText;
