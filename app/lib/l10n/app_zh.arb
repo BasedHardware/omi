@@ -3092,5 +3092,6 @@
         "description": "Placeholder card text shown under available payment methods"
     },
     "syncProcessingBackgroundHint": "此过程会在后台继续 — 你可以离开此屏幕。",
-    "syncCardRateLimited": "已达到合理使用上限 — 同步将自动恢复"
+    "syncCardRateLimited": "已达到合理使用上限 — 同步将自动恢复",
+    "syncCardBackendBusy": "Omi 服务器繁忙 — 容量恢复后将自动同步你的录音"
 }

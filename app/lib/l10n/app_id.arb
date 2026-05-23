@@ -3112,5 +3112,6 @@
         "description": "Placeholder card text shown under available payment methods"
     },
     "syncProcessingBackgroundHint": "Ini berlanjut di latar belakang — Anda dapat meninggalkan layar ini.",
-    "syncCardRateLimited": "Batas penggunaan wajar tercapai — sinkronisasi akan dilanjutkan secara otomatis"
+    "syncCardRateLimited": "Batas penggunaan wajar tercapai — sinkronisasi akan dilanjutkan secara otomatis",
+    "syncCardBackendBusy": "Server Omi sedang sibuk — rekamanmu akan disinkronkan setelah kapasitas tersedia kembali"
 }

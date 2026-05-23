@@ -3038,5 +3038,6 @@
         "description": "Placeholder card text shown under available payment methods"
     },
     "syncProcessingBackgroundHint": "Das läuft im Hintergrund weiter — du kannst diesen Bildschirm verlassen.",
-    "syncCardRateLimited": "Nutzungslimit erreicht — die Synchronisierung wird automatisch fortgesetzt"
+    "syncCardRateLimited": "Nutzungslimit erreicht — die Synchronisierung wird automatisch fortgesetzt",
+    "syncCardBackendBusy": "Omis Server sind ausgelastet — deine Aufnahmen werden synchronisiert, sobald wieder Kapazität verfügbar ist"
 }

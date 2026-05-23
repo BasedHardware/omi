@@ -3070,5 +3070,6 @@
         "description": "Placeholder card text shown under available payment methods"
     },
     "syncProcessingBackgroundHint": "Це триває у фоновому режимі — ви можете залишити цей екран.",
-    "syncCardRateLimited": "Досягнуто ліміт використання — синхронізація відновиться автоматично"
+    "syncCardRateLimited": "Досягнуто ліміт використання — синхронізація відновиться автоматично",
+    "syncCardBackendBusy": "Сервери Omi перевантажені — ваші записи синхронізуються, щойно з'явиться доступна потужність"
 }

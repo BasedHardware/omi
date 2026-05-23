@@ -3079,5 +3079,6 @@
         "description": "Placeholder card text shown under available payment methods"
     },
     "syncProcessingBackgroundHint": "Det fortsætter i baggrunden — du kan forlade denne skærm.",
-    "syncCardRateLimited": "Grænsen for rimelig brug er nået — synkroniseringen genoptages automatisk"
+    "syncCardRateLimited": "Grænsen for rimelig brug er nået — synkroniseringen genoptages automatisk",
+    "syncCardBackendBusy": "Omis servere er travle — dine optagelser synkroniseres, når der igen er kapacitet"
 }

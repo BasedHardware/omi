@@ -3039,5 +3039,6 @@
         "description": "Placeholder card text shown under available payment methods"
     },
     "syncProcessingBackgroundHint": "Això continua en segon pla — pots sortir d'aquesta pantalla.",
-    "syncCardRateLimited": "S'ha assolit el límit d'ús just — la sincronització es reprendrà automàticament"
+    "syncCardRateLimited": "S'ha assolit el límit d'ús just — la sincronització es reprendrà automàticament",
+    "syncCardBackendBusy": "Els servidors d'Omi estan saturats — els enregistraments se sincronitzaran quan hi hagi capacitat disponible"
 }

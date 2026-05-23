@@ -3070,5 +3070,6 @@
         "description": "Placeholder card text shown under available payment methods"
     },
     "syncProcessingBackgroundHint": "Tai tęsiasi fone — galite išeiti iš šio ekrano.",
-    "syncCardRateLimited": "Pasiekta sąžiningo naudojimo riba — sinchronizavimas bus tęsiamas automatiškai"
+    "syncCardRateLimited": "Pasiekta sąžiningo naudojimo riba — sinchronizavimas bus tęsiamas automatiškai",
+    "syncCardBackendBusy": "Omi serveriai užimti — jūsų įrašai bus sinchronizuoti, kai atsilaisvins pajėgumai"
 }

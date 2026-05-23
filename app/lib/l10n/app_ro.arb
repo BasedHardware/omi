@@ -3070,5 +3070,6 @@
         "description": "Placeholder card text shown under available payment methods"
     },
     "syncProcessingBackgroundHint": "Acest lucru continuă în fundal — poți părăsi acest ecran.",
-    "syncCardRateLimited": "Limita de utilizare echitabilă a fost atinsă — sincronizarea va fi reluată automat"
+    "syncCardRateLimited": "Limita de utilizare echitabilă a fost atinsă — sincronizarea va fi reluată automat",
+    "syncCardBackendBusy": "Serverele Omi sunt aglomerate — înregistrările tale se vor sincroniza imediat ce se eliberează capacitate"
 }

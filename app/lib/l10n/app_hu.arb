@@ -3166,5 +3166,6 @@
         "description": "Placeholder card text shown under available payment methods"
     },
     "syncProcessingBackgroundHint": "Ez a háttérben folytatódik — elhagyhatja ezt a képernyőt.",
-    "syncCardRateLimited": "Elérted a méltányos használati korlátot — a szinkronizálás automatikusan folytatódik"
+    "syncCardRateLimited": "Elérted a méltányos használati korlátot — a szinkronizálás automatikusan folytatódik",
+    "syncCardBackendBusy": "Az Omi szerverei leterheltek — a felvételeid szinkronizálódnak, amint felszabadul a kapacitás"
 }

@@ -3070,5 +3070,6 @@
         "description": "Placeholder card text shown under available payment methods"
     },
     "syncProcessingBackgroundHint": "Dit gaat op de achtergrond door — je kunt dit scherm verlaten.",
-    "syncCardRateLimited": "Gebruikslimiet bereikt — synchronisatie wordt automatisch hervat"
+    "syncCardRateLimited": "Gebruikslimiet bereikt — synchronisatie wordt automatisch hervat",
+    "syncCardBackendBusy": "De servers van Omi zijn druk — je opnames worden gesynchroniseerd zodra er weer capaciteit is"
 }

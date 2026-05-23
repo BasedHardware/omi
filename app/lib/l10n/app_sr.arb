@@ -10765,5 +10765,6 @@
         "description": "Placeholder card text shown under available payment methods"
     },
     "syncProcessingBackgroundHint": "Ово се наставља у позадини — можете напустити овај екран.",
-    "syncCardRateLimited": "Достигнут је лимит фер коришћења — синхронизација ће се аутоматски наставити"
+    "syncCardRateLimited": "Достигнут је лимит фер коришћења — синхронизација ће се аутоматски наставити",
+    "syncCardBackendBusy": "Omi сервери су заузети — ваши снимци ће се синхронизовати чим се ослободи капацитет"
 }

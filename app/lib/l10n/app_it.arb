@@ -3070,5 +3070,6 @@
         "description": "Placeholder card text shown under available payment methods"
     },
     "syncProcessingBackgroundHint": "L'operazione continua in background — puoi lasciare questa schermata.",
-    "syncCardRateLimited": "Limite di utilizzo raggiunto — la sincronizzazione riprenderà automaticamente"
+    "syncCardRateLimited": "Limite di utilizzo raggiunto — la sincronizzazione riprenderà automaticamente",
+    "syncCardBackendBusy": "I server di Omi sono sovraccarichi — le tue registrazioni verranno sincronizzate appena tornerà disponibile capacità"
 }
