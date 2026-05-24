@@ -87,7 +87,6 @@
          <service
             android:name="id.flutter.flutter_background_service.BackgroundService"
             android:foregroundServiceType="microphone"
-            android:stopWithTask="false"
             tools:node="merge" />
 
         <service

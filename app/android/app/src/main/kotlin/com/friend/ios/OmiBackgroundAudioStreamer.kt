@@ -64,6 +64,7 @@ class OmiBackgroundAudioStreamer(private val context: Context) {
     private var activeUrl: String? = null
     private var activeConfig: Config? = null
     private var sentFrames = 0
+    @Volatile
     private var lastFailureAtMs = 0L
 
     fun isConfiguredFor(address: String): Boolean {
@@ -232,9 +233,12 @@ class OmiBackgroundAudioStreamer(private val context: Context) {
     private fun sendFrame(webSocket: WebSocket, frame: ByteArray): Boolean {
         val sent = webSocket.send(frame.toByteString())
         if (sent) {
-            sentFrames += 1
-            if (sentFrames % 100 == 0) {
-                Log.i(TAG, "Sent $sentFrames background BLE audio frames")
+            val totalSent = synchronized(lock) {
+                sentFrames += 1
+                sentFrames
+            }
+            if (totalSent % 100 == 0) {
+                Log.i(TAG, "Sent $totalSent background BLE audio frames")
             }
         }
         return sent
@@ -341,11 +345,17 @@ class OmiBackgroundAudioStreamer(private val context: Context) {
     }
 
     private fun normalizeBaseUrl(value: String): String {
-        var base = value.trim()
-        if (!base.startsWith("http://") && !base.startsWith("https://")) {
-            base = "https://$base"
+        var base = value.trim().ifEmpty { DEFAULT_API_BASE_URL }
+        val lowerBase = base.lowercase(Locale.US)
+        if (lowerBase.startsWith("wss://") || lowerBase.startsWith("ws://")) {
+            base = lowerBase.substringBefore("://") + "://" + base.substringAfter("://")
+            return if (base.endsWith("/")) base else "$base/"
         }
-        base = base.replaceFirst("https://", "wss://").replaceFirst("http://", "ws://")
+        base = when {
+            lowerBase.startsWith("https://") -> "wss://" + base.substring("https://".length)
+            lowerBase.startsWith("http://") -> "ws://" + base.substring("http://".length)
+            else -> "wss://$base"
+        }
         return if (base.endsWith("/")) base else "$base/"
     }
 
