@@ -330,8 +330,6 @@ class SharedPreferencesUtil {
 
   set deviceSupportsMultiFileSync(bool value) => saveBool('deviceSupportsMultiFileSync', value);
 
-  // Whether the user has been shown the Fast Transfer explanation dialog
-
   bool get hasSpeakerProfile => getBool('hasSpeakerProfile');
 
   set hasSpeakerProfile(bool value) => saveBool('hasSpeakerProfile', value);
