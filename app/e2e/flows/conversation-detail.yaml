@@ -1,0 +1,119 @@
+# E2E Flow: Conversation Detail — view transcript, summary, action items, audio playback, and actions
+# Tests: Open conversation, navigate tabs, search transcript, star/share, play audio, edit speaker, reprocess
+# Core feature: reviewing and interacting with a completed conversation recording
+
+version: 2
+name: conversation-detail
+description: Conversation detail flow — open a conversation from the list, view transcript with speaker labels, switch to summary tab, view action items, search within transcript, star conversation, share link, play audio, edit speaker names, reprocess conversation
+app: com.friend.ios.dev
+evidence:
+  video: true
+covers:
+  - app/lib/pages/conversation_detail/page.dart
+  - app/lib/pages/conversation_detail/widgets/name_speaker_sheet.dart
+  - app/lib/providers/conversation_detail_provider.dart
+  - app/lib/providers/conversation_provider.dart
+preconditions:
+  - auth_ready  # User signed in and onboarding completed. App shows home screen.
+  - has_conversations  # At least 1 completed conversation with transcript segments exists.
+
+steps:
+  - id: S1
+    name: Open conversation from list
+    do: "On the home screen, tap the first conversation card in the Conversations list to open the conversation detail page. Verify the detail page loads with: back arrow (top-left), conversation title, star/share/search/menu icons in app bar, and tab buttons at the bottom (Transcript, Summary, Action Items)."
+    verify: true
+    expect:
+      - kind: interactive_count
+        min: 4
+    evidence:
+      - screenshot: step-S1.webp
+    note: "ConversationDetailPage has 3 tabs: Transcript (index 0), Summary (index 1, default), Action Items (index 2). The bottom bar shows tab selector buttons and optional audio playback controls. The page loads conversation data from ConversationDetailProvider."
+
+  - id: S2
+    name: View Summary tab (default)
+    do: "Verify the Summary tab is active (default). It shows: AI-generated summary text with sections, geolocation widget (if location was captured), and any action items extracted from the conversation. The summary contains key points, topics discussed, and conclusions."
+    verify: true
+    expect:
+      - kind: interactive_count
+        min: 3
+    evidence:
+      - screenshot: step-S2.webp
+    note: "Summary tab shows structured_summary from backend. May include sections like 'Key Points', 'Decisions', 'Follow-ups'. Geolocation widget shows map pin if conversation had location data. Rating UI appears at bottom for feedback."
+
+  - id: S3
+    name: Switch to Transcript tab
+    do: "Tap the 'Transcript' tab button at the bottom of the page. Verify the transcript view loads showing: speaker-labeled segments with colored avatars, transcribed text per segment, and timestamps. Segments from different speakers appear with different colors. User's segments (if speech profile matched) appear right-aligned."
+    verify: true
+    expect:
+      - kind: interactive_count
+        min: 3
+    evidence:
+      - screenshot: step-S3.webp
+    note: "Transcript segments show: speaker avatar (person icon, color-coded by speakerId), speaker name (e.g., 'Speaker 0' or named person), text content, start/end timestamps. User segments (isUser=true) are right-aligned with different color. Segments are tappable for speaker editing."
+
+  - id: S4
+    name: Search within transcript
+    do: "Tap the search icon (magnifying glass) in the app bar. A search overlay appears with a text field. Type a word that appears in the transcript. The matching results count shows (e.g., '1/3'). Use the up/down arrow buttons to navigate between matches. Matching text is highlighted in the transcript."
+    verify: true
+    expect:
+      - kind: interactive_count
+        min: 3
+    evidence:
+      - screenshot: step-S4.webp
+    note: "Search overlay shows TextField + 'N/M' counter + up/down arrows + X clear button. _updateSearchResults() finds all occurrences in transcript text. _navigateSearch(next) moves to next/prev match and auto-scrolls. Search also works on Summary tab for summary text. Tap X or press back to dismiss."
+
+  - id: S5
+    name: Dismiss search and tap speaker label
+    do: "Dismiss the search overlay (tap X or press back). Tap on a speaker label (e.g., 'Speaker 0') in the transcript. The NameSpeakerBottomSheet opens showing: existing people as chips (including 'You'), text field to create new person, 'Tag Other Segments From Speaker' option."
+    verify: true
+    expect:
+      - kind: interactive_count
+        min: 3
+    evidence:
+      - screenshot: step-S5.webp
+    note: "NameSpeakerBottomSheet shows people sorted by frequency in this transcript. Select existing person or type new name. 'Tag Other Segments' checkbox groups all segments from same speakerId for bulk assignment."
+
+  - id: S6
+    name: Dismiss speaker sheet and star conversation
+    do: "Dismiss the speaker sheet (press back or tap outside). Tap the star icon in the app bar. The icon fills in (solid star, amber color) indicating the conversation is starred. A brief loading state may show while the API call completes."
+    verify: true
+    expect:
+      - kind: interactive_count
+        min: 4
+    evidence:
+      - screenshot: step-S6.webp
+    note: "Star calls setConversationStarred(id, true). Icon toggles between outline (unstarred) and solid (starred). _isTogglingStarred prevents double-taps. Starred conversations appear in the 'Starred' folder tab on the home screen."
+
+  - id: S7
+    name: Switch to Action Items tab
+    do: "Tap the 'Action Items' tab button at the bottom. Verify the action items view shows: incomplete items section with count badge, each item with a checkbox, and optionally a completed items section. Items are extracted by AI from the conversation content."
+    verify: true
+    expect:
+      - kind: interactive_count
+        min: 2
+    evidence:
+      - screenshot: step-S7.webp
+    note: "Action Items tab shows tasks extracted from conversation. Incomplete items at top, completed at bottom (collapsed). Each item has: checkbox (tap to complete/uncomplete), text, and optional goal link. Completion calls conversationProvider.updateGlobalActionItemState()."
+
+  - id: S8
+    name: Open three-dot menu
+    do: "Tap the three-dot menu icon (⋮) in the app bar. A dropdown menu appears with options: Copy Transcript, Copy Summary, Share Audio (if audio exists), Reprocess, Delete."
+    verify: true
+    expect:
+      - kind: interactive_count
+        min: 3
+    evidence:
+      - screenshot: step-S8.webp
+    note: "PullDownButton with iOS-style menu. Share Audio only visible if conversation hasAudio(). Reprocess triggers backend re-processing of the raw audio. Delete shows confirmation dialog."
+
+  - id: S9
+    name: Dismiss menu and return to home
+    do: "Dismiss the menu (tap outside or press back). Press the back arrow to return to the home screen. Verify the conversations list shows with the starred conversation now marked."
+    verify: true
+    expect:
+      - kind: text_visible
+        values: ["Conversations"]
+      - kind: interactive_count
+        min: 4
+    evidence:
+      - screenshot: step-S9.webp
