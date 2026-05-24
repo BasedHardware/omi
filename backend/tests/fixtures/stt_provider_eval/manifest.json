@@ -37,7 +37,7 @@
           },
           "raw_audio_seconds": 5.0,
           "billable_seconds": 5.0,
-          "estimated_cost_usd": 0.0002,
+          "estimated_cost_usd": 0.00056667,
           "latency_seconds": 1.0,
           "fallback_count": 0
         }
@@ -68,7 +68,7 @@
           },
           "raw_audio_seconds": 5.0,
           "billable_seconds": 5.0,
-          "estimated_cost_usd": 0.00036,
+          "estimated_cost_usd": 0.00023611,
           "latency_seconds": 1.8,
           "fallback_count": 0,
           "rejected_reconciliation_count": 1
@@ -111,7 +111,7 @@
           },
           "raw_audio_seconds": 2.0,
           "billable_seconds": 2.0,
-          "estimated_cost_usd": 8e-05,
+          "estimated_cost_usd": 0.00022667,
           "latency_seconds": 0.9,
           "fallback_count": 0,
           "split_count": 1
@@ -150,7 +150,7 @@
           },
           "raw_audio_seconds": 2.0,
           "billable_seconds": 2.0,
-          "estimated_cost_usd": 0.00015,
+          "estimated_cost_usd": 0.00009444,
           "latency_seconds": 1.4,
           "fallback_count": 0,
           "split_count": 1,
@@ -187,7 +187,7 @@
           },
           "raw_audio_seconds": 3.0,
           "billable_seconds": 3.0,
-          "estimated_cost_usd": 0.00012,
+          "estimated_cost_usd": 0.00034,
           "latency_seconds": 1.2,
           "fallback_count": 0
         }
@@ -225,7 +225,7 @@
           },
           "raw_audio_seconds": 3.0,
           "billable_seconds": 3.0,
-          "estimated_cost_usd": 0.00022,
+          "estimated_cost_usd": 0.00014167,
           "latency_seconds": 1.9,
           "fallback_count": 0,
           "split_count": 1,
@@ -256,7 +256,7 @@
           "raw_audio_seconds": 30.0,
           "speech_active_seconds": 0.5,
           "billable_seconds": 30.0,
-          "estimated_cost_usd": 0.0012,
+          "estimated_cost_usd": 0.0034,
           "latency_seconds": 1.0,
           "fallback_count": 0
         }
@@ -281,7 +281,7 @@
           "raw_audio_seconds": 30.0,
           "speech_active_seconds": 0.5,
           "billable_seconds": 30.0,
-          "estimated_cost_usd": 0.0022,
+          "estimated_cost_usd": 0.00141667,
           "latency_seconds": 2.0,
           "fallback_count": 0
         }
@@ -302,7 +302,7 @@
           "raw_audio_seconds": 15.0,
           "speech_active_seconds": 0.0,
           "billable_seconds": 15.0,
-          "estimated_cost_usd": 0.0006,
+          "estimated_cost_usd": 0.0017,
           "latency_seconds": 0.8,
           "fallback_count": 0
         }
@@ -319,7 +319,7 @@
           "raw_audio_seconds": 15.0,
           "speech_active_seconds": 0.0,
           "billable_seconds": 15.0,
-          "estimated_cost_usd": 0.0011,
+          "estimated_cost_usd": 0.00070833,
           "latency_seconds": 1.2,
           "fallback_count": 0
         }
@@ -354,7 +354,7 @@
           },
           "raw_audio_seconds": 5.0,
           "billable_seconds": 5.0,
-          "estimated_cost_usd": 0.0002,
+          "estimated_cost_usd": 0.00056667,
           "latency_seconds": 1.3,
           "fallback_count": 0
         }
@@ -385,7 +385,7 @@
           },
           "raw_audio_seconds": 5.0,
           "billable_seconds": 5.0,
-          "estimated_cost_usd": 0.00036,
+          "estimated_cost_usd": 0.00023611,
           "latency_seconds": 2.0,
           "fallback_count": 0
         }
@@ -413,7 +413,7 @@
           },
           "raw_audio_seconds": 4.0,
           "billable_seconds": 2.0,
-          "estimated_cost_usd": 8e-05,
+          "estimated_cost_usd": 0.00022667,
           "latency_seconds": 1.0,
           "fallback_count": 0
         }
@@ -437,7 +437,7 @@
           },
           "raw_audio_seconds": 4.0,
           "billable_seconds": 2.0,
-          "estimated_cost_usd": 0.00015,
+          "estimated_cost_usd": 0.00009444,
           "latency_seconds": 1.7,
           "fallback_count": 0
         }
@@ -465,7 +465,7 @@
           },
           "raw_audio_seconds": 22.0,
           "billable_seconds": 22.0,
-          "estimated_cost_usd": 0.00088,
+          "estimated_cost_usd": 0.00249333,
           "latency_seconds": 1.1,
           "fallback_count": 0
         }
@@ -490,7 +490,7 @@
           },
           "raw_audio_seconds": 22.0,
           "billable_seconds": 22.0,
-          "estimated_cost_usd": 0.00158,
+          "estimated_cost_usd": 0.00103889,
           "latency_seconds": 2.1,
           "fallback_count": 1
         }
@@ -525,7 +525,7 @@
           },
           "raw_audio_seconds": 6.0,
           "billable_seconds": 6.0,
-          "estimated_cost_usd": 0.00044,
+          "estimated_cost_usd": 0.00068,
           "latency_seconds": 1.3,
           "fallback_count": 0
         }
@@ -556,7 +556,7 @@
           },
           "raw_audio_seconds": 6.0,
           "billable_seconds": 6.0,
-          "estimated_cost_usd": 0.00122,
+          "estimated_cost_usd": 0.00028333,
           "latency_seconds": 2.2,
           "fallback_count": 0,
           "split_count": 0,

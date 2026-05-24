@@ -6,7 +6,7 @@
   "raw_audio_seconds": 5.0,
   "speech_active_seconds": 4.5,
   "billable_seconds": 5.0,
-  "estimated_cost_usd": 0.00020,
+  "estimated_cost_usd": 0.00023611,
   "latency_seconds": 1.8,
   "runtime_seconds": 1.8,
   "retry_count": 0,

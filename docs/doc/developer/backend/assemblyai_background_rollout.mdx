@@ -15,12 +15,15 @@ already been captured and can tolerate async provider polling, retries, and
 Deepgram fallback.
 
 Current saved-provider benchmark evidence still favors Deepgram on some
-cost-adjusted speaker-quality fixtures: Deepgram reached 99.79% speaker purity
-at about $0.264/hour, while AssemblyAI reached 95.91% at about $0.734/hour.
-That benchmark is a constraint on the AssemblyAI pipeline, not a reason to keep
-Deepgram as the primary passive background provider. The production stance is:
-AssemblyAI first, conservative speaker safety, privacy-safe monitoring, and
-Deepgram fallback.
+speaker-quality fixtures: Deepgram reached 99.79% speaker purity, while
+AssemblyAI reached 95.91%. Current public pay-as-you-go pricing checked on
+2026-05-25 makes AssemblyAI Universal-2 plus diarization about `$0.170/hour`
+and Deepgram Nova-3 prerecorded plus diarization about `$0.408/hour` for
+monolingual audio or `$0.468/hour` for multilingual audio. Older experiment
+summaries used stale Deepgram rates that omitted the diarization add-on and made
+AssemblyAI look more expensive; do not use those numbers for rollout decisions.
+The production stance is: AssemblyAI first, conservative speaker safety,
+privacy-safe monitoring, and Deepgram fallback.
 
 Deepgram remains the provider for mobile/BLE `/v4/listen`, realtime assistant
 streaming, Hold-to-Talk streaming, voice-message finalize semantics, and
@@ -47,10 +50,10 @@ required production strategies:
 
 | Strategy | Provider | Speaker purity | Empty transcript | Fallback | Timeout/error | Cost/hour |
 | --- | --- | ---: | ---: | ---: | ---: | ---: |
-| `always_deepgram` | Deepgram | 100.0% | 10.0% | 0.0% | 0.0% | `$0.158` |
-| `always_assemblyai` | AssemblyAI | 98.9% | 10.0% | 1.0% | 0.0% | `$0.286` |
-| `current_policy` | AssemblyAI | 98.9% | 10.0% | 1.0% | 0.0% | `$0.286` |
-| `shadow_only` | Deepgram | 100.0% | 10.0% | 0.0% | 0.0% | `$0.158` |
+| `always_deepgram` | Deepgram | 100.0% | 10.0% | 0.0% | 0.0% | `$0.408` |
+| `always_assemblyai` | AssemblyAI | 98.9% | 10.0% | 1.0% | 0.0% | `$0.170` |
+| `current_policy` | AssemblyAI | 98.9% | 10.0% | 1.0% | 0.0% | `$0.170` |
+| `shadow_only` | Deepgram | 100.0% | 10.0% | 0.0% | 0.0% | `$0.408` |
 
 The gate still marked AssemblyAI as `limited` because the
 `saved_real_policy_router_outputs` scenario had 95.5% AssemblyAI speaker-word
@@ -314,10 +317,11 @@ Default health criteria:
   degradation.
 - App-visible speaker inflation stays within the replay budget and does not
   rise without a matching purity improvement.
-- Cost/hour stays within the approved margin. The current offline gate shows
-  AssemblyAI at about 1.8x Deepgram (`$0.286/hour` versus `$0.158/hour`), while
-  older saved-provider evidence showed a wider gap; expansion requires an
-  explicit owner decision if this remains materially above Deepgram.
+- Cost/hour stays within the approved margin. The current offline gate should
+  show AssemblyAI below Deepgram for diarized prerecorded work, roughly
+  `$0.170/hour` versus `$0.408/hour` with monolingual Deepgram Nova-3 pricing.
+  If the gate shows AssemblyAI above Deepgram, first audit stale fixture ledgers,
+  omitted Deepgram diarization cost, and billable-duration inflation.
 - No sustained increase in user corrections, self-voice review failures,
   support complaints, or billing surprises.
 
@@ -343,10 +347,12 @@ for the review window:
 - Timeout rate exceeds 1% or any timeout spike correlates with support reports.
 - Empty transcript rate exceeds the Deepgram baseline by more than 1 percentage
   point.
-- Cost/hour exceeds the approved Deepgram margin. The current baseline is about
-  `$0.264/hour` for Deepgram and `$0.734/hour` for AssemblyAI; AssemblyAI cost is
-  a rollout blocker unless the rollout doc names a quality or product reason for
-  accepting the margin.
+- Cost/hour unexpectedly exceeds the approved provider margin. The current
+  public pricing baseline for diarized prerecorded work is about `$0.170/hour`
+  for AssemblyAI Universal-2, `$0.408/hour` for Deepgram Nova-3 monolingual, and
+  `$0.468/hour` for Deepgram Nova-3 multilingual. A report showing AssemblyAI as
+  more expensive is a stale-pricing or billable-duration investigation until
+  proven otherwise.
 - Unknown or low-confidence speaker rate exceeds the Deepgram baseline by more
   than 5 percentage points, or `unknown_speaker_duration_seconds` grows enough
   to make speaker labels visibly worse.

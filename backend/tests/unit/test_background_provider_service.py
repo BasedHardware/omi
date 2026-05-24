@@ -87,7 +87,7 @@ def test_provider_service_transcribes_sync_upload_and_finalizes_deepgram_run(mon
     assert finalize_run.call_args.kwargs['workload'] == 'sync'
     assert finalize_run.call_args.kwargs['status'] == 'succeeded'
     assert finalize_run.call_args.kwargs['transcript_segment_count'] == 1
-    assert finalize_run.call_args.kwargs['estimated_cost_usd'] == 0.00016
+    assert finalize_run.call_args.kwargs['estimated_cost_usd'] == 0.00022667
 
 
 def test_provider_service_finalizes_background_run_on_deepgram_when_assemblyai_disabled(monkeypatch):
@@ -112,7 +112,7 @@ def test_provider_service_finalizes_background_run_on_deepgram_when_assemblyai_d
     assert finalize_run.call_args.kwargs['workload'] == 'background'
     assert finalize_run.call_args.kwargs['provider'] == 'deepgram'
     assert finalize_run.call_args.kwargs['raw_audio_seconds'] == 9.5
-    assert finalize_run.call_args.kwargs['estimated_cost_usd'] == 0.00076
+    assert finalize_run.call_args.kwargs['estimated_cost_usd'] == 0.00107667
 
 
 def test_background_routing_defaults_to_assemblyai_for_background(monkeypatch):
@@ -285,7 +285,7 @@ def test_provider_service_falls_back_to_deepgram_when_assemblyai_fails(monkeypat
     assert finalize_run.call_args_list[1].kwargs['provider'] == 'deepgram'
     assert finalize_run.call_args_list[1].kwargs['fallback_count'] == 1
     assert finalize_run.call_args_list[1].kwargs['fallback_provider'] == 'assemblyai'
-    assert finalize_run.call_args_list[1].kwargs['estimated_cost_usd'] == 0.00016
+    assert finalize_run.call_args_list[1].kwargs['estimated_cost_usd'] == 0.00022667
 
 
 def test_provider_service_falls_back_to_deepgram_for_background_when_assemblyai_fails(monkeypatch):
@@ -547,7 +547,7 @@ def test_prerecorded_cost_estimator_uses_provider_defaults_and_unknown_provider_
             workload='background',
             billable_seconds=60.0,
         )
-        == 0.0048
+        == 0.0068
     )
     assert (
         estimate_prerecorded_provider_cost_usd(

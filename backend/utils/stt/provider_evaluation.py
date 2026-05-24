@@ -8,8 +8,8 @@ PROVIDER_BY_STRATEGY = {
     'current_policy': 'assemblyai',
     'shadow_only': 'deepgram',
 }
-ASSEMBLYAI_COST_PER_HOUR_USD = 0.2592
-DEEPGRAM_COST_PER_HOUR_USD = 0.144
+ASSEMBLYAI_COST_PER_HOUR_USD = 0.17
+DEEPGRAM_COST_PER_HOUR_USD = 0.408
 
 
 @dataclass(frozen=True)
@@ -720,7 +720,7 @@ def _likely_cause(metric: str) -> str:
         'empty_transcript_rate': 'low-signal/no-speech handling produced an empty or failed transcript',
         'latency_seconds': 'AssemblyAI async job latency exceeds Deepgram for this workload shape',
         'timeout_error_rate': 'provider timeout or retry exhaustion path is not default-safe',
-        'estimated_cost_per_hour_usd': 'AssemblyAI billable duration or pricing is too high for default background volume',
+        'estimated_cost_per_hour_usd': 'provider billable duration or pricing is too high for default background volume',
     }.get(metric, 'AssemblyAI trails the Deepgram comparator on this gate')
 
 
@@ -731,7 +731,7 @@ def _mitigation(metric: str) -> str:
         'empty_transcript_rate': 'preserve no-speech detection and fallback controls before default promotion',
         'latency_seconds': 'keep latency SLO alerts and fallback controls before expanding default traffic',
         'timeout_error_rate': 'use Deepgram fallback and provider health gates from TICKET-027',
-        'estimated_cost_per_hour_usd': 'cap rollout or require explicit product tradeoff in TICKET-028',
+        'estimated_cost_per_hour_usd': 'review billable seconds, requested add-ons, and provider pricing before changing defaults',
     }.get(metric, 'capture in TICKET-028 rollout tradeoffs before promoting AssemblyAI')
 
 

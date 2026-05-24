@@ -10,9 +10,11 @@ class PrerecordedProviderCostRate:
     source: str
 
 
-# Pay-as-you-go public STT pricing, checked 2026-05-21.
+# Pay-as-you-go public STT pricing, checked 2026-05-25.
 # AssemblyAI background runs use speaker_labels=True, so the pre-recorded
-# diarization add-on is included in AssemblyAI rates here.
+# diarization add-on is included in AssemblyAI rates here. Deepgram background
+# runs also request diarize=True, so include the speaker diarization add-on
+# there too; otherwise Deepgram appears artificially cheap in rollout gates.
 # Customer-specific committed-use discounts are intentionally excluded.
 _PRERECORDED_STT_COST_RATES: dict[str, dict[str, PrerecordedProviderCostRate]] = {
     STTProviderName.assemblyai.value: {
@@ -20,39 +22,40 @@ _PRERECORDED_STT_COST_RATES: dict[str, dict[str, PrerecordedProviderCostRate]] =
         # plus pre-recorded Speaker Diarization $0.02/hr.
         'universal-2': PrerecordedProviderCostRate(
             usd_per_billable_second=0.17 / 3600,
-            source='assemblyai_prerecorded_diarized_payg_2026_05_21',
+            source='assemblyai_prerecorded_diarized_payg_2026_05_25',
         ),
         'universal-3-pro': PrerecordedProviderCostRate(
             usd_per_billable_second=0.23 / 3600,
-            source='assemblyai_prerecorded_diarized_payg_2026_05_21',
+            source='assemblyai_prerecorded_diarized_payg_2026_05_25',
         ),
         'u3-pro': PrerecordedProviderCostRate(
             usd_per_billable_second=0.23 / 3600,
-            source='assemblyai_prerecorded_diarized_payg_2026_05_21',
+            source='assemblyai_prerecorded_diarized_payg_2026_05_25',
         ),
         'default': PrerecordedProviderCostRate(
             usd_per_billable_second=0.17 / 3600,
-            source='assemblyai_prerecorded_diarized_default_2026_05_21',
+            source='assemblyai_prerecorded_diarized_default_2026_05_25',
         ),
     },
     STTProviderName.deepgram.value: {
         # Deepgram pricing: Nova-3 monolingual pre-recorded $0.0048/min,
-        # Nova-3 multilingual pre-recorded $0.0058/min.
+        # Nova-3 multilingual pre-recorded $0.0058/min, plus Speaker
+        # Diarization add-on $0.0020/min.
         'nova-3': PrerecordedProviderCostRate(
-            usd_per_billable_second=0.0048 / 60,
-            source='deepgram_prerecorded_payg_2026_05_21',
+            usd_per_billable_second=0.0068 / 60,
+            source='deepgram_prerecorded_diarized_payg_2026_05_25',
         ),
         'nova-3-general': PrerecordedProviderCostRate(
-            usd_per_billable_second=0.0048 / 60,
-            source='deepgram_prerecorded_payg_2026_05_21',
+            usd_per_billable_second=0.0068 / 60,
+            source='deepgram_prerecorded_diarized_payg_2026_05_25',
         ),
         'nova-3-multilingual': PrerecordedProviderCostRate(
-            usd_per_billable_second=0.0058 / 60,
-            source='deepgram_prerecorded_payg_2026_05_21',
+            usd_per_billable_second=0.0078 / 60,
+            source='deepgram_prerecorded_diarized_payg_2026_05_25',
         ),
         'default': PrerecordedProviderCostRate(
-            usd_per_billable_second=0.0048 / 60,
-            source='deepgram_prerecorded_default_2026_05_21',
+            usd_per_billable_second=0.0068 / 60,
+            source='deepgram_prerecorded_diarized_default_2026_05_25',
         ),
     },
 }

@@ -54,7 +54,7 @@ def test_fixture_report_passes_and_includes_cost_identity_and_timing_metrics():
 
     assert report['status'] == 'passed'
     assert report['case_count'] == 1
-    assert report['aggregate']['assemblyai_estimated_cost_usd'] == 0.00020
+    assert report['aggregate']['assemblyai_estimated_cost_usd'] == 0.00023611
     case = report['cases'][0]
     assert case['comparison']['transcript_word_error_rate'] == 0.0
     assert case['comparison']['average_timestamp_drift_seconds'] > 0.0

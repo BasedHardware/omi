@@ -15,6 +15,8 @@ The report compares `always_deepgram`, `always_assemblyai`, `current_policy`, an
 
 The fixture manifest covers clean turns, fast turns, overlap, sparse speech, low-signal/no-speech, multilingual turns, duplicate chunk replay, provider failure/fallback, saved real-provider E2E output, and saved policy-router output.
 
+Cost estimates use public pay-as-you-go diarized prerecorded rates checked on 2026-05-25: AssemblyAI Universal-2 plus diarization is `$0.170/hour`, Deepgram Nova-3 monolingual plus diarization is `$0.408/hour`, and Deepgram Nova-3 multilingual plus diarization is `$0.468/hour`. Older experiment notes omitted Deepgram diarization cost and should not be used for rollout cost decisions.
+
 Live-provider smoke tests are optional:
 
 ```bash
