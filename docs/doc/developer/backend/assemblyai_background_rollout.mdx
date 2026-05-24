@@ -78,6 +78,15 @@ upload, applies the chunk timeline offset, maps provider speaker clusters to
 stable numeric `speaker_id` values per conversation, and appends segments to the
 in-progress conversation when `persist=true`.
 
+Desktop chunking is currently config-gated to the fixed 15s safety profile:
+`BackgroundTranscriptionConfiguration.cloudBatch` aliases the fixed-15s
+configuration with 0.5s overlap and client-side speech-activity suppression.
+The Swift chunker also has a named silence-aware candidate configuration that
+can flush after the minimum speech/audio window and a 350ms silence gap, while
+still enforcing the same 15s hard cap. Do not switch the runtime background path
+to that candidate until Deepgram-vs-AssemblyAI replay evals show no speaker
+quality regression on fast-turn, overlap, sparse, and variable-density fixtures.
+
 Deepgram is the prerecorded fallback provider. If AssemblyAI fails, times out,
 or exhausts retries for an eligible prerecorded workload, the failed AssemblyAI
 run is finalized in the provider ledger and the request retries through

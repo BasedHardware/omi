@@ -156,6 +156,65 @@ final class BackgroundTranscriptionTests: XCTestCase {
     XCTAssertEqual(session.snapshot().segments.count, 1)
   }
 
+  func testCloudBatchDefaultKeepsFixedFifteenSecondFallback() {
+    let configuration = BackgroundTranscriptionConfiguration.cloudBatch
+    var chunker = BackgroundAudioChunker(configuration: configuration)
+
+    XCTAssertFalse(configuration.usesSilenceAwareChunking)
+    XCTAssertEqual(configuration.minChunkDuration, 15.0)
+    XCTAssertEqual(configuration.maxChunkDuration, 15.0)
+
+    let samplesPerFrame = configuration.sampleRate / 10
+    let speechFrame = pcm(samples: Array(repeating: 1_000, count: samplesPerFrame))
+    let silenceFrame = pcm(samples: Array(repeating: 0, count: samplesPerFrame))
+    var chunks: [BackgroundAudioChunk] = []
+
+    for frameIndex in 0..<70 {
+      let frame = frameIndex < 65 ? speechFrame : silenceFrame
+      chunks.append(contentsOf: chunker.append(pcmData: frame, startTime: Double(frameIndex) / 10.0))
+    }
+    XCTAssertTrue(chunks.isEmpty)
+
+    for frameIndex in 70..<160 {
+      chunks.append(contentsOf: chunker.append(pcmData: speechFrame, startTime: Double(frameIndex) / 10.0))
+    }
+
+    XCTAssertEqual(chunks.count, 1)
+    XCTAssertEqual(chunks[0].startTime, 0, accuracy: 0.001)
+    XCTAssertEqual(sampleCount(chunks[0].pcmData), configuration.sampleRate * 15)
+  }
+
+  func testSilenceAwareCloudBatchCandidateFlushesOnSilenceBeforeHardCap() {
+    let configuration = BackgroundTranscriptionConfiguration.silenceAwareCloudBatchCandidate
+    var chunker = BackgroundAudioChunker(configuration: configuration)
+
+    XCTAssertTrue(configuration.usesSilenceAwareChunking)
+    XCTAssertEqual(configuration.maxChunkDuration, 15.0)
+    XCTAssertLessThan(configuration.minChunkDuration, configuration.maxChunkDuration)
+
+    let speechSamples = Array(repeating: Int16(1_000), count: Int(Double(configuration.sampleRate) * 6.5))
+    let silenceSamples = Array(repeating: Int16(0), count: Int(Double(configuration.sampleRate) * 0.5))
+    let chunks = chunker.append(pcmData: pcm(samples: speechSamples + silenceSamples), startTime: 30)
+
+    XCTAssertEqual(chunks.count, 1)
+    XCTAssertEqual(chunks[0].startTime, 30, accuracy: 0.001)
+    XCTAssertLessThan(sampleCount(chunks[0].pcmData), configuration.sampleRate * 15)
+    XCTAssertGreaterThanOrEqual(sampleCount(chunks[0].pcmData), Int(Double(configuration.sampleRate) * 6.5))
+    XCTAssertFalse(chunks[0].isFinal)
+  }
+
+  func testSilenceAwareCloudBatchCandidateStillHardCapsContinuousSpeech() {
+    let configuration = BackgroundTranscriptionConfiguration.silenceAwareCloudBatchCandidate
+    var chunker = BackgroundAudioChunker(configuration: configuration)
+
+    let samples = Array(repeating: Int16(1_000), count: configuration.sampleRate * 16)
+    let chunks = chunker.append(pcmData: pcm(samples: samples), startTime: 12)
+
+    XCTAssertEqual(chunks.count, 1)
+    XCTAssertEqual(chunks[0].startTime, 12, accuracy: 0.001)
+    XCTAssertEqual(sampleCount(chunks[0].pcmData), configuration.sampleRate * 15)
+  }
+
   func testCloudBatchDropsSilentChunksBeforeUpload() async throws {
     let configuration = BackgroundTranscriptionConfiguration.cloudBatch
     var uploadCount = 0
@@ -255,6 +314,36 @@ final class BackgroundTranscriptionTests: XCTestCase {
       session.snapshot().lastSpeechActivityDecision?.rejectedHighZeroCrossingWindows ?? 0,
       0
     )
+  }
+
+  func testSilenceAwareCloudBatchCandidateDropsShortSpeechBeforeUpload() async throws {
+    let configuration = BackgroundTranscriptionConfiguration.silenceAwareCloudBatchCandidate
+    var uploadCount = 0
+    let session = CloudBackgroundTranscriptionSession(configuration: configuration) { chunk in
+      uploadCount += 1
+      return [
+        Self.backendSegment(
+          id: "short-speech",
+          text: "short",
+          start: chunk.startTime,
+          end: chunk.startTime + 1
+        )
+      ]
+    }
+
+    let shortSpeech = Array(
+      repeating: Int16(1_000), count: Int(Double(configuration.sampleRate) * 0.2))
+    let silence = Array(
+      repeating: Int16(0), count: Int(Double(configuration.sampleRate) * 6.5))
+    let result = session.append(pcmData: pcm(samples: shortSpeech + silence), startTime: 0)
+
+    XCTAssertEqual(result.enqueuedChunks, 0)
+    XCTAssertEqual(session.pendingChunkCount, 0)
+    let shortSpeechUpload = try await session.transcribeNext()
+    XCTAssertNil(shortSpeechUpload)
+    XCTAssertEqual(uploadCount, 0)
+    XCTAssertEqual(session.snapshot().droppedChunkCount, 1)
+    XCTAssertEqual(session.snapshot().lastSpeechActivityDecision?.reason, .insufficientSpeech)
   }
 
   func testCloudBatchFinishSplitsLongTailAtFifteenSecondWindows() {

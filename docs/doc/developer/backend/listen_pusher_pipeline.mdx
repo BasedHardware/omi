@@ -244,12 +244,15 @@ explicit conversation with
 `POST /v2/desktop/background-conversation/{conversation_id}/finish`. Mobile
 listen, BLE listen, and PTT continue to use their existing Deepgram paths.
 
-For cloud batch, the desktop client buffers roughly 15s PCM chunks with 0.5s
-overlap, drops chunks that do not contain sustained speech activity before
-uploading, and uses backpressure instead of stopping recording when AssemblyAI
-is slower than realtime. AssemblyAI batch requests use the selected single
-language rather than `multi` to avoid provider-side language-detection failures
-on low-speech audio.
+For cloud batch, the desktop client currently uses the fixed 15s safety profile:
+15s PCM chunks with 0.5s overlap, client-side sustained-speech checks before
+uploading, and backpressure instead of stopping recording when AssemblyAI is
+slower than realtime. A silence-aware client configuration exists for eval and
+can flush earlier after sustained speech plus a silence gap, but it remains off
+the runtime path until replay gates show no speaker-quality regression versus
+fixed 15s. AssemblyAI batch requests use the selected single language rather
+than `multi` to avoid provider-side language-detection failures on low-speech
+audio.
 
 Eligible AssemblyAI workloads are `sync`, `background`, and `postprocess`.
 Latency-critical workloads (`realtime`, streaming `ptt`, and

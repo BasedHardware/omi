@@ -110,7 +110,9 @@ struct BackgroundAudioChunker {
 
     var offset = minBytes.alignedToSample
     while offset + windowBytes <= maxBytes {
-      if isSilentWindow(start: offset, byteCount: windowBytes), hasSpeech(before: offset) {
+      if isSilentWindow(start: offset, byteCount: windowBytes),
+        hasMinimumSpeech(before: offset)
+      {
         return offset
       }
       offset += configuration.bytesPerSample
@@ -130,11 +132,16 @@ struct BackgroundAudioChunker {
     return true
   }
 
-  private func hasSpeech(before endOffset: Int) -> Bool {
+  private func hasMinimumSpeech(before endOffset: Int) -> Bool {
     guard endOffset > 0 else { return false }
+    let minimumSpeechBytes = max(
+      configuration.bytesPerSample,
+      configuration.alignedByteCount(for: configuration.speechActivityDetection.minimumSpeechDuration)
+    )
     var peak = 0
     var sumSquares = 0.0
     var count = 0
+    var speechLikeBytes = 0
 
     for offset in stride(
       from: 0, to: min(endOffset, buffer.count), by: configuration.bytesPerSample)
@@ -142,13 +149,17 @@ struct BackgroundAudioChunker {
       let amplitude = sampleAmplitude(at: offset)
       peak = max(peak, amplitude)
       sumSquares += Double(amplitude * amplitude)
+      if amplitude >= configuration.speechPeakAmplitudeThreshold {
+        speechLikeBytes += configuration.bytesPerSample
+      }
       count += 1
     }
 
     guard count > 0 else { return false }
     let rms = sqrt(sumSquares / Double(count))
-    return peak >= configuration.speechPeakAmplitudeThreshold
-      || rms >= Double(configuration.speechRMSAmplitudeThreshold)
+    return speechLikeBytes >= minimumSpeechBytes
+      || (rms >= Double(configuration.speechRMSAmplitudeThreshold)
+        && endOffset >= minimumSpeechBytes)
   }
 
   private func sampleAmplitude(at offset: Int) -> Int {
