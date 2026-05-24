@@ -1,0 +1,100 @@
+# E2E Flow: Device Photo Capture — Omi device camera captures photos during recording
+# Tests: Photos appearing in the capturing page timeline alongside transcripts
+# Core feature: visual context capture during conversations via Omi device camera
+# Requires: Physical Omi device with camera capability
+
+version: 2
+name: device-photo-capture
+description: Device photo capture flow — Omi device camera captures photos during recording, photos appear in chronological timeline mixed with transcript segments, view photo grid, tap to open photo viewer, verify photos included in processed conversation
+app: com.friend.ios.dev
+evidence:
+  video: true
+covers:
+  - app/lib/pages/conversation_capturing/page.dart
+  - app/lib/providers/capture_provider.dart
+  - app/lib/backend/schema/conversation.dart
+preconditions:
+  - auth_ready  # User signed in and onboarding completed. App shows home screen.
+  - omi_device_connected  # Omi BLE device with camera paired and connected.
+
+steps:
+  - id: S1
+    name: Verify device is connected and listening
+    do: "Verify the home screen shows the device connected with battery indicator and 'Listening' status. The Omi device with camera capability is actively recording."
+    verify: true
+    expect:
+      - kind: text_visible
+        values: ["Listening"]
+      - kind: interactive_count
+        min: 4
+    evidence:
+      - screenshot: step-S1.webp
+    note: "Device camera is initiated via _initiateDevicePhotoStreaming() which calls connection.performCameraStartPhotoController(). Photos are captured periodically by the device and sent as base64 chunks via BLE."
+
+  - id: S2
+    name: Open capturing page
+    do: "Tap the 'Listening' status card to open the ConversationCapturingPage. Speak near the device to generate transcript segments. After a few moments, photos captured by the device camera should also appear in the Transcripts tab."
+    verify: true
+    expect:
+      - kind: interactive_count
+        min: 2
+    evidence:
+      - screenshot: step-S2.webp
+    note: "Photos arrive as image_chunk JSON messages via WebSocket. Each photo is base64-encoded and chunked into 8KB pieces for BLE transport. Photos get temporary IDs (temp_img_TIMESTAMP) until the server assigns permanent IDs via PhotoProcessingEvent."
+
+  - id: S3
+    name: Observe photo-transcript timeline
+    do: "Verify the Transcripts tab shows a mixed chronological timeline of transcript segments AND photo groups. Photos captured within 30 seconds of each other are grouped together. Each photo group shows: the photo(s) in a grid layout, timestamp, and count label (e.g., '2 photos'). Single photos show full-width, 2 photos show side-by-side, 3+ show in a grid."
+    verify: true
+    expect:
+      - kind: interactive_count
+        min: 2
+    evidence:
+      - screenshot: step-S3.webp
+    note: "Photo grouping uses 30-second proximity threshold. Layout: 1 photo = full width, 2 photos = 2-column row, 3+ photos = grid. Photos are interleaved with transcript segments based on createdAt timestamps. Each photo shows: image preview, optional description (from PhotoDescribedEvent), discard status."
+
+  - id: S4
+    name: Tap a photo to view full-size
+    do: "Tap on a photo in the timeline to open the full-size photo viewer. The photo shows at full resolution. Swipe or tap to dismiss."
+    verify: true
+    expect:
+      - kind: interactive_count
+        min: 1
+    evidence:
+      - screenshot: step-S4.webp
+    note: "Photos are stored as base64 in ConversationPhoto objects. The photo viewer shows the decoded image. Photos may have AI-generated descriptions from PhotoDescribedEvent."
+
+  - id: S5
+    name: Process conversation with photos
+    do: "Tap 'Process Now' to stop recording and process the conversation. Confirm if dialog appears. Return to home and wait for processing to complete."
+    verify: true
+    expect:
+      - kind: text_visible
+        values: ["Conversations"]
+      - kind: interactive_count
+        min: 4
+    evidence:
+      - screenshot: step-S5.webp
+
+  - id: S6
+    name: Verify photos in conversation detail
+    do: "Open the completed conversation. Photos captured during the recording should be referenced in the conversation summary and visible in the transcript timeline. The AI summary may describe visual context from the photos."
+    verify: true
+    expect:
+      - kind: interactive_count
+        min: 3
+    evidence:
+      - screenshot: step-S6.webp
+    note: "Photos are processed server-side for descriptions. PhotoDescribedEvent updates each photo's description field. Discarded photos (marked as irrelevant by the backend) have discarded=true and may be hidden or de-emphasized in the UI."
+
+  - id: S7
+    name: Return to home
+    do: "Press back to return to the home screen."
+    verify: true
+    expect:
+      - kind: text_visible
+        values: ["Conversations"]
+      - kind: interactive_count
+        min: 4
+    evidence:
+      - screenshot: step-S7.webp
