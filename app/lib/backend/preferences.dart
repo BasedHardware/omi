@@ -325,20 +325,12 @@ class SharedPreferencesUtil {
 
   set unlimitedLocalStorageEnabled(bool value) => saveBool('unlimitedLocalStorageEnabled', value);
 
-  // Preferred sync method for SD card files: 'wifi' (Fast Transfer) or 'ble' (Bluetooth)
-  String get preferredSyncMethod => getString('preferredSyncMethod', defaultValue: 'ble');
-
-  set preferredSyncMethod(String value) => saveString('preferredSyncMethod', value);
-
   // Whether connected device supports new multi-file storage sync (persisted so it works when disconnected)
   bool get deviceSupportsMultiFileSync => getBool('deviceSupportsMultiFileSync');
 
   set deviceSupportsMultiFileSync(bool value) => saveBool('deviceSupportsMultiFileSync', value);
 
   // Whether the user has been shown the Fast Transfer explanation dialog
-  bool get hasSeenFastTransferIntro => getBool('hasSeenFastTransferIntro');
-
-  set hasSeenFastTransferIntro(bool value) => saveBool('hasSeenFastTransferIntro', value);
 
   bool get hasSpeakerProfile => getBool('hasSpeakerProfile');
 

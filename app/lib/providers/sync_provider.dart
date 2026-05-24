@@ -323,7 +323,7 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
     await refreshWals();
   }
 
-  Future<void> syncWals({IWifiConnectionListener? connectionListener}) async {
+  Future<void> syncWals() async {
     if (SyncRateLimiter.instance.isLimited) {
       notifyListeners();
       return;
@@ -333,12 +333,12 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
     _totalWalsToProcess = missingWals.length;
     _walsProcessedCount = 0;
     await _performSync(
-      operation: () => _walService.getSyncs().syncAll(progress: this, connectionListener: connectionListener),
+      operation: () => _walService.getSyncs().syncAll(progress: this),
       context: 'sync all WALs',
     );
   }
 
-  Future<void> syncWal(Wal wal, {IWifiConnectionListener? connectionListener}) async {
+  Future<void> syncWal(Wal wal) async {
     if (SyncRateLimiter.instance.isLimited) {
       notifyListeners();
       return;
@@ -346,7 +346,7 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
     _cancelAutoUploadIfNeeded();
     _updateSyncState(_syncState.toIdle());
     await _performSync(
-      operation: () => _walService.getSyncs().syncWal(wal: wal, progress: this, connectionListener: connectionListener),
+      operation: () => _walService.getSyncs().syncWal(wal: wal, progress: this),
       context: 'sync WAL ${wal.id}',
       failedWal: wal,
     );
@@ -412,18 +412,9 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
   }
 
   String _formatSyncError(dynamic error, Wal? wal) {
-    var baseMessage = error.toString().replaceAll('Exception: ', '').replaceAll('WifiSyncException: ', '');
+    var baseMessage = error.toString().replaceAll('Exception: ', '');
 
-    // Convert technical WiFi errors to user-friendly messages
-    if (baseMessage.toLowerCase().contains('internal error') ||
-        baseMessage.toLowerCase().contains('invalidpacketlength') ||
-        baseMessage.toLowerCase().contains('packet length')) {
-      baseMessage = 'Failed to enable WiFi on device';
-    } else if (baseMessage.toLowerCase().contains('wifi') && baseMessage.toLowerCase().contains('setup')) {
-      baseMessage = 'Failed to enable WiFi on device';
-    } else if (baseMessage.toLowerCase().contains('tcp') || baseMessage.toLowerCase().contains('socket')) {
-      baseMessage = 'Connection interrupted';
-    } else if (baseMessage.toLowerCase().contains('timeout')) {
+    if (baseMessage.toLowerCase().contains('timeout')) {
       baseMessage = 'Device did not respond';
     } else if (baseMessage.toLowerCase().contains('could not be processed')) {
       baseMessage = 'Audio file could not be processed';
@@ -598,16 +589,15 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
   }
 
   /// Transfer a single WAL from device storage (SD card or flash page) to phone storage
-  Future<void> transferWalToPhone(Wal wal, {IWifiConnectionListener? connectionListener}) async {
+  Future<void> transferWalToPhone(Wal wal) async {
     if (wal.storage != WalStorage.sdcard && wal.storage != WalStorage.flashPage) {
       throw Exception('This recording is already on phone');
     }
 
-    // Set sync state to syncing so progress updates are processed
     _updateSyncState(_syncState.toSyncing());
 
     try {
-      await _walService.getSyncs().syncWal(wal: wal, progress: this, connectionListener: connectionListener);
+      await _walService.getSyncs().syncWal(wal: wal, progress: this);
       await refreshWals();
       _updateSyncState(_syncState.toIdle());
     } catch (e) {
