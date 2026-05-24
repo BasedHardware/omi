@@ -2,10 +2,577 @@
   "cases": [
     {
       "id": "fixture_good_meeting",
+      "scenario": "saved_real_provider_e2e",
+      "current_policy_provider": "deepgram",
       "deepgram_fixture": "fixture_good_meeting.deepgram.json",
       "assemblyai_fixture": "fixture_good_meeting.assemblyai.json",
       "deepgram_rollup": "fixture_good_meeting.deepgram.rollup.json",
       "assemblyai_rollup": "fixture_good_meeting.assemblyai.rollup.json"
+    },
+    {
+      "id": "synthetic_clean_turns",
+      "scenario": "clean_turns",
+      "current_policy_provider": "assemblyai",
+      "deepgram": {
+        "transcript": {
+          "segments": [
+            {
+              "text": "The first milestone is ready for review.",
+              "start": 0.0,
+              "end": 2.0,
+              "provider_cluster_id": "0",
+              "oracle_speaker": "alex"
+            },
+            {
+              "text": "I will check the metrics this afternoon.",
+              "start": 2.2,
+              "end": 4.4,
+              "provider_cluster_id": "1",
+              "oracle_speaker": "casey"
+            }
+          ]
+        },
+        "ledger": {
+          "run_count": 1,
+          "status_counts": {
+            "succeeded": 1
+          },
+          "raw_audio_seconds": 5.0,
+          "billable_seconds": 5.0,
+          "estimated_cost_usd": 0.0002,
+          "latency_seconds": 1.0,
+          "fallback_count": 0
+        }
+      },
+      "assemblyai": {
+        "transcript": {
+          "segments": [
+            {
+              "text": "The first milestone is ready for review.",
+              "start": 0.1,
+              "end": 2.1,
+              "provider_cluster_id": "A",
+              "oracle_speaker": "alex"
+            },
+            {
+              "text": "I will check the metrics this afternoon.",
+              "start": 2.3,
+              "end": 4.5,
+              "provider_cluster_id": "B",
+              "oracle_speaker": "casey"
+            }
+          ]
+        },
+        "ledger": {
+          "run_count": 1,
+          "status_counts": {
+            "succeeded": 1
+          },
+          "raw_audio_seconds": 5.0,
+          "billable_seconds": 5.0,
+          "estimated_cost_usd": 0.00036,
+          "latency_seconds": 1.8,
+          "fallback_count": 0,
+          "rejected_reconciliation_count": 1
+        }
+      }
+    },
+    {
+      "id": "synthetic_fast_turns",
+      "scenario": "fast_turns",
+      "current_policy_provider": "assemblyai",
+      "deepgram": {
+        "transcript": {
+          "segments": [
+            {
+              "text": "Yes.",
+              "start": 0.0,
+              "end": 0.2,
+              "provider_cluster_id": "0",
+              "oracle_speaker": "alex"
+            },
+            {
+              "text": "No.",
+              "start": 0.3,
+              "end": 0.5,
+              "provider_cluster_id": "1",
+              "oracle_speaker": "casey"
+            },
+            {
+              "text": "Maybe after lunch.",
+              "start": 0.6,
+              "end": 1.1,
+              "provider_cluster_id": "0",
+              "oracle_speaker": "alex"
+            }
+          ]
+        },
+        "ledger": {
+          "run_count": 1,
+          "status_counts": {
+            "succeeded": 1
+          },
+          "raw_audio_seconds": 2.0,
+          "billable_seconds": 2.0,
+          "estimated_cost_usd": 0.00008,
+          "latency_seconds": 0.9,
+          "fallback_count": 0,
+          "split_count": 1
+        }
+      },
+      "assemblyai": {
+        "transcript": {
+          "segments": [
+            {
+              "text": "Yes.",
+              "start": 0.0,
+              "end": 0.2,
+              "provider_cluster_id": "A",
+              "oracle_speaker": "alex"
+            },
+            {
+              "text": "No.",
+              "start": 0.3,
+              "end": 0.5,
+              "provider_cluster_id": "B",
+              "oracle_speaker": "casey"
+            },
+            {
+              "text": "Maybe after lunch.",
+              "start": 0.7,
+              "end": 1.2,
+              "provider_cluster_id": "A.2",
+              "oracle_speaker": "alex"
+            }
+          ]
+        },
+        "ledger": {
+          "run_count": 1,
+          "status_counts": {
+            "succeeded": 1
+          },
+          "raw_audio_seconds": 2.0,
+          "billable_seconds": 2.0,
+          "estimated_cost_usd": 0.00015,
+          "latency_seconds": 1.4,
+          "fallback_count": 0,
+          "split_count": 1,
+          "rejected_reconciliation_count": 1
+        }
+      }
+    },
+    {
+      "id": "synthetic_overlap",
+      "scenario": "overlap",
+      "current_policy_provider": "assemblyai",
+      "deepgram": {
+        "transcript": {
+          "segments": [
+            {
+              "text": "Start the recording now.",
+              "start": 0.0,
+              "end": 1.5,
+              "provider_cluster_id": "0",
+              "oracle_speaker": "alex"
+            },
+            {
+              "text": "I am already taking notes.",
+              "start": 1.0,
+              "end": 2.8,
+              "provider_cluster_id": "1",
+              "oracle_speaker": "casey"
+            }
+          ]
+        },
+        "ledger": {
+          "run_count": 1,
+          "status_counts": {
+            "succeeded": 1
+          },
+          "raw_audio_seconds": 3.0,
+          "billable_seconds": 3.0,
+          "estimated_cost_usd": 0.00012,
+          "latency_seconds": 1.2,
+          "fallback_count": 0
+        }
+      },
+      "assemblyai": {
+        "transcript": {
+          "segments": [
+            {
+              "text": "Start the recording now.",
+              "start": 0.0,
+              "end": 1.6,
+              "provider_cluster_id": "A",
+              "oracle_speaker": "alex"
+            },
+            {
+              "text": "I am already taking notes.",
+              "start": 1.1,
+              "end": 2.9,
+              "provider_cluster_id": "B",
+              "oracle_speaker": "casey"
+            },
+            {
+              "text": "notes.",
+              "start": 2.7,
+              "end": 2.9,
+              "provider_cluster_id": "B.2",
+              "oracle_speaker": "casey"
+            }
+          ]
+        },
+        "ledger": {
+          "run_count": 1,
+          "status_counts": {
+            "succeeded": 1
+          },
+          "raw_audio_seconds": 3.0,
+          "billable_seconds": 3.0,
+          "estimated_cost_usd": 0.00022,
+          "latency_seconds": 1.9,
+          "fallback_count": 0,
+          "split_count": 1,
+          "accepted_reconciliation_count": 1
+        }
+      }
+    },
+    {
+      "id": "synthetic_sparse_speech",
+      "scenario": "sparse_speech",
+      "current_policy_provider": "assemblyai",
+      "deepgram": {
+        "transcript": {
+          "segments": [
+            {
+              "text": "Okay.",
+              "start": 12.0,
+              "end": 12.3,
+              "provider_cluster_id": "0",
+              "oracle_speaker": "alex"
+            }
+          ]
+        },
+        "ledger": {
+          "run_count": 1,
+          "status_counts": {
+            "succeeded": 1
+          },
+          "raw_audio_seconds": 30.0,
+          "speech_active_seconds": 0.5,
+          "billable_seconds": 30.0,
+          "estimated_cost_usd": 0.0012,
+          "latency_seconds": 1.0,
+          "fallback_count": 0
+        }
+      },
+      "assemblyai": {
+        "transcript": {
+          "segments": [
+            {
+              "text": "Okay.",
+              "start": 12.1,
+              "end": 12.4,
+              "provider_cluster_id": "A",
+              "oracle_speaker": "alex"
+            }
+          ]
+        },
+        "ledger": {
+          "run_count": 1,
+          "status_counts": {
+            "succeeded": 1
+          },
+          "raw_audio_seconds": 30.0,
+          "speech_active_seconds": 0.5,
+          "billable_seconds": 30.0,
+          "estimated_cost_usd": 0.0022,
+          "latency_seconds": 2.0,
+          "fallback_count": 0
+        }
+      }
+    },
+    {
+      "id": "synthetic_no_speech",
+      "scenario": "low_signal_no_speech",
+      "current_policy_provider": "deepgram",
+      "deepgram": {
+        "transcript": {
+          "segments": []
+        },
+        "ledger": {
+          "run_count": 1,
+          "status_counts": {
+            "succeeded": 1
+          },
+          "raw_audio_seconds": 15.0,
+          "speech_active_seconds": 0.0,
+          "billable_seconds": 15.0,
+          "estimated_cost_usd": 0.0006,
+          "latency_seconds": 0.8,
+          "fallback_count": 0
+        }
+      },
+      "assemblyai": {
+        "transcript": {
+          "segments": []
+        },
+        "ledger": {
+          "run_count": 1,
+          "status_counts": {
+            "succeeded": 1
+          },
+          "raw_audio_seconds": 15.0,
+          "speech_active_seconds": 0.0,
+          "billable_seconds": 15.0,
+          "estimated_cost_usd": 0.0011,
+          "latency_seconds": 1.2,
+          "fallback_count": 0
+        }
+      }
+    },
+    {
+      "id": "synthetic_multilingual_turns",
+      "scenario": "multilingual_turns",
+      "current_policy_provider": "assemblyai",
+      "deepgram": {
+        "transcript": {
+          "segments": [
+            {
+              "text": "Hola equipo, the build is ready.",
+              "start": 0.0,
+              "end": 2.4,
+              "provider_cluster_id": "0",
+              "oracle_speaker": "alex"
+            },
+            {
+              "text": "Merci, I will verify it now.",
+              "start": 2.6,
+              "end": 4.7,
+              "provider_cluster_id": "1",
+              "oracle_speaker": "casey"
+            }
+          ]
+        },
+        "ledger": {
+          "run_count": 1,
+          "status_counts": {
+            "succeeded": 1
+          },
+          "raw_audio_seconds": 5.0,
+          "billable_seconds": 5.0,
+          "estimated_cost_usd": 0.0002,
+          "latency_seconds": 1.3,
+          "fallback_count": 0
+        }
+      },
+      "assemblyai": {
+        "transcript": {
+          "segments": [
+            {
+              "text": "Hola equipo, the build is ready.",
+              "start": 0.1,
+              "end": 2.5,
+              "provider_cluster_id": "A",
+              "oracle_speaker": "alex"
+            },
+            {
+              "text": "Merci, I will verify it now.",
+              "start": 2.7,
+              "end": 4.8,
+              "provider_cluster_id": "B",
+              "oracle_speaker": "casey"
+            }
+          ]
+        },
+        "ledger": {
+          "run_count": 1,
+          "status_counts": {
+            "succeeded": 1
+          },
+          "raw_audio_seconds": 5.0,
+          "billable_seconds": 5.0,
+          "estimated_cost_usd": 0.00036,
+          "latency_seconds": 2.0,
+          "fallback_count": 0
+        }
+      }
+    },
+    {
+      "id": "synthetic_duplicate_replay",
+      "scenario": "duplicate_chunk_replay",
+      "current_policy_provider": "assemblyai",
+      "deepgram": {
+        "transcript": {
+          "segments": [
+            {
+              "text": "This chunk should only count once.",
+              "start": 0.0,
+              "end": 2.0,
+              "provider_cluster_id": "0",
+              "oracle_speaker": "alex"
+            }
+          ]
+        },
+        "ledger": {
+          "run_count": 2,
+          "status_counts": {
+            "succeeded": 2
+          },
+          "raw_audio_seconds": 4.0,
+          "billable_seconds": 2.0,
+          "estimated_cost_usd": 0.00008,
+          "latency_seconds": 1.0,
+          "fallback_count": 0
+        }
+      },
+      "assemblyai": {
+        "transcript": {
+          "segments": [
+            {
+              "text": "This chunk should only count once.",
+              "start": 0.0,
+              "end": 2.1,
+              "provider_cluster_id": "A",
+              "oracle_speaker": "alex"
+            }
+          ]
+        },
+        "ledger": {
+          "run_count": 2,
+          "status_counts": {
+            "succeeded": 2
+          },
+          "raw_audio_seconds": 4.0,
+          "billable_seconds": 2.0,
+          "estimated_cost_usd": 0.00015,
+          "latency_seconds": 1.7,
+          "fallback_count": 0
+        }
+      }
+    },
+    {
+      "id": "synthetic_provider_failure_fallback",
+      "scenario": "provider_failure_fallback",
+      "current_policy_provider": "deepgram",
+      "deepgram": {
+        "transcript": {
+          "segments": [
+            {
+              "text": "Fallback kept the transcript available.",
+              "start": 0.0,
+              "end": 2.2,
+              "provider_cluster_id": "0",
+              "oracle_speaker": "alex"
+            }
+          ]
+        },
+        "ledger": {
+          "run_count": 10,
+          "status_counts": {
+            "succeeded": 10
+          },
+          "raw_audio_seconds": 22.0,
+          "billable_seconds": 22.0,
+          "estimated_cost_usd": 0.00088,
+          "latency_seconds": 1.1,
+          "fallback_count": 0
+        }
+      },
+      "assemblyai": {
+        "transcript": {
+          "segments": [
+            {
+              "text": "Fallback kept the transcript available.",
+              "start": 0.0,
+              "end": 2.2,
+              "provider_cluster_id": "A",
+              "oracle_speaker": "alex"
+            }
+          ]
+        },
+        "ledger": {
+          "run_count": 10,
+          "status_counts": {
+            "succeeded": 9,
+            "timeout": 0
+          },
+          "raw_audio_seconds": 22.0,
+          "billable_seconds": 22.0,
+          "estimated_cost_usd": 0.00158,
+          "latency_seconds": 2.1,
+          "fallback_count": 1
+        }
+      }
+    },
+    {
+      "id": "saved_policy_router_gap",
+      "scenario": "saved_real_policy_router_outputs",
+      "current_policy_provider": "deepgram",
+      "deepgram": {
+        "transcript": {
+          "segments": [
+            {
+              "text": "We need battery telemetry before the next build ships and the background recorder should keep stable chunks for the entire review.",
+              "start": 0.0,
+              "end": 5.0,
+              "provider_cluster_id": "0",
+              "oracle_speaker": "alex"
+            },
+            {
+              "text": "Okay.",
+              "start": 5.1,
+              "end": 6.0,
+              "provider_cluster_id": "1",
+              "oracle_speaker": "casey"
+            }
+          ]
+        },
+        "ledger": {
+          "run_count": 1,
+          "status_counts": {
+            "succeeded": 1
+          },
+          "raw_audio_seconds": 6.0,
+          "billable_seconds": 6.0,
+          "estimated_cost_usd": 0.00044,
+          "latency_seconds": 1.3,
+          "fallback_count": 0
+        }
+      },
+      "assemblyai": {
+        "transcript": {
+          "segments": [
+            {
+              "text": "We need battery telemetry before the next build ships and the background recorder should keep stable chunks for the entire review.",
+              "start": 0.1,
+              "end": 5.1,
+              "provider_cluster_id": "A",
+              "oracle_speaker": "alex"
+            },
+            {
+              "text": "Okay.",
+              "start": 5.2,
+              "end": 6.1,
+              "provider_cluster_id": "A",
+              "oracle_speaker": "casey"
+            }
+          ]
+        },
+        "ledger": {
+          "run_count": 1,
+          "status_counts": {
+            "succeeded": 1
+          },
+          "raw_audio_seconds": 6.0,
+          "billable_seconds": 6.0,
+          "estimated_cost_usd": 0.00122,
+          "latency_seconds": 2.2,
+          "fallback_count": 0,
+          "split_count": 0,
+          "rejected_reconciliation_count": 1
+        }
+      }
     }
   ]
 }

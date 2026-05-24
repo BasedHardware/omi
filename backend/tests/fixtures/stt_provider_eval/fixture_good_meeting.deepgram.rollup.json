@@ -7,6 +7,11 @@
   "speech_active_seconds": 4.5,
   "billable_seconds": 5.0,
   "estimated_cost_usd": 0.00036,
+  "latency_seconds": 1.1,
+  "runtime_seconds": 1.1,
   "retry_count": 0,
-  "fallback_count": 0
+  "fallback_count": 0,
+  "split_count": 0,
+  "accepted_reconciliation_count": 0,
+  "rejected_reconciliation_count": 1
 }

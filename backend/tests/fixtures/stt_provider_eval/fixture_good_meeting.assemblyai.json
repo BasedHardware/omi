@@ -6,6 +6,7 @@
       "end": 2.3,
       "provider_cluster_id": "A",
       "provider_speaker_label": "ASSEMBLYAI_SPEAKER_A",
+      "oracle_speaker": "alex",
       "person_id": "person_alex",
       "speaker_identity_state": "identified",
       "speaker_identity_confidence": 0.88
@@ -16,6 +17,7 @@
       "end": 4.9,
       "provider_cluster_id": "B",
       "provider_speaker_label": "ASSEMBLYAI_SPEAKER_B",
+      "oracle_speaker": "casey",
       "speaker_identity_state": "unknown",
       "speaker_identity_confidence": 0.46
     }

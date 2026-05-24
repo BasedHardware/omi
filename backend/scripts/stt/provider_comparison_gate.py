@@ -22,7 +22,7 @@ try:
     from utils.stt.providers import STTProviderName, STTWorkload  # noqa: E402
 
     LIVE_PROVIDER_IMPORT_ERROR = None
-except ModuleNotFoundError as e:
+except Exception as e:
     _transcribe_bytes_with_provider = None
     _transcribe_url_with_provider = None
     STTProviderName = None
@@ -120,7 +120,11 @@ def main() -> int:
 
 
 def _prepare_case(case: dict[str, Any], base_path: Path) -> dict[str, Any]:
-    prepared = {'id': case.get('id') or case.get('case_id')}
+    prepared = {
+        'id': case.get('id') or case.get('case_id'),
+        'scenario': case.get('scenario') or case.get('type'),
+        'current_policy_provider': case.get('current_policy_provider'),
+    }
     prepared['deepgram'] = _load_provider_payload(case, base_path, 'deepgram')
     prepared['assemblyai'] = _load_provider_payload(case, base_path, 'assemblyai')
     return prepared
