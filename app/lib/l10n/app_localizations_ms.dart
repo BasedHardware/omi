@@ -965,11 +965,6 @@ class AppLocalizationsMs extends AppLocalizations {
   }
 
   @override
-  String memoriesUsedThisMonth(String used, String limit) {
-    return '$used daripada $limit ingatan dicipta bulan ini';
-  }
-
-  @override
   String get visibility => 'Keterlihatan';
 
   @override
@@ -1648,7 +1643,7 @@ class AppLocalizationsMs extends AppLocalizations {
   String get finalTouches => 'Sentuhan akhir';
 
   @override
-  String get processing => 'Memproses...';
+  String get processing => 'Memproses';
 
   @override
   String get features => 'Ciri-ciri';
@@ -6857,7 +6852,15 @@ class AppLocalizationsMs extends AppLocalizations {
   String get lowBatteryAlertTitle => 'Amaran Bateri Lemah';
 
   @override
-  String get lowBatteryAlertBody => 'Bateri peranti anda lemah. Masa untuk mengecas semula! 🔋';
+  String lowBatteryAlertBody(int level) {
+    return 'Bateri anda berada di $level%. Masa untuk mengecas semula! 🔋';
+  }
+
+  @override
+  String get batteryFullyChargedTitle => 'Omi telah dicas penuh';
+
+  @override
+  String get batteryFullyChargedBody => 'Peranti Omi anda telah dicas sepenuhnya. Anda boleh mencabutnya!';
 
   @override
   String get deviceDisconnectedNotificationTitle => 'Peranti Omi Anda Terputus';
@@ -8461,7 +8464,7 @@ class AppLocalizationsMs extends AppLocalizations {
   String get manageStorage => 'Urus storan';
 
   @override
-  String get safelyBackedUp => 'Disandarkan dengan selamat ke telefon anda';
+  String get safelyBackedUp => 'Perbualan dicipta';
 
   @override
   String get notYetSynced => 'Belum disegerakkan ke telefon anda';
@@ -9264,4 +9267,152 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get bulkDeleteFailed => 'Tidak dapat memadam tugasan. Sila cuba lagi.';
+
+  @override
+  String get deleteRecap => 'Padam ringkasan';
+
+  @override
+  String get deleteRecapConfirmTitle => 'Padam ringkasan ini?';
+
+  @override
+  String get deleteRecapConfirmBody =>
+      'Ringkasan ini akan dibuang secara kekal. Perbualan asal pada hari itu tidak terjejas.';
+
+  @override
+  String get deleteRecapAction => 'Padam';
+
+  @override
+  String get recapDeletedSnackbar => 'Ringkasan dipadam';
+
+  @override
+  String get recapDeleteFailed => 'Tidak dapat memadam ringkasan. Cuba lagi kemudian.';
+
+  @override
+  String get syncStatusBackedUp => 'Telah disandarkan';
+
+  @override
+  String get syncStatusBackingUp => 'Menyegerakkan…';
+
+  @override
+  String get syncStatusWaiting => 'Menunggu untuk segerak';
+
+  @override
+  String get syncStatusRetrying => 'Gagal diproses — mencuba semula';
+
+  @override
+  String get syncStatusFailed => 'Gagal — ketik Cuba Lagi';
+
+  @override
+  String get syncStatusFileUnavailable => 'Fail tidak tersedia';
+
+  @override
+  String get noRecordingsYet => 'Belum ada rakaman';
+
+  @override
+  String get syncInProgress => 'Penyegerakan sedang berjalan';
+
+  @override
+  String get syncStatusUploaded => 'Dimuat naik · diproses di Omi';
+
+  @override
+  String get deleteWhileProcessingTitle => 'Masih diproses';
+
+  @override
+  String get deleteWhileProcessingMessage =>
+      'Rakaman ini telah dimuat naik tetapi Omi masih mencipta perbualan. Jika anda padam sekarang dan pemprosesan gagal, ia tidak dapat dipulihkan. Padam juga?';
+
+  @override
+  String get syncCardAllBackedUp => 'Semua rakaman tersegerak';
+
+  @override
+  String syncCardReadyCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count rakaman sedia untuk disegerakkan',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get syncCardProcessing => 'Memproses di Omi…';
+
+  @override
+  String get syncCardWaitingInternet => 'Menunggu internet';
+
+  @override
+  String syncCardNeedsAttention(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count rakaman memerlukan perhatian',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get syncFlowIntro =>
+      'Rakaman dipindahkan daripada peranti anda ke telefon ini dan disimpan secara setempat, kemudian dimuat naik ke pelayan Omi tempat ia ditranskripsikan dan ditukar menjadi perbualan.';
+
+  @override
+  String get syncStepUpload => 'Segerak';
+
+  @override
+  String get syncStepUploadDesc => 'Rakaman anda dihantar ke pelayan Omi';
+
+  @override
+  String get syncStepProcess => 'Transkripsi';
+
+  @override
+  String get syncStepProcessDesc => 'Omi mengubah audio menjadi perbualan';
+
+  @override
+  String get syncStepBackedUp => 'Perbualan siap';
+
+  @override
+  String get syncStepBackedUpDesc => 'Cari di bawah Perbualan';
+
+  @override
+  String get syncFailureFootnote =>
+      'Jika pemprosesan gagal, rakaman akan dicuba semula secara automatik pada penyegerakan seterusnya.';
+
+  @override
+  String get syncStatusConversationCreated => 'Perbualan dicipta';
+
+  @override
+  String get syncCardUploadingTitle => 'Memuat naik ke Omi';
+
+  @override
+  String get syncCardDownloadingTitle => 'Memuat turun daripada peranti anda';
+
+  @override
+  String syncCardProgressOf(int current, int total) {
+    return '$current daripada $total';
+  }
+
+  @override
+  String get syncStatusOnDevice => 'Pada peranti anda';
+
+  @override
+  String get syncStatusDownloadingFromDevice => 'Memuat turun daripada peranti anda';
+
+  @override
+  String get newestFirst => 'Terbaharu dahulu';
+
+  @override
+  String get noSyncedRecordingsYet => 'Belum ada rakaman yang disegerakkan';
+
+  @override
+  String get morePaymentMethodsComingSoon => 'Lebih banyak kaedah pembayaran akan datang';
+
+  @override
+  String get syncProcessingBackgroundHint => 'Ini berterusan di latar belakang — anda boleh meninggalkan skrin ini.';
+
+  @override
+  String get syncCardRateLimited =>
+      'Had penggunaan saksama telah dicapai — penyegerakan akan disambung semula secara automatik';
+
+  @override
+  String get syncCardBackendBusy =>
+      'Pelayan Omi sedang sibuk — rakaman anda akan disegerakkan apabila kapasiti tersedia semula';
 }

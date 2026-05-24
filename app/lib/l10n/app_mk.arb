@@ -1160,17 +1160,6 @@
             }
         }
     },
-    "memoriesUsedThisMonth": "{used} од {limit} спомени креирани овој месец",
-    "@memoriesUsedThisMonth": {
-        "placeholders": {
-            "used": {
-                "type": "String"
-            },
-            "limit": {
-                "type": "String"
-            }
-        }
-    },
     "visibility": "Видливост",
     "visibilitySubtitle": "Контролирај кои разговори се појавуваат во твоја листа",
     "showShortConversations": "Покажи кратки разговори",
@@ -1580,7 +1569,7 @@
     "designingApp": "Дизајнирање апликација",
     "generatingIconStep": "Генерирање икона",
     "finalTouches": "Последни штипови",
-    "processing": "Обработка...",
+    "processing": "Се обработува",
     "features": "Карактеристики",
     "creatingYourApp": "Создавање на вашата апликација...",
     "generatingIcon": "Генерирање икона...",
@@ -8397,9 +8386,16 @@
     "@lowBatteryAlertTitle": {
         "description": "Title for low battery notification"
     },
-    "lowBatteryAlertBody": "Вашиот уред има ниска батерија. Време е за полнење! 🔋",
+    "lowBatteryAlertBody": "Вашата батерија е на {level}%. Време е за полнење! 🔋",
+    "batteryFullyChargedTitle": "Omi е целосно наполнет",
+    "batteryFullyChargedBody": "Вашиот Omi уред е целосно наполнет. Можете да го исклучите!",
     "@lowBatteryAlertBody": {
-        "description": "Body text for low battery notification"
+        "description": "Body text for low battery notification",
+        "placeholders": {
+            "level": {
+                "type": "int"
+            }
+        }
     },
     "deviceDisconnectedNotificationTitle": "Вашиот Omi Уред се Откачи",
     "@deviceDisconnectedNotificationTitle": {
@@ -10152,7 +10148,7 @@
     "@manageStorage": {
         "description": "Menu option and sheet title for managing recording storage"
     },
-    "safelyBackedUp": "Безбедно резервирано на твојот телефон",
+    "safelyBackedUp": "Создадени разговори",
     "@safelyBackedUp": {
         "description": "Description for synced files in manage storage sheet"
     },
@@ -10725,5 +10721,50 @@
     "startCallRecording": "Започни снимање повик",
     "startVoiceRecording": "Започни гласовно снимање",
     "bulkExportAlreadyExported": "Сите избрани задачи се веќе извезени",
-    "bulkDeleteFailed": "Задачите не можеа да се избришат. Обидете се повторно."
+    "bulkDeleteFailed": "Задачите не можеа да се избришат. Обидете се повторно.",
+    "deleteRecap": "Избриши преглед",
+    "deleteRecapConfirmTitle": "Да се избрише овој преглед?",
+    "deleteRecapConfirmBody": "Овој преглед ќе биде трајно отстранет. Оригиналните разговори од тој ден остануваат недопрени.",
+    "deleteRecapAction": "Избриши",
+    "recapDeletedSnackbar": "Прегледот е избришан",
+    "recapDeleteFailed": "Прегледот не може да се избрише. Обидете се повторно подоцна.",
+    "syncStatusBackedUp": "Резервно зачувано",
+    "syncStatusBackingUp": "Синхронизирање…",
+    "syncStatusWaiting": "Чека синхронизација",
+    "syncStatusRetrying": "Обработката не успеа — нов обид",
+    "syncStatusFailed": "Неуспешно — допрете Обиди се повторно",
+    "syncStatusFileUnavailable": "Датотеката е недостапна",
+    "syncStatusUploaded": "Поставено · се обработува на Omi",
+    "noRecordingsYet": "Сè уште нема снимки",
+    "syncInProgress": "Синхронизацијата е во тек",
+    "deleteWhileProcessingTitle": "Сè уште се обработува",
+    "deleteWhileProcessingMessage": "Оваа снимка е поставена, но Omi сè уште го создава разговорот. Ако ја избришете сега и обработката не успее, не може да се врати. Сепак да се избрише?",
+    "syncCardAllBackedUp": "Сите снимки се синхронизирани",
+    "syncCardReadyCount": "{count, plural, one{1 снимка спремна за синхронизација} other{{count} снимки спремни за синхронизација}}",
+    "syncCardProcessing": "Се обработува во Omi…",
+    "syncCardWaitingInternet": "Се чека интернет",
+    "syncCardNeedsAttention": "{count, plural, one{{count} снимка бара внимание} other{{count} снимки бараат внимание}}",
+    "syncFlowIntro": "Снимките се пренесуваат од вашиот уред на овој телефон и се складираат локално, а потоа се прикачуваат на серверот на Omi, каде што се транскрибираат и се претвораат во разговори.",
+    "syncStepUpload": "Синхронизација",
+    "syncStepUploadDesc": "Вашиот запис се испраќа на серверот на Omi",
+    "syncStepProcess": "Транскрипција",
+    "syncStepProcessDesc": "Omi го претвора звукот во разговор",
+    "syncStepBackedUp": "Разговорот е готов",
+    "syncStepBackedUpDesc": "Најди го во Разговори",
+    "syncFailureFootnote": "Ако обработката не успее, снимката автоматски се повторува при следната синхронизација.",
+    "syncStatusConversationCreated": "Разговорот е создаден",
+    "syncCardUploadingTitle": "Се прикачува на Omi",
+    "syncCardDownloadingTitle": "Се презема од вашиот уред",
+    "syncCardProgressOf": "{current} од {total}",
+    "syncStatusOnDevice": "На вашиот уред",
+    "syncStatusDownloadingFromDevice": "Се презема од вашиот уред",
+    "newestFirst": "Прво најнови",
+    "noSyncedRecordingsYet": "Сè уште нема синхронизирани записи",
+    "morePaymentMethodsComingSoon": "Наскоро повеќе начини на плаќање",
+    "@morePaymentMethodsComingSoon": {
+        "description": "Placeholder card text shown under available payment methods"
+    },
+    "syncProcessingBackgroundHint": "Ова продолжува во заднина — може да го напуштите овој екран.",
+    "syncCardRateLimited": "Достигнат е лимитот за фер користење — синхронизацијата автоматски ќе продолжи",
+    "syncCardBackendBusy": "Серверите на Omi се преоптоварени — вашите снимки ќе се синхронизираат штом ќе се ослободи капацитет"
 }

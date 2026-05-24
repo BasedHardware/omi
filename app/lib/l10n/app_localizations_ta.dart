@@ -968,11 +968,6 @@ class AppLocalizationsTa extends AppLocalizations {
   }
 
   @override
-  String memoriesUsedThisMonth(String used, String limit) {
-    return '$used / $limit நினைவுகள் இந்த மாதம் உருவாக்கப்பட்டுள்ளன';
-  }
-
-  @override
   String get visibility => 'দৃশ்যমानতা';
 
   @override
@@ -1651,7 +1646,7 @@ class AppLocalizationsTa extends AppLocalizations {
   String get finalTouches => 'চূড়ান்த தொடர்பு';
 
   @override
-  String get processing => 'செயல்பாட்டு மாற்றம்...';
+  String get processing => 'செயலாக்கப்படுகிறது';
 
   @override
   String get features => 'பண்புகள்';
@@ -6884,8 +6879,15 @@ class AppLocalizationsTa extends AppLocalizations {
   String get lowBatteryAlertTitle => 'குறைந்த பேட்டரி எச்சரிக்கை';
 
   @override
-  String get lowBatteryAlertBody =>
-      'உங்கள் சாதனத்தின் பேட்டரி குறைந்து விட்டது. மீண்டும் சார்ஜ் செய்ய வேண்டிய நேரம்! 🔋';
+  String lowBatteryAlertBody(int level) {
+    return 'உங்கள் பேட்டரி $level% இல் உள்ளது. மீண்டும் சார்ஜ் செய்ய வேண்டிய நேரம்! 🔋';
+  }
+
+  @override
+  String get batteryFullyChargedTitle => 'Omi முழுமையாக சார்ஜ் ஆகியது';
+
+  @override
+  String get batteryFullyChargedBody => 'உங்கள் Omi சாதனம் முழுமையாக சார்ஜ் ஆகியது. அனப்ளக் செய்யலாம்!';
 
   @override
   String get deviceDisconnectedNotificationTitle => 'உங்கள் Omi சாதனம் துண்டிக்கப்பட்டது';
@@ -8499,7 +8501,7 @@ class AppLocalizationsTa extends AppLocalizations {
   String get manageStorage => 'சேமிப்பகத்தை நிர்வகிக்கவும்';
 
   @override
-  String get safelyBackedUp => 'உங்கள் தொலைபேசিக்கு பாதுகாப்பாக வெச்சிவைக்கப்பட்டுள்ளது';
+  String get safelyBackedUp => 'உருவாக்கப்பட்ட உரையாடல்கள்';
 
   @override
   String get notYetSynced => 'இன்னும் உங்கள் தொலைபேசிக்கு ஒத்திசைக்கப்படவில்லை';
@@ -9309,4 +9311,153 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get bulkDeleteFailed => 'பணிகளை நீக்க முடியவில்லை. மீண்டும் முயற்சிக்கவும்.';
+
+  @override
+  String get deleteRecap => 'சுருக்கத்தை நீக்கு';
+
+  @override
+  String get deleteRecapConfirmTitle => 'இந்தச் சுருக்கத்தை நீக்கவா?';
+
+  @override
+  String get deleteRecapConfirmBody =>
+      'இந்தச் சுருக்கம் நிரந்தரமாக அகற்றப்படும். அந்த நாளின் அசல் உரையாடல்கள் பாதிக்கப்படவில்லை.';
+
+  @override
+  String get deleteRecapAction => 'நீக்கு';
+
+  @override
+  String get recapDeletedSnackbar => 'சுருக்கம் நீக்கப்பட்டது';
+
+  @override
+  String get recapDeleteFailed => 'சுருக்கத்தை நீக்க இயலவில்லை. பிறகு மீண்டும் முயற்சிக்கவும்.';
+
+  @override
+  String get syncStatusBackedUp => 'காப்புப் பிரதி எடுக்கப்பட்டது';
+
+  @override
+  String get syncStatusBackingUp => 'ஒத்திசைக்கிறது…';
+
+  @override
+  String get syncStatusWaiting => 'ஒத்திசைவுக்காக காத்திருக்கிறது';
+
+  @override
+  String get syncStatusRetrying => 'செயலாக்க முடியவில்லை — மீண்டும் முயற்சிக்கிறது';
+
+  @override
+  String get syncStatusFailed => 'தோல்வி — Retry-ஐ அழுத்தவும்';
+
+  @override
+  String get syncStatusFileUnavailable => 'கோப்பு கிடைக்கவில்லை';
+
+  @override
+  String get noRecordingsYet => 'இன்னும் பதிவுகள் இல்லை';
+
+  @override
+  String get syncInProgress => 'ஒத்திசைவு நடைபெறுகிறது';
+
+  @override
+  String get syncStatusUploaded => 'பதிவேற்றப்பட்டது · Omi-இல் செயலாக்கப்படுகிறது';
+
+  @override
+  String get deleteWhileProcessingTitle => 'இன்னும் செயலாக்கப்படுகிறது';
+
+  @override
+  String get deleteWhileProcessingMessage =>
+      'இந்தப் பதிவு பதிவேற்றப்பட்டது, ஆனால் Omi இன்னும் உரையாடலை உருவாக்குகிறது. இப்போது நீக்கி செயலாக்கம் தோல்வியடைந்தால், மீட்டெடுக்க முடியாது. அப்படியும் நீக்கவா?';
+
+  @override
+  String get syncCardAllBackedUp => 'எல்லா பதிவுகளும் ஒத்திசைக்கப்பட்டன';
+
+  @override
+  String syncCardReadyCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count பதிவுகள் ஒத்திசைக்கத் தயார்',
+      one: '1 பதிவு ஒத்திசைக்கத் தயார்',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get syncCardProcessing => 'Omi-யில் செயலாக்கப்படுகிறது…';
+
+  @override
+  String get syncCardWaitingInternet => 'இணையத்திற்காகக் காத்திருக்கிறது';
+
+  @override
+  String syncCardNeedsAttention(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count பதிவுகளுக்குக் கவனம் தேவை',
+      one: '1 பதிவுக்குக் கவனம் தேவை',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get syncFlowIntro =>
+      'பதிவுகள் உங்கள் சாதனத்திலிருந்து இந்த தொலைபேசிக்கு மாற்றப்பட்டு உள்ளூரில் சேமிக்கப்படுகின்றன, பின்னர் Omi இன் சேவையகத்திற்கு பதிவேற்றப்பட்டு, அங்கு அவை எழுத்துப்பெயர்க்கப்பட்டு உரையாடல்களாக மாற்றப்படுகின்றன.';
+
+  @override
+  String get syncStepUpload => 'ஒத்திசை';
+
+  @override
+  String get syncStepUploadDesc => 'உங்கள் பதிவு Omi இன் சேவையகத்திற்கு அனுப்பப்படுகிறது';
+
+  @override
+  String get syncStepProcess => 'எழுத்துப் பெயர்ப்பு';
+
+  @override
+  String get syncStepProcessDesc => 'Omi ஒலியை உரையாடலாக மாற்றுகிறது';
+
+  @override
+  String get syncStepBackedUp => 'உரையாடல் தயார்';
+
+  @override
+  String get syncStepBackedUpDesc => 'அதை உரையாடல்கள் பகுதியில் காணலாம்';
+
+  @override
+  String get syncFailureFootnote =>
+      'செயலாக்கம் தோல்வியடைந்தால், அடுத்த ஒத்திசைவில் பதிவு தானாகவே மீண்டும் முயற்சிக்கப்படும்.';
+
+  @override
+  String get syncStatusConversationCreated => 'உரையாடல் உருவாக்கப்பட்டது';
+
+  @override
+  String get syncCardUploadingTitle => 'Omi-க்கு பதிவேற்றப்படுகிறது';
+
+  @override
+  String get syncCardDownloadingTitle => 'உங்கள் சாதனத்திலிருந்து பதிவிறக்கப்படுகிறது';
+
+  @override
+  String syncCardProgressOf(int current, int total) {
+    return '$total-இல் $current';
+  }
+
+  @override
+  String get syncStatusOnDevice => 'உங்கள் சாதனத்தில்';
+
+  @override
+  String get syncStatusDownloadingFromDevice => 'உங்கள் சாதனத்திலிருந்து பதிவிறக்கப்படுகிறது';
+
+  @override
+  String get newestFirst => 'புதியவை முதலில்';
+
+  @override
+  String get noSyncedRecordingsYet => 'ஒத்திசைக்கப்பட்ட பதிவுகள் இன்னும் இல்லை';
+
+  @override
+  String get morePaymentMethodsComingSoon => 'மேலும் கட்டண முறைகள் விரைவில்';
+
+  @override
+  String get syncProcessingBackgroundHint => 'இது பின்னணியில் தொடர்கிறது — இந்தத் திரையிலிருந்து நீங்கள் வெளியேறலாம்.';
+
+  @override
+  String get syncCardRateLimited => 'நியாயமான பயன்பாட்டு வரம்பை அடைந்தது — ஒத்திசைவு தானாகவே மீண்டும் தொடரும்';
+
+  @override
+  String get syncCardBackendBusy =>
+      'Omi சேவையகங்கள் பணிமிகுதியில் உள்ளன — திறன் கிடைத்தவுடன் உங்கள் பதிவுகள் ஒத்திசைக்கப்படும்';
 }

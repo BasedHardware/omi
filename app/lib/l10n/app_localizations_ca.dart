@@ -968,11 +968,6 @@ class AppLocalizationsCa extends AppLocalizations {
   }
 
   @override
-  String memoriesUsedThisMonth(String used, String limit) {
-    return '$used de $limit records creats aquest mes';
-  }
-
-  @override
   String get visibility => 'Visibilitat';
 
   @override
@@ -1652,7 +1647,7 @@ class AppLocalizationsCa extends AppLocalizations {
   String get finalTouches => 'Tocs finals';
 
   @override
-  String get processing => 'Processant...';
+  String get processing => 'Processant';
 
   @override
   String get features => 'Funcionalitats';
@@ -6874,7 +6869,15 @@ class AppLocalizationsCa extends AppLocalizations {
   String get lowBatteryAlertTitle => 'Alerta de bateria baixa';
 
   @override
-  String get lowBatteryAlertBody => 'La bateria del teu dispositiu és baixa. És hora de carregar! 🔋';
+  String lowBatteryAlertBody(int level) {
+    return 'La teva bateria és al $level%. És hora de carregar! 🔋';
+  }
+
+  @override
+  String get batteryFullyChargedTitle => 'L\'Omi està completament carregat';
+
+  @override
+  String get batteryFullyChargedBody => 'El teu dispositiu Omi està completament carregat. Pots desconnectar-lo!';
 
   @override
   String get deviceDisconnectedNotificationTitle => 'El teu dispositiu Omi s\'ha desconnectat';
@@ -8489,7 +8492,7 @@ class AppLocalizationsCa extends AppLocalizations {
   String get manageStorage => 'Gestionar emmagatzematge';
 
   @override
-  String get safelyBackedUp => 'Còpia de seguretat al vostre telèfon';
+  String get safelyBackedUp => 'Converses creades';
 
   @override
   String get notYetSynced => 'Encara no sincronitzat amb el vostre telèfon';
@@ -9294,4 +9297,153 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get bulkDeleteFailed => 'No s\'han pogut eliminar les tasques. Torna-ho a provar.';
+
+  @override
+  String get deleteRecap => 'Esborra el resum';
+
+  @override
+  String get deleteRecapConfirmTitle => 'Esborrar aquest resum?';
+
+  @override
+  String get deleteRecapConfirmBody =>
+      'Aquest resum s\'eliminarà permanentment. Les converses originals d\'aquell dia no es veuran afectades.';
+
+  @override
+  String get deleteRecapAction => 'Esborra';
+
+  @override
+  String get recapDeletedSnackbar => 'Resum esborrat';
+
+  @override
+  String get recapDeleteFailed => 'No s\'ha pogut esborrar el resum. Torna-ho a provar més tard.';
+
+  @override
+  String get syncStatusBackedUp => 'Còpia feta';
+
+  @override
+  String get syncStatusBackingUp => 'Sincronitzant…';
+
+  @override
+  String get syncStatusWaiting => 'Esperant a sincronitzar';
+
+  @override
+  String get syncStatusRetrying => 'No s\'ha pogut processar — reintentant';
+
+  @override
+  String get syncStatusFailed => 'Ha fallat — toca Reintenta';
+
+  @override
+  String get syncStatusFileUnavailable => 'Fitxer no disponible';
+
+  @override
+  String get noRecordingsYet => 'Encara no hi ha enregistraments';
+
+  @override
+  String get syncInProgress => 'Sincronització en curs';
+
+  @override
+  String get syncStatusUploaded => 'Pujat · processant-se a Omi';
+
+  @override
+  String get deleteWhileProcessingTitle => 'Encara s\'està processant';
+
+  @override
+  String get deleteWhileProcessingMessage =>
+      'Aquest enregistrament s\'ha pujat però Omi encara està creant la conversa. Si l\'elimines ara i el processament falla, no es podrà recuperar. Vols eliminar-lo igualment?';
+
+  @override
+  String get syncCardAllBackedUp => 'Tots els enregistraments sincronitzats';
+
+  @override
+  String syncCardReadyCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count enregistraments a punt per sincronitzar',
+      one: '1 enregistrament a punt per sincronitzar',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get syncCardProcessing => 'Processant a Omi…';
+
+  @override
+  String get syncCardWaitingInternet => 'Esperant connexió';
+
+  @override
+  String syncCardNeedsAttention(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count gravacions requereixen atenció',
+      one: '1 gravació requereix atenció',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get syncFlowIntro =>
+      'Els enregistraments es transfereixen del teu dispositiu a aquest telèfon i s\'emmagatzemen localment, i després es pugen al servidor d\'Omi, on es transcriuen i es converteixen en converses.';
+
+  @override
+  String get syncStepUpload => 'Sincronitza';
+
+  @override
+  String get syncStepUploadDesc => 'La teva gravació s\'envia al servidor d\'Omi';
+
+  @override
+  String get syncStepProcess => 'Transcripció';
+
+  @override
+  String get syncStepProcessDesc => 'Omi converteix l\'àudio en una conversa';
+
+  @override
+  String get syncStepBackedUp => 'Conversa a punt';
+
+  @override
+  String get syncStepBackedUpDesc => 'La trobaràs a Converses';
+
+  @override
+  String get syncFailureFootnote =>
+      'Si el processament falla, la gravació es torna a intentar automàticament a la propera sincronització.';
+
+  @override
+  String get syncStatusConversationCreated => 'Conversa creada';
+
+  @override
+  String get syncCardUploadingTitle => 'Pujant a Omi';
+
+  @override
+  String get syncCardDownloadingTitle => 'S\'està baixant del teu dispositiu';
+
+  @override
+  String syncCardProgressOf(int current, int total) {
+    return '$current de $total';
+  }
+
+  @override
+  String get syncStatusOnDevice => 'Al teu dispositiu';
+
+  @override
+  String get syncStatusDownloadingFromDevice => 'S\'està baixant del teu dispositiu';
+
+  @override
+  String get newestFirst => 'Més recents primer';
+
+  @override
+  String get noSyncedRecordingsYet => 'Encara no hi ha enregistraments sincronitzats';
+
+  @override
+  String get morePaymentMethodsComingSoon => 'Aviat hi haurà més mètodes de pagament';
+
+  @override
+  String get syncProcessingBackgroundHint => 'Això continua en segon pla — pots sortir d\'aquesta pantalla.';
+
+  @override
+  String get syncCardRateLimited => 'S\'ha assolit el límit d\'ús just — la sincronització es reprendrà automàticament';
+
+  @override
+  String get syncCardBackendBusy =>
+      'Els servidors d\'Omi estan saturats — els enregistraments se sincronitzaran quan hi hagi capacitat disponible';
 }

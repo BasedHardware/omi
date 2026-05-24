@@ -1,3 +1,4 @@
+from utils.executors import critical_executor, run_blocking
 import os
 import uuid
 import json
@@ -165,7 +166,7 @@ async def auth_authorize(
     }
 
     # Store in Redis with 5-minute expiration
-    set_auth_session(session_id, session_data, 300)
+    await run_blocking(critical_executor, set_auth_session, session_id, session_data, 300)
 
     # Redirect to provider OAuth
     if provider == 'google':
@@ -188,7 +189,7 @@ async def auth_callback_google(
         raise HTTPException(status_code=400, detail=f"Auth error: {error}")
 
     # Retrieve session
-    session_data = get_auth_session(state)
+    session_data = await run_blocking(critical_executor, get_auth_session, state)
     if not session_data:
         raise HTTPException(status_code=400, detail="Invalid auth session")
 
@@ -199,7 +200,7 @@ async def auth_callback_google(
     auth_code = str(uuid.uuid4())
     app_redirect_uri = session_data.get('redirect_uri', _DEFAULT_MOBILE_REDIRECT)
     code_data = json.dumps({'credentials': oauth_credentials, 'redirect_uri': app_redirect_uri})
-    set_auth_code(auth_code, code_data, 300)
+    await run_blocking(critical_executor, set_auth_code, auth_code, code_data, 300)
 
     # Redirect to HTML page that will handle the eventual scheme/loopback redirect.
     # The original ``redirect_uri`` was validated by ``_validate_redirect_uri`` at
@@ -230,7 +231,7 @@ async def auth_callback_apple_post(
         raise HTTPException(status_code=400, detail=f"Auth error: {error}")
 
     # Retrieve session
-    session_data = get_auth_session(state)
+    session_data = await run_blocking(critical_executor, get_auth_session, state)
     if not session_data:
         raise HTTPException(status_code=400, detail="Invalid auth session")
 
@@ -241,7 +242,7 @@ async def auth_callback_apple_post(
     auth_code = str(uuid.uuid4())
     app_redirect_uri = session_data.get('redirect_uri', _DEFAULT_MOBILE_REDIRECT)
     code_data = json.dumps({'credentials': oauth_credentials, 'redirect_uri': app_redirect_uri})
-    set_auth_code(auth_code, code_data, 300)
+    await run_blocking(critical_executor, set_auth_code, auth_code, code_data, 300)
 
     # Redirect to HTML page that will handle the eventual scheme/loopback redirect.
     # The original ``redirect_uri`` was validated by ``_validate_redirect_uri`` at
@@ -276,12 +277,12 @@ async def auth_token(
         raise HTTPException(status_code=400, detail="Unsupported grant type")
 
     # Get auth code data from Redis
-    raw_code_data = get_auth_code(code)
+    raw_code_data = await run_blocking(critical_executor, get_auth_code, code)
     if not raw_code_data:
         raise HTTPException(status_code=400, detail="Invalid or expired code")
 
     # Clean up used code
-    delete_auth_code(code)
+    await run_blocking(critical_executor, delete_auth_code, code)
 
     try:
         code_data = json.loads(raw_code_data)

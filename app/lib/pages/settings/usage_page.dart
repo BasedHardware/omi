@@ -1282,36 +1282,6 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
                 },
               ),
             ],
-            if (icon == FontAwesomeIcons.brain &&
-                subscription != null &&
-                subscription.subscription.plan == PlanType.basic &&
-                subscription.memoriesCreatedLimit > 0) ...[
-              const SizedBox(height: 16),
-              Builder(
-                builder: (context) {
-                  final used = subscription.memoriesCreatedUsed;
-                  final limit = subscription.memoriesCreatedLimit;
-                  final percentage = (limit > 0) ? (used / limit).clamp(0.0, 1.0) : 0.0;
-                  return Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        context.l10n.memoriesUsedThisMonth(numberFormatter.format(used), numberFormatter.format(limit)),
-                        style: TextStyle(fontSize: 12, color: Colors.grey.shade400),
-                      ),
-                      const SizedBox(height: 8),
-                      LinearProgressIndicator(
-                        value: percentage,
-                        backgroundColor: Colors.grey.shade700,
-                        valueColor: AlwaysStoppedAnimation<Color>(color),
-                        minHeight: 4,
-                        borderRadius: BorderRadius.circular(2),
-                      ),
-                    ],
-                  );
-                },
-              ),
-            ],
           ],
         ),
       ),

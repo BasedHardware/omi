@@ -6,7 +6,7 @@ Regression goal (#6940): POST /v3/memories must
   (b) return 503 on Firestore failure (not unhandled 500),
   (c) survive vector upsert failure without 500 (memory still returned),
   (d) not attempt vector upsert when Firestore write fails,
-  (e) run blocking work off the event loop via asyncio.to_thread.
+  (e) run blocking work off the event loop via run_blocking.
 
 The router import chain (database.memories → encryption → cryptography)
 requires production env vars, so behavior tests use source-level verification
@@ -115,33 +115,30 @@ class TestCreateMemoryErrorHandling:
         source = _read_router()
         assert re.search(r'async def create_memory\(', source), "create_memory must be async def"
 
-    def test_create_memory_uses_to_thread_for_firestore(self):
-        """Firestore write in create_memory must use asyncio.to_thread."""
+    def test_create_memory_uses_run_blocking_for_firestore(self):
+        """Firestore write in create_memory must use run_blocking."""
         source = _read_router()
-        # Extract the create_memory function body (between its def and the next @router)
-        match = re.search(
-            r'(async def create_memory\(.+?)(?=\n@router\.)', source, re.DOTALL
-        )
+        match = re.search(r'(async def create_memory\(.+?)(?=\n@router\.)', source, re.DOTALL)
         assert match, "create_memory function not found"
         fn_body = match.group(1)
-        assert 'asyncio.to_thread(memories_db.create_memory' in fn_body, \
-            "create_memory must offload Firestore write via asyncio.to_thread"
+        assert (
+            'run_blocking' in fn_body and 'memories_db.create_memory' in fn_body
+        ), "create_memory must offload Firestore write via run_blocking"
 
-    def test_create_memory_uses_to_thread_for_vector(self):
-        """Vector upsert in create_memory must use asyncio.to_thread."""
+    def test_create_memory_uses_run_blocking_for_vector(self):
+        """Vector upsert in create_memory must use run_blocking."""
         source = _read_router()
-        match = re.search(
-            r'(async def create_memory\(.+?)(?=\n@router\.)', source, re.DOTALL
-        )
+        match = re.search(r'(async def create_memory\(.+?)(?=\n@router\.)', source, re.DOTALL)
         assert match, "create_memory function not found"
         fn_body = match.group(1)
-        assert 'asyncio.to_thread' in fn_body and 'upsert_memory_vector' in fn_body, \
-            "create_memory must offload vector upsert via asyncio.to_thread"
+        assert (
+            'run_blocking' in fn_body and 'upsert_memory_vector' in fn_body
+        ), "create_memory must offload vector upsert via run_blocking"
 
     def test_firestore_write_has_error_handling(self):
         """Firestore write in create_memory must be wrapped in try/except."""
         source = _read_router()
-        # The pattern: try + to_thread(_persist) + except -> 503
+        # The pattern: try + run_blocking(_persist) + except -> 503
         assert 'HTTPException(status_code=503' in source, "Firestore failure must return 503"
 
     def test_vector_upsert_has_error_handling(self):
@@ -185,8 +182,7 @@ class TestPolicyBoundaries:
         """Modify (lightweight Firestore writes) should allow more than create (OpenAI+Pinecone)."""
         create_max, _ = RATE_POLICIES["memories:create"]
         modify_max, _ = RATE_POLICIES["memories:modify"]
-        assert modify_max > create_max, \
-            f"modify ({modify_max}) should be higher than create ({create_max})"
+        assert modify_max > create_max, f"modify ({modify_max}) should be higher than create ({create_max})"
 
     def test_delete_limit_matches_create(self):
         """Single delete should match create rate (same Firestore+Pinecone cost)."""
@@ -199,12 +195,10 @@ class TestPolicyBoundaries:
         """Bulk delete must be much tighter than single delete."""
         delete_max, _ = RATE_POLICIES["memories:delete"]
         delete_all_max, _ = RATE_POLICIES["memories:delete_all"]
-        assert delete_all_max < delete_max / 10, \
-            f"delete_all ({delete_all_max}) should be <<< delete ({delete_max})"
+        assert delete_all_max < delete_max / 10, f"delete_all ({delete_all_max}) should be <<< delete ({delete_max})"
 
     def test_all_memory_policies_use_1h_window(self):
         """All memory policies should use consistent 1-hour windows."""
-        for name in ["memories:create", "memories:batch", "memories:modify",
-                      "memories:delete", "memories:delete_all"]:
+        for name in ["memories:create", "memories:batch", "memories:modify", "memories:delete", "memories:delete_all"]:
             _, window = RATE_POLICIES[name]
             assert window == 3600, f"{name} window is {window}, expected 3600"

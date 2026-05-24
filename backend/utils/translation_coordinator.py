@@ -24,6 +24,7 @@ from utils.translation import (
     set_negative_cache,
     TranslationService,
 )
+from utils.executors import sync_executor, run_blocking
 from utils.translation_cache import ConversationLanguageState, should_persist_translation, _normalize_base_language
 
 logger = logging.getLogger(__name__)
@@ -287,9 +288,8 @@ class TranslationCoordinator:
 
         try:
             # Run the sync GCP API call in a thread pool to avoid blocking the event loop
-            loop = asyncio.get_event_loop()
-            results = await loop.run_in_executor(
-                None, self.translation_service.translate_units_batch, self.target_language, api_units
+            results = await run_blocking(
+                sync_executor, self.translation_service.translate_units_batch, self.target_language, api_units
             )
 
             for seg_id, translated_text, detected_lang in results:

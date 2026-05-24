@@ -174,8 +174,21 @@ final class AgentPillsManager: ObservableObject {
                 log("AgentPill: router response shape unexpected, defaulting to chat")
                 return nil
             }
+            // Haiku occasionally ignores the "no markdown" instruction and
+            // wraps the JSON in ```json ... ``` fences, or emits leading
+            // prose. Extract the first balanced {...} object instead of
+            // trusting the whole response to be raw JSON.
             let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard let payloadData = trimmed.data(using: .utf8),
+            let jsonBody: String
+            if let firstBrace = trimmed.firstIndex(of: "{"),
+                let lastBrace = trimmed.lastIndex(of: "}"),
+                firstBrace < lastBrace
+            {
+                jsonBody = String(trimmed[firstBrace...lastBrace])
+            } else {
+                jsonBody = trimmed
+            }
+            guard let payloadData = jsonBody.data(using: .utf8),
                 let payload = try? JSONSerialization.jsonObject(with: payloadData) as? [String: Any],
                 let routeStr = (payload["route"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
             else {
@@ -284,7 +297,8 @@ final class AgentPillsManager: ObservableObject {
         model: String,
         fromVoice: Bool = false,
         preFetchedTitle: String? = nil,
-        preFetchedAck: String? = nil
+        preFetchedAck: String? = nil,
+        systemPromptSuffix: String? = nil
     ) -> AgentPill {
         let pill = AgentPill(query: query, model: model)
         if let preFetchedTitle, !preFetchedTitle.isEmpty {
@@ -368,6 +382,7 @@ final class AgentPillsManager: ObservableObject {
             await provider.sendMessage(
                 pill.query,
                 model: pill.model,
+                systemPromptSuffix: systemPromptSuffix,
                 systemPromptPrefix: ChatProvider.floatingBarSystemPromptPrefix,
                 sessionKey: "agent-\(pill.id.uuidString)"
             )

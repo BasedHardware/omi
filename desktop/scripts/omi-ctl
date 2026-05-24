@@ -1,0 +1,63 @@
+#!/bin/bash
+# omi-ctl — drive the running Omi desktop app via its local automation bridge.
+#
+# The bridge (DesktopAutomationBridge.swift) auto-enables on every non-production
+# bundle and listens on 127.0.0.1:47777. It lets an agent jump straight to any
+# screen and read app state without clicking through the UI.
+#
+# Env: OMI_AUTOMATION_PORT (default 47777) — set this per bundle if running
+#      several named test bundles side-by-side (each needs its own port).
+set -euo pipefail
+
+PORT="${OMI_AUTOMATION_PORT:-47777}"
+BASE="http://127.0.0.1:${PORT}"
+
+cmd="${1:-help}"; shift || true
+case "$cmd" in
+  state|health)
+    curl -fsS "$BASE/$cmd"; echo ;;
+  navigate)
+    target="${1:?usage: omi-ctl navigate <screen> [settings-section]}"
+    section="${2:-}"
+    body="{\"target\":\"$target\""
+    [ -n "$section" ] && body="$body,\"settingsSection\":\"$section\""
+    body="$body}"
+    curl -fsS -X POST "$BASE/navigate" -d "$body" >/dev/null
+    # The POST snapshot races the animated tab switch — settle, then report fresh state.
+    sleep 0.3
+    curl -fsS "$BASE/state"; echo ;;
+  open-conversation)
+    id="${1:?usage: omi-ctl open-conversation <id> [--transcript]}"
+    show=false; [ "${2:-}" = "--transcript" ] && show=true
+    curl -fsS -X POST "$BASE/conversation/open" \
+      -d "{\"conversationId\":\"$id\",\"showTranscript\":$show}"; echo ;;
+  wait-ready)
+    tries="${1:-30}"
+    for _ in $(seq 1 "$tries"); do
+      s=$(curl -fsS "$BASE/state" 2>/dev/null || true)
+      if echo "$s" | grep -q '"appState" : "main"'; then echo "$s"; exit 0; fi
+      sleep 0.5
+    done
+    echo "omi-ctl: timed out waiting for app to reach \"main\" state" >&2; exit 1 ;;
+  screens)
+    echo "dashboard|home  conversations  chat  memories  tasks  focus  insight  rewind  apps|integrations  settings  permissions  device  help" ;;
+  *)
+    cat <<EOF
+omi-ctl — drive the Omi desktop app via the local automation bridge
+
+Usage:
+  omi-ctl state                          App state snapshot (selected tab, auth, onboarding)
+  omi-ctl navigate <screen> [section]    Jump to a screen; optional settings sub-section
+  omi-ctl open-conversation <id> [--transcript]
+  omi-ctl wait-ready [tries]             Block until app reaches "main" state (0.5s/try)
+  omi-ctl screens                        List valid screen targets
+
+Examples:
+  omi-ctl navigate rewind
+  omi-ctl navigate settings rewind       # Settings page, Rewind sub-section
+  omi-ctl wait-ready && omi-ctl navigate memories
+
+Env: OMI_AUTOMATION_PORT (default 47777)
+EOF
+    ;;
+esac

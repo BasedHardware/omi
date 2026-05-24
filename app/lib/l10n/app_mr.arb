@@ -1160,17 +1160,6 @@
             }
         }
     },
-    "memoriesUsedThisMonth": "या महिन्यात {used} of {limit} स्मृती तयार केली",
-    "@memoriesUsedThisMonth": {
-        "placeholders": {
-            "used": {
-                "type": "String"
-            },
-            "limit": {
-                "type": "String"
-            }
-        }
-    },
     "visibility": "दृश्यमानता",
     "visibilitySubtitle": "कोण संभाषण आपल्या सूचीमध्ये दिसतात हे नियंत्रण करा",
     "showShortConversations": "लघु संभाषण दाखवा",
@@ -1580,7 +1569,7 @@
     "designingApp": "अॅप डिজाइन करत आहे",
     "generatingIconStep": "आयकन तयार करत आहे",
     "finalTouches": "अंतिम स्पर्श",
-    "processing": "प्रक्रिया करत आहे...",
+    "processing": "प्रक्रिया सुरू",
     "features": "वैशिष्ट्ये",
     "creatingYourApp": "आपली अॅप तयार करत आहे...",
     "generatingIcon": "आयकन तयार करत आहे...",
@@ -8397,9 +8386,16 @@
     "@lowBatteryAlertTitle": {
         "description": "Title for low battery notification"
     },
-    "lowBatteryAlertBody": "आपली डिव्हाइस बॅटरीवर कमी चल रही आहे. रिचार्जने वेळ आली! 🔋",
+    "lowBatteryAlertBody": "तुमची बॅटरी {level}% आहे. रिचार्ज करण्याची वेळ! 🔋",
+    "batteryFullyChargedTitle": "Omi पूर्णपणे चार्ज झाला आहे",
+    "batteryFullyChargedBody": "तुमचे Omi डिव्हाइस पूर्णपणे चार्ज झाले आहे. अनप्लग करू शकता!",
     "@lowBatteryAlertBody": {
-        "description": "Body text for low battery notification"
+        "description": "Body text for low battery notification",
+        "placeholders": {
+            "level": {
+                "type": "int"
+            }
+        }
     },
     "deviceDisconnectedNotificationTitle": "आपली Omi डिव्हाइस डिस्कनेक्ट झाली",
     "@deviceDisconnectedNotificationTitle": {
@@ -10152,7 +10148,7 @@
     "@manageStorage": {
         "description": "Menu option and sheet title for managing recording storage"
     },
-    "safelyBackedUp": "तुमच्या फोनमध्ये सुरक्षितपणे बॅकअप केले गेले",
+    "safelyBackedUp": "तयार झालेली संभाषणे",
     "@safelyBackedUp": {
         "description": "Description for synced files in manage storage sheet"
     },
@@ -10725,5 +10721,50 @@
     "startCallRecording": "कॉल रेकॉर्डिंग सुरू करा",
     "startVoiceRecording": "व्हॉइस रेकॉर्डिंग सुरू करा",
     "bulkExportAlreadyExported": "निवडलेली सर्व कार्ये आधीच निर्यात केली आहेत",
-    "bulkDeleteFailed": "कार्ये हटवता आली नाहीत. कृपया पुन्हा प्रयत्न करा."
+    "bulkDeleteFailed": "कार्ये हटवता आली नाहीत. कृपया पुन्हा प्रयत्न करा.",
+    "deleteRecap": "रीकॅप हटवा",
+    "deleteRecapConfirmTitle": "हे रीकॅप हटवायचे आहे का?",
+    "deleteRecapConfirmBody": "हे रीकॅप कायमचे काढून टाकले जाईल. त्या दिवसाच्या मूळ संभाषणांवर परिणाम होणार नाही.",
+    "deleteRecapAction": "हटवा",
+    "recapDeletedSnackbar": "रीकॅप हटवले",
+    "recapDeleteFailed": "रीकॅप हटवता आले नाही. नंतर पुन्हा प्रयत्न करा.",
+    "syncStatusBackedUp": "बॅकअप झाला",
+    "syncStatusBackingUp": "समन्वय करत आहे…",
+    "syncStatusWaiting": "सिंक होण्याची प्रतीक्षा",
+    "syncStatusRetrying": "प्रक्रिया करता आली नाही — पुन्हा प्रयत्न",
+    "syncStatusFailed": "अयशस्वी — Retry दाबा",
+    "syncStatusFileUnavailable": "फाइल उपलब्ध नाही",
+    "syncStatusUploaded": "अपलोड झाले · Omi वर प्रक्रिया सुरू",
+    "noRecordingsYet": "अद्याप कोणतीही रेकॉर्डिंग नाही",
+    "syncInProgress": "सिंक सुरू आहे",
+    "deleteWhileProcessingTitle": "अद्याप प्रक्रिया सुरू",
+    "deleteWhileProcessingMessage": "ही रेकॉर्डिंग अपलोड झाली आहे पण Omi अद्याप संभाषण तयार करत आहे. आता हटवल्यास आणि प्रक्रिया अयशस्वी झाल्यास ती परत मिळवता येणार नाही. तरीही हटवायचे?",
+    "syncCardAllBackedUp": "सर्व रेकॉर्डिंग सिंक झाली",
+    "syncCardReadyCount": "{count, plural, one{1 रेकॉर्डिंग सिंकसाठी तयार} other{{count} रेकॉर्डिंग सिंकसाठी तयार}}",
+    "syncCardProcessing": "Omi वर प्रक्रिया सुरू…",
+    "syncCardWaitingInternet": "इंटरनेटची प्रतीक्षा",
+    "syncCardNeedsAttention": "{count, plural, one{1 रेकॉर्डिंगकडे लक्ष देणे आवश्यक} other{{count} रेकॉर्डिंगकडे लक्ष देणे आवश्यक}}",
+    "syncFlowIntro": "रेकॉर्डिंग तुमच्या डिव्हाइसवरून या फोनवर हस्तांतरित होतात आणि स्थानिक पातळीवर साठवली जातात, त्यानंतर Omi च्या सर्व्हरवर अपलोड केली जातात, जिथे त्यांचे लिप्यंतरण होऊन संभाषणांमध्ये रूपांतर केले जाते.",
+    "syncStepUpload": "सिंक",
+    "syncStepUploadDesc": "तुमचे रेकॉर्डिंग Omi च्या सर्व्हरवर पाठवले जाते",
+    "syncStepProcess": "ट्रान्स्क्राइब",
+    "syncStepProcessDesc": "Omi ऑडिओचे संभाषणात रूपांतर करते",
+    "syncStepBackedUp": "संभाषण तयार",
+    "syncStepBackedUpDesc": "ते संभाषण मध्ये सापडेल",
+    "syncFailureFootnote": "प्रक्रिया अयशस्वी झाल्यास, पुढील सिंकमध्ये रेकॉर्डिंग आपोआप पुन्हा प्रयत्न केले जाते.",
+    "syncStatusConversationCreated": "संभाषण तयार झाले",
+    "syncCardUploadingTitle": "Omi वर अपलोड होत आहे",
+    "syncCardDownloadingTitle": "तुमच्या डिव्हाइसवरून डाउनलोड होत आहे",
+    "syncCardProgressOf": "{total} पैकी {current}",
+    "syncStatusOnDevice": "तुमच्या डिव्हाइसवर",
+    "syncStatusDownloadingFromDevice": "तुमच्या डिव्हाइसवरून डाउनलोड होत आहे",
+    "newestFirst": "नवीन आधी",
+    "noSyncedRecordingsYet": "अद्याप कोणतीही सिंक केलेली रेकॉर्डिंग नाही",
+    "morePaymentMethodsComingSoon": "लवकरच आणखी पेमेंट पद्धती",
+    "@morePaymentMethodsComingSoon": {
+        "description": "Placeholder card text shown under available payment methods"
+    },
+    "syncProcessingBackgroundHint": "हे पार्श्वभूमीत सुरू राहते — तुम्ही ही स्क्रीन सोडू शकता.",
+    "syncCardRateLimited": "वाजवी वापराची मर्यादा गाठली — सिंक आपोआप पुन्हा सुरू होईल",
+    "syncCardBackendBusy": "Omi चे सर्व्हर व्यस्त आहेत — क्षमता उपलब्ध होताच तुमची रेकॉर्डिंग्ज सिंक होतील"
 }

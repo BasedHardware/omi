@@ -958,11 +958,6 @@ class AppLocalizationsAr extends AppLocalizations {
   }
 
   @override
-  String memoriesUsedThisMonth(String used, String limit) {
-    return '$used من $limit ذكرى تم إنشاؤها هذا الشهر';
-  }
-
-  @override
   String get visibility => 'الظهور';
 
   @override
@@ -1629,7 +1624,7 @@ class AppLocalizationsAr extends AppLocalizations {
   String get finalTouches => 'اللمسات الأخيرة';
 
   @override
-  String get processing => 'جاري المعالجة...';
+  String get processing => 'قيد المعالجة';
 
   @override
   String get features => 'الميزات';
@@ -6786,7 +6781,15 @@ class AppLocalizationsAr extends AppLocalizations {
   String get lowBatteryAlertTitle => 'تنبيه انخفاض البطارية';
 
   @override
-  String get lowBatteryAlertBody => 'بطارية جهازك منخفضة. حان وقت إعادة الشحن! 🔋';
+  String lowBatteryAlertBody(int level) {
+    return 'بطاريتك عند $level٪. حان وقت إعادة الشحن! 🔋';
+  }
+
+  @override
+  String get batteryFullyChargedTitle => 'أومي مشحون بالكامل';
+
+  @override
+  String get batteryFullyChargedBody => 'جهاز Omi الخاص بك مشحون بالكامل. يمكنك فصله الآن!';
 
   @override
   String get deviceDisconnectedNotificationTitle => 'تم قطع اتصال جهاز Omi';
@@ -8380,7 +8383,7 @@ class AppLocalizationsAr extends AppLocalizations {
   String get manageStorage => 'إدارة التخزين';
 
   @override
-  String get safelyBackedUp => 'تم النسخ الاحتياطي بأمان إلى هاتفك';
+  String get safelyBackedUp => 'محادثات تم إنشاؤها';
 
   @override
   String get notYetSynced => 'لم تتم المزامنة بعد مع هاتفك';
@@ -9179,4 +9182,158 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get bulkDeleteFailed => 'تعذّر حذف المهام. يُرجى المحاولة مرة أخرى.';
+
+  @override
+  String get deleteRecap => 'حذف الملخص';
+
+  @override
+  String get deleteRecapConfirmTitle => 'حذف هذا الملخص؟';
+
+  @override
+  String get deleteRecapConfirmBody => 'سيتم حذف هذا الملخص نهائيًا. لن تتأثر المحادثات الأصلية لذلك اليوم.';
+
+  @override
+  String get deleteRecapAction => 'حذف';
+
+  @override
+  String get recapDeletedSnackbar => 'تم حذف الملخص';
+
+  @override
+  String get recapDeleteFailed => 'تعذر حذف الملخص. حاول مرة أخرى لاحقًا.';
+
+  @override
+  String get syncStatusBackedUp => 'تم النسخ الاحتياطي';
+
+  @override
+  String get syncStatusBackingUp => 'جارٍ المزامنة…';
+
+  @override
+  String get syncStatusWaiting => 'في انتظار المزامنة';
+
+  @override
+  String get syncStatusRetrying => 'تعذّرت المعالجة — جارٍ إعادة المحاولة';
+
+  @override
+  String get syncStatusFailed => 'فشل — اضغط إعادة المحاولة';
+
+  @override
+  String get syncStatusFileUnavailable => 'الملف غير متوفر';
+
+  @override
+  String get noRecordingsYet => 'لا توجد تسجيلات بعد';
+
+  @override
+  String get syncInProgress => 'المزامنة قيد التقدم';
+
+  @override
+  String get syncStatusUploaded => 'تم الرفع · قيد المعالجة على Omi';
+
+  @override
+  String get deleteWhileProcessingTitle => 'لا تزال قيد المعالجة';
+
+  @override
+  String get deleteWhileProcessingMessage =>
+      'تم رفع هذا التسجيل لكن Omi لا يزال ينشئ المحادثة. إذا حذفته الآن وفشلت المعالجة، فلن يمكن استرداده. هل تريد الحذف على أي حال؟';
+
+  @override
+  String get syncCardAllBackedUp => 'تمت مزامنة كل التسجيلات';
+
+  @override
+  String syncCardReadyCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count تسجيل جاهز للمزامنة',
+      many: '$count تسجيلًا جاهزة للمزامنة',
+      few: '$count تسجيلات جاهزة للمزامنة',
+      two: 'تسجيلان جاهزان للمزامنة',
+      one: 'تسجيل واحد جاهز للمزامنة',
+      zero: 'لا توجد تسجيلات جاهزة للمزامنة',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get syncCardProcessing => 'جارٍ المعالجة على Omi…';
+
+  @override
+  String get syncCardWaitingInternet => 'بانتظار الاتصال بالإنترنت';
+
+  @override
+  String syncCardNeedsAttention(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count تسجيل بحاجة إلى المراجعة',
+      many: '$count تسجيلًا بحاجة إلى المراجعة',
+      few: '$count تسجيلات بحاجة إلى المراجعة',
+      two: 'تسجيلان بحاجة إلى المراجعة',
+      one: 'تسجيل واحد بحاجة إلى المراجعة',
+      zero: 'لا توجد تسجيلات بحاجة إلى المراجعة',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get syncFlowIntro =>
+      'تُنقل التسجيلات من جهازك إلى هذا الهاتف وتُخزَّن محليًا، ثم تُرفع إلى خادم Omi حيث تُفرَّغ نصيًا وتُحوَّل إلى محادثات.';
+
+  @override
+  String get syncStepUpload => 'المزامنة';
+
+  @override
+  String get syncStepUploadDesc => 'يُرسَل تسجيلك إلى خادم Omi';
+
+  @override
+  String get syncStepProcess => 'النسخ النصي';
+
+  @override
+  String get syncStepProcessDesc => 'يحوّل Omi الصوت إلى محادثة';
+
+  @override
+  String get syncStepBackedUp => 'المحادثة جاهزة';
+
+  @override
+  String get syncStepBackedUpDesc => 'ستجدها ضمن المحادثات';
+
+  @override
+  String get syncFailureFootnote => 'في حال فشل المعالجة، تُعاد محاولة التسجيل تلقائيًا في المزامنة التالية.';
+
+  @override
+  String get syncStatusConversationCreated => 'تم إنشاء المحادثة';
+
+  @override
+  String get syncCardUploadingTitle => 'جارٍ الرفع إلى Omi';
+
+  @override
+  String get syncCardDownloadingTitle => 'جارٍ التنزيل من جهازك';
+
+  @override
+  String syncCardProgressOf(int current, int total) {
+    return '$current من $total';
+  }
+
+  @override
+  String get syncStatusOnDevice => 'على جهازك';
+
+  @override
+  String get syncStatusDownloadingFromDevice => 'جارٍ التنزيل من جهازك';
+
+  @override
+  String get newestFirst => 'الأحدث أولاً';
+
+  @override
+  String get noSyncedRecordingsYet => 'لا توجد تسجيلات متزامنة بعد';
+
+  @override
+  String get morePaymentMethodsComingSoon => 'المزيد من طرق الدفع قريبًا';
+
+  @override
+  String get syncProcessingBackgroundHint => 'تستمر العملية في الخلفية — يمكنك مغادرة هذه الشاشة.';
+
+  @override
+  String get syncCardRateLimited => 'تم بلوغ حد الاستخدام العادل — ستُستأنف المزامنة تلقائيًا';
+
+  @override
+  String get syncCardBackendBusy => 'خوادم Omi مشغولة الآن — ستتم مزامنة تسجيلاتك عند توفر السعة';
 }

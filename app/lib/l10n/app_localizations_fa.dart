@@ -965,11 +965,6 @@ class AppLocalizationsFa extends AppLocalizations {
   }
 
   @override
-  String memoriesUsedThisMonth(String used, String limit) {
-    return '$used از $limit یادداشت این ماه ایجاد‌شده است';
-  }
-
-  @override
   String get visibility => 'دید';
 
   @override
@@ -1643,7 +1638,7 @@ class AppLocalizationsFa extends AppLocalizations {
   String get finalTouches => 'لمسات نهایی';
 
   @override
-  String get processing => 'در حال پردازش...';
+  String get processing => 'در حال پردازش';
 
   @override
   String get features => 'ویژگی‌ها';
@@ -6840,7 +6835,15 @@ class AppLocalizationsFa extends AppLocalizations {
   String get lowBatteryAlertTitle => 'هشدار باتری کم';
 
   @override
-  String get lowBatteryAlertBody => 'باتری دستگاه شما تقریباً تمام است. وقت شارژ کردن است! 🔋';
+  String lowBatteryAlertBody(int level) {
+    return 'باتری شما $level٪ است. وقت شارژ کردن است! 🔋';
+  }
+
+  @override
+  String get batteryFullyChargedTitle => 'Omi کاملاً شارژ شد';
+
+  @override
+  String get batteryFullyChargedBody => 'دستگاه Omi شما کاملاً شارژ شده است. می‌توانید آن را جدا کنید!';
 
   @override
   String get deviceDisconnectedNotificationTitle => 'دستگاه Omi شما قطع شد';
@@ -8441,7 +8444,7 @@ class AppLocalizationsFa extends AppLocalizations {
   String get manageStorage => 'مدیریت فضای ذخیره‌سازی';
 
   @override
-  String get safelyBackedUp => 'به‌طور ایمن در تلفن شما پشتیبان‌گیری شد';
+  String get safelyBackedUp => 'گفتگوها ساخته شدند';
 
   @override
   String get notYetSynced => 'هنوز به تلفن شما همگام‌سازی نشده‌است';
@@ -9243,4 +9246,153 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get bulkDeleteFailed => 'حذف کارها ممکن نشد. لطفاً دوباره تلاش کنید.';
+
+  @override
+  String get deleteRecap => 'حذف خلاصه';
+
+  @override
+  String get deleteRecapConfirmTitle => 'این خلاصه حذف شود؟';
+
+  @override
+  String get deleteRecapConfirmBody =>
+      'این خلاصه برای همیشه حذف خواهد شد. مکالمات اصلی آن روز تحت تأثیر قرار نمی‌گیرند.';
+
+  @override
+  String get deleteRecapAction => 'حذف';
+
+  @override
+  String get recapDeletedSnackbar => 'خلاصه حذف شد';
+
+  @override
+  String get recapDeleteFailed => 'حذف خلاصه ممکن نشد. بعداً دوباره تلاش کنید.';
+
+  @override
+  String get syncStatusBackedUp => 'پشتیبان‌گیری شد';
+
+  @override
+  String get syncStatusBackingUp => 'در حال هماهنگ‌سازی…';
+
+  @override
+  String get syncStatusWaiting => 'در انتظار همگام‌سازی';
+
+  @override
+  String get syncStatusRetrying => 'پردازش ناموفق — تلاش مجدد';
+
+  @override
+  String get syncStatusFailed => 'ناموفق — روی تلاش مجدد بزنید';
+
+  @override
+  String get syncStatusFileUnavailable => 'فایل در دسترس نیست';
+
+  @override
+  String get noRecordingsYet => 'هنوز ضبطی وجود ندارد';
+
+  @override
+  String get syncInProgress => 'همگام‌سازی در حال انجام است';
+
+  @override
+  String get syncStatusUploaded => 'بارگذاری شد · در حال پردازش در Omi';
+
+  @override
+  String get deleteWhileProcessingTitle => 'هنوز در حال پردازش';
+
+  @override
+  String get deleteWhileProcessingMessage =>
+      'این ضبط بارگذاری شده اما Omi هنوز در حال ساخت مکالمه است. اگر اکنون آن را حذف کنید و پردازش ناموفق شود، قابل بازیابی نخواهد بود. به‌هرحال حذف شود؟';
+
+  @override
+  String get syncCardAllBackedUp => 'همهٔ ضبط‌ها همگام شدند';
+
+  @override
+  String syncCardReadyCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count ضبط آمادهٔ همگام‌سازی',
+      one: '1 ضبط آمادهٔ همگام‌سازی',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get syncCardProcessing => 'در حال پردازش در Omi…';
+
+  @override
+  String get syncCardWaitingInternet => 'در انتظار اتصال به اینترنت';
+
+  @override
+  String syncCardNeedsAttention(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count ضبط نیازمند توجه است',
+      one: '۱ ضبط نیازمند توجه است',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get syncFlowIntro =>
+      'ضبط‌ها از دستگاه شما به این تلفن منتقل و به‌صورت محلی ذخیره می‌شوند، سپس به سرور Omi بارگذاری می‌شوند تا رونویسی و به گفت‌وگو تبدیل شوند.';
+
+  @override
+  String get syncStepUpload => 'همگام‌سازی';
+
+  @override
+  String get syncStepUploadDesc => 'ضبط شما به سرور Omi فرستاده می‌شود';
+
+  @override
+  String get syncStepProcess => 'رونویسی';
+
+  @override
+  String get syncStepProcessDesc => 'Omi صدا را به یک گفتگو تبدیل می‌کند';
+
+  @override
+  String get syncStepBackedUp => 'گفتگو آماده است';
+
+  @override
+  String get syncStepBackedUpDesc => 'آن را در گفتگوها بیابید';
+
+  @override
+  String get syncFailureFootnote =>
+      'اگر پردازش ناموفق باشد، ضبط در همگام‌سازی بعدی به‌صورت خودکار دوباره امتحان می‌شود.';
+
+  @override
+  String get syncStatusConversationCreated => 'مکالمه ایجاد شد';
+
+  @override
+  String get syncCardUploadingTitle => 'در حال بارگذاری در Omi';
+
+  @override
+  String get syncCardDownloadingTitle => 'در حال دانلود از دستگاه شما';
+
+  @override
+  String syncCardProgressOf(int current, int total) {
+    return '$current از $total';
+  }
+
+  @override
+  String get syncStatusOnDevice => 'روی دستگاه شما';
+
+  @override
+  String get syncStatusDownloadingFromDevice => 'در حال دانلود از دستگاه شما';
+
+  @override
+  String get newestFirst => 'ابتدا جدیدترین‌ها';
+
+  @override
+  String get noSyncedRecordingsYet => 'هنوز ضبط همگام‌سازی‌شده‌ای وجود ندارد';
+
+  @override
+  String get morePaymentMethodsComingSoon => 'روش‌های پرداخت بیشتر به‌زودی';
+
+  @override
+  String get syncProcessingBackgroundHint => 'این کار در پس‌زمینه ادامه می‌یابد — می‌توانید این صفحه را ترک کنید.';
+
+  @override
+  String get syncCardRateLimited =>
+      'محدودیت استفاده منصفانه به پایان رسید — همگام‌سازی به‌طور خودکار از سر گرفته می‌شود';
+
+  @override
+  String get syncCardBackendBusy => 'سرورهای Omi شلوغ هستند — ضبط‌های شما به‌محض آزاد شدن ظرفیت همگام‌سازی می‌شوند';
 }

@@ -965,11 +965,6 @@ class AppLocalizationsMr extends AppLocalizations {
   }
 
   @override
-  String memoriesUsedThisMonth(String used, String limit) {
-    return 'या महिन्यात $used of $limit स्मृती तयार केली';
-  }
-
-  @override
   String get visibility => 'दृश्यमानता';
 
   @override
@@ -1643,7 +1638,7 @@ class AppLocalizationsMr extends AppLocalizations {
   String get finalTouches => 'अंतिम स्पर्श';
 
   @override
-  String get processing => 'प्रक्रिया करत आहे...';
+  String get processing => 'प्रक्रिया सुरू';
 
   @override
   String get features => 'वैशिष्ट्ये';
@@ -6847,7 +6842,15 @@ class AppLocalizationsMr extends AppLocalizations {
   String get lowBatteryAlertTitle => 'कमी बॅटरी सूचना';
 
   @override
-  String get lowBatteryAlertBody => 'आपली डिव्हाइस बॅटरीवर कमी चल रही आहे. रिचार्जने वेळ आली! 🔋';
+  String lowBatteryAlertBody(int level) {
+    return 'तुमची बॅटरी $level% आहे. रिचार्ज करण्याची वेळ! 🔋';
+  }
+
+  @override
+  String get batteryFullyChargedTitle => 'Omi पूर्णपणे चार्ज झाला आहे';
+
+  @override
+  String get batteryFullyChargedBody => 'तुमचे Omi डिव्हाइस पूर्णपणे चार्ज झाले आहे. अनप्लग करू शकता!';
 
   @override
   String get deviceDisconnectedNotificationTitle => 'आपली Omi डिव्हाइस डिस्कनेक्ट झाली';
@@ -8449,7 +8452,7 @@ class AppLocalizationsMr extends AppLocalizations {
   String get manageStorage => 'स्टोरेज व्यवस्थापित करा';
 
   @override
-  String get safelyBackedUp => 'तुमच्या फोनमध्ये सुरक्षितपणे बॅकअप केले गेले';
+  String get safelyBackedUp => 'तयार झालेली संभाषणे';
 
   @override
   String get notYetSynced => 'अद्याप तुमच्या फोनशी सिंक केले नाही';
@@ -9251,4 +9254,152 @@ class AppLocalizationsMr extends AppLocalizations {
 
   @override
   String get bulkDeleteFailed => 'कार्ये हटवता आली नाहीत. कृपया पुन्हा प्रयत्न करा.';
+
+  @override
+  String get deleteRecap => 'रीकॅप हटवा';
+
+  @override
+  String get deleteRecapConfirmTitle => 'हे रीकॅप हटवायचे आहे का?';
+
+  @override
+  String get deleteRecapConfirmBody =>
+      'हे रीकॅप कायमचे काढून टाकले जाईल. त्या दिवसाच्या मूळ संभाषणांवर परिणाम होणार नाही.';
+
+  @override
+  String get deleteRecapAction => 'हटवा';
+
+  @override
+  String get recapDeletedSnackbar => 'रीकॅप हटवले';
+
+  @override
+  String get recapDeleteFailed => 'रीकॅप हटवता आले नाही. नंतर पुन्हा प्रयत्न करा.';
+
+  @override
+  String get syncStatusBackedUp => 'बॅकअप झाला';
+
+  @override
+  String get syncStatusBackingUp => 'समन्वय करत आहे…';
+
+  @override
+  String get syncStatusWaiting => 'सिंक होण्याची प्रतीक्षा';
+
+  @override
+  String get syncStatusRetrying => 'प्रक्रिया करता आली नाही — पुन्हा प्रयत्न';
+
+  @override
+  String get syncStatusFailed => 'अयशस्वी — Retry दाबा';
+
+  @override
+  String get syncStatusFileUnavailable => 'फाइल उपलब्ध नाही';
+
+  @override
+  String get noRecordingsYet => 'अद्याप कोणतीही रेकॉर्डिंग नाही';
+
+  @override
+  String get syncInProgress => 'सिंक सुरू आहे';
+
+  @override
+  String get syncStatusUploaded => 'अपलोड झाले · Omi वर प्रक्रिया सुरू';
+
+  @override
+  String get deleteWhileProcessingTitle => 'अद्याप प्रक्रिया सुरू';
+
+  @override
+  String get deleteWhileProcessingMessage =>
+      'ही रेकॉर्डिंग अपलोड झाली आहे पण Omi अद्याप संभाषण तयार करत आहे. आता हटवल्यास आणि प्रक्रिया अयशस्वी झाल्यास ती परत मिळवता येणार नाही. तरीही हटवायचे?';
+
+  @override
+  String get syncCardAllBackedUp => 'सर्व रेकॉर्डिंग सिंक झाली';
+
+  @override
+  String syncCardReadyCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count रेकॉर्डिंग सिंकसाठी तयार',
+      one: '1 रेकॉर्डिंग सिंकसाठी तयार',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get syncCardProcessing => 'Omi वर प्रक्रिया सुरू…';
+
+  @override
+  String get syncCardWaitingInternet => 'इंटरनेटची प्रतीक्षा';
+
+  @override
+  String syncCardNeedsAttention(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count रेकॉर्डिंगकडे लक्ष देणे आवश्यक',
+      one: '1 रेकॉर्डिंगकडे लक्ष देणे आवश्यक',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get syncFlowIntro =>
+      'रेकॉर्डिंग तुमच्या डिव्हाइसवरून या फोनवर हस्तांतरित होतात आणि स्थानिक पातळीवर साठवली जातात, त्यानंतर Omi च्या सर्व्हरवर अपलोड केली जातात, जिथे त्यांचे लिप्यंतरण होऊन संभाषणांमध्ये रूपांतर केले जाते.';
+
+  @override
+  String get syncStepUpload => 'सिंक';
+
+  @override
+  String get syncStepUploadDesc => 'तुमचे रेकॉर्डिंग Omi च्या सर्व्हरवर पाठवले जाते';
+
+  @override
+  String get syncStepProcess => 'ट्रान्स्क्राइब';
+
+  @override
+  String get syncStepProcessDesc => 'Omi ऑडिओचे संभाषणात रूपांतर करते';
+
+  @override
+  String get syncStepBackedUp => 'संभाषण तयार';
+
+  @override
+  String get syncStepBackedUpDesc => 'ते संभाषण मध्ये सापडेल';
+
+  @override
+  String get syncFailureFootnote =>
+      'प्रक्रिया अयशस्वी झाल्यास, पुढील सिंकमध्ये रेकॉर्डिंग आपोआप पुन्हा प्रयत्न केले जाते.';
+
+  @override
+  String get syncStatusConversationCreated => 'संभाषण तयार झाले';
+
+  @override
+  String get syncCardUploadingTitle => 'Omi वर अपलोड होत आहे';
+
+  @override
+  String get syncCardDownloadingTitle => 'तुमच्या डिव्हाइसवरून डाउनलोड होत आहे';
+
+  @override
+  String syncCardProgressOf(int current, int total) {
+    return '$total पैकी $current';
+  }
+
+  @override
+  String get syncStatusOnDevice => 'तुमच्या डिव्हाइसवर';
+
+  @override
+  String get syncStatusDownloadingFromDevice => 'तुमच्या डिव्हाइसवरून डाउनलोड होत आहे';
+
+  @override
+  String get newestFirst => 'नवीन आधी';
+
+  @override
+  String get noSyncedRecordingsYet => 'अद्याप कोणतीही सिंक केलेली रेकॉर्डिंग नाही';
+
+  @override
+  String get morePaymentMethodsComingSoon => 'लवकरच आणखी पेमेंट पद्धती';
+
+  @override
+  String get syncProcessingBackgroundHint => 'हे पार्श्वभूमीत सुरू राहते — तुम्ही ही स्क्रीन सोडू शकता.';
+
+  @override
+  String get syncCardRateLimited => 'वाजवी वापराची मर्यादा गाठली — सिंक आपोआप पुन्हा सुरू होईल';
+
+  @override
+  String get syncCardBackendBusy => 'Omi चे सर्व्हर व्यस्त आहेत — क्षमता उपलब्ध होताच तुमची रेकॉर्डिंग्ज सिंक होतील';
 }

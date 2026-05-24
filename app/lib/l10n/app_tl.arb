@@ -1160,17 +1160,6 @@
             }
         }
     },
-    "memoriesUsedThisMonth": "{used} ng {limit} alaala na nabuo sa buwan na ito",
-    "@memoriesUsedThisMonth": {
-        "placeholders": {
-            "used": {
-                "type": "String"
-            },
-            "limit": {
-                "type": "String"
-            }
-        }
-    },
     "visibility": "Visibility",
     "visibilitySubtitle": "Kontrolin kung aling mga pag-uusap ang lilitaw sa iyong lista",
     "showShortConversations": "Ipakita ang Short Conversations",
@@ -1580,7 +1569,7 @@
     "designingApp": "Dinadala ang app",
     "generatingIconStep": "Bumubuo ng icon",
     "finalTouches": "Huling touchup",
-    "processing": "Nagpoproseso...",
+    "processing": "Pinoproseso",
     "features": "Mga Features",
     "creatingYourApp": "Lumilikha ng iyong app...",
     "generatingIcon": "Bumubuo ng icon...",
@@ -8397,9 +8386,16 @@
     "@lowBatteryAlertTitle": {
         "description": "Title for low battery notification"
     },
-    "lowBatteryAlertBody": "Ang iyong device ay mababa na sa baterya. Panahon na para mag-recharge! 🔋",
+    "lowBatteryAlertBody": "Ang iyong baterya ay nasa {level}%. Panahon na para mag-recharge! 🔋",
+    "batteryFullyChargedTitle": "Naka-charge na ang Omi",
+    "batteryFullyChargedBody": "Ang iyong Omi device ay ganap nang na-charge. Maaari mo na itong i-unplug!",
     "@lowBatteryAlertBody": {
-        "description": "Body text for low battery notification"
+        "description": "Body text for low battery notification",
+        "placeholders": {
+            "level": {
+                "type": "int"
+            }
+        }
     },
     "deviceDisconnectedNotificationTitle": "Ang Iyong Omi Device ay Nadiskonekta",
     "@deviceDisconnectedNotificationTitle": {
@@ -10152,7 +10148,7 @@
     "@manageStorage": {
         "description": "Menu option and sheet title for managing recording storage"
     },
-    "safelyBackedUp": "Safely backed up sa iyong phone",
+    "safelyBackedUp": "Mga conversation na nalikha",
     "@safelyBackedUp": {
         "description": "Description for synced files in manage storage sheet"
     },
@@ -10725,5 +10721,50 @@
     "startCallRecording": "Simulan ang pag-record ng tawag",
     "startVoiceRecording": "Simulan ang voice recording",
     "bulkExportAlreadyExported": "Lahat ng napiling gawain ay na-export na",
-    "bulkDeleteFailed": "Hindi matanggal ang mga gawain. Pakisubukang muli."
+    "bulkDeleteFailed": "Hindi matanggal ang mga gawain. Pakisubukang muli.",
+    "deleteRecap": "Burahin ang recap",
+    "deleteRecapConfirmTitle": "Burahin ang recap na ito?",
+    "deleteRecapConfirmBody": "Permanenteng aalisin ang recap na ito. Hindi maaapektuhan ang mga orihinal na pag-uusap mula sa araw na iyon.",
+    "deleteRecapAction": "Burahin",
+    "recapDeletedSnackbar": "Burado na ang recap",
+    "recapDeleteFailed": "Hindi maburahin ang recap. Subukan ulit mamaya.",
+    "syncStatusBackedUp": "Na-back up na",
+    "syncStatusBackingUp": "Sine-sync…",
+    "syncStatusWaiting": "Naghihintay na mag-sync",
+    "syncStatusRetrying": "Hindi naproseso — sinusubukang muli",
+    "syncStatusFailed": "Nabigo — i-tap ang Subukan Muli",
+    "syncStatusFileUnavailable": "Hindi available ang file",
+    "syncStatusUploaded": "Na-upload · pinoproseso sa Omi",
+    "noRecordingsYet": "Wala pang mga recording",
+    "syncInProgress": "Kasalukuyang nagsi-sync",
+    "deleteWhileProcessingTitle": "Pinoproseso pa rin",
+    "deleteWhileProcessingMessage": "Na-upload na ang recording na ito ngunit ginagawa pa ng Omi ang usapan. Kung buburahin mo ito ngayon at mabigo ang pagproseso, hindi na ito mababawi. Burahin pa rin?",
+    "syncCardAllBackedUp": "Lahat ng recording ay na-sync na",
+    "syncCardReadyCount": "{count, plural, one{1 recording ang handa nang i-sync} other{{count} na recording ang handa nang i-sync}}",
+    "syncCardProcessing": "Pinoproseso sa Omi…",
+    "syncCardWaitingInternet": "Naghihintay ng internet",
+    "syncCardNeedsAttention": "{count, plural, one{1 recording ang kailangang asikasuhin} other{{count} recording ang kailangang asikasuhin}}",
+    "syncFlowIntro": "Ang mga recording ay inililipat mula sa iyong device patungo sa telepono na ito at iniimbak nang lokal, pagkatapos ay ina-upload sa server ng Omi kung saan tina-transcribe ang mga ito at ginagawang mga pag-uusap.",
+    "syncStepUpload": "I-sync",
+    "syncStepUploadDesc": "Ipinapadala ang iyong recording sa server ng Omi",
+    "syncStepProcess": "I-transcribe",
+    "syncStepProcessDesc": "Ginagawang conversation ng Omi ang audio",
+    "syncStepBackedUp": "Handa na ang conversation",
+    "syncStepBackedUpDesc": "Hanapin sa ilalim ng Mga Conversation",
+    "syncFailureFootnote": "Kung mabigo ang pagproseso, awtomatikong susubukan muli ang recording sa susunod na sync.",
+    "syncStatusConversationCreated": "Nagawa ang usapan",
+    "syncCardUploadingTitle": "Ina-upload sa Omi",
+    "syncCardDownloadingTitle": "Dina-download mula sa iyong device",
+    "syncCardProgressOf": "{current} ng {total}",
+    "syncStatusOnDevice": "Nasa iyong device",
+    "syncStatusDownloadingFromDevice": "Dina-download mula sa iyong device",
+    "newestFirst": "Pinakabago muna",
+    "noSyncedRecordingsYet": "Wala pang naka-sync na recording",
+    "morePaymentMethodsComingSoon": "Mas maraming paraan ng pagbabayad na malapit nang dumating",
+    "@morePaymentMethodsComingSoon": {
+        "description": "Placeholder card text shown under available payment methods"
+    },
+    "syncProcessingBackgroundHint": "Magpapatuloy ito sa background — puwede mong iwan ang screen na ito.",
+    "syncCardRateLimited": "Naabot na ang limitasyon ng patas na paggamit — awtomatikong magpapatuloy ang pag-sync",
+    "syncCardBackendBusy": "Abala ang mga server ng Omi — masi-sync ang iyong mga recording kapag may bakanteng kapasidad na muli"
 }

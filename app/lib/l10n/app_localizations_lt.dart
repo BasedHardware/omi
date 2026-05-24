@@ -964,11 +964,6 @@ class AppLocalizationsLt extends AppLocalizations {
   }
 
   @override
-  String memoriesUsedThisMonth(String used, String limit) {
-    return 'Šį mėnesį sukurta $used iš $limit prisiminimų';
-  }
-
-  @override
   String get visibility => 'Matomumas';
 
   @override
@@ -1640,7 +1635,7 @@ class AppLocalizationsLt extends AppLocalizations {
   String get finalTouches => 'Paskutiniai patobulinimai';
 
   @override
-  String get processing => 'Apdorojama...';
+  String get processing => 'Apdorojama';
 
   @override
   String get features => 'Funkcijos';
@@ -6839,7 +6834,15 @@ class AppLocalizationsLt extends AppLocalizations {
   String get lowBatteryAlertTitle => 'Įspėjimas apie senką bateriją';
 
   @override
-  String get lowBatteryAlertBody => 'Jūsų įrenginio baterija senka. Laikas įkrauti! 🔋';
+  String lowBatteryAlertBody(int level) {
+    return 'Jūsų baterija yra $level%. Laikas įkrauti! 🔋';
+  }
+
+  @override
+  String get batteryFullyChargedTitle => 'Omi yra visiškai įkrautas';
+
+  @override
+  String get batteryFullyChargedBody => 'Jūsų Omi įrenginys yra visiškai įkrautas. Galite jį atjungti!';
 
   @override
   String get deviceDisconnectedNotificationTitle => 'Jūsų Omi įrenginys atsijungė';
@@ -8446,7 +8449,7 @@ class AppLocalizationsLt extends AppLocalizations {
   String get manageStorage => 'Tvarkyti saugyklą';
 
   @override
-  String get safelyBackedUp => 'Saugiai nukopijuota į jūsų telefoną';
+  String get safelyBackedUp => 'Sukurti pokalbiai';
 
   @override
   String get notYetSynced => 'Dar nesinchronizuota su jūsų telefonu';
@@ -9249,4 +9252,156 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get bulkDeleteFailed => 'Nepavyko ištrinti užduočių. Bandykite dar kartą.';
+
+  @override
+  String get deleteRecap => 'Ištrinti suvestinę';
+
+  @override
+  String get deleteRecapConfirmTitle => 'Ištrinti šią suvestinę?';
+
+  @override
+  String get deleteRecapConfirmBody =>
+      'Ši suvestinė bus visam laikui pašalinta. Tos dienos pradinės pokalbiai nebus paveikti.';
+
+  @override
+  String get deleteRecapAction => 'Ištrinti';
+
+  @override
+  String get recapDeletedSnackbar => 'Suvestinė ištrinta';
+
+  @override
+  String get recapDeleteFailed => 'Nepavyko ištrinti suvestinės. Bandykite vėliau.';
+
+  @override
+  String get syncStatusBackedUp => 'Sukurta atsarginė kopija';
+
+  @override
+  String get syncStatusBackingUp => 'Sinchronizuojama…';
+
+  @override
+  String get syncStatusWaiting => 'Laukiama sinchronizavimo';
+
+  @override
+  String get syncStatusRetrying => 'Nepavyko apdoroti — bandoma dar kartą';
+
+  @override
+  String get syncStatusFailed => 'Nepavyko — palieskite Bandyti dar kartą';
+
+  @override
+  String get syncStatusFileUnavailable => 'Failas nepasiekiamas';
+
+  @override
+  String get noRecordingsYet => 'Įrašų dar nėra';
+
+  @override
+  String get syncInProgress => 'Vyksta sinchronizavimas';
+
+  @override
+  String get syncStatusUploaded => 'Įkelta · apdorojama Omi';
+
+  @override
+  String get deleteWhileProcessingTitle => 'Vis dar apdorojama';
+
+  @override
+  String get deleteWhileProcessingMessage =>
+      'Šis įrašas įkeltas, bet Omi vis dar kuria pokalbį. Jei ištrinsite dabar ir apdorojimas nepavyks, jo nebus galima atkurti. Vis tiek ištrinti?';
+
+  @override
+  String get syncCardAllBackedUp => 'Visi įrašai sinchronizuoti';
+
+  @override
+  String syncCardReadyCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count įrašų paruošta sinchronizuoti',
+      many: '$count įrašo paruošta sinchronizuoti',
+      few: '$count įrašai paruošti sinchronizuoti',
+      one: '1 įrašas paruoštas sinchronizuoti',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get syncCardProcessing => 'Apdorojama Omi…';
+
+  @override
+  String get syncCardWaitingInternet => 'Laukiama interneto';
+
+  @override
+  String syncCardNeedsAttention(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count įrašų reikia dėmesio',
+      many: '$count įrašo reikia dėmesio',
+      few: '$count įrašams reikia dėmesio',
+      one: '$count įrašui reikia dėmesio',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get syncFlowIntro =>
+      'Įrašai perkeliami iš jūsų įrenginio į šį telefoną ir saugomi vietoje, o paskui įkeliami į Omi serverį, kur jie transkribuojami ir paverčiami pokalbiais.';
+
+  @override
+  String get syncStepUpload => 'Sinchronizuoti';
+
+  @override
+  String get syncStepUploadDesc => 'Jūsų įrašas siunčiamas į Omi serverį';
+
+  @override
+  String get syncStepProcess => 'Transkripcija';
+
+  @override
+  String get syncStepProcessDesc => 'Omi paverčia garsą pokalbiu';
+
+  @override
+  String get syncStepBackedUp => 'Pokalbis paruoštas';
+
+  @override
+  String get syncStepBackedUpDesc => 'Rasite skiltyje Pokalbiai';
+
+  @override
+  String get syncFailureFootnote =>
+      'Jei apdorojimas nepavyksta, įrašas automatiškai pakartojamas kitos sinchronizacijos metu.';
+
+  @override
+  String get syncStatusConversationCreated => 'Pokalbis sukurtas';
+
+  @override
+  String get syncCardUploadingTitle => 'Įkeliama į Omi';
+
+  @override
+  String get syncCardDownloadingTitle => 'Atsisiunčiama iš jūsų įrenginio';
+
+  @override
+  String syncCardProgressOf(int current, int total) {
+    return '$current iš $total';
+  }
+
+  @override
+  String get syncStatusOnDevice => 'Jūsų įrenginyje';
+
+  @override
+  String get syncStatusDownloadingFromDevice => 'Atsisiunčiama iš jūsų įrenginio';
+
+  @override
+  String get newestFirst => 'Pirma naujausi';
+
+  @override
+  String get noSyncedRecordingsYet => 'Sinchronizuotų įrašų dar nėra';
+
+  @override
+  String get morePaymentMethodsComingSoon => 'Netrukus daugiau mokėjimo būdų';
+
+  @override
+  String get syncProcessingBackgroundHint => 'Tai tęsiasi fone — galite išeiti iš šio ekrano.';
+
+  @override
+  String get syncCardRateLimited => 'Pasiekta sąžiningo naudojimo riba — sinchronizavimas bus tęsiamas automatiškai';
+
+  @override
+  String get syncCardBackendBusy => 'Omi serveriai užimti — jūsų įrašai bus sinchronizuoti, kai atsilaisvins pajėgumai';
 }

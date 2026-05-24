@@ -1160,17 +1160,6 @@
             }
         }
     },
-    "memoriesUsedThisMonth": "{used} מתוך {limit} זיכרונות שנוצרו החודש",
-    "@memoriesUsedThisMonth": {
-        "placeholders": {
-            "used": {
-                "type": "String"
-            },
-            "limit": {
-                "type": "String"
-            }
-        }
-    },
     "visibility": "יכולת הראות",
     "visibilitySubtitle": "שלוט באילו שיחות מופיעות ברשימה שלך",
     "showShortConversations": "הצג שיחות קצרות",
@@ -1580,7 +1569,7 @@
     "designingApp": "עיצוב אפליקציה",
     "generatingIconStep": "יצירת אייקון",
     "finalTouches": "המגעות הסופיות",
-    "processing": "מעבד...",
+    "processing": "מעבד",
     "features": "תכונות",
     "creatingYourApp": "יצירת האפליקציה שלך...",
     "generatingIcon": "יצירת אייקון...",
@@ -8397,9 +8386,16 @@
     "@lowBatteryAlertTitle": {
         "description": "Title for low battery notification"
     },
-    "lowBatteryAlertBody": "ההתקן שלך נמצא בסוללה נמוכה. הגיע הזמן לטעינה מחדש! 🔋",
+    "lowBatteryAlertBody": "הסוללה שלך ב-{level}%. הגיע הזמן לטעון! 🔋",
+    "batteryFullyChargedTitle": "Omi טעון לגמרי",
+    "batteryFullyChargedBody": "מכשיר Omi שלך טעון לגמרי. אפשר לנתק אותו!",
     "@lowBatteryAlertBody": {
-        "description": "Body text for low battery notification"
+        "description": "Body text for low battery notification",
+        "placeholders": {
+            "level": {
+                "type": "int"
+            }
+        }
     },
     "deviceDisconnectedNotificationTitle": "התקן Omi שלך התנתק",
     "@deviceDisconnectedNotificationTitle": {
@@ -10152,7 +10148,7 @@
     "@manageStorage": {
         "description": "Menu option and sheet title for managing recording storage"
     },
-    "safelyBackedUp": "גיבוי בטוח בטלפון שלך",
+    "safelyBackedUp": "שיחות נוצרו",
     "@safelyBackedUp": {
         "description": "Description for synced files in manage storage sheet"
     },
@@ -10725,5 +10721,50 @@
     "startCallRecording": "התחל הקלטת שיחה",
     "startVoiceRecording": "התחל הקלטה קולית",
     "bulkExportAlreadyExported": "כל המשימות שנבחרו כבר יוצאו",
-    "bulkDeleteFailed": "לא ניתן למחוק את המשימות. אנא נסה שוב."
+    "bulkDeleteFailed": "לא ניתן למחוק את המשימות. אנא נסה שוב.",
+    "deleteRecap": "מחק סיכום",
+    "deleteRecapConfirmTitle": "למחוק את הסיכום הזה?",
+    "deleteRecapConfirmBody": "הסיכום הזה יוסר לצמיתות. השיחות המקוריות מאותו יום לא יושפעו.",
+    "deleteRecapAction": "מחק",
+    "recapDeletedSnackbar": "הסיכום נמחק",
+    "recapDeleteFailed": "לא ניתן היה למחוק את הסיכום. נסה שוב מאוחר יותר.",
+    "syncStatusBackedUp": "גובה",
+    "syncStatusBackingUp": "מסנכרן…",
+    "syncStatusWaiting": "ממתין לסנכרון",
+    "syncStatusRetrying": "העיבוד נכשל — מנסה שוב",
+    "syncStatusFailed": "נכשל — הקש על נסה שוב",
+    "syncStatusFileUnavailable": "הקובץ אינו זמין",
+    "syncStatusUploaded": "הועלה · בעיבוד ב-Omi",
+    "noRecordingsYet": "אין הקלטות עדיין",
+    "syncInProgress": "מתבצע סנכרון",
+    "deleteWhileProcessingTitle": "עדיין בעיבוד",
+    "deleteWhileProcessingMessage": "ההקלטה הזו הועלתה אך Omi עדיין יוצר את השיחה. אם תמחק אותה עכשיו והעיבוד ייכשל, לא יהיה ניתן לשחזר אותה. למחוק בכל זאת?",
+    "syncCardAllBackedUp": "כל ההקלטות סונכרנו",
+    "syncCardReadyCount": "{count, plural, one{הקלטה אחת מוכנה לסנכרון} two{2 הקלטות מוכנות לסנכרון} many{{count} הקלטות מוכנות לסנכרון} other{{count} הקלטות מוכנות לסנכרון}}",
+    "syncCardProcessing": "בעיבוד ב-Omi…",
+    "syncCardWaitingInternet": "ממתין לאינטרנט",
+    "syncCardNeedsAttention": "{count, plural, one{הקלטה אחת דורשת תשומת לב} two{2 הקלטות דורשות תשומת לב} many{{count} הקלטות דורשות תשומת לב} other{{count} הקלטות דורשות תשומת לב}}",
+    "syncFlowIntro": "ההקלטות מועברות מהמכשיר שלך לטלפון הזה ונשמרות מקומית, ולאחר מכן מועלות לשרת של Omi, שם הן מתומללות והופכות לשיחות.",
+    "syncStepUpload": "סנכרון",
+    "syncStepUploadDesc": "ההקלטה שלך נשלחת לשרת של Omi",
+    "syncStepProcess": "תמלול",
+    "syncStepProcessDesc": "Omi הופך את האודיו לשיחה",
+    "syncStepBackedUp": "השיחה מוכנה",
+    "syncStepBackedUpDesc": "תמצא אותה תחת שיחות",
+    "syncFailureFootnote": "אם העיבוד נכשל, ההקלטה תנוסה שוב באופן אוטומטי בסנכרון הבא.",
+    "syncStatusConversationCreated": "השיחה נוצרה",
+    "syncCardUploadingTitle": "מעלה ל-Omi",
+    "syncCardDownloadingTitle": "מוריד מהמכשיר שלך",
+    "syncCardProgressOf": "{current} מתוך {total}",
+    "syncStatusOnDevice": "במכשיר שלך",
+    "syncStatusDownloadingFromDevice": "מוריד מהמכשיר שלך",
+    "newestFirst": "החדשות ביותר תחילה",
+    "noSyncedRecordingsYet": "אין עדיין הקלטות מסונכרנות",
+    "morePaymentMethodsComingSoon": "אמצעי תשלום נוספים בקרוב",
+    "@morePaymentMethodsComingSoon": {
+        "description": "Placeholder card text shown under available payment methods"
+    },
+    "syncProcessingBackgroundHint": "התהליך נמשך ברקע — אפשר לצאת מהמסך הזה.",
+    "syncCardRateLimited": "הגעת למגבלת השימוש ההוגן — הסנכרון יתחדש באופן אוטומטי",
+    "syncCardBackendBusy": "השרתים של Omi עמוסים — ההקלטות שלך יסונכרנו ברגע שתתפנה תפוסה"
 }

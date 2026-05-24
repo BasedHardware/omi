@@ -1166,17 +1166,6 @@
             }
         }
     },
-    "memoriesUsedThisMonth": "{used} of {limit} memories created this month",
-    "@memoriesUsedThisMonth": {
-        "placeholders": {
-            "used": {
-                "type": "String"
-            },
-            "limit": {
-                "type": "String"
-            }
-        }
-    },
     "visibility": "Visibility",
     "visibilitySubtitle": "Control which conversations appear in your list",
     "showShortConversations": "Show Short Conversations",
@@ -1586,7 +1575,7 @@
     "designingApp": "Designing app",
     "generatingIconStep": "Generating icon",
     "finalTouches": "Final touches",
-    "processing": "Processing...",
+    "processing": "Processing",
     "features": "Features",
     "creatingYourApp": "Creating your app...",
     "generatingIcon": "Generating icon...",
@@ -8401,9 +8390,16 @@
     "@lowBatteryAlertTitle": {
         "description": "Title for low battery notification"
     },
-    "lowBatteryAlertBody": "Your device is running low on battery. Time for a recharge! 🔋",
+    "lowBatteryAlertBody": "Your battery is at {level}%. Time for a recharge! 🔋",
+    "batteryFullyChargedTitle": "Omi is fully charged",
+    "batteryFullyChargedBody": "Your Omi device is fully charged. Feel free to unplug!",
     "@lowBatteryAlertBody": {
-        "description": "Body text for low battery notification"
+        "description": "Body text for low battery notification",
+        "placeholders": {
+            "level": {
+                "type": "int"
+            }
+        }
     },
     "deviceDisconnectedNotificationTitle": "Your Omi Device Disconnected",
     "@deviceDisconnectedNotificationTitle": {
@@ -10156,7 +10152,7 @@
     "@manageStorage": {
         "description": "Menu option and sheet title for managing recording storage"
     },
-    "safelyBackedUp": "Safely backed up to your phone",
+    "safelyBackedUp": "Conversations created",
     "@safelyBackedUp": {
         "description": "Description for synced files in manage storage sheet"
     },
@@ -11020,5 +11016,125 @@
     "bulkDeleteFailed": "Could not delete tasks. Please try again.",
     "@bulkDeleteFailed": {
         "description": "Snackbar shown when the bulk delete request fails and the local list is restored"
+    },
+    "deleteRecap": "Delete recap",
+    "@deleteRecap": {
+        "description": "Menu / button label to delete a daily recap. Used on the detail page action sheet and the swipe-to-delete background."
+    },
+    "deleteRecapConfirmTitle": "Delete this recap?",
+    "@deleteRecapConfirmTitle": {
+        "description": "Title of the confirm dialog when deleting a daily recap."
+    },
+    "deleteRecapConfirmBody": "This recap will be permanently removed. The original conversations from that day are not affected.",
+    "@deleteRecapConfirmBody": {
+        "description": "Body of the confirm dialog clarifying that conversations are not deleted with the recap."
+    },
+    "deleteRecapAction": "Delete",
+    "@deleteRecapAction": {
+        "description": "Confirm action button on the delete-recap dialog."
+    },
+    "recapDeletedSnackbar": "Recap deleted",
+    "@recapDeletedSnackbar": {
+        "description": "Snackbar shown after a recap was successfully deleted."
+    },
+    "recapDeleteFailed": "Couldn't delete the recap. Try again later.",
+    "@recapDeleteFailed": {
+        "description": "Snackbar shown when the recap delete API fails."
+    },
+    "syncStatusBackedUp": "Backed up",
+    "syncStatusBackingUp": "Syncing…",
+    "syncStatusWaiting": "Waiting to sync",
+    "syncStatusRetrying": "Couldn’t process — retrying",
+    "syncStatusFailed": "Failed — tap Retry",
+    "syncStatusFileUnavailable": "File unavailable",
+    "noRecordingsYet": "No recordings yet",
+    "syncInProgress": "Sync in progress",
+    "syncStatusUploaded": "Uploaded · processing on Omi",
+    "deleteWhileProcessingTitle": "Still processing",
+    "deleteWhileProcessingMessage": "This recording is uploaded but Omi is still creating the conversation. If you delete it now and processing fails, it can't be recovered. Delete anyway?",
+    "syncCardAllBackedUp": "All recordings synced",
+    "syncCardReadyCount": "{count, plural, =1{1 recording ready to sync} other{{count} recordings ready to sync}}",
+    "@syncCardReadyCount": {
+        "description": "Status card: pending recordings count",
+        "placeholders": {
+            "count": {
+                "type": "int"
+            }
+        }
+    },
+    "syncCardProcessing": "Processing on Omi…",
+    "syncCardWaitingInternet": "Waiting for internet",
+    "syncCardNeedsAttention": "{count} recording{count, plural, =1{} other{s}} need attention",
+    "@syncCardNeedsAttention": {
+        "description": "Status card: items that need user attention",
+        "placeholders": {
+            "count": {
+                "type": "int"
+            }
+        }
+    },
+    "syncFlowIntro": "Recordings are transferred from your device to this phone and stored locally, then uploaded to Omi's server where they're transcribed and turned into conversations.",
+    "syncStepUpload": "Sync",
+    "syncStepUploadDesc": "Your recording is sent to Omi's server",
+    "syncStepProcess": "Transcribe",
+    "syncStepProcessDesc": "Omi turns the audio into a conversation",
+    "syncStepBackedUp": "Conversation ready",
+    "syncStepBackedUpDesc": "Find it under Conversations",
+    "syncFailureFootnote": "If processing fails, your recording is retried automatically on the next sync.",
+    "syncStatusConversationCreated": "Conversation created",
+    "@syncStatusConversationCreated": {
+        "description": "Row subtitle on the sync page for a fully synced recording: emphasises that processing succeeded and a conversation now exists."
+    },
+    "syncCardUploadingTitle": "Uploading to Omi",
+    "@syncCardUploadingTitle": {
+        "description": "Top status card: phase title when uploading audio batches to Omi (sub-line shows X of Y)"
+    },
+    "syncCardDownloadingTitle": "Downloading from your device",
+    "@syncCardDownloadingTitle": {
+        "description": "Top status card: phase title when downloading recordings from the Omi device over BLE/Wi-Fi"
+    },
+    "syncCardProgressOf": "{current} of {total}",
+    "@syncCardProgressOf": {
+        "description": "Top status card: secondary progress line under the phase title.",
+        "placeholders": {
+            "current": {
+                "type": "int"
+            },
+            "total": {
+                "type": "int"
+            }
+        }
+    },
+    "syncStatusOnDevice": "On your device",
+    "@syncStatusOnDevice": {
+        "description": "Row subtitle for a recording still on the Omi device (SD-card or flash page) that has not been downloaded to the phone yet."
+    },
+    "syncStatusDownloadingFromDevice": "Downloading from your device",
+    "@syncStatusDownloadingFromDevice": {
+        "description": "Row subtitle for a recording currently being transferred from the Omi device to the phone."
+    },
+    "newestFirst": "Newest first",
+    "@newestFirst": {
+        "description": "Subtle sort-order indicator next to the recordings list header so the user knows the newest items are at the top."
+    },
+    "noSyncedRecordingsYet": "No synced recordings yet",
+    "@noSyncedRecordingsYet": {
+        "description": "Empty-state message when the Synced filter is active but no recording has finished backing up."
+    },
+    "morePaymentMethodsComingSoon": "More payment methods coming soon",
+    "@morePaymentMethodsComingSoon": {
+        "description": "Placeholder card text shown under available payment methods"
+    },
+    "syncProcessingBackgroundHint": "This continues in the background — you can leave this screen.",
+    "@syncProcessingBackgroundHint": {
+        "description": "Reassurance line on the manual sync status card during the cloud-processing phase, so users do not think sync is stuck when there is no visible progress."
+    },
+    "syncCardRateLimited": "Fair-use limit reached — syncing will resume automatically",
+    "@syncCardRateLimited": {
+        "description": "Status card line when uploads are paused due to a fair-use/rate-limit (HTTP 429) cooldown. Reassures the user this is not an error and will resume on its own."
+    },
+    "syncCardBackendBusy": "Omi servers are busy — your recordings will sync once capacity returns",
+    "@syncCardBackendBusy": {
+        "description": "Status card line when the backend stale-guard has flagged queued jobs (i.e. workers are saturated, not the user being rate-limited). Distinct from the 429 fair-use case."
     }
 }

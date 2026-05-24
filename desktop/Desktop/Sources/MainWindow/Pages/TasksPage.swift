@@ -2367,9 +2367,13 @@ struct TasksPage: View {
                 loadingView
             } else if let error = viewModel.error, viewModel.tasks.isEmpty {
                 errorView(error)
-            } else if viewModel.displayTasks.isEmpty {
+            } else if viewModel.displayTasks.isEmpty && !viewModel.isInlineCreating {
                 emptyView
             } else {
+                // Render the list view (which hosts the InlineTaskCreationRow) whenever
+                // the user is inline-creating, even if the underlying task list is empty.
+                // Without this guard, clicking "+" on an empty list flips isInlineCreating
+                // but the empty view ignores it, so the input field never appears.
                 tasksListView
             }
         }

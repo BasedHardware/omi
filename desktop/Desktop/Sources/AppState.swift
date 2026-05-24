@@ -125,11 +125,156 @@ class AppState: ObservableObject {
   @Published var showUsageLimitPopup: Bool = false
   @Published var usageLimitReason: String = ""
 
+  /// True once the backend has told us this desktop user is past their trial
+  /// (e.g. via the `freemium_threshold_reached` listen-WS event). When true,
+  /// every $-incurring toggle on the desktop client should refuse to enable
+  /// and show the paywall popup instead. Stays sticky until the app restarts
+  /// or the user successfully reactivates (chat-quota allows / paid plan).
+  ///
+  /// Mirrored to UserDefaults `desktop_isPaywalled` so non-AppState singletons
+  /// (e.g. `ProactiveAssistantsPlugin`) can synchronously gate without holding
+  /// an AppState reference.
+  @Published var isPaywalled: Bool = false {
+    didSet { UserDefaults.standard.set(isPaywalled, forKey: "desktop_isPaywalled") }
+  }
+
+  /// Trial metadata from `/v1/users/me/trial`. Updated every 60s.
+  @Published var trialMetadata: TrialMetadataResponse?
+
+  private var trialRefreshTimer: Timer?
+
   /// Trigger the monthly-limit popup. Safe to call repeatedly — SwiftUI's
   /// `@Published` dedupes identical-value writes automatically.
   func triggerUsageLimitPopup(reason: String) {
     usageLimitReason = reason
     showUsageLimitPopup = true
+  }
+
+  /// Returns true if the requested capture toggle should be blocked because
+  /// the user is paywalled. Posts the existing usage-limit popup and returns
+  /// true so the caller can early-return without enabling the feature.
+  ///
+  /// Use at the entry point of every toggle/start function that drives a
+  /// $-cost path (transcription, screen analysis, proactive monitoring, etc).
+  /// Single source of truth for "should the UI block $-cost features". A BYOK
+  /// user (all four keys configured locally) is never paywalled, regardless of
+  /// the persisted `desktop_isPaywalled` flag, which can lag behind BYOK
+  /// activation. Use this anywhere that only has UserDefaults access.
+  nonisolated static var isPaywalledEffective: Bool {
+    !APIKeyService.isByokActive && UserDefaults.standard.bool(forKey: "desktop_isPaywalled")
+  }
+
+  @discardableResult
+  func blockIfPaywalled(reason: String = "trial_expired") -> Bool {
+    // BYOK users are never paywalled. If the user has all four BYOK keys
+    // configured locally, every backend request carries them and the server
+    // exempts the user — so the client must not block capture either, even if
+    // a stale `isPaywalled` flag is still set (e.g. trial expired *before*
+    // they added keys, and the backend heartbeat hasn't refreshed yet).
+    if APIKeyService.isByokActive {
+      if isPaywalled { isPaywalled = false }
+      return false
+    }
+    guard isPaywalled else { return false }
+    NotificationCenter.default.post(
+      name: .showUsageLimitPopup,
+      object: nil,
+      userInfo: ["reason": reason]
+    )
+    return true
+  }
+
+  func fetchTrialMetadata() {
+    #if DEBUG
+    if let debugMode = UserDefaults.standard.string(forKey: "debug_trial_mode") {
+      applyDebugTrialMode(debugMode)
+      return
+    }
+    #endif
+
+    Task { @MainActor in
+      do {
+        let metadata = try await APIClient.shared.getTrialMetadata()
+        self.trialMetadata = metadata
+        // Local BYOK always wins — never re-block a user who has all four keys
+        // configured, regardless of what the (possibly heartbeat-lagged)
+        // backend trial state says.
+        if APIKeyService.isByokActive {
+          if self.isPaywalled { self.isPaywalled = false }
+        } else if metadata.trialExpired && !self.isPaywalled {
+          self.isPaywalled = true
+        } else if !metadata.trialExpired && self.isPaywalled {
+          self.isPaywalled = false
+        }
+      } catch {
+        log("AppState: failed to fetch trial metadata: \(error.localizedDescription)")
+      }
+    }
+  }
+
+  #if DEBUG
+  private func applyDebugTrialMode(_ mode: String) {
+    let now = Int(Date().timeIntervalSince1970)
+    let features = ["unlimited_listening", "unlimited_transcription", "unlimited_memories", "unlimited_insights", "30_chat_questions_per_month"]
+    let dur = 3 * 24 * 3600
+
+    func mock(remaining: Int, expired: Bool) -> TrialMetadataResponse {
+      TrialMetadataResponse(
+        trialStartedAt: now - (dur - remaining), trialEndsAt: now + remaining,
+        trialRemainingSeconds: remaining, trialExpired: expired,
+        trialDurationSeconds: dur, trialFeatures: features, planAfterTrial: "Free"
+      )
+    }
+
+    switch mode {
+    case "active":
+      self.trialMetadata = mock(remaining: 2 * 24 * 3600 + 3600, expired: false)
+    case "warning":
+      self.trialMetadata = mock(remaining: 12 * 3600, expired: false)
+    case "expiring":
+      self.trialMetadata = mock(remaining: 1800, expired: false)
+    case "expired":
+      self.trialMetadata = mock(remaining: 0, expired: true)
+    case "realtime":
+      let endKey = "debug_trial_end_time"
+      let rtDur = 120
+      var endTime = UserDefaults.standard.integer(forKey: endKey)
+      if endTime == 0 {
+        endTime = now + rtDur
+        UserDefaults.standard.set(endTime, forKey: endKey)
+      }
+      let remaining = max(0, endTime - now)
+      self.trialMetadata = TrialMetadataResponse(
+        trialStartedAt: endTime - rtDur, trialEndsAt: endTime,
+        trialRemainingSeconds: remaining, trialExpired: remaining == 0,
+        trialDurationSeconds: rtDur, trialFeatures: features, planAfterTrial: "Free"
+      )
+      if remaining == 0 && !self.isPaywalled { self.isPaywalled = true }
+    default:
+      break
+    }
+  }
+  #endif
+
+  func startTrialMetadataRefresh() {
+    trialRefreshTimer?.invalidate()
+    fetchTrialMetadata()
+    #if DEBUG
+    let interval: TimeInterval = UserDefaults.standard.string(forKey: "debug_trial_mode") == "realtime" ? 10 : 60
+    #else
+    let interval: TimeInterval = 60
+    #endif
+    trialRefreshTimer = Timer.scheduledTimer(withTimeInterval: interval, repeats: true) { [weak self] _ in
+      Task { @MainActor in
+        self?.fetchTrialMetadata()
+      }
+    }
+  }
+
+  func stopTrialMetadataRefresh() {
+    trialRefreshTimer?.invalidate()
+    trialRefreshTimer = nil
+    trialMetadata = nil
   }
 
   /// True if notifications are enabled but won't show visual banners
@@ -229,6 +374,13 @@ class AppState: ObservableObject {
   init() {
     // Register as the current instance so background services can check recording state
     AppState.current = self
+
+    // Restore paywall flag from prior session so toggles + auto-restart respect
+    // it before any backend call has a chance to refresh state — but a BYOK
+    // user (all four keys configured) is never paywalled, so clear any stale
+    // flag immediately on launch.
+    self.isPaywalled =
+      !APIKeyService.isByokActive && UserDefaults.standard.bool(forKey: "desktop_isPaywalled")
 
     // Resolve beta/stable before loading backend URLs so beta releases use dev services.
     AppBuild.prepareUpdateChannelForBackendRouting()
@@ -1233,6 +1385,11 @@ class AppState: ObservableObject {
   /// - Parameter source: Audio source to use (defaults to current audioSource setting)
   func startTranscription(source: AudioSource? = nil) {
     guard !isTranscribing else { return }
+
+    // Paywall hard-stop: every code path that enables the mic + WS streaming
+    // funnels through here, including auto-restart from sleep and toggle
+    // shortcuts. Refuse to start and surface the upgrade popup.
+    if blockIfPaywalled() { return }
 
     // Use provided source or fall back to current setting
     let effectiveSource = source ?? audioSource
@@ -2524,7 +2681,28 @@ class AppState: ObservableObject {
     case "freemium_threshold_reached":
       let remaining = event.raw["remaining_seconds"] as? Int ?? 0
       log("Transcription: Freemium threshold reached, \(remaining)s remaining")
+      // BYOK users must never be paywalled. The backend exempts them, but a
+      // heartbeat/Firestore lag can briefly let this event slip through right
+      // after activation — ignore it so we don't kill a BYOK user's capture.
+      if APIKeyService.isByokActive {
+        log("Paywall: ignoring freemium threshold — BYOK active locally")
+        if isPaywalled { isPaywalled = false }
+        break
+      }
       triggerUsageLimitPopup(reason: "transcription")
+      // Hard-stop client-side capture so the mic LED and screen-recording
+      // indicator actually turn off. Without this, popup shows but the user
+      // still sees the mic indicator green and assumes recording continues —
+      // confusing and a battery/trust hit. Sticky until next app launch or
+      // successful plan reactivation.
+      isPaywalled = true
+      if isTranscribing {
+        log("Paywall: stopping transcription (freemium threshold)")
+        stopTranscription()
+      }
+      Task { @MainActor in
+        ProactiveAssistantsPlugin.shared.stopMonitoring()
+      }
 
     case "translating":
       if let segmentsArray = event.raw["segments"] as? [[String: Any]] {

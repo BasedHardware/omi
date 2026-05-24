@@ -1160,17 +1160,6 @@
             }
         }
     },
-    "memoriesUsedThisMonth": "{used} యొక్క {limit} జ్ఞాపకాలు ఈ నెలలో సృష్టించబడ్డాయి",
-    "@memoriesUsedThisMonth": {
-        "placeholders": {
-            "used": {
-                "type": "String"
-            },
-            "limit": {
-                "type": "String"
-            }
-        }
-    },
     "visibility": "దృశ్యమానత",
     "visibilitySubtitle": "ఎటువంటి సంభాషణలు మీ జాబితాలో కనిపించాలో నియంత్రించండి",
     "showShortConversations": "చిన్న సంభాషణలను చూపండి",
@@ -1580,7 +1569,7 @@
     "designingApp": "అనువర్తనాన్ని డిజైన్ చేస్తుంది",
     "generatingIconStep": "చిహ్నాన్ని ఉత్పత్తి చేస్తుంది",
     "finalTouches": "చివరి స్పర్శ",
-    "processing": "ప్రక్రియ చేస్తుంది...",
+    "processing": "ప్రాసెస్ అవుతోంది",
     "features": "లక్షణాలు",
     "creatingYourApp": "మీ అనువర్తనాన్ని సృష్టిస్తుంది...",
     "generatingIcon": "చిహ్నాన్ని ఉత్పత్తి చేస్తుంది...",
@@ -8397,9 +8386,16 @@
     "@lowBatteryAlertTitle": {
         "description": "Title for low battery notification"
     },
-    "lowBatteryAlertBody": "మీ పరికరం తక్కువ బ్యాటరీలో ఉంది. రీఛార్జ్ చేయడానికి సమయం! 🔋",
+    "lowBatteryAlertBody": "మీ బ్యాటరీ {level}% వద్ద ఉంది. రీఛార్జ్ చేయడానికి సమయం! 🔋",
+    "batteryFullyChargedTitle": "Omi పూర్తిగా చార్జ్ అయింది",
+    "batteryFullyChargedBody": "మీ Omi పరికరం పూర్తిగా చార్జ్ అయింది. అన్‌ప్లగ్ చేయవచ్చు!",
     "@lowBatteryAlertBody": {
-        "description": "Body text for low battery notification"
+        "description": "Body text for low battery notification",
+        "placeholders": {
+            "level": {
+                "type": "int"
+            }
+        }
     },
     "deviceDisconnectedNotificationTitle": "మీ Omi పరికరం డిస్‌కనెక్ట్ చేయబడింది",
     "@deviceDisconnectedNotificationTitle": {
@@ -10152,7 +10148,7 @@
     "@manageStorage": {
         "description": "Menu option and sheet title for managing recording storage"
     },
-    "safelyBackedUp": "మీ ఫోన్‌కు సురక్షితంగా బ్యాకప్ చేయబడింది",
+    "safelyBackedUp": "సృష్టించిన సంభాషణలు",
     "@safelyBackedUp": {
         "description": "Description for synced files in manage storage sheet"
     },
@@ -10725,5 +10721,50 @@
     "startCallRecording": "కాల్ రికార్డింగ్ ప్రారంభించండి",
     "startVoiceRecording": "వాయిస్ రికార్డింగ్ ప్రారంభించండి",
     "bulkExportAlreadyExported": "ఎంచుకున్న అన్ని పనులు ఇప్పటికే ఎగుమతి చేయబడ్డాయి",
-    "bulkDeleteFailed": "పనులను తొలగించలేకపోయింది. దయచేసి మళ్లీ ప్రయత్నించండి."
+    "bulkDeleteFailed": "పనులను తొలగించలేకపోయింది. దయచేసి మళ్లీ ప్రయత్నించండి.",
+    "deleteRecap": "సారాంశాన్ని తొలగించండి",
+    "deleteRecapConfirmTitle": "ఈ సారాంశాన్ని తొలగించాలా?",
+    "deleteRecapConfirmBody": "ఈ సారాంశం శాశ్వతంగా తొలగించబడుతుంది. ఆ రోజు అసలు సంభాషణలపై ప్రభావం ఉండదు.",
+    "deleteRecapAction": "తొలగించు",
+    "recapDeletedSnackbar": "సారాంశం తొలగించబడింది",
+    "recapDeleteFailed": "సారాంశాన్ని తొలగించలేకపోయాం. తర్వాత మళ్ళీ ప్రయత్నించండి.",
+    "syncStatusBackedUp": "బ్యాకప్ అయింది",
+    "syncStatusBackingUp": "సమన్వయం చేస్తోంది…",
+    "syncStatusWaiting": "సింక్ కోసం వేచి ఉంది",
+    "syncStatusRetrying": "ప్రాసెస్ చేయలేకపోయింది — మళ్లీ ప్రయత్నిస్తోంది",
+    "syncStatusFailed": "విఫలమైంది — Retry నొక్కండి",
+    "syncStatusFileUnavailable": "ఫైల్ అందుబాటులో లేదు",
+    "syncStatusUploaded": "అప్‌లోడ్ అయింది · Omiలో ప్రాసెస్ అవుతోంది",
+    "noRecordingsYet": "ఇంకా రికార్డింగ్‌లు లేవు",
+    "syncInProgress": "సింక్ జరుగుతోంది",
+    "deleteWhileProcessingTitle": "ఇంకా ప్రాసెస్ అవుతోంది",
+    "deleteWhileProcessingMessage": "ఈ రికార్డింగ్ అప్‌లోడ్ అయింది కానీ Omi ఇంకా సంభాషణను సృష్టిస్తోంది. ఇప్పుడు తొలగిస్తే మరియు ప్రాసెసింగ్ విఫలమైతే, దాన్ని తిరిగి పొందలేరు. అయినా తొలగించాలా?",
+    "syncCardAllBackedUp": "అన్ని రికార్డింగ్‌లు సింక్ అయ్యాయి",
+    "syncCardReadyCount": "{count, plural, one{1 రికార్డింగ్ సింక్‌కు సిద్ధంగా ఉంది} other{{count} రికార్డింగ్‌లు సింక్‌కు సిద్ధంగా ఉన్నాయి}}",
+    "syncCardProcessing": "Omiలో ప్రాసెస్ అవుతోంది…",
+    "syncCardWaitingInternet": "ఇంటర్నెట్ కోసం వేచి ఉంది",
+    "syncCardNeedsAttention": "{count, plural, one{1 రికార్డింగ్‌కు శ్రద్ధ అవసరం} other{{count} రికార్డింగ్‌లకు శ్రద్ధ అవసరం}}",
+    "syncFlowIntro": "రికార్డింగ్‌లు మీ పరికరం నుండి ఈ ఫోన్‌కు బదిలీ చేయబడి స్థానికంగా నిల్వ చేయబడతాయి, ఆ తర్వాత Omi సర్వర్‌కు అప్‌లోడ్ చేయబడతాయి, అక్కడ అవి లిప్యంతరీకరించబడి సంభాషణలుగా మార్చబడతాయి.",
+    "syncStepUpload": "సింక్",
+    "syncStepUploadDesc": "మీ రికార్డింగ్ Omi సర్వర్‌కు పంపబడుతుంది",
+    "syncStepProcess": "లిప్యంతరీకరణ",
+    "syncStepProcessDesc": "Omi ఆడియోను సంభాషణగా మారుస్తుంది",
+    "syncStepBackedUp": "సంభాషణ సిద్ధంగా ఉంది",
+    "syncStepBackedUpDesc": "దీన్ని సంభాషణలు లో కనుగొనండి",
+    "syncFailureFootnote": "ప్రాసెసింగ్ విఫలమైతే, తదుపరి సింక్‌లో రికార్డింగ్ ఆటోమేటిక్‌గా మళ్లీ ప్రయత్నించబడుతుంది.",
+    "syncStatusConversationCreated": "సంభాషణ సృష్టించబడింది",
+    "syncCardUploadingTitle": "Omi కి అప్‌లోడ్ అవుతోంది",
+    "syncCardDownloadingTitle": "మీ పరికరం నుండి డౌన్‌లోడ్ అవుతోంది",
+    "syncCardProgressOf": "{total}లో {current}",
+    "syncStatusOnDevice": "మీ పరికరంలో",
+    "syncStatusDownloadingFromDevice": "మీ పరికరం నుండి డౌన్‌లోడ్ అవుతోంది",
+    "newestFirst": "కొత్తవి మొదట",
+    "noSyncedRecordingsYet": "ఇంకా సమకాలీకరించిన రికార్డింగ్‌లు లేవు",
+    "morePaymentMethodsComingSoon": "మరిన్ని చెల్లింపు పద్ధతులు త్వరలో",
+    "@morePaymentMethodsComingSoon": {
+        "description": "Placeholder card text shown under available payment methods"
+    },
+    "syncProcessingBackgroundHint": "ఇది నేపథ్యంలో కొనసాగుతుంది — మీరు ఈ స్క్రీన్ నుండి వెళ్లిపోవచ్చు.",
+    "syncCardRateLimited": "న్యాయమైన వినియోగ పరిమితి చేరుకుంది — సింక్ స్వయంచాలకంగా తిరిగి కొనసాగుతుంది",
+    "syncCardBackendBusy": "Omi సర్వర్‌లు బిజీగా ఉన్నాయి — సామర్థ్యం అందుబాటులోకి వచ్చిన వెంటనే మీ రికార్డింగ్‌లు సింక్ అవుతాయి"
 }

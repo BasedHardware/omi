@@ -966,11 +966,6 @@ class AppLocalizationsTr extends AppLocalizations {
   }
 
   @override
-  String memoriesUsedThisMonth(String used, String limit) {
-    return 'Bu ay $limit anıdan $used oluşturuldu';
-  }
-
-  @override
   String get visibility => 'Görünürlük';
 
   @override
@@ -1647,7 +1642,7 @@ class AppLocalizationsTr extends AppLocalizations {
   String get finalTouches => 'Son dokunuşlar';
 
   @override
-  String get processing => 'İşleniyor...';
+  String get processing => 'İşleniyor';
 
   @override
   String get features => 'Özellikler';
@@ -6847,7 +6842,15 @@ class AppLocalizationsTr extends AppLocalizations {
   String get lowBatteryAlertTitle => 'Düşük Pil Uyarısı';
 
   @override
-  String get lowBatteryAlertBody => 'Cihazınızın pili azaldı. Şarj etme zamanı! 🔋';
+  String lowBatteryAlertBody(int level) {
+    return 'Pil seviyeniz %$level. Şarj etme zamanı! 🔋';
+  }
+
+  @override
+  String get batteryFullyChargedTitle => 'Omi tamamen şarj oldu';
+
+  @override
+  String get batteryFullyChargedBody => 'Omi cihazınız tamamen şarj oldu. Fişini çekebilirsiniz!';
 
   @override
   String get deviceDisconnectedNotificationTitle => 'Omi Cihazınız Bağlantı Kesildi';
@@ -8450,7 +8453,7 @@ class AppLocalizationsTr extends AppLocalizations {
   String get manageStorage => 'Depolamayı yönet';
 
   @override
-  String get safelyBackedUp => 'Telefonunuza güvenli şekilde yedeklendi';
+  String get safelyBackedUp => 'Oluşturulan konuşmalar';
 
   @override
   String get notYetSynced => 'Henüz telefonunuzla senkronize edilmedi';
@@ -9253,4 +9256,151 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get bulkDeleteFailed => 'Görevler silinemedi. Lütfen tekrar deneyin.';
+
+  @override
+  String get deleteRecap => 'Özeti sil';
+
+  @override
+  String get deleteRecapConfirmTitle => 'Bu özet silinsin mi?';
+
+  @override
+  String get deleteRecapConfirmBody => 'Bu özet kalıcı olarak kaldırılacak. O güne ait orijinal sohbetler etkilenmez.';
+
+  @override
+  String get deleteRecapAction => 'Sil';
+
+  @override
+  String get recapDeletedSnackbar => 'Özet silindi';
+
+  @override
+  String get recapDeleteFailed => 'Özet silinemedi. Daha sonra tekrar deneyin.';
+
+  @override
+  String get syncStatusBackedUp => 'Yedeklendi';
+
+  @override
+  String get syncStatusBackingUp => 'Senkronize ediliyor…';
+
+  @override
+  String get syncStatusWaiting => 'Eşitleme bekleniyor';
+
+  @override
+  String get syncStatusRetrying => 'İşlenemedi — yeniden deneniyor';
+
+  @override
+  String get syncStatusFailed => 'Başarısız — Yeniden Dene\'ye dokunun';
+
+  @override
+  String get syncStatusFileUnavailable => 'Dosya kullanılamıyor';
+
+  @override
+  String get noRecordingsYet => 'Henüz kayıt yok';
+
+  @override
+  String get syncInProgress => 'Eşitleme sürüyor';
+
+  @override
+  String get syncStatusUploaded => 'Yüklendi · Omi\'de işleniyor';
+
+  @override
+  String get deleteWhileProcessingTitle => 'Hâlâ işleniyor';
+
+  @override
+  String get deleteWhileProcessingMessage =>
+      'Bu kayıt yüklendi ancak Omi hâlâ konuşmayı oluşturuyor. Şimdi silerseniz ve işleme başarısız olursa kurtarılamaz. Yine de silinsin mi?';
+
+  @override
+  String get syncCardAllBackedUp => 'Tüm kayıtlar eşitlendi';
+
+  @override
+  String syncCardReadyCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count kayıt eşitlemeye hazır',
+      one: '1 kayıt eşitlemeye hazır',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get syncCardProcessing => 'Omi\'de işleniyor…';
+
+  @override
+  String get syncCardWaitingInternet => 'İnternet bekleniyor';
+
+  @override
+  String syncCardNeedsAttention(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count kayıt ilgi bekliyor',
+      one: '1 kayıt ilgi bekliyor',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get syncFlowIntro =>
+      'Kayıtlar cihazınızdan bu telefona aktarılıp yerel olarak saklanır, ardından Omi\'nin sunucusuna yüklenir; burada deşifre edilip görüşmelere dönüştürülür.';
+
+  @override
+  String get syncStepUpload => 'Eşitle';
+
+  @override
+  String get syncStepUploadDesc => 'Kaydınız Omi\'nin sunucusuna gönderilir';
+
+  @override
+  String get syncStepProcess => 'Yazıya dök';
+
+  @override
+  String get syncStepProcessDesc => 'Omi sesi bir konuşmaya dönüştürür';
+
+  @override
+  String get syncStepBackedUp => 'Konuşma hazır';
+
+  @override
+  String get syncStepBackedUpDesc => 'Konuşmalar altında bulabilirsin';
+
+  @override
+  String get syncFailureFootnote =>
+      'İşlem başarısız olursa, kayıt bir sonraki eşitlemede otomatik olarak yeniden denenir.';
+
+  @override
+  String get syncStatusConversationCreated => 'Konuşma oluşturuldu';
+
+  @override
+  String get syncCardUploadingTitle => 'Omi\'ye yükleniyor';
+
+  @override
+  String get syncCardDownloadingTitle => 'Cihazınızdan indiriliyor';
+
+  @override
+  String syncCardProgressOf(int current, int total) {
+    return '$total / $current';
+  }
+
+  @override
+  String get syncStatusOnDevice => 'Cihazınızda';
+
+  @override
+  String get syncStatusDownloadingFromDevice => 'Cihazınızdan indiriliyor';
+
+  @override
+  String get newestFirst => 'Önce en yeniler';
+
+  @override
+  String get noSyncedRecordingsYet => 'Henüz senkronize edilmiş kayıt yok';
+
+  @override
+  String get morePaymentMethodsComingSoon => 'Daha fazla ödeme yöntemi yakında';
+
+  @override
+  String get syncProcessingBackgroundHint => 'Bu işlem arka planda sürer — bu ekrandan ayrılabilirsiniz.';
+
+  @override
+  String get syncCardRateLimited => 'Adil kullanım sınırına ulaşıldı — eşitleme otomatik olarak sürdürülecek';
+
+  @override
+  String get syncCardBackendBusy => 'Omi sunucuları yoğun — kapasite boşaldığında kayıtlarınız eşitlenecek';
 }

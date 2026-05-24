@@ -952,11 +952,6 @@ class AppLocalizationsJa extends AppLocalizations {
   }
 
   @override
-  String memoriesUsedThisMonth(String used, String limit) {
-    return '今月 $limit個中$used個の記憶作成済み';
-  }
-
-  @override
   String get visibility => '表示設定';
 
   @override
@@ -1621,7 +1616,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get finalTouches => '最終調整';
 
   @override
-  String get processing => '処理中...';
+  String get processing => '処理中';
 
   @override
   String get features => '機能';
@@ -6716,7 +6711,15 @@ class AppLocalizationsJa extends AppLocalizations {
   String get lowBatteryAlertTitle => 'バッテリー残量低下アラート';
 
   @override
-  String get lowBatteryAlertBody => 'デバイスのバッテリーが少なくなっています。充電してください！🔋';
+  String lowBatteryAlertBody(int level) {
+    return 'バッテリー残量は $level% です。充電してください！🔋';
+  }
+
+  @override
+  String get batteryFullyChargedTitle => 'Omiは満充電です';
+
+  @override
+  String get batteryFullyChargedBody => 'Omiデバイスが満充電になりました。充電ケーブルを外してください！';
 
   @override
   String get deviceDisconnectedNotificationTitle => 'Omiデバイスが切断されました';
@@ -8295,7 +8298,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get manageStorage => 'ストレージを管理';
 
   @override
-  String get safelyBackedUp => 'スマホに安全にバックアップ済み';
+  String get safelyBackedUp => '作成された会話';
 
   @override
   String get notYetSynced => 'まだスマホに同期されていません';
@@ -9091,4 +9094,146 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get bulkDeleteFailed => 'タスクを削除できませんでした。もう一度お試しください。';
+
+  @override
+  String get deleteRecap => 'リキャップを削除';
+
+  @override
+  String get deleteRecapConfirmTitle => 'このリキャップを削除しますか?';
+
+  @override
+  String get deleteRecapConfirmBody => 'このリキャップは完全に削除されます。その日の元の会話には影響しません。';
+
+  @override
+  String get deleteRecapAction => '削除';
+
+  @override
+  String get recapDeletedSnackbar => 'リキャップを削除しました';
+
+  @override
+  String get recapDeleteFailed => 'リキャップを削除できませんでした。後でもう一度お試しください。';
+
+  @override
+  String get syncStatusBackedUp => 'バックアップ済み';
+
+  @override
+  String get syncStatusBackingUp => '同期中…';
+
+  @override
+  String get syncStatusWaiting => '同期を待機中';
+
+  @override
+  String get syncStatusRetrying => '処理できませんでした — 再試行中';
+
+  @override
+  String get syncStatusFailed => '失敗 — 「再試行」をタップ';
+
+  @override
+  String get syncStatusFileUnavailable => 'ファイルを利用できません';
+
+  @override
+  String get noRecordingsYet => 'まだ録音がありません';
+
+  @override
+  String get syncInProgress => '同期中';
+
+  @override
+  String get syncStatusUploaded => 'アップロード済み · Omi で処理中';
+
+  @override
+  String get deleteWhileProcessingTitle => 'まだ処理中です';
+
+  @override
+  String get deleteWhileProcessingMessage => 'この録音はアップロード済みですが、Omi はまだ会話を作成しています。今削除して処理が失敗すると復元できません。それでも削除しますか？';
+
+  @override
+  String get syncCardAllBackedUp => 'すべての録音を同期済み';
+
+  @override
+  String syncCardReadyCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count 件の録音を同期できます',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get syncCardProcessing => 'Omiで処理中…';
+
+  @override
+  String get syncCardWaitingInternet => 'インターネット接続を待機中';
+
+  @override
+  String syncCardNeedsAttention(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '確認が必要な録音が$count件',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get syncFlowIntro => '録音はデバイスからこの電話に転送されてローカルに保存され、その後 Omi のサーバーにアップロードされて文字起こしされ、会話に変換されます。';
+
+  @override
+  String get syncStepUpload => '同期';
+
+  @override
+  String get syncStepUploadDesc => '録音はOmiのサーバーに送信されます';
+
+  @override
+  String get syncStepProcess => '文字起こし';
+
+  @override
+  String get syncStepProcessDesc => 'Omi が音声を会話に変換します';
+
+  @override
+  String get syncStepBackedUp => '会話の準備が完了';
+
+  @override
+  String get syncStepBackedUpDesc => '会話 から見つけられます';
+
+  @override
+  String get syncFailureFootnote => '処理に失敗した場合、次回の同期で録音が自動的に再試行されます。';
+
+  @override
+  String get syncStatusConversationCreated => '会話を作成しました';
+
+  @override
+  String get syncCardUploadingTitle => 'Omiへアップロード中';
+
+  @override
+  String get syncCardDownloadingTitle => 'デバイスからダウンロード中';
+
+  @override
+  String syncCardProgressOf(int current, int total) {
+    return '$total件中$current件';
+  }
+
+  @override
+  String get syncStatusOnDevice => 'デバイス上';
+
+  @override
+  String get syncStatusDownloadingFromDevice => 'デバイスからダウンロード中';
+
+  @override
+  String get newestFirst => '新しい順';
+
+  @override
+  String get noSyncedRecordingsYet => '同期済みの録音はまだありません';
+
+  @override
+  String get morePaymentMethodsComingSoon => '他の支払い方法を近日追加予定';
+
+  @override
+  String get syncProcessingBackgroundHint => 'この処理はバックグラウンドで続きます — この画面から移動してかまいません。';
+
+  @override
+  String get syncCardRateLimited => '利用上限に達しました — 同期は自動的に再開されます';
+
+  @override
+  String get syncCardBackendBusy => 'Omi のサーバーが混雑しています — 空き容量が戻り次第、録音が同期されます';
 }

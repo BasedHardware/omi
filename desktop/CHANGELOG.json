@@ -2,6 +2,240 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.11.420",
+      "date": "2026-05-22",
+      "changes": [
+        "Fixed BYOK chat on the free plan: the desktop now forwards your provider keys to chat requests, so chat no longer hits the trial paywall and runs on your own keys"
+      ]
+    },
+    {
+      "version": "0.11.419",
+      "date": "2026-05-21",
+      "changes": [
+        "Fixed \"Failed to load plan information\" on the Plan & Usage page when the backend response was missing usage fields"
+      ]
+    },
+    {
+      "version": "0.11.417",
+      "date": "2026-05-21",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.416",
+      "date": "2026-05-21",
+      "changes": [
+        "Reduced Sentry error noise: filter transient network/socket errors and rate-limit repeated identical errors so a single root cause no longer floods crash reporting",
+        "Fixed a database constraint crash when recording video-based screenshots with no legacy image path",
+        "Raised app-hang reporting threshold to 3s so only sustained freezes are flagged"
+      ]
+    },
+    {
+      "version": "0.11.415",
+      "date": "2026-05-21",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.414",
+      "date": "2026-05-21",
+      "changes": [
+        "Fixed memories created on desktop showing up under \"Manual\" on mobile \u2014 they now appear under \"About You\" or \"Insights\" based on their type",
+        "Screen Capture and Microphone menu bar toggles now show as off when your trial has expired or you hit your usage limit, and tapping them brings up the upgrade prompt"
+      ]
+    },
+    {
+      "version": "0.11.412",
+      "date": "2026-05-20",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.411",
+      "date": "2026-05-18",
+      "changes": [
+        "Fixed BYOK keys not being used for Gemini and Anthropic requests \u2014 users who bring their own API keys now bypass server keys and rate limits for all AI features"
+      ]
+    },
+    {
+      "version": "0.11.409",
+      "date": "2026-05-18",
+      "changes": [
+        "Fixed BYOK keys not being used for Gemini and Anthropic requests \u2014 users who bring their own API keys now bypass server keys and rate limits for all AI features"
+      ]
+    },
+    {
+      "version": "0.11.408",
+      "date": "2026-05-17",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.407",
+      "date": "2026-05-16",
+      "changes": [
+        "Fixed BYOK users hitting \"trial_expired\" / monthly-limit popup even with all 4 keys configured \u2014 request-level BYOK headers now bypass the trial paywall regardless of Firestore heartbeat state, and the listen WebSocket extracts BYOK headers before the paywall check"
+      ]
+    },
+    {
+      "version": "0.11.406",
+      "date": "2026-05-15",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.405",
+      "date": "2026-05-15",
+      "changes": [
+        "Rewind shows screenshots within ~5 seconds of launch instead of waiting up to a minute for the first video chunk to fill up"
+      ]
+    },
+    {
+      "version": "0.11.404",
+      "date": "2026-05-15",
+      "changes": [
+        "Task notifications fire within seconds instead of waiting up to 5 minutes \u2014 promote runs immediately on monitoring start and the safety-net cadence dropped from 5 min to 1 min"
+      ]
+    },
+    {
+      "version": "0.11.403",
+      "date": "2026-05-15",
+      "changes": [
+        "Fixed Tasks page \"+\" button doing nothing when the task list was empty"
+      ]
+    },
+    {
+      "version": "0.11.402",
+      "date": "2026-05-15",
+      "changes": [
+        "Task analyzer now extracts every distinct commitment in a frame instead of stopping after the first \u2014 a chat asking for two unrelated deliverables in one message creates two tasks"
+      ]
+    },
+    {
+      "version": "0.11.401",
+      "date": "2026-05-14",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.400",
+      "date": "2026-05-14",
+      "changes": [
+        "Added file/screenshot attachments to chat (paperclip + drag-drop)"
+      ]
+    },
+    {
+      "version": "0.11.398",
+      "date": "2026-05-14",
+      "changes": [
+        "Smarter task analyzer dedupe \u2014 per-chat/window throttle instead of one global 60s cooldown, so opening multiple chats in quick succession no longer drops tasks"
+      ]
+    },
+    {
+      "version": "0.11.397",
+      "date": "2026-05-14",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.395",
+      "date": "2026-05-13",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.393",
+      "date": "2026-05-13",
+      "changes": [
+        "Fixed push-to-talk ignoring auto-detect language setting, causing non-English (e.g. Russian) speech to be force-transcribed as English"
+      ]
+    },
+    {
+      "version": "0.11.392",
+      "date": "2026-05-12",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.391",
+      "date": "2026-05-12",
+      "changes": [
+        "Fixed notification frequency setting being ignored, and replaced the dropdown with a stepped slider in Settings"
+      ]
+    },
+    {
+      "version": "0.11.389",
+      "date": "2026-05-12",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.388",
+      "date": "2026-05-12",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.387",
+      "date": "2026-05-12",
+      "changes": [
+        "Fixed: agent pills now spawn correctly when the Haiku router wraps its decision JSON in markdown code fences"
+      ]
+    },
+    {
+      "version": "0.11.386",
+      "date": "2026-05-12",
+      "changes": [
+        "Fixed: agent pills now spawn correctly from voice/typed Ask Omi prompts (router was 400ing server-side)"
+      ]
+    },
+    {
+      "version": "0.11.385",
+      "date": "2026-05-12",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.384",
+      "date": "2026-05-12",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.383",
+      "date": "2026-05-11",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.382",
+      "date": "2026-05-11",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.380",
+      "date": "2026-05-10",
+      "changes": [
+        "Beta builds now talk to the development backend for faster fixes \u2014 your data still lives in production"
+      ]
+    },
+    {
       "version": "0.11.379",
       "date": "2026-05-07",
       "changes": [
@@ -347,7 +581,7 @@
       "version": "0.11.319",
       "date": "2026-04-16",
       "changes": [
-        "Added a voice picker in the floating bar settings with 10 ElevenLabs voices to choose from"
+        "Added a voice picker in the floating bar settings"
       ]
     },
     {

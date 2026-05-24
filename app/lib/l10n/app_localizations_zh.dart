@@ -950,11 +950,6 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String memoriesUsedThisMonth(String used, String limit) {
-    return '本月创建 $used/$limit 条记忆';
-  }
-
-  @override
   String get visibility => '可见性';
 
   @override
@@ -1619,7 +1614,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get finalTouches => '最后修饰';
 
   @override
-  String get processing => '处理中...';
+  String get processing => '处理中';
 
   @override
   String get features => '功能';
@@ -6707,7 +6702,15 @@ class AppLocalizationsZh extends AppLocalizations {
   String get lowBatteryAlertTitle => '电池电量低警告';
 
   @override
-  String get lowBatteryAlertBody => '您的设备电池电量低。是时候充电了！🔋';
+  String lowBatteryAlertBody(int level) {
+    return '您的电池电量为 $level%。是时候充电了！🔋';
+  }
+
+  @override
+  String get batteryFullyChargedTitle => 'Omi已充满电';
+
+  @override
+  String get batteryFullyChargedBody => '您的Omi设备已充满电，可以拔掉充电线了！';
 
   @override
   String get deviceDisconnectedNotificationTitle => '您的 Omi 设备已断开连接';
@@ -8286,7 +8289,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get manageStorage => '管理存储';
 
   @override
-  String get safelyBackedUp => '已安全备份到您的手机';
+  String get safelyBackedUp => '已创建对话';
 
   @override
   String get notYetSynced => '尚未同步到您的手机';
@@ -9077,4 +9080,146 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get bulkDeleteFailed => '无法删除任务，请重试。';
+
+  @override
+  String get deleteRecap => '删除回顾';
+
+  @override
+  String get deleteRecapConfirmTitle => '删除该回顾?';
+
+  @override
+  String get deleteRecapConfirmBody => '此回顾将被永久删除。当天的原始对话不会受到影响。';
+
+  @override
+  String get deleteRecapAction => '删除';
+
+  @override
+  String get recapDeletedSnackbar => '回顾已删除';
+
+  @override
+  String get recapDeleteFailed => '无法删除回顾。请稍后重试。';
+
+  @override
+  String get syncStatusBackedUp => '已备份';
+
+  @override
+  String get syncStatusBackingUp => '同步中…';
+
+  @override
+  String get syncStatusWaiting => '等待同步';
+
+  @override
+  String get syncStatusRetrying => '无法处理 — 正在重试';
+
+  @override
+  String get syncStatusFailed => '失败 — 点按“重试”';
+
+  @override
+  String get syncStatusFileUnavailable => '文件不可用';
+
+  @override
+  String get noRecordingsYet => '暂无录音';
+
+  @override
+  String get syncInProgress => '正在同步';
+
+  @override
+  String get syncStatusUploaded => '已上传 · 正在 Omi 上处理';
+
+  @override
+  String get deleteWhileProcessingTitle => '仍在处理';
+
+  @override
+  String get deleteWhileProcessingMessage => '此录音已上传，但 Omi 仍在创建对话。如果现在删除且处理失败，将无法恢复。仍要删除吗？';
+
+  @override
+  String get syncCardAllBackedUp => '所有录音已同步';
+
+  @override
+  String syncCardReadyCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count 条录音可同步',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get syncCardProcessing => 'Omi 处理中…';
+
+  @override
+  String get syncCardWaitingInternet => '等待网络连接';
+
+  @override
+  String syncCardNeedsAttention(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count 条录音需要关注',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get syncFlowIntro => '录音从你的设备传输到这部手机并存储在本地，然后上传到 Omi 的服务器，在那里被转录并转化为对话。';
+
+  @override
+  String get syncStepUpload => '同步';
+
+  @override
+  String get syncStepUploadDesc => '你的录音会发送到 Omi 的服务器';
+
+  @override
+  String get syncStepProcess => '转写';
+
+  @override
+  String get syncStepProcessDesc => 'Omi 将音频转为对话';
+
+  @override
+  String get syncStepBackedUp => '对话已就绪';
+
+  @override
+  String get syncStepBackedUpDesc => '在对话中找到';
+
+  @override
+  String get syncFailureFootnote => '若处理失败,录音将在下次同步时自动重试。';
+
+  @override
+  String get syncStatusConversationCreated => '对话已创建';
+
+  @override
+  String get syncCardUploadingTitle => '正在上传到 Omi';
+
+  @override
+  String get syncCardDownloadingTitle => '正在从你的设备下载';
+
+  @override
+  String syncCardProgressOf(int current, int total) {
+    return '第 $current 项,共 $total 项';
+  }
+
+  @override
+  String get syncStatusOnDevice => '在你的设备上';
+
+  @override
+  String get syncStatusDownloadingFromDevice => '正在从你的设备下载';
+
+  @override
+  String get newestFirst => '最新优先';
+
+  @override
+  String get noSyncedRecordingsYet => '还没有已同步的录音';
+
+  @override
+  String get morePaymentMethodsComingSoon => '更多支付方式即将推出';
+
+  @override
+  String get syncProcessingBackgroundHint => '此过程会在后台继续 — 你可以离开此屏幕。';
+
+  @override
+  String get syncCardRateLimited => '已达到合理使用上限 — 同步将自动恢复';
+
+  @override
+  String get syncCardBackendBusy => 'Omi 服务器繁忙 — 容量恢复后将自动同步你的录音';
 }

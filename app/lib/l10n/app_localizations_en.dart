@@ -962,11 +962,6 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
-  String memoriesUsedThisMonth(String used, String limit) {
-    return '$used of $limit memories created this month';
-  }
-
-  @override
   String get visibility => 'Visibility';
 
   @override
@@ -1639,7 +1634,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get finalTouches => 'Final touches';
 
   @override
-  String get processing => 'Processing...';
+  String get processing => 'Processing';
 
   @override
   String get features => 'Features';
@@ -6832,7 +6827,15 @@ class AppLocalizationsEn extends AppLocalizations {
   String get lowBatteryAlertTitle => 'Low Battery Alert';
 
   @override
-  String get lowBatteryAlertBody => 'Your device is running low on battery. Time for a recharge! 🔋';
+  String lowBatteryAlertBody(int level) {
+    return 'Your battery is at $level%. Time for a recharge! 🔋';
+  }
+
+  @override
+  String get batteryFullyChargedTitle => 'Omi is fully charged';
+
+  @override
+  String get batteryFullyChargedBody => 'Your Omi device is fully charged. Feel free to unplug!';
 
   @override
   String get deviceDisconnectedNotificationTitle => 'Your Omi Device Disconnected';
@@ -8435,7 +8438,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get manageStorage => 'Manage Storage';
 
   @override
-  String get safelyBackedUp => 'Safely backed up to your phone';
+  String get safelyBackedUp => 'Conversations created';
 
   @override
   String get notYetSynced => 'Not yet synced to your phone';
@@ -9237,4 +9240,151 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get bulkDeleteFailed => 'Could not delete tasks. Please try again.';
+
+  @override
+  String get deleteRecap => 'Delete recap';
+
+  @override
+  String get deleteRecapConfirmTitle => 'Delete this recap?';
+
+  @override
+  String get deleteRecapConfirmBody =>
+      'This recap will be permanently removed. The original conversations from that day are not affected.';
+
+  @override
+  String get deleteRecapAction => 'Delete';
+
+  @override
+  String get recapDeletedSnackbar => 'Recap deleted';
+
+  @override
+  String get recapDeleteFailed => 'Couldn\'t delete the recap. Try again later.';
+
+  @override
+  String get syncStatusBackedUp => 'Backed up';
+
+  @override
+  String get syncStatusBackingUp => 'Syncing…';
+
+  @override
+  String get syncStatusWaiting => 'Waiting to sync';
+
+  @override
+  String get syncStatusRetrying => 'Couldn’t process — retrying';
+
+  @override
+  String get syncStatusFailed => 'Failed — tap Retry';
+
+  @override
+  String get syncStatusFileUnavailable => 'File unavailable';
+
+  @override
+  String get noRecordingsYet => 'No recordings yet';
+
+  @override
+  String get syncInProgress => 'Sync in progress';
+
+  @override
+  String get syncStatusUploaded => 'Uploaded · processing on Omi';
+
+  @override
+  String get deleteWhileProcessingTitle => 'Still processing';
+
+  @override
+  String get deleteWhileProcessingMessage =>
+      'This recording is uploaded but Omi is still creating the conversation. If you delete it now and processing fails, it can\'t be recovered. Delete anyway?';
+
+  @override
+  String get syncCardAllBackedUp => 'All recordings synced';
+
+  @override
+  String syncCardReadyCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count recordings ready to sync',
+      one: '1 recording ready to sync',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get syncCardProcessing => 'Processing on Omi…';
+
+  @override
+  String get syncCardWaitingInternet => 'Waiting for internet';
+
+  @override
+  String syncCardNeedsAttention(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 's',
+      one: '',
+    );
+    return '$count recording$_temp0 need attention';
+  }
+
+  @override
+  String get syncFlowIntro =>
+      'Recordings are transferred from your device to this phone and stored locally, then uploaded to Omi\'s server where they\'re transcribed and turned into conversations.';
+
+  @override
+  String get syncStepUpload => 'Sync';
+
+  @override
+  String get syncStepUploadDesc => 'Your recording is sent to Omi\'s server';
+
+  @override
+  String get syncStepProcess => 'Transcribe';
+
+  @override
+  String get syncStepProcessDesc => 'Omi turns the audio into a conversation';
+
+  @override
+  String get syncStepBackedUp => 'Conversation ready';
+
+  @override
+  String get syncStepBackedUpDesc => 'Find it under Conversations';
+
+  @override
+  String get syncFailureFootnote => 'If processing fails, your recording is retried automatically on the next sync.';
+
+  @override
+  String get syncStatusConversationCreated => 'Conversation created';
+
+  @override
+  String get syncCardUploadingTitle => 'Uploading to Omi';
+
+  @override
+  String get syncCardDownloadingTitle => 'Downloading from your device';
+
+  @override
+  String syncCardProgressOf(int current, int total) {
+    return '$current of $total';
+  }
+
+  @override
+  String get syncStatusOnDevice => 'On your device';
+
+  @override
+  String get syncStatusDownloadingFromDevice => 'Downloading from your device';
+
+  @override
+  String get newestFirst => 'Newest first';
+
+  @override
+  String get noSyncedRecordingsYet => 'No synced recordings yet';
+
+  @override
+  String get morePaymentMethodsComingSoon => 'More payment methods coming soon';
+
+  @override
+  String get syncProcessingBackgroundHint => 'This continues in the background — you can leave this screen.';
+
+  @override
+  String get syncCardRateLimited => 'Fair-use limit reached — syncing will resume automatically';
+
+  @override
+  String get syncCardBackendBusy => 'Omi servers are busy — your recordings will sync once capacity returns';
 }

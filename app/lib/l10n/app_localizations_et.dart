@@ -965,11 +965,6 @@ class AppLocalizationsEt extends AppLocalizations {
   }
 
   @override
-  String memoriesUsedThisMonth(String used, String limit) {
-    return '$used/$limit mälestust loodud sel kuul';
-  }
-
-  @override
   String get visibility => 'Nähtavus';
 
   @override
@@ -1641,7 +1636,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String get finalTouches => 'Viimased lihvid';
 
   @override
-  String get processing => 'Töötlemine...';
+  String get processing => 'Töötlemine';
 
   @override
   String get features => 'Funktsioonid';
@@ -6838,7 +6833,15 @@ class AppLocalizationsEt extends AppLocalizations {
   String get lowBatteryAlertTitle => 'Tühja aku hoiatus';
 
   @override
-  String get lowBatteryAlertBody => 'Teie seadme aku on tühi. Aeg laadida! 🔋';
+  String lowBatteryAlertBody(int level) {
+    return 'Sinu aku on $level%. Aeg laadida! 🔋';
+  }
+
+  @override
+  String get batteryFullyChargedTitle => 'Omi on täielikult laetud';
+
+  @override
+  String get batteryFullyChargedBody => 'Teie Omi seade on täielikult laetud. Võite selle lahti ühendada!';
 
   @override
   String get deviceDisconnectedNotificationTitle => 'Teie Omi seade on lahti ühendatud';
@@ -8435,7 +8438,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String get manageStorage => 'Halda salvestusruumi';
 
   @override
-  String get safelyBackedUp => 'Turvaliselt teie telefonile varundatud';
+  String get safelyBackedUp => 'Loodud vestlused';
 
   @override
   String get notYetSynced => 'Pole veel teie telefoniga sünkroniseeritud';
@@ -9237,4 +9240,152 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get bulkDeleteFailed => 'Ülesandeid ei õnnestunud kustutada. Palun proovi uuesti.';
+
+  @override
+  String get deleteRecap => 'Kustuta kokkuvõte';
+
+  @override
+  String get deleteRecapConfirmTitle => 'Kustutada see kokkuvõte?';
+
+  @override
+  String get deleteRecapConfirmBody =>
+      'Kokkuvõte eemaldatakse jäädavalt. Selle päeva algsed vestlused jäävad puutumata.';
+
+  @override
+  String get deleteRecapAction => 'Kustuta';
+
+  @override
+  String get recapDeletedSnackbar => 'Kokkuvõte kustutatud';
+
+  @override
+  String get recapDeleteFailed => 'Kokkuvõtet ei saanud kustutada. Proovi hiljem uuesti.';
+
+  @override
+  String get syncStatusBackedUp => 'Varundatud';
+
+  @override
+  String get syncStatusBackingUp => 'Sünkroonimine…';
+
+  @override
+  String get syncStatusWaiting => 'Ootab sünkroonimist';
+
+  @override
+  String get syncStatusRetrying => 'Töötlemine ebaõnnestus — proovin uuesti';
+
+  @override
+  String get syncStatusFailed => 'Ebaõnnestus — puuduta Proovi uuesti';
+
+  @override
+  String get syncStatusFileUnavailable => 'Fail pole saadaval';
+
+  @override
+  String get noRecordingsYet => 'Salvestisi veel pole';
+
+  @override
+  String get syncInProgress => 'Sünkroonimine käib';
+
+  @override
+  String get syncStatusUploaded => 'Üles laaditud · töödeldakse Omis';
+
+  @override
+  String get deleteWhileProcessingTitle => 'Töötlemine veel käib';
+
+  @override
+  String get deleteWhileProcessingMessage =>
+      'See salvestis on üles laaditud, kuid Omi loob veel vestlust. Kui kustutad selle nüüd ja töötlemine ebaõnnestub, ei saa seda taastada. Kas kustutada ikkagi?';
+
+  @override
+  String get syncCardAllBackedUp => 'Kõik salvestused sünkroonitud';
+
+  @override
+  String syncCardReadyCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count salvestust on sünkroonimiseks valmis',
+      one: '1 salvestus on sünkroonimiseks valmis',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get syncCardProcessing => 'Töötlemine Omis…';
+
+  @override
+  String get syncCardWaitingInternet => 'Ootan internetiühendust';
+
+  @override
+  String syncCardNeedsAttention(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count salvestist vajab tähelepanu',
+      one: '1 salvestis vajab tähelepanu',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get syncFlowIntro =>
+      'Salvestised kantakse sinu seadmest sellesse telefoni ja salvestatakse kohapeal ning seejärel laaditakse üles Omi serverisse, kus need transkribeeritakse ja muudetakse vestlusteks.';
+
+  @override
+  String get syncStepUpload => 'Sünkrooni';
+
+  @override
+  String get syncStepUploadDesc => 'Sinu salvestis saadetakse Omi serverisse';
+
+  @override
+  String get syncStepProcess => 'Transkribeerimine';
+
+  @override
+  String get syncStepProcessDesc => 'Omi muudab heli vestluseks';
+
+  @override
+  String get syncStepBackedUp => 'Vestlus on valmis';
+
+  @override
+  String get syncStepBackedUpDesc => 'Leiad selle jaotisest Vestlused';
+
+  @override
+  String get syncFailureFootnote =>
+      'Kui töötlemine ebaõnnestub, proovitakse salvestist järgmise sünkroonimise käigus automaatselt uuesti.';
+
+  @override
+  String get syncStatusConversationCreated => 'Vestlus loodud';
+
+  @override
+  String get syncCardUploadingTitle => 'Üleslaadimine Omisse';
+
+  @override
+  String get syncCardDownloadingTitle => 'Allalaadimine sinu seadmest';
+
+  @override
+  String syncCardProgressOf(int current, int total) {
+    return '$current / $total';
+  }
+
+  @override
+  String get syncStatusOnDevice => 'Sinu seadmes';
+
+  @override
+  String get syncStatusDownloadingFromDevice => 'Allalaadimine sinu seadmest';
+
+  @override
+  String get newestFirst => 'Uusimad esmalt';
+
+  @override
+  String get noSyncedRecordingsYet => 'Sünkroonitud salvestisi pole veel';
+
+  @override
+  String get morePaymentMethodsComingSoon => 'Peagi rohkem makseviise';
+
+  @override
+  String get syncProcessingBackgroundHint => 'See jätkub taustal — võite sellelt ekraanilt lahkuda.';
+
+  @override
+  String get syncCardRateLimited => 'Õiglase kasutuse piir on saavutatud — sünkroonimine jätkub automaatselt';
+
+  @override
+  String get syncCardBackendBusy => 'Omi serverid on hõivatud — sinu salvestised sünkroonitakse, kui maht vabaneb';
 }

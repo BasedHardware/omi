@@ -964,11 +964,6 @@ class AppLocalizationsCs extends AppLocalizations {
   }
 
   @override
-  String memoriesUsedThisMonth(String used, String limit) {
-    return 'Tento měsíc vytvořeno $used z $limit vzpomínek';
-  }
-
-  @override
   String get visibility => 'Viditelnost';
 
   @override
@@ -1643,7 +1638,7 @@ class AppLocalizationsCs extends AppLocalizations {
   String get finalTouches => 'Závěrečné úpravy';
 
   @override
-  String get processing => 'Zpracování...';
+  String get processing => 'Zpracování';
 
   @override
   String get features => 'Funkce';
@@ -6826,7 +6821,15 @@ class AppLocalizationsCs extends AppLocalizations {
   String get lowBatteryAlertTitle => 'Upozornění na vybitou baterii';
 
   @override
-  String get lowBatteryAlertBody => 'Baterie vašeho zařízení je vybitá. Je čas ji dobít! 🔋';
+  String lowBatteryAlertBody(int level) {
+    return 'Vaše baterie je na $level%. Je čas ji dobít! 🔋';
+  }
+
+  @override
+  String get batteryFullyChargedTitle => 'Omi je plně nabitý';
+
+  @override
+  String get batteryFullyChargedBody => 'Vaše zařízení Omi je plně nabité. Můžete jej odpojit!';
 
   @override
   String get deviceDisconnectedNotificationTitle => 'Vaše zařízení Omi bylo odpojeno';
@@ -8434,7 +8437,7 @@ class AppLocalizationsCs extends AppLocalizations {
   String get manageStorage => 'Správa úložiště';
 
   @override
-  String get safelyBackedUp => 'Bezpečně zálohováno na vašem telefonu';
+  String get safelyBackedUp => 'Vytvořené konverzace';
 
   @override
   String get notYetSynced => 'Zatím nesynchronizováno s vaším telefonem';
@@ -9236,4 +9239,157 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get bulkDeleteFailed => 'Úkoly se nepodařilo smazat. Zkuste to prosím znovu.';
+
+  @override
+  String get deleteRecap => 'Smazat shrnutí';
+
+  @override
+  String get deleteRecapConfirmTitle => 'Smazat toto shrnutí?';
+
+  @override
+  String get deleteRecapConfirmBody =>
+      'Shrnutí bude trvale odstraněno. Původní konverzace z toho dne nebudou ovlivněny.';
+
+  @override
+  String get deleteRecapAction => 'Smazat';
+
+  @override
+  String get recapDeletedSnackbar => 'Shrnutí smazáno';
+
+  @override
+  String get recapDeleteFailed => 'Shrnutí se nepodařilo smazat. Zkuste to znovu později.';
+
+  @override
+  String get syncStatusBackedUp => 'Zálohováno';
+
+  @override
+  String get syncStatusBackingUp => 'Synchronizace…';
+
+  @override
+  String get syncStatusWaiting => 'Čeká na synchronizaci';
+
+  @override
+  String get syncStatusRetrying => 'Zpracování selhalo — opakuji';
+
+  @override
+  String get syncStatusFailed => 'Selhalo — klepněte na Opakovat';
+
+  @override
+  String get syncStatusFileUnavailable => 'Soubor není k dispozici';
+
+  @override
+  String get noRecordingsYet => 'Zatím žádné nahrávky';
+
+  @override
+  String get syncInProgress => 'Probíhá synchronizace';
+
+  @override
+  String get syncStatusUploaded => 'Nahráno · zpracovává se v Omi';
+
+  @override
+  String get deleteWhileProcessingTitle => 'Stále se zpracovává';
+
+  @override
+  String get deleteWhileProcessingMessage =>
+      'Tato nahrávka je nahraná, ale Omi stále vytváří konverzaci. Pokud ji nyní smažete a zpracování selže, nepůjde obnovit. Přesto smazat?';
+
+  @override
+  String get syncCardAllBackedUp => 'Všechny nahrávky synchronizovány';
+
+  @override
+  String syncCardReadyCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count nahrávek připravených k synchronizaci',
+      many: '$count nahrávky připravené k synchronizaci',
+      few: '$count nahrávky připravené k synchronizaci',
+      one: '1 nahrávka připravená k synchronizaci',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get syncCardProcessing => 'Zpracování v Omi…';
+
+  @override
+  String get syncCardWaitingInternet => 'Čekání na internet';
+
+  @override
+  String syncCardNeedsAttention(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count nahrávek vyžaduje pozornost',
+      many: '$count nahrávek vyžaduje pozornost',
+      few: '$count nahrávky vyžadují pozornost',
+      one: '1 nahrávka vyžaduje pozornost',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get syncFlowIntro =>
+      'Nahrávky se přenášejí z vašeho zařízení do tohoto telefonu a ukládají se místně, poté se nahrávají na server Omi, kde se přepisují a mění v konverzace.';
+
+  @override
+  String get syncStepUpload => 'Synchronizace';
+
+  @override
+  String get syncStepUploadDesc => 'Vaše nahrávka se odesílá na server Omi';
+
+  @override
+  String get syncStepProcess => 'Přepis';
+
+  @override
+  String get syncStepProcessDesc => 'Omi promění zvuk v konverzaci';
+
+  @override
+  String get syncStepBackedUp => 'Konverzace je hotová';
+
+  @override
+  String get syncStepBackedUpDesc => 'Najdete ji v Konverzace';
+
+  @override
+  String get syncFailureFootnote =>
+      'Pokud zpracování selže, nahrávka se při příští synchronizaci automaticky zopakuje.';
+
+  @override
+  String get syncStatusConversationCreated => 'Konverzace vytvořena';
+
+  @override
+  String get syncCardUploadingTitle => 'Nahrávání do Omi';
+
+  @override
+  String get syncCardDownloadingTitle => 'Stahování z vašeho zařízení';
+
+  @override
+  String syncCardProgressOf(int current, int total) {
+    return '$current z $total';
+  }
+
+  @override
+  String get syncStatusOnDevice => 'Ve vašem zařízení';
+
+  @override
+  String get syncStatusDownloadingFromDevice => 'Stahování z vašeho zařízení';
+
+  @override
+  String get newestFirst => 'Nejnovější první';
+
+  @override
+  String get noSyncedRecordingsYet => 'Zatím žádné synchronizované nahrávky';
+
+  @override
+  String get morePaymentMethodsComingSoon => 'Brzy přibudou další platební metody';
+
+  @override
+  String get syncProcessingBackgroundHint => 'Pokračuje to na pozadí — tuto obrazovku můžete opustit.';
+
+  @override
+  String get syncCardRateLimited => 'Byl dosažen limit férového využití — synchronizace bude automaticky pokračovat';
+
+  @override
+  String get syncCardBackendBusy =>
+      'Servery Omi jsou vytížené — vaše nahrávky se synchronizují, jakmile bude k dispozici kapacita';
 }

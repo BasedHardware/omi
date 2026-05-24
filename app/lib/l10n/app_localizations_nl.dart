@@ -966,11 +966,6 @@ class AppLocalizationsNl extends AppLocalizations {
   }
 
   @override
-  String memoriesUsedThisMonth(String used, String limit) {
-    return '$used van $limit herinneringen aangemaakt deze maand';
-  }
-
-  @override
   String get visibility => 'Zichtbaarheid';
 
   @override
@@ -1646,7 +1641,7 @@ class AppLocalizationsNl extends AppLocalizations {
   String get finalTouches => 'Laatste aanpassingen';
 
   @override
-  String get processing => 'Verwerken...';
+  String get processing => 'Verwerken';
 
   @override
   String get features => 'Functies';
@@ -6857,7 +6852,15 @@ class AppLocalizationsNl extends AppLocalizations {
   String get lowBatteryAlertTitle => 'Waarschuwing lage batterij';
 
   @override
-  String get lowBatteryAlertBody => 'De batterij van uw apparaat is bijna leeg. Tijd om op te laden! 🔋';
+  String lowBatteryAlertBody(int level) {
+    return 'Je batterij staat op $level%. Tijd om op te laden! 🔋';
+  }
+
+  @override
+  String get batteryFullyChargedTitle => 'Omi is volledig opgeladen';
+
+  @override
+  String get batteryFullyChargedBody => 'Uw Omi-apparaat is volledig opgeladen. U kunt het loskoppelen!';
 
   @override
   String get deviceDisconnectedNotificationTitle => 'Uw Omi-apparaat is losgekoppeld';
@@ -8465,7 +8468,7 @@ class AppLocalizationsNl extends AppLocalizations {
   String get manageStorage => 'Opslag beheren';
 
   @override
-  String get safelyBackedUp => 'Veilig opgeslagen op uw telefoon';
+  String get safelyBackedUp => 'Aangemaakte gesprekken';
 
   @override
   String get notYetSynced => 'Nog niet gesynchroniseerd met uw telefoon';
@@ -9268,4 +9271,153 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get bulkDeleteFailed => 'Taken konden niet worden verwijderd. Probeer het opnieuw.';
+
+  @override
+  String get deleteRecap => 'Samenvatting verwijderen';
+
+  @override
+  String get deleteRecapConfirmTitle => 'Deze samenvatting verwijderen?';
+
+  @override
+  String get deleteRecapConfirmBody =>
+      'Deze samenvatting wordt permanent verwijderd. De oorspronkelijke gesprekken van die dag blijven behouden.';
+
+  @override
+  String get deleteRecapAction => 'Verwijderen';
+
+  @override
+  String get recapDeletedSnackbar => 'Samenvatting verwijderd';
+
+  @override
+  String get recapDeleteFailed => 'Kan de samenvatting niet verwijderen. Probeer het later opnieuw.';
+
+  @override
+  String get syncStatusBackedUp => 'Geback-upt';
+
+  @override
+  String get syncStatusBackingUp => 'Synchroniseren…';
+
+  @override
+  String get syncStatusWaiting => 'Wacht op synchronisatie';
+
+  @override
+  String get syncStatusRetrying => 'Verwerken mislukt — opnieuw proberen';
+
+  @override
+  String get syncStatusFailed => 'Mislukt — tik op Opnieuw';
+
+  @override
+  String get syncStatusFileUnavailable => 'Bestand niet beschikbaar';
+
+  @override
+  String get noRecordingsYet => 'Nog geen opnames';
+
+  @override
+  String get syncInProgress => 'Synchronisatie bezig';
+
+  @override
+  String get syncStatusUploaded => 'Geüpload · wordt verwerkt op Omi';
+
+  @override
+  String get deleteWhileProcessingTitle => 'Nog bezig met verwerken';
+
+  @override
+  String get deleteWhileProcessingMessage =>
+      'Deze opname is geüpload maar Omi maakt het gesprek nog aan. Als je hem nu verwijdert en de verwerking mislukt, kan hij niet worden hersteld. Toch verwijderen?';
+
+  @override
+  String get syncCardAllBackedUp => 'Alle opnames gesynchroniseerd';
+
+  @override
+  String syncCardReadyCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count opnames klaar om te synchroniseren',
+      one: '1 opname klaar om te synchroniseren',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get syncCardProcessing => 'Verwerken bij Omi…';
+
+  @override
+  String get syncCardWaitingInternet => 'Wachten op internet';
+
+  @override
+  String syncCardNeedsAttention(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count opnamen vragen aandacht',
+      one: '1 opname vraagt aandacht',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get syncFlowIntro =>
+      'Opnamen worden van je apparaat naar deze telefoon overgezet en lokaal opgeslagen en vervolgens geüpload naar de server van Omi, waar ze worden getranscribeerd en omgezet in gesprekken.';
+
+  @override
+  String get syncStepUpload => 'Synchroniseren';
+
+  @override
+  String get syncStepUploadDesc => 'Je opname wordt naar Omi\'s server gestuurd';
+
+  @override
+  String get syncStepProcess => 'Transcriberen';
+
+  @override
+  String get syncStepProcessDesc => 'Omi maakt van de audio een gesprek';
+
+  @override
+  String get syncStepBackedUp => 'Gesprek klaar';
+
+  @override
+  String get syncStepBackedUpDesc => 'Te vinden onder Gesprekken';
+
+  @override
+  String get syncFailureFootnote =>
+      'Als de verwerking mislukt, wordt de opname automatisch opnieuw geprobeerd bij de volgende synchronisatie.';
+
+  @override
+  String get syncStatusConversationCreated => 'Gesprek aangemaakt';
+
+  @override
+  String get syncCardUploadingTitle => 'Uploaden naar Omi';
+
+  @override
+  String get syncCardDownloadingTitle => 'Downloaden van je apparaat';
+
+  @override
+  String syncCardProgressOf(int current, int total) {
+    return '$current van $total';
+  }
+
+  @override
+  String get syncStatusOnDevice => 'Op je apparaat';
+
+  @override
+  String get syncStatusDownloadingFromDevice => 'Downloaden van je apparaat';
+
+  @override
+  String get newestFirst => 'Nieuwste eerst';
+
+  @override
+  String get noSyncedRecordingsYet => 'Nog geen gesynchroniseerde opnames';
+
+  @override
+  String get morePaymentMethodsComingSoon => 'Meer betaalmethoden binnenkort';
+
+  @override
+  String get syncProcessingBackgroundHint => 'Dit gaat op de achtergrond door — je kunt dit scherm verlaten.';
+
+  @override
+  String get syncCardRateLimited => 'Gebruikslimiet bereikt — synchronisatie wordt automatisch hervat';
+
+  @override
+  String get syncCardBackendBusy =>
+      'De servers van Omi zijn druk — je opnames worden gesynchroniseerd zodra er weer capaciteit is';
 }

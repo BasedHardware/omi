@@ -1160,17 +1160,6 @@
             }
         }
     },
-    "memoriesUsedThisMonth": "{used} از {limit} یادداشت این ماه ایجاد‌شده است",
-    "@memoriesUsedThisMonth": {
-        "placeholders": {
-            "used": {
-                "type": "String"
-            },
-            "limit": {
-                "type": "String"
-            }
-        }
-    },
     "visibility": "دید",
     "visibilitySubtitle": "کنترل کنید کدام گفتگوها در لیست شما نمایش داده شوند",
     "showShortConversations": "نمایش گفتگوهای کوتاه",
@@ -1580,7 +1569,7 @@
     "designingApp": "طراحی برنامه",
     "generatingIconStep": "تولید آیکون",
     "finalTouches": "لمسات نهایی",
-    "processing": "در حال پردازش...",
+    "processing": "در حال پردازش",
     "features": "ویژگی‌ها",
     "creatingYourApp": "در حال ایجاد برنامه شما...",
     "generatingIcon": "در حال تولید آیکون...",
@@ -8397,9 +8386,16 @@
     "@lowBatteryAlertTitle": {
         "description": "Title for low battery notification"
     },
-    "lowBatteryAlertBody": "باتری دستگاه شما تقریباً تمام است. وقت شارژ کردن است! 🔋",
+    "lowBatteryAlertBody": "باتری شما {level}٪ است. وقت شارژ کردن است! 🔋",
+    "batteryFullyChargedTitle": "Omi کاملاً شارژ شد",
+    "batteryFullyChargedBody": "دستگاه Omi شما کاملاً شارژ شده است. می‌توانید آن را جدا کنید!",
     "@lowBatteryAlertBody": {
-        "description": "Body text for low battery notification"
+        "description": "Body text for low battery notification",
+        "placeholders": {
+            "level": {
+                "type": "int"
+            }
+        }
     },
     "deviceDisconnectedNotificationTitle": "دستگاه Omi شما قطع شد",
     "@deviceDisconnectedNotificationTitle": {
@@ -10152,7 +10148,7 @@
     "@manageStorage": {
         "description": "Menu option and sheet title for managing recording storage"
     },
-    "safelyBackedUp": "به‌طور ایمن در تلفن شما پشتیبان‌گیری شد",
+    "safelyBackedUp": "گفتگوها ساخته شدند",
     "@safelyBackedUp": {
         "description": "Description for synced files in manage storage sheet"
     },
@@ -10725,5 +10721,50 @@
     "startCallRecording": "شروع ضبط تماس",
     "startVoiceRecording": "شروع ضبط صدا",
     "bulkExportAlreadyExported": "همهٔ کارهای انتخاب‌شده قبلاً صادر شده‌اند",
-    "bulkDeleteFailed": "حذف کارها ممکن نشد. لطفاً دوباره تلاش کنید."
+    "bulkDeleteFailed": "حذف کارها ممکن نشد. لطفاً دوباره تلاش کنید.",
+    "deleteRecap": "حذف خلاصه",
+    "deleteRecapConfirmTitle": "این خلاصه حذف شود؟",
+    "deleteRecapConfirmBody": "این خلاصه برای همیشه حذف خواهد شد. مکالمات اصلی آن روز تحت تأثیر قرار نمی‌گیرند.",
+    "deleteRecapAction": "حذف",
+    "recapDeletedSnackbar": "خلاصه حذف شد",
+    "recapDeleteFailed": "حذف خلاصه ممکن نشد. بعداً دوباره تلاش کنید.",
+    "syncStatusBackedUp": "پشتیبان‌گیری شد",
+    "syncStatusBackingUp": "در حال هماهنگ‌سازی…",
+    "syncStatusWaiting": "در انتظار همگام‌سازی",
+    "syncStatusRetrying": "پردازش ناموفق — تلاش مجدد",
+    "syncStatusFailed": "ناموفق — روی تلاش مجدد بزنید",
+    "syncStatusFileUnavailable": "فایل در دسترس نیست",
+    "syncStatusUploaded": "بارگذاری شد · در حال پردازش در Omi",
+    "noRecordingsYet": "هنوز ضبطی وجود ندارد",
+    "syncInProgress": "همگام‌سازی در حال انجام است",
+    "deleteWhileProcessingTitle": "هنوز در حال پردازش",
+    "deleteWhileProcessingMessage": "این ضبط بارگذاری شده اما Omi هنوز در حال ساخت مکالمه است. اگر اکنون آن را حذف کنید و پردازش ناموفق شود، قابل بازیابی نخواهد بود. به‌هرحال حذف شود؟",
+    "syncCardAllBackedUp": "همهٔ ضبط‌ها همگام شدند",
+    "syncCardReadyCount": "{count, plural, one{1 ضبط آمادهٔ همگام‌سازی} other{{count} ضبط آمادهٔ همگام‌سازی}}",
+    "syncCardProcessing": "در حال پردازش در Omi…",
+    "syncCardWaitingInternet": "در انتظار اتصال به اینترنت",
+    "syncCardNeedsAttention": "{count, plural, one{۱ ضبط نیازمند توجه است} other{{count} ضبط نیازمند توجه است}}",
+    "syncFlowIntro": "ضبط‌ها از دستگاه شما به این تلفن منتقل و به‌صورت محلی ذخیره می‌شوند، سپس به سرور Omi بارگذاری می‌شوند تا رونویسی و به گفت‌وگو تبدیل شوند.",
+    "syncStepUpload": "همگام‌سازی",
+    "syncStepUploadDesc": "ضبط شما به سرور Omi فرستاده می‌شود",
+    "syncStepProcess": "رونویسی",
+    "syncStepProcessDesc": "Omi صدا را به یک گفتگو تبدیل می‌کند",
+    "syncStepBackedUp": "گفتگو آماده است",
+    "syncStepBackedUpDesc": "آن را در گفتگوها بیابید",
+    "syncFailureFootnote": "اگر پردازش ناموفق باشد، ضبط در همگام‌سازی بعدی به‌صورت خودکار دوباره امتحان می‌شود.",
+    "syncStatusConversationCreated": "مکالمه ایجاد شد",
+    "syncCardUploadingTitle": "در حال بارگذاری در Omi",
+    "syncCardDownloadingTitle": "در حال دانلود از دستگاه شما",
+    "syncCardProgressOf": "{current} از {total}",
+    "syncStatusOnDevice": "روی دستگاه شما",
+    "syncStatusDownloadingFromDevice": "در حال دانلود از دستگاه شما",
+    "newestFirst": "ابتدا جدیدترین‌ها",
+    "noSyncedRecordingsYet": "هنوز ضبط همگام‌سازی‌شده‌ای وجود ندارد",
+    "morePaymentMethodsComingSoon": "روش‌های پرداخت بیشتر به‌زودی",
+    "@morePaymentMethodsComingSoon": {
+        "description": "Placeholder card text shown under available payment methods"
+    },
+    "syncProcessingBackgroundHint": "این کار در پس‌زمینه ادامه می‌یابد — می‌توانید این صفحه را ترک کنید.",
+    "syncCardRateLimited": "محدودیت استفاده منصفانه به پایان رسید — همگام‌سازی به‌طور خودکار از سر گرفته می‌شود",
+    "syncCardBackendBusy": "سرورهای Omi شلوغ هستند — ضبط‌های شما به‌محض آزاد شدن ظرفیت همگام‌سازی می‌شوند"
 }

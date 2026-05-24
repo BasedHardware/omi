@@ -969,11 +969,6 @@ class AppLocalizationsHu extends AppLocalizations {
   }
 
   @override
-  String memoriesUsedThisMonth(String used, String limit) {
-    return '$used / $limit emlék létrehozva ebben a hónapban';
-  }
-
-  @override
   String get visibility => 'Láthatóság';
 
   @override
@@ -1653,7 +1648,7 @@ class AppLocalizationsHu extends AppLocalizations {
   String get finalTouches => 'Utolsó simítások';
 
   @override
-  String get processing => 'Feldolgozás...';
+  String get processing => 'Feldolgozás';
 
   @override
   String get features => 'Funkciók';
@@ -6868,7 +6863,15 @@ class AppLocalizationsHu extends AppLocalizations {
   String get lowBatteryAlertTitle => 'Alacsony akkumulátor figyelmeztetés';
 
   @override
-  String get lowBatteryAlertBody => 'Az eszköz akkumulátora alacsony. Ideje feltölteni! 🔋';
+  String lowBatteryAlertBody(int level) {
+    return 'Az akkumulátorod $level%-on van. Ideje feltölteni! 🔋';
+  }
+
+  @override
+  String get batteryFullyChargedTitle => 'Az Omi teljesen feltöltődött';
+
+  @override
+  String get batteryFullyChargedBody => 'Az Omi eszköz teljesen feltöltődött. Leválaszthatod!';
 
   @override
   String get deviceDisconnectedNotificationTitle => 'Az Omi eszköz lecsatlakozott';
@@ -8475,7 +8478,7 @@ class AppLocalizationsHu extends AppLocalizations {
   String get manageStorage => 'Tárhely kezelése';
 
   @override
-  String get safelyBackedUp => 'Biztonságosan mentve a telefonjára';
+  String get safelyBackedUp => 'Beszélgetések létrehozva';
 
   @override
   String get notYetSynced => 'Még nincs szinkronizálva a telefonjával';
@@ -9279,4 +9282,154 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get bulkDeleteFailed => 'A feladatokat nem sikerült törölni. Kérjük, próbáld újra.';
+
+  @override
+  String get deleteRecap => 'Összefoglaló törlése';
+
+  @override
+  String get deleteRecapConfirmTitle => 'Törlöd ezt az összefoglalót?';
+
+  @override
+  String get deleteRecapConfirmBody =>
+      'Az összefoglaló véglegesen eltávolításra kerül. Az adott nap eredeti beszélgetései érintetlenek maradnak.';
+
+  @override
+  String get deleteRecapAction => 'Törlés';
+
+  @override
+  String get recapDeletedSnackbar => 'Összefoglaló törölve';
+
+  @override
+  String get recapDeleteFailed => 'Nem sikerült törölni az összefoglalót. Próbáld újra később.';
+
+  @override
+  String get syncStatusBackedUp => 'Mentve';
+
+  @override
+  String get syncStatusBackingUp => 'Szinkronizálás…';
+
+  @override
+  String get syncStatusWaiting => 'Szinkronizálásra vár';
+
+  @override
+  String get syncStatusRetrying => 'A feldolgozás sikertelen — újrapróbálkozás';
+
+  @override
+  String get syncStatusFailed => 'Sikertelen — koppintson az Újra gombra';
+
+  @override
+  String get syncStatusFileUnavailable => 'A fájl nem érhető el';
+
+  @override
+  String get noRecordingsYet => 'Még nincs felvétel';
+
+  @override
+  String get syncInProgress => 'Szinkronizálás folyamatban';
+
+  @override
+  String get syncStatusUploaded => 'Feltöltve · feldolgozás az Omin';
+
+  @override
+  String get deleteWhileProcessingTitle => 'Még feldolgozás alatt';
+
+  @override
+  String get deleteWhileProcessingMessage =>
+      'Ezt a felvételt feltöltöttük, de az Omi még készíti a beszélgetést. Ha most törli és a feldolgozás meghiúsul, nem állítható vissza. Mégis törli?';
+
+  @override
+  String get syncCardAllBackedUp => 'Minden felvétel szinkronizálva';
+
+  @override
+  String syncCardReadyCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count felvétel készen áll a szinkronizálásra',
+      one: '1 felvétel készen áll a szinkronizálásra',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get syncCardProcessing => 'Feldolgozás az Omiban…';
+
+  @override
+  String get syncCardWaitingInternet => 'Internetkapcsolatra várva';
+
+  @override
+  String syncCardNeedsAttention(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count felvétel figyelmet igényel',
+      one: '1 felvétel figyelmet igényel',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get syncFlowIntro =>
+      'A felvételek az eszközödről erre a telefonra kerülnek át, és helyben tárolódnak, majd feltöltődnek az Omi szerverére, ahol leiratot készít belőlük, és beszélgetésekké alakítja őket.';
+
+  @override
+  String get syncStepUpload => 'Szinkronizálás';
+
+  @override
+  String get syncStepUploadDesc => 'A felvételed az Omi szerverére kerül';
+
+  @override
+  String get syncStepProcess => 'Átírás';
+
+  @override
+  String get syncStepProcessDesc => 'Az Omi a hangból beszélgetést készít';
+
+  @override
+  String get syncStepBackedUp => 'A beszélgetés kész';
+
+  @override
+  String get syncStepBackedUpDesc => 'A Beszélgetések között találod';
+
+  @override
+  String get syncFailureFootnote =>
+      'Ha a feldolgozás sikertelen, a felvételt a következő szinkronizálásnál automatikusan újrapróbáljuk.';
+
+  @override
+  String get syncStatusConversationCreated => 'Beszélgetés létrehozva';
+
+  @override
+  String get syncCardUploadingTitle => 'Feltöltés az Omira';
+
+  @override
+  String get syncCardDownloadingTitle => 'Letöltés az eszközödről';
+
+  @override
+  String syncCardProgressOf(int current, int total) {
+    return '$current / $total';
+  }
+
+  @override
+  String get syncStatusOnDevice => 'Az eszközödön';
+
+  @override
+  String get syncStatusDownloadingFromDevice => 'Letöltés az eszközödről';
+
+  @override
+  String get newestFirst => 'Legújabbak elöl';
+
+  @override
+  String get noSyncedRecordingsYet => 'Még nincsenek szinkronizált felvételek';
+
+  @override
+  String get morePaymentMethodsComingSoon => 'Hamarosan további fizetési módok';
+
+  @override
+  String get syncProcessingBackgroundHint => 'Ez a háttérben folytatódik — elhagyhatja ezt a képernyőt.';
+
+  @override
+  String get syncCardRateLimited =>
+      'Elérted a méltányos használati korlátot — a szinkronizálás automatikusan folytatódik';
+
+  @override
+  String get syncCardBackendBusy =>
+      'Az Omi szerverei leterheltek — a felvételeid szinkronizálódnak, amint felszabadul a kapacitás';
 }

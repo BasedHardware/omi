@@ -1477,38 +1477,48 @@ class CaptureProvider extends ChangeNotifier
       return;
     }
 
-    // Remaining attempts = maxRetries minus already-persisted retryCount
-    const maxRetries = 3;
-    const baseDelay = 5;
-    final startAttempt = wal.retryCount;
+    if (!_isConnected) {
+      Logger.debug('Auto-sync WAL ${wal.id}: offline, will retry later');
+      return;
+    }
 
-    for (int attempt = startAttempt; attempt < maxRetries; attempt++) {
-      if (!_isConnected) {
-        Logger.debug('Auto-sync WAL ${wal.id}: offline, aborting without incrementing retryCount');
-        return;
-      }
-      try {
-        final result = await syncLocalFilesV2([file], conversationId: conversationId);
-        if (result.hasPartialFailure) {
-          throw Exception('Partial sync failure: ${result.failedSegments}/${result.totalSegments} segments failed');
-        }
+    // Honor an active fair-use cooldown: don't fire uploads that will just be
+    // 429'd, which amplifies the throttle and mislabels recordings as failed.
+    if (SyncRateLimiter.instance.isLimited) {
+      Logger.debug('Auto-sync WAL ${wal.id}: rate-limited until ${SyncRateLimiter.instance.until}, skipping');
+      return;
+    }
+
+    // Upload only — no poll-to-terminal, no in-method retry loop. On 202 the
+    // WAL becomes `uploaded` and the SyncReconciler resolves the job out of
+    // band; on real failure we bump retryCount so orphan recovery / the next
+    // sync retries (the local file is retained until confirmed synced).
+    try {
+      final result = await uploadLocalFilesV2([file], conversationId: conversationId);
+      SyncRateLimiter.instance.clear();
+      if (result.completed != null) {
+        // 200 fast-path: server already produced the result.
         await phoneSync.markWalSyncedAndPersist(wal);
-        return;
-      } on SocketException {
-        Logger.debug('Auto-sync WAL ${wal.id}: network error, aborting without incrementing retryCount');
-        return;
-      } catch (e) {
-        wal.retryCount = attempt + 1;
-        wal.lastRetryAt = DateTime.now().millisecondsSinceEpoch ~/ 1000;
-        await phoneSync.persistRetryMetadata(wal);
-        if (attempt < maxRetries - 1) {
-          final delay = baseDelay * (1 << attempt); // 5s, 10s, 20s
-          Logger.debug('Auto-sync WAL ${wal.id} attempt ${attempt + 1} failed, retrying in ${delay}s: $e');
-          await Future.delayed(Duration(seconds: delay));
-        } else {
-          Logger.debug('Auto-sync WAL ${wal.id} failed after $maxRetries attempts: $e');
-        }
+      } else {
+        wal.status = WalStatus.uploaded;
+        wal.jobId = result.jobId;
+        wal.uploadedAt = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+        await phoneSync.persistRetryMetadata(wal); // persists the WAL list
+        SyncReconciler.instance.poke();
       }
+    } on SyncRateLimitedException catch (e) {
+      // Fair-use throttle — pause uploads, do NOT bump retryCount (it's not a
+      // content failure). The WAL stays `miss`/'waiting' and syncs once the
+      // cooldown clears.
+      SyncRateLimiter.instance.markLimited(retryAfterSeconds: e.retryAfterSeconds);
+      Logger.debug('Auto-sync WAL ${wal.id}: rate-limited, paused until ${SyncRateLimiter.instance.until}');
+    } on SocketException {
+      Logger.debug('Auto-sync WAL ${wal.id}: network error, aborting without incrementing retryCount');
+    } catch (e) {
+      wal.retryCount = wal.retryCount + 1;
+      wal.lastRetryAt = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+      await phoneSync.persistRetryMetadata(wal);
+      Logger.debug('Auto-sync WAL ${wal.id} upload failed (retryCount=${wal.retryCount}): $e');
     }
   }
 

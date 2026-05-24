@@ -2192,6 +2192,40 @@ workflows:
           # Install libwebp (required for screenshot encoding)
           brew install webp
 
+          # Homebrew's libwebp on Codemagic's Mac mini m2 is arm64-only as of
+          # 2026-05-10, which breaks Swift's x86_64 cross-compile link step:
+          #   ld: ignoring '/opt/homebrew/opt/webp/lib/libwebp.dylib': arm64 only
+          #   Undefined symbols for x86_64: _WebPEncodeRGBA, _WebPFree
+          # The earlier "Prepare universal libwebp" step builds universal dylibs
+          # at /tmp/libwebp-universal/. Overwrite Homebrew's arm64-only copies
+          # with those universal versions so pkg-config (used by Package.swift's
+          # CWebP system-lib target) resolves to a linker-compatible dylib for
+          # both archs.
+          WEBP_LIB_DIR="$(brew --prefix webp)/lib"
+          for dylib in libwebp.7.dylib libsharpyuv.0.dylib; do
+            src="/tmp/libwebp-universal/$dylib"
+            dst="$WEBP_LIB_DIR/$dylib"
+            if [ ! -f "$src" ]; then
+              echo "WARN: universal $dylib missing at $src — skipping patch"
+              continue
+            fi
+            if [ ! -e "$dst" ]; then
+              echo "WARN: Homebrew $dylib not at $dst — skipping patch"
+              continue
+            fi
+            # Replace the symlink at this well-known path with the universal
+            # file. The underlying Cellar file (libwebp.7.x.y.dylib) is read-only
+            # so we can't overwrite it directly. pkg-config's `-L<dir> -lwebp`
+            # resolves to libwebp.dylib → libwebp.7.dylib → our universal file
+            # via the now-broken chain, which is fine: dyld only cares about the
+            # last hop being readable.
+            rm -f "$dst"
+            cp "$src" "$dst"
+            file "$dst" | grep -q "universal binary" \
+              && echo "Patched $dst to universal" \
+              || { echo "ERROR: $dst is not universal after patch"; exit 1; }
+          done
+
           mkdir -p "$BUILD_DIR"
           # Unset TOOLCHAINS to use Xcode's default toolchain (avoids Swift version conflicts)
           unset TOOLCHAINS
@@ -2214,7 +2248,19 @@ workflows:
           # Build x86_64 (cross-compile). Use --triple for explicit arch directory.
           echo "Building x86_64..."
           xcrun swift build -c release --package-path Desktop --triple x86_64-apple-macosx
+
           X86_64_PATH="Desktop/.build/x86_64-apple-macosx/release/$BINARY_NAME"
+          # Symmetric existence check — without this, a silent x86_64 build failure
+          # (exit 0 but no output) bubbles up later as "missing binary" in the
+          # universal-bundle step with no traceback. Burned a build in May 2026.
+          if [ ! -f "$X86_64_PATH" ]; then
+            echo "ERROR: x86_64 binary not found at $X86_64_PATH"
+            echo "Listing $(dirname "$X86_64_PATH"):"
+            ls -la "$(dirname "$X86_64_PATH")" 2>&1 | head -30 || true
+            echo "Listing Desktop/.build/:"
+            ls -la "Desktop/.build/" 2>&1 || true
+            exit 1
+          fi
           echo "x86_64 binary: $(file "$X86_64_PATH" | grep -oE 'arm64|x86_64' | head -1)"
 
       - name: Create universal app bundle

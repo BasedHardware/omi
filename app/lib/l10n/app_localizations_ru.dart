@@ -966,11 +966,6 @@ class AppLocalizationsRu extends AppLocalizations {
   }
 
   @override
-  String memoriesUsedThisMonth(String used, String limit) {
-    return 'Создано $used из $limit воспоминаний в этом месяце';
-  }
-
-  @override
   String get visibility => 'Видимость';
 
   @override
@@ -1648,7 +1643,7 @@ class AppLocalizationsRu extends AppLocalizations {
   String get finalTouches => 'Завершающие штрихи';
 
   @override
-  String get processing => 'Обработка...';
+  String get processing => 'Обработка';
 
   @override
   String get features => 'Возможности';
@@ -6854,7 +6849,15 @@ class AppLocalizationsRu extends AppLocalizations {
   String get lowBatteryAlertTitle => 'Предупреждение о низком заряде';
 
   @override
-  String get lowBatteryAlertBody => 'Батарея вашего устройства разряжена. Пора зарядить! 🔋';
+  String lowBatteryAlertBody(int level) {
+    return 'Заряд батареи $level%. Пора зарядить! 🔋';
+  }
+
+  @override
+  String get batteryFullyChargedTitle => 'Omi полностью заряжен';
+
+  @override
+  String get batteryFullyChargedBody => 'Ваше устройство Omi полностью заряжено. Можно отключить от зарядки!';
 
   @override
   String get deviceDisconnectedNotificationTitle => 'Ваше устройство Omi отключено';
@@ -8465,7 +8468,7 @@ class AppLocalizationsRu extends AppLocalizations {
   String get manageStorage => 'Управление хранилищем';
 
   @override
-  String get safelyBackedUp => 'Безопасно сохранено на вашем телефоне';
+  String get safelyBackedUp => 'Созданные беседы';
 
   @override
   String get notYetSynced => 'Ещё не синхронизировано с вашим телефоном';
@@ -9269,4 +9272,157 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get bulkDeleteFailed => 'Не удалось удалить задачи. Пожалуйста, попробуйте ещё раз.';
+
+  @override
+  String get deleteRecap => 'Удалить сводку';
+
+  @override
+  String get deleteRecapConfirmTitle => 'Удалить эту сводку?';
+
+  @override
+  String get deleteRecapConfirmBody =>
+      'Эта сводка будет удалена навсегда. Исходные разговоры за этот день не затронуты.';
+
+  @override
+  String get deleteRecapAction => 'Удалить';
+
+  @override
+  String get recapDeletedSnackbar => 'Сводка удалена';
+
+  @override
+  String get recapDeleteFailed => 'Не удалось удалить сводку. Повторите попытку позже.';
+
+  @override
+  String get syncStatusBackedUp => 'Сохранено в облаке';
+
+  @override
+  String get syncStatusBackingUp => 'Синхронизация…';
+
+  @override
+  String get syncStatusWaiting => 'Ожидает синхронизации';
+
+  @override
+  String get syncStatusRetrying => 'Не удалось обработать — повтор';
+
+  @override
+  String get syncStatusFailed => 'Ошибка — нажмите «Повторить»';
+
+  @override
+  String get syncStatusFileUnavailable => 'Файл недоступен';
+
+  @override
+  String get noRecordingsYet => 'Записей пока нет';
+
+  @override
+  String get syncInProgress => 'Идёт синхронизация';
+
+  @override
+  String get syncStatusUploaded => 'Загружено · обработка в Omi';
+
+  @override
+  String get deleteWhileProcessingTitle => 'Ещё обрабатывается';
+
+  @override
+  String get deleteWhileProcessingMessage =>
+      'Эта запись загружена, но Omi ещё создаёт разговор. Если удалить её сейчас и обработка не удастся, восстановить будет невозможно. Всё равно удалить?';
+
+  @override
+  String get syncCardAllBackedUp => 'Все записи синхронизированы';
+
+  @override
+  String syncCardReadyCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count записи готовы к синхронизации',
+      many: '$count записей готовы к синхронизации',
+      few: '$count записи готовы к синхронизации',
+      one: '1 запись готова к синхронизации',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get syncCardProcessing => 'Обработка в Omi…';
+
+  @override
+  String get syncCardWaitingInternet => 'Ожидание интернета';
+
+  @override
+  String syncCardNeedsAttention(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count записи требуют внимания',
+      many: '$count записей требуют внимания',
+      few: '$count записи требуют внимания',
+      one: '$count запись требует внимания',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get syncFlowIntro =>
+      'Записи передаются с вашего устройства на этот телефон и хранятся локально, а затем загружаются на сервер Omi, где они расшифровываются и превращаются в разговоры.';
+
+  @override
+  String get syncStepUpload => 'Синхронизация';
+
+  @override
+  String get syncStepUploadDesc => 'Ваша запись отправляется на сервер Omi';
+
+  @override
+  String get syncStepProcess => 'Расшифровка';
+
+  @override
+  String get syncStepProcessDesc => 'Omi превращает аудио в беседу';
+
+  @override
+  String get syncStepBackedUp => 'Беседа готова';
+
+  @override
+  String get syncStepBackedUpDesc => 'Найдёте её в разделе Беседы';
+
+  @override
+  String get syncFailureFootnote =>
+      'Если обработка не удастся, запись будет автоматически повторена при следующей синхронизации.';
+
+  @override
+  String get syncStatusConversationCreated => 'Разговор создан';
+
+  @override
+  String get syncCardUploadingTitle => 'Загрузка в Omi';
+
+  @override
+  String get syncCardDownloadingTitle => 'Загрузка с вашего устройства';
+
+  @override
+  String syncCardProgressOf(int current, int total) {
+    return '$current из $total';
+  }
+
+  @override
+  String get syncStatusOnDevice => 'На вашем устройстве';
+
+  @override
+  String get syncStatusDownloadingFromDevice => 'Загрузка с вашего устройства';
+
+  @override
+  String get newestFirst => 'Сначала новые';
+
+  @override
+  String get noSyncedRecordingsYet => 'Пока нет синхронизированных записей';
+
+  @override
+  String get morePaymentMethodsComingSoon => 'Скоро добавим новые способы оплаты';
+
+  @override
+  String get syncProcessingBackgroundHint => 'Это продолжается в фоновом режиме — вы можете покинуть этот экран.';
+
+  @override
+  String get syncCardRateLimited => 'Достигнут лимит использования — синхронизация возобновится автоматически';
+
+  @override
+  String get syncCardBackendBusy =>
+      'Серверы Omi загружены — ваши записи синхронизируются, как только освободятся мощности';
 }

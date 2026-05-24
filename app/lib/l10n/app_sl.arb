@@ -1160,17 +1160,6 @@
             }
         }
     },
-    "memoriesUsedThisMonth": "{used} od {limit} spominov ustvarjenih ta mesec",
-    "@memoriesUsedThisMonth": {
-        "placeholders": {
-            "used": {
-                "type": "String"
-            },
-            "limit": {
-                "type": "String"
-            }
-        }
-    },
     "visibility": "Vidljivost",
     "visibilitySubtitle": "Nadzor, kateri pogovori se pojavljajo na vaši seznamu",
     "showShortConversations": "Prikaži kratke pogovore",
@@ -1580,7 +1569,7 @@
     "designingApp": "Oblikujem aplikacijo",
     "generatingIconStep": "Generiram ikono",
     "finalTouches": "Končni dotiki",
-    "processing": "Obdelava...",
+    "processing": "Obdelava",
     "features": "Lastnosti",
     "creatingYourApp": "Ustvarjam vašo aplikacijo...",
     "generatingIcon": "Generiram ikono...",
@@ -8397,9 +8386,16 @@
     "@lowBatteryAlertTitle": {
         "description": "Title for low battery notification"
     },
-    "lowBatteryAlertBody": "Vaša naprava ima nizko baterijo. Čas je za polnjenje! 🔋",
+    "lowBatteryAlertBody": "Vaša baterija je na {level}%. Čas je za polnjenje! 🔋",
+    "batteryFullyChargedTitle": "Omi je popolnoma napolnjen",
+    "batteryFullyChargedBody": "Vaša naprava Omi je popolnoma napolnjena. Lahko jo odklopite!",
     "@lowBatteryAlertBody": {
-        "description": "Body text for low battery notification"
+        "description": "Body text for low battery notification",
+        "placeholders": {
+            "level": {
+                "type": "int"
+            }
+        }
     },
     "deviceDisconnectedNotificationTitle": "Vaša Naprava Omi je Odklopljena",
     "@deviceDisconnectedNotificationTitle": {
@@ -10152,7 +10148,7 @@
     "@manageStorage": {
         "description": "Menu option and sheet title for managing recording storage"
     },
-    "safelyBackedUp": "Varno rezervirano na tvojem telefonu",
+    "safelyBackedUp": "Ustvarjeni pogovori",
     "@safelyBackedUp": {
         "description": "Description for synced files in manage storage sheet"
     },
@@ -10725,5 +10721,50 @@
     "startCallRecording": "Začni snemanje klica",
     "startVoiceRecording": "Začni glasovno snemanje",
     "bulkExportAlreadyExported": "Vse izbrane naloge so že izvožene",
-    "bulkDeleteFailed": "Nalog ni bilo mogoče izbrisati. Poskusite znova."
+    "bulkDeleteFailed": "Nalog ni bilo mogoče izbrisati. Poskusite znova.",
+    "deleteRecap": "Izbriši povzetek",
+    "deleteRecapConfirmTitle": "Izbrišem ta povzetek?",
+    "deleteRecapConfirmBody": "Ta povzetek bo trajno odstranjen. Izvirni pogovori tega dne ostanejo nespremenjeni.",
+    "deleteRecapAction": "Izbriši",
+    "recapDeletedSnackbar": "Povzetek izbrisan",
+    "recapDeleteFailed": "Povzetka ni bilo mogoče izbrisati. Poskusite znova pozneje.",
+    "syncStatusBackedUp": "Varnostno kopirano",
+    "syncStatusBackingUp": "Sinhronizacija…",
+    "syncStatusWaiting": "Čaka na sinhronizacijo",
+    "syncStatusRetrying": "Obdelava ni uspela — vnovični poskus",
+    "syncStatusFailed": "Ni uspelo — tapnite Poskusi znova",
+    "syncStatusFileUnavailable": "Datoteka ni na voljo",
+    "syncStatusUploaded": "Naloženo · obdelava v Omi",
+    "noRecordingsYet": "Še ni posnetkov",
+    "syncInProgress": "Sinhronizacija poteka",
+    "deleteWhileProcessingTitle": "Še poteka obdelava",
+    "deleteWhileProcessingMessage": "Ta posnetek je naložen, vendar Omi še ustvarja pogovor. Če ga zdaj izbrišete in obdelava ne uspe, ga ne bo mogoče obnoviti. Vseeno izbrišem?",
+    "syncCardAllBackedUp": "Vsi posnetki sinhronizirani",
+    "syncCardReadyCount": "{count, plural, one{1 posnetek pripravljen za sinhronizacijo} two{{count} posnetka pripravljena za sinhronizacijo} few{{count} posnetki pripravljeni za sinhronizacijo} other{{count} posnetkov pripravljenih za sinhronizacijo}}",
+    "syncCardProcessing": "Obdelava v Omi…",
+    "syncCardWaitingInternet": "Čakanje na internet",
+    "syncCardNeedsAttention": "{count, plural, one{{count} posnetek potrebuje pozornost} two{{count} posnetka potrebujeta pozornost} few{{count} posnetki potrebujejo pozornost} other{{count} posnetkov potrebuje pozornost}}",
+    "syncFlowIntro": "Posnetki se prenesejo iz vaše naprave v ta telefon in shranijo lokalno, nato pa naložijo na strežnik Omi, kjer se prepišejo in pretvorijo v pogovore.",
+    "syncStepUpload": "Sinhronizacija",
+    "syncStepUploadDesc": "Vaš posnetek se pošlje na Omijev strežnik",
+    "syncStepProcess": "Prepis",
+    "syncStepProcessDesc": "Omi spremeni zvok v pogovor",
+    "syncStepBackedUp": "Pogovor pripravljen",
+    "syncStepBackedUpDesc": "Najdeš ga pod Pogovori",
+    "syncFailureFootnote": "Če obdelava ne uspe, se posnetek samodejno ponovi pri naslednji sinhronizaciji.",
+    "syncStatusConversationCreated": "Pogovor ustvarjen",
+    "syncCardUploadingTitle": "Nalaganje v Omi",
+    "syncCardDownloadingTitle": "Prenašanje iz vaše naprave",
+    "syncCardProgressOf": "{current} od {total}",
+    "syncStatusOnDevice": "V vaši napravi",
+    "syncStatusDownloadingFromDevice": "Prenašanje iz vaše naprave",
+    "newestFirst": "Najprej najnovejši",
+    "noSyncedRecordingsYet": "Sinhroniziranih posnetkov še ni",
+    "morePaymentMethodsComingSoon": "Kmalu več načinov plačila",
+    "@morePaymentMethodsComingSoon": {
+        "description": "Placeholder card text shown under available payment methods"
+    },
+    "syncProcessingBackgroundHint": "To se nadaljuje v ozadju — ta zaslon lahko zapustite.",
+    "syncCardRateLimited": "Dosežena je meja poštene uporabe — sinhronizacija se bo samodejno nadaljevala",
+    "syncCardBackendBusy": "Strežniki Omi so obremenjeni — vaši posnetki se bodo sinhronizirali, ko se sprosti zmogljivost"
 }

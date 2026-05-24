@@ -961,11 +961,6 @@ class AppLocalizationsTh extends AppLocalizations {
   }
 
   @override
-  String memoriesUsedThisMonth(String used, String limit) {
-    return 'สร้างความทรงจำ $used จาก $limit รายการในเดือนนี้';
-  }
-
-  @override
   String get visibility => 'การมองเห็น';
 
   @override
@@ -1634,7 +1629,7 @@ class AppLocalizationsTh extends AppLocalizations {
   String get finalTouches => 'ตกแต่งขั้นสุดท้าย';
 
   @override
-  String get processing => 'กำลังประมวลผล...';
+  String get processing => 'กำลังประมวลผล';
 
   @override
   String get features => 'ฟีเจอร์';
@@ -6803,7 +6798,15 @@ class AppLocalizationsTh extends AppLocalizations {
   String get lowBatteryAlertTitle => 'การแจ้งเตือนแบตเตอรี่ต่ำ';
 
   @override
-  String get lowBatteryAlertBody => 'แบตเตอรี่ของอุปกรณ์ของคุณต่ำ ถึงเวลาชาร์จแล้ว! 🔋';
+  String lowBatteryAlertBody(int level) {
+    return 'แบตเตอรี่ของคุณอยู่ที่ $level% ถึงเวลาชาร์จแล้ว! 🔋';
+  }
+
+  @override
+  String get batteryFullyChargedTitle => 'Omi ชาร์จเต็มแล้ว';
+
+  @override
+  String get batteryFullyChargedBody => 'อุปกรณ์ Omi ของคุณชาร์จเต็มแล้ว รู้สึกอิสระที่จะถอดปลั๊กได้!';
 
   @override
   String get deviceDisconnectedNotificationTitle => 'อุปกรณ์ Omi ของคุณถูกตัดการเชื่อมต่อ';
@@ -8394,7 +8397,7 @@ class AppLocalizationsTh extends AppLocalizations {
   String get manageStorage => 'จัดการพื้นที่จัดเก็บ';
 
   @override
-  String get safelyBackedUp => 'สำรองข้อมูลไว้ในโทรศัพท์อย่างปลอดภัย';
+  String get safelyBackedUp => 'บทสนทนาที่สร้างแล้ว';
 
   @override
   String get notYetSynced => 'ยังไม่ได้ซิงค์กับโทรศัพท์ของคุณ';
@@ -9194,4 +9197,148 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get bulkDeleteFailed => 'ลบงานไม่สำเร็จ โปรดลองอีกครั้ง';
+
+  @override
+  String get deleteRecap => 'ลบสรุป';
+
+  @override
+  String get deleteRecapConfirmTitle => 'ลบสรุปนี้หรือไม่?';
+
+  @override
+  String get deleteRecapConfirmBody => 'สรุปนี้จะถูกลบอย่างถาวร บทสนทนาต้นฉบับของวันนั้นจะไม่ได้รับผลกระทบ';
+
+  @override
+  String get deleteRecapAction => 'ลบ';
+
+  @override
+  String get recapDeletedSnackbar => 'ลบสรุปแล้ว';
+
+  @override
+  String get recapDeleteFailed => 'ไม่สามารถลบสรุปได้ ลองใหม่อีกครั้งภายหลัง';
+
+  @override
+  String get syncStatusBackedUp => 'สำรองข้อมูลแล้ว';
+
+  @override
+  String get syncStatusBackingUp => 'กำลังซิงค์…';
+
+  @override
+  String get syncStatusWaiting => 'รอการซิงค์';
+
+  @override
+  String get syncStatusRetrying => 'ประมวลผลไม่สำเร็จ — กำลังลองใหม่';
+
+  @override
+  String get syncStatusFailed => 'ล้มเหลว — แตะ ลองใหม่';
+
+  @override
+  String get syncStatusFileUnavailable => 'ไม่พบไฟล์';
+
+  @override
+  String get noRecordingsYet => 'ยังไม่มีการบันทึก';
+
+  @override
+  String get syncInProgress => 'กำลังซิงค์';
+
+  @override
+  String get syncStatusUploaded => 'อัปโหลดแล้ว · กำลังประมวลผลบน Omi';
+
+  @override
+  String get deleteWhileProcessingTitle => 'ยังประมวลผลอยู่';
+
+  @override
+  String get deleteWhileProcessingMessage =>
+      'การบันทึกนี้อัปโหลดแล้วแต่ Omi ยังสร้างบทสนทนาอยู่ หากลบตอนนี้และการประมวลผลล้มเหลว จะกู้คืนไม่ได้ ลบต่อไปหรือไม่?';
+
+  @override
+  String get syncCardAllBackedUp => 'ซิงค์การบันทึกทั้งหมดแล้ว';
+
+  @override
+  String syncCardReadyCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'การบันทึก $count รายการพร้อมซิงค์',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get syncCardProcessing => 'กำลังประมวลผลบน Omi…';
+
+  @override
+  String get syncCardWaitingInternet => 'รออินเทอร์เน็ต';
+
+  @override
+  String syncCardNeedsAttention(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'การบันทึก $count รายการต้องการความสนใจ',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get syncFlowIntro =>
+      'การบันทึกจะถูกถ่ายโอนจากอุปกรณ์ของคุณมายังโทรศัพท์เครื่องนี้และจัดเก็บไว้ในเครื่อง จากนั้นอัปโหลดไปยังเซิร์ฟเวอร์ของ Omi ซึ่งจะถอดความและแปลงเป็นบทสนทนา';
+
+  @override
+  String get syncStepUpload => 'ซิงค์';
+
+  @override
+  String get syncStepUploadDesc => 'การบันทึกของคุณถูกส่งไปยังเซิร์ฟเวอร์ของ Omi';
+
+  @override
+  String get syncStepProcess => 'ถอดเสียง';
+
+  @override
+  String get syncStepProcessDesc => 'Omi เปลี่ยนเสียงให้เป็นบทสนทนา';
+
+  @override
+  String get syncStepBackedUp => 'บทสนทนาพร้อมแล้ว';
+
+  @override
+  String get syncStepBackedUpDesc => 'ค้นหาได้ที่ การสนทนา';
+
+  @override
+  String get syncFailureFootnote => 'หากการประมวลผลล้มเหลว ระบบจะลองอีกครั้งโดยอัตโนมัติในการซิงค์ครั้งถัดไป';
+
+  @override
+  String get syncStatusConversationCreated => 'สร้างบทสนทนาแล้ว';
+
+  @override
+  String get syncCardUploadingTitle => 'กำลังอัปโหลดไปยัง Omi';
+
+  @override
+  String get syncCardDownloadingTitle => 'กำลังดาวน์โหลดจากอุปกรณ์ของคุณ';
+
+  @override
+  String syncCardProgressOf(int current, int total) {
+    return '$current จาก $total';
+  }
+
+  @override
+  String get syncStatusOnDevice => 'อยู่บนอุปกรณ์ของคุณ';
+
+  @override
+  String get syncStatusDownloadingFromDevice => 'กำลังดาวน์โหลดจากอุปกรณ์ของคุณ';
+
+  @override
+  String get newestFirst => 'ใหม่สุดก่อน';
+
+  @override
+  String get noSyncedRecordingsYet => 'ยังไม่มีการบันทึกที่ซิงค์แล้ว';
+
+  @override
+  String get morePaymentMethodsComingSoon => 'วิธีการชำระเงินอื่นๆ เร็วๆ นี้';
+
+  @override
+  String get syncProcessingBackgroundHint => 'การทำงานนี้ดำเนินต่อในเบื้องหลัง — คุณออกจากหน้าจอนี้ได้.';
+
+  @override
+  String get syncCardRateLimited => 'ถึงขีดจำกัดการใช้งานที่เป็นธรรมแล้ว — การซิงค์จะดำเนินต่อโดยอัตโนมัติ';
+
+  @override
+  String get syncCardBackendBusy => 'เซิร์ฟเวอร์ของ Omi กำลังคับคั่ง — การบันทึกของคุณจะซิงค์เมื่อมีพื้นที่ว่างกลับมา';
 }

@@ -359,7 +359,7 @@ class PushToTalkManager: ObservableObject {
       Task {
         do {
           await self.contextCaptureTask?.value
-          let language = self.pttBatchTranscriptionLanguage()
+          let language = AssistantSettings.shared.effectiveTranscriptionLanguage
           let audioSeconds = Double(audioData.count) / (16000.0 * 2.0)
           log("PushToTalkManager: batch audio \(audioData.count) bytes (\(String(format: "%.1f", audioSeconds))s), pttLanguage=\(language), selectedLanguage=\(AssistantSettings.shared.transcriptionLanguage), autoDetect=\(AssistantSettings.shared.transcriptionAutoDetect)")
 
@@ -369,7 +369,7 @@ class PushToTalkManager: ObservableObject {
             contextKeywords: self.currentContextSnapshot?.keywords ?? []
           )
 
-          if (transcript == nil || transcript?.isEmpty == true) && language != "en" && audioSeconds < 5.0 {
+          if (transcript == nil || transcript?.isEmpty == true) && language != "en" && language != "multi" && audioSeconds < 5.0 {
             log("PushToTalkManager: selected language returned empty on short audio, retrying with 'en'")
             transcript = try await TranscriptionService.batchTranscribe(
               audioData: audioData,
@@ -408,15 +408,6 @@ class PushToTalkManager: ObservableObject {
       liveFinalizationTimeout = timeout
       DispatchQueue.main.asyncAfter(deadline: .now() + 3.0, execute: timeout)
     }
-  }
-
-  private func pttBatchTranscriptionLanguage() -> String {
-    let selected = AssistantSettings.shared.transcriptionLanguage
-      .trimmingCharacters(in: .whitespacesAndNewlines)
-    if selected.isEmpty || selected == "multi" || selected == "auto" {
-      return "en"
-    }
-    return selected
   }
 
   private func sendTranscript() {

@@ -75,12 +75,20 @@ jobs:
         run: echo ${{ steps.deploy.outputs.url }}
 
       - name: Generate deployment summary
-        if: always() # Ensure this step runs even if previous steps fail
+        if: always() && github.event.inputs.environment == 'prod'
         uses: ./.github/actions/deployment-summary
         with:
-          workflow_name: ${{ github.workflow }}
           environment: ${{ github.event.inputs.environment }}
-          branch: ${{ github.event.inputs.branch }}
           release_version: ${{ github.event.inputs.release_version }}
           status: ${{ job.status }}
           service: ${{ env.SERVICE }}
+
+      - name: Notify deployment status on Telegram
+        if: always() && github.event.inputs.environment == 'prod'
+        uses: ./.github/actions/deployment-notifier
+        with:
+          environment: ${{ github.event.inputs.environment }}
+          release_version: ${{ github.event.inputs.release_version }}
+          status: ${{ job.status }}
+          telegram_bot_token: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          telegram_chat_id: ${{ secrets.TELEGRAM_CHAT_ID }}

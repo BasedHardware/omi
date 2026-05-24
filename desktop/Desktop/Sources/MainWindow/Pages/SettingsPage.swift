@@ -1350,21 +1350,7 @@ struct SettingsContentView: View {
             Divider()
               .background(OmiColors.backgroundQuaternary)
 
-            settingRow(
-              title: "Frequency", subtitle: "How often to receive notifications",
-              settingId: "notifications.frequency"
-            ) {
-              Picker("", selection: $notificationFrequency) {
-                ForEach(frequencyOptions, id: \.0) { option in
-                  Text(option.1).tag(option.0)
-                }
-              }
-              .pickerStyle(.menu)
-              .frame(width: 120)
-              .onChange(of: notificationFrequency) { _, newValue in
-                updateNotificationSettings(frequency: newValue)
-              }
-            }
+            notificationFrequencySlider(settingId: "notifications.frequency")
 
             settingRow(
               title: "Focus Notifications", subtitle: "Show notification on focus changes",
@@ -1746,10 +1732,141 @@ struct SettingsContentView: View {
     }
   }
 
+  // MARK: - Trial Countdown Card
+
+  @ViewBuilder
+  private var trialCountdownCard: some View {
+    if let trial = appState.trialMetadata, trial.trialStartedAt != nil, !trial.trialExpired {
+      settingsCard(settingId: "planusage.trial") {
+        VStack(alignment: .leading, spacing: 14) {
+          HStack(spacing: 16) {
+            Image(systemName: "clock.fill")
+              .scaledFont(size: 28)
+              .foregroundColor(trialTimeColor(remaining: trial.trialRemainingSeconds))
+
+            VStack(alignment: .leading, spacing: 4) {
+              Text("Premium Trial Active")
+                .scaledFont(size: 16, weight: .semibold)
+                .foregroundColor(OmiColors.textPrimary)
+
+              Text(trialCountdownText(remaining: trial.trialRemainingSeconds))
+                .scaledFont(size: 13)
+                .foregroundColor(trialTimeColor(remaining: trial.trialRemainingSeconds))
+            }
+
+            Spacer()
+
+            // Progress ring
+            ZStack {
+              Circle()
+                .stroke(OmiColors.backgroundQuaternary, lineWidth: 3)
+              Circle()
+                .trim(from: 0, to: trialProgress(trial))
+                .stroke(trialTimeColor(remaining: trial.trialRemainingSeconds), style: StrokeStyle(lineWidth: 3, lineCap: .round))
+                .rotationEffect(.degrees(-90))
+            }
+            .frame(width: 32, height: 32)
+          }
+
+          Divider().overlay(OmiColors.backgroundQuaternary)
+
+          VStack(alignment: .leading, spacing: 8) {
+            Text("Included in your trial")
+              .scaledFont(size: 12, weight: .semibold)
+              .foregroundColor(OmiColors.textTertiary)
+
+            trialFeatureRow(text: "Unlimited listening & transcription")
+            trialFeatureRow(text: "Unlimited memories & insights")
+            trialFeatureRow(text: "Chat questions")
+          }
+        }
+      }
+    } else if let trial = appState.trialMetadata, trial.trialExpired {
+      settingsCard(settingId: "planusage.trial-expired") {
+        VStack(alignment: .leading, spacing: 14) {
+          HStack(spacing: 16) {
+            Image(systemName: "exclamationmark.circle.fill")
+              .scaledFont(size: 28)
+              .foregroundColor(OmiColors.warning)
+
+            VStack(alignment: .leading, spacing: 4) {
+              Text("Trial Ended")
+                .scaledFont(size: 16, weight: .semibold)
+                .foregroundColor(OmiColors.textPrimary)
+
+              Text("Upgrade to keep unlimited access")
+                .scaledFont(size: 13)
+                .foregroundColor(OmiColors.textSecondary)
+            }
+
+            Spacer()
+          }
+
+          Divider().overlay(OmiColors.backgroundQuaternary)
+
+          Button(action: {
+            selectedPlanIdForCheckout = "operator"
+          }) {
+            Text("View Plans")
+              .scaledFont(size: 13, weight: .semibold)
+              .padding(.horizontal, 16)
+              .padding(.vertical, 8)
+          }
+          .buttonStyle(.borderedProminent)
+          .tint(OmiColors.purplePrimary)
+        }
+      }
+    }
+  }
+
+  private func trialFeatureRow(text: String) -> some View {
+    HStack(spacing: 8) {
+      ZStack {
+        Circle()
+          .fill(OmiColors.purplePrimary.opacity(0.16))
+          .frame(width: 18, height: 18)
+        Image(systemName: "checkmark")
+          .scaledFont(size: 9, weight: .bold)
+          .foregroundColor(OmiColors.purplePrimary)
+      }
+      Text(text)
+        .scaledFont(size: 13, weight: .medium)
+        .foregroundColor(OmiColors.textSecondary)
+    }
+  }
+
+  private func trialCountdownText(remaining: Int) -> String {
+    if remaining <= 0 { return "Expired" }
+    let hours = remaining / 3600
+    let minutes = (remaining % 3600) / 60
+    if hours >= 24 {
+      let days = hours / 24
+      let leftoverHours = hours % 24
+      return "\(days)d \(leftoverHours)h remaining"
+    }
+    if hours > 0 {
+      return "\(hours)h \(minutes)m remaining"
+    }
+    return "\(minutes)m remaining"
+  }
+
+  private func trialTimeColor(remaining: Int) -> Color {
+    if remaining <= 3600 { return OmiColors.warning }      // < 1 hour: warning orange
+    if remaining <= 24 * 3600 { return .yellow }           // < 24 hours: yellow
+    return OmiColors.success                                // plenty of time: green
+  }
+
+  private func trialProgress(_ trial: TrialMetadataResponse) -> CGFloat {
+    guard trial.trialDurationSeconds > 0 else { return 0 }
+    return CGFloat(trial.trialRemainingSeconds) / CGFloat(trial.trialDurationSeconds)
+  }
+
   // MARK: - Plan and Usage Section
 
   private var planUsageSection: some View {
     VStack(spacing: 20) {
+      trialCountdownCard
+
       settingsCard(settingId: "planusage.current") {
         VStack(alignment: .leading, spacing: 14) {
           HStack(spacing: 16) {
@@ -2283,15 +2400,8 @@ struct SettingsContentView: View {
         }
         Spacer()
         Picker("", selection: $shortcutSettings.selectedVoiceID) {
-          Section("Female") {
-            ForEach(ShortcutSettings.availableVoices.filter { $0.gender == .female }) { voice in
-              Text(voice.name).tag(voice.id)
-            }
-          }
-          Section("Male") {
-            ForEach(ShortcutSettings.availableVoices.filter { $0.gender == .male }) { voice in
-              Text(voice.name).tag(voice.id)
-            }
+          ForEach(ShortcutSettings.availableVoices) { voice in
+            Text(voice.name).tag(voice.id)
           }
         }
         .pickerStyle(.menu)
@@ -5309,6 +5419,10 @@ struct SettingsContentView: View {
           try? await APIClient.shared.activateBYOK(fingerprints: fingerprints)
           await FloatingBarUsageLimiter.shared.fetchPlan()
           await MainActor.run {
+            // Clear any sticky paywall flag from a prior `freemium_threshold_reached`
+            // event — once all 4 BYOK keys validate, the user is on the free BYOK
+            // plan and shouldn't be locked out of capture/transcription anymore.
+            AppState.current?.isPaywalled = false
             byokKeyStatuses = results
             byokActivationError = nil
           }
@@ -5501,6 +5615,102 @@ struct SettingsContentView: View {
         }
       }
     }
+  }
+
+  /// Stepped slider for `notifications.frequency` matching the voice-speed slider
+  /// pattern. Six positions: Off / Minimal / Low / Balanced / High / Maximum.
+  /// Sits inside the existing Notifications card, so it does not wrap itself in
+  /// another `settingsCard` — it just applies the highlight modifier directly.
+  private func notificationFrequencySlider(settingId: String) -> some View {
+    let stepCount = frequencyOptions.count  // 6
+    let segmentCount = CGFloat(stepCount - 1)
+    let currentIndex = max(0, min(stepCount - 1, notificationFrequency))
+    let currentLabel = frequencyOptions[currentIndex].1
+
+    let body = VStack(alignment: .leading, spacing: 12) {
+      HStack(alignment: .center) {
+        VStack(alignment: .leading, spacing: 2) {
+          Text("Frequency")
+            .scaledFont(size: 14)
+            .foregroundColor(OmiColors.textSecondary)
+          Text("How often to receive notifications")
+            .scaledFont(size: 12)
+            .foregroundColor(OmiColors.textTertiary)
+        }
+        Spacer()
+        Text(currentLabel)
+          .scaledFont(size: 13, weight: .semibold)
+          .foregroundColor(OmiColors.purplePrimary)
+          .padding(.horizontal, 10)
+          .padding(.vertical, 4)
+          .background(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+              .fill(OmiColors.purplePrimary.opacity(0.15))
+          )
+      }
+
+      GeometryReader { geo in
+        let trackWidth = geo.size.width
+
+        ZStack(alignment: .leading) {
+          RoundedRectangle(cornerRadius: 4)
+            .fill(OmiColors.backgroundQuaternary)
+            .frame(height: 6)
+
+          RoundedRectangle(cornerRadius: 4)
+            .fill(OmiColors.purplePrimary)
+            .frame(width: trackWidth * CGFloat(currentIndex) / segmentCount, height: 6)
+
+          ForEach(0..<stepCount, id: \.self) { i in
+            Circle()
+              .fill(
+                i <= currentIndex ? OmiColors.purplePrimary : OmiColors.backgroundQuaternary
+              )
+              .frame(width: 8, height: 8)
+              .position(
+                x: trackWidth * CGFloat(i) / segmentCount,
+                y: 3
+              )
+          }
+
+          Circle()
+            .fill(Color.white)
+            .frame(width: 22, height: 22)
+            .shadow(color: .black.opacity(0.25), radius: 3, y: 1)
+            .position(
+              x: trackWidth * CGFloat(currentIndex) / segmentCount,
+              y: 3
+            )
+            .gesture(
+              DragGesture(minimumDistance: 0)
+                .onChanged { value in
+                  let fraction = max(0, min(1, value.location.x / trackWidth))
+                  let nearestIndex = Int(round(fraction * segmentCount))
+                  let clamped = max(0, min(stepCount - 1, nearestIndex))
+                  if clamped != notificationFrequency {
+                    notificationFrequency = clamped
+                    updateNotificationSettings(frequency: clamped)
+                  }
+                }
+            )
+        }
+      }
+      .frame(height: 22)
+
+      HStack {
+        Text(frequencyOptions.first?.1 ?? "Off")
+          .scaledFont(size: 11)
+          .foregroundColor(OmiColors.textTertiary)
+        Spacer()
+        Text(frequencyOptions.last?.1 ?? "Maximum")
+          .scaledFont(size: 11)
+          .foregroundColor(OmiColors.textTertiary)
+      }
+    }
+
+    return body.modifier(
+      SettingHighlightModifier(
+        settingId: settingId, highlightedSettingId: $highlightedSettingId))
   }
 
   private func tierPickerRow(tier: Int, label: String, subtitle: String) -> some View {
@@ -6725,6 +6935,8 @@ struct SettingsContentView: View {
           dailySummaryHour = dailySummary.hour
           notificationsEnabled = notifications.enabled
           notificationFrequency = notifications.frequency
+          // Mirror to UserDefaults so NotificationService can throttle without a backend roundtrip.
+          UserDefaults.standard.set(notifications.frequency, forKey: NotificationService.frequencyDefaultsKey)
           userLanguage = language.language
           recordingPermissionEnabled = recording.enabled
           privateCloudSyncEnabled = cloudSync.enabled
@@ -6776,6 +6988,17 @@ struct SettingsContentView: View {
             subscription.subscription.plan.rawValue == selectedPlanIdForCheckout
           {
             self.selectedPlanIdForCheckout = nil
+          }
+          // Clear the sticky paywall flag whenever the subscription endpoint
+          // reports a non-basic active plan. Catches the case where a paid user
+          // hit the paywall once (e.g. WS connected before payment cleared
+          // the trial cache) — without this they'd stay paywalled until the
+          // next app restart even after their Operator/Architect plan is active.
+          if subscription.subscription.plan != .basic,
+             subscription.subscription.status == .active,
+             AppState.current?.isPaywalled == true {
+            AppState.current?.isPaywalled = false
+            log("Paywall: cleared sticky flag — subscription \(subscription.subscription.plan.rawValue) is active")
           }
           isLoadingSubscription = false
         }
@@ -7082,6 +7305,11 @@ struct SettingsContentView: View {
   }
 
   private func updateNotificationSettings(enabled: Bool? = nil, frequency: Int? = nil) {
+    if let frequency {
+      // Mirror locally so NotificationService picks up the new throttle level immediately,
+      // even before the backend round-trip completes.
+      UserDefaults.standard.set(frequency, forKey: NotificationService.frequencyDefaultsKey)
+    }
     Task {
       do {
         let _ = try await APIClient.shared.updateNotificationSettings(

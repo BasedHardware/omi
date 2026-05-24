@@ -963,11 +963,6 @@ class AppLocalizationsSr extends AppLocalizations {
   }
 
   @override
-  String memoriesUsedThisMonth(String used, String limit) {
-    return '$used од $limit успомена направљено овог месеца';
-  }
-
-  @override
   String get visibility => 'Видљивост';
 
   @override
@@ -1642,7 +1637,7 @@ class AppLocalizationsSr extends AppLocalizations {
   String get finalTouches => 'Финалне дораде';
 
   @override
-  String get processing => 'Обрада...';
+  String get processing => 'Обрада';
 
   @override
   String get features => 'Функције';
@@ -6845,7 +6840,15 @@ class AppLocalizationsSr extends AppLocalizations {
   String get lowBatteryAlertTitle => 'Обавештење о слабој батерији';
 
   @override
-  String get lowBatteryAlertBody => 'Батерија вашег уређаја је скоро празна. Време је за пуњење! 🔋';
+  String lowBatteryAlertBody(int level) {
+    return 'Батерија вам је на $level%. Време је за пуњење! 🔋';
+  }
+
+  @override
+  String get batteryFullyChargedTitle => 'Omi је потпуно напуњен';
+
+  @override
+  String get batteryFullyChargedBody => 'Ваш Omi уређај је потпуно напуњен. Можете га искључити!';
 
   @override
   String get deviceDisconnectedNotificationTitle => 'Ваш Omi уређај је одсоединут';
@@ -8451,7 +8454,7 @@ class AppLocalizationsSr extends AppLocalizations {
   String get manageStorage => 'Управљај складиштем';
 
   @override
-  String get safelyBackedUp => 'Безбедно сачувано на твој телефон';
+  String get safelyBackedUp => 'Креирани разговори';
 
   @override
   String get notYetSynced => 'Још није синхронизовано са твојим телефоном';
@@ -9253,4 +9256,153 @@ class AppLocalizationsSr extends AppLocalizations {
 
   @override
   String get bulkDeleteFailed => 'Задаци нису могли бити обрисани. Покушајте поново.';
+
+  @override
+  String get deleteRecap => 'Обриши преглед';
+
+  @override
+  String get deleteRecapConfirmTitle => 'Обрисати овај преглед?';
+
+  @override
+  String get deleteRecapConfirmBody => 'Овај преглед биће трајно уклоњен. Изворни разговори тог дана нису погођени.';
+
+  @override
+  String get deleteRecapAction => 'Обриши';
+
+  @override
+  String get recapDeletedSnackbar => 'Преглед обрисан';
+
+  @override
+  String get recapDeleteFailed => 'Преглед није могуће обрисати. Покушајте поново касније.';
+
+  @override
+  String get syncStatusBackedUp => 'Направљена резервна копија';
+
+  @override
+  String get syncStatusBackingUp => 'Синхронизација…';
+
+  @override
+  String get syncStatusWaiting => 'Чека синхронизацију';
+
+  @override
+  String get syncStatusRetrying => 'Обрада није успела — нови покушај';
+
+  @override
+  String get syncStatusFailed => 'Неуспело — додирните Покушај поново';
+
+  @override
+  String get syncStatusFileUnavailable => 'Датотека није доступна';
+
+  @override
+  String get noRecordingsYet => 'Још нема снимака';
+
+  @override
+  String get syncInProgress => 'Синхронизација у току';
+
+  @override
+  String get syncStatusUploaded => 'Отпремљено · обрада на Omi';
+
+  @override
+  String get deleteWhileProcessingTitle => 'Још се обрађује';
+
+  @override
+  String get deleteWhileProcessingMessage =>
+      'Овај снимак је отпремљен, али Omi још прави разговор. Ако га сада обришете и обрада не успе, неће моћи да се врати. Свеједно обрисати?';
+
+  @override
+  String get syncCardAllBackedUp => 'Сви снимци синхронизовани';
+
+  @override
+  String syncCardReadyCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count снимака спремно за синхронизацију',
+      few: '$count снимка спремна за синхронизацију',
+      one: '1 снимак спреман за синхронизацију',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get syncCardProcessing => 'Обрада у Omi…';
+
+  @override
+  String get syncCardWaitingInternet => 'Чекање интернета';
+
+  @override
+  String syncCardNeedsAttention(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count снимака захтева пажњу',
+      few: '$count снимка захтевају пажњу',
+      one: '$count снимак захтева пажњу',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get syncFlowIntro =>
+      'Снимци се преносе са вашег уређаја на овај телефон и чувају локално, а затим отпремају на Omi сервер где се транскрибују и претварају у разговоре.';
+
+  @override
+  String get syncStepUpload => 'Синхронизација';
+
+  @override
+  String get syncStepUploadDesc => 'Ваш снимак се шаље на Omi сервер';
+
+  @override
+  String get syncStepProcess => 'Транскрипција';
+
+  @override
+  String get syncStepProcessDesc => 'Omi претвара звук у разговор';
+
+  @override
+  String get syncStepBackedUp => 'Разговор је спреман';
+
+  @override
+  String get syncStepBackedUpDesc => 'Пронађи га у Разговори';
+
+  @override
+  String get syncFailureFootnote => 'Ако обрада не успе, снимак се аутоматски понавља при следећој синхронизацији.';
+
+  @override
+  String get syncStatusConversationCreated => 'Разговор је направљен';
+
+  @override
+  String get syncCardUploadingTitle => 'Отпремање на Omi';
+
+  @override
+  String get syncCardDownloadingTitle => 'Преузимање са вашег уређаја';
+
+  @override
+  String syncCardProgressOf(int current, int total) {
+    return '$current од $total';
+  }
+
+  @override
+  String get syncStatusOnDevice => 'На вашем уређају';
+
+  @override
+  String get syncStatusDownloadingFromDevice => 'Преузимање са вашег уређаја';
+
+  @override
+  String get newestFirst => 'Прво најновије';
+
+  @override
+  String get noSyncedRecordingsYet => 'Још нема синхронизованих снимака';
+
+  @override
+  String get morePaymentMethodsComingSoon => 'Ускоро више начина плаћања';
+
+  @override
+  String get syncProcessingBackgroundHint => 'Ово се наставља у позадини — можете напустити овај екран.';
+
+  @override
+  String get syncCardRateLimited => 'Достигнут је лимит фер коришћења — синхронизација ће се аутоматски наставити';
+
+  @override
+  String get syncCardBackendBusy =>
+      'Omi сервери су заузети — ваши снимци ће се синхронизовати чим се ослободи капацитет';
 }

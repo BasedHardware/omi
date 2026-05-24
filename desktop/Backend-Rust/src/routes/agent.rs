@@ -8,7 +8,7 @@ use axum::{
     Json, Router,
 };
 
-use crate::auth::AuthUser;
+use crate::auth::{AuthUser, PaywalledAuthUser};
 use crate::models::agent::{AgentStatusResponse, AgentVmStatus, ProvisionAgentResponse};
 use crate::AppState;
 
@@ -17,8 +17,9 @@ use crate::AppState;
 /// Creates a GCE VM from the omi-agent image family for this user.
 async fn provision_agent_vm(
     State(state): State<AppState>,
-    user: AuthUser,
+    user: PaywalledAuthUser,
 ) -> Result<Json<ProvisionAgentResponse>, StatusCode> {
+    let user: AuthUser = user.into();
     tracing::info!("Agent VM provision request for user {}", user.uid);
 
     // 1. Check if user already has a VM
@@ -161,8 +162,9 @@ async fn provision_agent_vm(
 /// If the VM self-stopped (idle timeout), detects it via GCE API and restarts it.
 async fn get_agent_status(
     State(state): State<AppState>,
-    user: AuthUser,
+    user: PaywalledAuthUser,
 ) -> Result<Json<Option<AgentStatusResponse>>, StatusCode> {
+    let user: AuthUser = user.into();
     tracing::info!("Agent VM status request for user {}", user.uid);
 
     match state.firestore.get_agent_vm(&user.uid).await {

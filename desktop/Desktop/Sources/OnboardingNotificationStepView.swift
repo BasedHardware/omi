@@ -131,7 +131,8 @@ struct OnboardingNotificationStepView: View {
                 NotificationService.shared.sendNotification(
                     title: insightHeadline,
                     message: insightText,
-                    assistantId: "onboarding"
+                    assistantId: "onboarding",
+                    respectFrequency: false
                 )
 
                 // Show "notification sent" + continue after a beat

@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import List, Optional
 
-from utils.executors import critical_executor
+from utils.executors import db_executor, postprocess_executor
 
 from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
@@ -55,7 +55,7 @@ def create_memory(memory: Memory, uid: str = Depends(with_rate_limit(get_uid_fro
     memory.category = identify_category_for_memory(memory.content)
     memory_db = MemoryDB.from_memory(memory, uid, None, True)
     memories_db.create_memory(uid, memory_db.model_dump())
-    critical_executor.submit(update_personas_async, uid)
+    postprocess_executor.submit(update_personas_async, uid)
     return memory_db
 
 
@@ -192,7 +192,9 @@ def search_conversations(
         try:
             starts_at = int(datetime.strptime(start_date, "%Y-%m-%d").timestamp())
         except ValueError:
-            raise HTTPException(status_code=400, detail=f"Invalid start_date format: '{start_date}'. Expected YYYY-MM-DD.")
+            raise HTTPException(
+                status_code=400, detail=f"Invalid start_date format: '{start_date}'. Expected YYYY-MM-DD."
+            )
     if end_date:
         try:
             ends_at = int(datetime.strptime(end_date, "%Y-%m-%d").timestamp())
