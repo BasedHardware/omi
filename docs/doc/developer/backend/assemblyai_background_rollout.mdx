@@ -19,6 +19,45 @@ Deepgram remains the provider for mobile/BLE `/v4/listen`, realtime assistant
 streaming, Hold-to-Talk streaming, voice-message finalize semantics, and
 background fallback.
 
+## Current Readiness Decision
+
+As of the TICKET-028 offline readiness gate, AssemblyAI is approved only for a
+small desktop background canary. Broad defaulting remains blocked until the
+canary supplies privacy-safe real-session evidence and the remaining
+saved-policy speaker-purity gap is either closed or explicitly accepted by the
+product/business owner.
+
+The latest offline command was:
+
+```bash
+cd backend
+python3 scripts/stt/provider_comparison_gate.py \
+  --manifest tests/fixtures/stt_provider_eval/manifest.json \
+  --output-md /tmp/stt-provider-eval.md \
+  --output-json /tmp/stt-provider-eval.json
+```
+
+It passed 10 fixture cases with no failures or warnings and reported all
+required production strategies:
+
+| Strategy | Provider | Speaker purity | Empty transcript | Fallback | Timeout/error | Cost/hour |
+| --- | --- | ---: | ---: | ---: | ---: | ---: |
+| `always_deepgram` | Deepgram | 100.0% | 10.0% | 0.0% | 0.0% | `$0.158` |
+| `always_assemblyai` | AssemblyAI | 98.9% | 10.0% | 1.0% | 0.0% | `$0.286` |
+| `current_policy` | mixed | 100.0% | 10.0% | 0.0% | 0.0% | `$0.217` |
+| `shadow_only` | Deepgram | 100.0% | 10.0% | 0.0% | 0.0% | `$0.158` |
+
+The gate still marked AssemblyAI as `limited` because the
+`saved_real_policy_router_outputs` scenario had 95.5% AssemblyAI speaker-word
+purity versus 100.0% for Deepgram. The mitigation remains to keep
+split-before-identity enabled, keep unresolved provider clusters chunk-scoped,
+and promote only through real-session canary metrics that include both purity
+and fragmentation budgets.
+
+Selected rollout decision: enable AssemblyAI for a small canary cohort with
+Deepgram fallback and hard rollback thresholds. Do not set AssemblyAI as the
+broad background default from offline evidence alone.
+
 Eligible AssemblyAI workloads are:
 
 - `sync`
@@ -251,6 +290,79 @@ Expected cost and quality review should inspect:
    background rollback. For broader passive prerecorded rollback, set
    `ASSEMBLYAI_PRERECORDED_STT_ENABLED=false` or remove `background` from
    `ASSEMBLYAI_PRERECORDED_STT_WORKLOADS`.
+
+## TICKET-028 Canary Plan
+
+Initial cohort:
+
+- Scope: desktop background recording only, excluding mobile/BLE listen,
+  realtime assistant streaming, Hold-to-Talk, and voice-message finalize paths.
+- Size: 1% of eligible desktop background traffic or an internal opt-in cohort
+  of at least 20 active background users, whichever is safer for the deployment
+  environment.
+- Duration: minimum 7 consecutive days and at least 200 successful background
+  chunks before expansion review.
+- Configuration: `ASSEMBLYAI_BACKGROUND_PROVIDER_MODE=assemblyai`,
+  `ASSEMBLYAI_PRERECORDED_STT_ENABLED=true`,
+  `ASSEMBLYAI_PRERECORDED_STT_WORKLOADS=sync,background,postprocess`, and
+  `ASSEMBLYAI_PRERECORDED_STT_FALLBACK_ENABLED=true` for only the selected
+  backend environment or cohort.
+- Required fallback: keep Deepgram credentials available and verify recent
+  fallback runs record `fallback.from_provider=assemblyai`,
+  `fallback.to_provider=deepgram`, and a classified `fallback.reason`.
+
+Owner/on-call action:
+
+- The backend on-call owns first response during the canary window.
+- Roll back immediately when a hard threshold below trips.
+- Hold expansion and open a follow-up ticket when any warning threshold is
+  close to tripping or when support reports speaker/transcript regressions not
+  visible in the aggregate metrics.
+- Product/business owner approval is required before accepting any remaining
+  cost or speaker-quality regression for expanded rollout.
+
+Expansion success criteria:
+
+- Offline provider gate continues to pass with no failures:
+  `provider_comparison_gate.py --manifest tests/fixtures/stt_provider_eval/manifest.json`.
+- AssemblyAI background error rate is not more than 1 percentage point above
+  the Deepgram baseline and remains below 3% absolute.
+- Fallback rate stays at or below 5% and does not double the previous healthy
+  window.
+- Timeout rate stays at or below 1%.
+- Empty transcript rate is not more than 1 percentage point above Deepgram.
+- Unknown or low-confidence speaker rate is not more than 5 percentage points
+  above Deepgram, and unknown speaker duration does not create visible speaker
+  degradation.
+- App-visible speaker inflation stays within the replay budget and does not
+  rise without a matching purity improvement.
+- Cost/hour stays within the approved margin. The current offline gate shows
+  AssemblyAI at about 1.8x Deepgram (`$0.286/hour` versus `$0.158/hour`), while
+  older saved-provider evidence showed a wider gap; expansion requires an
+  explicit owner decision if this remains materially above Deepgram.
+- No sustained increase in user corrections, self-voice review failures,
+  support complaints, or billing surprises.
+
+Expansion path:
+
+1. Hold at 1% until the full review window passes.
+2. Expand to 5% only after the success criteria above are met.
+3. Expand to 25% only after another full review window passes with no hard
+   threshold trips.
+4. Broad defaulting requires either measured parity with Deepgram on the canary
+   metrics or documented product/business owner approval for the remaining
+   regression, plus the rollback command below staying tested.
+
+Rollback command/config:
+
+```bash
+ASSEMBLYAI_BACKGROUND_PROVIDER_MODE=deepgram
+```
+
+After rollback, confirm new background runs show `provider=deepgram`, verify
+`transcription_provider_fallbacks_total` is not continuing to rise from
+AssemblyAI failures, and keep `ASSEMBLYAI_PRERECORDED_STT_FALLBACK_ENABLED=true`
+until the incident review is complete.
 
 ## Health Thresholds
 
