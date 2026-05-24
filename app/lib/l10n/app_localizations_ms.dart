@@ -4641,41 +4641,13 @@ class AppLocalizationsMs extends AppLocalizations {
       'Terima kasih kerana menjadi pengguna Omi yang dihargai. Jika anda mempunyai sebarang soalan atau kebimbangan, sila hubungi kami di team@basedhardware.com.';
 
   @override
-  String get wifiSyncSettings => 'Tetapan Segerak WiFi';
-
-  @override
-  String get enterHotspotCredentials => 'Masukkan kelayakan hotspot telefon anda';
-
-  @override
-  String get wifiSyncUsesHotspot =>
-      'Segerak WiFi menggunakan telefon anda sebagai hotspot. Cari nama dan kata laluan di Tetapan > Hotspot Peribadi.';
-
-  @override
-  String get hotspotNameSsid => 'Nama Hotspot (SSID)';
-
-  @override
-  String get exampleIphoneHotspot => 'cth. iPhone Hotspot';
-
-  @override
   String get password => 'Kata Laluan';
-
-  @override
-  String get enterHotspotPassword => 'Masukkan kata laluan hotspot';
 
   @override
   String get saveCredentials => 'Simpan Kelayakan';
 
   @override
   String get clearCredentials => 'Kosongkan Kelayakan';
-
-  @override
-  String get pleaseEnterHotspotName => 'Sila masukkan nama hotspot';
-
-  @override
-  String get wifiCredentialsSaved => 'Kelayakan WiFi disimpan';
-
-  @override
-  String get wifiCredentialsCleared => 'Kelayakan WiFi dikosongkan';
 
   @override
   String summaryGeneratedForDate(String date) {
@@ -5825,9 +5797,6 @@ class AppLocalizationsMs extends AppLocalizations {
   String get limitless => 'Limitless';
 
   @override
-  String get fastTransfer => 'Pemindahan Pantas';
-
-  @override
   String get syncingStatus => 'Menyegerakkan';
 
   @override
@@ -5837,15 +5806,6 @@ class AppLocalizationsMs extends AppLocalizations {
   String etaLabel(String time) {
     return 'Anggaran: $time';
   }
-
-  @override
-  String get transferMethod => 'Kaedah Pemindahan';
-
-  @override
-  String get fast => 'Pantas';
-
-  @override
-  String get ble => 'BLE';
 
   @override
   String get phone => 'Telefon';
@@ -5866,25 +5826,7 @@ class AppLocalizationsMs extends AppLocalizations {
   String get processedFilesDeleted => 'Fail yang diproses telah dipadam';
 
   @override
-  String get wifiEnableFailed => 'Gagal mengaktifkan WiFi pada peranti. Sila cuba lagi.';
-
-  @override
-  String get deviceNoFastTransfer => 'Peranti anda tidak menyokong Pemindahan Pantas. Gunakan Bluetooth sebaliknya.';
-
-  @override
-  String get enableHotspotMessage => 'Sila aktifkan hotspot telefon anda dan cuba lagi.';
-
-  @override
-  String get transferStartFailed => 'Gagal memulakan pemindahan. Sila cuba lagi.';
-
-  @override
   String get deviceNotResponding => 'Peranti tidak bertindak balas. Sila cuba lagi.';
-
-  @override
-  String get invalidWifiCredentials => 'Kelayakan WiFi tidak sah. Semak tetapan hotspot anda.';
-
-  @override
-  String get wifiConnectionFailed => 'Sambungan WiFi gagal. Sila cuba lagi.';
 
   @override
   String get sdCardProcessing => 'Memproses Kad SD';
@@ -5896,9 +5838,6 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get process => 'Proses';
-
-  @override
-  String get wifiSyncFailed => 'Segerak WiFi Gagal';
 
   @override
   String get processingFailed => 'Pemprosesan Gagal';
@@ -6676,24 +6615,13 @@ class AppLocalizationsMs extends AppLocalizations {
   }
 
   @override
-  String get wifiSync => 'Penyegerakan WiFi';
-
-  @override
   String itemCopiedToClipboard(String item) {
     return '$item disalin ke papan keratan';
   }
 
   @override
-  String get wifiConnectionFailedTitle => 'Sambungan Gagal';
-
-  @override
   String connectingToDeviceName(String deviceName) {
     return 'Menyambung ke $deviceName';
-  }
-
-  @override
-  String enableDeviceWifi(String deviceName) {
-    return 'Aktifkan WiFi $deviceName';
   }
 
   @override
@@ -6790,9 +6718,6 @@ class AppLocalizationsMs extends AppLocalizations {
   String get statusUnprocessed => 'Belum Diproses';
 
   @override
-  String get switchedToFastTransfer => 'Bertukar ke Pemindahan Pantas';
-
-  @override
   String get transferCompleteMessage => 'Pemindahan selesai! Anda kini boleh memainkan rakaman ini.';
 
   @override
@@ -6804,33 +6729,7 @@ class AppLocalizationsMs extends AppLocalizations {
   String get transferCancelled => 'Pemindahan dibatalkan';
 
   @override
-  String get fastTransferEnabled => 'Pemindahan Pantas diaktifkan';
-
-  @override
   String get bluetoothSyncEnabled => 'Penyegerakan Bluetooth diaktifkan';
-
-  @override
-  String get enableFastTransfer => 'Aktifkan Pemindahan Pantas';
-
-  @override
-  String get fastTransferDescription =>
-      'Pemindahan Pantas menggunakan WiFi untuk kelajuan ~5x lebih pantas. Telefon anda akan bersambung sementara ke rangkaian WiFi peranti Omi semasa pemindahan.';
-
-  @override
-  String get internetAccessPausedDuringTransfer => 'Akses internet dijeda semasa pemindahan';
-
-  @override
-  String get chooseTransferMethodDescription => 'Pilih cara rakaman dipindahkan dari peranti Omi ke telefon anda.';
-
-  @override
-  String get wifiSpeed => '~150 KB/s melalui WiFi';
-
-  @override
-  String get fiveTimesFaster => '5X LEBIH PANTAS';
-
-  @override
-  String get fastTransferMethodDescription =>
-      'Mencipta sambungan WiFi terus ke peranti Omi anda. Telefon anda terputus sementara dari WiFi biasa semasa pemindahan.';
 
   @override
   String get bluetooth => 'Bluetooth';
@@ -7530,13 +7429,6 @@ class AppLocalizationsMs extends AppLocalizations {
   String get voiceFailedToTranscribe => 'Gagal mentranskrip audio';
 
   @override
-  String get locationPermissionRequired => 'Kebenaran lokasi diperlukan';
-
-  @override
-  String get locationPermissionContent =>
-      'Pemindahan Pantas memerlukan kebenaran lokasi untuk mengesahkan sambungan WiFi. Sila berikan kebenaran lokasi untuk meneruskan.';
-
-  @override
   String get pdfTranscriptExport => 'Eksport Transkrip';
 
   @override
@@ -7681,12 +7573,6 @@ class AppLocalizationsMs extends AppLocalizations {
   String get dailyRecapsDescription => 'Ringkasan harian anda akan muncul di sini setelah dijana';
 
   @override
-  String get chooseTransferMethod => 'Pilih kaedah pemindahan';
-
-  @override
-  String get fastTransferSpeed => '~150 KB/s melalui WiFi';
-
-  @override
   String largeTimeGapDetected(String gap) {
     return 'Jurang masa besar dikesan ($gap)';
   }
@@ -7695,10 +7581,6 @@ class AppLocalizationsMs extends AppLocalizations {
   String largeTimeGapsDetected(String gaps) {
     return 'Jurang masa besar dikesan ($gaps)';
   }
-
-  @override
-  String get deviceDoesNotSupportWifiSwitchingToBle =>
-      'Peranti tidak menyokong penyegerakan WiFi, bertukar kepada Bluetooth';
 
   @override
   String get appleHealthNotAvailable => 'Apple Health tidak tersedia pada peranti ini';

@@ -4647,41 +4647,13 @@ class AppLocalizationsHu extends AppLocalizations {
       'Köszönjük, hogy az Omi értékes felhasználója. Ha kérdése vagy aggálya van, forduljon hozzánk a team@basedhardware.com címen.';
 
   @override
-  String get wifiSyncSettings => 'WiFi szinkronizálás beállításai';
-
-  @override
-  String get enterHotspotCredentials => 'Adja meg telefonja hotspot hitelesítő adatait';
-
-  @override
-  String get wifiSyncUsesHotspot =>
-      'A WiFi szinkronizálás a telefont hotspotként használja. A nevet és jelszót a Beállítások > Személyes hotspot menüben találja.';
-
-  @override
-  String get hotspotNameSsid => 'Hotspot neve (SSID)';
-
-  @override
-  String get exampleIphoneHotspot => 'pl. iPhone Hotspot';
-
-  @override
   String get password => 'Jelszó';
-
-  @override
-  String get enterHotspotPassword => 'Adja meg a hotspot jelszavát';
 
   @override
   String get saveCredentials => 'Hitelesítő adatok mentése';
 
   @override
   String get clearCredentials => 'Hitelesítő adatok törlése';
-
-  @override
-  String get pleaseEnterHotspotName => 'Kérjük, adjon meg egy hotspot nevet';
-
-  @override
-  String get wifiCredentialsSaved => 'WiFi hitelesítő adatok mentve';
-
-  @override
-  String get wifiCredentialsCleared => 'WiFi hitelesítő adatok törölve';
 
   @override
   String summaryGeneratedForDate(String date) {
@@ -5835,9 +5807,6 @@ class AppLocalizationsHu extends AppLocalizations {
   String get limitless => 'Limitless';
 
   @override
-  String get fastTransfer => 'Gyors átvitel';
-
-  @override
   String get syncingStatus => 'Szinkronizálás';
 
   @override
@@ -5847,15 +5816,6 @@ class AppLocalizationsHu extends AppLocalizations {
   String etaLabel(String time) {
     return 'ETA: $time';
   }
-
-  @override
-  String get transferMethod => 'Átviteli módszer';
-
-  @override
-  String get fast => 'Gyors';
-
-  @override
-  String get ble => 'BLE';
 
   @override
   String get phone => 'Telefon';
@@ -5876,25 +5836,7 @@ class AppLocalizationsHu extends AppLocalizations {
   String get processedFilesDeleted => 'Feldolgozott fájlok törölve';
 
   @override
-  String get wifiEnableFailed => 'A WiFi engedélyezése sikertelen az eszközön. Kérlek, próbáld újra.';
-
-  @override
-  String get deviceNoFastTransfer => 'Az eszközöd nem támogatja a gyors átvitelt. Használd inkább a Bluetooth-t.';
-
-  @override
-  String get enableHotspotMessage => 'Kérlek, engedélyezd a telefonod hotspotját, és próbáld újra.';
-
-  @override
-  String get transferStartFailed => 'Az átvitel indítása sikertelen. Kérlek, próbáld újra.';
-
-  @override
   String get deviceNotResponding => 'Az eszköz nem válaszol. Kérlek, próbáld újra.';
-
-  @override
-  String get invalidWifiCredentials => 'Érvénytelen WiFi hitelesítő adatok. Ellenőrizd a hotspot beállításokat.';
-
-  @override
-  String get wifiConnectionFailed => 'WiFi kapcsolódás sikertelen. Kérlek, próbáld újra.';
 
   @override
   String get sdCardProcessing => 'SD Card Processing';
@@ -5906,9 +5848,6 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get process => 'Feldolgozás';
-
-  @override
-  String get wifiSyncFailed => 'WiFi szinkronizálás sikertelen';
 
   @override
   String get processingFailed => 'Feldolgozás sikertelen';
@@ -6686,24 +6625,13 @@ class AppLocalizationsHu extends AppLocalizations {
   }
 
   @override
-  String get wifiSync => 'WiFi szinkronizálás';
-
-  @override
   String itemCopiedToClipboard(String item) {
     return '$item másolva a vágólapra';
   }
 
   @override
-  String get wifiConnectionFailedTitle => 'Kapcsolódás sikertelen';
-
-  @override
   String connectingToDeviceName(String deviceName) {
     return 'Csatlakozás a következőhöz: $deviceName';
-  }
-
-  @override
-  String enableDeviceWifi(String deviceName) {
-    return '$deviceName WiFi engedélyezése';
   }
 
   @override
@@ -6800,9 +6728,6 @@ class AppLocalizationsHu extends AppLocalizations {
   String get statusUnprocessed => 'Feldolgozatlan';
 
   @override
-  String get switchedToFastTransfer => 'Átváltás gyors átvitelre';
-
-  @override
   String get transferCompleteMessage => 'Átvitel befejezve! Most már lejátszhatod ezt a felvételt.';
 
   @override
@@ -6814,34 +6739,7 @@ class AppLocalizationsHu extends AppLocalizations {
   String get transferCancelled => 'Átvitel megszakítva';
 
   @override
-  String get fastTransferEnabled => 'Gyors átvitel engedélyezve';
-
-  @override
   String get bluetoothSyncEnabled => 'Bluetooth szinkronizálás engedélyezve';
-
-  @override
-  String get enableFastTransfer => 'Gyors átvitel engedélyezése';
-
-  @override
-  String get fastTransferDescription =>
-      'A gyors átvitel WiFi-t használ ~5x gyorsabb sebességekhez. A telefonja ideiglenesen csatlakozik az Omi eszköz WiFi hálózatához az átvitel során.';
-
-  @override
-  String get internetAccessPausedDuringTransfer => 'Az internetelérés szünetel az átvitel alatt';
-
-  @override
-  String get chooseTransferMethodDescription =>
-      'Válassza ki, hogyan kerüljenek át a felvételek az Omi eszközről a telefonjára.';
-
-  @override
-  String get wifiSpeed => '~150 KB/s WiFi-n keresztül';
-
-  @override
-  String get fiveTimesFaster => '5X GYORSABB';
-
-  @override
-  String get fastTransferMethodDescription =>
-      'Közvetlen WiFi kapcsolatot hoz létre az Omi eszközével. A telefonja ideiglenesen lecsatlakozik a szokásos WiFi-ről az átvitel alatt.';
 
   @override
   String get bluetooth => 'Bluetooth';
@@ -7544,13 +7442,6 @@ class AppLocalizationsHu extends AppLocalizations {
   String get voiceFailedToTranscribe => 'Nem sikerült átírni a hangot';
 
   @override
-  String get locationPermissionRequired => 'Helymeghatározási engedély szükséges';
-
-  @override
-  String get locationPermissionContent =>
-      'A gyors átvitelhez helymeghatározási engedély szükséges a WiFi-kapcsolat ellenőrzéséhez. Kérjük, adja meg a helymeghatározási engedélyt a folytatáshoz.';
-
-  @override
   String get pdfTranscriptExport => 'Átirat exportálása';
 
   @override
@@ -7695,12 +7586,6 @@ class AppLocalizationsHu extends AppLocalizations {
   String get dailyRecapsDescription => 'A napi összefoglalói itt jelennek meg, amint elkészülnek';
 
   @override
-  String get chooseTransferMethod => 'Válasszon átviteli módot';
-
-  @override
-  String get fastTransferSpeed => '~150 KB/s WiFi-n keresztül';
-
-  @override
   String largeTimeGapDetected(String gap) {
     return 'Nagy időeltérés észlelve ($gap)';
   }
@@ -7709,10 +7594,6 @@ class AppLocalizationsHu extends AppLocalizations {
   String largeTimeGapsDetected(String gaps) {
     return 'Nagy időeltérések észlelve ($gaps)';
   }
-
-  @override
-  String get deviceDoesNotSupportWifiSwitchingToBle =>
-      'Az eszköz nem támogatja a WiFi szinkronizálást, váltás Bluetooth-ra';
 
   @override
   String get appleHealthNotAvailable => 'Az Apple Health nem érhető el ezen az eszközön';

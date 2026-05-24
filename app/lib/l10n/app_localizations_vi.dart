@@ -4632,41 +4632,13 @@ class AppLocalizationsVi extends AppLocalizations {
       'Cảm ơn bạn đã là người dùng quý giá của Omi. Nếu bạn có bất kỳ câu hỏi hoặc lo ngại nào, hãy liên hệ với chúng tôi tại team@basedhardware.com.';
 
   @override
-  String get wifiSyncSettings => 'Cài đặt đồng bộ WiFi';
-
-  @override
-  String get enterHotspotCredentials => 'Nhập thông tin đăng nhập điểm phát sóng điện thoại';
-
-  @override
-  String get wifiSyncUsesHotspot =>
-      'Đồng bộ WiFi sử dụng điện thoại của bạn làm điểm phát sóng. Tìm tên và mật khẩu trong Cài đặt > Điểm truy cập cá nhân.';
-
-  @override
-  String get hotspotNameSsid => 'Tên điểm phát sóng (SSID)';
-
-  @override
-  String get exampleIphoneHotspot => 'vd: iPhone Hotspot';
-
-  @override
   String get password => 'Mật khẩu';
-
-  @override
-  String get enterHotspotPassword => 'Nhập mật khẩu điểm phát sóng';
 
   @override
   String get saveCredentials => 'Lưu thông tin đăng nhập';
 
   @override
   String get clearCredentials => 'Xóa thông tin đăng nhập';
-
-  @override
-  String get pleaseEnterHotspotName => 'Vui lòng nhập tên điểm phát sóng';
-
-  @override
-  String get wifiCredentialsSaved => 'Đã lưu thông tin WiFi';
-
-  @override
-  String get wifiCredentialsCleared => 'Đã xóa thông tin WiFi';
 
   @override
   String summaryGeneratedForDate(String date) {
@@ -5812,9 +5784,6 @@ class AppLocalizationsVi extends AppLocalizations {
   String get limitless => 'Limitless';
 
   @override
-  String get fastTransfer => 'Truyền nhanh';
-
-  @override
   String get syncingStatus => 'Đang đồng bộ';
 
   @override
@@ -5824,15 +5793,6 @@ class AppLocalizationsVi extends AppLocalizations {
   String etaLabel(String time) {
     return 'Thời gian còn lại: $time';
   }
-
-  @override
-  String get transferMethod => 'Phương thức truyền';
-
-  @override
-  String get fast => 'Nhanh';
-
-  @override
-  String get ble => 'BLE';
 
   @override
   String get phone => 'Điện thoại';
@@ -5853,25 +5813,7 @@ class AppLocalizationsVi extends AppLocalizations {
   String get processedFilesDeleted => 'Đã xóa tệp đã xử lý';
 
   @override
-  String get wifiEnableFailed => 'Không thể bật WiFi trên thiết bị. Vui lòng thử lại.';
-
-  @override
-  String get deviceNoFastTransfer => 'Thiết bị của bạn không hỗ trợ Chuyển Nhanh. Sử dụng Bluetooth thay thế.';
-
-  @override
-  String get enableHotspotMessage => 'Vui lòng bật điểm phát sóng trên điện thoại và thử lại.';
-
-  @override
-  String get transferStartFailed => 'Không thể bắt đầu chuyển. Vui lòng thử lại.';
-
-  @override
   String get deviceNotResponding => 'Thiết bị không phản hồi. Vui lòng thử lại.';
-
-  @override
-  String get invalidWifiCredentials => 'Thông tin WiFi không hợp lệ. Kiểm tra cài đặt điểm phát sóng của bạn.';
-
-  @override
-  String get wifiConnectionFailed => 'Kết nối WiFi thất bại. Vui lòng thử lại.';
 
   @override
   String get sdCardProcessing => 'Đang Xử lý Thẻ SD';
@@ -5883,9 +5825,6 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get process => 'Xử lý';
-
-  @override
-  String get wifiSyncFailed => 'Đồng bộ WiFi Thất bại';
 
   @override
   String get processingFailed => 'Xử lý Thất bại';
@@ -6661,24 +6600,13 @@ class AppLocalizationsVi extends AppLocalizations {
   }
 
   @override
-  String get wifiSync => 'Đồng bộ WiFi';
-
-  @override
   String itemCopiedToClipboard(String item) {
     return 'Đã sao chép $item vào bộ nhớ tạm';
   }
 
   @override
-  String get wifiConnectionFailedTitle => 'Kết nối Thất bại';
-
-  @override
   String connectingToDeviceName(String deviceName) {
     return 'Đang kết nối tới $deviceName';
-  }
-
-  @override
-  String enableDeviceWifi(String deviceName) {
-    return 'Bật WiFi của $deviceName';
   }
 
   @override
@@ -6775,9 +6703,6 @@ class AppLocalizationsVi extends AppLocalizations {
   String get statusUnprocessed => 'Chưa Xử lý';
 
   @override
-  String get switchedToFastTransfer => 'Đã chuyển sang Chuyển Nhanh';
-
-  @override
   String get transferCompleteMessage => 'Chuyển hoàn tất! Bạn có thể phát bản ghi này ngay.';
 
   @override
@@ -6789,33 +6714,7 @@ class AppLocalizationsVi extends AppLocalizations {
   String get transferCancelled => 'Đã hủy chuyển';
 
   @override
-  String get fastTransferEnabled => 'Đã bật truyền nhanh';
-
-  @override
   String get bluetoothSyncEnabled => 'Đã bật đồng bộ Bluetooth';
-
-  @override
-  String get enableFastTransfer => 'Bật truyền nhanh';
-
-  @override
-  String get fastTransferDescription =>
-      'Truyền nhanh sử dụng WiFi để đạt tốc độ nhanh hơn ~5 lần. Điện thoại của bạn sẽ tạm thời kết nối với mạng WiFi của thiết bị Omi trong quá trình truyền.';
-
-  @override
-  String get internetAccessPausedDuringTransfer => 'Truy cập internet bị tạm dừng trong quá trình truyền';
-
-  @override
-  String get chooseTransferMethodDescription => 'Chọn cách truyền bản ghi từ thiết bị Omi sang điện thoại của bạn.';
-
-  @override
-  String get wifiSpeed => '~150 KB/s qua WiFi';
-
-  @override
-  String get fiveTimesFaster => 'NHANH HƠN 5 LẦN';
-
-  @override
-  String get fastTransferMethodDescription =>
-      'Tạo kết nối WiFi trực tiếp đến thiết bị Omi. Điện thoại của bạn tạm thời ngắt kết nối WiFi thông thường trong quá trình truyền.';
 
   @override
   String get bluetooth => 'Bluetooth';
@@ -7509,13 +7408,6 @@ class AppLocalizationsVi extends AppLocalizations {
   String get voiceFailedToTranscribe => 'Không thể phiên âm giọng nói';
 
   @override
-  String get locationPermissionRequired => 'Cần Quyền Vị trí';
-
-  @override
-  String get locationPermissionContent =>
-      'Ứng dụng cần quyền truy cập vị trí để hoạt động đúng. Vui lòng cấp quyền trong cài đặt.';
-
-  @override
   String get pdfTranscriptExport => 'Xuất Bản ghi';
 
   @override
@@ -7660,12 +7552,6 @@ class AppLocalizationsVi extends AppLocalizations {
   String get dailyRecapsDescription => 'Bản tóm tắt hàng ngày của bạn sẽ xuất hiện ở đây khi được tạo';
 
   @override
-  String get chooseTransferMethod => 'Chọn phương thức chuyển';
-
-  @override
-  String get fastTransferSpeed => '~150 KB/s qua WiFi';
-
-  @override
   String largeTimeGapDetected(String gap) {
     return 'Phát hiện khoảng cách thời gian lớn ($gap)';
   }
@@ -7674,9 +7560,6 @@ class AppLocalizationsVi extends AppLocalizations {
   String largeTimeGapsDetected(String gaps) {
     return 'Phát hiện các khoảng cách thời gian lớn ($gaps)';
   }
-
-  @override
-  String get deviceDoesNotSupportWifiSwitchingToBle => 'Thiết bị không hỗ trợ đồng bộ WiFi, chuyển sang Bluetooth';
 
   @override
   String get appleHealthNotAvailable => 'Apple Health không khả dụng trên thiết bị này';

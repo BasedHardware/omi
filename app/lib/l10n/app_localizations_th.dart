@@ -4601,41 +4601,13 @@ class AppLocalizationsTh extends AppLocalizations {
       'ขอบคุณที่เป็นผู้ใช้ที่มีคุณค่าของ Omi หากคุณมีคำถามหรือข้อกังวลใดๆ โปรดติดต่อเราที่ team@basedhardware.com';
 
   @override
-  String get wifiSyncSettings => 'การตั้งค่าการซิงค์ WiFi';
-
-  @override
-  String get enterHotspotCredentials => 'ป้อนข้อมูลรับรองฮอตสปอตของโทรศัพท์';
-
-  @override
-  String get wifiSyncUsesHotspot =>
-      'การซิงค์ WiFi ใช้โทรศัพท์ของคุณเป็นฮอตสปอต ค้นหาชื่อและรหัสผ่านในการตั้งค่า > ฮอตสปอตส่วนตัว';
-
-  @override
-  String get hotspotNameSsid => 'ชื่อฮอตสปอต (SSID)';
-
-  @override
-  String get exampleIphoneHotspot => 'เช่น iPhone Hotspot';
-
-  @override
   String get password => 'รหัสผ่าน';
-
-  @override
-  String get enterHotspotPassword => 'ป้อนรหัสผ่านฮอตสปอต';
 
   @override
   String get saveCredentials => 'บันทึกข้อมูลรับรอง';
 
   @override
   String get clearCredentials => 'ล้างข้อมูลรับรอง';
-
-  @override
-  String get pleaseEnterHotspotName => 'กรุณาป้อนชื่อฮอตสปอต';
-
-  @override
-  String get wifiCredentialsSaved => 'บันทึกข้อมูลรับรอง WiFi แล้ว';
-
-  @override
-  String get wifiCredentialsCleared => 'ล้างข้อมูลรับรอง WiFi แล้ว';
 
   @override
   String summaryGeneratedForDate(String date) {
@@ -5775,9 +5747,6 @@ class AppLocalizationsTh extends AppLocalizations {
   String get limitless => 'Limitless';
 
   @override
-  String get fastTransfer => 'การถ่ายโอนเร็ว';
-
-  @override
   String get syncingStatus => 'กำลังซิงค์';
 
   @override
@@ -5787,15 +5756,6 @@ class AppLocalizationsTh extends AppLocalizations {
   String etaLabel(String time) {
     return 'ETA: $time';
   }
-
-  @override
-  String get transferMethod => 'วิธีการถ่ายโอน';
-
-  @override
-  String get fast => 'เร็ว';
-
-  @override
-  String get ble => 'BLE';
 
   @override
   String get phone => 'โทรศัพท์';
@@ -5816,25 +5776,7 @@ class AppLocalizationsTh extends AppLocalizations {
   String get processedFilesDeleted => 'ลบไฟล์ที่ประมวลผลแล้ว';
 
   @override
-  String get wifiEnableFailed => 'ไม่สามารถเปิด WiFi บนอุปกรณ์ได้ กรุณาลองอีกครั้ง';
-
-  @override
-  String get deviceNoFastTransfer => 'อุปกรณ์ของคุณไม่รองรับการถ่ายโอนเร็ว ใช้ Bluetooth แทน';
-
-  @override
-  String get enableHotspotMessage => 'กรุณาเปิดฮอตสปอตของโทรศัพท์แล้วลองอีกครั้ง';
-
-  @override
-  String get transferStartFailed => 'ไม่สามารถเริ่มการถ่ายโอนได้ กรุณาลองอีกครั้ง';
-
-  @override
   String get deviceNotResponding => 'อุปกรณ์ไม่ตอบสนอง กรุณาลองอีกครั้ง';
-
-  @override
-  String get invalidWifiCredentials => 'ข้อมูลรับรอง WiFi ไม่ถูกต้อง ตรวจสอบการตั้งค่าฮอตสปอต';
-
-  @override
-  String get wifiConnectionFailed => 'การเชื่อมต่อ WiFi ล้มเหลว กรุณาลองอีกครั้ง';
 
   @override
   String get sdCardProcessing => 'กำลังประมวลผล SD Card';
@@ -5846,9 +5788,6 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get process => 'ประมวลผล';
-
-  @override
-  String get wifiSyncFailed => 'การซิงค์ WiFi ล้มเหลว';
 
   @override
   String get processingFailed => 'การประมวลผลล้มเหลว';
@@ -6622,24 +6561,13 @@ class AppLocalizationsTh extends AppLocalizations {
   }
 
   @override
-  String get wifiSync => 'การซิงค์ WiFi';
-
-  @override
   String itemCopiedToClipboard(String item) {
     return 'คัดลอก $item ไปยังคลิปบอร์ดแล้ว';
   }
 
   @override
-  String get wifiConnectionFailedTitle => 'การเชื่อมต่อล้มเหลว';
-
-  @override
   String connectingToDeviceName(String deviceName) {
     return 'กำลังเชื่อมต่อกับ $deviceName';
-  }
-
-  @override
-  String enableDeviceWifi(String deviceName) {
-    return 'เปิด WiFi ของ $deviceName';
   }
 
   @override
@@ -6736,9 +6664,6 @@ class AppLocalizationsTh extends AppLocalizations {
   String get statusUnprocessed => 'ยังไม่ประมวลผล';
 
   @override
-  String get switchedToFastTransfer => 'เปลี่ยนเป็นการถ่ายโอนเร็ว';
-
-  @override
   String get transferCompleteMessage => 'การถ่ายโอนเสร็จสมบูรณ์! คุณสามารถเล่นการบันทึกนี้ได้แล้ว';
 
   @override
@@ -6750,33 +6675,7 @@ class AppLocalizationsTh extends AppLocalizations {
   String get transferCancelled => 'ยกเลิกการถ่ายโอนแล้ว';
 
   @override
-  String get fastTransferEnabled => 'เปิดใช้งานการถ่ายโอนเร็วแล้ว';
-
-  @override
   String get bluetoothSyncEnabled => 'เปิดใช้งานการซิงค์บลูทูธแล้ว';
-
-  @override
-  String get enableFastTransfer => 'เปิดใช้งานการถ่ายโอนเร็ว';
-
-  @override
-  String get fastTransferDescription =>
-      'การถ่ายโอนเร็วใช้ WiFi สำหรับความเร็ว ~5 เท่า โทรศัพท์ของคุณจะเชื่อมต่อกับเครือข่าย WiFi ของอุปกรณ์ Omi ชั่วคราวระหว่างการถ่ายโอน';
-
-  @override
-  String get internetAccessPausedDuringTransfer => 'การเข้าถึงอินเทอร์เน็ตถูกหยุดชั่วคราวระหว่างการถ่ายโอน';
-
-  @override
-  String get chooseTransferMethodDescription => 'เลือกวิธีการถ่ายโอนการบันทึกจากอุปกรณ์ Omi ไปยังโทรศัพท์ของคุณ';
-
-  @override
-  String get wifiSpeed => '~150 KB/s ผ่าน WiFi';
-
-  @override
-  String get fiveTimesFaster => 'เร็วกว่า 5 เท่า';
-
-  @override
-  String get fastTransferMethodDescription =>
-      'สร้างการเชื่อมต่อ WiFi โดยตรงไปยังอุปกรณ์ Omi โทรศัพท์ของคุณจะตัดการเชื่อมต่อ WiFi ปกติชั่วคราวระหว่างการถ่ายโอน';
 
   @override
   String get bluetooth => 'บลูทูธ';
@@ -7472,13 +7371,6 @@ class AppLocalizationsTh extends AppLocalizations {
   String get voiceFailedToTranscribe => 'ไม่สามารถถอดเสียงได้';
 
   @override
-  String get locationPermissionRequired => 'ต้องได้รับอนุญาตตำแหน่ง';
-
-  @override
-  String get locationPermissionContent =>
-      'การถ่ายโอนเร็วต้องได้รับอนุญาตตำแหน่งเพื่อตรวจสอบการเชื่อมต่อ WiFi โปรดให้สิทธิ์ตำแหน่งเพื่อดำเนินการต่อ';
-
-  @override
   String get pdfTranscriptExport => 'ส่งออกบทถอดเสียง';
 
   @override
@@ -7623,12 +7515,6 @@ class AppLocalizationsTh extends AppLocalizations {
   String get dailyRecapsDescription => 'สรุปรายวันของคุณจะปรากฏที่นี่เมื่อสร้างเสร็จ';
 
   @override
-  String get chooseTransferMethod => 'เลือกวิธีการถ่ายโอน';
-
-  @override
-  String get fastTransferSpeed => '~150 KB/s ผ่าน WiFi';
-
-  @override
   String largeTimeGapDetected(String gap) {
     return 'ตรวจพบช่วงเวลาห่างมาก ($gap)';
   }
@@ -7637,9 +7523,6 @@ class AppLocalizationsTh extends AppLocalizations {
   String largeTimeGapsDetected(String gaps) {
     return 'ตรวจพบช่วงเวลาห่างมากหลายช่วง ($gaps)';
   }
-
-  @override
-  String get deviceDoesNotSupportWifiSwitchingToBle => 'อุปกรณ์ไม่รองรับการซิงค์ WiFi กำลังเปลี่ยนไปใช้ Bluetooth';
 
   @override
   String get appleHealthNotAvailable => 'Apple Health ไม่พร้อมใช้งานบนอุปกรณ์นี้';

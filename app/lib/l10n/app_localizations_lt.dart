@@ -4624,41 +4624,13 @@ class AppLocalizationsLt extends AppLocalizations {
       'Dėkojame, kad esate vertinamas Omi vartotojas. Jei turite klausimų ar rūpesčių, susisiekite su mumis adresu team@basedhardware.com.';
 
   @override
-  String get wifiSyncSettings => 'WiFi sinchronizavimo nustatymai';
-
-  @override
-  String get enterHotspotCredentials => 'Įveskite telefono viešosios prieigos taško duomenis';
-
-  @override
-  String get wifiSyncUsesHotspot =>
-      'WiFi sinchronizavimas naudoja jūsų telefoną kaip viešosios prieigos tašką. Raskite pavadinimą ir slaptažodį Nustatymai > Asmeninis viešosios prieigos taškas.';
-
-  @override
-  String get hotspotNameSsid => 'Viešosios prieigos taško pavadinimas (SSID)';
-
-  @override
-  String get exampleIphoneHotspot => 'pvz. iPhone Hotspot';
-
-  @override
   String get password => 'Slaptažodis';
-
-  @override
-  String get enterHotspotPassword => 'Įveskite viešosios prieigos taško slaptažodį';
 
   @override
   String get saveCredentials => 'Išsaugoti duomenis';
 
   @override
   String get clearCredentials => 'Išvalyti duomenis';
-
-  @override
-  String get pleaseEnterHotspotName => 'Įveskite viešosios prieigos taško pavadinimą';
-
-  @override
-  String get wifiCredentialsSaved => 'WiFi duomenys išsaugoti';
-
-  @override
-  String get wifiCredentialsCleared => 'WiFi duomenys išvalyti';
 
   @override
   String summaryGeneratedForDate(String date) {
@@ -5806,9 +5778,6 @@ class AppLocalizationsLt extends AppLocalizations {
   String get limitless => 'Limitless';
 
   @override
-  String get fastTransfer => 'Greitas perdavimas';
-
-  @override
   String get syncingStatus => 'Sinchronizuojama';
 
   @override
@@ -5818,15 +5787,6 @@ class AppLocalizationsLt extends AppLocalizations {
   String etaLabel(String time) {
     return 'ETA: $time';
   }
-
-  @override
-  String get transferMethod => 'Perdavimo metodas';
-
-  @override
-  String get fast => 'Greitas';
-
-  @override
-  String get ble => 'BLE';
 
   @override
   String get phone => 'Telefonas';
@@ -5847,25 +5807,7 @@ class AppLocalizationsLt extends AppLocalizations {
   String get processedFilesDeleted => 'Apdoroti failai ištrinti';
 
   @override
-  String get wifiEnableFailed => 'Nepavyko įjungti WiFi įrenginyje. Bandykite dar kartą.';
-
-  @override
-  String get deviceNoFastTransfer => 'Jūsų įrenginys nepalaiko greito perkėlimo. Naudokite Bluetooth.';
-
-  @override
-  String get enableHotspotMessage => 'Įjunkite telefono prieigos tašką ir bandykite dar kartą.';
-
-  @override
-  String get transferStartFailed => 'Nepavyko pradėti perkėlimo. Bandykite dar kartą.';
-
-  @override
   String get deviceNotResponding => 'Įrenginys neatsako. Bandykite dar kartą.';
-
-  @override
-  String get invalidWifiCredentials => 'Neteisingi WiFi prisijungimo duomenys. Patikrinkite prieigos taško nustatymus.';
-
-  @override
-  String get wifiConnectionFailed => 'WiFi prisijungimas nepavyko. Bandykite dar kartą.';
 
   @override
   String get sdCardProcessing => 'SD kortelės apdorojimas';
@@ -5877,9 +5819,6 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get process => 'Apdoroti';
-
-  @override
-  String get wifiSyncFailed => 'WiFi sinchronizavimas nepavyko';
 
   @override
   String get processingFailed => 'Apdorojimas nepavyko';
@@ -6658,24 +6597,13 @@ class AppLocalizationsLt extends AppLocalizations {
   }
 
   @override
-  String get wifiSync => 'WiFi sinchronizavimas';
-
-  @override
   String itemCopiedToClipboard(String item) {
     return '$item nukopijuota į iškarpinę';
   }
 
   @override
-  String get wifiConnectionFailedTitle => 'Prisijungimas nepavyko';
-
-  @override
   String connectingToDeviceName(String deviceName) {
     return 'Jungiamasi prie $deviceName';
-  }
-
-  @override
-  String enableDeviceWifi(String deviceName) {
-    return 'Įjungti $deviceName WiFi';
   }
 
   @override
@@ -6772,9 +6700,6 @@ class AppLocalizationsLt extends AppLocalizations {
   String get statusUnprocessed => 'Neapdorota';
 
   @override
-  String get switchedToFastTransfer => 'Perjungta į greitą perkėlimą';
-
-  @override
   String get transferCompleteMessage => 'Perkėlimas baigtas\\! Dabar galite paleisti šį įrašą.';
 
   @override
@@ -6786,33 +6711,7 @@ class AppLocalizationsLt extends AppLocalizations {
   String get transferCancelled => 'Perkėlimas atšauktas';
 
   @override
-  String get fastTransferEnabled => 'Greitas perdavimas įjungtas';
-
-  @override
   String get bluetoothSyncEnabled => 'Bluetooth sinchronizavimas įjungtas';
-
-  @override
-  String get enableFastTransfer => 'Įjungti greitą perdavimą';
-
-  @override
-  String get fastTransferDescription =>
-      'Greitas perdavimas naudoja WiFi ~5x greitesniam greičiui. Perdavimo metu telefonas laikinai prisijungs prie Omi įrenginio WiFi tinklo.';
-
-  @override
-  String get internetAccessPausedDuringTransfer => 'Interneto prieiga pristabdyta perdavimo metu';
-
-  @override
-  String get chooseTransferMethodDescription => 'Pasirinkite, kaip įrašai perduodami iš Omi įrenginio į telefoną.';
-
-  @override
-  String get wifiSpeed => '~150 KB/s per WiFi';
-
-  @override
-  String get fiveTimesFaster => '5X GREIČIAU';
-
-  @override
-  String get fastTransferMethodDescription =>
-      'Sukuria tiesioginį WiFi ryšį su Omi įrenginiu. Perdavimo metu telefonas laikinai atsijungia nuo įprasto WiFi.';
 
   @override
   String get bluetooth => 'Bluetooth';
@@ -7514,13 +7413,6 @@ class AppLocalizationsLt extends AppLocalizations {
   String get voiceFailedToTranscribe => 'Nepavyko transkribuoti garso';
 
   @override
-  String get locationPermissionRequired => 'Reikalingas vietos leidimas';
-
-  @override
-  String get locationPermissionContent =>
-      'Greitam perdavimui reikia vietos leidimo, kad būtų galima patikrinti WiFi ryšį. Suteikite vietos leidimą, kad galėtumėte tęsti.';
-
-  @override
   String get pdfTranscriptExport => 'Transkripcijos eksportas';
 
   @override
@@ -7665,12 +7557,6 @@ class AppLocalizationsLt extends AppLocalizations {
   String get dailyRecapsDescription => 'Jūsų dienos santraukos bus rodomos čia, kai bus sukurtos';
 
   @override
-  String get chooseTransferMethod => 'Pasirinkite perdavimo būdą';
-
-  @override
-  String get fastTransferSpeed => '~150 KB/s per WiFi';
-
-  @override
   String largeTimeGapDetected(String gap) {
     return 'Aptiktas didelis laiko tarpas ($gap)';
   }
@@ -7679,10 +7565,6 @@ class AppLocalizationsLt extends AppLocalizations {
   String largeTimeGapsDetected(String gaps) {
     return 'Aptikti dideli laiko tarpai ($gaps)';
   }
-
-  @override
-  String get deviceDoesNotSupportWifiSwitchingToBle =>
-      'Įrenginys nepalaiko WiFi sinchronizavimo, perjungiama į Bluetooth';
 
   @override
   String get appleHealthNotAvailable => 'Apple Health nepasiekiama šiame įrenginyje';

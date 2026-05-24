@@ -4621,41 +4621,13 @@ class AppLocalizationsSk extends AppLocalizations {
       'Ďakujeme, že ste cenený používateľ Omi. Ak máte akékoľvek otázky alebo obavy, neváhajte nás kontaktovať na team@basedhardware.com.';
 
   @override
-  String get wifiSyncSettings => 'Nastavenia synchronizácie WiFi';
-
-  @override
-  String get enterHotspotCredentials => 'Zadajte prihlasovacie údaje hotspotu telefónu';
-
-  @override
-  String get wifiSyncUsesHotspot =>
-      'WiFi synchronizácia používa váš telefón ako hotspot. Nájdite názov a heslo v Nastavenia > Osobný hotspot.';
-
-  @override
-  String get hotspotNameSsid => 'Názov hotspotu (SSID)';
-
-  @override
-  String get exampleIphoneHotspot => 'napr. iPhone Hotspot';
-
-  @override
   String get password => 'Heslo';
-
-  @override
-  String get enterHotspotPassword => 'Zadajte heslo hotspotu';
 
   @override
   String get saveCredentials => 'Uložiť prihlasovacie údaje';
 
   @override
   String get clearCredentials => 'Vymazať prihlasovacie údaje';
-
-  @override
-  String get pleaseEnterHotspotName => 'Prosím zadajte názov hotspotu';
-
-  @override
-  String get wifiCredentialsSaved => 'WiFi prihlasovacie údaje uložené';
-
-  @override
-  String get wifiCredentialsCleared => 'WiFi prihlasovacie údaje vymazané';
 
   @override
   String summaryGeneratedForDate(String date) {
@@ -5803,9 +5775,6 @@ class AppLocalizationsSk extends AppLocalizations {
   String get limitless => 'Limitless';
 
   @override
-  String get fastTransfer => 'Rýchly prenos';
-
-  @override
   String get syncingStatus => 'Synchronizuje sa';
 
   @override
@@ -5815,15 +5784,6 @@ class AppLocalizationsSk extends AppLocalizations {
   String etaLabel(String time) {
     return 'ETA: $time';
   }
-
-  @override
-  String get transferMethod => 'Metóda prenosu';
-
-  @override
-  String get fast => 'Rýchle';
-
-  @override
-  String get ble => 'BLE';
 
   @override
   String get phone => 'Telefón';
@@ -5844,25 +5804,7 @@ class AppLocalizationsSk extends AppLocalizations {
   String get processedFilesDeleted => 'Spracované súbory odstránené';
 
   @override
-  String get wifiEnableFailed => 'Nepodarilo sa povoliť WiFi na zariadení';
-
-  @override
-  String get deviceNoFastTransfer => 'Zariadenie nepodporuje rýchly prenos';
-
-  @override
-  String get enableHotspotMessage => 'Povoľte prosím hotspot na vašom telefóne';
-
-  @override
-  String get transferStartFailed => 'Nepodarilo sa spustiť prenos';
-
-  @override
   String get deviceNotResponding => 'Zariadenie neodpovedá. Skúste to prosím znova.';
-
-  @override
-  String get invalidWifiCredentials => 'Neplatné WiFi prihlasovacie údaje';
-
-  @override
-  String get wifiConnectionFailed => 'WiFi pripojenie zlyhalo';
 
   @override
   String get sdCardProcessing => 'Spracovanie SD karty';
@@ -5874,9 +5816,6 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get process => 'Spracovať';
-
-  @override
-  String get wifiSyncFailed => 'WiFi synchronizácia zlyhala';
 
   @override
   String get processingFailed => 'Spracovanie zlyhalo';
@@ -6655,24 +6594,13 @@ class AppLocalizationsSk extends AppLocalizations {
   }
 
   @override
-  String get wifiSync => 'Synchronizácia WiFi';
-
-  @override
   String itemCopiedToClipboard(String item) {
     return '$item skopírované do schránky';
   }
 
   @override
-  String get wifiConnectionFailedTitle => 'Pripojenie zlyhalo';
-
-  @override
   String connectingToDeviceName(String deviceName) {
     return 'Pripájanie k $deviceName...';
-  }
-
-  @override
-  String enableDeviceWifi(String deviceName) {
-    return 'Enable $deviceName\'s WiFi';
   }
 
   @override
@@ -6767,9 +6695,6 @@ class AppLocalizationsSk extends AppLocalizations {
   String get statusUnprocessed => 'Nespracované';
 
   @override
-  String get switchedToFastTransfer => 'Prepnuté na rýchly prenos';
-
-  @override
   String get transferCompleteMessage => 'Prenos dokončený';
 
   @override
@@ -6781,33 +6706,7 @@ class AppLocalizationsSk extends AppLocalizations {
   String get transferCancelled => 'Prenos zrušený';
 
   @override
-  String get fastTransferEnabled => 'Rýchly prenos povolený';
-
-  @override
   String get bluetoothSyncEnabled => 'Synchronizácia Bluetooth povolená';
-
-  @override
-  String get enableFastTransfer => 'Povoliť rýchly prenos';
-
-  @override
-  String get fastTransferDescription =>
-      'Rýchly prenos používa WiFi pre ~5x rýchlejšie prenosy. Váš telefón sa dočasne pripojí k WiFi sieti zariadenia Omi počas prenosu.';
-
-  @override
-  String get internetAccessPausedDuringTransfer => 'Prístup na internet je počas prenosu pozastavený';
-
-  @override
-  String get chooseTransferMethodDescription => 'Zvoľte, ako sa nahrávky prenášajú zo zariadenia Omi do telefónu.';
-
-  @override
-  String get wifiSpeed => '~150 KB/s cez WiFi';
-
-  @override
-  String get fiveTimesFaster => '5X RÝCHLEJŠÍ';
-
-  @override
-  String get fastTransferMethodDescription =>
-      'Vytvorí priame WiFi pripojenie k zariadeniu Omi. Telefón sa dočasne odpojí od bežnej WiFi počas prenosu.';
 
   @override
   String get bluetooth => 'Bluetooth';
@@ -7499,12 +7398,6 @@ class AppLocalizationsSk extends AppLocalizations {
   String get voiceFailedToTranscribe => 'Nepodarilo sa prepísať hlas';
 
   @override
-  String get locationPermissionRequired => 'Vyžaduje sa povolenie polohy';
-
-  @override
-  String get locationPermissionContent => 'Pre túto funkciu potrebujeme prístup k vašej polohe';
-
-  @override
   String get pdfTranscriptExport => 'Export prepisu';
 
   @override
@@ -7649,12 +7542,6 @@ class AppLocalizationsSk extends AppLocalizations {
   String get dailyRecapsDescription => 'Vaše denné súhrny sa tu zobrazia po vygenerovaní';
 
   @override
-  String get chooseTransferMethod => 'Vyberte spôsob prenosu';
-
-  @override
-  String get fastTransferSpeed => '~150 KB/s cez WiFi';
-
-  @override
   String largeTimeGapDetected(String gap) {
     return 'Zistená veľká časová medzera ($gap)';
   }
@@ -7663,10 +7550,6 @@ class AppLocalizationsSk extends AppLocalizations {
   String largeTimeGapsDetected(String gaps) {
     return 'Zistené veľké časové medzery ($gaps)';
   }
-
-  @override
-  String get deviceDoesNotSupportWifiSwitchingToBle =>
-      'Zariadenie nepodporuje WiFi synchronizáciu, prepínanie na Bluetooth';
 
   @override
   String get appleHealthNotAvailable => 'Apple Health nie je na tomto zariadení k dispozícii';

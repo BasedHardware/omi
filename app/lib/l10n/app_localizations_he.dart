@@ -4589,41 +4589,13 @@ class AppLocalizationsHe extends AppLocalizations {
       'תודה על היותך משתמש מוערך של Omi. אם יש לך שאלות או חששות, אתה מוזמן לפנות אלינו ל-team@basedhardware.com.';
 
   @override
-  String get wifiSyncSettings => 'הגדרות סנכרון WiFi';
-
-  @override
-  String get enterHotspotCredentials => 'הזן את פרטי הנקודה הציבורית של הטלפון שלך';
-
-  @override
-  String get wifiSyncUsesHotspot =>
-      'סנכרון WiFi משתמש בטלפון שלך כנקודה ציבורית. מצא את שם הנקודה הציבורית וסיסמה בהגדרות > Personal Hotspot.';
-
-  @override
-  String get hotspotNameSsid => 'שם הנקודה הציבורית (SSID)';
-
-  @override
-  String get exampleIphoneHotspot => 'למשל iPhone Hotspot';
-
-  @override
   String get password => 'סיסמה';
-
-  @override
-  String get enterHotspotPassword => 'הזן סיסמה לנקודה ציבורית';
 
   @override
   String get saveCredentials => 'שמור פרטים';
 
   @override
   String get clearCredentials => 'נקה פרטים';
-
-  @override
-  String get pleaseEnterHotspotName => 'אנא הזן שם נקודה ציבורית';
-
-  @override
-  String get wifiCredentialsSaved => 'פרטי WiFi נשמרו';
-
-  @override
-  String get wifiCredentialsCleared => 'פרטי WiFi נוקו';
 
   @override
   String summaryGeneratedForDate(String date) {
@@ -5758,9 +5730,6 @@ class AppLocalizationsHe extends AppLocalizations {
   String get limitless => 'Limitless';
 
   @override
-  String get fastTransfer => 'העברה מהירה';
-
-  @override
   String get syncingStatus => 'סנכרון';
 
   @override
@@ -5770,15 +5739,6 @@ class AppLocalizationsHe extends AppLocalizations {
   String etaLabel(String time) {
     return 'ETA: $time';
   }
-
-  @override
-  String get transferMethod => 'שיטת העברה';
-
-  @override
-  String get fast => 'מהיר';
-
-  @override
-  String get ble => 'BLE';
 
   @override
   String get phone => 'טלפון';
@@ -5799,25 +5759,7 @@ class AppLocalizationsHe extends AppLocalizations {
   String get processedFilesDeleted => 'קבצים שעובדו נמחקו';
 
   @override
-  String get wifiEnableFailed => 'איתור בהפעלת WiFi במכשיר. אנא נסה שוב.';
-
-  @override
-  String get deviceNoFastTransfer => 'המכשיר שלך אינו תומך בהעברה מהירה. השתמש ב-Bluetooth במקום זאת.';
-
-  @override
-  String get enableHotspotMessage => 'אנא הפעל את נקודת החום של הטלפון שלך ונסה שוב.';
-
-  @override
-  String get transferStartFailed => 'איתור בהתחלת ההעברה. אנא נסה שוב.';
-
-  @override
   String get deviceNotResponding => 'המכשיר לא הגיב. אנא נסה שוב.';
-
-  @override
-  String get invalidWifiCredentials => 'אישורי WiFi לא תקפים. בדוק את הגדרות נקודת החום שלך.';
-
-  @override
-  String get wifiConnectionFailed => 'חיבור WiFi נכשל. אנא נסה שוב.';
 
   @override
   String get sdCardProcessing => 'עיבוד כרטיס SD';
@@ -5829,9 +5771,6 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get process => 'עיבוד';
-
-  @override
-  String get wifiSyncFailed => 'סנכרון WiFi נכשל';
 
   @override
   String get processingFailed => 'עיבוד נכשל';
@@ -6602,24 +6541,13 @@ class AppLocalizationsHe extends AppLocalizations {
   }
 
   @override
-  String get wifiSync => 'סנכרון WiFi';
-
-  @override
   String itemCopiedToClipboard(String item) {
     return '$item הועתק ללוח הגזירה';
   }
 
   @override
-  String get wifiConnectionFailedTitle => 'החיבור נכשל';
-
-  @override
   String connectingToDeviceName(String deviceName) {
     return 'התחברות ל-$deviceName';
-  }
-
-  @override
-  String enableDeviceWifi(String deviceName) {
-    return 'הפעל WiFi של $deviceName';
   }
 
   @override
@@ -6715,9 +6643,6 @@ class AppLocalizationsHe extends AppLocalizations {
   String get statusUnprocessed => 'לא מעובד';
 
   @override
-  String get switchedToFastTransfer => 'עברת ל-Fast Transfer';
-
-  @override
   String get transferCompleteMessage => 'ההעברה הושלמה! אתה יכול כעת להשמיע הקלטה זו.';
 
   @override
@@ -6729,33 +6654,7 @@ class AppLocalizationsHe extends AppLocalizations {
   String get transferCancelled => 'ביטול העברה';
 
   @override
-  String get fastTransferEnabled => 'Fast Transfer מופעל';
-
-  @override
   String get bluetoothSyncEnabled => 'סנכרון Bluetooth מופעל';
-
-  @override
-  String get enableFastTransfer => 'הפעל Fast Transfer';
-
-  @override
-  String get fastTransferDescription =>
-      'Fast Transfer משתמש ב-WiFi כדי להשיג מהירויות גבוהות פי 5. הטלפון שלך יתחבר זמנית לרשת ה-WiFi של התקן Omi שלך במהלך ההעברה.';
-
-  @override
-  String get internetAccessPausedDuringTransfer => 'גישת האינטרנט מושהית במהלך ההעברה';
-
-  @override
-  String get chooseTransferMethodDescription => 'בחר כיצד יוסברו הקלטות מהתקן Omi שלך לטלפון שלך.';
-
-  @override
-  String get wifiSpeed => '~150 KB/s דרך WiFi';
-
-  @override
-  String get fiveTimesFaster => 'פי 5 מהר יותר';
-
-  @override
-  String get fastTransferMethodDescription =>
-      'יוצר חיבור WiFi ישיר להתקן Omi שלך. הטלפון שלך יתנתק זמנית מ-WiFi הרגיל שלך במהלך ההעברה.';
 
   @override
   String get bluetooth => 'Bluetooth';
@@ -7446,13 +7345,6 @@ class AppLocalizationsHe extends AppLocalizations {
   String get voiceFailedToTranscribe => 'כישלון בתמלול אודיו';
 
   @override
-  String get locationPermissionRequired => 'הרשאת מיקום נדרשת';
-
-  @override
-  String get locationPermissionContent =>
-      'Fast Transfer דורש הרשאת מיקום כדי לאמת חיבור WiFi. אנא הגרם הרשאת מיקום כדי להמשיך.';
-
-  @override
   String get pdfTranscriptExport => 'ייצוא תמלול';
 
   @override
@@ -7597,12 +7489,6 @@ class AppLocalizationsHe extends AppLocalizations {
   String get dailyRecapsDescription => 'הסיכומים היומיים שלך יופיעו כאן לאחר שייווצרו';
 
   @override
-  String get chooseTransferMethod => 'בחר שיטת העברה';
-
-  @override
-  String get fastTransferSpeed => '~150 KB/s דרך WiFi';
-
-  @override
   String largeTimeGapDetected(String gap) {
     return 'נמצא פער זמן גדול ($gap)';
   }
@@ -7611,9 +7497,6 @@ class AppLocalizationsHe extends AppLocalizations {
   String largeTimeGapsDetected(String gaps) {
     return 'נמצאו פערי זמן גדולים ($gaps)';
   }
-
-  @override
-  String get deviceDoesNotSupportWifiSwitchingToBle => 'ההתקן אינו תומך בסנכרון WiFi, מעבר ל-Bluetooth';
 
   @override
   String get appleHealthNotAvailable => 'Apple Health אינו זמין בהתקן זה';

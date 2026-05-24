@@ -4632,41 +4632,13 @@ class AppLocalizationsSl extends AppLocalizations {
       'Hvala, ker ste dragoceni uporabnik Omija. Če imate vprašanja ali pomisleke, se lahko obrnete na nas na team@basedhardware.com.';
 
   @override
-  String get wifiSyncSettings => 'Nastavitve WiFi sinhronizacije';
-
-  @override
-  String get enterHotspotCredentials => 'Vnesite poverilnice osebne dostopne točke vašega telefona';
-
-  @override
-  String get wifiSyncUsesHotspot =>
-      'WiFi sinhronizacija uporablja vaš telefon kot dostopno točko. Poiščite ime dostopne točke in geslo v Nastavitve > Osebna dostopna točka.';
-
-  @override
-  String get hotspotNameSsid => 'Ime dostopne točke (SSID)';
-
-  @override
-  String get exampleIphoneHotspot => 'npr. iPhone Hotspot';
-
-  @override
   String get password => 'Geslo';
-
-  @override
-  String get enterHotspotPassword => 'Vnesite geslo dostopne točke';
 
   @override
   String get saveCredentials => 'Shranite poverilnice';
 
   @override
   String get clearCredentials => 'Počistite poverilnice';
-
-  @override
-  String get pleaseEnterHotspotName => 'Prosimo, vnesite ime dostopne točke';
-
-  @override
-  String get wifiCredentialsSaved => 'WiFi poverilnice so shranjene';
-
-  @override
-  String get wifiCredentialsCleared => 'WiFi poverilnice so počiščene';
 
   @override
   String summaryGeneratedForDate(String date) {
@@ -5817,9 +5789,6 @@ class AppLocalizationsSl extends AppLocalizations {
   String get limitless => 'Limitless';
 
   @override
-  String get fastTransfer => 'Hitri prenos';
-
-  @override
   String get syncingStatus => 'Sinhronizacija';
 
   @override
@@ -5829,15 +5798,6 @@ class AppLocalizationsSl extends AppLocalizations {
   String etaLabel(String time) {
     return 'Predviden čas: $time';
   }
-
-  @override
-  String get transferMethod => 'Način prenosa';
-
-  @override
-  String get fast => 'Hitro';
-
-  @override
-  String get ble => 'BLE';
 
   @override
   String get phone => 'Telefon';
@@ -5858,25 +5818,7 @@ class AppLocalizationsSl extends AppLocalizations {
   String get processedFilesDeleted => 'Obdelane datoteke izbrisane';
 
   @override
-  String get wifiEnableFailed => 'Napaka pri omogočanju WiFi na napravi. Poskusite znova.';
-
-  @override
-  String get deviceNoFastTransfer => 'Vaša naprava ne podpira hitrih prenosa. Namesto tega uporabite Bluetooth.';
-
-  @override
-  String get enableHotspotMessage => 'Prosim, omogočite osebno točko dostopa na vašem telefonu in poskusite znova.';
-
-  @override
-  String get transferStartFailed => 'Napaka pri začetku prenosa. Poskusite znova.';
-
-  @override
   String get deviceNotResponding => 'Naprava se ni odzvala. Poskusite znova.';
-
-  @override
-  String get invalidWifiCredentials => 'Neveljavne WiFi poverila. Preverite nastavitve osebne točke dostopa.';
-
-  @override
-  String get wifiConnectionFailed => 'Povezava WiFi je neuspešna. Poskusite znova.';
 
   @override
   String get sdCardProcessing => 'Obdelava SD kartice';
@@ -5888,9 +5830,6 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String get process => 'Obdelaj';
-
-  @override
-  String get wifiSyncFailed => 'Sinhronizacija WiFi neuspešna';
 
   @override
   String get processingFailed => 'Obdelava neuspešna';
@@ -6668,24 +6607,13 @@ class AppLocalizationsSl extends AppLocalizations {
   }
 
   @override
-  String get wifiSync => 'Sinhronizacija WiFi';
-
-  @override
   String itemCopiedToClipboard(String item) {
     return '$item kopiran v odložišče';
   }
 
   @override
-  String get wifiConnectionFailedTitle => 'Povezava neuspešna';
-
-  @override
   String connectingToDeviceName(String deviceName) {
     return 'Povezovanje z $deviceName';
-  }
-
-  @override
-  String enableDeviceWifi(String deviceName) {
-    return 'Omogočite WiFi na $deviceName';
   }
 
   @override
@@ -6782,9 +6710,6 @@ class AppLocalizationsSl extends AppLocalizations {
   String get statusUnprocessed => 'Neobdelano';
 
   @override
-  String get switchedToFastTransfer => 'Prešli na Hiter Prenos';
-
-  @override
   String get transferCompleteMessage => 'Prenos je končan! Sedaj lahko predvajate to snemanje.';
 
   @override
@@ -6796,33 +6721,7 @@ class AppLocalizationsSl extends AppLocalizations {
   String get transferCancelled => 'Prenos je preklican';
 
   @override
-  String get fastTransferEnabled => 'Hiter prenos je omogočen';
-
-  @override
   String get bluetoothSyncEnabled => 'Bluetooth sinhronizacija je omogočena';
-
-  @override
-  String get enableFastTransfer => 'Omogoči Hiter Prenos';
-
-  @override
-  String get fastTransferDescription =>
-      'Hiter prenos uporablja WiFi za približno 5-krat hitrejše hitrosti. Vaš telefon se bo med prenosom začasno povezal na WiFi omrežje naprave Omi.';
-
-  @override
-  String get internetAccessPausedDuringTransfer => 'Dostop do interneta je zaustavljen med prenosom';
-
-  @override
-  String get chooseTransferMethodDescription => 'Izberite, kako se snemanja prenašajo z naprave Omi na vaš telefon.';
-
-  @override
-  String get wifiSpeed => '~150 KB/s prek WiFi';
-
-  @override
-  String get fiveTimesFaster => '5-KRAT HITREJŠE';
-
-  @override
-  String get fastTransferMethodDescription =>
-      'Ustvari neposredno WiFi povezavo z napravo Omi. Vaš telefon se med prenosom začasno odklopi od običajnega WiFi omrežja.';
 
   @override
   String get bluetooth => 'Bluetooth';
@@ -7530,13 +7429,6 @@ class AppLocalizationsSl extends AppLocalizations {
   String get voiceFailedToTranscribe => 'Prepis zvoka ni uspel';
 
   @override
-  String get locationPermissionRequired => 'Dovoljenječe za Lokacijo je Potrebno';
-
-  @override
-  String get locationPermissionContent =>
-      'Hiter prenos zahteva dovoljenječe za lokacijo za preverjanje WiFi povezave. Prosimo, dovolite dovoljenječe za lokacijo, da nadaljujete.';
-
-  @override
   String get pdfTranscriptExport => 'Izvoz Prepisа';
 
   @override
@@ -7681,12 +7573,6 @@ class AppLocalizationsSl extends AppLocalizations {
   String get dailyRecapsDescription => 'Vaši dnevni povzetki se bodo pojavili tukaj, ko bodo ustvarjeni';
 
   @override
-  String get chooseTransferMethod => 'Izberite Način Prenosa';
-
-  @override
-  String get fastTransferSpeed => '~150 KB/s prek WiFi';
-
-  @override
   String largeTimeGapDetected(String gap) {
     return 'Zaznana velika časovna vrzel ($gap)';
   }
@@ -7695,10 +7581,6 @@ class AppLocalizationsSl extends AppLocalizations {
   String largeTimeGapsDetected(String gaps) {
     return 'Zaznane velike časovne vrzeli ($gaps)';
   }
-
-  @override
-  String get deviceDoesNotSupportWifiSwitchingToBle =>
-      'Naprava ne podpira WiFi sinhronizacije, preklapljam na Bluetooth';
 
   @override
   String get appleHealthNotAvailable => 'Apple Health ni dostopen na tej napravi';

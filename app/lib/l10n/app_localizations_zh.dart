@@ -4534,40 +4534,13 @@ class AppLocalizationsZh extends AppLocalizations {
   String get thankYouText => '感谢您成为Omi的尊贵用户。如果您有任何问题或疑虑，请随时通过team@basedhardware.com与我们联系。';
 
   @override
-  String get wifiSyncSettings => 'WiFi同步设置';
-
-  @override
-  String get enterHotspotCredentials => '输入您手机的热点凭据';
-
-  @override
-  String get wifiSyncUsesHotspot => 'WiFi同步使用您的手机作为热点。在设置 > 个人热点中找到热点名称和密码。';
-
-  @override
-  String get hotspotNameSsid => '热点名称 (SSID)';
-
-  @override
-  String get exampleIphoneHotspot => '例如 iPhone热点';
-
-  @override
   String get password => '密码';
-
-  @override
-  String get enterHotspotPassword => '输入热点密码';
 
   @override
   String get saveCredentials => '保存凭据';
 
   @override
   String get clearCredentials => '清除凭据';
-
-  @override
-  String get pleaseEnterHotspotName => '请输入热点名称';
-
-  @override
-  String get wifiCredentialsSaved => 'WiFi凭据已保存';
-
-  @override
-  String get wifiCredentialsCleared => 'WiFi凭据已清除';
 
   @override
   String summaryGeneratedForDate(String date) {
@@ -5690,9 +5663,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get limitless => '无限';
 
   @override
-  String get fastTransfer => '快速传输';
-
-  @override
   String get syncingStatus => '同步中';
 
   @override
@@ -5702,15 +5672,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String etaLabel(String time) {
     return '预计时间：$time';
   }
-
-  @override
-  String get transferMethod => '传输方式';
-
-  @override
-  String get fast => '快速';
-
-  @override
-  String get ble => '蓝牙低功耗';
 
   @override
   String get phone => '手机';
@@ -5731,25 +5692,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get processedFilesDeleted => '已处理的文件已删除';
 
   @override
-  String get wifiEnableFailed => '无法在设备上启用 WiFi。请重试。';
-
-  @override
-  String get deviceNoFastTransfer => '您的设备不支持快速传输。请改用蓝牙。';
-
-  @override
-  String get enableHotspotMessage => '请启用您手机的热点并重试。';
-
-  @override
-  String get transferStartFailed => '无法开始传输。请重试。';
-
-  @override
   String get deviceNotResponding => '设备无响应。请重试。';
-
-  @override
-  String get invalidWifiCredentials => 'WiFi 凭据无效。请检查您的热点设置。';
-
-  @override
-  String get wifiConnectionFailed => 'WiFi 连接失败。请重试。';
 
   @override
   String get sdCardProcessing => 'SD 卡处理中';
@@ -5761,9 +5704,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get process => '处理';
-
-  @override
-  String get wifiSyncFailed => 'WiFi 同步失败';
 
   @override
   String get processingFailed => '处理失败';
@@ -6531,24 +6471,13 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String get wifiSync => 'WiFi 同步';
-
-  @override
   String itemCopiedToClipboard(String item) {
     return '$item 已复制到剪贴板';
   }
 
   @override
-  String get wifiConnectionFailedTitle => '连接失败';
-
-  @override
   String connectingToDeviceName(String deviceName) {
     return '正在连接到 $deviceName';
-  }
-
-  @override
-  String enableDeviceWifi(String deviceName) {
-    return '启用 $deviceName 的 WiFi';
   }
 
   @override
@@ -6643,9 +6572,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get statusUnprocessed => '未处理';
 
   @override
-  String get switchedToFastTransfer => '已切换到快速传输';
-
-  @override
   String get transferCompleteMessage => '传输完成！您现在可以播放此录音了。';
 
   @override
@@ -6657,31 +6583,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get transferCancelled => '传输已取消';
 
   @override
-  String get fastTransferEnabled => '快速传输已启用';
-
-  @override
   String get bluetoothSyncEnabled => '蓝牙同步已启用';
-
-  @override
-  String get enableFastTransfer => '启用快速传输';
-
-  @override
-  String get fastTransferDescription => '快速传输使用WiFi实现约5倍的传输速度。传输期间，您的手机将临时连接到Omi设备的WiFi网络。';
-
-  @override
-  String get internetAccessPausedDuringTransfer => '传输期间互联网访问暂停';
-
-  @override
-  String get chooseTransferMethodDescription => '选择如何将录音从Omi设备传输到您的手机。';
-
-  @override
-  String get wifiSpeed => '通过WiFi约150 KB/s';
-
-  @override
-  String get fiveTimesFaster => '快5倍';
-
-  @override
-  String get fastTransferMethodDescription => '创建与Omi设备的直接WiFi连接。传输期间，您的手机将暂时断开常规WiFi连接。';
 
   @override
   String get bluetooth => '蓝牙';
@@ -7368,12 +7270,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get voiceFailedToTranscribe => '音频转录失败';
 
   @override
-  String get locationPermissionRequired => '位置权限请求';
-
-  @override
-  String get locationPermissionContent => '快速传输需要位置权限来验证WiFi连接。请授予位置权限以继续。';
-
-  @override
   String get pdfTranscriptExport => '导出文字记录';
 
   @override
@@ -7518,12 +7414,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get dailyRecapsDescription => '您的每日总结生成后将显示在这里';
 
   @override
-  String get chooseTransferMethod => '选择传输方式';
-
-  @override
-  String get fastTransferSpeed => '通过WiFi ~150 KB/s';
-
-  @override
   String largeTimeGapDetected(String gap) {
     return '检测到较大时间间隔 ($gap)';
   }
@@ -7532,9 +7422,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String largeTimeGapsDetected(String gaps) {
     return '检测到多个较大时间间隔 ($gaps)';
   }
-
-  @override
-  String get deviceDoesNotSupportWifiSwitchingToBle => '设备不支持WiFi同步,正在切换到蓝牙';
 
   @override
   String get appleHealthNotAvailable => '此设备上不可用Apple Health';

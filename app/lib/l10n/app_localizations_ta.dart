@@ -4657,41 +4657,13 @@ class AppLocalizationsTa extends AppLocalizations {
       'Omi இன் மதிப்புள்ள ব்যবহারকாரராக இருந்தமைக்கு நன்றி. உங்களுக்கு ஏதேனும் கேள்விகள் அல்லது கவலைகள் இருந்தால், team@basedhardware.com ஐக்கு தொடர்பு கொள்ளவும்.';
 
   @override
-  String get wifiSyncSettings => 'WiFi ஒத்திசைவு அமைப்புகள்';
-
-  @override
-  String get enterHotspotCredentials => 'உங்கள் ஃபோனின் ஹாட்ஸ்பாட் நற்சான்றுகளை உள்ளிடவும்';
-
-  @override
-  String get wifiSyncUsesHotspot =>
-      'WiFi ஒத்திசைவு உங்கள் ஃபோனைப் பயன்படுத்தி ஹாட்ஸ்பாட்டாக பயன்படுத்துகிறது. அமைப்புகள் > தனிப்பட்ட ஹாட்ஸ்பாட்டில் உங்கள் ஹாட்ஸ்பாட் பெயர் மற்றும் கடவுச்சொல்லைக் கண்டறியவும்.';
-
-  @override
-  String get hotspotNameSsid => 'ஹாட்ஸ்பாட் பெயர் (SSID)';
-
-  @override
-  String get exampleIphoneHotspot => 'உதாரணமாக iPhone ஹாட்ஸ்பாட்';
-
-  @override
   String get password => 'கடவுச்சொல்';
-
-  @override
-  String get enterHotspotPassword => 'ஹாட்ஸ்பாட் கடவுச்சொல்லை உள்ளிடவும்';
 
   @override
   String get saveCredentials => 'நற்சான்றுகளைச் சேமிக்கவும்';
 
   @override
   String get clearCredentials => 'நற்சான்றுகளைத் தெளிக்கவும்';
-
-  @override
-  String get pleaseEnterHotspotName => 'தயவுசெய்து ஹாட்ஸ்பாட் பெயரை உள்ளிடவும்';
-
-  @override
-  String get wifiCredentialsSaved => 'WiFi நற்சான்றுகள் சேமிக்கப்பட்டது';
-
-  @override
-  String get wifiCredentialsCleared => 'WiFi நற்சான்றுகள் தெளிக்கப்பட்டது';
 
   @override
   String summaryGeneratedForDate(String date) {
@@ -5845,9 +5817,6 @@ class AppLocalizationsTa extends AppLocalizations {
   String get limitless => 'Limitless';
 
   @override
-  String get fastTransfer => 'வேகமான பரிமாற்றம்';
-
-  @override
   String get syncingStatus => 'ஒத்திசைப்பு செய்கிறது';
 
   @override
@@ -5857,15 +5826,6 @@ class AppLocalizationsTa extends AppLocalizations {
   String etaLabel(String time) {
     return 'ETA: $time';
   }
-
-  @override
-  String get transferMethod => 'பரிமாற்ற முறை';
-
-  @override
-  String get fast => 'வேகமான';
-
-  @override
-  String get ble => 'BLE';
 
   @override
   String get phone => 'தொலைபேசி';
@@ -5886,26 +5846,7 @@ class AppLocalizationsTa extends AppLocalizations {
   String get processedFilesDeleted => 'செயலாக்கப்பட்ட கோப்புகள் நீக்கப்பட்டன';
 
   @override
-  String get wifiEnableFailed => 'சாதனத்தில் WiFi இயக்க முடியவில்லை. மீண்டும் முயற்சி செய்யவும்.';
-
-  @override
-  String get deviceNoFastTransfer =>
-      'உங்கள் சாதனம் வேகமான பரிமாற்றம் ஆதரிக்காது. அதற்கு பதிலாக Bluetooth பயன்படுத்தவும்.';
-
-  @override
-  String get enableHotspotMessage => 'உங்கள் தொலைபேசியின் ஹாட்ஸ்பாட்டை இயக்கவும் மற்றும் மீண்டும் முயற்சி செய்யவும்.';
-
-  @override
-  String get transferStartFailed => 'பரிமாற்றத்தைத் தொடங்க முடியவில்லை. மீண்டும் முயற்சி செய்யவும்.';
-
-  @override
   String get deviceNotResponding => 'சாதனம் பதிலளிக்கவில்லை. மீண்டும் முயற்சி செய்யவும்.';
-
-  @override
-  String get invalidWifiCredentials => 'செல்லுபடியாகாத WiFi நற்சான்றுகள். உங்கள் ஹாட்ஸ்பாட் அமைப்புகளை சரிபார்க்கவும்.';
-
-  @override
-  String get wifiConnectionFailed => 'WiFi இணைப்பு தவறிவிட்டது. மீண்டும் முயற்சி செய்யவும்.';
 
   @override
   String get sdCardProcessing => 'SD கார்டு செயலாக்கம்';
@@ -5917,9 +5858,6 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get process => 'செயலாக்குங்கள்';
-
-  @override
-  String get wifiSyncFailed => 'WiFi ஒத்திசைப்பு தவறிவிட்டது';
 
   @override
   String get processingFailed => 'செயலாக்கம் தவறிவிட்டது';
@@ -6702,24 +6640,13 @@ class AppLocalizationsTa extends AppLocalizations {
   }
 
   @override
-  String get wifiSync => 'WiFi ஒத்திசைப்பு';
-
-  @override
   String itemCopiedToClipboard(String item) {
     return '$item கிளிப்பிங் பலகையில் நகலெடுக்கப்பட்டது';
   }
 
   @override
-  String get wifiConnectionFailedTitle => 'இணைப்பு தவறிவிட்டது';
-
-  @override
   String connectingToDeviceName(String deviceName) {
     return '$deviceName க்கு இணைக்கிறது';
-  }
-
-  @override
-  String enableDeviceWifi(String deviceName) {
-    return '$deviceName का WiFi இயக்கவும்';
   }
 
   @override
@@ -6816,9 +6743,6 @@ class AppLocalizationsTa extends AppLocalizations {
   String get statusUnprocessed => 'செயல்படுத்தப்படாதது';
 
   @override
-  String get switchedToFastTransfer => 'விரைவு பரிமாற்றத்திற்கு மாற்றப்பட்டது';
-
-  @override
   String get transferCompleteMessage => 'பரிமாற்றம் முடிந்தது! இப்போது இந்த பதிவை இயக்க முடியும்.';
 
   @override
@@ -6830,34 +6754,7 @@ class AppLocalizationsTa extends AppLocalizations {
   String get transferCancelled => 'பரிமாற்றம் ரத்து செய்யப்பட்டது';
 
   @override
-  String get fastTransferEnabled => 'விரைவு பரிமாற்றம் இயக்கப்பட்டது';
-
-  @override
   String get bluetoothSyncEnabled => 'Bluetooth ஒத்திசைவு இயக்கப்பட்டது';
-
-  @override
-  String get enableFastTransfer => 'விரைவு பரிமாற்றம் இயக்கவும்';
-
-  @override
-  String get fastTransferDescription =>
-      'விரைவு பரிமாற்றம் WiFi ஐ பயன்படுத்தி ~5 மடங்கு வேகமாக பரிமாற்றம் செய்கிறது. பரிமாற்றத்தின் போது உங்கள் ஃபோன் தற்காலிகமாக உங்கள் Omi சாதனத்தின் WiFi நெட்வொர்க்குடன் இணைக்கப்படும்.';
-
-  @override
-  String get internetAccessPausedDuringTransfer => 'பரிமாற்றத்தின் போது இணைய அணுகல் நிறுத்தப்பட்டது';
-
-  @override
-  String get chooseTransferMethodDescription =>
-      'உங்கள் Omi சாதனத்தில் இருந்து உங்கள் ஃபோனுக்கு பதிவுகளை எவ்வாறு பரிமாற்ற வேண்டும் என்பதைத் தேர்ந்தெடுக்கவும்.';
-
-  @override
-  String get wifiSpeed => 'WiFi வழியாக ~150 KB/s';
-
-  @override
-  String get fiveTimesFaster => '5 மடங்கு வேகமாக';
-
-  @override
-  String get fastTransferMethodDescription =>
-      'உங்கள் Omi சாதனத்திற்கு நேரடி WiFi இணைப்பை உருவாக்குகிறது. பரிமாற்றத்தின் போது உங்கள் ஃபோன் உங்கள் வழக்கமான WiFi இல் இருந்து தற்காலிகமாக துண்டிக்கப்படும்.';
 
   @override
   String get bluetooth => 'Bluetooth';
@@ -7565,13 +7462,6 @@ class AppLocalizationsTa extends AppLocalizations {
   String get voiceFailedToTranscribe => 'ஆடியோ மாற்றுவதில் தோல்வி';
 
   @override
-  String get locationPermissionRequired => 'இருப்பிடம் அனுமதி தேவை';
-
-  @override
-  String get locationPermissionContent =>
-      'விரைவு பரிமாற்றம் WiFi இணைப்பை சரிசெய்ய இருப்பிடம் அனுமதி தேவை. தொடர்ந்து செல்ல இருப்பிடம் அனுமதி வழங்கவும்.';
-
-  @override
   String get pdfTranscriptExport => 'மாற்றுரை ஏற்றுமதி';
 
   @override
@@ -7716,12 +7606,6 @@ class AppLocalizationsTa extends AppLocalizations {
   String get dailyRecapsDescription => 'உங்கள் தினசரி சுருக்கங்கள் உருவாக்கப்பட்ட பிறகு இங்கே தோன்றும்';
 
   @override
-  String get chooseTransferMethod => 'பரிமாற்ற முறையைத் தேர்ந்தெடுக்கவும்';
-
-  @override
-  String get fastTransferSpeed => 'WiFi வழியாக ~150 KB/s';
-
-  @override
   String largeTimeGapDetected(String gap) {
     return 'பெரிய நேர இடைவெளி கண்டறியப்பட்டது ($gap)';
   }
@@ -7730,10 +7614,6 @@ class AppLocalizationsTa extends AppLocalizations {
   String largeTimeGapsDetected(String gaps) {
     return 'பெரிய நேர இடைவெளிகள் கண்டறியப்பட்டுள்ளன ($gaps)';
   }
-
-  @override
-  String get deviceDoesNotSupportWifiSwitchingToBle =>
-      'சாதனம் WiFi ஒத்திசைவை ஆதரிக்கவில்லை, Bluetooth இற்கு மாற்றப்படுகிறது';
 
   @override
   String get appleHealthNotAvailable => 'Apple Health இந்த சாதனத்தில் கிடைக்கவில்லை';

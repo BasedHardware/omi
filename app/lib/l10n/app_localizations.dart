@@ -8805,47 +8805,11 @@ abstract class AppLocalizations {
   /// **'Thank you for being a valued user of Omi. If you have any questions or concerns, feel free to reach out to us to team@basedhardware.com.'**
   String get thankYouText;
 
-  /// WiFi sync settings - wifiSyncSettings
-  ///
-  /// In en, this message translates to:
-  /// **'WiFi Sync Settings'**
-  String get wifiSyncSettings;
-
-  /// WiFi sync settings - enterHotspotCredentials
-  ///
-  /// In en, this message translates to:
-  /// **'Enter your phone\'s hotspot credentials'**
-  String get enterHotspotCredentials;
-
-  /// WiFi sync settings - wifiSyncUsesHotspot
-  ///
-  /// In en, this message translates to:
-  /// **'WiFi sync uses your phone as a hotspot. Find your hotspot name and password in Settings > Personal Hotspot.'**
-  String get wifiSyncUsesHotspot;
-
-  /// WiFi sync settings - hotspotNameSsid
-  ///
-  /// In en, this message translates to:
-  /// **'Hotspot Name (SSID)'**
-  String get hotspotNameSsid;
-
-  /// WiFi sync settings - exampleIphoneHotspot
-  ///
-  /// In en, this message translates to:
-  /// **'e.g. iPhone Hotspot'**
-  String get exampleIphoneHotspot;
-
   /// WiFi sync settings - password
   ///
   /// In en, this message translates to:
   /// **'Password'**
   String get password;
-
-  /// WiFi sync settings - enterHotspotPassword
-  ///
-  /// In en, this message translates to:
-  /// **'Enter hotspot password'**
-  String get enterHotspotPassword;
 
   /// WiFi sync settings - saveCredentials
   ///
@@ -8858,24 +8822,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Clear Credentials'**
   String get clearCredentials;
-
-  /// WiFi sync settings - pleaseEnterHotspotName
-  ///
-  /// In en, this message translates to:
-  /// **'Please enter a hotspot name'**
-  String get pleaseEnterHotspotName;
-
-  /// WiFi sync settings - wifiCredentialsSaved
-  ///
-  /// In en, this message translates to:
-  /// **'WiFi credentials saved'**
-  String get wifiCredentialsSaved;
-
-  /// WiFi sync settings - wifiCredentialsCleared
-  ///
-  /// In en, this message translates to:
-  /// **'WiFi credentials cleared'**
-  String get wifiCredentialsCleared;
 
   /// Daily summary settings - summaryGeneratedForDate
   ///
@@ -11019,12 +10965,6 @@ abstract class AppLocalizations {
   /// **'Limitless'**
   String get limitless;
 
-  /// Name of the fast transfer method
-  ///
-  /// In en, this message translates to:
-  /// **'Fast Transfer'**
-  String get fastTransfer;
-
   /// Status label when syncing is in progress
   ///
   /// In en, this message translates to:
@@ -11042,24 +10982,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'ETA: {time}'**
   String etaLabel(String time);
-
-  /// Page title for transfer method settings
-  ///
-  /// In en, this message translates to:
-  /// **'Transfer Method'**
-  String get transferMethod;
-
-  /// Label for fast WiFi transfer method
-  ///
-  /// In en, this message translates to:
-  /// **'Fast'**
-  String get fast;
-
-  /// Label for Bluetooth Low Energy transfer method
-  ///
-  /// In en, this message translates to:
-  /// **'BLE'**
-  String get ble;
 
   /// Filter label for phone storage
   ///
@@ -11097,47 +11019,11 @@ abstract class AppLocalizations {
   /// **'Processed files deleted'**
   String get processedFilesDeleted;
 
-  /// Error message when WiFi fails to enable on device
-  ///
-  /// In en, this message translates to:
-  /// **'Failed to enable WiFi on device. Please try again.'**
-  String get wifiEnableFailed;
-
-  /// Error message when device does not support fast transfer
-  ///
-  /// In en, this message translates to:
-  /// **'Your device does not support Fast Transfer. Use Bluetooth instead.'**
-  String get deviceNoFastTransfer;
-
-  /// Error message asking user to enable hotspot
-  ///
-  /// In en, this message translates to:
-  /// **'Please enable your phone\'s hotspot and try again.'**
-  String get enableHotspotMessage;
-
-  /// Error message when transfer fails to start
-  ///
-  /// In en, this message translates to:
-  /// **'Failed to start transfer. Please try again.'**
-  String get transferStartFailed;
-
   /// Error message when device times out
   ///
   /// In en, this message translates to:
   /// **'Device did not respond. Please try again.'**
   String get deviceNotResponding;
-
-  /// Error message for invalid WiFi credentials
-  ///
-  /// In en, this message translates to:
-  /// **'Invalid WiFi credentials. Check your hotspot settings.'**
-  String get invalidWifiCredentials;
-
-  /// Error message when WiFi connection fails
-  ///
-  /// In en, this message translates to:
-  /// **'WiFi connection failed. Please try again.'**
-  String get wifiConnectionFailed;
 
   /// Dialog title for SD card processing
   ///
@@ -11156,12 +11042,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Process'**
   String get process;
-
-  /// Error title when WiFi sync fails
-  ///
-  /// In en, this message translates to:
-  /// **'WiFi Sync Failed'**
-  String get wifiSyncFailed;
 
   /// Error title when processing fails
   ///
@@ -12561,35 +12441,17 @@ abstract class AppLocalizations {
   /// **'Here\'s what we just discussed: {link}'**
   String heresWhatWeDiscussed(String link);
 
-  /// WiFi sync feature label
-  ///
-  /// In en, this message translates to:
-  /// **'WiFi Sync'**
-  String get wifiSync;
-
   /// Message when item is copied to clipboard
   ///
   /// In en, this message translates to:
   /// **'{item} copied to clipboard'**
   String itemCopiedToClipboard(String item);
 
-  /// Title shown when WiFi connection to device fails
-  ///
-  /// In en, this message translates to:
-  /// **'Connection Failed'**
-  String get wifiConnectionFailedTitle;
-
   /// Title shown while connecting to device WiFi
   ///
   /// In en, this message translates to:
   /// **'Connecting to {deviceName}'**
   String connectingToDeviceName(String deviceName);
-
-  /// Step text for enabling device WiFi
-  ///
-  /// In en, this message translates to:
-  /// **'Enable {deviceName}\'s WiFi'**
-  String enableDeviceWifi(String deviceName);
 
   /// Step text for connecting to device
   ///
@@ -12765,12 +12627,6 @@ abstract class AppLocalizations {
   /// **'Unprocessed'**
   String get statusUnprocessed;
 
-  /// Snackbar message when switching to fast transfer mode
-  ///
-  /// In en, this message translates to:
-  /// **'Switched to Fast Transfer'**
-  String get switchedToFastTransfer;
-
   /// Success message when transfer completes
   ///
   /// In en, this message translates to:
@@ -12789,59 +12645,11 @@ abstract class AppLocalizations {
   /// **'Transfer cancelled'**
   String get transferCancelled;
 
-  /// Snackbar message when fast transfer is enabled
-  ///
-  /// In en, this message translates to:
-  /// **'Fast Transfer enabled'**
-  String get fastTransferEnabled;
-
   /// Snackbar message when bluetooth sync is enabled
   ///
   /// In en, this message translates to:
   /// **'Bluetooth sync enabled'**
   String get bluetoothSyncEnabled;
-
-  /// Dialog title for enabling fast transfer
-  ///
-  /// In en, this message translates to:
-  /// **'Enable Fast Transfer'**
-  String get enableFastTransfer;
-
-  /// Description of fast transfer feature in dialog
-  ///
-  /// In en, this message translates to:
-  /// **'Fast Transfer uses WiFi for ~5x faster speeds. Your phone will temporarily connect to your Omi device\'s WiFi network during transfer.'**
-  String get fastTransferDescription;
-
-  /// Warning that internet is paused during transfer
-  ///
-  /// In en, this message translates to:
-  /// **'Internet access is paused during transfer'**
-  String get internetAccessPausedDuringTransfer;
-
-  /// Description text on transfer method page
-  ///
-  /// In en, this message translates to:
-  /// **'Choose how recordings are transferred from your Omi device to your phone.'**
-  String get chooseTransferMethodDescription;
-
-  /// Speed description for WiFi transfer
-  ///
-  /// In en, this message translates to:
-  /// **'~150 KB/s via WiFi'**
-  String get wifiSpeed;
-
-  /// Badge label for faster transfer method
-  ///
-  /// In en, this message translates to:
-  /// **'5X FASTER'**
-  String get fiveTimesFaster;
-
-  /// Description of fast transfer method card
-  ///
-  /// In en, this message translates to:
-  /// **'Creates a direct WiFi connection to your Omi device. Your phone temporarily disconnects from your regular WiFi during transfer.'**
-  String get fastTransferMethodDescription;
 
   /// Name of bluetooth transfer method
   ///
@@ -14079,18 +13887,6 @@ abstract class AppLocalizations {
   /// **'Failed to transcribe audio'**
   String get voiceFailedToTranscribe;
 
-  /// Title for dialog requesting location permission
-  ///
-  /// In en, this message translates to:
-  /// **'Location Permission Required'**
-  String get locationPermissionRequired;
-
-  /// Explanation text for location permission dialog
-  ///
-  /// In en, this message translates to:
-  /// **'Fast Transfer requires location permission to verify WiFi connection. Please grant location permission to continue.'**
-  String get locationPermissionContent;
-
   /// Title for PDF transcript export document
   ///
   /// In en, this message translates to:
@@ -14307,18 +14103,6 @@ abstract class AppLocalizations {
   /// **'Your daily recaps will appear here once generated'**
   String get dailyRecapsDescription;
 
-  /// Title for transfer method selection dialog
-  ///
-  /// In en, this message translates to:
-  /// **'Choose Transfer Method'**
-  String get chooseTransferMethod;
-
-  /// Speed description for fast transfer via WiFi
-  ///
-  /// In en, this message translates to:
-  /// **'~150 KB/s via WiFi'**
-  String get fastTransferSpeed;
-
   /// No description provided for @largeTimeGapDetected.
   ///
   /// In en, this message translates to:
@@ -14330,12 +14114,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Large time gaps detected ({gaps})'**
   String largeTimeGapsDetected(String gaps);
-
-  /// Message shown when WiFi sync fails because device hardware does not support WiFi, automatically falling back to Bluetooth transfer
-  ///
-  /// In en, this message translates to:
-  /// **'Device does not support WiFi sync, switching to Bluetooth'**
-  String get deviceDoesNotSupportWifiSwitchingToBle;
 
   /// No description provided for @appleHealthNotAvailable.
   ///
