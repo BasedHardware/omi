@@ -27,6 +27,10 @@ class MainActivity: FlutterActivity() {
 
         // Register Native BLE Pigeon APIs
         OmiBleManager.initialize(application)
+        getSharedPreferences("FlutterSharedPreferences", MODE_PRIVATE)
+            .edit()
+            .putBoolean("flutter.nativeBleForegroundReady", false)
+            .apply()
         OmiBleManager.isFlutterAlive = true
         OmiBleManager.instance.flutterApi = BleFlutterApi(flutterEngine.dartExecutor.binaryMessenger)
         val hostApi = BleHostApiImpl { this }
@@ -75,11 +79,10 @@ class MainActivity: FlutterActivity() {
     }
 
     override fun onDestroy() {
-        // When user closes the app (swipe away), stop the foreground service.
-        // The service handles disconnecting all managed devices in onDestroy.
+        // The BLE foreground service owns the pendant connection and must survive
+        // a normal task close so the pendant can keep recording in the background.
         if (isFinishing) {
             OmiBleManager.isFlutterAlive = false
-            OmiBleForegroundService.stopService(this)
         }
         super.onDestroy()
     }

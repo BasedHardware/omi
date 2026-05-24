@@ -25,6 +25,7 @@ import 'package:omi/backend/schema/message.dart';
 import 'package:omi/backend/schema/person.dart';
 import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
+import 'package:omi/env/env.dart';
 import 'package:omi/models/custom_stt_config.dart';
 import 'package:omi/models/stt_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
@@ -37,6 +38,7 @@ import 'package:omi/services/voice_playback/omi_voice_playback_service.dart';
 import 'package:omi/services/sockets/transcription_service.dart';
 import 'package:omi/services/audio_sources/audio_source.dart';
 import 'package:omi/services/audio_sources/ble_device_source.dart';
+import 'package:omi/services/devices/models.dart';
 import 'package:omi/services/audio_sources/phone_mic_source.dart';
 import 'package:omi/services/wals.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
@@ -716,11 +718,11 @@ class CaptureProvider extends ChangeNotifier
     );
   }
 
-  Future streamAudioToWs(String deviceId, BleAudioCodec codec) async {
+  Future<bool> streamAudioToWs(String deviceId, BleAudioCodec codec) async {
     Logger.debug('streamAudioToWs in capture_provider');
     _bleBytesStream?.cancel();
     _startMetricsTracking();
-    _bleBytesStream = await _getBleAudioBytesListener(
+    final subscription = await _getBleAudioBytesListener(
       deviceId,
       onAudioBytesReceived: (List<int> value) {
         final snapshot = List<int>.from(value);
@@ -772,7 +774,9 @@ class CaptureProvider extends ChangeNotifier
         }
       },
     );
+    _bleBytesStream = subscription;
     notifyListeners();
+    return subscription != null;
   }
 
   Future<void> _resetState() async {
@@ -794,8 +798,8 @@ class CaptureProvider extends ChangeNotifier
     notifyListeners();
   }
 
-  Future _cleanupCurrentState() async {
-    await _closeBleStream();
+  Future _cleanupCurrentState({bool disableNativeBackground = false}) async {
+    await _closeBleStream(disableNativeBackground: disableNativeBackground);
     _activeSource = null;
     notifyListeners();
   }
@@ -869,6 +873,7 @@ class CaptureProvider extends ChangeNotifier
     if (connection == null) return;
     final codec = await _getAudioCodec(deviceId);
     await _wal.getSyncs().phone.onAudioCodecChanged(codec);
+    await _saveNativeBleStreamConfig(device, codec);
 
     // Create audio source for BLE device
     final pd = await device.getDeviceInfo(connection);
@@ -879,11 +884,40 @@ class CaptureProvider extends ChangeNotifier
     _wal.getSyncs().phone.setDeviceInfo(deviceId, deviceModel);
 
     await streamButton(deviceId);
-    await streamAudioToWs(deviceId, codec);
+    final foregroundAudioReady = await streamAudioToWs(deviceId, codec);
+    if (foregroundAudioReady) {
+      await SharedPreferencesUtil().saveBool('nativeBleForegroundReady', true);
+    }
 
     // Update state
     updateRecordingState(RecordingState.deviceRecord);
     notifyListeners();
+  }
+
+  Future<void> _saveNativeBleStreamConfig(BtDevice device, BleAudioCodec codec) async {
+    var serviceUuid = omiServiceUuid;
+    var characteristicUuid = audioDataStreamCharacteristicUuid;
+
+    if (device.type == DeviceType.friendPendant) {
+      serviceUuid = friendPendantServiceUuid;
+      characteristicUuid = friendPendantAudioCharacteristicUuid;
+    }
+
+    await SharedPreferencesUtil().saveString(
+      'nativeBleStreamConfig',
+      jsonEncode({
+        'deviceId': device.id,
+        'codec': codec.toString(),
+        'sampleRate': mapCodecToSampleRate(codec),
+        'source': _getConversationSourceFromDevice(),
+        'apiBaseUrl': Env.apiBaseUrl ?? 'https://api.omiapi.com/',
+        'serviceUuid': serviceUuid,
+        'characteristicUuid': characteristicUuid,
+        'deviceType': device.type.name,
+      }),
+    );
+    await SharedPreferencesUtil().saveBool('nativeBleForegroundReady', false);
+    await SharedPreferencesUtil().saveBool('nativeBleStreamingEnabled', true);
   }
 
   Future<void> _initiateDevicePhotoStreaming() async {
@@ -1005,10 +1039,16 @@ class CaptureProvider extends ChangeNotifier
     _calculateMetricsRates();
   }
 
-  Future _closeBleStream() async {
+  Future _closeBleStream({bool disableNativeBackground = false}) async {
     await _bleBytesStream?.cancel();
     await _blePhotoStream?.cancel();
     _stopMetricsTracking();
+    if (disableNativeBackground) {
+      await SharedPreferencesUtil().saveBool('nativeBleForegroundReady', false);
+      await SharedPreferencesUtil().saveBool('nativeBleStreamingEnabled', false);
+    } else {
+      await SharedPreferencesUtil().saveBool('nativeBleForegroundReady', false);
+    }
     if (_recordingDevice != null) {
       var connection = await ServiceManager.instance().device.ensureConnection(_recordingDevice!.id);
       if (connection != null && await connection.hasPhotoStreamingCharacteristic()) {
@@ -1127,7 +1167,7 @@ class CaptureProvider extends ChangeNotifier
       }
       _phoneMicWalActive = false;
     }
-    await _cleanupCurrentState();
+    await _cleanupCurrentState(disableNativeBackground: true);
     ServiceManager.instance().mic.stop();
     updateRecordingState(RecordingState.stop);
     await _socket?.stop(reason: 'stop stream recording');
@@ -1151,7 +1191,7 @@ class CaptureProvider extends ChangeNotifier
   }
 
   Future stopStreamDeviceRecording({bool cleanDevice = false}) async {
-    await _cleanupCurrentState();
+    await _cleanupCurrentState(disableNativeBackground: true);
     if (cleanDevice) {
       _updateRecordingDevice(null);
     }
@@ -1817,6 +1857,8 @@ class CaptureProvider extends ChangeNotifier
     await BatteryWidgetService().updateMuteState(true);
     // Pause the BLE stream but keep the device connection
     await _bleBytesStream?.cancel();
+    await SharedPreferencesUtil().saveBool('nativeBleForegroundReady', false);
+    await SharedPreferencesUtil().saveBool('nativeBleStreamingEnabled', false);
     _isPaused = true;
     updateRecordingState(RecordingState.pause);
     notifyListeners();
@@ -1829,12 +1871,6 @@ class CaptureProvider extends ChangeNotifier
     BatteryWidgetService().updateMuteState(false);
     // Resume streaming from the device
     await _initiateDeviceAudioStreaming();
-
-    final deviceId = _recordingDevice!.id;
-    BleAudioCodec codec = await _getAudioCodec(deviceId);
-    await _wal.getSyncs().phone.onAudioCodecChanged(codec);
-
-    await streamAudioToWs(deviceId, codec);
 
     updateRecordingState(RecordingState.deviceRecord);
     notifyListeners();
