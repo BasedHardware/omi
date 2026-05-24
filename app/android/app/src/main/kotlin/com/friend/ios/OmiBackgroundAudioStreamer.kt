@@ -21,10 +21,6 @@ class OmiBackgroundAudioStreamer(private val context: Context) {
         private const val DEFAULT_API_BASE_URL = "https://api.omiapi.com/"
         private const val MAX_PENDING_FRAMES = 200
         private const val RECONNECT_BACKOFF_MS = 3_000L
-        private const val OMI_SERVICE_UUID = "19b10000-e8f2-537e-4f6c-d104768a1214"
-        private const val OMI_AUDIO_CHAR_UUID = "19b10001-e8f2-537e-4f6c-d104768a1214"
-        private const val FRIEND_SERVICE_UUID = "1a3fd0e7-b1f3-ac9e-2e49-b647b2c4f8da"
-        private const val FRIEND_AUDIO_CHAR_UUID = "01000000-1111-1111-1111-111111111111"
         private const val MAX_CACHED_TRANSCRIPT_MESSAGES = 200
         private val transcriptCacheLock = Any()
         private val cachedTranscriptMessages = ArrayDeque<String>()
@@ -72,6 +68,12 @@ class OmiBackgroundAudioStreamer(private val context: Context) {
         return config.deviceId.equals(address, ignoreCase = true)
     }
 
+    fun configuredAudioTargetFor(address: String): Pair<String, String>? {
+        val config = loadConfig() ?: return null
+        if (!config.deviceId.equals(address, ignoreCase = true)) return null
+        return config.serviceUuid to config.characteristicUuid
+    }
+
     fun stop(reason: String) {
         var socketToClose: WebSocket? = null
         synchronized(lock) {
@@ -102,7 +104,7 @@ class OmiBackgroundAudioStreamer(private val context: Context) {
         if (!config.deviceId.equals(address, ignoreCase = true)) return
         if (!matches(config, serviceUuid, characteristicUuid)) return
 
-        val frames = transformFrames(serviceUuid, characteristicUuid, value)
+        val frames = transformFrames(config, value)
         if (frames.isEmpty()) return
 
         ensureSocket(config)
@@ -116,29 +118,30 @@ class OmiBackgroundAudioStreamer(private val context: Context) {
         config.serviceUuid.equals(serviceUuid, ignoreCase = true) &&
             config.characteristicUuid.equals(characteristicUuid, ignoreCase = true)
 
-    private fun transformFrames(serviceUuid: String, characteristicUuid: String, value: ByteArray): List<ByteArray> {
-        val svc = serviceUuid.lowercase(Locale.US)
-        val chr = characteristicUuid.lowercase(Locale.US)
-
-        if (svc == OMI_SERVICE_UUID && chr == OMI_AUDIO_CHAR_UUID) {
-            if (value.size <= 3) return emptyList()
-            return listOf(value.copyOfRange(3, value.size))
-        }
-
-        if (svc == FRIEND_SERVICE_UUID && chr == FRIEND_AUDIO_CHAR_UUID) {
-            if (value.size <= 5) return emptyList()
-            val payload = value.copyOfRange(0, value.size - 5)
-            val frames = mutableListOf<ByteArray>()
-            var offset = 0
-            while (offset + 30 <= payload.size) {
-                frames.add(payload.copyOfRange(offset, offset + 30))
-                offset += 30
+    private fun transformFrames(config: Config, value: ByteArray): List<ByteArray> =
+        when (config.deviceType) {
+            "omi", "openglass" -> {
+                if (value.size <= 3) emptyList() else listOf(value.copyOfRange(3, value.size))
             }
-            return frames
+            "friendPendant" -> {
+                if (value.size <= 5) {
+                    emptyList()
+                } else {
+                    val payload = value.copyOfRange(0, value.size - 5)
+                    val frames = mutableListOf<ByteArray>()
+                    var offset = 0
+                    while (offset + 30 <= payload.size) {
+                        frames.add(payload.copyOfRange(offset, offset + 30))
+                        offset += 30
+                    }
+                    frames
+                }
+            }
+            else -> {
+                Log.w(TAG, "Unsupported background BLE audio device type: ${config.deviceType}")
+                emptyList()
+            }
         }
-
-        return listOf(value.copyOf())
-    }
 
     private fun ensureSocket(config: Config) {
         val now = System.currentTimeMillis()

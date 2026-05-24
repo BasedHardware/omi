@@ -48,11 +48,6 @@ class OmiBleForegroundService : Service() {
         private const val MAX_DISCONNECT_HISTORY = 20
         private const val RSSI_TREND_WINDOW_MS = 15_000L
         private const val RSSI_TREND_FADING_DROP_DB = 10
-        private const val OMI_SERVICE_UUID = "19b10000-e8f2-537e-4f6c-d104768a1214"
-        private const val OMI_AUDIO_CHAR_UUID = "19b10001-e8f2-537e-4f6c-d104768a1214"
-        private const val FRIEND_SERVICE_UUID = "1a3fd0e7-b1f3-ac9e-2e49-b647b2c4f8da"
-        private const val FRIEND_AUDIO_CHAR_UUID = "01000000-1111-1111-1111-111111111111"
-
         /** Classify the RSSI trajectory in the window before [nowMs]. See BleDisconnectEvent.rssiTrend
          *  for the semantics of each label. */
         private fun classifyRssiTrend(samples: List<Pair<Long, Int>>, nowMs: Long): String {
@@ -253,17 +248,12 @@ class OmiBleForegroundService : Service() {
 
     private fun ensureBackgroundAudioSubscription(address: String, services: List<BleService>) {
         if (OmiBleManager.isFlutterAlive) return
-        if (!backgroundAudioStreamer.isConfiguredFor(address)) return
-
-        val target = listOf(
-            OMI_SERVICE_UUID to OMI_AUDIO_CHAR_UUID,
-            FRIEND_SERVICE_UUID to FRIEND_AUDIO_CHAR_UUID
-        ).firstOrNull { (serviceUuid, characteristicUuid) ->
-            services.any { service ->
-                service.uuid.equals(serviceUuid, ignoreCase = true) &&
-                    service.characteristicUuids.any { it.equals(characteristicUuid, ignoreCase = true) }
-            }
-        } ?: return
+        val target = backgroundAudioStreamer.configuredAudioTargetFor(address) ?: return
+        val hasTarget = services.any { service ->
+            service.uuid.equals(target.first, ignoreCase = true) &&
+                service.characteristicUuids.any { it.equals(target.second, ignoreCase = true) }
+        }
+        if (!hasTarget) return
 
         Log.i(TAG, "Ensuring BLE audio subscription for background transcription on $address")
         bleManager.subscribeCharacteristic(address, target.first, target.second)

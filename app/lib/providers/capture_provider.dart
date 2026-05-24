@@ -906,12 +906,11 @@ class CaptureProvider extends ChangeNotifier
   }
 
   Future<void> _saveNativeBleStreamConfig(BtDevice device, BleAudioCodec codec) async {
-    var serviceUuid = omiServiceUuid;
-    var characteristicUuid = audioDataStreamCharacteristicUuid;
-
-    if (device.type == DeviceType.friendPendant) {
-      serviceUuid = friendPendantServiceUuid;
-      characteristicUuid = friendPendantAudioCharacteristicUuid;
+    final audioTarget = _nativeBleAudioTarget(device);
+    if (audioTarget == null) {
+      await SharedPreferencesUtil().saveBool('nativeBleForegroundReady', false);
+      await SharedPreferencesUtil().saveBool('nativeBleStreamingEnabled', false);
+      return;
     }
 
     await SharedPreferencesUtil().saveString(
@@ -922,13 +921,30 @@ class CaptureProvider extends ChangeNotifier
         'sampleRate': mapCodecToSampleRate(codec),
         'source': _getConversationSourceFromDevice(),
         'apiBaseUrl': Env.apiBaseUrl ?? 'https://api.omiapi.com/',
-        'serviceUuid': serviceUuid,
-        'characteristicUuid': characteristicUuid,
+        'serviceUuid': audioTarget.key,
+        'characteristicUuid': audioTarget.value,
         'deviceType': device.type.name,
       }),
     );
     await SharedPreferencesUtil().saveBool('nativeBleForegroundReady', false);
     await SharedPreferencesUtil().saveBool('nativeBleStreamingEnabled', true);
+  }
+
+  MapEntry<String, String>? _nativeBleAudioTarget(BtDevice device) {
+    switch (device.type) {
+      case DeviceType.omi:
+      case DeviceType.openglass:
+        return const MapEntry(omiServiceUuid, audioDataStreamCharacteristicUuid);
+      case DeviceType.friendPendant:
+        return const MapEntry(friendPendantServiceUuid, friendPendantAudioCharacteristicUuid);
+      case DeviceType.appleWatch:
+      case DeviceType.bee:
+      case DeviceType.fieldy:
+      case DeviceType.frame:
+      case DeviceType.limitless:
+      case DeviceType.plaud:
+        return null;
+    }
   }
 
   Future<void> _initiateDevicePhotoStreaming() async {
