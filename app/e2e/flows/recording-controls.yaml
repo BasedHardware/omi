@@ -1,0 +1,121 @@
+# E2E Flow: Recording Controls — mute/unmute, summary tab, process now confirmation
+# Tests: All interactive controls available during an active recording session
+# Core feature: controlling recording behavior while a conversation is being captured
+
+version: 2
+name: recording-controls
+description: Recording controls flow — start phone mic recording, test mute/unmute toggle, view summary tab with silence timeout info, test process now with confirmation dialog and "don't ask again" checkbox, verify recording state transitions
+app: com.friend.ios.dev
+evidence:
+  video: true
+covers:
+  - app/lib/pages/conversation_capturing/page.dart
+  - app/lib/providers/capture_provider.dart
+  - app/lib/widgets/bottom_nav_bar.dart
+preconditions:
+  - auth_ready  # User signed in and onboarding completed. App shows home screen.
+  - no_omi_device  # No Omi BLE device connected. Central mic button visible.
+  - microphone_permission  # Mic permission granted.
+
+steps:
+  - id: S1
+    name: Start recording via mic button
+    do: "Tap the central purple mic button on the home screen. Wait for the ConversationCapturingPage to appear with '🎙️ Listening' status."
+    verify: true
+    expect:
+      - kind: interactive_count
+        min: 1
+    evidence:
+      - screenshot: step-S1.webp
+
+  - id: S2
+    name: Speak to generate transcripts
+    do: "Speak clearly for 15-20 seconds until transcript segments appear. Once segments are visible, the 'Process Now' button (yellow/amber) and mute button (grey circle with mic_off icon) appear at the bottom."
+    verify: true
+    expect:
+      - kind: text_visible
+        values: ["Process Now"]
+      - kind: interactive_count
+        min: 3
+    evidence:
+      - screenshot: step-S2.webp
+    note: "Floating action buttons only appear when provider.segments.isNotEmpty || provider.photos.isNotEmpty. Process Now is Color(0xFFFFB800) with FontAwesomeIcons.stop. Mute button is 52x52 circle."
+
+  - id: S3
+    name: Tap mute to pause recording
+    do: "Tap the mute button (grey circle with mic_off icon, bottom-right). Verify: (1) the app bar status changes from '🎙️ Listening' to '🔇 Muted', (2) the mute button changes color to red, (3) no new transcript segments appear. Haptic feedback fires (heavy impact + light impact)."
+    verify: true
+    expect:
+      - kind: interactive_count
+        min: 2
+    evidence:
+      - screenshot: step-S3.webp
+    note: "For phone mic: mute calls provider.stopStreamRecording() which stops the mic service entirely. State changes to RecordingState.stop temporarily. The WebSocket connection remains open but receives no audio. This is different from device mute which calls pauseDeviceRecording() and sets state to RecordingState.pause."
+
+  - id: S4
+    name: Unmute to resume recording
+    do: "Tap the mute button again (now red) to resume recording. Verify: (1) the app bar status returns to '🎙️ Listening', (2) the mute button returns to grey, (3) speak again and new transcript segments appear. Haptic feedback fires (medium impact)."
+    verify: true
+    expect:
+      - kind: interactive_count
+        min: 2
+    evidence:
+      - screenshot: step-S4.webp
+    note: "Unmute for phone mic calls provider.streamRecording() to restart the mic. Audio streaming to WebSocket resumes. New segments arrive from the point of unmuting — there is a gap in the transcript matching the muted duration."
+
+  - id: S5
+    name: Switch to Summary tab
+    do: "Swipe left or tap the Summary tab (tab 1). Verify the Summary tab shows: 'No summary yet' message, conversation timeout info. If silence timeout is set, it shows 'Summarized after X minutes of silence'. If set to manual (-1), it shows 'Conversation ends manually'. An emoji (🤫) decorates the timeout info."
+    verify: true
+    expect:
+      - kind: interactive_count
+        min: 2
+    evidence:
+      - screenshot: step-S5.webp
+    note: "Silence timeout configured via SharedPreferencesUtil().conversationSilenceDuration. -1 = manual only, >0 = auto-stop after N seconds of silence. The timeout applies to device recording — phone mic requires manual stop via Process Now."
+
+  - id: S6
+    name: Switch back to Transcripts tab
+    do: "Swipe right or tap the Transcripts tab (tab 0) to return to the live transcript view. Verify transcript segments from both before and after the mute/unmute cycle are visible."
+    verify: true
+    expect:
+      - kind: interactive_count
+        min: 3
+    evidence:
+      - screenshot: step-S6.webp
+
+  - id: S7
+    name: Tap Process Now — confirmation dialog
+    do: "Tap the 'Process Now' button (yellow/amber). A confirmation dialog appears with: title 'Finished?', message 'Stop Recording?', silence timeout info, a 'Don't ask me again' checkbox, and Cancel/Confirm buttons. Tap 'Cancel' to dismiss the dialog and continue recording."
+    verify: true
+    expect:
+      - kind: interactive_count
+        min: 3
+    evidence:
+      - screenshot: step-S7.webp
+    note: "Confirmation dialog only appears if SharedPreferencesUtil().showSummarizeConfirmation is true (default). The 'Don't ask me again' checkbox sets showSummarizeConfirmation=false, which makes future Process Now taps stop immediately without dialog. Cancel returns to recording."
+
+  - id: S8
+    name: Tap Process Now again — confirm to stop
+    do: "Tap 'Process Now' again. In the confirmation dialog, tap 'Confirm' to stop recording and process the conversation. The app navigates back to the home screen with the conversation being processed."
+    verify: true
+    expect:
+      - kind: text_visible
+        values: ["Conversations"]
+      - kind: interactive_count
+        min: 4
+    evidence:
+      - screenshot: step-S8.webp
+    note: "Confirm calls _stopConversation() which: (1) stops mic recording, (2) calls forceProcessingCurrentConversation(), (3) navigates back. The processing skeleton appears in the conversations list."
+
+  - id: S9
+    name: Verify conversation processed
+    do: "Wait for the processing to complete (30-120 seconds). The processing skeleton is replaced by a completed conversation card. Verify it appears in the list."
+    verify: true
+    expect:
+      - kind: text_visible
+        values: ["Conversations"]
+      - kind: interactive_count
+        min: 4
+    evidence:
+      - screenshot: step-S9.webp
