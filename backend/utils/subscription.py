@@ -660,11 +660,7 @@ def get_plan_features(plan: PlanType, simplified: bool = False) -> List[str]:
             if BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH > 0
             else "Unlimited insights"
         ),
-        (
-            f"{BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH} memories per month"
-            if BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH > 0
-            else "Unlimited memories"
-        ),
+        "Unlimited memories",
     ]
 
 
