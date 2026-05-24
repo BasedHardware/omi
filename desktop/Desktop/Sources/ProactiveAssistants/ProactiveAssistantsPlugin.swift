@@ -52,9 +52,6 @@ public class ProactiveAssistantsPlugin: NSObject {
     private var wasMonitoringBeforeLock = false
     private var systemEventObservers: [NSObjectProtocol] = []
 
-    // Daily settings state tracking
-    private var settingsStateTimer: Timer?
-
     // Video call throttling: reduce capture frequency when a call app is frontmost
     // to avoid competing with the call app for CPU/GPU (ScreenCaptureKit, encoding, OCR).
     private var videoCallFrameCounter = 0
@@ -481,8 +478,6 @@ public class ProactiveAssistantsPlugin: NSObject {
 
         sendEvent(type: "monitoringStarted", data: [:])
         AnalyticsManager.shared.monitoringStarted()
-        trackSettingsState()
-        startSettingsStateTimer()
         NotificationCenter.default.post(
             name: .assistantMonitoringStateDidChange,
             object: nil,
@@ -503,8 +498,6 @@ public class ProactiveAssistantsPlugin: NSObject {
         analysisDelayTimer = nil
         distributionDebounceTimer?.invalidate()
         distributionDebounceTimer = nil
-        settingsStateTimer?.invalidate()
-        settingsStateTimer = nil
         isInDelayPeriod = false
         lastDistributedApp = nil
         lastDistributedWindowTitle = nil
@@ -984,27 +977,6 @@ public class ProactiveAssistantsPlugin: NSObject {
         distributionDebounceTimer = nil
 
         AssistantCoordinator.shared.distributeFrame(frame)
-    }
-
-    // MARK: - Settings State Tracking
-
-    /// Track current settings state to analytics
-    private func trackSettingsState() {
-        AnalyticsManager.shared.trackSettingsState(
-            screenshotsEnabled: isMonitoring,
-            memoryExtractionEnabled: MemoryAssistantSettings.shared.isEnabled,
-            memoryNotificationsEnabled: MemoryAssistantSettings.shared.notificationsEnabled
-        )
-    }
-
-    /// Start a daily timer to report settings state
-    private func startSettingsStateTimer() {
-        settingsStateTimer?.invalidate()
-        settingsStateTimer = Timer.scheduledTimer(withTimeInterval: 86400, repeats: true) { [weak self] _ in
-            Task { @MainActor in
-                self?.trackSettingsState()
-            }
-        }
     }
 
     // MARK: - Event Broadcasting

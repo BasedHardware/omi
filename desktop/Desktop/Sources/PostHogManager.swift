@@ -25,8 +25,8 @@ class PostHogManager {
 
         // Disable automatic lifecycle events — PostHog's observer calls setResourceValues(isExcludedFromBackupKey:)
         // synchronously on the main thread (via NSApplicationDidFinishLaunchingNotification), which XPCs to the
-        // mds (Spotlight) daemon and can hang for 2000ms+ when the daemon is slow. We already track lifecycle
-        // events manually via AnalyticsManager.shared.appLaunched() / appBecameActive() etc.
+        // mds (Spotlight) daemon and can hang for 2000ms+ when the daemon is slow. We track the meaningful
+        // lifecycle event (App Launched / First Launch) manually via AnalyticsManager.shared.
         config.captureApplicationLifecycleEvents = false
         config.captureScreenViews = true
         config.preloadFeatureFlags = true
@@ -331,14 +331,6 @@ extension PostHogManager {
         track("First Launch", properties: diagnostics)
     }
 
-    func appBecameActive() {
-        track("App Became Active")
-    }
-
-    func appResignedActive() {
-        track("App Resigned Active")
-    }
-
     // MARK: - Page/Screen Views (PostHog specific)
 
     func pageViewed(_ pageName: String) {
@@ -475,12 +467,6 @@ extension PostHogManager {
 
     // MARK: - Launch At Login Events
 
-    func launchAtLoginStatusChecked(enabled: Bool) {
-        track("Launch At Login Status", properties: [
-            "enabled": enabled
-        ])
-    }
-
     func launchAtLoginChanged(enabled: Bool, source: String) {
         track("Launch At Login Changed", properties: [
             "enabled": enabled,
@@ -607,10 +593,6 @@ extension PostHogManager {
 
     // MARK: - Update Events
 
-    func updateCheckStarted() {
-        track("Update Check Started")
-    }
-
     func updateAvailable(version: String) {
         track("Update Available", properties: [
             "version": version
@@ -621,22 +603,6 @@ extension PostHogManager {
         track("Update Installed", properties: [
             "version": version
         ])
-    }
-
-    func updateNotFound() {
-        track("Update Not Found")
-    }
-
-    func updateCheckFailed(error: String, errorDomain: String, errorCode: Int, underlyingError: String? = nil, underlyingDomain: String? = nil, underlyingCode: Int? = nil) {
-        var props: [String: Any] = [
-            "error": error,
-            "error_domain": errorDomain,
-            "error_code": errorCode
-        ]
-        if let underlyingError { props["underlying_error"] = underlyingError }
-        if let underlyingDomain { props["underlying_domain"] = underlyingDomain }
-        if let underlyingCode { props["underlying_code"] = underlyingCode }
-        track("Update Check Failed", properties: props)
     }
 
     // MARK: - Notification Events
@@ -709,22 +675,8 @@ extension PostHogManager {
 
     // MARK: - Settings State
 
-    func settingsStateTracked(screenshotsEnabled: Bool, memoryExtractionEnabled: Bool, memoryNotificationsEnabled: Bool) {
-        track("Settings State", properties: [
-            "screenshots_enabled": screenshotsEnabled,
-            "memory_extraction_enabled": memoryExtractionEnabled,
-            "memory_notifications_enabled": memoryNotificationsEnabled
-        ])
-    }
-
     /// Comprehensive all-settings snapshot (fired on app launch, at most once per day)
     func allSettingsStateTracked(properties: [String: Any]) {
         track("All Settings State", properties: properties)
-    }
-
-    // MARK: - Display Info
-
-    func displayInfoTracked(info: [String: Any]) {
-        track("Display Info", properties: info)
     }
 }
