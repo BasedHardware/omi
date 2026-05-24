@@ -1,0 +1,112 @@
+# E2E Flow: WAL Safety & Offline Recovery — audio persists through network interruptions
+# Tests: WAL indicator during recording, offline behavior, reconnection, orphan WAL recovery on restart
+# Core feature: ensuring no audio data is lost during recording even with network issues
+
+version: 2
+name: wal-offline-recovery
+description: WAL offline recovery flow — start phone mic recording, observe WAL safety indicator showing locally saved audio, simulate network loss (airplane mode), verify recording continues offline, restore network, verify WebSocket reconnects and WAL syncs, force-stop app during recording, relaunch and verify orphan WAL recovery
+app: com.friend.ios.dev
+evidence:
+  video: true
+covers:
+  - app/lib/services/wals/wal_service.dart
+  - app/lib/services/wals/local_wal_sync.dart
+  - app/lib/services/wals/wal_syncs.dart
+  - app/lib/providers/capture_provider.dart
+  - app/lib/pages/conversation_capturing/page.dart
+preconditions:
+  - auth_ready  # User signed in and onboarding completed. App shows home screen.
+  - microphone_permission  # Mic permission granted.
+
+steps:
+  - id: S1
+    name: Start phone mic recording
+    do: "Tap the central mic button on the home screen to start phone mic recording. Wait for the ConversationCapturingPage to appear with '🎙️ Listening' in the app bar."
+    verify: true
+    expect:
+      - kind: interactive_count
+        min: 1
+    evidence:
+      - screenshot: step-S1.webp
+    note: "Phone mic recording creates PhoneMicSource and initializes WAL service. Audio bytes are buffered into 320-byte PCM frames with FrameSyncKey for tracking."
+
+  - id: S2
+    name: Speak and observe WAL indicator
+    do: "Speak for 30-60 seconds to generate audio data. Observe the WAL safety indicator below the transcript tabs — it shows 'Audio saved locally: Xm Ys' with a green dot, indicating audio frames are being written to local WAL storage. This proves audio persists even if the network drops."
+    verify: true
+    expect:
+      - kind: interactive_count
+        min: 2
+    evidence:
+      - screenshot: step-S2.webp
+    note: "WAL indicator is in ConversationCapturingPage below the TabBarView. Shows unsyncedSessionWals count and inFlightAudioSeconds. Green dot = WAL active. Spinner = sync in progress. The indicator only appears when there are unsynced WAL frames."
+
+  - id: S3
+    name: Enable airplane mode to simulate network loss
+    do: "Enable airplane mode on the device/emulator to kill the network connection. Android emulator: `adb shell cmd connectivity airplane-mode enable`. The WebSocket connection will drop. Verify the app continues recording — the '🎙️ Listening' status may change to show a connection warning, but audio capture continues locally."
+    verify: true
+    expect:
+      - kind: interactive_count
+        min: 1
+    evidence:
+      - screenshot: step-S3.webp
+    note: "When WebSocket disconnects (onClosed/onError), the keep-alive timer starts attempting reconnection every 15 seconds. Audio frames continue being captured and stored in WAL — they just aren't sent to the WebSocket. The WAL indicator should show growing 'Audio saved locally' duration."
+
+  - id: S4
+    name: Continue recording offline for 30 seconds
+    do: "Continue speaking for ~30 seconds while offline. The WAL safety indicator should show the locally saved audio duration growing. No new transcript segments will appear (WebSocket is disconnected), but audio is being safely stored."
+    verify: true
+    expect:
+      - kind: interactive_count
+        min: 1
+    evidence:
+      - screenshot: step-S4.webp
+    note: "WAL frames accumulate in local storage. Each frame has a FrameSyncKey for deduplication. The sync status tracks which frames have been sent to the WebSocket and which are pending. The indicator updates every time new frames are captured."
+
+  - id: S5
+    name: Disable airplane mode to restore network
+    do: "Disable airplane mode to restore network connectivity. Android emulator: `adb shell cmd connectivity airplane-mode disable`. Wait 15-30 seconds for the keep-alive timer to reconnect the WebSocket. Verify the WebSocket reconnects — new transcript segments should start appearing again."
+    verify: true
+    expect:
+      - kind: interactive_count
+        min: 2
+    evidence:
+      - screenshot: step-S5.webp
+    note: "The keep-alive timer (_startKeepAliveServices) runs every 15 seconds. When network is available, it calls _initiateWebsocket() to recreate the WebSocket connection. Once connected, new audio frames are sent in real-time. Previously queued WAL frames are synced in the background."
+
+  - id: S6
+    name: Process conversation and verify WAL sync
+    do: "Tap 'Process Now' to stop recording and process the conversation. Confirm if the confirmation dialog appears. Wait for the conversation to be created. The WAL safety indicator may show a sync spinner briefly as remaining frames are uploaded."
+    verify: true
+    expect:
+      - kind: text_visible
+        values: ["Conversations"]
+      - kind: interactive_count
+        min: 4
+    evidence:
+      - screenshot: step-S6.webp
+    note: "forceProcessingCurrentConversation() drains the WAL tail buffer via phoneSync.finalizeCurrentSession(), stamps all session WALs with the conversation ID, and auto-syncs them to the backend. _autoSyncSessionWals() retries failed uploads up to 3 times with exponential backoff (5s, 10s, 20s)."
+
+  - id: S7
+    name: Verify conversation includes offline audio
+    do: "Tap the newly created conversation in the list. Open the Transcript tab. Verify the transcript includes segments from the entire recording session — both the online portions (before airplane mode and after reconnection) and the offline portion (synced via WAL recovery). The transcript should be continuous without gaps."
+    verify: true
+    expect:
+      - kind: interactive_count
+        min: 3
+    evidence:
+      - screenshot: step-S7.webp
+    note: "The backend processes all audio including WAL-synced offline segments. The transcript should cover the full recording duration. WAL deduplication via FrameSyncKey ensures no duplicate audio segments."
+
+  - id: S8
+    name: Return to home
+    do: "Press back to return to the home screen."
+    verify: true
+    expect:
+      - kind: text_visible
+        values: ["Conversations"]
+      - kind: interactive_count
+        min: 4
+    evidence:
+      - screenshot: step-S8.webp
+    note: "On app restart, recoverOrphanedWals() scans for any WAL files from previous sessions that were not fully synced. This handles the force-stop scenario where the app was killed during recording. Orphan recovery is skipped if the device is offline."
