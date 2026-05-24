@@ -66,6 +66,10 @@ import 'package:omi/backend/schema/message_event.dart'
 class CaptureProvider extends ChangeNotifier
     with MessageNotifierMixin
     implements ITransctiptSegmentSocketServiceListener {
+  static const MethodChannel _nativeBleTranscriptChannel = MethodChannel('com.friend.ios/native_ble_transcript');
+  static const int _maxInProgressConversationRefreshAttempts = 30;
+  static const Duration _inProgressConversationRefreshInterval = Duration(seconds: 2);
+
   ConversationProvider? conversationProvider;
   MessageProvider? messageProvider;
   PeopleProvider? peopleProvider;
@@ -77,6 +81,9 @@ class CaptureProvider extends ChangeNotifier
   TranscriptSegmentSocketService? _socket;
   Timer? _keepAliveTimer;
   DateTime? _keepAliveLastExecutedAt;
+  Timer? _inProgressConversationRefreshTimer;
+  int _inProgressConversationRefreshAttempts = 0;
+  bool _isRefreshingInProgressConversation = false;
 
   IWalService get _wal => ServiceManager.instance().wal;
 
@@ -443,6 +450,7 @@ class CaptureProvider extends ChangeNotifier
   }
 
   Future _resetStateVariables() async {
+    _stopInProgressConversationRefresh();
     segments = [];
     photos = [];
     hasTranscripts = false;
@@ -551,7 +559,9 @@ class CaptureProvider extends ChangeNotifier
       _sessionStartSeconds = DateTime.now().millisecondsSinceEpoch ~/ 1000;
     }
 
-    _loadInProgressConversation();
+    await _loadInProgressConversation();
+    await _drainNativeBleTranscriptMessages();
+    _startInProgressConversationRefresh();
 
     notifyListeners();
   }
@@ -799,6 +809,7 @@ class CaptureProvider extends ChangeNotifier
   }
 
   Future _cleanupCurrentState({bool disableNativeBackground = false}) async {
+    _stopInProgressConversationRefresh();
     await _closeBleStream(disableNativeBackground: disableNativeBackground);
     _activeSource = null;
     notifyListeners();
@@ -1064,6 +1075,7 @@ class CaptureProvider extends ChangeNotifier
     _blePhotoStream?.cancel();
     _socket?.unsubscribe(this);
     _keepAliveTimer?.cancel();
+    _inProgressConversationRefreshTimer?.cancel();
     _connectionStateListener?.cancel();
     _audioInterruptionSubscription?.cancel();
     _metricsTimer?.cancel();
@@ -1289,6 +1301,99 @@ class CaptureProvider extends ChangeNotifier
 
   Future refreshInProgressConversations() async {
     _loadInProgressConversation();
+  }
+
+  bool get _canRefreshInProgressConversation =>
+      recordingDeviceServiceReady ||
+      recordingState == RecordingState.initialising ||
+      recordingState == RecordingState.interrupted ||
+      recordingState == RecordingState.pause ||
+      recordingState == RecordingState.deviceRecord;
+
+  void _startInProgressConversationRefresh() {
+    if (!_canRefreshInProgressConversation || segments.isNotEmpty || photos.isNotEmpty) return;
+
+    _stopInProgressConversationRefresh();
+    _inProgressConversationRefreshAttempts = 0;
+    _inProgressConversationRefreshTimer = Timer.periodic(_inProgressConversationRefreshInterval, (_) {
+      _refreshInProgressConversationTick();
+    });
+  }
+
+  void _stopInProgressConversationRefresh() {
+    _inProgressConversationRefreshTimer?.cancel();
+    _inProgressConversationRefreshTimer = null;
+    _inProgressConversationRefreshAttempts = 0;
+    _isRefreshingInProgressConversation = false;
+  }
+
+  Future<void> _refreshInProgressConversationTick() async {
+    if (_isRefreshingInProgressConversation) return;
+    if (!_canRefreshInProgressConversation ||
+        segments.isNotEmpty ||
+        photos.isNotEmpty ||
+        _inProgressConversationRefreshAttempts >= _maxInProgressConversationRefreshAttempts) {
+      _stopInProgressConversationRefresh();
+      return;
+    }
+
+    _inProgressConversationRefreshAttempts++;
+    _isRefreshingInProgressConversation = true;
+    try {
+      await _drainNativeBleTranscriptMessages();
+      if (segments.isEmpty && photos.isEmpty) {
+        await _loadInProgressConversation();
+      }
+    } finally {
+      _isRefreshingInProgressConversation = false;
+    }
+
+    if (segments.isNotEmpty ||
+        photos.isNotEmpty ||
+        _inProgressConversationRefreshAttempts >= _maxInProgressConversationRefreshAttempts) {
+      _stopInProgressConversationRefresh();
+    }
+  }
+
+  Future<void> _drainNativeBleTranscriptMessages() async {
+    if (!Platform.isAndroid) return;
+
+    List<String>? messages;
+    try {
+      messages = await _nativeBleTranscriptChannel.invokeListMethod<String>('drain');
+    } on MissingPluginException {
+      return;
+    } catch (e) {
+      Logger.debug('Failed to drain native BLE transcript messages: $e');
+      return;
+    }
+
+    if (messages == null || messages.isEmpty) return;
+    Logger.debug('Draining ${messages.length} native BLE transcript messages');
+
+    for (final message in messages) {
+      await _handleNativeBleTranscriptMessage(message);
+    }
+  }
+
+  Future<void> _handleNativeBleTranscriptMessage(String message) async {
+    dynamic jsonEvent;
+    try {
+      jsonEvent = jsonDecode(message);
+    } catch (e) {
+      Logger.debug('Failed to decode native BLE transcript message: $e');
+      return;
+    }
+
+    if (jsonEvent is List) {
+      final newSegments = jsonEvent.map((e) => TranscriptSegment.fromJson(e)).toList();
+      await _processNewSegmentReceived(newSegments);
+      return;
+    }
+
+    if (jsonEvent is Map && jsonEvent.containsKey('type')) {
+      onMessageEventReceived(MessageEvent.fromJson(Map<String, dynamic>.from(jsonEvent)));
+    }
   }
 
   Future _loadInProgressConversation() async {
@@ -1759,7 +1864,7 @@ class CaptureProvider extends ChangeNotifier
     _processNewSegmentReceived(newSegments);
   }
 
-  void _processNewSegmentReceived(List<TranscriptSegment> newSegments) async {
+  Future<void> _processNewSegmentReceived(List<TranscriptSegment> newSegments) async {
     if (newSegments.isEmpty) return;
 
     if (segments.isEmpty && !_isLoadingInProgressConversation) {

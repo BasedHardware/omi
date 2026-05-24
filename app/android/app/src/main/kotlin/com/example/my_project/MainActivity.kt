@@ -14,6 +14,7 @@ import io.flutter.plugin.common.MethodChannel
 
 class MainActivity: FlutterActivity() {
     private val CHANNEL = "com.friend.ios/notifyOnKill"
+    private val NATIVE_BLE_TRANSCRIPT_CHANNEL = "com.friend.ios/native_ble_transcript"
     private var bleHostApiImpl: BleHostApiImpl? = null
 
     override fun configureFlutterEngine(@NonNull flutterEngine: FlutterEngine) {
@@ -37,6 +38,14 @@ class MainActivity: FlutterActivity() {
         hostApi.initCompanionManager(this)
         bleHostApiImpl = hostApi
         BleHostApi.setUp(flutterEngine.dartExecutor.binaryMessenger, hostApi)
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, NATIVE_BLE_TRANSCRIPT_CHANNEL).setMethodCallHandler {
+            call, result ->
+            if (call.method == "drain") {
+                result.success(OmiBackgroundAudioStreamer.drainCachedTranscriptMessages())
+            } else {
+                result.notImplemented()
+            }
+        }
 
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL).setMethodCallHandler {
             call, result ->

@@ -25,6 +25,20 @@ class OmiBackgroundAudioStreamer(private val context: Context) {
         private const val OMI_AUDIO_CHAR_UUID = "19b10001-e8f2-537e-4f6c-d104768a1214"
         private const val FRIEND_SERVICE_UUID = "1a3fd0e7-b1f3-ac9e-2e49-b647b2c4f8da"
         private const val FRIEND_AUDIO_CHAR_UUID = "01000000-1111-1111-1111-111111111111"
+        private const val MAX_CACHED_TRANSCRIPT_MESSAGES = 200
+        private val transcriptCacheLock = Any()
+        private val cachedTranscriptMessages = ArrayDeque<String>()
+
+        fun drainCachedTranscriptMessages(): List<String> =
+            synchronized(transcriptCacheLock) {
+                if (cachedTranscriptMessages.isEmpty()) {
+                    emptyList()
+                } else {
+                    val messages = cachedTranscriptMessages.toList()
+                    cachedTranscriptMessages.clear()
+                    messages
+                }
+            }
     }
 
     private data class Config(
@@ -168,6 +182,7 @@ class OmiBackgroundAudioStreamer(private val context: Context) {
         }
 
         override fun onMessage(webSocket: WebSocket, text: String) {
+            cacheTranscriptMessage(text)
             Log.d(TAG, "Background transcription message received (${text.length} chars)")
         }
 
@@ -223,6 +238,18 @@ class OmiBackgroundAudioStreamer(private val context: Context) {
             }
         }
         return sent
+    }
+
+    private fun cacheTranscriptMessage(text: String) {
+        val trimmed = text.trimStart()
+        if (!trimmed.startsWith("[") && !trimmed.startsWith("{")) return
+
+        synchronized(transcriptCacheLock) {
+            if (cachedTranscriptMessages.size >= MAX_CACHED_TRANSCRIPT_MESSAGES) {
+                cachedTranscriptMessages.removeFirst()
+            }
+            cachedTranscriptMessages.addLast(text)
+        }
     }
 
     private fun queueFrameLocked(frame: ByteArray) {
