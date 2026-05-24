@@ -193,7 +193,25 @@ evidence rather than provider labels.
 
 Provider run ledgers live in `transcription_provider_runs`, and daily rollups
 live in `transcription_provider_usage_daily`. Ledger payload guards reject raw
-audio bytes, transcript text, words, utterances, and similar high-risk payloads.
+audio bytes, transcript text, words, utterances, API keys, tokens, secrets, and
+similar high-risk payloads.
+
+Privacy-safe provider run fields include:
+
+- `provider`, `model`, `workload`, and `status`
+- `raw_audio_seconds`, `speech_active_seconds`, `billable_seconds`, and `chunk_duration_seconds`
+- `retry_count`, `fallback_count`, and `fallback.reason`
+- `timing.latency_ms`
+- `estimated_cost_usd`
+- `speaker_cluster_count`, `split_count`, `identified_speaker_cluster_count`, and `identity_match_count`
+- `provider_speaker_count`, `mapped_speaker_count`, `mapped_person_count`, `unmapped_speaker_count`
+- `unknown_speaker_count` and `unknown_speaker_duration_seconds`
+- `identity_confidence_summary` buckets
+
+Do not add raw audio, full transcript text, provider `words`, provider
+`utterances`, user secrets, or provider API responses to these ledgers. Store
+only opaque artifact references such as `provider_result_id` when a separate
+retention-controlled artifact is required.
 
 ## Dashboards And Reports
 
@@ -211,8 +229,128 @@ Expected rollout dashboards should use `/metrics` counters and histograms for:
 Expected cost and quality review should inspect:
 
 - `transcription_provider_usage_daily` by provider, model, workload, and day.
-- `transcription_provider_runs` for canary failures, fallback direction, retry counts, latency, billable seconds, and estimated cost.
+- `transcription_provider_runs` for canary failures, fallback direction, fallback reason, retry counts, latency, chunk duration, billable seconds, estimated cost, split count, identity match count, and unknown speaker fields.
 - `backend/scripts/stt/provider_comparison_gate.py` reports for transcript drift, speaker cluster stability, identity quality, fallback rate, failure rate, and economics.
+
+## Rollout Stages
+
+1. `0%`: set `ASSEMBLYAI_BACKGROUND_PROVIDER_MODE=deepgram`. AssemblyAI is not
+   used for desktop background. Keep `/metrics` and daily Deepgram cost/hour as
+   the baseline.
+2. `shadow_only`: set `ASSEMBLYAI_BACKGROUND_PROVIDER_MODE=shadow_only`.
+   Production background requests stay on Deepgram while AssemblyAI readiness
+   work and offline comparisons continue.
+3. Small canary: set `ASSEMBLYAI_BACKGROUND_PROVIDER_MODE=assemblyai` only for
+   the selected backend environment or cohort. Require `ASSEMBLYAI_API_KEY`,
+   `DEEPGRAM_API_KEY`, `ASSEMBLYAI_PRERECORDED_STT_ENABLED=true`,
+   `ASSEMBLYAI_PRERECORDED_STT_WORKLOADS` containing `background`, and
+   `ASSEMBLYAI_PRERECORDED_STT_FALLBACK_ENABLED=true`.
+4. Expanded canary: increase the eligible cohort only after the health
+   thresholds below pass for the full review window.
+5. Rollback: set `ASSEMBLYAI_BACKGROUND_PROVIDER_MODE=deepgram` for immediate
+   background rollback. For broader passive prerecorded rollback, set
+   `ASSEMBLYAI_PRERECORDED_STT_ENABLED=false` or remove `background` from
+   `ASSEMBLYAI_PRERECORDED_STT_WORKLOADS`.
+
+## Health Thresholds
+
+Rollback or hold expansion when any condition is true for the review window:
+
+- AssemblyAI background error rate is higher than Deepgram by more than 1
+  percentage point, or exceeds 3% absolute.
+- Fallback rate exceeds 5% or doubles the previous healthy window.
+- Timeout rate exceeds 1% or any timeout spike correlates with support reports.
+- Empty transcript rate exceeds the Deepgram baseline by more than 1 percentage
+  point.
+- Cost/hour exceeds the approved Deepgram margin. The current baseline is about
+  `$0.264/hour` for Deepgram and `$0.734/hour` for AssemblyAI; AssemblyAI cost is
+  a rollout blocker unless the rollout doc names a quality or product reason for
+  accepting the margin.
+- Unknown or low-confidence speaker rate exceeds the Deepgram baseline by more
+  than 5 percentage points, or `unknown_speaker_duration_seconds` grows enough
+  to make speaker labels visibly worse.
+- App-visible speaker inflation or `split_count` rises without a matching
+  speaker purity improvement in replay reports.
+- User correction/self-voice review rate rises above the Deepgram baseline when
+  that signal is available.
+- Support complaints mention missing transcripts, wrong speakers, degraded
+  background transcription, or account/billing surprises.
+
+## Operations Runbook
+
+Enable a small canary:
+
+```bash
+ASSEMBLYAI_API_KEY=<redacted>
+DEEPGRAM_API_KEY=<redacted>
+ASSEMBLYAI_PRERECORDED_STT_ENABLED=true
+ASSEMBLYAI_PRERECORDED_STT_WORKLOADS=sync,background,postprocess
+ASSEMBLYAI_PRERECORDED_STT_FALLBACK_ENABLED=true
+ASSEMBLYAI_BACKGROUND_PROVIDER_MODE=assemblyai
+```
+
+Disable AssemblyAI for background:
+
+```bash
+ASSEMBLYAI_BACKGROUND_PROVIDER_MODE=deepgram
+```
+
+Disable AssemblyAI for all passive prerecorded workloads:
+
+```bash
+ASSEMBLYAI_PRERECORDED_STT_ENABLED=false
+```
+
+Validate after each config change:
+
+1. Confirm `/metrics` has background samples for
+   `transcription_provider_requests_total`,
+   `transcription_provider_latency_seconds`,
+   `transcription_provider_fallbacks_total`, and
+   `transcription_provider_audio_seconds_total`.
+2. Query `transcription_provider_usage_daily` for `provider=assemblyai`,
+   `model=universal-2`, and `workload=background`; compute cost/hour as
+   `estimated_cost_usd / (billable_seconds / 3600)`.
+3. Inspect recent `transcription_provider_runs` without opening transcript or
+   audio artifacts. Check `status`, `fallback.reason`, `retry_count`,
+   `timing.latency_ms`, `chunk_duration_seconds`, `estimated_cost_usd`,
+   `split_count`, `identity_match_count`, `unknown_speaker_count`, and
+   `unknown_speaker_duration_seconds`.
+4. Run the offline gate before expansion:
+   `python3 scripts/stt/provider_comparison_gate.py --manifest tests/fixtures/stt_provider_eval/manifest.json`.
+5. If a rollback threshold trips, set `ASSEMBLYAI_BACKGROUND_PROVIDER_MODE=deepgram`,
+   verify new background runs show `provider=deepgram`, and leave
+   `ASSEMBLYAI_PRERECORDED_STT_FALLBACK_ENABLED=true` until the incident review
+   is complete.
+
+Debugging checklist:
+
+- `missing_assemblyai_api_key`: verify `ASSEMBLYAI_API_KEY` is present only in
+  secret storage and never in logs, ledgers, or dispatch artifacts.
+- `provider_failure`: inspect provider status, timeout settings
+  `ASSEMBLYAI_POLL_INTERVAL_SECONDS` and `ASSEMBLYAI_MAX_POLL_SECONDS`, retry
+  counts, and Deepgram fallback health.
+- High cost/hour: compare `billable_seconds`, `chunk_duration_seconds`, and
+  request count against the fixed-15s background profile before changing
+  chunking.
+- Speaker regressions: compare `split_count`, `identity_match_count`,
+  `unknown_speaker_count`, `unknown_speaker_duration_seconds`, and replay
+  speaker-purity reports. Do not reduce split-before-match protections unless
+  replay gates show no regression.
+
+## Data Handling
+
+AssemblyAI receives uploaded audio only for eligible prerecorded workloads after
+the routing flags above allow it. User consent and BYOK behavior must be
+consistent with the desktop background transcription setting and the optional
+`X-BYOK-AssemblyAI` header. Regional data handling follows the configured
+AssemblyAI account and endpoint; do not enable a region or cohort where vendor
+retention, residency, or customer terms are not approved.
+
+Secrets are configuration-only. Never place `ASSEMBLYAI_API_KEY`, user BYOK
+headers, provider bearer tokens, raw audio, full transcript text, provider
+`words`, or provider `utterances` in metrics, logs, Firestore ledgers, CAR
+artifacts, screenshots, or support notes.
 
 Fixture validation:
 

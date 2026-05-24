@@ -8,7 +8,7 @@ import httpx
 from deepgram import DeepgramClient, DeepgramClientOptions
 
 from models.transcript_segment import ProviderTranscriptResult, TranscriptSegment
-from utils.stt.assemblyai_adapter import AssemblyAIAsyncTranscriptionProvider
+from utils.stt.assemblyai_adapter import AssemblyAIAsyncTranscriptionProvider, AssemblyAITimeoutError
 from utils.stt.conversation_reconstructor import reconstruct_conversation
 from utils.stt.deepgram_adapter import DeepgramPrerecordedTranscriptionProvider
 from utils.stt.deepgram_adapter import provider_result_to_legacy_words
@@ -48,6 +48,8 @@ logger = logging.getLogger(__name__)
 _DG_TIMEOUT = httpx.Timeout(connect=10.0, read=120.0, write=30.0, pool=10.0)
 _DEEPGRAM_OPTIONS = DeepgramClientOptions(options={"keepalive": "true"})
 _DEEPGRAM_CLIENT = DeepgramClient(os.getenv('DEEPGRAM_API_KEY'), _DEEPGRAM_OPTIONS)
+_LOCAL_CLUSTER_SPLIT_MARKER = '::local_part:'
+_UNKNOWN_SPEAKER_STATES = {'unknown', 'unassigned', 'legacy_ambiguous'}
 
 
 def create_provider_run(**kwargs) -> str:
@@ -268,11 +270,13 @@ def transcribe_url(
         )
         fallback_provider_name = _resolve_usable_fallback_prerecorded_provider(provider_name, workload)
         if fallback_provider_name:
+            fallback_reason = _fallback_reason_from_exception(e)
             logger.warning(
-                'provider prerecorded url transcription falling back workload=%s from_provider=%s to_provider=%s: %s',
+                'provider prerecorded url transcription falling back workload=%s from_provider=%s to_provider=%s reason=%s: %s',
                 workload.value,
                 provider_name.value,
                 fallback_provider_name.value,
+                fallback_reason,
                 e,
             )
             return _transcribe_url_with_provider(
@@ -290,6 +294,7 @@ def transcribe_url(
                 skip_n_seconds=skip_n_seconds,
                 raw_audio_seconds=raw_audio_seconds,
                 fallback_from_provider=provider_name.value,
+                fallback_reason=fallback_reason,
             )
         raise RuntimeError(f'{provider_name.value} transcription failed after 2 attempts: {e}')
 
@@ -362,11 +367,13 @@ def transcribe_bytes(
         )
         fallback_provider_name = _resolve_usable_fallback_prerecorded_provider(provider_name, workload)
         if fallback_provider_name:
+            fallback_reason = _fallback_reason_from_exception(e)
             logger.warning(
-                'provider prerecorded bytes transcription falling back workload=%s from_provider=%s to_provider=%s: %s',
+                'provider prerecorded bytes transcription falling back workload=%s from_provider=%s to_provider=%s reason=%s: %s',
                 workload.value,
                 provider_name.value,
                 fallback_provider_name.value,
+                fallback_reason,
                 e,
             )
             return _transcribe_bytes_with_provider(
@@ -386,6 +393,7 @@ def transcribe_bytes(
                 skip_n_seconds=skip_n_seconds,
                 raw_audio_seconds=raw_audio_seconds,
                 fallback_from_provider=provider_name.value,
+                fallback_reason=fallback_reason,
             )
         raise RuntimeError(f'{provider_name.value} transcription failed after 2 attempts: {e}')
 
@@ -430,6 +438,7 @@ def _transcribe_url_with_provider(
     skip_n_seconds: int = 0,
     raw_audio_seconds: float = 0.0,
     fallback_from_provider: Optional[str] = None,
+    fallback_reason: str = 'provider_failure',
 ) -> PrerecordedTranscriptionResponse:
     provider = _get_prerecorded_provider(provider_name)
     started_at = datetime.now(timezone.utc)
@@ -454,6 +463,7 @@ def _transcribe_url_with_provider(
             raw_audio_seconds,
             skip_n_seconds,
             fallback_from_provider=fallback_from_provider,
+            fallback_reason=fallback_reason,
             detected_language=detected_language,
         )
     except Exception as e:
@@ -487,6 +497,7 @@ def _transcribe_bytes_with_provider(
     skip_n_seconds: int = 0,
     raw_audio_seconds: float = 0.0,
     fallback_from_provider: Optional[str] = None,
+    fallback_reason: str = 'provider_failure',
 ) -> PrerecordedTranscriptionResponse:
     provider = _get_prerecorded_provider(provider_name)
     started_at = datetime.now(timezone.utc)
@@ -513,6 +524,7 @@ def _transcribe_bytes_with_provider(
             raw_audio_seconds,
             skip_n_seconds,
             fallback_from_provider=fallback_from_provider,
+            fallback_reason=fallback_reason,
             detected_language=detected_language,
         )
     except Exception as e:
@@ -538,6 +550,7 @@ def _build_success_response(
     raw_audio_seconds: float,
     skip_n_seconds: int,
     fallback_from_provider: Optional[str] = None,
+    fallback_reason: str = 'provider_failure',
     detected_language: Optional[str] = None,
 ) -> PrerecordedTranscriptionResponse:
     segments = reconstruct_conversation(provider_result, skip_n_seconds=skip_n_seconds)
@@ -553,6 +566,7 @@ def _build_success_response(
         segments=segments,
         fallback_count=1 if fallback_from_provider else 0,
         fallback_provider=fallback_from_provider,
+        fallback_reason=fallback_reason,
     )
     return PrerecordedTranscriptionResponse(
         result=provider_result,
@@ -617,6 +631,13 @@ def _provider_error_from_exception(error: Exception) -> Exception:
     return error
 
 
+def _fallback_reason_from_exception(error: Exception) -> str:
+    provider_error = _provider_error_from_exception(error)
+    if isinstance(provider_error, (AssemblyAITimeoutError, httpx.TimeoutException, TimeoutError)):
+        return 'provider_timeout'
+    return 'provider_failure'
+
+
 def _unpack_provider_result(result, return_language: bool) -> Tuple[ProviderTranscriptResult, Optional[str]]:
     if return_language:
         transcript_result, detected_language = result
@@ -660,6 +681,7 @@ def _finalize_run(
     segments: List[TranscriptSegment],
     fallback_count: int = 0,
     fallback_provider: Optional[str] = None,
+    fallback_reason: str = 'provider_failure',
 ) -> None:
     if not run_id:
         return
@@ -667,6 +689,7 @@ def _finalize_run(
     clusters = {_segment_cluster_key(segment) for segment in segments if _segment_cluster_key(segment)}
     confidences = [segment.speaker_identity_confidence for segment in segments]
     identity_metrics = speaker_identity_metrics(segments)
+    unknown_speaker_duration_seconds = _unknown_speaker_duration_seconds(segments)
     try:
         finalize_provider_run(
             run_id=run_id,
@@ -678,6 +701,7 @@ def _finalize_run(
             raw_audio_seconds=raw_audio_seconds,
             speech_active_seconds=raw_audio_seconds,
             billable_seconds=billable_seconds,
+            chunk_duration_seconds=raw_audio_seconds,
             estimated_cost_usd=estimate_prerecorded_provider_cost_usd(
                 provider=result.provider,
                 model=result.model,
@@ -690,14 +714,19 @@ def _finalize_run(
             transcript_word_count=len(result.words),
             speaker_cluster_count=len(clusters),
             identified_speaker_cluster_count=_identified_cluster_count(segments),
+            identity_match_count=identity_metrics['mapped_speaker_count'],
             identity_confidence_summary=summarize_identity_confidences(confidences),
             provider_speaker_count=identity_metrics['provider_speaker_count'],
             mapped_speaker_count=identity_metrics['mapped_speaker_count'],
             mapped_person_count=identity_metrics['mapped_person_count'],
             unmapped_speaker_count=identity_metrics['unmapped_speaker_count'],
+            unknown_speaker_count=identity_metrics['unmapped_speaker_count'],
+            unknown_speaker_duration_seconds=unknown_speaker_duration_seconds,
+            split_count=_split_count(clusters),
             embedding_extraction_failure_count=identity_metrics['embedding_extraction_failure_count'],
             artifact_refs=_provider_artifact_refs(result),
             fallback_provider=fallback_provider,
+            fallback_reason=fallback_reason,
         )
     except Exception as e:
         logger.warning('failed to finalize transcription provider run ledger run_id=%s: %s', run_id, e)
@@ -733,6 +762,7 @@ def _finalize_failed_run(
             raw_audio_seconds=raw_audio_seconds,
             speech_active_seconds=raw_audio_seconds,
             billable_seconds=billable_seconds,
+            chunk_duration_seconds=raw_audio_seconds,
             estimated_cost_usd=estimate_prerecorded_provider_cost_usd(
                 provider=provider,
                 model=model,
@@ -816,6 +846,18 @@ def speaker_identity_metrics(segments: List[TranscriptSegment]) -> dict:
         'unmapped_speaker_count': max(len(provider_speakers) - len(mapped_speakers), 0),
         'embedding_extraction_failure_count': len(embedding_failures),
     }
+
+
+def _unknown_speaker_duration_seconds(segments: List[TranscriptSegment]) -> float:
+    duration = 0.0
+    for segment in segments:
+        if segment.speaker_identity_state in _UNKNOWN_SPEAKER_STATES:
+            duration += max(0.0, segment.end - segment.start)
+    return round(duration, 3)
+
+
+def _split_count(clusters: set[str]) -> int:
+    return sum(1 for cluster in clusters if _LOCAL_CLUSTER_SPLIT_MARKER in str(cluster))
 
 
 def _identified_cluster_count(segments: List[TranscriptSegment]) -> int:

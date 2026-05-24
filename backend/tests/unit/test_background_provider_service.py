@@ -17,7 +17,7 @@ sys.modules.setdefault('database._client', types.SimpleNamespace(db=MagicMock())
 os.environ.setdefault('DEEPGRAM_API_KEY', 'fake-for-test')
 os.environ.setdefault('ASSEMBLYAI_API_KEY', 'fake-for-test')
 
-from models.transcript_segment import ProviderTranscriptResult, ProviderTranscriptWord  # noqa: E402
+from models.transcript_segment import ProviderTranscriptResult, ProviderTranscriptWord, TranscriptSegment  # noqa: E402
 from utils.stt import provider_service  # noqa: E402
 from utils.stt.provider_costs import estimate_prerecorded_provider_cost_usd  # noqa: E402
 from utils.stt.providers import (  # noqa: E402
@@ -610,10 +610,64 @@ def test_provider_service_counts_label_only_identified_clusters():
 
     assert finalize_run.call_args.kwargs['speaker_cluster_count'] == 2
     assert finalize_run.call_args.kwargs['identified_speaker_cluster_count'] == 1
+    assert finalize_run.call_args.kwargs['identity_match_count'] == 1
     assert finalize_run.call_args.kwargs['provider_speaker_count'] == 2
     assert finalize_run.call_args.kwargs['mapped_speaker_count'] == 1
     assert finalize_run.call_args.kwargs['mapped_person_count'] == 1
     assert finalize_run.call_args.kwargs['unmapped_speaker_count'] == 1
+    assert finalize_run.call_args.kwargs['unknown_speaker_count'] == 1
+    assert finalize_run.call_args.kwargs['unknown_speaker_duration_seconds'] == 0.4
+    assert finalize_run.call_args.kwargs['chunk_duration_seconds'] == 2.0
+
+
+def test_provider_service_records_split_count_from_local_cluster_marker():
+    result = ProviderTranscriptResult(provider='assemblyai', model='universal-2', duration=2.0)
+    segments = [
+        TranscriptSegment(
+            text='first speaker',
+            is_user=False,
+            start=0.0,
+            end=0.8,
+            provider_cluster_id='A::local_part:0',
+            speaker_identity_state='unknown',
+        ),
+        TranscriptSegment(
+            text='known speaker',
+            is_user=False,
+            person_id='person-b',
+            start=1.0,
+            end=1.8,
+            provider_cluster_id='B',
+            speaker_identity_state='identified',
+            speaker_identity_confidence=0.93,
+        ),
+    ]
+
+    with patch.object(provider_service, 'finalize_provider_run') as finalize_run:
+        provider_service._finalize_run(
+            'run-split',
+            result,
+            STTWorkload.background,
+            provider_service.datetime.now(provider_service.timezone.utc),
+            'succeeded',
+            retry_count=0,
+            raw_audio_seconds=2.0,
+            segments=segments,
+        )
+
+    assert finalize_run.call_args.kwargs['split_count'] == 1
+    assert finalize_run.call_args.kwargs['unknown_speaker_count'] == 1
+    assert finalize_run.call_args.kwargs['unknown_speaker_duration_seconds'] == 0.8
+
+
+def test_provider_service_classifies_timeout_fallback_reason():
+    timeout = provider_service.ProviderTranscriptionRetriesExhausted(provider_service.AssemblyAITimeoutError(), 1)
+
+    assert provider_service._fallback_reason_from_exception(timeout) == 'provider_timeout'
+    assert (
+        provider_service._fallback_reason_from_exception(RuntimeError('temporary provider failure'))
+        == 'provider_failure'
+    )
 
 
 def test_provider_service_preserves_assemblyai_labels_for_identity_metrics():

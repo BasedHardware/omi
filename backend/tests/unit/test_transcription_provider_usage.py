@@ -127,6 +127,7 @@ def test_create_and_finalize_provider_run_writes_ledger_rollup_and_metrics(monke
         raw_audio_seconds=60.0,
         speech_active_seconds=42.0,
         billable_seconds=60.0,
+        chunk_duration_seconds=15.0,
         estimated_cost_usd=0.37,
         retry_count=1,
         fallback_count=0,
@@ -134,6 +135,10 @@ def test_create_and_finalize_provider_run_writes_ledger_rollup_and_metrics(monke
         transcript_word_count=140,
         speaker_cluster_count=3,
         identified_speaker_cluster_count=2,
+        identity_match_count=2,
+        unknown_speaker_count=1,
+        unknown_speaker_duration_seconds=7.5,
+        split_count=1,
         identity_confidence_summary={'high': 2, 'unknown': 1},
         artifact_refs={'provider_result': 'gs://bucket/result.json'},
     )
@@ -146,8 +151,13 @@ def test_create_and_finalize_provider_run_writes_ledger_rollup_and_metrics(monke
     finalized = run_doc.set_calls[1]['data']
     assert finalized['status'] == 'success'
     assert finalized['timing']['latency_ms'] == 5000
+    assert finalized['chunk_duration_seconds'] == 15.0
     assert finalized['retry_count'] == 1
     assert finalized['fallback'] is None
+    assert finalized['identity_match_count'] == 2
+    assert finalized['unknown_speaker_count'] == 1
+    assert finalized['unknown_speaker_duration_seconds'] == 7.5
+    assert finalized['split_count'] == 1
     assert 'transcript_text' not in finalized
     assert 'words' not in finalized
 
@@ -155,7 +165,12 @@ def test_create_and_finalize_provider_run_writes_ledger_rollup_and_metrics(monke
     rollup = rollup_doc.set_calls[0]['data']
     assert rollup['run_count'] == {'__increment': 1}
     assert rollup['raw_audio_seconds'] == {'__increment': 60.0}
+    assert rollup['chunk_duration_seconds'] == {'__increment': 15.0}
     assert rollup['estimated_cost_usd'] == {'__increment': 0.37}
+    assert rollup['identity_match_count'] == {'__increment': 2}
+    assert rollup['unknown_speaker_count'] == {'__increment': 1}
+    assert rollup['unknown_speaker_duration_seconds'] == {'__increment': 7.5}
+    assert rollup['split_count'] == {'__increment': 1}
     assert rollup['identity_confidence_counts.high'] == {'__increment': 2}
     assert emitted[0]['latency_seconds'] == 5.0
     assert emitted[0]['billable_seconds'] == 60.0
@@ -169,6 +184,10 @@ def test_rejects_transcript_text_and_chunk_payloads():
         usage._reject_forbidden_payload_keys({'chunks': [{'start': 0}]})
     with pytest.raises(ValueError):
         usage._reject_forbidden_payload_keys({'artifact_refs': {'transcript': 'gs://bucket/transcript.txt'}})
+    with pytest.raises(ValueError):
+        usage._reject_forbidden_payload_keys({'provider': {'api_key': 'secret-aa-key'}})
+    with pytest.raises(ValueError):
+        usage._reject_forbidden_payload_keys({'full_transcript_text': 'hello world'})
 
 
 def test_utc_daily_bucket_and_rollup_rebuild(monkeypatch):
@@ -184,6 +203,7 @@ def test_utc_daily_bucket_and_rollup_rebuild(monkeypatch):
             'raw_audio_seconds': 10,
             'speech_active_seconds': 6,
             'billable_seconds': 10,
+            'chunk_duration_seconds': 15,
             'estimated_cost_usd': 0.1,
             'retry_count': 1,
             'fallback_count': 0,
@@ -191,6 +211,10 @@ def test_utc_daily_bucket_and_rollup_rebuild(monkeypatch):
             'transcript_word_count': 40,
             'speaker_cluster_count': 2,
             'identified_speaker_cluster_count': 1,
+            'identity_match_count': 1,
+            'unknown_speaker_count': 1,
+            'unknown_speaker_duration_seconds': 3,
+            'split_count': 1,
             'identity_confidence_summary': {'high': 1},
         }
     )
@@ -213,7 +237,12 @@ def test_utc_daily_bucket_and_rollup_rebuild(monkeypatch):
 
     assert rollup['run_count'] == 1
     assert rollup['raw_audio_seconds'] == 10.0
+    assert rollup['chunk_duration_seconds'] == 15.0
     assert rollup['status_counts'] == {'success': 1}
+    assert rollup['identity_match_count'] == 1.0
+    assert rollup['unknown_speaker_count'] == 1.0
+    assert rollup['unknown_speaker_duration_seconds'] == 3.0
+    assert rollup['split_count'] == 1.0
     assert rollup['identity_confidence_counts'] == {'high': 1}
 
 
