@@ -26,14 +26,6 @@ abstract class IWalSyncProgressListener {
   });
 }
 
-/// Listener for WiFi connection progress
-abstract class IWifiConnectionListener {
-  void onEnablingDeviceWifi();
-  void onConnectingToDevice();
-  void onConnected();
-  void onConnectionFailed(String error);
-}
-
 abstract class IWalServiceListener extends IWalSyncListener {
   void onStatusChanged(WalServiceStatus status);
 }
@@ -46,15 +38,8 @@ abstract class IWalSyncListener {
 abstract class IWalSync {
   Future<List<Wal>> getMissingWals();
   Future deleteWal(Wal wal);
-  Future<SyncLocalFilesResponse?> syncAll({
-    IWalSyncProgressListener? progress,
-    IWifiConnectionListener? connectionListener,
-  });
-  Future<SyncLocalFilesResponse?> syncWal({
-    required Wal wal,
-    IWalSyncProgressListener? progress,
-    IWifiConnectionListener? connectionListener,
-  });
+  Future<SyncLocalFilesResponse?> syncAll({IWalSyncProgressListener? progress});
+  Future<SyncLocalFilesResponse?> syncWal({required Wal wal, IWalSyncProgressListener? progress});
   void cancelSync();
 
   void start();
@@ -104,16 +89,6 @@ abstract class SDCardWalSync implements IWalSync {
   Future<void> deleteAllPendingWals();
   bool get isSyncing;
   double get currentSpeedKBps;
-
-  Future<bool> isWifiSyncSupported();
-  Future<bool> setWifiCredentials(String ssid, String password);
-  Future<void> clearWifiCredentials();
-  Future<void> loadWifiCredentials();
-  Map<String, String?>? getWifiCredentials();
-  Future<SyncLocalFilesResponse?> syncWithWifi({
-    IWalSyncProgressListener? progress,
-    IWifiConnectionListener? connectionListener,
-  });
 }
 
 abstract class StorageSync implements IWalSync {

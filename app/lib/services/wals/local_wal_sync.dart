@@ -513,10 +513,7 @@ class LocalWalSyncImpl implements LocalWalSync {
   }
 
   @override
-  Future<SyncLocalFilesResponse?> syncAll({
-    IWalSyncProgressListener? progress,
-    IWifiConnectionListener? connectionListener,
-  }) async {
+  Future<SyncLocalFilesResponse?> syncAll({IWalSyncProgressListener? progress}) async {
     await _flush();
     _isCancelled = false;
     _accumulatedResponse = null;
@@ -729,11 +726,7 @@ class LocalWalSyncImpl implements LocalWalSync {
   }
 
   @override
-  Future<SyncLocalFilesResponse?> syncWal({
-    required Wal wal,
-    IWalSyncProgressListener? progress,
-    IWifiConnectionListener? connectionListener,
-  }) async {
+  Future<SyncLocalFilesResponse?> syncWal({required Wal wal, IWalSyncProgressListener? progress}) async {
     await _flush();
 
     var walToSync = _wals.where((w) => w == wal).toList().first;

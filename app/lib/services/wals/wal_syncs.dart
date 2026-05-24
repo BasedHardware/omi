@@ -1,10 +1,8 @@
 import 'dart:async';
 
-import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/models/sync_state.dart';
-import 'package:omi/services/connectivity_service.dart';
 import 'package:omi/services/wals/flash_page_wal_sync.dart';
 import 'package:omi/services/wals/local_wal_sync.dart';
 import 'package:omi/services/wals/ring_storage_sync.dart';
@@ -66,8 +64,6 @@ class WalSyncs implements IWalSync {
     _flashPageSync.setLocalSync(_phoneSync);
     _storageSync.setLocalSync(_phoneSync);
     _ringSync.setLocalSync(_phoneSync);
-
-    _sdcardSync.loadWifiCredentials();
   }
 
   @override
@@ -205,10 +201,7 @@ class WalSyncs implements IWalSync {
   }
 
   @override
-  Future<SyncLocalFilesResponse?> syncAll({
-    IWalSyncProgressListener? progress,
-    IWifiConnectionListener? connectionListener,
-  }) async {
+  Future<SyncLocalFilesResponse?> syncAll({IWalSyncProgressListener? progress}) async {
     _isCancelled = false;
     var resp = SyncLocalFilesResponse(newConversationIds: [], updatedConversationIds: []);
 
@@ -257,19 +250,9 @@ class WalSyncs implements IWalSync {
     progress?.onWalSyncedProgress(0.0, phase: SyncPhase.downloadingFromDevice);
     final missingSDCardWals = (await _sdcardSync.getMissingWals()).where((w) => w.status == WalStatus.miss).toList();
 
-    bool usedWifi = false;
     if (missingSDCardWals.isNotEmpty) {
-      final preferredMethod = SharedPreferencesUtil().preferredSyncMethod;
-      final wifiSupported = await _sdcardSync.isWifiSyncSupported();
-
-      if (preferredMethod == 'wifi' && wifiSupported) {
-        usedWifi = true;
-        DebugLogManager.logInfo('SD card sync using WiFi', {'walCount': missingSDCardWals.length});
-        await _sdcardSync.syncWithWifi(progress: progress, connectionListener: connectionListener);
-      } else {
-        DebugLogManager.logInfo('SD card sync using BLE', {'walCount': missingSDCardWals.length});
-        await _sdcardSync.syncAll(progress: progress);
-      }
+      DebugLogManager.logInfo('SD card sync over BLE', {'walCount': missingSDCardWals.length});
+      await _sdcardSync.syncAll(progress: progress);
     }
 
     if (_isCancelled) {
@@ -286,19 +269,6 @@ class WalSyncs implements IWalSync {
     if (_isCancelled) {
       Logger.debug("WalSyncs: Cancelled after flash page phase");
       DebugLogManager.logWarning('Sync cancelled after flash page phase');
-      return resp;
-    }
-
-    if (usedWifi) {
-      Logger.debug("WalSyncs: Waiting for internet after WiFi transfer...");
-      DebugLogManager.logInfo('Waiting for internet after WiFi transfer');
-      progress?.onWalSyncedProgress(0.0, phase: SyncPhase.waitingForInternet);
-      await _waitForInternet();
-    }
-
-    if (_isCancelled) {
-      Logger.debug("WalSyncs: Cancelled after waiting for internet");
-      DebugLogManager.logWarning('Sync cancelled while waiting for internet');
       return resp;
     }
 
@@ -327,24 +297,13 @@ class WalSyncs implements IWalSync {
   }
 
   @override
-  Future<SyncLocalFilesResponse?> syncWal({
-    required Wal wal,
-    IWalSyncProgressListener? progress,
-    IWifiConnectionListener? connectionListener,
-  }) async {
+  Future<SyncLocalFilesResponse?> syncWal({required Wal wal, IWalSyncProgressListener? progress}) async {
     if (wal.storage == WalStorage.sdcard) {
       progress?.onWalSyncedProgress(0.0, phase: SyncPhase.downloadingFromDevice);
       if (wal.fileNum == -1) {
         return _ringSync.syncWal(wal: wal, progress: progress);
       }
-      final preferredMethod = SharedPreferencesUtil().preferredSyncMethod;
-      final wifiSupported = await _sdcardSync.isWifiSyncSupported();
-
-      if (preferredMethod == 'wifi' && wifiSupported) {
-        return await _sdcardSync.syncWithWifi(progress: progress, connectionListener: connectionListener);
-      } else {
-        return _sdcardSync.syncWal(wal: wal, progress: progress);
-      }
+      return _sdcardSync.syncWal(wal: wal, progress: progress);
     } else if (wal.storage == WalStorage.flashPage) {
       progress?.onWalSyncedProgress(0.0, phase: SyncPhase.downloadingFromDevice);
       return _flashPageSync.syncWal(wal: wal, progress: progress);
@@ -377,20 +336,4 @@ class WalSyncs implements IWalSync {
   /// Get conversation IDs accumulated so far from completed upload batches.
   /// Returns null if no sync is in progress or no batches have completed.
   SyncLocalFilesResponse? get accumulatedResponse => _phoneSync.accumulatedResponse;
-
-  /// Wait for internet connectivity to be restored (e.g. after WiFi transfer).
-  /// Polls every 2 seconds, gives up after 30 seconds.
-  Future<void> _waitForInternet() async {
-    final connectivity = ConnectivityService();
-    for (int i = 0; i < 15; i++) {
-      if (connectivity.isConnected) {
-        Logger.debug("WalSyncs: Internet available after ${i * 2}s");
-        DebugLogManager.logInfo('Internet restored after ${i * 2}s');
-        return;
-      }
-      await Future.delayed(const Duration(seconds: 2));
-    }
-    Logger.debug("WalSyncs: Internet not available after 30s, proceeding anyway");
-    DebugLogManager.logWarning('Internet not available after 30s, proceeding anyway');
-  }
 }
