@@ -25,7 +25,10 @@ class DeviceLocator {
   }
 
   factory DeviceLocator.fromJson(Map<String, dynamic> json) {
-    final kind = TransportKind.values[json['kind'] as int];
+    final rawKind = json['kind'] as int;
+    final kind = (rawKind >= 0 && rawKind < TransportKind.values.length)
+        ? TransportKind.values[rawKind]
+        : TransportKind.bluetooth;
     switch (kind) {
       case TransportKind.bluetooth:
         return DeviceLocator.bluetooth(
