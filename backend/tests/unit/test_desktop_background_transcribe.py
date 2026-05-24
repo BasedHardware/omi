@@ -642,6 +642,9 @@ def test_noncontiguous_same_provider_cluster_splits_inside_chunk(monkeypatch):
         'A::local_part:2',
     ]
     assert data['speaker_diagnostics']['provider_cluster_count'] == 3
+    assert data['speaker_diagnostics']['speaker_split_cluster_count'] == 2
+    assert data['speaker_diagnostics']['speaker_split_segment_count'] == 2
+    assert data['speaker_diagnostics']['cannot_link_violations_prevented'] == 1
 
 
 def test_contiguous_same_provider_cluster_stays_together_inside_chunk(monkeypatch):
@@ -708,7 +711,7 @@ def test_assemblyai_label_only_speakers_do_not_collapse_to_single_local_speaker(
     assert desktop_background.update_provider_run_identity_metrics.call_args.args[6] == 'missing_candidate_embeddings'
 
 
-def test_background_transcribe_multi_chunk_offsets_persist_and_keep_speaker_map(monkeypatch):
+def test_background_transcribe_multi_chunk_offsets_persist_and_keep_anonymous_speakers_chunk_local(monkeypatch):
     client, mock_transcribe = _client(monkeypatch)
     speaker_map_store = {}
 
@@ -752,8 +755,61 @@ def test_background_transcribe_multi_chunk_offsets_persist_and_keep_speaker_map(
     ]
     assert [segment.start for segment in appended_segments] == [0.1, 14.1, 28.1]
     assert [segment.end for segment in appended_segments] == [1.0, 15.0, 29.0]
-    assert [segment.speaker_id for segment in appended_segments] == [0, 1, 0]
-    assert [segment.speaker for segment in appended_segments] == ['SPEAKER_00', 'SPEAKER_01', 'SPEAKER_00']
+    assert [segment.speaker_id for segment in appended_segments] == [0, 1, 2]
+    assert [segment.speaker for segment in appended_segments] == ['SPEAKER_00', 'SPEAKER_01', 'SPEAKER_02']
+
+
+def test_background_transcribe_multi_chunk_known_omi_identity_can_reconcile(monkeypatch):
+    alice_embedding = np.array([[1.0, 0.0]], dtype=np.float32)
+    client, mock_transcribe = _client(
+        monkeypatch,
+        person_embeddings_cache={'person-alice': {'embedding': alice_embedding, 'name': 'Alice'}},
+    )
+    monkeypatch.setattr(desktop_background, 'extract_embedding_from_bytes', lambda _audio, _filename: alice_embedding)
+    speaker_map_store = {}
+
+    def _redis_get(key):
+        return speaker_map_store.get(key)
+
+    def _redis_set(key, value, **_kwargs):
+        speaker_map_store[key] = value
+
+    monkeypatch.setattr(desktop_background.redis_db.r, 'get', _redis_get)
+    monkeypatch.setattr(desktop_background.redis_db.r, 'set', _redis_set)
+
+    responses = [
+        [TranscriptSegment(text='Alice first chunk.', is_user=False, start=0.1, end=3.0, provider_cluster_id='A')],
+        [TranscriptSegment(text='Alice second chunk.', is_user=False, start=0.1, end=3.0, provider_cluster_id='B')],
+    ]
+
+    def _transcribe_bytes(_audio_bytes, **_kwargs):
+        return SimpleNamespace(
+            result=ProviderTranscriptResult(provider='assemblyai', model='universal-2', words=[], utterances=[]),
+            detected_language='en',
+            segments=[segment.model_copy(deep=True) for segment in responses.pop(0)],
+            run_id='run-known',
+        )
+
+    mock_transcribe.side_effect = _transcribe_bytes
+
+    response_payloads = []
+    for chunk_start_ms in (0, 14000):
+        response = client.post(
+            f'/v2/desktop/background-transcribe?conversation_id=conv-1&chunk_id=chunk-id-{chunk_start_ms}&chunk_start_ms={chunk_start_ms}',
+            content=b'\x01\x00' * 16000 * 4,
+            headers={'Content-Type': 'application/octet-stream'},
+        )
+        assert response.status_code == 200
+        response_payloads.append(response.json())
+
+    appended_segments = [
+        call.args[4][0]
+        for call in desktop_background.append_background_chunk_to_in_progress_conversation.call_args_list
+    ]
+    assert [segment.person_id for segment in appended_segments] == ['person-alice', 'person-alice']
+    assert [segment.speaker_id for segment in appended_segments] == [0, 0]
+    assert response_payloads[-1]['speaker_diagnostics']['speaker_reconciliation_accepted_count'] == 1
+    assert response_payloads[-1]['speaker_diagnostics']['speaker_reconciliation_rejected_count'] == 0
 
 
 def test_background_transcribe_identifies_assemblyai_speaker_with_omi_user_embedding(monkeypatch):

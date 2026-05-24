@@ -136,6 +136,28 @@ def test_text_self_introduction_is_hint_only_without_voice_assignment():
     assert segments[0].speaker_identity_text_hints[0]['source'] == 'text_self_introduction'
 
 
+def test_text_hint_negative_controls_do_not_create_identity_hints():
+    negative_texts = [
+        'Bonjour, je suis Alice et je parle francais.',
+        'Alice said I am Bob during the interview.',
+        '"I am Alice," she read from the script.',
+        'Alice is my manager and she mentioned the roadmap.',
+        'Hello Alice, hello Alice, thanks for joining.',
+        'This monologue has no actual speaker change.',
+        'My name as Alice was mistranscribed by the ASR.',
+    ]
+
+    segments = [
+        _segment(f'negative-{index}', index * 3.0, index * 3.0 + 2.0, cluster=f'cluster-{index}', text=text)
+        for index, text in enumerate(negative_texts)
+    ]
+
+    assignments = identify_background_speaker_clusters(segments, audio_bytes=None, person_embeddings_cache={})
+
+    assert all(not assignment.text_hints for assignment in assignments.values())
+    assert all(not segment.speaker_identity_text_hints for segment in segments)
+
+
 def test_user_sentinel_is_not_persisted_as_durable_person_identity():
     user_embedding = np.array([[1.0, 0.0]], dtype=np.float32)
     segments = [_segment('me', 0.0, 4.0)]

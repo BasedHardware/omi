@@ -45,6 +45,15 @@ router = APIRouter(prefix="/v2/desktop", tags=["desktop-background"])
 _MAX_PCM_BODY_BYTES = 200_000_000
 _SPEAKER_MAP_TTL_SECONDS = 60 * 60 * 24
 _LOCAL_CLUSTER_SPLIT_MARKER = "::local_part:"
+_ANONYMOUS_CHUNK_NAMESPACE = "chunk"
+_IDENTIFIED_SPEAKER_NAMESPACE = "identity"
+
+_SPEAKER_RECONCILIATION_BUDGETS = {
+    "max_app_visible_speaker_inflation_ratio": 4.0,
+    "max_provider_only_false_merge_rate": 0.0,
+    "max_unresolved_anonymous_speaker_duration_seconds": 60 * 60,
+    "max_split_reconcile_ratio": 10.0,
+}
 
 
 class BackgroundConversationStartRequest(BaseModel):
@@ -260,8 +269,9 @@ async def background_transcribe(
         del audio_bytes
 
     segments = response.segments
-    _split_noncontiguous_provider_clusters(segments)
+    split_diagnostics = _split_noncontiguous_provider_clusters(segments)
     speaker_diagnostics = _speaker_diagnostics(segments)
+    speaker_diagnostics.update(split_diagnostics)
     if conversation_id and segments:
         await _identify_speakers(
             uid=uid,
@@ -274,8 +284,11 @@ async def background_transcribe(
         )
     _apply_chunk_offset(segments, chunk_start_ms / 1000.0)
     if conversation_id:
-        _apply_speaker_ids(conversation_id, segments)
+        reconciliation_diagnostics = _apply_speaker_ids(conversation_id, chunk_id, segments)
+    else:
+        reconciliation_diagnostics = _speaker_reconciliation_diagnostics(segments, {}, {}, {})
     speaker_diagnostics.update(_speaker_diagnostics(segments, prefix="mapped_"))
+    speaker_diagnostics.update(reconciliation_diagnostics)
 
     finished_at = datetime.now(timezone.utc)
     if persist and conversation_id:
@@ -393,7 +406,7 @@ def _apply_chunk_offset(segments: List[TranscriptSegment], offset_sec: float) ->
         segment.end += offset_sec
 
 
-def _split_noncontiguous_provider_clusters(segments: List[TranscriptSegment]) -> None:
+def _split_noncontiguous_provider_clusters(segments: List[TranscriptSegment]) -> Dict[str, object]:
     """Split reused provider clusters into local contiguous groups.
 
     Batched providers can reuse the same cluster label for rapid, non-contiguous turns
@@ -423,15 +436,27 @@ def _split_noncontiguous_provider_clusters(segments: List[TranscriptSegment]) ->
     for cluster, _group_segments in groups:
         group_counts[cluster] = group_counts.get(cluster, 0) + 1
 
+    split_cluster_count = 0
+    split_segment_count = 0
+    cannot_link_pairs_prevented = 0
     group_indexes: Dict[str, int] = {}
     for cluster, group_segments in groups:
         if group_counts[cluster] <= 1:
             continue
+        split_cluster_count += 1
+        split_segment_count += len(group_segments)
+        cannot_link_pairs_prevented += group_indexes.get(cluster, 0) * len(group_segments)
         group_index = group_indexes.get(cluster, 0) + 1
         group_indexes[cluster] = group_index
         local_cluster = f'{cluster}{_LOCAL_CLUSTER_SPLIT_MARKER}{group_index}'
         for segment in group_segments:
             segment.provider_cluster_id = local_cluster
+
+    return {
+        "speaker_split_cluster_count": split_cluster_count,
+        "speaker_split_segment_count": split_segment_count,
+        "cannot_link_violations_prevented": cannot_link_pairs_prevented,
+    }
 
 
 def _raw_provider_cluster_key(segment: TranscriptSegment) -> Optional[str]:
@@ -516,13 +541,25 @@ def _build_person_embeddings_cache(uid: str) -> Dict[str, dict]:
     return cache
 
 
-def _apply_speaker_ids(conversation_id: str, segments: List[TranscriptSegment]) -> None:
+def _apply_speaker_ids(
+    conversation_id: str, chunk_id: Optional[str], segments: List[TranscriptSegment]
+) -> Dict[str, object]:
     speaker_map = _load_speaker_map(conversation_id)
     changed = False
+    attempted_reconciliation: Dict[str, str] = {}
+    accepted_reconciliation: Dict[str, str] = {}
+    rejected_reconciliation: Dict[str, str] = {}
     for segment in segments:
-        cluster = segment.provider_cluster_id or segment.provider_speaker_label or segment.speaker
-        if not cluster:
+        raw_cluster = segment.provider_cluster_id or segment.provider_speaker_label or segment.speaker
+        if not raw_cluster:
             continue
+        cluster = _speaker_reconciliation_key(chunk_id, segment, str(raw_cluster))
+        attempted_reconciliation[str(raw_cluster)] = cluster
+        if cluster.startswith(f"{_IDENTIFIED_SPEAKER_NAMESPACE}:"):
+            accepted_reconciliation[str(raw_cluster)] = cluster
+        else:
+            rejected_reconciliation[str(raw_cluster)] = "anonymous_provider_cluster_is_chunk_local"
+
         if cluster not in speaker_map:
             speaker_map[cluster] = len(speaker_map)
             changed = True
@@ -534,6 +571,22 @@ def _apply_speaker_ids(conversation_id: str, segments: List[TranscriptSegment]) 
 
     if changed:
         _store_speaker_map(conversation_id, speaker_map)
+    return _speaker_reconciliation_diagnostics(
+        segments,
+        attempted_reconciliation,
+        accepted_reconciliation,
+        rejected_reconciliation,
+    )
+
+
+def _speaker_reconciliation_key(chunk_id: Optional[str], segment: TranscriptSegment, raw_cluster: str) -> str:
+    if segment.is_user or segment.speaker_identity_state == "user":
+        return f"{_IDENTIFIED_SPEAKER_NAMESPACE}:user"
+    if segment.person_id and segment.speaker_identity_state == "identified":
+        return f"{_IDENTIFIED_SPEAKER_NAMESPACE}:person:{segment.person_id}"
+
+    namespace = chunk_id or "unspecified"
+    return f"{_ANONYMOUS_CHUNK_NAMESPACE}:{namespace}:provider:{raw_cluster}"
 
 
 def _speaker_map_key(conversation_id: str) -> str:
@@ -553,6 +606,57 @@ def _load_speaker_map(conversation_id: str) -> Dict[str, int]:
 
 def _store_speaker_map(conversation_id: str, speaker_map: Dict[str, int]) -> None:
     redis_db.r.set(_speaker_map_key(conversation_id), json.dumps(speaker_map), ex=_SPEAKER_MAP_TTL_SECONDS)
+
+
+def _speaker_reconciliation_diagnostics(
+    segments: List[TranscriptSegment],
+    attempted_reconciliation: Dict[str, str],
+    accepted_reconciliation: Dict[str, str],
+    rejected_reconciliation: Dict[str, str],
+) -> Dict[str, object]:
+    clean_speech_duration = 0.0
+    unknown_speaker_duration = 0.0
+    provider_clusters = set()
+    app_speakers = set()
+    for segment in segments:
+        duration = max(0.0, segment.end - segment.start)
+        if segment.text and len(segment.text.split()) >= 2:
+            clean_speech_duration += duration
+        if segment.speaker_identity_state in ("unknown", "unassigned", "legacy_ambiguous"):
+            unknown_speaker_duration += duration
+        cluster = segment.provider_cluster_id or segment.provider_speaker_label
+        if cluster:
+            provider_clusters.add(str(cluster))
+        if segment.speaker_id is not None:
+            app_speakers.add(int(segment.speaker_id))
+
+    provider_count = max(len(provider_clusters), 1)
+    speaker_inflation_ratio = round(len(app_speakers) / provider_count, 6)
+    split_count = sum(1 for cluster in provider_clusters if _LOCAL_CLUSTER_SPLIT_MARKER in cluster)
+    accepted_count = len(set(accepted_reconciliation.values()))
+    split_reconcile_ratio = round(split_count / max(accepted_count, 1), 6) if split_count else 0.0
+
+    budget_violations = []
+    if speaker_inflation_ratio > _SPEAKER_RECONCILIATION_BUDGETS["max_app_visible_speaker_inflation_ratio"]:
+        budget_violations.append("max_app_visible_speaker_inflation_ratio")
+    if unknown_speaker_duration > _SPEAKER_RECONCILIATION_BUDGETS["max_unresolved_anonymous_speaker_duration_seconds"]:
+        budget_violations.append("max_unresolved_anonymous_speaker_duration_seconds")
+    if split_reconcile_ratio > _SPEAKER_RECONCILIATION_BUDGETS["max_split_reconcile_ratio"]:
+        budget_violations.append("max_split_reconcile_ratio")
+
+    return {
+        "speaker_reconciliation_attempted_count": len(attempted_reconciliation),
+        "speaker_reconciliation_accepted_count": len(accepted_reconciliation),
+        "speaker_reconciliation_rejected_count": len(rejected_reconciliation),
+        "speaker_reconciliation_rejected_reasons": sorted(set(rejected_reconciliation.values()))[:20],
+        "provider_only_false_merge_rate": 0.0,
+        "clean_speech_duration_seconds": round(clean_speech_duration, 3),
+        "unknown_speaker_duration_seconds": round(unknown_speaker_duration, 3),
+        "app_visible_speaker_inflation_ratio": speaker_inflation_ratio,
+        "split_reconcile_ratio": split_reconcile_ratio,
+        "speaker_reconciliation_budgets": _SPEAKER_RECONCILIATION_BUDGETS,
+        "speaker_reconciliation_budget_violations": budget_violations,
+    }
 
 
 def _speaker_diagnostics(segments: List[TranscriptSegment], prefix: str = "") -> Dict[str, object]:

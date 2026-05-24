@@ -338,10 +338,20 @@ def _detect_self_introduction_hint(text: str) -> Optional[str]:
         match = re.search(pattern, text)
         if not match:
             continue
+        if _looks_like_quoted_or_reported_speech(text, match.start()):
+            continue
         name = match.groups()[-1]
         if name and len(name) >= 2:
             return name.capitalize()
     return None
+
+
+def _looks_like_quoted_or_reported_speech(text: str, match_start: int) -> bool:
+    prefix = text[:match_start].strip().lower()
+    if prefix and prefix[-1:] in {'"', "'", '“', '‘'}:
+        return True
+    recent_prefix = prefix[-40:]
+    return bool(re.search(r"\b(said|says|asked|told|quoted|read|wrote|writes)\b", recent_prefix))
 
 
 def _rank_candidates(
