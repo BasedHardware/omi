@@ -1,7 +1,7 @@
 import html
 from typing import Any
 
-import requests
+import httpx
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse
 
@@ -10,15 +10,27 @@ from models import ChatToolResponse
 app = FastAPI(
     title="Omi PubMed App",
     description="PubMed chat tools for Omi",
-    version="1.0.0",
+    version="1.0.1",
 )
 
 EUTILS = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils"
-TIMEOUT = 20
+TIMEOUT = 20.0
 
 
 def _safe(value: Any) -> str:
     return html.unescape(str(value)) if value is not None else ""
+
+
+def _is_valid_pmid(pmid: str) -> bool:
+    return pmid.isdigit() and len(pmid) <= 12
+
+
+def _clamp_max_results(value: Any, default: int = 5) -> int:
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        return default
+    return max(1, min(parsed, 10))
 
 
 def _extract_article_fields(record: dict) -> dict:
@@ -27,15 +39,17 @@ def _extract_article_fields(record: dict) -> dict:
     source = _safe(record.get("source", ""))
     doi = _safe(record.get("elocationid", ""))
     authors = []
-    for a in record.get("authors", [])[:8]:
-        name = _safe(a.get("name"))
+    for author in record.get("authors", [])[:8]:
+        name = _safe(author.get("name"))
         if name:
             authors.append(name)
+
     abstract = ""
     if isinstance(record.get("abstract"), list):
         abstract = " ".join(_safe(x) for x in record["abstract"] if x)
     elif record.get("abstract"):
         abstract = _safe(record["abstract"])
+
     return {
         "title": title,
         "pubdate": pubdate,
@@ -46,29 +60,36 @@ def _extract_article_fields(record: dict) -> dict:
     }
 
 
-def _search_ids(query: str, retmax: int = 5) -> list[str]:
-    params = {
-        "db": "pubmed",
-        "term": query,
-        "retmode": "json",
-        "retmax": max(1, min(retmax, 20)),
-        "sort": "relevance",
-    }
-    resp = requests.get(f"{EUTILS}/esearch.fcgi", params=params, timeout=TIMEOUT)
+async def _fetch_json(client: httpx.AsyncClient, endpoint: str, params: dict) -> dict:
+    resp = await client.get(f"{EUTILS}/{endpoint}", params=params)
     resp.raise_for_status()
-    return resp.json().get("esearchresult", {}).get("idlist", [])
+    return resp.json()
 
 
-def _fetch_summaries(ids: list[str]) -> dict:
+async def _search_ids(client: httpx.AsyncClient, query: str, retmax: int = 5) -> list[str]:
+    data = await _fetch_json(
+        client,
+        "esearch.fcgi",
+        {
+            "db": "pubmed",
+            "term": query,
+            "retmode": "json",
+            "retmax": _clamp_max_results(retmax),
+            "sort": "relevance",
+        },
+    )
+    return data.get("esearchresult", {}).get("idlist", [])
+
+
+async def _fetch_summaries(client: httpx.AsyncClient, ids: list[str]) -> dict:
     if not ids:
         return {}
-    resp = requests.get(
-        f"{EUTILS}/esummary.fcgi",
-        params={"db": "pubmed", "id": ",".join(ids), "retmode": "json"},
-        timeout=TIMEOUT,
+    data = await _fetch_json(
+        client,
+        "esummary.fcgi",
+        {"db": "pubmed", "id": ",".join(ids), "retmode": "json"},
     )
-    resp.raise_for_status()
-    return resp.json().get("result", {})
+    return data.get("result", {})
 
 
 @app.get("/health")
@@ -115,7 +136,7 @@ async def manifest():
                 "method": "POST",
                 "parameters": {
                     "properties": {
-                        "pmid": {"type": "string", "description": "PubMed ID"},
+                        "pmid": {"type": "string", "description": "PubMed ID (numeric)"},
                     },
                     "required": ["pmid"],
                 },
@@ -129,7 +150,7 @@ async def manifest():
                 "method": "POST",
                 "parameters": {
                     "properties": {
-                        "pmid": {"type": "string", "description": "PubMed ID"},
+                        "pmid": {"type": "string", "description": "PubMed ID (numeric)"},
                         "max_results": {"type": "integer", "description": "1-10, default 5"},
                     },
                     "required": ["pmid"],
@@ -151,22 +172,23 @@ async def search_pubmed(request: Request):
     try:
         body = await request.json()
         query = (body.get("query") or "").strip()
-        max_results = int(body.get("max_results", 5))
+        max_results = _clamp_max_results(body.get("max_results", 5))
         if not query:
             return ChatToolResponse(error="query is required")
 
-        ids = _search_ids(query, max_results)
-        if not ids:
-            return ChatToolResponse(result=f"No PubMed results found for: {query}")
+        async with httpx.AsyncClient(timeout=TIMEOUT) as client:
+            ids = await _search_ids(client, query, max_results)
+            if not ids:
+                return ChatToolResponse(result=f"No PubMed results found for: {query}")
+            summaries = await _fetch_summaries(client, ids)
 
-        summaries = _fetch_summaries(ids)
         lines = [f"Top PubMed results for: {query}"]
-        for idx, pmid in enumerate(ids, start=1):
-            row = summaries.get(pmid, {})
+        for idx, result_pmid in enumerate(ids, start=1):
+            row = summaries.get(result_pmid, {})
             title = _safe(row.get("title", "Untitled"))
             journal = _safe(row.get("fulljournalname", row.get("source", "")))
             date = _safe(row.get("pubdate", ""))
-            lines.append(f"{idx}. PMID {pmid}: {title} ({journal}, {date})")
+            lines.append(f"{idx}. PMID {result_pmid}: {title} ({journal}, {date})")
         return ChatToolResponse(result="\n".join(lines))
     except Exception as e:
         return ChatToolResponse(error=f"PubMed search failed: {e}")
@@ -179,8 +201,12 @@ async def get_pubmed_article(request: Request):
         pmid = (body.get("pmid") or "").strip()
         if not pmid:
             return ChatToolResponse(error="pmid is required")
+        if not _is_valid_pmid(pmid):
+            return ChatToolResponse(error="pmid must be a numeric PubMed ID")
 
-        summaries = _fetch_summaries([pmid])
+        async with httpx.AsyncClient(timeout=TIMEOUT) as client:
+            summaries = await _fetch_summaries(client, [pmid])
+
         if pmid not in summaries:
             return ChatToolResponse(error=f"No PubMed record found for PMID {pmid}")
 
@@ -204,41 +230,44 @@ async def get_related_pubmed(request: Request):
     try:
         body = await request.json()
         pmid = (body.get("pmid") or "").strip()
-        max_results = int(body.get("max_results", 5))
+        max_results = _clamp_max_results(body.get("max_results", 5))
         if not pmid:
             return ChatToolResponse(error="pmid is required")
+        if not _is_valid_pmid(pmid):
+            return ChatToolResponse(error="pmid must be a numeric PubMed ID")
 
-        link_resp = requests.get(
-            f"{EUTILS}/elink.fcgi",
-            params={
-                "dbfrom": "pubmed",
-                "db": "pubmed",
-                "id": pmid,
-                "linkname": "pubmed_pubmed",
-                "retmode": "json",
-            },
-            timeout=TIMEOUT,
-        )
-        link_resp.raise_for_status()
-        data = link_resp.json()
-        linksets = data.get("linksets", [])
-        related = []
-        if linksets:
-            dbs = linksets[0].get("linksetdbs", [])
-            if dbs:
-                related = [str(x) for x in dbs[0].get("links", [])[: max(1, min(max_results, 10))]]
+        async with httpx.AsyncClient(timeout=TIMEOUT) as client:
+            data = await _fetch_json(
+                client,
+                "elink.fcgi",
+                {
+                    "dbfrom": "pubmed",
+                    "db": "pubmed",
+                    "id": pmid,
+                    "linkname": "pubmed_pubmed",
+                    "retmode": "json",
+                },
+            )
 
-        if not related:
-            return ChatToolResponse(result=f"No related articles found for PMID {pmid}")
+            linksets = data.get("linksets", [])
+            related = []
+            if linksets:
+                dbs = linksets[0].get("linksetdbs", [])
+                if dbs:
+                    related = [str(x) for x in dbs[0].get("links", [])[:max_results]]
 
-        summaries = _fetch_summaries(related)
+            if not related:
+                return ChatToolResponse(result=f"No related articles found for PMID {pmid}")
+
+            summaries = await _fetch_summaries(client, related)
+
         lines = [f"Related PubMed articles for PMID {pmid}:"]
-        for idx, rid in enumerate(related, start=1):
-            row = summaries.get(rid, {})
+        for idx, related_pmid in enumerate(related, start=1):
+            row = summaries.get(related_pmid, {})
             title = _safe(row.get("title", "Untitled"))
             journal = _safe(row.get("fulljournalname", row.get("source", "")))
             date = _safe(row.get("pubdate", ""))
-            lines.append(f"{idx}. PMID {rid}: {title} ({journal}, {date})")
+            lines.append(f"{idx}. PMID {related_pmid}: {title} ({journal}, {date})")
         return ChatToolResponse(result="\n".join(lines))
     except Exception as e:
         return ChatToolResponse(error=f"Failed to fetch related PubMed articles: {e}")
