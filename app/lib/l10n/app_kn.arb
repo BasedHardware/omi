@@ -5390,33 +5390,9 @@
     "@thankYouText": {
         "description": "Privacy page - thankYouText"
     },
-    "wifiSyncSettings": "WiFi ಸಿಂಕ್ ಸಂಯೋಜನೆಗಳು",
-    "@wifiSyncSettings": {
-        "description": "WiFi sync settings - wifiSyncSettings"
-    },
-    "enterHotspotCredentials": "ನಿಮ್ಮ ಫೋನ್‌ನ ಹಾಟ್‌ಸ್ಪಾಟ್ ಪ್ರಮಾಣಪತ್ರ ನಮೂದಿಸಿ",
-    "@enterHotspotCredentials": {
-        "description": "WiFi sync settings - enterHotspotCredentials"
-    },
-    "wifiSyncUsesHotspot": "WiFi ಸಿಂಕ್ ನಿಮ್ಮ ಫೋನ್‌ನನ್ನು ಹಾಟ್‌ಸ್ಪಾಟ್ ಆಗಿ ಬಳಸುತ್ತದೆ. ಸೆಟ್ಟಿಂಗ್‌ಗಳು > ಪರ್ಸನಲ್ ಹಾಟ್‌ಸ್ಪಾಟ್‌ನಲ್ಲಿ ನಿಮ್ಮ ಹಾಟ್‌ಸ್ಪಾಟ್ ಹೆಸರು ಮತ್ತು ಪಾಸ್‌ವರ್ಡ್ ಕಂಡುಕೊಳ್ಳಿ.",
-    "@wifiSyncUsesHotspot": {
-        "description": "WiFi sync settings - wifiSyncUsesHotspot"
-    },
-    "hotspotNameSsid": "ಹಾಟ್‌ಸ್ಪಾಟ್ ಹೆಸರು (SSID)",
-    "@hotspotNameSsid": {
-        "description": "WiFi sync settings - hotspotNameSsid"
-    },
-    "exampleIphoneHotspot": "ಉದಾಹರಣೆ iPhone ಹಾಟ್‌ಸ್ಪಾಟ್",
-    "@exampleIphoneHotspot": {
-        "description": "WiFi sync settings - exampleIphoneHotspot"
-    },
     "password": "ಪಾಸ್‌ವರ್ಡ್",
     "@password": {
         "description": "WiFi sync settings - password"
-    },
-    "enterHotspotPassword": "ಹಾಟ್‌ಸ್ಪಾಟ್ ಪಾಸ್‌ವರ್ಡ್ ನಮೂದಿಸಿ",
-    "@enterHotspotPassword": {
-        "description": "WiFi sync settings - enterHotspotPassword"
     },
     "saveCredentials": "ಪ್ರಮಾಣಪತ್ರ ಉಳಿಸಿ",
     "@saveCredentials": {
@@ -5425,18 +5401,6 @@
     "clearCredentials": "ಪ್ರಮಾಣಪತ್ರ ತೀಕ್ಷ್ಣ ಮಾಡಿ",
     "@clearCredentials": {
         "description": "WiFi sync settings - clearCredentials"
-    },
-    "pleaseEnterHotspotName": "ದಯವಿಟ್ಟು ಹಾಟ್‌ಸ್ಪಾಟ್ ಹೆಸರು ನಮೂದಿಸಿ",
-    "@pleaseEnterHotspotName": {
-        "description": "WiFi sync settings - pleaseEnterHotspotName"
-    },
-    "wifiCredentialsSaved": "WiFi ಪ್ರಮಾಣಪತ್ರ ಉಳಿಸಲಾಗಿದೆ",
-    "@wifiCredentialsSaved": {
-        "description": "WiFi sync settings - wifiCredentialsSaved"
-    },
-    "wifiCredentialsCleared": "WiFi ಪ್ರಮಾಣಪತ್ರ ತೀಕ್ಷ್ಣ ಮಾಡಲಾಗಿದೆ",
-    "@wifiCredentialsCleared": {
-        "description": "WiFi sync settings - wifiCredentialsCleared"
     },
     "summaryGeneratedForDate": "{date} ಗೆ ಸಾರಾಂಶ ತಯಾರಿತವಾಗಿದೆ",
     "@summaryGeneratedForDate": {
@@ -6999,10 +6963,6 @@
     "@limitless": {
         "description": "Label for Limitless device storage"
     },
-    "fastTransfer": "ವೇಗ ವರ್ಗಾವಣೆ",
-    "@fastTransfer": {
-        "description": "Name of the fast transfer method"
-    },
     "syncingStatus": "ಸಿಂಕ್ ಮಾಡುತ್ತಿದೆ",
     "@syncingStatus": {
         "description": "Status label when syncing is in progress"
@@ -7019,18 +6979,6 @@
                 "type": "String"
             }
         }
-    },
-    "transferMethod": "ವರ್ಗಾವಣೆ ವಿಧಾನ",
-    "@transferMethod": {
-        "description": "Page title for transfer method settings"
-    },
-    "fast": "ವೇಗ",
-    "@fast": {
-        "description": "Label for fast WiFi transfer method"
-    },
-    "ble": "BLE",
-    "@ble": {
-        "description": "Label for Bluetooth Low Energy transfer method"
     },
     "phone": "ಫೋನ್",
     "@phone": {
@@ -7056,33 +7004,9 @@
     "@processedFilesDeleted": {
         "description": "Snackbar message when processed files are deleted"
     },
-    "wifiEnableFailed": "ಸಾಧನದಲ್ಲಿ WiFi ಸಕ್ರಿಯಗೊಳಿಸಲು ವಿಫಲ. ದಯವಿಟ್ಟು ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.",
-    "@wifiEnableFailed": {
-        "description": "Error message when WiFi fails to enable on device"
-    },
-    "deviceNoFastTransfer": "ನಿಮ್ಮ ಸಾಧನವು ವೇಗ ವರ್ಗಾವಣೆ ಬೆಂಬಲಿಸುವುದಿಲ್ಲ. ಬದಲಿ Bluetooth ಬಳಸಿ.",
-    "@deviceNoFastTransfer": {
-        "description": "Error message when device does not support fast transfer"
-    },
-    "enableHotspotMessage": "ದಯವಿಟ್ಟು ನಿಮ್ಮ ಫೋನ್‌ನ ಹಾಟ್‌ಸ್ಪಾಟ್ ಸಕ್ರಿಯಗೊಳಿಸಿ ಮತ್ತು ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.",
-    "@enableHotspotMessage": {
-        "description": "Error message asking user to enable hotspot"
-    },
-    "transferStartFailed": "ವರ್ಗಾವಣೆ ಪ್ರಾರಂಭಗೊಳಿಸಲು ವಿಫಲ. ದಯವಿಟ್ಟು ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.",
-    "@transferStartFailed": {
-        "description": "Error message when transfer fails to start"
-    },
     "deviceNotResponding": "ಸಾಧನವು ಪ್ರತಿಕ್ರಿಯೆ ನೀಡಿಲ್ಲ. ದಯವಿಟ್ಟು ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.",
     "@deviceNotResponding": {
         "description": "Error message when device times out"
-    },
-    "invalidWifiCredentials": "ಅಮಾನ್ಯ WiFi ಆಖ್ಯಾನ. ನಿಮ್ಮ ಹಾಟ್‌ಸ್ಪಾಟ್ ಸೆಟ್ಟಿಂಗ್‌ಗಳನ್ನು ಪರಿಶೀಲಿಸಿ.",
-    "@invalidWifiCredentials": {
-        "description": "Error message for invalid WiFi credentials"
-    },
-    "wifiConnectionFailed": "WiFi ಸಂಪರ್ಕ ವಿಫಲ. ದಯವಿಟ್ಟು ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.",
-    "@wifiConnectionFailed": {
-        "description": "Error message when WiFi connection fails"
     },
     "sdCardProcessing": "SD ಕಾರ್ಡ್ ಪ್ರಕ್ರಿಯೆಗೊಳಿಸುವುದು",
     "@sdCardProcessing": {
@@ -7100,10 +7024,6 @@
     "process": "ಪ್ರಕ್ರಿಯೆಗೊಳಿಸಿ",
     "@process": {
         "description": "Button label to start processing"
-    },
-    "wifiSyncFailed": "WiFi ಸಿಂಕ್ ವಿಫಲ",
-    "@wifiSyncFailed": {
-        "description": "Error title when WiFi sync fails"
     },
     "processingFailed": "ಪ್ರಕ್ರಿಯೆಗೊಳಿಸುವುದು ವಿಫಲ",
     "@processingFailed": {
@@ -8140,10 +8060,6 @@
             }
         }
     },
-    "wifiSync": "WiFi ಸಿಂಕ್",
-    "@wifiSync": {
-        "description": "WiFi sync feature label"
-    },
     "itemCopiedToClipboard": "{item} ಕ್ಲಿಪ್‌ಬೋರ್ಡ್‌ಗೆ ನಕಲಿಸಲಾಯಿತು",
     "@itemCopiedToClipboard": {
         "description": "Message when item is copied to clipboard",
@@ -8154,23 +8070,9 @@
             }
         }
     },
-    "wifiConnectionFailedTitle": "ಸಂಪರ್ಕ ವಿಫಲ",
-    "@wifiConnectionFailedTitle": {
-        "description": "Title shown when WiFi connection to device fails"
-    },
     "connectingToDeviceName": "{deviceName} ಗೆ ಸಂಪರ್ಕಿಸುತ್ತಿದೆ",
     "@connectingToDeviceName": {
         "description": "Title shown while connecting to device WiFi",
-        "placeholders": {
-            "deviceName": {
-                "type": "String",
-                "example": "Omi"
-            }
-        }
-    },
-    "enableDeviceWifi": "{deviceName} ನ WiFi ಸಕ್ರಿಯಗೊಳಿಸಿ",
-    "@enableDeviceWifi": {
-        "description": "Step text for enabling device WiFi",
         "placeholders": {
             "deviceName": {
                 "type": "String",
@@ -8305,10 +8207,6 @@
     "@statusUnprocessed": {
         "description": "Status value for unprocessed recording"
     },
-    "switchedToFastTransfer": "ವೇಗದ ವರ್ಗಾವಣೆಗೆ ಬದಲಾಯಿಸಲಾಗಿದೆ",
-    "@switchedToFastTransfer": {
-        "description": "Snackbar message when switching to fast transfer mode"
-    },
     "transferCompleteMessage": "ವರ್ಗಾವಣೆ ಪೂರ್ಣ! ನೀವು ಈ ರೆಕಾರ್ಡಿಂಗ್ ಈಗ ಪ್ಲೇ ಮಾಡಬಹುದು.",
     "@transferCompleteMessage": {
         "description": "Success message when transfer completes"
@@ -8326,41 +8224,9 @@
     "@transferCancelled": {
         "description": "Snackbar message when transfer is cancelled"
     },
-    "fastTransferEnabled": "ವೇಗದ ವರ್ಗಾವಣೆ ಸಕ್ರಿಯಗೊಳಿಸಲಾಗಿದೆ",
-    "@fastTransferEnabled": {
-        "description": "Snackbar message when fast transfer is enabled"
-    },
     "bluetoothSyncEnabled": "ಬ್ಲೂಟೂತ್ ಸಿಂಕ್ ಸಕ್ರಿಯಗೊಳಿಸಲಾಗಿದೆ",
     "@bluetoothSyncEnabled": {
         "description": "Snackbar message when bluetooth sync is enabled"
-    },
-    "enableFastTransfer": "ವೇಗದ ವರ್ಗಾವಣೆ ಸಕ್ರಿಯಗೊಳಿಸಿ",
-    "@enableFastTransfer": {
-        "description": "Dialog title for enabling fast transfer"
-    },
-    "fastTransferDescription": "ವೇಗದ ವರ್ಗಾವಣೆ WiFi ಬಳಸಿ ಸುಮಾರು 5 ಪಟ್ಟು ವೇಗವಾನ ಗತಿಯನ್ನು ಬಳಸುತ್ತದೆ. ವರ್ಗಾವಣೆಯ ಸಮಯದಲ್ಲಿ ನಿಮ್ಮ ಫೋನ್ ಠಾಯಿ Omi ಸಾಧನದ WiFi ನೆಟ್ವರ್ಕ್ಗೆ ಠಾಯಿಗೆ ಸಂಪರ್ಕ ಸ್ಥಾಪಿಸುತ್ತದೆ.",
-    "@fastTransferDescription": {
-        "description": "Description of fast transfer feature in dialog"
-    },
-    "internetAccessPausedDuringTransfer": "ವರ್ಗಾವಣೆಯ ಸಮಯದಲ್ಲಿ ಇಂಟರ್ನೆಟ್ ಪ್ರವೇಶ ಸ್ಥಗಿತಗೊಂಡಿದೆ",
-    "@internetAccessPausedDuringTransfer": {
-        "description": "Warning that internet is paused during transfer"
-    },
-    "chooseTransferMethodDescription": "ರೆಕಾರ್ಡಿಂಗ್ಗಳನ್ನು ನಿಮ್ಮ Omi ಸಾಧನದಿಂದ ಫೋನ್ಗೆ ವರ್ಗಾವಣೆ ಮಾಡುವ ವಿಧಾನವನ್ನು ಆಯ್ಕೆ ಮಾಡಿ.",
-    "@chooseTransferMethodDescription": {
-        "description": "Description text on transfer method page"
-    },
-    "wifiSpeed": "WiFi ಮೂಲಕ ~150 KB/s",
-    "@wifiSpeed": {
-        "description": "Speed description for WiFi transfer"
-    },
-    "fiveTimesFaster": "5X ವೇಗವಾಯಿತು",
-    "@fiveTimesFaster": {
-        "description": "Badge label for faster transfer method"
-    },
-    "fastTransferMethodDescription": "ನಿಮ್ಮ Omi ಸಾಧನಕ್ಕೆ ನೇರ WiFi ಸಂಪರ್ಕವನ್ನು ರಚಿಸುತ್ತದೆ. ನಿಮ್ಮ ಫೋನ್ ವರ್ಗಾವಣೆಯ ಸಮಯದಲ್ಲಿ ಠಾಯಿಗೆ ಸಾಮಾನ್ಯ WiFi ನಿಂದ ಸಂಪರ್ಕವಿಚ್ಛಿನ್ನ ಆಗುತ್ತದೆ.",
-    "@fastTransferMethodDescription": {
-        "description": "Description of fast transfer method card"
     },
     "bluetooth": "ಬ್ಲೂಟೂತ್",
     "@bluetooth": {
@@ -9344,14 +9210,6 @@
     "@voiceFailedToTranscribe": {
         "description": "Error message when voice transcription fails"
     },
-    "locationPermissionRequired": "ಸ್ಥಳ ಅನುಮತಿ ಅಗತ್ಯ",
-    "@locationPermissionRequired": {
-        "description": "Title for dialog requesting location permission"
-    },
-    "locationPermissionContent": "ವೇಗದ ವರ್ಗಾವಣೆ WiFi ಸಂಪರ್ಕ ಪರಿಶೀಲಿಸಲು ಸ್ಥಳ ಅನುಮತಿ ಅಗತ್ಯ. ದಯವಿಟ್ಟು ಸ್ಥಳ ಅನುಮತಿ ನೀಡಿ ಮುಂದುವರೆಯಲು.",
-    "@locationPermissionContent": {
-        "description": "Explanation text for location permission dialog"
-    },
     "pdfTranscriptExport": "ಟ್ರಾನ್ಸ್‌ಕ್ರಿಪ್ಟ್ ರಕಷ್ಯ",
     "@pdfTranscriptExport": {
         "description": "Title for PDF transcript export document"
@@ -9590,14 +9448,6 @@
     },
     "noDailyRecapsYet": "ಇನ್ನೂ ದೈನಿಕ ಸಾರಾಂಶಗಳಿಲ್ಲ",
     "dailyRecapsDescription": "ನಿಮ್ಮ ದೈನಿಕ ಸಾರಾಂಶಗಳು ಉತ್ಪನ್ನ ಮಾಡಿದ ನಂತರ ಇಲ್ಲಿ ಕಾಣಿಸುತ್ತವೆ",
-    "chooseTransferMethod": "ವರ್ಗಾವಣೆ ವಿಧಾನ ಆಯ್ಕೆ ಮಾಡಿ",
-    "@chooseTransferMethod": {
-        "description": "Title for transfer method selection dialog"
-    },
-    "fastTransferSpeed": "WiFi ಮೂಲಕ ~150 KB/s",
-    "@fastTransferSpeed": {
-        "description": "Speed description for fast transfer via WiFi"
-    },
     "largeTimeGapDetected": "ದೊಡ್ಡ ಸಮಯ ಮಧ್ಯಂತರ ಕಂಡುಹಿಡಿಯಲಾಗಿದೆ ({gap})",
     "@largeTimeGapDetected": {
         "placeholders": {
@@ -9615,10 +9465,6 @@
                 "example": "1.5h, 2.0h"
             }
         }
-    },
-    "deviceDoesNotSupportWifiSwitchingToBle": "ಸಾಧನವು WiFi ಸಿಂಕ್ ಬೆಂಬಲಿಸುವುದಿಲ್ಲ, ಬ್ಲೂಟೂತ್ಗೆ ಬದಲಾಯಿಸಿಕೊಳ್ಳುತ್ತಿದೆ",
-    "@deviceDoesNotSupportWifiSwitchingToBle": {
-        "description": "Message shown when WiFi sync fails because device hardware does not support WiFi, automatically falling back to Bluetooth transfer"
     },
     "appleHealthNotAvailable": "Apple Health ಈ ಸಾಧನದಲ್ಲಿ ಲಭ್ಯವಿಲ್ಲ",
     "downloadAudio": "ಆಡಿಯೋ ಡೌನ್‌ಲೋಡ್ ಮಾಡಿ",

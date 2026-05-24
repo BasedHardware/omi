@@ -5390,33 +5390,9 @@
     "@thankYouText": {
         "description": "Privacy page - thankYouText"
     },
-    "wifiSyncSettings": "WiFi सिंक सेटिंग्ज",
-    "@wifiSyncSettings": {
-        "description": "WiFi sync settings - wifiSyncSettings"
-    },
-    "enterHotspotCredentials": "आपल्या फोनच्या हॉटस्पॉट क्रेडेंशियल्स प्रविष्ट करा",
-    "@enterHotspotCredentials": {
-        "description": "WiFi sync settings - enterHotspotCredentials"
-    },
-    "wifiSyncUsesHotspot": "WiFi सिंक आपल्या फोनला हॉटस्पॉट म्हणून वापरते. आपल्या हॉटस्पॉट नाव आणि पासवर्ड सेटिंग्ज > व्यक्तिगत हॉटस्पॉट मध्ये शोधा.",
-    "@wifiSyncUsesHotspot": {
-        "description": "WiFi sync settings - wifiSyncUsesHotspot"
-    },
-    "hotspotNameSsid": "हॉटस्पॉट नाव (SSID)",
-    "@hotspotNameSsid": {
-        "description": "WiFi sync settings - hotspotNameSsid"
-    },
-    "exampleIphoneHotspot": "उदा. iPhone हॉटस्पॉट",
-    "@exampleIphoneHotspot": {
-        "description": "WiFi sync settings - exampleIphoneHotspot"
-    },
     "password": "पासवर्ड",
     "@password": {
         "description": "WiFi sync settings - password"
-    },
-    "enterHotspotPassword": "हॉटस्पॉट पासवर्ड प्रविष्ट करा",
-    "@enterHotspotPassword": {
-        "description": "WiFi sync settings - enterHotspotPassword"
     },
     "saveCredentials": "क्रेडेंशियल्स सेव करा",
     "@saveCredentials": {
@@ -5425,18 +5401,6 @@
     "clearCredentials": "क्रेडेंशियल्स साफ करा",
     "@clearCredentials": {
         "description": "WiFi sync settings - clearCredentials"
-    },
-    "pleaseEnterHotspotName": "कृपया हॉटस्पॉट नाव प्रविष्ट करा",
-    "@pleaseEnterHotspotName": {
-        "description": "WiFi sync settings - pleaseEnterHotspotName"
-    },
-    "wifiCredentialsSaved": "WiFi क्रेडेंशियल्स सेव केली आहेत",
-    "@wifiCredentialsSaved": {
-        "description": "WiFi sync settings - wifiCredentialsSaved"
-    },
-    "wifiCredentialsCleared": "WiFi क्रेडेंशियल्स साफ केली आहेत",
-    "@wifiCredentialsCleared": {
-        "description": "WiFi sync settings - wifiCredentialsCleared"
     },
     "summaryGeneratedForDate": "{date} साठी सारांश तयार केला गेला",
     "@summaryGeneratedForDate": {
@@ -6999,10 +6963,6 @@
     "@limitless": {
         "description": "Label for Limitless device storage"
     },
-    "fastTransfer": "जलद स्थानांतर",
-    "@fastTransfer": {
-        "description": "Name of the fast transfer method"
-    },
     "syncingStatus": "समन्वय करत आहे",
     "@syncingStatus": {
         "description": "Status label when syncing is in progress"
@@ -7019,18 +6979,6 @@
                 "type": "String"
             }
         }
-    },
-    "transferMethod": "स्थानांतर पद्धत",
-    "@transferMethod": {
-        "description": "Page title for transfer method settings"
-    },
-    "fast": "जलद",
-    "@fast": {
-        "description": "Label for fast WiFi transfer method"
-    },
-    "ble": "BLE",
-    "@ble": {
-        "description": "Label for Bluetooth Low Energy transfer method"
     },
     "phone": "फोन",
     "@phone": {
@@ -7056,33 +7004,9 @@
     "@processedFilesDeleted": {
         "description": "Snackbar message when processed files are deleted"
     },
-    "wifiEnableFailed": "डिव्हाइसवर WiFi सक्षम करणे अयोग्य. कृपया पुन्हा प्रयत्न करा.",
-    "@wifiEnableFailed": {
-        "description": "Error message when WiFi fails to enable on device"
-    },
-    "deviceNoFastTransfer": "आपल्या डिव्हाइसला जलद स्थानांतर समर्थित नाही. त्याऐवजी Bluetooth वापरा.",
-    "@deviceNoFastTransfer": {
-        "description": "Error message when device does not support fast transfer"
-    },
-    "enableHotspotMessage": "कृपया आपल्या फोनची हॉटस्पॉट सक्षम करा आणि पुन्हा प्रयत्न करा.",
-    "@enableHotspotMessage": {
-        "description": "Error message asking user to enable hotspot"
-    },
-    "transferStartFailed": "स्थानांतर सुरू करणे अयोग्य. कृपया पुन्हा प्रयत्न करा.",
-    "@transferStartFailed": {
-        "description": "Error message when transfer fails to start"
-    },
     "deviceNotResponding": "डिव्हाइस प्रतिसाद दिला नाही. कृपया पुन्हा प्रयत्न करा.",
     "@deviceNotResponding": {
         "description": "Error message when device times out"
-    },
-    "invalidWifiCredentials": "अमान्य WiFi प्रमाणपत्र. आपल्या हॉटस्पॉट सेटिंग्स तपासा.",
-    "@invalidWifiCredentials": {
-        "description": "Error message for invalid WiFi credentials"
-    },
-    "wifiConnectionFailed": "WiFi कनेक्शन अयोग्य. कृपया पुन्हा प्रयत्न करा.",
-    "@wifiConnectionFailed": {
-        "description": "Error message when WiFi connection fails"
     },
     "sdCardProcessing": "SD कार्ड प्रक्रिया करणे",
     "@sdCardProcessing": {
@@ -7100,10 +7024,6 @@
     "process": "प्रक्रिया करा",
     "@process": {
         "description": "Button label to start processing"
-    },
-    "wifiSyncFailed": "WiFi समन्वय अयोग्य",
-    "@wifiSyncFailed": {
-        "description": "Error title when WiFi sync fails"
     },
     "processingFailed": "प्रक्रिया अयोग्य",
     "@processingFailed": {
@@ -8140,10 +8060,6 @@
             }
         }
     },
-    "wifiSync": "WiFi समन्वय",
-    "@wifiSync": {
-        "description": "WiFi sync feature label"
-    },
     "itemCopiedToClipboard": "{item} क्लिपबोर्डवर कॉपी केले",
     "@itemCopiedToClipboard": {
         "description": "Message when item is copied to clipboard",
@@ -8154,23 +8070,9 @@
             }
         }
     },
-    "wifiConnectionFailedTitle": "कनेक्शन अयोग्य",
-    "@wifiConnectionFailedTitle": {
-        "description": "Title shown when WiFi connection to device fails"
-    },
     "connectingToDeviceName": "{deviceName} शी कनेक्ट करत आहे",
     "@connectingToDeviceName": {
         "description": "Title shown while connecting to device WiFi",
-        "placeholders": {
-            "deviceName": {
-                "type": "String",
-                "example": "Omi"
-            }
-        }
-    },
-    "enableDeviceWifi": "{deviceName} चा WiFi सक्षम करा",
-    "@enableDeviceWifi": {
-        "description": "Step text for enabling device WiFi",
         "placeholders": {
             "deviceName": {
                 "type": "String",
@@ -8305,10 +8207,6 @@
     "@statusUnprocessed": {
         "description": "Status value for unprocessed recording"
     },
-    "switchedToFastTransfer": "फास्ट ट्रांसफरवर स्विच केले",
-    "@switchedToFastTransfer": {
-        "description": "Snackbar message when switching to fast transfer mode"
-    },
     "transferCompleteMessage": "स्थानांतरण पूर्ण! आता आप्पण ही रेकॉर्डिंग प्ले करू शकता.",
     "@transferCompleteMessage": {
         "description": "Success message when transfer completes"
@@ -8326,41 +8224,9 @@
     "@transferCancelled": {
         "description": "Snackbar message when transfer is cancelled"
     },
-    "fastTransferEnabled": "फास्ट ट्रांसफर सक्षम केले",
-    "@fastTransferEnabled": {
-        "description": "Snackbar message when fast transfer is enabled"
-    },
     "bluetoothSyncEnabled": "ब्लूटूथ सिंक सक्षम केला",
     "@bluetoothSyncEnabled": {
         "description": "Snackbar message when bluetooth sync is enabled"
-    },
-    "enableFastTransfer": "फास्ट ट्रांसफर सक्षम करा",
-    "@enableFastTransfer": {
-        "description": "Dialog title for enabling fast transfer"
-    },
-    "fastTransferDescription": "फास्ट ट्रांसफर WiFi वापरून ~5x वेगवान गती देतो. आपले फोन स्थानांतरणादरम्यान आपल्या Omi डिव्हाइसच्या WiFi नेटवर्कला तात्पुरते जोडेल.",
-    "@fastTransferDescription": {
-        "description": "Description of fast transfer feature in dialog"
-    },
-    "internetAccessPausedDuringTransfer": "स्थानांतरणादरम्यान इंटरनेट प्रवेश सक्षम केला आहे",
-    "@internetAccessPausedDuringTransfer": {
-        "description": "Warning that internet is paused during transfer"
-    },
-    "chooseTransferMethodDescription": "आपल्या Omi डिव्हाइसमधून आपल्या फोनवर रेकॉर्डिंग कसे स्थानांतरित करायचे ते निवडा.",
-    "@chooseTransferMethodDescription": {
-        "description": "Description text on transfer method page"
-    },
-    "wifiSpeed": "WiFi द्वारे ~150 KB/s",
-    "@wifiSpeed": {
-        "description": "Speed description for WiFi transfer"
-    },
-    "fiveTimesFaster": "५X वेगवान",
-    "@fiveTimesFaster": {
-        "description": "Badge label for faster transfer method"
-    },
-    "fastTransferMethodDescription": "आपल्या Omi डिव्हाइसला थेट WiFi कनेक्शन तयार करते. स्थानांतरणादरम्यान आपले फोन आपल्या नियमित WiFi पासून तात्पुरते डिस्कनेक्ट होईल.",
-    "@fastTransferMethodDescription": {
-        "description": "Description of fast transfer method card"
     },
     "bluetooth": "ब्लूटूथ",
     "@bluetooth": {
@@ -9344,14 +9210,6 @@
     "@voiceFailedToTranscribe": {
         "description": "Error message when voice transcription fails"
     },
-    "locationPermissionRequired": "स्थान परवानगी आवश्यक",
-    "@locationPermissionRequired": {
-        "description": "Title for dialog requesting location permission"
-    },
-    "locationPermissionContent": "फास्ट ट्रांसफरला WiFi कनेक्शन सत्यापित करण्यासाठी स्थान परवानगी आवश्यक आहे. कृपया आगे जाण्यासाठी स्थान परवानगी द्या.",
-    "@locationPermissionContent": {
-        "description": "Explanation text for location permission dialog"
-    },
     "pdfTranscriptExport": "ट्रान्सक्रिप्ट निर्यात",
     "@pdfTranscriptExport": {
         "description": "Title for PDF transcript export document"
@@ -9590,14 +9448,6 @@
     },
     "noDailyRecapsYet": "अद्याप कोणत्याही दैनिक रीकॅप नाही",
     "dailyRecapsDescription": "आपल्या दैनिक रीकॅप्स तयार झाल्या की येथे दिसतील",
-    "chooseTransferMethod": "स्थानांतरण पद्धती निवडा",
-    "@chooseTransferMethod": {
-        "description": "Title for transfer method selection dialog"
-    },
-    "fastTransferSpeed": "WiFi द्वारे ~150 KB/s",
-    "@fastTransferSpeed": {
-        "description": "Speed description for fast transfer via WiFi"
-    },
     "largeTimeGapDetected": "मोठा वेळ अंतर शोधला ({gap})",
     "@largeTimeGapDetected": {
         "placeholders": {
@@ -9615,10 +9465,6 @@
                 "example": "1.5h, 2.0h"
             }
         }
-    },
-    "deviceDoesNotSupportWifiSwitchingToBle": "डिव्हाइस WiFi सिंक समर्थन करत नाही, ब्लूटूथ वर स्विच करत आहे",
-    "@deviceDoesNotSupportWifiSwitchingToBle": {
-        "description": "Message shown when WiFi sync fails because device hardware does not support WiFi, automatically falling back to Bluetooth transfer"
     },
     "appleHealthNotAvailable": "Apple Health या डिव्हाइसवर उपलब्ध नाही",
     "downloadAudio": "ऑडिओ डाउनलोड करा",

@@ -5390,33 +5390,9 @@
     "@thankYouText": {
         "description": "Privacy page - thankYouText"
     },
-    "wifiSyncSettings": "Параметры Сінхранізацыі WiFi",
-    "@wifiSyncSettings": {
-        "description": "WiFi sync settings - wifiSyncSettings"
-    },
-    "enterHotspotCredentials": "Уведзіце меркаванні гарячай тачкі вашага тэлефона",
-    "@enterHotspotCredentials": {
-        "description": "WiFi sync settings - enterHotspotCredentials"
-    },
-    "wifiSyncUsesHotspot": "Сінхранізацыя WiFi выкарыстоўвае ваш тэлефон як гарячую тачку. Знайдзіце імя гарячай тачкі і пароль у Параметрах > Персанальная гарячая тачка.",
-    "@wifiSyncUsesHotspot": {
-        "description": "WiFi sync settings - wifiSyncUsesHotspot"
-    },
-    "hotspotNameSsid": "Імя Гарячай Тачкі (SSID)",
-    "@hotspotNameSsid": {
-        "description": "WiFi sync settings - hotspotNameSsid"
-    },
-    "exampleIphoneHotspot": "напр. iPhone Hotspot",
-    "@exampleIphoneHotspot": {
-        "description": "WiFi sync settings - exampleIphoneHotspot"
-    },
     "password": "Пароль",
     "@password": {
         "description": "WiFi sync settings - password"
-    },
-    "enterHotspotPassword": "Уведзіце пароль гарячай тачкі",
-    "@enterHotspotPassword": {
-        "description": "WiFi sync settings - enterHotspotPassword"
     },
     "saveCredentials": "Сахаваць Меркаванні",
     "@saveCredentials": {
@@ -5425,18 +5401,6 @@
     "clearCredentials": "Очыстіць Меркаванні",
     "@clearCredentials": {
         "description": "WiFi sync settings - clearCredentials"
-    },
-    "pleaseEnterHotspotName": "Калі ласка, уведзіце імя гарячай тачкі",
-    "@pleaseEnterHotspotName": {
-        "description": "WiFi sync settings - pleaseEnterHotspotName"
-    },
-    "wifiCredentialsSaved": "Меркаванні WiFi сахаваны",
-    "@wifiCredentialsSaved": {
-        "description": "WiFi sync settings - wifiCredentialsSaved"
-    },
-    "wifiCredentialsCleared": "Меркаванні WiFi очышчаны",
-    "@wifiCredentialsCleared": {
-        "description": "WiFi sync settings - wifiCredentialsCleared"
     },
     "summaryGeneratedForDate": "Рэзюмэ генеравана для {date}",
     "@summaryGeneratedForDate": {
@@ -6999,10 +6963,6 @@
     "@limitless": {
         "description": "Label for Limitless device storage"
     },
-    "fastTransfer": "Хуткі пераноса",
-    "@fastTransfer": {
-        "description": "Name of the fast transfer method"
-    },
     "syncingStatus": "Синхранізацыя",
     "@syncingStatus": {
         "description": "Status label when syncing is in progress"
@@ -7019,18 +6979,6 @@
                 "type": "String"
             }
         }
-    },
-    "transferMethod": "Метад передачы",
-    "@transferMethod": {
-        "description": "Page title for transfer method settings"
-    },
-    "fast": "Хуткі",
-    "@fast": {
-        "description": "Label for fast WiFi transfer method"
-    },
-    "ble": "BLE",
-    "@ble": {
-        "description": "Label for Bluetooth Low Energy transfer method"
     },
     "phone": "Тэлефон",
     "@phone": {
@@ -7056,33 +7004,9 @@
     "@processedFilesDeleted": {
         "description": "Snackbar message when processed files are deleted"
     },
-    "wifiEnableFailed": "Не вышло ўключыць WiFi на прыборы. Пожалуйста, паспрабуйце яшчэ раз.",
-    "@wifiEnableFailed": {
-        "description": "Error message when WiFi fails to enable on device"
-    },
-    "deviceNoFastTransfer": "Ваш прыбор не падтрымлівае хуткі пераноса. Выкарыстайце Bluetooth замест гэтага.",
-    "@deviceNoFastTransfer": {
-        "description": "Error message when device does not support fast transfer"
-    },
-    "enableHotspotMessage": "Пожалуйста, ўключыце хотспот вашага тэлефона і паспрабуйце яшчэ раз.",
-    "@enableHotspotMessage": {
-        "description": "Error message asking user to enable hotspot"
-    },
-    "transferStartFailed": "Не вышло запусціць пераноса. Пожалуйста, паспрабуйце яшчэ раз.",
-    "@transferStartFailed": {
-        "description": "Error message when transfer fails to start"
-    },
     "deviceNotResponding": "Прыбор не адрэагаваў. Пожалуйста, паспрабуйце яшчэ раз.",
     "@deviceNotResponding": {
         "description": "Error message when device times out"
-    },
-    "invalidWifiCredentials": "Няправільныя запалогінванні WiFi. Праверце налады хотспота.",
-    "@invalidWifiCredentials": {
-        "description": "Error message for invalid WiFi credentials"
-    },
-    "wifiConnectionFailed": "Не удалося падлучыцца да WiFi. Пожалуйста, паспрабуйце яшчэ раз.",
-    "@wifiConnectionFailed": {
-        "description": "Error message when WiFi connection fails"
     },
     "sdCardProcessing": "Апрацаванне SD картка",
     "@sdCardProcessing": {
@@ -7100,10 +7024,6 @@
     "process": "Апрацаваць",
     "@process": {
         "description": "Button label to start processing"
-    },
-    "wifiSyncFailed": "WiFi синхранізацыя не вышла",
-    "@wifiSyncFailed": {
-        "description": "Error title when WiFi sync fails"
     },
     "processingFailed": "Апрацаванне не вышло",
     "@processingFailed": {
@@ -8140,10 +8060,6 @@
             }
         }
     },
-    "wifiSync": "WiFi синхранізацыя",
-    "@wifiSync": {
-        "description": "WiFi sync feature label"
-    },
     "itemCopiedToClipboard": "{item} скапіяваны ў буфер абмену",
     "@itemCopiedToClipboard": {
         "description": "Message when item is copied to clipboard",
@@ -8154,23 +8070,9 @@
             }
         }
     },
-    "wifiConnectionFailedTitle": "Сувязь не вышла",
-    "@wifiConnectionFailedTitle": {
-        "description": "Title shown when WiFi connection to device fails"
-    },
     "connectingToDeviceName": "Падлучэнне да {deviceName}",
     "@connectingToDeviceName": {
         "description": "Title shown while connecting to device WiFi",
-        "placeholders": {
-            "deviceName": {
-                "type": "String",
-                "example": "Omi"
-            }
-        }
-    },
-    "enableDeviceWifi": "Ўключыць WiFi на {deviceName}",
-    "@enableDeviceWifi": {
-        "description": "Step text for enabling device WiFi",
         "placeholders": {
             "deviceName": {
                 "type": "String",
@@ -8305,10 +8207,6 @@
     "@statusUnprocessed": {
         "description": "Status value for unprocessed recording"
     },
-    "switchedToFastTransfer": "Пераклучана на хуткую пераноску",
-    "@switchedToFastTransfer": {
-        "description": "Snackbar message when switching to fast transfer mode"
-    },
     "transferCompleteMessage": "Пераноска завершана! Вы можаце граць гэты запіс.",
     "@transferCompleteMessage": {
         "description": "Success message when transfer completes"
@@ -8326,41 +8224,9 @@
     "@transferCancelled": {
         "description": "Snackbar message when transfer is cancelled"
     },
-    "fastTransferEnabled": "Хутка пераноска ўключана",
-    "@fastTransferEnabled": {
-        "description": "Snackbar message when fast transfer is enabled"
-    },
     "bluetoothSyncEnabled": "Синхранізацыя Bluetooth ўключана",
     "@bluetoothSyncEnabled": {
         "description": "Snackbar message when bluetooth sync is enabled"
-    },
-    "enableFastTransfer": "Ўключыць хуткую пераноску",
-    "@enableFastTransfer": {
-        "description": "Dialog title for enabling fast transfer"
-    },
-    "fastTransferDescription": "Хутка пераноска выкарыстоўвае WiFi для ~5х больш хуткага хуткасці. Ваш тэлефон часова падключыцца да сеткі WiFi вашага прыстасавання Omi падчас пераносы.",
-    "@fastTransferDescription": {
-        "description": "Description of fast transfer feature in dialog"
-    },
-    "internetAccessPausedDuringTransfer": "Доступ у інтэрнет паставлены на паўзу падчас пераносы",
-    "@internetAccessPausedDuringTransfer": {
-        "description": "Warning that internet is paused during transfer"
-    },
-    "chooseTransferMethodDescription": "Выберыце спосаб пераносы запісаў з вашага прыстасавання Omi на ваш тэлефон.",
-    "@chooseTransferMethodDescription": {
-        "description": "Description text on transfer method page"
-    },
-    "wifiSpeed": "~150 KB/s праз WiFi",
-    "@wifiSpeed": {
-        "description": "Speed description for WiFi transfer"
-    },
-    "fiveTimesFaster": "5X ХУТЧЭЙ",
-    "@fiveTimesFaster": {
-        "description": "Badge label for faster transfer method"
-    },
-    "fastTransferMethodDescription": "Стварае прамую злучэнне WiFi з вашым прыстасаваннем Omi. Ваш тэлефон часова адключаецца ад звычайнай сеткі WiFi падчас пераносы.",
-    "@fastTransferMethodDescription": {
-        "description": "Description of fast transfer method card"
     },
     "bluetooth": "Bluetooth",
     "@bluetooth": {
@@ -9344,14 +9210,6 @@
     "@voiceFailedToTranscribe": {
         "description": "Error message when voice transcription fails"
     },
-    "locationPermissionRequired": "Дозвол на месцазнаходжанне патрэбны",
-    "@locationPermissionRequired": {
-        "description": "Title for dialog requesting location permission"
-    },
-    "locationPermissionContent": "Хутка пераноска патрэбуе дозвол на месцазнаходжанне, каб прапаноўваць WiFi злучэнне. Калі ласка, разрэшыце дозвол на месцазнаходжанне, каб адкіць.",
-    "@locationPermissionContent": {
-        "description": "Explanation text for location permission dialog"
-    },
     "pdfTranscriptExport": "Экспорт транскрыпцыі",
     "@pdfTranscriptExport": {
         "description": "Title for PDF transcript export document"
@@ -9590,14 +9448,6 @@
     },
     "noDailyRecapsYet": "Штодзённых рэзюмэ яшчэ нема",
     "dailyRecapsDescription": "Ваша штодзённыя рэзюмэ з'явяцца тут пасля стварэння",
-    "chooseTransferMethod": "Выберыце спосаб пераносы",
-    "@chooseTransferMethod": {
-        "description": "Title for transfer method selection dialog"
-    },
-    "fastTransferSpeed": "~150 KB/s праз WiFi",
-    "@fastTransferSpeed": {
-        "description": "Speed description for fast transfer via WiFi"
-    },
     "largeTimeGapDetected": "Вялікі часовы разрыў выяўлены ({gap})",
     "@largeTimeGapDetected": {
         "placeholders": {
@@ -9615,10 +9465,6 @@
                 "example": "1.5h, 2.0h"
             }
         }
-    },
-    "deviceDoesNotSupportWifiSwitchingToBle": "Прыстасаванне не падтрымлівае WiFi синхранізацыю, мяняем на Bluetooth",
-    "@deviceDoesNotSupportWifiSwitchingToBle": {
-        "description": "Message shown when WiFi sync fails because device hardware does not support WiFi, automatically falling back to Bluetooth transfer"
     },
     "appleHealthNotAvailable": "Apple Health недаступна на гэтым прыстасаванні",
     "downloadAudio": "Загрузіць аўдыё",

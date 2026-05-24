@@ -5390,33 +5390,9 @@
     "@thankYouText": {
         "description": "Privacy page - thankYouText"
     },
-    "wifiSyncSettings": "Nastavitve WiFi sinhronizacije",
-    "@wifiSyncSettings": {
-        "description": "WiFi sync settings - wifiSyncSettings"
-    },
-    "enterHotspotCredentials": "Vnesite poverilnice osebne dostopne točke vašega telefona",
-    "@enterHotspotCredentials": {
-        "description": "WiFi sync settings - enterHotspotCredentials"
-    },
-    "wifiSyncUsesHotspot": "WiFi sinhronizacija uporablja vaš telefon kot dostopno točko. Poiščite ime dostopne točke in geslo v Nastavitve > Osebna dostopna točka.",
-    "@wifiSyncUsesHotspot": {
-        "description": "WiFi sync settings - wifiSyncUsesHotspot"
-    },
-    "hotspotNameSsid": "Ime dostopne točke (SSID)",
-    "@hotspotNameSsid": {
-        "description": "WiFi sync settings - hotspotNameSsid"
-    },
-    "exampleIphoneHotspot": "npr. iPhone Hotspot",
-    "@exampleIphoneHotspot": {
-        "description": "WiFi sync settings - exampleIphoneHotspot"
-    },
     "password": "Geslo",
     "@password": {
         "description": "WiFi sync settings - password"
-    },
-    "enterHotspotPassword": "Vnesite geslo dostopne točke",
-    "@enterHotspotPassword": {
-        "description": "WiFi sync settings - enterHotspotPassword"
     },
     "saveCredentials": "Shranite poverilnice",
     "@saveCredentials": {
@@ -5425,18 +5401,6 @@
     "clearCredentials": "Počistite poverilnice",
     "@clearCredentials": {
         "description": "WiFi sync settings - clearCredentials"
-    },
-    "pleaseEnterHotspotName": "Prosimo, vnesite ime dostopne točke",
-    "@pleaseEnterHotspotName": {
-        "description": "WiFi sync settings - pleaseEnterHotspotName"
-    },
-    "wifiCredentialsSaved": "WiFi poverilnice so shranjene",
-    "@wifiCredentialsSaved": {
-        "description": "WiFi sync settings - wifiCredentialsSaved"
-    },
-    "wifiCredentialsCleared": "WiFi poverilnice so počiščene",
-    "@wifiCredentialsCleared": {
-        "description": "WiFi sync settings - wifiCredentialsCleared"
     },
     "summaryGeneratedForDate": "Povzetek je bil ustvarjen za {date}",
     "@summaryGeneratedForDate": {
@@ -6999,10 +6963,6 @@
     "@limitless": {
         "description": "Label for Limitless device storage"
     },
-    "fastTransfer": "Hitri prenos",
-    "@fastTransfer": {
-        "description": "Name of the fast transfer method"
-    },
     "syncingStatus": "Sinhronizacija",
     "@syncingStatus": {
         "description": "Status label when syncing is in progress"
@@ -7019,18 +6979,6 @@
                 "type": "String"
             }
         }
-    },
-    "transferMethod": "Način prenosa",
-    "@transferMethod": {
-        "description": "Page title for transfer method settings"
-    },
-    "fast": "Hitro",
-    "@fast": {
-        "description": "Label for fast WiFi transfer method"
-    },
-    "ble": "BLE",
-    "@ble": {
-        "description": "Label for Bluetooth Low Energy transfer method"
     },
     "phone": "Telefon",
     "@phone": {
@@ -7056,33 +7004,9 @@
     "@processedFilesDeleted": {
         "description": "Snackbar message when processed files are deleted"
     },
-    "wifiEnableFailed": "Napaka pri omogočanju WiFi na napravi. Poskusite znova.",
-    "@wifiEnableFailed": {
-        "description": "Error message when WiFi fails to enable on device"
-    },
-    "deviceNoFastTransfer": "Vaša naprava ne podpira hitrih prenosa. Namesto tega uporabite Bluetooth.",
-    "@deviceNoFastTransfer": {
-        "description": "Error message when device does not support fast transfer"
-    },
-    "enableHotspotMessage": "Prosim, omogočite osebno točko dostopa na vašem telefonu in poskusite znova.",
-    "@enableHotspotMessage": {
-        "description": "Error message asking user to enable hotspot"
-    },
-    "transferStartFailed": "Napaka pri začetku prenosa. Poskusite znova.",
-    "@transferStartFailed": {
-        "description": "Error message when transfer fails to start"
-    },
     "deviceNotResponding": "Naprava se ni odzvala. Poskusite znova.",
     "@deviceNotResponding": {
         "description": "Error message when device times out"
-    },
-    "invalidWifiCredentials": "Neveljavne WiFi poverila. Preverite nastavitve osebne točke dostopa.",
-    "@invalidWifiCredentials": {
-        "description": "Error message for invalid WiFi credentials"
-    },
-    "wifiConnectionFailed": "Povezava WiFi je neuspešna. Poskusite znova.",
-    "@wifiConnectionFailed": {
-        "description": "Error message when WiFi connection fails"
     },
     "sdCardProcessing": "Obdelava SD kartice",
     "@sdCardProcessing": {
@@ -7100,10 +7024,6 @@
     "process": "Obdelaj",
     "@process": {
         "description": "Button label to start processing"
-    },
-    "wifiSyncFailed": "Sinhronizacija WiFi neuspešna",
-    "@wifiSyncFailed": {
-        "description": "Error title when WiFi sync fails"
     },
     "processingFailed": "Obdelava neuspešna",
     "@processingFailed": {
@@ -8140,10 +8060,6 @@
             }
         }
     },
-    "wifiSync": "Sinhronizacija WiFi",
-    "@wifiSync": {
-        "description": "WiFi sync feature label"
-    },
     "itemCopiedToClipboard": "{item} kopiran v odložišče",
     "@itemCopiedToClipboard": {
         "description": "Message when item is copied to clipboard",
@@ -8154,23 +8070,9 @@
             }
         }
     },
-    "wifiConnectionFailedTitle": "Povezava neuspešna",
-    "@wifiConnectionFailedTitle": {
-        "description": "Title shown when WiFi connection to device fails"
-    },
     "connectingToDeviceName": "Povezovanje z {deviceName}",
     "@connectingToDeviceName": {
         "description": "Title shown while connecting to device WiFi",
-        "placeholders": {
-            "deviceName": {
-                "type": "String",
-                "example": "Omi"
-            }
-        }
-    },
-    "enableDeviceWifi": "Omogočite WiFi na {deviceName}",
-    "@enableDeviceWifi": {
-        "description": "Step text for enabling device WiFi",
         "placeholders": {
             "deviceName": {
                 "type": "String",
@@ -8305,10 +8207,6 @@
     "@statusUnprocessed": {
         "description": "Status value for unprocessed recording"
     },
-    "switchedToFastTransfer": "Prešli na Hiter Prenos",
-    "@switchedToFastTransfer": {
-        "description": "Snackbar message when switching to fast transfer mode"
-    },
     "transferCompleteMessage": "Prenos je končan! Sedaj lahko predvajate to snemanje.",
     "@transferCompleteMessage": {
         "description": "Success message when transfer completes"
@@ -8326,41 +8224,9 @@
     "@transferCancelled": {
         "description": "Snackbar message when transfer is cancelled"
     },
-    "fastTransferEnabled": "Hiter prenos je omogočen",
-    "@fastTransferEnabled": {
-        "description": "Snackbar message when fast transfer is enabled"
-    },
     "bluetoothSyncEnabled": "Bluetooth sinhronizacija je omogočena",
     "@bluetoothSyncEnabled": {
         "description": "Snackbar message when bluetooth sync is enabled"
-    },
-    "enableFastTransfer": "Omogoči Hiter Prenos",
-    "@enableFastTransfer": {
-        "description": "Dialog title for enabling fast transfer"
-    },
-    "fastTransferDescription": "Hiter prenos uporablja WiFi za približno 5-krat hitrejše hitrosti. Vaš telefon se bo med prenosom začasno povezal na WiFi omrežje naprave Omi.",
-    "@fastTransferDescription": {
-        "description": "Description of fast transfer feature in dialog"
-    },
-    "internetAccessPausedDuringTransfer": "Dostop do interneta je zaustavljen med prenosom",
-    "@internetAccessPausedDuringTransfer": {
-        "description": "Warning that internet is paused during transfer"
-    },
-    "chooseTransferMethodDescription": "Izberite, kako se snemanja prenašajo z naprave Omi na vaš telefon.",
-    "@chooseTransferMethodDescription": {
-        "description": "Description text on transfer method page"
-    },
-    "wifiSpeed": "~150 KB/s prek WiFi",
-    "@wifiSpeed": {
-        "description": "Speed description for WiFi transfer"
-    },
-    "fiveTimesFaster": "5-KRAT HITREJŠE",
-    "@fiveTimesFaster": {
-        "description": "Badge label for faster transfer method"
-    },
-    "fastTransferMethodDescription": "Ustvari neposredno WiFi povezavo z napravo Omi. Vaš telefon se med prenosom začasno odklopi od običajnega WiFi omrežja.",
-    "@fastTransferMethodDescription": {
-        "description": "Description of fast transfer method card"
     },
     "bluetooth": "Bluetooth",
     "@bluetooth": {
@@ -9344,14 +9210,6 @@
     "@voiceFailedToTranscribe": {
         "description": "Error message when voice transcription fails"
     },
-    "locationPermissionRequired": "Dovoljenječe za Lokacijo je Potrebno",
-    "@locationPermissionRequired": {
-        "description": "Title for dialog requesting location permission"
-    },
-    "locationPermissionContent": "Hiter prenos zahteva dovoljenječe za lokacijo za preverjanje WiFi povezave. Prosimo, dovolite dovoljenječe za lokacijo, da nadaljujete.",
-    "@locationPermissionContent": {
-        "description": "Explanation text for location permission dialog"
-    },
     "pdfTranscriptExport": "Izvoz Prepisа",
     "@pdfTranscriptExport": {
         "description": "Title for PDF transcript export document"
@@ -9590,14 +9448,6 @@
     },
     "noDailyRecapsYet": "Še ni dnevnih povzetkov",
     "dailyRecapsDescription": "Vaši dnevni povzetki se bodo pojavili tukaj, ko bodo ustvarjeni",
-    "chooseTransferMethod": "Izberite Način Prenosa",
-    "@chooseTransferMethod": {
-        "description": "Title for transfer method selection dialog"
-    },
-    "fastTransferSpeed": "~150 KB/s prek WiFi",
-    "@fastTransferSpeed": {
-        "description": "Speed description for fast transfer via WiFi"
-    },
     "largeTimeGapDetected": "Zaznana velika časovna vrzel ({gap})",
     "@largeTimeGapDetected": {
         "placeholders": {
@@ -9615,10 +9465,6 @@
                 "example": "1.5h, 2.0h"
             }
         }
-    },
-    "deviceDoesNotSupportWifiSwitchingToBle": "Naprava ne podpira WiFi sinhronizacije, preklapljam na Bluetooth",
-    "@deviceDoesNotSupportWifiSwitchingToBle": {
-        "description": "Message shown when WiFi sync fails because device hardware does not support WiFi, automatically falling back to Bluetooth transfer"
     },
     "appleHealthNotAvailable": "Apple Health ni dostopen na tej napravi",
     "downloadAudio": "Preznesi Zvok",

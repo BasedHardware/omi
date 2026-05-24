@@ -5390,33 +5390,9 @@
     "@thankYouText": {
         "description": "Privacy page - thankYouText"
     },
-    "wifiSyncSettings": "تنظیمات نقطه اتصال Wi-Fi",
-    "@wifiSyncSettings": {
-        "description": "WiFi sync settings - wifiSyncSettings"
-    },
-    "enterHotspotCredentials": "اطلاعات اعتباری نقطه اتصال تلفن خود را وارد کنید",
-    "@enterHotspotCredentials": {
-        "description": "WiFi sync settings - enterHotspotCredentials"
-    },
-    "wifiSyncUsesHotspot": "هم‌راه‌سازی Wi-Fi از تلفن شما به‌عنوان نقطه اتصال استفاده می‌کند. نام نقطه اتصال و رمز عبور خود را در تنظیمات > Personal Hotspot بیابید.",
-    "@wifiSyncUsesHotspot": {
-        "description": "WiFi sync settings - wifiSyncUsesHotspot"
-    },
-    "hotspotNameSsid": "نام نقطه اتصال (SSID)",
-    "@hotspotNameSsid": {
-        "description": "WiFi sync settings - hotspotNameSsid"
-    },
-    "exampleIphoneHotspot": "مثال: iPhone Hotspot",
-    "@exampleIphoneHotspot": {
-        "description": "WiFi sync settings - exampleIphoneHotspot"
-    },
     "password": "رمز عبور",
     "@password": {
         "description": "WiFi sync settings - password"
-    },
-    "enterHotspotPassword": "رمز عبور نقطه اتصال را وارد کنید",
-    "@enterHotspotPassword": {
-        "description": "WiFi sync settings - enterHotspotPassword"
     },
     "saveCredentials": "ذخیره اطلاعات اعتباری",
     "@saveCredentials": {
@@ -5425,18 +5401,6 @@
     "clearCredentials": "پاک‌کردن اطلاعات اعتباری",
     "@clearCredentials": {
         "description": "WiFi sync settings - clearCredentials"
-    },
-    "pleaseEnterHotspotName": "لطفا نام نقطه اتصال را وارد کنید",
-    "@pleaseEnterHotspotName": {
-        "description": "WiFi sync settings - pleaseEnterHotspotName"
-    },
-    "wifiCredentialsSaved": "اطلاعات اعتباری Wi-Fi ذخیره شد",
-    "@wifiCredentialsSaved": {
-        "description": "WiFi sync settings - wifiCredentialsSaved"
-    },
-    "wifiCredentialsCleared": "اطلاعات اعتباری Wi-Fi پاک‌شد",
-    "@wifiCredentialsCleared": {
-        "description": "WiFi sync settings - wifiCredentialsCleared"
     },
     "summaryGeneratedForDate": "خلاصه برای {date} تولید شد",
     "@summaryGeneratedForDate": {
@@ -6999,10 +6963,6 @@
     "@limitless": {
         "description": "Label for Limitless device storage"
     },
-    "fastTransfer": "انتقال سریع",
-    "@fastTransfer": {
-        "description": "Name of the fast transfer method"
-    },
     "syncingStatus": "هماهنگ سازی",
     "@syncingStatus": {
         "description": "Status label when syncing is in progress"
@@ -7019,18 +6979,6 @@
                 "type": "String"
             }
         }
-    },
-    "transferMethod": "روش انتقال",
-    "@transferMethod": {
-        "description": "Page title for transfer method settings"
-    },
-    "fast": "سریع",
-    "@fast": {
-        "description": "Label for fast WiFi transfer method"
-    },
-    "ble": "BLE",
-    "@ble": {
-        "description": "Label for Bluetooth Low Energy transfer method"
     },
     "phone": "تلفن",
     "@phone": {
@@ -7056,33 +7004,9 @@
     "@processedFilesDeleted": {
         "description": "Snackbar message when processed files are deleted"
     },
-    "wifiEnableFailed": "فعال کردن WiFi در دستگاه ناموفق بود. لطفاً دوباره تلاش کنید.",
-    "@wifiEnableFailed": {
-        "description": "Error message when WiFi fails to enable on device"
-    },
-    "deviceNoFastTransfer": "دستگاه شما از Fast Transfer پشتیبانی نمی کند. به جای آن از Bluetooth استفاده کنید.",
-    "@deviceNoFastTransfer": {
-        "description": "Error message when device does not support fast transfer"
-    },
-    "enableHotspotMessage": "لطفاً hotspot تلفن خود را فعال کنید و دوباره تلاش کنید.",
-    "@enableHotspotMessage": {
-        "description": "Error message asking user to enable hotspot"
-    },
-    "transferStartFailed": "شروع انتقال ناموفق بود. لطفاً دوباره تلاش کنید.",
-    "@transferStartFailed": {
-        "description": "Error message when transfer fails to start"
-    },
     "deviceNotResponding": "دستگاه پاسخ نداد. لطفاً دوباره تلاش کنید.",
     "@deviceNotResponding": {
         "description": "Error message when device times out"
-    },
-    "invalidWifiCredentials": "اعتبارات WiFi نامعتبر است. تنظیمات hotspot خود را بررسی کنید.",
-    "@invalidWifiCredentials": {
-        "description": "Error message for invalid WiFi credentials"
-    },
-    "wifiConnectionFailed": "اتصال WiFi ناموفق بود. لطفاً دوباره تلاش کنید.",
-    "@wifiConnectionFailed": {
-        "description": "Error message when WiFi connection fails"
     },
     "sdCardProcessing": "پردازش کارت SD",
     "@sdCardProcessing": {
@@ -7100,10 +7024,6 @@
     "process": "پردازش",
     "@process": {
         "description": "Button label to start processing"
-    },
-    "wifiSyncFailed": "هماهنگ سازی WiFi ناموفق بود",
-    "@wifiSyncFailed": {
-        "description": "Error title when WiFi sync fails"
     },
     "processingFailed": "پردازش ناموفق بود",
     "@processingFailed": {
@@ -8140,10 +8060,6 @@
             }
         }
     },
-    "wifiSync": "هماهنگ سازی WiFi",
-    "@wifiSync": {
-        "description": "WiFi sync feature label"
-    },
     "itemCopiedToClipboard": "{item} در کلیپ بورد کپی شد",
     "@itemCopiedToClipboard": {
         "description": "Message when item is copied to clipboard",
@@ -8154,23 +8070,9 @@
             }
         }
     },
-    "wifiConnectionFailedTitle": "اتصال ناموفق",
-    "@wifiConnectionFailedTitle": {
-        "description": "Title shown when WiFi connection to device fails"
-    },
     "connectingToDeviceName": "اتصال به {deviceName}",
     "@connectingToDeviceName": {
         "description": "Title shown while connecting to device WiFi",
-        "placeholders": {
-            "deviceName": {
-                "type": "String",
-                "example": "Omi"
-            }
-        }
-    },
-    "enableDeviceWifi": "فعال کردن WiFi {deviceName}",
-    "@enableDeviceWifi": {
-        "description": "Step text for enabling device WiFi",
         "placeholders": {
             "deviceName": {
                 "type": "String",
@@ -8305,10 +8207,6 @@
     "@statusUnprocessed": {
         "description": "Status value for unprocessed recording"
     },
-    "switchedToFastTransfer": "به انتقال سریع تغییر یافت",
-    "@switchedToFastTransfer": {
-        "description": "Snackbar message when switching to fast transfer mode"
-    },
     "transferCompleteMessage": "انتقال تکمیل شد! اکنون می‌توانید این ضبط را پخش کنید.",
     "@transferCompleteMessage": {
         "description": "Success message when transfer completes"
@@ -8326,41 +8224,9 @@
     "@transferCancelled": {
         "description": "Snackbar message when transfer is cancelled"
     },
-    "fastTransferEnabled": "انتقال سریع فعال شد",
-    "@fastTransferEnabled": {
-        "description": "Snackbar message when fast transfer is enabled"
-    },
     "bluetoothSyncEnabled": "هماهنگ‌سازی Bluetooth فعال شد",
     "@bluetoothSyncEnabled": {
         "description": "Snackbar message when bluetooth sync is enabled"
-    },
-    "enableFastTransfer": "فعال‌کردن انتقال سریع",
-    "@enableFastTransfer": {
-        "description": "Dialog title for enabling fast transfer"
-    },
-    "fastTransferDescription": "انتقال سریع از Wi-Fi برای سرعت تقریباً 5 برابر سریع‌تر استفاده می‌کند. تلفن شما به‌طور موقت در طی انتقال به شبکه Wi-Fi دستگاه Omi متصل خواهد شد.",
-    "@fastTransferDescription": {
-        "description": "Description of fast transfer feature in dialog"
-    },
-    "internetAccessPausedDuringTransfer": "دسترسی به اینترنت در طی انتقال متوقف است",
-    "@internetAccessPausedDuringTransfer": {
-        "description": "Warning that internet is paused during transfer"
-    },
-    "chooseTransferMethodDescription": "نحوه انتقال ضبط‌شده‌ها از دستگاه Omi به تلفن خود را انتخاب کنید.",
-    "@chooseTransferMethodDescription": {
-        "description": "Description text on transfer method page"
-    },
-    "wifiSpeed": "تقریباً 150 کیلوبایت بر ثانیه از طریق Wi-Fi",
-    "@wifiSpeed": {
-        "description": "Speed description for WiFi transfer"
-    },
-    "fiveTimesFaster": "5 برابر سریع‌تر",
-    "@fiveTimesFaster": {
-        "description": "Badge label for faster transfer method"
-    },
-    "fastTransferMethodDescription": "اتصال مستقیم Wi-Fi را به دستگاه Omi ایجاد می‌کند. تلفن شما به‌طور موقت از Wi-Fi معمولی خود در طی انتقال قطع می‌شود.",
-    "@fastTransferMethodDescription": {
-        "description": "Description of fast transfer method card"
     },
     "bluetooth": "Bluetooth",
     "@bluetooth": {
@@ -9344,14 +9210,6 @@
     "@voiceFailedToTranscribe": {
         "description": "Error message when voice transcription fails"
     },
-    "locationPermissionRequired": "اجازهِ مکان مورد نیاز است",
-    "@locationPermissionRequired": {
-        "description": "Title for dialog requesting location permission"
-    },
-    "locationPermissionContent": "انتقال سریع برای تأیید اتصال Wi-Fi به اجازهِ مکان نیاز دارد. لطفاً برای ادامه اجازهِ مکان را اعطا کنید.",
-    "@locationPermissionContent": {
-        "description": "Explanation text for location permission dialog"
-    },
     "pdfTranscriptExport": "صادرات رونوشت",
     "@pdfTranscriptExport": {
         "description": "Title for PDF transcript export document"
@@ -9590,14 +9448,6 @@
     },
     "noDailyRecapsYet": "هنوز هیچ خلاصهِ روزانه‌ای وجود ندارد",
     "dailyRecapsDescription": "خلاصه‌های روزانهِ شما پس از تولید در اینجا ظاهر خواهد شد",
-    "chooseTransferMethod": "انتخاب روش انتقال",
-    "@chooseTransferMethod": {
-        "description": "Title for transfer method selection dialog"
-    },
-    "fastTransferSpeed": "تقریباً 150 کیلوبایت بر ثانیه از طریق Wi-Fi",
-    "@fastTransferSpeed": {
-        "description": "Speed description for fast transfer via WiFi"
-    },
     "largeTimeGapDetected": "فاصلهِ زمانیِ بزرگ تشخیص داده شد ({gap})",
     "@largeTimeGapDetected": {
         "placeholders": {
@@ -9615,10 +9465,6 @@
                 "example": "1.5h, 2.0h"
             }
         }
-    },
-    "deviceDoesNotSupportWifiSwitchingToBle": "دستگاه از هماهنگ‌سازی Wi-Fi پشتیبانی نمی‌کند، تغییر به Bluetooth",
-    "@deviceDoesNotSupportWifiSwitchingToBle": {
-        "description": "Message shown when WiFi sync fails because device hardware does not support WiFi, automatically falling back to Bluetooth transfer"
     },
     "appleHealthNotAvailable": "Apple Health در این دستگاه در دسترس نیست",
     "downloadAudio": "دانلود صدا",
