@@ -1,0 +1,108 @@
+# E2E Flow: Speech Profile — train Omi to recognize your voice
+# Tests: Navigate to speech profile page, start recording, answer questions, complete profile, verify saved
+# Core feature: voice recognition training for speaker diarization accuracy
+
+version: 2
+name: speech-profile
+description: Speech profile flow — navigate to Settings > Profile > Speech Profile, start voice training, answer questions with speech, skip questions, complete and upload profile, verify profile saved
+app: com.friend.ios.dev
+evidence:
+  video: true
+covers:
+  - app/lib/pages/speech_profile/page.dart
+  - app/lib/providers/speech_profile_provider.dart
+  - app/lib/backend/http/api/speech_profile.dart
+  - app/lib/pages/settings/profile.dart
+preconditions:
+  - auth_ready  # User signed in and onboarding completed. App shows home screen.
+  - microphone_permission  # Mic permission granted. Android: `adb shell pm grant com.friend.ios.dev android.permission.RECORD_AUDIO`.
+
+steps:
+  - id: S1
+    name: Open settings
+    do: "Tap the settings icon (gear, top-right corner) on the home screen to open the Settings page."
+    verify: true
+    expect:
+      - kind: interactive_count
+        min: 4
+    evidence:
+      - screenshot: step-S1.webp
+
+  - id: S2
+    name: Navigate to Profile
+    do: "Tap 'Profile' in the settings menu to open the Profile page."
+    verify: true
+    expect:
+      - kind: interactive_count
+        min: 4
+    evidence:
+      - screenshot: step-S2.webp
+    note: "Profile page shows: Language, Custom Vocabulary, Speech Profile, Identifying Others, Data Privacy."
+
+  - id: S3
+    name: Tap Speech Profile
+    do: "Tap 'Speech Profile' (waveform icon) in the Profile menu. The Speech Profile page opens showing: intro text explaining the feature, a 'Get Started' button (or 'Do It Again' if profile already exists), and optionally 'Listen to Speech Profile' if samples exist."
+    verify: true
+    expect:
+      - kind: interactive_count
+        min: 2
+    evidence:
+      - screenshot: step-S3.webp
+    note: "SpeechProfilePage in speech_profile/page.dart. Shows device animation widget at top (connected device info or phone mic fallback). Intro text explains 'teach Omi your voice'. Help icon (?) in app bar opens recording tips dialog."
+
+  - id: S4
+    name: Tap Get Started to begin voice training
+    do: "Tap the 'Get Started' button (purple/blue gradient, center). If primary language is not set, a LanguageSelectionDialog appears first — select a language and confirm. The page transitions to question mode: a question text appears with fade animation, a progress bar shows at the bottom, and a 'Skip This Question' button appears."
+    verify: true
+    expect:
+      - kind: interactive_count
+        min: 2
+    evidence:
+      - screenshot: step-S4.webp
+    note: "Tapping Get Started calls provider.initialise() which: (1) checks device codec compatibility, (2) creates SpeechProfileTranscriptSegmentSocketService, (3) starts recording via phone mic or BLE device, (4) sets startedRecording=true, (5) starts max duration timer. Questions are served by the provider and displayed one at a time."
+
+  - id: S5
+    name: Speak answer to first question
+    do: "Read and speak the answer to the displayed question for 10-15 seconds. The transcribed text appears below the question in real-time. When enough speech is captured, the question auto-advances to the next one and the progress bar updates."
+    verify: true
+    expect:
+      - kind: interactive_count
+        min: 2
+    evidence:
+      - screenshot: step-S5.webp
+    note: "Transcription arrives via WebSocket (same as conversation capture but with includeSpeechProfile=false). Questions auto-advance based on backend speech analysis. Progress bar shows questionProgress (0.0-1.0). If recording quality is poor, error dialogs appear: MULTIPLE_SPEAKERS, TOO_SHORT, INVALID_RECORDING, SOCKET_DISCONNECTED."
+
+  - id: S6
+    name: Skip a question
+    do: "When the next question appears, tap 'Skip This Question' button instead of speaking. The question advances to the next one and the progress bar updates. This demonstrates the skip functionality."
+    verify: true
+    expect:
+      - kind: interactive_count
+        min: 2
+    evidence:
+      - screenshot: step-S6.webp
+    note: "Skip calls provider.skipCurrentQuestion(). The backend accepts the skip and moves to the next question. Minimum number of answered questions is required for a valid profile."
+
+  - id: S7
+    name: Complete all questions
+    do: "Continue answering or skipping questions until all are completed. When finished, the page shows 'All Done' with a gradient-bordered button and a success message. A loading spinner may appear briefly while the profile uploads to the server."
+    verify: true
+    expect:
+      - kind: interactive_count
+        min: 2
+    evidence:
+      - screenshot: step-S7.webp
+    note: "Completion triggers provider.finalize() which uploads the speech profile segments to the backend via POST /v1/speech-profile. The uploaded profile is used for speaker diarization in future conversations. profileCompleted=true shows the completion UI."
+
+  - id: S8
+    name: Return to home
+    do: "Tap the back arrow or 'All Done' button to return. Navigate back through Profile → Settings → Home. Verify the home screen is displayed."
+    verify: true
+    expect:
+      - kind: text_visible
+        values: ["Conversations"]
+      - kind: interactive_count
+        min: 4
+    evidence:
+      - screenshot: step-S8.webp
+    note: "After completing a speech profile, future conversation recordings will include speech profile matching (includeSpeechProfile=true in WebSocket params). The user's speech segments will be labeled as 'You' in transcripts."
