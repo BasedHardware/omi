@@ -981,9 +981,14 @@ class OmiDeviceConnection extends DeviceConnection {
       Logger.debug('OmiDeviceConnection: Error getting device info: $e');
     }
 
-    // Set defaults if values are empty
+    // Set defaults if values are empty.
+    // firmwareRevision intentionally has no fallback: when the BLE read fails
+    // we leave it empty rather than lying with an arbitrary version. A stale
+    // default like '1.0.2' tricked the backend into recommending Omi_CV1_v3.0.5
+    // (the only release whose minimum_firmware_required is 1.0.0) to users
+    // whose actual firmware was 3.0.19 — see callers for the empty-check guard.
     deviceInfo['modelNumber'] ??= 'Omi Device';
-    deviceInfo['firmwareRevision'] ??= '1.0.2';
+    deviceInfo['firmwareRevision'] ??= '';
     deviceInfo['hardwareRevision'] ??= 'Seeed Xiao BLE Sense';
     deviceInfo['manufacturerName'] ??= 'Based Hardware';
     deviceInfo['hasImageStream'] ??= 'false';
