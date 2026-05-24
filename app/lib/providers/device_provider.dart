@@ -18,6 +18,7 @@ import 'package:omi/services/devices/omi_connection.dart';
 import 'package:omi/services/notifications.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/services/battery_widget_service.dart';
+import 'package:omi/services/wals/wal_syncs.dart';
 import 'package:omi/utils/device.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/other/debouncer.dart';
@@ -455,11 +456,14 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     SharedPreferencesUtil().deviceName = device.name;
 
     // Wals
-    ServiceManager.instance().wal.getSyncs().sdcard.setDevice(device);
-    ServiceManager.instance().wal.getSyncs().flashPage.setDevice(device);
-    ServiceManager.instance().wal.getSyncs().storage.setDevice(device);
+    final syncs = ServiceManager.instance().wal.getSyncs();
+    syncs.setDevice(device);
+    syncs.sdcard.setDevice(device);
+    syncs.flashPage.setDevice(device);
+    syncs.storage.setDevice(device);
+    syncs.ring.setDevice(device);
 
-    // Auto-sync: check if device has offline files (new multi-file firmware)
+    // Auto-sync: check if device has offline files
     _checkAndStartAutoSync(device);
 
     notifyListeners();
@@ -492,7 +496,8 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     try {
       // Use firmware version as the reliable signal for multi-file support
       // Read from pairedDevice which has firmwareRevision populated by getDeviceInfo()
-      supportsMultiFileSync = _isFirmwareVersionSupported(pairedDevice?.firmwareRevision ?? device.firmwareRevision);
+      final fwVersion = pairedDevice?.firmwareRevision ?? device.firmwareRevision;
+      supportsMultiFileSync = _isFirmwareVersionSupported(fwVersion);
       SharedPreferencesUtil().deviceSupportsMultiFileSync = supportsMultiFileSync;
       notifyListeners();
 
@@ -500,6 +505,18 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
 
       var connection = await ServiceManager.instance().device.ensureConnection(device.id);
       if (connection == null) return;
+
+      // fw >= 3.0.20 speaks the ring-buffer protocol; auto-detect via the 16-byte
+      // ring status read instead of the multi-file file-list endpoint (which the
+      // ring firmware no longer serves).
+      if (WalSyncs.isRingBufferFirmware(fwVersion)) {
+        final ringStatus = await connection.getRingStatus();
+        if (ringStatus == null || ringStatus.unreadPackets <= 0) return;
+        Logger.debug(
+            'DeviceProvider: Ring auto-sync detected ${ringStatus.unreadPackets} unread packets (${ringStatus.usedBytes} bytes)');
+        onOfflineDataDetected?.call(device, ringStatus.unreadPackets, ringStatus.usedBytes);
+        return;
+      }
 
       final status = await connection.getStorageFileStats();
       if (status == null || status.fileCount == 0) return;

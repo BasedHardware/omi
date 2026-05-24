@@ -10,6 +10,7 @@ import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/services/devices.dart';
 import 'package:omi/services/devices/device_connection.dart';
 import 'package:omi/services/devices/models.dart';
+import 'package:omi/services/devices/ring_protocol.dart';
 import 'package:omi/services/devices/wifi_sync_error.dart';
 import 'package:omi/services/notifications.dart';
 import 'package:omi/utils/logger.dart';
@@ -359,6 +360,154 @@ class OmiDeviceConnection extends DeviceConnection {
     } catch (e) {
       Logger.debug('OmiDeviceConnection: Error sending stop command: $e');
       return false;
+    }
+  }
+
+  // --- Ring-buffer storage protocol (firmware 3.0.20+) ---
+
+  @override
+  Future<RingStatus?> performGetRingStatus() async {
+    try {
+      final value = await transport.readCharacteristic(
+        storageDataStreamServiceUuid,
+        storageReadControlCharacteristicUuid,
+      );
+      final status = RingProtocol.parseStatus(value);
+      if (status == null) {
+        Logger.debug('OmiDeviceConnection: Ring status too short (${value.length} bytes)');
+      } else {
+        Logger.debug('OmiDeviceConnection: $status');
+      }
+      return status;
+    } catch (e) {
+      Logger.debug('OmiDeviceConnection: Error reading ring status: $e');
+      return null;
+    }
+  }
+
+  @override
+  Future<RingInfo?> performGetRingInfo() async {
+    StreamSubscription? sub;
+    try {
+      final completer = Completer<RingInfo?>();
+      final stream = transport.getCharacteristicStream(
+        storageDataStreamServiceUuid,
+        storageDataStreamCharacteristicUuid,
+      );
+
+      sub = stream.listen((value) {
+        if (completer.isCompleted) return;
+        final info = RingProtocol.parseInfoNotification(value);
+        if (info == null) return;
+        Logger.debug('OmiDeviceConnection: $info');
+        completer.complete(info);
+      });
+
+      await transport.writeCharacteristic(
+        storageDataStreamServiceUuid,
+        storageDataStreamCharacteristicUuid,
+        [RingProtocol.cmdInfo],
+      );
+
+      return await completer.future.timeout(const Duration(seconds: 5), onTimeout: () {
+        Logger.debug('OmiDeviceConnection: getRingInfo timeout');
+        return null;
+      });
+    } catch (e) {
+      Logger.debug('OmiDeviceConnection: Error getting ring info: $e');
+      return null;
+    } finally {
+      await sub?.cancel();
+    }
+  }
+
+  @override
+  Future<bool> performReadRingFromSeq(int startSeq, {int? packetCount}) async {
+    try {
+      await transport.writeCharacteristic(
+        storageDataStreamServiceUuid,
+        storageDataStreamCharacteristicUuid,
+        RingProtocol.encodeReadCommand(startSeq, packetCount: packetCount),
+      );
+      Logger.debug('OmiDeviceConnection: CMD_RING_READ start_seq=$startSeq count=${packetCount ?? "all"}');
+      return true;
+    } catch (e) {
+      Logger.debug('OmiDeviceConnection: Error sending CMD_RING_READ: $e');
+      return false;
+    }
+  }
+
+  @override
+  Future<bool> performAdvanceRing(int newReadSeq) async {
+    StreamSubscription? sub;
+    try {
+      final completer = Completer<bool>();
+      final stream = transport.getCharacteristicStream(
+        storageDataStreamServiceUuid,
+        storageDataStreamCharacteristicUuid,
+      );
+
+      sub = stream.listen((value) {
+        if (completer.isCompleted) return;
+        if (value.length < 2 || value[0] != RingProtocol.notifyAck) return;
+        final status = value[1];
+        Logger.debug('OmiDeviceConnection: ADVANCE ack status=$status');
+        completer.complete(status == 0);
+      });
+
+      await transport.writeCharacteristic(
+        storageDataStreamServiceUuid,
+        storageDataStreamCharacteristicUuid,
+        RingProtocol.encodeAdvanceCommand(newReadSeq),
+      );
+      Logger.debug('OmiDeviceConnection: CMD_RING_ADVANCE seq=$newReadSeq');
+
+      return await completer.future.timeout(const Duration(seconds: 5), onTimeout: () {
+        Logger.debug('OmiDeviceConnection: advanceRing timeout');
+        return false;
+      });
+    } catch (e) {
+      Logger.debug('OmiDeviceConnection: Error advancing ring: $e');
+      return false;
+    } finally {
+      await sub?.cancel();
+    }
+  }
+
+  @override
+  Future<bool> performClearRing() async {
+    StreamSubscription? sub;
+    try {
+      final completer = Completer<bool>();
+      final stream = transport.getCharacteristicStream(
+        storageDataStreamServiceUuid,
+        storageDataStreamCharacteristicUuid,
+      );
+
+      sub = stream.listen((value) {
+        if (completer.isCompleted) return;
+        if (value.length < 2 || value[0] != RingProtocol.notifyAck) return;
+        final status = value[1];
+        Logger.debug('OmiDeviceConnection: CLEAR ack status=$status');
+        completer.complete(status == 0);
+      });
+
+      await transport.writeCharacteristic(
+        storageDataStreamServiceUuid,
+        storageDataStreamCharacteristicUuid,
+        [RingProtocol.cmdClear],
+      );
+      Logger.debug('OmiDeviceConnection: CMD_RING_CLEAR');
+
+      return await completer.future.timeout(const Duration(seconds: 5), onTimeout: () {
+        Logger.debug('OmiDeviceConnection: clearRing timeout');
+        return false;
+      });
+    } catch (e) {
+      Logger.debug('OmiDeviceConnection: Error clearing ring: $e');
+      return false;
+    } finally {
+      await sub?.cancel();
     }
   }
 

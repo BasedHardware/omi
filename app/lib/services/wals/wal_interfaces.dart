@@ -126,6 +126,19 @@ abstract class StorageSync implements IWalSync {
   Future<bool> hasFilesToSync();
 }
 
+/// Ring-buffer storage sync (firmware 3.0.20+).
+/// Mirrors StorageSync, with the ring as a single logical stream rather than a list of files.
+abstract class RingStorageSync implements IWalSync {
+  void setLocalSync(LocalWalSync localSync);
+  void setDevice(BtDevice? device);
+  Future<void> deleteAllSyncedWals();
+  Future<void> deleteAllPendingWals();
+  bool get isSyncing;
+  double get currentSpeedKBps;
+  Future<bool> hasFilesToSync();
+  Future<void> refreshWalsFromDevice();
+}
+
 abstract class FlashPageWalSync implements IWalSync {
   void setDevice(BtDevice? device);
   void setLocalSync(LocalWalSync localSync);

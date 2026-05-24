@@ -7,6 +7,7 @@ import 'package:omi/models/sync_state.dart';
 import 'package:omi/services/connectivity_service.dart';
 import 'package:omi/services/wals/flash_page_wal_sync.dart';
 import 'package:omi/services/wals/local_wal_sync.dart';
+import 'package:omi/services/wals/ring_storage_sync.dart';
 import 'package:omi/services/wals/sdcard_wal_sync.dart';
 import 'package:omi/services/wals/storage_sync.dart';
 import 'package:omi/services/wals/wal.dart';
@@ -27,19 +28,44 @@ class WalSyncs implements IWalSync {
   late StorageSyncImpl _storageSync;
   StorageSyncImpl get storage => _storageSync;
 
+  late RingStorageSyncImpl _ringSync;
+  RingStorageSyncImpl get ring => _ringSync;
+
   final IWalSyncListener listener;
 
   bool _isCancelled = false;
+  BtDevice? _device;
+
+  /// Called from DeviceProvider when a device connects/disconnects so the
+  /// firmware-version gate in syncAll() can route to the right Phase-0 sync.
+  void setDevice(BtDevice? device) {
+    _device = device;
+  }
+
+  /// Firmware >= 3.0.20 speaks the ring-buffer protocol; older multi-file
+  /// firmware (3.0.17–3.0.19) keeps using StorageSync.
+  static bool isRingBufferFirmware(String? version) {
+    if (version == null || version.isEmpty || version == 'Unknown') return false;
+    final parts = version.split('.').map((p) => int.tryParse(p) ?? 0).toList();
+    if (parts.length < 3) return false;
+    if (parts[0] > 3) return true;
+    if (parts[0] < 3) return false;
+    if (parts[1] > 0) return true;
+    if (parts[1] < 0) return false;
+    return parts[2] >= 20;
+  }
 
   WalSyncs(this.listener) {
     _phoneSync = LocalWalSyncImpl(listener);
     _sdcardSync = SDCardWalSyncImpl(listener);
     _flashPageSync = FlashPageWalSyncImpl(listener);
     _storageSync = StorageSyncImpl(listener);
+    _ringSync = RingStorageSyncImpl(listener);
 
     _sdcardSync.setLocalSync(_phoneSync);
     _flashPageSync.setLocalSync(_phoneSync);
     _storageSync.setLocalSync(_phoneSync);
+    _ringSync.setLocalSync(_phoneSync);
 
     _sdcardSync.loadWifiCredentials();
   }
@@ -50,11 +76,13 @@ class WalSyncs implements IWalSync {
     await _sdcardSync.deleteWal(wal);
     await _flashPageSync.deleteWal(wal);
     await _storageSync.deleteWal(wal);
+    await _ringSync.deleteWal(wal);
   }
 
   @override
   Future<List<Wal>> getMissingWals() async {
     List<Wal> wals = [];
+    wals.addAll(await _ringSync.getMissingWals());
     wals.addAll(await _storageSync.getMissingWals());
     wals.addAll(await _sdcardSync.getMissingWals());
     wals.addAll(await _phoneSync.getMissingWals());
@@ -64,6 +92,7 @@ class WalSyncs implements IWalSync {
 
   Future<List<Wal>> getAllWals() async {
     List<Wal> wals = [];
+    wals.addAll(await _ringSync.getMissingWals());
     wals.addAll(await _storageSync.getMissingWals());
     wals.addAll(await _sdcardSync.getMissingWals());
     wals.addAll(await _phoneSync.getAllWals());
@@ -146,6 +175,7 @@ class WalSyncs implements IWalSync {
     await _sdcardSync.deleteAllSyncedWals();
     await _flashPageSync.deleteAllSyncedWals();
     await _storageSync.deleteAllSyncedWals();
+    await _ringSync.deleteAllSyncedWals();
   }
 
   Future<void> deleteAllPendingWals() async {
@@ -153,6 +183,7 @@ class WalSyncs implements IWalSync {
     await _sdcardSync.deleteAllPendingWals();
     await _flashPageSync.deleteAllPendingWals();
     await _storageSync.deleteAllPendingWals();
+    await _ringSync.deleteAllPendingWals();
   }
 
   @override
@@ -161,6 +192,7 @@ class WalSyncs implements IWalSync {
     _sdcardSync.start();
     _flashPageSync.start();
     _storageSync.start();
+    _ringSync.start();
   }
 
   @override
@@ -169,6 +201,7 @@ class WalSyncs implements IWalSync {
     await _sdcardSync.stop();
     await _flashPageSync.stop();
     await _storageSync.stop();
+    await _ringSync.stop();
   }
 
   @override
@@ -187,15 +220,30 @@ class WalSyncs implements IWalSync {
       'phone': allMissing.where((w) => w.storage == WalStorage.disk || w.storage == WalStorage.mem).length,
     });
 
-    // Phase 0: New multi-file storage sync (for new firmware with LittleFS)
-    // Refresh file list from device via BLE (safe — not syncing yet)
-    await _storageSync.refreshWalsFromDevice();
-    final storageMissing = await _storageSync.getMissingWals();
-    if (storageMissing.isNotEmpty) {
-      Logger.debug("WalSyncs: Phase 0 - Downloading ${storageMissing.length} multi-file storage files to phone");
-      DebugLogManager.logInfo('Sync Phase 0: Multi-file storage sync');
-      progress?.onWalSyncedProgress(0.0, phase: SyncPhase.downloadingFromDevice);
-      await _storageSync.syncAll(progress: progress);
+    // Phase 0: New offline storage sync, gated by firmware version.
+    //   fw >= 3.0.20  -> ring-buffer protocol (RingStorageSync)
+    //   fw 3.0.17–.19 -> multi-file LittleFS protocol (StorageSync)
+    //   fw < 3.0.17   -> falls through to Phase 1a legacy SD-card path
+    final fwVersion = _device?.firmwareRevision;
+    final useRing = isRingBufferFirmware(fwVersion);
+    if (useRing) {
+      await _ringSync.refreshWalsFromDevice();
+      final ringMissing = await _ringSync.getMissingWals();
+      if (ringMissing.isNotEmpty) {
+        Logger.debug("WalSyncs: Phase 0 - Ring-buffer sync (fw=$fwVersion)");
+        DebugLogManager.logInfo('Sync Phase 0: Ring-buffer sync', {'fw': fwVersion ?? ''});
+        progress?.onWalSyncedProgress(0.0, phase: SyncPhase.downloadingFromDevice);
+        await _ringSync.syncAll(progress: progress);
+      }
+    } else {
+      await _storageSync.refreshWalsFromDevice();
+      final storageMissing = await _storageSync.getMissingWals();
+      if (storageMissing.isNotEmpty) {
+        Logger.debug("WalSyncs: Phase 0 - Downloading ${storageMissing.length} multi-file storage files to phone");
+        DebugLogManager.logInfo('Sync Phase 0: Multi-file storage sync', {'fw': fwVersion ?? ''});
+        progress?.onWalSyncedProgress(0.0, phase: SyncPhase.downloadingFromDevice);
+        await _storageSync.syncAll(progress: progress);
+      }
     }
 
     if (_isCancelled) {
@@ -286,6 +334,9 @@ class WalSyncs implements IWalSync {
   }) async {
     if (wal.storage == WalStorage.sdcard) {
       progress?.onWalSyncedProgress(0.0, phase: SyncPhase.downloadingFromDevice);
+      if (wal.fileNum == -1) {
+        return _ringSync.syncWal(wal: wal, progress: progress);
+      }
       final preferredMethod = SharedPreferencesUtil().preferredSyncMethod;
       final wifiSupported = await _sdcardSync.isWifiSyncSupported();
 
@@ -306,15 +357,16 @@ class WalSyncs implements IWalSync {
   @override
   void cancelSync() {
     _isCancelled = true;
+    _ringSync.cancelSync();
     _storageSync.cancelSync();
     _sdcardSync.cancelSync();
     _flashPageSync.cancelSync();
     _phoneSync.cancelSync();
   }
 
-  bool get isStorageSyncing => _storageSync.isSyncing;
+  bool get isStorageSyncing => _storageSync.isSyncing || _ringSync.isSyncing;
 
-  double get storageSpeedKBps => _storageSync.currentSpeedKBps;
+  double get storageSpeedKBps => _ringSync.isSyncing ? _ringSync.currentSpeedKBps : _storageSync.currentSpeedKBps;
 
   bool get isSdCardSyncing => _sdcardSync.isSyncing;
 
