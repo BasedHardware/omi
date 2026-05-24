@@ -187,19 +187,17 @@ class RingStorageSyncImpl implements RingStorageSync {
         return;
       }
 
-      // timerStart = 0 here; the per-record timestamp from the first NOTIFY_DATA
-      // record will become the authoritative start time (or now-duration fallback
-      // if status.rtcValid == 0).
+      final displayTimerStart = DateTime.now().millisecondsSinceEpoch ~/ 1000 - estimatedSecs;
       _wals = [
         Wal(
           codec: codec,
-          timerStart: 0,
+          timerStart: displayTimerStart,
           status: WalStatus.miss,
           storage: WalStorage.sdcard,
           seconds: estimatedSecs,
           storageOffset: 0,
           storageTotalBytes: status.unreadPackets * RingProtocol.recordSize,
-          fileNum: -1, // sentinel: ring has no file index
+          fileNum: -1,
           device: _device!.id,
           deviceModel: deviceModel,
           totalFrames: estimatedFrames,
