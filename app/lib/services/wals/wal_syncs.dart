@@ -334,6 +334,9 @@ class WalSyncs implements IWalSync {
   }) async {
     if (wal.storage == WalStorage.sdcard) {
       progress?.onWalSyncedProgress(0.0, phase: SyncPhase.downloadingFromDevice);
+      if (wal.fileNum == -1) {
+        return _ringSync.syncWal(wal: wal, progress: progress);
+      }
       final preferredMethod = SharedPreferencesUtil().preferredSyncMethod;
       final wifiSupported = await _sdcardSync.isWifiSyncSupported();
 

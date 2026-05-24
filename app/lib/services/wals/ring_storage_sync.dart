@@ -321,7 +321,10 @@ class RingStorageSyncImpl implements RingStorageSync {
     _isSyncing = true;
     try {
       progress?.onWalSyncedProgress(0.0);
-      await _syncRing(wal, progress: progress);
+      final complete = await _syncRing(wal, progress: progress);
+      if (complete) {
+        wal.status = WalStatus.synced;
+      }
       progress?.onWalSyncedProgress(1.0, speedKBps: _currentSpeedKBps);
       listener.onWalUpdated();
     } catch (e) {
