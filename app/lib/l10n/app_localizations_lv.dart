@@ -4632,41 +4632,13 @@ class AppLocalizationsLv extends AppLocalizations {
       'Paldies, ka esat vērtīgs Omi lietotājs. Ja jums ir kādi jautājumi vai bažas, sazinieties ar mums pa team@basedhardware.com.';
 
   @override
-  String get wifiSyncSettings => 'WiFi sinhronizācijas iestatījumi';
-
-  @override
-  String get enterHotspotCredentials => 'Ievadiet tālruņa tīklāja akreditācijas datus';
-
-  @override
-  String get wifiSyncUsesHotspot =>
-      'WiFi sinhronizācija izmanto jūsu tālruni kā tīklāju. Atrodiet nosaukumu un paroli sadaļā Iestatījumi > Personālais tīklājs.';
-
-  @override
-  String get hotspotNameSsid => 'Tīklāja nosaukums (SSID)';
-
-  @override
-  String get exampleIphoneHotspot => 'piem. iPhone Hotspot';
-
-  @override
   String get password => 'Parole';
-
-  @override
-  String get enterHotspotPassword => 'Ievadiet tīklāja paroli';
 
   @override
   String get saveCredentials => 'Saglabāt akreditācijas datus';
 
   @override
   String get clearCredentials => 'Notīrīt akreditācijas datus';
-
-  @override
-  String get pleaseEnterHotspotName => 'Lūdzu, ievadiet tīklāja nosaukumu';
-
-  @override
-  String get wifiCredentialsSaved => 'WiFi akreditācijas dati saglabāti';
-
-  @override
-  String get wifiCredentialsCleared => 'WiFi akreditācijas dati notīrīti';
 
   @override
   String summaryGeneratedForDate(String date) {
@@ -5815,9 +5787,6 @@ class AppLocalizationsLv extends AppLocalizations {
   String get limitless => 'Limitless';
 
   @override
-  String get fastTransfer => 'Ātrā pārsūtīšana';
-
-  @override
   String get syncingStatus => 'Sinhronizē';
 
   @override
@@ -5827,15 +5796,6 @@ class AppLocalizationsLv extends AppLocalizations {
   String etaLabel(String time) {
     return 'Aptuvens laiks: $time';
   }
-
-  @override
-  String get transferMethod => 'Pārsūtīšanas metode';
-
-  @override
-  String get fast => 'Ātrs';
-
-  @override
-  String get ble => 'BLE';
 
   @override
   String get phone => 'Tālrunis';
@@ -5856,25 +5816,7 @@ class AppLocalizationsLv extends AppLocalizations {
   String get processedFilesDeleted => 'Apstrādātie faili dzēsti';
 
   @override
-  String get wifiEnableFailed => 'Neizdevās iespējot WiFi ierīcē. Lūdzu, mēģiniet vēlreiz.';
-
-  @override
-  String get deviceNoFastTransfer => 'Jūsu ierīce neatbalsta ātro pārsūtīšanu. Tā vietā izmantojiet Bluetooth.';
-
-  @override
-  String get enableHotspotMessage => 'Lūdzu, iespējojiet tālruņa piekļuves punktu un mēģiniet vēlreiz.';
-
-  @override
-  String get transferStartFailed => 'Neizdevās sākt pārsūtīšanu. Lūdzu, mēģiniet vēlreiz.';
-
-  @override
   String get deviceNotResponding => 'Ierīce nereaģē. Lūdzu, mēģiniet vēlreiz.';
-
-  @override
-  String get invalidWifiCredentials => 'Nederīgi WiFi akreditācijas dati. Pārbaudiet piekļuves punkta iestatījumus.';
-
-  @override
-  String get wifiConnectionFailed => 'WiFi savienojums neizdevās. Lūdzu, mēģiniet vēlreiz.';
 
   @override
   String get sdCardProcessing => 'SD kartes apstrāde';
@@ -5886,9 +5828,6 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get process => 'Apstrādāt';
-
-  @override
-  String get wifiSyncFailed => 'WiFi sinhronizācija neizdevās';
 
   @override
   String get processingFailed => 'Apstrāde neizdevās';
@@ -6669,24 +6608,13 @@ class AppLocalizationsLv extends AppLocalizations {
   }
 
   @override
-  String get wifiSync => 'WiFi sinhronizācija';
-
-  @override
   String itemCopiedToClipboard(String item) {
     return '$item nokopēts starpliktuvē';
   }
 
   @override
-  String get wifiConnectionFailedTitle => 'Savienojums neizdevās';
-
-  @override
   String connectingToDeviceName(String deviceName) {
     return 'Savienojas ar $deviceName';
-  }
-
-  @override
-  String enableDeviceWifi(String deviceName) {
-    return 'Iespējot $deviceName WiFi';
   }
 
   @override
@@ -6782,9 +6710,6 @@ class AppLocalizationsLv extends AppLocalizations {
   String get statusUnprocessed => 'Neapstrādāts';
 
   @override
-  String get switchedToFastTransfer => 'Pārslēgts uz ātro pārsūtīšanu';
-
-  @override
   String get transferCompleteMessage => 'Pārsūtīšana pabeigta! Tagad varat atskaņot šo ierakstu.';
 
   @override
@@ -6796,33 +6721,7 @@ class AppLocalizationsLv extends AppLocalizations {
   String get transferCancelled => 'Pārsūtīšana atcelta';
 
   @override
-  String get fastTransferEnabled => 'Ātrā pārsūtīšana iespējota';
-
-  @override
   String get bluetoothSyncEnabled => 'Bluetooth sinhronizācija iespējota';
-
-  @override
-  String get enableFastTransfer => 'Iespējot ātro pārsūtīšanu';
-
-  @override
-  String get fastTransferDescription =>
-      'Ātrā pārsūtīšana izmanto WiFi ~5x ātrākam ātrumam. Pārsūtīšanas laikā tālrunis īslaicīgi pieslēgsies Omi ierīces WiFi tīklam.';
-
-  @override
-  String get internetAccessPausedDuringTransfer => 'Interneta piekļuve ir apturēta pārsūtīšanas laikā';
-
-  @override
-  String get chooseTransferMethodDescription => 'Izvēlieties, kā ieraksti tiek pārsūtīti no Omi ierīces uz tālruni.';
-
-  @override
-  String get wifiSpeed => '~150 KB/s caur WiFi';
-
-  @override
-  String get fiveTimesFaster => '5X ĀTRĀK';
-
-  @override
-  String get fastTransferMethodDescription =>
-      'Izveido tiešu WiFi savienojumu ar Omi ierīci. Pārsūtīšanas laikā tālrunis īslaicīgi atvienojas no parastā WiFi.';
 
   @override
   String get bluetooth => 'Bluetooth';
@@ -7526,13 +7425,6 @@ class AppLocalizationsLv extends AppLocalizations {
   String get voiceFailedToTranscribe => 'Neizdevās transkribēt audio';
 
   @override
-  String get locationPermissionRequired => 'Nepieciešama atrašanās vietas atļauja';
-
-  @override
-  String get locationPermissionContent =>
-      'Ātrai pārsūtīšanai nepieciešama atrašanās vietas atļauja, lai pārbaudītu WiFi savienojumu. Lūdzu, piešķiriet atrašanās vietas atļauju, lai turpinātu.';
-
-  @override
   String get pdfTranscriptExport => 'Transkripcijas eksports';
 
   @override
@@ -7677,12 +7569,6 @@ class AppLocalizationsLv extends AppLocalizations {
   String get dailyRecapsDescription => 'Jūsu ikdienas apkopojumi parādīsies šeit, kad tie būs izveidoti';
 
   @override
-  String get chooseTransferMethod => 'Izvēlieties pārsūtīšanas metodi';
-
-  @override
-  String get fastTransferSpeed => '~150 KB/s caur WiFi';
-
-  @override
   String largeTimeGapDetected(String gap) {
     return 'Konstatēta liela laika starpība ($gap)';
   }
@@ -7691,9 +7577,6 @@ class AppLocalizationsLv extends AppLocalizations {
   String largeTimeGapsDetected(String gaps) {
     return 'Konstatētas lielas laika starpības ($gaps)';
   }
-
-  @override
-  String get deviceDoesNotSupportWifiSwitchingToBle => 'Ierīce neatbalsta WiFi sinhronizāciju, pārslēdzas uz Bluetooth';
 
   @override
   String get appleHealthNotAvailable => 'Apple Health nav pieejams šajā ierīcē';

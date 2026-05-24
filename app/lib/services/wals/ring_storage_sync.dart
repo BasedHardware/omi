@@ -273,10 +273,7 @@ class RingStorageSyncImpl implements RingStorageSync {
   }
 
   @override
-  Future<SyncLocalFilesResponse?> syncAll({
-    IWalSyncProgressListener? progress,
-    IWifiConnectionListener? connectionListener,
-  }) async {
+  Future<SyncLocalFilesResponse?> syncAll({IWalSyncProgressListener? progress}) async {
     if (_device == null) {
       Logger.debug('RingStorageSync.syncAll: _device is null');
       return null;
@@ -318,11 +315,7 @@ class RingStorageSyncImpl implements RingStorageSync {
   }
 
   @override
-  Future<SyncLocalFilesResponse?> syncWal({
-    required Wal wal,
-    IWalSyncProgressListener? progress,
-    IWifiConnectionListener? connectionListener,
-  }) async {
+  Future<SyncLocalFilesResponse?> syncWal({required Wal wal, IWalSyncProgressListener? progress}) async {
     _resetSyncState();
     _isSyncing = true;
     try {

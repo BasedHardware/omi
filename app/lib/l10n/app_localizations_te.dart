@@ -4651,41 +4651,13 @@ class AppLocalizationsTe extends AppLocalizations {
       'Omi యొక్క విలువైన వినియోగదారుగా ఉన్నందుకు ధన్యవాదాలు. మీకు ఏవైనా ప్రశ్నలు లేదా ఆందోళనలు ఉంటే, team@basedhardware.com కు సంప్రదించడానికి సంకోచించకండి.';
 
   @override
-  String get wifiSyncSettings => 'WiFi సమకాలీకరణ సెట్టింగ్‌లు';
-
-  @override
-  String get enterHotspotCredentials => 'మీ ఫోన్ యొక్క హాట్‌స్పాట్ సంలग్నాలను నమోదు చేయండి';
-
-  @override
-  String get wifiSyncUsesHotspot =>
-      'WiFi సమకాలీకరణ మీ ఫోన్‌ను హాట్‌స్పాట్‌గా ఉపయోగిస్తుంది. సెట్టింగ్‌లు > ఖ్యాతిమත్తర హాట్‌స్పాట్‌లో మీ హాట్‌స్పాట్ పేరు మరియు పాస్‌వర్డ్ కనుగొనండి.';
-
-  @override
-  String get hotspotNameSsid => 'హాట్‌స్పాట్ పేరు (SSID)';
-
-  @override
-  String get exampleIphoneHotspot => 'ఉదా. iPhone హాట్‌స్పాట్';
-
-  @override
   String get password => 'పాస్‌వర్డ్';
-
-  @override
-  String get enterHotspotPassword => 'హాట్‌స్పాట్ పాస్‌వర్డ్ నమోదు చేయండి';
 
   @override
   String get saveCredentials => 'సంలग్నాలను సేవ చేయండి';
 
   @override
   String get clearCredentials => 'సంలग్నాలను క్లియర్ చేయండి';
-
-  @override
-  String get pleaseEnterHotspotName => 'దయచేసి హాట్‌స్పాట్ పేరు నమోదు చేయండి';
-
-  @override
-  String get wifiCredentialsSaved => 'WiFi సంలग్నాలు సేవ చేయబడ్డాయి';
-
-  @override
-  String get wifiCredentialsCleared => 'WiFi సంలग్నాలు క్లియర్ చేయబడ్డాయి';
 
   @override
   String summaryGeneratedForDate(String date) {
@@ -5839,9 +5811,6 @@ class AppLocalizationsTe extends AppLocalizations {
   String get limitless => 'Limitless';
 
   @override
-  String get fastTransfer => 'ఫాస్ట్ ట్రాన్స్ఫర్';
-
-  @override
   String get syncingStatus => 'సమన్వయం చేస్తున్నాను';
 
   @override
@@ -5851,15 +5820,6 @@ class AppLocalizationsTe extends AppLocalizations {
   String etaLabel(String time) {
     return 'ETA: $time';
   }
-
-  @override
-  String get transferMethod => 'ట్రాన్స్ఫర్ పద్ధతి';
-
-  @override
-  String get fast => 'ఫాస్ట్';
-
-  @override
-  String get ble => 'BLE';
 
   @override
   String get phone => 'ఫోన్';
@@ -5880,25 +5840,7 @@ class AppLocalizationsTe extends AppLocalizations {
   String get processedFilesDeleted => 'ప్రక్రియ చేసిన ఫైల్‌లు తొలగించబడ్డాయి';
 
   @override
-  String get wifiEnableFailed => 'పరికరంపై WiFi ప్రారంభించడంలో విఫలమైంది. దయచేసి మరలా ప్రయత్నించండి.';
-
-  @override
-  String get deviceNoFastTransfer => 'మీ పరికరం ఫాస్ట్ ట్రాన్స్ఫర్ సపోర్ట్ చేయదు. బదులుగా బ్లూటూత్ ఉపయోగించండి.';
-
-  @override
-  String get enableHotspotMessage => 'దయచేసి మీ ఫోన్ యొక్క హాట్‌స్పాట్ ప్రారంభించండి మరియు మరలా ప్రయత్నించండి.';
-
-  @override
-  String get transferStartFailed => 'ట్రాన్స్ఫర్ ప్రారంభించడంలో విఫలమైంది. దయచేసి మరలా ప్రయత్నించండి.';
-
-  @override
   String get deviceNotResponding => 'పరికరం ప్రతిస్పందించలేదు. దయచేసి మరలా ప్రయత్నించండి.';
-
-  @override
-  String get invalidWifiCredentials => 'చెల్లని WiFi నిఖర్చన. మీ హాట్‌స్పాట్ సెట్టింగ్‌లను తనిఖీ చేయండి.';
-
-  @override
-  String get wifiConnectionFailed => 'WiFi సంయోగం విఫలమైంది. దయచేసి మరలా ప్రయత్నించండి.';
 
   @override
   String get sdCardProcessing => 'SD కార్డ్ ప్రసంస్కరణ';
@@ -5910,9 +5852,6 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get process => 'ప్రక్రియ';
-
-  @override
-  String get wifiSyncFailed => 'WiFi సమన్వయం విఫలమైంది';
 
   @override
   String get processingFailed => 'ప్రసంస్కరణ విఫలమైంది';
@@ -6695,24 +6634,13 @@ class AppLocalizationsTe extends AppLocalizations {
   }
 
   @override
-  String get wifiSync => 'WiFi సమన్వయం';
-
-  @override
   String itemCopiedToClipboard(String item) {
     return '$item క్లిప్‌బోర్డ్‌కు కాపీ చేయబడింది';
   }
 
   @override
-  String get wifiConnectionFailedTitle => 'సంయోగం విఫలమైంది';
-
-  @override
   String connectingToDeviceName(String deviceName) {
     return '$deviceName కు కనెక్ట్ చేస్తున్నాను';
-  }
-
-  @override
-  String enableDeviceWifi(String deviceName) {
-    return '$deviceName యొక్క WiFi ప్రారంభించండి';
   }
 
   @override
@@ -6808,9 +6736,6 @@ class AppLocalizationsTe extends AppLocalizations {
   String get statusUnprocessed => 'ప్రక్రియ చేయబడనిది';
 
   @override
-  String get switchedToFastTransfer => 'ఫాస్ట్ ట్రాన్‌సర్కు మారారు';
-
-  @override
   String get transferCompleteMessage => 'బదిలీ సంపూర్ణం! మీరు ఇప్పుడు ఈ రికార్డింగ్‌ను ప్లే చేయవచ్చు.';
 
   @override
@@ -6822,34 +6747,7 @@ class AppLocalizationsTe extends AppLocalizations {
   String get transferCancelled => 'బదిలీ రద్దు చేయబడింది';
 
   @override
-  String get fastTransferEnabled => 'ఫాస్ట్ ట్రాన్‌సర్ సక్రియం చేయబడింది';
-
-  @override
   String get bluetoothSyncEnabled => 'బ్లూటూత్ సింక్ సక్రియం చేయబడింది';
-
-  @override
-  String get enableFastTransfer => 'ఫాస్ట్ ట్రాన్‌సర్‌ను సక్రియం చేయండి';
-
-  @override
-  String get fastTransferDescription =>
-      'ఫాస్ట్ ట్రాన్‌సర్ WiFi ను ఉపయోగించి ~5x వేగవంతమైన వేగం. బదిలీ సమయంలో మీ ఫోన్잠시Omi పరికరం యొక్క WiFi నెట్‌వర్క్‌కు అనుసంధానం అవుతుంది.';
-
-  @override
-  String get internetAccessPausedDuringTransfer => 'బదిలీ సమయంలో ఇంటర్నెట్ యాక్సెస్ పాజ్ చేయబడింది';
-
-  @override
-  String get chooseTransferMethodDescription =>
-      'మీ Omi పరికరం నుండి మీ ఫోన్‌కు రికార్డింగ్‌లు ఎలా బదిలీ చేయాలో ఎంచుకోండి.';
-
-  @override
-  String get wifiSpeed => 'WiFi ద్వారా ~150 KB/s';
-
-  @override
-  String get fiveTimesFaster => '5X వేగవంతమైనది';
-
-  @override
-  String get fastTransferMethodDescription =>
-      'మీ Omi పరికరానికి నేరుగా WiFi కనెక్షన్ సృష్టిస్తుంది. బదిలీ సమయంలో మీ ఫోన్잠ిக్కా మీ సాధారణ WiFi నుండి డిస్‌కనెక్ట్ చేయబడుతుంది.';
 
   @override
   String get bluetooth => 'బ్లూటూత్';
@@ -7554,13 +7452,6 @@ class AppLocalizationsTe extends AppLocalizations {
   String get voiceFailedToTranscribe => 'ఆడియోను ట్రాన్‌స్‌క్రిబ్ చేయడానికి విఫలమైంది';
 
   @override
-  String get locationPermissionRequired => 'స్థానం అనుమతి అవసరం';
-
-  @override
-  String get locationPermissionContent =>
-      'ఫాస్ట్ ట్రాన్‌సర్‌కు WiFi సంయోగం ధృవీకరించడానికి స్థానం అనుమతి అవసరం. దయచేసి కొనసాగించడానికి స్థానం అనుమతిని ఇవ్వండి.';
-
-  @override
   String get pdfTranscriptExport => 'ట్రాన్‌స్క్రిప్ట్ ఎక్సపోర్ట్';
 
   @override
@@ -7705,12 +7596,6 @@ class AppLocalizationsTe extends AppLocalizations {
   String get dailyRecapsDescription => 'మీ రోజువారీ రీక్యాప్‌లు అందాయ్‌తో ఇక్కడ కనిపిస్తాయి';
 
   @override
-  String get chooseTransferMethod => 'బదిలీ పద్ధతిని ఎంచుకోండి';
-
-  @override
-  String get fastTransferSpeed => 'WiFi ద్వారా ~150 KB/s';
-
-  @override
   String largeTimeGapDetected(String gap) {
     return 'పెద్ద సమయ విరామం సంప్రదించబడింది ($gap)';
   }
@@ -7719,9 +7604,6 @@ class AppLocalizationsTe extends AppLocalizations {
   String largeTimeGapsDetected(String gaps) {
     return 'పెద్ద సమయ విరామాలు సంప్రదించబడ్డాయి ($gaps)';
   }
-
-  @override
-  String get deviceDoesNotSupportWifiSwitchingToBle => 'పరికరం WiFi సింక్‌కు సమర్థనీయం కాదు, బ్లూటూత్‌కు మారుస్తోంది';
 
   @override
   String get appleHealthNotAvailable => 'Apple ఆరోగ్యం ఈ పరికరంలో అందుబాటులో లేదు';

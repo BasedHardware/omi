@@ -4623,41 +4623,13 @@ class AppLocalizationsEt extends AppLocalizations {
       'Täname, et olete Omi väärtuslik kasutaja. Kui teil on küsimusi või muresid, võtke meiega ühendust aadressil team@basedhardware.com.';
 
   @override
-  String get wifiSyncSettings => 'WiFi sünkroonimise seaded';
-
-  @override
-  String get enterHotspotCredentials => 'Sisestage oma telefoni leviala mandaadid';
-
-  @override
-  String get wifiSyncUsesHotspot =>
-      'WiFi sünkroonimine kasutab teie telefoni levialana. Leidke nimi ja parool menüüst Seaded > Isiklik leviala.';
-
-  @override
-  String get hotspotNameSsid => 'Leviala nimi (SSID)';
-
-  @override
-  String get exampleIphoneHotspot => 'nt iPhone Hotspot';
-
-  @override
   String get password => 'Parool';
-
-  @override
-  String get enterHotspotPassword => 'Sisestage leviala parool';
 
   @override
   String get saveCredentials => 'Salvesta mandaadid';
 
   @override
   String get clearCredentials => 'Kustuta mandaadid';
-
-  @override
-  String get pleaseEnterHotspotName => 'Palun sisestage leviala nimi';
-
-  @override
-  String get wifiCredentialsSaved => 'WiFi mandaadid salvestatud';
-
-  @override
-  String get wifiCredentialsCleared => 'WiFi mandaadid kustutatud';
 
   @override
   String summaryGeneratedForDate(String date) {
@@ -5805,9 +5777,6 @@ class AppLocalizationsEt extends AppLocalizations {
   String get limitless => 'Limitless';
 
   @override
-  String get fastTransfer => 'Kiire edastus';
-
-  @override
   String get syncingStatus => 'Sünkroonimine';
 
   @override
@@ -5817,15 +5786,6 @@ class AppLocalizationsEt extends AppLocalizations {
   String etaLabel(String time) {
     return 'Hinnanguline aeg: $time';
   }
-
-  @override
-  String get transferMethod => 'Edastusmeetod';
-
-  @override
-  String get fast => 'Kiire';
-
-  @override
-  String get ble => 'BLE';
 
   @override
   String get phone => 'Telefon';
@@ -5846,25 +5806,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String get processedFilesDeleted => 'Töödeldud failid kustutatud';
 
   @override
-  String get wifiEnableFailed => 'Seadme WiFi lubamine ebaõnnestus. Palun proovige uuesti.';
-
-  @override
-  String get deviceNoFastTransfer => 'Teie seade ei toeta kiiret ülekannet. Kasutage selle asemel Bluetooth-i.';
-
-  @override
-  String get enableHotspotMessage => 'Palun lülitage oma telefoni kuumkoht sisse ja proovige uuesti.';
-
-  @override
-  String get transferStartFailed => 'Ülekande alustamine ebaõnnestus. Palun proovige uuesti.';
-
-  @override
   String get deviceNotResponding => 'Seade ei vastanud. Palun proovige uuesti.';
-
-  @override
-  String get invalidWifiCredentials => 'Vigased WiFi andmed. Kontrollige oma kuumkoha seadeid.';
-
-  @override
-  String get wifiConnectionFailed => 'WiFi ühendus ebaõnnestus. Palun proovige uuesti.';
 
   @override
   String get sdCardProcessing => 'SD-kaardi töötlemine';
@@ -5876,9 +5818,6 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get process => 'Töötle';
-
-  @override
-  String get wifiSyncFailed => 'WiFi sünkroonimine ebaõnnestus';
 
   @override
   String get processingFailed => 'Töötlemine ebaõnnestus';
@@ -6657,24 +6596,13 @@ class AppLocalizationsEt extends AppLocalizations {
   }
 
   @override
-  String get wifiSync => 'WiFi sünkroonimine';
-
-  @override
   String itemCopiedToClipboard(String item) {
     return '$item kopeeritud lõikelauale';
   }
 
   @override
-  String get wifiConnectionFailedTitle => 'Ühendus ebaõnnestus';
-
-  @override
   String connectingToDeviceName(String deviceName) {
     return 'Ühendamine seadmega $deviceName';
-  }
-
-  @override
-  String enableDeviceWifi(String deviceName) {
-    return 'Luba $deviceName WiFi';
   }
 
   @override
@@ -6771,9 +6699,6 @@ class AppLocalizationsEt extends AppLocalizations {
   String get statusUnprocessed => 'Töötlemata';
 
   @override
-  String get switchedToFastTransfer => 'Lülitatud kiirele ülekandele';
-
-  @override
   String get transferCompleteMessage => 'Ülekanne lõpetatud! Nüüd saate seda salvestist esitada.';
 
   @override
@@ -6785,33 +6710,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String get transferCancelled => 'Ülekanne tühistatud';
 
   @override
-  String get fastTransferEnabled => 'Kiire edastus lubatud';
-
-  @override
   String get bluetoothSyncEnabled => 'Bluetoothi sünkroonimine lubatud';
-
-  @override
-  String get enableFastTransfer => 'Luba kiire edastus';
-
-  @override
-  String get fastTransferDescription =>
-      'Kiire edastus kasutab WiFi-d ~5x kiiremate kiiruste jaoks. Teie telefon ühendub ajutiselt edastuse ajal Omi seadme WiFi-võrguga.';
-
-  @override
-  String get internetAccessPausedDuringTransfer => 'Interneti-juurdepääs on edastuse ajal peatatud';
-
-  @override
-  String get chooseTransferMethodDescription => 'Valige, kuidas salvestised edastatakse Omi seadmest telefoni.';
-
-  @override
-  String get wifiSpeed => '~150 KB/s WiFi kaudu';
-
-  @override
-  String get fiveTimesFaster => '5X KIIREM';
-
-  @override
-  String get fastTransferMethodDescription =>
-      'Loob otseühenduse WiFi kaudu Omi seadmega. Teie telefon katkestab ajutiselt ühenduse tavalise WiFi-ga edastuse ajal.';
 
   @override
   String get bluetooth => 'Bluetooth';
@@ -7507,13 +7406,6 @@ class AppLocalizationsEt extends AppLocalizations {
   String get voiceFailedToTranscribe => 'Heli transkribeerimine ebaõnnestus';
 
   @override
-  String get locationPermissionRequired => 'Asukoha luba nõutav';
-
-  @override
-  String get locationPermissionContent =>
-      'Kiire edastus vajab asukoha luba WiFi-ühenduse kontrollimiseks. Jätkamiseks andke palun asukoha luba.';
-
-  @override
   String get pdfTranscriptExport => 'Transkriptsiooni eksport';
 
   @override
@@ -7658,12 +7550,6 @@ class AppLocalizationsEt extends AppLocalizations {
   String get dailyRecapsDescription => 'Teie päevased kokkuvõtted ilmuvad siia pärast nende loomist';
 
   @override
-  String get chooseTransferMethod => 'Valige ülekandemeetod';
-
-  @override
-  String get fastTransferSpeed => '~150 KB/s WiFi kaudu';
-
-  @override
   String largeTimeGapDetected(String gap) {
     return 'Tuvastati suur ajavahe ($gap)';
   }
@@ -7672,9 +7558,6 @@ class AppLocalizationsEt extends AppLocalizations {
   String largeTimeGapsDetected(String gaps) {
     return 'Tuvastati suured ajavahed ($gaps)';
   }
-
-  @override
-  String get deviceDoesNotSupportWifiSwitchingToBle => 'Seade ei toeta WiFi sünkroniseerimist, lülitumine Bluetoothile';
 
   @override
   String get appleHealthNotAvailable => 'Apple Health pole selles seadmes saadaval';

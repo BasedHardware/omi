@@ -1,9 +1,6 @@
 import 'dart:async';
-import 'dart:io';
 
 import 'package:flutter/foundation.dart';
-
-import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/services/devices.dart';
@@ -18,9 +15,7 @@ import 'package:omi/services/devices/models.dart';
 import 'package:omi/services/devices/omi_connection.dart';
 import 'package:omi/services/devices/omiglass_connection.dart';
 import 'package:omi/services/devices/plaud_connection.dart';
-import 'package:omi/services/devices/wifi_sync_error.dart';
 import 'package:omi/services/devices/transports/device_transport.dart';
-import 'package:omi/services/devices/transports/ble_transport.dart';
 import 'package:omi/services/devices/transports/native_ble_transport.dart';
 import 'package:omi/services/devices/transports/frame_transport.dart';
 import 'package:omi/services/devices/transports/watch_transport.dart';
@@ -633,71 +628,4 @@ abstract class DeviceConnection {
   }
 
   Future<int?> performGetMicGain();
-
-  Future<bool> isWifiSyncSupported() async {
-    if (await isConnected()) {
-      return await performIsWifiSyncSupported();
-    }
-    return false;
-  }
-
-  Future<bool> performIsWifiSyncSupported() async {
-    return false;
-  }
-
-  Future<WifiSyncSetupResult> setupWifiSync(String ssid, String password) async {
-    final connected = await isConnected();
-    debugPrint('DeviceConnection: setupWifiSync - isConnected: $connected, ssid: $ssid');
-    if (connected) {
-      final result = await performSetupWifiSync(ssid, password);
-      debugPrint('DeviceConnection: setupWifiSync - result: ${result.success}, error: ${result.errorCode}');
-      return result;
-    }
-    debugPrint('DeviceConnection: setupWifiSync - device disconnected');
-    return WifiSyncSetupResult.connectionFailed();
-  }
-
-  Future<WifiSyncSetupResult> performSetupWifiSync(String ssid, String password) async {
-    return WifiSyncSetupResult.failure(WifiSyncErrorCode.wifiHardwareNotAvailable);
-  }
-
-  Future<bool> startWifiSync() async {
-    final connected = await isConnected();
-    debugPrint('DeviceConnection: startWifiSync - isConnected: $connected');
-    if (connected) {
-      final result = await performStartWifiSync();
-      debugPrint('DeviceConnection: startWifiSync - performStartWifiSync returned: $result');
-      return result;
-    }
-    debugPrint('DeviceConnection: startWifiSync - device disconnected, showing notification');
-    return false;
-  }
-
-  Future<bool> performStartWifiSync() async {
-    return false;
-  }
-
-  Future<bool> stopWifiSync() async {
-    if (await isConnected()) {
-      return await performStopWifiSync();
-    }
-    return false;
-  }
-
-  Future<bool> performStopWifiSync() async {
-    return false;
-  }
-
-  Future<StreamSubscription?> getWifiSyncStatusListener({required void Function(int status) onStatusReceived}) async {
-    if (await isConnected()) {
-      return await performGetWifiSyncStatusListener(onStatusReceived: onStatusReceived);
-    }
-    return null;
-  }
-
-  Future<StreamSubscription?> performGetWifiSyncStatusListener({
-    required void Function(int status) onStatusReceived,
-  }) async {
-    return null;
-  }
 }

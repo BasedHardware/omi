@@ -4589,41 +4589,13 @@ class AppLocalizationsAr extends AppLocalizations {
       'شكرًا لك لكونك مستخدمًا قيمًا لـ Omi. إذا كانت لديك أي أسئلة أو مخاوف، فلا تتردد في التواصل معنا على team@basedhardware.com.';
 
   @override
-  String get wifiSyncSettings => 'إعدادات مزامنة WiFi';
-
-  @override
-  String get enterHotspotCredentials => 'أدخل بيانات اعتماد نقطة اتصال هاتفك';
-
-  @override
-  String get wifiSyncUsesHotspot =>
-      'تستخدم مزامنة WiFi هاتفك كنقطة اتصال. ابحث عن اسم وكلمة مرور نقطة الاتصال في الإعدادات > نقطة اتصال شخصية.';
-
-  @override
-  String get hotspotNameSsid => 'اسم نقطة الاتصال (SSID)';
-
-  @override
-  String get exampleIphoneHotspot => 'مثال: نقطة اتصال iPhone';
-
-  @override
   String get password => 'كلمة المرور';
-
-  @override
-  String get enterHotspotPassword => 'أدخل كلمة مرور نقطة الاتصال';
 
   @override
   String get saveCredentials => 'حفظ بيانات الاعتماد';
 
   @override
   String get clearCredentials => 'مسح بيانات الاعتماد';
-
-  @override
-  String get pleaseEnterHotspotName => 'يرجى إدخال اسم نقطة الاتصال';
-
-  @override
-  String get wifiCredentialsSaved => 'تم حفظ بيانات اعتماد WiFi';
-
-  @override
-  String get wifiCredentialsCleared => 'تم مسح بيانات اعتماد WiFi';
 
   @override
   String summaryGeneratedForDate(String date) {
@@ -5761,9 +5733,6 @@ class AppLocalizationsAr extends AppLocalizations {
   String get limitless => 'Limitless';
 
   @override
-  String get fastTransfer => 'النقل السريع';
-
-  @override
   String get syncingStatus => 'جارٍ المزامنة';
 
   @override
@@ -5773,15 +5742,6 @@ class AppLocalizationsAr extends AppLocalizations {
   String etaLabel(String time) {
     return 'الوقت المتبقي: $time';
   }
-
-  @override
-  String get transferMethod => 'طريقة النقل';
-
-  @override
-  String get fast => 'سريع';
-
-  @override
-  String get ble => 'BLE';
 
   @override
   String get phone => 'الهاتف';
@@ -5802,25 +5762,7 @@ class AppLocalizationsAr extends AppLocalizations {
   String get processedFilesDeleted => 'تم حذف الملفات المعالجة';
 
   @override
-  String get wifiEnableFailed => 'فشل تفعيل واي فاي على الجهاز. يرجى المحاولة مرة أخرى.';
-
-  @override
-  String get deviceNoFastTransfer => 'جهازك لا يدعم النقل السريع. استخدم البلوتوث في الوقت الحالي.';
-
-  @override
-  String get enableHotspotMessage => 'يرجى تفعيل نقطة اتصال هاتفك والمحاولة مرة أخرى.';
-
-  @override
-  String get transferStartFailed => 'فشل بدء النقل. يرجى المحاولة مرة أخرى.';
-
-  @override
   String get deviceNotResponding => 'لم يستجب الجهاز. يرجى المحاولة مرة أخرى.';
-
-  @override
-  String get invalidWifiCredentials => 'بيانات واي فاي غير صالحة. تحقق من إعدادات نقطة الاتصال.';
-
-  @override
-  String get wifiConnectionFailed => 'فشل اتصال واي فاي. يرجى المحاولة مرة أخرى.';
 
   @override
   String get sdCardProcessing => 'معالجة بطاقة SD';
@@ -5832,9 +5774,6 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get process => 'معالجة';
-
-  @override
-  String get wifiSyncFailed => 'فشلت مزامنة واي فاي';
 
   @override
   String get processingFailed => 'فشلت المعالجة';
@@ -6606,24 +6545,13 @@ class AppLocalizationsAr extends AppLocalizations {
   }
 
   @override
-  String get wifiSync => 'مزامنة الواي فاي';
-
-  @override
   String itemCopiedToClipboard(String item) {
     return '$item تم نسخه إلى الحافظة';
   }
 
   @override
-  String get wifiConnectionFailedTitle => 'فشل الاتصال';
-
-  @override
   String connectingToDeviceName(String deviceName) {
     return 'جارٍ الاتصال بـ $deviceName';
-  }
-
-  @override
-  String enableDeviceWifi(String deviceName) {
-    return 'تفعيل واي فاي $deviceName';
   }
 
   @override
@@ -6719,9 +6647,6 @@ class AppLocalizationsAr extends AppLocalizations {
   String get statusUnprocessed => 'لم تتم المعالجة';
 
   @override
-  String get switchedToFastTransfer => 'تم التبديل إلى النقل السريع';
-
-  @override
   String get transferCompleteMessage => 'اكتمل النقل! يمكنك الآن تشغيل هذا التسجيل.';
 
   @override
@@ -6733,33 +6658,7 @@ class AppLocalizationsAr extends AppLocalizations {
   String get transferCancelled => 'تم إلغاء النقل';
 
   @override
-  String get fastTransferEnabled => 'تم تفعيل النقل السريع';
-
-  @override
   String get bluetoothSyncEnabled => 'تم تفعيل مزامنة البلوتوث';
-
-  @override
-  String get enableFastTransfer => 'تفعيل النقل السريع';
-
-  @override
-  String get fastTransferDescription =>
-      'يستخدم النقل السريع شبكة WiFi للحصول على سرعات أسرع بـ 5 مرات. سيتصل هاتفك مؤقتًا بشبكة WiFi الخاصة بجهاز Omi أثناء النقل.';
-
-  @override
-  String get internetAccessPausedDuringTransfer => 'يتم إيقاف الوصول إلى الإنترنت أثناء النقل';
-
-  @override
-  String get chooseTransferMethodDescription => 'اختر كيفية نقل التسجيلات من جهاز Omi إلى هاتفك.';
-
-  @override
-  String get wifiSpeed => '~150 كيلوبايت/ثانية عبر WiFi';
-
-  @override
-  String get fiveTimesFaster => 'أسرع 5 مرات';
-
-  @override
-  String get fastTransferMethodDescription =>
-      'ينشئ اتصال WiFi مباشر بجهاز Omi. يتم فصل هاتفك مؤقتًا عن شبكة WiFi العادية أثناء النقل.';
 
   @override
   String get bluetooth => 'بلوتوث';
@@ -7454,13 +7353,6 @@ class AppLocalizationsAr extends AppLocalizations {
   String get voiceFailedToTranscribe => 'فشل في نسخ الصوت';
 
   @override
-  String get locationPermissionRequired => 'إذن الموقع مطلوب';
-
-  @override
-  String get locationPermissionContent =>
-      'يتطلب النقل السريع إذن الموقع للتحقق من اتصال WiFi. يرجى منح إذن الموقع للمتابعة.';
-
-  @override
   String get pdfTranscriptExport => 'تصدير النص';
 
   @override
@@ -7605,12 +7497,6 @@ class AppLocalizationsAr extends AppLocalizations {
   String get dailyRecapsDescription => 'ستظهر ملخصاتك اليومية هنا بمجرد إنشائها';
 
   @override
-  String get chooseTransferMethod => 'اختر طريقة النقل';
-
-  @override
-  String get fastTransferSpeed => '~150 كيلوبايت/ثانية عبر WiFi';
-
-  @override
   String largeTimeGapDetected(String gap) {
     return 'تم اكتشاف فجوة زمنية كبيرة ($gap)';
   }
@@ -7619,9 +7505,6 @@ class AppLocalizationsAr extends AppLocalizations {
   String largeTimeGapsDetected(String gaps) {
     return 'تم اكتشاف فجوات زمنية كبيرة ($gaps)';
   }
-
-  @override
-  String get deviceDoesNotSupportWifiSwitchingToBle => 'الجهاز لا يدعم مزامنة WiFi، التبديل إلى البلوتوث';
 
   @override
   String get appleHealthNotAvailable => 'Apple Health غير متاح على هذا الجهاز';

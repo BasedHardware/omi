@@ -4637,41 +4637,13 @@ class AppLocalizationsBe extends AppLocalizations {
       'Дзякуем, што вы каристальнік Omi. Калі ў вас ёсць якія-либо пытанні або ўзнікаюць праблемы, не вагайцеся звяртацца да нас team@basedhardware.com.';
 
   @override
-  String get wifiSyncSettings => 'Параметры Сінхранізацыі WiFi';
-
-  @override
-  String get enterHotspotCredentials => 'Уведзіце меркаванні гарячай тачкі вашага тэлефона';
-
-  @override
-  String get wifiSyncUsesHotspot =>
-      'Сінхранізацыя WiFi выкарыстоўвае ваш тэлефон як гарячую тачку. Знайдзіце імя гарячай тачкі і пароль у Параметрах > Персанальная гарячая тачка.';
-
-  @override
-  String get hotspotNameSsid => 'Імя Гарячай Тачкі (SSID)';
-
-  @override
-  String get exampleIphoneHotspot => 'напр. iPhone Hotspot';
-
-  @override
   String get password => 'Пароль';
-
-  @override
-  String get enterHotspotPassword => 'Уведзіце пароль гарячай тачкі';
 
   @override
   String get saveCredentials => 'Сахаваць Меркаванні';
 
   @override
   String get clearCredentials => 'Очыстіць Меркаванні';
-
-  @override
-  String get pleaseEnterHotspotName => 'Калі ласка, уведзіце імя гарячай тачкі';
-
-  @override
-  String get wifiCredentialsSaved => 'Меркаванні WiFi сахаваны';
-
-  @override
-  String get wifiCredentialsCleared => 'Меркаванні WiFi очышчаны';
 
   @override
   String summaryGeneratedForDate(String date) {
@@ -5821,9 +5793,6 @@ class AppLocalizationsBe extends AppLocalizations {
   String get limitless => 'Limitless';
 
   @override
-  String get fastTransfer => 'Хуткі пераноса';
-
-  @override
   String get syncingStatus => 'Синхранізацыя';
 
   @override
@@ -5833,15 +5802,6 @@ class AppLocalizationsBe extends AppLocalizations {
   String etaLabel(String time) {
     return 'ETA: $time';
   }
-
-  @override
-  String get transferMethod => 'Метад передачы';
-
-  @override
-  String get fast => 'Хуткі';
-
-  @override
-  String get ble => 'BLE';
 
   @override
   String get phone => 'Тэлефон';
@@ -5862,25 +5822,7 @@ class AppLocalizationsBe extends AppLocalizations {
   String get processedFilesDeleted => 'Апрацаваныя файлы выдалены';
 
   @override
-  String get wifiEnableFailed => 'Не вышло ўключыць WiFi на прыборы. Пожалуйста, паспрабуйце яшчэ раз.';
-
-  @override
-  String get deviceNoFastTransfer => 'Ваш прыбор не падтрымлівае хуткі пераноса. Выкарыстайце Bluetooth замест гэтага.';
-
-  @override
-  String get enableHotspotMessage => 'Пожалуйста, ўключыце хотспот вашага тэлефона і паспрабуйце яшчэ раз.';
-
-  @override
-  String get transferStartFailed => 'Не вышло запусціць пераноса. Пожалуйста, паспрабуйце яшчэ раз.';
-
-  @override
   String get deviceNotResponding => 'Прыбор не адрэагаваў. Пожалуйста, паспрабуйце яшчэ раз.';
-
-  @override
-  String get invalidWifiCredentials => 'Няправільныя запалогінванні WiFi. Праверце налады хотспота.';
-
-  @override
-  String get wifiConnectionFailed => 'Не удалося падлучыцца да WiFi. Пожалуйста, паспрабуйце яшчэ раз.';
 
   @override
   String get sdCardProcessing => 'Апрацаванне SD картка';
@@ -5892,9 +5834,6 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String get process => 'Апрацаваць';
-
-  @override
-  String get wifiSyncFailed => 'WiFi синхранізацыя не вышла';
 
   @override
   String get processingFailed => 'Апрацаванне не вышло';
@@ -6675,24 +6614,13 @@ class AppLocalizationsBe extends AppLocalizations {
   }
 
   @override
-  String get wifiSync => 'WiFi синхранізацыя';
-
-  @override
   String itemCopiedToClipboard(String item) {
     return '$item скапіяваны ў буфер абмену';
   }
 
   @override
-  String get wifiConnectionFailedTitle => 'Сувязь не вышла';
-
-  @override
   String connectingToDeviceName(String deviceName) {
     return 'Падлучэнне да $deviceName';
-  }
-
-  @override
-  String enableDeviceWifi(String deviceName) {
-    return 'Ўключыць WiFi на $deviceName';
   }
 
   @override
@@ -6789,9 +6717,6 @@ class AppLocalizationsBe extends AppLocalizations {
   String get statusUnprocessed => 'Не апрацавана';
 
   @override
-  String get switchedToFastTransfer => 'Пераклучана на хуткую пераноску';
-
-  @override
   String get transferCompleteMessage => 'Пераноска завершана! Вы можаце граць гэты запіс.';
 
   @override
@@ -6803,34 +6728,7 @@ class AppLocalizationsBe extends AppLocalizations {
   String get transferCancelled => 'Пераноска скасавана';
 
   @override
-  String get fastTransferEnabled => 'Хутка пераноска ўключана';
-
-  @override
   String get bluetoothSyncEnabled => 'Синхранізацыя Bluetooth ўключана';
-
-  @override
-  String get enableFastTransfer => 'Ўключыць хуткую пераноску';
-
-  @override
-  String get fastTransferDescription =>
-      'Хутка пераноска выкарыстоўвае WiFi для ~5х больш хуткага хуткасці. Ваш тэлефон часова падключыцца да сеткі WiFi вашага прыстасавання Omi падчас пераносы.';
-
-  @override
-  String get internetAccessPausedDuringTransfer => 'Доступ у інтэрнет паставлены на паўзу падчас пераносы';
-
-  @override
-  String get chooseTransferMethodDescription =>
-      'Выберыце спосаб пераносы запісаў з вашага прыстасавання Omi на ваш тэлефон.';
-
-  @override
-  String get wifiSpeed => '~150 KB/s праз WiFi';
-
-  @override
-  String get fiveTimesFaster => '5X ХУТЧЭЙ';
-
-  @override
-  String get fastTransferMethodDescription =>
-      'Стварае прамую злучэнне WiFi з вашым прыстасаваннем Omi. Ваш тэлефон часова адключаецца ад звычайнай сеткі WiFi падчас пераносы.';
 
   @override
   String get bluetooth => 'Bluetooth';
@@ -7532,13 +7430,6 @@ class AppLocalizationsBe extends AppLocalizations {
   String get voiceFailedToTranscribe => 'Не вдалося пераскладаць аўдыё';
 
   @override
-  String get locationPermissionRequired => 'Дозвол на месцазнаходжанне патрэбны';
-
-  @override
-  String get locationPermissionContent =>
-      'Хутка пераноска патрэбуе дозвол на месцазнаходжанне, каб прапаноўваць WiFi злучэнне. Калі ласка, разрэшыце дозвол на месцазнаходжанне, каб адкіць.';
-
-  @override
   String get pdfTranscriptExport => 'Экспорт транскрыпцыі';
 
   @override
@@ -7683,12 +7574,6 @@ class AppLocalizationsBe extends AppLocalizations {
   String get dailyRecapsDescription => 'Ваша штодзённыя рэзюмэ з\'явяцца тут пасля стварэння';
 
   @override
-  String get chooseTransferMethod => 'Выберыце спосаб пераносы';
-
-  @override
-  String get fastTransferSpeed => '~150 KB/s праз WiFi';
-
-  @override
   String largeTimeGapDetected(String gap) {
     return 'Вялікі часовы разрыў выяўлены ($gap)';
   }
@@ -7697,10 +7582,6 @@ class AppLocalizationsBe extends AppLocalizations {
   String largeTimeGapsDetected(String gaps) {
     return 'Вялікі часовы разрывы выяўлены ($gaps)';
   }
-
-  @override
-  String get deviceDoesNotSupportWifiSwitchingToBle =>
-      'Прыстасаванне не падтрымлівае WiFi синхранізацыю, мяняем на Bluetooth';
 
   @override
   String get appleHealthNotAvailable => 'Apple Health недаступна на гэтым прыстасаванні';

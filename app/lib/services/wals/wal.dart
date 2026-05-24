@@ -23,7 +23,7 @@ enum WalStatus { inProgress, miss, uploaded, synced, corrupted }
 
 enum WalStorage { mem, disk, sdcard, flashPage }
 
-enum SyncMethod { ble, wifi }
+enum SyncMethod { ble }
 
 /// User-facing sync state for a single recording, derived from [Wal.status],
 /// [Wal.isSyncing] and [Wal.retryCount]. This is what the sync UI renders so a

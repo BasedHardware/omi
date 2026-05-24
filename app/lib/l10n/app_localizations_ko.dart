@@ -4542,40 +4542,13 @@ class AppLocalizationsKo extends AppLocalizations {
   String get thankYouText => 'Omi의 소중한 사용자가 되어 주셔서 감사합니다. 질문이나 우려 사항이 있으시면 team@basedhardware.com으로 연락해 주세요.';
 
   @override
-  String get wifiSyncSettings => 'WiFi 동기화 설정';
-
-  @override
-  String get enterHotspotCredentials => '휴대폰 핫스팟 자격 증명 입력';
-
-  @override
-  String get wifiSyncUsesHotspot => 'WiFi 동기화는 휴대폰을 핫스팟으로 사용합니다. 설정 > 개인용 핫스팟에서 이름과 비밀번호를 찾으세요.';
-
-  @override
-  String get hotspotNameSsid => '핫스팟 이름 (SSID)';
-
-  @override
-  String get exampleIphoneHotspot => '예: iPhone 핫스팟';
-
-  @override
   String get password => '비밀번호';
-
-  @override
-  String get enterHotspotPassword => '핫스팟 비밀번호 입력';
 
   @override
   String get saveCredentials => '자격 증명 저장';
 
   @override
   String get clearCredentials => '자격 증명 지우기';
-
-  @override
-  String get pleaseEnterHotspotName => '핫스팟 이름을 입력하세요';
-
-  @override
-  String get wifiCredentialsSaved => 'WiFi 자격 증명이 저장됨';
-
-  @override
-  String get wifiCredentialsCleared => 'WiFi 자격 증명이 지워짐';
 
   @override
   String summaryGeneratedForDate(String date) {
@@ -5701,9 +5674,6 @@ class AppLocalizationsKo extends AppLocalizations {
   String get limitless => 'Limitless';
 
   @override
-  String get fastTransfer => '빠른 전송';
-
-  @override
   String get syncingStatus => '동기화 중';
 
   @override
@@ -5713,15 +5683,6 @@ class AppLocalizationsKo extends AppLocalizations {
   String etaLabel(String time) {
     return '예상 시간: $time';
   }
-
-  @override
-  String get transferMethod => '전송 방법';
-
-  @override
-  String get fast => '빠름';
-
-  @override
-  String get ble => 'BLE';
 
   @override
   String get phone => '휴대폰';
@@ -5742,25 +5703,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get processedFilesDeleted => '처리된 파일이 삭제되었습니다';
 
   @override
-  String get wifiEnableFailed => '장치에서 WiFi를 활성화하지 못했습니다. 다시 시도해 주세요.';
-
-  @override
-  String get deviceNoFastTransfer => '이 장치는 빠른 전송을 지원하지 않습니다. 대신 Bluetooth를 사용하세요.';
-
-  @override
-  String get enableHotspotMessage => '휴대폰의 핫스팟을 활성화한 후 다시 시도해 주세요.';
-
-  @override
-  String get transferStartFailed => '전송을 시작하지 못했습니다. 다시 시도해 주세요.';
-
-  @override
   String get deviceNotResponding => '장치가 응답하지 않습니다. 다시 시도해 주세요.';
-
-  @override
-  String get invalidWifiCredentials => '잘못된 WiFi 자격 증명입니다. 핫스팟 설정을 확인하세요.';
-
-  @override
-  String get wifiConnectionFailed => 'WiFi 연결에 실패했습니다. 다시 시도해 주세요.';
 
   @override
   String get sdCardProcessing => 'SD 카드 처리 중';
@@ -5772,9 +5715,6 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get process => '처리';
-
-  @override
-  String get wifiSyncFailed => 'WiFi 동기화 실패';
 
   @override
   String get processingFailed => '처리 실패';
@@ -6542,24 +6482,13 @@ class AppLocalizationsKo extends AppLocalizations {
   }
 
   @override
-  String get wifiSync => 'WiFi 동기화';
-
-  @override
   String itemCopiedToClipboard(String item) {
     return '$item이(가) 클립보드에 복사됨';
   }
 
   @override
-  String get wifiConnectionFailedTitle => '연결 실패';
-
-  @override
   String connectingToDeviceName(String deviceName) {
     return '$deviceName에 연결 중';
-  }
-
-  @override
-  String enableDeviceWifi(String deviceName) {
-    return '$deviceName의 WiFi 활성화';
   }
 
   @override
@@ -6654,9 +6583,6 @@ class AppLocalizationsKo extends AppLocalizations {
   String get statusUnprocessed => '미처리';
 
   @override
-  String get switchedToFastTransfer => '빠른 전송으로 전환됨';
-
-  @override
   String get transferCompleteMessage => '전송 완료! 이제 이 녹음을 재생할 수 있습니다.';
 
   @override
@@ -6668,31 +6594,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get transferCancelled => '전송 취소됨';
 
   @override
-  String get fastTransferEnabled => '빠른 전송 활성화됨';
-
-  @override
   String get bluetoothSyncEnabled => '블루투스 동기화 활성화됨';
-
-  @override
-  String get enableFastTransfer => '빠른 전송 활성화';
-
-  @override
-  String get fastTransferDescription => '빠른 전송은 WiFi를 사용하여 ~5배 빠른 속도를 제공합니다. 전송 중 휴대폰이 일시적으로 Omi 기기의 WiFi 네트워크에 연결됩니다.';
-
-  @override
-  String get internetAccessPausedDuringTransfer => '전송 중 인터넷 접속이 일시 중지됩니다';
-
-  @override
-  String get chooseTransferMethodDescription => 'Omi 기기에서 휴대폰으로 녹음을 전송하는 방법을 선택하세요.';
-
-  @override
-  String get wifiSpeed => 'WiFi로 ~150 KB/s';
-
-  @override
-  String get fiveTimesFaster => '5배 빠름';
-
-  @override
-  String get fastTransferMethodDescription => 'Omi 기기에 직접 WiFi 연결을 생성합니다. 전송 중 휴대폰이 일시적으로 일반 WiFi에서 연결 해제됩니다.';
 
   @override
   String get bluetooth => '블루투스';
@@ -7379,12 +7281,6 @@ class AppLocalizationsKo extends AppLocalizations {
   String get voiceFailedToTranscribe => '오디오 텍스트 변환 실패';
 
   @override
-  String get locationPermissionRequired => '위치 권한 필요';
-
-  @override
-  String get locationPermissionContent => '빠른 전송을 위해 WiFi 연결 확인에 위치 권한이 필요합니다. 계속하려면 위치 권한을 부여해 주세요.';
-
-  @override
   String get pdfTranscriptExport => '녹취록 내보내기';
 
   @override
@@ -7529,12 +7425,6 @@ class AppLocalizationsKo extends AppLocalizations {
   String get dailyRecapsDescription => '일일 요약이 생성되면 여기에 표시됩니다';
 
   @override
-  String get chooseTransferMethod => '전송 방법 선택';
-
-  @override
-  String get fastTransferSpeed => 'WiFi를 통해 ~150 KB/s';
-
-  @override
   String largeTimeGapDetected(String gap) {
     return '큰 시간 간격이 감지되었습니다 ($gap)';
   }
@@ -7543,9 +7433,6 @@ class AppLocalizationsKo extends AppLocalizations {
   String largeTimeGapsDetected(String gaps) {
     return '큰 시간 간격들이 감지되었습니다 ($gaps)';
   }
-
-  @override
-  String get deviceDoesNotSupportWifiSwitchingToBle => '기기가 WiFi 동기화를 지원하지 않습니다. Bluetooth로 전환 중';
 
   @override
   String get appleHealthNotAvailable => '이 기기에서는 Apple Health를 사용할 수 없습니다';

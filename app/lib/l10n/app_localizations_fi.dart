@@ -4624,41 +4624,13 @@ class AppLocalizationsFi extends AppLocalizations {
       'Kiitos, että olet arvokas Omin käyttäjä. Jos sinulla on kysyttävää tai huolenaiheita, ota rohkeasti yhteyttä osoitteeseen team@basedhardware.com.';
 
   @override
-  String get wifiSyncSettings => 'WiFi-synkronointiasetukset';
-
-  @override
-  String get enterHotspotCredentials => 'Syötä puhelimesi hotspot-tunnukset';
-
-  @override
-  String get wifiSyncUsesHotspot =>
-      'WiFi-synkronointi käyttää puhelintasi hotspotina. Löydä nimi ja salasana kohdasta Asetukset > Oma hotspot.';
-
-  @override
-  String get hotspotNameSsid => 'Hotspotin nimi (SSID)';
-
-  @override
-  String get exampleIphoneHotspot => 'esim. iPhone Hotspot';
-
-  @override
   String get password => 'Salasana';
-
-  @override
-  String get enterHotspotPassword => 'Syötä hotspotin salasana';
 
   @override
   String get saveCredentials => 'Tallenna tunnukset';
 
   @override
   String get clearCredentials => 'Tyhjennä tunnukset';
-
-  @override
-  String get pleaseEnterHotspotName => 'Syötä hotspotin nimi';
-
-  @override
-  String get wifiCredentialsSaved => 'WiFi-tunnukset tallennettu';
-
-  @override
-  String get wifiCredentialsCleared => 'WiFi-tunnukset tyhjennetty';
 
   @override
   String summaryGeneratedForDate(String date) {
@@ -5805,9 +5777,6 @@ class AppLocalizationsFi extends AppLocalizations {
   String get limitless => 'Limitless';
 
   @override
-  String get fastTransfer => 'Nopea siirto';
-
-  @override
   String get syncingStatus => 'Synkronoidaan';
 
   @override
@@ -5817,15 +5786,6 @@ class AppLocalizationsFi extends AppLocalizations {
   String etaLabel(String time) {
     return 'ETA: $time';
   }
-
-  @override
-  String get transferMethod => 'Siirtotapa';
-
-  @override
-  String get fast => 'Nopea';
-
-  @override
-  String get ble => 'BLE';
 
   @override
   String get phone => 'Puhelin';
@@ -5846,25 +5806,7 @@ class AppLocalizationsFi extends AppLocalizations {
   String get processedFilesDeleted => 'Käsitellyt tiedostot poistettu';
 
   @override
-  String get wifiEnableFailed => 'WiFin käyttöönotto laitteessa epäonnistui. Yritä uudelleen.';
-
-  @override
-  String get deviceNoFastTransfer => 'Laitteesi ei tue nopeaa siirtoa. Käytä Bluetoothia sen sijaan.';
-
-  @override
-  String get enableHotspotMessage => 'Ota puhelimesi hotspot käyttöön ja yritä uudelleen.';
-
-  @override
-  String get transferStartFailed => 'Siirron aloitus epäonnistui. Yritä uudelleen.';
-
-  @override
   String get deviceNotResponding => 'Laite ei vastannut. Yritä uudelleen.';
-
-  @override
-  String get invalidWifiCredentials => 'Virheelliset WiFi-tunnukset. Tarkista hotspot-asetuksesi.';
-
-  @override
-  String get wifiConnectionFailed => 'WiFi-yhteys epäonnistui. Yritä uudelleen.';
 
   @override
   String get sdCardProcessing => 'SD-kortin käsittely';
@@ -5876,9 +5818,6 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get process => 'Käsittele';
-
-  @override
-  String get wifiSyncFailed => 'WiFi-synkronointi epäonnistui';
 
   @override
   String get processingFailed => 'Käsittely epäonnistui';
@@ -6657,24 +6596,13 @@ class AppLocalizationsFi extends AppLocalizations {
   }
 
   @override
-  String get wifiSync => 'WiFi-synkronointi';
-
-  @override
   String itemCopiedToClipboard(String item) {
     return '$item kopioitu leikepöydälle';
   }
 
   @override
-  String get wifiConnectionFailedTitle => 'WiFi-yhteys epäonnistui';
-
-  @override
   String connectingToDeviceName(String deviceName) {
     return 'Yhdistetään laitteeseen $deviceName';
-  }
-
-  @override
-  String enableDeviceWifi(String deviceName) {
-    return 'Ota käyttöön $deviceName-laitteen WiFi';
   }
 
   @override
@@ -6771,9 +6699,6 @@ class AppLocalizationsFi extends AppLocalizations {
   String get statusUnprocessed => 'Käsittelemätön';
 
   @override
-  String get switchedToFastTransfer => 'Vaihdettu nopeaan siirtoon';
-
-  @override
   String get transferCompleteMessage => 'Siirto valmis! Voit nyt toistaa tämän nauhoituksen.';
 
   @override
@@ -6785,33 +6710,7 @@ class AppLocalizationsFi extends AppLocalizations {
   String get transferCancelled => 'Siirto peruutettu';
 
   @override
-  String get fastTransferEnabled => 'Nopea siirto käytössä';
-
-  @override
   String get bluetoothSyncEnabled => 'Bluetooth-synkronointi käytössä';
-
-  @override
-  String get enableFastTransfer => 'Ota nopea siirto käyttöön';
-
-  @override
-  String get fastTransferDescription =>
-      'Nopea siirto käyttää WiFiä ~5x nopeampiin nopeuksiin. Puhelimesi yhdistää tilapäisesti Omi-laitteesi WiFi-verkkoon siirron aikana.';
-
-  @override
-  String get internetAccessPausedDuringTransfer => 'Internet-yhteys keskeytetään siirron ajaksi';
-
-  @override
-  String get chooseTransferMethodDescription => 'Valitse, miten tallenteet siirretään Omi-laitteesta puhelimeesi.';
-
-  @override
-  String get wifiSpeed => '~150 KB/s WiFin kautta';
-
-  @override
-  String get fiveTimesFaster => '5X NOPEAMPI';
-
-  @override
-  String get fastTransferMethodDescription =>
-      'Luo suoran WiFi-yhteyden Omi-laitteeseesi. Puhelimesi katkeaa tilapäisesti tavallisesta WiFistä siirron aikana.';
 
   @override
   String get bluetooth => 'Bluetooth';
@@ -7507,13 +7406,6 @@ class AppLocalizationsFi extends AppLocalizations {
   String get voiceFailedToTranscribe => 'Äänen litterointi epäonnistui';
 
   @override
-  String get locationPermissionRequired => 'Sijaintilupa vaaditaan';
-
-  @override
-  String get locationPermissionContent =>
-      'Nopea siirto vaatii sijaintiluvan WiFi-yhteyden tarkistamiseksi. Myönnä sijaintilupa jatkaaksesi.';
-
-  @override
   String get pdfTranscriptExport => 'Litteraation vienti';
 
   @override
@@ -7658,12 +7550,6 @@ class AppLocalizationsFi extends AppLocalizations {
   String get dailyRecapsDescription => 'Päivittäiset yhteenvetosi näkyvät täällä, kun ne on luotu';
 
   @override
-  String get chooseTransferMethod => 'Valitse siirtotapa';
-
-  @override
-  String get fastTransferSpeed => '~150 KB/s WiFin kautta';
-
-  @override
   String largeTimeGapDetected(String gap) {
     return 'Havaittu suuri aikaväli ($gap)';
   }
@@ -7672,9 +7558,6 @@ class AppLocalizationsFi extends AppLocalizations {
   String largeTimeGapsDetected(String gaps) {
     return 'Havaittu suuria aikavälejä ($gaps)';
   }
-
-  @override
-  String get deviceDoesNotSupportWifiSwitchingToBle => 'Laite ei tue WiFi-synkronointia, vaihdetaan Bluetoothiin';
 
   @override
   String get appleHealthNotAvailable => 'Apple Health ei ole käytettävissä tässä laitteessa';
