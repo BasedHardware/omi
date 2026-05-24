@@ -73,7 +73,7 @@ def test_manifest_report_includes_strategy_rollups_gap_report_and_fragmentation_
     assert set(report['strategies']) == {'always_deepgram', 'always_assemblyai', 'current_policy', 'shadow_only'}
     assert report['strategies']['always_assemblyai']['provider'] == 'assemblyai'
     assert report['strategies']['shadow_only']['provider'] == 'deepgram'
-    assert report['strategies']['current_policy']['provider'] == 'mixed'
+    assert report['strategies']['current_policy']['provider'] == 'assemblyai'
     assert report['strategies']['always_assemblyai']['split_count'] >= 2
     assert report['strategies']['always_assemblyai']['estimated_cost_per_hour_usd'] > 0
     assert report['assemblyai_gap_report']['status'] == 'limited'
@@ -194,4 +194,4 @@ def test_compact_markdown_report_is_review_friendly():
     assert 'fixture_good_meeting' in markdown
     assert 'Strategy Rollup' in markdown
     assert 'AssemblyAI Gap Report' in markdown
-    assert 'TICKET-028' in markdown
+    assert 'AssemblyAI default readiness' in markdown

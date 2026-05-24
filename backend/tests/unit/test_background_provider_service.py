@@ -115,14 +115,14 @@ def test_provider_service_finalizes_background_run_on_deepgram_when_assemblyai_d
     assert finalize_run.call_args.kwargs['estimated_cost_usd'] == 0.00076
 
 
-def test_background_routing_defaults_to_shadow_only_deepgram_until_rollout_gates_pass(monkeypatch):
+def test_background_routing_defaults_to_assemblyai_for_background(monkeypatch):
     monkeypatch.delenv('ASSEMBLYAI_PRERECORDED_STT_ENABLED', raising=False)
     monkeypatch.delenv('ASSEMBLYAI_PRERECORDED_STT_WORKLOADS', raising=False)
     monkeypatch.delenv('ASSEMBLYAI_BACKGROUND_PROVIDER_MODE', raising=False)
 
     assert get_prerecorded_provider_name(STTWorkload.sync) == STTProviderName.assemblyai
-    assert get_background_provider_mode() == BackgroundProviderMode.shadow_only
-    assert get_prerecorded_provider_name(STTWorkload.background) == STTProviderName.deepgram
+    assert get_background_provider_mode() == BackgroundProviderMode.assemblyai
+    assert get_prerecorded_provider_name(STTWorkload.background) == STTProviderName.assemblyai
     assert get_prerecorded_provider_name(STTWorkload.postprocess) == STTProviderName.assemblyai
 
 

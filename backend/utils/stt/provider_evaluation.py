@@ -5,6 +5,7 @@ PRODUCTION_STRATEGIES = ('always_deepgram', 'always_assemblyai', 'current_policy
 PROVIDER_BY_STRATEGY = {
     'always_deepgram': 'deepgram',
     'always_assemblyai': 'assemblyai',
+    'current_policy': 'assemblyai',
     'shadow_only': 'deepgram',
 }
 ASSEMBLYAI_COST_PER_HOUR_USD = 0.2592
@@ -130,8 +131,8 @@ def compact_markdown_report(report: dict[str, Any]) -> str:
     lines.extend(
         [
             '',
-            'Synthetic and saved-output gates are necessary but insufficient for broad defaulting. '
-            'TICKET-028 must turn this gap report into an AssemblyAI canary/default rollout plan with privacy-safe real-session evidence.',
+            'Synthetic and saved-output gates are necessary but insufficient for default health decisions. '
+            'Use this gap report to track AssemblyAI default readiness and rollback thresholds with privacy-safe real-session evidence.',
         ]
     )
     return '\n'.join(lines)
@@ -154,7 +155,7 @@ def _compare_case(case: dict[str, Any], thresholds: ProviderGateThresholds) -> d
     return {
         'id': case.get('id') or case.get('case_id') or 'unknown',
         'scenario': case.get('scenario') or case.get('type') or 'unspecified',
-        'current_policy_provider': case.get('current_policy_provider') or 'deepgram',
+        'current_policy_provider': case.get('current_policy_provider') or 'assemblyai',
         'providers': {'deepgram': _public_summary(deepgram), 'assemblyai': _public_summary(assemblyai)},
         'comparison': comparison,
         'gates': gates,
@@ -389,7 +390,7 @@ def _evaluate_case_gates(
             comparison['average_timestamp_drift_seconds'],
             thresholds.max_average_timestamp_drift_seconds,
             'warning',
-            gate_group='canary_readiness',
+            gate_group='rollout_readiness',
         ),
         _threshold_gate(
             'assemblyai_low_confidence_identity_rate',
@@ -429,7 +430,7 @@ def _evaluate_case_gates(
             assemblyai['timeout_error_rate'],
             thresholds.max_timeout_error_rate,
             'failure',
-            gate_group='canary_readiness',
+            gate_group='rollout_readiness',
         ),
         _threshold_gate(
             'assemblyai_purity_delta_vs_deepgram',
@@ -444,7 +445,7 @@ def _evaluate_case_gates(
             _safe_ratio(assemblyai['latency_seconds'], deepgram['latency_seconds']),
             thresholds.max_latency_ratio_vs_deepgram,
             'warning',
-            gate_group='canary_readiness',
+            gate_group='rollout_readiness',
         ),
         _threshold_gate(
             'assemblyai_cost_ratio_vs_deepgram',
@@ -461,7 +462,7 @@ def _evaluate_case_gates(
                     {
                         'metric': f"{provider['provider']}_instrumentation",
                         'severity': 'warning',
-                        'gate_group': 'canary_readiness',
+                        'gate_group': 'rollout_readiness',
                         'value': None,
                         'threshold': 'ledger_or_rollup_required',
                         'message': 'missing provider ledger or rollup metrics',
@@ -621,7 +622,7 @@ def _strategy_rollup(case_reports: list[dict[str, Any]], strategy: str) -> dict[
     selected = []
     providers = set()
     for case in case_reports:
-        provider_name = PROVIDER_BY_STRATEGY.get(strategy) or case.get('current_policy_provider') or 'deepgram'
+        provider_name = PROVIDER_BY_STRATEGY.get(strategy) or case.get('current_policy_provider') or 'assemblyai'
         providers.add(provider_name)
         selected.append(case['providers'][provider_name])
     cost = sum(provider['estimated_cost_usd'] for provider in selected)
@@ -718,7 +719,7 @@ def _likely_cause(metric: str) -> str:
         'covered_speaker_count': 'provider diarization missed a speaker or no-speech gating discarded speech',
         'empty_transcript_rate': 'low-signal/no-speech handling produced an empty or failed transcript',
         'latency_seconds': 'AssemblyAI async job latency exceeds Deepgram for this workload shape',
-        'timeout_error_rate': 'provider timeout or retry exhaustion path is not canary-safe',
+        'timeout_error_rate': 'provider timeout or retry exhaustion path is not default-safe',
         'estimated_cost_per_hour_usd': 'AssemblyAI billable duration or pricing is too high for default background volume',
     }.get(metric, 'AssemblyAI trails the Deepgram comparator on this gate')
 
@@ -726,9 +727,9 @@ def _likely_cause(metric: str) -> str:
 def _mitigation(metric: str) -> str:
     return {
         'speaker_word_purity': 'keep split-before-match enabled and gate rollout on fragmentation plus purity budgets',
-        'covered_speaker_count': 'route affected low-signal cases to Deepgram fallback until canary evidence closes coverage',
+        'covered_speaker_count': 'use Deepgram fallback for affected low-signal cases until AssemblyAI closes coverage',
         'empty_transcript_rate': 'preserve no-speech detection and fallback controls before default promotion',
-        'latency_seconds': 'limit rollout cohort and add latency SLO alerts before expanding canary',
+        'latency_seconds': 'keep latency SLO alerts and fallback controls before expanding default traffic',
         'timeout_error_rate': 'use Deepgram fallback and provider health gates from TICKET-027',
         'estimated_cost_per_hour_usd': 'cap rollout or require explicit product tradeoff in TICKET-028',
     }.get(metric, 'capture in TICKET-028 rollout tradeoffs before promoting AssemblyAI')

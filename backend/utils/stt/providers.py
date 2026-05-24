@@ -142,7 +142,7 @@ def assemblyai_prerecorded_fallback_enabled() -> bool:
 
 
 def get_background_provider_mode() -> BackgroundProviderMode:
-    configured = os.getenv('ASSEMBLYAI_BACKGROUND_PROVIDER_MODE', BackgroundProviderMode.shadow_only.value)
+    configured = os.getenv('ASSEMBLYAI_BACKGROUND_PROVIDER_MODE', BackgroundProviderMode.assemblyai.value)
     try:
         return BackgroundProviderMode(configured.strip().lower())
     except ValueError:

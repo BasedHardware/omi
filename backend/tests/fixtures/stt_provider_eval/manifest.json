@@ -3,7 +3,6 @@
     {
       "id": "fixture_good_meeting",
       "scenario": "saved_real_provider_e2e",
-      "current_policy_provider": "deepgram",
       "deepgram_fixture": "fixture_good_meeting.deepgram.json",
       "assemblyai_fixture": "fixture_good_meeting.assemblyai.json",
       "deepgram_rollup": "fixture_good_meeting.deepgram.rollup.json",
@@ -12,7 +11,6 @@
     {
       "id": "synthetic_clean_turns",
       "scenario": "clean_turns",
-      "current_policy_provider": "assemblyai",
       "deepgram": {
         "transcript": {
           "segments": [
@@ -80,7 +78,6 @@
     {
       "id": "synthetic_fast_turns",
       "scenario": "fast_turns",
-      "current_policy_provider": "assemblyai",
       "deepgram": {
         "transcript": {
           "segments": [
@@ -114,7 +111,7 @@
           },
           "raw_audio_seconds": 2.0,
           "billable_seconds": 2.0,
-          "estimated_cost_usd": 0.00008,
+          "estimated_cost_usd": 8e-05,
           "latency_seconds": 0.9,
           "fallback_count": 0,
           "split_count": 1
@@ -164,7 +161,6 @@
     {
       "id": "synthetic_overlap",
       "scenario": "overlap",
-      "current_policy_provider": "assemblyai",
       "deepgram": {
         "transcript": {
           "segments": [
@@ -240,7 +236,6 @@
     {
       "id": "synthetic_sparse_speech",
       "scenario": "sparse_speech",
-      "current_policy_provider": "assemblyai",
       "deepgram": {
         "transcript": {
           "segments": [
@@ -295,7 +290,6 @@
     {
       "id": "synthetic_no_speech",
       "scenario": "low_signal_no_speech",
-      "current_policy_provider": "deepgram",
       "deepgram": {
         "transcript": {
           "segments": []
@@ -334,7 +328,6 @@
     {
       "id": "synthetic_multilingual_turns",
       "scenario": "multilingual_turns",
-      "current_policy_provider": "assemblyai",
       "deepgram": {
         "transcript": {
           "segments": [
@@ -401,7 +394,6 @@
     {
       "id": "synthetic_duplicate_replay",
       "scenario": "duplicate_chunk_replay",
-      "current_policy_provider": "assemblyai",
       "deepgram": {
         "transcript": {
           "segments": [
@@ -421,7 +413,7 @@
           },
           "raw_audio_seconds": 4.0,
           "billable_seconds": 2.0,
-          "estimated_cost_usd": 0.00008,
+          "estimated_cost_usd": 8e-05,
           "latency_seconds": 1.0,
           "fallback_count": 0
         }
@@ -454,7 +446,6 @@
     {
       "id": "synthetic_provider_failure_fallback",
       "scenario": "provider_failure_fallback",
-      "current_policy_provider": "deepgram",
       "deepgram": {
         "transcript": {
           "segments": [
@@ -508,7 +499,6 @@
     {
       "id": "saved_policy_router_gap",
       "scenario": "saved_real_policy_router_outputs",
-      "current_policy_provider": "deepgram",
       "deepgram": {
         "transcript": {
           "segments": [
