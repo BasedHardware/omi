@@ -1,0 +1,66 @@
+# E2E Flow: Freemium Threshold — transcription usage limit behavior
+# Tests: What happens when free-tier transcription minutes approach/hit the limit
+# Core feature: graceful degradation when user's free transcription quota is exhausted
+
+version: 2
+name: freemium-threshold
+description: Freemium threshold flow — record until transcription usage approaches the free-tier limit, observe threshold warning, verify freemium state transitions, check on-device STT fallback prompt, verify recording continues with degraded quality
+app: com.friend.ios.dev
+evidence:
+  video: true
+covers:
+  - app/lib/services/freemium_transcription_service.dart
+  - app/lib/providers/capture_provider.dart
+  - app/lib/pages/conversation_capturing/page.dart
+  - app/lib/backend/schema/message_event.dart
+preconditions:
+  - auth_ready  # User signed in and onboarding completed. App shows home screen.
+  - microphone_permission  # Mic permission granted.
+  - free_tier_account  # User is on the free plan (not premium). Check Settings > Plan & Usage.
+
+steps:
+  - id: S1
+    name: Start recording on free tier
+    do: "Tap the mic button to start phone mic recording. Verify the ConversationCapturingPage appears with '🎙️ Listening'. This test requires accumulating enough recording time to trigger the freemium threshold."
+    verify: true
+    expect:
+      - kind: interactive_count
+        min: 1
+    evidence:
+      - screenshot: step-S1.webp
+    note: "Freemium threshold is checked server-side. The backend sends FreemiumThresholdReachedEvent via WebSocket when usage approaches the limit. The event contains: remainingSeconds, requiresUserAction, and message."
+
+  - id: S2
+    name: Record until threshold warning
+    do: "Continue recording. When the free-tier transcription limit is approaching, the app receives a FreemiumThresholdReachedEvent from the backend. A warning banner or notification appears indicating remaining transcription time. If requiresUserAction is true, the user is prompted to set up on-device STT in Transcription Settings."
+    verify: true
+    expect:
+      - kind: interactive_count
+        min: 2
+    evidence:
+      - screenshot: step-S2.webp
+    note: "The threshold event sets provider._freemiumThresholdReached=true and _freemiumRemainingSeconds. If requiresUserAction=true, the app shows a setup prompt. The usageProvider.refreshSubscription() is called to update plan status. This step may require significant recording time on a fresh account — consider using a test account near its limit."
+
+  - id: S3
+    name: Observe WebSocket close on limit (code 4002)
+    do: "If the free-tier limit is fully exhausted, the backend closes the WebSocket with close code 4002 (out of credits). The app shows a notification about the usage limit. Recording may stop or switch to on-device STT if available."
+    verify: true
+    expect:
+      - kind: interactive_count
+        min: 1
+    evidence:
+      - screenshot: step-S3.webp
+    note: "Close code 4002 is specifically handled in CaptureProvider.onClosed(). When received, the provider sets freemium state. The user can: (1) upgrade to premium plan, (2) configure on-device STT, or (3) wait for the usage to reset. On iOS: on-device STT uses Apple Speech Recognition. On Android: requires downloading a Whisper model."
+
+  - id: S4
+    name: Process conversation and return to home
+    do: "Tap 'Process Now' if still available, or press back to return to the home screen. Verify the conversation was created (even if transcription was cut short at the limit)."
+    verify: true
+    expect:
+      - kind: text_visible
+        values: ["Conversations"]
+      - kind: interactive_count
+        min: 4
+    evidence:
+      - screenshot: step-S4.webp
+    note: "Conversations captured up to the freemium limit are still processed normally. Audio captured after the limit may not have transcription but the recording data is preserved via WAL."
