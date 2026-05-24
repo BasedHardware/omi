@@ -29,7 +29,6 @@ const String imageCaptureControlCharacteristicUuid = '19b10006-e8f2-537e-4f6c-d1
 const String storageDataStreamServiceUuid = '30295780-4301-eabd-2904-2849adfeae43';
 const String storageDataStreamCharacteristicUuid = '30295781-4301-eabd-2904-2849adfeae43';
 const String storageReadControlCharacteristicUuid = '30295782-4301-eabd-2904-2849adfeae43';
-const String storageWifiCharacteristicUuid = '30295783-4301-eabd-2904-2849adfeae43';
 
 const String timeSyncServiceUuid = '19b10030-e8f2-537e-4f6c-d104768a1214';
 const String timeSyncWriteCharacteristicUuid = '19b10031-e8f2-537e-4f6c-d104768a1214';
