@@ -1,12 +1,19 @@
 """Pydantic models for Semantic Scholar Omi integration."""
 from typing import Optional
 from pydantic import BaseModel, Field
+from pydantic import model_validator
 
 
 class ChatToolResponse(BaseModel):
     """Response model for Omi chat tool endpoints."""
     result: Optional[str] = None
     error: Optional[str] = None
+
+    @model_validator(mode="after")
+    def validate_result_or_error(self):
+        if self.result is None and self.error is None:
+            raise ValueError("Either result or error must be provided.")
+        return self
 
 
 class SearchPapersRequest(BaseModel):

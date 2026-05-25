@@ -38,7 +38,8 @@ def format_year(year: Any) -> str:
 def normalize_identifier(raw: str) -> str:
     value = raw.strip()
     if value.lower().startswith("doi:"):
-        value = value[4:]
+        # Preserve DOI namespace expected by Semantic Scholar.
+        value = "DOI:" + value[4:].strip()
     return value
 
 
@@ -60,9 +61,19 @@ async def manifest() -> Dict[str, Any]:
                 "endpoint": "/tools/search_semantic_scholar_papers",
                 "method": "POST",
                 "parameters": {
-                    "query": "string",
-                    "max_results": "integer 1-10 (default 5)",
-                    "min_year": "optional integer",
+                    "type": "object",
+                    "properties": {
+                        "query": {"type": "string", "description": "Search query"},
+                        "max_results": {
+                            "type": "integer",
+                            "description": "Max results (1-10, default 5)",
+                        },
+                        "min_year": {
+                            "type": "integer",
+                            "description": "Optional minimum publication year",
+                        },
+                    },
+                    "required": ["query"],
                 },
             },
             {
@@ -70,14 +81,36 @@ async def manifest() -> Dict[str, Any]:
                 "description": "Get details for a paper by Semantic Scholar ID or DOI.",
                 "endpoint": "/tools/get_semantic_scholar_paper",
                 "method": "POST",
-                "parameters": {"paper_id_or_doi": "string"},
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "paper_id_or_doi": {
+                            "type": "string",
+                            "description": "Semantic Scholar paper ID or DOI",
+                        }
+                    },
+                    "required": ["paper_id_or_doi"],
+                },
             },
             {
                 "name": "get_semantic_scholar_author_papers",
                 "description": "Get recent papers by Semantic Scholar author ID.",
                 "endpoint": "/tools/get_semantic_scholar_author_papers",
                 "method": "POST",
-                "parameters": {"author_id": "string", "max_results": "integer 1-10"},
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "author_id": {
+                            "type": "string",
+                            "description": "Semantic Scholar author ID",
+                        },
+                        "max_results": {
+                            "type": "integer",
+                            "description": "Max results (1-10, default 5)",
+                        },
+                    },
+                    "required": ["author_id"],
+                },
             },
         ]
     }
@@ -121,7 +154,7 @@ async def search_papers(req: SearchPapersRequest) -> ChatToolResponse:
 @app.post("/tools/get_semantic_scholar_paper", response_model=ChatToolResponse)
 async def get_paper(req: GetPaperRequest) -> ChatToolResponse:
     try:
-        identifier = quote(normalize_identifier(req.paper_id_or_doi), safe="")
+        identifier = quote(normalize_identifier(req.paper_id_or_doi), safe=":")
         data = await api_get(
             f"/paper/{identifier}",
             {"fields": "title,abstract,year,authors,citationCount,referenceCount,url,venue"},
