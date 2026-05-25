@@ -9286,4 +9286,7 @@ class AppLocalizationsSr extends AppLocalizations {
   @override
   String get syncCardBackendBusy =>
       'Omi сервери су заузети — ваши снимци ће се синхронизовати чим се ослободи капацитет';
+
+  @override
+  String get unableToDetermineFirmwareVersion => 'Није могуће одредити тренутну верзију фирмвера';
 }

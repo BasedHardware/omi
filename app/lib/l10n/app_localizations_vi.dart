@@ -9272,4 +9272,7 @@ class AppLocalizationsVi extends AppLocalizations {
   @override
   String get syncCardBackendBusy =>
       'Máy chủ Omi đang quá tải — bản ghi của bạn sẽ được đồng bộ khi dung lượng được khôi phục';
+
+  @override
+  String get unableToDetermineFirmwareVersion => 'Không thể xác định phiên bản firmware hiện tại';
 }

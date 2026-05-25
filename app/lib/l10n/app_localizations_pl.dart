@@ -9299,4 +9299,7 @@ class AppLocalizationsPl extends AppLocalizations {
   @override
   String get syncCardBackendBusy =>
       'Serwery Omi są obciążone — twoje nagrania zsynchronizują się, gdy zwolni się przepustowość';
+
+  @override
+  String get unableToDetermineFirmwareVersion => 'Nie można określić bieżącej wersji oprogramowania układowego';
 }

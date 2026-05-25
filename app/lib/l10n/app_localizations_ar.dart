@@ -9219,4 +9219,7 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get syncCardBackendBusy => 'خوادم Omi مشغولة الآن — ستتم مزامنة تسجيلاتك عند توفر السعة';
+
+  @override
+  String get unableToDetermineFirmwareVersion => 'تعذر تحديد إصدار البرنامج الثابت الحالي';
 }

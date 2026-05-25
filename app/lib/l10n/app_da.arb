@@ -3043,5 +3043,6 @@
     },
     "syncProcessingBackgroundHint": "Det fortsætter i baggrunden — du kan forlade denne skærm.",
     "syncCardRateLimited": "Grænsen for rimelig brug er nået — synkroniseringen genoptages automatisk",
-    "syncCardBackendBusy": "Omis servere er travle — dine optagelser synkroniseres, når der igen er kapacitet"
+    "syncCardBackendBusy": "Omis servere er travle — dine optagelser synkroniseres, når der igen er kapacitet",
+    "unableToDetermineFirmwareVersion": "Kan ikke fastslå den aktuelle firmware-version"
 }

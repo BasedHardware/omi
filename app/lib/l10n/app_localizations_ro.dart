@@ -9319,4 +9319,7 @@ class AppLocalizationsRo extends AppLocalizations {
   @override
   String get syncCardBackendBusy =>
       'Serverele Omi sunt aglomerate — înregistrările tale se vor sincroniza imediat ce se eliberează capacitate';
+
+  @override
+  String get unableToDetermineFirmwareVersion => 'Nu se poate determina versiunea curentă a firmware-ului';
 }

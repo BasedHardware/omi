@@ -9309,4 +9309,7 @@ class AppLocalizationsBg extends AppLocalizations {
   @override
   String get syncCardBackendBusy =>
       'Сървърите на Omi са натоварени — записите ви ще се синхронизират, когато се освободи капацитет';
+
+  @override
+  String get unableToDetermineFirmwareVersion => 'Не може да се определи текущата версия на фърмуера';
 }

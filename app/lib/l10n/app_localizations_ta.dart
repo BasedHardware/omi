@@ -9340,4 +9340,7 @@ class AppLocalizationsTa extends AppLocalizations {
   @override
   String get syncCardBackendBusy =>
       'Omi சேவையகங்கள் பணிமிகுதியில் உள்ளன — திறன் கிடைத்தவுடன் உங்கள் பதிவுகள் ஒத்திசைக்கப்படும்';
+
+  @override
+  String get unableToDetermineFirmwareVersion => 'தற்போதைய ஃபார்ம்வேர் பதிப்பை தீர்மானிக்க முடியவில்லை';
 }

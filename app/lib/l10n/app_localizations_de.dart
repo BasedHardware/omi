@@ -9349,4 +9349,7 @@ class AppLocalizationsDe extends AppLocalizations {
   @override
   String get syncCardBackendBusy =>
       'Omis Server sind ausgelastet — deine Aufnahmen werden synchronisiert, sobald wieder Kapazität verfügbar ist';
+
+  @override
+  String get unableToDetermineFirmwareVersion => 'Aktuelle Firmware-Version konnte nicht ermittelt werden';
 }

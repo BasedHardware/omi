@@ -3034,5 +3034,6 @@
     },
     "syncProcessingBackgroundHint": "Tai tęsiasi fone — galite išeiti iš šio ekrano.",
     "syncCardRateLimited": "Pasiekta sąžiningo naudojimo riba — sinchronizavimas bus tęsiamas automatiškai",
-    "syncCardBackendBusy": "Omi serveriai užimti — jūsų įrašai bus sinchronizuoti, kai atsilaisvins pajėgumai"
+    "syncCardBackendBusy": "Omi serveriai užimti — jūsų įrašai bus sinchronizuoti, kai atsilaisvins pajėgumai",
+    "unableToDetermineFirmwareVersion": "Nepavyko nustatyti dabartinės programinės aparatinės įrangos versijos"
 }

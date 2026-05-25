@@ -9274,4 +9274,7 @@ class AppLocalizationsFi extends AppLocalizations {
   @override
   String get syncCardBackendBusy =>
       'Omin palvelimet ovat ruuhkautuneet — tallenteesi synkronoidaan, kun kapasiteettia vapautuu';
+
+  @override
+  String get unableToDetermineFirmwareVersion => 'Nykyistä laiteohjelmistoversiota ei voida määrittää';
 }

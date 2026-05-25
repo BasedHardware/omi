@@ -3069,5 +3069,6 @@
     },
     "syncProcessingBackgroundHint": "Bu işlem arka planda sürer — bu ekrandan ayrılabilirsiniz.",
     "syncCardRateLimited": "Adil kullanım sınırına ulaşıldı — eşitleme otomatik olarak sürdürülecek",
-    "syncCardBackendBusy": "Omi sunucuları yoğun — kapasite boşaldığında kayıtlarınız eşitlenecek"
+    "syncCardBackendBusy": "Omi sunucuları yoğun — kapasite boşaldığında kayıtlarınız eşitlenecek",
+    "unableToDetermineFirmwareVersion": "Mevcut donanım yazılımı sürümü belirlenemiyor"
 }

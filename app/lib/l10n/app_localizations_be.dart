@@ -9302,4 +9302,7 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String get syncCardBackendBusy => 'Серверы Omi загружаныя — вашы запісы сінхранізуюцца, калі з\'явіцца магчымасць';
+
+  @override
+  String get unableToDetermineFirmwareVersion => 'Не ўдалося вызначыць бягучую версію прашыўкі';
 }

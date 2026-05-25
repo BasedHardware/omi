@@ -9355,4 +9355,7 @@ class AppLocalizationsFr extends AppLocalizations {
   @override
   String get syncCardBackendBusy =>
       'Les serveurs Omi sont saturés — vos enregistrements se synchroniseront dès que la capacité sera rétablie';
+
+  @override
+  String get unableToDetermineFirmwareVersion => 'Impossible de déterminer la version actuelle du firmware';
 }

@@ -9306,4 +9306,7 @@ class AppLocalizationsHr extends AppLocalizations {
   @override
   String get syncCardBackendBusy =>
       'Omi poslužitelji su zauzeti — vaše snimke će se sinkronizirati čim se oslobodi kapacitet';
+
+  @override
+  String get unableToDetermineFirmwareVersion => 'Nije moguće utvrditi trenutnu verziju firmvera';
 }

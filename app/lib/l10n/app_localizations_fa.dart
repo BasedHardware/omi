@@ -9276,4 +9276,7 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get syncCardBackendBusy => 'سرورهای Omi شلوغ هستند — ضبط‌های شما به‌محض آزاد شدن ظرفیت همگام‌سازی می‌شوند';
+
+  @override
+  String get unableToDetermineFirmwareVersion => 'تعیین نسخه فعلی سفت‌افزار امکان‌پذیر نیست';
 }

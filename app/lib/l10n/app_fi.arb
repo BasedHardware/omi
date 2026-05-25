@@ -3034,5 +3034,6 @@
     },
     "syncProcessingBackgroundHint": "Tämä jatkuu taustalla — voit poistua tästä näkymästä.",
     "syncCardRateLimited": "Kohtuullisen käytön raja saavutettu — synkronointi jatkuu automaattisesti",
-    "syncCardBackendBusy": "Omin palvelimet ovat ruuhkautuneet — tallenteesi synkronoidaan, kun kapasiteettia vapautuu"
+    "syncCardBackendBusy": "Omin palvelimet ovat ruuhkautuneet — tallenteesi synkronoidaan, kun kapasiteettia vapautuu",
+    "unableToDetermineFirmwareVersion": "Nykyistä laiteohjelmistoversiota ei voida määrittää"
 }

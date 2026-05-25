@@ -9277,4 +9277,7 @@ class AppLocalizationsPt extends AppLocalizations {
   @override
   String get syncCardBackendBusy =>
       'Os servidores da Omi estão sobrecarregados — as suas gravações serão sincronizadas assim que houver capacidade disponível';
+
+  @override
+  String get unableToDetermineFirmwareVersion => 'Não foi possível determinar a versão atual do firmware';
 }

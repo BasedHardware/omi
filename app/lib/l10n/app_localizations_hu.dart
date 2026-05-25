@@ -9313,4 +9313,7 @@ class AppLocalizationsHu extends AppLocalizations {
   @override
   String get syncCardBackendBusy =>
       'Az Omi szerverei leterheltek — a felvételeid szinkronizálódnak, amint felszabadul a kapacitás';
+
+  @override
+  String get unableToDetermineFirmwareVersion => 'A jelenlegi firmware verziója nem határozható meg';
 }

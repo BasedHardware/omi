@@ -3002,5 +3002,6 @@
     },
     "syncProcessingBackgroundHint": "Das läuft im Hintergrund weiter — du kannst diesen Bildschirm verlassen.",
     "syncCardRateLimited": "Nutzungslimit erreicht — die Synchronisierung wird automatisch fortgesetzt",
-    "syncCardBackendBusy": "Omis Server sind ausgelastet — deine Aufnahmen werden synchronisiert, sobald wieder Kapazität verfügbar ist"
+    "syncCardBackendBusy": "Omis Server sind ausgelastet — deine Aufnahmen werden synchronisiert, sobald wieder Kapazität verfügbar ist",
+    "unableToDetermineFirmwareVersion": "Aktuelle Firmware-Version konnte nicht ermittelt werden"
 }

@@ -9323,4 +9323,7 @@ class AppLocalizationsMk extends AppLocalizations {
   @override
   String get syncCardBackendBusy =>
       'Серверите на Omi се преоптоварени — вашите снимки ќе се синхронизираат штом ќе се ослободи капацитет';
+
+  @override
+  String get unableToDetermineFirmwareVersion => 'Не може да се одреди тековната верзија на фирмверот';
 }

@@ -9358,4 +9358,7 @@ class AppLocalizationsTl extends AppLocalizations {
   @override
   String get syncCardBackendBusy =>
       'Abala ang mga server ng Omi — masi-sync ang iyong mga recording kapag may bakanteng kapasidad na muli';
+
+  @override
+  String get unableToDetermineFirmwareVersion => 'Hindi matukoy ang kasalukuyang bersyon ng firmware';
 }

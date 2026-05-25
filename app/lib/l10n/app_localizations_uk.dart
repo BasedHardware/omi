@@ -9292,4 +9292,7 @@ class AppLocalizationsUk extends AppLocalizations {
   @override
   String get syncCardBackendBusy =>
       'Сервери Omi перевантажені — ваші записи синхронізуються, щойно з\'явиться доступна потужність';
+
+  @override
+  String get unableToDetermineFirmwareVersion => 'Не вдається визначити поточну версію мікропрограми';
 }

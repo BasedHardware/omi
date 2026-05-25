@@ -3003,5 +3003,6 @@
     },
     "syncProcessingBackgroundHint": "Pokračuje to na pozadí — tuto obrazovku můžete opustit.",
     "syncCardRateLimited": "Byl dosažen limit férového využití — synchronizace bude automaticky pokračovat",
-    "syncCardBackendBusy": "Servery Omi jsou vytížené — vaše nahrávky se synchronizují, jakmile bude k dispozici kapacita"
+    "syncCardBackendBusy": "Servery Omi jsou vytížené — vaše nahrávky se synchronizují, jakmile bude k dispozici kapacita",
+    "unableToDetermineFirmwareVersion": "Nelze určit aktuální verzi firmwaru"
 }

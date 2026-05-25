@@ -9307,4 +9307,7 @@ class AppLocalizationsRu extends AppLocalizations {
   @override
   String get syncCardBackendBusy =>
       'Серверы Omi загружены — ваши записи синхронизируются, как только освободятся мощности';
+
+  @override
+  String get unableToDetermineFirmwareVersion => 'Не удаётся определить текущую версию прошивки';
 }

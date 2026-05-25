@@ -9259,4 +9259,7 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get syncCardBackendBusy => 'Omis servere er travle — dine optagelser synkroniseres, når der igen er kapacitet';
+
+  @override
+  String get unableToDetermineFirmwareVersion => 'Kan ikke fastslå den aktuelle firmware-version';
 }

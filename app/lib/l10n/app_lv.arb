@@ -3034,5 +3034,6 @@
     },
     "syncProcessingBackgroundHint": "Tas turpinās fonā — varat pamest šo ekrānu.",
     "syncCardRateLimited": "Sasniegts godīgas lietošanas ierobežojums — sinhronizācija turpināsies automātiski",
-    "syncCardBackendBusy": "Omi serveri ir noslogoti — jūsu ieraksti tiks sinhronizēti, tiklīdz atbrīvosies jauda"
+    "syncCardBackendBusy": "Omi serveri ir noslogoti — jūsu ieraksti tiks sinhronizēti, tiklīdz atbrīvosies jauda",
+    "unableToDetermineFirmwareVersion": "Nevar noteikt pašreizējo programmaparatūras versiju"
 }

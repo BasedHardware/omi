@@ -17282,6 +17282,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Omi servers are busy — your recordings will sync once capacity returns'**
   String get syncCardBackendBusy;
+
+  /// Shown when the device firmware revision cannot be read over BLE, so an OTA update offer would be unreliable.
+  ///
+  /// In en, this message translates to:
+  /// **'Unable to determine current firmware version'**
+  String get unableToDetermineFirmwareVersion;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

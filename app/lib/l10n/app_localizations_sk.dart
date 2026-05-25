@@ -9266,4 +9266,7 @@ class AppLocalizationsSk extends AppLocalizations {
   @override
   String get syncCardBackendBusy =>
       'Servery Omi sú vyťažené — vaše nahrávky sa zosynchronizujú, hneď ako sa uvoľní kapacita';
+
+  @override
+  String get unableToDetermineFirmwareVersion => 'Nedá sa určiť aktuálna verzia firmvéru';
 }

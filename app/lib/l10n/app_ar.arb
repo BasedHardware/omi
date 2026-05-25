@@ -3001,5 +3001,6 @@
     },
     "syncProcessingBackgroundHint": "تستمر العملية في الخلفية — يمكنك مغادرة هذه الشاشة.",
     "syncCardRateLimited": "تم بلوغ حد الاستخدام العادل — ستُستأنف المزامنة تلقائيًا",
-    "syncCardBackendBusy": "خوادم Omi مشغولة الآن — ستتم مزامنة تسجيلاتك عند توفر السعة"
+    "syncCardBackendBusy": "خوادم Omi مشغولة الآن — ستتم مزامنة تسجيلاتك عند توفر السعة",
+    "unableToDetermineFirmwareVersion": "تعذر تحديد إصدار البرنامج الثابت الحالي"
 }

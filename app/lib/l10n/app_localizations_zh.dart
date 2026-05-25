@@ -9109,4 +9109,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get syncCardBackendBusy => 'Omi 服务器繁忙 — 容量恢复后将自动同步你的录音';
+
+  @override
+  String get unableToDetermineFirmwareVersion => '无法确定当前固件版本';
 }

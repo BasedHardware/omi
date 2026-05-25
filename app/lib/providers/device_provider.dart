@@ -406,6 +406,12 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     }
 
     var device = pairedDevice!;
+    if (device.firmwareRevision.isEmpty) {
+      // BLE read of the firmware-revision characteristic failed. Skip the
+      // upgrade check rather than asking the backend what's "newer than
+      // unknown" — that path returns a misleading legacy version.
+      return ('Unable to determine current firmware version', false, '', {});
+    }
     var latestFirmwareDetails = await getLatestFirmwareVersion(
       deviceModelNumber: device.modelNumber,
       firmwareRevision: device.firmwareRevision,

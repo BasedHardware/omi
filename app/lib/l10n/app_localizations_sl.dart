@@ -9301,4 +9301,7 @@ class AppLocalizationsSl extends AppLocalizations {
   @override
   String get syncCardBackendBusy =>
       'Strežniki Omi so obremenjeni — vaši posnetki se bodo sinhronizirali, ko se sprosti zmogljivost';
+
+  @override
+  String get unableToDetermineFirmwareVersion => 'Trenutne različice vdelane programske opreme ni mogoče določiti';
 }
