@@ -214,6 +214,31 @@ enum MemoryExportDestination: String, CaseIterable, Identifiable, Sendable {
     }
   }
 
+  /// Title + body for an Omi task that asks Omi to perform this connection
+  /// autonomously (driving the browser/terminal) via the standard execute flow.
+  func omiExecutionTask(key: String) -> (title: String, body: String)? {
+    guard let setup = mcpSetup(key: key) else { return nil }
+    let clientName = title
+    let taskTitle = "Connect my Omi memory to \(clientName) over MCP"
+    var lines = [
+      "Set up the Omi memory MCP connector in \(clientName) end-to-end for me so it can read my Omi memories. Use the browser/terminal as needed and confirm when it's connected.",
+      "",
+      "MCP server URL: \(setup.serverURL)",
+      "My Omi MCP key: \(key)",
+      "",
+      "Steps:",
+    ]
+    for (index, step) in setup.steps.enumerated() {
+      lines.append("\(index + 1). \(step)")
+    }
+    if let copyText = setup.copyText {
+      lines.append("")
+      lines.append("Command/config to run:")
+      lines.append(copyText)
+    }
+    return (taskTitle, lines.joined(separator: "\n"))
+  }
+
   fileprivate var notionTokenKey: String { "memoryExportNotionToken" }
   fileprivate var notionParentPageKey: String { "memoryExportNotionParentPageID" }
   fileprivate var obsidianVaultPathKey: String { "memoryExportObsidianVaultPath" }
