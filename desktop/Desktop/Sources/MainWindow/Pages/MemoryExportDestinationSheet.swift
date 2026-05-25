@@ -137,32 +137,13 @@ final class MemoryExportDestinationSheetModel: ObservableObject {
     isExecuting = true
     defer { isExecuting = false }
 
-    let key: String
-    if let existing = mcpKey {
-      key = existing
-    } else {
-      do {
-        key = try await MemoryExportService.shared.ensureMCPKey()
-        mcpKey = key
-      } catch {
-        errorMessage = "Couldn't create an MCP key: \(error.localizedDescription)"
-        return
-      }
+    do {
+      _ = try await MemoryExportExecutor.run(destination)
+      mcpKey = await MemoryExportService.shared.storedMCPKey()
+      statusMessage = "Omi is setting this up — follow along in the floating bar."
+    } catch {
+      errorMessage = error.localizedDescription
     }
-
-    guard let task = destination.omiExecutionTask(key: key) else { return }
-
-    _ = await TasksStore.shared.createTask(
-      description: task.title, dueAt: Date(), priority: "high", tags: ["mcp-setup"])
-
-    let model =
-      ShortcutSettings.shared.selectedModel.isEmpty
-      ? "claude-sonnet-4-6" : ShortcutSettings.shared.selectedModel
-    let query = ProactiveTaskExecute.buildQuery(title: task.title, message: task.body)
-    _ = AgentPillsManager.shared.spawn(
-      query: query, model: model, systemPromptSuffix: ProactiveTaskExecute.systemPromptSuffix)
-
-    statusMessage = "Omi is setting this up — follow along in the floating bar."
   }
 
   func run(destination: MemoryExportDestination) async -> MemoryExportStatus? {
