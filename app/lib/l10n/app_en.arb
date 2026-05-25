@@ -11136,5 +11136,9 @@
     "syncCardBackendBusy": "Omi servers are busy — your recordings will sync once capacity returns",
     "@syncCardBackendBusy": {
         "description": "Status card line when the backend stale-guard has flagged queued jobs (i.e. workers are saturated, not the user being rate-limited). Distinct from the 429 fair-use case."
+    },
+    "unableToDetermineFirmwareVersion": "Unable to determine current firmware version",
+    "@unableToDetermineFirmwareVersion": {
+        "description": "Shown when the device firmware revision cannot be read over BLE, so an OTA update offer would be unreliable."
     }
 }

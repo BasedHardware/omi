@@ -9403,4 +9403,7 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get syncCardBackendBusy => 'Omi sunucuları yoğun — kapasite boşaldığında kayıtlarınız eşitlenecek';
+
+  @override
+  String get unableToDetermineFirmwareVersion => 'Mevcut donanım yazılımı sürümü belirlenemiyor';
 }

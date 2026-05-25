@@ -9387,4 +9387,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get syncCardBackendBusy => 'Omi servers are busy — your recordings will sync once capacity returns';
+
+  @override
+  String get unableToDetermineFirmwareVersion => 'Unable to determine current firmware version';
 }

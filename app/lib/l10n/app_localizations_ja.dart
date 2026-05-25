@@ -9236,4 +9236,7 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get syncCardBackendBusy => 'Omi のサーバーが混雑しています — 空き容量が戻り次第、録音が同期されます';
+
+  @override
+  String get unableToDetermineFirmwareVersion => '現在のファームウェアバージョンを特定できません';
 }

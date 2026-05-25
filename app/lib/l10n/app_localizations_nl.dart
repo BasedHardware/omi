@@ -9420,4 +9420,7 @@ class AppLocalizationsNl extends AppLocalizations {
   @override
   String get syncCardBackendBusy =>
       'De servers van Omi zijn druk — je opnames worden gesynchroniseerd zodra er weer capaciteit is';
+
+  @override
+  String get unableToDetermineFirmwareVersion => 'Kan de huidige firmwareversie niet bepalen';
 }

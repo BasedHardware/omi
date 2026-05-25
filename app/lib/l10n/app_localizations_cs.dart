@@ -9392,4 +9392,7 @@ class AppLocalizationsCs extends AppLocalizations {
   @override
   String get syncCardBackendBusy =>
       'Servery Omi jsou vytížené — vaše nahrávky se synchronizují, jakmile bude k dispozici kapacita';
+
+  @override
+  String get unableToDetermineFirmwareVersion => 'Nelze určit aktuální verzi firmwaru';
 }

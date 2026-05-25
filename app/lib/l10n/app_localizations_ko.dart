@@ -9238,4 +9238,7 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get syncCardBackendBusy => 'Omi 서버가 혼잡합니다 — 용량이 확보되는 대로 녹음이 동기화됩니다';
+
+  @override
+  String get unableToDetermineFirmwareVersion => '현재 펌웨어 버전을 확인할 수 없습니다';
 }

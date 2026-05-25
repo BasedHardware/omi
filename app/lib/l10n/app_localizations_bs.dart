@@ -9417,4 +9417,7 @@ class AppLocalizationsBs extends AppLocalizations {
   @override
   String get syncCardBackendBusy =>
       'Omi serveri su zauzeti — vaši snimci će se sinhronizovati kada se oslobodi kapacitet';
+
+  @override
+  String get unableToDetermineFirmwareVersion => 'Nije moguće odrediti trenutnu verziju firmvera';
 }

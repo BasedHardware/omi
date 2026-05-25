@@ -9400,4 +9400,7 @@ class AppLocalizationsId extends AppLocalizations {
   @override
   String get syncCardBackendBusy =>
       'Server Omi sedang sibuk — rekamanmu akan disinkronkan setelah kapasitas tersedia kembali';
+
+  @override
+  String get unableToDetermineFirmwareVersion => 'Tidak dapat menentukan versi firmware saat ini';
 }

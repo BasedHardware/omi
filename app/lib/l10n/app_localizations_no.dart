@@ -9388,4 +9388,7 @@ class AppLocalizationsNo extends AppLocalizations {
   @override
   String get syncCardBackendBusy =>
       'Omis servere er travle — opptakene dine synkroniseres så snart kapasiteten er tilbake';
+
+  @override
+  String get unableToDetermineFirmwareVersion => 'Kan ikke bestemme gjeldende fastvareversjon';
 }

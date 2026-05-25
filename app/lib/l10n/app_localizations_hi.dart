@@ -9371,4 +9371,7 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get syncCardBackendBusy => 'Omi के सर्वर व्यस्त हैं — क्षमता उपलब्ध होते ही आपकी रिकॉर्डिंग सिंक हो जाएंगी';
+
+  @override
+  String get unableToDetermineFirmwareVersion => 'वर्तमान फ़र्मवेयर संस्करण निर्धारित नहीं किया जा सका';
 }

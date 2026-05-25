@@ -9388,4 +9388,7 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get syncCardBackendBusy => 'Omi serverid on hõivatud — sinu salvestised sünkroonitakse, kui maht vabaneb';
+
+  @override
+  String get unableToDetermineFirmwareVersion => 'Praeguse püsivara versiooni ei õnnestunud tuvastada';
 }

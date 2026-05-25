@@ -9321,4 +9321,7 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get syncCardBackendBusy => 'השרתים של Omi עמוסים — ההקלטות שלך יסונכרנו ברגע שתתפנה תפוסה';
+
+  @override
+  String get unableToDetermineFirmwareVersion => 'לא ניתן לקבוע את גרסת הקושחה הנוכחית';
 }

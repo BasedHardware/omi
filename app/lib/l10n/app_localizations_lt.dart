@@ -9404,4 +9404,8 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get syncCardBackendBusy => 'Omi serveriai užimti — jūsų įrašai bus sinchronizuoti, kai atsilaisvins pajėgumai';
+
+  @override
+  String get unableToDetermineFirmwareVersion =>
+      'Nepavyko nustatyti dabartinės programinės aparatinės įrangos versijos';
 }

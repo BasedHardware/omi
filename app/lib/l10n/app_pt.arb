@@ -3107,5 +3107,6 @@
     },
     "syncProcessingBackgroundHint": "Isto continua em segundo plano — pode sair deste ecrã.",
     "syncCardRateLimited": "Limite de uso atingido — a sincronização será retomada automaticamente",
-    "syncCardBackendBusy": "Os servidores da Omi estão sobrecarregados — as suas gravações serão sincronizadas assim que houver capacidade disponível"
+    "syncCardBackendBusy": "Os servidores da Omi estão sobrecarregados — as suas gravações serão sincronizadas assim que houver capacidade disponível",
+    "unableToDetermineFirmwareVersion": "Não foi possível determinar a versão atual do firmware"
 }

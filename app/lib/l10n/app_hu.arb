@@ -3167,5 +3167,6 @@
     },
     "syncProcessingBackgroundHint": "Ez a háttérben folytatódik — elhagyhatja ezt a képernyőt.",
     "syncCardRateLimited": "Elérted a méltányos használati korlátot — a szinkronizálás automatikusan folytatódik",
-    "syncCardBackendBusy": "Az Omi szerverei leterheltek — a felvételeid szinkronizálódnak, amint felszabadul a kapacitás"
+    "syncCardBackendBusy": "Az Omi szerverei leterheltek — a felvételeid szinkronizálódnak, amint felszabadul a kapacitás",
+    "unableToDetermineFirmwareVersion": "A jelenlegi firmware verziója nem határozható meg"
 }

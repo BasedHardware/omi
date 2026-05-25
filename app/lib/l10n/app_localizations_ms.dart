@@ -9415,4 +9415,7 @@ class AppLocalizationsMs extends AppLocalizations {
   @override
   String get syncCardBackendBusy =>
       'Pelayan Omi sedang sibuk — rakaman anda akan disegerakkan apabila kapasiti tersedia semula';
+
+  @override
+  String get unableToDetermineFirmwareVersion => 'Tidak dapat menentukan versi perisian tegar semasa';
 }
