@@ -138,9 +138,15 @@ final class MemoryExportDestinationSheetModel: ObservableObject {
     defer { isExecuting = false }
 
     do {
-      _ = try await MemoryExportExecutor.run(destination)
+      let outcome = try await MemoryExportExecutor.run(destination)
       mcpKey = await MemoryExportService.shared.storedMCPKey()
-      statusMessage = "Omi is setting this up — follow along in the floating bar."
+      switch outcome.mode {
+      case .autonomous:
+        statusMessage = "Omi is setting this up — follow along in the floating bar."
+      case .assisted:
+        statusMessage =
+          "Opened \(destination.title) and copied your key — finish with the steps below."
+      }
     } catch {
       errorMessage = error.localizedDescription
     }
@@ -368,6 +374,21 @@ struct MemoryExportDestinationSheet: View {
     }
   }
 
+  private var executeButtonTitle: String {
+    destination.mcpExecuteKind == .autonomous ? "Execute" : "Open & copy key"
+  }
+
+  private var executeBlockSubtitle: String {
+    switch destination.mcpExecuteKind {
+    case .autonomous:
+      return
+        "Omi sets up \(destination.title) for you automatically — it runs as an Omi task you can watch in the floating bar."
+    case .assisted:
+      return
+        "Omi opens \(destination.title) and copies your key, then you confirm the quick steps below."
+    }
+  }
+
   /// "Execute" — hands the whole setup to Omi to run as a task.
   private var executeBlock: some View {
     VStack(alignment: .leading, spacing: 8) {
@@ -385,14 +406,12 @@ struct MemoryExportDestinationSheet: View {
           .padding(.vertical, 2)
           .background(Capsule().fill(OmiColors.purplePrimary.opacity(0.15)))
       }
-      Text(
-        "Omi opens \(destination.title) and sets up the connection for you — it runs as an Omi task you can watch in the floating bar."
-      )
-      .scaledFont(size: 12)
-      .foregroundColor(OmiColors.textTertiary)
-      .fixedSize(horizontal: false, vertical: true)
+      Text(executeBlockSubtitle)
+        .scaledFont(size: 12)
+        .foregroundColor(OmiColors.textTertiary)
+        .fixedSize(horizontal: false, vertical: true)
 
-      Button(model.isExecuting ? "Starting Omi…" : "Execute") {
+      Button(model.isExecuting ? "Starting Omi…" : executeButtonTitle) {
         Task { await model.executeWithOmi(destination: destination) }
       }
       .buttonStyle(OnboardingCardButtonStyle(isPrimary: true))

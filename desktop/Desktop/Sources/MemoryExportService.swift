@@ -82,6 +82,20 @@ enum MemoryExportDestination: String, CaseIterable, Identifiable, Sendable {
     }
   }
 
+  /// How the "Execute" button performs the setup.
+  /// - `.autonomous`: Omi runs a deterministic CLI step end-to-end (config write /
+  ///   `claude mcp add`). Reliable for everyone.
+  /// - `.assisted`: Omi opens the connector page and copies the key; the user does
+  ///   the final clicks. Used for ChatGPT/Claude because fully autonomous browser
+  ///   navigation of their connector UIs isn't reliable enough to promise.
+  enum MCPExecuteKind { case autonomous, assisted }
+  var mcpExecuteKind: MCPExecuteKind {
+    switch self {
+    case .claudeCode, .codex: return .autonomous
+    case .chatgpt, .claude, .notion, .obsidian, .gemini: return .assisted
+    }
+  }
+
   /// Whether this destination offers the classic copy/paste memory-pack export.
   var supportsMemoryPack: Bool {
     switch self {
