@@ -823,6 +823,8 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
                         ? null
                         : () async {
                             if (provider.loadingExportMemories) return;
+                            // Capture l10n before async gaps
+                            final exportTitle = context.l10n.exportAllData;
                             setState(() => provider.loadingExportMemories = true);
                             ScaffoldMessenger.of(context).showSnackBar(
                               SnackBar(
@@ -834,25 +836,29 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
                             final filePath = '${directory.path}/omi-export.json';
                             final exportedPath = await exportUserDataToFile(filePath);
                             if (exportedPath == null) {
+                              // Always reset the flag so the button is re-enabled even if widget is unmounted
+                              provider.loadingExportMemories = false;
                               if (context.mounted) {
                                 ScaffoldMessenger.of(
                                   context,
                                 ).showSnackBar(const SnackBar(content: Text('Export failed. Please try again.')));
-                                setState(() => provider.loadingExportMemories = false);
+                                setState(() {});
                               }
                               return;
                             }
 
                             final result = await Share.shareXFiles(
                               [XFile(exportedPath)],
-                              subject: 'Exported Data from Omi',
-                              text: 'Exported Data from Omi',
+                              subject: exportTitle,
+                              text: exportTitle,
                             );
                             if (result.status == ShareResultStatus.success) {
                               Logger.debug('Export shared');
                             }
                             PlatformManager.instance.analytics.exportMemories();
-                            if (mounted) setState(() => provider.loadingExportMemories = false);
+                            // Always reset the flag so the button is re-enabled even if widget is unmounted
+                            provider.loadingExportMemories = false;
+                            if (mounted) setState(() {});
                           },
                     child: Container(
                       padding: const EdgeInsets.all(16),
