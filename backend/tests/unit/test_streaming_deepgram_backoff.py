@@ -238,16 +238,16 @@ async def test_retries_one_failure_raises_no_sleep():
 
 
 @pytest.mark.asyncio
-async def test_connect_uses_asyncio_to_thread():
-    """connect_to_deepgram is offloaded via asyncio.to_thread to avoid blocking the event loop."""
+async def test_connect_uses_run_blocking():
+    """connect_to_deepgram is offloaded via run_blocking to avoid blocking the event loop."""
     mock_conn = MagicMock()
 
-    async def fake_to_thread(func, *args):
-        return func(*args)
+    async def fake_run_blocking(_executor, func, *args, **kwargs):
+        return func(*args, **kwargs)
 
     with patch('utils.stt.streaming.connect_to_deepgram', return_value=mock_conn) as mock_connect, patch(
-        'utils.stt.streaming.asyncio.to_thread', side_effect=fake_to_thread
-    ) as mock_to_thread:
+        'utils.stt.streaming.run_blocking', side_effect=fake_run_blocking
+    ) as mock_run_blocking:
         result = await connect_to_deepgram_with_backoff(
             on_message=MagicMock(),
             on_error=MagicMock(),
@@ -257,10 +257,9 @@ async def test_connect_uses_asyncio_to_thread():
             model='nova-3',
         )
     assert result is mock_conn
-    mock_to_thread.assert_called_once()
-    # Verify connect_to_deepgram was passed as the first arg to to_thread
-    call_args = mock_to_thread.call_args
-    assert call_args[0][0] is mock_connect
+    mock_run_blocking.assert_called_once()
+    call_args = mock_run_blocking.call_args
+    assert call_args[0][1] is mock_connect
 
 
 @pytest.mark.asyncio

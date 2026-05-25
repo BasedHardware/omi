@@ -63,6 +63,12 @@ final class FloatingBarUsageLimiter: ObservableObject {
     }
 
     var isLimitReached: Bool {
+        // BYOK users pay their own LLM bill and are never limited. Honor local
+        // BYOK state so a heartbeat-lagged server quota (allowed=false right
+        // after activation) can't block chat for a fully-configured BYOK user.
+        if APIKeyService.isByokActive {
+            return false
+        }
         guard let quota = serverQuota else {
             // No server data yet — allow the query (server will enforce).
             return false

@@ -2,6 +2,93 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.11.421",
+      "date": "2026-05-24",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.420",
+      "date": "2026-05-22",
+      "changes": [
+        "Fixed BYOK chat on the free plan: the desktop now forwards your provider keys to chat requests, so chat no longer hits the trial paywall and runs on your own keys"
+      ]
+    },
+    {
+      "version": "0.11.419",
+      "date": "2026-05-21",
+      "changes": [
+        "Fixed \"Failed to load plan information\" on the Plan & Usage page when the backend response was missing usage fields"
+      ]
+    },
+    {
+      "version": "0.11.417",
+      "date": "2026-05-21",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.416",
+      "date": "2026-05-21",
+      "changes": [
+        "Reduced Sentry error noise: filter transient network/socket errors and rate-limit repeated identical errors so a single root cause no longer floods crash reporting",
+        "Fixed a database constraint crash when recording video-based screenshots with no legacy image path",
+        "Raised app-hang reporting threshold to 3s so only sustained freezes are flagged"
+      ]
+    },
+    {
+      "version": "0.11.415",
+      "date": "2026-05-21",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.414",
+      "date": "2026-05-21",
+      "changes": [
+        "Fixed memories created on desktop showing up under \"Manual\" on mobile \u2014 they now appear under \"About You\" or \"Insights\" based on their type",
+        "Screen Capture and Microphone menu bar toggles now show as off when your trial has expired or you hit your usage limit, and tapping them brings up the upgrade prompt"
+      ]
+    },
+    {
+      "version": "0.11.412",
+      "date": "2026-05-20",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.411",
+      "date": "2026-05-18",
+      "changes": [
+        "Fixed BYOK keys not being used for Gemini and Anthropic requests \u2014 users who bring their own API keys now bypass server keys and rate limits for all AI features"
+      ]
+    },
+    {
+      "version": "0.11.409",
+      "date": "2026-05-18",
+      "changes": [
+        "Fixed BYOK keys not being used for Gemini and Anthropic requests \u2014 users who bring their own API keys now bypass server keys and rate limits for all AI features"
+      ]
+    },
+    {
+      "version": "0.11.408",
+      "date": "2026-05-17",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.407",
+      "date": "2026-05-16",
+      "changes": [
+        "Fixed BYOK users hitting \"trial_expired\" / monthly-limit popup even with all 4 keys configured \u2014 request-level BYOK headers now bypass the trial paywall regardless of Firestore heartbeat state, and the listen WebSocket extracts BYOK headers before the paywall check"
+      ]
+    },
+    {
       "version": "0.11.406",
       "date": "2026-05-15",
       "changes": [

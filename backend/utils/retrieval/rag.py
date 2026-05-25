@@ -12,7 +12,7 @@ from utils.conversations.render import conversations_to_string
 from models.transcript_segment import TranscriptSegment
 from utils.llm.chat import chunk_extraction, retrieve_memory_context_params
 from utils.llm.clients import num_tokens_from_string
-from utils.executors import critical_executor
+from utils.executors import db_executor
 import logging
 
 logger = logging.getLogger(__name__)
@@ -33,7 +33,7 @@ def retrieve_memories_for_topics(uid: str, topics: List[str], dates_range: List)
     memories_id = defaultdict(list)
     top_k = 10 if len(topics) == 1 else 5
     futures = [
-        critical_executor.submit(retrieve_for_topic, uid, topic, start_timestamp, end_timestamp, top_k, memories_id)
+        db_executor.submit(retrieve_for_topic, uid, topic, start_timestamp, end_timestamp, top_k, memories_id)
         for topic in topics
     ]
     for f in futures:
@@ -42,7 +42,7 @@ def retrieve_memories_for_topics(uid: str, topics: List[str], dates_range: List)
     # FIXME, fix the source of the issue, not this patch
     if not memories_id and len(dates_range) == 2:
         futures = [
-            critical_executor.submit(retrieve_for_topic, uid, topic, None, None, top_k, memories_id) for topic in topics
+            db_executor.submit(retrieve_for_topic, uid, topic, None, None, top_k, memories_id) for topic in topics
         ]
         for f in futures:
             f.result()
@@ -99,7 +99,7 @@ def retrieve_rag_conversation_context(uid: str, memory: Conversation) -> Tuple[s
         # TODO: restore sorting here
         context_data = {}
         futures = [
-            critical_executor.submit(
+            db_executor.submit(
                 get_better_conversation_chunk, m, memories_id_to_topics.get(m.id, []), context_data, people, user_name
             )
             for m in memories

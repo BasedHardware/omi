@@ -8,8 +8,16 @@ enum DesktopAutomationLaunchOptions {
   static let defaultPort: UInt16 = 47777
 
   static var isEnabled: Bool {
-    CommandLine.arguments.contains(enableFlag)
+    // Explicit opt-out always wins, so a dev build can be run "clean" if needed.
+    if ProcessInfo.processInfo.environment["OMI_DISABLE_LOCAL_AUTOMATION"] == "1" {
+      return false
+    }
+    // Auto-enable on any non-production bundle (Omi Dev + every `omi-*` named test
+    // bundle) so agents can drive the app without remembering a launch flag. The
+    // listener only binds to 127.0.0.1 and is never enabled on the production bundle.
+    return CommandLine.arguments.contains(enableFlag)
       || ProcessInfo.processInfo.environment["OMI_ENABLE_LOCAL_AUTOMATION"] == "1"
+      || AppBuild.isNonProduction
   }
 
   static var port: UInt16 {

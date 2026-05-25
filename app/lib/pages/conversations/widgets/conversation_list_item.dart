@@ -291,9 +291,8 @@ class _ConversationListItemState extends State<ConversationListItem> {
                         },
                         onDismissed: (direction) async {
                           var conversation = widget.conversation;
-                          var conversationIdx = widget.conversationIdx;
                           PlatformManager.instance.analytics.conversationSwipedToDelete(conversation);
-                          provider.deleteConversationLocally(conversation, conversationIdx, widget.date);
+                          provider.deleteConversationLocally(conversation, widget.date);
                         },
                         child: Padding(
                           padding: PlatformService.isMobile

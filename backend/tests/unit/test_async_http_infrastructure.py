@@ -386,9 +386,9 @@ class TestExecutorConfiguration:
         """critical_executor documented as 8 workers for latency-sensitive work."""
         assert critical_executor._max_workers == 8
 
-    def test_storage_executor_has_16_workers(self):
-        """storage_executor sized for 16 workers to handle concurrent private cloud uploads."""
-        assert storage_executor._max_workers == 16
+    def test_storage_executor_has_96_workers(self):
+        """storage_executor sized for 96 workers to handle concurrent private cloud uploads (#7376)."""
+        assert storage_executor._max_workers == 96
 
 
 class TestNotificationWebhookWiring:
@@ -405,9 +405,10 @@ class TestNotificationWebhookWiring:
         with open(os.path.join(backend_dir, 'utils', 'other', 'notifications.py')) as f:
             src = f.read()
 
-        # Verify the exact wiring pattern
-        assert 'storage_executor.submit(asyncio.run, day_summary_webhook(' in src
+        # Verify the exact wiring pattern (postprocess_executor, not storage_executor, #7387)
+        assert 'postprocess_executor.submit(asyncio.run, day_summary_webhook(' in src
         assert 'critical_executor' not in src
+        assert 'storage_executor' not in src
 
 
 class TestPrivateCloudQueueCap:

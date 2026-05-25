@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from typing import List, Optional
 from pathlib import Path
 
-from utils.executors import critical_executor
+from utils.executors import critical_executor, db_executor, llm_executor, storage_executor, run_blocking
 
 from fastapi import (
     APIRouter,
@@ -253,7 +253,7 @@ def send_message(
 
     # Check for goal progress (background) — rate-limited to one call per user per 5 min
     if try_acquire_goal_extraction_lock(uid):
-        critical_executor.submit(extract_and_update_goal_progress, uid, data.text)
+        llm_executor.submit(extract_and_update_goal_progress, uid, data.text)
 
     app = get_available_app_by_id(compat_app_id, uid)
     app = App(**app) if app else None
@@ -469,7 +469,7 @@ def get_messages(
 
 
 @router.post("/v2/voice-messages")
-async def create_voice_message_stream(
+def create_voice_message_stream(
     files: List[UploadFile] = File(...),
     language: Optional[str] = Form(None),
     uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "voice:message")),
@@ -595,12 +595,15 @@ async def transcribe_voice_message(
     other_file_paths = []
 
     # Process all files in a single loop
+    def _save_wav(path, file_obj):
+        with open(path, "wb") as buffer:
+            shutil.copyfileobj(file_obj, buffer)
+
     for file in upload_files:
         if file.filename.lower().endswith('.wav'):
             # For WAV files, save directly to a temporary path
             temp_path = f"/tmp/{uid}_{uuid.uuid4()}.wav"
-            with open(temp_path, "wb") as buffer:
-                shutil.copyfileobj(file.file, buffer)
+            await run_blocking(storage_executor, _save_wav, temp_path, file.file)
             wav_paths.append(temp_path)
         else:
             # For other files, collect paths for later conversion
@@ -748,7 +751,9 @@ async def transcribe_voice_message_stream(
     # Inline rate limiting for WebSocket (can't use Depends(with_rate_limit))
     try:
         max_requests, window = get_effective_limit('voice:transcribe_stream')
-        allowed, remaining, retry_after = check_rate_limit(uid, 'voice:transcribe_stream', max_requests, window)
+        allowed, remaining, retry_after = await run_blocking(
+            critical_executor, check_rate_limit, uid, 'voice:transcribe_stream', max_requests, window
+        )
         if not allowed:
             if not RATE_LIMIT_SHADOW:
                 await websocket.close(code=1008, reason=f'Rate limit exceeded. Retry in {retry_after}s.')

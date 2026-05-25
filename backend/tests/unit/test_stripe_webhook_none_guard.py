@@ -148,7 +148,7 @@ def test_customer_subscription_logs_none_subscription():
     """customer.subscription.* handler must log when _build_subscription_from_stripe_object returns None."""
     source = _read_source()
     handler_start = source.index("'customer.subscription.updated'")
-    handler_section = source[handler_start : handler_start + 2500]
+    handler_section = source[handler_start : handler_start + 4000]
 
     # Must log unknown price ID when subscription build fails
     assert (

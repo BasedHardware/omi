@@ -964,11 +964,6 @@ class AppLocalizationsDa extends AppLocalizations {
   }
 
   @override
-  String memoriesUsedThisMonth(String used, String limit) {
-    return '$used af $limit minder oprettet denne måned';
-  }
-
-  @override
   String get visibility => 'Synlighed';
 
   @override
@@ -4615,41 +4610,13 @@ class AppLocalizationsDa extends AppLocalizations {
       'Tak fordi du er en værdsat bruger af Omi. Hvis du har spørgsmål eller bekymringer, er du velkommen til at kontakte os på team@basedhardware.com.';
 
   @override
-  String get wifiSyncSettings => 'WiFi-synkroniseringsindstillinger';
-
-  @override
-  String get enterHotspotCredentials => 'Indtast din telefons hotspot-legitimationsoplysninger';
-
-  @override
-  String get wifiSyncUsesHotspot =>
-      'WiFi-synkronisering bruger din telefon som hotspot. Find dit hotspot-navn og adgangskode i Indstillinger > Personligt hotspot.';
-
-  @override
-  String get hotspotNameSsid => 'Hotspot-navn (SSID)';
-
-  @override
-  String get exampleIphoneHotspot => 'f.eks. iPhone Hotspot';
-
-  @override
   String get password => 'Adgangskode';
-
-  @override
-  String get enterHotspotPassword => 'Indtast hotspot-adgangskode';
 
   @override
   String get saveCredentials => 'Gem legitimationsoplysninger';
 
   @override
   String get clearCredentials => 'Ryd legitimationsoplysninger';
-
-  @override
-  String get pleaseEnterHotspotName => 'Indtast venligst et hotspot-navn';
-
-  @override
-  String get wifiCredentialsSaved => 'WiFi-legitimationsoplysninger gemt';
-
-  @override
-  String get wifiCredentialsCleared => 'WiFi-legitimationsoplysninger ryddet';
 
   @override
   String summaryGeneratedForDate(String date) {
@@ -5793,9 +5760,6 @@ class AppLocalizationsDa extends AppLocalizations {
   String get limitless => 'Ubegrænset';
 
   @override
-  String get fastTransfer => 'Hurtig overførsel';
-
-  @override
   String get syncingStatus => 'Synkroniserer';
 
   @override
@@ -5805,15 +5769,6 @@ class AppLocalizationsDa extends AppLocalizations {
   String etaLabel(String time) {
     return 'Estimeret tid';
   }
-
-  @override
-  String get transferMethod => 'Overførselsmetode';
-
-  @override
-  String get fast => 'Hurtig';
-
-  @override
-  String get ble => 'BLE';
 
   @override
   String get phone => 'Telefon';
@@ -5834,25 +5789,7 @@ class AppLocalizationsDa extends AppLocalizations {
   String get processedFilesDeleted => 'Behandlede filer slettet';
 
   @override
-  String get wifiEnableFailed => 'Kunne ikke aktivere WiFi på enheden. Prøv venligst igen.';
-
-  @override
-  String get deviceNoFastTransfer => 'Enheden understøtter ikke hurtig overførsel';
-
-  @override
-  String get enableHotspotMessage => 'Aktivér venligst hotspot på din telefon for at fortsætte';
-
-  @override
-  String get transferStartFailed => 'Kunne ikke starte overførsel. Prøv venligst igen.';
-
-  @override
   String get deviceNotResponding => 'Enheden reagerer ikke. Prøv venligst igen.';
-
-  @override
-  String get invalidWifiCredentials => 'Ugyldige WiFi-legitimationsoplysninger';
-
-  @override
-  String get wifiConnectionFailed => 'WiFi-forbindelse mislykkedes';
 
   @override
   String get sdCardProcessing => 'SD-kort behandles';
@@ -5864,9 +5801,6 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get process => 'Behandl';
-
-  @override
-  String get wifiSyncFailed => 'WiFi-synkronisering mislykkedes';
 
   @override
   String get processingFailed => 'Behandling mislykkedes';
@@ -6644,24 +6578,13 @@ class AppLocalizationsDa extends AppLocalizations {
   }
 
   @override
-  String get wifiSync => 'WiFi-synkronisering';
-
-  @override
   String itemCopiedToClipboard(String item) {
     return '$item kopieret til udklipsholder';
   }
 
   @override
-  String get wifiConnectionFailedTitle => 'WiFi-forbindelse mislykkedes';
-
-  @override
   String connectingToDeviceName(String deviceName) {
     return 'Forbinder til $deviceName';
-  }
-
-  @override
-  String enableDeviceWifi(String deviceName) {
-    return 'Aktivér WiFi på enheden';
   }
 
   @override
@@ -6756,9 +6679,6 @@ class AppLocalizationsDa extends AppLocalizations {
   String get statusUnprocessed => 'Ubehandlet';
 
   @override
-  String get switchedToFastTransfer => 'Skiftet til hurtig overførsel';
-
-  @override
   String get transferCompleteMessage => 'Overførsel fuldført! Du kan nu afspille denne optagelse.';
 
   @override
@@ -6770,33 +6690,7 @@ class AppLocalizationsDa extends AppLocalizations {
   String get transferCancelled => 'Overførsel annulleret';
 
   @override
-  String get fastTransferEnabled => 'Hurtig overførsel aktiveret';
-
-  @override
   String get bluetoothSyncEnabled => 'Bluetooth-synkronisering aktiveret';
-
-  @override
-  String get enableFastTransfer => 'Aktiver hurtig overførsel';
-
-  @override
-  String get fastTransferDescription =>
-      'Hurtig overførsel bruger WiFi for ~5x hurtigere hastigheder. Din telefon vil midlertidigt forbinde til din Omi-enheds WiFi-netværk under overførsel.';
-
-  @override
-  String get internetAccessPausedDuringTransfer => 'Internetadgang er sat på pause under overførsel';
-
-  @override
-  String get chooseTransferMethodDescription => 'Vælg hvordan optagelser overføres fra din Omi-enhed til din telefon.';
-
-  @override
-  String get wifiSpeed => 'WiFi-hastighed';
-
-  @override
-  String get fiveTimesFaster => '5X HURTIGERE';
-
-  @override
-  String get fastTransferMethodDescription =>
-      'Opretter en direkte WiFi-forbindelse til din Omi-enhed. Din telefon afbrydes midlertidigt fra dit normale WiFi under overførsel.';
 
   @override
   String get bluetooth => 'Bluetooth';
@@ -6818,7 +6712,9 @@ class AppLocalizationsDa extends AppLocalizations {
   String get lowBatteryAlertTitle => 'Advarsel om lavt batteri';
 
   @override
-  String get lowBatteryAlertBody => 'Din enheds batteri er lavt. Det er tid til at genoplade! 🔋';
+  String lowBatteryAlertBody(int level) {
+    return 'Dit batteri er på $level%. Tid til at lade op! 🔋';
+  }
 
   @override
   String get batteryFullyChargedTitle => 'Omi er fuldt opladet';
@@ -7494,13 +7390,6 @@ class AppLocalizationsDa extends AppLocalizations {
   String get voiceFailedToTranscribe => 'Kunne ikke transskribere lyd';
 
   @override
-  String get locationPermissionRequired => 'Placeringstilladelse påkrævet';
-
-  @override
-  String get locationPermissionContent =>
-      'Hurtig overførsel kræver placeringstilladelse for at bekræfte WiFi-forbindelse. Giv venligst placeringstilladelse for at fortsætte.';
-
-  @override
   String get pdfTranscriptExport => 'Eksport af transskription';
 
   @override
@@ -7645,12 +7534,6 @@ class AppLocalizationsDa extends AppLocalizations {
   String get dailyRecapsDescription => 'Dine daglige opsamlinger vises her, når de er genereret';
 
   @override
-  String get chooseTransferMethod => 'Vælg overførselsmetode';
-
-  @override
-  String get fastTransferSpeed => '~150 KB/s via WiFi';
-
-  @override
   String largeTimeGapDetected(String gap) {
     return 'Stort tidsgab opdaget ($gap)';
   }
@@ -7659,10 +7542,6 @@ class AppLocalizationsDa extends AppLocalizations {
   String largeTimeGapsDetected(String gaps) {
     return 'Store tidsgab opdaget ($gaps)';
   }
-
-  @override
-  String get deviceDoesNotSupportWifiSwitchingToBle =>
-      'Enheden understøtter ikke WiFi-synkronisering, skifter til Bluetooth';
 
   @override
   String get appleHealthNotAvailable => 'Apple Health er ikke tilgængelig på denne enhed';
@@ -8427,7 +8306,7 @@ class AppLocalizationsDa extends AppLocalizations {
   String get manageStorage => 'Administrer lager';
 
   @override
-  String get safelyBackedUp => 'Sikkert sikkerhedskopieret til din telefon';
+  String get safelyBackedUp => 'Samtaler oprettet';
 
   @override
   String get notYetSynced => 'Endnu ikke synkroniseret med din telefon';
@@ -9232,6 +9111,280 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get bulkDeleteFailed => 'Opgaverne kunne ikke slettes. Prøv igen.';
+
+  @override
+  String get deleteRecap => 'Slet opsummering';
+
+  @override
+  String get deleteRecapConfirmTitle => 'Slet denne opsummering?';
+
+  @override
+  String get deleteRecapConfirmBody =>
+      'Opsummeringen fjernes permanent. De oprindelige samtaler fra den dag påvirkes ikke.';
+
+  @override
+  String get deleteRecapAction => 'Slet';
+
+  @override
+  String get recapDeletedSnackbar => 'Opsummering slettet';
+
+  @override
+  String get recapDeleteFailed => 'Kunne ikke slette opsummeringen. Prøv igen senere.';
+
+  @override
+  String get syncStatusBackedUp => 'Sikkerhedskopieret';
+
+  @override
+  String get syncStatusBackingUp => 'Synkroniserer…';
+
+  @override
+  String get syncStatusWaiting => 'Venter på synkronisering';
+
+  @override
+  String get syncStatusRetrying => 'Kunne ikke behandles — prøver igen';
+
+  @override
+  String get syncStatusFailed => 'Mislykkedes — tryk på Prøv igen';
+
+  @override
+  String get syncStatusFileUnavailable => 'Filen er utilgængelig';
+
+  @override
+  String get noRecordingsYet => 'Ingen optagelser endnu';
+
+  @override
+  String get syncInProgress => 'Synkronisering i gang';
+
+  @override
+  String get syncStatusUploaded => 'Uploadet · behandles på Omi';
+
+  @override
+  String get deleteWhileProcessingTitle => 'Behandles stadig';
+
+  @override
+  String get deleteWhileProcessingMessage =>
+      'Denne optagelse er uploadet, men Omi opretter stadig samtalen. Hvis du sletter den nu, og behandlingen mislykkes, kan den ikke gendannes. Slet alligevel?';
+
+  @override
+  String get syncCardAllBackedUp => 'Alle optagelser synkroniseret';
+
+  @override
+  String syncCardReadyCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count optagelser klar til synkronisering',
+      one: '1 optagelse klar til synkronisering',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get syncCardProcessing => 'Behandler i Omi…';
+
+  @override
+  String get syncCardWaitingInternet => 'Venter på internet';
+
+  @override
+  String syncCardNeedsAttention(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count optagelser kræver opmærksomhed',
+      one: '1 optagelse kræver opmærksomhed',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get syncFlowIntro =>
+      'Optagelser overføres fra din enhed til denne telefon og gemmes lokalt og uploades derefter til Omis server, hvor de transskriberes og bliver til samtaler.';
+
+  @override
+  String get syncStepUpload => 'Synkroniser';
+
+  @override
+  String get syncStepUploadDesc => 'Din optagelse sendes til Omis server';
+
+  @override
+  String get syncStepProcess => 'Transskriber';
+
+  @override
+  String get syncStepProcessDesc => 'Omi gør lyden til en samtale';
+
+  @override
+  String get syncStepBackedUp => 'Samtalen er klar';
+
+  @override
+  String get syncStepBackedUpDesc => 'Find den under Samtaler';
+
+  @override
+  String get syncFailureFootnote =>
+      'Hvis behandlingen mislykkes, prøves optagelsen automatisk igen ved næste synkronisering.';
+
+  @override
+  String get syncStatusConversationCreated => 'Samtale oprettet';
+
+  @override
+  String get syncCardUploadingTitle => 'Uploader til Omi';
+
+  @override
+  String get syncCardDownloadingTitle => 'Downloader fra din enhed';
+
+  @override
+  String syncCardProgressOf(int current, int total) {
+    return '$current af $total';
+  }
+
+  @override
+  String get syncStatusOnDevice => 'På din enhed';
+
+  @override
+  String get syncStatusDownloadingFromDevice => 'Downloader fra din enhed';
+
+  @override
+  String get newestFirst => 'Nyeste først';
+
+  @override
+  String get noSyncedRecordingsYet => 'Ingen synkroniserede optagelser endnu';
+
+  @override
+  String get morePaymentMethodsComingSoon => 'Flere betalingsmetoder kommer snart';
+
+  @override
+  String get syncProcessingBackgroundHint => 'Det fortsætter i baggrunden — du kan forlade denne skærm.';
+
+  @override
+  String get syncCardRateLimited => 'Grænsen for rimelig brug er nået — synkroniseringen genoptages automatisk';
+
+  @override
+  String get syncCardBackendBusy => 'Omis servere er travle — dine optagelser synkroniseres, når der igen er kapacitet';
+
+  @override
+  String get unableToDetermineFirmwareVersion => 'Kan ikke fastslå den aktuelle firmware-version';
+
+  @override
+  String memoriesUsedThisMonth(String used, String limit) {
+    return '$used of $limit memories created this month';
+  }
+
+  @override
+  String get wifiSyncSettings => 'WiFi Sync Settings';
+
+  @override
+  String get enterHotspotCredentials => 'Enter your phone\'s hotspot credentials';
+
+  @override
+  String get wifiSyncUsesHotspot =>
+      'WiFi sync uses your phone as a hotspot. Find your hotspot name and password in Settings > Personal Hotspot.';
+
+  @override
+  String get hotspotNameSsid => 'Hotspot Name (SSID)';
+
+  @override
+  String get exampleIphoneHotspot => 'e.g. iPhone Hotspot';
+
+  @override
+  String get enterHotspotPassword => 'Enter hotspot password';
+
+  @override
+  String get pleaseEnterHotspotName => 'Please enter a hotspot name';
+
+  @override
+  String get wifiCredentialsSaved => 'WiFi credentials saved';
+
+  @override
+  String get wifiCredentialsCleared => 'WiFi credentials cleared';
+
+  @override
+  String get fastTransfer => 'Fast Transfer';
+
+  @override
+  String get transferMethod => 'Transfer Method';
+
+  @override
+  String get fast => 'Fast';
+
+  @override
+  String get ble => 'BLE';
+
+  @override
+  String get wifiEnableFailed => 'Failed to enable WiFi on device. Please try again.';
+
+  @override
+  String get deviceNoFastTransfer => 'Your device does not support Fast Transfer. Use Bluetooth instead.';
+
+  @override
+  String get enableHotspotMessage => 'Please enable your phone\'s hotspot and try again.';
+
+  @override
+  String get transferStartFailed => 'Failed to start transfer. Please try again.';
+
+  @override
+  String get invalidWifiCredentials => 'Invalid WiFi credentials. Check your hotspot settings.';
+
+  @override
+  String get wifiConnectionFailed => 'WiFi connection failed. Please try again.';
+
+  @override
+  String get wifiSyncFailed => 'WiFi Sync Failed';
+
+  @override
+  String get wifiSync => 'WiFi Sync';
+
+  @override
+  String get wifiConnectionFailedTitle => 'Connection Failed';
+
+  @override
+  String enableDeviceWifi(String deviceName) {
+    return 'Enable $deviceName\'s WiFi';
+  }
+
+  @override
+  String get switchedToFastTransfer => 'Switched to Fast Transfer';
+
+  @override
+  String get fastTransferEnabled => 'Fast Transfer enabled';
+
+  @override
+  String get enableFastTransfer => 'Enable Fast Transfer';
+
+  @override
+  String get fastTransferDescription =>
+      'Fast Transfer uses WiFi for ~5x faster speeds. Your phone will temporarily connect to your Omi device\'s WiFi network during transfer.';
+
+  @override
+  String get internetAccessPausedDuringTransfer => 'Internet access is paused during transfer';
+
+  @override
+  String get chooseTransferMethodDescription =>
+      'Choose how recordings are transferred from your Omi device to your phone.';
+
+  @override
+  String get wifiSpeed => '~150 KB/s via WiFi';
+
+  @override
+  String get fiveTimesFaster => '5X FASTER';
+
+  @override
+  String get fastTransferMethodDescription =>
+      'Creates a direct WiFi connection to your Omi device. Your phone temporarily disconnects from your regular WiFi during transfer.';
+
+  @override
+  String get locationPermissionRequired => 'Location Permission Required';
+
+  @override
+  String get locationPermissionContent =>
+      'Fast Transfer requires location permission to verify WiFi connection. Please grant location permission to continue.';
+
+  @override
+  String get chooseTransferMethod => 'Choose Transfer Method';
+
+  @override
+  String get fastTransferSpeed => '~150 KB/s via WiFi';
+
+  @override
+  String get deviceDoesNotSupportWifiSwitchingToBle => 'Device does not support WiFi sync, switching to Bluetooth';
 
   @override
   String get restorePurchasesAction => 'Gendan køb';

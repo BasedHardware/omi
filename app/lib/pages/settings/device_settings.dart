@@ -41,9 +41,6 @@ class _DeviceSettingsState extends State<DeviceSettings> {
   bool _isMicGainLoaded = false;
   bool? _hasMicGainFeature;
 
-  // WiFi sync state
-  bool _isWifiSupported = false;
-
   Timer? _debounce;
   Timer? _micGainDebounce;
 
@@ -131,13 +128,6 @@ class _DeviceSettingsState extends State<DeviceSettings> {
               _isMicGainLoaded = true; // Loaded, but no value, use default
             });
           }
-        }
-
-        final wifiSupported = await connection.isWifiSyncSupported();
-        if (mounted) {
-          setState(() {
-            _isWifiSupported = wifiSupported;
-          });
         }
       }
     }
@@ -335,16 +325,6 @@ class _DeviceSettingsState extends State<DeviceSettings> {
             copyValue: manufacturer,
             showChevron: false,
           ),
-          // WiFi Sync
-          if (_isWifiSupported) ...[
-            const Divider(height: 1, color: Color(0xFF3C3C43)),
-            _buildProfileStyleItem(
-              icon: FontAwesomeIcons.wifi,
-              title: context.l10n.wifiSync,
-              chipValue: context.l10n.available,
-              showChevron: false,
-            ),
-          ],
         ],
       ),
     );

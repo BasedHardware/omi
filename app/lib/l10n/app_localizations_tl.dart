@@ -967,11 +967,6 @@ class AppLocalizationsTl extends AppLocalizations {
   }
 
   @override
-  String memoriesUsedThisMonth(String used, String limit) {
-    return '$used ng $limit alaala na nabuo sa buwan na ito';
-  }
-
-  @override
   String get visibility => 'Visibility';
 
   @override
@@ -1649,7 +1644,7 @@ class AppLocalizationsTl extends AppLocalizations {
   String get finalTouches => 'Huling touchup';
 
   @override
-  String get processing => 'Nagpoproseso...';
+  String get processing => 'Pinoproseso';
 
   @override
   String get features => 'Mga Features';
@@ -4669,41 +4664,13 @@ class AppLocalizationsTl extends AppLocalizations {
       'Salamat sa pagiging valued user ng Omi. Kung mayroon kang anumang mga katanungan o alalahanin, huwag mag-atubiling makipag-ugnayan sa amin sa team@basedhardware.com.';
 
   @override
-  String get wifiSyncSettings => 'WiFi Sync Settings';
-
-  @override
-  String get enterHotspotCredentials => 'Ipasok ang iyong phone hotspot credentials';
-
-  @override
-  String get wifiSyncUsesHotspot =>
-      'Ang WiFi sync ay gumagamit ng iyong phone bilang hotspot. Hanapin ang iyong hotspot name at password sa Settings > Personal Hotspot.';
-
-  @override
-  String get hotspotNameSsid => 'Hotspot Name (SSID)';
-
-  @override
-  String get exampleIphoneHotspot => 'halimbawa iPhone Hotspot';
-
-  @override
   String get password => 'Password';
-
-  @override
-  String get enterHotspotPassword => 'Ipasok ang hotspot password';
 
   @override
   String get saveCredentials => 'I-save ang Credentials';
 
   @override
   String get clearCredentials => 'I-clear ang Credentials';
-
-  @override
-  String get pleaseEnterHotspotName => 'Mangyaring ipasok ang isang hotspot name';
-
-  @override
-  String get wifiCredentialsSaved => 'WiFi credentials na na-save';
-
-  @override
-  String get wifiCredentialsCleared => 'WiFi credentials na na-clear';
 
   @override
   String summaryGeneratedForDate(String date) {
@@ -5859,9 +5826,6 @@ class AppLocalizationsTl extends AppLocalizations {
   String get limitless => 'Limitless';
 
   @override
-  String get fastTransfer => 'Fast Transfer';
-
-  @override
   String get syncingStatus => 'Sine-sync';
 
   @override
@@ -5871,15 +5835,6 @@ class AppLocalizationsTl extends AppLocalizations {
   String etaLabel(String time) {
     return 'ETA: $time';
   }
-
-  @override
-  String get transferMethod => 'Transfer Method';
-
-  @override
-  String get fast => 'Mabilis';
-
-  @override
-  String get ble => 'BLE';
 
   @override
   String get phone => 'Telepono';
@@ -5900,26 +5855,7 @@ class AppLocalizationsTl extends AppLocalizations {
   String get processedFilesDeleted => 'Naprosesong mga file ay natanggal';
 
   @override
-  String get wifiEnableFailed => 'Nabigo ang pagpapagana ng WiFi sa device. Subukan ulit.';
-
-  @override
-  String get deviceNoFastTransfer =>
-      'Ang iyong device ay hindi sumusuporta sa Fast Transfer. Gumamit ng Bluetooth sa halip.';
-
-  @override
-  String get enableHotspotMessage => 'Pakipagana ang hotspot ng iyong telepono at subukan ulit.';
-
-  @override
-  String get transferStartFailed => 'Nabigo ang pagsisimula ng transfer. Subukan ulit.';
-
-  @override
   String get deviceNotResponding => 'Ang device ay hindi tumugon. Subukan ulit.';
-
-  @override
-  String get invalidWifiCredentials => 'Invalid na WiFi credentials. Suriin ang iyong hotspot settings.';
-
-  @override
-  String get wifiConnectionFailed => 'Nabigo ang WiFi connection. Subukan ulit.';
 
   @override
   String get sdCardProcessing => 'SD Card Processing';
@@ -5931,9 +5867,6 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get process => 'Proseso';
-
-  @override
-  String get wifiSyncFailed => 'Nabigo ang WiFi Sync';
 
   @override
   String get processingFailed => 'Nabigo ang Pagpoproseso';
@@ -6717,24 +6650,13 @@ class AppLocalizationsTl extends AppLocalizations {
   }
 
   @override
-  String get wifiSync => 'WiFi Sync';
-
-  @override
   String itemCopiedToClipboard(String item) {
     return '$item ay kinopya sa clipboard';
   }
 
   @override
-  String get wifiConnectionFailedTitle => 'Connection Failed';
-
-  @override
   String connectingToDeviceName(String deviceName) {
     return 'Kumokonekta sa $deviceName';
-  }
-
-  @override
-  String enableDeviceWifi(String deviceName) {
-    return 'Paganahin ang $deviceName\'s WiFi';
   }
 
   @override
@@ -6831,9 +6753,6 @@ class AppLocalizationsTl extends AppLocalizations {
   String get statusUnprocessed => 'Hindi Naproseso';
 
   @override
-  String get switchedToFastTransfer => 'Lumipat sa Fast Transfer';
-
-  @override
   String get transferCompleteMessage => 'Tapos na ang paglipat! Maaari mo na ngayong i-play ang recording na ito.';
 
   @override
@@ -6845,34 +6764,7 @@ class AppLocalizationsTl extends AppLocalizations {
   String get transferCancelled => 'Kinansela ang paglipat';
 
   @override
-  String get fastTransferEnabled => 'Fast Transfer ay naka-enable';
-
-  @override
   String get bluetoothSyncEnabled => 'Bluetooth sync ay naka-enable';
-
-  @override
-  String get enableFastTransfer => 'I-enable ang Fast Transfer';
-
-  @override
-  String get fastTransferDescription =>
-      'Gumagamit ang Fast Transfer ng WiFi para sa humigit-kumulang na 5x na mas mabilis na bilis. Ang iyong telepono ay pansamantalang magkonekta sa WiFi network ng iyong Omi device sa panahon ng paglipat.';
-
-  @override
-  String get internetAccessPausedDuringTransfer => 'Ang internet access ay napigil sa panahon ng paglipat';
-
-  @override
-  String get chooseTransferMethodDescription =>
-      'Pumili kung paano ang mga recording ay ilipat mula sa iyong Omi device patungo sa iyong telepono.';
-
-  @override
-  String get wifiSpeed => '~150 KB/s sa pamamagitan ng WiFi';
-
-  @override
-  String get fiveTimesFaster => '5X MAS MABILIS';
-
-  @override
-  String get fastTransferMethodDescription =>
-      'Lumilikha ng direktang WiFi connection sa iyong Omi device. Ang iyong telepono ay pansamantalang nadadiskonekta mula sa iyong regular na WiFi sa panahon ng paglipat.';
 
   @override
   String get bluetooth => 'Bluetooth';
@@ -6894,7 +6786,9 @@ class AppLocalizationsTl extends AppLocalizations {
   String get lowBatteryAlertTitle => 'Low Battery Alert';
 
   @override
-  String get lowBatteryAlertBody => 'Ang iyong device ay mababa na sa baterya. Panahon na para mag-recharge! 🔋';
+  String lowBatteryAlertBody(int level) {
+    return 'Ang iyong baterya ay nasa $level%. Panahon na para mag-recharge! 🔋';
+  }
 
   @override
   String get batteryFullyChargedTitle => 'Naka-charge na ang Omi';
@@ -7582,13 +7476,6 @@ class AppLocalizationsTl extends AppLocalizations {
   String get voiceFailedToTranscribe => 'Nabigo ang pag-transcribe ng audio';
 
   @override
-  String get locationPermissionRequired => 'Ang Location Permission ay Kinakailangan';
-
-  @override
-  String get locationPermissionContent =>
-      'Ang Fast Transfer ay nangangailangan ng location permission upang ma-verify ang WiFi connection. Mangyaring bigyan ng location permission upang magpatuloy.';
-
-  @override
   String get pdfTranscriptExport => 'Transcript Export';
 
   @override
@@ -7733,12 +7620,6 @@ class AppLocalizationsTl extends AppLocalizations {
   String get dailyRecapsDescription => 'Ang iyong daily recaps ay lilitaw dito kapag na-generate na';
 
   @override
-  String get chooseTransferMethod => 'Pumili ng Transfer Method';
-
-  @override
-  String get fastTransferSpeed => '~150 KB/s sa pamamagitan ng WiFi';
-
-  @override
   String largeTimeGapDetected(String gap) {
     return 'Malaking time gap na natuklasan ($gap)';
   }
@@ -7747,10 +7628,6 @@ class AppLocalizationsTl extends AppLocalizations {
   String largeTimeGapsDetected(String gaps) {
     return 'Malaking time gaps na natuklasan ($gaps)';
   }
-
-  @override
-  String get deviceDoesNotSupportWifiSwitchingToBle =>
-      'Ang device ay hindi sumusuporta sa WiFi sync, lumipat sa Bluetooth';
 
   @override
   String get appleHealthNotAvailable => 'Ang Apple Health ay hindi available sa device na ito';
@@ -8521,7 +8398,7 @@ class AppLocalizationsTl extends AppLocalizations {
   String get manageStorage => 'Pamahalaan ang Storage';
 
   @override
-  String get safelyBackedUp => 'Safely backed up sa iyong phone';
+  String get safelyBackedUp => 'Mga conversation na nalikha';
 
   @override
   String get notYetSynced => 'Hindi pa nag-sync sa iyong phone';
@@ -9331,6 +9208,282 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get bulkDeleteFailed => 'Hindi matanggal ang mga gawain. Pakisubukang muli.';
+
+  @override
+  String get deleteRecap => 'Burahin ang recap';
+
+  @override
+  String get deleteRecapConfirmTitle => 'Burahin ang recap na ito?';
+
+  @override
+  String get deleteRecapConfirmBody =>
+      'Permanenteng aalisin ang recap na ito. Hindi maaapektuhan ang mga orihinal na pag-uusap mula sa araw na iyon.';
+
+  @override
+  String get deleteRecapAction => 'Burahin';
+
+  @override
+  String get recapDeletedSnackbar => 'Burado na ang recap';
+
+  @override
+  String get recapDeleteFailed => 'Hindi maburahin ang recap. Subukan ulit mamaya.';
+
+  @override
+  String get syncStatusBackedUp => 'Na-back up na';
+
+  @override
+  String get syncStatusBackingUp => 'Sine-sync…';
+
+  @override
+  String get syncStatusWaiting => 'Naghihintay na mag-sync';
+
+  @override
+  String get syncStatusRetrying => 'Hindi naproseso — sinusubukang muli';
+
+  @override
+  String get syncStatusFailed => 'Nabigo — i-tap ang Subukan Muli';
+
+  @override
+  String get syncStatusFileUnavailable => 'Hindi available ang file';
+
+  @override
+  String get noRecordingsYet => 'Wala pang mga recording';
+
+  @override
+  String get syncInProgress => 'Kasalukuyang nagsi-sync';
+
+  @override
+  String get syncStatusUploaded => 'Na-upload · pinoproseso sa Omi';
+
+  @override
+  String get deleteWhileProcessingTitle => 'Pinoproseso pa rin';
+
+  @override
+  String get deleteWhileProcessingMessage =>
+      'Na-upload na ang recording na ito ngunit ginagawa pa ng Omi ang usapan. Kung buburahin mo ito ngayon at mabigo ang pagproseso, hindi na ito mababawi. Burahin pa rin?';
+
+  @override
+  String get syncCardAllBackedUp => 'Lahat ng recording ay na-sync na';
+
+  @override
+  String syncCardReadyCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count na recording ang handa nang i-sync',
+      one: '1 recording ang handa nang i-sync',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get syncCardProcessing => 'Pinoproseso sa Omi…';
+
+  @override
+  String get syncCardWaitingInternet => 'Naghihintay ng internet';
+
+  @override
+  String syncCardNeedsAttention(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count recording ang kailangang asikasuhin',
+      one: '1 recording ang kailangang asikasuhin',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get syncFlowIntro =>
+      'Ang mga recording ay inililipat mula sa iyong device patungo sa telepono na ito at iniimbak nang lokal, pagkatapos ay ina-upload sa server ng Omi kung saan tina-transcribe ang mga ito at ginagawang mga pag-uusap.';
+
+  @override
+  String get syncStepUpload => 'I-sync';
+
+  @override
+  String get syncStepUploadDesc => 'Ipinapadala ang iyong recording sa server ng Omi';
+
+  @override
+  String get syncStepProcess => 'I-transcribe';
+
+  @override
+  String get syncStepProcessDesc => 'Ginagawang conversation ng Omi ang audio';
+
+  @override
+  String get syncStepBackedUp => 'Handa na ang conversation';
+
+  @override
+  String get syncStepBackedUpDesc => 'Hanapin sa ilalim ng Mga Conversation';
+
+  @override
+  String get syncFailureFootnote =>
+      'Kung mabigo ang pagproseso, awtomatikong susubukan muli ang recording sa susunod na sync.';
+
+  @override
+  String get syncStatusConversationCreated => 'Nagawa ang usapan';
+
+  @override
+  String get syncCardUploadingTitle => 'Ina-upload sa Omi';
+
+  @override
+  String get syncCardDownloadingTitle => 'Dina-download mula sa iyong device';
+
+  @override
+  String syncCardProgressOf(int current, int total) {
+    return '$current ng $total';
+  }
+
+  @override
+  String get syncStatusOnDevice => 'Nasa iyong device';
+
+  @override
+  String get syncStatusDownloadingFromDevice => 'Dina-download mula sa iyong device';
+
+  @override
+  String get newestFirst => 'Pinakabago muna';
+
+  @override
+  String get noSyncedRecordingsYet => 'Wala pang naka-sync na recording';
+
+  @override
+  String get morePaymentMethodsComingSoon => 'Mas maraming paraan ng pagbabayad na malapit nang dumating';
+
+  @override
+  String get syncProcessingBackgroundHint => 'Magpapatuloy ito sa background — puwede mong iwan ang screen na ito.';
+
+  @override
+  String get syncCardRateLimited =>
+      'Naabot na ang limitasyon ng patas na paggamit — awtomatikong magpapatuloy ang pag-sync';
+
+  @override
+  String get syncCardBackendBusy =>
+      'Abala ang mga server ng Omi — masi-sync ang iyong mga recording kapag may bakanteng kapasidad na muli';
+
+  @override
+  String get unableToDetermineFirmwareVersion => 'Hindi matukoy ang kasalukuyang bersyon ng firmware';
+
+  @override
+  String memoriesUsedThisMonth(String used, String limit) {
+    return '$used of $limit memories created this month';
+  }
+
+  @override
+  String get wifiSyncSettings => 'WiFi Sync Settings';
+
+  @override
+  String get enterHotspotCredentials => 'Enter your phone\'s hotspot credentials';
+
+  @override
+  String get wifiSyncUsesHotspot =>
+      'WiFi sync uses your phone as a hotspot. Find your hotspot name and password in Settings > Personal Hotspot.';
+
+  @override
+  String get hotspotNameSsid => 'Hotspot Name (SSID)';
+
+  @override
+  String get exampleIphoneHotspot => 'e.g. iPhone Hotspot';
+
+  @override
+  String get enterHotspotPassword => 'Enter hotspot password';
+
+  @override
+  String get pleaseEnterHotspotName => 'Please enter a hotspot name';
+
+  @override
+  String get wifiCredentialsSaved => 'WiFi credentials saved';
+
+  @override
+  String get wifiCredentialsCleared => 'WiFi credentials cleared';
+
+  @override
+  String get fastTransfer => 'Fast Transfer';
+
+  @override
+  String get transferMethod => 'Transfer Method';
+
+  @override
+  String get fast => 'Fast';
+
+  @override
+  String get ble => 'BLE';
+
+  @override
+  String get wifiEnableFailed => 'Failed to enable WiFi on device. Please try again.';
+
+  @override
+  String get deviceNoFastTransfer => 'Your device does not support Fast Transfer. Use Bluetooth instead.';
+
+  @override
+  String get enableHotspotMessage => 'Please enable your phone\'s hotspot and try again.';
+
+  @override
+  String get transferStartFailed => 'Failed to start transfer. Please try again.';
+
+  @override
+  String get invalidWifiCredentials => 'Invalid WiFi credentials. Check your hotspot settings.';
+
+  @override
+  String get wifiConnectionFailed => 'WiFi connection failed. Please try again.';
+
+  @override
+  String get wifiSyncFailed => 'WiFi Sync Failed';
+
+  @override
+  String get wifiSync => 'WiFi Sync';
+
+  @override
+  String get wifiConnectionFailedTitle => 'Connection Failed';
+
+  @override
+  String enableDeviceWifi(String deviceName) {
+    return 'Enable $deviceName\'s WiFi';
+  }
+
+  @override
+  String get switchedToFastTransfer => 'Switched to Fast Transfer';
+
+  @override
+  String get fastTransferEnabled => 'Fast Transfer enabled';
+
+  @override
+  String get enableFastTransfer => 'Enable Fast Transfer';
+
+  @override
+  String get fastTransferDescription =>
+      'Fast Transfer uses WiFi for ~5x faster speeds. Your phone will temporarily connect to your Omi device\'s WiFi network during transfer.';
+
+  @override
+  String get internetAccessPausedDuringTransfer => 'Internet access is paused during transfer';
+
+  @override
+  String get chooseTransferMethodDescription =>
+      'Choose how recordings are transferred from your Omi device to your phone.';
+
+  @override
+  String get wifiSpeed => '~150 KB/s via WiFi';
+
+  @override
+  String get fiveTimesFaster => '5X FASTER';
+
+  @override
+  String get fastTransferMethodDescription =>
+      'Creates a direct WiFi connection to your Omi device. Your phone temporarily disconnects from your regular WiFi during transfer.';
+
+  @override
+  String get locationPermissionRequired => 'Location Permission Required';
+
+  @override
+  String get locationPermissionContent =>
+      'Fast Transfer requires location permission to verify WiFi connection. Please grant location permission to continue.';
+
+  @override
+  String get chooseTransferMethod => 'Choose Transfer Method';
+
+  @override
+  String get fastTransferSpeed => '~150 KB/s via WiFi';
+
+  @override
+  String get deviceDoesNotSupportWifiSwitchingToBle => 'Device does not support WiFi sync, switching to Bluetooth';
 
   @override
   String get restorePurchasesAction => 'I-restore ang mga Pagbili';

@@ -58,7 +58,6 @@ class PlanLimits(BaseModel):
     transcription_seconds: Optional[int] = None
     words_transcribed: Optional[int] = None
     insights_gained: Optional[int] = None
-    memories_created: Optional[int] = None
     # Chat caps. Exactly one of these is set per plan: `free` and `unlimited`
     # (displayed as "Plus") cap by question count; `architect` caps by cost_usd.
     chat_questions_per_month: Optional[int] = None
@@ -152,8 +151,6 @@ class UserSubscriptionResponse(BaseModel):
     words_transcribed_limit: int
     insights_gained_used: int
     insights_gained_limit: int
-    memories_created_used: int
-    memories_created_limit: int
     available_plans: List[SubscriptionPlan] = []
     show_subscription_ui: bool = True
     # Whether the Superwall mobile paywall is active for this user. Computed

@@ -43,9 +43,6 @@ final class UpdaterDelegate: NSObject, SPUUpdaterDelegate {
   /// Called when Sparkle is about to check for updates (permission gate)
   func updater(_ updater: SPUUpdater, mayPerform check: SPUUpdateCheck) throws {
     logSync("Sparkle: Starting update check")
-    Task { @MainActor in
-      AnalyticsManager.shared.updateCheckStarted()
-    }
   }
 
   /// Called when Sparkle finishes loading the appcast
@@ -85,7 +82,6 @@ final class UpdaterDelegate: NSObject, SPUUpdaterDelegate {
   func updaterDidNotFindUpdate(_ updater: SPUUpdater) {
     logSync("Sparkle: No update available")
     Task { @MainActor in
-      AnalyticsManager.shared.updateNotFound()
       self.viewModel?.updateAvailable = false
     }
   }
@@ -111,29 +107,6 @@ final class UpdaterDelegate: NSObject, SPUUpdaterDelegate {
       }
       for (key, value) in nsError.userInfo where key != NSUnderlyingErrorKey {
         logSync("Sparkle: Error info [\(key)] = \(value)")
-      }
-      // Build diagnostic properties for analytics
-      let errorDomain = nsError.domain
-      let errorCode = nsError.code
-      var underlyingMessage: String? = nil
-      var underlyingDomain: String? = nil
-      var underlyingCode: Int? = nil
-
-      if let underlying = nsError.userInfo[NSUnderlyingErrorKey] as? NSError {
-        underlyingMessage = underlying.localizedDescription
-        underlyingDomain = underlying.domain
-        underlyingCode = underlying.code
-      }
-
-      Task { @MainActor in
-        AnalyticsManager.shared.updateCheckFailed(
-          error: message,
-          errorDomain: errorDomain,
-          errorCode: errorCode,
-          underlyingError: underlyingMessage,
-          underlyingDomain: underlyingDomain,
-          underlyingCode: underlyingCode
-        )
       }
 
       // SUInstallationError (4005): Sparkle's installer failed to launch.

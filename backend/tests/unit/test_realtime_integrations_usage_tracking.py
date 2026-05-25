@@ -26,7 +26,7 @@ def _stub_module(name: str) -> types.ModuleType:
 
 # Stub database package and submodules
 database_mod = _stub_module("database")
-database_mod.__path__ = []
+database_mod.__path__ = [os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', 'database'))]
 for submodule in [
     "redis_db",
     "memories",
@@ -60,16 +60,20 @@ vector_db_mod.query_vectors_by_metadata = MagicMock(return_value=[])
 
 apps_mod = sys.modules["database.apps"]
 apps_mod.record_app_usage = MagicMock()
+apps_mod.get_app_by_id_db = MagicMock(return_value=None)
 
 llm_usage_mod = sys.modules["database.llm_usage"]
 llm_usage_mod.record_llm_usage = MagicMock()
 
 client_mod = sys.modules["database._client"]
 client_mod.document_id_from_seed = MagicMock(return_value="doc-id")
+client_mod.db = MagicMock()
 
 redis_mod = sys.modules["database.redis_db"]
 redis_mod.get_generic_cache = MagicMock(return_value=None)
 redis_mod.set_generic_cache = MagicMock()
+redis_mod.delete_app_cache_by_id = MagicMock()
+redis_mod.r = MagicMock()
 redis_mod.get_proactive_noti_sent_at = MagicMock(return_value=None)
 redis_mod.set_proactive_noti_sent_at = MagicMock()
 redis_mod.incr_daily_notification_count = MagicMock()

@@ -30,6 +30,27 @@ class AuthTokenUnavailableException implements Exception {
   String toString() => 'AuthTokenUnavailableException: $message';
 }
 
+// Normal-mode connectivity failures on mobile (no network, DNS failure,
+// connection reset, TLS handshake during reconnect, request timeout). Reporting
+// these to Crashlytics drowns out real signal — caller logs them locally and
+// either returns null or rethrows for the upstream sync state machine.
+bool _isTransientNetworkError(Object e) {
+  if (e is SocketException) return true;
+  if (e is HandshakeException) return true;
+  if (e is TimeoutException) return true;
+  if (e is http.ClientException) {
+    final m = e.message;
+    return m.contains('SocketException') ||
+        m.contains('HandshakeException') ||
+        m.contains('TimeoutException') ||
+        m.contains('Connection closed') ||
+        m.contains('Connection reset') ||
+        m.contains('Failed host lookup') ||
+        m.contains('Network is unreachable');
+  }
+  return false;
+}
+
 Future<String> getAuthHeader() async {
   DateTime? expiry = DateTime.fromMillisecondsSinceEpoch(SharedPreferencesUtil().tokenExpirationTime);
   bool hasAuthToken = SharedPreferencesUtil().authToken.isNotEmpty;
@@ -169,7 +190,9 @@ Future<http.Response?> makeApiCall({
     return response;
   } catch (e, stackTrace) {
     Logger.debug('HTTP request failed: $e, $stackTrace');
-    PlatformManager.instance.crashReporter.reportCrash(e, stackTrace, userAttributes: {'url': url, 'method': method});
+    if (!_isTransientNetworkError(e)) {
+      PlatformManager.instance.crashReporter.reportCrash(e, stackTrace, userAttributes: {'url': url, 'method': method});
+    }
     return null;
   }
 }
@@ -309,7 +332,9 @@ Future<http.Response> makeMultipartApiCall({
     return response;
   } catch (e, stackTrace) {
     Logger.debug('Multipart HTTP request failed: $e, $stackTrace');
-    PlatformManager.instance.crashReporter.reportCrash(e, stackTrace, userAttributes: {'url': url, 'method': method});
+    if (!_isTransientNetworkError(e)) {
+      PlatformManager.instance.crashReporter.reportCrash(e, stackTrace, userAttributes: {'url': url, 'method': method});
+    }
     rethrow;
   }
 }
@@ -382,7 +407,9 @@ Future<http.Response> makeMultipartApiCallUnpooled({
     return response;
   } catch (e, stackTrace) {
     Logger.debug('Unpooled multipart HTTP request failed: $e, $stackTrace');
-    PlatformManager.instance.crashReporter.reportCrash(e, stackTrace, userAttributes: {'url': url, 'method': method});
+    if (!_isTransientNetworkError(e)) {
+      PlatformManager.instance.crashReporter.reportCrash(e, stackTrace, userAttributes: {'url': url, 'method': method});
+    }
     rethrow;
   } finally {
     client.close();
@@ -445,7 +472,9 @@ Stream<String> makeStreamingApiCall({
     }
   } catch (e, stackTrace) {
     Logger.error('Streaming request error: $e');
-    PlatformManager.instance.crashReporter.reportCrash(e, stackTrace, userAttributes: {'url': url, 'method': method});
+    if (!_isTransientNetworkError(e)) {
+      PlatformManager.instance.crashReporter.reportCrash(e, stackTrace, userAttributes: {'url': url, 'method': method});
+    }
   }
 }
 
@@ -537,7 +566,9 @@ Stream<String> makeMultipartStreamingApiCall({
     }
   } catch (e, stackTrace) {
     Logger.error('Multipart streaming request error: $e');
-    PlatformManager.instance.crashReporter.reportCrash(e, stackTrace, userAttributes: {'url': url, 'method': 'POST'});
+    if (!_isTransientNetworkError(e)) {
+      PlatformManager.instance.crashReporter.reportCrash(e, stackTrace, userAttributes: {'url': url, 'method': 'POST'});
+    }
   }
 }
 

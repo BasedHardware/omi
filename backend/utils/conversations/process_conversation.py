@@ -50,7 +50,7 @@ from models.task import Task, TaskStatus, TaskAction, TaskActionProvider
 from models.trend import Trend
 from models.notification_message import NotificationMessage
 from utils.apps import get_available_apps, update_personas_async, update_persona_prompt
-from utils.executors import critical_executor, postprocess_executor, submit_with_context
+from utils.executors import db_executor, llm_executor, postprocess_executor, submit_with_context
 from utils.llm.conversation_processing import (
     get_transcript_structure,
     get_app_result,
@@ -405,7 +405,7 @@ def _trigger_apps(
         if not is_reprocess:
             record_app_usage(uid, app.id, UsageHistoryType.memory_created_prompt, conversation_id=conversation.id)
 
-    futures = [submit_with_context(critical_executor, execute_app, app) for app in filtered_apps]
+    futures = [submit_with_context(llm_executor, execute_app, app) for app in filtered_apps]
     for future in futures:
         try:
             future.result()
@@ -617,7 +617,7 @@ def _save_action_items(uid: str, conversation: Conversation):
         def _run_auto_sync():
             asyncio.run(auto_sync_action_items_batch(uid, created_items))
 
-        submit_with_context(critical_executor, _run_auto_sync)
+        submit_with_context(db_executor, _run_auto_sync)
 
         upsert_action_item_vectors_batch(
             uid,

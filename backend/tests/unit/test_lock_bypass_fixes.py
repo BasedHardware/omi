@@ -657,8 +657,7 @@ class TestUsersLockEnforcement:
         assert len(conversations_passed) == 1
         assert conversations_passed[0].id == 'conv-2'
 
-    @pytest.mark.asyncio
-    async def test_gdpr_export_includes_locked(self):
+    def test_gdpr_export_includes_locked(self):
         """H6: GDPR export must include locked conversations (Art. 15)."""
         import database.conversations as conversations_db
         import database.memories as memories_db
@@ -679,13 +678,20 @@ class TestUsersLockEnforcement:
                 with patch('routers.users.get_standalone_action_items', return_value=[], create=True):
                     from routers.users import export_all_user_data
 
-                    response = await export_all_user_data(uid='test-uid')
+                    response = export_all_user_data(uid='test-uid')
 
-                    # Consume body inside patches — generate() is a lazy generator
-                    body_parts = []
-                    async for chunk in response.body_iterator:
-                        body_parts.append(chunk)
-                    body = ''.join(body_parts)
+                    # Consume body inside patches — generate() is a lazy generator.
+                    # StreamingResponse wraps sync generators as async iterators,
+                    # so iterate the underlying generator directly.
+                    import asyncio
+
+                    async def _consume():
+                        parts = []
+                        async for chunk in response.body_iterator:
+                            parts.append(chunk)
+                        return ''.join(parts)
+
+                    body = asyncio.run(_consume())
 
         import json
 
@@ -938,8 +944,7 @@ class TestMentorProactiveLockFilter:
 class TestIntegrationSearchLockRedaction:
     """Integration search/list endpoints must redact title/overview for locked conversations."""
 
-    @pytest.mark.asyncio
-    async def test_integration_search_redacts_locked_title_overview(self):
+    def test_integration_search_redacts_locked_title_overview(self):
         """Integration search re-fetches full convos — must also blank title/overview."""
         import database.conversations as conversations_db
         import database.apps as apps_db
@@ -969,7 +974,7 @@ class TestIntegrationSearchLockRedaction:
 
                     from routers.integration import search_conversations_via_integration
 
-                    result = await search_conversations_via_integration(
+                    result = search_conversations_via_integration(
                         request=MagicMock(),
                         app_id='app-1',
                         uid='test-uid',
@@ -1137,8 +1142,7 @@ class TestPersonaGenerationLockFilter:
 class TestIntegrationListLockRedaction:
     """get_conversations_via_integration must redact locked conversation content."""
 
-    @pytest.mark.asyncio
-    async def test_integration_list_redacts_locked_title_overview(self):
+    def test_integration_list_redacts_locked_title_overview(self):
         """Integration list must blank title/overview/action_items/events/transcript for locked."""
         import copy
         import database.conversations as conversations_db
@@ -1162,7 +1166,7 @@ class TestIntegrationListLockRedaction:
 
                 from routers.integration import get_conversations_via_integration
 
-                result = await get_conversations_via_integration(
+                result = get_conversations_via_integration(
                     request=MagicMock(),
                     app_id='app-1',
                     uid='test-uid',

@@ -328,7 +328,7 @@ actor InsightAssistant: ProactiveAssistant {
             let response = try await APIClient.shared.createMemory(
                 content: insight.insight,
                 visibility: "private",
-                category: .system,
+                category: .interesting,
                 confidence: insight.confidence,
                 sourceApp: insight.sourceApp,
                 contextSummary: insightResult.contextSummary,

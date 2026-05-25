@@ -20,7 +20,7 @@ os.environ.setdefault(
 sys.modules.setdefault("database._client", MagicMock())
 
 _db_pkg = types.ModuleType("database")
-_db_pkg.__path__ = []
+_db_pkg.__path__ = [os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', 'database'))]
 sys.modules.setdefault("database", _db_pkg)
 
 for submod in [
@@ -48,6 +48,8 @@ sys.modules["database.mem_db"].get_proactive_noti_sent_at = MagicMock(return_val
 sys.modules["database.mem_db"].set_proactive_noti_sent_at = MagicMock()
 sys.modules["database.redis_db"].get_generic_cache = MagicMock(return_value=None)
 sys.modules["database.redis_db"].set_generic_cache = MagicMock()
+sys.modules["database.redis_db"].delete_app_cache_by_id = MagicMock()
+sys.modules["database.redis_db"].r = MagicMock()
 sys.modules["database.redis_db"].get_proactive_noti_sent_at = MagicMock(return_value=None)
 sys.modules["database.redis_db"].set_proactive_noti_sent_at = MagicMock()
 sys.modules["database.redis_db"].get_proactive_noti_sent_at_ttl = MagicMock(return_value=0)
@@ -55,6 +57,7 @@ sys.modules["database.redis_db"].incr_daily_notification_count = MagicMock()
 sys.modules["database.redis_db"].get_daily_notification_count = MagicMock(return_value=0)
 sys.modules["database.vector_db"].query_vectors_by_metadata = MagicMock(return_value=[])
 sys.modules["database.apps"].record_app_usage = MagicMock()
+sys.modules["database.apps"].get_app_by_id_db = MagicMock(return_value=None)
 sys.modules["database.llm_usage"].record_llm_usage = MagicMock()
 sys.modules["database.chat"].add_app_message = MagicMock(return_value={"id": "msg-1"})
 sys.modules["database.chat"].get_app_messages = MagicMock(return_value=[])

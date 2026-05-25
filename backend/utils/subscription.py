@@ -13,7 +13,7 @@ from database import redis_db
 from database.announcements import compare_versions
 from database.plan_caps_config import get_plan_limits_from_config
 from models.users import PlanType, SubscriptionStatus, Subscription, PlanLimits, TrialMetadata
-from utils.byok import get_byok_key
+from utils.byok import get_byok_key, get_byok_keys
 from utils.log_sanitizer import sanitize
 import logging
 
@@ -33,23 +33,10 @@ PAID_PLAN_TYPES = {
 # Desktop-only 3-day trial paywall.
 #
 # Applies to ALL desktop users on the basic plan once their Firebase Auth
-# account is older than `TRIAL_LENGTH_SECONDS` and they don't have BYOK
+# account is older than TRIAL_LENGTH_SECONDS and they don't have BYOK
 # active. Mobile (ios / android), Omi devices, paid plans, BYOK users,
 # and accounts inside the trial window are exempt.
-#
-# Env-var overrides:
-#   TRIAL_PAYWALL_ENABLED=false   → kill switch, disables paywall entirely
-#   TRIAL_PAYWALL_TEST_UIDS=u1,u2 → if set, restrict paywall to listed UIDs
-#                                   (everyone else exempt). Defaults to empty
-#                                   (unrestricted) so a real prod deploy
-#                                   covers all qualifying desktop users.
-TRIAL_LENGTH_SECONDS = int(os.getenv('TRIAL_LENGTH_SECONDS', str(3 * 24 * 60 * 60)))
-
-_TRIAL_PAYWALL_ENABLED = os.getenv("TRIAL_PAYWALL_ENABLED", "true").lower() != "false"
-
-_TRIAL_PAYWALL_TEST_UIDS: set[str] = {
-    u.strip() for u in os.getenv("TRIAL_PAYWALL_TEST_UIDS", "").split(",") if u.strip()
-}
+TRIAL_LENGTH_SECONDS = 3 * 24 * 60 * 60  # 3 days
 
 # Platform identifiers that count as desktop for paywall purposes. The Swift
 # client sends X-App-Platform: macos and the listen WS uses source=desktop.
@@ -59,6 +46,27 @@ _TRIAL_PAYWALL_DESKTOP_TOKENS = {"macos", "desktop"}
 # Cache the (slow) Firebase Auth + Firestore lookup result for a few minutes
 # so chat-quota polling doesn't fan out to Firebase on every request.
 _TRIAL_PAYWALL_CACHE_TTL_SECONDS = 300
+
+# Providers a fully-enrolled BYOK desktop client always sends headers for.
+# Used by the request-level escape hatch in `_is_trial_expired_cached`.
+_BYOK_REQUIRED_PROVIDERS = ("openai", "anthropic", "gemini", "deepgram")
+
+
+def _request_has_all_byok_keys() -> bool:
+    """True if the *current request* carries headers for all 4 enrolled BYOK
+    providers.
+
+    Firestore BYOK state is the source of truth for fingerprint validation,
+    but it can be temporarily stale — heartbeat just expired, activation
+    POST hasn't landed yet, cross-region read replica lag, etc. A user who is
+    literally sending all 4 valid API keys on this request should never be
+    paywalled because of a Firestore sync gap. The actual fingerprint check
+    in `utils.byok._check_byok_validity` runs separately and still rejects
+    forged headers (mismatched SHA-256 against the enrolled fingerprints) —
+    we trust the headers' *presence* here, not their *contents*.
+    """
+    keys = get_byok_keys()
+    return all(p in keys and keys[p] for p in _BYOK_REQUIRED_PROVIDERS)
 
 
 def _is_trial_expired_uncached(uid: str) -> bool:
@@ -87,6 +95,14 @@ def _is_trial_expired_uncached(uid: str) -> bool:
 
 
 def _is_trial_expired_cached(uid: str) -> bool:
+    # Request-level escape hatch: a request carrying all 4 BYOK provider
+    # headers is never paywalled, regardless of cached Firestore state. The
+    # cache TTL is 5 min and Firestore's BYOK `is_active` heartbeat is 24 h,
+    # so even a perfectly-configured BYOK user can transiently look stale to
+    # Firestore. Trust the live request.
+    if _request_has_all_byok_keys():
+        return False
+
     cache_key = f"trial_paywall:expired:{uid}"
     cached = redis_db.get_generic_cache(cache_key)
     if cached is not None:
@@ -107,11 +123,7 @@ def is_trial_paywalled(uid: str, platform: Optional[str]) -> bool:
     `source` query param for the listen WebSocket. Mobile (ios/android),
     Omi devices, and any unknown/missing platform are never paywalled.
     """
-    if not _TRIAL_PAYWALL_ENABLED:
-        return False
     if not platform or platform.lower() not in _TRIAL_PAYWALL_DESKTOP_TOKENS:
-        return False
-    if _TRIAL_PAYWALL_TEST_UIDS and uid not in _TRIAL_PAYWALL_TEST_UIDS:
         return False
     return _is_trial_expired_cached(uid)
 
@@ -135,7 +147,10 @@ def get_trial_metadata(uid: str) -> TrialMetadata:
         plan = subscription.plan if subscription else PlanType.basic
 
         # Paid-plan or BYOK users: trial is moot — they have full access.
-        if plan != PlanType.basic or users_db.is_byok_active(uid):
+        # Same request-level escape hatch as `_is_trial_expired_cached`: a request
+        # carrying all 4 BYOK provider headers is treated as BYOK-active even if
+        # Firestore hasn't caught up yet.
+        if plan != PlanType.basic or users_db.is_byok_active(uid) or _request_has_all_byok_keys():
             return TrialMetadata(
                 trial_expired=False,
                 trial_duration_seconds=TRIAL_LENGTH_SECONDS,
@@ -397,7 +412,6 @@ BASIC_TIER_MINUTES_LIMIT_PER_MONTH = int(os.getenv('BASIC_TIER_MINUTES_LIMIT_PER
 BASIC_TIER_MONTHLY_SECONDS_LIMIT = BASIC_TIER_MINUTES_LIMIT_PER_MONTH * 60
 BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH = int(os.getenv('BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH', '0'))
 BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH = int(os.getenv('BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH', '0'))
-BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH = int(os.getenv('BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH', '0'))
 
 # Chat caps per plan. Env-overridable for ops.
 FREE_CHAT_QUESTIONS_PER_MONTH = int(os.getenv('FREE_CHAT_QUESTIONS_PER_MONTH', '30'))
@@ -632,11 +646,7 @@ def get_plan_features(plan: PlanType, simplified: bool = False) -> List[str]:
             if BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH > 0
             else "Unlimited insights"
         ),
-        (
-            f"{BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH} memories per month"
-            if BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH > 0
-            else "Unlimited memories"
-        ),
+        "Unlimited memories",
     ]
 
 
@@ -761,7 +771,7 @@ def has_transcription_credits(uid: str, source: Optional[str] = None) -> bool:
     etc). The paywall test override only fires for desktop sources so that
     phone-call / Omi-device traffic for cohort UIDs is unaffected.
     """
-    # Single-user paywall test override (see _TRIAL_PAYWALL_TEST_UIDS).
+    # Desktop trial paywall: paywalled users have zero transcription credits.
     if is_trial_paywalled(uid, source):
         return False
 

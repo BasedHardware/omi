@@ -10,7 +10,7 @@ import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/services/devices.dart';
 import 'package:omi/services/devices/device_connection.dart';
 import 'package:omi/services/devices/models.dart';
-import 'package:omi/services/devices/wifi_sync_error.dart';
+import 'package:omi/services/devices/ring_protocol.dart';
 import 'package:omi/services/notifications.dart';
 import 'package:omi/utils/logger.dart';
 
@@ -359,6 +359,154 @@ class OmiDeviceConnection extends DeviceConnection {
     } catch (e) {
       Logger.debug('OmiDeviceConnection: Error sending stop command: $e');
       return false;
+    }
+  }
+
+  // --- Ring-buffer storage protocol (firmware 3.0.20+) ---
+
+  @override
+  Future<RingStatus?> performGetRingStatus() async {
+    try {
+      final value = await transport.readCharacteristic(
+        storageDataStreamServiceUuid,
+        storageReadControlCharacteristicUuid,
+      );
+      final status = RingProtocol.parseStatus(value);
+      if (status == null) {
+        Logger.debug('OmiDeviceConnection: Ring status too short (${value.length} bytes)');
+      } else {
+        Logger.debug('OmiDeviceConnection: $status');
+      }
+      return status;
+    } catch (e) {
+      Logger.debug('OmiDeviceConnection: Error reading ring status: $e');
+      return null;
+    }
+  }
+
+  @override
+  Future<RingInfo?> performGetRingInfo() async {
+    StreamSubscription? sub;
+    try {
+      final completer = Completer<RingInfo?>();
+      final stream = transport.getCharacteristicStream(
+        storageDataStreamServiceUuid,
+        storageDataStreamCharacteristicUuid,
+      );
+
+      sub = stream.listen((value) {
+        if (completer.isCompleted) return;
+        final info = RingProtocol.parseInfoNotification(value);
+        if (info == null) return;
+        Logger.debug('OmiDeviceConnection: $info');
+        completer.complete(info);
+      });
+
+      await transport.writeCharacteristic(
+        storageDataStreamServiceUuid,
+        storageDataStreamCharacteristicUuid,
+        [RingProtocol.cmdInfo],
+      );
+
+      return await completer.future.timeout(const Duration(seconds: 5), onTimeout: () {
+        Logger.debug('OmiDeviceConnection: getRingInfo timeout');
+        return null;
+      });
+    } catch (e) {
+      Logger.debug('OmiDeviceConnection: Error getting ring info: $e');
+      return null;
+    } finally {
+      await sub?.cancel();
+    }
+  }
+
+  @override
+  Future<bool> performReadRingFromSeq(int startSeq, {int? packetCount}) async {
+    try {
+      await transport.writeCharacteristic(
+        storageDataStreamServiceUuid,
+        storageDataStreamCharacteristicUuid,
+        RingProtocol.encodeReadCommand(startSeq, packetCount: packetCount),
+      );
+      Logger.debug('OmiDeviceConnection: CMD_RING_READ start_seq=$startSeq count=${packetCount ?? "all"}');
+      return true;
+    } catch (e) {
+      Logger.debug('OmiDeviceConnection: Error sending CMD_RING_READ: $e');
+      return false;
+    }
+  }
+
+  @override
+  Future<bool> performAdvanceRing(int newReadSeq) async {
+    StreamSubscription? sub;
+    try {
+      final completer = Completer<bool>();
+      final stream = transport.getCharacteristicStream(
+        storageDataStreamServiceUuid,
+        storageDataStreamCharacteristicUuid,
+      );
+
+      sub = stream.listen((value) {
+        if (completer.isCompleted) return;
+        if (value.length < 2 || value[0] != RingProtocol.notifyAck) return;
+        final status = value[1];
+        Logger.debug('OmiDeviceConnection: ADVANCE ack status=$status');
+        completer.complete(status == 0);
+      });
+
+      await transport.writeCharacteristic(
+        storageDataStreamServiceUuid,
+        storageDataStreamCharacteristicUuid,
+        RingProtocol.encodeAdvanceCommand(newReadSeq),
+      );
+      Logger.debug('OmiDeviceConnection: CMD_RING_ADVANCE seq=$newReadSeq');
+
+      return await completer.future.timeout(const Duration(seconds: 5), onTimeout: () {
+        Logger.debug('OmiDeviceConnection: advanceRing timeout');
+        return false;
+      });
+    } catch (e) {
+      Logger.debug('OmiDeviceConnection: Error advancing ring: $e');
+      return false;
+    } finally {
+      await sub?.cancel();
+    }
+  }
+
+  @override
+  Future<bool> performClearRing() async {
+    StreamSubscription? sub;
+    try {
+      final completer = Completer<bool>();
+      final stream = transport.getCharacteristicStream(
+        storageDataStreamServiceUuid,
+        storageDataStreamCharacteristicUuid,
+      );
+
+      sub = stream.listen((value) {
+        if (completer.isCompleted) return;
+        if (value.length < 2 || value[0] != RingProtocol.notifyAck) return;
+        final status = value[1];
+        Logger.debug('OmiDeviceConnection: CLEAR ack status=$status');
+        completer.complete(status == 0);
+      });
+
+      await transport.writeCharacteristic(
+        storageDataStreamServiceUuid,
+        storageDataStreamCharacteristicUuid,
+        [RingProtocol.cmdClear],
+      );
+      Logger.debug('OmiDeviceConnection: CMD_RING_CLEAR');
+
+      return await completer.future.timeout(const Duration(seconds: 5), onTimeout: () {
+        Logger.debug('OmiDeviceConnection: clearRing timeout');
+        return false;
+      });
+    } catch (e) {
+      Logger.debug('OmiDeviceConnection: Error clearing ring: $e');
+      return false;
+    } finally {
+      await sub?.cancel();
     }
   }
 
@@ -832,139 +980,18 @@ class OmiDeviceConnection extends DeviceConnection {
       Logger.debug('OmiDeviceConnection: Error getting device info: $e');
     }
 
-    // Set defaults if values are empty
+    // Set defaults if values are empty.
+    // firmwareRevision intentionally has no fallback: when the BLE read fails
+    // we leave it empty rather than lying with an arbitrary version. A stale
+    // default like '1.0.2' tricked the backend into recommending Omi_CV1_v3.0.5
+    // (the only release whose minimum_firmware_required is 1.0.0) to users
+    // whose actual firmware was 3.0.19 — see callers for the empty-check guard.
     deviceInfo['modelNumber'] ??= 'Omi Device';
-    deviceInfo['firmwareRevision'] ??= '1.0.2';
+    deviceInfo['firmwareRevision'] ??= '';
     deviceInfo['hardwareRevision'] ??= 'Seeed Xiao BLE Sense';
     deviceInfo['manufacturerName'] ??= 'Based Hardware';
     deviceInfo['hasImageStream'] ??= 'false';
 
     return deviceInfo;
-  }
-
-  @override
-  Future<bool> performIsWifiSyncSupported() async {
-    final features = await getFeatures();
-    return (features & OmiFeatures.wifi) != 0;
-  }
-
-  @override
-  Future<WifiSyncSetupResult> performSetupWifiSync(String ssid, String password) async {
-    try {
-      // Validate SSID length (1-32 characters)
-      if (ssid.isEmpty || ssid.length > 32) {
-        debugPrint('OmiDeviceConnection: Invalid SSID length: ${ssid.length}');
-        return WifiSyncSetupResult.failure(
-          WifiSyncErrorCode.ssidLengthInvalid,
-          customMessage: 'SSID must be 1-32 characters',
-        );
-      }
-
-      // Validate password length (8-63 characters for WPA2)
-      if (password.isEmpty || password.length < 8 || password.length > 63) {
-        debugPrint('OmiDeviceConnection: Invalid password length: ${password.length}');
-        return WifiSyncSetupResult.failure(
-          WifiSyncErrorCode.passwordLengthInvalid,
-          customMessage: 'Password must be 8-63 characters',
-        );
-      }
-
-      final List<int> command = [];
-
-      command.add(0x01);
-
-      // SSID
-      final ssidBytes = ssid.codeUnits;
-      command.add(ssidBytes.length);
-      command.addAll(ssidBytes);
-
-      // Password
-      final passwordBytes = password.codeUnits;
-      command.add(passwordBytes.length);
-      command.addAll(passwordBytes);
-
-      // Set up listener for the response before sending the command
-      final completer = Completer<WifiSyncSetupResult>();
-      StreamSubscription? responseSubscription;
-
-      try {
-        final stream = transport.getCharacteristicStream(storageDataStreamServiceUuid, storageWifiCharacteristicUuid);
-
-        responseSubscription = stream.listen((value) {
-          if (value.isNotEmpty && !completer.isCompleted) {
-            final responseCode = value[0];
-            final errorCode = WifiSyncErrorCode.fromCode(responseCode);
-            if (errorCode.isSuccess) {
-              completer.complete(WifiSyncSetupResult.success());
-            } else {
-              completer.complete(WifiSyncSetupResult.failure(errorCode));
-            }
-          }
-        });
-
-        await Future.delayed(const Duration(milliseconds: 100));
-
-        // Send the setup command
-        await transport.writeCharacteristic(storageDataStreamServiceUuid, storageWifiCharacteristicUuid, command);
-
-        // Wait for response with timeout
-        final result = await completer.future.timeout(
-          const Duration(seconds: 5),
-          onTimeout: () => WifiSyncSetupResult.timeout(),
-        );
-
-        return result;
-      } finally {
-        await responseSubscription?.cancel();
-      }
-    } catch (e) {
-      Logger.debug('OmiDeviceConnection: Error setting up WiFi sync: $e');
-      return WifiSyncSetupResult.connectionFailed();
-    }
-  }
-
-  @override
-  Future<bool> performStartWifiSync() async {
-    try {
-      // Send WIFI_START command (0x02)
-      await transport.writeCharacteristic(storageDataStreamServiceUuid, storageWifiCharacteristicUuid, [0x02]);
-      return true;
-    } catch (e) {
-      Logger.debug('OmiDeviceConnection: Error starting WiFi sync: $e');
-      return false;
-    }
-  }
-
-  @override
-  Future<bool> performStopWifiSync() async {
-    try {
-      // Send WIFI_SHUTDOWN command (0x03)
-      await transport.writeCharacteristic(storageDataStreamServiceUuid, storageWifiCharacteristicUuid, [0x03]);
-      return true;
-    } catch (e) {
-      Logger.debug('OmiDeviceConnection: Error stopping WiFi sync: $e');
-      return false;
-    }
-  }
-
-  @override
-  Future<StreamSubscription?> performGetWifiSyncStatusListener({
-    required void Function(int status) onStatusReceived,
-  }) async {
-    try {
-      final stream = transport.getCharacteristicStream(storageDataStreamServiceUuid, storageWifiCharacteristicUuid);
-
-      final subscription = stream.listen((value) {
-        if (value.isNotEmpty) {
-          final status = value[0];
-          onStatusReceived(status);
-        }
-      });
-
-      return subscription;
-    } catch (e) {
-      Logger.debug('OmiDeviceConnection: Error setting up WiFi status listener: $e');
-      return null;
-    }
   }
 }

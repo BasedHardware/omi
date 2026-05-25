@@ -87,3 +87,7 @@ demo/out/
 
 # Claude project instructions (user-local, contains absolute paths)
 CLAUDE.md
+
+# Captured dev auth session (omi-auth-dump.sh) — contains real tokens, never commit
+tmp/desktop-auth.json
+tmp/

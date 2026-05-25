@@ -1473,6 +1473,10 @@ class AnalyticsManager {
     track('Daily Summary Notification Opened', properties: {'summary_id': summaryId, 'date': date});
   }
 
+  void dailySummaryShared({required String summaryId, required String date}) {
+    track('Daily Summary Shared', properties: {'summary_id': summaryId, 'date': date});
+  }
+
   void dailySummaryConversationClicked({
     required String summaryId,
     required String conversationId,
@@ -1486,6 +1490,16 @@ class AnalyticsManager {
 
   void dailySummarySectionViewed({required String summaryId, required String sectionName}) {
     track('Daily Summary Section Viewed', properties: {'summary_id': summaryId, 'section_name': sectionName});
+  }
+
+  /// Recap deletion. ``source`` distinguishes the entry point so we can tell if
+  /// users prefer the swipe gesture on the list vs the menu on the detail page.
+  void dailySummaryDeleted({required String summaryId, required String date, required String source}) {
+    track('Daily Summary Deleted', properties: {'summary_id': summaryId, 'date': date, 'source': source});
+  }
+
+  void dailySummaryDeleteFailed({required String summaryId, required String date, required String source}) {
+    track('Daily Summary Delete Failed', properties: {'summary_id': summaryId, 'date': date, 'source': source});
   }
 
   // ============================================================================

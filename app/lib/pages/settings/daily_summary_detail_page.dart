@@ -1,16 +1,20 @@
 import 'package:omi/utils/platform/platform_manager.dart';
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 
 import 'package:flutter_map/flutter_map.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:latlong2/latlong.dart';
+import 'package:share_plus/share_plus.dart';
 
 import 'package:omi/backend/http/api/conversations.dart' as conversations_api;
-import 'package:omi/backend/http/api/users.dart';
+import 'package:omi/backend/http/api/users.dart' show deleteDailySummary, getDailySummary, setDailySummaryVisibility;
 import 'package:omi/backend/schema/daily_summary.dart';
 import 'package:omi/pages/conversation_detail/maps_util.dart';
 import 'package:omi/pages/conversation_detail/page.dart';
+import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:omi/utils/l10n_extensions.dart';
+import 'package:omi/utils/platform/platform_service.dart';
 
 class DailySummaryDetailPage extends StatefulWidget {
   final String summaryId;
@@ -25,6 +29,8 @@ class DailySummaryDetailPage extends StatefulWidget {
 class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with SingleTickerProviderStateMixin {
   DailySummary? _summary;
   bool _isLoading = true;
+  bool _isSharing = false;
+  bool _isDeleting = false;
   late AnimationController _animationController;
   late Animation<double> _fadeAnimation;
 
@@ -88,6 +94,24 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
     );
   }
 
+  Future<void> _shareSummary() async {
+    final summary = _summary;
+    if (summary == null || _isSharing) return;
+    setState(() => _isSharing = true);
+    try {
+      final shared = await setDailySummaryVisibility(widget.summaryId);
+      if (!shared) {
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Failed to share recap')));
+        return;
+      }
+      PlatformManager.instance.analytics.dailySummaryShared(summaryId: widget.summaryId, date: summary.date);
+      final url = 'https://h.omi.me/recaps/${widget.summaryId}';
+      await SharePlus.instance.share(ShareParams(uri: Uri.parse(url), subject: summary.headline));
+    } finally {
+      if (mounted) setState(() => _isSharing = false);
+    }
+  }
+
   Future<void> _openConversation(String? conversationId) async {
     if (conversationId == null || conversationId.isEmpty) return;
 
@@ -121,6 +145,101 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
     } catch (e) {
       if (!mounted) return;
       Navigator.pop(context); // Dismiss loading
+    }
+  }
+
+  /// Pops the page with ``{deleted: true, summaryId}`` so the caller list
+  /// can optimistically remove the card without re-fetching.
+  Future<void> _deleteRecap() async {
+    if (_isDeleting) return;
+    setState(() => _isDeleting = true);
+
+    final success = await deleteDailySummary(widget.summaryId);
+    if (!mounted) return;
+
+    final summary = _summary;
+    const analyticsSource = 'daily_summary_detail';
+    if (success) {
+      PlatformManager.instance.analytics.dailySummaryDeleted(
+        summaryId: widget.summaryId,
+        date: summary?.date ?? '',
+        source: analyticsSource,
+      );
+      AppSnackbar.showSnackbar(context.l10n.recapDeletedSnackbar);
+      Navigator.pop(context, {'deleted': true, 'summaryId': widget.summaryId});
+    } else {
+      PlatformManager.instance.analytics.dailySummaryDeleteFailed(
+        summaryId: widget.summaryId,
+        date: summary?.date ?? '',
+        source: analyticsSource,
+      );
+      setState(() => _isDeleting = false);
+      AppSnackbar.showSnackbarError(context.l10n.recapDeleteFailed);
+    }
+  }
+
+  /// Bottom sheet menu opened by the SliverAppBar's 3-dot icon. Today only
+  /// "delete" lives here — keeping the sheet pattern so future actions
+  /// (share, regenerate, etc.) plug in without restructuring.
+  Future<void> _showActionsSheet() async {
+    if (_summary == null) return;
+
+    if (PlatformService.isApple) {
+      await showCupertinoModalPopup<void>(
+        context: context,
+        builder: (sheetCtx) => CupertinoActionSheet(
+          actions: [
+            CupertinoActionSheetAction(
+              isDestructiveAction: true,
+              onPressed: () {
+                Navigator.pop(sheetCtx);
+                _confirmDelete();
+              },
+              child: Text(context.l10n.deleteRecap),
+            ),
+          ],
+          cancelButton: CupertinoActionSheetAction(
+            onPressed: () => Navigator.pop(sheetCtx),
+            child: Text(context.l10n.cancel),
+          ),
+        ),
+      );
+      return;
+    }
+
+    await showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: const Color(0xFF1A1A1F),
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (sheetCtx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.delete_outline, color: Color(0xFFFF6B6B)),
+              title: Text(
+                context.l10n.deleteRecap,
+                style: const TextStyle(color: Color(0xFFFF6B6B), fontWeight: FontWeight.w600),
+              ),
+              onTap: () {
+                Navigator.pop(sheetCtx);
+                _confirmDelete();
+              },
+            ),
+            ListTile(
+              title: Text(context.l10n.cancel, textAlign: TextAlign.center),
+              onTap: () => Navigator.pop(sheetCtx),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _confirmDelete() async {
+    final confirmed = await showDeleteRecapConfirmDialog(context);
+    if (confirmed == true) {
+      await _deleteRecap();
     }
   }
 
@@ -189,6 +308,44 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
         ),
         onPressed: () => Navigator.pop(context),
       ),
+      actions: [
+        Padding(
+          padding: const EdgeInsets.only(right: 8),
+          child: GestureDetector(
+            onTap: _isSharing ? null : _shareSummary,
+            child: Container(
+              width: 36,
+              height: 36,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(color: Colors.black.withValues(alpha: 0.3), shape: BoxShape.circle),
+              child: _isSharing
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(
+                          strokeWidth: 2, valueColor: AlwaysStoppedAnimation<Color>(Colors.white)),
+                    )
+                  : const Icon(Icons.share_outlined, color: Colors.white, size: 20),
+            ),
+          ),
+        ),
+        IconButton(
+          tooltip: context.l10n.deleteRecap,
+          icon: Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(color: Colors.black.withValues(alpha: 0.3), shape: BoxShape.circle),
+            child: _isDeleting
+                ? const SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                  )
+                : const Icon(Icons.more_horiz, color: Colors.white, size: 20),
+          ),
+          onPressed: _isDeleting ? null : _showActionsSheet,
+        ),
+        const SizedBox(width: 8),
+      ],
       flexibleSpace: FlexibleSpaceBar(
         background: Container(
           decoration: const BoxDecoration(
@@ -754,6 +911,55 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
       ),
     );
   }
+}
+
+/// Platform-aware "Delete this recap?" confirm. Returns ``true`` when the
+/// user taps the destructive action. Lifted to a free function so the list
+/// page's swipe handler can fire the same dialog without instantiating the
+/// detail page state.
+Future<bool?> showDeleteRecapConfirmDialog(BuildContext context) {
+  final l10n = context.l10n;
+  if (PlatformService.isApple) {
+    return showCupertinoDialog<bool>(
+      context: context,
+      builder: (dialogCtx) => CupertinoAlertDialog(
+        title: Text(l10n.deleteRecapConfirmTitle),
+        content: Padding(
+          padding: const EdgeInsets.only(top: 8),
+          child: Text(l10n.deleteRecapConfirmBody),
+        ),
+        actions: [
+          CupertinoDialogAction(
+            onPressed: () => Navigator.pop(dialogCtx, false),
+            child: Text(l10n.cancel),
+          ),
+          CupertinoDialogAction(
+            isDestructiveAction: true,
+            onPressed: () => Navigator.pop(dialogCtx, true),
+            child: Text(l10n.deleteRecapAction),
+          ),
+        ],
+      ),
+    );
+  }
+  return showDialog<bool>(
+    context: context,
+    builder: (dialogCtx) => AlertDialog(
+      title: Text(l10n.deleteRecapConfirmTitle),
+      content: Text(l10n.deleteRecapConfirmBody),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(dialogCtx, false),
+          child: Text(l10n.cancel),
+        ),
+        TextButton(
+          onPressed: () => Navigator.pop(dialogCtx, true),
+          style: TextButton.styleFrom(foregroundColor: const Color(0xFFFF6B6B)),
+          child: Text(l10n.deleteRecapAction),
+        ),
+      ],
+    ),
+  );
 }
 
 // Helper class for timeline locations

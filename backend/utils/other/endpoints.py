@@ -1,4 +1,3 @@
-import asyncio
 import json
 import os
 import time
@@ -14,6 +13,7 @@ import redis as redis_pkg
 from database.redis_db import check_rate_limit, try_acquire_listen_lock
 from database.users import record_user_platform
 from utils.byok import extract_byok_from_websocket, set_byok_keys, validate_byok_request, validate_byok_websocket
+from utils.executors import critical_executor, run_blocking
 from utils.rate_limit_config import RATE_POLICIES, RATE_LIMIT_SHADOW, get_effective_limit
 
 logger = logging.getLogger(__name__)
@@ -162,16 +162,16 @@ async def get_current_user_uid_ws_listen(
     control returns to the async handler, so ``get_byok_key('deepgram')``
     would return None downstream. Running the dep on the event loop keeps
     the mutation in the handler's context; the blocking Firebase and
-    Firestore calls are offloaded via ``asyncio.to_thread``.
+    Firestore calls are offloaded via ``run_blocking``.
     """
-    uid = await asyncio.to_thread(_verify_ws_auth, authorization)
+    uid = await run_blocking(critical_executor, _verify_ws_auth, authorization)
 
     # Extract BYOK headers from the WS upgrade request and validate.
     if websocket is not None:
         byok_keys = extract_byok_from_websocket(websocket)
         if byok_keys:
             set_byok_keys(byok_keys)
-        error = await asyncio.to_thread(validate_byok_websocket, uid)
+        error = await run_blocking(critical_executor, validate_byok_websocket, uid)
         if error:
             raise WebSocketException(code=4003, reason=error)
 
