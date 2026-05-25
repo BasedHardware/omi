@@ -127,6 +127,44 @@ final class MemoryExportDestinationSheetModel: ObservableObject {
     NSWorkspace.shared.open(url)
   }
 
+  @Published var isExecuting = false
+
+  /// Hand the whole setup to Omi: create a task and run it through the standard
+  /// execute flow (TasksStore.createTask + AgentPillsManager.spawn) — the same path
+  /// the floating-bar "Execute" button uses. No new execution flow.
+  func executeWithOmi(destination: MemoryExportDestination) async {
+    errorMessage = nil
+    isExecuting = true
+    defer { isExecuting = false }
+
+    let key: String
+    if let existing = mcpKey {
+      key = existing
+    } else {
+      do {
+        key = try await MemoryExportService.shared.ensureMCPKey()
+        mcpKey = key
+      } catch {
+        errorMessage = "Couldn't create an MCP key: \(error.localizedDescription)"
+        return
+      }
+    }
+
+    guard let task = destination.omiExecutionTask(key: key) else { return }
+
+    _ = await TasksStore.shared.createTask(
+      description: task.title, dueAt: Date(), priority: "high", tags: ["mcp-setup"])
+
+    let model =
+      ShortcutSettings.shared.selectedModel.isEmpty
+      ? "claude-sonnet-4-6" : ShortcutSettings.shared.selectedModel
+    let query = ProactiveTaskExecute.buildQuery(title: task.title, message: task.body)
+    _ = AgentPillsManager.shared.spawn(
+      query: query, model: model, systemPromptSuffix: ProactiveTaskExecute.systemPromptSuffix)
+
+    statusMessage = "Omi is setting this up — follow along in the floating bar."
+  }
+
   func run(destination: MemoryExportDestination) async -> MemoryExportStatus? {
     errorMessage = nil
     statusMessage = nil
@@ -315,6 +353,11 @@ struct MemoryExportDestinationSheet: View {
   private var content: some View {
     VStack(alignment: .leading, spacing: 18) {
       if destination.supportsMCP {
+        executeBlock
+        Divider()
+          .background(OmiColors.backgroundTertiary)
+          .padding(.vertical, 2)
+
         methodHeader(
           icon: "bolt.fill",
           title: "Live connection",
@@ -341,6 +384,38 @@ struct MemoryExportDestinationSheet: View {
         packSection
         packActionButton
       }
+    }
+  }
+
+  /// "Execute" — hands the whole setup to Omi to run as a task.
+  private var executeBlock: some View {
+    VStack(alignment: .leading, spacing: 8) {
+      HStack(spacing: 8) {
+        Image(systemName: "sparkles")
+          .scaledFont(size: 13, weight: .semibold)
+          .foregroundColor(OmiColors.purplePrimary)
+        Text("Let Omi do it")
+          .scaledFont(size: 15, weight: .semibold)
+          .foregroundColor(OmiColors.textPrimary)
+        Text("FASTEST")
+          .scaledFont(size: 9, weight: .bold)
+          .foregroundColor(OmiColors.purplePrimary)
+          .padding(.horizontal, 7)
+          .padding(.vertical, 2)
+          .background(Capsule().fill(OmiColors.purplePrimary.opacity(0.15)))
+      }
+      Text(
+        "Omi opens \(destination.title) and sets up the connection for you — it runs as an Omi task you can watch in the floating bar."
+      )
+      .scaledFont(size: 12)
+      .foregroundColor(OmiColors.textTertiary)
+      .fixedSize(horizontal: false, vertical: true)
+
+      Button(model.isExecuting ? "Starting Omi…" : "Execute") {
+        Task { await model.executeWithOmi(destination: destination) }
+      }
+      .buttonStyle(OnboardingCardButtonStyle(isPrimary: true))
+      .disabled(model.isExecuting)
     }
   }
 
