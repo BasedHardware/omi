@@ -838,19 +838,21 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
                                 ScaffoldMessenger.of(
                                   context,
                                 ).showSnackBar(const SnackBar(content: Text('Export failed. Please try again.')));
+                                setState(() => provider.loadingExportMemories = false);
                               }
-                              setState(() => provider.loadingExportMemories = false);
                               return;
                             }
 
-                            final result = await Share.shareXFiles([
-                              XFile(exportedPath),
-                            ], text: 'Exported Data from Omi');
+                            final result = await Share.shareXFiles(
+                              [XFile(exportedPath)],
+                              subject: 'Exported Data from Omi',
+                              text: 'Exported Data from Omi',
+                            );
                             if (result.status == ShareResultStatus.success) {
                               Logger.debug('Export shared');
                             }
                             PlatformManager.instance.analytics.exportMemories();
-                            setState(() => provider.loadingExportMemories = false);
+                            if (mounted) setState(() => provider.loadingExportMemories = false);
                           },
                     child: Container(
                       padding: const EdgeInsets.all(16),
