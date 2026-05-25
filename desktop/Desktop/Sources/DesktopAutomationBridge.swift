@@ -69,6 +69,34 @@ struct DesktopAutomationOpenConversationRequest: Codable {
   let activateApp: Bool?
 }
 
+/// Describes a semantic action exposed over `GET /actions` so an agent can discover
+/// what it can drive without inspecting the UI tree.
+struct DesktopAutomationActionDescriptor: Codable {
+  let name: String
+  let summary: String
+  /// Names of params the handler reads (hints for the caller; not enforced).
+  let params: [String]
+}
+
+/// Returned by `POST /action`: what ran, any handler detail, and the resulting state.
+struct DesktopAutomationActionResult: Codable {
+  let action: String
+  let detail: [String: String]?
+  let state: DesktopAutomationSnapshot
+}
+
+enum DesktopAutomationActionError: LocalizedError {
+  case unknownAction(String)
+  case invalidParams(String)
+
+  var errorDescription: String? {
+    switch self {
+    case .unknownAction(let name): return "unknown_action: \(name)"
+    case .invalidParams(let detail): return "invalid_params: \(detail)"
+    }
+  }
+}
+
 private struct DesktopAutomationResponse<T: Codable>: Codable {
   let ok: Bool
   let result: T?
@@ -104,6 +132,89 @@ actor DesktopAutomationStateStore {
   }
 }
 
+/// In-process registry of semantic, cursor-free actions the automation bridge can
+/// run. Handlers invoke the app's real code (notifications, services) directly, so
+/// no synthetic mouse events are ever generated — this is the deterministic
+/// "command channel" equivalent of the Flutter app's Marionette driver.
+///
+/// Built-ins are registered at bridge startup. Feature code can register more via
+/// `register(name:summary:params:handler:)` (e.g. from a view model's lifecycle) and
+/// remove them with `unregister(_:)`.
+@MainActor
+final class DesktopAutomationActionRegistry {
+  static let shared = DesktopAutomationActionRegistry()
+
+  /// Handler runs on the main actor and returns optional string detail for the caller.
+  typealias Handler = (_ params: [String: String]) async throws -> [String: String]?
+
+  private struct Entry {
+    let descriptor: DesktopAutomationActionDescriptor
+    let run: Handler
+  }
+
+  private var entries: [String: Entry] = [:]
+  private var didRegisterBuiltins = false
+
+  func register(
+    name: String, summary: String, params: [String] = [], handler: @escaping Handler
+  ) {
+    entries[name] = Entry(
+      descriptor: DesktopAutomationActionDescriptor(name: name, summary: summary, params: params),
+      run: handler)
+  }
+
+  func unregister(_ name: String) {
+    entries[name] = nil
+  }
+
+  func descriptors() -> [DesktopAutomationActionDescriptor] {
+    entries.values.map(\.descriptor).sorted { $0.name < $1.name }
+  }
+
+  func perform(_ name: String, params: [String: String]) async throws -> [String: String]? {
+    guard let entry = entries[name] else {
+      throw DesktopAutomationActionError.unknownAction(name)
+    }
+    return try await entry.run(params)
+  }
+
+  /// Register the always-available actions that don't need any view's `@State` —
+  /// they post the same notifications / hit the same services as the real controls,
+  /// so they exercise the genuine code paths. Idempotent.
+  func registerBuiltins() {
+    guard !didRegisterBuiltins else { return }
+    didRegisterBuiltins = true
+
+    register(
+      name: "refresh_all_data",
+      summary: "Refresh conversations, chat, tasks, and memories (same as Cmd+R)"
+    ) { _ in
+      NotificationCenter.default.post(name: .refreshAllData, object: nil)
+      return nil
+    }
+
+    register(
+      name: "toggle_transcription",
+      summary: "Enable or disable live transcription (mirrors the menu-bar toggle)",
+      params: ["enabled"]
+    ) { params in
+      let enabled = boolParam(params["enabled"], default: true)
+      AssistantSettings.shared.transcriptionEnabled = enabled
+      NotificationCenter.default.post(
+        name: .toggleTranscriptionRequested, object: nil, userInfo: ["enabled": enabled])
+      return ["enabled": enabled ? "true" : "false"]
+    }
+  }
+}
+
+/// Coerce a string param ("true"/"1"/"yes") into a Bool, falling back when absent.
+private func boolParam(_ raw: String?, default fallback: Bool) -> Bool {
+  guard let raw = raw?.trimmingCharacters(in: .whitespaces).lowercased(), !raw.isEmpty else {
+    return fallback
+  }
+  return ["1", "true", "yes", "on"].contains(raw)
+}
+
 final class DesktopAutomationBridge {
   static let shared = DesktopAutomationBridge()
 
@@ -132,6 +243,7 @@ final class DesktopAutomationBridge {
       }
       listener.start(queue: queue)
       self.listener = listener
+      Task { @MainActor in DesktopAutomationActionRegistry.shared.registerBuiltins() }
       log(
         "DesktopAutomationBridge: listening on http://127.0.0.1:\(DesktopAutomationLaunchOptions.port)"
       )
@@ -215,6 +327,35 @@ final class DesktopAutomationBridge {
     return HTTPRequest(method: method, path: path, body: body)
   }
 
+  /// Parse a `POST /action` body: `{ "name": "...", "params": { "k": "v", ... } }`.
+  /// Param values are coerced to strings (bools → "true"/"false", numbers → digits)
+  /// so callers can send natural JSON types.
+  private func parseActionRequest(from body: Data) -> (name: String, params: [String: String])? {
+    guard let object = try? JSONSerialization.jsonObject(with: body) as? [String: Any],
+      let name = object["name"] as? String, !name.isEmpty
+    else {
+      return nil
+    }
+
+    var params: [String: String] = [:]
+    if let raw = object["params"] as? [String: Any] {
+      for (key, value) in raw {
+        if let string = value as? String {
+          params[key] = string
+        } else if let number = value as? NSNumber {
+          if CFGetTypeID(number) == CFBooleanGetTypeID() {
+            params[key] = number.boolValue ? "true" : "false"
+          } else {
+            params[key] = number.stringValue
+          }
+        } else {
+          params[key] = String(describing: value)
+        }
+      }
+    }
+    return (name, params)
+  }
+
   private func route(request: HTTPRequest) async -> HTTPResponse {
     switch (request.method, request.path) {
     case ("GET", "/health"):
@@ -256,6 +397,32 @@ final class DesktopAutomationBridge {
             result: nil,
             error: error.localizedDescription
           ),
+          statusCode: 400
+        )
+      }
+    case ("GET", "/actions"):
+      let descriptors = await DesktopAutomationActionRegistry.shared.descriptors()
+      return jsonResponse(DesktopAutomationResponse(ok: true, result: descriptors, error: nil))
+    case ("POST", "/action"):
+      guard let parsed = parseActionRequest(from: request.body) else {
+        return jsonResponse(
+          DesktopAutomationResponse<DesktopAutomationActionResult>(
+            ok: false, result: nil, error: "invalid_action_request"),
+          statusCode: 400
+        )
+      }
+      do {
+        let detail = try await DesktopAutomationActionRegistry.shared.perform(
+          parsed.name, params: parsed.params)
+        try await Task.sleep(for: .milliseconds(150))
+        let snapshot = await DesktopAutomationStateStore.shared.current()
+        let result = DesktopAutomationActionResult(
+          action: parsed.name, detail: detail, state: snapshot)
+        return jsonResponse(DesktopAutomationResponse(ok: true, result: result, error: nil))
+      } catch {
+        return jsonResponse(
+          DesktopAutomationResponse<DesktopAutomationActionResult>(
+            ok: false, result: nil, error: error.localizedDescription),
           statusCode: 400
         )
       }

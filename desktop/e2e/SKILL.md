@@ -32,6 +32,21 @@ The app runs a local HTTP control bridge (`DesktopAutomationBridge.swift`) that 
 ```
 Disable with `OMI_DISABLE_LOCAL_AUTOMATION=1` to run a dev build "clean". Running several named bundles at once? Give each its own `OMI_AUTOMATION_PORT` (default 47777).
 
+### 2b. Run semantic actions (cursor-free, in-process)
+Beyond navigation, the bridge exposes named **actions** that invoke the app's real
+code paths directly — no synthetic mouse events, so they never grab the cursor (the
+deterministic equivalent of the Flutter app's Marionette driver). Prefer these over
+`agent-swift click`/coordinate clicking for anything they cover.
+```bash
+./scripts/omi-ctl actions                          # discover available actions + params
+./scripts/omi-ctl action refresh_all_data          # same as Cmd+R
+./scripts/omi-ctl action toggle_transcription enabled=false
+```
+Add new actions in `DesktopAutomationActionRegistry` (`registerBuiltins()` for global
+ones, or `register(name:summary:params:handler:)` from a view model for screen-scoped
+ones). `GET /actions` lists them; `POST /action {name, params}` runs one and returns
+the resulting state snapshot.
+
 ### The full loop
 ```bash
 cd desktop
