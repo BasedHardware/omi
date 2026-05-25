@@ -1,10 +1,11 @@
 import html
 from typing import Any
+from urllib.parse import quote
 
 import httpx
-from fastapi import FastAPI, Query
+from fastapi import FastAPI
 
-from models import ChatToolResponse
+from models import AuthorWorksInput, ChatToolResponse, GetWorkInput, SearchWorksInput
 
 CROSSREF_BASE = "https://api.crossref.org"
 TIMEOUT = 20.0
@@ -24,6 +25,14 @@ def clean(text: Any) -> str:
     if text is None:
         return ""
     return html.unescape(str(text)).strip()
+
+
+def extract_year(item: dict[str, Any]) -> str:
+    for key in ("published-print", "published-online", "issued"):
+        date_parts = (item.get(key) or {}).get("date-parts", [])
+        if date_parts and date_parts[0]:
+            return clean(date_parts[0][0])
+    return ""
 
 
 async def crossref_get(path: str, params: dict[str, Any]) -> dict[str, Any]:
@@ -80,50 +89,115 @@ async def tools():
     }
 
 
+@app.get("/.well-known/omi-tools.json")
+async def get_omi_tools_manifest():
+    return {
+        "tools": [
+            {
+                "name": "search_crossref_works",
+                "description": "Search scholarly works by keyword via Crossref",
+                "endpoint": "/tools/search_crossref_works",
+                "method": "POST",
+                "parameters": {
+                    "properties": {
+                        "query": {"type": "string", "description": "Search keyword(s)"},
+                        "max_results": {
+                            "type": "integer",
+                            "description": "Number of results (1-10)",
+                            "default": 5,
+                        },
+                    },
+                    "required": ["query"],
+                },
+                "auth_required": False,
+                "status_message": "Searching Crossref...",
+            },
+            {
+                "name": "get_crossref_work",
+                "description": "Get details for a specific work by DOI",
+                "endpoint": "/tools/get_crossref_work",
+                "method": "POST",
+                "parameters": {
+                    "properties": {
+                        "doi": {
+                            "type": "string",
+                            "description": "DOI, e.g. 10.1038/nphys1170",
+                        }
+                    },
+                    "required": ["doi"],
+                },
+                "auth_required": False,
+                "status_message": "Fetching Crossref work...",
+            },
+            {
+                "name": "get_crossref_works_by_author",
+                "description": "Find recent works for an author name",
+                "endpoint": "/tools/get_crossref_works_by_author",
+                "method": "POST",
+                "parameters": {
+                    "properties": {
+                        "author": {"type": "string", "description": "Author name"},
+                        "max_results": {
+                            "type": "integer",
+                            "description": "Number of results (1-10)",
+                            "default": 5,
+                        },
+                    },
+                    "required": ["author"],
+                },
+                "auth_required": False,
+                "status_message": "Fetching author works...",
+            },
+        ]
+    }
+
+
 @app.post("/tools/search_crossref_works", response_model=ChatToolResponse)
-async def search_crossref_works(
-    query: str = Query(..., min_length=2),
-    max_results: int = Query(5, ge=1, le=10),
-):
-    limited = clamp_max_results(max_results)
+async def search_crossref_works(payload: SearchWorksInput):
+    query = payload.query.strip()
+    if len(query) < 2:
+        return ChatToolResponse(error="Query must be at least 2 characters.")
+    limited = clamp_max_results(payload.max_results)
     try:
         payload = await crossref_get(
             "/works",
             {"query": query, "rows": limited, "sort": "relevance", "order": "desc"},
         )
     except Exception as exc:
-        return ChatToolResponse(message=f"Crossref request failed: {exc}")
+        return ChatToolResponse(error=f"Crossref request failed: {exc}")
     items = payload.get("message", {}).get("items", [])
     if not items:
-        return ChatToolResponse(message=f"No Crossref results found for '{query}'.")
+        return ChatToolResponse(result=f"No Crossref results found for '{query}'.")
 
     lines = [f"Top {len(items)} Crossref results for '{query}':"]
     for idx, item in enumerate(items, 1):
         title = clean((item.get("title") or ["Untitled"])[0])
         doi = clean(item.get("DOI"))
-        year = clean(((item.get("published-print") or item.get("published-online") or {}).get("date-parts", [[""]]))[0][0])
+        year = extract_year(item)
         lines.append(f"{idx}. {title} ({year})")
         lines.append(f"   DOI: {doi}")
-    return ChatToolResponse(message="\n".join(lines))
+    return ChatToolResponse(result="\n".join(lines))
 
 
 @app.post("/tools/get_crossref_work", response_model=ChatToolResponse)
-async def get_crossref_work(doi: str = Query(..., min_length=3)):
-    normalized = doi.strip()
+async def get_crossref_work(payload: GetWorkInput):
+    normalized = payload.doi.strip()
     if "/" not in normalized:
-        return ChatToolResponse(message="Invalid DOI format. Example: 10.1038/nphys1170")
+        return ChatToolResponse(error="Invalid DOI format. Example: 10.1038/nphys1170")
+    if ".." in normalized:
+        return ChatToolResponse(error="Invalid DOI value.")
 
     try:
-        payload = await crossref_get(f"/works/{normalized}", {})
+        payload = await crossref_get(f"/works/{quote(normalized, safe='')}", {})
     except Exception as exc:
-        return ChatToolResponse(message=f"Crossref request failed: {exc}")
+        return ChatToolResponse(error=f"Crossref request failed: {exc}")
     item = payload.get("message", {})
     title = clean((item.get("title") or ["Untitled"])[0])
     publisher = clean(item.get("publisher"))
     doi_out = clean(item.get("DOI"))
     url = clean(item.get("URL"))
     abstract = clean(item.get("abstract"))
-    year = clean(((item.get("published-print") or item.get("published-online") or {}).get("date-parts", [[""]]))[0][0])
+    year = extract_year(item)
 
     parts = [
         f"Title: {title}",
@@ -134,15 +208,15 @@ async def get_crossref_work(doi: str = Query(..., min_length=3)):
     ]
     if abstract:
         parts.append(f"Abstract: {abstract[:1200]}")
-    return ChatToolResponse(message="\n".join(parts))
+    return ChatToolResponse(result="\n".join(parts))
 
 
 @app.post("/tools/get_crossref_works_by_author", response_model=ChatToolResponse)
-async def get_crossref_works_by_author(
-    author: str = Query(..., min_length=2),
-    max_results: int = Query(5, ge=1, le=10),
-):
-    limited = clamp_max_results(max_results)
+async def get_crossref_works_by_author(payload: AuthorWorksInput):
+    author = payload.author.strip()
+    if len(author) < 2:
+        return ChatToolResponse(error="Author must be at least 2 characters.")
+    limited = clamp_max_results(payload.max_results)
     try:
         payload = await crossref_get(
             "/works",
@@ -154,16 +228,16 @@ async def get_crossref_works_by_author(
             },
         )
     except Exception as exc:
-        return ChatToolResponse(message=f"Crossref request failed: {exc}")
+        return ChatToolResponse(error=f"Crossref request failed: {exc}")
     items = payload.get("message", {}).get("items", [])
     if not items:
-        return ChatToolResponse(message=f"No recent works found for author '{author}'.")
+        return ChatToolResponse(result=f"No recent works found for author '{author}'.")
 
     lines = [f"Recent works for '{author}':"]
     for idx, item in enumerate(items, 1):
         title = clean((item.get("title") or ["Untitled"])[0])
         doi = clean(item.get("DOI"))
-        year = clean(((item.get("published-print") or item.get("published-online") or {}).get("date-parts", [[""]]))[0][0])
+        year = extract_year(item)
         lines.append(f"{idx}. {title} ({year})")
         lines.append(f"   DOI: {doi}")
-    return ChatToolResponse(message="\n".join(lines))
+    return ChatToolResponse(result="\n".join(lines))
