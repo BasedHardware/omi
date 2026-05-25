@@ -380,7 +380,7 @@ startupProbe:
 # This section is for setting up autoscaling more information can be found here: https://kubernetes.io/docs/concepts/workloads/autoscaling/
 autoscaling:
   enabled: true
-  minReplicas: 20
+  minReplicas: 12
   maxReplicas: 60
   behavior:
     scaleDown:
