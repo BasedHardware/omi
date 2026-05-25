@@ -5,6 +5,8 @@ from typing import Dict
 
 import typesense
 
+import database.conversations as conversations_db
+
 client = typesense.Client(
     {
         'nodes': [{'host': os.getenv('TYPESENSE_HOST'), 'port': os.getenv('TYPESENSE_HOST_PORT'), 'protocol': 'https'}],
@@ -20,6 +22,7 @@ def search_conversations(
     page: int = 1,
     per_page: int = 10,
     include_discarded: bool = True,
+    include_trashed: bool = False,
     start_date: int = None,
     end_date: int = None,
 ) -> Dict:
@@ -46,8 +49,17 @@ def search_conversations(
 
         results = client.collections['conversations'].documents.search(search_parameters)
         memories = []
+        visible_ids = conversations_db.filter_visible_conversation_ids(
+            uid,
+            [item['document']['id'] for item in results['hits']],
+            include_discarded=include_discarded,
+            include_trashed=include_trashed,
+        )
+        visible_id_set = set(visible_ids)
         for item in results['hits']:
             doc = item['document']
+            if doc['id'] not in visible_id_set:
+                continue
             # Exclude locked conversations entirely to prevent inference leaks
             if doc.get('is_locked', False):
                 continue

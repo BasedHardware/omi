@@ -130,6 +130,7 @@ def get_conversations(
     offset: int = 0,
     statuses: Optional[str] = "processing,completed",
     include_discarded: bool = True,
+    include_trashed: bool = Query(False),
     start_date: Optional[datetime] = Query(None, description="Filter by start date (inclusive)"),
     end_date: Optional[datetime] = Query(None, description="Filter by end date (inclusive)"),
     folder_id: Optional[str] = Query(None, description="Filter by folder ID"),
@@ -146,6 +147,7 @@ def get_conversations(
         limit,
         offset,
         include_discarded=include_discarded,
+        include_trashed=include_trashed,
         statuses=statuses.split(",") if len(statuses) > 0 else [],
         start_date=start_date,
         end_date=end_date,
@@ -161,17 +163,45 @@ def get_conversations(
 def get_conversations_count(
     statuses: Optional[str] = Query(None, description="Comma-separated status filter (e.g. processing,completed)"),
     include_discarded: bool = Query(False),
+    include_trashed: bool = Query(False),
     uid: str = Depends(auth.get_current_user_uid),
 ):
     status_list = [s.strip() for s in statuses.split(',') if s.strip()] if statuses else []
-    count = conversations_db.get_conversations_count(uid, include_discarded=include_discarded, statuses=status_list)
+    count = conversations_db.get_conversations_count(
+        uid, include_discarded=include_discarded, include_trashed=include_trashed, statuses=status_list
+    )
     return {'count': count}
+
+
+@router.get("/v1/conversations/trash", response_model=List[Conversation], tags=['conversations'])
+def get_trashed_conversations(
+    limit: int = 100,
+    offset: int = 0,
+    uid: str = Depends(auth.get_current_user_uid),
+):
+    return conversations_db.get_trashed_conversations(uid, limit=limit, offset=offset)
 
 
 @router.get("/v1/conversations/{conversation_id}", response_model=Conversation, tags=['conversations'])
 def get_conversation_by_id(conversation_id: str, uid: str = Depends(auth.get_current_user_uid)):
     logger.info(f'get_conversation_by_id {uid} {conversation_id}')
     return _get_valid_conversation_by_id(uid, conversation_id)
+
+
+@router.post("/v1/conversations/{conversation_id}/trash", response_model=Conversation, tags=['conversations'])
+def trash_conversation(conversation_id: str, uid: str = Depends(auth.get_current_user_uid)):
+    conversation = conversations_db.trash_conversation(uid, conversation_id)
+    if conversation is None:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    return conversation
+
+
+@router.post("/v1/conversations/{conversation_id}/restore", response_model=Conversation, tags=['conversations'])
+def restore_conversation(conversation_id: str, uid: str = Depends(auth.get_current_user_uid)):
+    conversation = conversations_db.restore_conversation(uid, conversation_id)
+    if conversation is None:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    return conversation
 
 
 @router.patch("/v1/conversations/{conversation_id}/title", tags=['conversations'])

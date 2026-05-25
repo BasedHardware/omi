@@ -816,6 +816,15 @@ class ConversationProvider extends ChangeNotifier {
     groupConversationsByDate();
   }
 
+  Future<bool> trashConversation(ServerConversation conversation) async {
+    final result = await trashConversationServer(conversation.id);
+    if (result == null) return false;
+    conversations.removeWhere((element) => element.id == conversation.id);
+    searchedConversations.removeWhere((element) => element.id == conversation.id);
+    groupConversationsByDate();
+    return true;
+  }
+
   @override
   void dispose() {
     _processingConversationWatchTimer?.cancel();

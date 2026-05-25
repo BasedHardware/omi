@@ -5,10 +5,19 @@ Pytest configuration for integration tests.
 import os
 import sys
 
-import firebase_admin
 import pytest
-from dotenv import load_dotenv
-from firebase_admin import credentials
+
+try:
+    from dotenv import load_dotenv
+except ModuleNotFoundError:
+    load_dotenv = None
+
+try:
+    import firebase_admin
+    from firebase_admin import credentials
+except ModuleNotFoundError:
+    firebase_admin = None
+    credentials = None
 
 # Add project root to path (go up from integration -> tests -> backend -> root)
 project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '../../..'))
@@ -20,7 +29,7 @@ if backend_dir not in sys.path:
     sys.path.insert(0, backend_dir)
 
 env_file = os.path.join(backend_dir, '.env')
-if os.path.exists(env_file):
+if load_dotenv is not None and os.path.exists(env_file):
     load_dotenv(env_file)
     os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = backend_dir + "/" + os.getenv('GOOGLE_APPLICATION_CREDENTIALS')
 
@@ -28,6 +37,10 @@ if os.path.exists(env_file):
 @pytest.fixture(scope="session", autouse=True)
 def initialize_firebase():
     """Initialize Firebase Admin SDK before running tests"""
+    if firebase_admin is None:
+        yield
+        return
+
     try:
         cred = credentials.ApplicationDefault()
         firebase_admin.initialize_app(cred)

@@ -132,6 +132,10 @@ def _make_memory(locked=False, memory_id='mem-1'):
     }
 
 
+def _pass_through_visible_ids(uid, conversation_ids, **kwargs):
+    return conversation_ids
+
+
 # =============================================================================
 # Test sync.py audio endpoints — call the real router functions
 # =============================================================================
@@ -274,7 +278,14 @@ class TestSearchRedaction:
             'found': 2,
         }
 
-        with patch('utils.conversations.search.client', mock_client):
+        with (
+            patch('utils.conversations.search.client', mock_client),
+            patch(
+                'utils.conversations.search.conversations_db.filter_visible_conversation_ids',
+                side_effect=_pass_through_visible_ids,
+                create=True,
+            ),
+        ):
             from utils.conversations.search import search_conversations
 
             result = search_conversations(uid='test-uid', query='test')
@@ -317,7 +328,14 @@ class TestSearchRedaction:
             'hits': hits,
             'found': 6,
         }
-        with patch('utils.conversations.search.client', mock_client):
+        with (
+            patch('utils.conversations.search.client', mock_client),
+            patch(
+                'utils.conversations.search.conversations_db.filter_visible_conversation_ids',
+                side_effect=_pass_through_visible_ids,
+                create=True,
+            ),
+        ):
             from utils.conversations.search import search_conversations
 
             result = search_conversations(uid='test-uid', query='test', per_page=5)
@@ -345,7 +363,14 @@ class TestSearchRedaction:
             'hits': hits,
             'found': 2,
         }
-        with patch('utils.conversations.search.client', mock_client):
+        with (
+            patch('utils.conversations.search.client', mock_client),
+            patch(
+                'utils.conversations.search.conversations_db.filter_visible_conversation_ids',
+                side_effect=_pass_through_visible_ids,
+                create=True,
+            ),
+        ):
             from utils.conversations.search import search_conversations
 
             result = search_conversations(uid='test-uid', query='test', per_page=5)

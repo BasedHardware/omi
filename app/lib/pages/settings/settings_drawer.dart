@@ -13,7 +13,9 @@ import 'package:omi/pages/settings/permissions_page.dart';
 import 'package:omi/pages/settings/profile.dart';
 import 'package:omi/pages/memories/page.dart';
 import 'package:omi/pages/settings/integrations_page.dart';
+import 'package:omi/pages/settings/trash_page.dart';
 import 'package:omi/pages/settings/usage_page.dart';
+import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/pages/referral/referral_page.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/usage_provider.dart';
@@ -61,6 +63,7 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
   String? version;
   String? buildVersion;
   String? shortDeviceInfo;
+  int _trashPreviewCount = 0;
 
   bool _isSearching = false;
   String _searchQuery = '';
@@ -73,6 +76,7 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
     _searchController = TextEditingController();
     _searchFocusNode = FocusNode();
     _loadAppAndDeviceInfo();
+    _loadTrashPreviewCount();
   }
 
   @override
@@ -119,6 +123,14 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
         });
       }
     }
+  }
+
+  Future<void> _loadTrashPreviewCount() async {
+    final conversations = await getTrashedConversations(limit: 1);
+    if (!mounted) return;
+    setState(() {
+      _trashPreviewCount = conversations.length;
+    });
   }
 
   Widget _buildSettingsItem({
@@ -300,6 +312,7 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
     }
 
     void goToMemories() => routeToPage(context, const MemoriesPage());
+    void goToTrash() => Navigator.of(context).push(MaterialPageRoute(builder: (context) => const TrashPage()));
     void goToDeveloper() async => await routeToPage(context, const DeveloperSettingsPage());
 
     const profileIcon = FaIcon(FontAwesomeIcons.solidUser, color: Color(0xFF8E8E93), size: 20);
@@ -308,6 +321,7 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
     const deviceIcon = FaIcon(FontAwesomeIcons.bluetooth, color: Color(0xFF8E8E93), size: 20);
     const permIcon = FaIcon(FontAwesomeIcons.shieldHalved, color: Color(0xFF8E8E93), size: 20);
     const memIcon = FaIcon(FontAwesomeIcons.brain, color: Color(0xFF8E8E93), size: 20);
+    const trashIcon = FaIcon(FontAwesomeIcons.trash, color: Color(0xFF8E8E93), size: 20);
     const devIcon = FaIcon(FontAwesomeIcons.code, color: Color(0xFF8E8E93), size: 20);
     const intIcon = FaIcon(FontAwesomeIcons.networkWired, color: Color(0xFF8E8E93), size: 20);
     const syncIcon = FaIcon(FontAwesomeIcons.solidCloud, color: Color(0xFF8E8E93), size: 20);
@@ -355,6 +369,7 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
       _SearchableItem(title: context.l10n.backgroundActivity, icon: permIcon, onTap: goToPermissions),
       // --- Memories ---
       _SearchableItem(title: context.l10n.memories, icon: memIcon, onTap: goToMemories),
+      _SearchableItem(title: context.l10n.trash, icon: trashIcon, onTap: goToTrash),
       // --- Support ---
       if (PlatformService.isIntercomSupported) ...[
         _SearchableItem(
@@ -604,6 +619,27 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
                   icon: const FaIcon(FontAwesomeIcons.brain, color: Color(0xFF8E8E93), size: 20),
                   onTap: () {
                     routeToPage(context, const MemoriesPage());
+                  },
+                ),
+                const Divider(height: 1, color: Color(0xFF3C3C43)),
+                _buildSettingsItem(
+                  title: context.l10n.trash,
+                  icon: const FaIcon(FontAwesomeIcons.trash, color: Color(0xFF8E8E93), size: 20),
+                  trailingChip: _trashPreviewCount > 0
+                      ? Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: Colors.red.withOpacity(0.2),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: Text(
+                            _trashPreviewCount.toString(),
+                            style: const TextStyle(color: Colors.red, fontSize: 10, fontWeight: FontWeight.w600),
+                          ),
+                        )
+                      : null,
+                  onTap: () {
+                    Navigator.of(context).push(MaterialPageRoute(builder: (context) => const TrashPage()));
                   },
                 ),
               ],
