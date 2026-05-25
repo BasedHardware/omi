@@ -148,9 +148,11 @@ Agents can and should self-test the running app — don't stop at a successful c
    ```
    On next launch `restoreAuthState()` picks it up and boots already-signed-in.
 3. **Inspect / drive the app:**
-   - `./scripts/omi-ctl state` — app-state snapshot (selected tab, auth, onboarding). The automation bridge auto-enables on non-prod bundles.
+   - **Prefer the local bridge — it never touches the cursor.** It calls the app's real code in-process (no synthetic mouse events), so it won't take over the user's machine. Use it before reaching for `agent-swift click`/`cliclick`/computer-use. Auto-enables on non-prod bundles; run several at once by giving each its own `OMI_AUTOMATION_PORT` (default 47777).
+   - `./scripts/omi-ctl state` — app-state snapshot (selected tab, auth, onboarding).
    - `./scripts/omi-ctl navigate <screen> [settings-section]` — jump straight to a screen in ~150ms (`omi-ctl screens` lists targets).
-   - `agent-swift connect --bundle-id com.omi.omi-<feature>` then `snapshot -i`, `find role textfield fill "…"`, `click @eN`, `screenshot /tmp/evidence.png` to drive the UI.
+   - `./scripts/omi-ctl actions` then `./scripts/omi-ctl action <name> [k=v …]` — discover and run semantic actions (e.g. `refresh_all_data`, `toggle_transcription enabled=false`). Add new ones in `DesktopAutomationActionRegistry`. See `desktop/e2e/SKILL.md` §2b.
+   - `agent-swift connect --bundle-id com.omi.omi-<feature>` then `snapshot -i`, `find role textfield fill "…"`, `click @eN`, `screenshot /tmp/evidence.png` — only for UI the bridge can't reach yet (`click` moves the cursor).
 4. **Read logs to confirm behavior:**
    - App + chat bridge: `/private/tmp/omi-dev.log` (dev builds) or `/private/tmp/omi.log`.
    - Local Rust backend: stdout of the `./run.sh` process.
@@ -238,6 +240,7 @@ Full RELEASE flow + `gh workflow run gcp_backend.yml -f environment=prod -f bran
 ## Documentation Maintenance
 
 - **This file (`AGENTS.md`) is the single source of truth for agent instructions.** Add or change rules here. `CLAUDE.md` is only a pointer — do not put instructions in it.
+- **Any AI editing this file must keep it concise and simple** — short, plain bullets a human or agent can scan fast. Prefer editing/replacing an existing line over adding new ones; no verbose prose.
 - If a PR changes setup, test commands, safety rules, service boundaries, or env vars — update this file in the same PR.
 - For architecture / core flow / API changes — update Mintlify docs (`docs/doc/developer/`) in the same PR.
 - If a PR changes audio streaming, transcription, conversation lifecycle, or listen/pusher WebSocket — update `docs/doc/developer/backend/listen_pusher_pipeline.mdx`.
