@@ -232,10 +232,12 @@ class HomeContentPageState extends State<HomeContentPage> with AutomaticKeepAliv
             ),
             const SizedBox(height: 10),
             SizedBox(
-              width: 96,
+              width: 120,
               child: Text(
                 label,
                 textAlign: TextAlign.center,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
                 style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w500, height: 1.2),
               ),
             ),
