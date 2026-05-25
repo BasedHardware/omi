@@ -23,6 +23,8 @@ These rules apply to every AI agent working in this repository. This file is the
 - Development scripts/commands must target only dev or named test app processes (e.g. `Omi Dev.app` / `com.omi.desktop-dev`, or `omi-*` named bundles), never production.
 - Never push directly to `main`. Land changes through a PR only. Never squash-merge — use a regular merge.
 - Never push or create PRs unless explicitly asked — commit locally by default.
+- **Nothing lands on `main` until the user explicitly says so.** Do not commit, merge, push, or open a PR against `main` until the user gives an explicit go-ahead in that turn. Keep all work on feature branches; a prior approval never carries over to later changes.
+- **Prefer testing locally first.** The user prefers to build and run the app locally to verify a change works before it goes to a PR or merge. Default to a local named-bundle build + run for desktop changes (and the equivalent local run for other components) before proposing to land anything.
 
 ## Coding Guidelines
 
