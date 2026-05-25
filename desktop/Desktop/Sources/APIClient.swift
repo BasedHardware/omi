@@ -98,6 +98,10 @@ actor APIClient {
       headers[provider.headerName] = entry.key
     }
 
+    if let chatgptFingerprint = CodexAuthService.enrollmentFingerprintIfActive() {
+      headers["X-ChatGPT-Fingerprint"] = chatgptFingerprint
+    }
+
     return headers
   }
 
@@ -4571,6 +4575,21 @@ extension APIClient {
   /// Deactivate BYOK (user cleared keys) so they return to the paid plan gate.
   func deactivateBYOK() async throws {
     try await delete("v1/users/me/byok-active")
+  }
+
+  /// Activate ChatGPT / Codex subscription tier (LLM only; fingerprint of account_id).
+  func activateChatGPT(fingerprint: String) async throws {
+    struct Request: Encodable {
+      let fingerprint: String
+    }
+    struct Empty: Decodable {}
+    let _: Empty = try await post(
+      "v1/users/me/chatgpt-active", body: Request(fingerprint: fingerprint)
+    )
+  }
+
+  func deactivateChatGPT() async throws {
+    try await delete("v1/users/me/chatgpt-active")
   }
 
   /// Fetches all people for the current user

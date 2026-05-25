@@ -215,6 +215,64 @@ def clear_byok_active(uid: str):
     )
 
 
+def get_chatgpt_state(uid: str) -> dict:
+    user_ref = db.collection('users').document(uid)
+    data = user_ref.get().to_dict() or {}
+    return data.get('chatgpt', {})
+
+
+def is_chatgpt_active(uid: str) -> bool:
+    """True if user enrolled ChatGPT/Codex tier (LLM-only; separate from four-key BYOK)."""
+    state = get_chatgpt_state(uid)
+    if not state.get('active'):
+        return False
+    last_seen = state.get('last_seen_at')
+    if not last_seen:
+        return False
+    if isinstance(last_seen, datetime):
+        age = (datetime.now(timezone.utc) - last_seen).total_seconds()
+    else:
+        return False
+    return age <= BYOK_HEARTBEAT_TTL_SECONDS
+
+
+def set_chatgpt_active(uid: str, fingerprint: str):
+    user_ref = db.collection('users').document(uid)
+    user_ref.set(
+        {
+            'chatgpt': {
+                'active': True,
+                'fingerprint': fingerprint,
+                'last_seen_at': datetime.now(timezone.utc),
+            }
+        },
+        merge=True,
+    )
+
+
+def touch_chatgpt_heartbeat(uid: str):
+    """Refresh ChatGPT tier heartbeat (called when a valid fingerprint is on the request)."""
+    user_ref = db.collection('users').document(uid)
+    user_ref.set(
+        {'chatgpt': {'last_seen_at': datetime.now(timezone.utc)}},
+        merge=True,
+    )
+
+
+def clear_chatgpt_active(uid: str):
+    user_ref = db.collection('users').document(uid)
+    user_ref.set(
+        {
+            'chatgpt': {
+                'active': False,
+                'fingerprint': '',
+                'last_seen_at': datetime.now(timezone.utc),
+            }
+        },
+        merge=True,
+    )
+
+
 def set_user_deletion_feedback(uid: str, reason: Optional[str], reason_details: Optional[str] = None):
     # Stored in a top-level collection so it survives the user record being deleted.
     db.collection('account_deletions').document(uid).set(

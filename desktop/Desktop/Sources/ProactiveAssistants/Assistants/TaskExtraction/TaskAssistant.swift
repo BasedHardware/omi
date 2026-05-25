@@ -177,8 +177,12 @@ actor TaskAssistant: ProactiveAssistant {
 
     // MARK: - Embedding Lifecycle
 
-    /// Load embedding index and kick off backfill
+    /// Load embedding index and kick off backfill (skipped when using local wiki search).
     private func initializeEmbeddings() async {
+        guard MemorySearchMode.usesVectorEmbeddings else {
+            log("Task: Skipping embedding index — local wiki / FTS memory search mode")
+            return
+        }
         await EmbeddingService.shared.loadIndex()
         // Backfill in background
         Task {
@@ -367,10 +371,16 @@ actor TaskAssistant: ProactiveAssistant {
             windowTitle: windowTitle
         )
 
-        // Generate embedding for new staged task in background
+        // Generate embedding or wiki index for new staged task in background
         if let recordId = extractionRecord?.id {
-            Task {
-                await self.generateEmbeddingForTask(id: recordId, text: task.title)
+            if MemorySearchMode.usesVectorEmbeddings {
+                Task {
+                    await self.generateEmbeddingForTask(id: recordId, text: task.title)
+                }
+            } else {
+                Task {
+                    await self.indexStagedTaskInWiki(id: recordId, description: task.title)
+                }
             }
         }
 
@@ -406,6 +416,23 @@ actor TaskAssistant: ProactiveAssistant {
             log("Task: Generated embedding for staged task \(id)")
         } catch {
             logError("Task: Failed to generate embedding for staged task \(id)", error: error)
+        }
+    }
+
+    private func indexStagedTaskInWiki(id: Int64, description: String) async {
+        let slug = "task-\(id)"
+        do {
+            _ = try await MemoryWikiStorage.shared.upsertPage(
+                slug: slug,
+                title: description,
+                body: description,
+                tags: ["task", "staged"],
+                category: "task",
+                sourceType: "staged_task",
+                sourceId: String(id)
+            )
+        } catch {
+            logError("Task: Failed to index staged task in memory wiki", error: error)
         }
     }
 
@@ -1244,8 +1271,12 @@ actor TaskAssistant: ProactiveAssistant {
         )
     }
 
-    /// Execute vector similarity search
+    /// Execute vector similarity search (or FTS + wiki when embeddings disabled).
     private func executeVectorSearch(query: String) async -> [TaskSearchResult] {
+        guard MemorySearchMode.usesVectorEmbeddings else {
+            return await executeKeywordAndWikiSearch(query: query)
+        }
+
         var results: [TaskSearchResult] = []
 
         do {
@@ -1289,6 +1320,28 @@ actor TaskAssistant: ProactiveAssistant {
         }
 
         return results.sorted { ($0.similarity ?? 0) > ($1.similarity ?? 0) }
+    }
+
+    /// Keyword FTS across tasks plus memory wiki (used when vector embeddings are off).
+    private func executeKeywordAndWikiSearch(query: String) async -> [TaskSearchResult] {
+        var results = await executeKeywordSearch(query: query)
+        do {
+            let wikiHits = try await MemoryWikiStorage.shared.search(query: query, limit: 8)
+            for hit in wikiHits {
+                results.append(
+                    TaskSearchResult(
+                        id: 0,
+                        description: "[Memory wiki] \(hit.title): \(hit.snippet)",
+                        status: "wiki",
+                        similarity: nil,
+                        matchType: "wiki_fts",
+                        relevanceScore: nil
+                    ))
+            }
+        } catch {
+            logError("Task: Wiki search failed", error: error)
+        }
+        return results
     }
 
     /// Execute FTS5 keyword search (searches both action_items and staged_tasks)

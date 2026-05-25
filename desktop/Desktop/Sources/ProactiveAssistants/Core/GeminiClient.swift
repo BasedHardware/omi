@@ -177,11 +177,19 @@ struct GeminiResponse: Decodable {
 
 // MARK: - GeminiClient
 
-/// Low-level client for communicating with the Gemini API via backend proxy.
-/// All requests route through the Rust backend (/v1/proxy/gemini/*) which adds
-/// the Gemini API key server-side. Auth uses Firebase Bearer token.
+/// Low-level client for proactive AI. Default path uses the Gemini backend proxy;
+/// when ChatGPT/Codex is enrolled, requests use the local Codex loopback proxy instead.
 actor GeminiClient {
+  private enum Transport {
+    case geminiProxy
+    case codexOpenAICompatible
+  }
+
   private let model: String
+
+  private var transport: Transport {
+    CodexAuthService.isActive ? .codexOpenAICompatible : .geminiProxy
+  }
 
   /// Backend proxy base URL (from OMI_DESKTOP_API_URL env var)
   private static var proxyBaseURL: String {
@@ -248,14 +256,91 @@ actor GeminiClient {
   }
 
   init(apiKey: String? = nil, model: String = ModelQoS.Gemini.proactive) throws {
-    // BREAKING CHANGE (issue #5861): apiKey parameter is ignored.
-    // All Gemini requests now route through the backend proxy which supplies
-    // the key server-side. Defaults to production when OMI_DESKTOP_API_URL is absent
-    // so installed test bundles launched from Finder still have AI features.
-    guard !Self.proxyBaseURL.isEmpty else {
+    // BREAKING CHANGE (issue #5861): apiKey parameter is ignored for cloud proxy mode.
+    self.model = model
+    if !CodexAuthService.isActive && Self.proxyBaseURL.isEmpty {
       throw GeminiClientError.missingAPIKey
     }
-    self.model = model
+  }
+
+  private func mapCodexError(_ error: CodexLLMClient.ClientError) -> GeminiClientError {
+    switch error {
+    case .notConfigured:
+      return .missingAPIKey
+    case .invalidSettings:
+      return .apiError(error.localizedDescription)
+    case .invalidResponse:
+      return .invalidResponse
+    case .httpFailure(let status, let body):
+      return .apiError("HTTP \(status): \(body)")
+    }
+  }
+
+  private func codexConfig() throws -> CodexLLMClient.ProviderConfig {
+    guard let config = CodexLLMClient.providerConfig() else {
+      throw GeminiClientError.missingAPIKey
+    }
+    return config
+  }
+
+  private func codexChatText(
+    systemPrompt: String,
+    userText: String,
+    jsonMode: Bool,
+    timeout: TimeInterval = 300
+  ) async throws -> String {
+    await CodexProxyService.shared.ensureRunning()
+    let config = try codexConfig()
+    do {
+      return try await CodexLLMClient.chatCompletionText(
+        config: config,
+        systemPrompt: systemPrompt,
+        userText: userText,
+        jsonMode: jsonMode,
+        timeout: timeout
+      )
+    } catch let error as CodexLLMClient.ClientError {
+      throw mapCodexError(error)
+    }
+  }
+
+  private func codexChatImageOrOCR(
+    prompt: String,
+    imageData: Data,
+    systemPrompt: String,
+    jsonMode: Bool,
+    timeout: TimeInterval = 300
+  ) async throws -> String {
+    await CodexProxyService.shared.ensureRunning()
+    let config = try codexConfig()
+    do {
+      return try await CodexLLMClient.chatCompletionMultimodalJPEG(
+        config: config,
+        systemPrompt: systemPrompt,
+        userText: prompt,
+        jpegData: imageData,
+        jsonMode: jsonMode,
+        timeout: timeout
+      )
+    } catch let error as CodexLLMClient.ClientError {
+      if case .httpFailure = error {
+        let ocr = try await CodexLLMClient.ScreenOCR.recognizeTextFromJPEG(imageData)
+        let user =
+          prompt
+          + "\n\n--- ON-SCREEN TEXT (macOS OCR) ---\n\(ocr)\n--- END OCR ---\n"
+        let sysp =
+          systemPrompt
+          + "\n\nReturn a single JSON object only (no prose or markdown fences)."
+        return try await CodexLLMClient.chatCompletionText(
+          config: config,
+          systemPrompt: sysp,
+          userText: user,
+          jsonMode: jsonMode,
+          timeout: timeout
+        )
+      }
+      throw mapCodexError(error)
+    }
   }
 
   /// Get Firebase auth header for proxy requests
@@ -354,6 +439,15 @@ actor GeminiClient {
 
     for attempt in 0...maxRetries {
       do {
+        if transport == .codexOpenAICompatible {
+          return try await codexChatImageOrOCR(
+            prompt: prompt,
+            imageData: imageData,
+            systemPrompt: systemPrompt,
+            jsonMode: true
+          )
+        }
+
         // Wrap base64 encoding + JSON serialization in autoreleasepool.
         // These create bridged Obj-C objects (NSString, NSData) that accumulate
         // in Swift concurrency's cooperative thread pool without being drained.
@@ -438,6 +532,15 @@ actor GeminiClient {
 
     for attempt in 0...maxRetries {
       do {
+        if transport == .codexOpenAICompatible {
+          return try await codexChatText(
+            systemPrompt: systemPrompt,
+            userText: prompt,
+            jsonMode: false,
+            timeout: timeout
+          )
+        }
+
         let request = GeminiRequest(
           contents: [
             GeminiRequest.Content(parts: [
@@ -509,6 +612,14 @@ actor GeminiClient {
 
     for attempt in 0...maxRetries {
       do {
+        if transport == .codexOpenAICompatible {
+          return try await codexChatText(
+            systemPrompt: systemPrompt,
+            userText: prompt,
+            jsonMode: true
+          )
+        }
+
         let request = GeminiRequest(
           contents: [
             GeminiRequest.Content(parts: [
@@ -800,6 +911,24 @@ extension GeminiClient {
 
     for attempt in 0...maxRetries {
       do {
+        if transport == .codexOpenAICompatible {
+          await CodexProxyService.shared.ensureRunning()
+          let config = try codexConfig()
+          do {
+            return try await CodexLLMClient.performGeminiCompatibleToolRound(
+              config: config,
+              systemPrompt: systemPrompt,
+              contents: contents,
+              tools: tools,
+              forceToolCall: forceToolCall,
+              allowVisionInlineJPEG: true,
+              timeout: 300
+            )
+          } catch let error as CodexLLMClient.ClientError {
+            throw mapCodexError(error)
+          }
+        }
+
         // Wrap JSON serialization in autoreleasepool (contents may include
         // large base64 image data that creates bridged Obj-C intermediaries).
         let requestBody: Data = try autoreleasepool {
