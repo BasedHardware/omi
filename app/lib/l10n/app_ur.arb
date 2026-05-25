@@ -1480,7 +1480,7 @@
     "exportConfiguration": "ترتیب برآمد کریں",
     "bringYourOwn": "اپنا لے کر آئیں",
     "payYourSttProvider": "Omi کو آزادانہ استعمال کریں۔ آپ صرف اپنے STT فراہم کنندہ کو براہ راست ادا کریں۔",
-    "freeMinutesMonth": "ہر ماہ 1,200 منٹ مفت شامل ہیں۔ آن لائن کریں ",
+    "freeMinutesMonth": "ہر ماہ 600 منٹ مفت شامل ہیں۔ آن لائن کریں ",
     "omiUnlimited": "Omi Unlimited",
     "hostRequired": "میزبان درکار ہے",
     "validPortRequired": "درست پورٹ درکار ہے",
@@ -5503,7 +5503,7 @@
     "@noSpecificDataAccessConfigured": {
         "description": "Message shown when app has no specific data access"
     },
-    "basicPlanDescription": "1,200 پریمیم منٹ + آن ڈیوائس پر لامحدود",
+    "basicPlanDescription": "600 پریمیم منٹ + آن ڈیوائس پر لامحدود",
     "@basicPlanDescription": {
         "description": "Description of basic plan features in usage page"
     },
@@ -7278,7 +7278,7 @@
     "@cloudProvider": {
         "description": "Tab label for cloud provider option"
     },
-    "premiumMinutesInfo": "ماہانہ 1,200 پریمیم منٹ۔ On-Device ٹیب غیر محدود مفت ٹرانسکریپشن فراہم کرتا ہے۔",
+    "premiumMinutesInfo": "ماہانہ 600 پریمیم منٹ۔ On-Device ٹیب غیر محدود مفت ٹرانسکریپشن فراہم کرتا ہے۔",
     "@premiumMinutesInfo": {
         "description": "Info about premium minutes"
     },
@@ -7389,7 +7389,7 @@
     "@batteryDrainSignificantly": {
         "description": "Warning about battery drain"
     },
-    "premiumMinutesMonth": "ماہانہ 1,200 پریمیم منٹ۔ On-Device ٹیب غیر محدود مفت ٹرانسکریپشن فراہم کرتا ہے۔ ",
+    "premiumMinutesMonth": "ماہانہ 600 پریمیم منٹ۔ On-Device ٹیب غیر محدود مفت ٹرانسکریپشن فراہم کرتا ہے۔ ",
     "@premiumMinutesMonth": {
         "description": "Description of premium minutes quota"
     },

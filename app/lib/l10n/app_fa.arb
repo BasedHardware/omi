@@ -1480,7 +1480,7 @@
     "exportConfiguration": "صادر کردن پیکربندی",
     "bringYourOwn": "خود را بیاورید",
     "payYourSttProvider": "آزادانه از omi استفاده کنید. شما فقط مستقیماً ارائه‌دهنده STT خود را پرداخت می‌کنید.",
-    "freeMinutesMonth": "1200 دقیقه رایگان/ماه شامل است. نامحدود با ",
+    "freeMinutesMonth": "600 دقیقه رایگان/ماه شامل است. نامحدود با ",
     "omiUnlimited": "Omi Unlimited",
     "hostRequired": "میزبان ضروری است",
     "validPortRequired": "پورت معتبر ضروری است",
@@ -5503,7 +5503,7 @@
     "@noSpecificDataAccessConfigured": {
         "description": "Message shown when app has no specific data access"
     },
-    "basicPlanDescription": "1,200 دقیقه حرفه‌ای + نامحدود روی‌دستگاه",
+    "basicPlanDescription": "600 دقیقه حرفه‌ای + نامحدود روی‌دستگاه",
     "@basicPlanDescription": {
         "description": "Description of basic plan features in usage page"
     },
@@ -7278,7 +7278,7 @@
     "@cloudProvider": {
         "description": "Tab label for cloud provider option"
     },
-    "premiumMinutesInfo": "1,200 دقیقه premium/ماه. برگه On-Device رونویسی رایگان نامحدود را ارائه می دهد.",
+    "premiumMinutesInfo": "600 دقیقه premium/ماه. برگه On-Device رونویسی رایگان نامحدود را ارائه می دهد.",
     "@premiumMinutesInfo": {
         "description": "Info about premium minutes"
     },
@@ -7389,7 +7389,7 @@
     "@batteryDrainSignificantly": {
         "description": "Warning about battery drain"
     },
-    "premiumMinutesMonth": "1,200 دقیقه premium/ماه. برگه On-Device رونویسی رایگان نامحدود را ارائه می دهد.",
+    "premiumMinutesMonth": "600 دقیقه premium/ماه. برگه On-Device رونویسی رایگان نامحدود را ارائه می دهد.",
     "@premiumMinutesMonth": {
         "description": "Description of premium minutes quota"
     },

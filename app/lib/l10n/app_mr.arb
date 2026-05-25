@@ -1480,7 +1480,7 @@
     "exportConfiguration": "कॉन्फिगरेशन निर्यात करा",
     "bringYourOwn": "आपले स्वतःचे आणा",
     "payYourSttProvider": "Omi मुक्तपणे वापरा. आपण केवळ आपल्या STT प्रदाता ला थेट भुगतान करा.",
-    "freeMinutesMonth": "1,200 मुक्त मिनिटे/महिना समाविष्ट. अमर्यादित ",
+    "freeMinutesMonth": "600 मुक्त मिनिटे/महिना समाविष्ट. अमर्यादित ",
     "omiUnlimited": "Omi अमर्यादित",
     "hostRequired": "होस्ट आवश्यक आहे",
     "validPortRequired": "वैध पोर्ट आवश्यक आहे",
@@ -7278,7 +7278,7 @@
     "@cloudProvider": {
         "description": "Tab label for cloud provider option"
     },
-    "premiumMinutesInfo": "1,200 प्रीमियम मिनिटे/महिना. ऑन-डिव्हाइस टॅब अमर्यादित विनामूल्य ट्रान्सक्रिप्शन ऑफर करते.",
+    "premiumMinutesInfo": "600 प्रीमियम मिनिटे/महिना. ऑन-डिव्हाइस टॅब अमर्यादित विनामूल्य ट्रान्सक्रिप्शन ऑफर करते.",
     "@premiumMinutesInfo": {
         "description": "Info about premium minutes"
     },
@@ -7389,7 +7389,7 @@
     "@batteryDrainSignificantly": {
         "description": "Warning about battery drain"
     },
-    "premiumMinutesMonth": "1,200 प्रीमियम मिनिटे/महिना. ऑन-डिव्हाइस टॅब अमर्यादित विनामूल्य ट्रान्सक्रिप्शन ऑफर करते. ",
+    "premiumMinutesMonth": "600 प्रीमियम मिनिटे/महिना. ऑन-डिव्हाइस टॅब अमर्यादित विनामूल्य ट्रान्सक्रिप्शन ऑफर करते. ",
     "@premiumMinutesMonth": {
         "description": "Description of premium minutes quota"
     },
