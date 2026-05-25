@@ -69,6 +69,10 @@ struct DesktopAutomationOpenConversationRequest: Codable {
   let activateApp: Bool?
 }
 
+struct DesktopAutomationExecuteExportRequest: Codable {
+  let destination: String
+}
+
 private struct DesktopAutomationResponse<T: Codable>: Codable {
   let ok: Bool
   let result: T?
@@ -258,6 +262,27 @@ final class DesktopAutomationBridge {
           ),
           statusCode: 400
         )
+      }
+    case ("POST", "/execute-export"):
+      struct ExecResult: Codable { let taskTitle: String }
+      do {
+        let payload = try JSONDecoder().decode(
+          DesktopAutomationExecuteExportRequest.self, from: request.body)
+        guard let destination = MemoryExportDestination(rawValue: payload.destination) else {
+          return jsonResponse(
+            DesktopAutomationResponse<ExecResult>(
+              ok: false, result: nil, error: "unknown destination: \(payload.destination)"),
+            statusCode: 400)
+        }
+        let outcome = try await MemoryExportExecutor.run(destination)
+        return jsonResponse(
+          DesktopAutomationResponse(
+            ok: true, result: ExecResult(taskTitle: outcome.taskTitle), error: nil))
+      } catch {
+        return jsonResponse(
+          DesktopAutomationResponse<ExecResult>(
+            ok: false, result: nil, error: error.localizedDescription),
+          statusCode: 500)
       }
     case ("POST", "/gmail-read"):
       do {
