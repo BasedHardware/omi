@@ -264,6 +264,24 @@ enum APIError: LocalizedError {
   }
 }
 
+// MARK: - MCP API
+
+struct MCPKeyCreatedResponse: Codable {
+  let id: String
+  let name: String
+  let key: String
+}
+
+extension APIClient {
+  /// Creates a new MCP API key and returns the raw secret (shown only once by the server).
+  /// Used to wire Omi memory into external MCP clients (Claude, ChatGPT, Claude Code, Codex).
+  func createMCPKey(name: String = "Desktop") async throws -> String {
+    struct Body: Encodable { let name: String }
+    let response: MCPKeyCreatedResponse = try await post("v1/mcp/keys", body: Body(name: name))
+    return response.key
+  }
+}
+
 // MARK: - Conversation API
 
 extension APIClient {
