@@ -20,12 +20,26 @@ logger = logging.getLogger(__name__)
 
 PAID_PLAN_TYPES = {PlanType.unlimited, PlanType.architect, PlanType.operator}
 
+# Plans that unlock the desktop (macOS) app. Neo (unlimited) is a mobile/web
+# plan — it does NOT include desktop access, so on desktop a Neo subscriber is
+# treated like basic for the trial paywall. Operator and Architect include the
+# desktop app. Keep this in sync with the per-plan feature copy + the mobile
+# plans sheet (Operator shows "Desktop app", Neo shows "No desktop access").
+DESKTOP_ENTITLED_PLAN_TYPES = {PlanType.operator, PlanType.architect}
+
+
+def plan_grants_desktop(plan: PlanType) -> bool:
+    """True iff this plan unlocks the desktop (macOS) app."""
+    return plan in DESKTOP_ENTITLED_PLAN_TYPES
+
+
 # Desktop-only 3-day trial paywall.
 #
-# Applies to ALL desktop users on the basic plan once their Firebase Auth
-# account is older than TRIAL_LENGTH_SECONDS and they don't have BYOK
-# active. Mobile (ios / android), Omi devices, paid plans, BYOK users,
-# and accounts inside the trial window are exempt.
+# Applies to desktop users without a desktop-entitled plan (basic OR Neo) once
+# their Firebase Auth account is older than TRIAL_LENGTH_SECONDS and they don't
+# have BYOK active. Mobile (ios / android), Omi devices, desktop-entitled plans
+# (Operator / Architect), BYOK users, and accounts inside the trial window are
+# exempt.
 TRIAL_LENGTH_SECONDS = 3 * 24 * 60 * 60  # 3 days
 
 # Platform identifiers that count as desktop for paywall purposes. The Swift
@@ -62,14 +76,14 @@ def _request_has_all_byok_keys() -> bool:
 def _is_trial_expired_uncached(uid: str) -> bool:
     """Is this user past their 3-day desktop trial?
 
-    Trial only applies to the basic plan; BYOK users are bypassed (they're
-    paying their own LLM/STT bill). Returns False on any lookup error so a
-    Firebase blip never paywalls a paying user.
+    The trial applies to anyone without a desktop-entitled plan (basic OR Neo);
+    BYOK users are bypassed (they're paying their own LLM/STT bill). Returns
+    False on any lookup error so a Firebase blip never paywalls a paying user.
     """
     try:
         subscription = users_db.get_user_valid_subscription(uid)
         plan = subscription.plan if subscription else PlanType.basic
-        if plan != PlanType.basic:
+        if plan_grants_desktop(plan):
             return False
         if users_db.is_byok_active(uid):
             return False
@@ -136,11 +150,13 @@ def get_trial_metadata(uid: str) -> TrialMetadata:
         subscription = users_db.get_user_valid_subscription(uid)
         plan = subscription.plan if subscription else PlanType.basic
 
-        # Paid-plan or BYOK users: trial is moot — they have full access.
+        # Desktop-entitled (Operator / Architect) or BYOK users: trial is moot —
+        # they have full desktop access. Neo (unlimited) is mobile/web only, so
+        # it falls through to the trial computation just like basic.
         # Same request-level escape hatch as `_is_trial_expired_cached`: a request
         # carrying all 4 BYOK provider headers is treated as BYOK-active even if
         # Firestore hasn't caught up yet.
-        if plan != PlanType.basic or users_db.is_byok_active(uid) or _request_has_all_byok_keys():
+        if plan_grants_desktop(plan) or users_db.is_byok_active(uid) or _request_has_all_byok_keys():
             return TrialMetadata(
                 trial_expired=False,
                 trial_duration_seconds=TRIAL_LENGTH_SECONDS,
@@ -640,7 +656,8 @@ def get_plan_features(plan: PlanType, simplified: bool = False) -> List[str]:
             f"{NEO_CHAT_QUESTIONS_PER_MONTH} chat questions per month",
             "Unlimited listening and transcription",
             "Unlimited memories and insights",
-            "Available on Mac, mobile, and web",
+            # Neo is mobile/web only — no desktop app (see DESKTOP_ENTITLED_PLAN_TYPES).
+            "Available on mobile and web",
         ]
 
     # Basic plan
@@ -685,6 +702,55 @@ def _has_active_stripe_subscription(uid: str) -> bool:
         logger.error(f"Error checking Stripe for active subscriptions: {e}")
         return True  # fail-closed: block checkout if Stripe is unreachable
     return False
+
+
+def find_active_paid_subscription_for_user(uid: str) -> Optional[Subscription]:
+    """Resolve the user's current active *paid* subscription straight from Stripe.
+
+    Lists the customer's active subscriptions and returns the first one that
+    maps to a paid plan (matching this uid's metadata when present). Returns
+    None if there's no customer, no active paid sub, or Stripe is unreachable.
+
+    Used to (a) self-heal a Firestore record stuck on `basic` whose stored
+    subscription id points at an old/canceled sub, and (b) stop an old
+    subscription's cancellation webhook from clobbering an active plan when the
+    user canceled one sub and started another near-simultaneously (possibly on a
+    different Stripe customer).
+    """
+    customer_id = users_db.get_stripe_customer_id(uid)
+    if not customer_id:
+        return None
+    try:
+        subs = stripe.Subscription.list(customer=customer_id, status='active', limit=10)
+    except Exception as e:
+        logger.error(f"[find_active_paid_subscription_for_user] Stripe lookup failed for uid={uid}: {e}")
+        return None
+
+    for sub in subs.data:
+        d = sub.to_dict()
+        sub_uid = d.get('metadata', {}).get('uid')
+        if sub_uid and sub_uid != uid:
+            continue
+        items = d.get('items', {}).get('data') or []
+        if not items or not items[0].get('price'):
+            continue
+        price_id = items[0]['price'].get('id')
+        try:
+            plan = get_plan_type_from_price_id(price_id)
+        except ValueError:
+            continue
+        if not is_paid_plan(plan):
+            continue
+        return Subscription(
+            plan=plan,
+            status=SubscriptionStatus.active,
+            stripe_subscription_id=d.get('id'),
+            current_price_id=price_id,
+            current_period_end=d.get('current_period_end'),
+            cancel_at_period_end=d.get('cancel_at_period_end', False),
+            limits=get_plan_limits(plan),
+        )
+    return None
 
 
 def can_user_make_payment(uid: str, target_price_id: str = None) -> tuple[bool, str]:
@@ -877,25 +943,34 @@ def reconcile_basic_plan_with_stripe(uid: str, subscription: Subscription | None
             price_id = items[0]['price'].get('id')
 
         stripe_status = stripe_sub_dict.get('status')
-        if stripe_status not in ('active', 'trialing') or not price_id:
-            return subscription
+        if stripe_status in ('active', 'trialing') and price_id:
+            try:
+                plan_type = get_plan_type_from_price_id(price_id)
+            except ValueError:
+                plan_type = None
 
-        try:
-            plan_type = get_plan_type_from_price_id(price_id)
-        except ValueError:
-            plan_type = None
+            # If the stored Stripe sub is actually a paid plan, fix our local record.
+            if plan_type and is_paid_plan(plan_type):
+                subscription.plan = plan_type
+                subscription.status = SubscriptionStatus.active
+                subscription.current_period_end = stripe_sub_dict.get('current_period_end')
+                subscription.cancel_at_period_end = stripe_sub_dict.get('cancel_at_period_end', False)
+                subscription.current_price_id = price_id
+                subscription.limits = get_plan_limits(plan_type)
 
-        # If Stripe says this is actually a paid plan, fix our local record.
-        if plan_type and is_paid_plan(plan_type):
-            subscription.plan = plan_type
-            subscription.status = SubscriptionStatus.active
-            subscription.current_period_end = stripe_sub_dict.get('current_period_end')
-            subscription.cancel_at_period_end = stripe_sub_dict.get('cancel_at_period_end', False)
-            subscription.current_price_id = price_id
-            subscription.limits = get_plan_limits(plan_type)
+                # Persist the corrected subscription back to Firestore (without dynamic fields).
+                users_db.update_user_subscription(uid, subscription.dict())
+                return subscription
 
-            # Persist the corrected subscription back to Firestore (without dynamic fields).
-            users_db.update_user_subscription(uid, subscription.dict())
+        # Stored sub is canceled / unknown / not a paid plan. The user may have
+        # canceled it and started a *different* active subscription (possibly on
+        # a new Stripe customer) — the stored sub id alone can't see that. Adopt
+        # the customer's current active paid sub so an old sub's cancellation
+        # can't leave a paying user stranded on basic.
+        active = find_active_paid_subscription_for_user(uid)
+        if active:
+            users_db.update_user_subscription(uid, active.dict())
+            return active
 
     except Exception as e:
         # Don't break user flows on reconciliation issues; just log and continue with existing data.
