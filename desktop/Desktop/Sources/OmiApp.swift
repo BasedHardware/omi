@@ -1234,6 +1234,17 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
   }
 
   private func updateOnboardingLifecyclePolicy(reason: String) {
+    // Only the production/beta bundle (com.omi.computer-macos) should relaunch on login.
+    // Dev and named test bundles must always opt out — otherwise every local build that was
+    // open at shutdown gets relaunched on the next restart, swarming the screen with dev apps.
+    guard AppBuild.isProductionBundle else {
+      guard !relaunchOnLoginSuppressedForOnboarding else { return }
+      NSApp.disableRelaunchOnLogin()
+      relaunchOnLoginSuppressedForOnboarding = true
+      log("AppDelegate: Disabled relaunch on login for non-production bundle (\(reason))")
+      return
+    }
+
     let hasCompletedOnboarding = UserDefaults.standard.bool(forKey: "hasCompletedOnboarding")
 
     if hasCompletedOnboarding {
