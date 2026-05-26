@@ -451,6 +451,36 @@ final class DesktopAutomationBridge {
           statusCode: 400
         )
       }
+    case ("POST", "/open-export"):
+      struct OpenResult: Codable { let destination: String }
+      do {
+        let payload = try JSONDecoder().decode(
+          DesktopAutomationExecuteExportRequest.self, from: request.body)
+        guard MemoryExportDestination(rawValue: payload.destination) != nil else {
+          return jsonResponse(
+            DesktopAutomationResponse<OpenResult>(
+              ok: false, result: nil, error: "unknown destination: \(payload.destination)"),
+            statusCode: 400)
+        }
+        await MainActor.run {
+          NSApp.activate()
+          if let window = NSApp.windows.first(where: { $0.title.lowercased().hasPrefix("omi") }) {
+            window.makeKeyAndOrderFront(nil)
+          }
+          NotificationCenter.default.post(
+            name: .desktopAutomationOpenExportRequested, object: nil,
+            userInfo: ["destination": payload.destination])
+        }
+        try await Task.sleep(for: .milliseconds(300))
+        return jsonResponse(
+          DesktopAutomationResponse(
+            ok: true, result: OpenResult(destination: payload.destination), error: nil))
+      } catch {
+        return jsonResponse(
+          DesktopAutomationResponse<OpenResult>(
+            ok: false, result: nil, error: error.localizedDescription),
+          statusCode: 500)
+      }
     case ("POST", "/gmail-read"):
       do {
         let emails = try await GmailReaderService.shared.readRecentEmails(maxResults: 50)
