@@ -1,5 +1,7 @@
 {
-  "unreleased": [],
+  "unreleased": [
+    "Added an X (Twitter) connector to import your tweets and bookmarks into Omi"
+  ],
   "releases": [
     {
       "version": "0.11.426",

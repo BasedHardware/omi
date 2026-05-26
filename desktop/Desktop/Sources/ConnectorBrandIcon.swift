@@ -13,6 +13,7 @@ enum ConnectorBrand: String, Sendable {
   case gemini
   case claudeCode
   case codex
+  case x
 
   fileprivate var appPath: String? {
     switch self {
@@ -30,7 +31,7 @@ enum ConnectorBrand: String, Sendable {
     case .codex:
       // Codex is OpenAI's CLI — reuse the ChatGPT app icon as the brand mark.
       return "/Applications/ChatGPT.app"
-    case .calendar, .gmail, .localFiles, .gemini:
+    case .calendar, .gmail, .localFiles, .gemini, .x:
       return nil
     }
   }
@@ -81,6 +82,9 @@ enum ConnectorBrand: String, Sendable {
       return "terminal.fill"
     case .codex:
       return "chevron.left.forwardslash.chevron.right"
+    case .x:
+      // SF Symbols has no X/Twitter mark — rendered as the 𝕏 glyph in the view.
+      return "at"
     }
   }
 }
@@ -175,7 +179,12 @@ struct ConnectorBrandIcon: View {
             .stroke(Color.white.opacity(0.06), lineWidth: 1)
         )
 
-      if let image = ConnectorBrandImageLoader.image(for: brand) {
+      if brand == .x {
+        // X's wordmark glyph — no SF Symbol or app icon exists for it.
+        Text("𝕏")
+          .font(.system(size: size * 0.5, weight: .bold))
+          .foregroundColor(OmiColors.textPrimary)
+      } else if let image = ConnectorBrandImageLoader.image(for: brand) {
         Image(nsImage: image)
           .resizable()
           .interpolation(.high)

@@ -34,6 +34,7 @@ from routers import (
     action_items,
     task_integrations,
     integrations,
+    x_connector,
     other,
     developer,
     updates,
@@ -92,6 +93,7 @@ app.include_router(conversations.router)
 app.include_router(action_items.router)
 app.include_router(task_integrations.router)
 app.include_router(integrations.router)
+app.include_router(x_connector.router)
 app.include_router(memories.router)
 app.include_router(chat.router)
 app.include_router(speech_profile.router)
