@@ -1480,7 +1480,7 @@
     "exportConfiguration": "ఆకృతిని ఎగుమతి చేయండి",
     "bringYourOwn": "మీ స్వంతమైనవాటిని తీసుకువెళ్లండి",
     "payYourSttProvider": "Omi ను స్వేచ్ఛగా ఉపయోగించండి. మీరు మీ STT ప్రదాతకు నేరుగా చెల్లించండి.",
-    "freeMinutesMonth": "1,200 ఉచిత నిమిషాలు/నెల చేర్చబడ్డాయి. అসীమితమైన ",
+    "freeMinutesMonth": "600 ఉచిత నిమిషాలు/నెల చేర్చబడ్డాయి. అসীమితమైన ",
     "omiUnlimited": "Omi అసీమితం",
     "hostRequired": "హోస్ట్ అవసరం",
     "validPortRequired": "చెల్లుబాటు అయ్యే పోర్ట్ అవసరం",
@@ -5503,7 +5503,7 @@
     "@noSpecificDataAccessConfigured": {
         "description": "Message shown when app has no specific data access"
     },
-    "basicPlanDescription": "1,200 ప్రీమియం నిమిషాలు + ఆన్-డివైస్‌లో అన్‌లిమిటెడ్",
+    "basicPlanDescription": "600 ప్రీమియం నిమిషాలు + ఆన్-డివైస్‌లో అన్‌లిమిటెడ్",
     "@basicPlanDescription": {
         "description": "Description of basic plan features in usage page"
     },
@@ -7278,7 +7278,7 @@
     "@cloudProvider": {
         "description": "Tab label for cloud provider option"
     },
-    "premiumMinutesInfo": "నెలకు 1,200 ప్రిమియం నిమిషాలు. ఆన్-డివైస్ ట్యాబ్ అపరిమిత ఉచిత ట్రాన్‌స్క్రిప్షన్ అందిస్తుంది.",
+    "premiumMinutesInfo": "నెలకు 600 ప్రిమియం నిమిషాలు. ఆన్-డివైస్ ట్యాబ్ అపరిమిత ఉచిత ట్రాన్‌స్క్రిప్షన్ అందిస్తుంది.",
     "@premiumMinutesInfo": {
         "description": "Info about premium minutes"
     },
@@ -7389,7 +7389,7 @@
     "@batteryDrainSignificantly": {
         "description": "Warning about battery drain"
     },
-    "premiumMinutesMonth": "నెలకు 1,200 ప్రిమియం నిమిషాలు. ఆన్-డివైస్ ట్యాబ్ అపరిమిత ఉచిత ట్రాన్‌స్క్రిప్షన్ అందిస్తుంది. ",
+    "premiumMinutesMonth": "నెలకు 600 ప్రిమియం నిమిషాలు. ఆన్-డివైస్ ట్యాబ్ అపరిమిత ఉచిత ట్రాన్‌స్క్రిప్షన్ అందిస్తుంది. ",
     "@premiumMinutesMonth": {
         "description": "Description of premium minutes quota"
     },
