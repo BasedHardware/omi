@@ -7,8 +7,13 @@ enum MemoryExportDestination: String, CaseIterable, Identifiable, Sendable {
   case chatgpt
   case claude
   case gemini
+  case claudeCode
+  case codex
 
   var id: String { rawValue }
+
+  /// The hosted Omi MCP endpoint every client connects to.
+  static let mcpServerURL = "https://api.omi.me/v1/mcp/sse"
 
   var title: String {
     switch self {
@@ -17,6 +22,8 @@ enum MemoryExportDestination: String, CaseIterable, Identifiable, Sendable {
     case .chatgpt: return "ChatGPT"
     case .claude: return "Claude"
     case .gemini: return "Gemini"
+    case .claudeCode: return "Claude Code"
+    case .codex: return "Codex"
     }
   }
 
@@ -24,9 +31,11 @@ enum MemoryExportDestination: String, CaseIterable, Identifiable, Sendable {
     switch self {
     case .notion: return "Copy-ready page export"
     case .obsidian: return "Choose once, refresh anytime"
-    case .chatgpt: return "Prompt + memory pack"
-    case .claude: return "Prompt + memory pack"
+    case .chatgpt: return "Live MCP or memory pack"
+    case .claude: return "Live MCP or memory pack"
     case .gemini: return "Prompt + memory pack"
+    case .claudeCode: return "Connect via MCP"
+    case .codex: return "Connect via MCP"
     }
   }
 
@@ -34,9 +43,11 @@ enum MemoryExportDestination: String, CaseIterable, Identifiable, Sendable {
     switch self {
     case .notion: return "Copy a ready-to-paste memory page and jump into Notion."
     case .obsidian: return "Write Omi memories into your Obsidian vault."
-    case .chatgpt: return "Copy the prompt and memory pack, then open ChatGPT."
-    case .claude: return "Copy the prompt and memory pack, then open Claude."
+    case .chatgpt: return "Connect over MCP so ChatGPT reads your memories live, or copy a memory pack."
+    case .claude: return "Connect over MCP so Claude reads your memories live, or copy a memory pack."
     case .gemini: return "Copy the prompt and memory pack, then open Gemini."
+    case .claudeCode: return "Add Omi as an MCP server so Claude Code always reads your memories."
+    case .codex: return "Add Omi as an MCP server so Codex always reads your memories."
     }
   }
 
@@ -47,6 +58,8 @@ enum MemoryExportDestination: String, CaseIterable, Identifiable, Sendable {
     case .chatgpt: return .chatgpt
     case .claude: return .claude
     case .gemini: return .gemini
+    case .claudeCode: return .claudeCode
+    case .codex: return .codex
     }
   }
 
@@ -54,7 +67,41 @@ enum MemoryExportDestination: String, CaseIterable, Identifiable, Sendable {
     switch self {
     case .obsidian:
       return true
-    case .notion, .chatgpt, .claude, .gemini:
+    case .notion, .chatgpt, .claude, .gemini, .claudeCode, .codex:
+      return false
+    }
+  }
+
+  /// Whether this destination offers the live MCP connector flow.
+  var supportsMCP: Bool {
+    switch self {
+    case .chatgpt, .claude, .claudeCode, .codex:
+      return true
+    case .notion, .obsidian, .gemini:
+      return false
+    }
+  }
+
+  /// How the "Execute" button performs the setup.
+  /// - `.autonomous`: Omi runs a deterministic CLI step end-to-end (config write /
+  ///   `claude mcp add`). Reliable for everyone.
+  /// - `.assisted`: Omi opens the connector page and copies the key; the user does
+  ///   the final clicks. Used for ChatGPT/Claude because fully autonomous browser
+  ///   navigation of their connector UIs isn't reliable enough to promise.
+  enum MCPExecuteKind { case autonomous, assisted }
+  var mcpExecuteKind: MCPExecuteKind {
+    switch self {
+    case .claudeCode, .codex: return .autonomous
+    case .chatgpt, .claude, .notion, .obsidian, .gemini: return .assisted
+    }
+  }
+
+  /// Whether this destination offers the classic copy/paste memory-pack export.
+  var supportsMemoryPack: Bool {
+    switch self {
+    case .notion, .obsidian, .chatgpt, .claude, .gemini:
+      return true
+    case .claudeCode, .codex:
       return false
     }
   }
@@ -71,12 +118,14 @@ enum MemoryExportDestination: String, CaseIterable, Identifiable, Sendable {
       return URL(string: "https://claude.ai/new")
     case .gemini:
       return URL(string: "https://gemini.google.com/app")
+    case .claudeCode, .codex:
+      return nil
     }
   }
 
   var manualPrompt: String {
     switch self {
-    case .notion:
+    case .notion, .claudeCode, .codex:
       return ""
     case .chatgpt:
       return """
@@ -97,7 +146,7 @@ enum MemoryExportDestination: String, CaseIterable, Identifiable, Sendable {
 
   func clipboardText(for markdown: String) -> String {
     switch self {
-    case .notion:
+    case .notion, .obsidian, .claudeCode, .codex:
       return markdown
     case .chatgpt, .claude, .gemini:
       return """
@@ -107,9 +156,101 @@ enum MemoryExportDestination: String, CaseIterable, Identifiable, Sendable {
 
         \(markdown)
         """
-    case .obsidian:
-      return markdown
     }
+  }
+
+  // MARK: - MCP connection setup
+
+  /// Per-client instructions for wiring Omi memory in over MCP, rendered with the user's key.
+  func mcpSetup(key: String) -> MCPSetup? {
+    let url = Self.mcpServerURL
+    switch self {
+    case .claude:
+      return MCPSetup(
+        serverURL: url,
+        copyTitle: nil,
+        copyText: nil,
+        steps: [
+          "Open claude.ai → Settings → Connectors → Add custom connector",
+          "Name it “Omi Memory” and paste the server URL below",
+          "Under Advanced settings set OAuth Client ID to “omi” and Client Secret to your key below",
+          "Click Add, then Connect. Syncs to Claude desktop + mobile automatically.",
+        ],
+        openURL: URL(string: "https://claude.ai/settings/connectors"),
+        openTitle: "Open Claude Connectors"
+      )
+    case .chatgpt:
+      return MCPSetup(
+        serverURL: url,
+        copyTitle: nil,
+        copyText: nil,
+        steps: [
+          "Open ChatGPT → Settings → Apps → Advanced, enable Developer mode",
+          "Create app → name it “Omi Memory” and paste the server URL below",
+          "Authentication: OAuth. In Advanced OAuth settings set Client ID “omi”, Client Secret to your key, token auth method “client_secret_post”",
+          "Auth URL: https://api.omi.me/authorize · Token URL: https://api.omi.me/token",
+          "Create, then Connect. Syncs to ChatGPT desktop + mobile automatically.",
+        ],
+        openURL: URL(string: "https://chatgpt.com/"),
+        openTitle: "Open ChatGPT"
+      )
+    case .claudeCode:
+      return MCPSetup(
+        serverURL: url,
+        copyTitle: "Copy command",
+        copyText:
+          "claude mcp add --scope user --transport http omi-memory \(url) --header \"Authorization: Bearer \(key)\"",
+        steps: [
+          "Run the command below in your terminal",
+          "It registers Omi at user scope, so every Claude Code project reads your memories",
+        ],
+        openURL: nil,
+        openTitle: nil
+      )
+    case .codex:
+      return MCPSetup(
+        serverURL: url,
+        copyTitle: "Copy config",
+        copyText: """
+          [mcp_servers.omi-memory]
+          command = "npx"
+          args = ["-y", "mcp-remote", "\(url)", "--header", "Authorization: Bearer \(key)"]
+          """,
+        steps: [
+          "Add the block below to ~/.codex/config.toml",
+          "Restart Codex — it will read your Omi memories over MCP",
+        ],
+        openURL: nil,
+        openTitle: nil
+      )
+    case .notion, .obsidian, .gemini:
+      return nil
+    }
+  }
+
+  /// Title + body for an Omi task that asks Omi to perform this connection
+  /// autonomously (driving the browser/terminal) via the standard execute flow.
+  func omiExecutionTask(key: String) -> (title: String, body: String)? {
+    guard let setup = mcpSetup(key: key) else { return nil }
+    let clientName = title
+    let taskTitle = "Connect my Omi memory to \(clientName) over MCP"
+    var lines = [
+      "Set up the Omi memory MCP connector in \(clientName) end-to-end for me so it can read my Omi memories. Use the browser/terminal as needed and confirm when it's connected.",
+      "",
+      "MCP server URL: \(setup.serverURL)",
+      "My Omi MCP key: \(key)",
+      "",
+      "Steps:",
+    ]
+    for (index, step) in setup.steps.enumerated() {
+      lines.append("\(index + 1). \(step)")
+    }
+    if let copyText = setup.copyText {
+      lines.append("")
+      lines.append("Command/config to run:")
+      lines.append(copyText)
+    }
+    return (taskTitle, lines.joined(separator: "\n"))
   }
 
   fileprivate var notionTokenKey: String { "memoryExportNotionToken" }
@@ -126,6 +267,16 @@ struct MemoryExportStatus: Sendable {
   let lastExportedAt: Date?
   let detailText: String?
   let isConfigured: Bool
+}
+
+/// Rendered MCP connection instructions for a single client.
+struct MCPSetup: Sendable {
+  let serverURL: String
+  let copyTitle: String?
+  let copyText: String?
+  let steps: [String]
+  let openURL: URL?
+  let openTitle: String?
 }
 
 struct MemoryExportResult: Sendable {
@@ -182,6 +333,8 @@ actor MemoryExportService {
     switch destination {
     case .obsidian:
       isConfigured = !(defaults.string(forKey: destination.obsidianVaultPathKey) ?? "").isEmpty
+    case .claudeCode, .codex:
+      isConfigured = hasStoredMCPKey
     case .notion, .chatgpt, .claude, .gemini:
       isConfigured = exportedCount > 0
     }
@@ -210,6 +363,29 @@ actor MemoryExportService {
 
   func obsidianVaultPath() -> String {
     defaults.string(forKey: MemoryExportDestination.obsidian.obsidianVaultPathKey) ?? ""
+  }
+
+  // MARK: - MCP key
+
+  private var mcpKeyDefaultsKey: String { "memoryExportMCPApiKey" }
+
+  nonisolated var hasStoredMCPKey: Bool {
+    !(UserDefaults.standard.string(forKey: "memoryExportMCPApiKey") ?? "").isEmpty
+  }
+
+  func storedMCPKey() -> String? {
+    let value = defaults.string(forKey: mcpKeyDefaultsKey) ?? ""
+    return value.isEmpty ? nil : value
+  }
+
+  /// Returns the cached MCP key, minting a fresh one via the backend on first use.
+  func ensureMCPKey() async throws -> String {
+    if let existing = storedMCPKey() {
+      return existing
+    }
+    let key = try await APIClient.shared.createMCPKey(name: "Omi Desktop")
+    defaults.set(key, forKey: mcpKeyDefaultsKey)
+    return key
   }
 
   func exportToNotion(token: String, parentPageID: String) async throws -> MemoryExportResult {

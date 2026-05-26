@@ -1,5 +1,8 @@
 {
-  "unreleased": [],
+  "unreleased": [
+    "Redesigned the Apps page connectors as a compact list and added one-tap MCP connection for Claude, ChatGPT, Claude Code, and Codex",
+    "Added an Execute button on MCP connectors so Omi sets up Claude/ChatGPT/Claude Code/Codex for you as a task"
+  ],
   "releases": [
     {
       "version": "0.11.423",

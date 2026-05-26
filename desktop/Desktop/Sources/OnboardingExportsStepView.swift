@@ -45,12 +45,18 @@ struct OnboardingExportsStepView: View {
     }
   }
 
+  // Onboarding seeds memory via copy/paste packs; MCP-only clients (Claude Code,
+  // Codex) are wired later from the Apps page, so keep them out of first-run.
+  private var onboardingDestinations: [MemoryExportDestination] {
+    MemoryExportDestination.allCases.filter { $0.supportsMemoryPack }
+  }
+
   private var destinationsList: some View {
     VStack(alignment: .leading, spacing: 0) {
-      ForEach(Array(MemoryExportDestination.allCases.enumerated()), id: \.element.id) {
+      ForEach(Array(onboardingDestinations.enumerated()), id: \.element.id) {
         index, destination in
         exportRow(destination: destination)
-        if index < MemoryExportDestination.allCases.count - 1 {
+        if index < onboardingDestinations.count - 1 {
           Divider()
             .padding(.leading, 66)
             .background(Color.white.opacity(0.05))
@@ -171,6 +177,10 @@ private struct OnboardingInlineExportPanel: View {
         inlineInfoCard(
           "Omi copies the prompt and memory pack together, saves a Markdown backup, and opens \(destination.title)."
         )
+
+      case .claudeCode, .codex:
+        inlineInfoCard(
+          "Connect \(destination.title) over MCP from Settings → Apps after onboarding.")
       }
 
       HStack(spacing: 12) {
@@ -222,7 +232,7 @@ private struct OnboardingInlineExportPanel: View {
     switch destination {
     case .notion: return "Preparing…"
     case .obsidian: return "Exporting…"
-    case .chatgpt, .claude, .gemini: return "Preparing…"
+    case .chatgpt, .claude, .gemini, .claudeCode, .codex: return "Preparing…"
     }
   }
 
@@ -232,7 +242,7 @@ private struct OnboardingInlineExportPanel: View {
       return "Copy & open"
     case .obsidian:
       return model.obsidianVaultPath.isEmpty ? "Choose vault" : "Export"
-    case .chatgpt, .claude, .gemini:
+    case .chatgpt, .claude, .gemini, .claudeCode, .codex:
       return "Copy & open"
     }
   }

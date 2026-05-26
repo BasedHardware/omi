@@ -11,6 +11,8 @@ enum ConnectorBrand: String, Sendable {
   case chatgpt
   case claude
   case gemini
+  case claudeCode
+  case codex
 
   fileprivate var appPath: String? {
     switch self {
@@ -22,8 +24,12 @@ enum ConnectorBrand: String, Sendable {
       return "/Applications/Obsidian.app"
     case .chatgpt:
       return "/Applications/ChatGPT.app"
-    case .claude:
+    case .claude, .claudeCode:
+      // Claude Code is Anthropic's CLI — reuse the Claude app icon as the brand mark.
       return "/Applications/Claude.app"
+    case .codex:
+      // Codex is OpenAI's CLI — reuse the ChatGPT app icon as the brand mark.
+      return "/Applications/ChatGPT.app"
     case .calendar, .gmail, .localFiles, .gemini:
       return nil
     }
@@ -71,6 +77,10 @@ enum ConnectorBrand: String, Sendable {
       return "sparkles"
     case .gemini:
       return "sparkles.rectangle.stack"
+    case .claudeCode:
+      return "terminal.fill"
+    case .codex:
+      return "chevron.left.forwardslash.chevron.right"
     }
   }
 }

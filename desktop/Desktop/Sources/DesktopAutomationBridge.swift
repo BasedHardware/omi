@@ -69,6 +69,10 @@ struct DesktopAutomationOpenConversationRequest: Codable {
   let activateApp: Bool?
 }
 
+struct DesktopAutomationExecuteExportRequest: Codable {
+  let destination: String
+}
+
 /// Describes a semantic action exposed over `GET /actions` so an agent can discover
 /// what it can drive without inspecting the UI tree.
 struct DesktopAutomationActionDescriptor: Codable {
@@ -399,6 +403,27 @@ final class DesktopAutomationBridge {
           ),
           statusCode: 400
         )
+      }
+    case ("POST", "/execute-export"):
+      struct ExecResult: Codable { let taskTitle: String }
+      do {
+        let payload = try JSONDecoder().decode(
+          DesktopAutomationExecuteExportRequest.self, from: request.body)
+        guard let destination = MemoryExportDestination(rawValue: payload.destination) else {
+          return jsonResponse(
+            DesktopAutomationResponse<ExecResult>(
+              ok: false, result: nil, error: "unknown destination: \(payload.destination)"),
+            statusCode: 400)
+        }
+        let outcome = try await MemoryExportExecutor.run(destination)
+        return jsonResponse(
+          DesktopAutomationResponse(
+            ok: true, result: ExecResult(taskTitle: outcome.taskTitle), error: nil))
+      } catch {
+        return jsonResponse(
+          DesktopAutomationResponse<ExecResult>(
+            ok: false, result: nil, error: error.localizedDescription),
+          statusCode: 500)
       }
     case ("GET", "/actions"):
       let descriptors = await DesktopAutomationActionRegistry.shared.descriptors()

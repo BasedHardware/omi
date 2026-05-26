@@ -12,13 +12,13 @@ struct ExportsSection: View {
         .scaledFont(size: 18, weight: .semibold)
         .foregroundColor(OmiColors.textPrimary)
 
-      LazyVGrid(
-        columns: [
-          GridItem(.adaptive(minimum: 220), spacing: 16)
-        ], spacing: 16
-      ) {
-        ForEach(destinations) { destination in
-          MemoryExportCard(
+      VStack(spacing: 0) {
+        ForEach(Array(destinations.enumerated()), id: \.element.id) { index, destination in
+          if index > 0 {
+            Divider()
+              .background(OmiColors.backgroundTertiary)
+          }
+          MemoryExportRow(
             destination: destination,
             status: statuses[destination]
               ?? MemoryExportStatus(
@@ -28,102 +28,62 @@ struct ExportsSection: View {
           }
         }
       }
+      .background(OmiColors.backgroundPrimary)
+      .cornerRadius(12)
+      .overlay(
+        RoundedRectangle(cornerRadius: 12)
+          .stroke(OmiColors.backgroundTertiary, lineWidth: 1)
+      )
     }
   }
 }
 
-private struct MemoryExportCard: View {
+private struct MemoryExportRow: View {
   let destination: MemoryExportDestination
   let status: MemoryExportStatus
   let action: () -> Void
 
   @State private var isHovering = false
 
-  private var primaryText: String {
-    if status.exportedCount > 0 {
-      return "\(status.exportedCount.formatted()) memories exported"
-    }
-    if let detail = status.detailText, !detail.isEmpty {
-      return detail
-    }
-    return destination.isAutomated ? "Not connected" : "Ready to export"
-  }
-
-  private var secondaryText: String? {
-    if let lastExportedAt = status.lastExportedAt {
-      return
-        "Updated \(RelativeDateTimeFormatter().localizedString(for: lastExportedAt, relativeTo: Date()))"
-    }
-    if let detail = status.detailText, !detail.isEmpty, detail != primaryText {
-      return detail
-    }
-    return destination.isAutomated ? destination.subtitle : "Manual flow"
-  }
-
   private var actionTitle: String {
+    if destination.supportsMCP {
+      return status.isConfigured ? "Manage" : "Connect"
+    }
     switch destination {
     case .obsidian:
-      return status.isConfigured ? "Sync now" : "Connect"
-    case .notion, .chatgpt, .claude, .gemini:
+      return status.isConfigured ? "Sync" : "Connect"
+    case .notion, .chatgpt, .claude, .gemini, .claudeCode, .codex:
       return "Open"
     }
   }
 
   var body: some View {
     Button(action: action) {
-      VStack(alignment: .leading, spacing: 10) {
-        HStack(spacing: 12) {
-          ConnectorBrandIcon(brand: destination.brand, size: 50, cornerRadius: 12)
+      HStack(spacing: 12) {
+        ConnectorBrandIcon(brand: destination.brand, size: 34, cornerRadius: 9)
 
-          VStack(alignment: .leading, spacing: 4) {
-            Text(destination.title)
-              .scaledFont(size: 14, weight: .medium)
-              .foregroundColor(OmiColors.textPrimary)
-              .lineLimit(1)
+        VStack(alignment: .leading, spacing: 2) {
+          Text(destination.title)
+            .scaledFont(size: 14, weight: .medium)
+            .foregroundColor(OmiColors.textPrimary)
+            .lineLimit(1)
 
-            Text(destination.subtitle)
-              .scaledFont(size: 12)
-              .foregroundColor(OmiColors.textTertiary)
-              .lineLimit(1)
-          }
-
-          Spacer()
+          Text(destination.description)
+            .scaledFont(size: 12)
+            .foregroundColor(OmiColors.textTertiary)
+            .lineLimit(1)
+            .truncationMode(.tail)
         }
 
-        Text(destination.description)
-          .scaledFont(size: 12)
-          .foregroundColor(OmiColors.textSecondary)
-          .lineLimit(2)
-          .multilineTextAlignment(.leading)
+        Spacer(minLength: 12)
 
-        HStack {
-          VStack(alignment: .leading, spacing: 3) {
-            Text(primaryText)
-              .scaledFont(size: 11, weight: .medium)
-              .foregroundColor(
-                status.exportedCount > 0 ? OmiColors.textSecondary : OmiColors.textTertiary)
-
-            if let secondaryText {
-              Text(secondaryText)
-                .scaledFont(size: 11)
-                .foregroundColor(OmiColors.textTertiary)
-                .lineLimit(1)
-            }
-          }
-
-          Spacer()
-
-          ImportConnectorActionButton(
-            title: actionTitle, isConnected: status.isConfigured || status.exportedCount > 0)
-        }
+        ImportConnectorActionButton(
+          title: actionTitle, isConnected: status.isConfigured || status.exportedCount > 0)
       }
-      .padding(14)
-      .background(isHovering ? OmiColors.backgroundSecondary : OmiColors.backgroundPrimary)
-      .cornerRadius(12)
-      .overlay(
-        RoundedRectangle(cornerRadius: 12)
-          .stroke(OmiColors.backgroundTertiary, lineWidth: 1)
-      )
+      .padding(.horizontal, 14)
+      .padding(.vertical, 11)
+      .background(isHovering ? OmiColors.backgroundSecondary : Color.clear)
+      .contentShape(Rectangle())
     }
     .buttonStyle(.plain)
     .onHover { isHovering = $0 }
@@ -138,9 +98,58 @@ final class MemoryExportDestinationSheetModel: ObservableObject {
   @Published var notionToken = ""
   @Published var notionParentPageID = ""
   @Published var obsidianVaultPath = ""
+  @Published var mcpKey: String?
+  @Published var isLoadingMCPKey = false
 
   func loadConfiguration() async {
     obsidianVaultPath = await MemoryExportService.shared.obsidianVaultPath()
+    mcpKey = await MemoryExportService.shared.storedMCPKey()
+  }
+
+  func generateMCPKey() async {
+    errorMessage = nil
+    isLoadingMCPKey = true
+    defer { isLoadingMCPKey = false }
+    do {
+      mcpKey = try await MemoryExportService.shared.ensureMCPKey()
+    } catch {
+      errorMessage = "Couldn't create an MCP key: \(error.localizedDescription)"
+    }
+  }
+
+  func copyToPasteboard(_ text: String, label: String) {
+    NSPasteboard.general.clearContents()
+    NSPasteboard.general.setString(text, forType: .string)
+    statusMessage = "\(label) copied."
+  }
+
+  func open(_ url: URL) {
+    NSWorkspace.shared.open(url)
+  }
+
+  @Published var isExecuting = false
+
+  /// Hand the whole setup to Omi: create a task and run it through the standard
+  /// execute flow (TasksStore.createTask + AgentPillsManager.spawn) — the same path
+  /// the floating-bar "Execute" button uses. No new execution flow.
+  func executeWithOmi(destination: MemoryExportDestination) async {
+    errorMessage = nil
+    isExecuting = true
+    defer { isExecuting = false }
+
+    do {
+      let outcome = try await MemoryExportExecutor.run(destination)
+      mcpKey = await MemoryExportService.shared.storedMCPKey()
+      switch outcome.mode {
+      case .autonomous:
+        statusMessage = "Omi is setting this up — follow along in the floating bar."
+      case .assisted:
+        statusMessage =
+          "Opened \(destination.title) and copied your key — finish with the steps below."
+      }
+    } catch {
+      errorMessage = error.localizedDescription
+    }
   }
 
   func run(destination: MemoryExportDestination) async -> MemoryExportStatus? {
@@ -187,6 +196,10 @@ final class MemoryExportDestinationSheetModel: ObservableObject {
           openDestination(for: destination, url: result.destinationURL)
         }
         statusMessage = "Memory pack ready for \(destination.title). Prompt and export copied."
+
+      case .claudeCode, .codex:
+        // MCP-only destinations have no memory-pack run step.
+        return nil
       }
 
       return await MemoryExportService.shared.status(for: destination)
@@ -325,6 +338,225 @@ struct MemoryExportDestinationSheet: View {
 
   @ViewBuilder
   private var content: some View {
+    VStack(alignment: .leading, spacing: 18) {
+      if destination.supportsMCP {
+        executeBlock
+        Divider()
+          .background(OmiColors.backgroundTertiary)
+          .padding(.vertical, 2)
+
+        methodHeader(
+          icon: "bolt.fill",
+          title: "Live connection",
+          tag: "AUTOMATIC",
+          tagColor: OmiColors.success,
+          subtitle: "Set it once — \(destination.title) reads your memories live and stays in sync."
+        )
+        mcpSection
+      }
+
+      if destination.supportsMemoryPack {
+        if destination.supportsMCP {
+          Divider()
+            .background(OmiColors.backgroundTertiary)
+            .padding(.vertical, 2)
+        }
+        methodHeader(
+          icon: "doc.on.clipboard.fill",
+          title: "Memory pack",
+          tag: "MANUAL",
+          tagColor: OmiColors.textTertiary,
+          subtitle: "Copy a one-time snapshot and paste it in yourself. Won't update on its own."
+        )
+        packSection
+        packActionButton
+      }
+    }
+  }
+
+  private var executeButtonTitle: String {
+    destination.mcpExecuteKind == .autonomous ? "Execute" : "Open & copy key"
+  }
+
+  private var executeBlockSubtitle: String {
+    switch destination.mcpExecuteKind {
+    case .autonomous:
+      return
+        "Omi sets up \(destination.title) for you automatically — it runs as an Omi task you can watch in the floating bar."
+    case .assisted:
+      return
+        "Omi opens \(destination.title) and copies your key, then you confirm the quick steps below."
+    }
+  }
+
+  /// "Execute" — hands the whole setup to Omi to run as a task.
+  private var executeBlock: some View {
+    VStack(alignment: .leading, spacing: 8) {
+      HStack(spacing: 8) {
+        Image(systemName: "sparkles")
+          .scaledFont(size: 13, weight: .semibold)
+          .foregroundColor(OmiColors.purplePrimary)
+        Text("Let Omi do it")
+          .scaledFont(size: 15, weight: .semibold)
+          .foregroundColor(OmiColors.textPrimary)
+        Text("FASTEST")
+          .scaledFont(size: 9, weight: .bold)
+          .foregroundColor(OmiColors.purplePrimary)
+          .padding(.horizontal, 7)
+          .padding(.vertical, 2)
+          .background(Capsule().fill(OmiColors.purplePrimary.opacity(0.15)))
+      }
+      Text(executeBlockSubtitle)
+        .scaledFont(size: 12)
+        .foregroundColor(OmiColors.textTertiary)
+        .fixedSize(horizontal: false, vertical: true)
+
+      Button(model.isExecuting ? "Starting Omi…" : executeButtonTitle) {
+        Task { await model.executeWithOmi(destination: destination) }
+      }
+      .buttonStyle(OnboardingCardButtonStyle(isPrimary: true))
+      .disabled(model.isExecuting)
+    }
+  }
+
+  /// Labeled header that makes the automatic (MCP) vs manual (pack) choice obvious.
+  private func methodHeader(
+    icon: String, title: String, tag: String, tagColor: Color, subtitle: String
+  ) -> some View {
+    VStack(alignment: .leading, spacing: 4) {
+      HStack(spacing: 8) {
+        Image(systemName: icon)
+          .scaledFont(size: 13, weight: .semibold)
+          .foregroundColor(tagColor)
+        Text(title)
+          .scaledFont(size: 15, weight: .semibold)
+          .foregroundColor(OmiColors.textPrimary)
+        Text(tag)
+          .scaledFont(size: 9, weight: .bold)
+          .foregroundColor(tagColor)
+          .padding(.horizontal, 7)
+          .padding(.vertical, 2)
+          .background(
+            Capsule().fill(tagColor.opacity(0.15))
+          )
+      }
+      Text(subtitle)
+        .scaledFont(size: 12)
+        .foregroundColor(OmiColors.textTertiary)
+        .fixedSize(horizontal: false, vertical: true)
+    }
+  }
+
+  // MARK: - MCP connection
+
+  @ViewBuilder
+  private var mcpSection: some View {
+    let setup = destination.mcpSetup(key: model.mcpKey ?? "YOUR_OMI_KEY")
+    VStack(alignment: .leading, spacing: 12) {
+      mcpCodeRow(
+        label: "Server URL", value: MemoryExportDestination.mcpServerURL, copyLabel: "Server URL")
+
+      mcpKeyRow
+
+      if let setup, let copyText = setup.copyText, let copyTitle = setup.copyTitle {
+        mcpSnippet(copyText, title: copyTitle, enabled: model.mcpKey != nil)
+      }
+
+      if let setup {
+        VStack(alignment: .leading, spacing: 6) {
+          ForEach(Array(setup.steps.enumerated()), id: \.offset) { index, step in
+            HStack(alignment: .top, spacing: 8) {
+              Text("\(index + 1).")
+                .scaledFont(size: 12, weight: .semibold)
+                .foregroundColor(OmiColors.textTertiary)
+              Text(step)
+                .scaledFont(size: 12)
+                .foregroundColor(OmiColors.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
+            }
+          }
+        }
+        .padding(.top, 2)
+
+        if let openURL = setup.openURL, let openTitle = setup.openTitle {
+          Button(openTitle) { model.open(openURL) }
+            .buttonStyle(.plain)
+            .scaledFont(size: 12, weight: .medium)
+            .foregroundColor(OmiColors.textSecondary)
+        }
+      }
+    }
+  }
+
+  @ViewBuilder
+  private var mcpKeyRow: some View {
+    if let key = model.mcpKey {
+      mcpCodeRow(label: "Your key", value: key, copyLabel: "Key", secure: true)
+    } else {
+      Button(model.isLoadingMCPKey ? "Generating…" : "Generate connection key") {
+        Task { await model.generateMCPKey() }
+      }
+      .buttonStyle(OnboardingCardButtonStyle(isPrimary: true))
+      .disabled(model.isLoadingMCPKey)
+    }
+  }
+
+  private func mcpCodeRow(label: String, value: String, copyLabel: String, secure: Bool = false)
+    -> some View
+  {
+    VStack(alignment: .leading, spacing: 6) {
+      Text(label)
+        .scaledFont(size: 12, weight: .medium)
+        .foregroundColor(OmiColors.textSecondary)
+      HStack(spacing: 8) {
+        Text(secure ? String(repeating: "•", count: min(value.count, 28)) : value)
+          .scaledFont(size: 12)
+          .foregroundColor(OmiColors.textPrimary)
+          .lineLimit(1)
+          .truncationMode(.middle)
+          .frame(maxWidth: .infinity, alignment: .leading)
+        Button("Copy") { model.copyToPasteboard(value, label: copyLabel) }
+          .buttonStyle(.plain)
+          .scaledFont(size: 11, weight: .medium)
+          .foregroundColor(OmiColors.textSecondary)
+      }
+      .padding(.horizontal, 12)
+      .padding(.vertical, 10)
+      .background(
+        RoundedRectangle(cornerRadius: 12, style: .continuous)
+          .fill(OmiColors.backgroundSecondary)
+          .overlay(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+              .stroke(Color.white.opacity(0.08), lineWidth: 1))
+      )
+    }
+  }
+
+  private func mcpSnippet(_ text: String, title: String, enabled: Bool) -> some View {
+    VStack(alignment: .leading, spacing: 8) {
+      Text(text)
+        .scaledFont(size: 11)
+        .foregroundColor(OmiColors.textSecondary)
+        .textSelection(.enabled)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(12)
+        .background(
+          RoundedRectangle(cornerRadius: 12, style: .continuous)
+            .fill(OmiColors.backgroundSecondary)
+            .overlay(
+              RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .stroke(Color.white.opacity(0.08), lineWidth: 1))
+        )
+      Button(title) { model.copyToPasteboard(text, label: title) }
+        .buttonStyle(OnboardingCardButtonStyle(isPrimary: true))
+        .disabled(!enabled)
+    }
+  }
+
+  // MARK: - Memory pack
+
+  @ViewBuilder
+  private var packSection: some View {
     switch destination {
     case .notion:
       VStack(alignment: .leading, spacing: 12) {
@@ -378,8 +610,13 @@ struct MemoryExportDestinationSheet: View {
               )
           )
       }
-    }
 
+    case .claudeCode, .codex:
+      EmptyView()
+    }
+  }
+
+  private var packActionButton: some View {
     Button(model.isRunning ? actionTitle.running : actionTitle.idle) {
       Task {
         if let updatedStatus = await model.run(destination: destination) {
@@ -399,6 +636,8 @@ struct MemoryExportDestinationSheet: View {
       return (model.obsidianVaultPath.isEmpty ? "Choose vault" : "Export", "Exporting…")
     case .chatgpt, .claude, .gemini:
       return ("Copy & open", "Preparing…")
+    case .claudeCode, .codex:
+      return ("Copy", "…")
     }
   }
 
