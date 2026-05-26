@@ -87,11 +87,9 @@ class ConversationPostProcessing {
 
   factory ConversationPostProcessing.fromJson(Map<String, dynamic> json) {
     return ConversationPostProcessing(
-      status:
-          ConversationPostProcessingStatus.values.asNameMap()[json['status']] ??
+      status: ConversationPostProcessingStatus.values.asNameMap()[json['status']] ??
           ConversationPostProcessingStatus.in_progress,
-      model:
-          ConversationPostProcessingModel.values.asNameMap()[json['model']] ??
+      model: ConversationPostProcessingModel.values.asNameMap()[json['model']] ??
           ConversationPostProcessingModel.fal_whisperx,
       failReason: json['fail_reason'],
     );
@@ -142,12 +140,55 @@ class ConversationPhoto {
   }
 
   Map<String, dynamic> toJson() => {
-    'id': id,
-    'base64': base64,
-    'description': description,
-    'created_at': createdAt.toUtc().toIso8601String(),
-    'discarded': discarded,
-  };
+        'id': id,
+        'base64': base64,
+        'description': description,
+        'created_at': createdAt.toUtc().toIso8601String(),
+        'discarded': discarded,
+      };
+}
+
+/// Links a conversation to a Google Calendar event.
+class CalendarEventLink {
+  final String eventId;
+  final String title;
+  final List<String> attendees;
+  final List<String> attendeeEmails;
+  final DateTime startTime;
+  final DateTime endTime;
+  final String? htmlLink;
+
+  CalendarEventLink({
+    required this.eventId,
+    required this.title,
+    this.attendees = const [],
+    this.attendeeEmails = const [],
+    required this.startTime,
+    required this.endTime,
+    this.htmlLink,
+  });
+
+  factory CalendarEventLink.fromJson(Map<String, dynamic> json) {
+    return CalendarEventLink(
+      eventId: json['event_id'] ?? '',
+      title: json['title'] ?? '',
+      attendees: ((json['attendees'] ?? []) as List<dynamic>).map((e) => e.toString()).toList(),
+      attendeeEmails: ((json['attendee_emails'] ?? []) as List<dynamic>).map((e) => e.toString()).toList(),
+      startTime: json['start_time'] != null ? DateTime.parse(json['start_time']).toLocal() : DateTime.now(),
+      endTime: json['end_time'] != null ? DateTime.parse(json['end_time']).toLocal() : DateTime.now(),
+      htmlLink: json['html_link'],
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+        'event_id': eventId,
+        'title': title,
+        'attendees': attendees,
+        'attendee_emails': attendeeEmails,
+        'start_time': startTime.toUtc().toIso8601String(),
+        'end_time': endTime.toUtc().toIso8601String(),
+        'html_link': htmlLink,
+      };
 }
 
 class AudioFile {
@@ -182,14 +223,14 @@ class AudioFile {
   }
 
   Map<String, dynamic> toJson() => {
-    'id': id,
-    'uid': uid,
-    'conversation_id': conversationId,
-    'chunk_timestamps': chunkTimestamps,
-    'provider': provider,
-    'started_at': startedAt?.toUtc().toIso8601String(),
-    'duration': duration,
-  };
+        'id': id,
+        'uid': uid,
+        'conversation_id': conversationId,
+        'chunk_timestamps': chunkTimestamps,
+        'provider': provider,
+        'started_at': startedAt?.toUtc().toIso8601String(),
+        'duration': duration,
+      };
 }
 
 class ServerConversation {
@@ -210,6 +251,9 @@ class ServerConversation {
   final String? language; // applies to friend/omi only
 
   final ConversationExternalData? externalIntegration;
+
+  /// Calendar event link - set when conversation overlaps with a Google Calendar event
+  final CalendarEventLink? calendarEvent;
 
   ConversationStatus status;
   bool discarded;
@@ -239,6 +283,7 @@ class ServerConversation {
     this.source,
     this.language,
     this.externalIntegration,
+    this.calendarEvent,
     this.status = ConversationStatus.completed,
     this.isLocked = false,
     this.starred = false,
@@ -256,12 +301,10 @@ class ServerConversation {
       transcriptSegments: ((json['transcript_segments'] ?? []) as List<dynamic>)
           .map((segment) => TranscriptSegment.fromJson(segment))
           .toList(),
-      appResults: ((json['apps_results'] ?? []) as List<dynamic>)
-          .map((result) => AppResponse.fromJson(result))
-          .toList(),
-      suggestedSummarizationApps: ((json['suggested_summarization_apps'] ?? []) as List<dynamic>)
-          .map((appId) => appId.toString())
-          .toList(),
+      appResults:
+          ((json['apps_results'] ?? []) as List<dynamic>).map((result) => AppResponse.fromJson(result)).toList(),
+      suggestedSummarizationApps:
+          ((json['suggested_summarization_apps'] ?? []) as List<dynamic>).map((appId) => appId.toString()).toList(),
       geolocation: json['geolocation'] != null ? Geolocation.fromJson(json['geolocation']) : null,
       photos: json['photos'] != null
           ? ((json['photos'] ?? []) as List<dynamic>).map((photo) => ConversationPhoto.fromJson(photo)).toList()
@@ -271,9 +314,9 @@ class ServerConversation {
       source: json['source'] != null ? ConversationSource.values.asNameMap()[json['source']] : ConversationSource.omi,
       language: json['language'],
       deleted: json['deleted'] ?? false,
-      externalIntegration: json['external_data'] != null
-          ? ConversationExternalData.fromJson(json['external_data'])
-          : null,
+      externalIntegration:
+          json['external_data'] != null ? ConversationExternalData.fromJson(json['external_data']) : null,
+      calendarEvent: json['calendar_event'] != null ? CalendarEventLink.fromJson(json['calendar_event']) : null,
       status: json['status'] != null
           ? ConversationStatus.values.asNameMap()[json['status']] ?? ConversationStatus.completed
           : ConversationStatus.completed,
@@ -301,6 +344,7 @@ class ServerConversation {
       'source': source?.toString(),
       'language': language,
       'external_data': externalIntegration?.toJson(),
+      'calendar_event': calendarEvent?.toJson(),
       'status': status.toString().split('.').last,
       'is_locked': isLocked,
       'starred': starred,
