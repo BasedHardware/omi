@@ -258,6 +258,14 @@ LEGACY_PRICE_MAP = {
     # Old Unlimited ($19.99/mo, $199.99/yr) → PlanType.unlimited (now Neo)
     'price_1RtJPm1F8wnoWYvwhVJ38kLb': PlanType.unlimited,
     'price_1RtJQ71F8wnoWYvwKMPaGlGY': PlanType.unlimited,
+    # Orphaned from the Apr 17–20 Neo-product window: between f30245338 (added
+    # a separate Stripe product `prod_UM0IIpZ4iOgfk5` "Neo" wired via
+    # STRIPE_NEO_* env vars) and 2e71145ab (reverted to STRIPE_UNLIMITED_*),
+    # desktop signups landed on these prices. Stripe keeps billing them, but
+    # post-revert code recognizes neither, so renewals raise "unknown price ID"
+    # and drop active subscribers to free.
+    'price_1TNIHd1F8wnoWYvwkIrekcQZ': PlanType.unlimited,  # Neo Monthly ($20/mo)
+    'price_1TNIHd1F8wnoWYvwlKywJ8TO': PlanType.unlimited,  # Neo Annual ($200/yr)
     # Old Pro ($199/mo, $1999/yr) → PlanType.architect
     'price_1TAfBB1F8wnoWYvw8XBFM1dX': PlanType.architect,
     'price_1TLFac1F8wnoWYvwtPxZhtzE': PlanType.architect,
