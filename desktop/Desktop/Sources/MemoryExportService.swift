@@ -91,8 +91,8 @@ enum MemoryExportDestination: String, CaseIterable, Identifiable, Sendable {
   enum MCPExecuteKind { case autonomous, assisted }
   var mcpExecuteKind: MCPExecuteKind {
     switch self {
-    case .claudeCode, .codex: return .autonomous
-    case .chatgpt, .claude, .notion, .obsidian, .gemini: return .assisted
+    case .chatgpt, .claude, .claudeCode, .codex: return .autonomous
+    case .notion, .obsidian, .gemini: return .assisted
     }
   }
 
