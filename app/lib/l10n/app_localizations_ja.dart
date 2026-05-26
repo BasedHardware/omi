@@ -952,11 +952,6 @@ class AppLocalizationsJa extends AppLocalizations {
   }
 
   @override
-  String memoriesUsedThisMonth(String used, String limit) {
-    return '今月 $limit個中$used個の記憶作成済み';
-  }
-
-  @override
   String get visibility => '表示設定';
 
   @override
@@ -1621,7 +1616,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get finalTouches => '最終調整';
 
   @override
-  String get processing => '処理中...';
+  String get processing => '処理中';
 
   @override
   String get features => '機能';
@@ -4545,40 +4540,13 @@ class AppLocalizationsJa extends AppLocalizations {
   String get thankYouText => 'Omiの大切なユーザーであることに感謝します。ご質問やご不明な点がございましたら、team@basedhardware.comまでお気軽にお問い合わせください。';
 
   @override
-  String get wifiSyncSettings => 'WiFi同期設定';
-
-  @override
-  String get enterHotspotCredentials => 'スマートフォンのホットスポット認証情報を入力';
-
-  @override
-  String get wifiSyncUsesHotspot => 'WiFi同期はスマートフォンをホットスポットとして使用します。設定 > インターネット共有で名前とパスワードを確認してください。';
-
-  @override
-  String get hotspotNameSsid => 'ホットスポット名（SSID）';
-
-  @override
-  String get exampleIphoneHotspot => '例：iPhoneホットスポット';
-
-  @override
   String get password => 'パスワード';
-
-  @override
-  String get enterHotspotPassword => 'ホットスポットのパスワードを入力';
 
   @override
   String get saveCredentials => '認証情報を保存';
 
   @override
   String get clearCredentials => '認証情報をクリア';
-
-  @override
-  String get pleaseEnterHotspotName => 'ホットスポット名を入力してください';
-
-  @override
-  String get wifiCredentialsSaved => 'WiFi認証情報を保存しました';
-
-  @override
-  String get wifiCredentialsCleared => 'WiFi認証情報をクリアしました';
 
   @override
   String summaryGeneratedForDate(String date) {
@@ -5704,9 +5672,6 @@ class AppLocalizationsJa extends AppLocalizations {
   String get limitless => 'Limitless';
 
   @override
-  String get fastTransfer => '高速転送';
-
-  @override
   String get syncingStatus => '同期中';
 
   @override
@@ -5716,15 +5681,6 @@ class AppLocalizationsJa extends AppLocalizations {
   String etaLabel(String time) {
     return '予想時間: $time';
   }
-
-  @override
-  String get transferMethod => '転送方法';
-
-  @override
-  String get fast => '高速';
-
-  @override
-  String get ble => 'BLE';
 
   @override
   String get phone => '電話';
@@ -5745,25 +5701,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get processedFilesDeleted => '処理済みファイルを削除しました';
 
   @override
-  String get wifiEnableFailed => 'デバイスでWiFiを有効にできませんでした。もう一度お試しください。';
-
-  @override
-  String get deviceNoFastTransfer => 'お使いのデバイスは高速転送に対応していません。Bluetoothをご使用ください。';
-
-  @override
-  String get enableHotspotMessage => '電話のホットスポットを有効にしてもう一度お試しください。';
-
-  @override
-  String get transferStartFailed => '転送を開始できませんでした。もう一度お試しください。';
-
-  @override
   String get deviceNotResponding => 'デバイスが応答しません。もう一度お試しください。';
-
-  @override
-  String get invalidWifiCredentials => 'WiFi認証情報が無効です。ホットスポットの設定を確認してください。';
-
-  @override
-  String get wifiConnectionFailed => 'WiFi接続に失敗しました。もう一度お試しください。';
 
   @override
   String get sdCardProcessing => 'SDカード処理';
@@ -5775,9 +5713,6 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get process => '処理';
-
-  @override
-  String get wifiSyncFailed => 'WiFi同期に失敗しました';
 
   @override
   String get processingFailed => '処理に失敗しました';
@@ -6545,24 +6480,13 @@ class AppLocalizationsJa extends AppLocalizations {
   }
 
   @override
-  String get wifiSync => 'WiFi同期';
-
-  @override
   String itemCopiedToClipboard(String item) {
     return '$itemがクリップボードにコピーされました';
   }
 
   @override
-  String get wifiConnectionFailedTitle => '接続に失敗しました';
-
-  @override
   String connectingToDeviceName(String deviceName) {
     return '$deviceNameに接続中';
-  }
-
-  @override
-  String enableDeviceWifi(String deviceName) {
-    return '$deviceNameのWiFiを有効化';
   }
 
   @override
@@ -6657,9 +6581,6 @@ class AppLocalizationsJa extends AppLocalizations {
   String get statusUnprocessed => '未処理';
 
   @override
-  String get switchedToFastTransfer => '高速転送に切り替えました';
-
-  @override
   String get transferCompleteMessage => '転送完了！この録音を再生できます。';
 
   @override
@@ -6671,31 +6592,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get transferCancelled => '転送がキャンセルされました';
 
   @override
-  String get fastTransferEnabled => '高速転送が有効になりました';
-
-  @override
   String get bluetoothSyncEnabled => 'Bluetooth同期が有効になりました';
-
-  @override
-  String get enableFastTransfer => '高速転送を有効にする';
-
-  @override
-  String get fastTransferDescription => '高速転送はWiFiを使用して約5倍の速度を実現します。転送中、電話は一時的にOmiデバイスのWiFiネットワークに接続されます。';
-
-  @override
-  String get internetAccessPausedDuringTransfer => '転送中はインターネットアクセスが一時停止されます';
-
-  @override
-  String get chooseTransferMethodDescription => 'Omiデバイスから電話への録音の転送方法を選択してください。';
-
-  @override
-  String get wifiSpeed => 'WiFi経由で約150 KB/s';
-
-  @override
-  String get fiveTimesFaster => '5倍高速';
-
-  @override
-  String get fastTransferMethodDescription => 'Omiデバイスへの直接WiFi接続を作成します。転送中、電話は通常のWiFiから一時的に切断されます。';
 
   @override
   String get bluetooth => 'Bluetooth';
@@ -6716,7 +6613,15 @@ class AppLocalizationsJa extends AppLocalizations {
   String get lowBatteryAlertTitle => 'バッテリー残量低下アラート';
 
   @override
-  String get lowBatteryAlertBody => 'デバイスのバッテリーが少なくなっています。充電してください！🔋';
+  String lowBatteryAlertBody(int level) {
+    return 'バッテリー残量は $level% です。充電してください！🔋';
+  }
+
+  @override
+  String get batteryFullyChargedTitle => 'Omiは満充電です';
+
+  @override
+  String get batteryFullyChargedBody => 'Omiデバイスが満充電になりました。充電ケーブルを外してください！';
 
   @override
   String get deviceDisconnectedNotificationTitle => 'Omiデバイスが切断されました';
@@ -7374,12 +7279,6 @@ class AppLocalizationsJa extends AppLocalizations {
   String get voiceFailedToTranscribe => '音声の文字起こしに失敗しました';
 
   @override
-  String get locationPermissionRequired => '位置情報の許可が必要です';
-
-  @override
-  String get locationPermissionContent => '高速転送にはWiFi接続を確認するために位置情報の許可が必要です。続行するには位置情報の許可を付与してください。';
-
-  @override
   String get pdfTranscriptExport => '文字起こしエクスポート';
 
   @override
@@ -7524,12 +7423,6 @@ class AppLocalizationsJa extends AppLocalizations {
   String get dailyRecapsDescription => '日次の要約は生成されるとここに表示されます';
 
   @override
-  String get chooseTransferMethod => '転送方法を選択';
-
-  @override
-  String get fastTransferSpeed => 'WiFi経由で約150 KB/s';
-
-  @override
   String largeTimeGapDetected(String gap) {
     return '大きな時間差が検出されました ($gap)';
   }
@@ -7538,9 +7431,6 @@ class AppLocalizationsJa extends AppLocalizations {
   String largeTimeGapsDetected(String gaps) {
     return '大きな時間差が検出されました ($gaps)';
   }
-
-  @override
-  String get deviceDoesNotSupportWifiSwitchingToBle => 'デバイスはWiFi同期をサポートしていません。Bluetoothに切り替えています';
 
   @override
   String get appleHealthNotAvailable => 'Apple Healthはこのデバイスでは利用できません';
@@ -8295,7 +8185,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get manageStorage => 'ストレージを管理';
 
   @override
-  String get safelyBackedUp => 'スマホに安全にバックアップ済み';
+  String get safelyBackedUp => '作成された会話';
 
   @override
   String get notYetSynced => 'まだスマホに同期されていません';
@@ -9091,4 +8981,149 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get bulkDeleteFailed => 'タスクを削除できませんでした。もう一度お試しください。';
+
+  @override
+  String get deleteRecap => 'リキャップを削除';
+
+  @override
+  String get deleteRecapConfirmTitle => 'このリキャップを削除しますか?';
+
+  @override
+  String get deleteRecapConfirmBody => 'このリキャップは完全に削除されます。その日の元の会話には影響しません。';
+
+  @override
+  String get deleteRecapAction => '削除';
+
+  @override
+  String get recapDeletedSnackbar => 'リキャップを削除しました';
+
+  @override
+  String get recapDeleteFailed => 'リキャップを削除できませんでした。後でもう一度お試しください。';
+
+  @override
+  String get syncStatusBackedUp => 'バックアップ済み';
+
+  @override
+  String get syncStatusBackingUp => '同期中…';
+
+  @override
+  String get syncStatusWaiting => '同期を待機中';
+
+  @override
+  String get syncStatusRetrying => '処理できませんでした — 再試行中';
+
+  @override
+  String get syncStatusFailed => '失敗 — 「再試行」をタップ';
+
+  @override
+  String get syncStatusFileUnavailable => 'ファイルを利用できません';
+
+  @override
+  String get noRecordingsYet => 'まだ録音がありません';
+
+  @override
+  String get syncInProgress => '同期中';
+
+  @override
+  String get syncStatusUploaded => 'アップロード済み · Omi で処理中';
+
+  @override
+  String get deleteWhileProcessingTitle => 'まだ処理中です';
+
+  @override
+  String get deleteWhileProcessingMessage => 'この録音はアップロード済みですが、Omi はまだ会話を作成しています。今削除して処理が失敗すると復元できません。それでも削除しますか？';
+
+  @override
+  String get syncCardAllBackedUp => 'すべての録音を同期済み';
+
+  @override
+  String syncCardReadyCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count 件の録音を同期できます',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get syncCardProcessing => 'Omiで処理中…';
+
+  @override
+  String get syncCardWaitingInternet => 'インターネット接続を待機中';
+
+  @override
+  String syncCardNeedsAttention(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '確認が必要な録音が$count件',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get syncFlowIntro => '録音はデバイスからこの電話に転送されてローカルに保存され、その後 Omi のサーバーにアップロードされて文字起こしされ、会話に変換されます。';
+
+  @override
+  String get syncStepUpload => '同期';
+
+  @override
+  String get syncStepUploadDesc => '録音はOmiのサーバーに送信されます';
+
+  @override
+  String get syncStepProcess => '文字起こし';
+
+  @override
+  String get syncStepProcessDesc => 'Omi が音声を会話に変換します';
+
+  @override
+  String get syncStepBackedUp => '会話の準備が完了';
+
+  @override
+  String get syncStepBackedUpDesc => '会話 から見つけられます';
+
+  @override
+  String get syncFailureFootnote => '処理に失敗した場合、次回の同期で録音が自動的に再試行されます。';
+
+  @override
+  String get syncStatusConversationCreated => '会話を作成しました';
+
+  @override
+  String get syncCardUploadingTitle => 'Omiへアップロード中';
+
+  @override
+  String get syncCardDownloadingTitle => 'デバイスからダウンロード中';
+
+  @override
+  String syncCardProgressOf(int current, int total) {
+    return '$total件中$current件';
+  }
+
+  @override
+  String get syncStatusOnDevice => 'デバイス上';
+
+  @override
+  String get syncStatusDownloadingFromDevice => 'デバイスからダウンロード中';
+
+  @override
+  String get newestFirst => '新しい順';
+
+  @override
+  String get noSyncedRecordingsYet => '同期済みの録音はまだありません';
+
+  @override
+  String get morePaymentMethodsComingSoon => '他の支払い方法を近日追加予定';
+
+  @override
+  String get syncProcessingBackgroundHint => 'この処理はバックグラウンドで続きます — この画面から移動してかまいません。';
+
+  @override
+  String get syncCardRateLimited => '利用上限に達しました — 同期は自動的に再開されます';
+
+  @override
+  String get syncCardBackendBusy => 'Omi のサーバーが混雑しています — 空き容量が戻り次第、録音が同期されます';
+
+  @override
+  String get unableToDetermineFirmwareVersion => '現在のファームウェアバージョンを特定できません';
 }

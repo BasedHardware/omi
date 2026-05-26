@@ -968,11 +968,6 @@ class AppLocalizationsRo extends AppLocalizations {
   }
 
   @override
-  String memoriesUsedThisMonth(String used, String limit) {
-    return '$used din $limit amintiri create luna aceasta';
-  }
-
-  @override
   String get visibility => 'Vizibilitate';
 
   @override
@@ -1651,7 +1646,7 @@ class AppLocalizationsRo extends AppLocalizations {
   String get finalTouches => 'Retușuri finale';
 
   @override
-  String get processing => 'Se procesează...';
+  String get processing => 'Se procesează';
 
   @override
   String get features => 'Funcționalități';
@@ -4653,41 +4648,13 @@ class AppLocalizationsRo extends AppLocalizations {
       'Îți mulțumim că ești un utilizator valoros al Omi. Dacă ai întrebări sau nelămuriri, nu ezita să ne contactezi la team@basedhardware.com.';
 
   @override
-  String get wifiSyncSettings => 'Setări sincronizare WiFi';
-
-  @override
-  String get enterHotspotCredentials => 'Introduceți datele hotspot-ului telefonului';
-
-  @override
-  String get wifiSyncUsesHotspot =>
-      'Sincronizarea WiFi folosește telefonul ca hotspot. Găsește numele și parola în Setări > Hotspot personal.';
-
-  @override
-  String get hotspotNameSsid => 'Nume hotspot (SSID)';
-
-  @override
-  String get exampleIphoneHotspot => 'ex. iPhone Hotspot';
-
-  @override
   String get password => 'Parolă';
-
-  @override
-  String get enterHotspotPassword => 'Introduceți parola hotspot';
 
   @override
   String get saveCredentials => 'Salvează datele de autentificare';
 
   @override
   String get clearCredentials => 'Șterge datele de autentificare';
-
-  @override
-  String get pleaseEnterHotspotName => 'Vă rugăm introduceți un nume de hotspot';
-
-  @override
-  String get wifiCredentialsSaved => 'Datele WiFi au fost salvate';
-
-  @override
-  String get wifiCredentialsCleared => 'Datele WiFi au fost șterse';
 
   @override
   String summaryGeneratedForDate(String date) {
@@ -5838,9 +5805,6 @@ class AppLocalizationsRo extends AppLocalizations {
   String get limitless => 'Limitless';
 
   @override
-  String get fastTransfer => 'Transfer rapid';
-
-  @override
   String get syncingStatus => 'Se sincronizează';
 
   @override
@@ -5850,15 +5814,6 @@ class AppLocalizationsRo extends AppLocalizations {
   String etaLabel(String time) {
     return 'Timp estimat: $time';
   }
-
-  @override
-  String get transferMethod => 'Metodă de transfer';
-
-  @override
-  String get fast => 'Rapid';
-
-  @override
-  String get ble => 'BLE';
 
   @override
   String get phone => 'Telefon';
@@ -5879,25 +5834,7 @@ class AppLocalizationsRo extends AppLocalizations {
   String get processedFilesDeleted => 'Fișierele procesate au fost șterse';
 
   @override
-  String get wifiEnableFailed => 'Nu s-a putut activa WiFi-ul pe dispozitiv. Încercați din nou.';
-
-  @override
-  String get deviceNoFastTransfer => 'Dispozitivul dvs. nu suportă Transfer rapid. Utilizați Bluetooth.';
-
-  @override
-  String get enableHotspotMessage => 'Te rugăm să activezi hotspot-ul telefonului și să încerci din nou.';
-
-  @override
-  String get transferStartFailed => 'Pornirea transferului a eșuat. Te rugăm să încerci din nou.';
-
-  @override
   String get deviceNotResponding => 'Dispozitivul nu a răspuns. Te rugăm să încerci din nou.';
-
-  @override
-  String get invalidWifiCredentials => 'Credențiale WiFi invalide. Verificați setările hotspot-ului.';
-
-  @override
-  String get wifiConnectionFailed => 'Conexiune WiFi eșuată. Încercați din nou.';
 
   @override
   String get sdCardProcessing => 'Procesare card SD';
@@ -5909,9 +5846,6 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get process => 'Procesează';
-
-  @override
-  String get wifiSyncFailed => 'Sincronizare WiFi eșuată';
 
   @override
   String get processingFailed => 'Procesare eșuată';
@@ -6693,24 +6627,13 @@ class AppLocalizationsRo extends AppLocalizations {
   }
 
   @override
-  String get wifiSync => 'Sincronizare WiFi';
-
-  @override
   String itemCopiedToClipboard(String item) {
     return '$item copiat în clipboard';
   }
 
   @override
-  String get wifiConnectionFailedTitle => 'Conexiune eșuată';
-
-  @override
   String connectingToDeviceName(String deviceName) {
     return 'Se conectează la $deviceName';
-  }
-
-  @override
-  String enableDeviceWifi(String deviceName) {
-    return 'Activează WiFi-ul $deviceName';
   }
 
   @override
@@ -6807,9 +6730,6 @@ class AppLocalizationsRo extends AppLocalizations {
   String get statusUnprocessed => 'Neprocesat';
 
   @override
-  String get switchedToFastTransfer => 'S-a trecut la transfer rapid';
-
-  @override
   String get transferCompleteMessage => 'Transfer complet! Acum poți reda această înregistrare.';
 
   @override
@@ -6821,34 +6741,7 @@ class AppLocalizationsRo extends AppLocalizations {
   String get transferCancelled => 'Transfer anulat';
 
   @override
-  String get fastTransferEnabled => 'Transfer rapid activat';
-
-  @override
   String get bluetoothSyncEnabled => 'Sincronizare Bluetooth activată';
-
-  @override
-  String get enableFastTransfer => 'Activează transferul rapid';
-
-  @override
-  String get fastTransferDescription =>
-      'Transferul rapid folosește WiFi pentru viteze de ~5x mai rapide. Telefonul se va conecta temporar la rețeaua WiFi a dispozitivului Omi în timpul transferului.';
-
-  @override
-  String get internetAccessPausedDuringTransfer => 'Accesul la internet este întrerupt în timpul transferului';
-
-  @override
-  String get chooseTransferMethodDescription =>
-      'Alegeți cum sunt transferate înregistrările de pe dispozitivul Omi pe telefon.';
-
-  @override
-  String get wifiSpeed => '~150 KB/s prin WiFi';
-
-  @override
-  String get fiveTimesFaster => 'DE 5X MAI RAPID';
-
-  @override
-  String get fastTransferMethodDescription =>
-      'Creează o conexiune WiFi directă la dispozitivul Omi. Telefonul se deconectează temporar de la WiFi-ul obișnuit în timpul transferului.';
 
   @override
   String get bluetooth => 'Bluetooth';
@@ -6870,7 +6763,15 @@ class AppLocalizationsRo extends AppLocalizations {
   String get lowBatteryAlertTitle => 'Alertă baterie descărcată';
 
   @override
-  String get lowBatteryAlertBody => 'Bateria dispozitivului este descărcată. E timpul să reîncărcați! 🔋';
+  String lowBatteryAlertBody(int level) {
+    return 'Bateria ta este la $level%. E timpul să reîncărcați! 🔋';
+  }
+
+  @override
+  String get batteryFullyChargedTitle => 'Omi este complet încărcat';
+
+  @override
+  String get batteryFullyChargedBody => 'Dispozitivul tău Omi este complet încărcat. Îl poți decupla acum!';
 
   @override
   String get deviceDisconnectedNotificationTitle => 'Dispozitivul Omi a fost deconectat';
@@ -7543,13 +7444,6 @@ class AppLocalizationsRo extends AppLocalizations {
   String get voiceFailedToTranscribe => 'Nu s-a reușit transcrierea audio';
 
   @override
-  String get locationPermissionRequired => 'Permisiune de locație necesară';
-
-  @override
-  String get locationPermissionContent =>
-      'Transferul rapid necesită permisiune de locație pentru a verifica conexiunea WiFi. Vă rugăm să acordați permisiunea de locație pentru a continua.';
-
-  @override
   String get pdfTranscriptExport => 'Export transcriere';
 
   @override
@@ -7694,12 +7588,6 @@ class AppLocalizationsRo extends AppLocalizations {
   String get dailyRecapsDescription => 'Rezumatele zilnice vor apărea aici odată generate';
 
   @override
-  String get chooseTransferMethod => 'Alegeți metoda de transfer';
-
-  @override
-  String get fastTransferSpeed => '~150 KB/s prin WiFi';
-
-  @override
   String largeTimeGapDetected(String gap) {
     return 'A fost detectată o diferență mare de timp ($gap)';
   }
@@ -7708,10 +7596,6 @@ class AppLocalizationsRo extends AppLocalizations {
   String largeTimeGapsDetected(String gaps) {
     return 'Au fost detectate diferențe mari de timp ($gaps)';
   }
-
-  @override
-  String get deviceDoesNotSupportWifiSwitchingToBle =>
-      'Dispozitivul nu acceptă sincronizare WiFi, comutare la Bluetooth';
 
   @override
   String get appleHealthNotAvailable => 'Apple Health nu este disponibil pe acest dispozitiv';
@@ -8480,7 +8364,7 @@ class AppLocalizationsRo extends AppLocalizations {
   String get manageStorage => 'Gestionare stocare';
 
   @override
-  String get safelyBackedUp => 'Salvat în siguranță pe telefonul dvs.';
+  String get safelyBackedUp => 'Conversații create';
 
   @override
   String get notYetSynced => 'Nu a fost încă sincronizat cu telefonul dvs.';
@@ -9283,4 +9167,159 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get bulkDeleteFailed => 'Nu am putut șterge sarcinile. Vă rugăm să încercați din nou.';
+
+  @override
+  String get deleteRecap => 'Șterge rezumatul';
+
+  @override
+  String get deleteRecapConfirmTitle => 'Ștergi acest rezumat?';
+
+  @override
+  String get deleteRecapConfirmBody =>
+      'Acest rezumat va fi eliminat definitiv. Conversațiile originale din ziua respectivă nu sunt afectate.';
+
+  @override
+  String get deleteRecapAction => 'Șterge';
+
+  @override
+  String get recapDeletedSnackbar => 'Rezumat șters';
+
+  @override
+  String get recapDeleteFailed => 'Rezumatul nu a putut fi șters. Încearcă din nou mai târziu.';
+
+  @override
+  String get syncStatusBackedUp => 'Copiat de rezervă';
+
+  @override
+  String get syncStatusBackingUp => 'Se sincronizează…';
+
+  @override
+  String get syncStatusWaiting => 'Așteaptă sincronizarea';
+
+  @override
+  String get syncStatusRetrying => 'Procesarea a eșuat — se reîncearcă';
+
+  @override
+  String get syncStatusFailed => 'A eșuat — atinge Reîncearcă';
+
+  @override
+  String get syncStatusFileUnavailable => 'Fișierul nu este disponibil';
+
+  @override
+  String get noRecordingsYet => 'Încă nu există înregistrări';
+
+  @override
+  String get syncInProgress => 'Sincronizare în curs';
+
+  @override
+  String get syncStatusUploaded => 'Încărcat · se procesează pe Omi';
+
+  @override
+  String get deleteWhileProcessingTitle => 'Încă se procesează';
+
+  @override
+  String get deleteWhileProcessingMessage =>
+      'Această înregistrare a fost încărcată, dar Omi încă creează conversația. Dacă o ștergi acum și procesarea eșuează, nu poate fi recuperată. Ștergi oricum?';
+
+  @override
+  String get syncCardAllBackedUp => 'Toate înregistrările sincronizate';
+
+  @override
+  String syncCardReadyCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count de înregistrări gata de sincronizare',
+      few: '$count înregistrări gata de sincronizare',
+      one: '1 înregistrare gata de sincronizare',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get syncCardProcessing => 'Procesare în Omi…';
+
+  @override
+  String get syncCardWaitingInternet => 'Se așteaptă internetul';
+
+  @override
+  String syncCardNeedsAttention(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count de înregistrări necesită atenție',
+      few: '$count înregistrări necesită atenție',
+      one: '1 înregistrare necesită atenție',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get syncFlowIntro =>
+      'Înregistrările sunt transferate de pe dispozitivul tău pe acest telefon și stocate local, apoi încărcate pe serverul Omi, unde sunt transcrise și transformate în conversații.';
+
+  @override
+  String get syncStepUpload => 'Sincronizare';
+
+  @override
+  String get syncStepUploadDesc => 'Înregistrarea ta este trimisă către serverul Omi';
+
+  @override
+  String get syncStepProcess => 'Transcriere';
+
+  @override
+  String get syncStepProcessDesc => 'Omi transformă audio într-o conversație';
+
+  @override
+  String get syncStepBackedUp => 'Conversația e gata';
+
+  @override
+  String get syncStepBackedUpDesc => 'O găsești în Conversații';
+
+  @override
+  String get syncFailureFootnote =>
+      'Dacă procesarea eșuează, înregistrarea se reia automat la următoarea sincronizare.';
+
+  @override
+  String get syncStatusConversationCreated => 'Conversație creată';
+
+  @override
+  String get syncCardUploadingTitle => 'Se încarcă pe Omi';
+
+  @override
+  String get syncCardDownloadingTitle => 'Se descarcă de pe dispozitivul tău';
+
+  @override
+  String syncCardProgressOf(int current, int total) {
+    return '$current din $total';
+  }
+
+  @override
+  String get syncStatusOnDevice => 'Pe dispozitivul tău';
+
+  @override
+  String get syncStatusDownloadingFromDevice => 'Se descarcă de pe dispozitivul tău';
+
+  @override
+  String get newestFirst => 'Cele mai noi primele';
+
+  @override
+  String get noSyncedRecordingsYet => 'Încă nu există înregistrări sincronizate';
+
+  @override
+  String get morePaymentMethodsComingSoon => 'În curând mai multe metode de plată';
+
+  @override
+  String get syncProcessingBackgroundHint => 'Acest lucru continuă în fundal — poți părăsi acest ecran.';
+
+  @override
+  String get syncCardRateLimited =>
+      'Limita de utilizare echitabilă a fost atinsă — sincronizarea va fi reluată automat';
+
+  @override
+  String get syncCardBackendBusy =>
+      'Serverele Omi sunt aglomerate — înregistrările tale se vor sincroniza imediat ce se eliberează capacitate';
+
+  @override
+  String get unableToDetermineFirmwareVersion => 'Nu se poate determina versiunea curentă a firmware-ului';
 }

@@ -1,6 +1,9 @@
 import sys
 import types
 
+_announcements_mod = types.ModuleType("database.announcements")
+_announcements_mod.compare_versions = lambda a, b: 0
+sys.modules.setdefault("database.announcements", _announcements_mod)
 sys.modules.setdefault("database.users", types.SimpleNamespace())
 sys.modules.setdefault("database.user_usage", types.SimpleNamespace())
 
@@ -25,3 +28,8 @@ def test_architect_is_treated_as_paid_unlimited_plan():
     assert get_plan_limits(PlanType.architect).transcription_seconds is None
     assert "Automations and vibe coding" in get_plan_features(PlanType.architect)
     assert "Unlimited listening, memories, and insights" in get_plan_features(PlanType.architect)
+
+
+def test_basic_plan_features_include_unlimited_memories():
+    features = get_plan_features(PlanType.basic)
+    assert "Unlimited memories" in features

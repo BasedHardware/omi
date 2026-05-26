@@ -966,11 +966,6 @@ class AppLocalizationsTe extends AppLocalizations {
   }
 
   @override
-  String memoriesUsedThisMonth(String used, String limit) {
-    return '$used యొక్క $limit జ్ఞాపకాలు ఈ నెలలో సృష్టించబడ్డాయి';
-  }
-
-  @override
   String get visibility => 'దృశ్యమానత';
 
   @override
@@ -1647,7 +1642,7 @@ class AppLocalizationsTe extends AppLocalizations {
   String get finalTouches => 'చివరి స్పర్శ';
 
   @override
-  String get processing => 'ప్రక్రియ చేస్తుంది...';
+  String get processing => 'ప్రాసెస్ అవుతోంది';
 
   @override
   String get features => 'లక్షణాలు';
@@ -4656,41 +4651,13 @@ class AppLocalizationsTe extends AppLocalizations {
       'Omi యొక్క విలువైన వినియోగదారుగా ఉన్నందుకు ధన్యవాదాలు. మీకు ఏవైనా ప్రశ్నలు లేదా ఆందోళనలు ఉంటే, team@basedhardware.com కు సంప్రదించడానికి సంకోచించకండి.';
 
   @override
-  String get wifiSyncSettings => 'WiFi సమకాలీకరణ సెట్టింగ్‌లు';
-
-  @override
-  String get enterHotspotCredentials => 'మీ ఫోన్ యొక్క హాట్‌స్పాట్ సంలग్నాలను నమోదు చేయండి';
-
-  @override
-  String get wifiSyncUsesHotspot =>
-      'WiFi సమకాలీకరణ మీ ఫోన్‌ను హాట్‌స్పాట్‌గా ఉపయోగిస్తుంది. సెట్టింగ్‌లు > ఖ్యాతిమත్తర హాట్‌స్పాట్‌లో మీ హాట్‌స్పాట్ పేరు మరియు పాస్‌వర్డ్ కనుగొనండి.';
-
-  @override
-  String get hotspotNameSsid => 'హాట్‌స్పాట్ పేరు (SSID)';
-
-  @override
-  String get exampleIphoneHotspot => 'ఉదా. iPhone హాట్‌స్పాట్';
-
-  @override
   String get password => 'పాస్‌వర్డ్';
-
-  @override
-  String get enterHotspotPassword => 'హాట్‌స్పాట్ పాస్‌వర్డ్ నమోదు చేయండి';
 
   @override
   String get saveCredentials => 'సంలग్నాలను సేవ చేయండి';
 
   @override
   String get clearCredentials => 'సంలग్నాలను క్లియర్ చేయండి';
-
-  @override
-  String get pleaseEnterHotspotName => 'దయచేసి హాట్‌స్పాట్ పేరు నమోదు చేయండి';
-
-  @override
-  String get wifiCredentialsSaved => 'WiFi సంలग్నాలు సేవ చేయబడ్డాయి';
-
-  @override
-  String get wifiCredentialsCleared => 'WiFi సంలग్నాలు క్లియర్ చేయబడ్డాయి';
 
   @override
   String summaryGeneratedForDate(String date) {
@@ -5844,9 +5811,6 @@ class AppLocalizationsTe extends AppLocalizations {
   String get limitless => 'Limitless';
 
   @override
-  String get fastTransfer => 'ఫాస్ట్ ట్రాన్స్ఫర్';
-
-  @override
   String get syncingStatus => 'సమన్వయం చేస్తున్నాను';
 
   @override
@@ -5856,15 +5820,6 @@ class AppLocalizationsTe extends AppLocalizations {
   String etaLabel(String time) {
     return 'ETA: $time';
   }
-
-  @override
-  String get transferMethod => 'ట్రాన్స్ఫర్ పద్ధతి';
-
-  @override
-  String get fast => 'ఫాస్ట్';
-
-  @override
-  String get ble => 'BLE';
 
   @override
   String get phone => 'ఫోన్';
@@ -5885,25 +5840,7 @@ class AppLocalizationsTe extends AppLocalizations {
   String get processedFilesDeleted => 'ప్రక్రియ చేసిన ఫైల్‌లు తొలగించబడ్డాయి';
 
   @override
-  String get wifiEnableFailed => 'పరికరంపై WiFi ప్రారంభించడంలో విఫలమైంది. దయచేసి మరలా ప్రయత్నించండి.';
-
-  @override
-  String get deviceNoFastTransfer => 'మీ పరికరం ఫాస్ట్ ట్రాన్స్ఫర్ సపోర్ట్ చేయదు. బదులుగా బ్లూటూత్ ఉపయోగించండి.';
-
-  @override
-  String get enableHotspotMessage => 'దయచేసి మీ ఫోన్ యొక్క హాట్‌స్పాట్ ప్రారంభించండి మరియు మరలా ప్రయత్నించండి.';
-
-  @override
-  String get transferStartFailed => 'ట్రాన్స్ఫర్ ప్రారంభించడంలో విఫలమైంది. దయచేసి మరలా ప్రయత్నించండి.';
-
-  @override
   String get deviceNotResponding => 'పరికరం ప్రతిస్పందించలేదు. దయచేసి మరలా ప్రయత్నించండి.';
-
-  @override
-  String get invalidWifiCredentials => 'చెల్లని WiFi నిఖర్చన. మీ హాట్‌స్పాట్ సెట్టింగ్‌లను తనిఖీ చేయండి.';
-
-  @override
-  String get wifiConnectionFailed => 'WiFi సంయోగం విఫలమైంది. దయచేసి మరలా ప్రయత్నించండి.';
 
   @override
   String get sdCardProcessing => 'SD కార్డ్ ప్రసంస్కరణ';
@@ -5915,9 +5852,6 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get process => 'ప్రక్రియ';
-
-  @override
-  String get wifiSyncFailed => 'WiFi సమన్వయం విఫలమైంది';
 
   @override
   String get processingFailed => 'ప్రసంస్కరణ విఫలమైంది';
@@ -6700,24 +6634,13 @@ class AppLocalizationsTe extends AppLocalizations {
   }
 
   @override
-  String get wifiSync => 'WiFi సమన్వయం';
-
-  @override
   String itemCopiedToClipboard(String item) {
     return '$item క్లిప్‌బోర్డ్‌కు కాపీ చేయబడింది';
   }
 
   @override
-  String get wifiConnectionFailedTitle => 'సంయోగం విఫలమైంది';
-
-  @override
   String connectingToDeviceName(String deviceName) {
     return '$deviceName కు కనెక్ట్ చేస్తున్నాను';
-  }
-
-  @override
-  String enableDeviceWifi(String deviceName) {
-    return '$deviceName యొక్క WiFi ప్రారంభించండి';
   }
 
   @override
@@ -6813,9 +6736,6 @@ class AppLocalizationsTe extends AppLocalizations {
   String get statusUnprocessed => 'ప్రక్రియ చేయబడనిది';
 
   @override
-  String get switchedToFastTransfer => 'ఫాస్ట్ ట్రాన్‌సర్కు మారారు';
-
-  @override
   String get transferCompleteMessage => 'బదిలీ సంపూర్ణం! మీరు ఇప్పుడు ఈ రికార్డింగ్‌ను ప్లే చేయవచ్చు.';
 
   @override
@@ -6827,34 +6747,7 @@ class AppLocalizationsTe extends AppLocalizations {
   String get transferCancelled => 'బదిలీ రద్దు చేయబడింది';
 
   @override
-  String get fastTransferEnabled => 'ఫాస్ట్ ట్రాన్‌సర్ సక్రియం చేయబడింది';
-
-  @override
   String get bluetoothSyncEnabled => 'బ్లూటూత్ సింక్ సక్రియం చేయబడింది';
-
-  @override
-  String get enableFastTransfer => 'ఫాస్ట్ ట్రాన్‌సర్‌ను సక్రియం చేయండి';
-
-  @override
-  String get fastTransferDescription =>
-      'ఫాస్ట్ ట్రాన్‌సర్ WiFi ను ఉపయోగించి ~5x వేగవంతమైన వేగం. బదిలీ సమయంలో మీ ఫోన్잠시Omi పరికరం యొక్క WiFi నెట్‌వర్క్‌కు అనుసంధానం అవుతుంది.';
-
-  @override
-  String get internetAccessPausedDuringTransfer => 'బదిలీ సమయంలో ఇంటర్నెట్ యాక్సెస్ పాజ్ చేయబడింది';
-
-  @override
-  String get chooseTransferMethodDescription =>
-      'మీ Omi పరికరం నుండి మీ ఫోన్‌కు రికార్డింగ్‌లు ఎలా బదిలీ చేయాలో ఎంచుకోండి.';
-
-  @override
-  String get wifiSpeed => 'WiFi ద్వారా ~150 KB/s';
-
-  @override
-  String get fiveTimesFaster => '5X వేగవంతమైనది';
-
-  @override
-  String get fastTransferMethodDescription =>
-      'మీ Omi పరికరానికి నేరుగా WiFi కనెక్షన్ సృష్టిస్తుంది. బదిలీ సమయంలో మీ ఫోన్잠ిக్కా మీ సాధారణ WiFi నుండి డిస్‌కనెక్ట్ చేయబడుతుంది.';
 
   @override
   String get bluetooth => 'బ్లూటూత్';
@@ -6876,7 +6769,15 @@ class AppLocalizationsTe extends AppLocalizations {
   String get lowBatteryAlertTitle => 'తక్కువ బ్యాటరీ సতর్కత';
 
   @override
-  String get lowBatteryAlertBody => 'మీ పరికరం తక్కువ బ్యాటరీలో ఉంది. రీఛార్జ్ చేయడానికి సమయం! 🔋';
+  String lowBatteryAlertBody(int level) {
+    return 'మీ బ్యాటరీ $level% వద్ద ఉంది. రీఛార్జ్ చేయడానికి సమయం! 🔋';
+  }
+
+  @override
+  String get batteryFullyChargedTitle => 'Omi పూర్తిగా చార్జ్ అయింది';
+
+  @override
+  String get batteryFullyChargedBody => 'మీ Omi పరికరం పూర్తిగా చార్జ్ అయింది. అన్‌ప్లగ్ చేయవచ్చు!';
 
   @override
   String get deviceDisconnectedNotificationTitle => 'మీ Omi పరికరం డిస్‌కనెక్ట్ చేయబడింది';
@@ -7551,13 +7452,6 @@ class AppLocalizationsTe extends AppLocalizations {
   String get voiceFailedToTranscribe => 'ఆడియోను ట్రాన్‌స్‌క్రిబ్ చేయడానికి విఫలమైంది';
 
   @override
-  String get locationPermissionRequired => 'స్థానం అనుమతి అవసరం';
-
-  @override
-  String get locationPermissionContent =>
-      'ఫాస్ట్ ట్రాన్‌సర్‌కు WiFi సంయోగం ధృవీకరించడానికి స్థానం అనుమతి అవసరం. దయచేసి కొనసాగించడానికి స్థానం అనుమతిని ఇవ్వండి.';
-
-  @override
   String get pdfTranscriptExport => 'ట్రాన్‌స్క్రిప్ట్ ఎక్సపోర్ట్';
 
   @override
@@ -7702,12 +7596,6 @@ class AppLocalizationsTe extends AppLocalizations {
   String get dailyRecapsDescription => 'మీ రోజువారీ రీక్యాప్‌లు అందాయ్‌తో ఇక్కడ కనిపిస్తాయి';
 
   @override
-  String get chooseTransferMethod => 'బదిలీ పద్ధతిని ఎంచుకోండి';
-
-  @override
-  String get fastTransferSpeed => 'WiFi ద్వారా ~150 KB/s';
-
-  @override
   String largeTimeGapDetected(String gap) {
     return 'పెద్ద సమయ విరామం సంప్రదించబడింది ($gap)';
   }
@@ -7716,9 +7604,6 @@ class AppLocalizationsTe extends AppLocalizations {
   String largeTimeGapsDetected(String gaps) {
     return 'పెద్ద సమయ విరామాలు సంప్రదించబడ్డాయి ($gaps)';
   }
-
-  @override
-  String get deviceDoesNotSupportWifiSwitchingToBle => 'పరికరం WiFi సింక్‌కు సమర్థనీయం కాదు, బ్లూటూత్‌కు మారుస్తోంది';
 
   @override
   String get appleHealthNotAvailable => 'Apple ఆరోగ్యం ఈ పరికరంలో అందుబాటులో లేదు';
@@ -8486,7 +8371,7 @@ class AppLocalizationsTe extends AppLocalizations {
   String get manageStorage => 'నిల్వను నిర్వహించండి';
 
   @override
-  String get safelyBackedUp => 'మీ ఫోన్‌కు సురక్షితంగా బ్యాకప్ చేయబడింది';
+  String get safelyBackedUp => 'సృష్టించిన సంభాషణలు';
 
   @override
   String get notYetSynced => 'ఇంకా మీ ఫోన్‌కు సమకాలీకరించబడలేదు';
@@ -9290,4 +9175,155 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get bulkDeleteFailed => 'పనులను తొలగించలేకపోయింది. దయచేసి మళ్లీ ప్రయత్నించండి.';
+
+  @override
+  String get deleteRecap => 'సారాంశాన్ని తొలగించండి';
+
+  @override
+  String get deleteRecapConfirmTitle => 'ఈ సారాంశాన్ని తొలగించాలా?';
+
+  @override
+  String get deleteRecapConfirmBody => 'ఈ సారాంశం శాశ్వతంగా తొలగించబడుతుంది. ఆ రోజు అసలు సంభాషణలపై ప్రభావం ఉండదు.';
+
+  @override
+  String get deleteRecapAction => 'తొలగించు';
+
+  @override
+  String get recapDeletedSnackbar => 'సారాంశం తొలగించబడింది';
+
+  @override
+  String get recapDeleteFailed => 'సారాంశాన్ని తొలగించలేకపోయాం. తర్వాత మళ్ళీ ప్రయత్నించండి.';
+
+  @override
+  String get syncStatusBackedUp => 'బ్యాకప్ అయింది';
+
+  @override
+  String get syncStatusBackingUp => 'సమన్వయం చేస్తోంది…';
+
+  @override
+  String get syncStatusWaiting => 'సింక్ కోసం వేచి ఉంది';
+
+  @override
+  String get syncStatusRetrying => 'ప్రాసెస్ చేయలేకపోయింది — మళ్లీ ప్రయత్నిస్తోంది';
+
+  @override
+  String get syncStatusFailed => 'విఫలమైంది — Retry నొక్కండి';
+
+  @override
+  String get syncStatusFileUnavailable => 'ఫైల్ అందుబాటులో లేదు';
+
+  @override
+  String get noRecordingsYet => 'ఇంకా రికార్డింగ్‌లు లేవు';
+
+  @override
+  String get syncInProgress => 'సింక్ జరుగుతోంది';
+
+  @override
+  String get syncStatusUploaded => 'అప్‌లోడ్ అయింది · Omiలో ప్రాసెస్ అవుతోంది';
+
+  @override
+  String get deleteWhileProcessingTitle => 'ఇంకా ప్రాసెస్ అవుతోంది';
+
+  @override
+  String get deleteWhileProcessingMessage =>
+      'ఈ రికార్డింగ్ అప్‌లోడ్ అయింది కానీ Omi ఇంకా సంభాషణను సృష్టిస్తోంది. ఇప్పుడు తొలగిస్తే మరియు ప్రాసెసింగ్ విఫలమైతే, దాన్ని తిరిగి పొందలేరు. అయినా తొలగించాలా?';
+
+  @override
+  String get syncCardAllBackedUp => 'అన్ని రికార్డింగ్‌లు సింక్ అయ్యాయి';
+
+  @override
+  String syncCardReadyCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count రికార్డింగ్‌లు సింక్‌కు సిద్ధంగా ఉన్నాయి',
+      one: '1 రికార్డింగ్ సింక్‌కు సిద్ధంగా ఉంది',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get syncCardProcessing => 'Omiలో ప్రాసెస్ అవుతోంది…';
+
+  @override
+  String get syncCardWaitingInternet => 'ఇంటర్నెట్ కోసం వేచి ఉంది';
+
+  @override
+  String syncCardNeedsAttention(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count రికార్డింగ్‌లకు శ్రద్ధ అవసరం',
+      one: '1 రికార్డింగ్‌కు శ్రద్ధ అవసరం',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get syncFlowIntro =>
+      'రికార్డింగ్‌లు మీ పరికరం నుండి ఈ ఫోన్‌కు బదిలీ చేయబడి స్థానికంగా నిల్వ చేయబడతాయి, ఆ తర్వాత Omi సర్వర్‌కు అప్‌లోడ్ చేయబడతాయి, అక్కడ అవి లిప్యంతరీకరించబడి సంభాషణలుగా మార్చబడతాయి.';
+
+  @override
+  String get syncStepUpload => 'సింక్';
+
+  @override
+  String get syncStepUploadDesc => 'మీ రికార్డింగ్ Omi సర్వర్‌కు పంపబడుతుంది';
+
+  @override
+  String get syncStepProcess => 'లిప్యంతరీకరణ';
+
+  @override
+  String get syncStepProcessDesc => 'Omi ఆడియోను సంభాషణగా మారుస్తుంది';
+
+  @override
+  String get syncStepBackedUp => 'సంభాషణ సిద్ధంగా ఉంది';
+
+  @override
+  String get syncStepBackedUpDesc => 'దీన్ని సంభాషణలు లో కనుగొనండి';
+
+  @override
+  String get syncFailureFootnote =>
+      'ప్రాసెసింగ్ విఫలమైతే, తదుపరి సింక్‌లో రికార్డింగ్ ఆటోమేటిక్‌గా మళ్లీ ప్రయత్నించబడుతుంది.';
+
+  @override
+  String get syncStatusConversationCreated => 'సంభాషణ సృష్టించబడింది';
+
+  @override
+  String get syncCardUploadingTitle => 'Omi కి అప్‌లోడ్ అవుతోంది';
+
+  @override
+  String get syncCardDownloadingTitle => 'మీ పరికరం నుండి డౌన్‌లోడ్ అవుతోంది';
+
+  @override
+  String syncCardProgressOf(int current, int total) {
+    return '$totalలో $current';
+  }
+
+  @override
+  String get syncStatusOnDevice => 'మీ పరికరంలో';
+
+  @override
+  String get syncStatusDownloadingFromDevice => 'మీ పరికరం నుండి డౌన్‌లోడ్ అవుతోంది';
+
+  @override
+  String get newestFirst => 'కొత్తవి మొదట';
+
+  @override
+  String get noSyncedRecordingsYet => 'ఇంకా సమకాలీకరించిన రికార్డింగ్‌లు లేవు';
+
+  @override
+  String get morePaymentMethodsComingSoon => 'మరిన్ని చెల్లింపు పద్ధతులు త్వరలో';
+
+  @override
+  String get syncProcessingBackgroundHint => 'ఇది నేపథ్యంలో కొనసాగుతుంది — మీరు ఈ స్క్రీన్ నుండి వెళ్లిపోవచ్చు.';
+
+  @override
+  String get syncCardRateLimited => 'న్యాయమైన వినియోగ పరిమితి చేరుకుంది — సింక్ స్వయంచాలకంగా తిరిగి కొనసాగుతుంది';
+
+  @override
+  String get syncCardBackendBusy =>
+      'Omi సర్వర్‌లు బిజీగా ఉన్నాయి — సామర్థ్యం అందుబాటులోకి వచ్చిన వెంటనే మీ రికార్డింగ్‌లు సింక్ అవుతాయి';
+
+  @override
+  String get unableToDetermineFirmwareVersion => 'ప్రస్తుత ఫర్మ్‌వేర్ సంస్కరణను నిర్ధారించలేకపోయాము';
 }

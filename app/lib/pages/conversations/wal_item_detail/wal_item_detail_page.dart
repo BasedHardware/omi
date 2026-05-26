@@ -1,22 +1,14 @@
 import 'dart:async';
-import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:provider/provider.dart';
-import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/models/playback_state.dart';
-import 'package:omi/pages/conversations/sync_widgets/fast_transfer_suggestion_dialog.dart';
-import 'package:omi/pages/conversations/sync_widgets/location_permission_dialog.dart';
 import 'package:omi/providers/sync_provider.dart';
-import 'package:omi/services/devices/wifi_sync_error.dart';
-import 'package:omi/services/services.dart';
 import 'package:omi/services/wals.dart';
-import 'package:omi/services/wifi/wifi_network_service.dart';
 import 'package:omi/ui/molecules/omi_confirm_dialog.dart';
-import 'package:omi/pages/conversations/sync_widgets/wifi_connection_sheet.dart';
 import 'package:omi/utils/device.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/other/time_utils.dart';
@@ -150,9 +142,8 @@ class _WalItemDetailPageState extends State<WalItemDetailPage> {
 
   Widget _buildDeviceTransferUI() {
     final isFlashPage = widget.wal.storage == WalStorage.flashPage;
-    final storageLabel = isFlashPage
-        ? context.l10n.storageLocationLimitlessPendant
-        : context.l10n.storageLocationSdCard;
+    final storageLabel =
+        isFlashPage ? context.l10n.storageLocationLimitlessPendant : context.l10n.storageLocationSdCard;
     final storageIcon = isFlashPage ? Icons.memory : Icons.sd_card;
     final storageColor = isFlashPage ? Colors.teal : Colors.deepPurpleAccent;
 
@@ -189,10 +180,10 @@ class _WalItemDetailPageState extends State<WalItemDetailPage> {
                   Text(
                     dateTimeFormat('H:mm', DateTime.fromMillisecondsSinceEpoch(widget.wal.timerStart * 1000)),
                     style: Theme.of(context).textTheme.bodyMedium!.copyWith(
-                      color: Colors.grey.shade400,
-                      fontSize: 16,
-                      fontWeight: FontWeight.w400,
-                    ),
+                          color: Colors.grey.shade400,
+                          fontSize: 16,
+                          fontWeight: FontWeight.w400,
+                        ),
                   ),
                   const SizedBox(height: 8),
                   // Storage notice
@@ -355,10 +346,10 @@ class _WalItemDetailPageState extends State<WalItemDetailPage> {
                   Text(
                     dateTimeFormat('H:mm', DateTime.fromMillisecondsSinceEpoch(widget.wal.timerStart * 1000)),
                     style: Theme.of(context).textTheme.bodyMedium!.copyWith(
-                      color: Colors.grey.shade400,
-                      fontSize: 16,
-                      fontWeight: FontWeight.w400,
-                    ),
+                          color: Colors.grey.shade400,
+                          fontSize: 16,
+                          fontWeight: FontWeight.w400,
+                        ),
                   ),
                   const SizedBox(height: 8),
                   // Privacy notice
@@ -486,72 +477,11 @@ class _WalItemDetailPageState extends State<WalItemDetailPage> {
   }
 
   Future<void> _handleTransferToPhone() async {
-    final preferredMethod = SharedPreferencesUtil().preferredSyncMethod;
-    final wifiSupported = await ServiceManager.instance().wal.getSyncs().sdcard.isWifiSyncSupported();
-
-    bool wifiHardwareAvailable = false;
-    if (wifiSupported && widget.wal.storage == WalStorage.sdcard) {
-      wifiHardwareAvailable = await _checkWifiHardwareAvailable();
-      if (!wifiHardwareAvailable && preferredMethod == 'wifi') {
-        SharedPreferencesUtil().preferredSyncMethod = 'ble';
-        if (mounted) {
-          _showSnackBar(context.l10n.deviceDoesNotSupportWifiSwitchingToBle, Colors.orange);
-        }
-      }
-    }
-
-    if (preferredMethod == 'ble' && wifiHardwareAvailable && widget.wal.storage == WalStorage.sdcard) {
-      if (!mounted) return;
-      final result = await FastTransferSuggestionDialog.show(context);
-      if (result == null) return;
-
-      if (result == 'switch') {
-        // User wants to switch to Fast Transfer
-        SharedPreferencesUtil().preferredSyncMethod = 'wifi';
-        if (!mounted) return;
-        _showSnackBar(context.l10n.switchedToFastTransfer, Colors.green);
-      }
-    }
-
-    final currentMethod = SharedPreferencesUtil().preferredSyncMethod;
-    if (Platform.isIOS && widget.wal.storage == WalStorage.sdcard) {
-      if (currentMethod == 'wifi' && wifiHardwareAvailable) {
-        if (!mounted) return;
-        final hasPermission = await LocationPermissionHelper.checkAndRequest(context);
-        if (!hasPermission) {
-          return;
-        }
-      }
-    }
-
     if (!mounted) return;
 
     try {
       final syncProvider = context.read<SyncProvider>();
-      final currentMethod = SharedPreferencesUtil().preferredSyncMethod;
-
-      // Show WiFi connection sheet if using WiFi for SD card transfer
-      if (currentMethod == 'wifi' && wifiHardwareAvailable && widget.wal.storage == WalStorage.sdcard && mounted) {
-        WifiConnectionListenerBridge? listener;
-
-        final sheetController = await WifiConnectionSheet.show(
-          context,
-          deviceName: 'Omi',
-          onCancel: () {
-            syncProvider.cancelSync();
-          },
-          onRetry: () {
-            if (listener != null) {
-              syncProvider.transferWalToPhone(widget.wal, connectionListener: listener);
-            }
-          },
-        );
-
-        listener = WifiConnectionListenerBridge(sheetController);
-        await syncProvider.transferWalToPhone(widget.wal, connectionListener: listener);
-      } else {
-        await syncProvider.transferWalToPhone(widget.wal);
-      }
+      await syncProvider.transferWalToPhone(widget.wal);
 
       if (mounted) {
         _showSnackBar(context.l10n.transferCompleteMessage, Colors.green);
@@ -561,33 +491,6 @@ class _WalItemDetailPageState extends State<WalItemDetailPage> {
       if (mounted) {
         _showSnackBar(context.l10n.transferFailedMessage(e.toString()), Colors.red);
       }
-    }
-  }
-
-  Future<bool> _checkWifiHardwareAvailable() async {
-    try {
-      final connection = await ServiceManager.instance().device.ensureConnection(widget.wal.device);
-      if (connection == null) {
-        return true;
-      }
-
-      final ssid = WifiNetworkService.generateSsid(widget.wal.device);
-      final password = WifiNetworkService.generatePassword(widget.wal.device);
-
-      final result = await connection.setupWifiSync(ssid, password);
-
-      if (!result.success && result.errorCode == WifiSyncErrorCode.wifiHardwareNotAvailable) {
-        return false;
-      }
-
-      if (result.success) {
-        await connection.stopWifiSync();
-      }
-
-      return true;
-    } catch (e) {
-      debugPrint('Error checking WiFi hardware: $e');
-      return true;
     }
   }
 
@@ -680,10 +583,11 @@ class _WalItemDetailPageState extends State<WalItemDetailPage> {
   }
 
   void _showDeleteDialog(BuildContext context) async {
+    final uploading = widget.wal.syncDisplayState == WalSyncDisplayState.uploaded;
     final confirmed = await OmiConfirmDialog.show(
       context,
-      title: context.l10n.deleteRecording,
-      message: context.l10n.deleteRecordingConfirmation,
+      title: uploading ? context.l10n.deleteWhileProcessingTitle : context.l10n.deleteRecording,
+      message: uploading ? context.l10n.deleteWhileProcessingMessage : context.l10n.deleteRecordingConfirmation,
       confirmLabel: context.l10n.delete,
       confirmColor: Colors.red,
     );

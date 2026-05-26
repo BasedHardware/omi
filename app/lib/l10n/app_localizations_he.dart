@@ -960,11 +960,6 @@ class AppLocalizationsHe extends AppLocalizations {
   }
 
   @override
-  String memoriesUsedThisMonth(String used, String limit) {
-    return '$used מתוך $limit זיכרונות שנוצרו החודש';
-  }
-
-  @override
   String get visibility => 'יכולת הראות';
 
   @override
@@ -1632,7 +1627,7 @@ class AppLocalizationsHe extends AppLocalizations {
   String get finalTouches => 'המגעות הסופיות';
 
   @override
-  String get processing => 'מעבד...';
+  String get processing => 'מעבד';
 
   @override
   String get features => 'תכונות';
@@ -4594,41 +4589,13 @@ class AppLocalizationsHe extends AppLocalizations {
       'תודה על היותך משתמש מוערך של Omi. אם יש לך שאלות או חששות, אתה מוזמן לפנות אלינו ל-team@basedhardware.com.';
 
   @override
-  String get wifiSyncSettings => 'הגדרות סנכרון WiFi';
-
-  @override
-  String get enterHotspotCredentials => 'הזן את פרטי הנקודה הציבורית של הטלפון שלך';
-
-  @override
-  String get wifiSyncUsesHotspot =>
-      'סנכרון WiFi משתמש בטלפון שלך כנקודה ציבורית. מצא את שם הנקודה הציבורית וסיסמה בהגדרות > Personal Hotspot.';
-
-  @override
-  String get hotspotNameSsid => 'שם הנקודה הציבורית (SSID)';
-
-  @override
-  String get exampleIphoneHotspot => 'למשל iPhone Hotspot';
-
-  @override
   String get password => 'סיסמה';
-
-  @override
-  String get enterHotspotPassword => 'הזן סיסמה לנקודה ציבורית';
 
   @override
   String get saveCredentials => 'שמור פרטים';
 
   @override
   String get clearCredentials => 'נקה פרטים';
-
-  @override
-  String get pleaseEnterHotspotName => 'אנא הזן שם נקודה ציבורית';
-
-  @override
-  String get wifiCredentialsSaved => 'פרטי WiFi נשמרו';
-
-  @override
-  String get wifiCredentialsCleared => 'פרטי WiFi נוקו';
 
   @override
   String summaryGeneratedForDate(String date) {
@@ -5763,9 +5730,6 @@ class AppLocalizationsHe extends AppLocalizations {
   String get limitless => 'Limitless';
 
   @override
-  String get fastTransfer => 'העברה מהירה';
-
-  @override
   String get syncingStatus => 'סנכרון';
 
   @override
@@ -5775,15 +5739,6 @@ class AppLocalizationsHe extends AppLocalizations {
   String etaLabel(String time) {
     return 'ETA: $time';
   }
-
-  @override
-  String get transferMethod => 'שיטת העברה';
-
-  @override
-  String get fast => 'מהיר';
-
-  @override
-  String get ble => 'BLE';
 
   @override
   String get phone => 'טלפון';
@@ -5804,25 +5759,7 @@ class AppLocalizationsHe extends AppLocalizations {
   String get processedFilesDeleted => 'קבצים שעובדו נמחקו';
 
   @override
-  String get wifiEnableFailed => 'איתור בהפעלת WiFi במכשיר. אנא נסה שוב.';
-
-  @override
-  String get deviceNoFastTransfer => 'המכשיר שלך אינו תומך בהעברה מהירה. השתמש ב-Bluetooth במקום זאת.';
-
-  @override
-  String get enableHotspotMessage => 'אנא הפעל את נקודת החום של הטלפון שלך ונסה שוב.';
-
-  @override
-  String get transferStartFailed => 'איתור בהתחלת ההעברה. אנא נסה שוב.';
-
-  @override
   String get deviceNotResponding => 'המכשיר לא הגיב. אנא נסה שוב.';
-
-  @override
-  String get invalidWifiCredentials => 'אישורי WiFi לא תקפים. בדוק את הגדרות נקודת החום שלך.';
-
-  @override
-  String get wifiConnectionFailed => 'חיבור WiFi נכשל. אנא נסה שוב.';
 
   @override
   String get sdCardProcessing => 'עיבוד כרטיס SD';
@@ -5834,9 +5771,6 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get process => 'עיבוד';
-
-  @override
-  String get wifiSyncFailed => 'סנכרון WiFi נכשל';
 
   @override
   String get processingFailed => 'עיבוד נכשל';
@@ -6607,24 +6541,13 @@ class AppLocalizationsHe extends AppLocalizations {
   }
 
   @override
-  String get wifiSync => 'סנכרון WiFi';
-
-  @override
   String itemCopiedToClipboard(String item) {
     return '$item הועתק ללוח הגזירה';
   }
 
   @override
-  String get wifiConnectionFailedTitle => 'החיבור נכשל';
-
-  @override
   String connectingToDeviceName(String deviceName) {
     return 'התחברות ל-$deviceName';
-  }
-
-  @override
-  String enableDeviceWifi(String deviceName) {
-    return 'הפעל WiFi של $deviceName';
   }
 
   @override
@@ -6720,9 +6643,6 @@ class AppLocalizationsHe extends AppLocalizations {
   String get statusUnprocessed => 'לא מעובד';
 
   @override
-  String get switchedToFastTransfer => 'עברת ל-Fast Transfer';
-
-  @override
   String get transferCompleteMessage => 'ההעברה הושלמה! אתה יכול כעת להשמיע הקלטה זו.';
 
   @override
@@ -6734,33 +6654,7 @@ class AppLocalizationsHe extends AppLocalizations {
   String get transferCancelled => 'ביטול העברה';
 
   @override
-  String get fastTransferEnabled => 'Fast Transfer מופעל';
-
-  @override
   String get bluetoothSyncEnabled => 'סנכרון Bluetooth מופעל';
-
-  @override
-  String get enableFastTransfer => 'הפעל Fast Transfer';
-
-  @override
-  String get fastTransferDescription =>
-      'Fast Transfer משתמש ב-WiFi כדי להשיג מהירויות גבוהות פי 5. הטלפון שלך יתחבר זמנית לרשת ה-WiFi של התקן Omi שלך במהלך ההעברה.';
-
-  @override
-  String get internetAccessPausedDuringTransfer => 'גישת האינטרנט מושהית במהלך ההעברה';
-
-  @override
-  String get chooseTransferMethodDescription => 'בחר כיצד יוסברו הקלטות מהתקן Omi שלך לטלפון שלך.';
-
-  @override
-  String get wifiSpeed => '~150 KB/s דרך WiFi';
-
-  @override
-  String get fiveTimesFaster => 'פי 5 מהר יותר';
-
-  @override
-  String get fastTransferMethodDescription =>
-      'יוצר חיבור WiFi ישיר להתקן Omi שלך. הטלפון שלך יתנתק זמנית מ-WiFi הרגיל שלך במהלך ההעברה.';
 
   @override
   String get bluetooth => 'Bluetooth';
@@ -6782,7 +6676,15 @@ class AppLocalizationsHe extends AppLocalizations {
   String get lowBatteryAlertTitle => 'התראת סוללה נמוכה';
 
   @override
-  String get lowBatteryAlertBody => 'ההתקן שלך נמצא בסוללה נמוכה. הגיע הזמן לטעינה מחדש! 🔋';
+  String lowBatteryAlertBody(int level) {
+    return 'הסוללה שלך ב-$level%. הגיע הזמן לטעון! 🔋';
+  }
+
+  @override
+  String get batteryFullyChargedTitle => 'Omi טעון לגמרי';
+
+  @override
+  String get batteryFullyChargedBody => 'מכשיר Omi שלך טעון לגמרי. אפשר לנתק אותו!';
 
   @override
   String get deviceDisconnectedNotificationTitle => 'התקן Omi שלך התנתק';
@@ -7443,13 +7345,6 @@ class AppLocalizationsHe extends AppLocalizations {
   String get voiceFailedToTranscribe => 'כישלון בתמלול אודיו';
 
   @override
-  String get locationPermissionRequired => 'הרשאת מיקום נדרשת';
-
-  @override
-  String get locationPermissionContent =>
-      'Fast Transfer דורש הרשאת מיקום כדי לאמת חיבור WiFi. אנא הגרם הרשאת מיקום כדי להמשיך.';
-
-  @override
   String get pdfTranscriptExport => 'ייצוא תמלול';
 
   @override
@@ -7594,12 +7489,6 @@ class AppLocalizationsHe extends AppLocalizations {
   String get dailyRecapsDescription => 'הסיכומים היומיים שלך יופיעו כאן לאחר שייווצרו';
 
   @override
-  String get chooseTransferMethod => 'בחר שיטת העברה';
-
-  @override
-  String get fastTransferSpeed => '~150 KB/s דרך WiFi';
-
-  @override
   String largeTimeGapDetected(String gap) {
     return 'נמצא פער זמן גדול ($gap)';
   }
@@ -7608,9 +7497,6 @@ class AppLocalizationsHe extends AppLocalizations {
   String largeTimeGapsDetected(String gaps) {
     return 'נמצאו פערי זמן גדולים ($gaps)';
   }
-
-  @override
-  String get deviceDoesNotSupportWifiSwitchingToBle => 'ההתקן אינו תומך בסנכרון WiFi, מעבר ל-Bluetooth';
 
   @override
   String get appleHealthNotAvailable => 'Apple Health אינו זמין בהתקן זה';
@@ -8369,7 +8255,7 @@ class AppLocalizationsHe extends AppLocalizations {
   String get manageStorage => 'נהל אחסון';
 
   @override
-  String get safelyBackedUp => 'גיבוי בטוח בטלפון שלך';
+  String get safelyBackedUp => 'שיחות נוצרו';
 
   @override
   String get notYetSynced => 'עדיין לא סונכרן לטלפון שלך';
@@ -9168,4 +9054,157 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get bulkDeleteFailed => 'לא ניתן למחוק את המשימות. אנא נסה שוב.';
+
+  @override
+  String get deleteRecap => 'מחק סיכום';
+
+  @override
+  String get deleteRecapConfirmTitle => 'למחוק את הסיכום הזה?';
+
+  @override
+  String get deleteRecapConfirmBody => 'הסיכום הזה יוסר לצמיתות. השיחות המקוריות מאותו יום לא יושפעו.';
+
+  @override
+  String get deleteRecapAction => 'מחק';
+
+  @override
+  String get recapDeletedSnackbar => 'הסיכום נמחק';
+
+  @override
+  String get recapDeleteFailed => 'לא ניתן היה למחוק את הסיכום. נסה שוב מאוחר יותר.';
+
+  @override
+  String get syncStatusBackedUp => 'גובה';
+
+  @override
+  String get syncStatusBackingUp => 'מסנכרן…';
+
+  @override
+  String get syncStatusWaiting => 'ממתין לסנכרון';
+
+  @override
+  String get syncStatusRetrying => 'העיבוד נכשל — מנסה שוב';
+
+  @override
+  String get syncStatusFailed => 'נכשל — הקש על נסה שוב';
+
+  @override
+  String get syncStatusFileUnavailable => 'הקובץ אינו זמין';
+
+  @override
+  String get noRecordingsYet => 'אין הקלטות עדיין';
+
+  @override
+  String get syncInProgress => 'מתבצע סנכרון';
+
+  @override
+  String get syncStatusUploaded => 'הועלה · בעיבוד ב-Omi';
+
+  @override
+  String get deleteWhileProcessingTitle => 'עדיין בעיבוד';
+
+  @override
+  String get deleteWhileProcessingMessage =>
+      'ההקלטה הזו הועלתה אך Omi עדיין יוצר את השיחה. אם תמחק אותה עכשיו והעיבוד ייכשל, לא יהיה ניתן לשחזר אותה. למחוק בכל זאת?';
+
+  @override
+  String get syncCardAllBackedUp => 'כל ההקלטות סונכרנו';
+
+  @override
+  String syncCardReadyCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count הקלטות מוכנות לסנכרון',
+      many: '$count הקלטות מוכנות לסנכרון',
+      two: '2 הקלטות מוכנות לסנכרון',
+      one: 'הקלטה אחת מוכנה לסנכרון',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get syncCardProcessing => 'בעיבוד ב-Omi…';
+
+  @override
+  String get syncCardWaitingInternet => 'ממתין לאינטרנט';
+
+  @override
+  String syncCardNeedsAttention(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count הקלטות דורשות תשומת לב',
+      many: '$count הקלטות דורשות תשומת לב',
+      two: '2 הקלטות דורשות תשומת לב',
+      one: 'הקלטה אחת דורשת תשומת לב',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get syncFlowIntro =>
+      'ההקלטות מועברות מהמכשיר שלך לטלפון הזה ונשמרות מקומית, ולאחר מכן מועלות לשרת של Omi, שם הן מתומללות והופכות לשיחות.';
+
+  @override
+  String get syncStepUpload => 'סנכרון';
+
+  @override
+  String get syncStepUploadDesc => 'ההקלטה שלך נשלחת לשרת של Omi';
+
+  @override
+  String get syncStepProcess => 'תמלול';
+
+  @override
+  String get syncStepProcessDesc => 'Omi הופך את האודיו לשיחה';
+
+  @override
+  String get syncStepBackedUp => 'השיחה מוכנה';
+
+  @override
+  String get syncStepBackedUpDesc => 'תמצא אותה תחת שיחות';
+
+  @override
+  String get syncFailureFootnote => 'אם העיבוד נכשל, ההקלטה תנוסה שוב באופן אוטומטי בסנכרון הבא.';
+
+  @override
+  String get syncStatusConversationCreated => 'השיחה נוצרה';
+
+  @override
+  String get syncCardUploadingTitle => 'מעלה ל-Omi';
+
+  @override
+  String get syncCardDownloadingTitle => 'מוריד מהמכשיר שלך';
+
+  @override
+  String syncCardProgressOf(int current, int total) {
+    return '$current מתוך $total';
+  }
+
+  @override
+  String get syncStatusOnDevice => 'במכשיר שלך';
+
+  @override
+  String get syncStatusDownloadingFromDevice => 'מוריד מהמכשיר שלך';
+
+  @override
+  String get newestFirst => 'החדשות ביותר תחילה';
+
+  @override
+  String get noSyncedRecordingsYet => 'אין עדיין הקלטות מסונכרנות';
+
+  @override
+  String get morePaymentMethodsComingSoon => 'אמצעי תשלום נוספים בקרוב';
+
+  @override
+  String get syncProcessingBackgroundHint => 'התהליך נמשך ברקע — אפשר לצאת מהמסך הזה.';
+
+  @override
+  String get syncCardRateLimited => 'הגעת למגבלת השימוש ההוגן — הסנכרון יתחדש באופן אוטומטי';
+
+  @override
+  String get syncCardBackendBusy => 'השרתים של Omi עמוסים — ההקלטות שלך יסונכרנו ברגע שתתפנה תפוסה';
+
+  @override
+  String get unableToDetermineFirmwareVersion => 'לא ניתן לקבוע את גרסת הקושחה הנוכחית';
 }

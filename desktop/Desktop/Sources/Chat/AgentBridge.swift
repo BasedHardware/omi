@@ -183,6 +183,23 @@ actor AgentBridge {
         log("AgentBridge: pi-mono start refused — OMI_DESKTOP_API_URL (Rust backend) not configured")
         throw BridgeError.bridgeScriptNotFound
       }
+
+      // BYOK: when the user runs on their own keys (free plan), forward all four
+      // as env vars so the pi-mono extension can attach them as X-BYOK-* headers
+      // on every /v2/chat/completions request. Without this the bridge sends no
+      // BYOK headers, so the backend (1) can't apply its request-level all-four-keys
+      // paywall exemption and 402s free-plan users whenever the Firestore BYOK
+      // heartbeat lags, and (2) bills chat to Omi's server Anthropic key instead of
+      // the user's. Only inject the complete set (isByokActive) so the backend's
+      // has_all_byok_keys() check passes; a partial set would be worse than none.
+      if APIKeyService.isByokActive {
+        for provider in BYOKProvider.allCases {
+          if let key = APIKeyService.byokKey(provider) {
+            env["OMI_BYOK_\(provider.rawValue.uppercased())"] = key
+          }
+        }
+        log("AgentBridge: pi-mono BYOK active — forwarding \(BYOKProvider.allCases.count) user keys as X-BYOK headers")
+      }
     }
 
     // Ensure the directory containing node is in PATH

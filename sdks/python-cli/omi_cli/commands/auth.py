@@ -114,6 +114,11 @@ def _do_browser_login(ctx: "AppContext", *, provider: str) -> None:
         )
 
     ctx.renderer.success(f"Logged in via [bold]{provider}[/bold] OAuth as profile [bold]{profile.name}[/bold].")
+    if not ctx.renderer.json_mode:
+        ctx.renderer.info(
+            "A developer API key for this machine was created in your Omi dashboard "
+            "(re-running browser login replaces it). Manage or revoke it there anytime."
+        )
     if ctx.renderer.json_mode:
         ctx.renderer.emit(
             {

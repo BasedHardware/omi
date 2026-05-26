@@ -38,8 +38,26 @@ actor TaskAssistant: ProactiveAssistant {
     private var latestFrame: CapturedFrame?
     /// Fallback timer that fires after extractionInterval if no context switch occurs
     private var fallbackTimerTask: Task<Void, Never>?
-    /// Timestamp of last context switch yield, for throttling rapid switches
-    private var lastContextSwitchYieldTime: Date = .distantPast
+    // Per-(app, normalized-window) timestamp of the last yielded context switch.
+    // Replaces the old global throttle so 10 different chats in <60s all flow through,
+    // while bouncing back to the same chat re-uses the cached analysis.
+    private var lastAnalyzedByKey: [String: Date] = [:]
+
+    /// Apps where new content arrives while the user stays in-app, so a context-switch
+    /// trigger is too slow. Frames arriving for these apps fire analysis immediately
+    /// (subject to the per-window dedupe TTL below).
+    private static let messagingFastPathApps: Set<String> = [
+        "Telegram",
+        "Messages",
+        "iMessage",
+        "WhatsApp",
+        "Signal",
+        "Slack",
+        "Discord",
+        "Messenger",
+    ]
+
+    private static let messagingFastPathDelay: TimeInterval = 15.0
 
     // Cached goals (refreshed every 5 minutes)
     private var cachedGoals: [Goal] = []
@@ -222,8 +240,9 @@ actor TaskAssistant: ProactiveAssistant {
 
     /// Run the extraction pipeline on arbitrary JPEG data without side effects (no saving, no events).
     /// Used by the test runner to replay past screenshots.
-    /// Returns (result, searchCount) where searchCount is the number of search tool calls made.
-    func testAnalyze(jpegData: Data, appName: String) async throws -> (TaskExtractionResult?, Int) {
+    /// Returns (results, searchCount) — results is one entry per extracted task plus one
+    /// terminator entry (no_task_found/reject_task) when no tasks were extracted.
+    func testAnalyze(jpegData: Data, appName: String) async throws -> ([TaskExtractionResult], Int) {
         return try await extractTaskSingleStage(from: jpegData, appName: appName)
     }
 
@@ -256,7 +275,35 @@ actor TaskAssistant: ProactiveAssistant {
             startFallbackTimer()
         }
 
+        // Fast in-app trigger: for messaging apps, arm a ~15s timer keyed to the
+        // current (app, window). Lets a new chat message turn into a task without
+        // requiring the user to leave the app.
+        armFastFallbackIfNeeded(frame: frame)
+
         return nil
+    }
+
+    /// For messaging apps, fire analysis immediately when a frame for a fresh window
+    /// arrives (subject to the per-window dedupe TTL). Lets chat content turn into a task
+    /// without requiring the user to leave the app. Non-messaging apps continue to rely on
+    /// the regular context-switch + fallback-timer path.
+    private func armFastFallbackIfNeeded(frame: CapturedFrame) {
+        guard Self.messagingFastPathApps.contains(frame.appName) else { return }
+
+        let key = Self.analyzedKey(for: frame)
+
+        // Per-window dedupe — same chat within the TTL is suppressed; the next eligible
+        // frame fires immediately.
+        if let last = lastAnalyzedByKey[key] {
+            let elapsed = Date().timeIntervalSince(last)
+            if elapsed < Self.messagingFastPathDelay {
+                return
+            }
+        }
+
+        log("Task: Fast in-app trigger firing immediately for messaging window '\(key)'")
+        lastAnalyzedByKey[key] = Date()
+        triggerContinuation.yield(.timerFallback(frame))
     }
 
     func handleResult(_ result: AssistantResult, sendEvent: @escaping (String, [String: Any]) -> Void) async {
@@ -474,6 +521,15 @@ actor TaskAssistant: ProactiveAssistant {
             )
 
             log("Task: Synced to staged_tasks backend (id: \(response.id))")
+
+            // Fast-path promotion: don't wait up to 5 min for the safety-net timer to
+            // promote this new task into action_items + fire a notification. Kicking off
+            // the promote loop immediately means the user sees the notification within
+            // seconds of the task being saved, not minutes later.
+            Task {
+                await TaskPromotionService.shared.promoteIfNeeded()
+            }
+
             return response.id
         } catch {
             logError("Task: Failed to sync to backend", error: error)
@@ -529,13 +585,23 @@ actor TaskAssistant: ProactiveAssistant {
 
         log("Task: Context switch from \(frame.appName) (window: \(frame.windowTitle ?? "nil")) -> \(newApp)")
 
-        // Throttle context switch yields using the analysis delay setting
+        // Per-window dedupe instead of one global cooldown. A different chat / window /
+        // browser tab has a different key, so 10 chats with 10 people in <60s all flow
+        // through. Re-entering the same chat within the dedupe window is skipped (the
+        // semantic dedupe inside the Claude prompt already catches duplicate tasks if
+        // we ever do re-analyze the same window later).
+        // Messaging apps use a shorter dedupe so a new message in the same chat doesn't
+        // wait a full minute before getting re-analyzed.
         let analysisDelay = await MainActor.run { AssistantSettings.shared.analysisDelay }
-        if analysisDelay > 0 {
-            let elapsed = Date().timeIntervalSince(lastContextSwitchYieldTime)
-            if elapsed < TimeInterval(analysisDelay) {
-                log("Task: Context switch throttled (\(Int(elapsed))s < \(analysisDelay)s delay)")
-                // Still cancel fallback timer so it resets
+        let dedupeKey = Self.analyzedKey(for: frame)
+        let dedupeTTL: TimeInterval = Self.messagingFastPathApps.contains(frame.appName)
+            ? Self.messagingFastPathDelay
+            : TimeInterval(analysisDelay)
+        let now = Date()
+        if dedupeTTL > 0, let last = lastAnalyzedByKey[dedupeKey] {
+            let elapsed = now.timeIntervalSince(last)
+            if elapsed < dedupeTTL {
+                log("Task: Context switch dedupe — already analyzed '\(dedupeKey)' \(Int(elapsed))s ago (<\(Int(dedupeTTL))s), skipping")
                 fallbackTimerTask?.cancel()
                 fallbackTimerTask = nil
                 return
@@ -547,8 +613,34 @@ actor TaskAssistant: ProactiveAssistant {
         fallbackTimerTask = nil
 
         // Yield context switch trigger with the frame
-        lastContextSwitchYieldTime = Date()
+        lastAnalyzedByKey[dedupeKey] = now
+        pruneStaleDedupeEntries(now: now, ttl: TimeInterval(max(analysisDelay, 60) * 5))
         triggerContinuation.yield(.contextSwitch(frame))
+    }
+
+    /// Normalize (app, window) into a stable dedupe key. Strips Telegram-style trailing
+    /// counters and collapses whitespace so the same chat across reopens hashes the same.
+    static func analyzedKey(for frame: CapturedFrame) -> String {
+        let app = frame.appName.lowercased()
+        let title = normalizedWindowTitle(frame.windowTitle)
+        return "\(app)::\(title)"
+    }
+
+    private static func normalizedWindowTitle(_ title: String?) -> String {
+        guard let raw = title, !raw.isEmpty else { return "" }
+        var t = raw.lowercased()
+        // Strip Telegram-style trailing message counters: " (247887)" / "(247887)".
+        if let range = t.range(of: #"\s*\(\d+\)\s*$"#, options: .regularExpression) {
+            t.removeSubrange(range)
+        }
+        // Collapse whitespace runs so " foo   bar " == "foo bar".
+        t = t.split(whereSeparator: { $0.isWhitespace }).joined(separator: " ")
+        return t
+    }
+
+    private func pruneStaleDedupeEntries(now: Date, ttl: TimeInterval) {
+        let cutoff = now.addingTimeInterval(-ttl)
+        lastAnalyzedByKey = lastAnalyzedByKey.filter { $0.value >= cutoff }
     }
 
     func clearPendingWork() async {
@@ -577,17 +669,20 @@ actor TaskAssistant: ProactiveAssistant {
 
         log("Task: Analyzing frame from \(frame.appName)...")
         do {
-            let (result, searchCount) = try await extractTaskSingleStage(from: frame.jpegData, appName: frame.appName)
-            guard let result = result else {
-                log("Task: Analysis returned no result")
+            let (results, searchCount) = try await extractTaskSingleStage(from: frame.jpegData, appName: frame.appName)
+            guard !results.isEmpty else {
+                log("Task: Analysis returned no results")
                 return
             }
 
-            log("Task: Analysis complete - hasNewTask: \(result.hasNewTask), context: \(result.contextSummary), searches: \(searchCount)")
+            let extractedCount = results.filter { $0.hasNewTask }.count
+            log("Task: Analysis complete - results: \(results.count) (extracted: \(extractedCount)), context: \(results.first?.contextSummary ?? ""), searches: \(searchCount)")
 
-            await handleResultWithScreenshot(result, screenshotId: frame.screenshotId, appName: frame.appName, windowTitle: frame.windowTitle) { type, data in
-                Task { @MainActor in
-                    AssistantCoordinator.shared.sendEvent(type: type, data: data)
+            for result in results {
+                await handleResultWithScreenshot(result, screenshotId: frame.screenshotId, appName: frame.appName, windowTitle: frame.windowTitle) { type, data in
+                    Task { @MainActor in
+                        AssistantCoordinator.shared.sendEvent(type: type, data: data)
+                    }
                 }
             }
         } catch {
@@ -595,9 +690,14 @@ actor TaskAssistant: ProactiveAssistant {
         }
     }
 
-    /// Loop-based extraction: image analysis + iterative tool calling for search + terminal tool for decision
-    /// Returns (result, searchCount) where searchCount is the number of search tool calls made.
-    private func extractTaskSingleStage(from jpegData: Data, appName: String) async throws -> (TaskExtractionResult?, Int) {
+    /// Loop-based extraction: image analysis + iterative tool calling. A single frame can
+    /// contain multiple distinct commitments (e.g. two unrelated asks in one chat) — the
+    /// loop accumulates every extract_task call instead of stopping after the first.
+    /// reject_task on one candidate no longer kills the whole frame; the loop keeps going
+    /// until no_task_found terminates it or the iteration budget is exhausted.
+    /// Returns (results, searchCount) — one TaskExtractionResult per extract_task plus a
+    /// terminator result when zero tasks were extracted.
+    private func extractTaskSingleStage(from jpegData: Data, appName: String) async throws -> ([TaskExtractionResult], Int) {
         // 1. Gather context
         let context = await refreshContext()
 
@@ -770,10 +870,14 @@ actor TaskAssistant: ProactiveAssistant {
             ]
         }
 
-        // 6. Tool-calling loop (max 5 iterations)
+        // 6. Tool-calling loop (max 8 iterations — enough headroom for 2-3 distinct
+        // commitments per frame each doing search + extract).
         var searchCount = 0
+        var extractedResults: [TaskExtractionResult] = []
+        var lastContextSummary = ""
+        var lastCurrentActivity = ""
 
-        for iteration in 0..<5 {
+        for iteration in 0..<8 {
             let result = try await geminiClient.sendImageToolLoop(
                 contents: contents,
                 systemPrompt: currentSystemPrompt,
@@ -792,12 +896,16 @@ actor TaskAssistant: ProactiveAssistant {
                 let contextSummary = toolCall.arguments["context_summary"] as? String ?? "No task on screen"
                 let currentActivity = toolCall.arguments["current_activity"] as? String ?? "Unknown"
                 log("Task: no_task_found — \(contextSummary)")
-                return (TaskExtractionResult(
+                if !extractedResults.isEmpty {
+                    // Already extracted at least one task — terminator can be implicit, just return.
+                    return (extractedResults, searchCount)
+                }
+                return ([TaskExtractionResult(
                     hasNewTask: false,
                     task: nil,
                     contextSummary: contextSummary,
                     currentActivity: currentActivity
-                ), searchCount)
+                )], searchCount)
 
             case "extract_task":
                 let title = toolCall.arguments["title"] as? String ?? ""
@@ -877,24 +985,67 @@ actor TaskAssistant: ProactiveAssistant {
                 )
 
                 log("Task: extract_task — \"\(title)\" (confidence: \(confidence), priority: \(priorityStr), score: \(relevanceScore.map { String($0) } ?? "nil"))")
-                return (TaskExtractionResult(
+                extractedResults.append(TaskExtractionResult(
                     hasNewTask: true,
                     task: task,
                     contextSummary: contextSummary,
                     currentActivity: currentActivity
-                ), searchCount)
+                ))
+                lastContextSummary = contextSummary
+                lastCurrentActivity = currentActivity
+                // Feed an acknowledgement back so the model can decide whether to extract
+                // more commitments or stop with no_task_found.
+                contents.append(GeminiImageToolRequest.Content(
+                    role: "model",
+                    parts: [GeminiImageToolRequest.Part(
+                        functionCall: .init(name: toolCall.name, args: ["title": title]),
+                        thoughtSignature: toolCall.thoughtSignature
+                    )]
+                ))
+                contents.append(GeminiImageToolRequest.Content(
+                    role: "user",
+                    parts: [GeminiImageToolRequest.Part(functionResponse: .init(
+                        name: toolCall.name,
+                        response: .init(result: """
+                            EXTRACTED: "\(title)". \
+                            Now look at the SAME screenshot again — is there ANOTHER distinct, unrelated commitment from a different request or different deliverable? \
+                            (Same person asking for two different things counts as two tasks.) \
+                            If yes, search_similar for the next one and extract it. \
+                            If no other commitment remains, call no_task_found.
+                            """)
+                    ))]
+                ))
+                continue
 
             case "reject_task":
                 let reason = toolCall.arguments["reason"] as? String ?? "Unknown reason"
                 let contextSummary = toolCall.arguments["context_summary"] as? String ?? ""
                 let currentActivity = toolCall.arguments["current_activity"] as? String ?? ""
                 log("Task: reject_task — \(reason)")
-                return (TaskExtractionResult(
-                    hasNewTask: false,
-                    task: nil,
-                    contextSummary: contextSummary,
-                    currentActivity: currentActivity
-                ), searchCount)
+                lastContextSummary = contextSummary
+                lastCurrentActivity = currentActivity
+                // reject_task no longer kills the frame — Claude may have only rejected one
+                // of several commitments. Feed the rejection back and let it look for others.
+                contents.append(GeminiImageToolRequest.Content(
+                    role: "model",
+                    parts: [GeminiImageToolRequest.Part(
+                        functionCall: .init(name: toolCall.name, args: ["reason": reason]),
+                        thoughtSignature: toolCall.thoughtSignature
+                    )]
+                ))
+                contents.append(GeminiImageToolRequest.Content(
+                    role: "user",
+                    parts: [GeminiImageToolRequest.Part(functionResponse: .init(
+                        name: toolCall.name,
+                        response: .init(result: """
+                            REJECTED that candidate (duplicate / already tracked). \
+                            Look at the SAME screenshot again — is there ANOTHER distinct, unrelated commitment that is NOT a duplicate of any existing task? \
+                            If yes, search_similar for it and extract it. \
+                            If no other commitment remains, call no_task_found.
+                            """)
+                    ))]
+                ))
+                continue
 
             case "search_similar":
                 let query = toolCall.arguments["query"] as? String ?? ""
@@ -966,8 +1117,18 @@ actor TaskAssistant: ProactiveAssistant {
             }
         }
 
-        log("Task: Completed in \(searchCount) searches (loop exhausted without terminal tool)")
-        return (nil, searchCount)
+        log("Task: Completed in \(searchCount) searches (loop exhausted without terminal tool), extracted: \(extractedResults.count)")
+        if !extractedResults.isEmpty {
+            return (extractedResults, searchCount)
+        }
+        // No extracts and no terminator — return a synthetic no-task result so the caller
+        // still saves an observation row for telemetry.
+        return ([TaskExtractionResult(
+            hasNewTask: false,
+            task: nil,
+            contextSummary: lastContextSummary.isEmpty ? "Analysis incomplete" : lastContextSummary,
+            currentActivity: lastCurrentActivity.isEmpty ? "Unknown" : lastCurrentActivity
+        )], searchCount)
     }
 
     // MARK: - Title Validation

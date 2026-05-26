@@ -15,7 +15,16 @@ from typing import Dict, List, Optional, Tuple
 import numpy as np
 import httpx
 
-from utils.executors import critical_executor, storage_executor
+from utils.executors import (
+    critical_executor,
+    db_executor,
+    postprocess_executor,
+    storage_executor,
+    sync_executor,
+    run_blocking,
+    start_background_task,
+    submit_with_context,
+)
 
 from fastapi import APIRouter, UploadFile, File, Depends, HTTPException, Query, Header, Request, Response
 from fastapi.responses import JSONResponse, StreamingResponse
@@ -46,9 +55,12 @@ from utils.other.storage import (
     download_audio_chunks_and_merge,
     get_or_create_merged_audio,
     get_merged_audio_signed_url,
+    _PRECACHE_FILE_SEM,
 )
 
 from utils import encryption
+from utils.byok import get_byok_keys, set_byok_keys
+from utils.http_client import _get_semaphore
 from utils.log_sanitizer import sanitize
 from utils.stt.pre_recorded import deepgram_prerecorded, get_deepgram_model_for_language, postprocess_words
 from utils.stt.vad import vad_is_empty
@@ -150,7 +162,9 @@ def parse_range_header(range_header: str, file_size: int) -> tuple[int, int] | N
 # **********************************************
 
 
-def _precache_audio_file(uid: str, conversation_id: str, audio_file: dict, fill_gaps: bool = True):
+def _precache_audio_file(
+    uid: str, conversation_id: str, audio_file: dict, fill_gaps: bool = True, caller: str = 'precache_endpoint'
+):
     """Pre-cache a single audio file."""
     try:
         audio_file_id = audio_file.get('id')
@@ -166,8 +180,8 @@ def _precache_audio_file(uid: str, conversation_id: str, audio_file: dict, fill_
             pcm_to_wav_func=pcm_to_wav,
             fill_gaps=fill_gaps,
             sample_rate=AUDIO_SAMPLE_RATE,
+            caller=caller,
         )
-        logger.info(f"Pre-cached audio file: {audio_file_id}")
     except Exception as e:
         logger.error(f"Error pre-caching audio file {audio_file.get('id')}: {e}")
 
@@ -191,10 +205,21 @@ def precache_conversation_audio_endpoint(
     if not audio_files:
         return {"status": "no_audio", "message": "No audio files in conversation"}
 
-    # Start background parallel pre-caching for all audio files using storage_executor
+    # Start background parallel pre-caching with bounded concurrency (#7387)
     def _precache_all_parallel():
         logger.info(f"Pre-caching all {len(audio_files)} audio files for conversation {conversation_id} (parallel)")
-        futures = [storage_executor.submit(_precache_audio_file, uid, conversation_id, af) for af in audio_files]
+        futures = []
+        for af in audio_files:
+            _PRECACHE_FILE_SEM.acquire()
+            try:
+                f = submit_with_context(
+                    storage_executor, _precache_audio_file, uid, conversation_id, af, caller='precache_endpoint'
+                )
+                f.add_done_callback(lambda _: _PRECACHE_FILE_SEM.release())
+                futures.append(f)
+            except Exception:
+                _PRECACHE_FILE_SEM.release()
+                raise
         for future in futures:
             try:
                 future.result()
@@ -202,7 +227,7 @@ def precache_conversation_audio_endpoint(
                 logger.error(f"Error in parallel precache: {e}")
         logger.info(f"Completed pre-cache for conversation {conversation_id}")
 
-    critical_executor.submit(_precache_all_parallel)
+    submit_with_context(postprocess_executor, _precache_all_parallel)
 
     return {"status": "started", "audio_file_count": len(audio_files)}
 
@@ -254,7 +279,7 @@ def get_audio_signed_urls_endpoint(
             # First uncached file: cache synchronously for immediate playback
             if not first_uncached_handled:
                 first_uncached_handled = True
-                _precache_audio_file(uid, conversation_id, af)
+                _precache_audio_file(uid, conversation_id, af, caller='sync_urls_first')
                 # Get signed URL after caching
                 signed_url = get_merged_audio_signed_url(uid, conversation_id, audio_file_id)
                 if signed_url:
@@ -291,14 +316,25 @@ def get_audio_signed_urls_endpoint(
     if uncached_files:
 
         def _cache_uncached_parallel():
-            futures = [storage_executor.submit(_precache_audio_file, uid, conversation_id, af) for af in uncached_files]
+            futures = []
+            for af in uncached_files:
+                _PRECACHE_FILE_SEM.acquire()
+                try:
+                    f = submit_with_context(
+                        storage_executor, _precache_audio_file, uid, conversation_id, af, caller='sync_urls_bg'
+                    )
+                    f.add_done_callback(lambda _: _PRECACHE_FILE_SEM.release())
+                    futures.append(f)
+                except Exception:
+                    _PRECACHE_FILE_SEM.release()
+                    raise
             for future in futures:
                 try:
                     future.result()
                 except Exception as e:
                     logger.error(f"Error in parallel cache: {e}")
 
-        critical_executor.submit(_cache_uncached_parallel)
+        submit_with_context(postprocess_executor, _cache_uncached_parallel)
 
     return {"audio_files": result}
 
@@ -363,6 +399,7 @@ def download_audio_file_endpoint(
                 pcm_to_wav_func=pcm_to_wav,
                 fill_gaps=True,
                 sample_rate=AUDIO_SAMPLE_RATE,
+                caller='sync_download',
             )
             content_type = "audio/wav"
             extension = "wav"
@@ -931,7 +968,7 @@ def process_segment(
             time.sleep(480)
             delete_syncing_temporal_file(path)
 
-        storage_executor.submit(delete_file)
+        submit_with_context(storage_executor, delete_file)
 
         # Apply user transcription preferences (vocabulary, language, model)
         prefs = transcription_prefs or {}
@@ -1138,8 +1175,7 @@ async def sync_local_files(
         def _run_vad(path):
             retrieve_vad_segments(path, segmented_paths, vad_errors)
 
-        loop = asyncio.get_running_loop()
-        await asyncio.gather(*[loop.run_in_executor(critical_executor, _run_vad, path) for path in wav_paths])
+        await asyncio.gather(*[run_blocking(sync_executor, _run_vad, path) for path in wav_paths])
 
         # Clean up original wav files after VAD segmentation (segments are now in segmented_paths)
         _cleanup_files(wav_paths)
@@ -1204,11 +1240,11 @@ async def sync_local_files(
             )
 
         # Fetch user transcription preferences once before spawning threads
-        transcription_prefs = users_db.get_user_transcription_preferences(uid)
+        transcription_prefs = await run_blocking(db_executor, users_db.get_user_transcription_preferences, uid)
 
         # Build speaker embeddings cache once for all segments (voice + text identification)
         try:
-            person_embeddings_cache = build_person_embeddings_cache(uid)
+            person_embeddings_cache = await run_blocking(db_executor, build_person_embeddings_cache, uid)
             if person_embeddings_cache:
                 logger.info(f'sync: loaded {len(person_embeddings_cache)} person embeddings for speaker ID uid={uid}')
         except Exception as e:
@@ -1217,8 +1253,8 @@ async def sync_local_files(
 
         await asyncio.gather(
             *[
-                loop.run_in_executor(
-                    critical_executor,
+                run_blocking(
+                    sync_executor,
                     process_segment,
                     path,
                     uid,
@@ -1298,9 +1334,10 @@ async def sync_local_files(
 # v2 async sync-local-files
 # ---------------------------------------------------------------------------
 # v1 processes segments synchronously (80-180s for large payloads → 504).
-# v2 does the fast path (decode, VAD) inline, then hands off STT+LLM to a
-# background thread. The app polls GET /v2/sync-local-files/{job_id} until
-# the job reaches a terminal status.
+# v2 returns 202 immediately after saving raw files, then runs the full
+# pipeline (decode → VAD → fair-use → STT → LLM) in a background thread.
+# The app polls GET /v2/sync-local-files/{job_id} until the job reaches
+# a terminal status.
 # ---------------------------------------------------------------------------
 
 
@@ -1336,119 +1373,282 @@ def _retrieve_file_paths_v2(files: List[UploadFile], uid: str, job_id: str):
     return paths
 
 
-def _process_segments_background(
+def _get_sync_pipeline_semaphore() -> asyncio.Semaphore:
+    """Return a loop-scoped semaphore capping concurrent sync pipelines."""
+    return _get_semaphore('sync_pipeline', 16)
+
+
+async def _run_full_pipeline_background_async(
     job_id: str,
     uid: str,
-    segmented_paths: list,
+    raw_paths: list,
     source,
-    is_locked: bool,
-    fair_use_restrict_dg: bool,
-    total_speech_seconds: float,
+    should_lock: bool,
     job_dir: str,
-    transcription_prefs: Optional[dict] = None,
-    person_embeddings_cache: Optional[Dict[str, dict]] = None,
     target_conversation_id: str = None,
 ):
-    """Background worker: runs segment processing and updates Redis job status."""
-    try:
-        mark_job_processing(job_id)
+    """Async coordinator for the full sync pipeline (decode → VAD → fair-use → STT → LLM).
 
-        response = {'updated_memories': set(), 'new_memories': set()}
-        segment_errors = []
-        segment_lock = threading.Lock()
-        total_segments = len(segmented_paths)
+    Runs as an asyncio task on the event loop. All blocking work is offloaded to
+    thread pools via run_blocking(). The coordinator itself holds zero thread pool
+    slots — only leaf operations use threads, and only for their actual duration.
+    """
+    async with _get_sync_pipeline_semaphore():
+        segmented_paths = set()
+        wav_paths = []
+        stage_timings = {}
+        pipeline_start = time.monotonic()
+        try:
+            await run_blocking(db_executor, mark_job_processing, job_id)
 
-        def _process_one_segment(path):
-            process_segment(
-                path,
-                uid,
-                response,
-                segment_lock,
-                segment_errors,
-                source,
-                is_locked,
-                transcription_prefs,
-                person_embeddings_cache,
-                target_conversation_id,
+            # --- Phase 1: Decode ---
+            await run_blocking(db_executor, update_sync_job, job_id, {'stage': 'decoding'})
+            t0 = time.monotonic()
+            try:
+                wav_paths = await run_blocking(sync_executor, decode_files_to_wav, raw_paths)
+            except HTTPException as e:
+                await run_blocking(db_executor, mark_job_failed, job_id, f'Decode failed: {e.detail}')
+                return
+            except Exception as e:
+                await run_blocking(db_executor, mark_job_failed, job_id, f'Decode failed: {e}')
+                return
+            finally:
+                await run_blocking(storage_executor, _cleanup_files, raw_paths)
+            stage_timings['decode_ms'] = int((time.monotonic() - t0) * 1000)
+
+            if not wav_paths:
+                await run_blocking(
+                    db_executor,
+                    mark_job_completed,
+                    job_id,
+                    {
+                        'new_memories': [],
+                        'updated_memories': [],
+                        'failed_segments': 0,
+                        'total_segments': 0,
+                        'errors': [],
+                    },
+                )
+                return
+
+            # --- Phase 2: VAD ---
+            await run_blocking(db_executor, update_sync_job, job_id, {'stage': 'vad'})
+            t0 = time.monotonic()
+            vad_errors = []
+
+            def _run_vad_bg(path):
+                try:
+                    retrieve_vad_segments(path, segmented_paths, vad_errors)
+                except Exception as e:
+                    vad_errors.append(f'{path}: {e}')
+
+            vad_tasks = [
+                asyncio.wait_for(run_blocking(sync_executor, _run_vad_bg, path), timeout=300) for path in wav_paths
+            ]
+            vad_results = await asyncio.gather(*vad_tasks, return_exceptions=True)
+            for r in vad_results:
+                if isinstance(r, asyncio.TimeoutError):
+                    vad_errors.append('VAD timed out after 300s')
+                elif isinstance(r, Exception):
+                    vad_errors.append(f'VAD executor error: {r}')
+
+            stage_timings['vad_ms'] = int((time.monotonic() - t0) * 1000)
+            await run_blocking(storage_executor, _cleanup_files, wav_paths)
+            wav_paths = []
+
+            if vad_errors:
+                error_detail = f'VAD failed for {len(vad_errors)} file(s): {"; ".join(vad_errors[:3])}'
+                if len(vad_errors) > 3:
+                    error_detail += f' (and {len(vad_errors) - 3} more)'
+                await run_blocking(storage_executor, _cleanup_files, list(segmented_paths))
+                segmented_paths = set()
+                await run_blocking(db_executor, mark_job_failed, job_id, error_detail)
+                return
+
+            # --- Phase 3: Speech metrics & fair-use ---
+            total_speech_seconds = await run_blocking(
+                sync_executor, lambda: sum(get_wav_duration(p) for p in segmented_paths)
+            )
+            total_speech_ms = int(total_speech_seconds * 1000)
+            total_segments = len(segmented_paths)
+
+            await run_blocking(
+                db_executor, update_sync_job, job_id, {'total_segments': total_segments, 'stage': 'processing'}
             )
 
-        # Process in chunks of 5, with heartbeat after each chunk
-        chunk_size = 5
-        segment_list = list(segmented_paths)
-        for i in range(0, len(segment_list), chunk_size):
-            chunk = segment_list[i : i + chunk_size]
-            futures = [critical_executor.submit(_process_one_segment, path) for path in chunk]
-            for future in futures:
+            if total_segments == 0:
+                await run_blocking(
+                    db_executor,
+                    mark_job_completed,
+                    job_id,
+                    {
+                        'new_memories': [],
+                        'updated_memories': [],
+                        'failed_segments': 0,
+                        'total_segments': 0,
+                        'errors': [],
+                    },
+                )
+                return
+
+            if FAIR_USE_ENABLED and total_speech_ms > 0:
+                await run_blocking(db_executor, record_speech_ms, uid, total_speech_ms, source='sync')
+                speech_totals = await run_blocking(db_executor, get_rolling_speech_ms, uid)
+                triggered_caps = await run_blocking(db_executor, check_soft_caps, uid, speech_totals=speech_totals)
+                if triggered_caps:
+                    logger.info(f'sync_v2 bg: soft caps triggered for {uid}: {triggered_caps}')
+                    try:
+                        asyncio.create_task(trigger_classifier_if_needed(uid, triggered_caps))
+                    except Exception as e:
+                        logger.error(f'sync_v2 bg: classifier scheduling failed for {uid}: {e}')
+
+            # DG budget gate
+            fair_use_restrict_dg = False
+            if FAIR_USE_ENABLED:
                 try:
-                    future.result()
+                    fair_use_stage = await run_blocking(db_executor, get_enforcement_stage, uid)
+                    if fair_use_stage == 'restrict' and FAIR_USE_RESTRICT_DAILY_DG_MS > 0:
+                        fair_use_restrict_dg = True
+                        if await run_blocking(db_executor, is_dg_budget_exhausted, uid):
+                            await run_blocking(storage_executor, _cleanup_files, list(segmented_paths))
+                            segmented_paths = set()
+                            await run_blocking(
+                                db_executor, mark_job_failed, job_id, 'DG budget exhausted — audio retained for retry'
+                            )
+                            return
                 except Exception as e:
-                    logger.error(f"Error processing segment: {e}")
-            # Heartbeat: refresh updated_at so stale detection doesn't kill active jobs
-            try:
-                update_sync_job(job_id, {'processed_segments': min(i + chunk_size, len(segment_list))})
-            except Exception:
-                pass  # Non-fatal: stale detection is a safety net, not a hard gate
+                    logger.error(f'sync_v2 bg: DG budget check error for {uid}: {e}')
 
-        # Record DG usage after processing (not before, to avoid charging on retries)
-        if fair_use_restrict_dg:
+            is_locked = should_lock
+
+            # --- Phase 4: Fetch prefs & embeddings ---
+            transcription_prefs = await run_blocking(db_executor, users_db.get_user_transcription_preferences, uid)
             try:
-                dg_ms = int(total_speech_seconds * 1000)
-                if dg_ms > 0:
-                    record_dg_usage_ms(uid, dg_ms)
+                person_embeddings_cache = await run_blocking(db_executor, build_person_embeddings_cache, uid)
+                if person_embeddings_cache:
+                    logger.info(f'sync_v2 bg: loaded {len(person_embeddings_cache)} person embeddings uid={uid}')
             except Exception as e:
-                logger.error(f'sync_v2: DG usage record error for {uid}: {e}')
+                logger.warning(f'sync_v2 bg: failed to load person embeddings uid={uid}: {e}')
+                person_embeddings_cache = {}
 
-        # Build result matching v1 response shape
-        failed_segments = len(segment_errors)
-        successful_segments = total_segments - failed_segments
-        result = {
-            'new_memories': sorted(response['new_memories']),
-            'updated_memories': sorted(response['updated_memories']),
-        }
-        if failed_segments > 0:
-            result['failed_segments'] = failed_segments
-            result['total_segments'] = total_segments
-            result['errors'] = segment_errors[:10]
+            # --- Phase 5: Process segments (STT + LLM) ---
+            await run_blocking(db_executor, update_sync_job, job_id, {'stage': 'stt_llm'})
+            t0 = time.monotonic()
+            response = {'updated_memories': set(), 'new_memories': set()}
+            segment_errors = []
+            segment_lock = threading.Lock()
 
-        # Record subscription usage only when at least one segment succeeded
-        if successful_segments > 0:
-            try:
-                usage_seconds = int(total_speech_seconds)
-                if usage_seconds > 0:
-                    record_usage(uid, transcription_seconds=usage_seconds, speech_seconds=usage_seconds)
-            except Exception as e:
-                logger.error(f'sync_v2: usage record error for {uid}: {e}')
+            def _process_one_segment(path):
+                process_segment(
+                    path,
+                    uid,
+                    response,
+                    segment_lock,
+                    segment_errors,
+                    source,
+                    is_locked,
+                    transcription_prefs,
+                    person_embeddings_cache,
+                    target_conversation_id,
+                )
 
-        mark_job_completed(
-            job_id,
-            {
-                'new_memories': result['new_memories'],
-                'updated_memories': result['updated_memories'],
-                'failed_segments': failed_segments,
-                'total_segments': total_segments,
-                'errors': segment_errors[:10] if segment_errors else [],
-            },
-        )
+            chunk_size = 5
+            segment_list = list(segmented_paths)
+            for i in range(0, len(segment_list), chunk_size):
+                chunk = segment_list[i : i + chunk_size]
+                seg_tasks = [
+                    asyncio.wait_for(run_blocking(sync_executor, _process_one_segment, path), timeout=300)
+                    for path in chunk
+                ]
+                seg_results = await asyncio.gather(*seg_tasks, return_exceptions=True)
+                for r in seg_results:
+                    if isinstance(r, asyncio.TimeoutError):
+                        segment_errors.append('Segment timed out after 300s')
+                        logger.error(f'sync_v2 bg: segment timed out job={job_id}')
+                    elif isinstance(r, Exception):
+                        logger.error(f'sync_v2 bg: segment error: {r}')
+                try:
+                    await run_blocking(
+                        db_executor,
+                        update_sync_job,
+                        job_id,
+                        {'processed_segments': min(i + chunk_size, len(segment_list))},
+                    )
+                except Exception:
+                    pass
 
-        logger.info(
-            f'sync_v2 background complete job={job_id} uid={uid} '
-            f'success={total_segments - failed_segments}/{total_segments}'
-        )
-    except Exception as e:
-        logger.error(f'sync_v2 background failed job={job_id} uid={uid}: {e}')
-        try:
-            mark_job_failed(job_id, str(e))
-        except Exception:
-            pass
-    finally:
-        # Clean up segmented wav files
-        _cleanup_files(list(segmented_paths))
-        # Clean up job directory
-        try:
-            if job_dir and os.path.isdir(job_dir):
-                shutil.rmtree(job_dir, ignore_errors=True)
+            stage_timings['stt_llm_ms'] = int((time.monotonic() - t0) * 1000)
+
+            # Record DG usage after processing
+            if fair_use_restrict_dg:
+                try:
+                    dg_ms = int(total_speech_seconds * 1000)
+                    if dg_ms > 0:
+                        await run_blocking(db_executor, record_dg_usage_ms, uid, dg_ms)
+                except Exception as e:
+                    logger.error(f'sync_v2 bg: DG usage record error for {uid}: {e}')
+
+            # Build result
+            failed_segments = len(segment_errors)
+            successful_segments = total_segments - failed_segments
+            result = {
+                'new_memories': sorted(response['new_memories']),
+                'updated_memories': sorted(response['updated_memories']),
+            }
+            if failed_segments > 0:
+                result['failed_segments'] = failed_segments
+                result['total_segments'] = total_segments
+                result['errors'] = segment_errors[:10]
+
+            if successful_segments > 0:
+                try:
+                    usage_seconds = int(total_speech_seconds)
+                    if usage_seconds > 0:
+                        await run_blocking(
+                            db_executor,
+                            record_usage,
+                            uid,
+                            transcription_seconds=usage_seconds,
+                            speech_seconds=usage_seconds,
+                        )
+                except Exception as e:
+                    logger.error(f'sync_v2 bg: usage record error for {uid}: {e}')
+
+            stage_timings['total_ms'] = int((time.monotonic() - pipeline_start) * 1000)
+            await run_blocking(
+                db_executor,
+                mark_job_completed,
+                job_id,
+                {
+                    'new_memories': result['new_memories'],
+                    'updated_memories': result['updated_memories'],
+                    'failed_segments': failed_segments,
+                    'total_segments': total_segments,
+                    'errors': segment_errors[:10] if segment_errors else [],
+                    'stage_timings': stage_timings,
+                },
+            )
+
+            logger.info(
+                f'sync_v2 bg complete job={job_id} uid={uid} '
+                f'success={successful_segments}/{total_segments} '
+                f'timings={stage_timings}'
+            )
         except Exception as e:
-            logger.error(f'sync_v2: failed to cleanup job dir {job_dir}: {e}')
+            logger.error(f'sync_v2 bg failed job={job_id} uid={uid}: {e}')
+            try:
+                await run_blocking(db_executor, mark_job_failed, job_id, str(e))
+            except Exception:
+                pass
+        finally:
+            set_byok_keys({})
+            await run_blocking(storage_executor, _cleanup_files, list(segmented_paths))
+            await run_blocking(storage_executor, _cleanup_files, wav_paths)
+            try:
+                if job_dir and os.path.isdir(job_dir):
+                    await run_blocking(storage_executor, shutil.rmtree, job_dir, True)
+            except Exception as e:
+                logger.error(f'sync_v2 bg: failed to cleanup job dir {job_dir}: {e}')
 
 
 @router.post("/v2/sync-local-files")
@@ -1460,14 +1660,15 @@ async def sync_local_files_v2(
     ),
 ):
     """
-    Async version of sync-local-files. Does fast-path work (decode, VAD) inline,
-    then starts background processing and returns 202 with a job_id for polling.
+    Async version of sync-local-files. Saves raw files and returns 202
+    immediately, then runs the full pipeline (decode → VAD → STT → LLM) as
+    an async background task. The app polls GET /v2/sync-local-files/{job_id}.
     """
     # Pre-check gates (same as v1)
-    if is_hard_restricted(uid):
+    if await run_blocking(critical_executor, is_hard_restricted, uid):
         raise HTTPException(status_code=429, detail="Account temporarily restricted due to fair-use policy")
 
-    should_lock = not has_transcription_credits(uid)
+    should_lock = not await run_blocking(critical_executor, has_transcription_credits, uid)
 
     # Detect source
     source = ConversationSource.omi
@@ -1481,112 +1682,33 @@ async def sync_local_files_v2(
     job_dir = f'syncing/{uid}/{job_id}'
 
     paths = []
-    wav_paths = []
-    segmented_paths = set()
 
     try:
-        # --- Fast path (inline, <5s typically) ---
-        paths = _retrieve_file_paths_v2(files, uid, job_id)
-        wav_paths = decode_files_to_wav(paths)
+        # --- Fast path: save raw files only (< 2s typical) ---
+        # Use sync_executor, NOT storage_executor — storage is saturated with
+        # background pipeline cleanup/GCS work and would queue the 202 response.
+        paths = await run_blocking(sync_executor, _retrieve_file_paths_v2, files, uid, job_id)
 
-        vad_errors = []
+        # Create Redis job — total_segments=0 until VAD completes in background
+        await run_blocking(db_executor, create_sync_job, uid, total_files=len(files), total_segments=0, job_id=job_id)
 
-        def _run_vad_v2(path):
-            retrieve_vad_segments(path, segmented_paths, vad_errors)
+        # Transfer ownership of raw paths to the background task
+        owned_paths = list(paths)
+        paths = []  # Prevent finally cleanup of files now owned by bg task
 
-        loop_v2 = asyncio.get_running_loop()
-        await asyncio.gather(*[loop_v2.run_in_executor(critical_executor, _run_vad_v2, path) for path in wav_paths])
-
-        _cleanup_files(wav_paths)
-        wav_paths = []
-
-        if vad_errors:
-            error_detail = f"VAD processing failed for {len(vad_errors)} file(s): {'; '.join(vad_errors[:3])}"
-            if len(vad_errors) > 3:
-                error_detail += f" (and {len(vad_errors) - 3} more)"
-            raise HTTPException(status_code=500, detail=error_detail)
-
-        # Fair-use speech tracking
-        total_speech_seconds = sum(get_wav_duration(p) for p in segmented_paths)
-        total_speech_ms = int(total_speech_seconds * 1000)
-
-        if FAIR_USE_ENABLED and total_speech_ms > 0:
-            record_speech_ms(uid, total_speech_ms, source='sync')
-            speech_totals = get_rolling_speech_ms(uid)
-            triggered_caps = check_soft_caps(uid, speech_totals=speech_totals)
-            if triggered_caps:
-                logger.info(f'sync_v2: soft caps triggered for {uid}: {triggered_caps}')
-                asyncio.create_task(trigger_classifier_if_needed(uid, triggered_caps))
-
-        # DG budget gate
-        fair_use_restrict_dg = False
-        if FAIR_USE_ENABLED:
-            try:
-                fair_use_stage = get_enforcement_stage(uid)
-                if fair_use_stage == 'restrict' and FAIR_USE_RESTRICT_DAILY_DG_MS > 0:
-                    fair_use_restrict_dg = True
-                    if is_dg_budget_exhausted(uid):
-                        _cleanup_files(list(segmented_paths))
-                        return JSONResponse(
-                            status_code=429,
-                            content={
-                                'dg_budget_exhausted': True,
-                                'skipped_segments': len(segmented_paths),
-                            },
-                        )
-            except Exception as e:
-                logger.error(f'sync_v2: DG budget check error for {uid}: {e}')
-
-        total_segments = len(segmented_paths)
-
-        if total_segments == 0:
-            # Nothing to process — return completed immediately
-            return JSONResponse(
-                status_code=200,
-                content={
-                    'new_memories': [],
-                    'updated_memories': [],
-                },
-            )
-
-        # --- Create Redis job and start background thread ---
-        job = create_sync_job(uid, total_files=len(files), total_segments=total_segments, job_id=job_id)
-
-        # Fetch user transcription preferences once before spawning background thread
-        transcription_prefs = users_db.get_user_transcription_preferences(uid)
-
-        # Build speaker embeddings cache once for all segments (voice + text identification)
-        try:
-            person_embeddings_cache = build_person_embeddings_cache(uid)
-            if person_embeddings_cache:
-                logger.info(
-                    f'sync_v2: loaded {len(person_embeddings_cache)} person embeddings for speaker ID uid={uid}'
-                )
-        except Exception as e:
-            logger.warning(f'sync_v2: failed to load person embeddings, skipping speaker ID uid={uid}: {e}')
-            person_embeddings_cache = {}
-
-        # Transfer ownership of segmented_paths to the background thread
-        owned_paths = list(segmented_paths)
-        segmented_paths = set()  # Prevent finally cleanup of files now owned by bg thread
-
-        # Run in default executor (not critical_executor) because _process_segments_background
-        # is a coordinator that submits child tasks to critical_executor — nesting both
-        # in the same pool causes deadlock under concurrent load.
-        loop_v2.run_in_executor(
-            None,
-            _process_segments_background,
-            job_id,
-            uid,
-            owned_paths,
-            source,
-            should_lock,
-            fair_use_restrict_dg,
-            total_speech_seconds,
-            job_dir,
-            transcription_prefs,
-            person_embeddings_cache,
-            conversation_id,
+        # Async coordinator: runs on event loop, offloads blocking work to pools.
+        # No thread pool slot held for the full pipeline duration (fixes #7361).
+        start_background_task(
+            _run_full_pipeline_background_async(
+                job_id,
+                uid,
+                owned_paths,
+                source,
+                should_lock,
+                job_dir,
+                conversation_id,
+            ),
+            name=f'sync_pipeline:{job_id}',
         )
 
         return JSONResponse(
@@ -1595,7 +1717,7 @@ async def sync_local_files_v2(
                 'job_id': job_id,
                 'status': 'queued',
                 'total_files': len(files),
-                'total_segments': total_segments,
+                'total_segments': 0,
                 'poll_after_ms': 3000,
             },
         )
@@ -1606,12 +1728,10 @@ async def sync_local_files_v2(
         raise HTTPException(status_code=500, detail=str(e))
     finally:
         _cleanup_files(paths)
-        _cleanup_files(wav_paths)
-        _cleanup_files(list(segmented_paths))
 
 
 @router.get("/v2/sync-local-files/{job_id}")
-async def get_sync_job_status(job_id: str, uid: str = Depends(auth.get_current_user_uid)):
+def get_sync_job_status(job_id: str, uid: str = Depends(auth.get_current_user_uid)):
     """Poll for the status of an async sync job."""
     job = get_sync_job(job_id)
     if not job:

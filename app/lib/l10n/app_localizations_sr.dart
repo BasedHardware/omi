@@ -963,11 +963,6 @@ class AppLocalizationsSr extends AppLocalizations {
   }
 
   @override
-  String memoriesUsedThisMonth(String used, String limit) {
-    return '$used од $limit успомена направљено овог месеца';
-  }
-
-  @override
   String get visibility => 'Видљивост';
 
   @override
@@ -1642,7 +1637,7 @@ class AppLocalizationsSr extends AppLocalizations {
   String get finalTouches => 'Финалне дораде';
 
   @override
-  String get processing => 'Обрада...';
+  String get processing => 'Обрада';
 
   @override
   String get features => 'Функције';
@@ -4637,41 +4632,13 @@ class AppLocalizationsSr extends AppLocalizations {
       'Хвала вам што сте драгоцени корисник Omi. Ако имате неке питање или забринутости, слободно нас контактирајте на team@basedhardware.com.';
 
   @override
-  String get wifiSyncSettings => 'Поставке WiFi синхронизације';
-
-  @override
-  String get enterHotspotCredentials => 'Унесите акредитиве топле тачке вашег телефона';
-
-  @override
-  String get wifiSyncUsesHotspot =>
-      'WiFi синхронизација користи ваш телефон као топлу тачку. Пронађите име и лозинку топле тачке у Поставкама > Лична топла тачка.';
-
-  @override
-  String get hotspotNameSsid => 'Назив топле тачке (SSID)';
-
-  @override
-  String get exampleIphoneHotspot => 'нпр. iPhone топла тачка';
-
-  @override
   String get password => 'Лозинка';
-
-  @override
-  String get enterHotspotPassword => 'Унесите лозинку топле тачке';
 
   @override
   String get saveCredentials => 'Сачувај акредитиве';
 
   @override
   String get clearCredentials => 'Обриши акредитиве';
-
-  @override
-  String get pleaseEnterHotspotName => 'Молим вас, унесите назив топле тачке';
-
-  @override
-  String get wifiCredentialsSaved => 'WiFi акредитиви су сачувани';
-
-  @override
-  String get wifiCredentialsCleared => 'WiFi акредитиви су обрисани';
 
   @override
   String summaryGeneratedForDate(String date) {
@@ -5816,9 +5783,6 @@ class AppLocalizationsSr extends AppLocalizations {
   String get limitless => 'Limitless';
 
   @override
-  String get fastTransfer => 'Брз пренос';
-
-  @override
   String get syncingStatus => 'Синхронизација';
 
   @override
@@ -5828,15 +5792,6 @@ class AppLocalizationsSr extends AppLocalizations {
   String etaLabel(String time) {
     return 'Процењено време: $time';
   }
-
-  @override
-  String get transferMethod => 'Метода преноса';
-
-  @override
-  String get fast => 'Брзо';
-
-  @override
-  String get ble => 'BLE';
 
   @override
   String get phone => 'Телефон';
@@ -5857,25 +5812,7 @@ class AppLocalizationsSr extends AppLocalizations {
   String get processedFilesDeleted => 'Обрађене датотеке су обрисане';
 
   @override
-  String get wifiEnableFailed => 'Грешка при омогућавању WiFi-ја на уређају. Покушајте поново.';
-
-  @override
-  String get deviceNoFastTransfer => 'Ваш уређај не подржава брз пренос. Користите Bluetooth уместо тога.';
-
-  @override
-  String get enableHotspotMessage => 'Омогућите точку приступа телефона и покушајте поново.';
-
-  @override
-  String get transferStartFailed => 'Грешка при покретању преноса. Покушајте поново.';
-
-  @override
   String get deviceNotResponding => 'Уређај није одговорио. Покушајте поново.';
-
-  @override
-  String get invalidWifiCredentials => 'Неважећи учитељи за WiFi. Проверите подешавања точке приступа.';
-
-  @override
-  String get wifiConnectionFailed => 'Грешка при повезивању са WiFi-јем. Покушајте поново.';
 
   @override
   String get sdCardProcessing => 'Обрада SD картице';
@@ -5887,9 +5824,6 @@ class AppLocalizationsSr extends AppLocalizations {
 
   @override
   String get process => 'Обради';
-
-  @override
-  String get wifiSyncFailed => 'WiFi синхронизација неуспешна';
 
   @override
   String get processingFailed => 'Обрада неуспешна';
@@ -6668,24 +6602,13 @@ class AppLocalizationsSr extends AppLocalizations {
   }
 
   @override
-  String get wifiSync => 'WiFi синхронизација';
-
-  @override
   String itemCopiedToClipboard(String item) {
     return '$item копиран у привремену меморију';
   }
 
   @override
-  String get wifiConnectionFailedTitle => 'Веза неуспешна';
-
-  @override
   String connectingToDeviceName(String deviceName) {
     return 'Повезивање на $deviceName';
-  }
-
-  @override
-  String enableDeviceWifi(String deviceName) {
-    return 'Омогући $deviceName WiFi';
   }
 
   @override
@@ -6782,9 +6705,6 @@ class AppLocalizationsSr extends AppLocalizations {
   String get statusUnprocessed => 'Необрађено';
 
   @override
-  String get switchedToFastTransfer => 'Пребачено на брз пренос';
-
-  @override
   String get transferCompleteMessage => 'Пренос је завршен! Сада можете пустити овај снимак.';
 
   @override
@@ -6796,34 +6716,7 @@ class AppLocalizationsSr extends AppLocalizations {
   String get transferCancelled => 'Пренос је отказан';
 
   @override
-  String get fastTransferEnabled => 'Брз пренос је омогућен';
-
-  @override
   String get bluetoothSyncEnabled => 'Синхронизација путем Bluetooth је омогућена';
-
-  @override
-  String get enableFastTransfer => 'Омогући брз пренос';
-
-  @override
-  String get fastTransferDescription =>
-      'Брз пренос користи WiFi за ~5x бржу брзину. Ваш телефон ће привремено бити повезан на WiFi мрежу вашег Omi уређаја током преноса.';
-
-  @override
-  String get internetAccessPausedDuringTransfer => 'Приступ интернету је паузиран током преноса';
-
-  @override
-  String get chooseTransferMethodDescription =>
-      'Изаберите како ће се снимци преносити са вашег Omi уређаја на телефон.';
-
-  @override
-  String get wifiSpeed => '~150 KB/s преко WiFi';
-
-  @override
-  String get fiveTimesFaster => '5X БРЖЕ';
-
-  @override
-  String get fastTransferMethodDescription =>
-      'Прави директну WiFi везу са вашим Omi уређајем. Ваш телефон ће привремено бити одсоединут од обичне WiFi мреже током преноса.';
 
   @override
   String get bluetooth => 'Bluetooth';
@@ -6845,7 +6738,15 @@ class AppLocalizationsSr extends AppLocalizations {
   String get lowBatteryAlertTitle => 'Обавештење о слабој батерији';
 
   @override
-  String get lowBatteryAlertBody => 'Батерија вашег уређаја је скоро празна. Време је за пуњење! 🔋';
+  String lowBatteryAlertBody(int level) {
+    return 'Батерија вам је на $level%. Време је за пуњење! 🔋';
+  }
+
+  @override
+  String get batteryFullyChargedTitle => 'Omi је потпуно напуњен';
+
+  @override
+  String get batteryFullyChargedBody => 'Ваш Omi уређај је потпуно напуњен. Можете га искључити!';
 
   @override
   String get deviceDisconnectedNotificationTitle => 'Ваш Omi уређај је одсоединут';
@@ -7518,13 +7419,6 @@ class AppLocalizationsSr extends AppLocalizations {
   String get voiceFailedToTranscribe => 'Неуспешна транскрипција аудиа';
 
   @override
-  String get locationPermissionRequired => 'Потребна је дозвола за локацију';
-
-  @override
-  String get locationPermissionContent =>
-      'Брз пренос захтева дозволу за локацију да би се верификовала WiFi веза. Молим дајте дозволу за локацију да наставите.';
-
-  @override
   String get pdfTranscriptExport => 'Извоз транскрипта';
 
   @override
@@ -7669,12 +7563,6 @@ class AppLocalizationsSr extends AppLocalizations {
   String get dailyRecapsDescription => 'Ваши дневни резимеи ће се појавити овде када буду генерисани';
 
   @override
-  String get chooseTransferMethod => 'Одаберите метод преноса';
-
-  @override
-  String get fastTransferSpeed => '~150 KB/s преко WiFi';
-
-  @override
   String largeTimeGapDetected(String gap) {
     return 'Откривена велика временска разлика ($gap)';
   }
@@ -7683,10 +7571,6 @@ class AppLocalizationsSr extends AppLocalizations {
   String largeTimeGapsDetected(String gaps) {
     return 'Откривене велике временске разлике ($gaps)';
   }
-
-  @override
-  String get deviceDoesNotSupportWifiSwitchingToBle =>
-      'Уређај не подржава WiFi синхронизацију, пребацивање на Bluetooth';
 
   @override
   String get appleHealthNotAvailable => 'Apple Health није доступна на овом уређају';
@@ -8451,7 +8335,7 @@ class AppLocalizationsSr extends AppLocalizations {
   String get manageStorage => 'Управљај складиштем';
 
   @override
-  String get safelyBackedUp => 'Безбедно сачувано на твој телефон';
+  String get safelyBackedUp => 'Креирани разговори';
 
   @override
   String get notYetSynced => 'Још није синхронизовано са твојим телефоном';
@@ -9253,4 +9137,156 @@ class AppLocalizationsSr extends AppLocalizations {
 
   @override
   String get bulkDeleteFailed => 'Задаци нису могли бити обрисани. Покушајте поново.';
+
+  @override
+  String get deleteRecap => 'Обриши преглед';
+
+  @override
+  String get deleteRecapConfirmTitle => 'Обрисати овај преглед?';
+
+  @override
+  String get deleteRecapConfirmBody => 'Овај преглед биће трајно уклоњен. Изворни разговори тог дана нису погођени.';
+
+  @override
+  String get deleteRecapAction => 'Обриши';
+
+  @override
+  String get recapDeletedSnackbar => 'Преглед обрисан';
+
+  @override
+  String get recapDeleteFailed => 'Преглед није могуће обрисати. Покушајте поново касније.';
+
+  @override
+  String get syncStatusBackedUp => 'Направљена резервна копија';
+
+  @override
+  String get syncStatusBackingUp => 'Синхронизација…';
+
+  @override
+  String get syncStatusWaiting => 'Чека синхронизацију';
+
+  @override
+  String get syncStatusRetrying => 'Обрада није успела — нови покушај';
+
+  @override
+  String get syncStatusFailed => 'Неуспело — додирните Покушај поново';
+
+  @override
+  String get syncStatusFileUnavailable => 'Датотека није доступна';
+
+  @override
+  String get noRecordingsYet => 'Још нема снимака';
+
+  @override
+  String get syncInProgress => 'Синхронизација у току';
+
+  @override
+  String get syncStatusUploaded => 'Отпремљено · обрада на Omi';
+
+  @override
+  String get deleteWhileProcessingTitle => 'Још се обрађује';
+
+  @override
+  String get deleteWhileProcessingMessage =>
+      'Овај снимак је отпремљен, али Omi још прави разговор. Ако га сада обришете и обрада не успе, неће моћи да се врати. Свеједно обрисати?';
+
+  @override
+  String get syncCardAllBackedUp => 'Сви снимци синхронизовани';
+
+  @override
+  String syncCardReadyCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count снимака спремно за синхронизацију',
+      few: '$count снимка спремна за синхронизацију',
+      one: '1 снимак спреман за синхронизацију',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get syncCardProcessing => 'Обрада у Omi…';
+
+  @override
+  String get syncCardWaitingInternet => 'Чекање интернета';
+
+  @override
+  String syncCardNeedsAttention(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count снимака захтева пажњу',
+      few: '$count снимка захтевају пажњу',
+      one: '$count снимак захтева пажњу',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get syncFlowIntro =>
+      'Снимци се преносе са вашег уређаја на овај телефон и чувају локално, а затим отпремају на Omi сервер где се транскрибују и претварају у разговоре.';
+
+  @override
+  String get syncStepUpload => 'Синхронизација';
+
+  @override
+  String get syncStepUploadDesc => 'Ваш снимак се шаље на Omi сервер';
+
+  @override
+  String get syncStepProcess => 'Транскрипција';
+
+  @override
+  String get syncStepProcessDesc => 'Omi претвара звук у разговор';
+
+  @override
+  String get syncStepBackedUp => 'Разговор је спреман';
+
+  @override
+  String get syncStepBackedUpDesc => 'Пронађи га у Разговори';
+
+  @override
+  String get syncFailureFootnote => 'Ако обрада не успе, снимак се аутоматски понавља при следећој синхронизацији.';
+
+  @override
+  String get syncStatusConversationCreated => 'Разговор је направљен';
+
+  @override
+  String get syncCardUploadingTitle => 'Отпремање на Omi';
+
+  @override
+  String get syncCardDownloadingTitle => 'Преузимање са вашег уређаја';
+
+  @override
+  String syncCardProgressOf(int current, int total) {
+    return '$current од $total';
+  }
+
+  @override
+  String get syncStatusOnDevice => 'На вашем уређају';
+
+  @override
+  String get syncStatusDownloadingFromDevice => 'Преузимање са вашег уређаја';
+
+  @override
+  String get newestFirst => 'Прво најновије';
+
+  @override
+  String get noSyncedRecordingsYet => 'Још нема синхронизованих снимака';
+
+  @override
+  String get morePaymentMethodsComingSoon => 'Ускоро више начина плаћања';
+
+  @override
+  String get syncProcessingBackgroundHint => 'Ово се наставља у позадини — можете напустити овај екран.';
+
+  @override
+  String get syncCardRateLimited => 'Достигнут је лимит фер коришћења — синхронизација ће се аутоматски наставити';
+
+  @override
+  String get syncCardBackendBusy =>
+      'Omi сервери су заузети — ваши снимци ће се синхронизовати чим се ослободи капацитет';
+
+  @override
+  String get unableToDetermineFirmwareVersion => 'Није могуће одредити тренутну верзију фирмвера';
 }

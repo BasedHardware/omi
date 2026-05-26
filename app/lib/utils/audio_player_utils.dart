@@ -83,6 +83,9 @@ class AudioPlayerUtils extends ChangeNotifier {
   bool isPlaying(String id) => _currentPlayingId == id;
 
   bool canPlayOrShare(Wal wal) {
+    if (wal.storage == WalStorage.sdcard && wal.fileNum == -1) {
+      return false;
+    }
     return (wal.filePath != null && wal.filePath!.isNotEmpty) ||
         wal.data.isNotEmpty ||
         wal.storage == WalStorage.sdcard;

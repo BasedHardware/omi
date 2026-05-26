@@ -20,7 +20,9 @@ Options (via environment variables):
   OMI_APP_NAME="Omi Dev"   App name (default: "Omi Dev")
   OMI_PYTHON_API_URL="..."  Python backend URL (subscriptions, payments, etc; default: https://api.omi.me)
   OMI_SIGN_IDENTITY="..."  Code signing identity (auto-detected if not set)
-  OMI_ENABLE_LOCAL_AUTOMATION=1  Enable agent-swift automation bridge
+  OMI_ENABLE_LOCAL_AUTOMATION=1   Force the automation bridge on (auto-on for non-prod bundles; see scripts/omi-ctl)
+  OMI_DISABLE_LOCAL_AUTOMATION=1  Run a dev build "clean" with the bridge off
+  OMI_AUTOMATION_PORT=47777       Bridge port (set per bundle when running several at once)
 
 Required files:
   Backend-Rust/.env         Environment variables (copy from ../.env.example)

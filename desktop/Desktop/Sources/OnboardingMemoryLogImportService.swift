@@ -119,6 +119,7 @@ actor OnboardingMemoryLogImportService {
           _ = try await APIClient.shared.createMemory(
             content: memory,
             visibility: "private",
+            category: .system,
             tags: source.tags,
             source: source.memorySource,
             headline: source.headline

@@ -1,3 +1,5 @@
+'use client';
+
 import { CheckCircle, ShareIos } from 'iconoir-react';
 import { useState } from 'react';
 

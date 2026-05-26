@@ -1160,17 +1160,6 @@
             }
         }
     },
-    "memoriesUsedThisMonth": "{used} од {limit} спомени креирани овој месец",
-    "@memoriesUsedThisMonth": {
-        "placeholders": {
-            "used": {
-                "type": "String"
-            },
-            "limit": {
-                "type": "String"
-            }
-        }
-    },
     "visibility": "Видливост",
     "visibilitySubtitle": "Контролирај кои разговори се појавуваат во твоја листа",
     "showShortConversations": "Покажи кратки разговори",
@@ -1580,7 +1569,7 @@
     "designingApp": "Дизајнирање апликација",
     "generatingIconStep": "Генерирање икона",
     "finalTouches": "Последни штипови",
-    "processing": "Обработка...",
+    "processing": "Се обработува",
     "features": "Карактеристики",
     "creatingYourApp": "Создавање на вашата апликација...",
     "generatingIcon": "Генерирање икона...",
@@ -5401,33 +5390,9 @@
     "@thankYouText": {
         "description": "Privacy page - thankYouText"
     },
-    "wifiSyncSettings": "Поставки за WiFi синхронизација",
-    "@wifiSyncSettings": {
-        "description": "WiFi sync settings - wifiSyncSettings"
-    },
-    "enterHotspotCredentials": "Внесете ги врите за личната точка на вашиот телефон",
-    "@enterHotspotCredentials": {
-        "description": "WiFi sync settings - enterHotspotCredentials"
-    },
-    "wifiSyncUsesHotspot": "WiFi синхронизација ја користи вашата телефон како личната точка. Најдете го називот на вашата личната точка и лозинката во Поставки > Лична точка.",
-    "@wifiSyncUsesHotspot": {
-        "description": "WiFi sync settings - wifiSyncUsesHotspot"
-    },
-    "hotspotNameSsid": "Назив на личната точка (SSID)",
-    "@hotspotNameSsid": {
-        "description": "WiFi sync settings - hotspotNameSsid"
-    },
-    "exampleIphoneHotspot": "нпр. iPhone личната точка",
-    "@exampleIphoneHotspot": {
-        "description": "WiFi sync settings - exampleIphoneHotspot"
-    },
     "password": "Лозинка",
     "@password": {
         "description": "WiFi sync settings - password"
-    },
-    "enterHotspotPassword": "Внесете лозинка за личната точка",
-    "@enterHotspotPassword": {
-        "description": "WiFi sync settings - enterHotspotPassword"
     },
     "saveCredentials": "Зачувај врите",
     "@saveCredentials": {
@@ -5436,18 +5401,6 @@
     "clearCredentials": "Избриши врите",
     "@clearCredentials": {
         "description": "WiFi sync settings - clearCredentials"
-    },
-    "pleaseEnterHotspotName": "Внесете назив на личната точка",
-    "@pleaseEnterHotspotName": {
-        "description": "WiFi sync settings - pleaseEnterHotspotName"
-    },
-    "wifiCredentialsSaved": "WiFi врите зачувани",
-    "@wifiCredentialsSaved": {
-        "description": "WiFi sync settings - wifiCredentialsSaved"
-    },
-    "wifiCredentialsCleared": "WiFi врите избришани",
-    "@wifiCredentialsCleared": {
-        "description": "WiFi sync settings - wifiCredentialsCleared"
     },
     "summaryGeneratedForDate": "Резиме генерирано за {date}",
     "@summaryGeneratedForDate": {
@@ -7010,10 +6963,6 @@
     "@limitless": {
         "description": "Label for Limitless device storage"
     },
-    "fastTransfer": "Брз пренос",
-    "@fastTransfer": {
-        "description": "Name of the fast transfer method"
-    },
     "syncingStatus": "Синхронизирање",
     "@syncingStatus": {
         "description": "Status label when syncing is in progress"
@@ -7030,18 +6979,6 @@
                 "type": "String"
             }
         }
-    },
-    "transferMethod": "Метод на пренос",
-    "@transferMethod": {
-        "description": "Page title for transfer method settings"
-    },
-    "fast": "Брз",
-    "@fast": {
-        "description": "Label for fast WiFi transfer method"
-    },
-    "ble": "BLE",
-    "@ble": {
-        "description": "Label for Bluetooth Low Energy transfer method"
     },
     "phone": "Телефон",
     "@phone": {
@@ -7067,33 +7004,9 @@
     "@processedFilesDeleted": {
         "description": "Snackbar message when processed files are deleted"
     },
-    "wifiEnableFailed": "Не успеаше да се активира WiFi на уредот. Моля, обидете се повторно.",
-    "@wifiEnableFailed": {
-        "description": "Error message when WiFi fails to enable on device"
-    },
-    "deviceNoFastTransfer": "Вашиот уред не поддржува брз пренос. Користете Bluetooth наместо тоа.",
-    "@deviceNoFastTransfer": {
-        "description": "Error message when device does not support fast transfer"
-    },
-    "enableHotspotMessage": "Моля, активирајте го хотспотот на вашиот телефон и обидете се повторно.",
-    "@enableHotspotMessage": {
-        "description": "Error message asking user to enable hotspot"
-    },
-    "transferStartFailed": "Не успеаше да се почне преносот. Моја, обидете се повторно.",
-    "@transferStartFailed": {
-        "description": "Error message when transfer fails to start"
-    },
     "deviceNotResponding": "Уредот не одговори. Моля, обидете се повторно.",
     "@deviceNotResponding": {
         "description": "Error message when device times out"
-    },
-    "invalidWifiCredentials": "Невалидни kredencijali за WiFi. Проверете ги вашите подесувања на хотспот.",
-    "@invalidWifiCredentials": {
-        "description": "Error message for invalid WiFi credentials"
-    },
-    "wifiConnectionFailed": "Врската WiFi неуспеа. Моля, обидете се повторно.",
-    "@wifiConnectionFailed": {
-        "description": "Error message when WiFi connection fails"
     },
     "sdCardProcessing": "Обработка на SD картичка",
     "@sdCardProcessing": {
@@ -7111,10 +7024,6 @@
     "process": "Обработи",
     "@process": {
         "description": "Button label to start processing"
-    },
-    "wifiSyncFailed": "WiFi синхронизирањето неуспеа",
-    "@wifiSyncFailed": {
-        "description": "Error title when WiFi sync fails"
     },
     "processingFailed": "Обработката неуспеа",
     "@processingFailed": {
@@ -8151,10 +8060,6 @@
             }
         }
     },
-    "wifiSync": "WiFi синхронизирање",
-    "@wifiSync": {
-        "description": "WiFi sync feature label"
-    },
     "itemCopiedToClipboard": "{item} е копирано во клипбордот",
     "@itemCopiedToClipboard": {
         "description": "Message when item is copied to clipboard",
@@ -8165,23 +8070,9 @@
             }
         }
     },
-    "wifiConnectionFailedTitle": "Врската неуспеа",
-    "@wifiConnectionFailedTitle": {
-        "description": "Title shown when WiFi connection to device fails"
-    },
     "connectingToDeviceName": "Поврзување со {deviceName}",
     "@connectingToDeviceName": {
         "description": "Title shown while connecting to device WiFi",
-        "placeholders": {
-            "deviceName": {
-                "type": "String",
-                "example": "Omi"
-            }
-        }
-    },
-    "enableDeviceWifi": "Активирај WiFi на {deviceName}",
-    "@enableDeviceWifi": {
-        "description": "Step text for enabling device WiFi",
         "placeholders": {
             "deviceName": {
                 "type": "String",
@@ -8316,10 +8207,6 @@
     "@statusUnprocessed": {
         "description": "Status value for unprocessed recording"
     },
-    "switchedToFastTransfer": "Пребачено на Брз Трансфер",
-    "@switchedToFastTransfer": {
-        "description": "Snackbar message when switching to fast transfer mode"
-    },
     "transferCompleteMessage": "Трансфер завршен! Сега можете да го пуштите ово снимање.",
     "@transferCompleteMessage": {
         "description": "Success message when transfer completes"
@@ -8337,41 +8224,9 @@
     "@transferCancelled": {
         "description": "Snackbar message when transfer is cancelled"
     },
-    "fastTransferEnabled": "Брз трансфер активиран",
-    "@fastTransferEnabled": {
-        "description": "Snackbar message when fast transfer is enabled"
-    },
     "bluetoothSyncEnabled": "Синхронизација преку Bluetooth активирана",
     "@bluetoothSyncEnabled": {
         "description": "Snackbar message when bluetooth sync is enabled"
-    },
-    "enableFastTransfer": "Активирај Брз Трансфер",
-    "@enableFastTransfer": {
-        "description": "Dialog title for enabling fast transfer"
-    },
-    "fastTransferDescription": "Брз трансфер користи WiFi за ~5x побрзи брзини. Вашиот телефон привремено ќе се поврзе со WiFi мрежата на вашиот Omi уред durante трансферот.",
-    "@fastTransferDescription": {
-        "description": "Description of fast transfer feature in dialog"
-    },
-    "internetAccessPausedDuringTransfer": "Пристапот до интернет е паузиран durante трансферот",
-    "@internetAccessPausedDuringTransfer": {
-        "description": "Warning that internet is paused during transfer"
-    },
-    "chooseTransferMethodDescription": "Одберете како снимањата ќе се трансферуваат од вашиот Omi уред на вашиот телефон.",
-    "@chooseTransferMethodDescription": {
-        "description": "Description text on transfer method page"
-    },
-    "wifiSpeed": "~150 KB/s преку WiFi",
-    "@wifiSpeed": {
-        "description": "Speed description for WiFi transfer"
-    },
-    "fiveTimesFaster": "5X ПОБРЗО",
-    "@fiveTimesFaster": {
-        "description": "Badge label for faster transfer method"
-    },
-    "fastTransferMethodDescription": "Создава директна WiFi врска со вашиот Omi уред. Вашиот телефон привремено се откачува од вашата редовна WiFi durante трансферот.",
-    "@fastTransferMethodDescription": {
-        "description": "Description of fast transfer method card"
     },
     "bluetooth": "Bluetooth",
     "@bluetooth": {
@@ -8397,9 +8252,16 @@
     "@lowBatteryAlertTitle": {
         "description": "Title for low battery notification"
     },
-    "lowBatteryAlertBody": "Вашиот уред има ниска батерија. Време е за полнење! 🔋",
+    "lowBatteryAlertBody": "Вашата батерија е на {level}%. Време е за полнење! 🔋",
+    "batteryFullyChargedTitle": "Omi е целосно наполнет",
+    "batteryFullyChargedBody": "Вашиот Omi уред е целосно наполнет. Можете да го исклучите!",
     "@lowBatteryAlertBody": {
-        "description": "Body text for low battery notification"
+        "description": "Body text for low battery notification",
+        "placeholders": {
+            "level": {
+                "type": "int"
+            }
+        }
     },
     "deviceDisconnectedNotificationTitle": "Вашиот Omi Уред се Откачи",
     "@deviceDisconnectedNotificationTitle": {
@@ -9348,14 +9210,6 @@
     "@voiceFailedToTranscribe": {
         "description": "Error message when voice transcription fails"
     },
-    "locationPermissionRequired": "Дозвола за Локација Потребна",
-    "@locationPermissionRequired": {
-        "description": "Title for dialog requesting location permission"
-    },
-    "locationPermissionContent": "Брз трансфер бара дозвола за локација за потврда на WiFi врска. Ве молиме дозволете дозвола за локација за да продолжите.",
-    "@locationPermissionContent": {
-        "description": "Explanation text for location permission dialog"
-    },
     "pdfTranscriptExport": "Извоз на Транскрипт",
     "@pdfTranscriptExport": {
         "description": "Title for PDF transcript export document"
@@ -9594,14 +9448,6 @@
     },
     "noDailyRecapsYet": "Нема дневни резимеа сѐ пока",
     "dailyRecapsDescription": "Вашите дневни резимеа ќе се појават овде кога ќе бидат генерирани",
-    "chooseTransferMethod": "Одбери Метод за Трансфер",
-    "@chooseTransferMethod": {
-        "description": "Title for transfer method selection dialog"
-    },
-    "fastTransferSpeed": "~150 KB/s преку WiFi",
-    "@fastTransferSpeed": {
-        "description": "Speed description for fast transfer via WiFi"
-    },
     "largeTimeGapDetected": "Голем временски јаз детектиран ({gap})",
     "@largeTimeGapDetected": {
         "placeholders": {
@@ -9619,10 +9465,6 @@
                 "example": "1.5h, 2.0h"
             }
         }
-    },
-    "deviceDoesNotSupportWifiSwitchingToBle": "Уредот не подржува WiFi синхронизација, смена на Bluetooth",
-    "@deviceDoesNotSupportWifiSwitchingToBle": {
-        "description": "Message shown when WiFi sync fails because device hardware does not support WiFi, automatically falling back to Bluetooth transfer"
     },
     "appleHealthNotAvailable": "Apple Health не е достапно на овој уред",
     "downloadAudio": "Преземи Аудио",
@@ -10152,7 +9994,7 @@
     "@manageStorage": {
         "description": "Menu option and sheet title for managing recording storage"
     },
-    "safelyBackedUp": "Безбедно резервирано на твојот телефон",
+    "safelyBackedUp": "Создадени разговори",
     "@safelyBackedUp": {
         "description": "Description for synced files in manage storage sheet"
     },
@@ -10725,5 +10567,51 @@
     "startCallRecording": "Започни снимање повик",
     "startVoiceRecording": "Започни гласовно снимање",
     "bulkExportAlreadyExported": "Сите избрани задачи се веќе извезени",
-    "bulkDeleteFailed": "Задачите не можеа да се избришат. Обидете се повторно."
+    "bulkDeleteFailed": "Задачите не можеа да се избришат. Обидете се повторно.",
+    "deleteRecap": "Избриши преглед",
+    "deleteRecapConfirmTitle": "Да се избрише овој преглед?",
+    "deleteRecapConfirmBody": "Овој преглед ќе биде трајно отстранет. Оригиналните разговори од тој ден остануваат недопрени.",
+    "deleteRecapAction": "Избриши",
+    "recapDeletedSnackbar": "Прегледот е избришан",
+    "recapDeleteFailed": "Прегледот не може да се избрише. Обидете се повторно подоцна.",
+    "syncStatusBackedUp": "Резервно зачувано",
+    "syncStatusBackingUp": "Синхронизирање…",
+    "syncStatusWaiting": "Чека синхронизација",
+    "syncStatusRetrying": "Обработката не успеа — нов обид",
+    "syncStatusFailed": "Неуспешно — допрете Обиди се повторно",
+    "syncStatusFileUnavailable": "Датотеката е недостапна",
+    "syncStatusUploaded": "Поставено · се обработува на Omi",
+    "noRecordingsYet": "Сè уште нема снимки",
+    "syncInProgress": "Синхронизацијата е во тек",
+    "deleteWhileProcessingTitle": "Сè уште се обработува",
+    "deleteWhileProcessingMessage": "Оваа снимка е поставена, но Omi сè уште го создава разговорот. Ако ја избришете сега и обработката не успее, не може да се врати. Сепак да се избрише?",
+    "syncCardAllBackedUp": "Сите снимки се синхронизирани",
+    "syncCardReadyCount": "{count, plural, one{1 снимка спремна за синхронизација} other{{count} снимки спремни за синхронизација}}",
+    "syncCardProcessing": "Се обработува во Omi…",
+    "syncCardWaitingInternet": "Се чека интернет",
+    "syncCardNeedsAttention": "{count, plural, one{{count} снимка бара внимание} other{{count} снимки бараат внимание}}",
+    "syncFlowIntro": "Снимките се пренесуваат од вашиот уред на овој телефон и се складираат локално, а потоа се прикачуваат на серверот на Omi, каде што се транскрибираат и се претвораат во разговори.",
+    "syncStepUpload": "Синхронизација",
+    "syncStepUploadDesc": "Вашиот запис се испраќа на серверот на Omi",
+    "syncStepProcess": "Транскрипција",
+    "syncStepProcessDesc": "Omi го претвора звукот во разговор",
+    "syncStepBackedUp": "Разговорот е готов",
+    "syncStepBackedUpDesc": "Најди го во Разговори",
+    "syncFailureFootnote": "Ако обработката не успее, снимката автоматски се повторува при следната синхронизација.",
+    "syncStatusConversationCreated": "Разговорот е создаден",
+    "syncCardUploadingTitle": "Се прикачува на Omi",
+    "syncCardDownloadingTitle": "Се презема од вашиот уред",
+    "syncCardProgressOf": "{current} од {total}",
+    "syncStatusOnDevice": "На вашиот уред",
+    "syncStatusDownloadingFromDevice": "Се презема од вашиот уред",
+    "newestFirst": "Прво најнови",
+    "noSyncedRecordingsYet": "Сè уште нема синхронизирани записи",
+    "morePaymentMethodsComingSoon": "Наскоро повеќе начини на плаќање",
+    "@morePaymentMethodsComingSoon": {
+        "description": "Placeholder card text shown under available payment methods"
+    },
+    "syncProcessingBackgroundHint": "Ова продолжува во заднина — може да го напуштите овој екран.",
+    "syncCardRateLimited": "Достигнат е лимитот за фер користење — синхронизацијата автоматски ќе продолжи",
+    "syncCardBackendBusy": "Серверите на Omi се преоптоварени — вашите снимки ќе се синхронизираат штом ќе се ослободи капацитет",
+    "unableToDetermineFirmwareVersion": "Не може да се одреди тековната верзија на фирмверот"
 }

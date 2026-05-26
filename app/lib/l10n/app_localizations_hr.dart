@@ -965,11 +965,6 @@ class AppLocalizationsHr extends AppLocalizations {
   }
 
   @override
-  String memoriesUsedThisMonth(String used, String limit) {
-    return '$used od $limit uspomena kreirano ovaj mjesec';
-  }
-
-  @override
   String get visibility => 'Vidljivost';
 
   @override
@@ -1644,7 +1639,7 @@ class AppLocalizationsHr extends AppLocalizations {
   String get finalTouches => 'Završni dodaci';
 
   @override
-  String get processing => 'Obrada...';
+  String get processing => 'Obrada';
 
   @override
   String get features => 'Mogućnosti';
@@ -4647,41 +4642,13 @@ class AppLocalizationsHr extends AppLocalizations {
       'Hvala vam što ste vrijedni korisnik Omija. Ako imate bilo koja pitanja ili zabrinute, slobodno nam napišite na team@basedhardware.com.';
 
   @override
-  String get wifiSyncSettings => 'Postavke WiFi sinhronizacije';
-
-  @override
-  String get enterHotspotCredentials => 'Unesite vjerodajnice osobnog pristupnog mjesta vašeg telefona';
-
-  @override
-  String get wifiSyncUsesHotspot =>
-      'WiFi sinhronizacija koristi vaš telefon kao osobno pristupno mjesto. Pronađite naziv i lozinku osobnog pristupnog mjesta u Postavkama > Osobno pristupno mjesto.';
-
-  @override
-  String get hotspotNameSsid => 'Naziv osobnog pristupnog mjesta (SSID)';
-
-  @override
-  String get exampleIphoneHotspot => 'npr. iPhone Personal Hotspot';
-
-  @override
   String get password => 'Lozinka';
-
-  @override
-  String get enterHotspotPassword => 'Unesite lozinku osobnog pristupnog mjesta';
 
   @override
   String get saveCredentials => 'Spremi vjerodajnice';
 
   @override
   String get clearCredentials => 'Briši vjerodajnice';
-
-  @override
-  String get pleaseEnterHotspotName => 'Molimo unesite naziv osobnog pristupnog mjesta';
-
-  @override
-  String get wifiCredentialsSaved => 'WiFi vjerodajnice su spremljene';
-
-  @override
-  String get wifiCredentialsCleared => 'WiFi vjerodajnice su obrisane';
 
   @override
   String summaryGeneratedForDate(String date) {
@@ -5830,9 +5797,6 @@ class AppLocalizationsHr extends AppLocalizations {
   String get limitless => 'Limitless';
 
   @override
-  String get fastTransfer => 'Brzi prijenos';
-
-  @override
   String get syncingStatus => 'Sinkronizacija';
 
   @override
@@ -5842,15 +5806,6 @@ class AppLocalizationsHr extends AppLocalizations {
   String etaLabel(String time) {
     return 'ETA: $time';
   }
-
-  @override
-  String get transferMethod => 'Metoda prijenosa';
-
-  @override
-  String get fast => 'Brzo';
-
-  @override
-  String get ble => 'BLE';
 
   @override
   String get phone => 'Telefon';
@@ -5871,25 +5826,7 @@ class AppLocalizationsHr extends AppLocalizations {
   String get processedFilesDeleted => 'Obrađene datoteke obrisane';
 
   @override
-  String get wifiEnableFailed => 'Neuspješno omogućavanje WiFi-ja na uređaju. Molimo pokušajte ponovno.';
-
-  @override
-  String get deviceNoFastTransfer => 'Vaš uređaj ne podržava brzi prijenos. Umjesto toga koristite Bluetooth.';
-
-  @override
-  String get enableHotspotMessage => 'Molimo omogućite vrelu točku vašeg telefona i pokušajte ponovno.';
-
-  @override
-  String get transferStartFailed => 'Neuspješan početak prijenosa. Molimo pokušajte ponovno.';
-
-  @override
   String get deviceNotResponding => 'Uređaj nije odgovorio. Molimo pokušajte ponovno.';
-
-  @override
-  String get invalidWifiCredentials => 'Nevaljani WiFi kredencijali. Provjerite postavke vruće točke.';
-
-  @override
-  String get wifiConnectionFailed => 'Veza WiFi-ja nije uspjela. Molimo pokušajte ponovno.';
 
   @override
   String get sdCardProcessing => 'Obrada SD kartice';
@@ -5901,9 +5838,6 @@ class AppLocalizationsHr extends AppLocalizations {
 
   @override
   String get process => 'Obrada';
-
-  @override
-  String get wifiSyncFailed => 'WiFi sinkronizacija neuspješna';
 
   @override
   String get processingFailed => 'Obrada neuspješna';
@@ -6679,24 +6613,13 @@ class AppLocalizationsHr extends AppLocalizations {
   }
 
   @override
-  String get wifiSync => 'WiFi sinkronizacija';
-
-  @override
   String itemCopiedToClipboard(String item) {
     return '$item kopiran u međumemoriju';
   }
 
   @override
-  String get wifiConnectionFailedTitle => 'Veza nije uspjela';
-
-  @override
   String connectingToDeviceName(String deviceName) {
     return 'Povezivanje sa $deviceName';
-  }
-
-  @override
-  String enableDeviceWifi(String deviceName) {
-    return 'Omogući WiFi na $deviceName';
   }
 
   @override
@@ -6793,9 +6716,6 @@ class AppLocalizationsHr extends AppLocalizations {
   String get statusUnprocessed => 'Neobrađeno';
 
   @override
-  String get switchedToFastTransfer => 'Prebačeno na Brz Prijenos';
-
-  @override
   String get transferCompleteMessage => 'Prijenos je završen! Sada možete reproducirati ovu snimku.';
 
   @override
@@ -6807,33 +6727,7 @@ class AppLocalizationsHr extends AppLocalizations {
   String get transferCancelled => 'Prijenos je otkazan';
 
   @override
-  String get fastTransferEnabled => 'Brz Prijenos je Omogućen';
-
-  @override
   String get bluetoothSyncEnabled => 'Bluetooth Sinhronizacija Omogućena';
-
-  @override
-  String get enableFastTransfer => 'Omogući Brz Prijenos';
-
-  @override
-  String get fastTransferDescription =>
-      'Brz Prijenos koristi WiFi za oko 5x brže brzine. Vaš telefon će se privremeno povezati na WiFi mrežu vašeg Omi uređaja tijekom prijenosa.';
-
-  @override
-  String get internetAccessPausedDuringTransfer => 'Pristup internetu je pauziran tijekom prijenosa';
-
-  @override
-  String get chooseTransferMethodDescription => 'Odaberite kako se snimke prenose s vašeg Omi uređaja na vaš telefon.';
-
-  @override
-  String get wifiSpeed => '~150 KB/s putem WiFi-ja';
-
-  @override
-  String get fiveTimesFaster => '5X BRŽE';
-
-  @override
-  String get fastTransferMethodDescription =>
-      'Kreira izravnu WiFi vezu s vašim Omi uređajem. Vaš telefon će se privremeno odspojiti od vaše standardne WiFi mreže tijekom prijenosa.';
 
   @override
   String get bluetooth => 'Bluetooth';
@@ -6855,7 +6749,15 @@ class AppLocalizationsHr extends AppLocalizations {
   String get lowBatteryAlertTitle => 'Upozorenje o Niskoj Bateriji';
 
   @override
-  String get lowBatteryAlertBody => 'Vaš uređaj ima nisku bateriju. Vrijeme je za puniranje! 🔋';
+  String lowBatteryAlertBody(int level) {
+    return 'Vaša baterija je na $level%. Vrijeme je za punjenje! 🔋';
+  }
+
+  @override
+  String get batteryFullyChargedTitle => 'Omi je potpuno napunjen';
+
+  @override
+  String get batteryFullyChargedBody => 'Vaš Omi uređaj je potpuno napunjen. Možete ga iskopčati!';
 
   @override
   String get deviceDisconnectedNotificationTitle => 'Vaš Omi Uređaj Je Odspoj';
@@ -7533,13 +7435,6 @@ class AppLocalizationsHr extends AppLocalizations {
   String get voiceFailedToTranscribe => 'Transkripcija zvuka nije uspjela';
 
   @override
-  String get locationPermissionRequired => 'Dozvola za Lokaciju je Obavezna';
-
-  @override
-  String get locationPermissionContent =>
-      'Brz Prijenos zahtijeva dozvolu za lokaciju da provjerite WiFi vezu. Molim vas dodijelite dozvolu za lokaciju da biste nastavili.';
-
-  @override
   String get pdfTranscriptExport => 'Izvoz Transkripcije';
 
   @override
@@ -7684,12 +7579,6 @@ class AppLocalizationsHr extends AppLocalizations {
   String get dailyRecapsDescription => 'Tvoji dnevni sažetci će se pojaviti ovdje nakon što budu generirani';
 
   @override
-  String get chooseTransferMethod => 'Odaberite Metodu Prijenosa';
-
-  @override
-  String get fastTransferSpeed => '~150 KB/s putem WiFi-ja';
-
-  @override
   String largeTimeGapDetected(String gap) {
     return 'Otkrivena velika vremenski razmak ($gap)';
   }
@@ -7698,10 +7587,6 @@ class AppLocalizationsHr extends AppLocalizations {
   String largeTimeGapsDetected(String gaps) {
     return 'Otkriveni veliki vremenski razmaci ($gaps)';
   }
-
-  @override
-  String get deviceDoesNotSupportWifiSwitchingToBle =>
-      'Uređaj ne podržava WiFi sinhronizaciju, prebacivanje na Bluetooth';
 
   @override
   String get appleHealthNotAvailable => 'Apple Health nije dostupan na ovom uređaju';
@@ -8467,7 +8352,7 @@ class AppLocalizationsHr extends AppLocalizations {
   String get manageStorage => 'Upravljanje pohranom';
 
   @override
-  String get safelyBackedUp => 'Sigurno pohranjeno na vašem telefonu';
+  String get safelyBackedUp => 'Razgovori stvoreni';
 
   @override
   String get notYetSynced => 'Još nije sinhronizovano s vašim telefonom';
@@ -9270,4 +9155,158 @@ class AppLocalizationsHr extends AppLocalizations {
 
   @override
   String get bulkDeleteFailed => 'Zadatke nije bilo moguće izbrisati. Pokušajte ponovno.';
+
+  @override
+  String get deleteRecap => 'Izbriši pregled';
+
+  @override
+  String get deleteRecapConfirmTitle => 'Izbrisati ovaj pregled?';
+
+  @override
+  String get deleteRecapConfirmBody =>
+      'Ovaj pregled bit će trajno uklonjen. Izvorni razgovori toga dana nisu pogođeni.';
+
+  @override
+  String get deleteRecapAction => 'Izbriši';
+
+  @override
+  String get recapDeletedSnackbar => 'Pregled izbrisan';
+
+  @override
+  String get recapDeleteFailed => 'Pregled nije moguće izbrisati. Pokušajte ponovno kasnije.';
+
+  @override
+  String get syncStatusBackedUp => 'Sigurnosno kopirano';
+
+  @override
+  String get syncStatusBackingUp => 'Sinkronizacija…';
+
+  @override
+  String get syncStatusWaiting => 'Čeka sinkronizaciju';
+
+  @override
+  String get syncStatusRetrying => 'Obrada nije uspjela — ponovni pokušaj';
+
+  @override
+  String get syncStatusFailed => 'Neuspjelo — dodirnite Pokušaj ponovno';
+
+  @override
+  String get syncStatusFileUnavailable => 'Datoteka nije dostupna';
+
+  @override
+  String get noRecordingsYet => 'Još nema snimaka';
+
+  @override
+  String get syncInProgress => 'Sinkronizacija u tijeku';
+
+  @override
+  String get syncStatusUploaded => 'Učitano · obrađuje se na Omi';
+
+  @override
+  String get deleteWhileProcessingTitle => 'Još se obrađuje';
+
+  @override
+  String get deleteWhileProcessingMessage =>
+      'Ova je snimka učitana, ali Omi još stvara razgovor. Ako je sada izbrišete i obrada ne uspije, neće se moći vratiti. Svejedno izbrisati?';
+
+  @override
+  String get syncCardAllBackedUp => 'Sve snimke sinkronizirane';
+
+  @override
+  String syncCardReadyCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count snimaka spremno za sinkronizaciju',
+      few: '$count snimke spremne za sinkronizaciju',
+      one: '1 snimka spremna za sinkronizaciju',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get syncCardProcessing => 'Obrada u Omi…';
+
+  @override
+  String get syncCardWaitingInternet => 'Čekanje interneta';
+
+  @override
+  String syncCardNeedsAttention(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count snimaka zahtijeva pažnju',
+      few: '$count snimke zahtijevaju pažnju',
+      one: '$count snimka zahtijeva pažnju',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get syncFlowIntro =>
+      'Snimke se prenose s vašeg uređaja na ovaj telefon i pohranjuju lokalno, a zatim učitavaju na Omijev poslužitelj gdje se transkribiraju i pretvaraju u razgovore.';
+
+  @override
+  String get syncStepUpload => 'Sinkronizacija';
+
+  @override
+  String get syncStepUploadDesc => 'Vaša snimka šalje se na Omijev poslužitelj';
+
+  @override
+  String get syncStepProcess => 'Transkripcija';
+
+  @override
+  String get syncStepProcessDesc => 'Omi pretvara zvuk u razgovor';
+
+  @override
+  String get syncStepBackedUp => 'Razgovor je spreman';
+
+  @override
+  String get syncStepBackedUpDesc => 'Pronađi ga u Razgovori';
+
+  @override
+  String get syncFailureFootnote => 'Ako obrada ne uspije, snimka se automatski ponavlja pri sljedećoj sinkronizaciji.';
+
+  @override
+  String get syncStatusConversationCreated => 'Razgovor stvoren';
+
+  @override
+  String get syncCardUploadingTitle => 'Slanje u Omi';
+
+  @override
+  String get syncCardDownloadingTitle => 'Preuzimanje s vašeg uređaja';
+
+  @override
+  String syncCardProgressOf(int current, int total) {
+    return '$current od $total';
+  }
+
+  @override
+  String get syncStatusOnDevice => 'Na vašem uređaju';
+
+  @override
+  String get syncStatusDownloadingFromDevice => 'Preuzimanje s vašeg uređaja';
+
+  @override
+  String get newestFirst => 'Najnovije prvo';
+
+  @override
+  String get noSyncedRecordingsYet => 'Još nema sinkroniziranih snimaka';
+
+  @override
+  String get morePaymentMethodsComingSoon => 'Uskoro stižu novi načini plaćanja';
+
+  @override
+  String get syncProcessingBackgroundHint => 'Ovo se nastavlja u pozadini — možete napustiti ovaj zaslon.';
+
+  @override
+  String get syncCardRateLimited =>
+      'Dostignuto je ograničenje poštene upotrebe — sinkronizacija će se automatski nastaviti';
+
+  @override
+  String get syncCardBackendBusy =>
+      'Omi poslužitelji su zauzeti — vaše snimke će se sinkronizirati čim se oslobodi kapacitet';
+
+  @override
+  String get unableToDetermineFirmwareVersion => 'Nije moguće utvrditi trenutnu verziju firmvera';
 }

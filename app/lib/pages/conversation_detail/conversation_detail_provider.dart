@@ -57,7 +57,11 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
   }
 
   ServerConversation? _cachedConversation;
-  ServerConversation get conversation {
+
+  /// Non-throwing variant of [conversation]. Build paths must use this so a
+  /// transient miss (conversation deleted under us, day-group emptied) returns
+  /// null instead of throwing from inside a Consumer's builder.
+  ServerConversation? get conversationOrNull {
     final list = conversationProvider?.groupedConversations[selectedDate];
     final id = _cachedConversationId;
 
@@ -79,7 +83,15 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
       return _cachedConversation = result;
     }
 
-    throw StateError("No valid conversation found");
+    return null;
+  }
+
+  /// Non-null accessor for call sites that already know the conversation is
+  /// valid (gestures, async handlers). Build paths use [conversationOrNull].
+  ServerConversation get conversation {
+    final c = conversationOrNull;
+    if (c == null) throw StateError("No valid conversation found");
+    return c;
   }
 
   List<bool> appResponseExpanded = [];

@@ -4696,6 +4696,104 @@ impl FirestoreService {
         Ok(doc)
     }
 
+    // =========================================================================
+    // BYOK & SUBSCRIPTION (used by paywall + BYOK validation)
+    // =========================================================================
+
+    /// Read the BYOK enrollment state from `users/{uid}.byok` in Firestore.
+    ///
+    /// Returns `ByokState::default()` (inactive) on any parse error so a
+    /// Firestore blip never blocks a user.
+    pub async fn get_user_byok_state(
+        &self,
+        uid: &str,
+    ) -> Result<crate::byok::ByokState, Box<dyn std::error::Error + Send + Sync>> {
+        let doc = self.get_user_document(uid).await?;
+        Ok(parse_byok_state_from_doc(&doc))
+    }
+
+    /// Read the effective subscription plan for paywall purposes.
+    ///
+    /// Mirrors Python's `get_user_valid_subscription()`:
+    /// - Basic plan with active status → returns "basic"
+    /// - Paid plan with `current_period_end` still in the future → returns the plan name
+    /// - Paid plan with expired `current_period_end` → falls back to "basic"
+    /// - Missing/unparseable → returns "basic" (fail-open)
+    /// - Handles legacy `"free"` → `"basic"` migration
+    pub async fn get_user_effective_plan(
+        &self,
+        uid: &str,
+    ) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
+        let doc = self.get_user_document(uid).await?;
+        let plan = parse_effective_plan_from_doc(&doc);
+
+        // Log interesting fallback cases for paid plans
+        if let Some(fields) = doc.get("fields") {
+            if let Some(sub_fields) = fields
+                .get("subscription")
+                .and_then(|v| v.get("mapValue"))
+                .and_then(|v| v.get("fields"))
+            {
+                let raw_plan = sub_fields
+                    .get("plan")
+                    .and_then(|v| v.get("stringValue"))
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("basic");
+
+                if raw_plan != "basic" && raw_plan != "free" && plan == "basic" {
+                    tracing::info!(
+                        "paywall: paid plan '{}' fell back to basic for uid={} (expired or missing period_end)",
+                        raw_plan, uid
+                    );
+                }
+            }
+        }
+
+        Ok(plan)
+    }
+
+    /// Get user account creation time from Firebase Auth Identity Toolkit REST API.
+    ///
+    /// Returns creation timestamp in milliseconds, or None if lookup fails.
+    /// Uses the same service-account auth as `delete_firebase_auth_user`.
+    pub async fn get_user_creation_time(
+        &self,
+        project_id: &str,
+        uid: &str,
+    ) -> Result<Option<i64>, Box<dyn std::error::Error + Send + Sync>> {
+        let access_token = self.get_access_token().await?;
+        let url = format!(
+            "https://identitytoolkit.googleapis.com/v1/projects/{}/accounts:lookup",
+            project_id
+        );
+
+        let response = self
+            .client
+            .post(&url)
+            .bearer_auth(access_token)
+            .json(&serde_json::json!({ "localId": [uid] }))
+            .send()
+            .await?;
+
+        if !response.status().is_success() {
+            let error_text = response.text().await?;
+            return Err(format!("Firebase accounts:lookup failed: {}", error_text).into());
+        }
+
+        let body: serde_json::Value = response.json().await?;
+
+        // Response: { "users": [{ "createdAt": "1234567890000", ... }] }
+        let created_at_ms = body
+            .get("users")
+            .and_then(|v| v.as_array())
+            .and_then(|arr| arr.first())
+            .and_then(|user| user.get("createdAt"))
+            .and_then(|v| v.as_str())
+            .and_then(|s| s.parse::<i64>().ok());
+
+        Ok(created_at_ms)
+    }
+
     /// Update user document fields (partial update)
     async fn update_user_fields(
         &self,
@@ -4926,8 +5024,6 @@ impl FirestoreService {
 
         let floating_bar = self.parse_sub_map(sf, "floating_bar").map(|f| FloatingBarSettingsData {
             voice_answers_enabled: self.parse_bool(f, "voice_answers_enabled").ok(),
-            elevenlabs_api_key: self.parse_string(f, "elevenlabs_api_key"),
-            elevenlabs_voice_id: self.parse_string(f, "elevenlabs_voice_id"),
         });
 
         // Read top-level update_channel from user doc (not from assistant_settings sub-map)
@@ -5066,10 +5162,6 @@ impl FirestoreService {
             let mut m = serde_json::Map::new();
             let vae = new.voice_answers_enabled.or(cur.voice_answers_enabled);
             if let Some(v) = vae { m.insert("voice_answers_enabled".into(), json!({"booleanValue": v})); }
-            let api_key = new.elevenlabs_api_key.or(cur.elevenlabs_api_key);
-            if let Some(v) = api_key { m.insert("elevenlabs_api_key".into(), json!({"stringValue": v})); }
-            let voice_id = new.elevenlabs_voice_id.or(cur.elevenlabs_voice_id);
-            if let Some(v) = voice_id { m.insert("elevenlabs_voice_id".into(), json!({"stringValue": v})); }
             if !m.is_empty() {
                 top_fields.insert("floating_bar".into(), self.build_sub_map_value(m));
             }
@@ -9760,6 +9852,112 @@ impl Default for Structured {
     }
 }
 
+// ---------------------------------------------------------------------------
+// Pure parsing functions (extracted from FirestoreService for testability)
+// ---------------------------------------------------------------------------
+
+/// Parse BYOK state from a Firestore user document JSON.
+/// Returns `ByokState::default()` (inactive) if the byok field is missing or malformed.
+fn parse_byok_state_from_doc(doc: &Value) -> crate::byok::ByokState {
+    let fields = match doc.get("fields") {
+        Some(f) => f,
+        None => return crate::byok::ByokState::default(),
+    };
+
+    let byok_fields = match fields
+        .get("byok")
+        .and_then(|v| v.get("mapValue"))
+        .and_then(|v| v.get("fields"))
+    {
+        Some(f) => f,
+        None => return crate::byok::ByokState::default(),
+    };
+
+    let active = byok_fields
+        .get("active")
+        .and_then(|v| v.get("booleanValue"))
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
+
+    let mut fingerprints = std::collections::HashMap::new();
+    if let Some(fp_fields) = byok_fields
+        .get("fingerprints")
+        .and_then(|v| v.get("mapValue"))
+        .and_then(|v| v.get("fields"))
+        .and_then(|v| v.as_object())
+    {
+        for (provider, val) in fp_fields {
+            if let Some(fp_str) = val.get("stringValue").and_then(|v| v.as_str()) {
+                fingerprints.insert(provider.clone(), fp_str.to_string());
+            }
+        }
+    }
+
+    let last_seen_at = byok_fields
+        .get("last_seen_at")
+        .and_then(|v| v.get("timestampValue"))
+        .and_then(|v| v.as_str())
+        .and_then(|ts| chrono::DateTime::parse_from_rfc3339(ts).ok())
+        .map(|dt| dt.with_timezone(&chrono::Utc));
+
+    crate::byok::ByokState {
+        active,
+        fingerprints,
+        last_seen_at,
+    }
+}
+
+/// Parse effective subscription plan from a Firestore user document JSON.
+/// Returns "basic" if the subscription field is missing, malformed, or expired.
+fn parse_effective_plan_from_doc(doc: &Value) -> String {
+    let fields = match doc.get("fields") {
+        Some(f) => f,
+        None => return "basic".to_string(),
+    };
+
+    let sub_fields = match fields
+        .get("subscription")
+        .and_then(|v| v.get("mapValue"))
+        .and_then(|v| v.get("fields"))
+    {
+        Some(f) => f,
+        None => return "basic".to_string(),
+    };
+
+    let mut plan = sub_fields
+        .get("plan")
+        .and_then(|v| v.get("stringValue"))
+        .and_then(|v| v.as_str())
+        .unwrap_or("basic")
+        .to_string();
+
+    if plan == "free" {
+        plan = "basic".to_string();
+    }
+
+    if plan == "basic" {
+        return plan;
+    }
+
+    // Paid plan: check current_period_end
+    match sub_fields
+        .get("current_period_end")
+        .and_then(|v| v.get("integerValue"))
+        .and_then(|v| v.as_str())
+        .and_then(|s| s.parse::<i64>().ok())
+    {
+        Some(period_end) => {
+            let now_epoch = chrono::Utc::now().timestamp();
+            if period_end < now_epoch {
+                "basic".to_string()
+            } else {
+                plan
+            }
+        }
+        None => "basic".to_string(),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -9770,5 +9968,227 @@ mod tests {
         assert_eq!(id.len(), 20);
         assert_eq!(id, document_id_from_seed("test content"));
         assert_ne!(id, document_id_from_seed("different content"));
+    }
+
+    // --- Firestore BYOK state parsing tests ---
+
+    #[test]
+    fn parse_byok_state_full_document() {
+        let doc = json!({
+            "fields": {
+                "byok": {
+                    "mapValue": {
+                        "fields": {
+                            "active": { "booleanValue": true },
+                            "fingerprints": {
+                                "mapValue": {
+                                    "fields": {
+                                        "openai": { "stringValue": "abc123" },
+                                        "anthropic": { "stringValue": "def456" }
+                                    }
+                                }
+                            },
+                            "last_seen_at": {
+                                "timestampValue": "2026-05-18T10:00:00Z"
+                            }
+                        }
+                    }
+                }
+            }
+        });
+        let state = parse_byok_state_from_doc(&doc);
+        assert!(state.active);
+        assert_eq!(state.fingerprints.len(), 2);
+        assert_eq!(state.fingerprints.get("openai").unwrap(), "abc123");
+        assert_eq!(state.fingerprints.get("anthropic").unwrap(), "def456");
+        assert!(state.last_seen_at.is_some());
+    }
+
+    #[test]
+    fn parse_byok_state_missing_byok_field() {
+        let doc = json!({ "fields": { "name": { "stringValue": "Alice" } } });
+        let state = parse_byok_state_from_doc(&doc);
+        assert!(!state.active);
+        assert!(state.fingerprints.is_empty());
+        assert!(state.last_seen_at.is_none());
+    }
+
+    #[test]
+    fn parse_byok_state_missing_fields() {
+        let doc = json!({});
+        let state = parse_byok_state_from_doc(&doc);
+        assert!(!state.active);
+    }
+
+    #[test]
+    fn parse_byok_state_active_false() {
+        let doc = json!({
+            "fields": {
+                "byok": {
+                    "mapValue": {
+                        "fields": {
+                            "active": { "booleanValue": false }
+                        }
+                    }
+                }
+            }
+        });
+        let state = parse_byok_state_from_doc(&doc);
+        assert!(!state.active);
+        assert!(state.fingerprints.is_empty());
+    }
+
+    #[test]
+    fn parse_byok_state_no_fingerprints() {
+        let doc = json!({
+            "fields": {
+                "byok": {
+                    "mapValue": {
+                        "fields": {
+                            "active": { "booleanValue": true },
+                            "last_seen_at": { "timestampValue": "2026-05-18T10:00:00Z" }
+                        }
+                    }
+                }
+            }
+        });
+        let state = parse_byok_state_from_doc(&doc);
+        assert!(state.active);
+        assert!(state.fingerprints.is_empty());
+    }
+
+    #[test]
+    fn parse_byok_state_malformed_timestamp() {
+        let doc = json!({
+            "fields": {
+                "byok": {
+                    "mapValue": {
+                        "fields": {
+                            "active": { "booleanValue": true },
+                            "last_seen_at": { "timestampValue": "not-a-date" }
+                        }
+                    }
+                }
+            }
+        });
+        let state = parse_byok_state_from_doc(&doc);
+        assert!(state.active);
+        assert!(state.last_seen_at.is_none());
+    }
+
+    // --- Firestore subscription plan parsing tests ---
+
+    #[test]
+    fn parse_plan_pro_with_future_expiry() {
+        let future_ts = chrono::Utc::now().timestamp() + 86400; // +1 day
+        let doc = json!({
+            "fields": {
+                "subscription": {
+                    "mapValue": {
+                        "fields": {
+                            "plan": { "stringValue": "pro" },
+                            "current_period_end": { "integerValue": future_ts.to_string() }
+                        }
+                    }
+                }
+            }
+        });
+        assert_eq!(parse_effective_plan_from_doc(&doc), "pro");
+    }
+
+    #[test]
+    fn parse_plan_pro_expired() {
+        let past_ts = chrono::Utc::now().timestamp() - 86400; // -1 day
+        let doc = json!({
+            "fields": {
+                "subscription": {
+                    "mapValue": {
+                        "fields": {
+                            "plan": { "stringValue": "pro" },
+                            "current_period_end": { "integerValue": past_ts.to_string() }
+                        }
+                    }
+                }
+            }
+        });
+        assert_eq!(parse_effective_plan_from_doc(&doc), "basic");
+    }
+
+    #[test]
+    fn parse_plan_pro_missing_period_end() {
+        let doc = json!({
+            "fields": {
+                "subscription": {
+                    "mapValue": {
+                        "fields": {
+                            "plan": { "stringValue": "pro" }
+                        }
+                    }
+                }
+            }
+        });
+        assert_eq!(parse_effective_plan_from_doc(&doc), "basic");
+    }
+
+    #[test]
+    fn parse_plan_basic() {
+        let doc = json!({
+            "fields": {
+                "subscription": {
+                    "mapValue": {
+                        "fields": {
+                            "plan": { "stringValue": "basic" }
+                        }
+                    }
+                }
+            }
+        });
+        assert_eq!(parse_effective_plan_from_doc(&doc), "basic");
+    }
+
+    #[test]
+    fn parse_plan_free_migrated_to_basic() {
+        let doc = json!({
+            "fields": {
+                "subscription": {
+                    "mapValue": {
+                        "fields": {
+                            "plan": { "stringValue": "free" }
+                        }
+                    }
+                }
+            }
+        });
+        assert_eq!(parse_effective_plan_from_doc(&doc), "basic");
+    }
+
+    #[test]
+    fn parse_plan_missing_subscription() {
+        let doc = json!({ "fields": {} });
+        assert_eq!(parse_effective_plan_from_doc(&doc), "basic");
+    }
+
+    #[test]
+    fn parse_plan_missing_fields_key() {
+        let doc = json!({});
+        assert_eq!(parse_effective_plan_from_doc(&doc), "basic");
+    }
+
+    #[test]
+    fn parse_plan_enterprise_valid() {
+        let future_ts = chrono::Utc::now().timestamp() + 86400;
+        let doc = json!({
+            "fields": {
+                "subscription": {
+                    "mapValue": {
+                        "fields": {
+                            "plan": { "stringValue": "enterprise" },
+                            "current_period_end": { "integerValue": future_ts.to_string() }
+                        }
+                    }
+                }
+            }
+        });
+        assert_eq!(parse_effective_plan_from_doc(&doc), "enterprise");
     }
 }

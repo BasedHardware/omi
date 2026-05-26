@@ -9,16 +9,17 @@ use axum::{
     Json, Router,
 };
 
-use crate::auth::AuthUser;
+use crate::auth::{AuthUser, PaywalledAuthUser};
 use crate::models::screen_activity::{ScreenActivitySyncRequest, ScreenActivitySyncResponse};
 use crate::AppState;
 
 /// POST /v1/screen-activity/sync
 async fn sync_screen_activity(
     State(state): State<AppState>,
-    user: AuthUser,
+    user: PaywalledAuthUser,
     Json(request): Json<ScreenActivitySyncRequest>,
 ) -> Result<Json<ScreenActivitySyncResponse>, (StatusCode, String)> {
+    let user: AuthUser = user.into();
     if request.rows.len() > 100 {
         return Err((StatusCode::BAD_REQUEST, "Maximum 100 rows per batch".to_string()));
     }

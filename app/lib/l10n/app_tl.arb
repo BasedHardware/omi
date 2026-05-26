@@ -1160,17 +1160,6 @@
             }
         }
     },
-    "memoriesUsedThisMonth": "{used} ng {limit} alaala na nabuo sa buwan na ito",
-    "@memoriesUsedThisMonth": {
-        "placeholders": {
-            "used": {
-                "type": "String"
-            },
-            "limit": {
-                "type": "String"
-            }
-        }
-    },
     "visibility": "Visibility",
     "visibilitySubtitle": "Kontrolin kung aling mga pag-uusap ang lilitaw sa iyong lista",
     "showShortConversations": "Ipakita ang Short Conversations",
@@ -1580,7 +1569,7 @@
     "designingApp": "Dinadala ang app",
     "generatingIconStep": "Bumubuo ng icon",
     "finalTouches": "Huling touchup",
-    "processing": "Nagpoproseso...",
+    "processing": "Pinoproseso",
     "features": "Mga Features",
     "creatingYourApp": "Lumilikha ng iyong app...",
     "generatingIcon": "Bumubuo ng icon...",
@@ -5401,33 +5390,9 @@
     "@thankYouText": {
         "description": "Privacy page - thankYouText"
     },
-    "wifiSyncSettings": "WiFi Sync Settings",
-    "@wifiSyncSettings": {
-        "description": "WiFi sync settings - wifiSyncSettings"
-    },
-    "enterHotspotCredentials": "Ipasok ang iyong phone hotspot credentials",
-    "@enterHotspotCredentials": {
-        "description": "WiFi sync settings - enterHotspotCredentials"
-    },
-    "wifiSyncUsesHotspot": "Ang WiFi sync ay gumagamit ng iyong phone bilang hotspot. Hanapin ang iyong hotspot name at password sa Settings > Personal Hotspot.",
-    "@wifiSyncUsesHotspot": {
-        "description": "WiFi sync settings - wifiSyncUsesHotspot"
-    },
-    "hotspotNameSsid": "Hotspot Name (SSID)",
-    "@hotspotNameSsid": {
-        "description": "WiFi sync settings - hotspotNameSsid"
-    },
-    "exampleIphoneHotspot": "halimbawa iPhone Hotspot",
-    "@exampleIphoneHotspot": {
-        "description": "WiFi sync settings - exampleIphoneHotspot"
-    },
     "password": "Password",
     "@password": {
         "description": "WiFi sync settings - password"
-    },
-    "enterHotspotPassword": "Ipasok ang hotspot password",
-    "@enterHotspotPassword": {
-        "description": "WiFi sync settings - enterHotspotPassword"
     },
     "saveCredentials": "I-save ang Credentials",
     "@saveCredentials": {
@@ -5436,18 +5401,6 @@
     "clearCredentials": "I-clear ang Credentials",
     "@clearCredentials": {
         "description": "WiFi sync settings - clearCredentials"
-    },
-    "pleaseEnterHotspotName": "Mangyaring ipasok ang isang hotspot name",
-    "@pleaseEnterHotspotName": {
-        "description": "WiFi sync settings - pleaseEnterHotspotName"
-    },
-    "wifiCredentialsSaved": "WiFi credentials na na-save",
-    "@wifiCredentialsSaved": {
-        "description": "WiFi sync settings - wifiCredentialsSaved"
-    },
-    "wifiCredentialsCleared": "WiFi credentials na na-clear",
-    "@wifiCredentialsCleared": {
-        "description": "WiFi sync settings - wifiCredentialsCleared"
     },
     "summaryGeneratedForDate": "Summary na nabuo para sa {date}",
     "@summaryGeneratedForDate": {
@@ -7010,10 +6963,6 @@
     "@limitless": {
         "description": "Label for Limitless device storage"
     },
-    "fastTransfer": "Fast Transfer",
-    "@fastTransfer": {
-        "description": "Name of the fast transfer method"
-    },
     "syncingStatus": "Sine-sync",
     "@syncingStatus": {
         "description": "Status label when syncing is in progress"
@@ -7030,18 +6979,6 @@
                 "type": "String"
             }
         }
-    },
-    "transferMethod": "Transfer Method",
-    "@transferMethod": {
-        "description": "Page title for transfer method settings"
-    },
-    "fast": "Mabilis",
-    "@fast": {
-        "description": "Label for fast WiFi transfer method"
-    },
-    "ble": "BLE",
-    "@ble": {
-        "description": "Label for Bluetooth Low Energy transfer method"
     },
     "phone": "Telepono",
     "@phone": {
@@ -7067,33 +7004,9 @@
     "@processedFilesDeleted": {
         "description": "Snackbar message when processed files are deleted"
     },
-    "wifiEnableFailed": "Nabigo ang pagpapagana ng WiFi sa device. Subukan ulit.",
-    "@wifiEnableFailed": {
-        "description": "Error message when WiFi fails to enable on device"
-    },
-    "deviceNoFastTransfer": "Ang iyong device ay hindi sumusuporta sa Fast Transfer. Gumamit ng Bluetooth sa halip.",
-    "@deviceNoFastTransfer": {
-        "description": "Error message when device does not support fast transfer"
-    },
-    "enableHotspotMessage": "Pakipagana ang hotspot ng iyong telepono at subukan ulit.",
-    "@enableHotspotMessage": {
-        "description": "Error message asking user to enable hotspot"
-    },
-    "transferStartFailed": "Nabigo ang pagsisimula ng transfer. Subukan ulit.",
-    "@transferStartFailed": {
-        "description": "Error message when transfer fails to start"
-    },
     "deviceNotResponding": "Ang device ay hindi tumugon. Subukan ulit.",
     "@deviceNotResponding": {
         "description": "Error message when device times out"
-    },
-    "invalidWifiCredentials": "Invalid na WiFi credentials. Suriin ang iyong hotspot settings.",
-    "@invalidWifiCredentials": {
-        "description": "Error message for invalid WiFi credentials"
-    },
-    "wifiConnectionFailed": "Nabigo ang WiFi connection. Subukan ulit.",
-    "@wifiConnectionFailed": {
-        "description": "Error message when WiFi connection fails"
     },
     "sdCardProcessing": "SD Card Processing",
     "@sdCardProcessing": {
@@ -7111,10 +7024,6 @@
     "process": "Proseso",
     "@process": {
         "description": "Button label to start processing"
-    },
-    "wifiSyncFailed": "Nabigo ang WiFi Sync",
-    "@wifiSyncFailed": {
-        "description": "Error title when WiFi sync fails"
     },
     "processingFailed": "Nabigo ang Pagpoproseso",
     "@processingFailed": {
@@ -8151,10 +8060,6 @@
             }
         }
     },
-    "wifiSync": "WiFi Sync",
-    "@wifiSync": {
-        "description": "WiFi sync feature label"
-    },
     "itemCopiedToClipboard": "{item} ay kinopya sa clipboard",
     "@itemCopiedToClipboard": {
         "description": "Message when item is copied to clipboard",
@@ -8165,23 +8070,9 @@
             }
         }
     },
-    "wifiConnectionFailedTitle": "Connection Failed",
-    "@wifiConnectionFailedTitle": {
-        "description": "Title shown when WiFi connection to device fails"
-    },
     "connectingToDeviceName": "Kumokonekta sa {deviceName}",
     "@connectingToDeviceName": {
         "description": "Title shown while connecting to device WiFi",
-        "placeholders": {
-            "deviceName": {
-                "type": "String",
-                "example": "Omi"
-            }
-        }
-    },
-    "enableDeviceWifi": "Paganahin ang {deviceName}'s WiFi",
-    "@enableDeviceWifi": {
-        "description": "Step text for enabling device WiFi",
         "placeholders": {
             "deviceName": {
                 "type": "String",
@@ -8316,10 +8207,6 @@
     "@statusUnprocessed": {
         "description": "Status value for unprocessed recording"
     },
-    "switchedToFastTransfer": "Lumipat sa Fast Transfer",
-    "@switchedToFastTransfer": {
-        "description": "Snackbar message when switching to fast transfer mode"
-    },
     "transferCompleteMessage": "Tapos na ang paglipat! Maaari mo na ngayong i-play ang recording na ito.",
     "@transferCompleteMessage": {
         "description": "Success message when transfer completes"
@@ -8337,41 +8224,9 @@
     "@transferCancelled": {
         "description": "Snackbar message when transfer is cancelled"
     },
-    "fastTransferEnabled": "Fast Transfer ay naka-enable",
-    "@fastTransferEnabled": {
-        "description": "Snackbar message when fast transfer is enabled"
-    },
     "bluetoothSyncEnabled": "Bluetooth sync ay naka-enable",
     "@bluetoothSyncEnabled": {
         "description": "Snackbar message when bluetooth sync is enabled"
-    },
-    "enableFastTransfer": "I-enable ang Fast Transfer",
-    "@enableFastTransfer": {
-        "description": "Dialog title for enabling fast transfer"
-    },
-    "fastTransferDescription": "Gumagamit ang Fast Transfer ng WiFi para sa humigit-kumulang na 5x na mas mabilis na bilis. Ang iyong telepono ay pansamantalang magkonekta sa WiFi network ng iyong Omi device sa panahon ng paglipat.",
-    "@fastTransferDescription": {
-        "description": "Description of fast transfer feature in dialog"
-    },
-    "internetAccessPausedDuringTransfer": "Ang internet access ay napigil sa panahon ng paglipat",
-    "@internetAccessPausedDuringTransfer": {
-        "description": "Warning that internet is paused during transfer"
-    },
-    "chooseTransferMethodDescription": "Pumili kung paano ang mga recording ay ilipat mula sa iyong Omi device patungo sa iyong telepono.",
-    "@chooseTransferMethodDescription": {
-        "description": "Description text on transfer method page"
-    },
-    "wifiSpeed": "~150 KB/s sa pamamagitan ng WiFi",
-    "@wifiSpeed": {
-        "description": "Speed description for WiFi transfer"
-    },
-    "fiveTimesFaster": "5X MAS MABILIS",
-    "@fiveTimesFaster": {
-        "description": "Badge label for faster transfer method"
-    },
-    "fastTransferMethodDescription": "Lumilikha ng direktang WiFi connection sa iyong Omi device. Ang iyong telepono ay pansamantalang nadadiskonekta mula sa iyong regular na WiFi sa panahon ng paglipat.",
-    "@fastTransferMethodDescription": {
-        "description": "Description of fast transfer method card"
     },
     "bluetooth": "Bluetooth",
     "@bluetooth": {
@@ -8397,9 +8252,16 @@
     "@lowBatteryAlertTitle": {
         "description": "Title for low battery notification"
     },
-    "lowBatteryAlertBody": "Ang iyong device ay mababa na sa baterya. Panahon na para mag-recharge! 🔋",
+    "lowBatteryAlertBody": "Ang iyong baterya ay nasa {level}%. Panahon na para mag-recharge! 🔋",
+    "batteryFullyChargedTitle": "Naka-charge na ang Omi",
+    "batteryFullyChargedBody": "Ang iyong Omi device ay ganap nang na-charge. Maaari mo na itong i-unplug!",
     "@lowBatteryAlertBody": {
-        "description": "Body text for low battery notification"
+        "description": "Body text for low battery notification",
+        "placeholders": {
+            "level": {
+                "type": "int"
+            }
+        }
     },
     "deviceDisconnectedNotificationTitle": "Ang Iyong Omi Device ay Nadiskonekta",
     "@deviceDisconnectedNotificationTitle": {
@@ -9348,14 +9210,6 @@
     "@voiceFailedToTranscribe": {
         "description": "Error message when voice transcription fails"
     },
-    "locationPermissionRequired": "Ang Location Permission ay Kinakailangan",
-    "@locationPermissionRequired": {
-        "description": "Title for dialog requesting location permission"
-    },
-    "locationPermissionContent": "Ang Fast Transfer ay nangangailangan ng location permission upang ma-verify ang WiFi connection. Mangyaring bigyan ng location permission upang magpatuloy.",
-    "@locationPermissionContent": {
-        "description": "Explanation text for location permission dialog"
-    },
     "pdfTranscriptExport": "Transcript Export",
     "@pdfTranscriptExport": {
         "description": "Title for PDF transcript export document"
@@ -9594,14 +9448,6 @@
     },
     "noDailyRecapsYet": "Walang daily recaps pa",
     "dailyRecapsDescription": "Ang iyong daily recaps ay lilitaw dito kapag na-generate na",
-    "chooseTransferMethod": "Pumili ng Transfer Method",
-    "@chooseTransferMethod": {
-        "description": "Title for transfer method selection dialog"
-    },
-    "fastTransferSpeed": "~150 KB/s sa pamamagitan ng WiFi",
-    "@fastTransferSpeed": {
-        "description": "Speed description for fast transfer via WiFi"
-    },
     "largeTimeGapDetected": "Malaking time gap na natuklasan ({gap})",
     "@largeTimeGapDetected": {
         "placeholders": {
@@ -9619,10 +9465,6 @@
                 "example": "1.5h, 2.0h"
             }
         }
-    },
-    "deviceDoesNotSupportWifiSwitchingToBle": "Ang device ay hindi sumusuporta sa WiFi sync, lumipat sa Bluetooth",
-    "@deviceDoesNotSupportWifiSwitchingToBle": {
-        "description": "Message shown when WiFi sync fails because device hardware does not support WiFi, automatically falling back to Bluetooth transfer"
     },
     "appleHealthNotAvailable": "Ang Apple Health ay hindi available sa device na ito",
     "downloadAudio": "I-download ang Audio",
@@ -10152,7 +9994,7 @@
     "@manageStorage": {
         "description": "Menu option and sheet title for managing recording storage"
     },
-    "safelyBackedUp": "Safely backed up sa iyong phone",
+    "safelyBackedUp": "Mga conversation na nalikha",
     "@safelyBackedUp": {
         "description": "Description for synced files in manage storage sheet"
     },
@@ -10725,5 +10567,51 @@
     "startCallRecording": "Simulan ang pag-record ng tawag",
     "startVoiceRecording": "Simulan ang voice recording",
     "bulkExportAlreadyExported": "Lahat ng napiling gawain ay na-export na",
-    "bulkDeleteFailed": "Hindi matanggal ang mga gawain. Pakisubukang muli."
+    "bulkDeleteFailed": "Hindi matanggal ang mga gawain. Pakisubukang muli.",
+    "deleteRecap": "Burahin ang recap",
+    "deleteRecapConfirmTitle": "Burahin ang recap na ito?",
+    "deleteRecapConfirmBody": "Permanenteng aalisin ang recap na ito. Hindi maaapektuhan ang mga orihinal na pag-uusap mula sa araw na iyon.",
+    "deleteRecapAction": "Burahin",
+    "recapDeletedSnackbar": "Burado na ang recap",
+    "recapDeleteFailed": "Hindi maburahin ang recap. Subukan ulit mamaya.",
+    "syncStatusBackedUp": "Na-back up na",
+    "syncStatusBackingUp": "Sine-sync…",
+    "syncStatusWaiting": "Naghihintay na mag-sync",
+    "syncStatusRetrying": "Hindi naproseso — sinusubukang muli",
+    "syncStatusFailed": "Nabigo — i-tap ang Subukan Muli",
+    "syncStatusFileUnavailable": "Hindi available ang file",
+    "syncStatusUploaded": "Na-upload · pinoproseso sa Omi",
+    "noRecordingsYet": "Wala pang mga recording",
+    "syncInProgress": "Kasalukuyang nagsi-sync",
+    "deleteWhileProcessingTitle": "Pinoproseso pa rin",
+    "deleteWhileProcessingMessage": "Na-upload na ang recording na ito ngunit ginagawa pa ng Omi ang usapan. Kung buburahin mo ito ngayon at mabigo ang pagproseso, hindi na ito mababawi. Burahin pa rin?",
+    "syncCardAllBackedUp": "Lahat ng recording ay na-sync na",
+    "syncCardReadyCount": "{count, plural, one{1 recording ang handa nang i-sync} other{{count} na recording ang handa nang i-sync}}",
+    "syncCardProcessing": "Pinoproseso sa Omi…",
+    "syncCardWaitingInternet": "Naghihintay ng internet",
+    "syncCardNeedsAttention": "{count, plural, one{1 recording ang kailangang asikasuhin} other{{count} recording ang kailangang asikasuhin}}",
+    "syncFlowIntro": "Ang mga recording ay inililipat mula sa iyong device patungo sa telepono na ito at iniimbak nang lokal, pagkatapos ay ina-upload sa server ng Omi kung saan tina-transcribe ang mga ito at ginagawang mga pag-uusap.",
+    "syncStepUpload": "I-sync",
+    "syncStepUploadDesc": "Ipinapadala ang iyong recording sa server ng Omi",
+    "syncStepProcess": "I-transcribe",
+    "syncStepProcessDesc": "Ginagawang conversation ng Omi ang audio",
+    "syncStepBackedUp": "Handa na ang conversation",
+    "syncStepBackedUpDesc": "Hanapin sa ilalim ng Mga Conversation",
+    "syncFailureFootnote": "Kung mabigo ang pagproseso, awtomatikong susubukan muli ang recording sa susunod na sync.",
+    "syncStatusConversationCreated": "Nagawa ang usapan",
+    "syncCardUploadingTitle": "Ina-upload sa Omi",
+    "syncCardDownloadingTitle": "Dina-download mula sa iyong device",
+    "syncCardProgressOf": "{current} ng {total}",
+    "syncStatusOnDevice": "Nasa iyong device",
+    "syncStatusDownloadingFromDevice": "Dina-download mula sa iyong device",
+    "newestFirst": "Pinakabago muna",
+    "noSyncedRecordingsYet": "Wala pang naka-sync na recording",
+    "morePaymentMethodsComingSoon": "Mas maraming paraan ng pagbabayad na malapit nang dumating",
+    "@morePaymentMethodsComingSoon": {
+        "description": "Placeholder card text shown under available payment methods"
+    },
+    "syncProcessingBackgroundHint": "Magpapatuloy ito sa background — puwede mong iwan ang screen na ito.",
+    "syncCardRateLimited": "Naabot na ang limitasyon ng patas na paggamit — awtomatikong magpapatuloy ang pag-sync",
+    "syncCardBackendBusy": "Abala ang mga server ng Omi — masi-sync ang iyong mga recording kapag may bakanteng kapasidad na muli",
+    "unableToDetermineFirmwareVersion": "Hindi matukoy ang kasalukuyang bersyon ng firmware"
 }

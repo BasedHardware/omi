@@ -251,7 +251,7 @@ struct SettingsSearchItem: Identifiable {
       icon: "sparkles", settingId: "floatingbar.draggable"),
     SettingsSearchItem(
       name: "Voice Questions", subtitle: "Speak replies aloud for push-to-talk questions",
-      keywords: ["voice", "speech", "tts", "elevenlabs", "audio answers", "push to talk"],
+      keywords: ["voice", "speech", "tts", "audio answers", "push to talk"],
       section: .floatingBar,
       icon: "sparkles", settingId: "floatingbar.voiceanswers"),
     SettingsSearchItem(

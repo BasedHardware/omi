@@ -539,7 +539,15 @@ struct ChatPage: View {
       isSending: chatProvider.isSending,
       isStopping: chatProvider.isStopping,
       mode: $chatProvider.chatMode,
-      inputText: $chatProvider.draftText
+      inputText: $chatProvider.draftText,
+      attachments: $chatProvider.pendingAttachments,
+      onAttachmentsAdded: { urls in
+        let toAdd = urls.compactMap { ChatAttachment.from(url: $0) }
+        chatProvider.addAttachments(toAdd)
+      },
+      onAttachmentRemoved: { id in
+        chatProvider.removePendingAttachment(id: id)
+      }
     )
   }
 
@@ -730,16 +738,22 @@ struct ChatBubble: View {
           .buttonStyle(.plain)
         } else {
           // User messages or AI messages without content blocks (loaded from Firestore)
-          VStack(alignment: message.sender == .user ? .trailing : .leading, spacing: 4) {
-            SelectableMarkdown(text: displayText, sender: message.sender)
-              .padding(.horizontal, 14)
-              .padding(.vertical, 10)
-              .background(
-                message.sender == .user
-                  ? OmiColors.userBubble : OmiColors.backgroundTertiary.opacity(0.95)
-              )
-              .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
-              .padding(.top, 2)
+          VStack(alignment: message.sender == .user ? .trailing : .leading, spacing: 6) {
+            if message.sender == .user && !message.attachments.isEmpty {
+              MessageAttachmentsView(attachments: message.attachments)
+            }
+
+            if !message.text.isEmpty {
+              SelectableMarkdown(text: displayText, sender: message.sender)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 10)
+                .background(
+                  message.sender == .user
+                    ? OmiColors.userBubble : OmiColors.backgroundTertiary.opacity(0.95)
+                )
+                .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+                .padding(.top, 2)
+            }
 
             // Show more / Show less toggle for long messages
             if message.text.count > Self.truncationThreshold {
@@ -900,6 +914,90 @@ extension ChatBubble: Equatable {
       && lhs.message.rating == rhs.message.rating
       && lhs.app?.id == rhs.app?.id
       && lhs.isDuplicate == rhs.isDuplicate
+  }
+}
+
+// MARK: - Message Attachments
+
+/// Renders the attachments saved on a user message bubble: image thumbnails
+/// for images, document chips for everything else. Tapping an image opens it
+/// in Quick Look (via Finder) so the user can inspect what they sent.
+struct MessageAttachmentsView: View {
+  let attachments: [ChatAttachment]
+
+  var body: some View {
+    LazyVGrid(columns: gridColumns, alignment: .trailing, spacing: 6) {
+      ForEach(attachments) { att in
+        attachmentTile(att)
+      }
+    }
+    .frame(maxWidth: 360, alignment: .trailing)
+  }
+
+  private var gridColumns: [GridItem] {
+    let count = min(max(attachments.count, 1), 2)
+    return Array(repeating: GridItem(.flexible(), spacing: 6), count: count)
+  }
+
+  @ViewBuilder
+  private func attachmentTile(_ att: ChatAttachment) -> some View {
+    if att.isImage {
+      imageTile(att)
+        .frame(height: 140)
+        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+    } else {
+      HStack(spacing: 8) {
+        Image(systemName: "doc")
+          .scaledFont(size: 18)
+          .foregroundColor(OmiColors.textSecondary)
+        VStack(alignment: .leading, spacing: 2) {
+          Text(att.fileName)
+            .scaledFont(size: 12, weight: .medium)
+            .foregroundColor(OmiColors.textPrimary)
+            .lineLimit(1)
+            .truncationMode(.middle)
+          Text(att.mimeType)
+            .scaledFont(size: 10)
+            .foregroundColor(OmiColors.textTertiary)
+        }
+      }
+      .padding(.horizontal, 10)
+      .padding(.vertical, 8)
+      .background(OmiColors.backgroundTertiary.opacity(0.9))
+      .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+    }
+  }
+
+  @ViewBuilder
+  private func imageTile(_ att: ChatAttachment) -> some View {
+    // Local data wins (instant) — fall back to the server thumbnail URL after a reload.
+    if let data = att.data, let img = NSImage(data: data) {
+      Image(nsImage: img).resizable().scaledToFill()
+    } else if let urlString = att.thumbnailURL, let url = URL(string: urlString) {
+      AsyncImage(url: url) { phase in
+        switch phase {
+        case .success(let image):
+          image.resizable().scaledToFill()
+        case .failure:
+          fallbackPlaceholder
+        default:
+          ProgressView()
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(OmiColors.backgroundTertiary.opacity(0.5))
+        }
+      }
+    } else {
+      fallbackPlaceholder
+    }
+  }
+
+  private var fallbackPlaceholder: some View {
+    ZStack {
+      OmiColors.backgroundTertiary.opacity(0.6)
+      Image(systemName: "photo")
+        .scaledFont(size: 26)
+        .foregroundColor(OmiColors.textTertiary)
+    }
   }
 }
 

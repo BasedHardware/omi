@@ -1,8 +1,7 @@
-import asyncio
 import logging
 from typing import List, Optional
 
-from utils.executors import critical_executor
+from utils.executors import db_executor, postprocess_executor, run_blocking, submit_with_context
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field, ValidationError
@@ -54,27 +53,34 @@ async def create_memory(
     memory: Memory,
     uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "memories:create")),
 ):
-    memory.category = MemoryCategory.manual
-    memory_db = MemoryDB.from_memory(memory, uid, None, True)
+    # Honor the client-supplied category (the Memory model defaults it to
+    # `interesting`). Only memories the user explicitly typed in arrive as
+    # `manual`; auto-extracted ones (system/interesting) keep their category so
+    # the mobile app files them under "About You"/"Insights" instead of dumping
+    # everything into "Manual". manually_added tracks human entry, so derive it
+    # from the category rather than forcing it True for every API caller.
+    manually_added = memory.category == MemoryCategory.manual
+    memory_db = MemoryDB.from_memory(memory, uid, None, manually_added)
 
     # Build payload outside try so serialization bugs aren't misreported as
     # transient 503s — only the Firestore write should be retryable.
     payload = memory_db.dict()
 
     try:
-        await asyncio.to_thread(memories_db.create_memory, uid, payload)
+        await run_blocking(db_executor, memories_db.create_memory, uid, payload)
     except Exception:
         logger.exception("Firestore create_memory failed uid=%s", uid)
         raise HTTPException(status_code=503, detail="Service temporarily unavailable")
 
     try:
-        await asyncio.to_thread(upsert_memory_vector, uid, memory_db.id, memory_db.content, memory_db.category.value)
+        await run_blocking(
+            postprocess_executor, upsert_memory_vector, uid, memory_db.id, memory_db.content, memory_db.category.value
+        )
     except Exception:
         logger.exception("Vector upsert failed uid=%s memory_id=%s (memory saved, vector missing)", uid, memory_db.id)
 
     if memory.visibility == 'public':
-        loop = asyncio.get_running_loop()
-        loop.run_in_executor(critical_executor, update_personas_async, uid)
+        submit_with_context(postprocess_executor, update_personas_async, uid)
 
     return memory_db
 
@@ -102,13 +108,15 @@ async def create_memories_batch(
     if not request.memories:
         return BatchMemoriesResponse(memories=[], created_count=0)
 
-    # Hardcode category to manual to match the single-create endpoint. Callers
-    # that need auto-categorization should use the dev API.
+    # Honor each item's category (defaults to `interesting` per the Memory
+    # model). Desktop import/extraction paths send `system`/`interesting` so
+    # they land under "About You"/"Insights"; only user-typed memories send
+    # `manual`. Derive manually_added from the category instead of forcing it.
     memory_dbs: List[MemoryDB] = []
     has_public = False
     for memory in request.memories:
-        memory.category = MemoryCategory.manual
-        memory_db = MemoryDB.from_memory(memory, uid, None, True)
+        manually_added = memory.category == MemoryCategory.manual
+        memory_db = MemoryDB.from_memory(memory, uid, None, manually_added)
         memory_dbs.append(memory_db)
         if memory.visibility == 'public':
             has_public = True
@@ -129,11 +137,10 @@ async def create_memories_batch(
             ],
         )
 
-    await asyncio.to_thread(_persist)
+    await run_blocking(db_executor, _persist)
 
     if has_public:
-        loop = asyncio.get_running_loop()
-        loop.run_in_executor(critical_executor, update_personas_async, uid)
+        submit_with_context(postprocess_executor, update_personas_async, uid)
 
     return BatchMemoriesResponse(memories=memory_dbs, created_count=len(memory_dbs))
 
@@ -216,5 +223,5 @@ def update_memory_visibility(
     if value not in ['public', 'private']:
         raise HTTPException(status_code=400, detail='Invalid visibility value')
     memories_db.change_memory_visibility(uid, memory_id, value)
-    critical_executor.submit(update_personas_async, uid)
+    postprocess_executor.submit(update_personas_async, uid)
     return {'status': 'ok'}

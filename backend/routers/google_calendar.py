@@ -17,7 +17,6 @@ from utils.other import endpoints as auth
 from utils.retrieval.tools.calendar_tools import get_google_calendar_events
 from utils.retrieval.tools.google_utils import refresh_google_token
 
-
 router = APIRouter()
 
 

@@ -1160,17 +1160,6 @@
             }
         }
     },
-    "memoriesUsedThisMonth": "{used} מתוך {limit} זיכרונות שנוצרו החודש",
-    "@memoriesUsedThisMonth": {
-        "placeholders": {
-            "used": {
-                "type": "String"
-            },
-            "limit": {
-                "type": "String"
-            }
-        }
-    },
     "visibility": "יכולת הראות",
     "visibilitySubtitle": "שלוט באילו שיחות מופיעות ברשימה שלך",
     "showShortConversations": "הצג שיחות קצרות",
@@ -1580,7 +1569,7 @@
     "designingApp": "עיצוב אפליקציה",
     "generatingIconStep": "יצירת אייקון",
     "finalTouches": "המגעות הסופיות",
-    "processing": "מעבד...",
+    "processing": "מעבד",
     "features": "תכונות",
     "creatingYourApp": "יצירת האפליקציה שלך...",
     "generatingIcon": "יצירת אייקון...",
@@ -5401,33 +5390,9 @@
     "@thankYouText": {
         "description": "Privacy page - thankYouText"
     },
-    "wifiSyncSettings": "הגדרות סנכרון WiFi",
-    "@wifiSyncSettings": {
-        "description": "WiFi sync settings - wifiSyncSettings"
-    },
-    "enterHotspotCredentials": "הזן את פרטי הנקודה הציבורית של הטלפון שלך",
-    "@enterHotspotCredentials": {
-        "description": "WiFi sync settings - enterHotspotCredentials"
-    },
-    "wifiSyncUsesHotspot": "סנכרון WiFi משתמש בטלפון שלך כנקודה ציבורית. מצא את שם הנקודה הציבורית וסיסמה בהגדרות > Personal Hotspot.",
-    "@wifiSyncUsesHotspot": {
-        "description": "WiFi sync settings - wifiSyncUsesHotspot"
-    },
-    "hotspotNameSsid": "שם הנקודה הציבורית (SSID)",
-    "@hotspotNameSsid": {
-        "description": "WiFi sync settings - hotspotNameSsid"
-    },
-    "exampleIphoneHotspot": "למשל iPhone Hotspot",
-    "@exampleIphoneHotspot": {
-        "description": "WiFi sync settings - exampleIphoneHotspot"
-    },
     "password": "סיסמה",
     "@password": {
         "description": "WiFi sync settings - password"
-    },
-    "enterHotspotPassword": "הזן סיסמה לנקודה ציבורית",
-    "@enterHotspotPassword": {
-        "description": "WiFi sync settings - enterHotspotPassword"
     },
     "saveCredentials": "שמור פרטים",
     "@saveCredentials": {
@@ -5436,18 +5401,6 @@
     "clearCredentials": "נקה פרטים",
     "@clearCredentials": {
         "description": "WiFi sync settings - clearCredentials"
-    },
-    "pleaseEnterHotspotName": "אנא הזן שם נקודה ציבורית",
-    "@pleaseEnterHotspotName": {
-        "description": "WiFi sync settings - pleaseEnterHotspotName"
-    },
-    "wifiCredentialsSaved": "פרטי WiFi נשמרו",
-    "@wifiCredentialsSaved": {
-        "description": "WiFi sync settings - wifiCredentialsSaved"
-    },
-    "wifiCredentialsCleared": "פרטי WiFi נוקו",
-    "@wifiCredentialsCleared": {
-        "description": "WiFi sync settings - wifiCredentialsCleared"
     },
     "summaryGeneratedForDate": "סיכום שנוצר עבור {date}",
     "@summaryGeneratedForDate": {
@@ -7010,10 +6963,6 @@
     "@limitless": {
         "description": "Label for Limitless device storage"
     },
-    "fastTransfer": "העברה מהירה",
-    "@fastTransfer": {
-        "description": "Name of the fast transfer method"
-    },
     "syncingStatus": "סנכרון",
     "@syncingStatus": {
         "description": "Status label when syncing is in progress"
@@ -7030,18 +6979,6 @@
                 "type": "String"
             }
         }
-    },
-    "transferMethod": "שיטת העברה",
-    "@transferMethod": {
-        "description": "Page title for transfer method settings"
-    },
-    "fast": "מהיר",
-    "@fast": {
-        "description": "Label for fast WiFi transfer method"
-    },
-    "ble": "BLE",
-    "@ble": {
-        "description": "Label for Bluetooth Low Energy transfer method"
     },
     "phone": "טלפון",
     "@phone": {
@@ -7067,33 +7004,9 @@
     "@processedFilesDeleted": {
         "description": "Snackbar message when processed files are deleted"
     },
-    "wifiEnableFailed": "איתור בהפעלת WiFi במכשיר. אנא נסה שוב.",
-    "@wifiEnableFailed": {
-        "description": "Error message when WiFi fails to enable on device"
-    },
-    "deviceNoFastTransfer": "המכשיר שלך אינו תומך בהעברה מהירה. השתמש ב-Bluetooth במקום זאת.",
-    "@deviceNoFastTransfer": {
-        "description": "Error message when device does not support fast transfer"
-    },
-    "enableHotspotMessage": "אנא הפעל את נקודת החום של הטלפון שלך ונסה שוב.",
-    "@enableHotspotMessage": {
-        "description": "Error message asking user to enable hotspot"
-    },
-    "transferStartFailed": "איתור בהתחלת ההעברה. אנא נסה שוב.",
-    "@transferStartFailed": {
-        "description": "Error message when transfer fails to start"
-    },
     "deviceNotResponding": "המכשיר לא הגיב. אנא נסה שוב.",
     "@deviceNotResponding": {
         "description": "Error message when device times out"
-    },
-    "invalidWifiCredentials": "אישורי WiFi לא תקפים. בדוק את הגדרות נקודת החום שלך.",
-    "@invalidWifiCredentials": {
-        "description": "Error message for invalid WiFi credentials"
-    },
-    "wifiConnectionFailed": "חיבור WiFi נכשל. אנא נסה שוב.",
-    "@wifiConnectionFailed": {
-        "description": "Error message when WiFi connection fails"
     },
     "sdCardProcessing": "עיבוד כרטיס SD",
     "@sdCardProcessing": {
@@ -7111,10 +7024,6 @@
     "process": "עיבוד",
     "@process": {
         "description": "Button label to start processing"
-    },
-    "wifiSyncFailed": "סנכרון WiFi נכשל",
-    "@wifiSyncFailed": {
-        "description": "Error title when WiFi sync fails"
     },
     "processingFailed": "עיבוד נכשל",
     "@processingFailed": {
@@ -8151,10 +8060,6 @@
             }
         }
     },
-    "wifiSync": "סנכרון WiFi",
-    "@wifiSync": {
-        "description": "WiFi sync feature label"
-    },
     "itemCopiedToClipboard": "{item} הועתק ללוח הגזירה",
     "@itemCopiedToClipboard": {
         "description": "Message when item is copied to clipboard",
@@ -8165,23 +8070,9 @@
             }
         }
     },
-    "wifiConnectionFailedTitle": "החיבור נכשל",
-    "@wifiConnectionFailedTitle": {
-        "description": "Title shown when WiFi connection to device fails"
-    },
     "connectingToDeviceName": "התחברות ל-{deviceName}",
     "@connectingToDeviceName": {
         "description": "Title shown while connecting to device WiFi",
-        "placeholders": {
-            "deviceName": {
-                "type": "String",
-                "example": "Omi"
-            }
-        }
-    },
-    "enableDeviceWifi": "הפעל WiFi של {deviceName}",
-    "@enableDeviceWifi": {
-        "description": "Step text for enabling device WiFi",
         "placeholders": {
             "deviceName": {
                 "type": "String",
@@ -8316,10 +8207,6 @@
     "@statusUnprocessed": {
         "description": "Status value for unprocessed recording"
     },
-    "switchedToFastTransfer": "עברת ל-Fast Transfer",
-    "@switchedToFastTransfer": {
-        "description": "Snackbar message when switching to fast transfer mode"
-    },
     "transferCompleteMessage": "ההעברה הושלמה! אתה יכול כעת להשמיע הקלטה זו.",
     "@transferCompleteMessage": {
         "description": "Success message when transfer completes"
@@ -8337,41 +8224,9 @@
     "@transferCancelled": {
         "description": "Snackbar message when transfer is cancelled"
     },
-    "fastTransferEnabled": "Fast Transfer מופעל",
-    "@fastTransferEnabled": {
-        "description": "Snackbar message when fast transfer is enabled"
-    },
     "bluetoothSyncEnabled": "סנכרון Bluetooth מופעל",
     "@bluetoothSyncEnabled": {
         "description": "Snackbar message when bluetooth sync is enabled"
-    },
-    "enableFastTransfer": "הפעל Fast Transfer",
-    "@enableFastTransfer": {
-        "description": "Dialog title for enabling fast transfer"
-    },
-    "fastTransferDescription": "Fast Transfer משתמש ב-WiFi כדי להשיג מהירויות גבוהות פי 5. הטלפון שלך יתחבר זמנית לרשת ה-WiFi של התקן Omi שלך במהלך ההעברה.",
-    "@fastTransferDescription": {
-        "description": "Description of fast transfer feature in dialog"
-    },
-    "internetAccessPausedDuringTransfer": "גישת האינטרנט מושהית במהלך ההעברה",
-    "@internetAccessPausedDuringTransfer": {
-        "description": "Warning that internet is paused during transfer"
-    },
-    "chooseTransferMethodDescription": "בחר כיצד יוסברו הקלטות מהתקן Omi שלך לטלפון שלך.",
-    "@chooseTransferMethodDescription": {
-        "description": "Description text on transfer method page"
-    },
-    "wifiSpeed": "~150 KB/s דרך WiFi",
-    "@wifiSpeed": {
-        "description": "Speed description for WiFi transfer"
-    },
-    "fiveTimesFaster": "פי 5 מהר יותר",
-    "@fiveTimesFaster": {
-        "description": "Badge label for faster transfer method"
-    },
-    "fastTransferMethodDescription": "יוצר חיבור WiFi ישיר להתקן Omi שלך. הטלפון שלך יתנתק זמנית מ-WiFi הרגיל שלך במהלך ההעברה.",
-    "@fastTransferMethodDescription": {
-        "description": "Description of fast transfer method card"
     },
     "bluetooth": "Bluetooth",
     "@bluetooth": {
@@ -8397,9 +8252,16 @@
     "@lowBatteryAlertTitle": {
         "description": "Title for low battery notification"
     },
-    "lowBatteryAlertBody": "ההתקן שלך נמצא בסוללה נמוכה. הגיע הזמן לטעינה מחדש! 🔋",
+    "lowBatteryAlertBody": "הסוללה שלך ב-{level}%. הגיע הזמן לטעון! 🔋",
+    "batteryFullyChargedTitle": "Omi טעון לגמרי",
+    "batteryFullyChargedBody": "מכשיר Omi שלך טעון לגמרי. אפשר לנתק אותו!",
     "@lowBatteryAlertBody": {
-        "description": "Body text for low battery notification"
+        "description": "Body text for low battery notification",
+        "placeholders": {
+            "level": {
+                "type": "int"
+            }
+        }
     },
     "deviceDisconnectedNotificationTitle": "התקן Omi שלך התנתק",
     "@deviceDisconnectedNotificationTitle": {
@@ -9348,14 +9210,6 @@
     "@voiceFailedToTranscribe": {
         "description": "Error message when voice transcription fails"
     },
-    "locationPermissionRequired": "הרשאת מיקום נדרשת",
-    "@locationPermissionRequired": {
-        "description": "Title for dialog requesting location permission"
-    },
-    "locationPermissionContent": "Fast Transfer דורש הרשאת מיקום כדי לאמת חיבור WiFi. אנא הגרם הרשאת מיקום כדי להמשיך.",
-    "@locationPermissionContent": {
-        "description": "Explanation text for location permission dialog"
-    },
     "pdfTranscriptExport": "ייצוא תמלול",
     "@pdfTranscriptExport": {
         "description": "Title for PDF transcript export document"
@@ -9594,14 +9448,6 @@
     },
     "noDailyRecapsYet": "אין סיכומים יומיים עדיין",
     "dailyRecapsDescription": "הסיכומים היומיים שלך יופיעו כאן לאחר שייווצרו",
-    "chooseTransferMethod": "בחר שיטת העברה",
-    "@chooseTransferMethod": {
-        "description": "Title for transfer method selection dialog"
-    },
-    "fastTransferSpeed": "~150 KB/s דרך WiFi",
-    "@fastTransferSpeed": {
-        "description": "Speed description for fast transfer via WiFi"
-    },
     "largeTimeGapDetected": "נמצא פער זמן גדול ({gap})",
     "@largeTimeGapDetected": {
         "placeholders": {
@@ -9619,10 +9465,6 @@
                 "example": "1.5h, 2.0h"
             }
         }
-    },
-    "deviceDoesNotSupportWifiSwitchingToBle": "ההתקן אינו תומך בסנכרון WiFi, מעבר ל-Bluetooth",
-    "@deviceDoesNotSupportWifiSwitchingToBle": {
-        "description": "Message shown when WiFi sync fails because device hardware does not support WiFi, automatically falling back to Bluetooth transfer"
     },
     "appleHealthNotAvailable": "Apple Health אינו זמין בהתקן זה",
     "downloadAudio": "הורד אודיו",
@@ -10152,7 +9994,7 @@
     "@manageStorage": {
         "description": "Menu option and sheet title for managing recording storage"
     },
-    "safelyBackedUp": "גיבוי בטוח בטלפון שלך",
+    "safelyBackedUp": "שיחות נוצרו",
     "@safelyBackedUp": {
         "description": "Description for synced files in manage storage sheet"
     },
@@ -10725,5 +10567,51 @@
     "startCallRecording": "התחל הקלטת שיחה",
     "startVoiceRecording": "התחל הקלטה קולית",
     "bulkExportAlreadyExported": "כל המשימות שנבחרו כבר יוצאו",
-    "bulkDeleteFailed": "לא ניתן למחוק את המשימות. אנא נסה שוב."
+    "bulkDeleteFailed": "לא ניתן למחוק את המשימות. אנא נסה שוב.",
+    "deleteRecap": "מחק סיכום",
+    "deleteRecapConfirmTitle": "למחוק את הסיכום הזה?",
+    "deleteRecapConfirmBody": "הסיכום הזה יוסר לצמיתות. השיחות המקוריות מאותו יום לא יושפעו.",
+    "deleteRecapAction": "מחק",
+    "recapDeletedSnackbar": "הסיכום נמחק",
+    "recapDeleteFailed": "לא ניתן היה למחוק את הסיכום. נסה שוב מאוחר יותר.",
+    "syncStatusBackedUp": "גובה",
+    "syncStatusBackingUp": "מסנכרן…",
+    "syncStatusWaiting": "ממתין לסנכרון",
+    "syncStatusRetrying": "העיבוד נכשל — מנסה שוב",
+    "syncStatusFailed": "נכשל — הקש על נסה שוב",
+    "syncStatusFileUnavailable": "הקובץ אינו זמין",
+    "syncStatusUploaded": "הועלה · בעיבוד ב-Omi",
+    "noRecordingsYet": "אין הקלטות עדיין",
+    "syncInProgress": "מתבצע סנכרון",
+    "deleteWhileProcessingTitle": "עדיין בעיבוד",
+    "deleteWhileProcessingMessage": "ההקלטה הזו הועלתה אך Omi עדיין יוצר את השיחה. אם תמחק אותה עכשיו והעיבוד ייכשל, לא יהיה ניתן לשחזר אותה. למחוק בכל זאת?",
+    "syncCardAllBackedUp": "כל ההקלטות סונכרנו",
+    "syncCardReadyCount": "{count, plural, one{הקלטה אחת מוכנה לסנכרון} two{2 הקלטות מוכנות לסנכרון} many{{count} הקלטות מוכנות לסנכרון} other{{count} הקלטות מוכנות לסנכרון}}",
+    "syncCardProcessing": "בעיבוד ב-Omi…",
+    "syncCardWaitingInternet": "ממתין לאינטרנט",
+    "syncCardNeedsAttention": "{count, plural, one{הקלטה אחת דורשת תשומת לב} two{2 הקלטות דורשות תשומת לב} many{{count} הקלטות דורשות תשומת לב} other{{count} הקלטות דורשות תשומת לב}}",
+    "syncFlowIntro": "ההקלטות מועברות מהמכשיר שלך לטלפון הזה ונשמרות מקומית, ולאחר מכן מועלות לשרת של Omi, שם הן מתומללות והופכות לשיחות.",
+    "syncStepUpload": "סנכרון",
+    "syncStepUploadDesc": "ההקלטה שלך נשלחת לשרת של Omi",
+    "syncStepProcess": "תמלול",
+    "syncStepProcessDesc": "Omi הופך את האודיו לשיחה",
+    "syncStepBackedUp": "השיחה מוכנה",
+    "syncStepBackedUpDesc": "תמצא אותה תחת שיחות",
+    "syncFailureFootnote": "אם העיבוד נכשל, ההקלטה תנוסה שוב באופן אוטומטי בסנכרון הבא.",
+    "syncStatusConversationCreated": "השיחה נוצרה",
+    "syncCardUploadingTitle": "מעלה ל-Omi",
+    "syncCardDownloadingTitle": "מוריד מהמכשיר שלך",
+    "syncCardProgressOf": "{current} מתוך {total}",
+    "syncStatusOnDevice": "במכשיר שלך",
+    "syncStatusDownloadingFromDevice": "מוריד מהמכשיר שלך",
+    "newestFirst": "החדשות ביותר תחילה",
+    "noSyncedRecordingsYet": "אין עדיין הקלטות מסונכרנות",
+    "morePaymentMethodsComingSoon": "אמצעי תשלום נוספים בקרוב",
+    "@morePaymentMethodsComingSoon": {
+        "description": "Placeholder card text shown under available payment methods"
+    },
+    "syncProcessingBackgroundHint": "התהליך נמשך ברקע — אפשר לצאת מהמסך הזה.",
+    "syncCardRateLimited": "הגעת למגבלת השימוש ההוגן — הסנכרון יתחדש באופן אוטומטי",
+    "syncCardBackendBusy": "השרתים של Omi עמוסים — ההקלטות שלך יסונכרנו ברגע שתתפנה תפוסה",
+    "unableToDetermineFirmwareVersion": "לא ניתן לקבוע את גרסת הקושחה הנוכחית"
 }

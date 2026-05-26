@@ -2,9 +2,11 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
+import 'package:http/http.dart' as http;
 import 'package:omi/backend/http/shared.dart';
 import 'package:omi/backend/schema/schema.dart';
 import 'package:omi/env/env.dart';
+import 'package:omi/utils/debug_log_manager.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 
@@ -40,6 +42,33 @@ Future<List<ServerConversation>> getConversations({
   String? folderId,
   bool? starred,
 }) async {
+  final result = await getConversationsResult(
+    limit: limit,
+    offset: offset,
+    statuses: statuses,
+    includeDiscarded: includeDiscarded,
+    startDate: startDate,
+    endDate: endDate,
+    folderId: folderId,
+    starred: starred,
+  );
+  return result.items;
+}
+
+// Same as [getConversations] but reports whether the request actually
+// succeeded. An empty `items` with `ok == false` means the fetch failed
+// (no response / non-200, e.g. auth token not ready right after a cold
+// start) — which callers must NOT treat as "the user has no conversations".
+Future<({List<ServerConversation> items, bool ok})> getConversationsResult({
+  int limit = 50,
+  int offset = 0,
+  List<ConversationStatus> statuses = const [],
+  bool includeDiscarded = true,
+  DateTime? startDate,
+  DateTime? endDate,
+  String? folderId,
+  bool? starred,
+}) async {
   String url =
       '${Env.apiBaseUrl}v1/conversations?include_discarded=$includeDiscarded&limit=$limit&offset=$offset&statuses=${statuses.map((val) => val.toString().split(".").last).join(",")}';
 
@@ -58,18 +87,17 @@ Future<List<ServerConversation>> getConversations({
   }
 
   var response = await makeApiCall(url: url, headers: {}, method: 'GET', body: '');
-  if (response == null) return [];
+  if (response == null) return (items: <ServerConversation>[], ok: false);
   if (response.statusCode == 200) {
     // decode body bytes to utf8 string and then parse json so as to avoid utf8 char issues
     var body = utf8.decode(response.bodyBytes);
     var memories =
         (jsonDecode(body) as List<dynamic>).map((conversation) => ServerConversation.fromJson(conversation)).toList();
     Logger.debug('getConversations length: ${memories.length}');
-    return memories;
-  } else {
-    Logger.debug('getConversations error ${response.statusCode}');
+    return (items: memories, ok: true);
   }
-  return [];
+  Logger.debug('getConversations error ${response.statusCode}');
+  return (items: <ServerConversation>[], ok: false);
 }
 
 Future<ServerConversation?> reProcessConversationServer(String conversationId, {String? appId}) async {
@@ -386,104 +414,121 @@ Future<bool> deleteConversationActionItem(String conversationId, ActionItem item
   return response.statusCode == 204;
 }
 
-/// v2 async sync: POST files → 202 with job_id, then poll until terminal.
-/// Returns the same SyncLocalFilesResponse as v1 once processing is confirmed complete.
-typedef SyncJobPollCallback = void Function(SyncJobStatusResponse status);
+/// Outcome of an upload-only POST to /v2/sync-local-files.
+/// Exactly one of [jobId] (HTTP 202 — audio received, processing in the
+/// background; reconcile later) or [completed] (HTTP 200 fast-path — server
+/// already returned the result synchronously) is non-null.
+class UploadFilesResult {
+  final String? jobId;
+  final SyncLocalFilesResponse? completed;
 
-Future<SyncLocalFilesResponse> syncLocalFilesV2(
+  const UploadFilesResult._(this.jobId, this.completed);
+  factory UploadFilesResult.queued(String jobId) => UploadFilesResult._(jobId, null);
+  factory UploadFilesResult.done(SyncLocalFilesResponse result) => UploadFilesResult._(null, result);
+
+  bool get isQueued => jobId != null;
+}
+
+/// Thrown when an upload is rejected by fair-use throttling (HTTP 429).
+/// [retryAfterSeconds] is the server's Retry-After when provided.
+class SyncRateLimitedException implements Exception {
+  final int? retryAfterSeconds;
+  SyncRateLimitedException([this.retryAfterSeconds]);
+
+  @override
+  String toString() => 'SyncRateLimitedException(retryAfter=$retryAfterSeconds)';
+}
+
+/// Parse a Retry-After header expressed in delta-seconds. Returns null for an
+/// absent or non-integer (HTTP-date) value; the caller falls back to a default.
+int? _parseRetryAfterSeconds(http.Response response) {
+  final raw = response.headers['retry-after'];
+  if (raw == null) return null;
+  return int.tryParse(raw.trim());
+}
+
+/// Upload-only: POST files and return as soon as the server acknowledges
+/// (HTTP 202 with a job_id, or the 200 fast-path with a finished result).
+/// Does NOT wait for server-side processing — the caller marks the WAL
+/// `uploaded` and a reconciler resolves [jobId] later via [fetchSyncJobStatus].
+/// Error-status mapping matches the old polling path so callers' retry logic
+/// is unchanged.
+Future<UploadFilesResult> uploadLocalFilesV2(
   List<File> files, {
   UploadProgressCallback? onUploadProgress,
-  SyncJobPollCallback? onPollProgress,
   String? conversationId,
 }) async {
+  var url = '${Env.apiBaseUrl}v2/sync-local-files';
+  if (conversationId != null) {
+    url += '?conversation_id=${Uri.encodeQueryComponent(conversationId)}';
+  }
+  var response = await makeMultipartApiCall(url: url, files: files, onUploadProgress: onUploadProgress);
+
+  if (response.statusCode == 200) {
+    // Fast-path: server processed synchronously and returned the result.
+    return UploadFilesResult.done(SyncLocalFilesResponse.fromJson(jsonDecode(response.body)));
+  }
+  if (response.statusCode == 202) {
+    final start = SyncJobStartResponse.fromJson(jsonDecode(response.body));
+    if (start.jobId.isEmpty) {
+      throw Exception('Upload accepted but no job id returned');
+    }
+    return UploadFilesResult.queued(start.jobId);
+  }
+  if (response.statusCode == 400) {
+    throw Exception('Audio file could not be processed by server');
+  } else if (response.statusCode == 413) {
+    throw Exception('Audio file is too large to upload');
+  } else if (response.statusCode == 429) {
+    // Fair-use throttle, not a content failure. Surface it typed so callers
+    // can back off (honoring Retry-After) instead of burning the retry budget.
+    throw SyncRateLimitedException(_parseRetryAfterSeconds(response));
+  } else if (response.statusCode >= 500) {
+    throw Exception('Server is temporarily unavailable');
+  }
+  throw Exception('Upload failed unexpectedly');
+}
+
+/// Why a single job-status fetch did not yield a usable status.
+/// - [notFound]  : 404/403 — job expired, unknown, or not ours. Unrecoverable
+///                 for this job_id; the caller must fall back to re-upload.
+/// - [transient] : network/5xx/null — retry later, job may still be alive.
+enum SyncJobFetchOutcome { ok, notFound, transient }
+
+class SyncJobFetch {
+  final SyncJobFetchOutcome outcome;
+  final SyncJobStatusResponse? status;
+  const SyncJobFetch(this.outcome, [this.status]);
+}
+
+/// Single GET of a sync job's status — no polling loop. The reconciler owns
+/// the polling cadence and decides what to do per [SyncJobFetchOutcome].
+Future<SyncJobFetch> fetchSyncJobStatus(String jobId) async {
+  final response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v2/sync-local-files/$jobId',
+    headers: {},
+    method: 'GET',
+    body: '',
+  );
+  if (response == null) {
+    DebugLogManager.logEvent('fetch_sync_job_status', {'jobId': jobId, 'httpStatus': null, 'outcome': 'transient'});
+    return const SyncJobFetch(SyncJobFetchOutcome.transient);
+  }
+  if (response.statusCode == 404 || response.statusCode == 403) {
+    DebugLogManager.logEvent(
+        'fetch_sync_job_status', {'jobId': jobId, 'httpStatus': response.statusCode, 'outcome': 'notFound'});
+    return const SyncJobFetch(SyncJobFetchOutcome.notFound);
+  }
+  if (response.statusCode != 200) {
+    DebugLogManager.logEvent(
+        'fetch_sync_job_status', {'jobId': jobId, 'httpStatus': response.statusCode, 'outcome': 'transient'});
+    return const SyncJobFetch(SyncJobFetchOutcome.transient);
+  }
   try {
-    // Step 1: Submit files
-    var url = '${Env.apiBaseUrl}v2/sync-local-files';
-    if (conversationId != null) {
-      url += '?conversation_id=${Uri.encodeQueryComponent(conversationId)}';
-    }
-    var response = await makeMultipartApiCall(url: url, files: files, onUploadProgress: onUploadProgress);
-
-    // Fast-path responses (no async job created)
-    if (response.statusCode == 200) {
-      return SyncLocalFilesResponse.fromJson(jsonDecode(response.body));
-    }
-
-    if (response.statusCode != 202) {
-      if (response.statusCode == 400) {
-        throw Exception('Audio file could not be processed by server');
-      } else if (response.statusCode == 413) {
-        throw Exception('Audio file is too large to upload');
-      } else if (response.statusCode == 429) {
-        throw Exception('Rate limited or budget exhausted');
-      } else if (response.statusCode >= 500) {
-        throw Exception('Server is temporarily unavailable');
-      } else {
-        throw Exception('Upload failed unexpectedly');
-      }
-    }
-
-    // Step 2: Poll for completion
-    var startResponse = SyncJobStartResponse.fromJson(jsonDecode(response.body));
-    var jobId = startResponse.jobId;
-    var pollInterval = Duration(milliseconds: startResponse.pollAfterMs);
-
-    const maxPolls = 120; // 120 x 3s = 6 minutes max
-    for (var i = 0; i < maxPolls; i++) {
-      await Future.delayed(pollInterval);
-
-      var pollResponse = await makeApiCall(
-        url: '${Env.apiBaseUrl}v2/sync-local-files/$jobId',
-        headers: {},
-        method: 'GET',
-        body: '',
-      );
-
-      if (pollResponse == null) {
-        Logger.debug('syncLocalFilesV2 poll failed: null response');
-        continue; // Retry on transient errors
-      }
-
-      // Terminal errors — don't retry
-      if (pollResponse.statusCode == 404) {
-        throw Exception('Sync job not found or expired');
-      }
-      if (pollResponse.statusCode == 403) {
-        throw Exception('Not authorized to view this sync job');
-      }
-      if (pollResponse.statusCode != 200) {
-        Logger.debug('syncLocalFilesV2 poll failed: ${pollResponse.statusCode}');
-        continue; // Retry on transient errors
-      }
-
-      var jobStatus = SyncJobStatusResponse.fromJson(jsonDecode(pollResponse.body));
-
-      // Report poll progress to caller for UI updates
-      onPollProgress?.call(jobStatus);
-
-      if (jobStatus.isTerminal) {
-        // All segments failed → throw to match v1's 500 behavior (WAL stays retryable)
-        if (jobStatus.status == 'failed') {
-          throw Exception(jobStatus.error ?? 'Sync job failed');
-        }
-        // Success or partial failure → return result
-        if (jobStatus.result != null) {
-          return jobStatus.result!;
-        }
-        return SyncLocalFilesResponse(
-          newConversationIds: [],
-          updatedConversationIds: [],
-          failedSegments: jobStatus.failedSegments,
-          totalSegments: jobStatus.totalSegments,
-        );
-      }
-    }
-
-    // Polling timed out — don't mark as synced
-    throw Exception('Sync job timed out waiting for results');
+    return SyncJobFetch(SyncJobFetchOutcome.ok, SyncJobStatusResponse.fromJson(jsonDecode(response.body)));
   } catch (e) {
-    Logger.debug('syncLocalFilesV2 error: $e');
-    rethrow;
+    Logger.debug('fetchSyncJobStatus parse error: $e');
+    return const SyncJobFetch(SyncJobFetchOutcome.transient);
   }
 }
 

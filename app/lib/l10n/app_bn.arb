@@ -1160,17 +1160,6 @@
             }
         }
     },
-    "memoriesUsedThisMonth": "এই মাসে {limit} স্মৃতির মধ্যে {used} তৈরি হয়েছে",
-    "@memoriesUsedThisMonth": {
-        "placeholders": {
-            "used": {
-                "type": "String"
-            },
-            "limit": {
-                "type": "String"
-            }
-        }
-    },
     "visibility": "দৃশ্যমানতা",
     "visibilitySubtitle": "নিয়ন্ত্রণ করুন কোন কথোপকথনগুলি আপনার তালিকায় উপস্থিত হয়",
     "showShortConversations": "সংক্ষিপ্ত কথোপকথন দেখান",
@@ -1580,7 +1569,7 @@
     "designingApp": "অ্যাপ ডিজাইন করছেন",
     "generatingIconStep": "আইকন তৈরি করছেন",
     "finalTouches": "চূড়ান্ত স্পর্শ",
-    "processing": "প্রক্রিয়া করছেন...",
+    "processing": "প্রক্রিয়াধীন",
     "features": "বৈশিষ্ট্য",
     "creatingYourApp": "আপনার অ্যাপ তৈরি করছেন...",
     "generatingIcon": "আইকন তৈরি করছেন...",
@@ -5401,33 +5390,9 @@
     "@thankYouText": {
         "description": "Privacy page - thankYouText"
     },
-    "wifiSyncSettings": "WiFi সিঙ্ক সেটিংস",
-    "@wifiSyncSettings": {
-        "description": "WiFi sync settings - wifiSyncSettings"
-    },
-    "enterHotspotCredentials": "আপনার ফোনের হটস্পট শংসাপত্র প্রবেশ করুন",
-    "@enterHotspotCredentials": {
-        "description": "WiFi sync settings - enterHotspotCredentials"
-    },
-    "wifiSyncUsesHotspot": "WiFi সিঙ্ক আপনার ফোনকে হটস্পট হিসাবে ব্যবহার করে। আপনার হটস্পট নাম এবং পাসওয়ার্ড খুঁজুন সেটিংস > ব্যক্তিগত হটস্পট এ।",
-    "@wifiSyncUsesHotspot": {
-        "description": "WiFi sync settings - wifiSyncUsesHotspot"
-    },
-    "hotspotNameSsid": "হটস্পট নাম (SSID)",
-    "@hotspotNameSsid": {
-        "description": "WiFi sync settings - hotspotNameSsid"
-    },
-    "exampleIphoneHotspot": "যেমন iPhone হটস্পট",
-    "@exampleIphoneHotspot": {
-        "description": "WiFi sync settings - exampleIphoneHotspot"
-    },
     "password": "পাসওয়ার্ড",
     "@password": {
         "description": "WiFi sync settings - password"
-    },
-    "enterHotspotPassword": "হটস্পট পাসওয়ার্ড প্রবেশ করুন",
-    "@enterHotspotPassword": {
-        "description": "WiFi sync settings - enterHotspotPassword"
     },
     "saveCredentials": "শংসাপত্র সংরক্ষণ করুন",
     "@saveCredentials": {
@@ -5436,18 +5401,6 @@
     "clearCredentials": "শংসাপত্র সাফ করুন",
     "@clearCredentials": {
         "description": "WiFi sync settings - clearCredentials"
-    },
-    "pleaseEnterHotspotName": "দয়া করে একটি হটস্পট নাম প্রবেশ করুন",
-    "@pleaseEnterHotspotName": {
-        "description": "WiFi sync settings - pleaseEnterHotspotName"
-    },
-    "wifiCredentialsSaved": "WiFi শংসাপত্র সংরক্ষিত",
-    "@wifiCredentialsSaved": {
-        "description": "WiFi sync settings - wifiCredentialsSaved"
-    },
-    "wifiCredentialsCleared": "WiFi শংসাপত্র সাফ করা হয়েছে",
-    "@wifiCredentialsCleared": {
-        "description": "WiFi sync settings - wifiCredentialsCleared"
     },
     "summaryGeneratedForDate": "{date} এর জন্য সারাংশ তৈরি হয়েছে",
     "@summaryGeneratedForDate": {
@@ -7010,10 +6963,6 @@
     "@limitless": {
         "description": "Label for Limitless device storage"
     },
-    "fastTransfer": "দ্রুত স্থানান্তর",
-    "@fastTransfer": {
-        "description": "Name of the fast transfer method"
-    },
     "syncingStatus": "সিঙ্ক করা হচ্ছে",
     "@syncingStatus": {
         "description": "Status label when syncing is in progress"
@@ -7030,18 +6979,6 @@
                 "type": "String"
             }
         }
-    },
-    "transferMethod": "স্থানান্তর পদ্ধতি",
-    "@transferMethod": {
-        "description": "Page title for transfer method settings"
-    },
-    "fast": "দ্রুত",
-    "@fast": {
-        "description": "Label for fast WiFi transfer method"
-    },
-    "ble": "BLE",
-    "@ble": {
-        "description": "Label for Bluetooth Low Energy transfer method"
     },
     "phone": "ফোন",
     "@phone": {
@@ -7067,33 +7004,9 @@
     "@processedFilesDeleted": {
         "description": "Snackbar message when processed files are deleted"
     },
-    "wifiEnableFailed": "ডিভাইসে Wi-Fi সক্ষম করতে ব্যর্থ। দয়া করে আবার চেষ্টা করুন।",
-    "@wifiEnableFailed": {
-        "description": "Error message when WiFi fails to enable on device"
-    },
-    "deviceNoFastTransfer": "আপনার ডিভাইস দ্রুত স্থানান্তর সমর্থন করে না। পরিবর্তে Bluetooth ব্যবহার করুন।",
-    "@deviceNoFastTransfer": {
-        "description": "Error message when device does not support fast transfer"
-    },
-    "enableHotspotMessage": "আপনার ফোনের হটস্পট সক্ষম করুন এবং আবার চেষ্টা করুন।",
-    "@enableHotspotMessage": {
-        "description": "Error message asking user to enable hotspot"
-    },
-    "transferStartFailed": "স্থানান্তর শুরু করতে ব্যর্থ। দয়া করে আবার চেষ্টা করুন।",
-    "@transferStartFailed": {
-        "description": "Error message when transfer fails to start"
-    },
     "deviceNotResponding": "ডিভাইস সাড়া দেয় না। দয়া করে আবার চেষ্টা করুন।",
     "@deviceNotResponding": {
         "description": "Error message when device times out"
-    },
-    "invalidWifiCredentials": "অবৈধ Wi-Fi শংসাপত্র। আপনার হটস্পট সেটিংস পরীক্ষা করুন।",
-    "@invalidWifiCredentials": {
-        "description": "Error message for invalid WiFi credentials"
-    },
-    "wifiConnectionFailed": "Wi-Fi সংযোগ ব্যর্থ। দয়া করে আবার চেষ্টা করুন।",
-    "@wifiConnectionFailed": {
-        "description": "Error message when WiFi connection fails"
     },
     "sdCardProcessing": "SD কার্ড প্রক্রিয়াকরণ",
     "@sdCardProcessing": {
@@ -7111,10 +7024,6 @@
     "process": "প্রক্রিয়া",
     "@process": {
         "description": "Button label to start processing"
-    },
-    "wifiSyncFailed": "Wi-Fi সিঙ্ক ব্যর্থ",
-    "@wifiSyncFailed": {
-        "description": "Error title when WiFi sync fails"
     },
     "processingFailed": "প্রক্রিয়াকরণ ব্যর্থ",
     "@processingFailed": {
@@ -8151,10 +8060,6 @@
             }
         }
     },
-    "wifiSync": "Wi-Fi সিঙ্ক",
-    "@wifiSync": {
-        "description": "WiFi sync feature label"
-    },
     "itemCopiedToClipboard": "{item} ক্লিপবোর্ডে কপি করা হয়েছে",
     "@itemCopiedToClipboard": {
         "description": "Message when item is copied to clipboard",
@@ -8165,23 +8070,9 @@
             }
         }
     },
-    "wifiConnectionFailedTitle": "সংযোগ ব্যর্থ",
-    "@wifiConnectionFailedTitle": {
-        "description": "Title shown when WiFi connection to device fails"
-    },
     "connectingToDeviceName": "{deviceName} এর সাথে সংযুক্ত হচ্ছে",
     "@connectingToDeviceName": {
         "description": "Title shown while connecting to device WiFi",
-        "placeholders": {
-            "deviceName": {
-                "type": "String",
-                "example": "Omi"
-            }
-        }
-    },
-    "enableDeviceWifi": "{deviceName} এর Wi-Fi সক্ষম করুন",
-    "@enableDeviceWifi": {
-        "description": "Step text for enabling device WiFi",
         "placeholders": {
             "deviceName": {
                 "type": "String",
@@ -8316,10 +8207,6 @@
     "@statusUnprocessed": {
         "description": "Status value for unprocessed recording"
     },
-    "switchedToFastTransfer": "দ্রুত ট্রান্সফারে স্যুইচ করা হয়েছে",
-    "@switchedToFastTransfer": {
-        "description": "Snackbar message when switching to fast transfer mode"
-    },
     "transferCompleteMessage": "ট্রান্সফার সম্পূর্ণ! এখন আপনি এই রেকর্ডিং চালাতে পারেন।",
     "@transferCompleteMessage": {
         "description": "Success message when transfer completes"
@@ -8337,41 +8224,9 @@
     "@transferCancelled": {
         "description": "Snackbar message when transfer is cancelled"
     },
-    "fastTransferEnabled": "দ্রুত ট্রান্সফার সক্ষম",
-    "@fastTransferEnabled": {
-        "description": "Snackbar message when fast transfer is enabled"
-    },
     "bluetoothSyncEnabled": "ব্লুটুথ সিঙ্ক সক্ষম",
     "@bluetoothSyncEnabled": {
         "description": "Snackbar message when bluetooth sync is enabled"
-    },
-    "enableFastTransfer": "দ্রুত ট্রান্সফার সক্ষম করুন",
-    "@enableFastTransfer": {
-        "description": "Dialog title for enabling fast transfer"
-    },
-    "fastTransferDescription": "দ্রুত ট্রান্সফার WiFi ব্যবহার করে ~৫ গুণ দ্রুত গতি প্রদান করে। ট্রান্সফারের সময় আপনার ফোন আপনার Omi ডিভাইসের WiFi নেটওয়ার্কের সাথে সাময়িকভাবে সংযুক্ত হবে।",
-    "@fastTransferDescription": {
-        "description": "Description of fast transfer feature in dialog"
-    },
-    "internetAccessPausedDuringTransfer": "ট্রান্সফারের সময় ইন্টারনেট অ্যাক্সেস বন্ধ রয়েছে",
-    "@internetAccessPausedDuringTransfer": {
-        "description": "Warning that internet is paused during transfer"
-    },
-    "chooseTransferMethodDescription": "আপনার Omi ডিভাইস থেকে আপনার ফোনে রেকর্ডিং কীভাবে স্থানান্তরিত হবে তা নির্বাচন করুন।",
-    "@chooseTransferMethodDescription": {
-        "description": "Description text on transfer method page"
-    },
-    "wifiSpeed": "WiFi এর মাধ্যমে ~১৫০ কেবি/সেক",
-    "@wifiSpeed": {
-        "description": "Speed description for WiFi transfer"
-    },
-    "fiveTimesFaster": "৫ গুণ দ্রুত",
-    "@fiveTimesFaster": {
-        "description": "Badge label for faster transfer method"
-    },
-    "fastTransferMethodDescription": "আপনার Omi ডিভাইসের সাথে সরাসরি WiFi সংযোগ তৈরি করে। ট্রান্সফারের সময় আপনার ফোন আপনার নিয়মিত WiFi থেকে সাময়িকভাবে সংযোগ বিচ্ছিন্ন হয়।",
-    "@fastTransferMethodDescription": {
-        "description": "Description of fast transfer method card"
     },
     "bluetooth": "ব্লুটুথ",
     "@bluetooth": {
@@ -8397,9 +8252,16 @@
     "@lowBatteryAlertTitle": {
         "description": "Title for low battery notification"
     },
-    "lowBatteryAlertBody": "আপনার ডিভাইসের ব্যাটারি কম হয়ে যাচ্ছে। চার্জ করার সময় এসেছে! 🔋",
+    "lowBatteryAlertBody": "আপনার ব্যাটারি {level}% এ আছে। চার্জ করার সময় এসেছে! 🔋",
+    "batteryFullyChargedTitle": "Omi সম্পূর্ণ চার্জ হয়েছে",
+    "batteryFullyChargedBody": "আপনার Omi ডিভাইস সম্পূর্ণ চার্জ হয়েছে। আনপ্লাগ করতে পারেন!",
     "@lowBatteryAlertBody": {
-        "description": "Body text for low battery notification"
+        "description": "Body text for low battery notification",
+        "placeholders": {
+            "level": {
+                "type": "int"
+            }
+        }
     },
     "deviceDisconnectedNotificationTitle": "আপনার Omi ডিভাইস সংযোগ বিচ্ছিন্ন হয়েছে",
     "@deviceDisconnectedNotificationTitle": {
@@ -9348,14 +9210,6 @@
     "@voiceFailedToTranscribe": {
         "description": "Error message when voice transcription fails"
     },
-    "locationPermissionRequired": "অবস্থান অনুমতি প্রয়োজন",
-    "@locationPermissionRequired": {
-        "description": "Title for dialog requesting location permission"
-    },
-    "locationPermissionContent": "দ্রুত ট্রান্সফার WiFi সংযোগ যাচাই করতে অবস্থান অনুমতি প্রয়োজন। এগিয়ে যেতে অবস্থান অনুমতি দিন।",
-    "@locationPermissionContent": {
-        "description": "Explanation text for location permission dialog"
-    },
     "pdfTranscriptExport": "প্রতিলেখ রপ্তানি",
     "@pdfTranscriptExport": {
         "description": "Title for PDF transcript export document"
@@ -9594,14 +9448,6 @@
     },
     "noDailyRecapsYet": "এখনো কোনো দৈনিক সংক্ষেপ নেই",
     "dailyRecapsDescription": "আপনার দৈনিক সংক্ষেপ এখানে উপস্থিত হবে একবার তৈরি হয়ে গেলে",
-    "chooseTransferMethod": "ট্রান্সফার পদ্ধতি নির্বাচন করুন",
-    "@chooseTransferMethod": {
-        "description": "Title for transfer method selection dialog"
-    },
-    "fastTransferSpeed": "WiFi এর মাধ্যমে ~১৫০ কেবি/সেক",
-    "@fastTransferSpeed": {
-        "description": "Speed description for fast transfer via WiFi"
-    },
     "largeTimeGapDetected": "বড় সময়ের ব্যবধান সনাক্ত হয়েছে ({gap})",
     "@largeTimeGapDetected": {
         "placeholders": {
@@ -9619,10 +9465,6 @@
                 "example": "1.5h, 2.0h"
             }
         }
-    },
-    "deviceDoesNotSupportWifiSwitchingToBle": "ডিভাইস WiFi সিঙ্ক সমর্থন করে না, ব্লুটুথে স্যুইচ করছি",
-    "@deviceDoesNotSupportWifiSwitchingToBle": {
-        "description": "Message shown when WiFi sync fails because device hardware does not support WiFi, automatically falling back to Bluetooth transfer"
     },
     "appleHealthNotAvailable": "এই ডিভাইসে Apple Health উপলব্ধ নয়",
     "downloadAudio": "অডিও ডাউনলোড করুন",
@@ -10152,7 +9994,7 @@
     "@manageStorage": {
         "description": "Menu option and sheet title for managing recording storage"
     },
-    "safelyBackedUp": "আপনার ফোনে নিরাপদে ব্যাকআপ করা হয়েছে",
+    "safelyBackedUp": "কথোপকথন তৈরি হয়েছে",
     "@safelyBackedUp": {
         "description": "Description for synced files in manage storage sheet"
     },
@@ -10725,5 +10567,51 @@
     "startCallRecording": "কল রেকর্ডিং শুরু করুন",
     "startVoiceRecording": "ভয়েস রেকর্ডিং শুরু করুন",
     "bulkExportAlreadyExported": "নির্বাচিত সব কাজ ইতিমধ্যেই রপ্তানি করা হয়েছে",
-    "bulkDeleteFailed": "কাজগুলো মুছে ফেলা যায়নি। আবার চেষ্টা করুন।"
+    "bulkDeleteFailed": "কাজগুলো মুছে ফেলা যায়নি। আবার চেষ্টা করুন।",
+    "deleteRecap": "রিক্যাপ মুছুন",
+    "deleteRecapConfirmTitle": "এই রিক্যাপ মুছবেন?",
+    "deleteRecapConfirmBody": "এই রিক্যাপটি স্থায়ীভাবে সরানো হবে। সেদিনের মূল কথোপকথন প্রভাবিত হবে না।",
+    "deleteRecapAction": "মুছুন",
+    "recapDeletedSnackbar": "রিক্যাপ মুছে ফেলা হয়েছে",
+    "recapDeleteFailed": "রিক্যাপ মুছে ফেলা যায়নি। পরে আবার চেষ্টা করুন।",
+    "syncStatusBackedUp": "ব্যাকআপ হয়েছে",
+    "syncStatusBackingUp": "সিঙ্ক করা হচ্ছে…",
+    "syncStatusWaiting": "সিঙ্কের অপেক্ষায়",
+    "syncStatusRetrying": "প্রক্রিয়া করা যায়নি — আবার চেষ্টা চলছে",
+    "syncStatusFailed": "ব্যর্থ — Retry চাপুন",
+    "syncStatusFileUnavailable": "ফাইল অনুপলব্ধ",
+    "syncStatusUploaded": "আপলোড হয়েছে · Omi-তে প্রক্রিয়াধীন",
+    "noRecordingsYet": "এখনও কোনো রেকর্ডিং নেই",
+    "syncInProgress": "সিঙ্ক চলছে",
+    "deleteWhileProcessingTitle": "এখনও প্রক্রিয়াধীন",
+    "deleteWhileProcessingMessage": "এই রেকর্ডিংটি আপলোড হয়েছে কিন্তু Omi এখনও কথোপকথন তৈরি করছে। এখন মুছে ফেললে এবং প্রক্রিয়া ব্যর্থ হলে এটি আর পুনরুদ্ধার করা যাবে না। তবুও মুছবেন?",
+    "syncCardAllBackedUp": "সব রেকর্ডিং সিঙ্ক হয়েছে",
+    "syncCardReadyCount": "{count, plural, one{1টি রেকর্ডিং সিঙ্কের জন্য প্রস্তুত} other{{count}টি রেকর্ডিং সিঙ্কের জন্য প্রস্তুত}}",
+    "syncCardProcessing": "Omi-তে প্রক্রিয়াজাত হচ্ছে…",
+    "syncCardWaitingInternet": "ইন্টারনেটের জন্য অপেক্ষা",
+    "syncCardNeedsAttention": "{count, plural, one{১টি রেকর্ডিংয়ের প্রতি মনোযোগ প্রয়োজন} other{{count}টি রেকর্ডিংয়ের প্রতি মনোযোগ প্রয়োজন}}",
+    "syncFlowIntro": "রেকর্ডিংগুলো আপনার ডিভাইস থেকে এই ফোনে স্থানান্তরিত হয় এবং স্থানীয়ভাবে সংরক্ষিত হয়, এরপর Omi এর সার্ভারে আপলোড করা হয় যেখানে সেগুলো প্রতিলিপি করা হয় এবং কথোপকথনে পরিণত হয়।",
+    "syncStepUpload": "সিঙ্ক",
+    "syncStepUploadDesc": "আপনার রেকর্ডিং Omi-এর সার্ভারে পাঠানো হয়",
+    "syncStepProcess": "ট্রান্সক্রিপশন",
+    "syncStepProcessDesc": "Omi অডিওকে কথোপকথনে রূপ দেয়",
+    "syncStepBackedUp": "কথোপকথন প্রস্তুত",
+    "syncStepBackedUpDesc": "কথোপকথন-এ খুঁজে পাবেন",
+    "syncFailureFootnote": "প্রক্রিয়াজাতকরণ ব্যর্থ হলে, পরবর্তী সিঙ্কে রেকর্ডিংটি স্বয়ংক্রিয়ভাবে পুনরায় চেষ্টা করা হয়।",
+    "syncStatusConversationCreated": "কথোপকথন তৈরি হয়েছে",
+    "syncCardUploadingTitle": "Omi-তে আপলোড হচ্ছে",
+    "syncCardDownloadingTitle": "আপনার ডিভাইস থেকে ডাউনলোড হচ্ছে",
+    "syncCardProgressOf": "{total}-এর মধ্যে {current}",
+    "syncStatusOnDevice": "আপনার ডিভাইসে",
+    "syncStatusDownloadingFromDevice": "আপনার ডিভাইস থেকে ডাউনলোড হচ্ছে",
+    "newestFirst": "নতুনগুলি আগে",
+    "noSyncedRecordingsYet": "এখনও কোনো সিঙ্ক করা রেকর্ডিং নেই",
+    "morePaymentMethodsComingSoon": "শীঘ্রই আরও পেমেন্ট পদ্ধতি আসছে",
+    "@morePaymentMethodsComingSoon": {
+        "description": "Placeholder card text shown under available payment methods"
+    },
+    "syncProcessingBackgroundHint": "এটি ব্যাকগ্রাউন্ডে চলতে থাকে — আপনি এই স্ক্রিন থেকে চলে যেতে পারেন।",
+    "syncCardRateLimited": "ন্যায্য ব্যবহারের সীমা পৌঁছেছে — সিঙ্ক স্বয়ংক্রিয়ভাবে আবার শুরু হবে",
+    "syncCardBackendBusy": "Omi-এর সার্ভার ব্যস্ত — সক্ষমতা ফিরে এলে আপনার রেকর্ডিংগুলি সিঙ্ক হয়ে যাবে",
+    "unableToDetermineFirmwareVersion": "বর্তমান ফার্মওয়্যার সংস্করণ নির্ধারণ করা যায়নি"
 }

@@ -1,7 +1,7 @@
 import asyncio
 from datetime import datetime, time, timedelta
 
-from utils.executors import storage_executor
+from utils.executors import postprocess_executor, run_blocking
 
 import pytz
 
@@ -14,6 +14,7 @@ from models.conversation import Conversation
 from utils.conversations.factory import deserialize_conversation
 from utils.llm.external_integrations import get_conversation_summary, generate_comprehensive_daily_summary
 from utils.notifications import send_bulk_notification, send_notification
+from utils.subscription import is_trial_paywalled
 from utils.webhooks import day_summary_webhook
 import database.daily_summaries as daily_summaries_db
 import logging
@@ -77,6 +78,17 @@ def _get_timezones_grouped_by_hour() -> dict[int, list[str]]:
 def _send_summary_notification(user_data: tuple):
     uid = user_data[0]
     user_tz_name = user_data[2] if len(user_data) > 2 else None
+
+    # Trial paywall: skip the daily-summary LLM job entirely for paywalled
+    # desktop users. We don't know the originating platform here (this is a
+    # server-initiated cron), so we conservatively check both desktop and
+    # macos — if either trips the paywall, skip. Mobile users with the same
+    # uid still get their daily summary because `is_trial_paywalled` requires
+    # the platform check to pass; passing `macos` is the right gate here
+    # because the desktop trial is the paid-tier we're enforcing.
+    if is_trial_paywalled(uid, 'macos'):
+        logger.info(f'trial paywall: skipping daily summary for uid={uid}')
+        return
 
     # Calculate local day boundaries for conversation fetching
     # date_str is set based on current hour:
@@ -163,7 +175,7 @@ def _send_summary_notification(user_data: tuple):
     )
 
     # Also send webhook with the full summary data (day_summary_webhook is async, so wrap in asyncio.run)
-    storage_executor.submit(asyncio.run, day_summary_webhook(uid, str(summary_data)))
+    postprocess_executor.submit(asyncio.run, day_summary_webhook(uid, str(summary_data)))
 
     tokens = user_data[1] if len(user_data) > 1 else None
     send_notification(
@@ -172,9 +184,14 @@ def _send_summary_notification(user_data: tuple):
 
 
 async def _send_bulk_summary_notification(users: list):
-    loop = asyncio.get_running_loop()
-    tasks = [loop.run_in_executor(storage_executor, _send_summary_notification, user_tokens) for user_tokens in users]
-    await asyncio.gather(*tasks)
+    _BATCH_SIZE = 8
+    for i in range(0, len(users), _BATCH_SIZE):
+        batch = users[i : i + _BATCH_SIZE]
+        tasks = [run_blocking(postprocess_executor, _send_summary_notification, user_tokens) for user_tokens in batch]
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+        for j, result in enumerate(results):
+            if isinstance(result, Exception):
+                logger.error(f"Daily summary failed for user batch[{i + j}]: {result}")
 
 
 async def send_daily_notification():

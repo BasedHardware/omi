@@ -874,11 +874,13 @@ struct ImportsSection: View {
                 .scaledFont(size: 18, weight: .semibold)
                 .foregroundColor(OmiColors.textPrimary)
 
-            LazyVGrid(columns: [
-                GridItem(.adaptive(minimum: 220), spacing: 16)
-            ], spacing: 16) {
-                ForEach(connectors) { connector in
-                    ImportConnectorCard(
+            VStack(spacing: 0) {
+                ForEach(Array(connectors.enumerated()), id: \.element.id) { index, connector in
+                    if index > 0 {
+                        Divider()
+                            .background(OmiColors.backgroundTertiary)
+                    }
+                    ImportConnectorRow(
                         connector: connector,
                         snapshot: statusStore.snapshot(for: connector)
                     ) {
@@ -886,7 +888,52 @@ struct ImportsSection: View {
                     }
                 }
             }
+            .background(OmiColors.backgroundPrimary)
+            .cornerRadius(12)
+            .overlay(
+                RoundedRectangle(cornerRadius: 12)
+                    .stroke(OmiColors.backgroundTertiary, lineWidth: 1)
+            )
         }
+    }
+}
+
+struct ImportConnectorRow: View {
+    let connector: ImportConnector
+    let snapshot: ImportConnectorStatusStore.Snapshot
+    let action: () -> Void
+
+    @State private var isHovering = false
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 12) {
+                ConnectorBrandIcon(brand: connector.brand, size: 34, cornerRadius: 9)
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(connector.title)
+                        .scaledFont(size: 14, weight: .medium)
+                        .foregroundColor(OmiColors.textPrimary)
+                        .lineLimit(1)
+
+                    Text(connector.description)
+                        .scaledFont(size: 12)
+                        .foregroundColor(OmiColors.textTertiary)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                }
+
+                Spacer(minLength: 12)
+
+                ImportConnectorActionButton(title: snapshot.actionTitle, isConnected: snapshot.isConnected)
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 11)
+            .background(isHovering ? OmiColors.backgroundSecondary : Color.clear)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .onHover { isHovering = $0 }
     }
 }
 

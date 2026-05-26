@@ -965,11 +965,6 @@ class AppLocalizationsFa extends AppLocalizations {
   }
 
   @override
-  String memoriesUsedThisMonth(String used, String limit) {
-    return '$used از $limit یادداشت این ماه ایجاد‌شده است';
-  }
-
-  @override
   String get visibility => 'دید';
 
   @override
@@ -1643,7 +1638,7 @@ class AppLocalizationsFa extends AppLocalizations {
   String get finalTouches => 'لمسات نهایی';
 
   @override
-  String get processing => 'در حال پردازش...';
+  String get processing => 'در حال پردازش';
 
   @override
   String get features => 'ویژگی‌ها';
@@ -4633,41 +4628,13 @@ class AppLocalizationsFa extends AppLocalizations {
       'از اینکه کاربر ارزشمندی از Omi هستید تشکر می‌کنیم. اگر سؤالات یا نگرانی‌ای دارید، لطفا با ما تماس بگیرید team@basedhardware.com.';
 
   @override
-  String get wifiSyncSettings => 'تنظیمات نقطه اتصال Wi-Fi';
-
-  @override
-  String get enterHotspotCredentials => 'اطلاعات اعتباری نقطه اتصال تلفن خود را وارد کنید';
-
-  @override
-  String get wifiSyncUsesHotspot =>
-      'هم‌راه‌سازی Wi-Fi از تلفن شما به‌عنوان نقطه اتصال استفاده می‌کند. نام نقطه اتصال و رمز عبور خود را در تنظیمات > Personal Hotspot بیابید.';
-
-  @override
-  String get hotspotNameSsid => 'نام نقطه اتصال (SSID)';
-
-  @override
-  String get exampleIphoneHotspot => 'مثال: iPhone Hotspot';
-
-  @override
   String get password => 'رمز عبور';
-
-  @override
-  String get enterHotspotPassword => 'رمز عبور نقطه اتصال را وارد کنید';
 
   @override
   String get saveCredentials => 'ذخیره اطلاعات اعتباری';
 
   @override
   String get clearCredentials => 'پاک‌کردن اطلاعات اعتباری';
-
-  @override
-  String get pleaseEnterHotspotName => 'لطفا نام نقطه اتصال را وارد کنید';
-
-  @override
-  String get wifiCredentialsSaved => 'اطلاعات اعتباری Wi-Fi ذخیره شد';
-
-  @override
-  String get wifiCredentialsCleared => 'اطلاعات اعتباری Wi-Fi پاک‌شد';
 
   @override
   String summaryGeneratedForDate(String date) {
@@ -5813,9 +5780,6 @@ class AppLocalizationsFa extends AppLocalizations {
   String get limitless => 'بی محدود';
 
   @override
-  String get fastTransfer => 'انتقال سریع';
-
-  @override
   String get syncingStatus => 'هماهنگ سازی';
 
   @override
@@ -5825,15 +5789,6 @@ class AppLocalizationsFa extends AppLocalizations {
   String etaLabel(String time) {
     return 'ETA: $time';
   }
-
-  @override
-  String get transferMethod => 'روش انتقال';
-
-  @override
-  String get fast => 'سریع';
-
-  @override
-  String get ble => 'BLE';
 
   @override
   String get phone => 'تلفن';
@@ -5854,26 +5809,7 @@ class AppLocalizationsFa extends AppLocalizations {
   String get processedFilesDeleted => 'فایل های پردازش شده حذف شدند';
 
   @override
-  String get wifiEnableFailed => 'فعال کردن WiFi در دستگاه ناموفق بود. لطفاً دوباره تلاش کنید.';
-
-  @override
-  String get deviceNoFastTransfer =>
-      'دستگاه شما از Fast Transfer پشتیبانی نمی کند. به جای آن از Bluetooth استفاده کنید.';
-
-  @override
-  String get enableHotspotMessage => 'لطفاً hotspot تلفن خود را فعال کنید و دوباره تلاش کنید.';
-
-  @override
-  String get transferStartFailed => 'شروع انتقال ناموفق بود. لطفاً دوباره تلاش کنید.';
-
-  @override
   String get deviceNotResponding => 'دستگاه پاسخ نداد. لطفاً دوباره تلاش کنید.';
-
-  @override
-  String get invalidWifiCredentials => 'اعتبارات WiFi نامعتبر است. تنظیمات hotspot خود را بررسی کنید.';
-
-  @override
-  String get wifiConnectionFailed => 'اتصال WiFi ناموفق بود. لطفاً دوباره تلاش کنید.';
 
   @override
   String get sdCardProcessing => 'پردازش کارت SD';
@@ -5885,9 +5821,6 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get process => 'پردازش';
-
-  @override
-  String get wifiSyncFailed => 'هماهنگ سازی WiFi ناموفق بود';
 
   @override
   String get processingFailed => 'پردازش ناموفق بود';
@@ -6664,24 +6597,13 @@ class AppLocalizationsFa extends AppLocalizations {
   }
 
   @override
-  String get wifiSync => 'هماهنگ سازی WiFi';
-
-  @override
   String itemCopiedToClipboard(String item) {
     return '$item در کلیپ بورد کپی شد';
   }
 
   @override
-  String get wifiConnectionFailedTitle => 'اتصال ناموفق';
-
-  @override
   String connectingToDeviceName(String deviceName) {
     return 'اتصال به $deviceName';
-  }
-
-  @override
-  String enableDeviceWifi(String deviceName) {
-    return 'فعال کردن WiFi $deviceName';
   }
 
   @override
@@ -6778,9 +6700,6 @@ class AppLocalizationsFa extends AppLocalizations {
   String get statusUnprocessed => 'پردازش‌نشده';
 
   @override
-  String get switchedToFastTransfer => 'به انتقال سریع تغییر یافت';
-
-  @override
   String get transferCompleteMessage => 'انتقال تکمیل شد! اکنون می‌توانید این ضبط را پخش کنید.';
 
   @override
@@ -6792,33 +6711,7 @@ class AppLocalizationsFa extends AppLocalizations {
   String get transferCancelled => 'انتقال لغو شد';
 
   @override
-  String get fastTransferEnabled => 'انتقال سریع فعال شد';
-
-  @override
   String get bluetoothSyncEnabled => 'هماهنگ‌سازی Bluetooth فعال شد';
-
-  @override
-  String get enableFastTransfer => 'فعال‌کردن انتقال سریع';
-
-  @override
-  String get fastTransferDescription =>
-      'انتقال سریع از Wi-Fi برای سرعت تقریباً 5 برابر سریع‌تر استفاده می‌کند. تلفن شما به‌طور موقت در طی انتقال به شبکه Wi-Fi دستگاه Omi متصل خواهد شد.';
-
-  @override
-  String get internetAccessPausedDuringTransfer => 'دسترسی به اینترنت در طی انتقال متوقف است';
-
-  @override
-  String get chooseTransferMethodDescription => 'نحوه انتقال ضبط‌شده‌ها از دستگاه Omi به تلفن خود را انتخاب کنید.';
-
-  @override
-  String get wifiSpeed => 'تقریباً 150 کیلوبایت بر ثانیه از طریق Wi-Fi';
-
-  @override
-  String get fiveTimesFaster => '5 برابر سریع‌تر';
-
-  @override
-  String get fastTransferMethodDescription =>
-      'اتصال مستقیم Wi-Fi را به دستگاه Omi ایجاد می‌کند. تلفن شما به‌طور موقت از Wi-Fi معمولی خود در طی انتقال قطع می‌شود.';
 
   @override
   String get bluetooth => 'Bluetooth';
@@ -6840,7 +6733,15 @@ class AppLocalizationsFa extends AppLocalizations {
   String get lowBatteryAlertTitle => 'هشدار باتری کم';
 
   @override
-  String get lowBatteryAlertBody => 'باتری دستگاه شما تقریباً تمام است. وقت شارژ کردن است! 🔋';
+  String lowBatteryAlertBody(int level) {
+    return 'باتری شما $level٪ است. وقت شارژ کردن است! 🔋';
+  }
+
+  @override
+  String get batteryFullyChargedTitle => 'Omi کاملاً شارژ شد';
+
+  @override
+  String get batteryFullyChargedBody => 'دستگاه Omi شما کاملاً شارژ شده است. می‌توانید آن را جدا کنید!';
 
   @override
   String get deviceDisconnectedNotificationTitle => 'دستگاه Omi شما قطع شد';
@@ -7510,13 +7411,6 @@ class AppLocalizationsFa extends AppLocalizations {
   String get voiceFailedToTranscribe => 'رونوشت صدا ناموفق بود';
 
   @override
-  String get locationPermissionRequired => 'اجازهِ مکان مورد نیاز است';
-
-  @override
-  String get locationPermissionContent =>
-      'انتقال سریع برای تأیید اتصال Wi-Fi به اجازهِ مکان نیاز دارد. لطفاً برای ادامه اجازهِ مکان را اعطا کنید.';
-
-  @override
   String get pdfTranscriptExport => 'صادرات رونوشت';
 
   @override
@@ -7661,12 +7555,6 @@ class AppLocalizationsFa extends AppLocalizations {
   String get dailyRecapsDescription => 'خلاصه‌های روزانهِ شما پس از تولید در اینجا ظاهر خواهد شد';
 
   @override
-  String get chooseTransferMethod => 'انتخاب روش انتقال';
-
-  @override
-  String get fastTransferSpeed => 'تقریباً 150 کیلوبایت بر ثانیه از طریق Wi-Fi';
-
-  @override
   String largeTimeGapDetected(String gap) {
     return 'فاصلهِ زمانیِ بزرگ تشخیص داده شد ($gap)';
   }
@@ -7675,10 +7563,6 @@ class AppLocalizationsFa extends AppLocalizations {
   String largeTimeGapsDetected(String gaps) {
     return 'فاصله‌های زمانیِ بزرگ تشخیص داده شدند ($gaps)';
   }
-
-  @override
-  String get deviceDoesNotSupportWifiSwitchingToBle =>
-      'دستگاه از هماهنگ‌سازی Wi-Fi پشتیبانی نمی‌کند، تغییر به Bluetooth';
 
   @override
   String get appleHealthNotAvailable => 'Apple Health در این دستگاه در دسترس نیست';
@@ -8441,7 +8325,7 @@ class AppLocalizationsFa extends AppLocalizations {
   String get manageStorage => 'مدیریت فضای ذخیره‌سازی';
 
   @override
-  String get safelyBackedUp => 'به‌طور ایمن در تلفن شما پشتیبان‌گیری شد';
+  String get safelyBackedUp => 'گفتگوها ساخته شدند';
 
   @override
   String get notYetSynced => 'هنوز به تلفن شما همگام‌سازی نشده‌است';
@@ -9243,4 +9127,156 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get bulkDeleteFailed => 'حذف کارها ممکن نشد. لطفاً دوباره تلاش کنید.';
+
+  @override
+  String get deleteRecap => 'حذف خلاصه';
+
+  @override
+  String get deleteRecapConfirmTitle => 'این خلاصه حذف شود؟';
+
+  @override
+  String get deleteRecapConfirmBody =>
+      'این خلاصه برای همیشه حذف خواهد شد. مکالمات اصلی آن روز تحت تأثیر قرار نمی‌گیرند.';
+
+  @override
+  String get deleteRecapAction => 'حذف';
+
+  @override
+  String get recapDeletedSnackbar => 'خلاصه حذف شد';
+
+  @override
+  String get recapDeleteFailed => 'حذف خلاصه ممکن نشد. بعداً دوباره تلاش کنید.';
+
+  @override
+  String get syncStatusBackedUp => 'پشتیبان‌گیری شد';
+
+  @override
+  String get syncStatusBackingUp => 'در حال هماهنگ‌سازی…';
+
+  @override
+  String get syncStatusWaiting => 'در انتظار همگام‌سازی';
+
+  @override
+  String get syncStatusRetrying => 'پردازش ناموفق — تلاش مجدد';
+
+  @override
+  String get syncStatusFailed => 'ناموفق — روی تلاش مجدد بزنید';
+
+  @override
+  String get syncStatusFileUnavailable => 'فایل در دسترس نیست';
+
+  @override
+  String get noRecordingsYet => 'هنوز ضبطی وجود ندارد';
+
+  @override
+  String get syncInProgress => 'همگام‌سازی در حال انجام است';
+
+  @override
+  String get syncStatusUploaded => 'بارگذاری شد · در حال پردازش در Omi';
+
+  @override
+  String get deleteWhileProcessingTitle => 'هنوز در حال پردازش';
+
+  @override
+  String get deleteWhileProcessingMessage =>
+      'این ضبط بارگذاری شده اما Omi هنوز در حال ساخت مکالمه است. اگر اکنون آن را حذف کنید و پردازش ناموفق شود، قابل بازیابی نخواهد بود. به‌هرحال حذف شود؟';
+
+  @override
+  String get syncCardAllBackedUp => 'همهٔ ضبط‌ها همگام شدند';
+
+  @override
+  String syncCardReadyCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count ضبط آمادهٔ همگام‌سازی',
+      one: '1 ضبط آمادهٔ همگام‌سازی',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get syncCardProcessing => 'در حال پردازش در Omi…';
+
+  @override
+  String get syncCardWaitingInternet => 'در انتظار اتصال به اینترنت';
+
+  @override
+  String syncCardNeedsAttention(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count ضبط نیازمند توجه است',
+      one: '۱ ضبط نیازمند توجه است',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get syncFlowIntro =>
+      'ضبط‌ها از دستگاه شما به این تلفن منتقل و به‌صورت محلی ذخیره می‌شوند، سپس به سرور Omi بارگذاری می‌شوند تا رونویسی و به گفت‌وگو تبدیل شوند.';
+
+  @override
+  String get syncStepUpload => 'همگام‌سازی';
+
+  @override
+  String get syncStepUploadDesc => 'ضبط شما به سرور Omi فرستاده می‌شود';
+
+  @override
+  String get syncStepProcess => 'رونویسی';
+
+  @override
+  String get syncStepProcessDesc => 'Omi صدا را به یک گفتگو تبدیل می‌کند';
+
+  @override
+  String get syncStepBackedUp => 'گفتگو آماده است';
+
+  @override
+  String get syncStepBackedUpDesc => 'آن را در گفتگوها بیابید';
+
+  @override
+  String get syncFailureFootnote =>
+      'اگر پردازش ناموفق باشد، ضبط در همگام‌سازی بعدی به‌صورت خودکار دوباره امتحان می‌شود.';
+
+  @override
+  String get syncStatusConversationCreated => 'مکالمه ایجاد شد';
+
+  @override
+  String get syncCardUploadingTitle => 'در حال بارگذاری در Omi';
+
+  @override
+  String get syncCardDownloadingTitle => 'در حال دانلود از دستگاه شما';
+
+  @override
+  String syncCardProgressOf(int current, int total) {
+    return '$current از $total';
+  }
+
+  @override
+  String get syncStatusOnDevice => 'روی دستگاه شما';
+
+  @override
+  String get syncStatusDownloadingFromDevice => 'در حال دانلود از دستگاه شما';
+
+  @override
+  String get newestFirst => 'ابتدا جدیدترین‌ها';
+
+  @override
+  String get noSyncedRecordingsYet => 'هنوز ضبط همگام‌سازی‌شده‌ای وجود ندارد';
+
+  @override
+  String get morePaymentMethodsComingSoon => 'روش‌های پرداخت بیشتر به‌زودی';
+
+  @override
+  String get syncProcessingBackgroundHint => 'این کار در پس‌زمینه ادامه می‌یابد — می‌توانید این صفحه را ترک کنید.';
+
+  @override
+  String get syncCardRateLimited =>
+      'محدودیت استفاده منصفانه به پایان رسید — همگام‌سازی به‌طور خودکار از سر گرفته می‌شود';
+
+  @override
+  String get syncCardBackendBusy => 'سرورهای Omi شلوغ هستند — ضبط‌های شما به‌محض آزاد شدن ظرفیت همگام‌سازی می‌شوند';
+
+  @override
+  String get unableToDetermineFirmwareVersion => 'تعیین نسخه فعلی سفت‌افزار امکان‌پذیر نیست';
 }

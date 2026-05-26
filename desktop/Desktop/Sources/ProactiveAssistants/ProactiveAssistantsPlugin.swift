@@ -52,9 +52,6 @@ public class ProactiveAssistantsPlugin: NSObject {
     private var wasMonitoringBeforeLock = false
     private var systemEventObservers: [NSObjectProtocol] = []
 
-    // Daily settings state tracking
-    private var settingsStateTimer: Timer?
-
     // Video call throttling: reduce capture frequency when a call app is frontmost
     // to avoid competing with the call app for CPU/GPU (ScreenCaptureKit, encoding, OCR).
     private var videoCallFrameCounter = 0
@@ -76,6 +73,14 @@ public class ProactiveAssistantsPlugin: NSObject {
     private var lastDistributionTime: Date = .distantPast
     /// Fallback interval: re-distribute even without context change to catch visual-only updates.
     private let distributionFallbackInterval: TimeInterval = 60
+    private let messagingDistributionFallbackInterval: TimeInterval = 15
+
+    /// Apps where new content can arrive while the user stays focused. Reusing the same
+    /// list TaskAssistant uses for its fast in-app trigger so the two layers stay aligned.
+    private static let messagingFastPathApps: Set<String> = [
+        "Telegram", "Messages", "iMessage", "WhatsApp", "Signal",
+        "Slack", "Discord", "Messenger",
+    ]
 
     /// Apps whose primary purpose is video/audio calls.
     private static let videoCallApps: Set<String> = [
@@ -229,6 +234,23 @@ public class ProactiveAssistantsPlugin: NSObject {
         // Guard against both active monitoring and pending startup (race condition fix)
         guard !isMonitoring && !isStartingMonitoring else {
             completion(isMonitoring, nil)
+            return
+        }
+
+        // Paywall hard-stop: refuse to start screen capture + Gemini analysis
+        // when the user is past their trial. `AppState` writes
+        // `desktop_isPaywalled` to UserDefaults whenever it flips so other
+        // singletons can synchronously check. Toggle UI also gates on this.
+        // BYOK users (all four keys configured locally) are never paywalled,
+        // so they bypass this gate even if the flag is transiently stale.
+        if !APIKeyService.isByokActive && UserDefaults.standard.bool(forKey: "desktop_isPaywalled") {
+            log("Paywall: refusing startMonitoring (trial expired)")
+            NotificationCenter.default.post(
+                name: .showUsageLimitPopup,
+                object: nil,
+                userInfo: ["reason": "trial_expired"]
+            )
+            completion(false, "trial_expired")
             return
         }
 
@@ -456,8 +478,6 @@ public class ProactiveAssistantsPlugin: NSObject {
 
         sendEvent(type: "monitoringStarted", data: [:])
         AnalyticsManager.shared.monitoringStarted()
-        trackSettingsState()
-        startSettingsStateTimer()
         NotificationCenter.default.post(
             name: .assistantMonitoringStateDidChange,
             object: nil,
@@ -478,8 +498,6 @@ public class ProactiveAssistantsPlugin: NSObject {
         analysisDelayTimer = nil
         distributionDebounceTimer?.invalidate()
         distributionDebounceTimer = nil
-        settingsStateTimer?.invalidate()
-        settingsStateTimer = nil
         isInDelayPeriod = false
         lastDistributedApp = nil
         lastDistributedWindowTitle = nil
@@ -921,7 +939,12 @@ public class ProactiveAssistantsPlugin: NSObject {
         )
 
         let timeSinceLastDistribution = Date().timeIntervalSince(lastDistributionTime)
-        let fallbackDue = timeSinceLastDistribution >= distributionFallbackInterval
+        // Messaging apps get a much shorter same-context fallback so a new chat message
+        // reaches the analyzer in ~15s, even when you stay in the app the whole time.
+        let activeFallbackInterval = Self.messagingFastPathApps.contains(frame.appName)
+            ? messagingDistributionFallbackInterval
+            : distributionFallbackInterval
+        let fallbackDue = timeSinceLastDistribution >= activeFallbackInterval
 
         if contextChanged {
             // Update tracking immediately so subsequent captures in the same new context
@@ -954,27 +977,6 @@ public class ProactiveAssistantsPlugin: NSObject {
         distributionDebounceTimer = nil
 
         AssistantCoordinator.shared.distributeFrame(frame)
-    }
-
-    // MARK: - Settings State Tracking
-
-    /// Track current settings state to analytics
-    private func trackSettingsState() {
-        AnalyticsManager.shared.trackSettingsState(
-            screenshotsEnabled: isMonitoring,
-            memoryExtractionEnabled: MemoryAssistantSettings.shared.isEnabled,
-            memoryNotificationsEnabled: MemoryAssistantSettings.shared.notificationsEnabled
-        )
-    }
-
-    /// Start a daily timer to report settings state
-    private func startSettingsStateTimer() {
-        settingsStateTimer?.invalidate()
-        settingsStateTimer = Timer.scheduledTimer(withTimeInterval: 86400, repeats: true) { [weak self] _ in
-            Task { @MainActor in
-                self?.trackSettingsState()
-            }
-        }
     }
 
     // MARK: - Event Broadcasting
@@ -1274,7 +1276,8 @@ public class ProactiveAssistantsPlugin: NSObject {
             NotificationService.shared.sendNotification(
                 title: "Screen Recording Permission Required",
                 message: "omi needs screen recording permission to continue monitoring. Please re-enable it in System Settings.",
-                deliverSystemBanner: true
+                deliverSystemBanner: true,
+                respectFrequency: false
             )
         }
     }
@@ -1582,7 +1585,8 @@ public class ProactiveAssistantsPlugin: NSObject {
             NotificationService.shared.sendNotification(
                 title: NotificationService.screenCaptureResetTitle,
                 message: "Screen recording permission needs to be re-enabled. Click to open Settings.",
-                deliverSystemBanner: true
+                deliverSystemBanner: true,
+                respectFrequency: false
             )
             return
         }
@@ -1596,7 +1600,8 @@ public class ProactiveAssistantsPlugin: NSObject {
         NotificationService.shared.sendNotification(
             title: NotificationService.screenCaptureResetTitle,
             message: "Screen recording permission needs to be re-enabled. Click to open Settings.",
-            deliverSystemBanner: true
+            deliverSystemBanner: true,
+            respectFrequency: false
         )
     }
 }

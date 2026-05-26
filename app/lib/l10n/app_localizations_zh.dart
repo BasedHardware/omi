@@ -950,11 +950,6 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String memoriesUsedThisMonth(String used, String limit) {
-    return '本月创建 $used/$limit 条记忆';
-  }
-
-  @override
   String get visibility => '可见性';
 
   @override
@@ -1619,7 +1614,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get finalTouches => '最后修饰';
 
   @override
-  String get processing => '处理中...';
+  String get processing => '处理中';
 
   @override
   String get features => '功能';
@@ -4539,40 +4534,13 @@ class AppLocalizationsZh extends AppLocalizations {
   String get thankYouText => '感谢您成为Omi的尊贵用户。如果您有任何问题或疑虑，请随时通过team@basedhardware.com与我们联系。';
 
   @override
-  String get wifiSyncSettings => 'WiFi同步设置';
-
-  @override
-  String get enterHotspotCredentials => '输入您手机的热点凭据';
-
-  @override
-  String get wifiSyncUsesHotspot => 'WiFi同步使用您的手机作为热点。在设置 > 个人热点中找到热点名称和密码。';
-
-  @override
-  String get hotspotNameSsid => '热点名称 (SSID)';
-
-  @override
-  String get exampleIphoneHotspot => '例如 iPhone热点';
-
-  @override
   String get password => '密码';
-
-  @override
-  String get enterHotspotPassword => '输入热点密码';
 
   @override
   String get saveCredentials => '保存凭据';
 
   @override
   String get clearCredentials => '清除凭据';
-
-  @override
-  String get pleaseEnterHotspotName => '请输入热点名称';
-
-  @override
-  String get wifiCredentialsSaved => 'WiFi凭据已保存';
-
-  @override
-  String get wifiCredentialsCleared => 'WiFi凭据已清除';
 
   @override
   String summaryGeneratedForDate(String date) {
@@ -5695,9 +5663,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get limitless => '无限';
 
   @override
-  String get fastTransfer => '快速传输';
-
-  @override
   String get syncingStatus => '同步中';
 
   @override
@@ -5707,15 +5672,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String etaLabel(String time) {
     return '预计时间：$time';
   }
-
-  @override
-  String get transferMethod => '传输方式';
-
-  @override
-  String get fast => '快速';
-
-  @override
-  String get ble => '蓝牙低功耗';
 
   @override
   String get phone => '手机';
@@ -5736,25 +5692,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get processedFilesDeleted => '已处理的文件已删除';
 
   @override
-  String get wifiEnableFailed => '无法在设备上启用 WiFi。请重试。';
-
-  @override
-  String get deviceNoFastTransfer => '您的设备不支持快速传输。请改用蓝牙。';
-
-  @override
-  String get enableHotspotMessage => '请启用您手机的热点并重试。';
-
-  @override
-  String get transferStartFailed => '无法开始传输。请重试。';
-
-  @override
   String get deviceNotResponding => '设备无响应。请重试。';
-
-  @override
-  String get invalidWifiCredentials => 'WiFi 凭据无效。请检查您的热点设置。';
-
-  @override
-  String get wifiConnectionFailed => 'WiFi 连接失败。请重试。';
 
   @override
   String get sdCardProcessing => 'SD 卡处理中';
@@ -5766,9 +5704,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get process => '处理';
-
-  @override
-  String get wifiSyncFailed => 'WiFi 同步失败';
 
   @override
   String get processingFailed => '处理失败';
@@ -6536,24 +6471,13 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String get wifiSync => 'WiFi 同步';
-
-  @override
   String itemCopiedToClipboard(String item) {
     return '$item 已复制到剪贴板';
   }
 
   @override
-  String get wifiConnectionFailedTitle => '连接失败';
-
-  @override
   String connectingToDeviceName(String deviceName) {
     return '正在连接到 $deviceName';
-  }
-
-  @override
-  String enableDeviceWifi(String deviceName) {
-    return '启用 $deviceName 的 WiFi';
   }
 
   @override
@@ -6648,9 +6572,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get statusUnprocessed => '未处理';
 
   @override
-  String get switchedToFastTransfer => '已切换到快速传输';
-
-  @override
   String get transferCompleteMessage => '传输完成！您现在可以播放此录音了。';
 
   @override
@@ -6662,31 +6583,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get transferCancelled => '传输已取消';
 
   @override
-  String get fastTransferEnabled => '快速传输已启用';
-
-  @override
   String get bluetoothSyncEnabled => '蓝牙同步已启用';
-
-  @override
-  String get enableFastTransfer => '启用快速传输';
-
-  @override
-  String get fastTransferDescription => '快速传输使用WiFi实现约5倍的传输速度。传输期间，您的手机将临时连接到Omi设备的WiFi网络。';
-
-  @override
-  String get internetAccessPausedDuringTransfer => '传输期间互联网访问暂停';
-
-  @override
-  String get chooseTransferMethodDescription => '选择如何将录音从Omi设备传输到您的手机。';
-
-  @override
-  String get wifiSpeed => '通过WiFi约150 KB/s';
-
-  @override
-  String get fiveTimesFaster => '快5倍';
-
-  @override
-  String get fastTransferMethodDescription => '创建与Omi设备的直接WiFi连接。传输期间，您的手机将暂时断开常规WiFi连接。';
 
   @override
   String get bluetooth => '蓝牙';
@@ -6707,7 +6604,15 @@ class AppLocalizationsZh extends AppLocalizations {
   String get lowBatteryAlertTitle => '电池电量低警告';
 
   @override
-  String get lowBatteryAlertBody => '您的设备电池电量低。是时候充电了！🔋';
+  String lowBatteryAlertBody(int level) {
+    return '您的电池电量为 $level%。是时候充电了！🔋';
+  }
+
+  @override
+  String get batteryFullyChargedTitle => 'Omi已充满电';
+
+  @override
+  String get batteryFullyChargedBody => '您的Omi设备已充满电，可以拔掉充电线了！';
 
   @override
   String get deviceDisconnectedNotificationTitle => '您的 Omi 设备已断开连接';
@@ -7365,12 +7270,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get voiceFailedToTranscribe => '音频转录失败';
 
   @override
-  String get locationPermissionRequired => '位置权限请求';
-
-  @override
-  String get locationPermissionContent => '快速传输需要位置权限来验证WiFi连接。请授予位置权限以继续。';
-
-  @override
   String get pdfTranscriptExport => '导出文字记录';
 
   @override
@@ -7515,12 +7414,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get dailyRecapsDescription => '您的每日总结生成后将显示在这里';
 
   @override
-  String get chooseTransferMethod => '选择传输方式';
-
-  @override
-  String get fastTransferSpeed => '通过WiFi ~150 KB/s';
-
-  @override
   String largeTimeGapDetected(String gap) {
     return '检测到较大时间间隔 ($gap)';
   }
@@ -7529,9 +7422,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String largeTimeGapsDetected(String gaps) {
     return '检测到多个较大时间间隔 ($gaps)';
   }
-
-  @override
-  String get deviceDoesNotSupportWifiSwitchingToBle => '设备不支持WiFi同步,正在切换到蓝牙';
 
   @override
   String get appleHealthNotAvailable => '此设备上不可用Apple Health';
@@ -8286,7 +8176,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get manageStorage => '管理存储';
 
   @override
-  String get safelyBackedUp => '已安全备份到您的手机';
+  String get safelyBackedUp => '已创建对话';
 
   @override
   String get notYetSynced => '尚未同步到您的手机';
@@ -9077,4 +8967,149 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get bulkDeleteFailed => '无法删除任务，请重试。';
+
+  @override
+  String get deleteRecap => '删除回顾';
+
+  @override
+  String get deleteRecapConfirmTitle => '删除该回顾?';
+
+  @override
+  String get deleteRecapConfirmBody => '此回顾将被永久删除。当天的原始对话不会受到影响。';
+
+  @override
+  String get deleteRecapAction => '删除';
+
+  @override
+  String get recapDeletedSnackbar => '回顾已删除';
+
+  @override
+  String get recapDeleteFailed => '无法删除回顾。请稍后重试。';
+
+  @override
+  String get syncStatusBackedUp => '已备份';
+
+  @override
+  String get syncStatusBackingUp => '同步中…';
+
+  @override
+  String get syncStatusWaiting => '等待同步';
+
+  @override
+  String get syncStatusRetrying => '无法处理 — 正在重试';
+
+  @override
+  String get syncStatusFailed => '失败 — 点按“重试”';
+
+  @override
+  String get syncStatusFileUnavailable => '文件不可用';
+
+  @override
+  String get noRecordingsYet => '暂无录音';
+
+  @override
+  String get syncInProgress => '正在同步';
+
+  @override
+  String get syncStatusUploaded => '已上传 · 正在 Omi 上处理';
+
+  @override
+  String get deleteWhileProcessingTitle => '仍在处理';
+
+  @override
+  String get deleteWhileProcessingMessage => '此录音已上传，但 Omi 仍在创建对话。如果现在删除且处理失败，将无法恢复。仍要删除吗？';
+
+  @override
+  String get syncCardAllBackedUp => '所有录音已同步';
+
+  @override
+  String syncCardReadyCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count 条录音可同步',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get syncCardProcessing => 'Omi 处理中…';
+
+  @override
+  String get syncCardWaitingInternet => '等待网络连接';
+
+  @override
+  String syncCardNeedsAttention(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count 条录音需要关注',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get syncFlowIntro => '录音从你的设备传输到这部手机并存储在本地，然后上传到 Omi 的服务器，在那里被转录并转化为对话。';
+
+  @override
+  String get syncStepUpload => '同步';
+
+  @override
+  String get syncStepUploadDesc => '你的录音会发送到 Omi 的服务器';
+
+  @override
+  String get syncStepProcess => '转写';
+
+  @override
+  String get syncStepProcessDesc => 'Omi 将音频转为对话';
+
+  @override
+  String get syncStepBackedUp => '对话已就绪';
+
+  @override
+  String get syncStepBackedUpDesc => '在对话中找到';
+
+  @override
+  String get syncFailureFootnote => '若处理失败,录音将在下次同步时自动重试。';
+
+  @override
+  String get syncStatusConversationCreated => '对话已创建';
+
+  @override
+  String get syncCardUploadingTitle => '正在上传到 Omi';
+
+  @override
+  String get syncCardDownloadingTitle => '正在从你的设备下载';
+
+  @override
+  String syncCardProgressOf(int current, int total) {
+    return '第 $current 项,共 $total 项';
+  }
+
+  @override
+  String get syncStatusOnDevice => '在你的设备上';
+
+  @override
+  String get syncStatusDownloadingFromDevice => '正在从你的设备下载';
+
+  @override
+  String get newestFirst => '最新优先';
+
+  @override
+  String get noSyncedRecordingsYet => '还没有已同步的录音';
+
+  @override
+  String get morePaymentMethodsComingSoon => '更多支付方式即将推出';
+
+  @override
+  String get syncProcessingBackgroundHint => '此过程会在后台继续 — 你可以离开此屏幕。';
+
+  @override
+  String get syncCardRateLimited => '已达到合理使用上限 — 同步将自动恢复';
+
+  @override
+  String get syncCardBackendBusy => 'Omi 服务器繁忙 — 容量恢复后将自动同步你的录音';
+
+  @override
+  String get unableToDetermineFirmwareVersion => '无法确定当前固件版本';
 }
