@@ -31,6 +31,20 @@ case "$cmd" in
     show=false; [ "${2:-}" = "--transcript" ] && show=true
     curl -fsS -X POST "$BASE/conversation/open" \
       -d "{\"conversationId\":\"$id\",\"showTranscript\":$show}"; echo ;;
+  actions)
+    curl -fsS "$BASE/actions"; echo ;;
+  action)
+    name="${1:?usage: omi-ctl action <name> [key=value ...]}"; shift || true
+    params=""
+    for kv in "$@"; do
+      key="${kv%%=*}"; val="${kv#*=}"
+      [ -n "$params" ] && params="$params,"
+      params="$params\"$key\":\"$val\""
+    done
+    body="{\"name\":\"$name\""
+    [ -n "$params" ] && body="$body,\"params\":{$params}"
+    body="$body}"
+    curl -fsS -X POST "$BASE/action" -d "$body"; echo ;;
   wait-ready)
     tries="${1:-30}"
     for _ in $(seq 1 "$tries"); do
@@ -51,11 +65,16 @@ Usage:
   omi-ctl open-conversation <id> [--transcript]
   omi-ctl wait-ready [tries]             Block until app reaches "main" state (0.5s/try)
   omi-ctl screens                        List valid screen targets
+  omi-ctl actions                        List semantic actions the app exposes
+  omi-ctl action <name> [key=value ...]  Run a semantic action (cursor-free, in-process)
 
 Examples:
   omi-ctl navigate rewind
   omi-ctl navigate settings rewind       # Settings page, Rewind sub-section
   omi-ctl wait-ready && omi-ctl navigate memories
+  omi-ctl actions                        # discover available actions
+  omi-ctl action refresh_all_data
+  omi-ctl action toggle_transcription enabled=false
 
 Env: OMI_AUTOMATION_PORT (default 47777)
 EOF

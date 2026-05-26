@@ -47,7 +47,6 @@ class PlansSheet extends StatefulWidget {
 class _PlansSheetState extends State<PlansSheet> {
   String selectedPlan = 'yearly'; // 'yearly' or 'monthly'  (billing period)
   String? selectedTierId; // 'unlimited', 'operator', 'architect'
-  final Set<String> _expandedTierIds = {}; // tracks which tier cards show full features
   bool _isUpgrading = false;
   bool _showTrainingDataOptIn = false; // Control visibility of training data opt-in
   bool _isSwitchingToFree = false;
@@ -372,13 +371,13 @@ class _PlansSheetState extends State<PlansSheet> {
     Map<String, dynamic>? selectedPlanData;
     if (tierId != null) {
       selectedPlanData = plans.cast<Map<String, dynamic>>().firstWhereOrNull(
-            (plan) => plan['plan_id'] == tierId && plan['interval'] == (isYearly ? 'year' : 'month'),
-          );
+        (plan) => plan['plan_id'] == tierId && plan['interval'] == (isYearly ? 'year' : 'month'),
+      );
     }
     // Fallback to old behavior (first plan matching interval) for backwards compat
     selectedPlanData ??= plans.cast<Map<String, dynamic>>().firstWhereOrNull(
-          (plan) => plan['interval'] == (isYearly ? 'year' : 'month'),
-        );
+      (plan) => plan['interval'] == (isYearly ? 'year' : 'month'),
+    );
 
     if (selectedPlanData == null) {
       AppSnackbar.showSnackbarError(context.l10n.selectedPlanNotAvailable);
@@ -394,7 +393,8 @@ class _PlansSheetState extends State<PlansSheet> {
     // Cross-tier changes are immediate+prorated on the backend, not deferred.
     final currentTierName = currentSub?.plan.name; // 'unlimited', 'operator', 'architect'
     final isSameTier = currentTierName == tierId;
-    final isUpgradingFromMonthlyToAnnual = isSameTier &&
+    final isUpgradingFromMonthlyToAnnual =
+        isSameTier &&
         (currentSub?.plan == PlanType.unlimited ||
             currentSub?.plan == PlanType.operator ||
             currentSub?.plan == PlanType.architect) &&
@@ -940,7 +940,8 @@ class _PlansSheetState extends State<PlansSheet> {
                             builder: (context) {
                               // Check if subscription period has ended
                               final sub = provider.subscription?.subscription;
-                              final periodEnded = sub?.currentPeriodEnd != null &&
+                              final periodEnded =
+                                  sub?.currentPeriodEnd != null &&
                                   DateTime.fromMillisecondsSinceEpoch(
                                     sub!.currentPeriodEnd! * 1000,
                                   ).isBefore(DateTime.now());
@@ -1009,7 +1010,8 @@ class _PlansSheetState extends State<PlansSheet> {
                         // Training Data Opt-in Option - only show after plans are loaded
                         Consumer2<UsageProvider, UserProvider>(
                           builder: (context, usageProvider, userProvider, child) {
-                            final shouldShowTrainingOption = _showTrainingDataOptIn &&
+                            final shouldShowTrainingOption =
+                                _showTrainingDataOptIn &&
                                 !usageProvider.isLoadingPlans &&
                                 usageProvider.availablePlans != null;
 
@@ -1169,7 +1171,8 @@ class _PlansSheetState extends State<PlansSheet> {
                             final isOnAnnualPlan = currentPlan?['interval'] == 'year';
                             final hasScheduledUpgrade = _hasScheduledUpgrade();
                             final usageProvider = context.read<UsageProvider>();
-                            final shouldShowContinueButton = !isOnAnnualPlan &&
+                            final shouldShowContinueButton =
+                                !isOnAnnualPlan &&
                                 !hasScheduledUpgrade &&
                                 !isCancelled &&
                                 !usageProvider.isLoadingPlans &&
@@ -1580,17 +1583,7 @@ class _PlansSheetState extends State<PlansSheet> {
               isPopular: eyebrow == 'Most popular',
               featureSummary: planSubtitle,
               features: planFeatures,
-              isExpanded: _expandedTierIds.contains(tierId),
-              onToggleExpand: () {
-                HapticFeedback.lightImpact();
-                setState(() {
-                  if (_expandedTierIds.contains(tierId)) {
-                    _expandedTierIds.remove(tierId);
-                  } else {
-                    _expandedTierIds.add(tierId);
-                  }
-                });
-              },
+              desktopAccess: _tierGrantsDesktop(tierId),
               onTap: () {
                 HapticFeedback.lightImpact();
                 setState(() => selectedTierId = tierId);
@@ -1689,8 +1682,7 @@ class _PlansSheetState extends State<PlansSheet> {
     String? endsOnDate,
     String? featureSummary,
     List<String> features = const [],
-    bool isExpanded = false,
-    VoidCallback? onToggleExpand,
+    bool? desktopAccess,
   }) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
@@ -1813,56 +1805,28 @@ class _PlansSheetState extends State<PlansSheet> {
               ],
             ),
           ),
-          // Feature summary + expand/collapse — separate tap target
-          if (featureSummary != null && features.isNotEmpty) ...[
+          // Plan details — always visible (no expand/collapse toggle).
+          if (featureSummary != null || desktopAccess != null || features.isNotEmpty) ...[
             const SizedBox(height: 10),
-            GestureDetector(
-              onTap: onToggleExpand,
-              behavior: HitTestBehavior.opaque,
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      featureSummary,
-                      style: TextStyle(color: Colors.grey[400], fontSize: 12),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
+            if (featureSummary != null) Text(featureSummary, style: TextStyle(color: Colors.grey[400], fontSize: 12)),
+            if (featureSummary != null && (desktopAccess != null || features.isNotEmpty)) const SizedBox(height: 8),
+            // Desktop access — explicit ✓/✗ so Neo (mobile/web only) is clearly
+            // distinguished from Operator/Architect.
+            if (desktopAccess != null) _buildDesktopAccessRow(desktopAccess),
+            ...features.map(
+              (f) => Padding(
+                padding: const EdgeInsets.only(bottom: 4),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Icon(Icons.check, color: Colors.green[400], size: 14),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text(f, style: TextStyle(color: Colors.grey[300], fontSize: 12, height: 1.3)),
                     ),
-                  ),
-                  Icon(
-                    isExpanded ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down,
-                    color: Colors.grey[500],
-                    size: 18,
-                  ),
-                ],
-              ),
-            ),
-            AnimatedCrossFade(
-              firstChild: const SizedBox.shrink(),
-              secondChild: Padding(
-                padding: const EdgeInsets.only(top: 8),
-                child: Column(
-                  children: features
-                      .map(
-                        (f) => Padding(
-                          padding: const EdgeInsets.only(bottom: 4),
-                          child: Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Icon(Icons.check, color: Colors.green[400], size: 14),
-                              const SizedBox(width: 6),
-                              Expanded(
-                                child: Text(f, style: TextStyle(color: Colors.grey[300], fontSize: 12, height: 1.3)),
-                              ),
-                            ],
-                          ),
-                        ),
-                      )
-                      .toList(),
+                  ],
                 ),
               ),
-              crossFadeState: isExpanded ? CrossFadeState.showSecond : CrossFadeState.showFirst,
-              duration: const Duration(milliseconds: 200),
             ),
           ],
         ],
@@ -1961,8 +1925,7 @@ class _PlansSheetState extends State<PlansSheet> {
     bool isPopular = false,
     String? featureSummary,
     List<String> features = const [],
-    bool isExpanded = false,
-    VoidCallback? onToggleExpand,
+    bool? desktopAccess,
     required VoidCallback onTap,
   }) {
     final title = planData['title'] as String;
@@ -1998,8 +1961,46 @@ class _PlansSheetState extends State<PlansSheet> {
       endsOnDate: endsOnDate,
       featureSummary: featureSummary,
       features: features,
-      isExpanded: isExpanded,
-      onToggleExpand: onToggleExpand,
+      desktopAccess: desktopAccess,
+    );
+  }
+
+  /// Whether a plan tier includes the desktop (macOS) app. Neo (unlimited) is
+  /// mobile/web only; Operator and Architect include desktop. Keep in sync with
+  /// backend `DESKTOP_ENTITLED_PLAN_TYPES`. Returns null for unknown tiers.
+  bool? _tierGrantsDesktop(String tierId) {
+    switch (tierId) {
+      case 'operator':
+      case 'architect':
+        return true;
+      case 'unlimited':
+        return false;
+      default:
+        return null;
+    }
+  }
+
+  Widget _buildDesktopAccessRow(bool granted) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 4),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(granted ? Icons.check : Icons.close, color: granted ? Colors.green[400] : Colors.red[400], size: 14),
+          const SizedBox(width: 6),
+          Expanded(
+            child: Text(
+              granted ? 'Works on Desktop' : "Doesn't work on Desktop",
+              style: TextStyle(
+                color: granted ? Colors.grey[300] : Colors.red[300],
+                fontSize: 12,
+                height: 1.3,
+                fontWeight: granted ? FontWeight.w400 : FontWeight.w500,
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 

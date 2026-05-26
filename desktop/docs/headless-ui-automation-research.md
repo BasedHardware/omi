@@ -125,6 +125,14 @@ API for the actions agents test most (e.g. `POST /action {name:"start_recording"
 This is the Marionette-equivalent and is 100% deterministic — no a11y guessing, no
 cursor, fastest of all. Use it for flows; use Layer 1 for breadth.
 
+> **Status (started on this branch):** Layer 2 is now scaffolded.
+> `DesktopAutomationActionRegistry` (in `DesktopAutomationBridge.swift`) backs new
+> `GET /actions` (discovery) + `POST /action {name, params}` endpoints, exposed via
+> `omi-ctl actions` / `omi-ctl action <name> [k=v…]`. Built-in actions:
+> `refresh_all_data`, `toggle_transcription`. Add more with
+> `register(name:summary:params:handler:)` — global ones in `registerBuiltins()`,
+> screen-scoped ones from a view model's lifecycle.
+
 **Policy: make the cursor-free path the default and the only allowed one.**
 - Agents drive the app via `omi-ctl` / the bridge (Layer 2) and `agent-swift press`
   (Layer 1) **only**.
