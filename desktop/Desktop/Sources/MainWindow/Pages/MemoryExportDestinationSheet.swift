@@ -313,21 +313,26 @@ struct MemoryExportDestinationSheet: View {
         DismissButton(action: onDismiss)
       }
 
-      content
+      // Scrollable so the full connector flow (Execute + live-connection steps +
+      // memory pack) never clips inside the fixed-height sheet.
+      ScrollView {
+        VStack(alignment: .leading, spacing: 18) {
+          content
 
-      if let statusMessage = model.statusMessage {
-        Text(statusMessage)
-          .scaledFont(size: 12, weight: .medium)
-          .foregroundColor(OmiColors.success)
+          if let statusMessage = model.statusMessage {
+            Text(statusMessage)
+              .scaledFont(size: 12, weight: .medium)
+              .foregroundColor(OmiColors.success)
+          }
+
+          if let errorMessage = model.errorMessage {
+            Text(errorMessage)
+              .scaledFont(size: 12, weight: .medium)
+              .foregroundColor(OmiColors.warning)
+          }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
       }
-
-      if let errorMessage = model.errorMessage {
-        Text(errorMessage)
-          .scaledFont(size: 12, weight: .medium)
-          .foregroundColor(OmiColors.warning)
-      }
-
-      Spacer(minLength: 0)
     }
     .padding(24)
     .background(OmiColors.backgroundPrimary)
@@ -375,14 +380,14 @@ struct MemoryExportDestinationSheet: View {
   }
 
   private var executeButtonTitle: String {
-    destination.mcpExecuteKind == .autonomous ? "Execute" : "Open & copy key"
+    destination.mcpExecuteKind == .autonomous ? "Do it for me" : "Open & copy key"
   }
 
   private var executeBlockSubtitle: String {
     switch destination.mcpExecuteKind {
     case .autonomous:
       return
-        "Omi sets up \(destination.title) for you automatically — it runs as an Omi task you can watch in the floating bar."
+        "Omi sets up \(destination.title) for you — it runs as an Omi task you can watch in the floating bar. If it gets stuck, use the manual steps below."
     case .assisted:
       return
         "Omi opens \(destination.title) and copies your key, then you confirm the quick steps below."

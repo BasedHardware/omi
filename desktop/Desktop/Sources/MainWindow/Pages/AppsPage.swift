@@ -296,6 +296,12 @@ struct AppsPage: View {
             )
             .frame(width: 520, height: 620)
         }
+        .onReceive(NotificationCenter.default.publisher(for: .desktopAutomationOpenExportRequested)) { note in
+            if let raw = note.userInfo?["destination"] as? String,
+                let dest = MemoryExportDestination(rawValue: raw) {
+                selectedExportDestination = dest
+            }
+        }
         .onAppear {
             // If apps are already loaded, notify sidebar to clear loading indicator
             if !appProvider.isLoading {
