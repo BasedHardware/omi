@@ -578,7 +578,11 @@ class FlashPageWalSyncImpl implements FlashPageWalSync {
   void setDevice(BtDevice? device) async {
     _device = device;
     if (device != null && device.type == DeviceType.limitless) {
-      _wals = await _getMissingWals();
+      final wals = await _getMissingWals();
+      // Only assign if _device hasn't changed during the await (e.g. concurrent setDevice(null))
+      if (_device?.id == device.id) {
+        _wals = wals;
+      }
     } else {
       _wals = [];
     }
