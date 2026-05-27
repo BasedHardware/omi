@@ -67,7 +67,7 @@ display:flex;height:100vh;margin:0;align-items:center;justify-content:center;tex
     return HTMLResponse(content=html)
 
 
-@router.get('/v2/integrations/x/callback', response_class=HTMLResponse, tags=['x'])
+@router.get('/v1/x/oauth/callback', response_class=HTMLResponse, tags=['x'])
 async def x_oauth_callback(
     request: Request,
     code: Optional[str] = Query(None),

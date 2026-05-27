@@ -44,9 +44,12 @@ X_CLIENT_SECRET = os.getenv('X_OAUTH_CLIENT_SECRET')
 X_REDIRECT_URI = os.getenv('X_OAUTH_REDIRECT_URI')
 X_SCOPES = os.getenv('X_OAUTH_SCOPES', 'tweet.read users.read bookmark.read like.read offline.access')
 
-AUTHORIZE_URL = 'https://twitter.com/i/oauth2/authorize'
-TOKEN_URL = 'https://api.twitter.com/2/oauth2/token'
-API_BASE = 'https://api.twitter.com/2'
+# Use x.com (not twitter.com): after X's domain migration the user's auth
+# session cookies live on x.com, so the twitter.com authorize page shows a
+# "you have to be logged in to X" loop even for logged-in users.
+AUTHORIZE_URL = 'https://x.com/i/oauth2/authorize'
+TOKEN_URL = 'https://api.x.com/2/oauth2/token'
+API_BASE = 'https://api.x.com/2'
 
 OAUTH_STATE_TTL = 600  # seconds
 _STATE_PREFIX = 'x_oauth_state:'
