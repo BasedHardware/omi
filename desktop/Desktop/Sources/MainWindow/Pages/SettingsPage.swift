@@ -1781,7 +1781,21 @@ struct SettingsContentView: View {
           }
         }
       }
-    } else if let trial = appState.trialMetadata, trial.trialExpired {
+    } else if let trial = appState.trialMetadata,
+      trial.trialExpired,
+      // Suppress the trial-expired card entirely for grandfathered Neo users.
+      // The backend already returns trial_expired=false for them, but
+      // trialMetadata is polled on a 60s timer; defensive guard so a stale
+      // cached value during/after a backend deploy doesn't briefly stack the
+      // "Trial Ended" card on top of the grandfather notice. The grandfather
+      // notice is rendered separately via neoDesktopGrandfatherCard.
+      userSubscription?.desktopGrandfatherUntil == nil
+    {
+      // Neo subscribers who aren't grandfathered land on this card too because
+      // Neo doesn't grant desktop access (per #7496). The generic "Trial Ended"
+      // copy is confusing for them — they're on a paid plan, just not one that
+      // includes Mac. Detect that case and switch to plan-specific copy.
+      let isNeoWithoutDesktop = userSubscription?.subscription.plan == .unlimited
       settingsCard(settingId: "planusage.trial-expired") {
         VStack(alignment: .leading, spacing: 14) {
           HStack(spacing: 16) {
@@ -1790,13 +1804,75 @@ struct SettingsContentView: View {
               .foregroundColor(OmiColors.warning)
 
             VStack(alignment: .leading, spacing: 4) {
-              Text("Trial Ended")
+              Text(isNeoWithoutDesktop ? "Desktop access not included" : "Trial Ended")
                 .scaledFont(size: 16, weight: .semibold)
                 .foregroundColor(OmiColors.textPrimary)
 
-              Text("Upgrade to keep unlimited access")
-                .scaledFont(size: 13)
-                .foregroundColor(OmiColors.textSecondary)
+              Text(
+                isNeoWithoutDesktop
+                  ? "Neo is available on mobile and web. To use Omi on Mac, upgrade to Operator or Architect."
+                  : "Upgrade to keep unlimited access"
+              )
+              .scaledFont(size: 13)
+              .foregroundColor(OmiColors.textSecondary)
+            }
+
+            Spacer()
+          }
+
+          Divider().overlay(OmiColors.backgroundQuaternary)
+
+          Button(action: {
+            selectedPlanIdForCheckout = "operator"
+          }) {
+            Text("View Plans")
+              .scaledFont(size: 13, weight: .semibold)
+              .padding(.horizontal, 16)
+              .padding(.vertical, 8)
+          }
+          .buttonStyle(.borderedProminent)
+          .tint(OmiColors.purplePrimary)
+        }
+      }
+    }
+  }
+
+  // MARK: - Neo desktop grandfather notice
+  //
+  // Surfaced for Neo subscribers whose current billing period started before
+  // the #7496 policy change. They keep desktop access until their period
+  // ends — this card tells them when, so the change doesn't surprise them
+  // at the next renewal. Backend computes the date as
+  // `desktop_grandfather_until` on /v1/users/me/subscription (#7513).
+  @ViewBuilder
+  private var neoDesktopGrandfatherCard: some View {
+    if let until = userSubscription?.desktopGrandfatherUntil,
+      userSubscription?.subscription.plan == .unlimited
+    {
+      let endsOn = Date(timeIntervalSince1970: TimeInterval(until))
+      let formatter: DateFormatter = {
+        let f = DateFormatter()
+        f.dateStyle = .long
+        f.timeStyle = .none
+        return f
+      }()
+      settingsCard(settingId: "planusage.neo-grandfather") {
+        VStack(alignment: .leading, spacing: 14) {
+          HStack(spacing: 16) {
+            Image(systemName: "info.circle.fill")
+              .scaledFont(size: 28)
+              .foregroundColor(OmiColors.purplePrimary)
+
+            VStack(alignment: .leading, spacing: 4) {
+              Text("Neo desktop access ends \(formatter.string(from: endsOn))")
+                .scaledFont(size: 16, weight: .semibold)
+                .foregroundColor(OmiColors.textPrimary)
+
+              Text(
+                "Your Neo plan continues to include desktop access through this billing period. After it ends, upgrade to Operator or Architect to keep using Omi on Mac."
+              )
+              .scaledFont(size: 13)
+              .foregroundColor(OmiColors.textSecondary)
             }
 
             Spacer()
@@ -1866,6 +1942,7 @@ struct SettingsContentView: View {
   private var planUsageSection: some View {
     VStack(spacing: 20) {
       trialCountdownCard
+      neoDesktopGrandfatherCard
 
       settingsCard(settingId: "planusage.current") {
         VStack(alignment: .leading, spacing: 14) {
