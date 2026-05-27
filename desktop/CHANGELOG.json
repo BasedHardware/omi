@@ -1,5 +1,7 @@
 {
-  "unreleased": [],
+  "unreleased": [
+    "Fixed privacy gap where password manager screens could be sent to AI assistants despite being excluded from Rewind"
+  ],
   "releases": [
     {
       "version": "0.11.427",
