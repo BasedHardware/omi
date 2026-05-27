@@ -119,6 +119,9 @@ def _get_trial_metadata_fn():
     # Get TRIAL_LENGTH_SECONDS
     tls_line = [l for l in source.split('\n') if l.startswith('TRIAL_LENGTH_SECONDS')][0]
 
+    # Need the DESKTOP_ENTITLED_PLAN_TYPES constant for plan_grants_desktop
+    desktop_line = [l for l in source.split('\n') if l.startswith('DESKTOP_ENTITLED_PLAN_TYPES')][0]
+
     namespace = {
         'PlanType': PlanType,
         'TrialMetadata': TrialMetadata,
@@ -131,6 +134,15 @@ def _get_trial_metadata_fn():
         'FREE_CHAT_QUESTIONS_PER_MONTH': 30,
         '_request_has_all_byok_keys': lambda: False,
     }
+    # Execute DESKTOP_ENTITLED_PLAN_TYPES
+    exec(compile(desktop_line, '<subscription.py>', 'exec'), namespace)
+
+    # Extract and execute plan_grants_desktop function
+    pgd_start = source.index('def plan_grants_desktop(')
+    pgd_end = source.index('\n\n', pgd_start)
+    pgd_source = source[pgd_start:pgd_end]
+    exec(compile(pgd_source, '<subscription.py>', 'exec'), namespace)
+
     # Execute TRIAL_LENGTH_SECONDS
     exec(compile(tls_line, '<subscription.py>', 'exec'), namespace)
     # Execute TRIAL_FEATURES
