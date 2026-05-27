@@ -828,6 +828,9 @@ public class ProactiveAssistantsPlugin: NSObject {
                     // be stored as lastTrackedFrame.
                     // Context switch detection still works: it uses lastTrackedApp/lastTrackedWindowTitle
                     // (set by checkContextSwitch), not lastTrackedFrame.
+                    if isRewindExcluded {
+                        log("PrivacyGate: Blocked frame from Rewind-excluded app '\(appName)' — not sent to assistants")
+                    }
                     if !isRewindExcluded {
                         AssistantCoordinator.shared.trackFrame(frame)
                         if !isInDelayPeriod {
@@ -908,6 +911,9 @@ public class ProactiveAssistantsPlugin: NSObject {
 
             // Privacy gate: skip ALL assistant paths for Rewind-excluded apps
             // (including trackFrame — see macOS 14+ path comment for rationale).
+            if isRewindExcluded {
+                log("PrivacyGate: Blocked frame from Rewind-excluded app '\(resolvedApp)' — not sent to assistants")
+            }
             if !isRewindExcluded {
                 AssistantCoordinator.shared.trackFrame(frame)
                 if !isInDelayPeriod {
