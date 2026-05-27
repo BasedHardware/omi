@@ -7,7 +7,7 @@ from collections import deque
 from datetime import datetime, timezone
 from typing import Dict, Optional, Set
 
-from fastapi import APIRouter
+from fastapi import Request, APIRouter
 from fastapi.websockets import WebSocketDisconnect, WebSocket
 from starlette.websockets import WebSocketState
 
@@ -77,11 +77,7 @@ BG_DRAIN_TIMEOUT = 30.0  # seconds
 
 
 async def _process_conversation_task(
-    uid: str,
-    conversation_id: str,
-    language: str,
-    websocket: WebSocket,
-    byok_keys: Optional[Dict[str, str]] = None,
+    uid: str, conversation_id: str, language: str, websocket: WebSocket, byok_keys: Optional[Dict[str, str]] = None
 ):
     """Process a conversation and send result back to _listen via websocket.
 
@@ -89,8 +85,6 @@ async def _process_conversation_task(
     STT calls made inside process_conversation route through the user's own
     provider keys instead of Omi's env keys.
     """
-    if byok_keys:
-        set_byok_keys(byok_keys)
     try:
         conversation_data = await run_blocking(db_executor, conversations_db.get_conversation, uid, conversation_id)
         if not conversation_data:
@@ -159,11 +153,7 @@ async def _process_conversation_task(
             pass
 
 
-async def _websocket_util_trigger(
-    websocket: WebSocket,
-    uid: str,
-    sample_rate: int = 8000,
-):
+async def _websocket_util_trigger(websocket: WebSocket, uid: str, sample_rate: int = 8000):
     logger.info(f'_websocket_util_trigger {uid}')
 
     try:
@@ -672,9 +662,5 @@ async def _websocket_util_trigger(
 
 
 @router.websocket("/v1/trigger/listen")
-async def websocket_endpoint_trigger(
-    websocket: WebSocket,
-    uid: str,
-    sample_rate: int = 8000,
-):
+async def websocket_endpoint_trigger(websocket: WebSocket, uid: str, sample_rate: int = 8000):
     await _websocket_util_trigger(websocket, uid, sample_rate)

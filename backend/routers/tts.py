@@ -14,7 +14,7 @@ import logging
 import os
 
 import httpx
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import Request, APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 
 from database import redis_db
@@ -22,10 +22,11 @@ from models.tts import TtsSynthesizeRequest
 from utils.http_client import get_tts_client, get_tts_semaphore
 from utils.log_sanitizer import sanitize
 from utils.other import endpoints as auth
+from utils.auth_middleware import require_firebase
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(require_firebase)])
 
 # Limits mirror desktop/Backend-Rust/src/routes/tts.rs
 _TTS_BURST_PER_MINUTE = 50
@@ -43,11 +44,9 @@ def _is_valid_voice_id(voice_id: str) -> bool:
     return 1 <= len(voice_id) <= 128 and voice_id.isalnum()
 
 
-@router.post('/v2/tts/synthesize', tags=['tts'])
-async def tts_synthesize(
-    req: TtsSynthesizeRequest,
-    uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "tts:synthesize")),
-):
+@router.post('/v2/tts/synthesize', tags=['tts'], dependencies=[Depends(auth.with_rate_limit("tts:synthesize"))])
+async def tts_synthesize(request: Request, req: TtsSynthesizeRequest):
+    uid = request.state.uid
     """Proxy a TTS request to ElevenLabs. Per-user rate limited."""
     api_key = os.getenv('ELEVENLABS_API_KEY')
     if not api_key:
@@ -64,8 +63,7 @@ async def tts_synthesize(
     char_count = len(text)
     if char_count > _TTS_REQUEST_CHAR_LIMIT:
         raise HTTPException(
-            status_code=400,
-            detail=f"text exceeds maximum length of {_TTS_REQUEST_CHAR_LIMIT} characters",
+            status_code=400, detail=f"text exceeds maximum length of {_TTS_REQUEST_CHAR_LIMIT} characters"
         )
 
     status, retry_after = redis_db.check_tts_rate_limit(

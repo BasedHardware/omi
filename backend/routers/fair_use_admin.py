@@ -10,7 +10,8 @@ from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
 
 import database.fair_use as fair_use_db
 from database._client import db
-from utils.other.endpoints import get_current_user_uid, rate_limit_dependency
+from utils.auth_middleware import require_firebase
+from utils.other.endpoints import rate_limit_dependency
 from utils.fair_use import (
     get_rolling_speech_ms,
     get_dg_budget_status,
@@ -23,7 +24,9 @@ from utils.fair_use import (
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter()
+_public_router = APIRouter()
+_firebase_router = APIRouter(dependencies=[Depends(require_firebase)])
+_custom_router = APIRouter()
 
 ADMIN_KEY = os.getenv('ADMIN_KEY', '')
 
@@ -43,18 +46,16 @@ def _verify_admin_key(x_admin_key: str = Header(..., alias='X-Admin-Key')) -> st
 # ---------------------------------------------------------------------------
 
 
-@router.get('/v1/admin/fair-use/flagged', tags=['admin'])
+@_custom_router.get('/v1/admin/fair-use/flagged', tags=['admin'])
 def get_flagged_users(
-    admin_id: str = Depends(_verify_admin_key),
-    stage: Optional[str] = None,
-    limit: int = Query(default=50, le=200),
+    admin_id: str = Depends(_verify_admin_key), stage: Optional[str] = None, limit: int = Query(default=50, le=200)
 ):
     """Get users with active fair-use enforcement."""
     users = fair_use_db.get_flagged_users(stage_filter=stage, limit=limit)
     return {'users': users, 'fair_use_enabled': FAIR_USE_ENABLED}
 
 
-@router.get('/v1/admin/fair-use/user/{uid}', tags=['admin'])
+@_custom_router.get('/v1/admin/fair-use/user/{uid}', tags=['admin'])
 def get_user_fair_use_detail(uid: str, admin_id: str = Depends(_verify_admin_key)):
     """Get detailed fair-use state and events for a specific user."""
     state = fair_use_db.get_fair_use_state(uid)
@@ -74,14 +75,14 @@ def get_user_fair_use_detail(uid: str, admin_id: str = Depends(_verify_admin_key
 # ---------------------------------------------------------------------------
 
 
-@router.post('/v1/admin/fair-use/user/{uid}/resolve-event/{event_id}', tags=['admin'])
+@_custom_router.post('/v1/admin/fair-use/user/{uid}/resolve-event/{event_id}', tags=['admin'])
 def resolve_event(uid: str, event_id: str, admin_id: str = Depends(_verify_admin_key), notes: str = Query(default='')):
     """Mark a fair-use event as resolved."""
     fair_use_db.resolve_fair_use_event(uid, event_id, admin_uid=admin_id, notes=notes)
     return {'status': 'resolved'}
 
 
-@router.post('/v1/admin/fair-use/user/{uid}/reset', tags=['admin'])
+@_custom_router.post('/v1/admin/fair-use/user/{uid}/reset', tags=['admin'])
 def reset_user_fair_use(uid: str, admin_id: str = Depends(_verify_admin_key)):
     """Reset a user's fair-use state to clean."""
     fair_use_db.reset_fair_use_state(uid, admin_uid=admin_id)
@@ -89,7 +90,7 @@ def reset_user_fair_use(uid: str, admin_id: str = Depends(_verify_admin_key)):
     return {'status': 'reset'}
 
 
-@router.post('/v1/admin/fair-use/user/{uid}/set-stage', tags=['admin'])
+@_custom_router.post('/v1/admin/fair-use/user/{uid}/set-stage', tags=['admin'])
 def set_user_stage(uid: str, stage: str = Query(...), admin_id: str = Depends(_verify_admin_key)):
     """Manually set a user's enforcement stage."""
     valid_stages = {'none', 'warning', 'throttle', 'restrict'}
@@ -106,7 +107,7 @@ def set_user_stage(uid: str, stage: str = Query(...), admin_id: str = Depends(_v
     return {'status': 'updated', 'stage': stage}
 
 
-@router.get('/v1/admin/fair-use/case/{case_ref}', tags=['admin'])
+@_custom_router.get('/v1/admin/fair-use/case/{case_ref}', tags=['admin'])
 def lookup_case(case_ref: str, admin_id: str = Depends(_verify_admin_key)):
     """Look up a fair-use event by case reference (for support team)."""
     # Search across all users' events for this case_ref
@@ -129,7 +130,7 @@ SUPPORT_EMAIL = 'team@basedhardware.com'
 # ---------------------------------------------------------------------------
 
 
-@router.get(
+@_public_router.get(
     '/v1/fair-use/case/{case_ref}/status',
     tags=['fair_use'],
     dependencies=[Depends(rate_limit_dependency('fair_use_case_status', requests_per_window=10, window_seconds=60))],
@@ -171,9 +172,10 @@ def get_public_case_status(case_ref: str):
 # ---------------------------------------------------------------------------
 
 
-@router.get('/v1/fair-use/status', tags=['fair_use'])
-def get_my_fair_use_status(uid: str = Depends(get_current_user_uid)):
+@_firebase_router.get('/v1/fair-use/status', tags=['fair_use'])
+def get_my_fair_use_status(request: Request):
     """User-facing endpoint: see your own fair-use status and speech usage."""
+    uid = request.state.uid
     state = fair_use_db.get_fair_use_state(uid)
     speech = get_rolling_speech_ms(uid)
 
@@ -228,3 +230,9 @@ def _user_facing_message(stage: str, case_ref: str = '') -> str:
         ),
     }
     return messages.get(stage, messages['none'])
+
+
+router = APIRouter()
+router.include_router(_public_router)
+router.include_router(_firebase_router)
+router.include_router(_custom_router)

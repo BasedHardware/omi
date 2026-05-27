@@ -1,6 +1,21 @@
+"""Auth dependencies and rate limiting for FastAPI endpoints.
+
+HTTP auth is handled by per-router dependencies in ``utils/auth_middleware.py``
+(``require_firebase``, ``require_firebase_no_byok``) which set
+``request.state.uid`` and ``request.state.byok_keys``.
+
+This module retains:
+- ``verify_token`` — shared by auth deps and WS auth
+- ``with_rate_limit`` — per-endpoint rate limiting (reads request.state.uid)
+- WebSocket auth helpers — router-level deps don't fire for WS
+- ``get_current_user_uid`` — DEPRECATED, kept only for backward compat
+- Rate limiting utilities
+"""
+
 import json
 import os
 import time
+from typing import Dict
 
 from fastapi import Depends, Header, HTTPException, WebSocketException
 from fastapi import Request
@@ -12,8 +27,12 @@ import redis as redis_pkg
 
 from database.redis_db import check_rate_limit, try_acquire_listen_lock
 from database.users import record_user_platform
-from utils.byok import extract_byok_from_websocket, set_byok_keys, validate_byok_request, validate_byok_websocket
-from utils.executors import critical_executor, run_blocking
+from utils.byok import (
+    _extract_byok_from_request,
+    extract_byok_from_websocket,
+    validate_and_return_byok_keys,
+    validate_and_return_byok_keys_ws,
+)
 from utils.rate_limit_config import RATE_POLICIES, RATE_LIMIT_SHADOW, get_effective_limit
 
 logger = logging.getLogger(__name__)
@@ -56,14 +75,10 @@ def get_current_user_uid(
     authorization: str = Header(None),
     x_app_platform: str = Header(None, alias='X-App-Platform'),
 ):
-    """FastAPI dependency for HTTP endpoints with Authorization header.
+    """DEPRECATED: Auth is now handled by per-router dependencies (require_firebase).
 
-    Side-effect: records the signup/last-active platform for the user via
-    `record_user_platform`, which is throttled via Redis to one Firestore
-    write per (uid, platform) every 10 minutes. Failures here never fail the
-    request — it's telemetry, not auth.
-
-    Also validates BYOK headers against Firestore enrollment (if applicable).
+    Kept for backward compatibility with any code that still references it.
+    Prefer reading ``request.state.uid`` set by the auth dependency.
     """
     if not authorization:
         raise HTTPException(status_code=401, detail="Authorization header not found")
@@ -81,12 +96,6 @@ def get_current_user_uid(
         record_user_platform(uid, x_app_platform)
     except Exception as e:  # noqa: BLE001 — telemetry must never fail the request
         logger.debug("record_user_platform swallowed error for uid=%s: %s", uid, e)
-
-    # Validate BYOK keys against Firestore enrollment for ALL authenticated
-    # HTTP endpoints.  Runs after auth so we have the uid.  Lightweight: uses
-    # a 30-second TTL cache for Firestore state, and is a no-op when no BYOK
-    # headers are present.
-    validate_byok_request(uid)
 
     return uid
 
@@ -95,11 +104,9 @@ def get_current_user_uid_no_byok_validation(
     authorization: str = Header(None),
     x_app_platform: str = Header(None, alias='X-App-Platform'),
 ):
-    """Auth dependency that skips BYOK fingerprint validation.
+    """DEPRECATED: BYOK-skip auth is now handled by require_firebase_no_byok dependency.
 
-    Used ONLY by the BYOK activation/deactivation endpoints — those need to
-    update Firestore fingerprints, so validating the old fingerprints first
-    would deadlock key rotation.
+    Kept for backward compatibility.
     """
     if not authorization:
         raise HTTPException(status_code=401, detail="Authorization header not found")
@@ -119,6 +126,11 @@ def get_current_user_uid_no_byok_validation(
         logger.debug("record_user_platform swallowed error for uid=%s: %s", uid, e)
 
     return uid
+
+
+# ---------------------------------------------------------------------------
+# WebSocket auth — BaseHTTPMiddleware does NOT fire for WS scope
+# ---------------------------------------------------------------------------
 
 
 def _verify_ws_auth(authorization: str) -> str:
@@ -143,39 +155,13 @@ def _verify_ws_auth(authorization: str) -> str:
         raise WebSocketException(code=1008, reason="Auth error")
 
 
-async def get_current_user_uid_ws_listen(
-    websocket: WebSocket = None,
-    authorization: str = Header(None),
-):
+def get_current_user_uid_ws_listen(authorization: str = Header(None)):
     """WebSocket auth for /v4/listen — NO rate limiting.
 
     Mobile apps reconnect legitimately on network switch / backgrounding,
     so the per-UID rate limiter must not block them.
-
-    Also extracts BYOK headers from the WS upgrade request and validates
-    them against Firestore enrollment (BaseHTTPMiddleware doesn't fire for
-    WebSocket scope, so this is the shared entry point for WS BYOK).
-
-    **Why async:** Starlette runs sync WS deps in a worker thread via
-    ``anyio.to_thread.run_sync``, which copies the context. ContextVar
-    mutations inside the sync dep (``set_byok_keys``) are discarded when
-    control returns to the async handler, so ``get_byok_key('deepgram')``
-    would return None downstream. Running the dep on the event loop keeps
-    the mutation in the handler's context; the blocking Firebase and
-    Firestore calls are offloaded via ``run_blocking``.
     """
-    uid = await run_blocking(critical_executor, _verify_ws_auth, authorization)
-
-    # Extract BYOK headers from the WS upgrade request and validate.
-    if websocket is not None:
-        byok_keys = extract_byok_from_websocket(websocket)
-        if byok_keys:
-            set_byok_keys(byok_keys)
-        error = await run_blocking(critical_executor, validate_byok_websocket, uid)
-        if error:
-            raise WebSocketException(code=4003, reason=error)
-
-    return uid
+    return _verify_ws_auth(authorization)
 
 
 def get_current_user_uid_ws(authorization: str = Header(None)):
@@ -232,6 +218,10 @@ def get_current_user_uid_from_ws_message(message: dict) -> str:
 
     return verify_token(token)
 
+
+# ---------------------------------------------------------------------------
+# Rate limiting
+# ---------------------------------------------------------------------------
 
 cached = {}
 
@@ -304,24 +294,37 @@ def _enforce_rate_limit(key: str, policy_name: str):
         )
 
 
-def with_rate_limit(auth_dependency, policy_name: str):
-    """Wrap an auth dependency with per-UID rate limiting.
+def with_rate_limit(policy_or_auth_dep, policy_name: str = None):
+    """Per-endpoint rate limiting.
 
-    After auth succeeds, checks the rate limit for that UID.
-    One Redis call per request. Fail-open on Redis errors.
-
-    Args:
-        auth_dependency: FastAPI dependency that returns a UID string.
-        policy_name: Key in RATE_POLICIES (utils/rate_limit_config.py).
+    Two calling conventions:
+    - ``with_rate_limit("policy")`` — reads uid from request.state (set by auth dependency)
+    - ``with_rate_limit(auth_dep, "policy")`` — legacy, wraps a custom auth dep (e.g. developer API key)
     """
-    if policy_name not in RATE_POLICIES:
-        raise ValueError(f"Unknown rate limit policy: {policy_name}")
+    if policy_name is None:
+        # New convention: with_rate_limit("policy")
+        actual_policy = policy_or_auth_dep
+        if actual_policy not in RATE_POLICIES:
+            raise ValueError(f"Unknown rate limit policy: {actual_policy}")
 
-    async def dependency(uid: str = Depends(auth_dependency)):
-        _enforce_rate_limit(uid, policy_name)
-        return uid
+        async def dependency(request: Request):
+            uid = getattr(request.state, 'uid', None)
+            if not uid:
+                raise HTTPException(status_code=401, detail="Authentication required")
+            _enforce_rate_limit(uid, actual_policy)
 
-    return dependency
+        return dependency
+    else:
+        # Legacy convention: with_rate_limit(auth_dep, "policy")
+        auth_dependency = policy_or_auth_dep
+        if policy_name not in RATE_POLICIES:
+            raise ValueError(f"Unknown rate limit policy: {policy_name}")
+
+        async def dependency(uid: str = Depends(auth_dependency)):
+            _enforce_rate_limit(uid, policy_name)
+            return uid
+
+        return dependency
 
 
 def check_rate_limit_inline(key: str, policy_name: str):
@@ -330,6 +333,24 @@ def check_rate_limit_inline(key: str, policy_name: str):
     Use when auth is not a standard Depends() pattern (e.g., MCP, integration).
     """
     _enforce_rate_limit(key, policy_name)
+
+
+# ---------------------------------------------------------------------------
+# BYOK WebSocket dependencies — middleware doesn't fire for WS
+# ---------------------------------------------------------------------------
+
+
+def get_validated_byok_keys_ws(
+    websocket: WebSocket,
+    uid: str = Depends(get_current_user_uid_ws_listen),
+) -> Dict[str, str]:
+    """Extract and validate BYOK keys from a WebSocket upgrade request.
+
+    Returns validated keys dict (empty if user is not BYOK-active or no
+    headers).  Raises WebSocketException(4003) on fingerprint mismatch.
+    """
+    keys = extract_byok_from_websocket(websocket)
+    return validate_and_return_byok_keys_ws(uid, keys)
 
 
 def timeit(func):

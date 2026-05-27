@@ -2,7 +2,7 @@ import os
 from datetime import datetime, timezone
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Query
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
 from pydantic import BaseModel
 
 from database.announcements import (
@@ -21,12 +21,15 @@ from database.announcements import (
     update_announcement,
 )
 from models.announcement import Announcement, AnnouncementType, Display, Targeting, TriggerType
+from utils.auth_middleware import require_firebase
 from utils.other import endpoints as auth_endpoints
 
-router = APIRouter()
+_public_router = APIRouter()
+_firebase_router = APIRouter(dependencies=[Depends(require_firebase)])
+_custom_router = APIRouter()
 
 
-@router.get("/v1/announcements/changelogs", response_model=List[Announcement])
+@_public_router.get("/v1/announcements/changelogs", response_model=List[Announcement])
 def get_changelogs(
     from_version: Optional[str] = Query(None, description="Previous app version (before upgrade)"),
     to_version: Optional[str] = Query(None, description="Current app version (after upgrade)"),
@@ -55,7 +58,7 @@ def get_changelogs(
     return changelogs
 
 
-@router.get("/v1/announcements/features", response_model=List[Announcement])
+@_public_router.get("/v1/announcements/features", response_model=List[Announcement])
 def get_features(
     version: str = Query(..., description="Version user upgraded to"),
     version_type: str = Query(..., description="Type: 'app' or 'firmware'"),
@@ -75,11 +78,11 @@ def get_features(
     return features
 
 
-@router.get("/v1/announcements/general", response_model=List[Announcement])
+@_public_router.get("/v1/announcements/general", response_model=List[Announcement])
 def get_announcements(
     last_checked_at: Optional[str] = Query(
         None, description="ISO timestamp of last check (only returns newer announcements)"
-    ),
+    )
 ):
     """
     Get active, non-expired general announcements.
@@ -103,14 +106,14 @@ def get_announcements(
 # ----------------------------
 
 
-@router.get("/v1/announcements/pending", response_model=List[Announcement], tags=["announcements"])
+@_firebase_router.get("/v1/announcements/pending", response_model=List[Announcement], tags=["announcements"])
 def get_pending_announcements_endpoint(
+    request: Request,
     app_version: str = Query(..., description="Current app version (e.g., '1.0.522+240')"),
     platform: str = Query(..., description="Platform: 'ios' or 'android'"),
     trigger: str = Query(..., description="Trigger: 'app_launch', 'version_upgrade', or 'firmware_upgrade'"),
     firmware_version: Optional[str] = Query(None, description="Current firmware version (optional)"),
     device_model: Optional[str] = Query(None, description="Device model name (optional)"),
-    uid: str = Depends(auth_endpoints.get_current_user_uid),
 ):
     """
     Get all pending announcements for a user.
@@ -131,6 +134,7 @@ def get_pending_announcements_endpoint(
     - version_upgrade: Check only when app version changed
     - firmware_upgrade: Check only when firmware version changed
     """
+    uid = request.state.uid
     if platform not in ["ios", "android"]:
         raise HTTPException(status_code=400, detail="Platform must be 'ios' or 'android'")
 
@@ -156,11 +160,11 @@ class DismissAnnouncementRequest(BaseModel):
     cta_clicked: bool = False
 
 
-@router.post("/v1/announcements/{announcement_id}/dismiss", tags=["announcements"])
+@_firebase_router.post("/v1/announcements/{announcement_id}/dismiss", tags=["announcements"])
 def dismiss_announcement_endpoint(
+    request: Request,
     announcement_id: str,
     data: DismissAnnouncementRequest,
-    uid: str = Depends(auth_endpoints.get_current_user_uid),
 ):
     """
     Mark an announcement as dismissed for the current user.
@@ -168,6 +172,7 @@ def dismiss_announcement_endpoint(
     This prevents the announcement from being shown again if show_once is True.
     The cta_clicked field can be used to track whether the user engaged with the call-to-action.
     """
+    uid = request.state.uid
     # Verify announcement exists
     announcement = get_announcement_by_id(announcement_id)
     if not announcement:
@@ -221,7 +226,7 @@ class UpdateAnnouncementRequest(BaseModel):
     content: Optional[dict] = None
 
 
-@router.get("/v1/announcements/all", response_model=List[Announcement], tags=["admin"])
+@_custom_router.get("/v1/announcements/all", response_model=List[Announcement], tags=["admin"])
 def list_all_announcements(
     secret_key: str = Header(..., description="Admin secret key"),
     announcement_type: Optional[AnnouncementType] = Query(None, description="Filter by type"),
@@ -235,14 +240,11 @@ def list_all_announcements(
     """
     _verify_admin_key(secret_key)
 
-    announcements = get_all_announcements(
-        announcement_type=announcement_type,
-        active_only=active_only,
-    )
+    announcements = get_all_announcements(announcement_type=announcement_type, active_only=active_only)
     return announcements
 
 
-@router.get("/v1/announcements/{announcement_id}", response_model=Announcement, tags=["admin"])
+@_custom_router.get("/v1/announcements/{announcement_id}", response_model=Announcement, tags=["admin"])
 def get_announcement(
     announcement_id: str,
     secret_key: str = Header(..., description="Admin secret key"),
@@ -260,7 +262,7 @@ def get_announcement(
     return announcement
 
 
-@router.post("/v1/announcements", response_model=Announcement, tags=["admin"])
+@_custom_router.post("/v1/announcements", response_model=Announcement, tags=["admin"])
 def create_announcement_endpoint(
     data: CreateAnnouncementRequest,
     secret_key: str = Header(..., description="Admin secret key"),
@@ -299,7 +301,7 @@ def create_announcement_endpoint(
     return created
 
 
-@router.put("/v1/announcements/{announcement_id}", response_model=Announcement, tags=["admin"])
+@_custom_router.put("/v1/announcements/{announcement_id}", response_model=Announcement, tags=["admin"])
 def update_announcement_endpoint(
     announcement_id: str,
     data: UpdateAnnouncementRequest,
@@ -342,7 +344,7 @@ def update_announcement_endpoint(
     return updated
 
 
-@router.delete("/v1/announcements/{announcement_id}", tags=["admin"])
+@_custom_router.delete("/v1/announcements/{announcement_id}", tags=["admin"])
 def delete_announcement_endpoint(
     announcement_id: str,
     secret_key: str = Header(..., description="Admin secret key"),
@@ -367,3 +369,9 @@ def delete_announcement_endpoint(
     else:
         success = delete_announcement(announcement_id)
         return {"success": success, "message": "Announcement permanently deleted"}
+
+
+router = APIRouter()
+router.include_router(_public_router)
+router.include_router(_firebase_router)
+router.include_router(_custom_router)

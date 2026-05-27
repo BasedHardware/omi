@@ -51,6 +51,10 @@ for mod_name in [
 ]:
     _stub_package(mod_name) if "." not in mod_name else _stub_module(mod_name)
 
+# auth_middleware imports InvalidIdTokenError at module level
+sys.modules["firebase_admin.auth"].InvalidIdTokenError = type("InvalidIdTokenError", (Exception,), {})
+sys.modules["firebase_admin.auth"].verify_id_token = MagicMock()
+
 redis_stub = _stub_module("redis")
 redis_stub.Redis = MagicMock(return_value=MagicMock())
 

@@ -55,13 +55,17 @@ from utils.overage import (
     is_overage_plan,
 )
 from utils.executors import db_executor, stripe_executor, run_blocking
+from utils.auth_middleware import require_firebase, require_firebase_no_byok
 from utils.log_sanitizer import sanitize
 import os
 import logging
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter()
+_public_router = APIRouter()
+_skip_byok_router = APIRouter(dependencies=[Depends(require_firebase_no_byok)])
+_firebase_router = APIRouter(dependencies=[Depends(require_firebase)])
+_custom_router = APIRouter()
 
 
 class CreateCheckoutRequest(BaseModel):
@@ -189,15 +193,16 @@ def _try_reactivate_subscription(uid: str, target_price_id: str) -> dict | None:
     return None
 
 
-@router.get('/v1/payments/available-plans', response_model=AvailablePlansResponse)
+@_skip_byok_router.get('/v1/payments/available-plans', response_model=AvailablePlansResponse)
 def get_available_plans_endpoint(
+    request: Request,
     # Payment / plan surfaces must stay reachable even if BYOK fingerprints
     # drift (e.g. user rotated a key locally without re-activating). Otherwise
     # a broken-BYOK user can't see or change their plan to recover.
-    uid: str = Depends(auth.get_current_user_uid_no_byok_validation),
     x_app_platform: Optional[str] = Header(None, alias='X-App-Platform'),
     x_app_version: Optional[str] = Header(None, alias='X-App-Version'),
 ):
+    uid = request.state.uid
     """Get available subscription plans with their price IDs and billing intervals."""
     try:
         # Get user's current subscription to determine which plan is active
@@ -344,8 +349,9 @@ class OverageInfoResponse(BaseModel):
     byok_available: bool = True
 
 
-@router.get('/v1/payments/overage-info', response_model=OverageInfoResponse)
-def get_overage_info_endpoint(uid: str = Depends(auth.get_current_user_uid_no_byok_validation)):
+@_skip_byok_router.get('/v1/payments/overage-info', response_model=OverageInfoResponse)
+def get_overage_info_endpoint(request: Request):
+    uid = request.state.uid
     """Explain overage billing + return the user's current accrued charge.
 
     Powers the clickable "What happens past the limit?" text on the plan page.
@@ -375,15 +381,16 @@ def get_overage_info_endpoint(uid: str = Depends(auth.get_current_user_uid_no_by
     )
 
 
-@router.post('/v1/payments/checkout-session')
-def create_checkout_session_endpoint(request: CreateCheckoutRequest, uid: str = Depends(auth.get_current_user_uid)):
+@_firebase_router.post('/v1/payments/checkout-session')
+def create_checkout_session_endpoint(request: Request, data: CreateCheckoutRequest):
     # Check if user can make a new payment
-    can_pay, reason = subscription_utils.can_user_make_payment(uid, request.price_id)
+    uid = request.state.uid
+    can_pay, reason = subscription_utils.can_user_make_payment(uid, data.price_id)
     if not can_pay:
         raise HTTPException(status_code=400, detail=reason)
 
     # Try to reactivate canceled subscription (Scenario A)
-    reactivation_result = _try_reactivate_subscription(uid, request.price_id)
+    reactivation_result = _try_reactivate_subscription(uid, data.price_id)
     if reactivation_result:
         return reactivation_result
 
@@ -391,15 +398,16 @@ def create_checkout_session_endpoint(request: CreateCheckoutRequest, uid: str = 
     idempotency_key = str(uuid.uuid4())
     existing_customer_id = users_db.get_stripe_customer_id(uid)
     session = stripe_utils.create_subscription_checkout_session(
-        uid, request.price_id, idempotency_key, customer_id=existing_customer_id
+        uid, data.price_id, idempotency_key, customer_id=existing_customer_id
     )
     if not session:
         raise HTTPException(status_code=500, detail="Could not create checkout session.")
     return {"url": session.url, "session_id": session.id}
 
 
-@router.post('/v1/payments/upgrade-subscription')
-def upgrade_subscription_endpoint(request: UpgradeSubscriptionRequest, uid: str = Depends(auth.get_current_user_uid)):
+@_firebase_router.post('/v1/payments/upgrade-subscription')
+def upgrade_subscription_endpoint(request: Request, data: UpgradeSubscriptionRequest):
+    uid = request.state.uid
     """Upgrade or change a user's subscription plan.
 
     - Cross-plan changes (e.g. Unlimited→Pro): immediate swap via Subscription.modify(),
@@ -422,14 +430,14 @@ def upgrade_subscription_endpoint(request: UpgradeSubscriptionRequest, uid: str 
         current_item_id = stripe_sub['items']['data'][0]['id']
 
         # Check if user is trying to upgrade to the same plan
-        if current_price_id == request.price_id:
+        if current_price_id == data.price_id:
             raise HTTPException(
                 status_code=400,
                 detail="You are already subscribed to this plan. Please select a different plan to upgrade or downgrade.",
             )
 
-        target_plan = get_plan_type_from_price_id(request.price_id)
-        target_price = stripe.Price.retrieve(request.price_id)
+        target_plan = get_plan_type_from_price_id(data.price_id)
+        target_price = stripe.Price.retrieve(data.price_id)
         target_interval = target_price.recurring.interval  # "month" or "year"
         current_plan = get_plan_type_from_price_id(current_price_id)
 
@@ -444,7 +452,7 @@ def upgrade_subscription_endpoint(request: UpgradeSubscriptionRequest, uid: str 
         if current_plan != target_plan:
             updated_sub = stripe.Subscription.modify(
                 stripe_sub['id'],
-                items=[{'id': current_item_id, 'price': request.price_id}],
+                items=[{'id': current_item_id, 'price': data.price_id}],
                 proration_behavior='always_invoice',
                 metadata={'uid': uid, 'sub_type': target_plan.value},
             )
@@ -472,9 +480,7 @@ def upgrade_subscription_endpoint(request: UpgradeSubscriptionRequest, uid: str 
             }
 
         # Same plan, different interval (e.g. monthly→annual): schedule for end of period
-        schedule = stripe.SubscriptionSchedule.create(
-            from_subscription=stripe_sub['id'],
-        )
+        schedule = stripe.SubscriptionSchedule.create(from_subscription=stripe_sub['id'])
 
         updated_schedule = stripe.SubscriptionSchedule.modify(
             schedule.id,
@@ -492,7 +498,7 @@ def upgrade_subscription_endpoint(request: UpgradeSubscriptionRequest, uid: str 
                 {
                     'items': [
                         {
-                            'price': request.price_id,
+                            'price': data.price_id,
                         }
                     ],
                 },
@@ -525,18 +531,16 @@ class CancelSubscriptionRequest(BaseModel):
     reason_details: Optional[str] = None
 
 
-@router.delete('/v1/payments/subscription')
-def cancel_subscription_endpoint(
-    request: CancelSubscriptionRequest = CancelSubscriptionRequest(),
-    uid: str = Depends(auth.get_current_user_uid),
-):
+@_firebase_router.delete('/v1/payments/subscription')
+def cancel_subscription_endpoint(request: Request, data: CancelSubscriptionRequest = CancelSubscriptionRequest()):
+    uid = request.state.uid
     subscription = users_db.get_user_subscription(uid)
     if not subscription.stripe_subscription_id:
         raise HTTPException(status_code=400, detail="No active Stripe subscription found.")
 
     # Store cancellation reason
-    if request.reason:
-        users_db.set_user_cancellation_feedback(uid, request.reason, request.reason_details)
+    if data.reason:
+        users_db.set_user_cancellation_feedback(uid, data.reason, data.reason_details)
 
     try:
         # First, check if the subscription is managed by a subscription schedule
@@ -592,7 +596,7 @@ def cancel_subscription_endpoint(
         raise HTTPException(status_code=500, detail="Could not cancel subscription. Please try again.")
 
 
-@router.post('/v1/stripe/webhook', tags=['v1', 'stripe', 'webhook'])
+@_custom_router.post('/v1/stripe/webhook', tags=['v1', 'stripe', 'webhook'])
 async def stripe_webhook(request: Request, stripe_signature: str = Header(None)):
     payload = await request.body()
 
@@ -859,7 +863,7 @@ async def stripe_webhook(request: Request, stripe_signature: str = Header(None))
     return {"status": "success"}
 
 
-@router.post('/v1/stripe/connect/webhook', tags=['v1', 'stripe', 'webhook'])
+@_custom_router.post('/v1/stripe/connect/webhook', tags=['v1', 'stripe', 'webhook'])
 async def stripe_webhook(request: Request, stripe_signature: str = Header(None)):
     payload = await request.body()
 
@@ -886,10 +890,9 @@ async def stripe_webhook(request: Request, stripe_signature: str = Header(None))
     return {"status": "success"}
 
 
-@router.post("/v1/stripe/connect-accounts")
-def create_connect_account_endpoint(
-    country: str | None = Query(default=None), uid: str = Depends(auth.get_current_user_uid)
-):
+@_firebase_router.post("/v1/stripe/connect-accounts")
+def create_connect_account_endpoint(request: Request, country: str | None = Query(default=None)):
+    uid = request.state.uid
     """
     Create a Stripe Connect account and return the account creation response
     """
@@ -909,13 +912,14 @@ def create_connect_account_endpoint(
         raise HTTPException(status_code=400, detail=str(e))
 
 
-@router.get('/v1/stripe/supported-countries')
+@_public_router.get('/v1/stripe/supported-countries')
 def get_supported_countries():
     return stripe_utils.get_supported_countries()
 
 
-@router.get("/v1/stripe/onboarded", tags=['v1', 'stripe'])
-def check_onboarding_status(uid: str = Depends(auth.get_current_user_uid)):
+@_firebase_router.get("/v1/stripe/onboarded", tags=['v1', 'stripe'])
+def check_onboarding_status(request: Request):
+    uid = request.state.uid
     """
     Check the onboarding status of a Connect account
     """
@@ -928,8 +932,8 @@ def check_onboarding_status(uid: str = Depends(auth.get_current_user_uid)):
         raise HTTPException(status_code=400, detail=str(e))
 
 
-@router.post("/v1/stripe/refresh/{account_id}")
-def refresh_account_link_endpoint(request: Request, account_id: str, uid: str = Depends(auth.get_current_user_uid)):
+@_custom_router.post("/v1/stripe/refresh/{account_id}")
+def refresh_account_link_endpoint(request: Request, account_id: str):
     """
     Generate a fresh account link if the previous one expired
     """
@@ -940,7 +944,7 @@ def refresh_account_link_endpoint(request: Request, account_id: str, uid: str = 
         raise HTTPException(status_code=400, detail=str(e))
 
 
-@router.get("/v1/stripe/return/{account_id}", response_class=HTMLResponse)
+@_public_router.get("/v1/stripe/return/{account_id}", response_class=HTMLResponse)
 def stripe_return(account_id: str):
     """
     Handle the return flow from Stripe Connect account creation
@@ -1008,8 +1012,9 @@ def stripe_return(account_id: str):
     return HTMLResponse(content=html_content)
 
 
-@router.post("/v1/paypal/payment-details")
-def save_paypal_payment_details(data: dict, uid: str = Depends(auth.get_current_user_uid)):
+@_firebase_router.post("/v1/paypal/payment-details")
+def save_paypal_payment_details(request: Request, data: dict):
+    uid = request.state.uid
     """
     Save PayPal payment details (email and paypal.me link)
     """
@@ -1029,8 +1034,9 @@ def save_paypal_payment_details(data: dict, uid: str = Depends(auth.get_current_
         raise HTTPException(status_code=400, detail=str(e))
 
 
-@router.get("/v1/paypal/payment-details")
-def get_paypal_payment_details_endpoint(uid: str = Depends(auth.get_current_user_uid)):
+@_firebase_router.get("/v1/paypal/payment-details")
+def get_paypal_payment_details_endpoint(request: Request):
+    uid = request.state.uid
     """
     Get the PayPal payment details for the user
     """
@@ -1041,7 +1047,7 @@ def get_paypal_payment_details_endpoint(uid: str = Depends(auth.get_current_user
     return details
 
 
-@router.get("/v1/payments/success", response_class=HTMLResponse)
+@_public_router.get("/v1/payments/success", response_class=HTMLResponse)
 def stripe_success(session_id: str = Query(...)):
     # The subscription is updated via webhook. This page is just for user feedback.
     return HTMLResponse(content="""
@@ -1055,7 +1061,7 @@ def stripe_success(session_id: str = Query(...)):
     """)
 
 
-@router.get("/v1/payments/cancel", response_class=HTMLResponse)
+@_public_router.get("/v1/payments/cancel", response_class=HTMLResponse)
 def stripe_cancel():
     return HTMLResponse(content="""
         <html>
@@ -1068,8 +1074,9 @@ def stripe_cancel():
     """)
 
 
-@router.post('/v1/payments/customer-portal')
-def create_customer_portal_endpoint(uid: str = Depends(auth.get_current_user_uid)):
+@_firebase_router.post('/v1/payments/customer-portal')
+def create_customer_portal_endpoint(request: Request):
+    uid = request.state.uid
     """Create a Stripe Customer Portal session for managing payment methods and subscriptions."""
 
     customer_id = users_db.get_stripe_customer_id(uid)
@@ -1088,15 +1095,12 @@ def create_customer_portal_endpoint(uid: str = Depends(auth.get_current_user_uid
 
     return_url = urljoin(base_url, 'v1/payments/portal-return')
 
-    portal_session = stripe.billing_portal.Session.create(
-        customer=customer_id,
-        return_url=return_url,
-    )
+    portal_session = stripe.billing_portal.Session.create(customer=customer_id, return_url=return_url)
 
     return {"url": portal_session.url}
 
 
-@router.get("/v1/payments/portal-return", response_class=HTMLResponse)
+@_public_router.get("/v1/payments/portal-return", response_class=HTMLResponse)
 def portal_return():
     return HTMLResponse(content="""
         <html>
@@ -1109,8 +1113,9 @@ def portal_return():
     """)
 
 
-@router.get("/v1/payment-methods/status")
-def get_payment_method_status(uid: str = Depends(auth.get_current_user_uid)):
+@_firebase_router.get("/v1/payment-methods/status")
+def get_payment_method_status(request: Request):
+    uid = request.state.uid
     """Get the statuses of the payment methods for the user"""
     default_payment_method = get_default_payment_method(uid)
 
@@ -1126,8 +1131,9 @@ def get_payment_method_status(uid: str = Depends(auth.get_current_user_uid)):
     return {"stripe": stripe_status, "paypal": paypal_status, "default": default_payment_method}
 
 
-@router.post("/v1/payment-methods/default")
-def set_default_payment_method_endpoint(data: dict, uid: str = Depends(auth.get_current_user_uid)):
+@_firebase_router.post("/v1/payment-methods/default")
+def set_default_payment_method_endpoint(request: Request, data: dict):
+    uid = request.state.uid
     """Set the default payment method for the user"""
     method = data.get('method')
     if method not in ['stripe', 'paypal']:
@@ -1136,8 +1142,9 @@ def set_default_payment_method_endpoint(data: dict, uid: str = Depends(auth.get_
     return {"status": "success"}
 
 
-@router.get("/v1/apps/{app_id}/subscription")
-def get_app_subscription(app_id: str, uid: str = Depends(auth.get_current_user_uid)):
+@_firebase_router.get("/v1/apps/{app_id}/subscription")
+def get_app_subscription(request: Request, app_id: str):
+    uid = request.state.uid
     """Get user's subscription for a specific app"""
     try:
 
@@ -1169,8 +1176,9 @@ def get_app_subscription(app_id: str, uid: str = Depends(auth.get_current_user_u
         raise HTTPException(status_code=500, detail="Could not retrieve subscription information")
 
 
-@router.delete("/v1/apps/{app_id}/subscription")
-def cancel_app_subscription(app_id: str, uid: str = Depends(auth.get_current_user_uid)):
+@_firebase_router.delete("/v1/apps/{app_id}/subscription")
+def cancel_app_subscription(request: Request, app_id: str):
+    uid = request.state.uid
     """Cancel user's subscription for a specific app"""
     try:
 
@@ -1188,10 +1196,7 @@ def cancel_app_subscription(app_id: str, uid: str = Depends(auth.get_current_use
             raise HTTPException(status_code=404, detail="Invalid subscription data")
 
         # Cancel the subscription at period end
-        updated_sub = stripe_utils.modify_subscription(
-            target_subscription_id,
-            cancel_at_period_end=True,
-        )
+        updated_sub = stripe_utils.modify_subscription(target_subscription_id, cancel_at_period_end=True)
 
         updated_sub_dict = updated_sub.to_dict()
 
@@ -1207,3 +1212,10 @@ def cancel_app_subscription(app_id: str, uid: str = Depends(auth.get_current_use
     except Exception as e:
         logger.error(f"Error canceling app subscription: {e}")
         raise HTTPException(status_code=500, detail="Could not cancel subscription")
+
+
+router = APIRouter()
+router.include_router(_public_router)
+router.include_router(_skip_byok_router)
+router.include_router(_firebase_router)
+router.include_router(_custom_router)

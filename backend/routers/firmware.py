@@ -26,8 +26,7 @@ router = APIRouter()
 
 # Firmware release tag pattern — matches Omi_CV1_v3.0.15, Omi_DK2_v2.0.10, OmiGlass_v2.3.2, etc.
 FIRMWARE_TAG_PATTERN = re.compile(
-    r'^(?:Omi_CV1|Omi_DK2|OmiGlass|OpenGlass|Friend)_v[0-9]+(?:\.[0-9]+){1,2}$',
-    re.IGNORECASE,
+    r'^(?:Omi_CV1|Omi_DK2|OmiGlass|OpenGlass|Friend)_v[0-9]+(?:\.[0-9]+){1,2}$', re.IGNORECASE
 )
 MAX_PAGES = 20  # Safety cap to prevent runaway pagination
 

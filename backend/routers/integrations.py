@@ -13,13 +13,15 @@ import httpx
 
 import database.users as users_db
 import database.redis_db as redis_db
+from utils.auth_middleware import require_firebase
 from utils.other import endpoints as auth
 from utils.log_sanitizer import sanitize
 import logging
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter()
+_firebase_router = APIRouter(dependencies=[Depends(require_firebase)])
+_custom_router = APIRouter()
 
 # OAuth state management
 OAUTH_STATE_EXPIRY = 600  # 10 minutes
@@ -199,8 +201,9 @@ class IntegrationResponse(BaseModel):
 # *****************************
 
 
-@router.get("/v1/integrations/{app_key}", response_model=IntegrationResponse, tags=['integrations'])
-def get_integration(app_key: str, uid: str = Depends(auth.get_current_user_uid)):
+@_firebase_router.get("/v1/integrations/{app_key}", response_model=IntegrationResponse, tags=['integrations'])
+def get_integration(request: Request, app_key: str):
+    uid = request.state.uid
     """Get integration connection status for the current user."""
     integration = users_db.get_integration(uid, app_key)
 
@@ -210,8 +213,9 @@ def get_integration(app_key: str, uid: str = Depends(auth.get_current_user_uid))
         return IntegrationResponse(connected=False, app_key=app_key)
 
 
-@router.put("/v1/integrations/{app_key}", tags=['integrations'])
-def save_integration(app_key: str, data: IntegrationData, uid: str = Depends(auth.get_current_user_uid)):
+@_firebase_router.put("/v1/integrations/{app_key}", tags=['integrations'])
+def save_integration(request: Request, app_key: str, data: IntegrationData):
+    uid = request.state.uid
     """Save or update an integration connection."""
     # Convert Pydantic model to dict, excluding None values
     integration_data = data.model_dump(exclude_none=True)
@@ -221,8 +225,9 @@ def save_integration(app_key: str, data: IntegrationData, uid: str = Depends(aut
     return {"status": "ok", "app_key": app_key}
 
 
-@router.delete("/v1/integrations/{app_key}", status_code=204, tags=['integrations'])
-def delete_integration(app_key: str, uid: str = Depends(auth.get_current_user_uid)):
+@_firebase_router.delete("/v1/integrations/{app_key}", status_code=204, tags=['integrations'])
+def delete_integration(request: Request, app_key: str):
+    uid = request.state.uid
     """Delete an integration connection."""
     success = users_db.delete_integration(uid, app_key)
 
@@ -232,8 +237,9 @@ def delete_integration(app_key: str, uid: str = Depends(auth.get_current_user_ui
     return None
 
 
-@router.put("/v1/integrations/apple-health/sync", tags=['integrations'])
-def sync_apple_health_data(data: AppleHealthSyncData, uid: str = Depends(auth.get_current_user_uid)):
+@_firebase_router.put("/v1/integrations/apple-health/sync", tags=['integrations'])
+def sync_apple_health_data(request: Request, data: AppleHealthSyncData):
+    uid = request.state.uid
     """
     Sync Apple Health data from the iOS device.
 
@@ -315,8 +321,9 @@ class OAuthUrlResponse(BaseModel):
     auth_url: str = Field(description="OAuth authorization URL to open in browser")
 
 
-@router.get("/v1/integrations/{app_key}/oauth-url", response_model=OAuthUrlResponse, tags=['integrations'])
-def get_oauth_url(app_key: str, uid: str = Depends(auth.get_current_user_uid)):
+@_firebase_router.get("/v1/integrations/{app_key}/oauth-url", response_model=OAuthUrlResponse, tags=['integrations'])
+def get_oauth_url(request: Request, app_key: str):
+    uid = request.state.uid
     """
     Get OAuth authorization URL for an integration.
     Frontend opens this URL in browser to start OAuth flow.
@@ -395,11 +402,7 @@ class OAuthProviderConfig(BaseModel):
 
 
 async def handle_oauth_callback(
-    request: Request,
-    app_key: str,
-    code: Optional[str],
-    state: Optional[str],
-    provider_config: OAuthProviderConfig,
+    request: Request, app_key: str, code: Optional[str], state: Optional[str], provider_config: OAuthProviderConfig
 ) -> HTMLResponse:
     """
     Generic OAuth callback handler that works for all providers.
@@ -496,16 +499,9 @@ async def handle_oauth_callback(
         return render_oauth_response(request, app_key, success=False, error_type='server_error')
 
 
-@router.get(
-    '/v2/integrations/{app_key}/callback',
-    response_class=HTMLResponse,
-    tags=['integrations', 'oauth'],
-)
+@_custom_router.get('/v2/integrations/{app_key}/callback', response_class=HTMLResponse, tags=['integrations', 'oauth'])
 async def oauth_callback(
-    request: Request,
-    app_key: str,
-    code: Optional[str] = Query(None),
-    state: Optional[str] = Query(None),
+    request: Request, app_key: str, code: Optional[str] = Query(None), state: Optional[str] = Query(None)
 ):
     key_map = {
         'google-calendar': 'google_calendar',
@@ -547,6 +543,11 @@ async def oauth_callback(
             },
         )
         return await handle_oauth_callback(request, normalized_key, code, state, config)
+
+
+router = APIRouter()
+router.include_router(_firebase_router)
+router.include_router(_custom_router)
 
 
 @router.on_event("shutdown")

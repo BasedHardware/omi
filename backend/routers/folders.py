@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import Request, APIRouter, Depends, HTTPException, Query
 from typing import List, Optional
 
 import database.folders as folders_db
@@ -14,12 +14,14 @@ from models.folder import (
 from models.conversation import Conversation
 from utils.conversations.render import redact_conversations_for_list
 from utils.other import endpoints as auth
+from utils.auth_middleware import require_firebase
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(require_firebase)])
 
 
 @router.get('/v1/folders', response_model=List[Folder], tags=['folders'])
-def get_folders(uid: str = Depends(auth.get_current_user_uid)):
+def get_folders(request: Request):
+    uid = request.state.uid
     """
     Get all folders for the current user.
     Initializes system folders if this is the first access.
@@ -31,7 +33,8 @@ def get_folders(uid: str = Depends(auth.get_current_user_uid)):
 
 
 @router.post('/v1/folders', response_model=Folder, tags=['folders'])
-def create_folder(request: CreateFolderRequest, uid: str = Depends(auth.get_current_user_uid)):
+def create_folder(request: Request, data: CreateFolderRequest):
+    uid = request.state.uid
     """Create a new custom folder."""
     # Check folder limit (50 custom folders)
     existing = folders_db.get_folders(uid)
@@ -40,17 +43,14 @@ def create_folder(request: CreateFolderRequest, uid: str = Depends(auth.get_curr
         raise HTTPException(status_code=400, detail="Maximum folder limit reached (50 custom folders)")
 
     folder = folders_db.create_folder(
-        uid,
-        name=request.name,
-        description=request.description,
-        color=request.color,
-        icon=request.icon,
+        uid, name=data.name, description=data.description, color=data.color, icon=data.icon
     )
     return folder
 
 
 @router.get('/v1/folders/{folder_id}', response_model=Folder, tags=['folders'])
-def get_folder(folder_id: str, uid: str = Depends(auth.get_current_user_uid)):
+def get_folder(request: Request, folder_id: str):
+    uid = request.state.uid
     """Get a specific folder by ID."""
     folder = folders_db.get_folder(uid, folder_id)
     if not folder:
@@ -59,13 +59,14 @@ def get_folder(folder_id: str, uid: str = Depends(auth.get_current_user_uid)):
 
 
 @router.patch('/v1/folders/{folder_id}', response_model=Folder, tags=['folders'])
-def update_folder(folder_id: str, request: UpdateFolderRequest, uid: str = Depends(auth.get_current_user_uid)):
+def update_folder(request: Request, folder_id: str, data: UpdateFolderRequest):
+    uid = request.state.uid
     """Update folder metadata (name, description, color, icon, order)."""
     folder = folders_db.get_folder(uid, folder_id)
     if not folder:
         raise HTTPException(status_code=404, detail="Folder not found")
 
-    update_data = request.model_dump(exclude_unset=True)
+    update_data = data.model_dump(exclude_unset=True)
     if update_data:
         folders_db.update_folder(uid, folder_id, update_data)
 
@@ -74,10 +75,11 @@ def update_folder(folder_id: str, request: UpdateFolderRequest, uid: str = Depen
 
 @router.delete('/v1/folders/{folder_id}', status_code=204, tags=['folders'])
 def delete_folder(
+    request: Request,
     folder_id: str,
     move_to_folder_id: Optional[str] = Query(None, description="Target folder for conversations (defaults to 'Other')"),
-    uid: str = Depends(auth.get_current_user_uid),
 ):
+    uid = request.state.uid
     """Delete a folder and move its conversations to another folder."""
     folder = folders_db.get_folder(uid, folder_id)
     if not folder:
@@ -90,20 +92,22 @@ def delete_folder(
 
 
 @router.post('/v1/folders/reorder', tags=['folders'])
-def reorder_folders(request: ReorderFoldersRequest, uid: str = Depends(auth.get_current_user_uid)):
+def reorder_folders(request: Request, data: ReorderFoldersRequest):
+    uid = request.state.uid
     """Reorder folders by providing an ordered list of folder IDs."""
-    folders_db.reorder_folders(uid, request.folder_ids)
+    folders_db.reorder_folders(uid, data.folder_ids)
     return {"status": "ok"}
 
 
 @router.get('/v1/folders/{folder_id}/conversations', response_model=List[Conversation], tags=['folders'])
 def get_folder_conversations(
+    request: Request,
     folder_id: str,
     limit: int = Query(100, ge=1, le=1000),
     offset: int = Query(0, ge=0),
     include_discarded: bool = Query(False),
-    uid: str = Depends(auth.get_current_user_uid),
 ):
+    uid = request.state.uid
     """Get all conversations in a folder with pagination."""
     folder = folders_db.get_folder(uid, folder_id)
     if not folder:
@@ -117,9 +121,8 @@ def get_folder_conversations(
 
 
 @router.patch('/v1/conversations/{conversation_id}/folder', tags=['folders'])
-def move_conversation_to_folder(
-    conversation_id: str, request: MoveConversationRequest, uid: str = Depends(auth.get_current_user_uid)
-):
+def move_conversation_to_folder(request: Request, conversation_id: str, data: MoveConversationRequest):
+    uid = request.state.uid
     """Move a conversation to a different folder."""
     conversation = conversations_db.get_conversation(uid, conversation_id)
     if not conversation:
@@ -127,31 +130,30 @@ def move_conversation_to_folder(
     if conversation.get('is_locked', False):
         raise HTTPException(status_code=402, detail="A paid plan is required to access this conversation.")
 
-    if request.folder_id:
-        folder = folders_db.get_folder(uid, request.folder_id)
+    if data.folder_id:
+        folder = folders_db.get_folder(uid, data.folder_id)
         if not folder:
             raise HTTPException(status_code=404, detail="Folder not found")
 
-    folders_db.move_conversation_to_folder(uid, conversation_id, request.folder_id)
+    folders_db.move_conversation_to_folder(uid, conversation_id, data.folder_id)
     return {"status": "ok"}
 
 
 @router.post('/v1/folders/{folder_id}/conversations/bulk-move', tags=['folders'])
-def bulk_move_conversations(
-    folder_id: str, request: BulkMoveConversationsRequest, uid: str = Depends(auth.get_current_user_uid)
-):
+def bulk_move_conversations(request: Request, folder_id: str, data: BulkMoveConversationsRequest):
+    uid = request.state.uid
     """Move multiple conversations to a folder."""
     folder = folders_db.get_folder(uid, folder_id)
     if not folder:
         raise HTTPException(status_code=404, detail="Folder not found")
 
     # Validate none of the conversations are locked
-    for conv_id in request.conversation_ids:
+    for conv_id in data.conversation_ids:
         conv = conversations_db.get_conversation(uid, conv_id)
         if not conv:
             raise HTTPException(status_code=404, detail=f"Conversation {conv_id} not found")
         if conv.get('is_locked', False):
             raise HTTPException(status_code=402, detail="A paid plan is required to access this conversation.")
 
-    moved = folders_db.bulk_move_conversations_to_folder(uid, request.conversation_ids, folder_id)
+    moved = folders_db.bulk_move_conversations_to_folder(uid, data.conversation_ids, folder_id)
     return {"status": "ok", "moved_count": moved}

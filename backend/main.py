@@ -151,10 +151,6 @@ methods_timeout = {
 
 app.add_middleware(TimeoutMiddleware, methods_timeout=methods_timeout)
 
-from utils.byok import BYOKMiddleware
-
-app.add_middleware(BYOKMiddleware)
-
 
 @app.on_event("startup")
 async def startup_event():

@@ -3,22 +3,19 @@ from typing import List, Optional
 
 from utils.executors import db_executor, postprocess_executor, run_blocking, submit_with_context
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import Request, APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field, ValidationError
 
 import database.memories as memories_db
-from database.vector_db import (
-    delete_memory_vector,
-    upsert_memory_vector,
-    upsert_memory_vectors_batch,
-)
+from database.vector_db import delete_memory_vector, upsert_memory_vector, upsert_memory_vectors_batch
 from models.memories import MemoryDB, Memory, MemoryCategory
 from utils.apps import update_personas_async
 from utils.other import endpoints as auth
+from utils.auth_middleware import require_firebase
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(require_firebase)])
 
 # Hard cap on memories per batch request. Keep aligned with the corresponding
 # Pydantic max_length validator below and with the Swift client chunker.
@@ -27,8 +24,7 @@ MEMORIES_BATCH_MAX = 100
 
 class BatchMemoriesRequest(BaseModel):
     memories: List[Memory] = Field(
-        description="List of memories to create in a single batch request",
-        max_length=MEMORIES_BATCH_MAX,
+        description="List of memories to create in a single batch request", max_length=MEMORIES_BATCH_MAX
     )
 
 
@@ -48,11 +44,14 @@ def _validate_memory(uid: str, memory_id: str) -> dict:
     return memory
 
 
-@router.post('/v3/memories', tags=['memories'], response_model=MemoryDB)
-async def create_memory(
-    memory: Memory,
-    uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "memories:create")),
-):
+@router.post(
+    '/v3/memories',
+    tags=['memories'],
+    response_model=MemoryDB,
+    dependencies=[Depends(auth.with_rate_limit("memories:create"))],
+)
+async def create_memory(request: Request, memory: Memory):
+    uid = request.state.uid
     # Honor the client-supplied category (the Memory model defaults it to
     # `interesting`). Only memories the user explicitly typed in arrive as
     # `manual`; auto-extracted ones (system/interesting) keep their category so
@@ -89,11 +88,10 @@ async def create_memory(
     '/v3/memories/batch',
     tags=['memories'],
     response_model=BatchMemoriesResponse,
+    dependencies=[Depends(auth.with_rate_limit("memories:batch"))],
 )
-async def create_memories_batch(
-    request: BatchMemoriesRequest,
-    uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "memories:batch")),
-):
+async def create_memories_batch(request: Request, data: BatchMemoriesRequest):
+    uid = request.state.uid
     """
     Create many memories in a single request.
 
@@ -105,7 +103,7 @@ async def create_memories_batch(
     One HTTP request here = one Firestore batch write + one embeddings call +
     one Pinecone upsert, regardless of batch size.
     """
-    if not request.memories:
+    if not data.memories:
         return BatchMemoriesResponse(memories=[], created_count=0)
 
     # Honor each item's category (defaults to `interesting` per the Memory
@@ -114,7 +112,7 @@ async def create_memories_batch(
     # `manual`. Derive manually_added from the category instead of forcing it.
     memory_dbs: List[MemoryDB] = []
     has_public = False
-    for memory in request.memories:
+    for memory in data.memories:
         manually_added = memory.category == MemoryCategory.manual
         memory_db = MemoryDB.from_memory(memory, uid, None, manually_added)
         memory_dbs.append(memory_db)
@@ -146,9 +144,10 @@ async def create_memories_batch(
 
 
 @router.get('/v3/memories', tags=['memories'], response_model=List[MemoryDB])
-def get_memories(limit: int = 100, offset: int = 0, uid: str = Depends(auth.get_current_user_uid)):
+def get_memories(request: Request, limit: int = 100, offset: int = 0):
     # Use high limits for the first page
     # Warn: should remove
+    uid = request.state.uid
     if offset == 0:
         limit = 5000
     memories = memories_db.get_memories(uid, limit, offset)
@@ -169,11 +168,11 @@ def get_memories(limit: int = 100, offset: int = 0, uid: str = Depends(auth.get_
     return valid_memories
 
 
-@router.delete('/v3/memories/{memory_id}', tags=['memories'])
-def delete_memory(
-    memory_id: str,
-    uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "memories:delete")),
-):
+@router.delete(
+    '/v3/memories/{memory_id}', tags=['memories'], dependencies=[Depends(auth.with_rate_limit("memories:delete"))]
+)
+def delete_memory(request: Request, memory_id: str):
+    uid = request.state.uid
     _validate_memory(uid, memory_id)
     memories_db.delete_memory(uid, memory_id)
     try:
@@ -183,42 +182,42 @@ def delete_memory(
     return {'status': 'ok'}
 
 
-@router.delete('/v3/memories', tags=['memories'])
-def delete_memories(
-    uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "memories:delete_all")),
-):
+@router.delete('/v3/memories', tags=['memories'], dependencies=[Depends(auth.with_rate_limit("memories:delete_all"))])
+def delete_memories(request: Request):
+    uid = request.state.uid
     memories_db.delete_all_memories(uid)
     return {'status': 'ok'}
 
 
-@router.post('/v3/memories/{memory_id}/review', tags=['memories'])
-def review_memory(
-    memory_id: str,
-    value: bool,
-    uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "memories:modify")),
-):
+@router.post(
+    '/v3/memories/{memory_id}/review',
+    tags=['memories'],
+    dependencies=[Depends(auth.with_rate_limit("memories:modify"))],
+)
+def review_memory(request: Request, memory_id: str, value: bool):
+    uid = request.state.uid
     _validate_memory(uid, memory_id)
     memories_db.review_memory(uid, memory_id, value)
     return {'status': 'ok'}
 
 
-@router.patch('/v3/memories/{memory_id}', tags=['memories'])
-def edit_memory(
-    memory_id: str,
-    value: str,
-    uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "memories:modify")),
-):
+@router.patch(
+    '/v3/memories/{memory_id}', tags=['memories'], dependencies=[Depends(auth.with_rate_limit("memories:modify"))]
+)
+def edit_memory(request: Request, memory_id: str, value: str):
+    uid = request.state.uid
     _validate_memory(uid, memory_id)
     memories_db.edit_memory(uid, memory_id, value)
     return {'status': 'ok'}
 
 
-@router.patch('/v3/memories/{memory_id}/visibility', tags=['memories'])
-def update_memory_visibility(
-    memory_id: str,
-    value: str,
-    uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "memories:modify")),
-):
+@router.patch(
+    '/v3/memories/{memory_id}/visibility',
+    tags=['memories'],
+    dependencies=[Depends(auth.with_rate_limit("memories:modify"))],
+)
+def update_memory_visibility(request: Request, memory_id: str, value: str):
+    uid = request.state.uid
     _validate_memory(uid, memory_id)
     if value not in ['public', 'private']:
         raise HTTPException(status_code=400, detail='Invalid visibility value')

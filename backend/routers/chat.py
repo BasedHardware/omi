@@ -39,6 +39,7 @@ from models.chat import (
 )
 from routers.sync import retrieve_file_paths, decode_files_to_wav
 from utils.apps import get_available_app_by_id
+from utils.byok import set_byok_keys
 from utils.conversation_helpers import extract_memory_ids
 from utils.chat import (
     process_voice_message_segment,
@@ -68,11 +69,13 @@ from utils.voice_duration_limiter import (
     check_budget,
     record_actual_duration,
 )
+from utils.auth_middleware import require_firebase
 import logging
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter()
+_public_router = APIRouter()
+_firebase_router = APIRouter(dependencies=[Depends(require_firebase)])
 
 # WS idle timeout: close if no audio bytes received for this long
 _WS_IDLE_TIMEOUT_S = 60
@@ -134,12 +137,7 @@ def _build_quota_exceeded_reply(
     """
     now = datetime.now(timezone.utc)
     user_msg = Message(
-        id=str(uuid.uuid4()),
-        text=data.text,
-        created_at=now,
-        sender='human',
-        type='text',
-        app_id=compat_app_id,
+        id=str(uuid.uuid4()), text=data.text, created_at=now, sender='human', type='text', app_id=compat_app_id
     )
     chat_db.add_message(uid, user_msg.dict())
 
@@ -178,12 +176,17 @@ def _build_quota_exceeded_reply(
     return ResponseMessage(**ai_msg.dict(), ask_for_nps=False)
 
 
-@router.post('/v2/messages', tags=['chat'], response_model=ResponseMessage)
+@_firebase_router.post(
+    '/v2/messages',
+    tags=['chat'],
+    response_model=ResponseMessage,
+    dependencies=[Depends(auth.with_rate_limit("chat:send_message"))],
+)
 def send_message(
+    request: Request,
     data: SendMessageRequest,
     plugin_id: Optional[str] = None,
     app_id: Optional[str] = None,
-    uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "chat:send_message")),
     x_app_platform: Optional[str] = Header(None, alias='X-App-Platform'),
 ):
     # Hard cap: Free by question count, Architect by cost_usd. Operator enters
@@ -193,6 +196,7 @@ def send_message(
     # streaming contract this endpoint already uses — so mobile parses it like
     # any other reply. Desktop pre-checks via /v1/users/me/usage-quota and
     # never reaches here when over.
+    uid = request.state.uid
     try:
         enforce_chat_quota(uid, platform=x_app_platform)
     except HTTPException as exc:
@@ -336,8 +340,9 @@ def send_message(
     return StreamingResponse(generate_stream(), media_type="text/event-stream")
 
 
-@router.post('/v2/messages/{message_id}/report', tags=['chat'], response_model=dict)
-def report_message(message_id: str, uid: str = Depends(auth.get_current_user_uid)):
+@_firebase_router.post('/v2/messages/{message_id}/report', tags=['chat'], response_model=dict)
+def report_message(request: Request, message_id: str):
+    uid = request.state.uid
     message, msg_doc_id = chat_db.get_message(uid, message_id)
     if message is None:
         raise HTTPException(status_code=404, detail='Message not found')
@@ -349,10 +354,9 @@ def report_message(message_id: str, uid: str = Depends(auth.get_current_user_uid
     return {'message': 'Message reported'}
 
 
-@router.delete('/v2/messages', tags=['chat'], response_model=Message)
-def clear_chat_messages(
-    app_id: Optional[str] = None, plugin_id: Optional[str] = None, uid: str = Depends(auth.get_current_user_uid)
-):
+@_firebase_router.delete('/v2/messages', tags=['chat'], response_model=Message)
+def clear_chat_messages(request: Request, app_id: Optional[str] = None, plugin_id: Optional[str] = None):
+    uid = request.state.uid
     compat_app_id = app_id or plugin_id
     if compat_app_id in ['null', '']:
         compat_app_id = None
@@ -430,20 +434,21 @@ def initial_message_util(uid: str, app_id: Optional[str] = None, chat_session_id
     return ai_message
 
 
-@router.post('/v2/initial-message', tags=['chat'], response_model=Message)
-def create_initial_message(
-    app_id: Optional[str] = None,
-    plugin_id: Optional[str] = None,
-    uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "chat:initial")),
-):
+@_firebase_router.post(
+    '/v2/initial-message',
+    tags=['chat'],
+    response_model=Message,
+    dependencies=[Depends(auth.with_rate_limit("chat:initial"))],
+)
+def create_initial_message(request: Request, app_id: Optional[str] = None, plugin_id: Optional[str] = None):
+    uid = request.state.uid
     compat_app_id = app_id or plugin_id
     return initial_message_util(uid, compat_app_id)
 
 
-@router.get('/v2/messages', response_model=List[Message], tags=['chat'])
-def get_messages(
-    plugin_id: Optional[str] = None, app_id: Optional[str] = None, uid: str = Depends(auth.get_current_user_uid)
-):
+@_firebase_router.get('/v2/messages', response_model=List[Message], tags=['chat'])
+def get_messages(request: Request, plugin_id: Optional[str] = None, app_id: Optional[str] = None):
+    uid = request.state.uid
     compat_app_id = app_id or plugin_id
     if compat_app_id in ['null', '']:
         compat_app_id = None
@@ -468,13 +473,14 @@ def get_messages(
     return messages
 
 
-@router.post("/v2/voice-messages")
+@_firebase_router.post("/v2/voice-messages", dependencies=[Depends(auth.with_rate_limit("voice:message"))])
 def create_voice_message_stream(
+    request: Request,
     files: List[UploadFile] = File(...),
     language: Optional[str] = Form(None),
-    uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "voice:message")),
     x_app_platform: Optional[str] = Header(None, alias='X-App-Platform'),
 ):
+    uid = request.state.uid
     enforce_chat_quota(uid, platform=x_app_platform)
 
     # wav
@@ -504,12 +510,12 @@ def create_voice_message_stream(
     return StreamingResponse(generate_stream(), media_type="text/event-stream")
 
 
-@router.post("/v2/voice-message/transcribe")
+@_firebase_router.post("/v2/voice-message/transcribe", dependencies=[Depends(auth.with_rate_limit("voice:transcribe"))])
 async def transcribe_voice_message(
     request: Request,
-    uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "voice:transcribe")),
     x_app_platform: Optional[str] = Header(None, alias='X-App-Platform'),
 ):
+    uid = request.state.uid
     """Transcribe audio and return the transcript text.
 
     Accepts two content types:
@@ -523,7 +529,6 @@ async def transcribe_voice_message(
     # change mobile behavior for users past their existing 30/mo chat cap.
     if is_trial_paywalled(uid, x_app_platform):
         raise HTTPException(status_code=402, detail={'error': 'quota_exceeded', 'plan_type': 'basic'})
-
     content_type = request.headers.get("content-type", "")
 
     if "application/octet-stream" in content_type:
@@ -697,10 +702,11 @@ async def transcribe_voice_message(
     return response
 
 
-@router.websocket("/v2/voice-message/transcribe-stream")
+@_public_router.websocket("/v2/voice-message/transcribe-stream")
 async def transcribe_voice_message_stream(
     websocket: WebSocket,
     uid: str = Depends(auth.get_current_user_uid_ws_listen),
+    byok_keys: dict = Depends(auth.get_validated_byok_keys_ws),
     language: str = 'en',
     sample_rate: int = 16000,
     codec: str = 'linear16',
@@ -729,6 +735,7 @@ async def transcribe_voice_message_stream(
           "is_user": false, "person_id": null}]
     """
     await websocket.accept()
+    set_byok_keys(byok_keys or {})
 
     # Paywalled desktop users — close before opening DG connection so we don't
     # bill Deepgram for a PTT stream that wouldn't be allowed to chat anyway.
@@ -956,11 +963,14 @@ async def transcribe_voice_message_stream(
         del stt_audio_buffer
 
 
-@router.post('/v2/files', response_model=List[FileChat], tags=['chat'])
-def upload_file_chat(
-    files: List[UploadFile] = File(...),
-    uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "file:upload")),
-):
+@_firebase_router.post(
+    '/v2/files',
+    response_model=List[FileChat],
+    tags=['chat'],
+    dependencies=[Depends(auth.with_rate_limit("file:upload"))],
+)
+def upload_file_chat(request: Request, files: List[UploadFile] = File(...)):
+    uid = request.state.uid
     thumbs_name = []
     files_chat = []
     for file in files:
@@ -1012,11 +1022,14 @@ def upload_file_chat(
 # CLEANUP: Remove after new app goes to prod ----------------------------------------------------------
 
 
-@router.post('/v1/files', response_model=List[FileChat], tags=['chat'])
-def upload_file_chat(
-    files: List[UploadFile] = File(...),
-    uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "file:upload")),
-):
+@_firebase_router.post(
+    '/v1/files',
+    response_model=List[FileChat],
+    tags=['chat'],
+    dependencies=[Depends(auth.with_rate_limit("file:upload"))],
+)
+def upload_file_chat(request: Request, files: List[UploadFile] = File(...)):
+    uid = request.state.uid
     thumbs_name = []
     files_chat = []
     for file in files:
@@ -1064,8 +1077,9 @@ def upload_file_chat(
     return response
 
 
-@router.post('/v1/messages/{message_id}/report', tags=['chat'], response_model=dict)
-def report_message(message_id: str, uid: str = Depends(auth.get_current_user_uid)):
+@_firebase_router.post('/v1/messages/{message_id}/report', tags=['chat'], response_model=dict)
+def report_message(request: Request, message_id: str):
+    uid = request.state.uid
     message, msg_doc_id = chat_db.get_message(uid, message_id)
     if message is None:
         raise HTTPException(status_code=404, detail='Message not found')
@@ -1077,10 +1091,9 @@ def report_message(message_id: str, uid: str = Depends(auth.get_current_user_uid
     return {'message': 'Message reported'}
 
 
-@router.delete('/v1/messages', tags=['chat'], response_model=Message)
-def clear_chat_messages(
-    plugin_id: Optional[str] = None, app_id: Optional[str] = None, uid: str = Depends(auth.get_current_user_uid)
-):
+@_firebase_router.delete('/v1/messages', tags=['chat'], response_model=Message)
+def clear_chat_messages(request: Request, plugin_id: Optional[str] = None, app_id: Optional[str] = None):
+    uid = request.state.uid
     compat_app_id = app_id or plugin_id
     if compat_app_id in ['null', '']:
         compat_app_id = None
@@ -1109,12 +1122,14 @@ def clear_chat_messages(
     return initial_message_util(uid, compat_app_id)
 
 
-@router.post('/v1/initial-message', tags=['chat'], response_model=Message)
-def create_initial_message(
-    plugin_id: Optional[str] = None,
-    app_id: Optional[str] = None,
-    uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "chat:initial")),
-):
+@_firebase_router.post(
+    '/v1/initial-message',
+    tags=['chat'],
+    response_model=Message,
+    dependencies=[Depends(auth.with_rate_limit("chat:initial"))],
+)
+def create_initial_message(request: Request, plugin_id: Optional[str] = None, app_id: Optional[str] = None):
+    uid = request.state.uid
     compat_app_id = app_id or plugin_id
     return initial_message_util(uid, compat_app_id)
 
@@ -1122,12 +1137,9 @@ def create_initial_message(
 # MARK: - Message Rating
 
 
-@router.patch('/v2/messages/{message_id}/rating', tags=['chat'])
-def rate_message(
-    message_id: str,
-    data: dict,
-    uid: str = Depends(auth.get_current_user_uid),
-):
+@_firebase_router.patch('/v2/messages/{message_id}/rating', tags=['chat'])
+def rate_message(request: Request, message_id: str, data: dict):
+    uid = request.state.uid
     """Rate a chat message (thumbs up/down). Used by desktop client."""
     rating = data.get('rating')
 
@@ -1149,11 +1161,7 @@ def rate_message(
 
             if langsmith_run_id:
                 score = 1.0 if rating == 1 else (0.0 if rating == -1 else 0.5)
-                submit_langsmith_feedback(
-                    run_id=langsmith_run_id,
-                    score=score,
-                    key="chat_message_rating",
-                )
+                submit_langsmith_feedback(run_id=langsmith_run_id, score=score, key="chat_message_rating")
     except Exception as e:
         logger.error(f"LangSmith feedback submission error (non-fatal): {e}")
 
@@ -1163,11 +1171,9 @@ def rate_message(
 # MARK: - Chat Sharing
 
 
-@router.post('/v2/messages/share', tags=['chat'])
-def share_chat_messages(
-    data: dict,
-    uid: str = Depends(auth.get_current_user_uid),
-):
+@_firebase_router.post('/v2/messages/share', tags=['chat'])
+def share_chat_messages(request: Request, data: dict):
+    uid = request.state.uid
     """Create a shareable link for chat messages."""
     message_ids = data.get('message_ids', [])
     if not message_ids:
@@ -1188,7 +1194,7 @@ def share_chat_messages(
     return {"url": f"https://h.omi.me/chat/{token}", "token": token}
 
 
-@router.get('/v2/messages/shared/{token}', tags=['chat'])
+@_public_router.get('/v2/messages/shared/{token}', tags=['chat'])
 def get_shared_chat_messages(token: str):
     """Public endpoint — get shared chat messages (no auth required)."""
     share_data = get_chat_share(token)
@@ -1217,3 +1223,8 @@ def get_shared_chat_messages(token: str):
         "messages": messages,
         "count": len(messages),
     }
+
+
+router = APIRouter()
+router.include_router(_public_router)
+router.include_router(_firebase_router)

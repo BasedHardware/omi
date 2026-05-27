@@ -1,12 +1,13 @@
 """Advice — proactive coaching items."""
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import Request, APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 
 import database.advice as advice_db
 from utils.other import endpoints as auth
+from utils.auth_middleware import require_firebase
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(require_firebase)])
 
 
 # ============================================================================
@@ -35,55 +36,50 @@ class UpdateAdviceRequest(BaseModel):
 
 
 @router.post('/v1/advice', tags=['advice'])
-def create_advice(
-    request: CreateAdviceRequest,
-    uid: str = Depends(auth.get_current_user_uid),
-):
+def create_advice(request: Request, data: CreateAdviceRequest):
+    uid = request.state.uid
     return advice_db.create_advice(
         uid,
-        content=request.content,
-        category=request.category or 'other',
-        reasoning=request.reasoning,
-        source_app=request.source_app,
-        confidence=request.confidence,
-        context_summary=request.context_summary,
-        current_activity=request.current_activity,
+        content=data.content,
+        category=data.category or 'other',
+        reasoning=data.reasoning,
+        source_app=data.source_app,
+        confidence=data.confidence,
+        context_summary=data.context_summary,
+        current_activity=data.current_activity,
     )
 
 
 @router.get('/v1/advice', tags=['advice'])
 def get_advice(
+    request: Request,
     limit: int = Query(100, ge=1, le=1000),
     offset: int = Query(0, ge=0),
     category: str | None = Query(None),
     include_dismissed: bool = Query(False),
-    uid: str = Depends(auth.get_current_user_uid),
 ):
+    uid = request.state.uid
     return advice_db.get_advice(uid, limit=limit, offset=offset, category=category, include_dismissed=include_dismissed)
 
 
 @router.patch('/v1/advice/{advice_id}', tags=['advice'])
-def update_advice(
-    advice_id: str,
-    request: UpdateAdviceRequest,
-    uid: str = Depends(auth.get_current_user_uid),
-):
-    result = advice_db.update_advice(uid, advice_id, is_read=request.is_read, is_dismissed=request.is_dismissed)
+def update_advice(request: Request, advice_id: str, data: UpdateAdviceRequest):
+    uid = request.state.uid
+    result = advice_db.update_advice(uid, advice_id, is_read=data.is_read, is_dismissed=data.is_dismissed)
     if result is None:
         raise HTTPException(status_code=404, detail='Advice not found')
     return result
 
 
 @router.delete('/v1/advice/{advice_id}', tags=['advice'])
-def delete_advice(
-    advice_id: str,
-    uid: str = Depends(auth.get_current_user_uid),
-):
+def delete_advice(request: Request, advice_id: str):
+    uid = request.state.uid
     advice_db.delete_advice(uid, advice_id)
     return {'status': 'ok'}
 
 
 @router.post('/v1/advice/mark-all-read', tags=['advice'])
-def mark_all_advice_read(uid: str = Depends(auth.get_current_user_uid)):
+def mark_all_advice_read(request: Request):
+    uid = request.state.uid
     count = advice_db.mark_all_advice_read(uid)
     return {'status': f'marked {count} as read'}

@@ -12,12 +12,14 @@ from utils.app_integrations import send_app_notification
 import database.notifications as notification_db
 from models.other import SaveFcmTokenRequest
 from utils.notifications import send_notification
+from utils.auth_middleware import require_firebase
 from utils.other import endpoints as auth
 from models.app import App
 
 # logger = logging.getLogger('uvicorn.error')
 # logger.setLevel(logging.DEBUG)
-router = APIRouter()
+_firebase_router = APIRouter(dependencies=[Depends(require_firebase)])
+_custom_router = APIRouter()
 
 # Rate limit settings - more conservative limits to prevent notification fatigue
 RATE_LIMIT_PERIOD = 3600  # 1 hour in seconds
@@ -56,13 +58,14 @@ def check_rate_limit(app_id: str, user_id: str) -> Tuple[bool, int, int, int]:
     return True, remaining, reset_time, 0
 
 
-@router.post('/v1/users/fcm-token')
+@_firebase_router.post('/v1/users/fcm-token')
 def save_token(
+    request: Request,
     data: SaveFcmTokenRequest,
-    uid: str = Depends(auth.get_current_user_uid),
     x_app_platform: str = Header(None, alias='X-App-Platform'),
     x_device_id_hash: str = Header(None, alias='X-Device-Id-Hash'),
 ):
+    uid = request.state.uid
     platform = x_app_platform or 'unknown'
     device_hash = x_device_id_hash or 'default'
 
@@ -81,7 +84,7 @@ def save_token(
 # ******************************************************
 
 
-@router.post('/v1/notification')
+@_custom_router.post('/v1/notification')
 def send_notification_to_user(data: dict, secret_key: str = Header(...)):
     if secret_key != os.getenv('ADMIN_KEY'):
         raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
@@ -92,7 +95,7 @@ def send_notification_to_user(data: dict, secret_key: str = Header(...)):
     return {'status': 'Ok'}
 
 
-@router.post('/v1/integrations/notification')
+@_custom_router.post('/v1/integrations/notification')
 def send_app_notification_to_user(request: Request, data: dict, authorization: Optional[str] = Header(None)):
     # Check app-based auth
     if 'aid' not in data:
@@ -155,3 +158,8 @@ def send_app_notification_to_user(request: Request, data: dict, authorization: O
     send_app_notification(uid, app.name, app.id, data['message'], target=target)
 
     return JSONResponse(status_code=200, headers=headers, content={'status': 'Ok'})
+
+
+router = APIRouter()
+router.include_router(_firebase_router)
+router.include_router(_custom_router)

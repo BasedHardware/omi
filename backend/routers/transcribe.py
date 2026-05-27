@@ -21,7 +21,7 @@ import opuslib  # type: ignore
 
 import lc3  # lc3py
 
-from fastapi import APIRouter, Depends
+from fastapi import Request, APIRouter, Depends
 from fastapi.websockets import WebSocket, WebSocketDisconnect
 from starlette.websockets import WebSocketState
 from websockets.exceptions import ConnectionClosed
@@ -70,11 +70,7 @@ from utils.other import endpoints as auth
 from utils.other.storage import get_profile_audio_if_exists, get_user_has_speech_profile
 from utils.pusher import connect_to_trigger_pusher, PusherCircuitBreakerOpen, get_circuit_breaker, CircuitState
 from utils.speaker_identification import detect_speaker_from_text
-from utils.stt.streaming import (
-    STTService,
-    get_stt_service_for_language,
-    process_audio_dg,
-)
+from utils.stt.streaming import STTService, get_stt_service_for_language, process_audio_dg
 from utils.stt.vad_gate import VADStreamingGate, VAD_GATE_MODE, is_gate_enabled
 from utils.fair_use import (
     FAIR_USE_ENABLED,
@@ -111,11 +107,7 @@ from utils.metrics import (
     PUSHER_CIRCUIT_BREAKER_STATE,
     PUSHER_SESSION_DEGRADED,
 )
-from utils.stt.speaker_embedding import (
-    extract_embedding_from_bytes,
-    compare_embeddings,
-    SPEAKER_MATCH_THRESHOLD,
-)
+from utils.stt.speaker_embedding import extract_embedding_from_bytes, compare_embeddings, SPEAKER_MATCH_THRESHOLD
 from utils.speaker_sample_migration import maybe_migrate_person_samples
 from utils.executors import db_executor, storage_executor, sync_executor, run_blocking
 from utils.log_sanitizer import sanitize, sanitize_pii
@@ -610,8 +602,7 @@ async def _stream_handler(
                 # Future: backend may auto-fallback to lower-tier cloud STT (action = ACTION_NONE)
                 await _asend_message_event(
                     FreemiumThresholdReachedEvent(
-                        remaining_seconds=remaining_seconds,
-                        action=FREEMIUM_ACTION_SETUP_ON_DEVICE_STT,
+                        remaining_seconds=remaining_seconds, action=FREEMIUM_ACTION_SETUP_ON_DEVICE_STT
                     )
                 )
                 freemium_threshold_sent = True
@@ -928,16 +919,12 @@ async def _stream_handler(
             if speaker_map_dirty:
                 # A new speaker match was found — retroactively fix all earlier segments once
                 process_speaker_assigned_segments(
-                    conversation.transcript_segments,
-                    segment_person_assignment_map,
-                    speaker_to_person_map,
+                    conversation.transcript_segments, segment_person_assignment_map, speaker_to_person_map
                 )
                 speaker_map_dirty = False
             else:
                 process_speaker_assigned_segments(
-                    updated_segments,
-                    segment_person_assignment_map,
-                    speaker_to_person_map,
+                    updated_segments, segment_person_assignment_map, speaker_to_person_map
                 )
             segments_dicts = [segment.dict() for segment in conversation.transcript_segments]
             conversations_db.update_conversation_segments(
@@ -999,11 +986,7 @@ async def _stream_handler(
 
                     callback = make_multi_channel_callback(ch_config)
                     stt_sockets_multi[i] = await process_audio_dg(
-                        callback,
-                        stt_language,
-                        TARGET_SAMPLE_RATE,
-                        1,
-                        model=stt_model,
+                        callback, stt_language, TARGET_SAMPLE_RATE, 1, model=stt_model
                     )
                 logger.info(
                     f"Multi-channel STT connections established ({len(channel_configs)} channels) {uid} {session_id}"
@@ -1368,10 +1351,7 @@ async def _stream_handler(
                             continue
 
                         # Exponential backoff: 1s, 2s, 4s, 8s, 16s, 32s (capped at 60s)
-                        delay = min(
-                            PUSHER_RECONNECT_BASE_DELAY * (2**reconnect_attempts),
-                            PUSHER_RECONNECT_MAX_DELAY,
-                        )
+                        delay = min(PUSHER_RECONNECT_BASE_DELAY * (2**reconnect_attempts), PUSHER_RECONNECT_MAX_DELAY)
                         # Add jitter (±25%)
                         delay *= 0.75 + random.random() * 0.5
                         logger.info(
@@ -1503,11 +1483,7 @@ async def _stream_handler(
         def is_degraded():
             return reconnect_state in (PusherReconnectState.DEGRADED, PusherReconnectState.HALF_OPEN_PROBE)
 
-        async def send_speaker_sample_request(
-            person_id: str,
-            conv_id: str,
-            segment_ids: List[str],
-        ):
+        async def send_speaker_sample_request(person_id: str, conv_id: str, segment_ids: List[str]):
             """Send speaker sample extraction request to pusher with segment IDs."""
             nonlocal pusher_ws, pusher_connected
             if not pusher_connected or not pusher_ws:
@@ -1973,10 +1949,7 @@ async def _stream_handler(
                     # Always send 'user' directly — is_user is fundamental, not gated by auto_assign.
                     _send_message_event(
                         SpeakerLabelSuggestionEvent(
-                            speaker_id=speaker_id,
-                            person_id='user',
-                            person_name='User',
-                            segment_id=segment['id'],
+                            speaker_id=speaker_id, person_id='user', person_name='User', segment_id=segment['id']
                         )
                     )
                     speaker_map_dirty = True
@@ -2051,9 +2024,7 @@ async def _stream_handler(
             if not conversation.transcript_segments:
                 return
             process_speaker_assigned_segments(
-                conversation.transcript_segments,
-                segment_person_assignment_map,
-                speaker_to_person_map,
+                conversation.transcript_segments, segment_person_assignment_map, speaker_to_person_map
             )
             segments_dicts = [seg.dict() for seg in conversation.transcript_segments]
             conversations_db.update_conversation_segments(
@@ -2380,10 +2351,7 @@ async def _stream_handler(
             if dg_socket is not None and dg_socket.is_connection_dead:
                 close_reason = dg_socket.death_reason or 'unknown'
                 logger.error(
-                    'DG connection died mid-session uid=%s session=%s reason=%s',
-                    uid,
-                    session_id,
-                    close_reason,
+                    'DG connection died mid-session uid=%s session=%s reason=%s', uid, session_id, close_reason
                 )
                 dg_socket = None  # Stop sending to dead connection
 
@@ -2905,6 +2873,7 @@ async def _listen(
 async def listen_handler(
     websocket: WebSocket,
     uid: str = Depends(auth.get_current_user_uid_ws_listen),
+    byok_keys: dict = Depends(auth.get_validated_byok_keys_ws),
     language: str = 'en',
     sample_rate: int = 8000,
     codec: str = 'pcm8',
@@ -2919,6 +2888,7 @@ async def listen_handler(
     vad_gate: str = '',
     call_id: Optional[str] = None,
 ):
+    set_byok_keys(byok_keys or {})
     custom_stt_mode = CustomSttMode.enabled if custom_stt == 'enabled' else CustomSttMode.disabled
     onboarding_mode = onboarding == 'enabled'
     speaker_auto_assign_enabled = speaker_auto_assign == 'enabled'

@@ -13,9 +13,7 @@ from database.redis_db import enable_app, increase_app_installs_count
 from utils.apps import is_user_app_enabled, get_is_user_paid_app, is_tester
 from models.app import App as AppModel, ActionType
 
-router = APIRouter(
-    tags=["oauth"],
-)
+router = APIRouter(tags=["oauth"])
 
 # Ensure the templates directory exists
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))

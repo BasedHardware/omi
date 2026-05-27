@@ -90,10 +90,7 @@ class CleanerMemory(BaseModel):
 
 @router.get("/v1/mcp/memories", tags=["mcp"], response_model=List[CleanerMemory])
 def get_memories(
-    uid: str = Depends(get_uid_from_mcp_api_key),
-    limit: int = 25,
-    offset: int = 0,
-    categories: Optional[str] = None,
+    uid: str = Depends(get_uid_from_mcp_api_key), limit: int = 25, offset: int = 0, categories: Optional[str] = None
 ):
     category_list = []
     if categories:
@@ -210,11 +207,7 @@ def search_conversations(
     return conversations
 
 
-@router.get(
-    "/v1/mcp/conversations/{conversation_id}",
-    response_model=FullConversation,
-    tags=["mcp"],
-)
+@router.get("/v1/mcp/conversations/{conversation_id}", response_model=FullConversation, tags=["mcp"])
 def get_conversation_by_id(conversation_id: str, uid: str = Depends(get_uid_from_mcp_api_key)):
     logger.info(f"get_conversation_by_id {uid} {conversation_id}")
     conversation = conversations_db.get_conversation(uid, conversation_id)
