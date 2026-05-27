@@ -1781,14 +1781,21 @@ struct SettingsContentView: View {
           }
         }
       }
-    } else if let trial = appState.trialMetadata, trial.trialExpired {
+    } else if let trial = appState.trialMetadata,
+      trial.trialExpired,
+      // Suppress the trial-expired card entirely for grandfathered Neo users.
+      // The backend already returns trial_expired=false for them, but
+      // trialMetadata is polled on a 60s timer; defensive guard so a stale
+      // cached value during/after a backend deploy doesn't briefly stack the
+      // "Trial Ended" card on top of the grandfather notice. The grandfather
+      // notice is rendered separately via neoDesktopGrandfatherCard.
+      userSubscription?.desktopGrandfatherUntil == nil
+    {
       // Neo subscribers who aren't grandfathered land on this card too because
       // Neo doesn't grant desktop access (per #7496). The generic "Trial Ended"
       // copy is confusing for them — they're on a paid plan, just not one that
       // includes Mac. Detect that case and switch to plan-specific copy.
-      let isNeoWithoutDesktop =
-        userSubscription?.subscription.plan == .unlimited
-        && userSubscription?.desktopGrandfatherUntil == nil
+      let isNeoWithoutDesktop = userSubscription?.subscription.plan == .unlimited
       settingsCard(settingId: "planusage.trial-expired") {
         VStack(alignment: .leading, spacing: 14) {
           HStack(spacing: 16) {
