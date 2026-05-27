@@ -15,6 +15,7 @@ Required env (X developer app — confidential client):
   (optional) X_OAUTH_SCOPES — defaults to the read scopes + offline.access.
 """
 
+import asyncio
 import base64
 import hashlib
 import logging
@@ -30,6 +31,7 @@ from database import redis_db
 from database import users as users_db
 from database import x_posts as x_posts_db
 from database import memories as memories_db
+from database._client import db
 from database.vector_db import upsert_memory_vectors_batch
 from models.memories import MemoryDB
 from utils.llm.memories import extract_memories_from_text
@@ -53,6 +55,13 @@ API_BASE = 'https://api.x.com/2'
 
 OAUTH_STATE_TTL = 600  # seconds
 _STATE_PREFIX = 'x_oauth_state:'
+
+# Lightweight registry of connected users so the periodic sync job can enumerate
+# them without a collection-group query/index. Written on connect, removed on
+# disconnect.
+_REGISTRY_COLLECTION = 'x_connector_users'
+SYNC_JOB_INTERVAL_HOURS = 6  # background sync cadence (the cron fires hourly)
+_SYNC_JOB_USER_SPACING_SEC = 1.5  # gap between users to stay gentle on X limits
 
 # Cap how much we pull per sync to stay well within X rate limits.
 MAX_TWEET_PAGES = 4  # ~4 * 100 = up to 400 recent tweets per sync
@@ -170,6 +179,23 @@ def _store_tokens(uid: str, token_resp: Dict, handle: Optional[str] = None, x_us
     if x_user_id:
         data['x_user_id'] = x_user_id
     users_db.set_integration(uid, INTEGRATION_KEY, data)
+    _register_user(uid)
+
+
+def _register_user(uid: str) -> None:
+    try:
+        db.collection(_REGISTRY_COLLECTION).document(uid).set(
+            {'uid': uid, 'updated_at': datetime.now(timezone.utc)}, merge=True
+        )
+    except Exception as e:
+        logger.warning(f'x_connector: failed to register user {uid} for sync: {e}')
+
+
+def _unregister_user(uid: str) -> None:
+    try:
+        db.collection(_REGISTRY_COLLECTION).document(uid).delete()
+    except Exception as e:
+        logger.warning(f'x_connector: failed to unregister user {uid}: {e}')
 
 
 async def get_valid_access_token(uid: str) -> Optional[str]:
@@ -412,3 +438,39 @@ def connection_status(uid: str) -> Dict:
 
 def disconnect(uid: str) -> None:
     users_db.set_integration(uid, INTEGRATION_KEY, {'connected': False, 'access_token': '', 'refresh_token': ''})
+    _unregister_user(uid)
+
+
+# ----------------------------------------------------------------------------
+# Periodic background sync (driven by the hourly cron in modal/job.py)
+# ----------------------------------------------------------------------------
+
+
+def should_run_x_sync_job() -> bool:
+    """Gate the sync to every SYNC_JOB_INTERVAL_HOURS (the cron fires hourly)."""
+    return datetime.now(timezone.utc).hour % SYNC_JOB_INTERVAL_HOURS == 0
+
+
+async def run_x_sync_job() -> Dict:
+    """Incrementally sync every connected X user. Errors are isolated per user;
+    a slow/failed account never blocks the others."""
+    try:
+        uids = [d.id for d in db.collection(_REGISTRY_COLLECTION).stream()]
+    except Exception as e:
+        logger.error(f'x_connector: sync job could not list users: {e}')
+        return {'users': 0, 'synced': 0, 'new_posts': 0}
+
+    synced = 0
+    new_posts = 0
+    for uid in uids:
+        try:
+            result = await sync_x_for_user(uid)
+            if result.get('success'):
+                synced += 1
+                new_posts += int(result.get('new_posts', 0))
+        except Exception as e:
+            logger.warning(f'x_connector: sync job failed for uid={uid}: {e}')
+        await asyncio.sleep(_SYNC_JOB_USER_SPACING_SEC)
+
+    logger.info(f'x_connector: sync job done — users={len(uids)} synced={synced} new_posts={new_posts}')
+    return {'users': len(uids), 'synced': synced, 'new_posts': new_posts}
