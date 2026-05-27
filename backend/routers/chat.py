@@ -1195,8 +1195,7 @@ def share_chat_messages(request: Request, data: dict):
 
 
 @_public_router.get('/v2/messages/shared/{token}', tags=['chat'])
-def get_shared_chat_messages(request: Request, token: str):
-    uid = request.state.uid
+def get_shared_chat_messages(token: str):
     """Public endpoint — get shared chat messages (no auth required)."""
     share_data = get_chat_share(token)
     if not share_data:
