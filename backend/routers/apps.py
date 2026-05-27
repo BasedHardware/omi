@@ -1805,8 +1805,7 @@ def disable_app_endpoint(request: Request, app_id: str):
 
 
 @_custom_router.post('/v1/apps/tester', tags=['v1'])
-def add_new_tester(request: Request, data: dict, secret_key: str = Header(...)):
-    uid = request.state.uid
+def add_new_tester(data: dict, secret_key: str = Header(...)):
     if secret_key != os.getenv('ADMIN_KEY'):
         raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
     if not data.get('uid'):
@@ -1819,8 +1818,7 @@ def add_new_tester(request: Request, data: dict, secret_key: str = Header(...)):
 
 
 @_custom_router.post('/v1/apps/tester/access', tags=['v1'])
-def add_app_access_tester(request: Request, data: dict, secret_key: str = Header(...)):
-    uid = request.state.uid
+def add_app_access_tester(data: dict, secret_key: str = Header(...)):
     if secret_key != os.getenv('ADMIN_KEY'):
         raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
     if not data.get('uid'):
@@ -1832,8 +1830,7 @@ def add_app_access_tester(request: Request, data: dict, secret_key: str = Header
 
 
 @_custom_router.delete('/v1/apps/tester/access', tags=['v1'])
-def remove_app_access_tester(request: Request, data: dict, secret_key: str = Header(...)):
-    uid = request.state.uid
+def remove_app_access_tester(data: dict, secret_key: str = Header(...)):
     if secret_key != os.getenv('ADMIN_KEY'):
         raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
     if not data.get('uid'):
@@ -1844,7 +1841,7 @@ def remove_app_access_tester(request: Request, data: dict, secret_key: str = Hea
     return {'status': 'ok'}
 
 
-@_custom_router.get('/v1/apps/tester/check', tags=['v1'])
+@_firebase_router.get('/v1/apps/tester/check', tags=['v1'])
 def check_is_tester(request: Request):
     uid = request.state.uid
     if is_tester(uid):
