@@ -298,6 +298,9 @@ def _extract_and_index(uid: str, posts: List[Dict]) -> int:
         for m in extracted:
             mdb = MemoryDB.from_memory(m, uid, None, False)
             mdb.manually_added = False
+            # Tag with the connector key so X-derived memories are identifiable
+            # (and cleanly removable on disconnect / re-import).
+            mdb.app_id = INTEGRATION_KEY
             memory_dbs.append(mdb)
         memories_db.save_memories(uid, [m.dict() for m in memory_dbs])
         upsert_memory_vectors_batch(
@@ -316,6 +319,9 @@ def _extract_and_index(uid: str, posts: List[Dict]) -> int:
 async def sync_x_for_user(uid: str) -> Dict:
     """Pull new X posts, store raw, extract memories. Returns a summary dict."""
     integ = users_db.get_integration(uid, INTEGRATION_KEY) or {}
+    # Mark syncing so the desktop can show live progress while this runs in the
+    # background (the OAuth callback kicks this off as a background task).
+    users_db.set_integration(uid, INTEGRATION_KEY, {'syncing': True})
     since_id = x_posts_db.get_newest_tweet_id(uid)
 
     new_posts: List[Dict] = []
@@ -344,6 +350,7 @@ async def sync_x_for_user(uid: str) -> Dict:
     if source is None:
         handle = integ.get('handle')
         if not handle:
+            users_db.set_integration(uid, INTEGRATION_KEY, {'syncing': False})
             return {'success': False, 'error': 'not_connected', 'new_posts': 0, 'memories_created': 0}
         try:
             timeline = await social.get_twitter_timeline(handle)
@@ -359,6 +366,7 @@ async def sync_x_for_user(uid: str) -> Dict:
             source = 'rapidapi'
         except Exception as e:
             logger.error(f'x_connector: RapidAPI fallback failed for uid={uid}: {e}')
+            users_db.set_integration(uid, INTEGRATION_KEY, {'syncing': False})
             return {'success': False, 'error': 'fetch_failed', 'new_posts': 0, 'memories_created': 0}
 
     written = x_posts_db.save_x_posts(uid, new_posts)
@@ -374,6 +382,8 @@ async def sync_x_for_user(uid: str) -> Dict:
             'last_synced_at': datetime.now(timezone.utc).isoformat(),
             'last_sync_source': source,
             'post_count': x_posts_db.count_x_posts(uid),
+            'memory_count': int(integ.get('memory_count', 0)) + memories_created,
+            'syncing': False,
         },
     )
     return {
@@ -393,6 +403,8 @@ def connection_status(uid: str) -> Dict:
         'connected': True,
         'handle': integ.get('handle'),
         'post_count': integ.get('post_count', 0),
+        'memory_count': integ.get('memory_count', 0),
+        'syncing': bool(integ.get('syncing', False)),
         'last_synced_at': integ.get('last_synced_at'),
         'last_sync_source': integ.get('last_sync_source'),
     }

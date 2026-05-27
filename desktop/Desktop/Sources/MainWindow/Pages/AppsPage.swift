@@ -1160,26 +1160,49 @@ private final class ImportConnectorSheetModel: ObservableObject {
                 detail: "Approve access in your browser. This window updates automatically."
             )
 
-            // Poll connection-status for up to ~2 minutes.
+            // Phase 1: wait until the account is linked (callback completed).
+            var linked: XConnectionStatus?
             for _ in 0..<60 {
                 try? await Task.sleep(for: .seconds(2))
                 if let status = try? await APIClient.shared.xConnectionStatus(), status.connected {
-                    updateProgress(
-                        title: "Importing your X data",
-                        detail: "Reading recent tweets and bookmarks and turning them into memories."
-                    )
-                    // Ensure at least one sync has run and grab counts.
-                    let sync = try? await APIClient.shared.xSync()
-                    let postCount = status.postCount ?? sync?.newPosts
-                    let memoryCount = sync?.memoriesCreated
-                    statusMessage = "Connected to X as @\(status.handle ?? "you")."
-                    return SyncResult(
-                        sourceCount: postCount, memoryCount: memoryCount, newItems: sync?.newPosts
-                    )
+                    linked = status
+                    break
                 }
             }
-            errorMessage = "Didn't hear back from X. If you approved access, try Sync again."
-            return nil
+            guard let linked else {
+                errorMessage = "Didn't hear back from X. If you approved access, try again."
+                return nil
+            }
+
+            let handle = linked.handle ?? "you"
+
+            // Phase 2: the OAuth callback kicks off the first import in the
+            // background. Poll while it runs, surfacing live counts, until the
+            // backend marks syncing complete (or counts stop growing).
+            var posts = linked.postCount ?? 0
+            var memories = linked.memoryCount ?? 0
+            for _ in 0..<90 {
+                let status = try? await APIClient.shared.xConnectionStatus()
+                posts = status?.postCount ?? posts
+                memories = status?.memoryCount ?? memories
+                updateProgress(
+                    title: "Importing your X data",
+                    detail: "Saved \(posts.formatted()) posts · \(memories.formatted()) memories so far…"
+                )
+                // Done once the backend clears the syncing flag and we have data.
+                if status?.syncing == false && posts > 0 { break }
+                try? await Task.sleep(for: .seconds(2))
+            }
+
+            if posts > 0 {
+                let memClause = memories > 0
+                    ? " — \(memories.formatted()) memories added. View them in Memories."
+                    : ". Extracted memories appear in Memories."
+                statusMessage = "Imported \(posts.formatted()) posts from @\(handle)\(memClause)"
+            } else {
+                statusMessage = "Connected to X as @\(handle). Import is still running; check back shortly."
+            }
+            return SyncResult(sourceCount: posts, memoryCount: memories > 0 ? memories : nil, newItems: posts)
         } catch {
             errorMessage = error.localizedDescription
             return nil

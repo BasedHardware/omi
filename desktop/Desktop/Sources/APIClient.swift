@@ -4994,6 +4994,8 @@ struct XConnectionStatus: Decodable {
   let connected: Bool
   let handle: String?
   let postCount: Int?
+  let memoryCount: Int?
+  let syncing: Bool?
   let lastSyncedAt: String?
   let lastSyncSource: String?
   enum CodingKeys: String, CodingKey {
@@ -5001,6 +5003,8 @@ struct XConnectionStatus: Decodable {
     case connected
     case handle
     case postCount = "post_count"
+    case memoryCount = "memory_count"
+    case syncing
     case lastSyncedAt = "last_synced_at"
     case lastSyncSource = "last_sync_source"
   }
