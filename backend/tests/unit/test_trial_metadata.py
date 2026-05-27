@@ -326,23 +326,22 @@ class TestTrialMetadataModel:
 class TestTrialEndpointAuth:
     """Verify /v1/users/me/trial endpoint uses Depends(get_current_user_uid)."""
 
-    def test_endpoint_uses_depends_auth(self):
-        """The trial endpoint must use Depends(auth.get_current_user_uid) for auth."""
+    def test_endpoint_uses_request_state_uid(self):
+        """The trial endpoint must read uid from request.state.uid (per-router auth)."""
         src = _read_source(USERS_ROUTER_SRC_PATH)
-        # Find the endpoint function
         endpoint_start = src.index("def get_user_trial_status")
-        # Check the function signature has Depends(auth.get_current_user_uid)
-        sig_end = src.index(')', endpoint_start) + 1
-        sig = src[endpoint_start:sig_end]
-        assert "Depends(auth.get_current_user_uid)" in sig
+        body_end = src.find('\n@', endpoint_start + 1)
+        if body_end == -1:
+            body_end = src.find('\n\n# ', endpoint_start + 1)
+        body = src[endpoint_start:body_end]
+        assert "request.state.uid" in body
 
     def test_endpoint_is_get_method(self):
-        """The trial endpoint must be a GET."""
+        """The trial endpoint must be a GET on _firebase_router."""
         src = _read_source(USERS_ROUTER_SRC_PATH)
-        # Find the decorator before get_user_trial_status
         fn_pos = src.index("def get_user_trial_status")
         preceding = src[max(0, fn_pos - 200) : fn_pos]
-        assert "@router.get(" in preceding
+        assert "@_firebase_router.get(" in preceding
 
     def test_endpoint_returns_get_trial_metadata_call(self):
         """The endpoint body calls get_trial_metadata(uid) and returns result."""

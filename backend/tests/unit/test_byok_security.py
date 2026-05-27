@@ -454,6 +454,13 @@ class TestBoundedCache:
 # ---------------------------------------------------------------------------
 
 
+def _mock_request(uid: str):
+    """Create a mock Request with state.uid set."""
+    req = MagicMock()
+    req.state.uid = uid
+    return req
+
+
 class TestBYOKActivationValidation:
     """Test the actual activate_byok_endpoint and its production constants."""
 
@@ -471,7 +478,7 @@ class TestBYOKActivationValidation:
 
         fps = self._valid_fingerprints()
         data = BYOKActivateRequest(fingerprints=fps)
-        result = activate_byok_endpoint(data, uid='test-uid')
+        result = activate_byok_endpoint(_mock_request('test-uid'), data)
         assert result == {"active": True}
         mock_users_db.set_byok_active.assert_called_once_with('test-uid', fps)
 
@@ -483,7 +490,7 @@ class TestBYOKActivationValidation:
         del fps['deepgram']
         data = BYOKActivateRequest(fingerprints=fps)
         with pytest.raises(HTTPException) as exc_info:
-            activate_byok_endpoint(data, uid='test-uid')
+            activate_byok_endpoint(_mock_request('test-uid'), data)
         assert exc_info.value.status_code == 400
         assert 'deepgram' in str(exc_info.value.detail)
 
@@ -495,7 +502,7 @@ class TestBYOKActivationValidation:
         fps['unknown_provider'] = hashlib.sha256(b'x').hexdigest()
         data = BYOKActivateRequest(fingerprints=fps)
         with pytest.raises(HTTPException) as exc_info:
-            activate_byok_endpoint(data, uid='test-uid')
+            activate_byok_endpoint(_mock_request('test-uid'), data)
         assert exc_info.value.status_code == 400
         assert 'Unknown provider' in str(exc_info.value.detail)
 
@@ -507,7 +514,7 @@ class TestBYOKActivationValidation:
         fps['openai'] = 'a' * 63
         data = BYOKActivateRequest(fingerprints=fps)
         with pytest.raises(HTTPException) as exc_info:
-            activate_byok_endpoint(data, uid='test-uid')
+            activate_byok_endpoint(_mock_request('test-uid'), data)
         assert exc_info.value.status_code == 400
 
     @patch('routers.users.users_db')
@@ -517,7 +524,7 @@ class TestBYOKActivationValidation:
         fps = self._valid_fingerprints()
         fps['openai'] = 'a' * 64
         data = BYOKActivateRequest(fingerprints=fps)
-        result = activate_byok_endpoint(data, uid='test-uid')
+        result = activate_byok_endpoint(_mock_request('test-uid'), data)
         assert result == {"active": True}
 
     def test_65_char_fingerprint_rejects(self):
@@ -528,7 +535,7 @@ class TestBYOKActivationValidation:
         fps['openai'] = 'a' * 65
         data = BYOKActivateRequest(fingerprints=fps)
         with pytest.raises(HTTPException) as exc_info:
-            activate_byok_endpoint(data, uid='test-uid')
+            activate_byok_endpoint(_mock_request('test-uid'), data)
         assert exc_info.value.status_code == 400
 
     def test_empty_fingerprints_rejects(self):
@@ -537,14 +544,14 @@ class TestBYOKActivationValidation:
 
         data = BYOKActivateRequest(fingerprints={})
         with pytest.raises(HTTPException) as exc_info:
-            activate_byok_endpoint(data, uid='test-uid')
+            activate_byok_endpoint(_mock_request('test-uid'), data)
         assert exc_info.value.status_code == 400
 
     @patch('routers.users.users_db')
     def test_deactivation_calls_clear(self, mock_users_db):
         from routers.users import deactivate_byok_endpoint
 
-        result = deactivate_byok_endpoint(uid='test-uid')
+        result = deactivate_byok_endpoint(_mock_request('test-uid'))
         assert result == {"active": False}
         mock_users_db.clear_byok_active.assert_called_once_with('test-uid')
 
@@ -997,72 +1004,76 @@ class TestBYOKStateCache:
 # ---------------------------------------------------------------------------
 
 
-class TestAuthDependencyBYOKIntegration:
-    """Verify shared auth dependencies call (or skip) BYOK validation."""
+class TestAuthDependencyBYOKSeparation:
+    """Verify auth deps do NOT include BYOK validation (separated into own dep)."""
 
-    @patch('utils.other.endpoints.validate_byok_request')
     @patch('utils.other.endpoints.record_user_platform')
     @patch('utils.other.endpoints.verify_token', return_value='uid-123')
-    def test_get_current_user_uid_calls_byok_validation(self, _mock_verify, _mock_platform, mock_validate):
+    def test_get_current_user_uid_no_byok_validation(self, _mock_verify, _mock_platform):
+        """get_current_user_uid returns uid without BYOK side effects."""
         from utils.other.endpoints import get_current_user_uid
 
         uid = get_current_user_uid(authorization='Bearer fake-token')
         assert uid == 'uid-123'
-        mock_validate.assert_called_once_with('uid-123')
 
     @patch('utils.other.endpoints.record_user_platform')
     @patch('utils.other.endpoints.verify_token', return_value='uid-456')
-    def test_no_byok_validation_skips_validate(self, _mock_verify, _mock_platform):
-        """get_current_user_uid_no_byok_validation must NOT call validate_byok_request."""
+    def test_no_byok_validation_dep_also_clean(self, _mock_verify, _mock_platform):
+        """get_current_user_uid_no_byok_validation also has no BYOK side effects."""
         from utils.other.endpoints import get_current_user_uid_no_byok_validation
 
-        with patch('utils.other.endpoints.validate_byok_request') as mock_validate:
-            uid = get_current_user_uid_no_byok_validation(authorization='Bearer fake-token')
-            assert uid == 'uid-456'
-            mock_validate.assert_not_called()
+        uid = get_current_user_uid_no_byok_validation(authorization='Bearer fake-token')
+        assert uid == 'uid-456'
+
+    @patch('utils.other.endpoints._verify_ws_auth', return_value='ws-uid')
+    def test_ws_listen_dep_is_sync_and_returns_uid_only(self, _mock_auth):
+        """get_current_user_uid_ws_listen is sync, returns uid, no BYOK logic."""
+        from utils.other.endpoints import get_current_user_uid_ws_listen
+        import inspect
+
+        # Must be sync (not async) — no ContextVar mutations in worker threads
+        assert not inspect.iscoroutinefunction(get_current_user_uid_ws_listen)
+        uid = get_current_user_uid_ws_listen(authorization='Bearer tok')
+        assert uid == 'ws-uid'
 
 
-class TestWSAuthDependencyBYOK:
-    """Verify get_current_user_uid_ws_listen extracts BYOK and validates."""
+class TestBYOKSeparatedDeps:
+    """Verify the new separated BYOK deps extract+validate without ContextVar mutation."""
+
+    def _make_request(self, headers: dict):
+        req = MagicMock()
+        req.headers = headers
+        return req
 
     def _make_ws(self, headers: dict):
         ws = MagicMock()
         ws.headers = headers
         return ws
 
-    @patch('utils.other.endpoints.validate_byok_websocket', return_value=None)
-    @patch('utils.other.endpoints._verify_ws_auth', return_value='ws-uid')
-    def test_ws_listen_with_byok_headers_validates(self, _mock_auth, mock_validate):
-        import asyncio
-        from utils.other.endpoints import get_current_user_uid_ws_listen
+    def test_http_middleware_extracts_byok_headers(self):
+        """AuthMiddleware extracts BYOK headers from HTTP requests."""
+        from utils.auth_middleware import _extract_byok_headers
 
-        ws = self._make_ws({'x-byok-openai': 'sk-test'})
-        uid = asyncio.run(get_current_user_uid_ws_listen(websocket=ws, authorization='Bearer tok'))
-        assert uid == 'ws-uid'
-        mock_validate.assert_called_once_with('ws-uid')
+        req = self._make_request({'x-byok-openai': 'sk-o', 'x-byok-deepgram': 'dg-d'})
+        result = _extract_byok_headers(req)
+        assert result == {'openai': 'sk-o', 'deepgram': 'dg-d'}
 
-    @patch('utils.other.endpoints.validate_byok_websocket', return_value=None)
-    @patch('utils.other.endpoints._verify_ws_auth', return_value='ws-uid')
-    def test_ws_listen_no_headers_passes(self, _mock_auth, mock_validate):
-        import asyncio
-        from utils.other.endpoints import get_current_user_uid_ws_listen
+    def test_http_middleware_empty_headers(self):
+        """AuthMiddleware returns empty dict when no BYOK headers present."""
+        from utils.auth_middleware import _extract_byok_headers
 
-        ws = self._make_ws({})
-        uid = asyncio.run(get_current_user_uid_ws_listen(websocket=ws, authorization='Bearer tok'))
-        assert uid == 'ws-uid'
+        req = self._make_request({})
+        result = _extract_byok_headers(req)
+        assert result == {}
+
+    @patch('utils.other.endpoints.validate_and_return_byok_keys_ws', return_value={'deepgram': 'dg-d'})
+    def test_ws_dep_extracts_and_validates(self, mock_validate):
+        from utils.other.endpoints import get_validated_byok_keys_ws
+
+        ws = self._make_ws({'x-byok-deepgram': 'dg-d'})
+        result = get_validated_byok_keys_ws(websocket=ws, uid='uid-3')
+        assert result == {'deepgram': 'dg-d'}
         mock_validate.assert_called_once()
-
-    @patch('utils.other.endpoints.validate_byok_websocket', return_value='fingerprint mismatch')
-    @patch('utils.other.endpoints._verify_ws_auth', return_value='ws-uid')
-    def test_ws_listen_validation_failure_raises_4003(self, _mock_auth, _mock_validate):
-        import asyncio
-        from fastapi import WebSocketException
-        from utils.other.endpoints import get_current_user_uid_ws_listen
-
-        ws = self._make_ws({'x-byok-openai': 'wrong-key'})
-        with pytest.raises(WebSocketException) as exc_info:
-            asyncio.run(get_current_user_uid_ws_listen(websocket=ws, authorization='Bearer tok'))
-        assert exc_info.value.code == 4003
 
 
 class TestActivationCacheInvalidation:
@@ -1080,7 +1091,7 @@ class TestActivationCacheInvalidation:
             'deepgram': hashlib.sha256(b'sk-d').hexdigest(),
         }
         data = BYOKActivateRequest(fingerprints=fingerprints)
-        result = activate_byok_endpoint(data=data, uid='uid-act')
+        result = activate_byok_endpoint(_mock_request('uid-act'), data)
         assert result == {'active': True}
         mock_invalidate.assert_called_once_with('uid-act')
 
@@ -1089,6 +1100,162 @@ class TestActivationCacheInvalidation:
     def test_deactivate_invalidates_cache(self, mock_users_db, mock_invalidate):
         from routers.users import deactivate_byok_endpoint
 
-        result = deactivate_byok_endpoint(uid='uid-deact')
+        result = deactivate_byok_endpoint(_mock_request('uid-deact'))
         assert result == {'active': False}
         mock_invalidate.assert_called_once_with('uid-deact')
+
+
+# ---------------------------------------------------------------------------
+# 17. Thread-safe BYOK validation (validate_and_return_byok_keys)
+# ---------------------------------------------------------------------------
+
+
+class TestValidateAndReturnBYOKKeys:
+    """Test the new validate_and_return_byok_keys functions.
+
+    These deps run in sync worker threads and NEVER mutate ContextVar.
+    They return validated keys as a dict; the async handler calls
+    set_byok_keys() to install them.
+    """
+
+    _FAKE_KEY_OPENAI = 'sk-test-openai-key-12345'
+    _FAKE_KEY_ANTHROPIC = 'sk-ant-test-key-67890'
+    _FAKE_KEY_GEMINI = 'AIzaSy-test-gemini-key'
+    _FAKE_KEY_DEEPGRAM = 'dg-test-deepgram-key'
+
+    @property
+    def _enrolled_fingerprints(self):
+        return {
+            'openai': hashlib.sha256(self._FAKE_KEY_OPENAI.encode()).hexdigest(),
+            'anthropic': hashlib.sha256(self._FAKE_KEY_ANTHROPIC.encode()).hexdigest(),
+            'gemini': hashlib.sha256(self._FAKE_KEY_GEMINI.encode()).hexdigest(),
+            'deepgram': hashlib.sha256(self._FAKE_KEY_DEEPGRAM.encode()).hexdigest(),
+        }
+
+    @property
+    def _valid_request_keys(self):
+        return {
+            'openai': self._FAKE_KEY_OPENAI,
+            'anthropic': self._FAKE_KEY_ANTHROPIC,
+            'gemini': self._FAKE_KEY_GEMINI,
+            'deepgram': self._FAKE_KEY_DEEPGRAM,
+        }
+
+    def _mock_byok_state(self, active=True, fingerprints=None):
+        from datetime import datetime, timezone
+
+        return {
+            'active': active,
+            'fingerprints': fingerprints if fingerprints is not None else self._enrolled_fingerprints,
+            'last_seen_at': datetime.now(timezone.utc),
+        }
+
+    @patch('database.users.BYOK_HEARTBEAT_TTL_SECONDS', 7 * 24 * 3600)
+    @patch('database.users.get_byok_state')
+    def test_returns_valid_keys(self, mock_get_state):
+        """Active BYOK user with correct keys → returns keys dict."""
+        from utils.byok import validate_and_return_byok_keys
+
+        mock_get_state.return_value = self._mock_byok_state()
+        result = validate_and_return_byok_keys('uid', self._valid_request_keys)
+        assert result == self._valid_request_keys
+
+    def test_empty_keys_returns_empty(self):
+        """No BYOK headers → returns empty dict without touching Firestore."""
+        from utils.byok import validate_and_return_byok_keys
+
+        result = validate_and_return_byok_keys('uid', {})
+        assert result == {}
+
+    @patch('database.users.BYOK_HEARTBEAT_TTL_SECONDS', 7 * 24 * 3600)
+    @patch('database.users.get_byok_state')
+    def test_non_active_user_returns_empty(self, mock_get_state):
+        """Non-BYOK user sending headers → returns empty (keys ignored)."""
+        from utils.byok import invalidate_byok_state_cache, validate_and_return_byok_keys
+
+        invalidate_byok_state_cache('uid-inactive')
+        mock_get_state.return_value = self._mock_byok_state(active=False)
+        result = validate_and_return_byok_keys('uid-inactive', self._valid_request_keys)
+        assert result == {}
+
+    @patch('database.users.BYOK_HEARTBEAT_TTL_SECONDS', 7 * 24 * 3600)
+    @patch('database.users.get_byok_state')
+    def test_mismatched_key_raises_403(self, mock_get_state):
+        """Active BYOK user with wrong key → HTTPException(403)."""
+        from fastapi import HTTPException
+        from utils.byok import validate_and_return_byok_keys
+
+        mock_get_state.return_value = self._mock_byok_state()
+        bad_keys = dict(self._valid_request_keys)
+        bad_keys['openai'] = 'sk-WRONG-key'
+        with pytest.raises(HTTPException) as exc_info:
+            validate_and_return_byok_keys('uid', bad_keys)
+        assert exc_info.value.status_code == 403
+        assert 'mismatch' in exc_info.value.detail
+
+    @patch('database.users.BYOK_HEARTBEAT_TTL_SECONDS', 7 * 24 * 3600)
+    @patch('database.users.get_byok_state')
+    def test_missing_provider_raises_403(self, mock_get_state):
+        """Active BYOK user missing enrolled provider → HTTPException(403)."""
+        from fastapi import HTTPException
+        from utils.byok import validate_and_return_byok_keys
+
+        mock_get_state.return_value = self._mock_byok_state()
+        partial_keys = {'openai': self._FAKE_KEY_OPENAI}
+        with pytest.raises(HTTPException) as exc_info:
+            validate_and_return_byok_keys('uid', partial_keys)
+        assert exc_info.value.status_code == 403
+        assert 'missing' in exc_info.value.detail
+
+    @patch('database.users.BYOK_HEARTBEAT_TTL_SECONDS', 7 * 24 * 3600)
+    @patch('database.users.get_byok_state')
+    def test_ws_variant_returns_valid_keys(self, mock_get_state):
+        """WS variant returns keys dict for valid request."""
+        from utils.byok import validate_and_return_byok_keys_ws
+
+        mock_get_state.return_value = self._mock_byok_state()
+        result = validate_and_return_byok_keys_ws('uid', self._valid_request_keys)
+        assert result == self._valid_request_keys
+
+    @patch('database.users.BYOK_HEARTBEAT_TTL_SECONDS', 7 * 24 * 3600)
+    @patch('database.users.get_byok_state')
+    def test_ws_variant_mismatch_raises_4003(self, mock_get_state):
+        """WS variant raises WebSocketException(4003) on fingerprint mismatch."""
+        from fastapi import WebSocketException
+        from utils.byok import validate_and_return_byok_keys_ws
+
+        mock_get_state.return_value = self._mock_byok_state()
+        bad_keys = dict(self._valid_request_keys)
+        bad_keys['deepgram'] = 'dg-WRONG'
+        with pytest.raises(WebSocketException) as exc_info:
+            validate_and_return_byok_keys_ws('uid', bad_keys)
+        assert exc_info.value.code == 4003
+
+    def test_does_not_mutate_contextvar(self):
+        """validate_and_return_byok_keys must NOT modify _byok_ctx."""
+        from contextvars import copy_context
+        from utils.byok import _byok_ctx, validate_and_return_byok_keys
+
+        ctx = copy_context()
+
+        def _run():
+            original = _byok_ctx.get()
+            validate_and_return_byok_keys('uid', {})
+            assert _byok_ctx.get() is original, "ContextVar must not be mutated"
+
+        ctx.run(_run)
+
+    @patch('database.users.BYOK_HEARTBEAT_TTL_SECONDS', 7 * 24 * 3600)
+    @patch('database.users.get_byok_state')
+    def test_extract_from_request(self, mock_get_state):
+        """_extract_byok_from_request reads headers correctly."""
+        from utils.byok import _extract_byok_from_request
+
+        mock_request = MagicMock()
+        mock_request.headers = {
+            'x-byok-openai': 'sk-o',
+            'x-byok-deepgram': 'dg-d',
+            'other-header': 'ignored',
+        }
+        keys = _extract_byok_from_request(mock_request)
+        assert keys == {'openai': 'sk-o', 'deepgram': 'dg-d'}

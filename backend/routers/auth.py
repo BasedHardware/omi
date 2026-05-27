@@ -21,10 +21,7 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(
-    prefix="/v1/auth",
-    tags=["authentication"],
-)
+router = APIRouter(prefix="/v1/auth", tags=["authentication"])
 
 # Set up Jinja2 templates
 templates_path = pathlib.Path(__file__).parent.parent / "templates"
@@ -96,26 +93,19 @@ def _validate_redirect_uri(redirect_uri: str) -> None:
         hostname = (parsed.hostname or "").strip().lower()
         if hostname not in _LOOPBACK_HOSTNAMES:
             raise HTTPException(
-                status_code=400,
-                detail="HTTP redirect_uri must point at loopback (localhost, 127.0.0.1, or ::1)",
+                status_code=400, detail="HTTP redirect_uri must point at loopback (localhost, 127.0.0.1, or ::1)"
             )
         return
 
     if scheme in _FORBIDDEN_REDIRECT_SCHEMES:
-        raise HTTPException(
-            status_code=400,
-            detail=f"redirect_uri scheme '{scheme}' is not permitted",
-        )
+        raise HTTPException(status_code=400, detail=f"redirect_uri scheme '{scheme}' is not permitted")
 
     # Custom app scheme. Per RFC 3986, a scheme is
     # ``ALPHA *( ALPHA / DIGIT / "+" / "-" / "." )``. Be a little stricter
     # than urllib here — require the scheme to start with a letter and contain
     # only the RFC-allowed characters, so we don't accept garbage like ``://x``.
     if not _is_valid_scheme(scheme):
-        raise HTTPException(
-            status_code=400,
-            detail=f"redirect_uri scheme '{scheme}' is malformed",
-        )
+        raise HTTPException(status_code=400, detail=f"redirect_uri scheme '{scheme}' is malformed")
 
     return
 
@@ -141,10 +131,7 @@ def _is_valid_scheme(scheme: str) -> bool:
 
 @router.get("/authorize")
 async def auth_authorize(
-    request: Request,
-    provider: str,  # 'google', 'apple'
-    redirect_uri: str,
-    state: Optional[str] = None,
+    request: Request, provider: str, redirect_uri: str, state: Optional[str] = None  # 'google', 'apple'
 ):
     """
     User authentication authorization endpoint for the main Omi app
@@ -177,10 +164,7 @@ async def auth_authorize(
 
 @router.get("/callback/google")
 async def auth_callback_google(
-    request: Request,
-    code: Optional[str] = None,
-    state: Optional[str] = None,
-    error: Optional[str] = None,
+    request: Request, code: Optional[str] = None, state: Optional[str] = None, error: Optional[str] = None
 ):
     """
     Google authentication callback handler (GET method)
@@ -218,10 +202,7 @@ async def auth_callback_google(
 
 @router.post("/callback/apple")
 async def auth_callback_apple_post(
-    request: Request,
-    code: str = Form(...),
-    state: str = Form(...),
-    error: Optional[str] = Form(None),
+    request: Request, code: str = Form(...), state: str = Form(...), error: Optional[str] = Form(None)
 ):
     """
     Apple authentication callback handler (POST method)
@@ -586,10 +567,7 @@ def _generate_apple_client_secret(client_id: str, team_id: str, key_id: str, pri
     """
     try:
         # Load the private key from PEM content
-        private_key = serialization.load_pem_private_key(
-            private_key_content.encode('utf-8'),
-            password=None,
-        )
+        private_key = serialization.load_pem_private_key(private_key_content.encode('utf-8'), password=None)
 
         # Create the JWT payload
         now = int(time.time())

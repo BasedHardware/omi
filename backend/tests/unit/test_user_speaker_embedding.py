@@ -174,7 +174,9 @@ class TestSpeechProfileEmbeddingExtraction:
                         mock_audio.duration_seconds = 10.0
                         mock_aseg.from_wav.return_value = mock_audio
 
-                        upload_profile(mock_file, uid='test-uid')
+                        mock_request = MagicMock()
+                        mock_request.state.uid = 'test-uid'
+                        upload_profile(mock_request, mock_file)
 
         mock_extract.assert_called_once()
         mock_store.assert_called_once()
@@ -224,7 +226,9 @@ class TestSpeechProfileEmbeddingExtraction:
                         mock_audio.duration_seconds = 10.0
                         mock_aseg.from_wav.return_value = mock_audio
 
-                        result = upload_profile(mock_file, uid='test-uid')
+                        mock_request = MagicMock()
+                        mock_request.state.uid = 'test-uid'
+                        result = upload_profile(mock_request, mock_file)
 
         # Upload still succeeded
         assert result == {"url": "https://storage.example.com/profile.wav"}
