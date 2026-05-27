@@ -790,6 +790,7 @@ def find_active_paid_subscription_for_user(uid: str) -> Optional[Subscription]:
             stripe_subscription_id=d.get('id'),
             current_price_id=price_id,
             current_period_end=d.get('current_period_end'),
+            current_period_start=d.get('current_period_start'),
             cancel_at_period_end=d.get('cancel_at_period_end', False),
             limits=get_plan_limits(plan),
         )
@@ -997,6 +998,7 @@ def reconcile_basic_plan_with_stripe(uid: str, subscription: Subscription | None
                 subscription.plan = plan_type
                 subscription.status = SubscriptionStatus.active
                 subscription.current_period_end = stripe_sub_dict.get('current_period_end')
+                subscription.current_period_start = stripe_sub_dict.get('current_period_start')
                 subscription.cancel_at_period_end = stripe_sub_dict.get('cancel_at_period_end', False)
                 subscription.current_price_id = price_id
                 subscription.limits = get_plan_limits(plan_type)
