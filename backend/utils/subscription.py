@@ -27,10 +27,45 @@ PAID_PLAN_TYPES = {PlanType.unlimited, PlanType.architect, PlanType.operator}
 # plans sheet (Operator shows "Desktop app", Neo shows "No desktop access").
 DESKTOP_ENTITLED_PLAN_TYPES = {PlanType.operator, PlanType.architect}
 
+# Grandfather: Neo subscriptions whose current billing period started before
+# this cutoff retain desktop access until that period ends. At their next
+# renewal, current_period_start advances past the cutoff and they fall under
+# the new policy. Default is the merge timestamp of #7496 — the PR that first
+# removed Neo from DESKTOP_ENTITLED_PLAN_TYPES — so users who bought Neo when
+# desktop was de facto included aren't pulled mid-cycle. Env-overridable so
+# the cutoff can shift if the policy date changes.
+NEO_DESKTOP_GRANDFATHER_CUTOFF = int(os.getenv('NEO_DESKTOP_GRANDFATHER_CUTOFF', '1779748479'))
 
-def plan_grants_desktop(plan: PlanType) -> bool:
-    """True iff this plan unlocks the desktop (macOS) app."""
-    return plan in DESKTOP_ENTITLED_PLAN_TYPES
+
+def plan_grants_desktop(plan: PlanType, subscription: Optional[Subscription] = None) -> bool:
+    """True iff this plan unlocks the desktop (macOS) app for this subscriber.
+
+    Operator and Architect always grant desktop. Neo grants desktop only under
+    the legacy grandfather: when the subscription's current_period_start is
+    before NEO_DESKTOP_GRANDFATHER_CUTOFF (or is None — existing pre-deploy
+    subs without the field set are treated as legacy until their next webhook
+    populates the field).
+    """
+    if plan in DESKTOP_ENTITLED_PLAN_TYPES:
+        return True
+    if plan == PlanType.unlimited and subscription is not None:
+        cps = subscription.current_period_start
+        if cps is None or cps < NEO_DESKTOP_GRANDFATHER_CUTOFF:
+            return True
+    return False
+
+
+def neo_grandfather_until(subscription: Optional[Subscription]) -> Optional[int]:
+    """If the subscriber is currently grandfathered onto Neo desktop, return
+    the unix-seconds timestamp when that access ends (their current period end).
+    Otherwise None. Used by the API response so the desktop client can render a
+    "Neo desktop access ends on <date>" notice.
+    """
+    if subscription is None or subscription.plan != PlanType.unlimited:
+        return None
+    if not plan_grants_desktop(subscription.plan, subscription):
+        return None
+    return subscription.current_period_end
 
 
 # Desktop-only 3-day trial paywall.
@@ -83,7 +118,7 @@ def _is_trial_expired_uncached(uid: str) -> bool:
     try:
         subscription = users_db.get_user_valid_subscription(uid)
         plan = subscription.plan if subscription else PlanType.basic
-        if plan_grants_desktop(plan):
+        if plan_grants_desktop(plan, subscription):
             return False
         if users_db.is_byok_active(uid):
             return False
@@ -156,7 +191,7 @@ def get_trial_metadata(uid: str) -> TrialMetadata:
         # Same request-level escape hatch as `_is_trial_expired_cached`: a request
         # carrying all 4 BYOK provider headers is treated as BYOK-active even if
         # Firestore hasn't caught up yet.
-        if plan_grants_desktop(plan) or users_db.is_byok_active(uid) or _request_has_all_byok_keys():
+        if plan_grants_desktop(plan, subscription) or users_db.is_byok_active(uid) or _request_has_all_byok_keys():
             return TrialMetadata(
                 trial_expired=False,
                 trial_duration_seconds=TRIAL_LENGTH_SECONDS,
