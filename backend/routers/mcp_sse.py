@@ -23,6 +23,7 @@ import database.memories as memories_db
 import database.conversations as conversations_db
 import database.mcp_api_key as mcp_api_key_db
 import database.vector_db as vector_db
+import database.x_posts as x_posts_db
 from models.memories import MemoryDB, Memory, MemoryCategory
 from utils.conversations.render import redact_conversation_for_list
 from models.conversation_enums import CategoryEnum
@@ -238,6 +239,43 @@ MCP_TOOLS = [
                 "limit": {"type": "integer", "description": "Maximum number of results to return", "default": 10},
             },
             "required": ["query"],
+        },
+    },
+    {
+        "name": "search_x_posts",
+        "description": (
+            "Semantic search across the user's imported X (Twitter) posts — their actual tweets and "
+            "bookmarks, not just extracted memories. Returns posts ranked by relevance to the query."
+        ),
+        "annotations": READ_ONLY_ANNOTATIONS,
+        "securitySchemes": MEMORIES_READ_SECURITY,
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "query": {"type": "string", "description": "Natural language search query"},
+                "limit": {"type": "integer", "description": "Maximum number of results to return", "default": 10},
+            },
+            "required": ["query"],
+        },
+    },
+    {
+        "name": "get_x_posts",
+        "description": (
+            "Retrieve the user's imported X (Twitter) posts, newest first. Optionally filter by kind "
+            "(tweet or bookmark). Returns the raw post text, created_at, and id."
+        ),
+        "annotations": READ_ONLY_ANNOTATIONS,
+        "securitySchemes": MEMORIES_READ_SECURITY,
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "kind": {
+                    "type": "string",
+                    "enum": ["tweet", "bookmark"],
+                    "description": "Filter to only tweets or only bookmarks (omit for all)",
+                },
+                "limit": {"type": "integer", "description": "Number of posts to retrieve", "default": 50},
+            },
         },
     },
 ]
@@ -500,6 +538,42 @@ def execute_tool(user_id: str, tool_name: str, arguments: dict) -> dict:
             )
 
         return {"conversations": results}
+
+    elif tool_name == "search_x_posts":
+        query = arguments.get("query")
+        if not query:
+            raise ToolExecutionError("query is required")
+        limit = arguments.get("limit", 10)
+
+        matches = vector_db.find_similar_x_posts(user_id, query, limit=limit)
+        if not matches:
+            return {"posts": []}
+
+        score_map = {str(m['post_id']): m.get('score', 0) for m in matches}
+        posts = x_posts_db.get_x_posts_by_ids(user_id, [m['post_id'] for m in matches])
+        results = []
+        for p in posts:
+            results.append(
+                {
+                    "id": p.get("id"),
+                    "text": p.get("text"),
+                    "kind": p.get("kind"),
+                    "created_at": p.get("created_at"),
+                    "relevance_score": round(score_map.get(str(p.get("id")), 0), 4),
+                }
+            )
+        results.sort(key=lambda x: x.get("relevance_score", 0), reverse=True)
+        return {"posts": results}
+
+    elif tool_name == "get_x_posts":
+        limit = arguments.get("limit", 50)
+        kind = arguments.get("kind")
+        posts = x_posts_db.get_x_posts(user_id, limit=limit, kind=kind)
+        results = [
+            {"id": p.get("id"), "text": p.get("text"), "kind": p.get("kind"), "created_at": p.get("created_at")}
+            for p in posts
+        ]
+        return {"posts": results}
 
     else:
         raise ToolExecutionError(f"Unknown tool: {tool_name}", code=-32601)

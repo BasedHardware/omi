@@ -290,6 +290,63 @@ def delete_memory_vector(uid: str, memory_id: str):
 
 
 # ==========================================
+# X (Twitter) Post Vector Functions
+# Semantic search over the user's raw imported tweets/bookmarks.
+# ==========================================
+
+X_POSTS_NAMESPACE = "ns_x"
+
+
+def upsert_x_post_vectors_batch(uid: str, items: List[dict]) -> int:
+    """Upsert X post embeddings in one request. Each item: {'post_id', 'content', 'kind'}.
+    Returns the number of vectors written (0 if Pinecone is not configured)."""
+    if index is None:
+        logger.warning('Pinecone index not initialized, skipping x_post vector batch upsert')
+        return 0
+    items = [it for it in items if (it.get('content') or '').strip()]
+    if not items:
+        return 0
+
+    vectors = embeddings.embed_documents([it['content'] for it in items])
+    now_ts = int(datetime.now(timezone.utc).timestamp())
+    payload = [
+        {
+            "id": f"{uid}-x-{it['post_id']}",
+            "values": vectors[i],
+            "metadata": {
+                "uid": uid,
+                "post_id": str(it['post_id']),
+                "kind": it.get('kind', 'tweet'),
+                "created_at": now_ts,
+            },
+        }
+        for i, it in enumerate(items)
+    ]
+    res = index.upsert(vectors=payload, namespace=X_POSTS_NAMESPACE)
+    logger.info(f'upsert_x_post_vectors_batch count={len(payload)} {res}')
+    return len(payload)
+
+
+def find_similar_x_posts(uid: str, content: str, limit: int = 10) -> List[dict]:
+    """Semantic search over the user's X posts. Returns [{post_id, kind, score}]."""
+    if index is None:
+        logger.warning('Pinecone index not initialized, skipping x_post similarity search')
+        return []
+    vector = embeddings.embed_query(content)
+    xc = index.query(
+        vector=vector, top_k=limit, include_metadata=True, filter={'uid': uid}, namespace=X_POSTS_NAMESPACE
+    )
+    return [
+        {
+            'post_id': m['metadata'].get('post_id'),
+            'kind': m['metadata'].get('kind'),
+            'score': m['score'],
+        }
+        for m in xc.get('matches', [])
+    ]
+
+
+# ==========================================
 # Screen Activity Vector Functions
 # For screenshot embeddings (Gemini embedding-001, 3072-dim)
 # ==========================================
