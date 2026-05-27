@@ -439,7 +439,7 @@ def delete_action_items_batch(uid: str, action_item_ids: List[str]) -> List[str]
     for item_id in action_item_ids:
         batch.delete(action_items_ref.document(item_id))
         count += 1
-        if count >= 500:
+        if count >= 499:  # Firestore batch limit is 500
             batch.commit()
             batch = db.batch()
             count = 0
