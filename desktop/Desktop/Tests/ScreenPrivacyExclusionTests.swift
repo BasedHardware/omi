@@ -72,4 +72,36 @@ final class ScreenPrivacyExclusionTests: XCTestCase {
         XCTAssertFalse(InsightAssistantSettings.shared.isAppExcluded("Slack"))
         XCTAssertFalse(FocusAssistantSettings.shared.isAppExcluded("Xcode"))
     }
+
+    // MARK: - Custom user-added Rewind exclusions propagate to assistants
+
+    @MainActor
+    func testCustomRewindExclusionBlocksAllAssistants() {
+        let customApp = "TestCustomPrivateApp_\(UUID().uuidString)"
+        // Add a custom exclusion to Rewind
+        RewindSettings.shared.excludeApp(customApp)
+        defer { RewindSettings.shared.includeApp(customApp) }
+
+        // All assistants must block this custom-excluded app
+        XCTAssertTrue(RewindSettings.shared.isAppExcluded(customApp),
+                      "RewindSettings must exclude custom app")
+        XCTAssertTrue(MemoryAssistantSettings.shared.isAppExcluded(customApp),
+                      "MemoryAssistantSettings must block custom Rewind-excluded app")
+        XCTAssertTrue(InsightAssistantSettings.shared.isAppExcluded(customApp),
+                      "InsightAssistantSettings must block custom Rewind-excluded app")
+        XCTAssertTrue(FocusAssistantSettings.shared.isAppExcluded(customApp),
+                      "FocusAssistantSettings must block custom Rewind-excluded app")
+    }
+
+    // MARK: - RewindSettings.isAppExcluded covers all default privacy apps
+
+    func testRewindSettingsExcludesAllDefaultPrivacyApps() {
+        let privacyApps = ["Passwords", "1Password", "1Password 7", "Bitwarden",
+                           "LastPass", "Dashlane", "Keeper", "Enpass",
+                           "KeePassXC", "Keychain Access"]
+        for app in privacyApps {
+            XCTAssertTrue(RewindSettings.shared.isAppExcluded(app),
+                          "RewindSettings.shared.isAppExcluded must return true for '\(app)'")
+        }
+    }
 }
