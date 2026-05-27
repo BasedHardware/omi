@@ -4,6 +4,7 @@ Tools for fetching content from specific URLs.
 
 import asyncio
 import ipaddress
+import json
 import re
 import logging
 from html.parser import HTMLParser
@@ -36,6 +37,99 @@ _PRIVATE_NETWORKS = [
 ]
 
 _PARSEABLE_TYPES = ('text/html', 'text/plain', 'application/xhtml+xml', 'application/xml')
+
+# Fields to surface from JSON-LD structured data (schema.org), in display order.
+_JSON_LD_FIELDS = [
+    ('name', 'Title'),
+    ('headline', 'Headline'),
+    ('uploadDate', 'Upload date'),
+    ('datePublished', 'Published'),
+    ('dateModified', 'Modified'),
+    ('author', 'Author'),
+    ('description', 'Description'),
+    ('duration', 'Duration'),
+]
+
+
+def _extract_meta_tags(html: str) -> str:
+    """
+    Extract page title, meta description, and Open Graph tags.
+    These are set even on fully JS-rendered pages (needed for SEO/social sharing)
+    and live inside <head>, which the HTML stripper skips entirely.
+    """
+    lines = []
+    seen: set = set()
+
+    def add(label: str, value: str) -> None:
+        value = value.strip()
+        if value and label not in seen:
+            seen.add(label)
+            lines.append(f'{label}: {value}')
+
+    title_m = re.search(r'<title[^>]*>(.*?)</title>', html, re.DOTALL | re.IGNORECASE)
+    if title_m:
+        add('Title', re.sub(r'<[^>]+>', '', title_m.group(1)))
+
+    for m in re.finditer(r'<meta\s+([^>]+?)/?>', html, re.IGNORECASE):
+        attrs = m.group(1)
+        name_m = re.search(r'(?:name|property)=["\']([^"\']+)["\']', attrs, re.IGNORECASE)
+        content_m = re.search(r'content=["\']([^"\']*)["\']', attrs, re.IGNORECASE)
+        if not name_m or not content_m:
+            continue
+        name = name_m.group(1).lower().strip()
+        content = content_m.group(1).strip()
+        if not content:
+            continue
+        if name == 'description':
+            add('Description', content)
+        elif name == 'og:title':
+            add('Title', content)
+        elif name == 'og:description':
+            add('Description', content)
+        elif name == 'og:site_name':
+            add('Site', content)
+        elif name == 'og:type':
+            add('Type', content)
+
+    return '\n'.join(lines)
+
+
+def _extract_json_ld(html: str) -> str:
+    """
+    Pull text from <script type="application/ld+json"> blocks.
+    Many JS-rendered pages (YouTube, articles) embed their canonical metadata
+    here even when the visible DOM is empty without JS execution.
+    Returns a formatted multi-line string, or '' if nothing useful is found.
+    """
+    pattern = re.compile(
+        r'<script[^>]+type=["\']application/ld\+json["\'][^>]*>(.*?)</script>', re.DOTALL | re.IGNORECASE
+    )
+    lines = []
+    for match in pattern.finditer(html):
+        try:
+            data = json.loads(match.group(1))
+        except (json.JSONDecodeError, ValueError):
+            continue
+
+        if isinstance(data, list):
+            items = data
+        else:
+            items = [data]
+
+        for item in items:
+            if not isinstance(item, dict):
+                continue
+            for key, label in _JSON_LD_FIELDS:
+                val = item.get(key)
+                if not val:
+                    continue
+                if isinstance(val, dict):
+                    val = val.get('name') or val.get('@id') or str(val)
+                elif isinstance(val, list):
+                    val = ', '.join(str(v.get('name', v) if isinstance(v, dict) else v) for v in val[:3])
+                lines.append(f'{label}: {val}')
+
+    return '\n'.join(lines)
 
 
 def _is_private_ip(ip_str: str) -> bool:
@@ -82,15 +176,21 @@ class _TextExtractor(HTMLParser):
 
 
 def _html_to_text(html: str) -> str:
+    meta = _extract_meta_tags(html)
+    structured = _extract_json_ld(html)
+
     parser = _TextExtractor()
     try:
         parser.feed(html)
     except Exception:
         pass
-    text = ' '.join(parser.chunks)
-    text = re.sub(r' \n ', '\n', text)
-    text = re.sub(r'\n{3,}', '\n\n', text)
-    return text.strip()
+    body = ' '.join(parser.chunks)
+    body = re.sub(r' \n ', '\n', body)
+    body = re.sub(r'\n{3,}', '\n\n', body)
+    body = body.strip()
+
+    parts = [p for p in (meta, structured, body) if p]
+    return '\n\n'.join(parts)
 
 
 async def _fetch_page(url: str, headers: dict) -> tuple[int, str, str]:
