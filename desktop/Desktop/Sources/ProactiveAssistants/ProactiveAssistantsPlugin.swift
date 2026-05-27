@@ -699,7 +699,7 @@ public class ProactiveAssistantsPlugin: NSObject {
         let (realAppName, windowTitle, windowID) = await WindowMonitor.getActiveWindowInfoAsync()
 
         // Check if the current app is excluded from Rewind capture
-        let isRewindExcluded = realAppName.map { RewindSettings.shared.isAppExcluded($0) } ?? false
+        var isRewindExcluded = realAppName.map { RewindSettings.shared.isAppExcluded($0) } ?? false
 
         // Throttle capture when a video call app is frontmost to reduce CPU contention.
         // Captures 1 out of every N frames (e.g., effective ~5s interval at default 1s capture rate).
@@ -754,8 +754,9 @@ public class ProactiveAssistantsPlugin: NSObject {
         }
         currentWindowTitle = windowTitle
 
-        // Use real app name from window info, fall back to cached if unavailable
-        let appName = realAppName ?? currentApp
+        // Use real app name from window info, fall back to cached if unavailable.
+        // Mutable because windowGone retry may re-resolve to a different app.
+        var appName = realAppName ?? currentApp
 
         // Always capture frames (other features may need them)
         // macOS 14+: capture CGImage directly, encode JPEG once for assistants,
@@ -775,6 +776,13 @@ public class ProactiveAssistantsPlugin: NSObject {
                     // failure. This used to trip the consecutive-failure counter and falsely
                     // declare "screen recording permission lost" after normal user actions.
                     cgImage = await screenCaptureService.captureActiveWindowCGImage()
+                    // Privacy: re-resolve app name since active window may have changed
+                    let (retryApp, retryTitle, _) = await WindowMonitor.getActiveWindowInfoAsync()
+                    if let retryApp = retryApp {
+                        appName = retryApp
+                        currentWindowTitle = retryTitle
+                        isRewindExcluded = RewindSettings.shared.isAppExcluded(retryApp)
+                    }
                 case .failed:
                     cgImage = nil
                 }
