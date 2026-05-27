@@ -108,8 +108,7 @@ def set_user_stage(uid: str, stage: str = Query(...), admin_id: str = Depends(_v
 
 
 @_custom_router.get('/v1/admin/fair-use/case/{case_ref}', tags=['admin'])
-def lookup_case(request: Request, case_ref: str, admin_id: str = Depends(_verify_admin_key)):
-    uid = request.state.uid
+def lookup_case(case_ref: str, admin_id: str = Depends(_verify_admin_key)):
     """Look up a fair-use event by case reference (for support team)."""
     # Search across all users' events for this case_ref
     query = db.collection_group('fair_use_events').where('case_ref', '==', case_ref).limit(1)
