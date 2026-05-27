@@ -475,6 +475,7 @@ def get_messages(request: Request, plugin_id: Optional[str] = None, app_id: Opti
 
 @_firebase_router.post("/v2/voice-messages", dependencies=[Depends(auth.with_rate_limit("voice:message"))])
 def create_voice_message_stream(
+    request: Request,
     files: List[UploadFile] = File(...),
     language: Optional[str] = Form(None),
     x_app_platform: Optional[str] = Header(None, alias='X-App-Platform'),
