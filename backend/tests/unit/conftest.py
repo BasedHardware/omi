@@ -53,6 +53,7 @@ _DB_SUBMODULES = [
     'users',
     'user_usage',
     'vector_db',
+    'webhook_health',
     'wrapped',
 ]
 
