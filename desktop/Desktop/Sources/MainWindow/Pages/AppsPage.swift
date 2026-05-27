@@ -870,6 +870,8 @@ final class ImportConnectorStatusStore: ObservableObject {
             return count == 1 ? "file indexed" : "files indexed"
         case "apple-notes":
             return count == 1 ? "note" : "notes"
+        case "x":
+            return count == 1 ? "post" : "posts"
         default:
             return count == 1 ? "item" : "items"
         }
