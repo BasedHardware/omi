@@ -564,6 +564,14 @@ Available app tool names: {app_tool_names}
 IMPORTANT: Always search for and use these tools when relevant. Never tell the user you don't have access to an integration if a matching tool exists above.
 </available_app_tools>"""
 
+    # Instruct Claude to use fetch_url_tool for any direct URL in the conversation.
+    # Without this, Claude's built-in "I can't browse links" behavior takes over.
+    system_prompt += """
+
+<url_fetching_instructions>
+You have fetch_url_tool available. When the user shares any URL (starting with http:// or https://), you MUST call fetch_url_tool to read its content before responding. Never say you cannot browse, visit, or read a URL. Always attempt to fetch it first.
+</url_fetching_instructions>"""
+
     # Convert tools to Anthropic format (core = visible, app = defer_loading)
     tool_schemas, tool_registry = _convert_tools(core_tools, app_tools)
 
