@@ -120,8 +120,7 @@ def render_oauth_response(
     return templates.TemplateResponse('oauth_callback.html', context)
 
 
-def validate_and_consume_oauth_state(request: Request, state_token: Optional[str]) -> Optional[Dict[str, str]]:
-    uid = request.state.uid
+def validate_and_consume_oauth_state(state_token: Optional[str]) -> Optional[Dict[str, str]]:
     """
     Validate OAuth state token and return associated data.
     Deletes the state token after validation to prevent replay attacks.
