@@ -461,5 +461,212 @@ class TestMixedModeRouterAuthDeps(unittest.TestCase):
                 ), f"Public route {route.path} should not have auth dep, got: {dep_names}"
 
 
+class TestCustomRouterNoFirebaseAuth(unittest.TestCase):
+    """Gap 1: Verify _custom_router routes have NO Firebase auth dependency.
+
+    Routers using _custom_router manage their own auth (e.g. admin key headers).
+    They must never inherit require_firebase from the merged router.
+    """
+
+    def _get_custom_routes(self, mod_name):
+        import importlib
+
+        mod = importlib.import_module(f'routers.{mod_name}')
+        custom_router = getattr(mod, '_custom_router', None)
+        if custom_router is None:
+            # oauth uses a bare router with no firebase deps
+            custom_router = getattr(mod, 'router')
+
+        routes = {}
+        for route in custom_router.routes:
+            if not hasattr(route, 'methods'):
+                continue
+            deps = [d.dependency for d in getattr(route, 'dependencies', [])]
+            for method in route.methods:
+                routes[(method, route.path)] = deps
+        return routes
+
+    def _assert_no_firebase_dep(self, mod_name):
+        routes = self._get_custom_routes(mod_name)
+        assert routes, f"No custom routes found in {mod_name}"
+        for key, deps in routes.items():
+            dep_names = [d.__name__ for d in deps if hasattr(d, '__name__')]
+            assert 'require_firebase' not in dep_names, (
+                f"Custom route {key} in {mod_name} has require_firebase — " f"custom routes must manage their own auth"
+            )
+            assert 'require_firebase_no_byok' not in dep_names, (
+                f"Custom route {key} in {mod_name} has require_firebase_no_byok — "
+                f"custom routes must manage their own auth"
+            )
+
+    def test_announcements_custom_routes_no_firebase(self):
+        self._assert_no_firebase_dep('announcements')
+
+    def test_apps_custom_routes_no_firebase(self):
+        self._assert_no_firebase_dep('apps')
+
+    def test_updates_custom_routes_no_firebase(self):
+        self._assert_no_firebase_dep('updates')
+
+    def test_oauth_routes_no_firebase(self):
+        self._assert_no_firebase_dep('oauth')
+
+    def test_fair_use_admin_custom_routes_no_firebase(self):
+        self._assert_no_firebase_dep('fair_use_admin')
+
+
+class TestRequireFirebaseNoByokContextVarReset(unittest.TestCase):
+    """Gap 2: Verify require_firebase_no_byok resets the BYOK ContextVar after the request."""
+
+    @patch('utils.auth_middleware._verify_token', return_value='uid-reset')
+    def test_contextvar_reset_after_request(self, _mock_verify):
+        from utils.byok import _byok_ctx
+
+        skip_router = APIRouter(dependencies=[Depends(require_firebase_no_byok)])
+
+        @skip_router.get("/v1/no-byok-ctx")
+        def endpoint(request: Request):
+            return {"uid": request.state.uid}
+
+        app = FastAPI()
+        app.include_router(skip_router)
+        client = TestClient(app)
+
+        before = _byok_ctx.get()
+        client.get("/v1/no-byok-ctx", headers={"Authorization": "Bearer tok", "x-byok-openai": "sk-raw"})
+        after = _byok_ctx.get()
+        assert before == after, f"ContextVar not reset: before={before}, after={after}"
+
+    @patch('utils.auth_middleware._verify_token', return_value='uid-crash')
+    def test_contextvar_reset_after_route_exception(self, _mock_verify):
+        from utils.byok import _byok_ctx
+
+        skip_router = APIRouter(dependencies=[Depends(require_firebase_no_byok)])
+
+        @skip_router.get("/v1/no-byok-crash")
+        def crash(request: Request):
+            raise RuntimeError("handler crashed")
+
+        app = FastAPI()
+        app.include_router(skip_router)
+
+        before = _byok_ctx.get()
+        client = TestClient(app, raise_server_exceptions=False)
+        client.get("/v1/no-byok-crash", headers={"Authorization": "Bearer tok", "x-byok-openai": "sk-raw"})
+        after = _byok_ctx.get()
+        assert before == after, f"ContextVar not reset after exception: before={before}, after={after}"
+
+
+class TestMixedModeRouterAuthDepsExpanded(unittest.TestCase):
+    """Gap 3: Expanded mixed-mode router coverage for announcements, updates, oauth, fair_use_admin."""
+
+    def _get_merged_router_deps(self, mod_name):
+        import importlib
+
+        mod = importlib.import_module(f'routers.{mod_name}')
+        router = getattr(mod, 'router')
+        dep_map = {}
+        for route in router.routes:
+            if not hasattr(route, 'methods'):
+                continue
+            deps = [d.dependency for d in getattr(route, 'dependencies', [])]
+            for method in route.methods:
+                dep_map[(method, route.path)] = deps
+        return dep_map
+
+    def _dep_names(self, deps):
+        return [d.__name__ for d in deps if hasattr(d, '__name__')]
+
+    # --- announcements ---
+
+    def test_announcements_firebase_routes_have_auth(self):
+        dep_map = self._get_merged_router_deps('announcements')
+        firebase_paths = ['/v1/announcements/pending', '/v1/announcements/{announcement_id}/dismiss']
+        for path in firebase_paths:
+            matches = [k for k in dep_map if k[1] == path]
+            assert matches, f"Route {path} not found"
+            for key in matches:
+                names = self._dep_names(dep_map[key])
+                assert 'require_firebase' in names, f"Firebase route {key} missing require_firebase: {names}"
+
+    def test_announcements_custom_routes_no_firebase(self):
+        dep_map = self._get_merged_router_deps('announcements')
+        custom_paths = ['/v1/announcements/all', '/v1/announcements', '/v1/announcements/{announcement_id}']
+        for path in custom_paths:
+            matches = [k for k in dep_map if k[1] == path]
+            for key in matches:
+                names = self._dep_names(dep_map[key])
+                assert 'require_firebase' not in names, f"Custom route {key} should not have require_firebase: {names}"
+
+    def test_announcements_public_routes_no_firebase(self):
+        dep_map = self._get_merged_router_deps('announcements')
+        public_paths = ['/v1/announcements/changelogs', '/v1/announcements/features', '/v1/announcements/general']
+        for path in public_paths:
+            matches = [k for k in dep_map if k[1] == path]
+            assert matches, f"Public route {path} not found"
+            for key in matches:
+                names = self._dep_names(dep_map[key])
+                assert 'require_firebase' not in names, f"Public route {key} should not have require_firebase: {names}"
+
+    # --- fair_use_admin ---
+
+    def test_fair_use_firebase_routes_have_auth(self):
+        dep_map = self._get_merged_router_deps('fair_use_admin')
+        matches = [k for k in dep_map if k[1] == '/v1/fair-use/status']
+        assert matches, "Firebase route /v1/fair-use/status not found"
+        for key in matches:
+            names = self._dep_names(dep_map[key])
+            assert 'require_firebase' in names, f"Firebase route {key} missing require_firebase: {names}"
+
+    def test_fair_use_custom_routes_no_firebase(self):
+        dep_map = self._get_merged_router_deps('fair_use_admin')
+        admin_keys = [k for k in dep_map if '/admin/fair-use/' in k[1]]
+        assert admin_keys, "No admin routes found in fair_use_admin"
+        for key in admin_keys:
+            names = self._dep_names(dep_map[key])
+            assert 'require_firebase' not in names, f"Admin route {key} should not have require_firebase: {names}"
+
+    def test_fair_use_public_routes_no_firebase(self):
+        dep_map = self._get_merged_router_deps('fair_use_admin')
+        matches = [k for k in dep_map if '/v1/fair-use/case/' in k[1] and '/status' in k[1]]
+        assert matches, "Public case status route not found"
+        for key in matches:
+            names = self._dep_names(dep_map[key])
+            assert 'require_firebase' not in names, f"Public route {key} should not have require_firebase: {names}"
+
+    # --- updates ---
+
+    def test_updates_has_no_firebase_routes(self):
+        dep_map = self._get_merged_router_deps('updates')
+        for key, deps in dep_map.items():
+            names = self._dep_names(deps)
+            assert 'require_firebase' not in names, f"Updates route {key} should not have require_firebase: {names}"
+
+    def test_updates_custom_route_no_firebase(self):
+        dep_map = self._get_merged_router_deps('updates')
+        matches = [k for k in dep_map if k[1] == '/v2/desktop/clear-cache']
+        assert matches, "Custom route /v2/desktop/clear-cache not found"
+        for key in matches:
+            names = self._dep_names(dep_map[key])
+            assert 'require_firebase' not in names, f"Custom route {key} should not have require_firebase: {names}"
+
+    # --- oauth ---
+
+    def test_oauth_routes_no_firebase(self):
+        import importlib
+
+        mod = importlib.import_module('routers.oauth')
+        router = getattr(mod, 'router')
+        for route in router.routes:
+            if not hasattr(route, 'methods'):
+                continue
+            deps = [d.dependency for d in getattr(route, 'dependencies', [])]
+            names = self._dep_names(deps)
+            for method in route.methods:
+                assert (
+                    'require_firebase' not in names
+                ), f"OAuth route ({method}, {route.path}) should not have require_firebase: {names}"
+
+
 if __name__ == "__main__":
     unittest.main()
