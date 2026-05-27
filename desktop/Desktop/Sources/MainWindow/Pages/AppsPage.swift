@@ -584,6 +584,17 @@ struct ImportConnector: Identifiable {
             isConnected: false
         ),
         ImportConnector(
+            id: "x",
+            title: "X (Twitter)",
+            subtitle: "Your posts & bookmarks",
+            description: "Connect your X account so Omi learns from your tweets and bookmarks.",
+            brand: .x,
+            statusText: "Not connected",
+            metricText: nil,
+            actionTitle: "Connect",
+            isConnected: false
+        ),
+        ImportConnector(
             id: "chatgpt",
             title: "ChatGPT",
             subtitle: "Memory import",
@@ -859,6 +870,8 @@ final class ImportConnectorStatusStore: ObservableObject {
             return count == 1 ? "file indexed" : "files indexed"
         case "apple-notes":
             return count == 1 ? "note" : "notes"
+        case "x":
+            return count == 1 ? "post" : "posts"
         default:
             return count == 1 ? "item" : "items"
         }
@@ -1121,6 +1134,94 @@ private final class ImportConnectorSheetModel: ObservableObject {
         }
     }
 
+    /// Connect X via backend-mediated OAuth: open the authorize URL in the
+    /// browser, then poll the backend until the account is linked. The backend
+    /// kicks off the first ingest, so once connected we surface the synced count.
+    func connectX() async -> SyncResult? {
+        beginRun(
+            title: "Connecting to X",
+            detail: "Opening x.com to authorize access to your posts and bookmarks."
+        )
+        defer { finishRun() }
+
+        // Deep link back to THIS build (dev vs prod URL schemes differ).
+        let scheme = Self.appURLScheme()
+        let redirect = "\(scheme)://x/callback"
+
+        do {
+            let resp = try await APIClient.shared.xOAuthURL(successRedirectURL: redirect)
+            guard resp.success, let authUrl = resp.authUrl, let url = URL(string: authUrl) else {
+                errorMessage = resp.error == "x_oauth_not_configured"
+                    ? "X connector isn't configured on the server yet."
+                    : "Couldn't start the X connection."
+                return nil
+            }
+            NSWorkspace.shared.open(url)
+            updateProgress(
+                title: "Waiting for X authorization",
+                detail: "Approve access in your browser. This window updates automatically."
+            )
+
+            // Phase 1: wait until the account is linked (callback completed).
+            var linked: XConnectionStatus?
+            for _ in 0..<60 {
+                try? await Task.sleep(for: .seconds(2))
+                if let status = try? await APIClient.shared.xConnectionStatus(), status.connected {
+                    linked = status
+                    break
+                }
+            }
+            guard let linked else {
+                errorMessage = "Didn't hear back from X. If you approved access, try again."
+                return nil
+            }
+
+            let handle = linked.handle ?? "you"
+
+            // Phase 2: the OAuth callback kicks off the first import in the
+            // background. Poll while it runs, surfacing live counts, until the
+            // backend marks syncing complete (or counts stop growing).
+            var posts = linked.postCount ?? 0
+            var memories = linked.memoryCount ?? 0
+            for _ in 0..<90 {
+                let status = try? await APIClient.shared.xConnectionStatus()
+                posts = status?.postCount ?? posts
+                memories = status?.memoryCount ?? memories
+                updateProgress(
+                    title: "Importing your X data",
+                    detail: "Saved \(posts.formatted()) posts · \(memories.formatted()) memories so far…"
+                )
+                // Done once the backend clears the syncing flag and we have data.
+                if status?.syncing == false && posts > 0 { break }
+                try? await Task.sleep(for: .seconds(2))
+            }
+
+            if posts > 0 {
+                let memClause = memories > 0
+                    ? " — \(memories.formatted()) memories added. View them in Memories."
+                    : ". Extracted memories appear in Memories."
+                statusMessage = "Imported \(posts.formatted()) posts from @\(handle)\(memClause)"
+            } else {
+                statusMessage = "Connected to X as @\(handle). Import is still running; check back shortly."
+            }
+            return SyncResult(sourceCount: posts, memoryCount: memories > 0 ? memories : nil, newItems: posts)
+        } catch {
+            errorMessage = error.localizedDescription
+            return nil
+        }
+    }
+
+    static func appURLScheme() -> String {
+        if let urlTypes = Bundle.main.infoDictionary?["CFBundleURLTypes"] as? [[String: Any]],
+            let first = urlTypes.first,
+            let schemes = first["CFBundleURLSchemes"] as? [String],
+            let scheme = schemes.first
+        {
+            return scheme
+        }
+        return "omi-computer"
+    }
+
     func importCalendar() async -> SyncResult? {
         beginRun(
             title: "Connecting to Calendar",
@@ -1375,6 +1476,16 @@ struct ImportConnectorSheet: View {
                                 lastDeltaCount: result.newItems
                             )
                         }
+                    case "x":
+                        if let result = await model.connectX() {
+                            statusStore.markSynced(
+                                connectorID: connector.id,
+                                sourceCount: result.sourceCount,
+                                memoryCount: result.memoryCount,
+                                lastDeltaCount: result.newItems,
+                                availabilityText: "Posts & bookmarks"
+                            )
+                        }
                     case "apple-notes":
                         if let result = await model.importAppleNotes() {
                             statusStore.markSynced(
@@ -1476,6 +1587,8 @@ struct ImportConnectorSheet: View {
             return model.isRunning ? "Importing…" : "Connect Gmail"
         case "apple-notes":
             return model.isRunning ? "Importing…" : "Connect Apple Notes"
+        case "x":
+            return model.isRunning ? "Connecting…" : "Connect X"
         case "local-files":
             return model.isRunning ? "Reindexing…" : "Reindex Local Files"
         default:
