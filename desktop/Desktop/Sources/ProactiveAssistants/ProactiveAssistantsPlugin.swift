@@ -814,14 +814,14 @@ public class ProactiveAssistantsPlugin: NSObject {
                         captureTime: captureTime
                     )
 
-                    // Always track the frame for context switch detection (even during delay).
-                    // trackFrame only updates an in-memory pointer — no data leaves the device.
-                    AssistantCoordinator.shared.trackFrame(frame)
-
-                    // Privacy gate: skip ALL assistant distribution for Rewind-excluded apps.
-                    // This prevents sensitive frames (password managers, keychains) from reaching
-                    // any LLM upload path (Memory, Insight, Focus assistants).
+                    // Privacy gate: skip ALL assistant paths for Rewind-excluded apps.
+                    // This includes trackFrame — the tracked frame can be passed to assistants
+                    // via onContextSwitch (e.g. TaskAssistant), so excluded frames must never
+                    // be stored as lastTrackedFrame.
+                    // Context switch detection still works: it uses lastTrackedApp/lastTrackedWindowTitle
+                    // (set by checkContextSwitch), not lastTrackedFrame.
                     if !isRewindExcluded {
+                        AssistantCoordinator.shared.trackFrame(frame)
                         if !isInDelayPeriod {
                             distributeFrameIfChanged(frame)
                         } else {
@@ -888,12 +888,10 @@ public class ProactiveAssistantsPlugin: NSObject {
                 frameNumber: frameCount
             )
 
-            // Always track the frame for context switch detection (even during delay).
-            // trackFrame only updates an in-memory pointer — no data leaves the device.
-            AssistantCoordinator.shared.trackFrame(frame)
-
-            // Privacy gate: skip ALL assistant distribution for Rewind-excluded apps.
+            // Privacy gate: skip ALL assistant paths for Rewind-excluded apps
+            // (including trackFrame — see macOS 14+ path comment for rationale).
             if !isRewindExcluded {
+                AssistantCoordinator.shared.trackFrame(frame)
                 if !isInDelayPeriod {
                     distributeFrameIfChanged(frame)
                 } else {
