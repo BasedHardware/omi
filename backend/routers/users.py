@@ -104,6 +104,7 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+_public_router = APIRouter()
 _skip_byok_router = APIRouter(dependencies=[Depends(require_firebase_no_byok)])
 _firebase_router = APIRouter(dependencies=[Depends(require_firebase)])
 
@@ -1370,7 +1371,7 @@ def delete_daily_summary(request: Request, summary_id: str):
     return {'status': 'ok'}
 
 
-@router.get('/v1/daily-summaries/{summary_id}/shared', tags=['v1'])
+@_public_router.get('/v1/daily-summaries/{summary_id}/shared', tags=['v1'])
 def get_shared_daily_summary(summary_id: str):
     """
     Public endpoint to retrieve a daily summary for sharing. No auth required.
@@ -1705,5 +1706,6 @@ def get_total_llm_cost(request: Request):
 
 
 router = APIRouter()
+router.include_router(_public_router)
 router.include_router(_skip_byok_router)
 router.include_router(_firebase_router)
