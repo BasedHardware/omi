@@ -788,6 +788,14 @@ public class ProactiveAssistantsPlugin: NSObject {
                 }
             } else {
                 cgImage = await screenCaptureService.captureActiveWindowCGImage()
+                // Privacy: re-resolve app name since captureActiveWindowCGImage captures
+                // whatever is currently active, which may differ from the earlier resolution.
+                let (fallbackApp, fallbackTitle, _) = await WindowMonitor.getActiveWindowInfoAsync()
+                if let fallbackApp = fallbackApp {
+                    appName = fallbackApp
+                    currentWindowTitle = fallbackTitle
+                    isRewindExcluded = RewindSettings.shared.isAppExcluded(fallbackApp)
+                }
             }
             if let cgImage = cgImage,
                let appName = appName {
@@ -873,6 +881,16 @@ public class ProactiveAssistantsPlugin: NSObject {
         } else if let jpegData = await screenCaptureService.captureActiveWindowAsync(),
            let appName = appName {
             // macOS 13.x fallback: existing JPEG-based path
+            // Privacy: re-resolve app name since captureActiveWindowAsync captures
+            // whatever is currently active, which may differ from the earlier resolution.
+            var resolvedApp = appName
+            let (freshApp, freshTitle, _) = await WindowMonitor.getActiveWindowInfoAsync()
+            if let freshApp = freshApp {
+                resolvedApp = freshApp
+                currentWindowTitle = freshTitle
+                isRewindExcluded = RewindSettings.shared.isAppExcluded(freshApp)
+            }
+
             if !lastCaptureSucceeded {
                 log("Screen capture recovered after \(consecutiveFailures) failures")
             }
@@ -883,7 +901,7 @@ public class ProactiveAssistantsPlugin: NSObject {
 
             let frame = CapturedFrame(
                 jpegData: jpegData,
-                appName: appName,
+                appName: resolvedApp,
                 windowTitle: currentWindowTitle,
                 frameNumber: frameCount
             )
