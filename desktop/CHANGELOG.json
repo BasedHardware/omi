@@ -1,8 +1,13 @@
 {
-  "unreleased": [
-    "Fixed editing a conversation title not saving"
-  ],
+  "unreleased": [],
   "releases": [
+    {
+      "version": "0.11.430",
+      "date": "2026-05-28",
+      "changes": [
+        "Fixed editing a conversation title not saving"
+      ]
+    },
     {
       "version": "0.11.428",
       "date": "2026-05-28",
