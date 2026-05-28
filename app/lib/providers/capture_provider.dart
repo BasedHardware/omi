@@ -198,6 +198,11 @@ class CaptureProvider extends ChangeNotifier
   void _onAudioInterruptionEnded() {
     if (_activeSource is! PhoneMicSource) return;
     _callActive = false;
+    if (_manualPhoneMicPause) {
+      updateRecordingState(RecordingState.pause);
+      notifyListeners();
+      return;
+    }
     _restartPhoneMicRecording();
   }
 
@@ -231,7 +236,6 @@ class CaptureProvider extends ChangeNotifier
 
   // Restarts mic only — preserves existing socket and conversation segments.
   Future<void> _resumeMicRecording() async {
-    _manualPhoneMicPause = false;
     updateRecordingState(RecordingState.initialising);
     _activeSource = PhoneMicSource();
     _phoneMicWalActive = true;
@@ -1138,8 +1142,8 @@ class CaptureProvider extends ChangeNotifier
 
   Future<void> pausePhoneMicRecording() async {
     if (_recordingDevice != null) return;
-    if (_activeSource is! PhoneMicSource &&
-        recordingState != RecordingState.record &&
+    if (_activeSource is! PhoneMicSource) return;
+    if (recordingState != RecordingState.record &&
         recordingState != RecordingState.initialising &&
         recordingState != RecordingState.interrupted) {
       return;

@@ -211,7 +211,7 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
                     tooltip: effectivelyMuted ? context.l10n.phoneUnmute : context.l10n.mute,
                     onPressed: provider.isCallActive ? null : () => _toggleMute(provider),
                     icon: Icon(
-                      effectivelyMuted ? Icons.mic : Icons.mic_off,
+                      effectivelyMuted ? Icons.mic_off : Icons.mic,
                       color: effectivelyMuted ? const Color(0xFFFF6B6B) : Colors.white70,
                       size: 24,
                     ),
@@ -379,7 +379,7 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
                                 ),
                               ],
                             ),
-                            child: Icon(effectivelyMuted ? Icons.mic : Icons.mic_off, color: Colors.white, size: 24),
+                            child: Icon(effectivelyMuted ? Icons.mic_off : Icons.mic, color: Colors.white, size: 24),
                           ),
                         ),
                       ),
