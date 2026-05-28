@@ -473,10 +473,12 @@ struct TaskTestRunnerView: View {
                 return
             }
 
-            log("TaskTestRunner: Loaded \(allScreenshots.count) screenshots from selected range")
+            // Filter out Rewind privacy-excluded apps (password managers, keychains)
+            let filteredScreenshots = allScreenshots.filter { !RewindSettings.shared.isAppExcluded($0.appName) }
+            log("TaskTestRunner: Loaded \(allScreenshots.count) screenshots, \(filteredScreenshots.count) after Rewind privacy filter")
 
-            guard allScreenshots.count >= 2 else {
-                log("TaskTestRunner: ERROR - Not enough screenshots (\(allScreenshots.count) < 2)")
+            guard filteredScreenshots.count >= 2 else {
+                log("TaskTestRunner: ERROR - Not enough screenshots (\(filteredScreenshots.count) < 2)")
                 await MainActor.run {
                     statusMessage = "Not enough screenshots in selected range to detect context switches"
                     isRunning = false
@@ -486,9 +488,9 @@ struct TaskTestRunnerView: View {
 
             // Walk through chronologically and find departing frames at context switches
             var departingFrames: [Screenshot] = []
-            for i in 0..<(allScreenshots.count - 1) {
-                let current = allScreenshots[i]
-                let next = allScreenshots[i + 1]
+            for i in 0..<(filteredScreenshots.count - 1) {
+                let current = filteredScreenshots[i]
+                let next = filteredScreenshots[i + 1]
 
                 if ContextDetection.didContextChange(
                     fromApp: current.appName,
@@ -502,7 +504,7 @@ struct TaskTestRunnerView: View {
 
             guard !departingFrames.isEmpty else {
                 await MainActor.run {
-                    statusMessage = "No context switches found in \(allScreenshots.count) screenshots from selected range"
+                    statusMessage = "No context switches found in \(filteredScreenshots.count) screenshots from selected range"
                     isRunning = false
                 }
                 return
