@@ -1,9 +1,14 @@
 {
-  "unreleased": [
-    "Plan & Usage: Neo subscribers now see a clear notice about when their desktop access ends, and post-policy Neo subscribers get plan-specific copy instead of \"Trial Ended\"",
-    "Fixed privacy gap where password manager screens could be sent to AI assistants despite being excluded from Rewind"
-  ],
+  "unreleased": [],
   "releases": [
+    {
+      "version": "0.11.428",
+      "date": "2026-05-28",
+      "changes": [
+        "Plan & Usage: Neo subscribers now see a clear notice about when their desktop access ends, and post-policy Neo subscribers get plan-specific copy instead of \"Trial Ended\"",
+        "Fixed privacy gap where password manager screens could be sent to AI assistants despite being excluded from Rewind"
+      ]
+    },
     {
       "version": "0.11.427",
       "date": "2026-05-27",
