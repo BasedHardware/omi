@@ -8,7 +8,7 @@ import json
 import re
 import logging
 from html.parser import HTMLParser
-from urllib.parse import urlparse
+from urllib.parse import urlparse, urljoin
 
 from langchain_core.tools import tool
 
@@ -224,7 +224,7 @@ async def _fetch_page(url: str, headers: dict) -> tuple[int, str, str]:
 
             if status in (301, 302, 303, 307, 308):
                 location = response.headers.get('location', '')
-                redirect_url = location
+                redirect_url = urljoin(url, location)
             else:
                 cl_header = response.headers.get('content-length')
                 if cl_header and int(cl_header) > _MAX_BODY_BYTES:
