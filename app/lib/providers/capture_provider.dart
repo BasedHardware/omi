@@ -231,6 +231,7 @@ class CaptureProvider extends ChangeNotifier
 
   // Restarts mic only — preserves existing socket and conversation segments.
   Future<void> _resumeMicRecording() async {
+    _manualPhoneMicPause = false;
     updateRecordingState(RecordingState.initialising);
     _activeSource = PhoneMicSource();
     _phoneMicWalActive = true;
@@ -249,7 +250,9 @@ class CaptureProvider extends ChangeNotifier
             updateRecordingState(RecordingState.record);
           },
           onStop: () {
-            if (!_callActive) {
+            if (_manualPhoneMicPause) {
+              updateRecordingState(RecordingState.pause);
+            } else if (!_callActive) {
               updateRecordingState(RecordingState.stop);
             }
           },
@@ -258,6 +261,20 @@ class CaptureProvider extends ChangeNotifier
           },
           onStalled: _onMicStalled,
         );
+  }
+
+  void _flushPhoneMicWalBuffer() {
+    if (!_phoneMicWalActive) return;
+
+    final flushed = _activeSource?.flush() ?? [];
+    for (final frame in flushed) {
+      _wal.getSyncs().phone.onFrameCaptured(frame);
+      if (_socket?.state == SocketServiceState.connected) {
+        _socket?.send(frame.payload);
+        _wal.getSyncs().phone.markFrameSynced(frame.syncKey);
+      }
+    }
+    _phoneMicWalActive = false;
   }
 
   void _onMicStalled() {
@@ -384,6 +401,7 @@ class CaptureProvider extends ChangeNotifier
   RecordingState recordingState = RecordingState.stop;
 
   bool _isPaused = false;
+  bool _manualPhoneMicPause = false;
   bool get isPaused => _isPaused;
   bool get isCallActive => _callActive;
 
@@ -406,13 +424,13 @@ class CaptureProvider extends ChangeNotifier
   bool get transcriptServiceReady => _transcriptServiceReady && _isConnected;
 
   // having a connected device or using the phone's mic for recording.
-  // Includes `interrupted` so the keep-alive/reconnect path keeps running
-  // while the phone mic is in a transiently-broken state (e.g., iOS audio
-  // session interruption after an incoming call).
+  // Includes temporary stop states so the in-session UI keeps the capture
+  // context alive while audio is paused or reconnecting.
   bool get recordingDeviceServiceReady =>
       _recordingDevice != null ||
       recordingState == RecordingState.record ||
       recordingState == RecordingState.interrupted ||
+      recordingState == RecordingState.pause ||
       recordingState == RecordingState.systemAudioRecord;
 
   bool get havingRecordingDevice => _recordingDevice != null;
@@ -1068,6 +1086,8 @@ class CaptureProvider extends ChangeNotifier
   }
 
   streamRecording() async {
+    _manualPhoneMicPause = false;
+    _isPaused = false;
     updateRecordingState(RecordingState.initialising);
     await Permission.microphone.request();
 
@@ -1103,7 +1123,9 @@ class CaptureProvider extends ChangeNotifier
             updateRecordingState(RecordingState.record);
           },
           onStop: () {
-            if (!_callActive) {
+            if (_manualPhoneMicPause) {
+              updateRecordingState(RecordingState.pause);
+            } else if (!_callActive) {
               updateRecordingState(RecordingState.stop);
             }
           },
@@ -1114,19 +1136,42 @@ class CaptureProvider extends ChangeNotifier
         );
   }
 
-  stopStreamRecording() async {
-    // Flush remaining phone mic WAL buffer before stopping
-    if (_phoneMicWalActive) {
-      final flushed = _activeSource?.flush() ?? [];
-      for (final frame in flushed) {
-        _wal.getSyncs().phone.onFrameCaptured(frame);
-        if (_socket?.state == SocketServiceState.connected) {
-          _socket?.send(frame.payload);
-          _wal.getSyncs().phone.markFrameSynced(frame.syncKey);
-        }
-      }
-      _phoneMicWalActive = false;
+  Future<void> pausePhoneMicRecording() async {
+    if (_recordingDevice != null) return;
+    if (_activeSource is! PhoneMicSource &&
+        recordingState != RecordingState.record &&
+        recordingState != RecordingState.initialising &&
+        recordingState != RecordingState.interrupted) {
+      return;
     }
+
+    _manualPhoneMicPause = true;
+    _isPaused = true;
+    _flushPhoneMicWalBuffer();
+    try {
+      ServiceManager.instance().mic.stop();
+    } catch (e) {
+      Logger.debug("Error pausing phone mic recording: $e");
+    }
+    updateRecordingState(RecordingState.pause);
+    notifyListeners();
+  }
+
+  Future<void> resumePhoneMicRecording() async {
+    if (_recordingDevice != null) return;
+    if (!_isPaused && recordingState != RecordingState.pause) return;
+
+    _isPaused = false;
+    _manualPhoneMicPause = false;
+    await _resumeMicRecording();
+    notifyListeners();
+  }
+
+  stopStreamRecording() async {
+    _manualPhoneMicPause = false;
+    _isPaused = false;
+    // Flush remaining phone mic WAL buffer before stopping
+    _flushPhoneMicWalBuffer();
     await _cleanupCurrentState();
     ServiceManager.instance().mic.stop();
     updateRecordingState(RecordingState.stop);
@@ -1213,7 +1258,9 @@ class CaptureProvider extends ChangeNotifier
         await _initiateWebsocket(audioCodec: codec, source: _getConversationSourceFromDevice());
         return;
       }
-      if (recordingState == RecordingState.record || recordingState == RecordingState.interrupted) {
+      if (recordingState == RecordingState.record ||
+          recordingState == RecordingState.interrupted ||
+          recordingState == RecordingState.pause) {
         await _initiateWebsocket(
           audioCodec: BleAudioCodec.pcm16,
           sampleRate: 16000,
