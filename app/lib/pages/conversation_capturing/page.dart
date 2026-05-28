@@ -36,7 +36,6 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
   TabController? _controller;
   late bool showSummarizeConfirmation;
   late AnimationController _animationController;
-  bool _isMuted = false;
   final ScrollController _timelineScrollController = ScrollController();
 
   @override
@@ -49,20 +48,22 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
     super.initState();
   }
 
+  bool _isCaptureMuted(CaptureProvider provider) =>
+      provider.isPaused || provider.recordingState == RecordingState.pause || provider.isCallActive;
+
   Future<void> _toggleMute(CaptureProvider provider) async {
-    if (_isMuted) {
+    if (provider.isCallActive) return;
+
+    if (_isCaptureMuted(provider)) {
       // Unmute - resume recording
       HapticFeedback.mediumImpact();
-      setState(() {
-        _isMuted = false;
-      });
 
       if (provider.havingRecordingDevice) {
         // Device recording (Omi device)
         await provider.resumeDeviceRecording();
       } else {
         // Phone mic
-        await provider.streamRecording();
+        await provider.resumePhoneMicRecording();
         PlatformManager.instance.analytics.phoneMicRecordingStarted();
       }
     } else {
@@ -70,16 +71,13 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
       HapticFeedback.heavyImpact();
       await Future.delayed(const Duration(milliseconds: 80));
       HapticFeedback.lightImpact();
-      setState(() {
-        _isMuted = true;
-      });
 
       if (provider.havingRecordingDevice) {
         // Device recording (Omi device)
         await provider.pauseDeviceRecording();
       } else {
         // Phone mic
-        await provider.stopStreamRecording();
+        await provider.pausePhoneMicRecording();
         PlatformManager.instance.analytics.phoneMicRecordingStopped();
       }
     }
@@ -172,7 +170,7 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
   Widget build(BuildContext context) {
     return Consumer2<CaptureProvider, DeviceProvider>(
       builder: (context, provider, deviceProvider, child) {
-        final effectivelyMuted = _isMuted || provider.isCallActive;
+        final effectivelyMuted = _isCaptureMuted(provider);
         return PopScope(
           canPop: true,
           child: Scaffold(
@@ -207,6 +205,15 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
                       provider.photos.isNotEmpty
                           ? 'Capturing'
                           : (effectivelyMuted ? context.l10n.muted : context.l10n.listening),
+                    ),
+                  ),
+                  IconButton(
+                    tooltip: effectivelyMuted ? context.l10n.phoneUnmute : context.l10n.mute,
+                    onPressed: provider.isCallActive ? null : () => _toggleMute(provider),
+                    icon: Icon(
+                      effectivelyMuted ? Icons.mic : Icons.mic_off,
+                      color: effectivelyMuted ? const Color(0xFFFF6B6B) : Colors.white70,
+                      size: 24,
                     ),
                   ),
                 ],
@@ -353,24 +360,27 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
                       ),
                       const SizedBox(width: 12),
                       // Mute button
-                      GestureDetector(
-                        onTap: () => _toggleMute(provider),
-                        child: Container(
-                          width: 52,
-                          height: 52,
-                          decoration: BoxDecoration(
-                            color: effectivelyMuted ? Colors.red : const Color(0xFF35343B),
-                            shape: BoxShape.circle,
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.black.withValues(alpha: 0.25),
-                                spreadRadius: 2,
-                                blurRadius: 8,
-                                offset: const Offset(0, 4),
-                              ),
-                            ],
+                      Tooltip(
+                        message: effectivelyMuted ? context.l10n.phoneUnmute : context.l10n.mute,
+                        child: GestureDetector(
+                          onTap: provider.isCallActive ? null : () => _toggleMute(provider),
+                          child: Container(
+                            width: 52,
+                            height: 52,
+                            decoration: BoxDecoration(
+                              color: effectivelyMuted ? Colors.red : const Color(0xFF35343B),
+                              shape: BoxShape.circle,
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withValues(alpha: 0.25),
+                                  spreadRadius: 2,
+                                  blurRadius: 8,
+                                  offset: const Offset(0, 4),
+                                ),
+                              ],
+                            ),
+                            child: Icon(effectivelyMuted ? Icons.mic : Icons.mic_off, color: Colors.white, size: 24),
                           ),
-                          child: const Icon(Icons.mic_off, color: Colors.white, size: 24),
                         ),
                       ),
                     ],
