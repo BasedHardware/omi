@@ -28,8 +28,6 @@ class ConversationCaptureWidget extends StatefulWidget {
 }
 
 class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
-  bool _isPhoneMicPaused = false;
-
   @override
   Widget build(BuildContext context) {
     // Hide capture widget when a phone call is in progress (banner replaces it)
@@ -90,6 +88,9 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
 
   _toggleRecording(BuildContext context, CaptureProvider provider) async {
     var recordingState = provider.recordingState;
+    final isPhoneMicPaused = !provider.havingRecordingDevice &&
+        provider.isPaused &&
+        recordingState == RecordingState.pause;
 
     if (provider.havingRecordingDevice) {
       // Device recording logic - add pause/resume for device recording
@@ -101,27 +102,16 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
         await provider.resumeDeviceRecording();
       }
     } else {
-      // Phone mic logic - use local state to track pause
-      if (recordingState == RecordingState.record && !_isPhoneMicPaused) {
-        // Pause recording
-        setState(() {
-          _isPhoneMicPaused = true;
-        });
-        await provider.stopStreamRecording();
+      if ((recordingState == RecordingState.record || recordingState == RecordingState.interrupted) &&
+          !isPhoneMicPaused) {
+        await provider.pausePhoneMicRecording();
         PlatformManager.instance.analytics.phoneMicRecordingStopped();
-      } else if (_isPhoneMicPaused) {
-        // Resume recording
-        setState(() {
-          _isPhoneMicPaused = false;
-        });
-        await provider.streamRecording();
+      } else if (isPhoneMicPaused) {
+        await provider.resumePhoneMicRecording();
         PlatformManager.instance.analytics.phoneMicRecordingStarted();
       } else if (recordingState == RecordingState.initialising) {
         Logger.debug('initialising, have to wait');
       } else {
-        setState(() {
-          _isPhoneMicPaused = false;
-        });
         await provider.streamRecording();
         PlatformManager.instance.analytics.phoneMicRecordingStarted();
       }
@@ -151,8 +141,7 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
         captureProvider.recordingState == RecordingState.initialising ||
         captureProvider.recordingState == RecordingState.pause ||
         captureProvider.recordingState == RecordingState.interrupted ||
-        captureProvider.isPaused ||
-        _isPhoneMicPaused;
+        captureProvider.isPaused;
 
     // Hide the widget when no recording is active and there are no segments or photos
     if (!isAnyRecordingActive && !isHavingTranscript && !isHavingPhotos && !isHavingRecordingDevice) {
@@ -167,7 +156,7 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
           context,
           () => _toggleRecording(context, captureProvider),
           captureProvider.recordingState,
-          isPhoneMicPaused: _isPhoneMicPaused,
+          isPhoneMicPaused: captureProvider.isPaused && captureProvider.recordingState == RecordingState.pause,
         ),
       );
     } else if (!isAnyRecordingActive &&
@@ -221,7 +210,7 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
     if (captureProvider.recordingState == RecordingState.interrupted && captureProvider.isCallActive) {
       stateText = context.l10n.paused;
       statusIndicator = const PausedStatusIndicator();
-    } else if (captureProvider.isPaused || _isPhoneMicPaused) {
+    } else if (captureProvider.isPaused) {
       stateText = context.l10n.paused;
       statusIndicator = const PausedStatusIndicator();
     } else if (!isHavingRecordingDevice && !isUsingPhoneMic) {
@@ -280,7 +269,7 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
         provider.recordingState == RecordingState.systemAudioRecord ||
         provider.recordingState == RecordingState.initialising ||
         provider.recordingState == RecordingState.interrupted ||
-        _isPhoneMicPaused;
+        provider.recordingState == RecordingState.pause;
 
     // Determine pause state based on recording type.
     // Call-active interruption is treated as paused for button/dot display.
@@ -289,7 +278,7 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
     if (isDeviceRecording) {
       isPaused = provider.isPaused && provider.recordingState == RecordingState.pause;
     } else if (isPhoneRecording) {
-      isPaused = _isPhoneMicPaused || provider.isPaused || isCallInterrupted;
+      isPaused = provider.isPaused || isCallInterrupted;
     }
 
     // Determine if this is an OmiGlass-type device (captures photos)
@@ -571,7 +560,7 @@ getPhoneMicRecordingButton(
         decoration: const BoxDecoration(color: Colors.orange, shape: BoxShape.circle),
         child: const Center(child: Icon(Icons.pause, color: Colors.white, size: 14)),
       );
-    } else if (isPhoneMicPaused) {
+    } else if (isPhoneMicPaused || currentActualState == RecordingState.pause) {
       text = context.l10n.resumeRecording;
       icon = Container(
         margin: const EdgeInsets.only(right: 4),
