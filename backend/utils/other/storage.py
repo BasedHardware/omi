@@ -26,7 +26,7 @@ logger = logging.getLogger(__name__)
 
 # Per-request fan-out limits for storage_executor (#7387)
 _STORAGE_CHUNK_SEM = threading.BoundedSemaphore(32)
-_PRECACHE_FILE_SEM = threading.BoundedSemaphore(4)
+_PRECACHE_FILE_SEM = threading.BoundedSemaphore(2)
 _CHUNK_WINDOW_SIZE = 8
 
 _merge_tracker_lock = threading.Lock()
