@@ -3768,6 +3768,10 @@ struct UserSubscriptionResponse: Codable {
   let memoriesCreatedLimit: Int
   let availablePlans: [SubscriptionPlanOption]
   let showSubscriptionUI: Bool
+  // Set for Neo subscribers whose current billing period started before the
+  // policy change in #7496 — they retain desktop access until this unix-seconds
+  // timestamp (their `current_period_end`). Null for everyone else.
+  let desktopGrandfatherUntil: Int?
 
   enum CodingKeys: String, CodingKey {
     case subscription
@@ -3781,6 +3785,7 @@ struct UserSubscriptionResponse: Codable {
     case memoriesCreatedLimit = "memories_created_limit"
     case availablePlans = "available_plans"
     case showSubscriptionUI = "show_subscription_ui"
+    case desktopGrandfatherUntil = "desktop_grandfather_until"
   }
 
   // Defensive decode: only `subscription` is required. The usage counters and
@@ -3801,6 +3806,7 @@ struct UserSubscriptionResponse: Codable {
     memoriesCreatedLimit = try c.decodeIfPresent(Int.self, forKey: .memoriesCreatedLimit) ?? 0
     availablePlans = try c.decodeIfPresent([SubscriptionPlanOption].self, forKey: .availablePlans) ?? []
     showSubscriptionUI = try c.decodeIfPresent(Bool.self, forKey: .showSubscriptionUI) ?? true
+    desktopGrandfatherUntil = try c.decodeIfPresent(Int.self, forKey: .desktopGrandfatherUntil)
   }
 }
 

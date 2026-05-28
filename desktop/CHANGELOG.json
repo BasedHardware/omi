@@ -1,5 +1,6 @@
 {
   "unreleased": [
+    "Plan & Usage: Neo subscribers now see a clear notice about when their desktop access ends, and post-policy Neo subscribers get plan-specific copy instead of \"Trial Ended\"",
     "Fixed privacy gap where password manager screens could be sent to AI assistants despite being excluded from Rewind"
   ],
   "releases": [

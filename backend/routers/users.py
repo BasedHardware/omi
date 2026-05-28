@@ -78,6 +78,7 @@ from utils.subscription import (
     get_plan_features,
     get_monthly_usage_for_subscription,
     is_trial_paywalled,
+    neo_grandfather_until,
     reconcile_basic_plan_with_stripe,
     filter_plans_for_user,
     should_show_new_plans,
@@ -1034,6 +1035,7 @@ def get_user_subscription_endpoint(
         chat_quota_allowed=chat_allowed,
         chat_quota_reset_at=chat_snapshot['reset_at'],
         phone_call_quota=phone_call_quota,
+        desktop_grandfather_until=neo_grandfather_until(subscription),
     )
 
 

@@ -118,6 +118,7 @@ pytest tests/unit/test_omi_qos_tiers.py -v
 pytest tests/unit/test_byok_security.py -v
 pytest tests/unit/test_paywall_reconnect_gate.py -v
 pytest tests/unit/test_trial_metadata.py -v
+pytest tests/unit/test_neo_desktop_grandfather.py -v
 pytest tests/unit/test_vertex_ai_system_role.py -v
 pytest tests/unit/test_tts.py -v
 pytest tests/unit/test_webhook_auto_disable.py -v
