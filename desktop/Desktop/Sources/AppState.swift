@@ -376,11 +376,26 @@ class AppState: ObservableObject {
     AppState.current = self
 
     // Restore paywall flag from prior session so toggles + auto-restart respect
-    // it before any backend call has a chance to refresh state — but a BYOK
-    // user (all four keys configured) is never paywalled, so clear any stale
-    // flag immediately on launch.
-    self.isPaywalled =
-      !APIKeyService.isByokActive && UserDefaults.standard.bool(forKey: "desktop_isPaywalled")
+    // it before any backend call has a chance to refresh state — but never for
+    // a BYOK user (all four keys configured) or a user whose cached plan is
+    // paid. The paid-plan carve-out fixes a popup-on-launch bug for Neo
+    // subscribers grandfathered onto desktop by #7513: their last session
+    // pre-grandfather wrote isPaywalled=true; without this clear, the next
+    // launch shows the monthly-limit popup until fetchTrialMetadata returns
+    // (~1-2s) AND callers that read UserDefaults synchronously
+    // (ProactiveAssistantsPlugin, isPaywalledEffective) keep blocking until
+    // didSet writes the new value. Only basic-tier users have a legitimate
+    // pre-fetch paywalled state to preserve.
+    let cachedPlan = UserDefaults.standard.string(forKey: "floatingBar_cachedPlan")
+    let cachedPlanIsPaid = cachedPlan != nil && cachedPlan != "basic"
+    if APIKeyService.isByokActive || cachedPlanIsPaid {
+      self.isPaywalled = false
+      // didSet doesn't fire from init, so flush UserDefaults explicitly for
+      // singletons that read the key directly.
+      UserDefaults.standard.set(false, forKey: "desktop_isPaywalled")
+    } else {
+      self.isPaywalled = UserDefaults.standard.bool(forKey: "desktop_isPaywalled")
+    }
 
     // Resolve beta/stable before loading backend URLs so beta releases use dev services.
     AppBuild.prepareUpdateChannelForBackendRouting()
