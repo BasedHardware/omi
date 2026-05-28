@@ -1,5 +1,7 @@
 {
-  "unreleased": [],
+  "unreleased": [
+    "Fixed editing a conversation title not saving"
+  ],
   "releases": [
     {
       "version": "0.11.428",

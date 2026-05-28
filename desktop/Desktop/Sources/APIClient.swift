@@ -387,15 +387,12 @@ extension APIClient {
 
   /// Updates the title of a conversation
   func updateConversationTitle(id: String, title: String) async throws {
-    struct TitleUpdate: Encodable {
-      let title: String
-    }
-
-    let url = URL(string: baseURL + "v1/conversations/\(id)")!
+    var components = URLComponents(string: baseURL + "v1/conversations/\(id)/title")!
+    components.queryItems = [URLQueryItem(name: "title", value: title)]
+    let url = components.url!
     var request = URLRequest(url: url)
     request.httpMethod = "PATCH"
     request.allHTTPHeaderFields = try await buildHeaders(requireAuth: true)
-    request.httpBody = try JSONEncoder().encode(TitleUpdate(title: title))
 
     let (_, response) = try await session.data(for: request)
     guard let httpResponse = response as? HTTPURLResponse,
