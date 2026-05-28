@@ -423,7 +423,7 @@ def delete_action_item(action_item_id: str, uid: str = Depends(auth.get_current_
 
 
 class BatchDeleteActionItemsRequest(BaseModel):
-    ids: List[str] = Field(description="IDs of action items to delete", min_length=1, max_length=500)
+    ids: List[str] = Field(description="IDs of action items to delete", min_length=1, max_length=10000)
 
 
 @router.post("/v1/action-items/batch-delete", tags=['action-items'])
