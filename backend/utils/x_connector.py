@@ -32,7 +32,7 @@ from database import users as users_db
 from database import x_posts as x_posts_db
 from database import memories as memories_db
 from database._client import db
-from database.vector_db import upsert_memory_vectors_batch
+from database.vector_db import upsert_memory_vectors_batch, upsert_x_post_vectors_batch
 from models.memories import MemoryDB
 from utils.llm.memories import extract_memories_from_text
 from utils import social
@@ -399,6 +399,15 @@ async def sync_x_for_user(uid: str) -> Dict:
     # Only mine memories from posts we hadn't seen before (the raw store dedupes,
     # but extraction is the expensive part — restrict it to genuinely new text).
     fresh = new_posts if written == len(new_posts) else new_posts[:written]
+    # Vector-index the raw posts so agents can semantically search the actual
+    # tweets (not just the extracted memories) via the MCP search_x_posts tool.
+    try:
+        upsert_x_post_vectors_batch(
+            uid,
+            [{'post_id': p['id'], 'content': p.get('text', ''), 'kind': p.get('kind', 'tweet')} for p in fresh],
+        )
+    except Exception as e:
+        logger.warning(f'x_connector: failed to index x_posts for uid={uid}: {e}')
     memories_created = _extract_and_index(uid, fresh)
 
     users_db.set_integration(

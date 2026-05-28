@@ -72,12 +72,31 @@ def save_x_posts(uid: str, posts: List[dict]) -> int:
 
 
 def get_x_posts(uid: str, limit: int = 100, kind: Optional[str] = None) -> List[dict]:
-    """Return stored posts, newest first. Optionally filter by kind."""
-    query = _posts_ref(uid)
+    """Return stored posts, newest first. Optionally filter by kind.
+
+    A kind filter + order_by would require a composite index, so when filtering
+    by kind we use the single-field equality query (auto-indexed) and sort in
+    Python — post volumes per user are small enough for this to be cheap.
+    """
+    coll = _posts_ref(uid)
     if kind:
-        query = query.where(filter=FieldFilter('kind', '==', kind))
-    query = query.order_by('created_at', direction=firestore.Query.DESCENDING).limit(limit)
+        docs = [d.to_dict() for d in coll.where(filter=FieldFilter('kind', '==', kind)).limit(limit * 3).stream()]
+        docs.sort(key=lambda d: d.get('created_at') or '', reverse=True)
+        return docs[:limit]
+    query = coll.order_by('created_at', direction=firestore.Query.DESCENDING).limit(limit)
     return [d.to_dict() for d in query.stream()]
+
+
+def get_x_posts_by_ids(uid: str, ids: List[str]) -> List[dict]:
+    """Fetch specific posts by id (used by semantic search to hydrate matches)."""
+    if not ids:
+        return []
+    coll = _posts_ref(uid)
+    out = []
+    for snap in db.get_all([coll.document(str(i)) for i in ids]):
+        if snap.exists:
+            out.append(snap.to_dict())
+    return out
 
 
 def count_x_posts(uid: str) -> int:
