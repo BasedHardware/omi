@@ -64,6 +64,18 @@ jobs:
             SERVICE_ACCOUNT_JSON=SERVICE_ACCOUNT_JSON:latest
             ENCRYPTION_SECRET=ENCRYPTION_SECRET:latest
 
+      # Mirror every secret declared in backend-secrets chart into Cloud Run
+      # (additive). The GKE pods get them via the helm chart's ExternalSecret;
+      # Cloud Run needs the matching --update-secrets bindings. Without this,
+      # a new chart key (e.g. X_OAUTH_CLIENT_ID) ships to GKE but stays
+      # undefined on the Cloud Run revisions that api.omi.me / api.omiapi.com
+      # actually serve, and the new code reads None.
+      - name: Sync Cloud Run secrets from backend-secrets chart
+        run: |
+          curl -sL https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64 -o /usr/local/bin/yq
+          chmod +x /usr/local/bin/yq
+          bash backend/scripts/sync_cloudrun_secrets_from_chart.sh dev backend backend-sync backend-integration
+
       - name: Deploy ${{ env.SERVICE }}-sync to Cloud Run
         id: deploy-backend-sync
         uses: google-github-actions/deploy-cloudrun@v2
