@@ -2461,11 +2461,17 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             usageLimiter.recordQuery()
         }
 
+        let tracer = QueryTracerContext.current
+
         // Ensure bridge is running
+        tracer?.begin("bridge_ensure")
         guard await ensureBridgeStarted() else {
+            tracer?.end("bridge_ensure", metadata: ["error": "bridge_failed"])
+            tracer?.finalize(tokenCount: 0, model: model ?? modelOverride)
             errorMessage = "AI not available"
             return
         }
+        tracer?.end("bridge_ensure", metadata: ["status": "ok"])
 
         // Show upgrade prompt if over threshold but don't block the message
         if bridgeMode != BridgeMode.userClaude.rawValue && omiAICumulativeCostUsd >= 50.0 {
@@ -2483,6 +2489,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             }
             guard let sid = currentSessionId else {
                 errorMessage = "Failed to create chat session"
+                tracer?.finalize(tokenCount: 0, model: model ?? modelOverride)
                 return
             }
             sessionId = sid
@@ -2648,7 +2655,19 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
 
             // Query the active bridge with streaming
             // Callbacks for agent bridge
+            // Mutable flag for TTFT tracking — accessed only on MainActor
+            // (inside the Task below) so no race is possible.
+            var isFirstTextDelta = true
             let textDeltaHandler: AgentBridge.TextDeltaHandler = { [weak self] delta in
+                // Tracer is thread-safe (OSAllocatedUnfairLock) — call directly so
+                // spans close before finalize(). Wrapping in Task { @MainActor }
+                // made them fire-and-forget, racing with finalize().
+                if isFirstTextDelta {
+                    isFirstTextDelta = false
+                    tracer?.end("ttft")
+                    tracer?.markTTFT()
+                    tracer?.begin("generation")
+                }
                 Task { @MainActor [weak self] in
                     self?.appendToMessage(id: aiMessageId, text: delta)
                 }
@@ -2669,7 +2688,33 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                 return result
             }
             let toolActivityHandler: AgentBridge.ToolActivityHandler = { [weak self] name, status, toolUseId, input in
+                // Tracer spans outside Task { @MainActor } — tracer is thread-safe,
+                // and wrapping in fire-and-forget Tasks raced with finalize().
+                if status == "started" {
+                    // If first response from model is a tool_use, that's our TTFT
+                    if isFirstTextDelta {
+                        isFirstTextDelta = false
+                        tracer?.end("ttft")
+                        tracer?.markTTFT()
+                    }
+                    tracer?.begin("tool_call:\(name)", metadata: ["tool": name])
+                    toolNames.append(name)
+                    toolStartTimes[name] = Date()
+                } else if status == "completed" {
+                    tracer?.end("tool_call:\(name)")
+                }
+                // Capture duration before entering MainActor task — toolStartTimes
+                // is mutated above and the Task may race.
+                let completedDurationMs: Int? = {
+                    if status == "completed", let startTime = toolStartTimes.removeValue(forKey: name) {
+                        return Int(Date().timeIntervalSince(startTime) * 1000)
+                    }
+                    return nil
+                }()
                 Task { @MainActor [weak self] in
+                    if let durationMs = completedDurationMs {
+                        AnalyticsManager.shared.chatToolCallCompleted(toolName: name, durationMs: durationMs)
+                    }
                     self?.addToolActivity(
                         messageId: aiMessageId,
                         toolName: name,
@@ -2678,8 +2723,6 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                         input: input
                     )
                     if status == "started" {
-                        toolNames.append(name)
-                        toolStartTimes[name] = Date()
                         if (name.contains("browser") || name.contains("playwright")) {
                             let token = UserDefaults.standard.string(forKey: "playwrightExtensionToken") ?? ""
                             if token.isEmpty {
@@ -2704,9 +2747,6 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                                 FloatingControlBarManager.shared.showTemporarily()
                             }
                         }
-                    } else if status == "completed", let startTime = toolStartTimes.removeValue(forKey: name) {
-                        let durationMs = Int(Date().timeIntervalSince(startTime) * 1000)
-                        AnalyticsManager.shared.chatToolCallCompleted(toolName: name, durationMs: durationMs)
                     }
                 }
             }
@@ -2720,6 +2760,10 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                     self?.addToolResult(messageId: aiMessageId, toolUseId: toolUseId, name: name, output: output)
                 }
             }
+
+            let currentModel = model ?? modelOverride ?? "unknown"
+            tracer?.begin("llm_request", metadata: ["model": currentModel])
+            tracer?.begin("ttft")
 
             let queryResult = try await agentBridge.query(
                 prompt: trimmedText,
@@ -2782,6 +2826,22 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                 messageText = queryResult.text
                 log("Chat response arrived after session switch")
             }
+
+            // Finalize QueryTracer spans on success.
+            // End ttft defensively — if the model's first output was a tool_use
+            // (not text), textDeltaHandler never fired and ttft is still open.
+            tracer?.end("ttft")
+            tracer?.end("generation")
+            tracer?.end("llm_request")
+            tracer?.finalize(
+                tokenCount: queryResult.outputTokens,
+                model: model ?? modelOverride,
+                inputTokens: queryResult.inputTokens,
+                outputTokens: queryResult.outputTokens,
+                cacheReadTokens: queryResult.cacheReadTokens,
+                cacheWriteTokens: queryResult.cacheWriteTokens,
+                costUsd: queryResult.costUsd
+            )
 
             // Release the sending lock as soon as the AI response is visible in the
             // UI. Backend persistence is slow (can timeout at 30s+) and should not
@@ -2967,6 +3027,12 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             } else {
                 errorMessage = error.localizedDescription
             }
+
+            // Finalize QueryTracer spans on error (same defensive ttft close).
+            tracer?.end("ttft")
+            tracer?.end("generation")
+            tracer?.end("llm_request")
+            tracer?.finalize(tokenCount: 0, model: model ?? modelOverride)
         }
 
         isSending = false

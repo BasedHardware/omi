@@ -48,6 +48,16 @@ class PushToTalkManager: ObservableObject {
   private var currentContextSnapshot: PTTContextSnapshot?
   private var contextCaptureTask: Task<Void, Never>?
 
+  /// Active query tracer for the current PTT session (nil when not recording)
+  private var activeTracer: QueryTracer?
+
+  private func makeActiveTracer() -> QueryTracer {
+    QueryTracer(
+      query: "(ptt recording)",
+      inputMode: ShortcutSettings.shared.pttTranscriptionMode == .batch ? .voicePTTBatch : .voicePTTLive
+    )
+  }
+
   // Batch mode: accumulate raw audio for post-recording transcription
   private var batchAudioBuffer = Data()
   private let batchAudioLock = NSLock()
@@ -230,6 +240,10 @@ class PushToTalkManager: ObservableObject {
       sound?.play()
     }
 
+    let tracer = makeActiveTracer()
+    self.activeTracer = tracer
+    tracer.begin("ptt_recording")
+
     let isFollowUp = isCurrentSessionFollowUp
     AnalyticsManager.shared.floatingBarPTTStarted(mode: isFollowUp ? "follow_up_hold" : "hold")
     let preOverlayImage = ScreenCaptureManager.captureScreenImage()
@@ -262,6 +276,13 @@ class PushToTalkManager: ObservableObject {
       transcriptSegments = []
       lastInterimText = ""
       currentContextSnapshot = nil
+
+      if activeTracer == nil {
+        let tracer = makeActiveTracer()
+        self.activeTracer = tracer
+        tracer.begin("ptt_recording")
+      }
+
       let preOverlayImage = ScreenCaptureManager.captureScreenImage()
       captureContextAndStartAudio(preOverlayImage: preOverlayImage)
     }
@@ -294,6 +315,7 @@ class PushToTalkManager: ObservableObject {
     liveFinalizationTimeout = nil
     contextCaptureTask?.cancel()
     contextCaptureTask = nil
+    activeTracer = nil
     stopAudioTranscription()
     state = .idle
     transcriptSegments = []
@@ -321,6 +343,8 @@ class PushToTalkManager: ObservableObject {
     lastOptionUpTime = 0
     finalizedMode = state == .lockedListening ? "locked" : "hold"
     state = .finalizing
+    activeTracer?.end("audio_capture")
+    activeTracer?.end("ptt_recording")
     finalizeWorkItem?.cancel()
     finalizeWorkItem = nil
     updateBarState()
@@ -363,6 +387,7 @@ class PushToTalkManager: ObservableObject {
           let audioSeconds = Double(audioData.count) / (16000.0 * 2.0)
           log("PushToTalkManager: batch audio \(audioData.count) bytes (\(String(format: "%.1f", audioSeconds))s), pttLanguage=\(language), selectedLanguage=\(AssistantSettings.shared.transcriptionLanguage), autoDetect=\(AssistantSettings.shared.transcriptionAutoDetect)")
 
+          self.activeTracer?.begin("batch_transcribe", metadata: ["endpoint": "/v2/voice-message/transcribe"])
           var transcript = try await TranscriptionService.batchTranscribe(
             audioData: audioData,
             language: language,
@@ -377,6 +402,7 @@ class PushToTalkManager: ObservableObject {
               contextKeywords: self.currentContextSnapshot?.keywords ?? []
             )
           }
+          self.activeTracer?.end("batch_transcribe")
 
           if let transcript, !transcript.isEmpty {
             self.transcriptSegments = [transcript]
@@ -449,7 +475,9 @@ class PushToTalkManager: ObservableObject {
     }
 
     Task { [weak self, query, contextKeywords, wasFollowUp] in
+      self?.activeTracer?.begin("transcript_cleanup")
       let cleanedQuery = await PTTTranscriptCleanupService.shared.cleanup(query, keywords: contextKeywords)
+      self?.activeTracer?.end("transcript_cleanup")
       await MainActor.run {
         self?.sendQuery(cleanedQuery, wasFollowUp: wasFollowUp)
       }
@@ -457,12 +485,26 @@ class PushToTalkManager: ObservableObject {
   }
 
   private func sendQuery(_ query: String, wasFollowUp: Bool) {
-    if wasFollowUp {
-      log("PushToTalkManager: sending follow-up query (\(query.count) chars): \(query)")
-      FloatingControlBarManager.shared.sendFollowUpQuery(query, fromVoice: true)
+    let tracer = activeTracer
+    activeTracer = nil  // ownership transfers to TaskLocal
+
+    let dispatch = { [weak self] in
+      if wasFollowUp {
+        log("PushToTalkManager: sending follow-up query (\(query.count) chars): \(query)")
+        FloatingControlBarManager.shared.sendFollowUpQuery(query, fromVoice: true)
+      } else {
+        log("PushToTalkManager: sending query (\(query.count) chars): \(query)")
+        FloatingControlBarManager.shared.openAIInputWithQuery(query, fromVoice: true)
+      }
+    }
+
+    if let tracer {
+      tracer.updateQuery(query)
+      QueryTracerContext.$current.withValue(tracer) {
+        dispatch()
+      }
     } else {
-      log("PushToTalkManager: sending query (\(query.count) chars): \(query)")
-      FloatingControlBarManager.shared.openAIInputWithQuery(query, fromVoice: true)
+      dispatch()
     }
   }
 
@@ -470,10 +512,13 @@ class PushToTalkManager: ObservableObject {
 
   private func captureContextAndStartAudio(preOverlayImage: CGImage? = nil) {
     contextCaptureTask?.cancel()
+    activeTracer?.begin("audio_capture")
     startAudioTranscription()
     let captureStartedAt = Date()
     contextCaptureTask = Task { [weak self] in
+      self?.activeTracer?.begin("context_ocr", metadata: ["parallel_with": "audio_capture"])
       let snapshot = await PTTContextVocabularyProvider.capture(at: captureStartedAt, preOverlayImage: preOverlayImage)
+      self?.activeTracer?.end("context_ocr")
       await MainActor.run {
         guard let self, !Task.isCancelled else { return }
         guard self.state == .listening || self.state == .lockedListening || self.state == .finalizing else { return }
