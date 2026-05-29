@@ -140,6 +140,8 @@ Rules:
 
 #### Self-Testing the App (end-to-end)
 
+**Hard rule: you may not ask the user to verify a feature you have not actually exercised yourself.** Compiling, "looks correct from the code", or "scroll down to see it" are not verification. If the obvious path is blocked (permission, focus, missing tool), try a long sequence of alternatives before involving the user — extend the bridge with a new action, add a temporary in-process hook, search the web for a workaround, grant the missing permission yourself if you can, write a tiny standalone harness. Roughly: spend ten serious attempts across different approaches before you escalate. Asking the user is the last move, not the first.
+
 Agents can and should self-test the running app — don't stop at a successful compile. The fast path skips the slow parts (web login, sidebar click-through):
 
 1. **Build + launch a named bundle:** `OMI_APP_NAME="omi-<feature>" ./run.sh` (add `OMI_SKIP_TUNNEL=1` for a local backend without a tunnel; `OMI_SKIP_BACKEND=1 OMI_DESKTOP_API_URL=…` to point at a remote backend).

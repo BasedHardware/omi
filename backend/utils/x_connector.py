@@ -139,6 +139,7 @@ def _basic_auth_header() -> Dict[str, str]:
 
 
 async def exchange_code(code: str, verifier: str) -> Dict:
+    logger.info(f'exchange_code: using redirect_uri={X_REDIRECT_URI!r} client_id={X_CLIENT_ID[:8]!r}…')
     data = {
         'grant_type': 'authorization_code',
         'code': code,
@@ -148,6 +149,8 @@ async def exchange_code(code: str, verifier: str) -> Dict:
     }
     async with httpx.AsyncClient(timeout=httpx.Timeout(15.0, connect=3.0)) as client:
         resp = await client.post(TOKEN_URL, data=data, headers=_basic_auth_header())
+        if resp.status_code >= 400:
+            logger.error(f'exchange_code: X returned {resp.status_code}: {resp.text[:500]}')
         resp.raise_for_status()
         return resp.json()
 
@@ -401,13 +404,15 @@ async def sync_x_for_user(uid: str) -> Dict:
     fresh = new_posts if written == len(new_posts) else new_posts[:written]
     # Vector-index the raw posts so agents can semantically search the actual
     # tweets (not just the extracted memories) via the MCP search_x_posts tool.
-    try:
-        upsert_x_post_vectors_batch(
-            uid,
-            [{'post_id': p['id'], 'content': p.get('text', ''), 'kind': p.get('kind', 'tweet')} for p in fresh],
-        )
-    except Exception as e:
-        logger.warning(f'x_connector: failed to index x_posts for uid={uid}: {e}')
+    # Chunk to stay within Pinecone's per-upsert vector limit (~100).
+    items_to_index = [
+        {'post_id': p['id'], 'content': p.get('text', ''), 'kind': p.get('kind', 'tweet')} for p in fresh
+    ]
+    for i in range(0, len(items_to_index), 100):
+        try:
+            upsert_x_post_vectors_batch(uid, items_to_index[i : i + 100])
+        except Exception as e:
+            logger.warning(f'x_connector: failed to index x_posts chunk[{i}:{i+100}] for uid={uid}: {e}')
     memories_created = _extract_and_index(uid, fresh)
 
     users_db.set_integration(
