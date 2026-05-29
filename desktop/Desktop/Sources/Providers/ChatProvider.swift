@@ -461,20 +461,15 @@ enum ChatMode: String, CaseIterable {
 enum ChatSystemPromptStyle {
     case main
     case floating
+
+    var includesDatabaseSchema: Bool { self == .main }
+    var includesSkills: Bool { self == .main }
 }
 
 /// State management for chat functionality with Claude Agent SDK
 /// Uses hybrid architecture: Swift → Claude Agent (via Node.js bridge) for AI, Backend for persistence + context
 @MainActor
 class ChatProvider: ObservableObject {
-
-    private enum PromptProfile {
-        case main
-        case floating
-
-        var includesDatabaseSchema: Bool { self == .main }
-        var includesSkills: Bool { self == .main }
-    }
 
     // MARK: - Floating Bar System Prompt Prefix
     /// Static prefix injected at the top of the system prompt for floating bar sessions.
@@ -929,7 +924,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             // Pre-warm ACP sessions with their respective system prompts.
             // This is the only place the system prompt is built and applied.
             let promptContext = formatMemoriesSection()
-            let mainSystemPrompt = buildSystemPrompt(contextString: promptContext, profile: .main)
+            let mainSystemPrompt = buildSystemPrompt(contextString: promptContext, style: .main)
             let floatingSystemPrompt = buildFloatingBarSystemPrompt(contextString: promptContext)
             let floatingModel = ShortcutSettings.shared.selectedModel.isEmpty
                 ? ModelQoS.Claude.defaultSelection
@@ -1634,7 +1629,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
     /// Called once at warmup (via ensureBridgeStarted) and cached in cachedMainSystemPrompt.
     /// Conversation history is injected here so the brand-new ACP session starts with context
     /// from before the app launch. After session/new the ACP SDK owns history natively.
-    private func buildSystemPrompt(contextString: String, profile: PromptProfile) -> String {
+    private func buildSystemPrompt(contextString: String, style: ChatSystemPromptStyle) -> String {
         // Get user name from AuthService
         let userName = AuthService.shared.displayName.isEmpty ? "there" : AuthService.shared.givenName
 
@@ -1654,7 +1649,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             goalSection: goalSection,
             tasksSection: tasksSection,
             aiProfileSection: aiProfileSection,
-            databaseSchema: profile.includesDatabaseSchema ? cachedDatabaseSchema : ""
+            databaseSchema: style.includesDatabaseSchema ? cachedDatabaseSchema : ""
         )
 
         // Inject conversation history so the new ACP session has context from before app launch.
@@ -1678,7 +1673,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
         // Append enabled skills as available context (global + project)
         // dev-mode is included in the list when devModeEnabled; full content loaded on demand via load_skill
         let enabledSkillNames = getEnabledSkillNames()
-        if profile.includesSkills && !enabledSkillNames.isEmpty {
+        if style.includesSkills && !enabledSkillNames.isEmpty {
             let allSkills = discoveredSkills + projectDiscoveredSkills
             let skillNames = allSkills
                 .filter { enabledSkillNames.contains($0.name) && ($0.name != "dev-mode" || devModeEnabled) }
@@ -1694,7 +1689,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
         let historyInjected = !history.isEmpty
         let historyMessages = messages.filter { !$0.text.isEmpty && !$0.isStreaming }
         let historyCount = min(historyMessages.count, 20)
-        log("ChatProvider: prompt built — schema: \(profile.includesDatabaseSchema && !cachedDatabaseSchema.isEmpty ? "yes" : "no"), goals: \(activeGoalCount), tasks: \(cachedTasks.count), ai_profile: \(!cachedAIProfile.isEmpty ? "yes" : "no"), memories: \(cachedMemories.count), history: \(historyInjected ? "injected (\(historyCount) msgs)" : "none"), claude_md: \(claudeMdEnabled && claudeMdContent != nil ? "yes" : "no"), project_claude_md: \(projectClaudeMdEnabled && projectClaudeMdContent != nil ? "yes" : "no"), skills: \(profile.includesSkills ? enabledSkillNames.count : 0), dev_mode_in_skills: \(profile.includesSkills && devModeEnabled && devModeContext != nil ? "yes" : "no"), prompt_length: \(prompt.count) chars")
+        log("ChatProvider: prompt built — schema: \(style.includesDatabaseSchema && !cachedDatabaseSchema.isEmpty ? "yes" : "no"), goals: \(activeGoalCount), tasks: \(cachedTasks.count), ai_profile: \(!cachedAIProfile.isEmpty ? "yes" : "no"), memories: \(cachedMemories.count), history: \(historyInjected ? "injected (\(historyCount) msgs)" : "none"), claude_md: \(claudeMdEnabled && claudeMdContent != nil ? "yes" : "no"), project_claude_md: \(projectClaudeMdEnabled && projectClaudeMdContent != nil ? "yes" : "no"), skills: \(style.includesSkills ? enabledSkillNames.count : 0), dev_mode_in_skills: \(style.includesSkills && devModeEnabled && devModeContext != nil ? "yes" : "no"), prompt_length: \(prompt.count) chars")
 
         // Log per-section character breakdown
         let baseTemplate = ChatPromptBuilder.buildDesktopChat(
@@ -1709,11 +1704,11 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             "goals:\(goalSection.count)c, " +
             "tasks:\(tasksSection.count)c, " +
             "ai_profile:\(aiProfileSection.count)c, " +
-            "schema:\(profile.includesDatabaseSchema ? cachedDatabaseSchema.count : 0)c, " +
+            "schema:\(style.includesDatabaseSchema ? cachedDatabaseSchema.count : 0)c, " +
             "history:\(history.count)c, " +
             "claude_md:\(claudeMdContent?.count ?? 0)c, " +
             "project_claude_md:\(projectClaudeMdContent?.count ?? 0)c, " +
-            "skills:\(profile.includesSkills ? skillsSectionSize : 0)c")
+            "skills:\(style.includesSkills ? skillsSectionSize : 0)c")
 
         return prompt
     }
@@ -1721,7 +1716,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
     private func buildFloatingBarSystemPrompt(contextString: String) -> String {
         let prompt = buildSystemPrompt(
             contextString: contextString,
-            profile: .floating
+            style: .floating
         )
         return Self.floatingBarSystemPromptPrefix + "\n\n" + prompt
     }
@@ -2641,9 +2636,10 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                 systemPrompt = prefix
             } else {
                 if systemPromptStyle == .floating {
-                    systemPrompt = cachedFloatingSystemPrompt.isEmpty
-                        ? buildFloatingBarSystemPrompt(contextString: formatMemoriesSection())
-                        : cachedFloatingSystemPrompt
+                    if cachedFloatingSystemPrompt.isEmpty {
+                        cachedFloatingSystemPrompt = buildFloatingBarSystemPrompt(contextString: formatMemoriesSection())
+                    }
+                    systemPrompt = cachedFloatingSystemPrompt
                 } else {
                     systemPrompt = cachedMainSystemPrompt
                 }
