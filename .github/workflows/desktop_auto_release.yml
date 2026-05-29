@@ -161,12 +161,19 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Generate Omi Bot token
+        id: app-token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.OMI_BOT_APP_ID }}
+          private-key: ${{ secrets.OMI_BOT_PRIVATE_KEY }}
+
       - name: Wait for previous desktop release build
         env:
-          GH_TOKEN: ${{ secrets.PAT_TOKEN }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
         run: |
           if [ -z "${GH_TOKEN:-}" ]; then
-            echo "PAT_TOKEN is not configured; cannot inspect previous release build status."
+            echo "Omi Bot token not available; cannot inspect previous release build status."
             exit 1
           fi
 
@@ -276,10 +283,10 @@ jobs:
 
       - name: Create and auto-merge PR to sync changelog back to main
         env:
-          GH_TOKEN: ${{ secrets.PAT_TOKEN }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
         run: |
           if [ -z "${GH_TOKEN:-}" ]; then
-            echo "PAT_TOKEN is not configured; cannot auto-merge changelog PR."
+            echo "Omi Bot token not available; cannot auto-merge changelog PR."
             exit 1
           fi
 
