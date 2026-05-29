@@ -128,9 +128,11 @@ struct AppsPage: View {
             // Content
             if appProvider.isLoading {
                 loadingShimmerView
-            } else if appProvider.apps.isEmpty && appProvider.popularApps.isEmpty {
-                emptyView
             } else {
+                // Always render the page (Imports/Exports are local connectors
+                // and must show even when the marketplace API returned no apps).
+                // The marketplace sections inside the else branch are each
+                // self-gated and skip when empty.
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 24) {
                         if !searchText.isEmpty || hasActiveFilters {

@@ -344,6 +344,21 @@ env:
       secretKeyRef:
         name: dev-omi-backend-secrets
         key: CONVERSATION_SUMMARIZED_APP_IDS
+  - name: X_OAUTH_CLIENT_ID
+    valueFrom:
+      secretKeyRef:
+        name: dev-omi-backend-secrets
+        key: X_OAUTH_CLIENT_ID
+  - name: X_OAUTH_CLIENT_SECRET
+    valueFrom:
+      secretKeyRef:
+        name: dev-omi-backend-secrets
+        key: X_OAUTH_CLIENT_SECRET
+  - name: X_OAUTH_REDIRECT_URI
+    valueFrom:
+      secretKeyRef:
+        name: dev-omi-backend-secrets
+        key: X_OAUTH_REDIRECT_URI
 
 resources:
   # We usually recommend not to specify default resources and to leave this as a conscious

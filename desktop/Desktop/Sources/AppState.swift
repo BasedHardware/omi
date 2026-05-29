@@ -146,6 +146,8 @@ class AppState: ObservableObject {
   /// Trigger the monthly-limit popup. Safe to call repeatedly — SwiftUI's
   /// `@Published` dedupes identical-value writes automatically.
   func triggerUsageLimitPopup(reason: String) {
+    // Debug escape hatch for self-test runs that don't want the overage modal in the way.
+    if ProcessInfo.processInfo.environment["OMI_SKIP_USAGE_POPUP"] == "1" { return }
     usageLimitReason = reason
     showUsageLimitPopup = true
   }
