@@ -1707,7 +1707,7 @@ class FloatingControlBarManager {
             message,
             model: floatingModel,
             systemPromptSuffix: notificationContextSuffix,
-            systemPromptPrefix: ChatProvider.floatingBarSystemPromptPrefix,
+            systemPromptStyle: .floating,
             sessionKey: floatingSessionKey,
             imageData: screenshotData
         )
