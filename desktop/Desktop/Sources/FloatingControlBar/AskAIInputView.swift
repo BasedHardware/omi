@@ -6,6 +6,7 @@ struct AskAIInputView: View {
     @Binding var userInput: String
     @State private var localInput: String = ""
     @State private var textHeight: CGFloat = 40
+    @State private var hasMarkedText = false
 
     var canClearVisibleConversation: Bool = false
     var onSend: ((String) -> Void)?
@@ -40,7 +41,7 @@ struct AskAIInputView: View {
 
             HStack(spacing: 6) {
                 ZStack(alignment: .topLeading) {
-                    if localInput.isEmpty {
+                    if localInput.isEmpty && !hasMarkedText {
                         Text("Ask a question...")
                             .scaledFont(size: 13)
                             .foregroundColor(.secondary)
@@ -57,6 +58,7 @@ struct AskAIInputView: View {
                             onSend?(trimmed)
                         },
                         focusOnAppear: true,
+                        onMarkedTextChange: { hasMarkedText = $0 },
                         minHeight: minHeight,
                         maxHeight: maxHeight,
                         onHeightChange: { newHeight in
