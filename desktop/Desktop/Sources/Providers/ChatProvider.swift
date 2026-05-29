@@ -2655,17 +2655,20 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
 
             // Query the active bridge with streaming
             // Callbacks for agent bridge
-            // Mutable flag for TTFT tracking — accessed only on MainActor
-            // (inside the Task below) so no race is possible.
-            var isFirstTextDelta = true
+            // Mutable flags for TTFT / generation tracking.
+            var isFirstResponse = true   // TTFT: first output of any kind (text or tool_use)
+            var isGenerating = false     // generation span: tracks actual text streaming
             let textDeltaHandler: AgentBridge.TextDeltaHandler = { [weak self] delta in
                 // Tracer is thread-safe (OSAllocatedUnfairLock) — call directly so
                 // spans close before finalize(). Wrapping in Task { @MainActor }
                 // made them fire-and-forget, racing with finalize().
-                if isFirstTextDelta {
-                    isFirstTextDelta = false
+                if isFirstResponse {
+                    isFirstResponse = false
                     tracer?.end("ttft")
                     tracer?.markTTFT()
+                }
+                if !isGenerating {
+                    isGenerating = true
                     tracer?.begin("generation")
                 }
                 Task { @MainActor [weak self] in
@@ -2674,8 +2677,22 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             }
             let toolCallHandler: AgentBridge.ToolCallHandler = { callId, name, input in
                 let toolCall = ToolCall(name: name, arguments: input, thoughtSignature: nil)
+                let toolStart = ContinuousClock.now
                 let result = await ChatToolExecutor.execute(toolCall)
+                let toolDurMs = Int64((ContinuousClock.now - toolStart).components.seconds * 1000
+                    + (ContinuousClock.now - toolStart).components.attoseconds / 1_000_000_000_000_000)
                 log("OMI tool \(name) executed for callId=\(callId)")
+
+                // Capture full tool input/output in trace
+                let inputJson = (try? String(data: JSONSerialization.data(withJSONObject: input), encoding: .utf8)) ?? "\(input)"
+                tracer?.captureToolExecution(
+                    toolUseId: callId,
+                    name: name,
+                    input: inputJson,
+                    output: result,
+                    durationMs: toolDurMs
+                )
+
                 // Track SQL query stats for metadata
                 if name == "execute_sql" {
                     sqlQueryCount += 1
@@ -2690,23 +2707,27 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             let toolActivityHandler: AgentBridge.ToolActivityHandler = { [weak self] name, status, toolUseId, input in
                 // Tracer spans outside Task { @MainActor } — tracer is thread-safe,
                 // and wrapping in fire-and-forget Tasks raced with finalize().
+                // Use toolUseId as span key so repeated calls to the same tool
+                // (e.g. 10x delete_task) each get their own span instead of
+                // colliding on the name-based lastIndex(where:) lookup.
+                let spanKey = "tool:\(toolUseId ?? name)"
                 if status == "started" {
                     // If first response from model is a tool_use, that's our TTFT
-                    if isFirstTextDelta {
-                        isFirstTextDelta = false
+                    if isFirstResponse {
+                        isFirstResponse = false
                         tracer?.end("ttft")
                         tracer?.markTTFT()
                     }
-                    tracer?.begin("tool_call:\(name)", metadata: ["tool": name])
+                    tracer?.begin(spanKey, metadata: ["tool": name])
                     toolNames.append(name)
-                    toolStartTimes[name] = Date()
+                    toolStartTimes[toolUseId ?? name] = Date()
                 } else if status == "completed" {
-                    tracer?.end("tool_call:\(name)")
+                    tracer?.end(spanKey)
                 }
                 // Capture duration before entering MainActor task — toolStartTimes
                 // is mutated above and the Task may race.
                 let completedDurationMs: Int? = {
-                    if status == "completed", let startTime = toolStartTimes.removeValue(forKey: name) {
+                    if status == "completed", let startTime = toolStartTimes.removeValue(forKey: toolUseId ?? name) {
                         return Int(Date().timeIntervalSince(startTime) * 1000)
                     }
                     return nil
@@ -2762,6 +2783,14 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             }
 
             let currentModel = model ?? modelOverride ?? "unknown"
+
+            // Capture full request for trace — system prompt + message history
+            tracer?.captureRequest(
+                systemPrompt: systemPrompt,
+                messages: Array(messages.suffix(40)).map { ["role": $0.sender == .user ? "user" : "assistant", "content": $0.text] },
+                hasScreenshot: imageData != nil
+            )
+
             tracer?.begin("llm_request", metadata: ["model": currentModel])
             tracer?.begin("ttft")
 
@@ -2826,6 +2855,9 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                 messageText = queryResult.text
                 log("Chat response arrived after session switch")
             }
+
+            // Capture response text in trace
+            tracer?.captureResponse(text: messageText)
 
             // Finalize QueryTracer spans on success.
             // End ttft defensively — if the model's first output was a tool_use

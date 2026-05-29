@@ -28,6 +28,22 @@ struct TraceFlaggedGap: Codable, Sendable {
     let gap_ms: Int64
 }
 
+struct TraceLLMRequest: Codable, Sendable {
+    let system_prompt: String?
+    let messages: [[String: String]]?
+    let response_text: String?
+    let finish_reason: String?
+    let has_screenshot: Bool
+}
+
+struct TraceToolExecution: Codable, Sendable {
+    let tool_use_id: String?
+    let name: String
+    let input: String
+    let output: String
+    let dur_ms: Int64?
+}
+
 struct QueryTrace: Codable, Sendable {
     let trace_id: String
     let timestamp: String
@@ -43,6 +59,8 @@ struct QueryTrace: Codable, Sendable {
     let cache_read_tokens: Int?
     let cache_write_tokens: Int?
     let cost_usd: Double?
+    let request: TraceLLMRequest?
+    let tool_executions: [TraceToolExecution]?
     let spans: [TraceSpan]
     let flagged_gaps: [TraceFlaggedGap]
 
@@ -50,6 +68,7 @@ struct QueryTrace: Codable, Sendable {
         case trace_id, timestamp, query_text, input_mode, model
         case total_ms, ttft_ms, token_count, tps
         case input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, cost_usd
+        case request, tool_executions
         case spans, flagged_gaps
     }
 
@@ -140,6 +159,14 @@ final class QueryTracer: @unchecked Sendable {
         var spanStack: [OpenSpan] = []
         var completedSpans: [BuiltSpan] = []
         var ttftInstant: ContinuousClock.Instant?
+
+        // Full request/response capture
+        var systemPrompt: String?
+        var messages: [[String: String]]?
+        var responseText: String?
+        var finishReason: String?
+        var hasScreenshot: Bool = false
+        var toolExecutions: [TraceToolExecution] = []
     }
 
     init(query: String, inputMode: QueryInputMode) {
@@ -229,6 +256,40 @@ final class QueryTracer: @unchecked Sendable {
         }
     }
 
+    /// Capture the full system prompt + message history sent to the API.
+    func captureRequest(
+        systemPrompt: String,
+        messages: [[String: String]],
+        hasScreenshot: Bool = false
+    ) {
+        lock.withLock { state in
+            state.systemPrompt = systemPrompt
+            state.messages = messages
+            state.hasScreenshot = hasScreenshot
+        }
+    }
+
+    /// Capture the final response text + finish reason.
+    func captureResponse(text: String, finishReason: String? = nil) {
+        lock.withLock { state in
+            state.responseText = text
+            state.finishReason = finishReason
+        }
+    }
+
+    /// Capture a tool call execution (name, input, output, duration).
+    func captureToolExecution(toolUseId: String?, name: String, input: String, output: String, durationMs: Int64? = nil) {
+        lock.withLock { state in
+            state.toolExecutions.append(TraceToolExecution(
+                tool_use_id: toolUseId,
+                name: name,
+                input: input,
+                output: output,
+                dur_ms: durationMs
+            ))
+        }
+    }
+
     func buildTrace(
         tokenCount: Int,
         model: String?,
@@ -239,7 +300,8 @@ final class QueryTracer: @unchecked Sendable {
         costUsd: Double? = nil
     ) -> QueryTrace {
         // Copy raw state out of the lock, force-closing any orphaned spans
-        let (completedSpans, ttftInstant, origin, traceId, query, inputMode) = lock.withLock { state in
+        let (completedSpans, ttftInstant, origin, traceId, query, inputMode,
+             systemPrompt, messages, responseText, finishReason, hasScreenshot, toolExecutions) = lock.withLock { state in
             // Drain unclosed spans so they're not silently lost
             let endInstant = ContinuousClock.now
             while let open = state.spanStack.popLast() {
@@ -261,7 +323,8 @@ final class QueryTracer: @unchecked Sendable {
                     state.spanStack[state.spanStack.count - 1].children.append(built)
                 }
             }
-            return (state.completedSpans, state.ttftInstant, state.origin, state.traceId, state.query, state.inputMode)
+            return (state.completedSpans, state.ttftInstant, state.origin, state.traceId, state.query, state.inputMode,
+                    state.systemPrompt, state.messages, state.responseText, state.finishReason, state.hasScreenshot, state.toolExecutions)
         }
 
         // All conversion work happens outside the lock
@@ -314,6 +377,14 @@ final class QueryTracer: @unchecked Sendable {
             traceSpans.append(convert(built, gapBefore: gapBefore))
         }
 
+        let request = TraceLLMRequest(
+            system_prompt: systemPrompt,
+            messages: messages,
+            response_text: responseText,
+            finish_reason: finishReason,
+            has_screenshot: hasScreenshot
+        )
+
         return QueryTrace(
             trace_id: traceId,
             timestamp: Self.isoFormatter.string(from: Date()),
@@ -329,6 +400,8 @@ final class QueryTracer: @unchecked Sendable {
             cache_read_tokens: cacheReadTokens,
             cache_write_tokens: cacheWriteTokens,
             cost_usd: costUsd,
+            request: request,
+            tool_executions: toolExecutions.isEmpty ? nil : toolExecutions,
             spans: traceSpans,
             flagged_gaps: flaggedGaps
         )
