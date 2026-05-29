@@ -16,6 +16,8 @@ struct AskAIInputView: View {
 
     private let minHeight: CGFloat = 40
     private let maxHeight: CGFloat = 200
+    private var trimmedInput: String { localInput.trimmingCharacters(in: .whitespacesAndNewlines) }
+    private var canSend: Bool { !hasMarkedText && !trimmedInput.isEmpty }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -53,9 +55,8 @@ struct AskAIInputView: View {
                         text: $localInput,
                         lineFragmentPadding: 8,
                         onSubmit: {
-                            let trimmed = localInput.trimmingCharacters(in: .whitespacesAndNewlines)
-                            guard !trimmed.isEmpty else { return }
-                            onSend?(trimmed)
+                            guard canSend else { return }
+                            onSend?(trimmedInput)
                         },
                         focusOnAppear: true,
                         onMarkedTextChange: { hasMarkedText = $0 },
@@ -79,18 +80,16 @@ struct AskAIInputView: View {
                 .frame(height: textHeight)
 
                 Button(action: {
-                    let trimmed = localInput.trimmingCharacters(in: .whitespacesAndNewlines)
-                    guard !trimmed.isEmpty else { return }
-                    onSend?(trimmed)
+                    guard canSend else { return }
+                    onSend?(trimmedInput)
                 }) {
                     Image(systemName: "arrow.up.circle.fill")
                         .scaledFont(size: 24)
                         .foregroundColor(
-                            localInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                                ? .secondary : .white
+                            canSend ? .white : .secondary
                         )
                 }
-                .disabled(localInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                .disabled(!canSend)
                 .buttonStyle(.plain)
             }
             .padding(.horizontal, 16)
