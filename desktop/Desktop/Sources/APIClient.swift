@@ -264,6 +264,24 @@ enum APIError: LocalizedError {
   }
 }
 
+// MARK: - MCP API
+
+struct MCPKeyCreatedResponse: Codable {
+  let id: String
+  let name: String
+  let key: String
+}
+
+extension APIClient {
+  /// Creates a new MCP API key and returns the raw secret (shown only once by the server).
+  /// Used to wire Omi memory into external MCP clients (Claude, ChatGPT, Claude Code, Codex).
+  func createMCPKey(name: String = "Desktop") async throws -> String {
+    struct Body: Encodable { let name: String }
+    let response: MCPKeyCreatedResponse = try await post("v1/mcp/keys", body: Body(name: name))
+    return response.key
+  }
+}
+
 // MARK: - Conversation API
 
 extension APIClient {
@@ -369,15 +387,12 @@ extension APIClient {
 
   /// Updates the title of a conversation
   func updateConversationTitle(id: String, title: String) async throws {
-    struct TitleUpdate: Encodable {
-      let title: String
-    }
-
-    let url = URL(string: baseURL + "v1/conversations/\(id)")!
+    var components = URLComponents(string: baseURL + "v1/conversations/\(id)/title")!
+    components.queryItems = [URLQueryItem(name: "title", value: title)]
+    let url = components.url!
     var request = URLRequest(url: url)
     request.httpMethod = "PATCH"
     request.allHTTPHeaderFields = try await buildHeaders(requireAuth: true)
-    request.httpBody = try JSONEncoder().encode(TitleUpdate(title: title))
 
     let (_, response) = try await session.data(for: request)
     guard let httpResponse = response as? HTTPURLResponse,
@@ -1451,18 +1466,25 @@ struct CreateMemoryResponse: Codable {
 }
 
 /// One item in a POST /v3/memories/batch payload. Mirrors the `Memory` model
-/// in `backend/models/memories.py` (the server hardcodes category=manual on
-/// batch creation, so we intentionally don't send it).
+/// in `backend/models/memories.py`. The server honors `category`, so batch
+/// imports default to `.system` ("About You") rather than landing in "Manual".
 struct MemoryBatchItem: Encodable {
   let content: String
   let visibility: String
+  let category: String
   let tags: [String]
   let headline: String?
 
-  init(content: String, visibility: String = "private", tags: [String] = [], headline: String? = nil)
-  {
+  init(
+    content: String,
+    visibility: String = "private",
+    category: MemoryCategory = .system,
+    tags: [String] = [],
+    headline: String? = nil
+  ) {
     self.content = content
     self.visibility = visibility
+    self.category = category.rawValue
     self.tags = tags
     self.headline = headline
   }
@@ -3743,6 +3765,10 @@ struct UserSubscriptionResponse: Codable {
   let memoriesCreatedLimit: Int
   let availablePlans: [SubscriptionPlanOption]
   let showSubscriptionUI: Bool
+  // Set for Neo subscribers whose current billing period started before the
+  // policy change in #7496 — they retain desktop access until this unix-seconds
+  // timestamp (their `current_period_end`). Null for everyone else.
+  let desktopGrandfatherUntil: Int?
 
   enum CodingKeys: String, CodingKey {
     case subscription
@@ -3756,6 +3782,28 @@ struct UserSubscriptionResponse: Codable {
     case memoriesCreatedLimit = "memories_created_limit"
     case availablePlans = "available_plans"
     case showSubscriptionUI = "show_subscription_ui"
+    case desktopGrandfatherUntil = "desktop_grandfather_until"
+  }
+
+  // Defensive decode: only `subscription` is required. The usage counters and
+  // plan catalog default when absent so a backend that's behind on schema
+  // (notably the dev backend the beta channel routes to, which can lag prod or
+  // omit newer fields like `memories_created_used`) doesn't blank the entire
+  // Plan & Usage page with "Failed to load plan information."
+  init(from decoder: Decoder) throws {
+    let c = try decoder.container(keyedBy: CodingKeys.self)
+    subscription = try c.decode(UserSubscriptionInfo.self, forKey: .subscription)
+    transcriptionSecondsUsed = try c.decodeIfPresent(Int.self, forKey: .transcriptionSecondsUsed) ?? 0
+    transcriptionSecondsLimit = try c.decodeIfPresent(Int.self, forKey: .transcriptionSecondsLimit) ?? 0
+    wordsTranscribedUsed = try c.decodeIfPresent(Int.self, forKey: .wordsTranscribedUsed) ?? 0
+    wordsTranscribedLimit = try c.decodeIfPresent(Int.self, forKey: .wordsTranscribedLimit) ?? 0
+    insightsGainedUsed = try c.decodeIfPresent(Int.self, forKey: .insightsGainedUsed) ?? 0
+    insightsGainedLimit = try c.decodeIfPresent(Int.self, forKey: .insightsGainedLimit) ?? 0
+    memoriesCreatedUsed = try c.decodeIfPresent(Int.self, forKey: .memoriesCreatedUsed) ?? 0
+    memoriesCreatedLimit = try c.decodeIfPresent(Int.self, forKey: .memoriesCreatedLimit) ?? 0
+    availablePlans = try c.decodeIfPresent([SubscriptionPlanOption].self, forKey: .availablePlans) ?? []
+    showSubscriptionUI = try c.decodeIfPresent(Bool.self, forKey: .showSubscriptionUI) ?? true
+    desktopGrandfatherUntil = try c.decodeIfPresent(Int.self, forKey: .desktopGrandfatherUntil)
   }
 }
 
@@ -4909,4 +4957,77 @@ extension APIClient {
     let body = UpdateActionItemRequest(completed: completed, description: description, dueAt: dueAt)
     return try await patch("v1/tools/action-items/\(id)", body: body, customBaseURL: nil)
   }
+
+  // MARK: - X (Twitter) Connector
+
+  /// Ask the Python backend for the X OAuth authorize URL. The desktop passes
+  /// its own deep link so the backend can redirect back to this exact build.
+  func xOAuthURL(successRedirectURL: String) async throws -> XOAuthURLResponse {
+    let encoded = successRedirectURL.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
+    return try await get("v1/x/oauth-url?success_redirect_url=\(encoded)")
+  }
+
+  func xConnectionStatus() async throws -> XConnectionStatus {
+    try await get("v1/x/connection-status")
+  }
+
+  @discardableResult
+  func xSync() async throws -> XSyncResult {
+    try await post("v1/x/sync")
+  }
+
+  func xDisconnect() async throws {
+    let _: XSimpleOK = try await post("v1/x/disconnect")
+  }
+}
+
+struct XOAuthURLResponse: Decodable {
+  let success: Bool
+  let authUrl: String?
+  let error: String?
+  enum CodingKeys: String, CodingKey {
+    case success
+    case authUrl = "auth_url"
+    case error
+  }
+}
+
+struct XConnectionStatus: Decodable {
+  let success: Bool
+  let connected: Bool
+  let handle: String?
+  let postCount: Int?
+  let memoryCount: Int?
+  let syncing: Bool?
+  let lastSyncedAt: String?
+  let lastSyncSource: String?
+  enum CodingKeys: String, CodingKey {
+    case success
+    case connected
+    case handle
+    case postCount = "post_count"
+    case memoryCount = "memory_count"
+    case syncing
+    case lastSyncedAt = "last_synced_at"
+    case lastSyncSource = "last_sync_source"
+  }
+}
+
+struct XSyncResult: Decodable {
+  let success: Bool
+  let source: String?
+  let newPosts: Int?
+  let memoriesCreated: Int?
+  let error: String?
+  enum CodingKeys: String, CodingKey {
+    case success
+    case source
+    case newPosts = "new_posts"
+    case memoriesCreated = "memories_created"
+    case error
+  }
+}
+
+struct XSimpleOK: Decodable {
+  let success: Bool
 }

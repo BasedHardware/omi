@@ -80,6 +80,7 @@ from utils.retrieval.rag import retrieve_rag_conversation_context
 from utils.webhooks import conversation_created_webhook
 from utils.notifications import send_action_item_data_message
 from utils.task_sync import auto_sync_action_items_batch
+from utils.conversations.calendar_linking import get_overlapping_calendar_event
 from utils.other.storage import precache_conversation_audio
 
 logger = logging.getLogger(__name__)
@@ -742,6 +743,22 @@ def process_conversation(
     structured, discarded = _get_structured(uid, language_code, conversation, force_process, people=people)
     conversation = _get_conversation_obj(uid, structured, conversation)
 
+    # Check for overlapping calendar events
+    if not discarded and conversation.started_at and conversation.finished_at and conversation.calendar_event is None:
+        try:
+            calendar_event = asyncio.run(
+                get_overlapping_calendar_event(
+                    uid,
+                    conversation.started_at,
+                    conversation.finished_at,
+                )
+            )
+            if calendar_event:
+                conversation.calendar_event = calendar_event
+        except Exception as e:
+            logger.error(f"Error during calendar event linking: {e}")
+            pass
+
     # AI-based folder assignment
     assigned_folder_id = None
     if not discarded and not is_reprocess and not conversation.folder_id:
@@ -822,7 +839,7 @@ def process_conversation(
             logger.error(f"Error creating audio files: {e}")
 
     conversation.status = ConversationStatus.completed
-    conversations_db.upsert_conversation(uid, conversation.dict())
+    conversations_db.upsert_conversation(uid, conversation.as_dict_cleaned_dates())
 
     # Update folder conversation count after conversation is saved
     if assigned_folder_id:

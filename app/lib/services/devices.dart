@@ -1,8 +1,6 @@
 import 'dart:async';
 import 'dart:io';
 
-import 'package:flutter/foundation.dart';
-
 import 'package:collection/collection.dart';
 
 import 'package:omi/backend/preferences.dart';
@@ -29,8 +27,6 @@ abstract class IDeviceService {
 
   DateTime? getFirstConnectedAt();
 
-  // WiFi sync support - pause BLE reconnection during WiFi transfer
-  void setWifiSyncInProgress(bool value);
   Future<void> disconnectDevice();
 
   /// Fully tear down connection + transport for a device being forgotten/unpaired.
@@ -53,7 +49,6 @@ class OmiFeatures {
   static const int offlineStorage = 1 << 6;
   static const int ledDimming = 1 << 7;
   static const int micGain = 1 << 8;
-  static const int wifi = 1 << 9;
 }
 
 abstract class IDeviceServiceSubsciption {
@@ -269,15 +264,6 @@ class DeviceService implements IDeviceService {
       Logger.debug('Error getting stored device: $e');
     }
     return null;
-  }
-
-  bool _isWifiSyncInProgress = false;
-  bool get isWifiSyncInProgress => _isWifiSyncInProgress;
-
-  @override
-  void setWifiSyncInProgress(bool value) {
-    _isWifiSyncInProgress = value;
-    Logger.debug("DeviceService: WiFi sync in progress: $value");
   }
 
   @override

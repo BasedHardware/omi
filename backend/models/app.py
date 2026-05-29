@@ -154,6 +154,8 @@ class AppBaseModel(BaseModel):
     official: Optional[bool] = False
     chat_tools: Optional[List[ChatTool]] = []
     source_code_url: Optional[str] = None
+    disabled: Optional[bool] = False
+    disabled_reason: Optional[str] = None
 
 
 class App(AppBaseModel):
@@ -286,6 +288,8 @@ class AppUpdate(BaseModel):
     chat_tools: Optional[List[ChatTool]] = None
     updated_at: Optional[datetime] = None
     source_code_url: Optional[str] = None
+    disabled: Optional[bool] = None
+    disabled_reason: Optional[str] = None
 
 
 class UsageHistoryType(str, Enum):

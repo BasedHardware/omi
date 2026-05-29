@@ -1,9 +1,12 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
+import 'package:http/http.dart' as http;
 import 'package:omi/backend/http/shared.dart';
 import 'package:omi/backend/schema/schema.dart';
 import 'package:omi/env/env.dart';
+import 'package:omi/utils/debug_log_manager.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 
@@ -122,6 +125,108 @@ Future<bool> deleteConversationServer(String conversationId) async {
   if (response == null) return false;
   Logger.debug('deleteConversation: ${response.statusCode}');
   return response.statusCode == 204;
+}
+
+Future<bool> unlinkCalendarEvent(String conversationId) async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/conversations/$conversationId/calendar-event',
+    headers: {},
+    method: 'DELETE',
+    body: '',
+  );
+  if (response == null) return false;
+  return response.statusCode == 200;
+}
+
+/// Add conversation summary to the linked calendar event description.
+/// Returns the htmlLink to open the event if successful, null otherwise.
+Future<String?> addSummaryToCalendarEvent(String conversationId) async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/conversations/$conversationId/calendar-event/add-summary',
+    headers: {},
+    method: 'POST',
+    body: '',
+  );
+  if (response == null) return null;
+  if (response.statusCode == 200) {
+    final data = jsonDecode(response.body);
+    return data['html_link'] as String?;
+  }
+  return null;
+}
+
+/// Link a specific Google Calendar event to a conversation.
+/// Returns the linked CalendarEventLink if successful, null otherwise.
+Future<CalendarEventLink?> linkCalendarEvent(String conversationId, String eventId) async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/conversations/$conversationId/calendar-event',
+    headers: {},
+    method: 'POST',
+    body: jsonEncode({'event_id': eventId}),
+  );
+  if (response == null) return null;
+  if (response.statusCode == 200) {
+    return CalendarEventLink.fromJson(jsonDecode(response.body));
+  }
+  debugPrint('linkCalendarEvent error: ${response.statusCode} - ${response.body}');
+  return null;
+}
+
+/// Auto-link a conversation to the best overlapping Google Calendar event.
+/// Returns the linked CalendarEventLink if found, null otherwise.
+Future<CalendarEventLink?> autoLinkCalendarEvent(String conversationId) async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/conversations/$conversationId/calendar-event/auto-link',
+    headers: {},
+    method: 'POST',
+    body: '',
+  );
+  if (response == null) return null;
+  if (response.statusCode == 200) {
+    return CalendarEventLink.fromJson(jsonDecode(response.body));
+  }
+  // 404 means no overlapping event found - not an error, just no match
+  if (response.statusCode == 404) {
+    debugPrint('autoLinkCalendarEvent: No overlapping calendar event found');
+    return null;
+  }
+  debugPrint('autoLinkCalendarEvent error: ${response.statusCode} - ${response.body}');
+  return null;
+}
+
+/// List Google Calendar events within a time range for the event picker.
+/// Returns a list of CalendarEventLink objects, or empty list on error.
+Future<List<CalendarEventLink>> listGoogleCalendarEvents({
+  DateTime? timeMin,
+  DateTime? timeMax,
+  String? query,
+  int maxResults = 20,
+}) async {
+  String url = '${Env.apiBaseUrl}v1/calendar/google/events?max_results=$maxResults';
+
+  if (timeMin != null) {
+    url += '&time_min=${timeMin.toUtc().toIso8601String()}';
+  }
+  if (timeMax != null) {
+    url += '&time_max=${timeMax.toUtc().toIso8601String()}';
+  }
+  if (query != null && query.isNotEmpty) {
+    url += '&q=${Uri.encodeComponent(query)}';
+  }
+
+  var response = await makeApiCall(
+    url: url,
+    headers: {},
+    method: 'GET',
+    body: '',
+  );
+  if (response == null) return [];
+  if (response.statusCode == 200) {
+    var body = utf8.decode(response.bodyBytes);
+    return (jsonDecode(body) as List<dynamic>).map((event) => CalendarEventLink.fromJson(event)).toList();
+  }
+  debugPrint('listGoogleCalendarEvents error: ${response.statusCode} - ${response.body}');
+  return [];
 }
 
 Future<ServerConversation?> getConversationById(String conversationId) async {
@@ -309,104 +414,121 @@ Future<bool> deleteConversationActionItem(String conversationId, ActionItem item
   return response.statusCode == 204;
 }
 
-/// v2 async sync: POST files → 202 with job_id, then poll until terminal.
-/// Returns the same SyncLocalFilesResponse as v1 once processing is confirmed complete.
-typedef SyncJobPollCallback = void Function(SyncJobStatusResponse status);
+/// Outcome of an upload-only POST to /v2/sync-local-files.
+/// Exactly one of [jobId] (HTTP 202 — audio received, processing in the
+/// background; reconcile later) or [completed] (HTTP 200 fast-path — server
+/// already returned the result synchronously) is non-null.
+class UploadFilesResult {
+  final String? jobId;
+  final SyncLocalFilesResponse? completed;
 
-Future<SyncLocalFilesResponse> syncLocalFilesV2(
+  const UploadFilesResult._(this.jobId, this.completed);
+  factory UploadFilesResult.queued(String jobId) => UploadFilesResult._(jobId, null);
+  factory UploadFilesResult.done(SyncLocalFilesResponse result) => UploadFilesResult._(null, result);
+
+  bool get isQueued => jobId != null;
+}
+
+/// Thrown when an upload is rejected by fair-use throttling (HTTP 429).
+/// [retryAfterSeconds] is the server's Retry-After when provided.
+class SyncRateLimitedException implements Exception {
+  final int? retryAfterSeconds;
+  SyncRateLimitedException([this.retryAfterSeconds]);
+
+  @override
+  String toString() => 'SyncRateLimitedException(retryAfter=$retryAfterSeconds)';
+}
+
+/// Parse a Retry-After header expressed in delta-seconds. Returns null for an
+/// absent or non-integer (HTTP-date) value; the caller falls back to a default.
+int? _parseRetryAfterSeconds(http.Response response) {
+  final raw = response.headers['retry-after'];
+  if (raw == null) return null;
+  return int.tryParse(raw.trim());
+}
+
+/// Upload-only: POST files and return as soon as the server acknowledges
+/// (HTTP 202 with a job_id, or the 200 fast-path with a finished result).
+/// Does NOT wait for server-side processing — the caller marks the WAL
+/// `uploaded` and a reconciler resolves [jobId] later via [fetchSyncJobStatus].
+/// Error-status mapping matches the old polling path so callers' retry logic
+/// is unchanged.
+Future<UploadFilesResult> uploadLocalFilesV2(
   List<File> files, {
   UploadProgressCallback? onUploadProgress,
-  SyncJobPollCallback? onPollProgress,
   String? conversationId,
 }) async {
+  var url = '${Env.apiBaseUrl}v2/sync-local-files';
+  if (conversationId != null) {
+    url += '?conversation_id=${Uri.encodeQueryComponent(conversationId)}';
+  }
+  var response = await makeMultipartApiCall(url: url, files: files, onUploadProgress: onUploadProgress);
+
+  if (response.statusCode == 200) {
+    // Fast-path: server processed synchronously and returned the result.
+    return UploadFilesResult.done(SyncLocalFilesResponse.fromJson(jsonDecode(response.body)));
+  }
+  if (response.statusCode == 202) {
+    final start = SyncJobStartResponse.fromJson(jsonDecode(response.body));
+    if (start.jobId.isEmpty) {
+      throw Exception('Upload accepted but no job id returned');
+    }
+    return UploadFilesResult.queued(start.jobId);
+  }
+  if (response.statusCode == 400) {
+    throw Exception('Audio file could not be processed by server');
+  } else if (response.statusCode == 413) {
+    throw Exception('Audio file is too large to upload');
+  } else if (response.statusCode == 429) {
+    // Fair-use throttle, not a content failure. Surface it typed so callers
+    // can back off (honoring Retry-After) instead of burning the retry budget.
+    throw SyncRateLimitedException(_parseRetryAfterSeconds(response));
+  } else if (response.statusCode >= 500) {
+    throw Exception('Server is temporarily unavailable');
+  }
+  throw Exception('Upload failed unexpectedly');
+}
+
+/// Why a single job-status fetch did not yield a usable status.
+/// - [notFound]  : 404/403 — job expired, unknown, or not ours. Unrecoverable
+///                 for this job_id; the caller must fall back to re-upload.
+/// - [transient] : network/5xx/null — retry later, job may still be alive.
+enum SyncJobFetchOutcome { ok, notFound, transient }
+
+class SyncJobFetch {
+  final SyncJobFetchOutcome outcome;
+  final SyncJobStatusResponse? status;
+  const SyncJobFetch(this.outcome, [this.status]);
+}
+
+/// Single GET of a sync job's status — no polling loop. The reconciler owns
+/// the polling cadence and decides what to do per [SyncJobFetchOutcome].
+Future<SyncJobFetch> fetchSyncJobStatus(String jobId) async {
+  final response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v2/sync-local-files/$jobId',
+    headers: {},
+    method: 'GET',
+    body: '',
+  );
+  if (response == null) {
+    DebugLogManager.logEvent('fetch_sync_job_status', {'jobId': jobId, 'httpStatus': null, 'outcome': 'transient'});
+    return const SyncJobFetch(SyncJobFetchOutcome.transient);
+  }
+  if (response.statusCode == 404 || response.statusCode == 403) {
+    DebugLogManager.logEvent(
+        'fetch_sync_job_status', {'jobId': jobId, 'httpStatus': response.statusCode, 'outcome': 'notFound'});
+    return const SyncJobFetch(SyncJobFetchOutcome.notFound);
+  }
+  if (response.statusCode != 200) {
+    DebugLogManager.logEvent(
+        'fetch_sync_job_status', {'jobId': jobId, 'httpStatus': response.statusCode, 'outcome': 'transient'});
+    return const SyncJobFetch(SyncJobFetchOutcome.transient);
+  }
   try {
-    // Step 1: Submit files
-    var url = '${Env.apiBaseUrl}v2/sync-local-files';
-    if (conversationId != null) {
-      url += '?conversation_id=${Uri.encodeQueryComponent(conversationId)}';
-    }
-    var response = await makeMultipartApiCall(url: url, files: files, onUploadProgress: onUploadProgress);
-
-    // Fast-path responses (no async job created)
-    if (response.statusCode == 200) {
-      return SyncLocalFilesResponse.fromJson(jsonDecode(response.body));
-    }
-
-    if (response.statusCode != 202) {
-      if (response.statusCode == 400) {
-        throw Exception('Audio file could not be processed by server');
-      } else if (response.statusCode == 413) {
-        throw Exception('Audio file is too large to upload');
-      } else if (response.statusCode == 429) {
-        throw Exception('Rate limited or budget exhausted');
-      } else if (response.statusCode >= 500) {
-        throw Exception('Server is temporarily unavailable');
-      } else {
-        throw Exception('Upload failed unexpectedly');
-      }
-    }
-
-    // Step 2: Poll for completion
-    var startResponse = SyncJobStartResponse.fromJson(jsonDecode(response.body));
-    var jobId = startResponse.jobId;
-    var pollInterval = Duration(milliseconds: startResponse.pollAfterMs);
-
-    const maxPolls = 120; // 120 x 3s = 6 minutes max
-    for (var i = 0; i < maxPolls; i++) {
-      await Future.delayed(pollInterval);
-
-      var pollResponse = await makeApiCall(
-        url: '${Env.apiBaseUrl}v2/sync-local-files/$jobId',
-        headers: {},
-        method: 'GET',
-        body: '',
-      );
-
-      if (pollResponse == null) {
-        Logger.debug('syncLocalFilesV2 poll failed: null response');
-        continue; // Retry on transient errors
-      }
-
-      // Terminal errors — don't retry
-      if (pollResponse.statusCode == 404) {
-        throw Exception('Sync job not found or expired');
-      }
-      if (pollResponse.statusCode == 403) {
-        throw Exception('Not authorized to view this sync job');
-      }
-      if (pollResponse.statusCode != 200) {
-        Logger.debug('syncLocalFilesV2 poll failed: ${pollResponse.statusCode}');
-        continue; // Retry on transient errors
-      }
-
-      var jobStatus = SyncJobStatusResponse.fromJson(jsonDecode(pollResponse.body));
-
-      // Report poll progress to caller for UI updates
-      onPollProgress?.call(jobStatus);
-
-      if (jobStatus.isTerminal) {
-        // All segments failed → throw to match v1's 500 behavior (WAL stays retryable)
-        if (jobStatus.status == 'failed') {
-          throw Exception(jobStatus.error ?? 'Sync job failed');
-        }
-        // Success or partial failure → return result
-        if (jobStatus.result != null) {
-          return jobStatus.result!;
-        }
-        return SyncLocalFilesResponse(
-          newConversationIds: [],
-          updatedConversationIds: [],
-          failedSegments: jobStatus.failedSegments,
-          totalSegments: jobStatus.totalSegments,
-        );
-      }
-    }
-
-    // Polling timed out — don't mark as synced
-    throw Exception('Sync job timed out waiting for results');
+    return SyncJobFetch(SyncJobFetchOutcome.ok, SyncJobStatusResponse.fromJson(jsonDecode(response.body)));
   } catch (e) {
-    Logger.debug('syncLocalFilesV2 error: $e');
-    rethrow;
+    Logger.debug('fetchSyncJobStatus parse error: $e');
+    return const SyncJobFetch(SyncJobFetchOutcome.transient);
   }
 }
 

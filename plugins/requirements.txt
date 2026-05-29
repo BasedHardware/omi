@@ -3,8 +3,8 @@
 # CVE-fix closure floats as required. Unrelated heavy deps pinned to
 # their original versions to avoid unnecessary major churn (redis,
 # websockets, starlette, protobuf, psutil, posthog, fastapi, uvicorn).
-# openai/langchain-openai kept at original — documented LOW residual
-# (fix needs the breaking openai 1.x->2.x major; tracked separately).
+# openai bumped 1.x->2.x + langchain-openai->1.1.14 (#7327): closes the
+# langchain-openai SSRF advisory; openai 2.x retains all API surfaces in use.
 aiohappyeyeballs==2.6.1
 aiohttp==3.13.5
 aiosignal==1.4.0
@@ -90,7 +90,7 @@ langchain-classic==1.0.7
 langchain-community==0.4.1
 langchain-core==1.4.0
 langchain-groq==1.1.2
-langchain-openai==1.1.9
+langchain-openai==1.1.14
 langchain-protocol==0.0.15
 langchain-text-splitters==1.1.2
 langgraph==1.2.0
@@ -116,7 +116,7 @@ nest-asyncio==1.6.0
 notebook==7.5.6
 notebook-shim==0.2.4
 numpy==2.4.6
-openai==1.109.1
+openai==2.38.0
 opencv-python==4.13.0.92
 orjson==3.11.9
 ormsgpack==1.12.2

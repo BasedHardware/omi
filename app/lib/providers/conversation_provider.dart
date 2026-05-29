@@ -758,7 +758,7 @@ class ConversationProvider extends ChangeNotifier {
   String? lastDeletedConversationId;
   Map<String, DateTime> deleteTimestamps = {};
 
-  void deleteConversationLocally(ServerConversation conversation, int index, DateTime date) {
+  void deleteConversationLocally(ServerConversation conversation, DateTime date) {
     if (lastDeletedConversationId != null &&
         memoriesToDelete.containsKey(lastDeletedConversationId) &&
         DateTime.now().difference(deleteTimestamps[lastDeletedConversationId]!) < const Duration(seconds: 3)) {
@@ -769,9 +769,12 @@ class ConversationProvider extends ChangeNotifier {
     lastDeletedConversationId = conversation.id;
     deleteTimestamps[conversation.id] = DateTime.now();
     conversations.removeWhere((element) => element.id == conversation.id);
-    groupedConversations[date]!.removeAt(index);
-    if (groupedConversations[date]!.isEmpty) {
-      groupedConversations.remove(date);
+    final group = groupedConversations[date];
+    if (group != null) {
+      group.removeWhere((e) => e.id == conversation.id);
+      if (group.isEmpty) {
+        groupedConversations.remove(date);
+      }
     }
     notifyListeners();
     Future.delayed(const Duration(seconds: 3), () {

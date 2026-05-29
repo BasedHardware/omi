@@ -4,7 +4,7 @@ Covers round 1:
 - routers/memories.py: postprocess_executor for persona updates, db_executor for DB (not threading.Thread)
 - routers/imports.py: storage_executor for long-running import batch (not critical_executor/Thread)
 - utils/other/hume.py: httpx migration with follow_redirects and RequestError handling
-- utils/llm/knowledge_graph.py: threading import present, db_executor + storage_executor for batch rebuild
+- utils/llm/knowledge_graph.py: threading import present, llm_executor + bounded semaphore for batch rebuild
 
 Covers round 2:
 - routers/sync.py: requests → httpx for audio download
@@ -115,10 +115,10 @@ class TestHumeHttpxMigration:
 
 
 class TestKnowledgeGraphMigration:
-    """Verify knowledge_graph uses threading import and storage_executor for batch rebuild."""
+    """Verify knowledge_graph uses threading import and llm_executor with bounded semaphore for batch rebuild."""
 
     def test_threading_imported(self):
-        """threading module must be imported (needed for Lock in rebuild)."""
+        """threading module must be imported (needed for Lock and BoundedSemaphore in rebuild)."""
         src = _read_source('utils/llm/knowledge_graph.py')
         assert 'import threading' in src
 
@@ -129,12 +129,25 @@ class TestKnowledgeGraphMigration:
         func_body = src[func_start:]
         assert 'threading.Lock()' in func_body
 
-    def test_rebuild_uses_storage_executor(self):
-        """Batch rebuild must use storage_executor (not critical_executor)."""
+    def test_rebuild_uses_llm_executor(self):
+        """Batch rebuild must use llm_executor (not storage_executor) for LLM+DB work (#7387)."""
         src = _read_source('utils/llm/knowledge_graph.py')
         func_start = src.index('def rebuild_knowledge_graph')
         func_body = src[func_start:]
-        assert 'storage_executor.submit' in func_body
+        assert 'llm_executor.submit' in func_body
+
+    def test_rebuild_has_bounded_semaphore(self):
+        """Batch rebuild must use BoundedSemaphore to cap fan-out (#7387)."""
+        src = _read_source('utils/llm/knowledge_graph.py')
+        assert '_KG_REBUILD_SEM' in src
+        assert 'BoundedSemaphore' in src
+
+    def test_rebuild_does_not_use_storage_executor(self):
+        """Batch rebuild must not use storage_executor (wrong pool for LLM+DB work, #7387)."""
+        src = _read_source('utils/llm/knowledge_graph.py')
+        func_start = src.index('def rebuild_knowledge_graph')
+        func_body = src[func_start:]
+        assert 'storage_executor' not in func_body
 
     def test_rebuild_does_not_use_critical_executor(self):
         """Batch rebuild must not use critical_executor (would monopolize request-path)."""
@@ -143,11 +156,11 @@ class TestKnowledgeGraphMigration:
         func_body = src[func_start:]
         assert 'critical_executor' not in func_body
 
-    def test_module_imports_both_executors(self):
-        """Module imports both db_executor (single operations) and storage_executor (batch)."""
+    def test_module_imports_required_executors(self):
+        """Module imports db_executor (single operations) and llm_executor (batch rebuild, #7387)."""
         src = _read_source('utils/llm/knowledge_graph.py')
         assert 'db_executor' in src
-        assert 'storage_executor' in src
+        assert 'llm_executor' in src
 
 
 # Round 2: requests → httpx migrations in 6 more files
@@ -338,15 +351,21 @@ class TestPostprocessExecutorMigration:
 
 
 class TestNotificationsExecutorMigration:
-    """Verify notifications uses storage_executor for batch cron work, not threading.Thread."""
+    """Verify notifications uses postprocess_executor for batch cron work (#7387), not threading.Thread."""
 
     def test_no_threading_thread(self):
         src = _read_source('utils/other/notifications.py')
         assert 'threading.Thread' not in src
 
-    def test_uses_storage_executor(self):
+    def test_uses_postprocess_executor(self):
+        """Batch notification work uses postprocess_executor (LLM+DB+webhook, not storage I/O, #7387)."""
         src = _read_source('utils/other/notifications.py')
-        assert 'storage_executor' in src
+        assert 'postprocess_executor' in src
+
+    def test_does_not_use_storage_executor(self):
+        """Batch notification work must not use storage_executor (wrong pool, #7387)."""
+        src = _read_source('utils/other/notifications.py')
+        assert 'storage_executor' not in src
 
     def test_does_not_use_critical_executor(self):
         """Batch cron work must not use critical_executor (would starve request-path)."""

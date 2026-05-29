@@ -34,6 +34,7 @@ import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/other/time_utils.dart';
 import 'package:omi/widgets/dialog.dart';
 import 'package:omi/widgets/extensions/string.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'maps_util.dart';
 
 // Highlight search matches with current result highlighting
@@ -120,7 +121,49 @@ class GetSummaryWidgets extends StatelessWidget {
     }
   }
 
+  String _formatAttendeesLabel(List<String> attendees) {
+    if (attendees.isEmpty) return '';
+    if (attendees.length == 1) return _formatAttendeeName(attendees[0]);
+    if (attendees.length == 2) {
+      return '${_formatAttendeeName(attendees[0])}, ${_formatAttendeeName(attendees[1])}';
+    }
+    return '${_formatAttendeeName(attendees[0])}, ${_formatAttendeeName(attendees[1])} +${attendees.length - 2}';
+  }
+
+  String _formatAttendeeName(String attendee) {
+    if (attendee.contains('@')) {
+      String localPart = attendee.split('@')[0];
+      if (localPart.isNotEmpty) {
+        return localPart[0].toUpperCase() + localPart.substring(1);
+      }
+      return localPart;
+    }
+    return attendee.split(' ')[0];
+  }
+
+  void _showCalendarEventDetails(BuildContext context, CalendarEventLink calendarEvent) {
+    final provider = Provider.of<ConversationDetailProvider>(context, listen: false);
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (context) => CalendarEventDetailsSheet(
+        calendarEvent: calendarEvent,
+        onUnlink: () async {
+          await provider.unlinkCalendarEvent();
+        },
+        onAddSummary: () => provider.addSummaryToCalendarEvent(),
+      ),
+    );
+  }
+
   Widget _buildInfoChips(BuildContext context, ServerConversation conversation) {
+    final date = _getDateFormat(context, conversation.startedAt ?? conversation.createdAt);
+    final time = conversation.source == ConversationSource.sdcard
+        ? setTimeSDCard(conversation.startedAt, conversation.createdAt)
+        : setTime(conversation.startedAt, conversation.createdAt, conversation.finishedAt);
+    final hasCalendarEvent = conversation.calendarEvent != null;
+
     return Consumer<FolderProvider>(
       builder: (context, folderProvider, _) {
         final folder = conversation.folderId != null ? folderProvider.getFolderById(conversation.folderId!) : null;
@@ -129,21 +172,33 @@ class GetSummaryWidgets extends StatelessWidget {
           spacing: 8,
           runSpacing: 8,
           children: [
-            // Date chip
+            // Combined date & time chip - uses Google Calendar logo when event is linked
             _buildChip(
-              label: _getDateFormat(context, conversation.startedAt ?? conversation.createdAt),
-              icon: Icons.calendar_today,
-            ),
-            // Time chip
-            _buildChip(
-              label: conversation.source == ConversationSource.sdcard
-                  ? setTimeSDCard(conversation.startedAt, conversation.createdAt)
-                  : setTime(conversation.startedAt, conversation.createdAt, conversation.finishedAt),
-              icon: Icons.access_time,
+              label: '$date, $time',
+              icon: hasCalendarEvent ? null : Icons.calendar_today,
+              leadingWidget: hasCalendarEvent
+                  ? ClipRRect(
+                      borderRadius: BorderRadius.circular(3),
+                      child: Image.asset(
+                        'assets/integration_app_logos/google-calendar.png',
+                        width: 14,
+                        height: 14,
+                        fit: BoxFit.cover,
+                      ),
+                    )
+                  : null,
+              onTap: hasCalendarEvent ? () => _showCalendarEventDetails(context, conversation.calendarEvent!) : null,
             ),
             // Duration chip
             if (conversation.transcriptSegments.isNotEmpty && _getDuration(context, conversation).isNotEmpty)
               _buildChip(label: _getDuration(context, conversation), icon: Icons.timelapse),
+            // Attendees chip (only when calendar event is linked and has attendees)
+            if (hasCalendarEvent && conversation.calendarEvent!.attendees.isNotEmpty)
+              _buildChip(
+                label: _formatAttendeesLabel(conversation.calendarEvent!.attendees),
+                icon: Icons.people,
+                onTap: () => _showCalendarEventDetails(context, conversation.calendarEvent!),
+              ),
             // Folder chip
             _buildFolderChip(
               context: context,
@@ -411,14 +466,25 @@ class GetSummaryWidgets extends StatelessWidget {
     );
   }
 
-  Widget _buildChip({required String label, required IconData icon}) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      decoration: BoxDecoration(color: Colors.grey.withValues(alpha: 0.2), borderRadius: BorderRadius.circular(20)),
+  Widget _buildChip({
+    required String label,
+    IconData? icon,
+    Widget? leadingWidget,
+    VoidCallback? onTap,
+  }) {
+    final chip = Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: Colors.grey.withValues(alpha: 0.16),
+        borderRadius: BorderRadius.circular(12),
+      ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 14, color: Colors.grey.shade300),
+          if (leadingWidget != null)
+            leadingWidget
+          else if (icon != null)
+            Icon(icon, size: 14, color: Colors.grey.shade300),
           const SizedBox(width: 6),
           Text(
             label,
@@ -427,6 +493,14 @@ class GetSummaryWidgets extends StatelessWidget {
         ],
       ),
     );
+
+    if (onTap != null) {
+      return GestureDetector(
+        onTap: onTap,
+        child: chip,
+      );
+    }
+    return chip;
   }
 
   @override
@@ -1223,6 +1297,8 @@ class GetGeolocationWidgets extends StatelessWidget {
 ///************ SETTINGS BOTTOM SHEET *************
 ///************************************************
 
+///************************************************
+
 class GetSheetTitle extends StatelessWidget {
   const GetSheetTitle({super.key});
 
@@ -1372,4 +1448,202 @@ _getLoadingIndicator() {
     height: 24,
     child: CircularProgressIndicator(valueColor: AlwaysStoppedAnimation<Color>(Colors.white)),
   );
+}
+
+class CalendarEventDetailsSheet extends StatefulWidget {
+  final CalendarEventLink calendarEvent;
+  final Future<void> Function()? onUnlink;
+  final Future<String?> Function()? onAddSummary;
+
+  const CalendarEventDetailsSheet({
+    super.key,
+    required this.calendarEvent,
+    this.onUnlink,
+    this.onAddSummary,
+  });
+
+  @override
+  State<CalendarEventDetailsSheet> createState() => _CalendarEventDetailsSheetState();
+}
+
+class _CalendarEventDetailsSheetState extends State<CalendarEventDetailsSheet> {
+  bool _unlinking = false;
+  bool _addingSummary = false;
+  bool _summaryAdded = false;
+
+  String _fmt(DateTime dt) {
+    final h = dt.hour % 12 == 0 ? 12 : dt.hour % 12;
+    final m = dt.minute.toString().padLeft(2, '0');
+    final period = dt.hour < 12 ? 'AM' : 'PM';
+    return '$h:$m $period';
+  }
+
+  Future<void> _shareWithAttendees() async {
+    final emails = widget.calendarEvent.attendeeEmails;
+    if (emails.isEmpty) return;
+    final subject = Uri.encodeComponent('Notes: ${widget.calendarEvent.title}');
+    final uri = Uri.parse('mailto:${emails.join(',')}?subject=$subject');
+    await launchUrl(uri);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final start = widget.calendarEvent.startTime;
+    final end = widget.calendarEvent.endTime;
+    final timeStr = '${_fmt(start)} – ${_fmt(end)}';
+
+    return Container(
+      decoration: const BoxDecoration(
+        color: Color(0xFF1A1A1A),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      padding: EdgeInsets.fromLTRB(20, 16, 20, MediaQuery.of(context).padding.bottom + 24),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Center(
+            child: Container(
+              width: 36,
+              height: 4,
+              decoration: BoxDecoration(color: Colors.grey[700], borderRadius: BorderRadius.circular(2)),
+            ),
+          ),
+          const SizedBox(height: 20),
+          Row(children: [
+            const Icon(Icons.calendar_today, size: 18, color: Colors.white70),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                widget.calendarEvent.title,
+                style: const TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.w600),
+              ),
+            ),
+          ]),
+          const SizedBox(height: 12),
+          Row(children: [
+            const Icon(Icons.access_time, size: 16, color: Colors.white54),
+            const SizedBox(width: 8),
+            Text(timeStr, style: const TextStyle(color: Colors.white70, fontSize: 14)),
+          ]),
+          if (widget.calendarEvent.attendees.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              const Icon(Icons.people_outline, size: 16, color: Colors.white54),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  widget.calendarEvent.attendees.join(', '),
+                  style: const TextStyle(color: Colors.white70, fontSize: 14),
+                ),
+              ),
+            ]),
+          ],
+          if (widget.calendarEvent.htmlLink != null) ...[
+            const SizedBox(height: 16),
+            GestureDetector(
+              onTap: () => launchUrl(Uri.parse(widget.calendarEvent.htmlLink!), mode: LaunchMode.externalApplication),
+              child: const Text(
+                'Open in Google Calendar',
+                style: TextStyle(color: Color(0xFF4285F4), fontSize: 14, decoration: TextDecoration.underline),
+              ),
+            ),
+          ],
+          const SizedBox(height: 24),
+          const Divider(color: Color(0xFF2C2C2E)),
+          const SizedBox(height: 8),
+          // Add Summary button
+          if (widget.onAddSummary != null && !_summaryAdded)
+            _ActionRow(
+              icon: Icons.note_add_outlined,
+              label: 'Add summary to event',
+              loading: _addingSummary,
+              onTap: () async {
+                setState(() => _addingSummary = true);
+                final link = await widget.onAddSummary!();
+                if (!mounted) return;
+                if (link != null) {
+                  setState(() {
+                    _addingSummary = false;
+                    _summaryAdded = true;
+                  });
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Summary added to calendar event')),
+                  );
+                } else {
+                  setState(() => _addingSummary = false);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Failed to add summary')),
+                  );
+                }
+              },
+            ),
+          if (_summaryAdded)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 12, horizontal: 4),
+              child: Row(children: [
+                Icon(Icons.check_circle_outline, size: 20, color: Colors.green),
+                SizedBox(width: 12),
+                Text('Summary added', style: TextStyle(color: Colors.green, fontSize: 15)),
+              ]),
+            ),
+          // Share with attendees button
+          if (widget.calendarEvent.attendeeEmails.isNotEmpty)
+            _ActionRow(
+              icon: Icons.share_outlined,
+              label: 'Share with attendees',
+              onTap: _shareWithAttendees,
+            ),
+          // Unlink button
+          if (widget.onUnlink != null)
+            _ActionRow(
+              icon: Icons.link_off,
+              label: 'Unlink calendar event',
+              color: Colors.redAccent,
+              loading: _unlinking,
+              onTap: () async {
+                setState(() => _unlinking = true);
+                await widget.onUnlink!();
+                if (!mounted) return;
+                Navigator.pop(context);
+              },
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ActionRow extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final VoidCallback? onTap;
+  final Color color;
+  final bool loading;
+
+  const _ActionRow({
+    required this.icon,
+    required this.label,
+    this.onTap,
+    this.color = Colors.white,
+    this.loading = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: loading ? null : onTap,
+      borderRadius: BorderRadius.circular(8),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 4),
+        child: Row(children: [
+          loading
+              ? SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: color))
+              : Icon(icon, size: 20, color: color),
+          const SizedBox(width: 12),
+          Text(label, style: TextStyle(color: color, fontSize: 15)),
+        ]),
+      ),
+    );
+  }
 }

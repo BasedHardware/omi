@@ -22,6 +22,7 @@ from database import (
     users as users_db,
 )
 from database.app_review_config import should_hide_subscription_ui
+from database.webhook_health import record_dev_webhook_success
 from database.conversations import get_in_progress_conversation, get_conversation
 from database.redis_db import (
     cache_user_geolocation,
@@ -77,6 +78,7 @@ from utils.subscription import (
     get_plan_features,
     get_monthly_usage_for_subscription,
     is_trial_paywalled,
+    neo_grandfather_until,
     reconcile_basic_plan_with_stripe,
     filter_plans_for_user,
     should_show_new_plans,
@@ -234,6 +236,7 @@ def disable_user_webhook_endpoint(wtype: WebhookType, uid: str = Depends(auth.ge
 @router.post('/v1/users/developer/webhook/{wtype}/enable', tags=['v1'])
 def enable_user_webhook_endpoint(wtype: WebhookType, uid: str = Depends(auth.get_current_user_uid)):
     enable_user_webhook_db(uid, wtype)
+    record_dev_webhook_success(uid, wtype.value)
     return {'status': 'ok'}
 
 
@@ -827,7 +830,6 @@ def _byok_unlimited_subscription() -> Subscription:
             transcription_seconds=None,
             words_transcribed=None,
             insights_gained=None,
-            memories_created=None,
         ),
     )
 
@@ -857,8 +859,6 @@ def get_user_subscription_endpoint(
             words_transcribed_limit=0,
             insights_gained_used=0,
             insights_gained_limit=0,
-            memories_created_used=0,
-            memories_created_limit=0,
             available_plans=[],
             show_subscription_ui=False,
             phone_call_quota=unlimited_phone_quota,
@@ -873,7 +873,6 @@ def get_user_subscription_endpoint(
                 transcription_seconds=None,
                 words_transcribed=None,
                 insights_gained=None,
-                memories_created=None,
             ),
         )
         return UserSubscriptionResponse(
@@ -884,8 +883,6 @@ def get_user_subscription_endpoint(
             words_transcribed_limit=0,
             insights_gained_used=0,
             insights_gained_limit=0,
-            memories_created_used=0,
-            memories_created_limit=0,
             available_plans=[],
             show_subscription_ui=False,
             phone_call_quota=unlimited_phone_quota,
@@ -929,13 +926,11 @@ def get_user_subscription_endpoint(
     transcription_seconds_used = usage.get('transcription_seconds', 0)
     words_transcribed_used = usage.get('words_transcribed', 0)
     insights_gained_used = usage.get('insights_gained', 0)
-    memories_created_used = usage.get('memories_created', 0)
 
     # Get limits from subscription (0 means unlimited)
     transcription_seconds_limit = subscription.limits.transcription_seconds or 0
     words_transcribed_limit = subscription.limits.words_transcribed or 0
     insights_gained_limit = subscription.limits.insights_gained or 0
-    memories_created_limit = subscription.limits.memories_created or 0
 
     # Build available plans. Version-gated: new clients see Operator + Architect,
     # old clients get legacy plan names. Legacy plans filtered from purchase catalog.
@@ -1032,8 +1027,6 @@ def get_user_subscription_endpoint(
         words_transcribed_limit=words_transcribed_limit,
         insights_gained_used=insights_gained_used,
         insights_gained_limit=insights_gained_limit,
-        memories_created_used=memories_created_used,
-        memories_created_limit=memories_created_limit,
         available_plans=available_plans,
         show_subscription_ui=show_subscription_ui,
         chat_quota_used=round(chat_snapshot['used'], 4),
@@ -1042,6 +1035,7 @@ def get_user_subscription_endpoint(
         chat_quota_allowed=chat_allowed,
         chat_quota_reset_at=chat_snapshot['reset_at'],
         phone_call_quota=phone_call_quota,
+        desktop_grandfather_until=neo_grandfather_until(subscription),
     )
 
 

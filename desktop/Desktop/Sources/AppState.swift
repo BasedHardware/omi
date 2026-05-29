@@ -146,6 +146,8 @@ class AppState: ObservableObject {
   /// Trigger the monthly-limit popup. Safe to call repeatedly — SwiftUI's
   /// `@Published` dedupes identical-value writes automatically.
   func triggerUsageLimitPopup(reason: String) {
+    // Debug escape hatch for self-test runs that don't want the overage modal in the way.
+    if ProcessInfo.processInfo.environment["OMI_SKIP_USAGE_POPUP"] == "1" { return }
     usageLimitReason = reason
     showUsageLimitPopup = true
   }
@@ -156,8 +158,25 @@ class AppState: ObservableObject {
   ///
   /// Use at the entry point of every toggle/start function that drives a
   /// $-cost path (transcription, screen analysis, proactive monitoring, etc).
+  /// Single source of truth for "should the UI block $-cost features". A BYOK
+  /// user (all four keys configured locally) is never paywalled, regardless of
+  /// the persisted `desktop_isPaywalled` flag, which can lag behind BYOK
+  /// activation. Use this anywhere that only has UserDefaults access.
+  nonisolated static var isPaywalledEffective: Bool {
+    !APIKeyService.isByokActive && UserDefaults.standard.bool(forKey: "desktop_isPaywalled")
+  }
+
   @discardableResult
   func blockIfPaywalled(reason: String = "trial_expired") -> Bool {
+    // BYOK users are never paywalled. If the user has all four BYOK keys
+    // configured locally, every backend request carries them and the server
+    // exempts the user — so the client must not block capture either, even if
+    // a stale `isPaywalled` flag is still set (e.g. trial expired *before*
+    // they added keys, and the backend heartbeat hasn't refreshed yet).
+    if APIKeyService.isByokActive {
+      if isPaywalled { isPaywalled = false }
+      return false
+    }
     guard isPaywalled else { return false }
     NotificationCenter.default.post(
       name: .showUsageLimitPopup,
@@ -179,7 +198,12 @@ class AppState: ObservableObject {
       do {
         let metadata = try await APIClient.shared.getTrialMetadata()
         self.trialMetadata = metadata
-        if metadata.trialExpired && !self.isPaywalled {
+        // Local BYOK always wins — never re-block a user who has all four keys
+        // configured, regardless of what the (possibly heartbeat-lagged)
+        // backend trial state says.
+        if APIKeyService.isByokActive {
+          if self.isPaywalled { self.isPaywalled = false }
+        } else if metadata.trialExpired && !self.isPaywalled {
           self.isPaywalled = true
         } else if !metadata.trialExpired && self.isPaywalled {
           self.isPaywalled = false
@@ -354,8 +378,26 @@ class AppState: ObservableObject {
     AppState.current = self
 
     // Restore paywall flag from prior session so toggles + auto-restart respect
-    // it before any backend call has a chance to refresh state.
-    self.isPaywalled = UserDefaults.standard.bool(forKey: "desktop_isPaywalled")
+    // it before any backend call has a chance to refresh state — but never for
+    // a BYOK user (all four keys configured) or a user whose cached plan is
+    // paid. The paid-plan carve-out fixes a popup-on-launch bug for Neo
+    // subscribers grandfathered onto desktop by #7513: their last session
+    // pre-grandfather wrote isPaywalled=true; without this clear, the next
+    // launch shows the monthly-limit popup until fetchTrialMetadata returns
+    // (~1-2s) AND callers that read UserDefaults synchronously
+    // (ProactiveAssistantsPlugin, isPaywalledEffective) keep blocking until
+    // didSet writes the new value. Only basic-tier users have a legitimate
+    // pre-fetch paywalled state to preserve.
+    let cachedPlan = UserDefaults.standard.string(forKey: "floatingBar_cachedPlan")
+    let cachedPlanIsPaid = cachedPlan != nil && cachedPlan != "basic"
+    if APIKeyService.isByokActive || cachedPlanIsPaid {
+      self.isPaywalled = false
+      // didSet doesn't fire from init, so flush UserDefaults explicitly for
+      // singletons that read the key directly.
+      UserDefaults.standard.set(false, forKey: "desktop_isPaywalled")
+    } else {
+      self.isPaywalled = UserDefaults.standard.bool(forKey: "desktop_isPaywalled")
+    }
 
     // Resolve beta/stable before loading backend URLs so beta releases use dev services.
     AppBuild.prepareUpdateChannelForBackendRouting()
@@ -2656,6 +2698,14 @@ class AppState: ObservableObject {
     case "freemium_threshold_reached":
       let remaining = event.raw["remaining_seconds"] as? Int ?? 0
       log("Transcription: Freemium threshold reached, \(remaining)s remaining")
+      // BYOK users must never be paywalled. The backend exempts them, but a
+      // heartbeat/Firestore lag can briefly let this event slip through right
+      // after activation — ignore it so we don't kill a BYOK user's capture.
+      if APIKeyService.isByokActive {
+        log("Paywall: ignoring freemium threshold — BYOK active locally")
+        if isPaywalled { isPaywalled = false }
+        break
+      }
       triggerUsageLimitPopup(reason: "transcription")
       // Hard-stop client-side capture so the mic LED and screen-recording
       // indicator actually turn off. Without this, popup shows but the user
@@ -3239,6 +3289,10 @@ extension Notification.Name {
   /// Posted by the local desktop automation bridge to expand the transcript drawer.
   static let desktopAutomationShowConversationTranscriptRequested = Notification.Name(
     "desktopAutomationShowConversationTranscriptRequested")
+  /// Posted by the local desktop automation bridge to open an export connector sheet
+  /// (userInfo: ["destination": rawValue]) — for headless e2e inspection.
+  static let desktopAutomationOpenExportRequested = Notification.Name(
+    "desktopAutomationOpenExportRequested")
   /// Posted when file indexing completes (userInfo: ["totalFiles": Int])
   static let fileIndexingComplete = Notification.Name("fileIndexingComplete")
   /// Posted from Settings to trigger the file indexing sheet

@@ -27,12 +27,15 @@ _db_redis.user_webhook_status_db = MagicMock(return_value=True)
 _db_redis.disable_user_webhook_db = MagicMock()
 _db_redis.enable_user_webhook_db = MagicMock()
 _db_redis.set_user_webhook_db = MagicMock()
+_db_redis.r = MagicMock()
+
+_backend_dir = os.path.join(os.path.dirname(__file__), '..', '..')
 
 for mod_name in ["database", "database.notifications", "database.users", "database.folders", "database.conversations"]:
     if mod_name not in sys.modules:
         sys.modules[mod_name] = types.ModuleType(mod_name)
         if mod_name == "database":
-            sys.modules[mod_name].__path__ = []
+            sys.modules[mod_name].__path__ = [os.path.abspath(os.path.join(_backend_dir, 'database'))]
 
 sys.modules["database.notifications"].get_token_only = MagicMock(return_value=None)
 sys.modules["database.users"].get_user_profile = MagicMock(return_value={"name": "Test"})

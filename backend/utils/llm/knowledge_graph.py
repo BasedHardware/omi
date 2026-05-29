@@ -5,9 +5,11 @@ import logging
 import json
 from concurrent.futures import as_completed
 
-from utils.executors import db_executor, storage_executor
+from utils.executors import db_executor, llm_executor
 
 logger = logging.getLogger(__name__)
+
+_KG_REBUILD_SEM = threading.BoundedSemaphore(4)
 
 from langchain_core.output_parsers import PydanticOutputParser
 from pydantic import BaseModel, Field
@@ -260,6 +262,7 @@ def rebuild_knowledge_graph(uid: str, memories: List[Dict[str, Any]], user_name:
     all_nodes = []
     all_edges = []
 
+
     _kg_sem = threading.Semaphore(10)
 
     def _bounded_process_memory(m):
@@ -267,6 +270,18 @@ def rebuild_knowledge_graph(uid: str, memories: List[Dict[str, Any]], user_name:
             return process_memory(m)
 
     futures = [storage_executor.submit(_bounded_process_memory, m) for m in memories]
+
+    futures = []
+    for m in memories:
+        _KG_REBUILD_SEM.acquire()
+        try:
+            f = llm_executor.submit(process_memory, m)
+            f.add_done_callback(lambda _: _KG_REBUILD_SEM.release())
+            futures.append(f)
+        except Exception:
+            _KG_REBUILD_SEM.release()
+            raise
+
     for future in as_completed(futures):
         try:
             result = future.result()

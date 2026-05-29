@@ -2,6 +2,137 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.11.432",
+      "date": "2026-05-29",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.431",
+      "date": "2026-05-29",
+      "changes": [
+        "Fixed editing a conversation title not saving"
+      ]
+    },
+    {
+      "version": "0.11.429",
+      "date": "2026-05-28",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.428",
+      "date": "2026-05-28",
+      "changes": [
+        "Plan & Usage: Neo subscribers now see a clear notice about when their desktop access ends, and post-policy Neo subscribers get plan-specific copy instead of \"Trial Ended\"",
+        "Fixed privacy gap where password manager screens could be sent to AI assistants despite being excluded from Rewind"
+      ]
+    },
+    {
+      "version": "0.11.427",
+      "date": "2026-05-27",
+      "changes": [
+        "Added an X (Twitter) connector to import your tweets and bookmarks into Omi"
+      ]
+    },
+    {
+      "version": "0.11.426",
+      "date": "2026-05-26",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.425",
+      "date": "2026-05-26",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.424",
+      "date": "2026-05-26",
+      "changes": [
+        "Redesigned the Apps page connectors as a compact list and added one-tap MCP connection for Claude, ChatGPT, Claude Code, and Codex",
+        "Added an Execute button on MCP connectors so Omi sets up Claude/ChatGPT/Claude Code/Codex for you as a task"
+      ]
+    },
+    {
+      "version": "0.11.423",
+      "date": "2026-05-25",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.422",
+      "date": "2026-05-25",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.421",
+      "date": "2026-05-24",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.420",
+      "date": "2026-05-22",
+      "changes": [
+        "Fixed BYOK chat on the free plan: the desktop now forwards your provider keys to chat requests, so chat no longer hits the trial paywall and runs on your own keys"
+      ]
+    },
+    {
+      "version": "0.11.419",
+      "date": "2026-05-21",
+      "changes": [
+        "Fixed \"Failed to load plan information\" on the Plan & Usage page when the backend response was missing usage fields"
+      ]
+    },
+    {
+      "version": "0.11.417",
+      "date": "2026-05-21",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.416",
+      "date": "2026-05-21",
+      "changes": [
+        "Reduced Sentry error noise: filter transient network/socket errors and rate-limit repeated identical errors so a single root cause no longer floods crash reporting",
+        "Fixed a database constraint crash when recording video-based screenshots with no legacy image path",
+        "Raised app-hang reporting threshold to 3s so only sustained freezes are flagged"
+      ]
+    },
+    {
+      "version": "0.11.415",
+      "date": "2026-05-21",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.414",
+      "date": "2026-05-21",
+      "changes": [
+        "Fixed memories created on desktop showing up under \"Manual\" on mobile \u2014 they now appear under \"About You\" or \"Insights\" based on their type",
+        "Screen Capture and Microphone menu bar toggles now show as off when your trial has expired or you hit your usage limit, and tapping them brings up the upgrade prompt"
+      ]
+    },
+    {
+      "version": "0.11.412",
+      "date": "2026-05-20",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
       "version": "0.11.411",
       "date": "2026-05-18",
       "changes": [

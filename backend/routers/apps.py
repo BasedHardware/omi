@@ -1,8 +1,11 @@
 import json
+import logging
 import os
 import asyncio
 import time
 from datetime import datetime, timezone
+
+import httpx
 from typing import List, Optional
 from urllib.parse import urlparse
 from pydantic import BaseModel as PydanticBaseModel, ValidationError
@@ -49,6 +52,7 @@ from database.apps import (
     set_app_popular_db,
     search_apps_db,
 )
+from database.webhook_health import clear_app_webhook_health
 from database.auth import get_user_from_uid
 from database.redis_db import (
     delete_generic_cache,
@@ -102,6 +106,7 @@ from utils.apps import (
     build_capability_groups_response,
     group_capability_apps_by_category,
     build_capability_category_groups_response,
+    validate_app_endpoints_for_reenable,
 )
 
 from database.memories import migrate_memories
@@ -745,6 +750,14 @@ def update_app(
     # Fetch chat tools from manifest URL (only way to add/update chat tools)
     if external_integration := data.get('external_integration'):
         update_dict = _process_chat_tools_manifest(external_integration, update_dict)
+
+    if update_dict.get('disabled') is False and app.get('disabled'):
+        validate_app_endpoints_for_reenable(app, update_dict, app_id)
+        clear_app_webhook_health(app_id)
+        update_dict.setdefault('disabled_reason', '')
+        update_dict.setdefault('disabled_error', '')
+        update_dict.setdefault('disabled_at', '')
+        update_dict.setdefault('disabled_failure_duration_hours', 0)
 
     update_app_in_db(update_dict)
 
@@ -1735,6 +1748,11 @@ async def enable_app_endpoint(app_id: str, uid: str = Depends(auth.get_current_u
     app = App(**app) if app else None
     if not app:
         raise HTTPException(status_code=404, detail='App not found')
+    if app.disabled:
+        raise HTTPException(
+            status_code=400,
+            detail='This app is currently unavailable due to connectivity issues. The developer has been notified.',
+        )
     if app.private is not None:
         if app.private and app.uid != uid and not await run_blocking(db_executor, is_tester, uid):
             raise HTTPException(status_code=403, detail='You are not authorized to perform this action')

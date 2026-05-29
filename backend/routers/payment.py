@@ -30,6 +30,7 @@ from utils.subscription import (
     should_show_new_plans,
     adapt_plans_for_legacy_client,
     clear_trial_paywall_cache,
+    find_active_paid_subscription_for_user,
 )
 from database.users import (
     get_stripe_connect_account_id,
@@ -99,6 +100,7 @@ def _build_subscription_from_stripe_object(stripe_sub: dict) -> Subscription | N
             plan=PlanType.basic,
             status=SubscriptionStatus.active,
             current_period_end=stripe_sub.get('current_period_end'),
+            current_period_start=stripe_sub.get('current_period_start'),
             stripe_subscription_id=stripe_sub['id'],
             cancel_at_period_end=False,
             limits=get_basic_plan_limits(),
@@ -119,6 +121,7 @@ def _build_subscription_from_stripe_object(stripe_sub: dict) -> Subscription | N
         plan=plan,
         status=SubscriptionStatus.active,
         current_period_end=stripe_sub.get('current_period_end'),
+        current_period_start=stripe_sub.get('current_period_start'),
         stripe_subscription_id=stripe_sub['id'],
         cancel_at_period_end=stripe_sub.get('cancel_at_period_end', False),
         limits=get_plan_limits(plan),
@@ -742,6 +745,21 @@ async def stripe_webhook(request: Request, stripe_signature: str = Header(None))
         if uid:
             new_subscription = _build_subscription_from_stripe_object(subscription_obj)
             if new_subscription:
+                # Guard against a stale/old subscription's cancellation clobbering an
+                # active plan. If this event downgrades the user to a non-paid plan
+                # (e.g. an old sub got canceled) but they still have a *different*
+                # active paid subscription — they canceled one sub and started
+                # another near-simultaneously, possibly on a new Stripe customer —
+                # don't overwrite their plan with basic. Adopt the active paid sub.
+                if not is_paid_plan(new_subscription.plan):
+                    event_sub_id = subscription_obj.get('id')
+                    active_paid = await run_blocking(stripe_executor, find_active_paid_subscription_for_user, uid)
+                    if active_paid and active_paid.stripe_subscription_id != event_sub_id:
+                        logger.info(
+                            f"Ignoring downgrade from {event['type']} (sub {event_sub_id}) for user {uid}: "
+                            f"a different active paid sub {active_paid.stripe_subscription_id} exists."
+                        )
+                        new_subscription = active_paid
                 try:
                     if new_subscription.status == SubscriptionStatus.active and is_paid_plan(new_subscription.plan):
                         await run_blocking(db_executor, conversations_db.unlock_all_conversations, uid)

@@ -13,7 +13,7 @@
     "@anthropic-ai/claude-agent-sdk": "^0.2.39",
     "@playwright/mcp": "^0.0.64",
     "better-sqlite3": "^11.0.0",
-    "ws": "^8.19.0",
+    "ws": "^8.20.1",
     "zod": "^4.0.0"
   }
 }

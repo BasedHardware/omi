@@ -2118,13 +2118,52 @@ workflows:
       - name: Prepare universal libwebp (arm64 + x86_64)
         script: |
           # Homebrew's libwebp is arm64-only on M2 runners, but we build a universal app.
+          # We need universal libwebp.7.dylib + libsharpyuv.0.dylib at
+          # /tmp/libwebp-universal/ for the later "Build Swift app" patch step.
+          WEBP_VERSION="1.5.0"
+          mkdir -p /tmp/libwebp-universal
+
+          # Fast path: use the prebuilt universal dylibs vendored in the repo
+          # (desktop/vendor/libwebp/, built from libwebp $WEBP_VERSION source with
+          # the same flags as the fallback below — see desktop/vendor/libwebp/README.md).
+          # This skips compiling libwebp from source twice every release run.
+          VENDOR_DIR="vendor/libwebp"
+          USE_VENDORED=true
+          for dylib in libwebp.7.dylib libsharpyuv.0.dylib; do
+            src="$VENDOR_DIR/$dylib"
+            if [ ! -f "$src" ] || ! file "$src" | grep -q "universal binary"; then
+              USE_VENDORED=false
+              break
+            fi
+          done
+          if [ "$USE_VENDORED" = true ]; then
+            echo "Using vendored universal libwebp dylibs from $VENDOR_DIR (skipping source build)"
+            cp "$VENDOR_DIR/libwebp.7.dylib" /tmp/libwebp-universal/libwebp.7.dylib
+            cp "$VENDOR_DIR/libsharpyuv.0.dylib" /tmp/libwebp-universal/libsharpyuv.0.dylib
+            for lib in /tmp/libwebp-universal/*.dylib; do
+              echo "$(basename "$lib"): $(file "$lib" | sed 's/.*: //')"
+              file "$lib" | grep -q "universal binary" || {
+                echo "ERROR: vendored $(basename "$lib") is not a universal binary"
+                exit 1
+              }
+            done
+            exit 0
+          fi
+
+          echo "Vendored libwebp dylibs missing/invalid — building from source"
           # Build each arch separately (multi-arch cmake fails with _Float16 on x86_64),
           # then lipo them into universal dylibs.
           command -v cmake >/dev/null 2>&1 || brew install cmake
-          WEBP_VERSION="1.5.0"
           TEMP_DIR="/tmp/libwebp-build-$$"
+          # -mmacosx-version-min pins LC_BUILD_VERSION minos to 13.0 even on
+          # toolchains where CMAKE_OSX_DEPLOYMENT_TARGET alone doesn't stick
+          # (newer SDKs otherwise stamp the SDK version, which would refuse to
+          # load on older macOS). Keep in sync with desktop/vendor/libwebp/README.md.
+          export MACOSX_DEPLOYMENT_TARGET=13.0
           CMAKE_COMMON="-DBUILD_SHARED_LIBS=ON -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_OSX_DEPLOYMENT_TARGET=13.0 \
+            -DCMAKE_C_FLAGS=-mmacosx-version-min=13.0 \
+            -DCMAKE_SHARED_LINKER_FLAGS=-mmacosx-version-min=13.0 \
             -DWEBP_BUILD_EXTRAS=OFF -DWEBP_BUILD_ANIM_UTILS=OFF \
             -DWEBP_BUILD_CWEBP=OFF -DWEBP_BUILD_DWEBP=OFF \
             -DWEBP_BUILD_GIF2WEBP=OFF -DWEBP_BUILD_IMG2WEBP=OFF \
