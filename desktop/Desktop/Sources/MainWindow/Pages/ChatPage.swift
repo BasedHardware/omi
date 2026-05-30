@@ -459,6 +459,7 @@ struct ChatPage: View {
       },
       sessionsLoadError: chatProvider.sessionsLoadError,
       onRetry: { Task { await chatProvider.retryLoad() } },
+      onCancelTurn: { [weak chatProvider] in chatProvider?.stopAgent() },
       welcomeContent: { welcomeMessage }
     )
   }
@@ -605,6 +606,10 @@ struct ChatBubble: View {
   let onRate: (Int?) -> Void
   var onCitationTap: ((Citation) -> Void)? = nil
   var isDuplicate: Bool = false
+  /// Fired when the user taps Cancel on a stalled-tool banner. Threaded
+  /// down to `ToolCallsGroup`. Optional so existing callers compile
+  /// without updating.
+  var onCancelTurn: (() -> Void)? = nil
 
   @State private var isHovering = false
   @State private var isTimestampHovering = false
@@ -618,13 +623,15 @@ struct ChatBubble: View {
 
   init(
     message: ChatMessage, app: OmiApp?, onRate: @escaping (Int?) -> Void,
-    onCitationTap: ((Citation) -> Void)? = nil, isDuplicate: Bool = false
+    onCitationTap: ((Citation) -> Void)? = nil, isDuplicate: Bool = false,
+    onCancelTurn: (() -> Void)? = nil
   ) {
     self.message = message
     self.app = app
     self.onRate = onRate
     self.onCitationTap = onCitationTap
     self.isDuplicate = isDuplicate
+    self.onCancelTurn = onCancelTurn
     self._cachedGroupedBlocks = State(initialValue: ContentBlockGroup.group(message.contentBlocks))
   }
 
@@ -697,7 +704,7 @@ struct ChatBubble: View {
                   .padding(.top, 2)
               }
             case .toolCalls(_, let calls):
-              ToolCallsGroup(calls: calls)
+              ToolCallsGroup(calls: calls, onCancel: onCancelTurn)
             case .thinking(_, let text):
               ThinkingBlock(text: text)
             case .discoveryCard(_, let title, let summary, let fullText):
@@ -705,15 +712,15 @@ struct ChatBubble: View {
             }
           }
           // Show typing indicator at end if still streaming
-          // (skip only when last group is tool calls with a running tool — it already has a spinner)
+          // (skip only when last group is tool calls with an in-flight tool — it already has a spinner)
           if message.isStreaming {
             if case .toolCalls(_, let calls) = cachedGroupedBlocks.last,
               calls.contains(where: { block in
-                if case .toolCall(_, _, .running, _, _, _) = block { return true }
+                if case .toolCall(_, _, let status, _, _, _) = block { return status.isInFlight }
                 return false
               })
             {
-              // Tool group has a running tool — its card already shows a spinner
+              // Tool group has an in-flight tool — its card already shows a spinner
             } else {
               TypingIndicator()
             }
@@ -1056,22 +1063,55 @@ enum ContentBlockGroup: Identifiable {
 /// Renders a group of consecutive tool calls as a single collapsed summary line
 struct ToolCallsGroup: View {
   let calls: [ChatContentBlock]
+  /// Fired when the user taps Cancel on the stalled-tool banner.
+  /// `ChatProvider` wires this to `agentBridge.interrupt()` via the
+  /// parent message view; defaults to a no-op so the button renders and
+  /// is clickable without crashing.
+  var onCancel: (() -> Void)? = nil
 
   @State private var isExpanded = false
 
-  /// Whether any tool in the group is still running
-  private var hasRunningTool: Bool {
+  /// True iff at least one tool in the group is `.stalled`. Drives the
+  /// message-level banner.
+  private var hasStalledTool: Bool {
     calls.contains { block in
-      if case .toolCall(_, _, .running, _, _, _) = block { return true }
+      if case .toolCall(_, _, .stalled, _, _, _) = block { return true }
       return false
     }
   }
 
-  /// Display name of the currently running tool (last running one), or last tool if all done
+  /// Most attention-worthy status across the group. Drives the header
+  /// icon. Priority: stalled > failed > slow > running > completed —
+  /// so a single stalled tool surfaces in the header even if others
+  /// are still running normally.
+  private var aggregateStatus: ToolCallStatus {
+    var hasStalled = false
+    var hasFailed = false
+    var hasSlow = false
+    var hasRunning = false
+    for block in calls {
+      if case .toolCall(_, _, let status, _, _, _) = block {
+        switch status {
+        case .stalled: hasStalled = true
+        case .failed: hasFailed = true
+        case .slow: hasSlow = true
+        case .running: hasRunning = true
+        case .completed: break
+        }
+      }
+    }
+    if hasStalled { return .stalled }
+    if hasFailed { return .failed }
+    if hasSlow { return .slow }
+    if hasRunning { return .running }
+    return .completed
+  }
+
+  /// Display name of the currently in-flight tool (last in-flight one), or last tool if all done
   private var currentToolName: String {
-    // Find the last running tool
+    // Find the last in-flight tool
     if let lastRunning = calls.last(where: { block in
-      if case .toolCall(_, _, .running, _, _, _) = block { return true }
+      if case .toolCall(_, _, let status, _, _, _) = block { return status.isInFlight }
       return false
     }) {
       if case .toolCall(_, let name, _, _, _, _) = lastRunning {
@@ -1086,7 +1126,14 @@ struct ToolCallsGroup: View {
   }
 
   var body: some View {
-    VStack(alignment: .leading, spacing: 0) {
+    VStack(alignment: .leading, spacing: 6) {
+      // Message-level Cancel banner appears above the summary header
+      // when any tool has been promoted to .stalled. The onCancel
+      // closure is wired to AgentBridge.interrupt().
+      if hasStalledTool {
+        ToolCallStalledBanner(onCancel: onCancel ?? {})
+      }
+
       // Summary header
       Button(action: {
         withAnimation(.easeInOut(duration: 0.2)) {
@@ -1094,16 +1141,9 @@ struct ToolCallsGroup: View {
         }
       }) {
         HStack(spacing: 6) {
-          // Status indicator
-          if hasRunningTool {
-            ProgressView()
-              .controlSize(.mini)
-              .frame(width: 12, height: 12)
-          } else {
-            Image(systemName: "checkmark.circle.fill")
-              .scaledFont(size: 12)
-              .foregroundColor(.green)
-          }
+          // Status indicator — driven by the aggregate state across
+          // all tools in the group (see `aggregateStatus`).
+          statusIcon(for: aggregateStatus, size: 12)
 
           // Current/last tool action
           Text(currentToolName)
@@ -1177,16 +1217,10 @@ struct ToolCallCard: View {
         }
       }) {
         HStack(spacing: 6) {
-          // Status indicator
-          if status == .running {
-            ProgressView()
-              .controlSize(.mini)
-              .frame(width: 12, height: 12)
-          } else {
-            Image(systemName: "checkmark.circle.fill")
-              .scaledFont(size: 12)
-              .foregroundColor(.green)
-          }
+          // Status indicator — uses the shared statusIcon helper so
+          // .slow / .stalled / .failed render the same way here as in
+          // the group header.
+          statusIcon(for: status, size: 12)
 
           // Tool name
           Text(ChatContentBlock.displayName(for: name))
@@ -1259,6 +1293,87 @@ struct ToolCallCard: View {
       }
     }
     .omiControlSurface(fill: OmiColors.backgroundTertiary.opacity(0.8), radius: 16)
+  }
+}
+
+// MARK: - Tool Call Status Icon (shared by ToolCallsGroup + ToolCallCard)
+
+/// Single source of truth for how each `ToolCallStatus` value renders
+/// as a small inline icon. Used in both the group header (with the
+/// aggregate status) and individual tool rows (with their own status)
+/// so the visual language is consistent.
+@ViewBuilder
+private func statusIcon(for status: ToolCallStatus, size: CGFloat) -> some View {
+  switch status {
+  case .running:
+    ProgressView()
+      .controlSize(.mini)
+      .frame(width: size, height: size)
+  case .slow:
+    // Still spinning so the user knows work is happening, just tinted
+    // amber to communicate "this is taking longer than usual."
+    ProgressView()
+      .controlSize(.mini)
+      .frame(width: size, height: size)
+      .tint(.orange)
+  case .stalled:
+    // No spinner — the message-level banner is the affordance to
+    // act. The icon switches to a static warning to make it visually
+    // distinct from a healthy in-flight tool.
+    Image(systemName: "exclamationmark.triangle.fill")
+      .scaledFont(size: size)
+      .foregroundColor(.orange)
+  case .completed:
+    Image(systemName: "checkmark.circle.fill")
+      .scaledFont(size: size)
+      .foregroundColor(.green)
+  case .failed:
+    Image(systemName: "xmark.circle.fill")
+      .scaledFont(size: size)
+      .foregroundColor(.red)
+  }
+}
+
+// MARK: - Tool Call Stalled Banner
+
+/// Message-level banner that appears above a tool group when any of
+/// its tools is `.stalled`. Tapping Cancel triggers the `onCancel`
+/// closure passed in by `ToolCallsGroup`, which is wired to
+/// `AgentBridge.interrupt()`.
+struct ToolCallStalledBanner: View {
+  let onCancel: () -> Void
+
+  var body: some View {
+    HStack(spacing: 8) {
+      Image(systemName: "exclamationmark.triangle.fill")
+        .scaledFont(size: 12)
+        .foregroundColor(.orange)
+
+      Text("This is taking longer than usual.")
+        .scaledFont(size: 12)
+        .foregroundColor(OmiColors.textSecondary)
+
+      Spacer(minLength: 4)
+
+      Button(action: onCancel) {
+        Text("Cancel")
+          .scaledFont(size: 11, weight: .medium)
+          .foregroundColor(.white)
+          .padding(.horizontal, 10)
+          .padding(.vertical, 4)
+          .background(Color.red.opacity(0.85))
+          .clipShape(RoundedRectangle(cornerRadius: 6))
+      }
+      .buttonStyle(.plain)
+    }
+    .padding(.horizontal, 12)
+    .padding(.vertical, 8)
+    .background(Color.orange.opacity(0.1))
+    .overlay(
+      RoundedRectangle(cornerRadius: 12)
+        .strokeBorder(Color.orange.opacity(0.4), lineWidth: 1)
+    )
+    .clipShape(RoundedRectangle(cornerRadius: 12))
   }
 }
 
