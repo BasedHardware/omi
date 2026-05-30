@@ -89,7 +89,12 @@ for _modname in ["utils.conversations", "utils.conversations.merge_conversations
     if _existing is not None and not getattr(_existing, "__file__", None):
         del sys.modules[_modname]
 
-from utils.conversations.merge_conversations import _coerce_dt, validate_merge_compatibility  # noqa: E402
+from utils.conversations.merge_conversations import (  # noqa: E402
+    _coerce_dt,
+    _merge_transcript_segments,
+    _normalize_conversation_timestamps,
+    validate_merge_compatibility,
+)
 
 # ---------------------------------------------------------------------------
 # _coerce_dt
@@ -321,3 +326,186 @@ class TestValidateGapMath:
         # After sort, c2 comes first → gap c2.finished (10:30) → c1.started (13:00) = 2.5h
         assert warn is not None
         assert "2.5h" in warn
+
+
+# ---------------------------------------------------------------------------
+# _normalize_conversation_timestamps — called by perform_merge_async so the
+# background task's sort/max/.isoformat/subtraction sites can assume datetime
+# ---------------------------------------------------------------------------
+
+
+class TestNormalizeConversationTimestamps:
+    def test_coerces_all_three_timestamp_fields(self):
+        conv = {
+            "id": "c1",
+            "started_at": "2026-05-30T10:00:00Z",
+            "finished_at": "2026-05-30T10:30:00Z",
+            "created_at": "2026-05-30T09:00:00Z",
+            "language": "en",
+        }
+        [out] = _normalize_conversation_timestamps([conv])
+        assert out["started_at"] == datetime(2026, 5, 30, 10, 0, tzinfo=timezone.utc)
+        assert out["finished_at"] == datetime(2026, 5, 30, 10, 30, tzinfo=timezone.utc)
+        assert out["created_at"] == datetime(2026, 5, 30, 9, 0, tzinfo=timezone.utc)
+        assert out["language"] == "en"
+
+    def test_leaves_native_datetimes_untouched(self):
+        dt = datetime(2026, 5, 30, 10, 0, tzinfo=timezone.utc)
+        [out] = _normalize_conversation_timestamps(
+            [{"id": "c1", "started_at": dt, "finished_at": dt, "created_at": dt}]
+        )
+        assert out["started_at"] is dt
+        assert out["finished_at"] is dt
+
+    def test_does_not_mutate_input(self):
+        conv = {"id": "c1", "started_at": "2026-05-30T10:00:00Z"}
+        _normalize_conversation_timestamps([conv])
+        # Caller's dict must still see the original string.
+        assert conv["started_at"] == "2026-05-30T10:00:00Z"
+
+    def test_omits_unknown_fields(self):
+        # Fields outside _TIMESTAMP_FIELDS pass through unchanged.
+        conv = {"id": "c1", "started_at": "2026-05-30T10:00:00Z", "other": "value"}
+        [out] = _normalize_conversation_timestamps([conv])
+        assert out["other"] == "value"
+
+    def test_skips_missing_timestamp_field(self):
+        # A doc without a given timestamp key keeps the key absent rather
+        # than introducing a None — downstream sites use `.get(...)` and
+        # already handle the missing case.
+        conv = {"id": "c1", "started_at": "2026-05-30T10:00:00Z"}
+        [out] = _normalize_conversation_timestamps([conv])
+        assert "finished_at" not in out
+        assert "created_at" not in out
+
+    def test_unparseable_becomes_none(self):
+        conv = {"id": "c1", "started_at": "not-a-date", "finished_at": None}
+        [out] = _normalize_conversation_timestamps([conv])
+        assert out["started_at"] is None
+        assert out["finished_at"] is None
+
+
+# ---------------------------------------------------------------------------
+# _merge_transcript_segments — receives normalised input from perform_merge_async,
+# but the gap/duration arithmetic is the same shape that previously crashed
+# the background task on string timestamps (Greptile P1 on PR #7554).
+# ---------------------------------------------------------------------------
+
+
+def _seg(start, end, text="hi", speaker_id=0):
+    return {"start": start, "end": end, "text": text, "speaker_id": speaker_id}
+
+
+class TestMergeTranscriptSegments:
+    def test_two_conversations_with_gap_adjusts_offsets(self):
+        c1 = {
+            "started_at": datetime(2026, 5, 30, 10, 0, tzinfo=timezone.utc),
+            "finished_at": datetime(2026, 5, 30, 10, 0, 30, tzinfo=timezone.utc),
+            "transcript_segments": [_seg(0.0, 5.0, "first")],
+        }
+        c2 = {
+            "started_at": datetime(2026, 5, 30, 10, 1, 0, tzinfo=timezone.utc),
+            "finished_at": datetime(2026, 5, 30, 10, 1, 30, tzinfo=timezone.utc),
+            "transcript_segments": [_seg(0.0, 5.0, "second")],
+        }
+        merged = _merge_transcript_segments([c1, c2])
+        assert len(merged) == 2
+        assert merged[0]["start"] == 0.0
+        assert merged[0]["end"] == 5.0
+        # Cumulative offset = 5.0 (max end of c1); gap = 60-30 = 30s.
+        # c2's seg starts at 0.0 → offset 35.0.
+        assert merged[1]["start"] == 35.0
+        assert merged[1]["end"] == 40.0
+
+    def test_inputs_post_normalisation_string_origin_does_not_crash(self):
+        # Simulates the exact path perform_merge_async takes: it now calls
+        # _normalize_conversation_timestamps before passing to this function.
+        # Verify the normaliser → merge_segments handoff produces the same
+        # arithmetic as native-datetime inputs would. Pre-fix this scenario
+        # surfaced as a silent TypeError caught by the outer except.
+        raw = [
+            {
+                "started_at": "2026-05-30T10:00:00Z",
+                "finished_at": "2026-05-30T10:00:30Z",
+                "transcript_segments": [_seg(0.0, 5.0, "first")],
+            },
+            {
+                "started_at": "2026-05-30T10:01:00Z",
+                "finished_at": "2026-05-30T10:01:30Z",
+                "transcript_segments": [_seg(0.0, 5.0, "second")],
+            },
+        ]
+        normalized = _normalize_conversation_timestamps(raw)
+        merged = _merge_transcript_segments(normalized)
+        assert len(merged) == 2
+        assert merged[1]["start"] == 35.0
+        assert merged[1]["end"] == 40.0
+
+    def test_first_conv_with_no_segments_uses_finished_minus_started(self):
+        # When the first conversation has no segments, cumulative_offset is
+        # seeded via finished_at - started_at. This is a datetime subtraction
+        # and was one of the silent-failure sites for string-typed docs.
+        raw = [
+            {
+                "started_at": "2026-05-30T10:00:00Z",
+                "finished_at": "2026-05-30T10:00:20Z",
+                "transcript_segments": [],
+            },
+            {
+                "started_at": "2026-05-30T10:00:30Z",
+                "finished_at": "2026-05-30T10:00:40Z",
+                "transcript_segments": [_seg(0.0, 5.0, "second")],
+            },
+        ]
+        merged = _merge_transcript_segments(_normalize_conversation_timestamps(raw))
+        # c1 duration = 20s; gap = 30-20 = 10s; c2 seg → offset 30s.
+        assert len(merged) == 1
+        assert merged[0]["start"] == 30.0
+        assert merged[0]["end"] == 35.0
+
+    def test_mid_conv_with_no_segments_keeps_offset_chain(self):
+        # The third site: when an intermediate conversation has no segments,
+        # cumulative_offset advances by offset + (finished_at - started_at).
+        raw = [
+            {
+                "started_at": "2026-05-30T10:00:00Z",
+                "finished_at": "2026-05-30T10:00:05Z",
+                "transcript_segments": [_seg(0.0, 5.0, "first")],
+            },
+            {
+                "started_at": "2026-05-30T10:00:10Z",
+                "finished_at": "2026-05-30T10:00:30Z",
+                "transcript_segments": [],
+            },
+            {
+                "started_at": "2026-05-30T10:00:40Z",
+                "finished_at": "2026-05-30T10:00:45Z",
+                "transcript_segments": [_seg(0.0, 5.0, "third")],
+            },
+        ]
+        merged = _merge_transcript_segments(_normalize_conversation_timestamps(raw))
+        # c1: max_end = 5. cumulative_offset = 5.
+        # c2 (empty): gap = 10-5 = 5; offset = 10. duration = 20 → cum = 30.
+        # c3: gap = 40-30 = 10; offset = 40. Seg starts at 0 → 40.
+        assert len(merged) == 2
+        assert merged[0]["start"] == 0.0
+        assert merged[1]["start"] == 40.0
+        assert merged[1]["end"] == 45.0
+
+    def test_does_not_mutate_input_segments(self):
+        seg = _seg(0.0, 5.0, "first")
+        raw = [
+            {
+                "started_at": datetime(2026, 5, 30, 10, 0, tzinfo=timezone.utc),
+                "finished_at": datetime(2026, 5, 30, 10, 0, 5, tzinfo=timezone.utc),
+                "transcript_segments": [seg],
+            },
+            {
+                "started_at": datetime(2026, 5, 30, 10, 0, 10, tzinfo=timezone.utc),
+                "finished_at": datetime(2026, 5, 30, 10, 0, 15, tzinfo=timezone.utc),
+                "transcript_segments": [_seg(0.0, 5.0, "second")],
+            },
+        ]
+        _merge_transcript_segments(raw)
+        assert seg["start"] == 0.0
+        assert seg["end"] == 5.0
