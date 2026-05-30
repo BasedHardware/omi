@@ -798,7 +798,6 @@ def download_audio_chunks_and_merge(
     # Build unified job list: ('individual', ts) or ('batch', path)
     jobs = [('individual', ts) for ts in individual_timestamps] + [('batch', p) for p in unique_batch_paths]
 
-
     def _submit_job(job):
         kind, key = job
         _STORAGE_CHUNK_SEM.acquire()
@@ -1076,7 +1075,6 @@ def precache_conversation_audio(
                 )
             except Exception as e:
                 logger.error(f"[PRECACHE] Error caching audio file {af.get('id')}: {e}")
-
 
         def _bounded_cache_single(af):
             with _STORAGE_FANOUT_SEMAPHORE:

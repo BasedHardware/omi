@@ -262,7 +262,6 @@ def rebuild_knowledge_graph(uid: str, memories: List[Dict[str, Any]], user_name:
     all_nodes = []
     all_edges = []
 
-
     _kg_sem = threading.Semaphore(10)
 
     def _bounded_process_memory(m):
