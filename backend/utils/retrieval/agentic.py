@@ -44,6 +44,7 @@ from utils.retrieval.tools import (
     get_screen_activity_tool,
     search_screen_activity_tool,
     save_user_preference_tool,
+    fetch_url_tool,
 )
 from utils.retrieval.tools.app_tools import load_app_tools, get_tool_status_message
 from utils.retrieval.safety import AgentSafetyGuard, SafetyGuardError
@@ -96,6 +97,7 @@ CORE_TOOLS = [
     get_screen_activity_tool,
     search_screen_activity_tool,
     save_user_preference_tool,
+    fetch_url_tool,
 ]
 
 # Standard tool names (used to detect app tools by exclusion)
@@ -133,6 +135,7 @@ def get_tool_display_name(tool_name: str, tool_obj: Optional[Any] = None) -> str
         'get_screen_activity_tool': 'Checking screen activity',
         'search_screen_activity_tool': 'Searching screen activity',
         'save_user_preference_tool': 'Saving preference',
+        'fetch_url_tool': 'Reading page',
     }
 
     if tool_name in tool_display_map:
@@ -560,6 +563,14 @@ Available app tool names: {app_tool_names}
 
 IMPORTANT: Always search for and use these tools when relevant. Never tell the user you don't have access to an integration if a matching tool exists above.
 </available_app_tools>"""
+
+    # Instruct Claude to use fetch_url_tool for any direct URL in the conversation.
+    # Without this, Claude's built-in "I can't browse links" behavior takes over.
+    system_prompt += """
+
+<url_fetching_instructions>
+You have fetch_url_tool available. When the user shares any URL (starting with http:// or https://), you MUST call fetch_url_tool to read its content before responding. Never say you cannot browse, visit, or read a URL. Always attempt to fetch it first.
+</url_fetching_instructions>"""
 
     # Convert tools to Anthropic format (core = visible, app = defer_loading)
     tool_schemas, tool_registry = _convert_tools(core_tools, app_tools)
