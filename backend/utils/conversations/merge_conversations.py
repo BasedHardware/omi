@@ -31,6 +31,32 @@ import logging
 logger = logging.getLogger(__name__)
 
 
+def _coerce_dt(value):
+    """Coerce a timestamp (datetime or ISO 8601 string) to a tz-aware UTC datetime.
+
+    Conversation docs can carry ``started_at`` / ``finished_at`` as either a
+    Firestore-deserialised ``datetime`` (tz-aware) or as an ISO string (older
+    write paths persisted ``.isoformat()`` instead of a native timestamp).
+    Subtracting two strings throws ``TypeError``; mixing tz-aware with
+    tz-naive also throws. Coercing both sides to a single tz-aware UTC
+    representation keeps the gap math safe regardless of source.
+
+    Returns ``None`` for unparseable input rather than raising — gap warnings
+    are best-effort and a malformed timestamp must not fail the merge call.
+    """
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
+    if isinstance(value, str):
+        try:
+            parsed = datetime.fromisoformat(value.replace('Z', '+00:00'))
+        except ValueError:
+            return None
+        return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
+    return None
+
+
 def validate_merge_compatibility(
     conversations: List[Dict],
 ) -> Tuple[bool, Optional[str], Optional[str]]:
@@ -67,11 +93,12 @@ def validate_merge_compatibility(
 
     # Generate warnings for large gaps (but don't reject)
     warnings = []
-    sorted_convs = sorted(conversations, key=lambda c: c.get('started_at', datetime.min))
+    _UTC_MIN = datetime.min.replace(tzinfo=timezone.utc)
+    sorted_convs = sorted(conversations, key=lambda c: _coerce_dt(c.get('started_at')) or _UTC_MIN)
 
     for i in range(1, len(sorted_convs)):
-        prev_finished = sorted_convs[i - 1].get('finished_at')
-        curr_started = sorted_convs[i].get('started_at')
+        prev_finished = _coerce_dt(sorted_convs[i - 1].get('finished_at'))
+        curr_started = _coerce_dt(sorted_convs[i].get('started_at'))
         if prev_finished and curr_started:
             gap_hours = (curr_started - prev_finished).total_seconds() / 3600
             if gap_hours > 1:
