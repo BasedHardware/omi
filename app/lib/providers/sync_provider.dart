@@ -47,13 +47,10 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
   // `uploaded` is not yet backed up (the server job is still processing), so
   // it counts as pending — keeps it visible in the legacy SyncPage and in
   // pending counts until the reconciler confirms it `synced`.
-  List<Wal> get pendingWals => _allWals
-      .where((w) =>
-          w.status == WalStatus.miss ||
-          w.status == WalStatus.uploaded ||
-          w.status == WalStatus.corrupted ||
-          w.isSyncing)
-      .toList();
+  bool _isPending(Wal w) =>
+      w.status == WalStatus.miss || w.status == WalStatus.uploaded || w.status == WalStatus.corrupted || w.isSyncing;
+
+  List<Wal> get pendingWals => _allWals.where(_isPending).toList();
 
   List<Wal> get uploadedWals => _allWals.where((w) => w.status == WalStatus.uploaded).toList();
 
@@ -61,6 +58,19 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
       _allWals.where((w) => !w.isSyncing && (w.status == WalStatus.miss || w.status == WalStatus.corrupted)).toList();
 
   List<Wal> get syncedWals => _allWals.where((w) => w.status == WalStatus.synced).toList();
+
+  // Count-only accessors for status-chip badges. Iterate once without
+  // allocating a filtered list — calling `.pendingWals.length` materialised
+  // a full List<Wal> on every Consumer rebuild just to read its size, which
+  // adds up during active sync notifyListeners storms on large wal sets.
+  //
+  // Counts here are keyed off raw WalStatus (the legacy chip's semantic);
+  // the existing `syncedWalsCount` / `syncingWalsCount` getters further
+  // down key off `syncDisplayState` and serve the auto-sync page's status
+  // surface — different signals, kept distinct so each caller picks the
+  // right one.
+  int get pendingStatusCount => _allWals.where(_isPending).length;
+  int get syncedStatusCount => _allWals.where((w) => w.status == WalStatus.synced).length;
 
   /// True while a fair-use (429) cooldown is active — uploads are paused.
   bool get isRateLimited => SyncRateLimiter.instance.isLimited;
