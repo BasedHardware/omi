@@ -148,6 +148,10 @@ struct ChatMessagesView<WelcomeContent: View>: View {
     /// Pass nil when the caller cannot distinguish local sends (e.g. TaskChatPanel
     /// with its own send path).
     var localSendToken: LocalSendToken? = nil
+    /// Fired when the user taps Cancel on a stalled-tool banner.
+    /// Threaded down to `ToolCallsGroup`. Optional so existing callers
+    /// don't need updating; ChatPage passes `chatProvider.stopAgent`.
+    var onCancelTurn: (() -> Void)? = nil
     @ViewBuilder var welcomeContent: () -> WelcomeContent
 
     /// IDs of messages that are near-duplicates of an earlier message in the same session.
@@ -536,7 +540,8 @@ struct ChatMessagesView<WelcomeContent: View>: View {
                     onCitationTap: { citation in
                         onCitationTap?(citation)
                     },
-                    isDuplicate: dupeIds.contains(message.id)
+                    isDuplicate: dupeIds.contains(message.id),
+                    onCancelTurn: onCancelTurn
                 )
                 .id(message.id)
             }
