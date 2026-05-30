@@ -63,6 +63,14 @@ class OmiBackgroundAudioStreamer(private val context: Context) {
     @Volatile
     private var lastFailureAtMs = 0L
 
+    // Per-device byte accumulator. Used by device types whose audio payload
+    // straddles BLE notifications (Bee: ADTS-framed AAC; Plaud: 80-byte chunking
+    // of variable-length opus payloads). Reset whenever the active config
+    // changes or the socket is torn down so we never mix bytes from two
+    // sessions. Other device types (omi/openglass/friendPendant/fieldy) ignore
+    // this buffer and remain pure transforms.
+    private val rxBuffer = ArrayDeque<Byte>()
+
     fun isConfiguredFor(address: String): Boolean {
         val config = loadConfig() ?: return false
         return config.deviceId.equals(address, ignoreCase = true)
@@ -87,6 +95,7 @@ class OmiBackgroundAudioStreamer(private val context: Context) {
             activeUrl = null
             activeConfig = null
             pendingFrames.clear()
+            rxBuffer.clear()
         }
         socketToClose?.close(1000, reason)
     }
@@ -137,6 +146,96 @@ class OmiBackgroundAudioStreamer(private val context: Context) {
                     frames
                 }
             }
+            // Fieldy: each notification carries N back-to-back 40-byte Opus
+            // frames (typically 6 → 240 bytes). Mirrors FieldyDeviceConnection
+            // .performGetBleAudioBytesListener — split on 40-byte boundaries,
+            // forward any final partial frame only if it starts with the
+            // expected Opus TOC byte 0xb8 (avoids forwarding stray bytes).
+            "fieldy" -> {
+                val frames = mutableListOf<ByteArray>()
+                var offset = 0
+                while (offset + 40 <= value.size) {
+                    frames.add(value.copyOfRange(offset, offset + 40))
+                    offset += 40
+                }
+                if (offset < value.size && value[offset] == 0xb8.toByte()) {
+                    frames.add(value.copyOfRange(offset, value.size))
+                }
+                frames
+            }
+            // Bee: notifications carry a 2-byte transport header followed by
+            // ADTS-framed AAC. Frames straddle notifications, so we accumulate
+            // into rxBuffer and slice on each complete ADTS frame. Mirrors
+            // BeeDeviceConnection.processAudioPacket exactly: scan for the
+            // sync word (0xFF + high-nibble 0xF), read the 13-bit ADTS frame
+            // length from bytes 3-5, emit when the buffer holds the full
+            // frame. Drop a single byte on resync mismatch.
+            "bee" -> {
+                if (value.size < 2) {
+                    emptyList()
+                } else {
+                    for (i in 2 until value.size) rxBuffer.addLast(value[i])
+                    val frames = mutableListOf<ByteArray>()
+                    while (rxBuffer.size >= 7) {
+                        val b0 = rxBuffer.elementAt(0).toInt() and 0xFF
+                        val b1 = rxBuffer.elementAt(1).toInt() and 0xFF
+                        if (b0 != 0xFF || (b1 and 0xF0) != 0xF0) {
+                            rxBuffer.removeFirst()
+                            continue
+                        }
+                        val b3 = rxBuffer.elementAt(3).toInt() and 0xFF
+                        val b4 = rxBuffer.elementAt(4).toInt() and 0xFF
+                        val b5 = rxBuffer.elementAt(5).toInt() and 0xFF
+                        val frameLength = ((b3 and 0x03) shl 11) or (b4 shl 3) or ((b5 and 0xE0) ushr 5)
+                        // Sanity-check the frame length against ADTS constraints
+                        // before consuming. Out-of-range values mean we're
+                        // mid-stream of noise — resync by one byte.
+                        if (frameLength < 7 || frameLength > 8192) {
+                            rxBuffer.removeFirst()
+                            continue
+                        }
+                        if (rxBuffer.size < frameLength) break
+                        val frame = ByteArray(frameLength) { rxBuffer.removeFirst() }
+                        frames.add(frame)
+                    }
+                    frames
+                }
+            }
+            // Plaud: notify characteristic carries both command responses and
+            // audio. Audio packets start with type byte 0x02; everything else
+            // is dropped (responses can't reach the WS — they're not audio).
+            // Layout: [0]=type, [1..4]=metadata, [5..8]=position (LE uint32,
+            // 0xFFFFFFFF = end-of-stream sentinel), [9]=length, [10..10+len]
+            // =audio payload. The payload is then re-chunked into 80-byte
+            // frames before sending — matches PlaudDeviceConnection's
+            // accumulator (the backend expects opus_fs320 in fixed chunks).
+            "plaud" -> {
+                if (value.size < 10 || (value[0].toInt() and 0xFF) != 2) {
+                    emptyList()
+                } else {
+                    val posB0 = value[5].toInt() and 0xFF
+                    val posB1 = value[6].toInt() and 0xFF
+                    val posB2 = value[7].toInt() and 0xFF
+                    val posB3 = value[8].toInt() and 0xFF
+                    val isEndMarker = posB0 == 0xFF && posB1 == 0xFF && posB2 == 0xFF && posB3 == 0xFF
+                    if (isEndMarker) {
+                        emptyList()
+                    } else {
+                        val length = value[9].toInt() and 0xFF
+                        if (length == 0 || 10 + length > value.size) {
+                            emptyList()
+                        } else {
+                            for (i in 10 until 10 + length) rxBuffer.addLast(value[i])
+                            val frames = mutableListOf<ByteArray>()
+                            while (rxBuffer.size >= 80) {
+                                val chunk = ByteArray(80) { rxBuffer.removeFirst() }
+                                frames.add(chunk)
+                            }
+                            frames
+                        }
+                    }
+                }
+            }
             else -> {
                 Log.w(TAG, "Unsupported background BLE audio device type: ${config.deviceType}")
                 emptyList()
@@ -162,6 +261,7 @@ class OmiBackgroundAudioStreamer(private val context: Context) {
             activeUrl = url
             activeConfig = config
             sentFrames = 0
+            rxBuffer.clear()
 
             Log.i(TAG, "Opening background transcription websocket (codec=${config.codec}, source=${config.source})")
             socket = client.newWebSocket(request, listener())
