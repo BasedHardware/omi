@@ -8,9 +8,9 @@ import 'package:flutter_provider_utilities/flutter_provider_utilities.dart';
 import 'package:omi/backend/http/api/apps.dart';
 import 'package:omi/backend/http/api/audio.dart';
 import 'package:omi/backend/http/api/conversations.dart'
-    hide unlinkCalendarEvent, addSummaryToCalendarEvent, autoLinkCalendarEvent, linkCalendarEvent;
+    hide unlinkCalendarEvent, autoLinkCalendarEvent, linkCalendarEvent;
 import 'package:omi/backend/http/api/conversations.dart' as conv_api
-    show unlinkCalendarEvent, addSummaryToCalendarEvent, autoLinkCalendarEvent, linkCalendarEvent;
+    show unlinkCalendarEvent, autoLinkCalendarEvent, linkCalendarEvent;
 import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/app.dart';
@@ -600,16 +600,6 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
       return false;
     } catch (e) {
       return false;
-    }
-  }
-
-  /// Adds conversation summary to the linked calendar event and returns the event link
-  Future<String?> addSummaryToCalendarEvent() async {
-    try {
-      final htmlLink = await conv_api.addSummaryToCalendarEvent(conversation.id);
-      return htmlLink;
-    } catch (e) {
-      return null;
     }
   }
 
