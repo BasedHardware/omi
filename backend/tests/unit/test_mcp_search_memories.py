@@ -82,7 +82,7 @@ sys.modules['firebase_admin.auth'].RevokedIdTokenError = type('RevokedIdTokenErr
 sys.modules['firebase_admin.auth'].CertificateFetchError = type('CertificateFetchError', (Exception,), {})
 sys.modules['firebase_admin.auth'].UserNotFoundError = type('UserNotFoundError', (Exception,), {})
 
-from routers.mcp import search_memories, delete_memory
+from routers.mcp import search_memories, delete_memory, edit_memory
 
 
 class TestSearchMemoriesEndpoint:
@@ -262,6 +262,38 @@ class TestSearchMemoriesUserReview:
         ]
         result = search_memories(query="test", limit=10, uid="user-1")
         assert result == []
+
+
+class TestEditMemoryVectorSync:
+    """edit_memory must re-embed the new content so search finds the edited text."""
+
+    @patch('routers.mcp.upsert_memory_vector')
+    @patch('routers.mcp.memories_db')
+    def test_edit_upserts_vector_with_new_content(self, mock_memories_db, mock_upsert_vector):
+        mock_memories_db.get_memory.return_value = {
+            'id': 'mem-1',
+            'content': 'old text',
+            'category': 'hobbies',
+            'is_locked': False,
+        }
+        result = edit_memory(memory_id="mem-1", value="new text", uid="user-1")
+        assert result == {"status": "ok"}
+        mock_memories_db.edit_memory.assert_called_once_with("user-1", "mem-1", "new text")
+        mock_upsert_vector.assert_called_once_with("user-1", "mem-1", "new text", "hobbies")
+
+    @patch('routers.mcp.upsert_memory_vector')
+    @patch('routers.mcp.memories_db')
+    def test_edit_succeeds_when_vector_upsert_fails(self, mock_memories_db, mock_upsert_vector):
+        mock_memories_db.get_memory.return_value = {
+            'id': 'mem-1',
+            'content': 'old text',
+            'category': 'other',
+            'is_locked': False,
+        }
+        mock_upsert_vector.side_effect = Exception("pinecone down")
+        result = edit_memory(memory_id="mem-1", value="new text", uid="user-1")
+        assert result == {"status": "ok"}
+        mock_memories_db.edit_memory.assert_called_once_with("user-1", "mem-1", "new text")
 
 
 class TestDeleteMemoryVectorSync:
