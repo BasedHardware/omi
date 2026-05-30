@@ -101,7 +101,8 @@ class TestSearchMemoriesEndpoint:
         mock_vector_db.find_similar_memories.return_value = []
         result = search_memories(query="test", limit=10, uid="user-1")
         assert result == []
-        mock_vector_db.find_similar_memories.assert_called_once_with("user-1", "test", threshold=0.0, limit=10)
+        # limit=10 → fetch_limit = min(10*3, 60) = 30
+        mock_vector_db.find_similar_memories.assert_called_once_with("user-1", "test", threshold=0.0, limit=30)
 
     @patch('routers.mcp.memories_db')
     @patch('routers.mcp.vector_db')
@@ -140,24 +141,27 @@ class TestSearchMemoriesEndpoint:
 
     @patch('routers.mcp.memories_db')
     @patch('routers.mcp.vector_db')
-    def test_limit_capped_at_20(self, mock_vector_db, mock_memories_db):
+    def test_limit_capped_at_20_fetches_60_candidates(self, mock_vector_db, mock_memories_db):
         mock_vector_db.find_similar_memories.return_value = []
         search_memories(query="test", limit=100, uid="user-1")
-        mock_vector_db.find_similar_memories.assert_called_once_with("user-1", "test", threshold=0.0, limit=20)
+        # limit clamps to 20, fetch_limit = min(20*3, 60) = 60
+        mock_vector_db.find_similar_memories.assert_called_once_with("user-1", "test", threshold=0.0, limit=60)
 
     @patch('routers.mcp.memories_db')
     @patch('routers.mcp.vector_db')
-    def test_limit_zero_clamped_to_1(self, mock_vector_db, mock_memories_db):
+    def test_limit_zero_clamped_to_1_fetches_3_candidates(self, mock_vector_db, mock_memories_db):
         mock_vector_db.find_similar_memories.return_value = []
         search_memories(query="test", limit=0, uid="user-1")
-        mock_vector_db.find_similar_memories.assert_called_once_with("user-1", "test", threshold=0.0, limit=1)
+        # limit clamps to 1, fetch_limit = min(1*3, 60) = 3
+        mock_vector_db.find_similar_memories.assert_called_once_with("user-1", "test", threshold=0.0, limit=3)
 
     @patch('routers.mcp.memories_db')
     @patch('routers.mcp.vector_db')
-    def test_negative_limit_clamped_to_1(self, mock_vector_db, mock_memories_db):
+    def test_negative_limit_clamped_to_1_fetches_3_candidates(self, mock_vector_db, mock_memories_db):
         mock_vector_db.find_similar_memories.return_value = []
         search_memories(query="test", limit=-5, uid="user-1")
-        mock_vector_db.find_similar_memories.assert_called_once_with("user-1", "test", threshold=0.0, limit=1)
+        # limit clamps to 1, fetch_limit = min(1*3, 60) = 3
+        mock_vector_db.find_similar_memories.assert_called_once_with("user-1", "test", threshold=0.0, limit=3)
 
     @patch('routers.mcp.memories_db')
     @patch('routers.mcp.vector_db')
@@ -203,10 +207,28 @@ class TestSearchMemoriesEndpoint:
 
     @patch('routers.mcp.memories_db')
     @patch('routers.mcp.vector_db')
-    def test_default_limit_is_10(self, mock_vector_db, mock_memories_db):
+    def test_default_limit_fetches_3x_candidates(self, mock_vector_db, mock_memories_db):
         mock_vector_db.find_similar_memories.return_value = []
         search_memories(query="test", uid="user-1")
-        mock_vector_db.find_similar_memories.assert_called_once_with("user-1", "test", threshold=0.0, limit=10)
+        # default limit=10, fetch_limit = min(10*3, 60) = 30
+        mock_vector_db.find_similar_memories.assert_called_once_with("user-1", "test", threshold=0.0, limit=30)
+
+    @patch('routers.mcp.memories_db')
+    @patch('routers.mcp.vector_db')
+    def test_locked_top_hit_does_not_exhaust_budget(self, mock_vector_db, mock_memories_db):
+        # Reviewer's exact scenario: best Pinecone hit is locked, second is accessible.
+        # With exact-limit fetching this returned [], now returns the accessible memory.
+        mock_vector_db.find_similar_memories.return_value = [
+            {'memory_id': 'mem-locked', 'score': 0.99},
+            {'memory_id': 'mem-ok', 'score': 0.80},
+        ]
+        mock_memories_db.get_memories_by_ids.return_value = [
+            self._make_memory('mem-locked', 'secret', 'other', locked=True),
+            self._make_memory('mem-ok', 'visible', 'other', locked=False),
+        ]
+        result = search_memories(query="test", limit=1, uid="user-1")
+        assert len(result) == 1
+        assert result[0]['id'] == 'mem-ok'
 
 
 class TestSearchMemoriesUserReview:

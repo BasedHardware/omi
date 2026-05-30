@@ -113,7 +113,8 @@ def search_memories(
 ):
     logger.info(f"search_memories {uid} query={sanitize_pii(query)} limit={limit}")
     limit = max(1, min(limit, 20))
-    matches = vector_db.find_similar_memories(uid, query, threshold=0.0, limit=limit)
+    fetch_limit = min(limit * 3, 60)
+    matches = vector_db.find_similar_memories(uid, query, threshold=0.0, limit=fetch_limit)
     if not matches:
         return []
     memory_ids = [m.get("memory_id") for m in matches if m.get("memory_id")]
@@ -136,7 +137,7 @@ def search_memories(
             }
         )
     results.sort(key=lambda x: x["relevance_score"], reverse=True)
-    return results
+    return results[:limit]
 
 
 @router.get("/v1/mcp/memories", tags=["mcp"], response_model=List[CleanerMemory])
