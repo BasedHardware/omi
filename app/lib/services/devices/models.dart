@@ -57,8 +57,10 @@ const String plaudWriteCharUuid = "00002bb1-0000-1000-8000-00805f9b34fb";
 const String plaudNotifyCharUuid = "00002bb0-0000-1000-8000-00805f9b34fb";
 
 const String beeServiceUuid = "03d5d5c4-a86c-11ee-9d89-8f2089a49e7e";
+const String beeAudioCharacteristicUuid = "b189a505-a86c-11ee-a5fb-8f2089a49e7e";
 
 const String fieldyServiceUuid = "4fafc201-1fb5-459e-8fcc-c5c9c331914b";
+const String fieldyAudioCharacteristicUuid = "82a48422-3ca9-4156-ae67-4170f58666e0";
 
 const String friendPendantServiceUuid = "1a3fd0e7-b1f3-ac9e-2e49-b647b2c4f8da";
 const String friendPendantAudioCharacteristicUuid = "01000000-1111-1111-1111-111111111111";

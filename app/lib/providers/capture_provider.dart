@@ -937,12 +937,25 @@ class CaptureProvider extends ChangeNotifier
         return const MapEntry(omiServiceUuid, audioDataStreamCharacteristicUuid);
       case DeviceType.friendPendant:
         return const MapEntry(friendPendantServiceUuid, friendPendantAudioCharacteristicUuid);
-      case DeviceType.appleWatch:
       case DeviceType.bee:
+        return const MapEntry(beeServiceUuid, beeAudioCharacteristicUuid);
       case DeviceType.fieldy:
+        return const MapEntry(fieldyServiceUuid, fieldyAudioCharacteristicUuid);
+      case DeviceType.plaud:
+        // Plaud's notify characteristic carries both command responses and
+        // audio data on the same channel. The native streamer's `plaud`
+        // branch in transformFrames filters on the leading type byte (0x02)
+        // so non-audio packets are dropped before they reach the websocket.
+        return const MapEntry(plaudServiceUuid, plaudNotifyCharUuid);
+      case DeviceType.appleWatch:
       case DeviceType.frame:
       case DeviceType.limitless:
-      case DeviceType.plaud:
+        // Limitless background streaming intentionally not yet implemented:
+        // its BLE protocol uses protobuf-fragment reassembly + nested Opus
+        // extraction that needs to be ported with a real Limitless device on
+        // hand to verify. Tracked as a follow-up. AppleWatch and Frame
+        // require their own native packet/control flow handling that hasn't
+        // been mirrored yet either.
         return null;
     }
   }
