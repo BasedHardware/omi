@@ -82,7 +82,7 @@ sys.modules['firebase_admin.auth'].RevokedIdTokenError = type('RevokedIdTokenErr
 sys.modules['firebase_admin.auth'].CertificateFetchError = type('CertificateFetchError', (Exception,), {})
 sys.modules['firebase_admin.auth'].UserNotFoundError = type('UserNotFoundError', (Exception,), {})
 
-from routers.mcp import search_memories
+from routers.mcp import search_memories, delete_memory
 
 
 class TestSearchMemoriesEndpoint:
@@ -218,3 +218,26 @@ class TestSearchMemoriesEndpoint:
         mock_vector_db.find_similar_memories.return_value = []
         search_memories(query="test", uid="user-1")
         mock_vector_db.find_similar_memories.assert_called_once_with("user-1", "test", threshold=0.0, limit=10)
+
+
+class TestDeleteMemoryVectorSync:
+    """delete_memory must also remove the Pinecone vector so search_memories
+    does not return stale top-K slots for deleted memories."""
+
+    @patch('routers.mcp.delete_memory_vector')
+    @patch('routers.mcp.memories_db')
+    def test_delete_removes_vector(self, mock_memories_db, mock_delete_vector):
+        mock_memories_db.get_memory.return_value = {'id': 'mem-1', 'content': 'x', 'is_locked': False}
+        result = delete_memory(memory_id="mem-1", uid="user-1")
+        assert result == {"status": "ok"}
+        mock_memories_db.delete_memory.assert_called_once_with("user-1", "mem-1")
+        mock_delete_vector.assert_called_once_with("user-1", "mem-1")
+
+    @patch('routers.mcp.delete_memory_vector')
+    @patch('routers.mcp.memories_db')
+    def test_delete_succeeds_when_vector_delete_fails(self, mock_memories_db, mock_delete_vector):
+        mock_memories_db.get_memory.return_value = {'id': 'mem-1', 'content': 'x', 'is_locked': False}
+        mock_delete_vector.side_effect = Exception("pinecone down")
+        result = delete_memory(memory_id="mem-1", uid="user-1")
+        assert result == {"status": "ok"}
+        mock_memories_db.delete_memory.assert_called_once_with("user-1", "mem-1")

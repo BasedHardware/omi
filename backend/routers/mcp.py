@@ -11,7 +11,7 @@ import database.conversations as conversations_db
 
 # from database.redis_db import get_filter_category_items
 # from database.vector_db import query_vectors_by_metadata
-from database.vector_db import upsert_memory_vector
+from database.vector_db import upsert_memory_vector, delete_memory_vector
 import database.vector_db as vector_db
 from models.memories import MemoryDB, Memory, MemoryCategory
 from models.conversation_enums import CategoryEnum
@@ -77,6 +77,10 @@ def _validate_mcp_memory(uid: str, memory_id: str) -> dict:
 def delete_memory(memory_id: str, uid: str = Depends(get_uid_from_mcp_api_key)):
     _validate_mcp_memory(uid, memory_id)
     memories_db.delete_memory(uid, memory_id)
+    try:
+        delete_memory_vector(uid, memory_id)
+    except Exception:
+        logger.exception("Vector delete failed uid=%s memory_id=%s (Firestore deleted)", uid, memory_id)
     return {"status": "ok"}
 
 
