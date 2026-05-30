@@ -88,6 +88,43 @@ class CleanerMemory(BaseModel):
     category: MemoryCategory
 
 
+class SearchedMemory(CleanerMemory):
+    relevance_score: float
+
+
+@router.get("/v1/mcp/memories/search", tags=["mcp"], response_model=List[SearchedMemory])
+def search_memories(
+    query: str,
+    limit: int = 10,
+    uid: str = Depends(get_uid_from_mcp_api_key),
+):
+    logger.info(f"search_memories {uid} query={sanitize_pii(query)} limit={limit}")
+    limit = min(limit, 20)
+    matches = vector_db.find_similar_memories(uid, query, threshold=0.0, limit=limit)
+    if not matches:
+        return []
+    memory_ids = [m.get("memory_id") for m in matches if m.get("memory_id")]
+    scores = {m.get("memory_id"): m.get("score", 0) for m in matches}
+    if not memory_ids:
+        return []
+    memories_data = memories_db.get_memories_by_ids(uid, memory_ids)
+    results = []
+    for m in memories_data:
+        content = m.get("content", "")
+        if m.get("is_locked", False):
+            content = (content[:70] + "...") if len(content) > 70 else content
+        results.append(
+            {
+                "id": m.get("id", ""),
+                "content": content,
+                "category": m.get("category", "other"),
+                "relevance_score": round(scores.get(m.get("id"), 0), 4),
+            }
+        )
+    results.sort(key=lambda x: x["relevance_score"], reverse=True)
+    return results
+
+
 @router.get("/v1/mcp/memories", tags=["mcp"], response_model=List[CleanerMemory])
 def get_memories(
     uid: str = Depends(get_uid_from_mcp_api_key),
