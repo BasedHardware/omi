@@ -11,6 +11,7 @@ import database.conversations as conversations_db
 
 # from database.redis_db import get_filter_category_items
 # from database.vector_db import query_vectors_by_metadata
+from database.vector_db import upsert_memory_vector
 import database.vector_db as vector_db
 from models.memories import MemoryDB, Memory, MemoryCategory
 from models.conversation_enums import CategoryEnum
@@ -55,6 +56,10 @@ def create_memory(memory: Memory, uid: str = Depends(with_rate_limit(get_uid_fro
     memory.category = identify_category_for_memory(memory.content)
     memory_db = MemoryDB.from_memory(memory, uid, None, True)
     memories_db.create_memory(uid, memory_db.model_dump())
+    try:
+        upsert_memory_vector(uid, memory_db.id, memory_db.content, memory_db.category.value)
+    except Exception:
+        logger.exception("Vector upsert failed uid=%s memory_id=%s (memory saved, vector missing)", uid, memory_db.id)
     postprocess_executor.submit(update_personas_async, uid)
     return memory_db
 
@@ -99,7 +104,7 @@ def search_memories(
     uid: str = Depends(get_uid_from_mcp_api_key),
 ):
     logger.info(f"search_memories {uid} query={sanitize_pii(query)} limit={limit}")
-    limit = min(limit, 20)
+    limit = max(1, min(limit, 20))
     matches = vector_db.find_similar_memories(uid, query, threshold=0.0, limit=limit)
     if not matches:
         return []
