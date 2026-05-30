@@ -1,6 +1,6 @@
 import asyncio
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import List
 
 from database.redis_db import (
@@ -107,7 +107,7 @@ async def day_summary_webhook(uid, summary: str):
                 client = get_webhook_client()
                 response = await client.post(
                     webhook_url,
-                    json={'summary': summary, 'uid': uid, 'created_at': datetime.now().isoformat()},
+                    json={'summary': summary, 'uid': uid, 'created_at': datetime.now(timezone.utc).isoformat()},
                     headers={'Content-Type': 'application/json'},
                 )
             logger.info(f'day_summary_webhook: {webhook_url} {response.status_code}')

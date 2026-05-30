@@ -1,14 +1,14 @@
 ---
 title: "Integration Apps"
 icon: "link"
-description: "Build webhook-based apps that connect Omi to external services. Process memories, real-time transcripts, or raw audio."
+description: "Build webhook-based apps that connect Omi to external services. Process memories, real-time transcripts, raw audio, or daily summaries."
 ---
 
 ## What Are Integration Apps?
 
 Integration apps allow Omi to interact with external services by sending data to your webhook endpoints. Unlike prompt-based apps, these require you to host a server.
 
-<CardGroup cols={3}>
+<CardGroup cols={2}>
   <Card title="Memory Triggers" icon="bell">
     Run code when a memory is created
   </Card>
@@ -18,6 +18,9 @@ Integration apps allow Omi to interact with external services by sending data to
   <Card title="Audio Streaming" icon="microphone">
     Receive raw audio bytes for custom processing
   </Card>
+  <Card title="Day Summary" icon="calendar-day">
+    Receive a daily recap of a user's conversations
+  </Card>
 </CardGroup>
 
 ```mermaid
@@ -26,6 +29,7 @@ flowchart LR
         M[Memory Created]
         T[Live Transcript]
         A[Audio Stream]
+        D[Day Summary]
     end
 
     subgraph Your["Your Server"]
@@ -37,6 +41,7 @@ flowchart LR
     M -->|POST| W
     T -->|POST| W
     A -->|POST| W
+    D -->|POST| W
     W --> P
     P --> E
 ```
@@ -285,6 +290,130 @@ For a complete implementation, see the [Audio Streaming Guide](/doc/developer/ap
 
 ---
 
+## Day Summary
+
+Receive a structured daily recap of a user's conversations, delivered at most once per day at the user's configured notification hour. The webhook only fires on days where the user actually had recorded, transcribed conversations — see *Delivery conditions* below.
+
+<AccordionGroup>
+  <Accordion title="How It Works" icon="gear">
+    1. An hourly cron job runs at minute 0 of every UTC hour
+    2. For each user whose local time matches their configured notification hour, Omi generates a comprehensive daily summary using an LLM
+    3. Your webhook receives the summary
+    4. Your server can store, display, or forward it to external services
+
+    **Day selection logic:** If the user's local time is before noon (12:00), the summary covers the *previous* day's conversations; at noon or later it covers *today's* conversations.
+
+    **Timezone requirement (scheduled delivery only):** The hourly cron job selects recipients by matching configured timezones to the current UTC hour, so users without a timezone are skipped by the schedule. The manual "Generate Summary" trigger described in the testing section falls back to UTC day boundaries and works without a configured timezone.
+
+    **Delivery conditions (when the webhook does *not* fire):**
+    - The user has no conversations for the selected day
+    - All conversations for the day are either locked or have no transcribed speech
+    - The user has no FCM push token registered. The cron path filters out token-less users when picking recipients, and the manual "Generate Summary" endpoint returns HTTP 400 in that case — the daily summary pipeline currently treats push delivery as a hard prerequisite for firing the webhook
+    - A delivery for the same `(uid, date)` has already been started — Omi acquires an atomic Redis lock *before* the LLM call (TTL 2 hours), so any subsequent cron tick within that window is a no-op even if the earlier run hasn't finished or ended up skipping for one of the reasons above
+
+    Treat days without a webhook delivery as "no recap available" rather than a failure — receivers should not assume the webhook fires every day.
+  </Accordion>
+  <Accordion title="Example Use Cases" icon="lightbulb">
+    - **Personal CRM**: Log daily conversation highlights to a notes app or database
+    - **Team Digest**: Post a Slack summary of a user's day every evening
+    - **Journaling**: Auto-populate a daily journal with structured reflections
+    - **Analytics Dashboard**: Aggregate daily stats across users
+    - **Goal Tracking**: Surface action items and decisions for follow-up
+  </Accordion>
+</AccordionGroup>
+
+### Webhook Payload
+
+Your endpoint receives a POST request with the daily summary:
+
+`POST /your-endpoint?uid=user123`
+
+```json
+{
+  "uid": "user123",
+  "created_at": "2024-01-15T22:00:00.123456+00:00",
+  "summary": "{'id': '550e8400-...', 'date': '2024-01-15', 'headline': 'Productive day with three focused work sessions', 'overview': '...', 'day_emoji': '💼', 'stats': {...}, 'highlights': [...], 'action_items': [...], 'decisions_made': [...], 'knowledge_nuggets': [...], 'locations': [...]}"
+}
+```
+
+**Field reference:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `uid` | string | User identifier (also in query param) |
+| `created_at` | string (ISO 8601 with `+00:00` offset) | Webhook send time in UTC |
+| `summary` | string | Serialized daily summary object (see warning below) |
+
+<Warning>
+**`summary` is a Python `repr` string, not a JSON object.** This is a known wart of the current wire format — the daily summary is generated as a Python `dict`, but it is wrapped in `str(...)` before being sent, which produces a single-quoted Python literal (e.g. `"{'headline': '...', 'overview': '...'}"`). Receivers **cannot** parse it with `JSON.parse`. To extract structured data you currently need a Python-specific parser such as `ast.literal_eval`, which is awkward for non-Python receivers. A future release will add a dedicated JSON-object field for the summary so receivers don't have to deal with this; in the meantime, expect the `summary` value to be opaque from a standard-JSON perspective.
+</Warning>
+
+The underlying summary object (once parsed) has roughly this shape — exposed today only as the source for the `repr` string, and as the schema the JSON-object field will use once it ships:
+
+```json
+{
+  "id": "550e8400-e29b-41d4-a716-446655440000",
+  "date": "2024-01-15",
+  "created_at": "2024-01-15T22:00:00.000000",
+  "headline": "Productive day with three focused work sessions",
+  "overview": "You had a productive day that included a project planning meeting, a deep-work coding session, and a team retrospective.",
+  "day_emoji": "💼",
+  "stats": {
+    "total_conversations": 3,
+    "total_duration_minutes": 87,
+    "action_items_count": 4
+  },
+  "highlights": [
+    {
+      "topic": "Q2 Roadmap",
+      "emoji": "🗺️",
+      "summary": "Locked in the Q2 feature priorities with the product team.",
+      "conversation_ids": ["conv_abc123"]
+    }
+  ],
+  "action_items": [
+    {
+      "description": "Send project proposal to design team by Friday",
+      "priority": "high",
+      "completed": false,
+      "source_conversation_id": "conv_abc123"
+    }
+  ],
+  "unresolved_questions": [
+    {
+      "question": "Which deployment pipeline should we adopt?",
+      "conversation_id": "conv_abc123"
+    }
+  ],
+  "decisions_made": [
+    {
+      "decision": "Migrate analytics to BigQuery",
+      "conversation_id": "conv_abc123"
+    }
+  ],
+  "knowledge_nuggets": [
+    {
+      "insight": "GitHub Actions reusable workflows can take typed inputs since 2023",
+      "conversation_id": "conv_abc123"
+    }
+  ],
+  "locations": [
+    {
+      "name": "Home office",
+      "latitude": 37.7749,
+      "longitude": -122.4194,
+      "time": "09:30"
+    }
+  ]
+}
+```
+
+<Info>
+The top-level `created_at` is the webhook send timestamp in UTC, with an explicit `+00:00` offset (e.g. `2024-01-15T22:00:00.123456+00:00`). The `created_at` *inside* the summary `repr` is the timestamp when the summary object was built by the LLM pipeline; it is also UTC but emitted as a naive ISO 8601 string with no offset suffix. The two will be very close in time but are technically distinct timestamps.
+</Info>
+
+---
+
 ## Creating an Integration App
 
 <Steps>
@@ -293,6 +422,7 @@ For a complete implementation, see the [Audio Streaming Guide](/doc/developer/ap
     - **Memory Trigger**: Process completed conversations
     - **Real-Time Transcript**: React to live speech
     - **Audio Bytes**: Process raw audio
+    - **Day Summary**: Receive a daily recap of conversations
   </Step>
   <Step title="Set Up Your Endpoint" icon="server">
     Create a webhook endpoint that can receive POST requests. For testing, use [webhook.site](https://webhook.site) or [webhook-test.com](https://webhook-test.com/).
@@ -339,6 +469,8 @@ For a complete implementation, see the [Audio Streaming Guide](/doc/developer/ap
   <Step title="Set Webhook URL" icon="link">
     - **Memory Triggers**: Enter URL in "Memory Creation Webhook"
     - **Real-Time**: Enter URL in "Real-Time Transcript Webhook"
+    - **Audio Bytes**: Enter URL (optionally with `,seconds` suffix) in "Audio Bytes Webhook"
+    - **Day Summary**: Enter URL in "Day Summary Webhook"
   </Step>
   <Step title="Test Memory Triggers" icon="bell">
     Go to any memory → Tap 3-dot menu → Developer Tools → Trigger webhook with existing data
@@ -347,6 +479,10 @@ For a complete implementation, see the [Audio Streaming Guide](/doc/developer/ap
     Start speaking - your endpoint receives updates immediately
   </Step>
 </Steps>
+
+<Note>
+The Day Summary webhook only fires on the scheduled cron path. The in-app "Generate Summary" trigger (Settings → Daily Summary → ⋮ menu) regenerates the summary on demand but does *not* currently POST to the developer webhook. The fastest way to validate a receiver is to enable the webhook, set its delivery hour to the next upcoming hour, and wait for the next cron tick.
+</Note>
 
 <Tip>
 Use [webhook.site](https://webhook.site) to see exactly what data Omi sends before writing any code.
