@@ -39,11 +39,13 @@ final class ChatErrorStateMappingTests: XCTestCase {
     XCTAssertNotNil(ChatErrorState.from(BridgeError.stopped))
     XCTAssertNotNil(ChatErrorState.from(BridgeError.timeout))
     XCTAssertNotNil(ChatErrorState.from(BridgeError.notRunning))
+    XCTAssertNotNil(ChatErrorState.from(BridgeError.restarting))
     XCTAssertNotNil(ChatErrorState.from(BridgeError.authMissing))
 
     // These must NOT map — they fall through to the legacy banner.
     XCTAssertNil(ChatErrorState.from(BridgeError.encodingError))
     XCTAssertNil(ChatErrorState.from(BridgeError.agentError("foo")))
+    XCTAssertNil(ChatErrorState.from(BridgeError.requestAlreadyActive))
     XCTAssertNil(ChatErrorState.from(
       BridgeError.quotaExceeded(plan: "free", unit: "msg", used: 100, limit: 100, resetAtUnix: nil)
     ))
@@ -152,8 +154,14 @@ final class ChatErrorStateTests: XCTestCase {
   }
 
   func testBridgeUnavailableReasonsCoverUnknown() {
-    let mapped = ChatErrorState.from(.notRunning)
-    XCTAssertEqual(mapped, .bridgeUnavailable(reason: .unknown))
+    XCTAssertEqual(
+      ChatErrorState.from(.notRunning),
+      .bridgeUnavailable(reason: .unknown)
+    )
+    XCTAssertEqual(
+      ChatErrorState.from(.restarting),
+      .bridgeUnavailable(reason: .unknown)
+    )
   }
 
   // MARK: - Auth mapping

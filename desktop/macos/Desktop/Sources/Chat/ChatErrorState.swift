@@ -23,7 +23,8 @@ enum BridgeUnavailableReason: Equatable, Sendable {
   /// `BridgeError.processExited` and `.outOfMemory`.
   case crashed
   /// Catch-all for "we don't know why it's not running"; maps from
-  /// `BridgeError.notRunning` and any other un-classified start failure.
+  /// `BridgeError.notRunning`, `.restarting`, and any other un-classified
+  /// start failure.
   case unknown
 }
 
@@ -64,7 +65,7 @@ enum ChatErrorState: Equatable, Sendable {
 enum ChatErrorRecoveryAction: Equatable, Sendable, CaseIterable {
   /// Replay the last user turn with a fresh `turnId`.
   case retry
-  /// Open the sign-in flow (Firebase / OAuth, NOT the $199 Claude paywall).
+  /// Open the sign-in flow (Firebase / OAuth, NOT the Claude paywall).
   case signIn
   /// Show installation instructions for the bridge runtime (Node.js / AI
   /// components). Currently routes to a docs URL.
@@ -116,12 +117,14 @@ extension ChatErrorState {
   ///   - `.processExited`        → `.bridgeUnavailable(.crashed)`
   ///   - `.outOfMemory`          → `.bridgeUnavailable(.crashed)`
   ///   - `.notRunning`           → `.bridgeUnavailable(.unknown)`
+  ///   - `.restarting`           → `.bridgeUnavailable(.unknown)`
   ///   - `.authMissing`          → `.authRequired`
   ///
   /// Cases intentionally returning `nil` (fall through to existing banner):
   ///   - `.encodingError`        (internal error, retry won't help)
   ///   - `.quotaExceeded`        (paywall — kept as separate sheet)
   ///   - `.agentError`           (varied; existing banner already classifies)
+  ///   - `.requestAlreadyActive` (the existing banner explains the active turn)
   static func from(_ bridgeError: BridgeError) -> ChatErrorState? {
     switch bridgeError {
     case .timeout:
@@ -134,11 +137,11 @@ extension ChatErrorState {
       return .bridgeUnavailable(reason: .runtimeMissing)
     case .processExited, .outOfMemory:
       return .bridgeUnavailable(reason: .crashed)
-    case .notRunning:
+    case .notRunning, .restarting:
       return .bridgeUnavailable(reason: .unknown)
     case .authMissing:
       return .authRequired
-    case .encodingError, .quotaExceeded, .agentError:
+    case .encodingError, .quotaExceeded, .agentError, .requestAlreadyActive:
       return nil
     }
   }
