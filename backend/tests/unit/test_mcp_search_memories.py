@@ -123,31 +123,20 @@ class TestSearchMemoriesEndpoint:
 
     @patch('routers.mcp.memories_db')
     @patch('routers.mcp.vector_db')
-    def test_locked_memory_truncates_content(self, mock_vector_db, mock_memories_db):
-        long_content = "A" * 200
+    def test_locked_memory_excluded_from_search(self, mock_vector_db, mock_memories_db):
+        # Search drops locked hits entirely (matches tool_services/memories.py behaviour);
+        # even short content must not leak via an MCP API key.
         mock_vector_db.find_similar_memories.return_value = [
             {'memory_id': 'mem-1', 'category': 'other', 'score': 0.9},
+            {'memory_id': 'mem-2', 'category': 'other', 'score': 0.8},
         ]
         mock_memories_db.get_memories_by_ids.return_value = [
-            self._make_memory('mem-1', long_content, 'other', locked=True),
+            self._make_memory('mem-1', 'Short locked', 'other', locked=True),
+            self._make_memory('mem-2', 'Unlocked memory', 'other', locked=False),
         ]
         result = search_memories(query="test", limit=10, uid="user-1")
         assert len(result) == 1
-        assert result[0]['content'] == "A" * 70 + "..."
-        assert result[0]['relevance_score'] == 0.9
-
-    @patch('routers.mcp.memories_db')
-    @patch('routers.mcp.vector_db')
-    def test_locked_memory_short_content_not_truncated(self, mock_vector_db, mock_memories_db):
-        short_content = "Short memory"
-        mock_vector_db.find_similar_memories.return_value = [
-            {'memory_id': 'mem-1', 'category': 'other', 'score': 0.9},
-        ]
-        mock_memories_db.get_memories_by_ids.return_value = [
-            self._make_memory('mem-1', short_content, 'other', locked=True),
-        ]
-        result = search_memories(query="test", limit=10, uid="user-1")
-        assert result[0]['content'] == "Short memory"
+        assert result[0]['id'] == 'mem-2'
 
     @patch('routers.mcp.memories_db')
     @patch('routers.mcp.vector_db')

@@ -125,13 +125,12 @@ def search_memories(
     for m in memories_data:
         if m.get('user_review') is False:
             continue
-        content = m.get("content", "")
-        if m.get("is_locked", False):
-            content = (content[:70] + "...") if len(content) > 70 else content
+        if m.get('is_locked', False):
+            continue
         results.append(
             {
                 "id": m.get("id", ""),
-                "content": content,
+                "content": m.get("content", ""),
                 "category": m.get("category", "other"),
                 "relevance_score": round(scores.get(m.get("id"), 0), 4),
             }
