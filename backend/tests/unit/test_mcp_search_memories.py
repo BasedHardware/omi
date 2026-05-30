@@ -158,6 +158,20 @@ class TestSearchMemoriesEndpoint:
 
     @patch('routers.mcp.memories_db')
     @patch('routers.mcp.vector_db')
+    def test_limit_zero_clamped_to_1(self, mock_vector_db, mock_memories_db):
+        mock_vector_db.find_similar_memories.return_value = []
+        search_memories(query="test", limit=0, uid="user-1")
+        mock_vector_db.find_similar_memories.assert_called_once_with("user-1", "test", threshold=0.0, limit=1)
+
+    @patch('routers.mcp.memories_db')
+    @patch('routers.mcp.vector_db')
+    def test_negative_limit_clamped_to_1(self, mock_vector_db, mock_memories_db):
+        mock_vector_db.find_similar_memories.return_value = []
+        search_memories(query="test", limit=-5, uid="user-1")
+        mock_vector_db.find_similar_memories.assert_called_once_with("user-1", "test", threshold=0.0, limit=1)
+
+    @patch('routers.mcp.memories_db')
+    @patch('routers.mcp.vector_db')
     def test_results_sorted_by_relevance_desc(self, mock_vector_db, mock_memories_db):
         mock_vector_db.find_similar_memories.return_value = [
             {'memory_id': 'mem-1', 'score': 0.5},
