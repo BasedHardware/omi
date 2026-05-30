@@ -4,6 +4,7 @@ Calendar event linking for conversations.
 Detects and links conversations to Google Calendar events when they overlap in time.
 """
 
+import logging
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
@@ -16,6 +17,8 @@ from utils.retrieval.tools.calendar_tools import (
     update_google_calendar_event,
 )
 from utils.retrieval.tools.google_utils import refresh_google_token
+
+logger = logging.getLogger(__name__)
 
 # Minimum overlap duration in seconds to consider a match (10 seconds)
 MIN_OVERLAP_SECONDS = 10
@@ -174,5 +177,11 @@ async def write_conversation_link_to_calendar_event(
             if new_token:
                 try:
                     await _write(new_token)
-                except Exception:
-                    pass
+                except Exception as retry_error:
+                    logger.warning(
+                        f"write_conversation_link_to_calendar_event failed after token refresh: {retry_error}"
+                    )
+        else:
+            logger.warning(
+                f"write_conversation_link_to_calendar_event failed for conversation {conversation_id}: {error_msg}"
+            )
