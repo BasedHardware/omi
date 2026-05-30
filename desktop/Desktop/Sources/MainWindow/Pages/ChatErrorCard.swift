@@ -188,14 +188,10 @@ struct ChatErrorCard: View {
       return "Retry"
     case .signIn:
       return "Sign in"
-    case .openSettings:
-      return "Open Settings"
     case .installRuntime:
       return "Install runtime"
     case .dismiss:
       return "Try a different question"
-    case .switchMode:
-      return "Switch mode"
     }
   }
 

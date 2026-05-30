@@ -3329,14 +3329,8 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
     ///   sign-in. Triggering native OAuth from a chat-error context
     ///   needs more UI plumbing than fits in this scope — surfacing
     ///   the URL is the honest minimum.
-    /// - `.openSettings`: post `navigateToAIChatSettings`. Same
-    ///   notification ChatPage already uses; navigates the user into
-    ///   the AI Chat settings page (where bridge mode + account live).
     /// - `.installRuntime`: open `https://nodejs.org/` so the user can
     ///   install Node before the bridge can spawn.
-    /// - `.switchMode`: toggle bridge mode (piMono ↔ userClaude) via
-    ///   the existing `switchBridgeMode(to:)`. Mirrors the Settings
-    ///   page's manual toggle path.
     func recoverFromError() async {
         guard let error = currentError else { return }
         let action = error.primaryRecovery
@@ -3356,23 +3350,11 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             if let url = URL(string: "https://omi.me/") {
                 NSWorkspace.shared.open(url)
             }
-        case .openSettings:
-            log("ChatErrorCard: .openSettings recovery — posting navigateToAIChatSettings")
-            NotificationCenter.default.post(name: .navigateToAIChatSettings, object: nil)
         case .installRuntime:
             log("ChatErrorCard: .installRuntime recovery — opening nodejs.org for runtime install")
             if let url = URL(string: "https://nodejs.org/") {
                 NSWorkspace.shared.open(url)
             }
-        case .switchMode:
-            // Toggle to the OTHER mode. `activeBridgeHarness` is the
-            // ground truth for what's actually running; the
-            // @AppStorage `bridgeMode` may have been written by a
-            // separate view and not yet reflect the live harness.
-            let targetMode: BridgeMode =
-                activeBridgeHarness == "piMono" ? .userClaude : .piMono
-            log("ChatErrorCard: .switchMode recovery — switching to \(targetMode.rawValue)")
-            await switchBridgeMode(to: targetMode)
         }
     }
 

@@ -59,20 +59,16 @@ enum ChatErrorState: Equatable, Sendable {
 
 /// One primary recovery action per error card. Multiple cases may share the
 /// same recovery (e.g. timeout + interrupted both → retry) — that's intentional.
-enum ChatErrorRecoveryAction: Equatable, Sendable {
+enum ChatErrorRecoveryAction: Equatable, Sendable, CaseIterable {
   /// Replay the last user turn with a fresh `turnId`.
   case retry
-  /// Open the sign-in flow (Firebase / OAuth, NOT the $199 Claude paywall).
+  /// Open the sign-in flow (Firebase / OAuth, NOT the Claude paywall).
   case signIn
-  /// Open Settings (e.g. for switching to a different model / mode).
-  case openSettings
   /// Show installation instructions for the bridge runtime (Node.js / AI
   /// components). Currently routes to a docs URL.
   case installRuntime
   /// Dismiss the card with no further action.
   case dismiss
-  /// Switch bridge mode (e.g. fall back from `userClaude` to `piMono`).
-  case switchMode
 }
 
 extension ChatErrorState {

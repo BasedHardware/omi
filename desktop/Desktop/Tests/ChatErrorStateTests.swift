@@ -7,17 +7,25 @@ import XCTest
 /// provider is heavy to construct in isolation).
 final class ChatErrorStateMappingTests: XCTestCase {
 
-  /// Every primaryRecovery action must be addressable by
-  /// `ChatProvider.recoverFromError()`. If a future commit adds a
-  /// new ChatErrorRecoveryAction case without a switch arm in the
-  /// provider, this test fails and forces the wiring.
-  func testEveryRecoveryActionIsAddressableByProvider() {
-    let allActions: [ChatErrorRecoveryAction] = [
-      .retry, .signIn, .openSettings, .installRuntime, .dismiss, .switchMode,
+  /// Every `ChatErrorRecoveryAction` must be *reachable* — produced by
+  /// some `ChatErrorState.primaryRecovery`. Guards against dead recovery
+  /// actions: an enum case with a handler in ChatProvider/ChatErrorCard
+  /// but no state that ever yields it. (Relies on `CaseIterable`.)
+  func testEveryRecoveryActionIsReachableFromSomeState() {
+    let allStates: [ChatErrorState] = [
+      .authRequired,
+      .timeout(toolName: nil),
+      .bridgeUnavailable(reason: .nodeMissing),
+      .bridgeUnavailable(reason: .runtimeMissing),
+      .bridgeUnavailable(reason: .crashed),
+      .bridgeUnavailable(reason: .unknown),
+      .interrupted,
+      .noDataFound,
     ]
+    let reachable = Set(allStates.map { $0.primaryRecovery })
     XCTAssertEqual(
-      allActions.count, 6,
-      "ChatErrorRecoveryAction has 6 cases. Adding a 7th requires updating ChatProvider.recoverFromError's switch."
+      reachable, Set(ChatErrorRecoveryAction.allCases),
+      "Every ChatErrorRecoveryAction must be produced by some state's primaryRecovery — unreachable actions are dead code."
     )
   }
 
@@ -66,7 +74,7 @@ final class ChatErrorStateTests: XCTestCase {
       // Exhaustive switch — any new case added to ChatErrorRecoveryAction
       // without being assigned here will fail to compile.
       switch state.primaryRecovery {
-      case .retry, .signIn, .openSettings, .installRuntime, .dismiss, .switchMode:
+      case .retry, .signIn, .installRuntime, .dismiss:
         break
       }
     }
