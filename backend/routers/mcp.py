@@ -119,6 +119,8 @@ def search_memories(
     memories_data = memories_db.get_memories_by_ids(uid, memory_ids)
     results = []
     for m in memories_data:
+        if m.get('user_review') is False:
+            continue
         content = m.get("content", "")
         if m.get("is_locked", False):
             content = (content[:70] + "...") if len(content) > 70 else content

@@ -220,6 +220,50 @@ class TestSearchMemoriesEndpoint:
         mock_vector_db.find_similar_memories.assert_called_once_with("user-1", "test", threshold=0.0, limit=10)
 
 
+class TestSearchMemoriesUserReview:
+    """search_memories must not surface memories the user explicitly rejected."""
+
+    @patch('routers.mcp.memories_db')
+    @patch('routers.mcp.vector_db')
+    def test_rejected_memory_excluded(self, mock_vector_db, mock_memories_db):
+        mock_vector_db.find_similar_memories.return_value = [
+            {'memory_id': 'mem-1', 'score': 0.9},
+            {'memory_id': 'mem-2', 'score': 0.8},
+        ]
+        mock_memories_db.get_memories_by_ids.return_value = [
+            {'id': 'mem-1', 'content': 'accepted', 'category': 'other', 'is_locked': False, 'user_review': True},
+            {'id': 'mem-2', 'content': 'rejected', 'category': 'other', 'is_locked': False, 'user_review': False},
+        ]
+        result = search_memories(query="test", limit=10, uid="user-1")
+        assert len(result) == 1
+        assert result[0]['id'] == 'mem-1'
+
+    @patch('routers.mcp.memories_db')
+    @patch('routers.mcp.vector_db')
+    def test_unreviewed_memory_included(self, mock_vector_db, mock_memories_db):
+        # user_review=None means not yet reviewed — should still appear
+        mock_vector_db.find_similar_memories.return_value = [
+            {'memory_id': 'mem-1', 'score': 0.9},
+        ]
+        mock_memories_db.get_memories_by_ids.return_value = [
+            {'id': 'mem-1', 'content': 'pending review', 'category': 'other', 'is_locked': False},
+        ]
+        result = search_memories(query="test", limit=10, uid="user-1")
+        assert len(result) == 1
+
+    @patch('routers.mcp.memories_db')
+    @patch('routers.mcp.vector_db')
+    def test_all_rejected_returns_empty(self, mock_vector_db, mock_memories_db):
+        mock_vector_db.find_similar_memories.return_value = [
+            {'memory_id': 'mem-1', 'score': 0.9},
+        ]
+        mock_memories_db.get_memories_by_ids.return_value = [
+            {'id': 'mem-1', 'content': 'rejected', 'category': 'other', 'is_locked': False, 'user_review': False},
+        ]
+        result = search_memories(query="test", limit=10, uid="user-1")
+        assert result == []
+
+
 class TestDeleteMemoryVectorSync:
     """delete_memory must also remove the Pinecone vector so search_memories
     does not return stale top-K slots for deleted memories."""
