@@ -10,7 +10,11 @@ from typing import Optional
 import database.users as users_db
 from models.conversation import CalendarEventLink
 from utils.conversations.calendar_utils import extract_attendees, parse_event_times
-from utils.retrieval.tools.calendar_tools import get_google_calendar_events
+from utils.retrieval.tools.calendar_tools import (
+    get_google_calendar_events,
+    get_google_calendar_event,
+    update_google_calendar_event,
+)
 from utils.retrieval.tools.google_utils import refresh_google_token
 
 # Minimum overlap duration in seconds to consider a match (10 seconds)
@@ -129,3 +133,46 @@ async def get_overlapping_calendar_event(
         end_time=event_end,
         html_link=best_match.get('htmlLink'),
     )
+
+
+async def write_conversation_link_to_calendar_event(
+    uid: str,
+    event_id: str,
+    conversation_id: str,
+) -> None:
+    """
+    Write the conversation link into the Google Calendar event description.
+
+    Appends https://h.omi.me/conversations/<conversation_id> to the event description.
+    Silently no-ops on any error — linking the conversation to the event is the primary
+    action; failing to write the description link should not block the caller.
+    """
+    integration = users_db.get_integration(uid, 'google_calendar')
+    if not integration or not integration.get('connected'):
+        return
+
+    access_token = integration.get('access_token')
+    if not access_token:
+        return
+
+    conversation_link = f"https://h.omi.me/conversations/{conversation_id}"
+
+    async def _write(token: str) -> None:
+        existing = await get_google_calendar_event(token, event_id)
+        current_description = existing.get('description', '') or ''
+        if conversation_link in current_description:
+            return
+        new_description = f"{current_description}\n\n{conversation_link}" if current_description else conversation_link
+        await update_google_calendar_event(access_token=token, event_id=event_id, description=new_description)
+
+    try:
+        await _write(access_token)
+    except Exception as e:
+        error_msg = str(e)
+        if "error 401" in error_msg.lower() or "authentication failed" in error_msg.lower():
+            new_token = await refresh_google_token(uid, integration)
+            if new_token:
+                try:
+                    await _write(new_token)
+                except Exception:
+                    pass

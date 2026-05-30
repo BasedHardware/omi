@@ -45,9 +45,12 @@ from utils.speaker_identification import extract_speaker_samples
 from utils.other import endpoints as auth
 from utils.other.storage import get_conversation_recording_if_exists
 from utils.app_integrations import trigger_external_integrations
-from utils.conversations.calendar_linking import get_overlapping_calendar_event
+from utils.conversations.calendar_linking import (
+    get_overlapping_calendar_event,
+    write_conversation_link_to_calendar_event,
+)
 from utils.conversations.calendar_utils import extract_attendees, parse_event_times
-from utils.retrieval.tools.calendar_tools import get_google_calendar_event, update_google_calendar_event
+from utils.retrieval.tools.calendar_tools import get_google_calendar_event
 from utils.retrieval.tools.google_utils import refresh_google_token
 from utils.conversations.location import get_google_maps_location
 import logging
@@ -271,6 +274,9 @@ async def link_calendar_event(
         uid, conversation_id, {'calendar_event': calendar_event.model_dump(mode='json')}
     )
 
+    # Automatically write the conversation link into the calendar event description
+    await write_conversation_link_to_calendar_event(uid, calendar_event.event_id, conversation_id)
+
     return calendar_event
 
 
@@ -323,87 +329,10 @@ async def auto_link_calendar_event(conversation_id: str, uid: str = Depends(auth
         uid, conversation_id, {'calendar_event': calendar_event.model_dump(mode='json')}
     )
 
+    # Automatically write the conversation link into the calendar event description
+    await write_conversation_link_to_calendar_event(uid, calendar_event.event_id, conversation_id)
+
     return calendar_event
-
-
-async def _add_summary_to_calendar_event_with_token(
-    access_token: str,
-    event_id: str,
-    conversation_id: str,
-) -> dict:
-    """Helper function to add summary link to calendar event with given token."""
-    # Get existing event to preserve current description
-    existing_event = await get_google_calendar_event(access_token, event_id)
-    current_description = existing_event.get('description', '') or ''
-
-    # Build the conversation link
-    conversation_link = f"https://h.omi.me/memories/{conversation_id}"
-
-    # Check if we already added the link (to avoid duplicates)
-    if conversation_link in current_description:
-        return {
-            'status': 'Ok',
-            'html_link': existing_event.get('htmlLink'),
-        }
-
-    # Append just the link
-    if current_description:
-        new_description = f"{current_description}\n\n{conversation_link}"
-    else:
-        new_description = conversation_link
-
-    # Update the calendar event
-    updated_event = await update_google_calendar_event(
-        access_token=access_token,
-        event_id=event_id,
-        description=new_description,
-    )
-
-    return {
-        'status': 'Ok',
-        'html_link': updated_event.get('htmlLink'),
-    }
-
-
-@router.post("/v1/conversations/{conversation_id}/calendar-event/add-summary", tags=['conversations'])
-async def add_summary_to_calendar_event(conversation_id: str, uid: str = Depends(auth.get_current_user_uid)):
-    """
-    Add conversation summary to the linked calendar event description.
-    """
-    conversation = _get_valid_conversation_by_id(uid, conversation_id)
-
-    calendar_event = conversation.get('calendar_event')
-    if not calendar_event:
-        raise HTTPException(status_code=400, detail="No calendar event linked to this conversation")
-
-    event_id = calendar_event.get('event_id')
-    if not event_id:
-        raise HTTPException(status_code=400, detail="Calendar event ID not found")
-
-    # Get Google Calendar access token
-    integration = users_db.get_integration(uid, 'google_calendar')
-    if not integration or not integration.get('connected'):
-        raise HTTPException(status_code=400, detail="Google Calendar not connected")
-
-    access_token = integration.get('access_token')
-    if not access_token:
-        raise HTTPException(status_code=400, detail="No access token found")
-
-    try:
-        return await _add_summary_to_calendar_event_with_token(access_token, event_id, conversation_id)
-    except Exception as e:
-        error_msg = str(e)
-
-        # Try to refresh token if authentication failed
-        if "error 401" in error_msg.lower() or "authentication failed" in error_msg.lower():
-            new_token = await refresh_google_token(uid, integration)
-            if new_token:
-                try:
-                    return await _add_summary_to_calendar_event_with_token(new_token, event_id, conversation_id)
-                except Exception as retry_error:
-                    raise HTTPException(status_code=500, detail=f"Failed after token refresh: {str(retry_error)}")
-
-        raise HTTPException(status_code=500, detail=f"Failed to update calendar event: {error_msg}")
 
 
 @router.patch("/v1/conversations/{conversation_id}/summary", tags=['conversations'])
