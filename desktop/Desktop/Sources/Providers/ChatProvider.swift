@@ -686,6 +686,15 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
     init() {
         log("ChatProvider initialized, will start Claude bridge on first use")
 
+        // When the last in-flight save completes, re-run any poll cycle
+        // that was deferred while saves were active. Keeps suppression
+        // from permanently dropping a fetch of other-platform messages.
+        pendingSaves.onDrained = { [weak self] in
+            guard let self, self.pollDeferredDuringSave else { return }
+            self.pollDeferredDuringSave = false
+            Task { [weak self] in await self?.pollForNewMessages() }
+        }
+
         // Migrate legacy "agentSDK" persisted mode to the new default "piMono".
         // Pre-6594 installs may have the old agentSDK tag saved; the settings
         // picker no longer offers it, so leaving it stored would leave the UI
@@ -2127,6 +2136,14 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
     /// active. Sites are documented inline at each `saveMessage(...)` call.
     private let pendingSaves = PendingSaveCounter()
 
+    /// Set when a `pollForNewMessages` cycle bailed *because* a save was
+    /// in flight. `pollForNewMessages` is only triggered by activation /
+    /// Cmd+R (there is no periodic poll), so a dropped cycle would leave
+    /// messages from other platforms unfetched until the next activation.
+    /// `pendingSaves.onDrained` re-runs the poll once saves finish, but
+    /// only when this flag says one was actually deferred.
+    private var pollDeferredDuringSave = false
+
     /// Fetch new messages from other platforms (e.g. mobile).
     /// Merges new messages into the existing array without disrupting the UI.
     private func pollForNewMessages() async {
@@ -2145,7 +2162,11 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
         // — any in-flight saveMessage (user msg, AI msg, follow-up, partial-on-error,
         // proactive notification) keeps the poll suppressed until it lands. This is
         // defense-in-depth over the 200-char text-prefix merge below at lines ~2192.
-        guard !isSending, !isLoading, !isLoadingSessions, !pendingSaves.isActive else { return }
+        guard !isSending, !isLoading, !isLoadingSessions else { return }
+        // A save in flight means a local message hasn't reconciled its
+        // server ID yet — defer rather than risk observing it as new.
+        // Mark the cycle deferred so `pendingSaves.onDrained` re-runs it.
+        guard !pendingSaves.isActive else { pollDeferredDuringSave = true; return }
         // Skip if messages haven't been loaded yet (initial load not done)
         guard !messages.isEmpty || sessionsLoadError != nil else { return }
         // Skip if there's an active streaming message
@@ -2175,8 +2196,11 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             // just fetched, carrying a server ID the local copy hasn't adopted
             // yet. Re-check here and bail this cycle; the next poll after the
             // save lands reconciles it by ID. Without this, the post-guard
-            // window stays open for the proactive paths.
-            guard !pendingSaves.isActive else { return }
+            // window stays open for the proactive paths. Mark the cycle
+            // deferred so the drain handler re-runs it — otherwise the
+            // just-fetched batch (including any genuine new messages from
+            // other platforms) would be dropped until the next activation.
+            guard !pendingSaves.isActive else { pollDeferredDuringSave = true; return }
 
             // Build a lookup of existing IDs for fast O(1) checks.
             let existingIds = Set(messages.map(\.id))

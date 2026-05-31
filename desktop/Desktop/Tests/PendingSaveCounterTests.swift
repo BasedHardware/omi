@@ -72,6 +72,28 @@ final class PendingSaveCounterTests: XCTestCase {
         XCTAssertFalse(counter.isActive)
     }
 
+    /// `onDrained` fires exactly when the last holder releases (count
+    /// returns to 0), not on intermediate `end()` calls. This is what
+    /// lets the owner re-run a poll cycle that was deferred while saves
+    /// were in flight.
+    func testOnDrainedFiresOnlyWhenCountReturnsToZero() {
+        let counter = PendingSaveCounter()
+        var drains = 0
+        counter.onDrained = { drains += 1 }
+
+        counter.begin()
+        counter.begin()
+        counter.end()
+        XCTAssertEqual(drains, 0, "still one holder — must not fire yet")
+        counter.end()
+        XCTAssertEqual(drains, 1, "last holder released — fires once")
+
+        // A fresh round fires again.
+        counter.begin()
+        counter.end()
+        XCTAssertEqual(drains, 2)
+    }
+
     /// Production usage interleaves begin/end across overlapping save
     /// Tasks. Verify the counter behaves correctly when begins and
     /// ends arrive out of original order.

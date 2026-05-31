@@ -43,6 +43,12 @@ import Foundation
 final class PendingSaveCounter {
     private var count: Int = 0
 
+    /// Invoked each time the count returns to 0 (the last in-flight save
+    /// completed). Lets the owner re-run any work that was suppressed
+    /// while saves were active — e.g. a `pollForNewMessages` cycle that
+    /// was deferred so it wouldn't observe a half-saved message.
+    var onDrained: (() -> Void)?
+
     /// True when at least one save is in flight.
     var isActive: Bool { count > 0 }
 
@@ -65,5 +71,6 @@ final class PendingSaveCounter {
         assert(count > 0, "PendingSaveCounter: unbalanced end() — no matching begin()")
         guard count > 0 else { return }
         count -= 1
+        if count == 0 { onDrained?() }
     }
 }
