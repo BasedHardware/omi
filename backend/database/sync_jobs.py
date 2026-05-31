@@ -70,15 +70,32 @@ def get_sync_job(job_id: str) -> Optional[dict]:
         return None
     job = json.loads(data)
 
-    # Stale-job detection: if processing for too long, mark failed
+    # Stale-job detection: if processing for too long, mark failed.
+    #
+    # Distinguishes two scenarios:
+    #   1. status == 'processing' and stale — worker likely died mid-pipeline.
+    #      Keep the existing failure semantics; the worker really did fail.
+    #   2. status == 'queued' and stale — never picked up; backend was saturated.
+    #      Not a job failure; the client should retry later.
     if job['status'] in ('queued', 'processing'):
         updated_at = job.get('updated_at') or job.get('created_at', 0)
         if time.time() - updated_at > STALE_THRESHOLD_SECONDS:
-            job['status'] = 'failed'
-            job['error'] = 'Job timed out (background worker likely died)'
+            if job['status'] == 'queued':
+                # Job was never picked up — backend capacity issue, not a failure.
+                job['status'] = 'queued_too_long'
+                job['error'] = 'Backend capacity exhausted before pickup — retry later'
+            else:
+                # Job was being processed but stalled — worker likely died.
+                job['status'] = 'failed'
+                job['error'] = 'Job timed out (background worker likely died)'
             job['completed_at'] = time.time()
-            # Persist the failure status
+            # Persist the status transition
             r.set(key, json.dumps(job, default=str), ex=JOB_TTL_SECONDS)
+            logger.info(
+                "Stale guard transitioned sync_job %s from %s to %s",
+                job_id, job['status'],
+                'queued_too_long' if job['status'] == 'queued' else 'failed',
+            )
 
     return job
 
