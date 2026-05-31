@@ -83,6 +83,8 @@ def create_subscription_checkout_session(
 
         checkout_session = stripe.checkout.Session.create(**session_params)
         return checkout_session
+    except stripe.error.InvalidRequestError:
+        raise
     except Exception as e:
         logger.error(f"Error creating checkout session: {e}")
         return None
