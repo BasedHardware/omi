@@ -689,9 +689,16 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
         // When the last in-flight save completes, re-run any poll cycle
         // that was deferred while saves were active. Keeps suppression
         // from permanently dropping a fetch of other-platform messages.
+        //
+        // The flag is intentionally NOT cleared here — only
+        // `pollForNewMessages` clears it, and only once it actually gets
+        // past its guards and commits to a fetch. Otherwise a retry that
+        // bails again (e.g. on `isSending` because the next turn is mid-
+        // stream) would drop the deferral permanently; leaving the flag
+        // set lets the next drain (e.g. the AI-response save) retry once
+        // sending has finished.
         pendingSaves.onDrained = { [weak self] in
             guard let self, self.pollDeferredDuringSave else { return }
-            self.pollDeferredDuringSave = false
             Task { [weak self] in await self?.pollForNewMessages() }
         }
 
@@ -2171,6 +2178,14 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
         guard !messages.isEmpty || sessionsLoadError != nil else { return }
         // Skip if there's an active streaming message
         guard !messages.contains(where: { $0.isStreaming }) else { return }
+
+        // Past all the deferral-relevant guards — this cycle is actually
+        // going to fetch, so any pending deferral is now being honored.
+        // Cleared HERE (not in onDrained) so a retry that bailed earlier
+        // on `isSending`/streaming keeps the flag set and gets retried by
+        // the next drain. The post-fetch recheck below re-sets it if a
+        // save sneaks in during getMessages.
+        pollDeferredDuringSave = false
 
         do {
             let persistedMessages: [ChatMessageDB]
