@@ -386,12 +386,7 @@ def create_checkout_session_endpoint(request: CreateCheckoutRequest, uid: str = 
     if not can_pay:
         raise HTTPException(status_code=400, detail=reason)
 
-    # Try to reactivate canceled subscription (Scenario A)
-    reactivation_result = _try_reactivate_subscription(uid, request.price_id)
-    if reactivation_result:
-        return reactivation_result
-
-    # Validate promotion code before creating checkout session
+    # Validate promotion code early — reject invalid codes before any subscription changes
     resolved_checkout_promo_id = None
     if request.promotion_code:
         promo_list = stripe.PromotionCode.list(code=request.promotion_code, active=True, limit=1)
@@ -399,16 +394,25 @@ def create_checkout_session_endpoint(request: CreateCheckoutRequest, uid: str = 
             raise HTTPException(status_code=400, detail="Invalid or expired promotion code.")
         resolved_checkout_promo_id = promo_list.data[0].id
 
+    # Try to reactivate canceled subscription (Scenario A)
+    reactivation_result = _try_reactivate_subscription(uid, request.price_id)
+    if reactivation_result:
+        return reactivation_result
+
     # Normal checkout flow for new subscriptions (Scenario B or first-time subscribers)
     idempotency_key = str(uuid.uuid4())
     existing_customer_id = users_db.get_stripe_customer_id(uid)
-    session = stripe_utils.create_subscription_checkout_session(
-        uid,
-        request.price_id,
-        idempotency_key,
-        customer_id=existing_customer_id,
-        promotion_code_id=resolved_checkout_promo_id,
-    )
+    try:
+        session = stripe_utils.create_subscription_checkout_session(
+            uid,
+            request.price_id,
+            idempotency_key,
+            customer_id=existing_customer_id,
+            promotion_code_id=resolved_checkout_promo_id,
+        )
+    except stripe.error.InvalidRequestError as e:
+        detail = str(e.user_message) if hasattr(e, 'user_message') and e.user_message else str(e)
+        raise HTTPException(status_code=400, detail=detail)
     if not session:
         raise HTTPException(status_code=500, detail="Could not create checkout session.")
     return {"url": session.url, "session_id": session.id}
@@ -543,6 +547,10 @@ def upgrade_subscription_endpoint(request: UpgradeSubscriptionRequest, uid: str 
 
     except HTTPException:
         raise
+    except stripe.error.InvalidRequestError as e:
+        logger.error(f"Stripe rejected subscription change: {sanitize(str(e))}")
+        detail = str(e.user_message) if hasattr(e, 'user_message') and e.user_message else str(e)
+        raise HTTPException(status_code=400, detail=detail)
     except Exception as e:
         logger.error(f"Error processing subscription change: {sanitize(str(e))}")
         raise HTTPException(status_code=500, detail="Failed to process subscription change. Please try again.")
