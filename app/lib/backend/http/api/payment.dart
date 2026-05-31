@@ -4,12 +4,16 @@ import 'package:omi/backend/http/shared.dart';
 import 'package:omi/env/env.dart';
 import 'package:omi/utils/logger.dart';
 
-Future<Map<String, dynamic>?> createCheckoutSession({required String priceId}) async {
+Future<Map<String, dynamic>?> createCheckoutSession({required String priceId, String? promotionCode}) async {
+  final body = <String, dynamic>{'price_id': priceId};
+  if (promotionCode != null && promotionCode.trim().isNotEmpty) {
+    body['promotion_code'] = promotionCode.trim();
+  }
   var response = await makeApiCall(
     url: '${Env.apiBaseUrl}v1/payments/checkout-session',
     headers: {},
     method: 'POST',
-    body: jsonEncode({'price_id': priceId}),
+    body: jsonEncode(body),
   );
   if (response != null && response.statusCode == 200) {
     var jsonResponse = jsonDecode(response.body);
