@@ -544,7 +544,11 @@ class _PlansSheetState extends State<PlansSheet> {
         );
         if (result != null && result['error'] == true) {
           final detail = result['detail'] as String? ?? 'Invalid promotion code.';
-          setState(() => _promoCodeError = detail);
+          if (promoCode.isNotEmpty) {
+            setState(() => _promoCodeError = detail);
+          } else {
+            AppSnackbar.showSnackbarError(detail);
+          }
           return;
         } else if (result != null) {
           setState(() => _promoCodeError = null);
@@ -1435,7 +1439,8 @@ class _PlansSheetState extends State<PlansSheet> {
         TextField(
           controller: _promoCodeController,
           style: const TextStyle(color: Colors.white, fontSize: 16),
-          textCapitalization: TextCapitalization.characters,
+          autocorrect: false,
+          enableSuggestions: false,
           decoration: InputDecoration(
             prefixIcon: Icon(Icons.local_offer_outlined, color: Colors.grey.shade400, size: 20),
             labelText: context.l10n.promoCode,
