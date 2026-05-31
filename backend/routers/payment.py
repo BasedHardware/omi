@@ -66,10 +66,12 @@ router = APIRouter()
 
 class CreateCheckoutRequest(BaseModel):
     price_id: str
+    promotion_code: Optional[str] = None
 
 
 class UpgradeSubscriptionRequest(BaseModel):
     price_id: str
+    promotion_code: Optional[str] = None
 
 
 class PricingOption(BaseModel):
@@ -393,7 +395,7 @@ def create_checkout_session_endpoint(request: CreateCheckoutRequest, uid: str = 
     idempotency_key = str(uuid.uuid4())
     existing_customer_id = users_db.get_stripe_customer_id(uid)
     session = stripe_utils.create_subscription_checkout_session(
-        uid, request.price_id, idempotency_key, customer_id=existing_customer_id
+        uid, request.price_id, idempotency_key, customer_id=existing_customer_id, promotion_code=request.promotion_code
     )
     if not session:
         raise HTTPException(status_code=500, detail="Could not create checkout session.")
@@ -442,14 +444,25 @@ def upgrade_subscription_endpoint(request: UpgradeSubscriptionRequest, uid: str 
                 detail="Downgrading from Architect to Unlimited is not available. Please contact support if you need to change your plan.",
             )
 
+        # Validate and resolve promotion code if provided
+        resolved_coupon_id = None
+        if request.promotion_code:
+            promo_list = stripe.PromotionCode.list(code=request.promotion_code, active=True, limit=1)
+            if not promo_list.data:
+                raise HTTPException(status_code=400, detail="Invalid or expired promotion code.")
+            resolved_coupon_id = promo_list.data[0].coupon.id
+
         # Cross-plan change (e.g. Unlimited→Architect): immediate swap with proration
         if current_plan != target_plan:
-            updated_sub = stripe.Subscription.modify(
-                stripe_sub['id'],
-                items=[{'id': current_item_id, 'price': request.price_id}],
-                proration_behavior='always_invoice',
-                metadata={'uid': uid, 'sub_type': target_plan.value},
-            )
+            modify_params = {
+                'items': [{'id': current_item_id, 'price': request.price_id}],
+                'proration_behavior': 'always_invoice',
+                'metadata': {'uid': uid, 'sub_type': target_plan.value},
+            }
+            if resolved_coupon_id:
+                modify_params['discounts'] = [{'coupon': resolved_coupon_id}]
+
+            updated_sub = stripe.Subscription.modify(stripe_sub['id'], **modify_params)
 
             # Update our database immediately
             new_subscription = _build_subscription_from_stripe_object(updated_sub.to_dict())
