@@ -235,6 +235,8 @@ struct SettingsContentView: View {
   @State private var fallbackPlanCatalog: [SubscriptionPlanOption] = []
   @State private var activeCheckoutPriceId: String?
   @State private var selectedPlanIdForCheckout: String?
+  @State private var upgradePromotionCode: String = ""
+  @State private var isPromoCodeExpanded: Bool = false
   @State private var isOpeningCustomerPortal: Bool = false
   @State private var activeBillingWebFlow: BillingWebFlow?
   @State private var pendingSubscriptionPriceId: String?
@@ -6822,6 +6824,48 @@ struct SettingsContentView: View {
           .overlay(OmiColors.backgroundQuaternary)
 
         VStack(alignment: .leading, spacing: 10) {
+          VStack(alignment: .leading, spacing: 6) {
+            Button(action: {
+              withAnimation(.easeInOut(duration: 0.2)) {
+                isPromoCodeExpanded.toggle()
+              }
+            }) {
+              HStack(spacing: 6) {
+                Image(systemName: "tag")
+                  .scaledFont(size: 12)
+                Text("Promo code")
+                  .scaledFont(size: 12)
+                Image(systemName: isPromoCodeExpanded ? "chevron.up" : "chevron.down")
+                  .scaledFont(size: 10)
+              }
+              .foregroundColor(OmiColors.textTertiary)
+            }
+            .buttonStyle(.plain)
+
+            if isPromoCodeExpanded {
+              VStack(alignment: .leading, spacing: 6) {
+                TextField("Enter promo code", text: $upgradePromotionCode)
+                  .textFieldStyle(.roundedBorder)
+                  .scaledFont(size: 13)
+                  .disabled(activeCheckoutPriceId != nil)
+                  .onChange(of: upgradePromotionCode) { _ in
+                    subscriptionError = nil
+                  }
+
+                if let error = subscriptionError {
+                  HStack(spacing: 4) {
+                    Image(systemName: "exclamationmark.circle")
+                      .scaledFont(size: 11)
+                    Text(error)
+                      .scaledFont(size: 11)
+                  }
+                  .foregroundColor(OmiColors.warning)
+                }
+              }
+              .transition(.opacity.combined(with: .move(edge: .top)))
+            }
+          }
+
           Text("Choose billing")
             .scaledFont(size: 12, weight: .semibold)
             .foregroundColor(OmiColors.textTertiary)
@@ -7273,6 +7317,9 @@ struct SettingsContentView: View {
     pendingSubscriptionPriceId = priceId
     subscriptionError = nil
 
+    let promotionCode = upgradePromotionCode.trimmingCharacters(in: .whitespacesAndNewlines)
+    let promoToSend: String? = promotionCode.isEmpty ? nil : promotionCode
+
     // If user already has an active paid subscription (not canceled), use upgrade endpoint
     // to schedule the plan change at end of billing period (no double-charging)
     if hasPaidSubscription,
@@ -7281,12 +7328,20 @@ struct SettingsContentView: View {
     {
       Task {
         do {
-          _ = try await APIClient.shared.upgradeSubscription(priceId: priceId)
+          _ = try await APIClient.shared.upgradeSubscription(
+            priceId: priceId, promotionCode: promoToSend)
           await MainActor.run {
             activeCheckoutPriceId = nil
             pendingSubscriptionPriceId = nil
             subscriptionError = nil
+            self.upgradePromotionCode = ""
             loadSubscriptionInfo()
+          }
+        } catch let apiError as APIError {
+          await MainActor.run {
+            activeCheckoutPriceId = nil
+            pendingSubscriptionPriceId = nil
+            subscriptionError = apiError.detail ?? "Failed to schedule plan change."
           }
         } catch {
           logError("Failed to schedule plan change", error: error)
@@ -7302,7 +7357,8 @@ struct SettingsContentView: View {
 
     Task {
       do {
-        let response = try await APIClient.shared.createCheckoutSession(priceId: priceId)
+        let response = try await APIClient.shared.createCheckoutSession(
+          priceId: priceId, promotionCode: promoToSend)
         let apiBaseURL = await APIClient.shared.baseURL
         await MainActor.run {
           activeCheckoutPriceId = nil
@@ -7332,6 +7388,14 @@ struct SettingsContentView: View {
           await MainActor.run {
             subscriptionError = response.message ?? "Could not start checkout."
           }
+        }
+      } catch let apiError as APIError {
+        logError("Failed to create checkout session", error: apiError)
+        await MainActor.run {
+          activeCheckoutPriceId = nil
+          pendingSubscriptionPriceId = nil
+          pendingCheckoutSessionId = nil
+          subscriptionError = apiError.detail ?? "Failed to open checkout."
         }
       } catch {
         logError("Failed to create checkout session", error: error)
