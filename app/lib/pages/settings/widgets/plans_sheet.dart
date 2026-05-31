@@ -529,6 +529,7 @@ class _PlansSheetState extends State<PlansSheet> {
     }
 
     setState(() => _isUpgrading = true);
+    final promoCode = _promoCodeController.text.trim();
     try {
       Map<String, dynamic>? result;
 
@@ -538,7 +539,6 @@ class _PlansSheetState extends State<PlansSheet> {
               currentSub.plan == PlanType.architect) &&
           currentSub.status == SubscriptionStatus.active &&
           !currentSub.cancelAtPeriodEnd) {
-        final promoCode = _promoCodeController.text.trim();
         result = await provider.upgradeUserSubscription(
           priceId: priceId,
           promotionCode: promoCode.isNotEmpty ? promoCode : null,
@@ -560,7 +560,10 @@ class _PlansSheetState extends State<PlansSheet> {
         }
       } else {
         // New subscription (for basic users or canceled subscriptions)
-        final sessionData = await provider.createUserCheckoutSession(priceId: priceId);
+        final sessionData = await provider.createUserCheckoutSession(
+          priceId: priceId,
+          promotionCode: promoCode.isNotEmpty ? promoCode : null,
+        );
         if (sessionData != null && mounted) {
           // Check if this was a reactivation
           if (sessionData.containsKey('status') && sessionData['status'] == 'reactivated') {
@@ -1183,10 +1186,8 @@ class _PlansSheetState extends State<PlansSheet> {
 
                         const SizedBox(height: 24),
 
-                        if (isUnlimited && !isCancelled) ...[
-                          _buildPromoCodeField(),
-                          const SizedBox(height: 16),
-                        ],
+                        _buildPromoCodeField(),
+                        const SizedBox(height: 16),
 
                         // Continue/Keep Unlimited button - only show for non-annual unlimited users
                         Builder(
