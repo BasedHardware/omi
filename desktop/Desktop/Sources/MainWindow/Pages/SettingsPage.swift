@@ -6824,40 +6824,6 @@ struct SettingsContentView: View {
           .overlay(OmiColors.backgroundQuaternary)
 
         VStack(alignment: .leading, spacing: 10) {
-          Text("Choose billing")
-            .scaledFont(size: 12, weight: .semibold)
-            .foregroundColor(OmiColors.textTertiary)
-
-          HStack(spacing: 10) {
-            ForEach(sortedPrices(for: plan)) { price in
-              Button(action: {
-                startCheckout(for: price.id)
-              }) {
-                Group {
-                  if activeCheckoutPriceId == price.id {
-                    ProgressView()
-                      .controlSize(.small)
-                      .frame(maxWidth: .infinity)
-                  } else {
-                    VStack(spacing: 3) {
-                      Text(price.title)
-                        .scaledFont(size: 12, weight: .bold)
-                      Text(price.priceString)
-                        .scaledFont(size: 11)
-                        .foregroundColor(Color.white.opacity(0.92))
-                    }
-                    .foregroundColor(.white)
-                    .frame(maxWidth: .infinity)
-                  }
-                }
-                .padding(.vertical, 10)
-              }
-              .buttonStyle(.borderedProminent)
-              .tint(accent)
-              .disabled(activeCheckoutPriceId != nil)
-            }
-          }
-
           VStack(alignment: .leading, spacing: 6) {
             Button(action: {
               withAnimation(.easeInOut(duration: 0.2)) {
@@ -6897,6 +6863,40 @@ struct SettingsContentView: View {
                 }
               }
               .transition(.opacity.combined(with: .move(edge: .top)))
+            }
+          }
+
+          Text("Choose billing")
+            .scaledFont(size: 12, weight: .semibold)
+            .foregroundColor(OmiColors.textTertiary)
+
+          HStack(spacing: 10) {
+            ForEach(sortedPrices(for: plan)) { price in
+              Button(action: {
+                startCheckout(for: price.id)
+              }) {
+                Group {
+                  if activeCheckoutPriceId == price.id {
+                    ProgressView()
+                      .controlSize(.small)
+                      .frame(maxWidth: .infinity)
+                  } else {
+                    VStack(spacing: 3) {
+                      Text(price.title)
+                        .scaledFont(size: 12, weight: .bold)
+                      Text(price.priceString)
+                        .scaledFont(size: 11)
+                        .foregroundColor(Color.white.opacity(0.92))
+                    }
+                    .foregroundColor(.white)
+                    .frame(maxWidth: .infinity)
+                  }
+                }
+                .padding(.vertical, 10)
+              }
+              .buttonStyle(.borderedProminent)
+              .tint(accent)
+              .disabled(activeCheckoutPriceId != nil)
             }
           }
         }
