@@ -332,7 +332,20 @@ Your endpoint receives a POST request with the daily summary:
 {
   "uid": "user123",
   "created_at": "2024-01-15T22:00:00.123456+00:00",
-  "summary": "{'id': '550e8400-...', 'date': '2024-01-15', 'headline': 'Productive day with three focused work sessions', 'overview': '...', 'day_emoji': '💼', 'stats': {...}, 'highlights': [...], 'action_items': [...], 'decisions_made': [...], 'knowledge_nuggets': [...], 'locations': [...]}"
+  "summary": "{'id': '550e8400-...', 'date': '2024-01-15', 'headline': 'Productive day with three focused work sessions', ...}",
+  "summary_json": {
+    "id": "550e8400-e29b-41d4-a716-446655440000",
+    "date": "2024-01-15",
+    "headline": "Productive day with three focused work sessions",
+    "overview": "...",
+    "day_emoji": "💼",
+    "stats": { },
+    "highlights": [],
+    "action_items": [],
+    "decisions_made": [],
+    "knowledge_nuggets": [],
+    "locations": []
+  }
 }
 ```
 
@@ -342,13 +355,14 @@ Your endpoint receives a POST request with the daily summary:
 |-------|------|-------------|
 | `uid` | string | User identifier (also in query param) |
 | `created_at` | string (ISO 8601 with `+00:00` offset) | Webhook send time in UTC |
-| `summary` | string | Serialized daily summary object (see warning below) |
+| `summary_json` | object | **Recommended.** The daily summary as a real JSON object (schema below). Use this for any new integration. |
+| `summary` | string | **Legacy.** The same payload serialized via Python's `str(...)`, kept for backward compatibility. See the migration note below. |
 
-<Warning>
-**`summary` is a Python `repr` string, not a JSON object.** This is a known wart of the current wire format — the daily summary is generated as a Python `dict`, but it is wrapped in `str(...)` before being sent, which produces a single-quoted Python literal (e.g. `"{'headline': '...', 'overview': '...'}"`). Receivers **cannot** parse it with `JSON.parse`. To extract structured data you currently need a Python-specific parser such as `ast.literal_eval`, which is awkward for non-Python receivers. A future release will add a dedicated JSON-object field for the summary so receivers don't have to deal with this; in the meantime, expect the `summary` value to be opaque from a standard-JSON perspective.
-</Warning>
+<Note>
+**Use `summary_json` for new integrations.** The `summary` field stays on the wire so existing receivers don't break, but it's the legacy form: Python's `str(...)` on a `dict` produces a single-quoted Python literal (e.g. `"{'headline': '...'}"`) that **cannot** be parsed by `JSON.parse` and currently requires something Python-specific like `ast.literal_eval` to read. The new `summary_json` field carries the exact same payload as a real JSON object — every standard JSON parser handles it natively. Plan to migrate existing receivers to `summary_json`; the legacy `summary` field will be deprecated in a future release.
+</Note>
 
-The underlying summary object (once parsed) has roughly this shape — exposed today only as the source for the `repr` string, and as the schema the JSON-object field will use once it ships:
+The `summary_json` object has this shape (also reflects what `summary` represents once parsed):
 
 ```json
 {
@@ -409,7 +423,7 @@ The underlying summary object (once parsed) has roughly this shape — exposed t
 ```
 
 <Info>
-The top-level `created_at` is the webhook send timestamp in UTC, with an explicit `+00:00` offset (e.g. `2024-01-15T22:00:00.123456+00:00`). The `created_at` *inside* the summary `repr` is the timestamp when the summary object was built by the LLM pipeline; it is also UTC but emitted as a naive ISO 8601 string with no offset suffix. The two will be very close in time but are technically distinct timestamps.
+The top-level `created_at` is the webhook send timestamp in UTC, with an explicit `+00:00` offset (e.g. `2024-01-15T22:00:00.123456+00:00`). The `created_at` *inside* `summary_json` (and inside the legacy `summary` string) is the timestamp when the summary object was built by the LLM pipeline; it is also UTC but emitted as a naive ISO 8601 string with no offset suffix. The two will be very close in time but are technically distinct timestamps.
 </Info>
 
 ---
