@@ -58,8 +58,11 @@ final class PendingSaveCounter {
 
     /// Decrement the count. Bounded at 0 — stray calls cannot drive
     /// the counter negative, which would otherwise permanently
-    /// indicate "no saves in flight" even when there are.
+    /// indicate "no saves in flight" even when there are. The `assert`
+    /// surfaces an unbalanced `begin()`/`end()` pair in debug builds
+    /// (zero cost in release) instead of failing silently.
     func end() {
+        assert(count > 0, "PendingSaveCounter: unbalanced end() — no matching begin()")
         guard count > 0 else { return }
         count -= 1
     }

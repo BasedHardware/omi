@@ -2168,6 +2168,16 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                 )
             }
 
+            // A save may have begun *while* getMessages was awaiting — e.g.
+            // a proactive assistant message appended via appendAssistantMessage
+            // (FloatingControlBarWindow) after this poll already passed the
+            // pendingSaves guard above. That message can be in the batch we
+            // just fetched, carrying a server ID the local copy hasn't adopted
+            // yet. Re-check here and bail this cycle; the next poll after the
+            // save lands reconciles it by ID. Without this, the post-guard
+            // window stays open for the proactive paths.
+            guard !pendingSaves.isActive else { return }
+
             // Build a lookup of existing IDs for fast O(1) checks.
             let existingIds = Set(messages.map(\.id))
 
@@ -2867,7 +2877,12 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                 // ID has been synced. The pre-existing 200-char
                 // text-prefix merge at `pollForNewMessages` stays as
                 // a secondary safety net.
+                // `defer` guarantees the counter is released on every exit
+                // path — success, throw, or any future early return added
+                // inside this block — so a missed `end()` can't permanently
+                // suppress the poll.
                 pendingSaves.begin()
+                defer { pendingSaves.end() }
                 do {
                     let toolMetadata = serializeToolCallMetadata(messageId: aiMessageId)
                     let response = try await APIClient.shared.saveMessage(
@@ -2884,10 +2899,8 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                         messages[syncIndex].id = response.id
                         messages[syncIndex].isSynced = true
                     }
-                    pendingSaves.end()
                     log("Saved and synced AI response: \(response.id) (session=\(capturedSessionId ?? "nil"), tool_calls=\(toolMetadata != nil ? "yes" : "none"))")
                 } catch {
-                    pendingSaves.end()
                     logError("Failed to persist AI response", error: error)
                 }
             }

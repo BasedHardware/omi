@@ -51,16 +51,24 @@ final class PendingSaveCounterTests: XCTestCase {
         XCTAssertFalse(counter.isActive)
     }
 
-    /// Defensive: stray `end()` calls without a matching `begin()` must
-    /// not drive the counter negative. A negative count would
-    /// misreport `isActive == false` when a subsequent `begin()` is
-    /// pending, silently re-opening the race window.
-    func testEndIsBoundedAtZero() {
+    /// The counter must not get "stuck" or go negative across balanced
+    /// use — after equal begins and ends it returns cleanly to zero and
+    /// a fresh round still activates it. (Calling `end()` without a
+    /// matching `begin()` is a programmer error caught by an `assert` in
+    /// debug builds; the release-build guard still bounds it at zero.)
+    func testCounterReturnsToZeroAndStaysUsableAcrossRounds() {
         let counter = PendingSaveCounter()
-        counter.end()
+        counter.begin()
+        counter.begin()
         counter.end()
         counter.end()
         XCTAssertEqual(counter.currentCount, 0)
+        XCTAssertFalse(counter.isActive)
+
+        // A subsequent round must still activate — no stuck state.
+        counter.begin()
+        XCTAssertTrue(counter.isActive)
+        counter.end()
         XCTAssertFalse(counter.isActive)
     }
 
