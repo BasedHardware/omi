@@ -248,7 +248,6 @@ enum APIError: LocalizedError {
   case invalidResponse
   case unauthorized
   case httpError(statusCode: Int)
-  case serverMessage(statusCode: Int, message: String)
   case decodingError(Error)
 
   var errorDescription: String? {
@@ -259,8 +258,6 @@ enum APIError: LocalizedError {
       return "Unauthorized - please sign in again"
     case .httpError(let statusCode):
       return "HTTP error: \(statusCode)"
-    case .serverMessage(_, let message):
-      return message
     case .decodingError(let error):
       return "Failed to decode response: \(error.localizedDescription)"
     }
@@ -4563,71 +4560,16 @@ extension APIClient {
     return try await post("v1/payments/checkout-session", body: Request(priceId: priceId))
   }
 
-  func upgradeSubscription(priceId: String, promotionCode: String? = nil) async throws -> UpgradeSubscriptionResponse {
+  func upgradeSubscription(priceId: String) async throws -> UpgradeSubscriptionResponse {
     struct Request: Encodable {
       let priceId: String
-      let promotionCode: String?
 
       enum CodingKeys: String, CodingKey {
         case priceId = "price_id"
-        case promotionCode = "promotion_code"
       }
     }
 
-    struct ErrorResponse: Decodable {
-      let detail: String?
-    }
-
-    let url = URL(string: baseURL + "v1/payments/upgrade-subscription")!
-    var request = URLRequest(url: url)
-    request.httpMethod = "POST"
-    request.allHTTPHeaderFields = try await buildHeaders()
-    request.httpBody = try JSONEncoder().encode(
-      Request(priceId: priceId, promotionCode: promotionCode?.trimmingCharacters(in: .whitespacesAndNewlines))
-    )
-
-    let (data, response) = try await session.data(for: request)
-    guard let httpResponse = response as? HTTPURLResponse else {
-      throw APIError.invalidResponse
-    }
-    if httpResponse.statusCode == 401 {
-      let authService = await MainActor.run { AuthService.shared }
-      _ = try await authService.getIdToken(forceRefresh: true)
-
-      var retryRequest = request
-      retryRequest.setValue(
-        try await authService.getAuthHeader(), forHTTPHeaderField: "Authorization")
-
-      let (retryData, retryResponse) = try await session.data(for: retryRequest)
-      guard let retryHttpResponse = retryResponse as? HTTPURLResponse else {
-        throw APIError.invalidResponse
-      }
-      if retryHttpResponse.statusCode == 401 {
-        throw APIError.unauthorized
-      }
-      guard (200...299).contains(retryHttpResponse.statusCode) else {
-        if let errorResponse = try? decoder.decode(ErrorResponse.self, from: retryData),
-           let detail = errorResponse.detail,
-           !detail.isEmpty
-        {
-          throw APIError.serverMessage(statusCode: retryHttpResponse.statusCode, message: detail)
-        }
-        throw APIError.httpError(statusCode: retryHttpResponse.statusCode)
-      }
-
-      return try decoder.decode(UpgradeSubscriptionResponse.self, from: retryData)
-    }
-    guard (200...299).contains(httpResponse.statusCode) else {
-      if let errorResponse = try? decoder.decode(ErrorResponse.self, from: data),
-         let detail = errorResponse.detail,
-         !detail.isEmpty
-      {
-        throw APIError.serverMessage(statusCode: httpResponse.statusCode, message: detail)
-      }
-      throw APIError.httpError(statusCode: httpResponse.statusCode)
-    }
-
-    return try decoder.decode(UpgradeSubscriptionResponse.self, from: data)
+    return try await post("v1/payments/upgrade-subscription", body: Request(priceId: priceId))
   }
 
   func createCustomerPortalSession() async throws -> CustomerPortalResponse {

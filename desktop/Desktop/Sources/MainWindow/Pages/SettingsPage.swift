@@ -235,7 +235,6 @@ struct SettingsContentView: View {
   @State private var fallbackPlanCatalog: [SubscriptionPlanOption] = []
   @State private var activeCheckoutPriceId: String?
   @State private var selectedPlanIdForCheckout: String?
-  @State private var upgradePromotionCode = ""
   @State private var isOpeningCustomerPortal: Bool = false
   @State private var activeBillingWebFlow: BillingWebFlow?
   @State private var pendingSubscriptionPriceId: String?
@@ -6760,7 +6759,6 @@ struct SettingsContentView: View {
       || userSubscription?.subscription.plan == .pro
     let isDowngrade = isArchitectUser && plan.id == "unlimited"
     let canPurchase = !isCurrentPlan && !isDowngrade
-    let acceptsPromotionCode = hasPaidSubscription && !(userSubscription?.subscription.cancelAtPeriodEnd ?? false)
 
     VStack(alignment: .leading, spacing: 16) {
       HStack(alignment: .top, spacing: 12) {
@@ -6831,10 +6829,7 @@ struct SettingsContentView: View {
           HStack(spacing: 10) {
             ForEach(sortedPrices(for: plan)) { price in
               Button(action: {
-                startCheckout(
-                  for: price.id,
-                  promotionCode: acceptsPromotionCode ? upgradePromotionCode : nil
-                )
+                startCheckout(for: price.id)
               }) {
                 Group {
                   if activeCheckoutPriceId == price.id {
@@ -6858,33 +6853,6 @@ struct SettingsContentView: View {
               .buttonStyle(.borderedProminent)
               .tint(accent)
               .disabled(activeCheckoutPriceId != nil)
-            }
-          }
-
-          if acceptsPromotionCode {
-            VStack(alignment: .leading, spacing: 6) {
-              HStack(spacing: 8) {
-                Image(systemName: "tag")
-                  .scaledFont(size: 12)
-                  .foregroundColor(OmiColors.textTertiary)
-                TextField("Promo code", text: $upgradePromotionCode)
-                  .textFieldStyle(.roundedBorder)
-                  .scaledFont(size: 13)
-                  .disabled(activeCheckoutPriceId != nil)
-                  .onChange(of: upgradePromotionCode) { _ in
-                    subscriptionError = nil
-                  }
-              }
-
-              if let error = subscriptionError {
-                HStack(spacing: 4) {
-                  Image(systemName: "exclamationmark.circle")
-                    .scaledFont(size: 11)
-                  Text(error)
-                    .scaledFont(size: 11)
-                }
-                .foregroundColor(OmiColors.warning)
-              }
             }
           }
         }
@@ -7299,13 +7267,11 @@ struct SettingsContentView: View {
     }
   }
 
-  private func startCheckout(for priceId: String, promotionCode: String? = nil) {
+  private func startCheckout(for priceId: String) {
     guard activeCheckoutPriceId == nil else { return }
     activeCheckoutPriceId = priceId
     pendingSubscriptionPriceId = priceId
     subscriptionError = nil
-    let trimmedPromotionCode = promotionCode?.trimmingCharacters(in: .whitespacesAndNewlines)
-    let upgradePromotionCode = trimmedPromotionCode?.isEmpty == false ? trimmedPromotionCode : nil
 
     // If user already has an active paid subscription (not canceled), use upgrade endpoint
     // to schedule the plan change at end of billing period (no double-charging)
@@ -7315,15 +7281,11 @@ struct SettingsContentView: View {
     {
       Task {
         do {
-          _ = try await APIClient.shared.upgradeSubscription(
-            priceId: priceId,
-            promotionCode: upgradePromotionCode
-          )
+          _ = try await APIClient.shared.upgradeSubscription(priceId: priceId)
           await MainActor.run {
             activeCheckoutPriceId = nil
             pendingSubscriptionPriceId = nil
             subscriptionError = nil
-            self.upgradePromotionCode = ""
             loadSubscriptionInfo()
           }
         } catch {
@@ -7331,7 +7293,7 @@ struct SettingsContentView: View {
           await MainActor.run {
             activeCheckoutPriceId = nil
             pendingSubscriptionPriceId = nil
-            subscriptionError = error.localizedDescription
+            subscriptionError = "Failed to schedule plan change."
           }
         }
       }

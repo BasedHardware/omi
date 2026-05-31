@@ -70,7 +70,6 @@ class CreateCheckoutRequest(BaseModel):
 
 class UpgradeSubscriptionRequest(BaseModel):
     price_id: str
-    promotion_code: Optional[str] = None
 
 
 class PricingOption(BaseModel):
@@ -190,45 +189,6 @@ def _try_reactivate_subscription(uid: str, target_price_id: str) -> dict | None:
         logger.error(f"Error checking for reactivation: {e}")
 
     return None
-
-
-def _stripe_object_value(obj, key: str):
-    if isinstance(obj, dict):
-        return obj.get(key)
-    if hasattr(obj, 'get'):
-        return obj.get(key)
-    return getattr(obj, key, None)
-
-
-def _resolve_promotion_code_id(code: Optional[str], customer_id: Optional[str]) -> Optional[str]:
-    stripped_code = code.strip() if code else ''
-    if not stripped_code:
-        return None
-
-    if customer_id:
-        customer_codes = stripe.PromotionCode.list(
-            code=stripped_code,
-            active=True,
-            customer=customer_id,
-            limit=1,
-        )
-        if customer_codes.data:
-            return _stripe_object_value(customer_codes.data[0], 'id')
-
-    promotion_codes = stripe.PromotionCode.list(
-        code=stripped_code,
-        active=True,
-        limit=1,
-    )
-    if not promotion_codes.data:
-        raise HTTPException(status_code=400, detail="Invalid promotion code.")
-
-    promotion_code = promotion_codes.data[0]
-    restricted_customer = _stripe_object_value(promotion_code, 'customer')
-    if restricted_customer and restricted_customer != customer_id:
-        raise HTTPException(status_code=400, detail="Invalid promotion code.")
-
-    return _stripe_object_value(promotion_code, 'id')
 
 
 @router.get('/v1/payments/available-plans', response_model=AvailablePlansResponse)
@@ -462,8 +422,6 @@ def upgrade_subscription_endpoint(request: UpgradeSubscriptionRequest, uid: str 
         stripe_sub = stripe.Subscription.retrieve(current_subscription.stripe_subscription_id).to_dict()
         current_price_id = stripe_sub['items']['data'][0]['price']['id']
         current_item_id = stripe_sub['items']['data'][0]['id']
-        promotion_code_id = _resolve_promotion_code_id(request.promotion_code, stripe_sub.get('customer'))
-        discount_params = {'discounts': [{'promotion_code': promotion_code_id}]} if promotion_code_id else {}
 
         # Check if user is trying to upgrade to the same plan
         if current_price_id == request.price_id:
@@ -491,7 +449,6 @@ def upgrade_subscription_endpoint(request: UpgradeSubscriptionRequest, uid: str 
                 items=[{'id': current_item_id, 'price': request.price_id}],
                 proration_behavior='always_invoice',
                 metadata={'uid': uid, 'sub_type': target_plan.value},
-                **discount_params,
             )
 
             # Update our database immediately
@@ -540,7 +497,6 @@ def upgrade_subscription_endpoint(request: UpgradeSubscriptionRequest, uid: str 
                             'price': request.price_id,
                         }
                     ],
-                    **discount_params,
                 },
             ],
             metadata={'uid': uid, 'upgrade_type': f'{current_plan.value}_{target_interval}'},
@@ -561,9 +517,6 @@ def upgrade_subscription_endpoint(request: UpgradeSubscriptionRequest, uid: str 
 
     except HTTPException:
         raise
-    except stripe.error.InvalidRequestError as e:
-        message = getattr(e, 'user_message', None) or str(e)
-        raise HTTPException(status_code=400, detail=sanitize(message))
     except Exception as e:
         logger.error(f"Error processing subscription change: {sanitize(str(e))}")
         raise HTTPException(status_code=500, detail="Failed to process subscription change. Please try again.")
