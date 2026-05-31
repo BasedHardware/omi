@@ -1437,6 +1437,7 @@ class _PlansSheetState extends State<PlansSheet> {
           style: const TextStyle(color: Colors.white, fontSize: 16),
           textCapitalization: TextCapitalization.characters,
           decoration: InputDecoration(
+            prefixIcon: Icon(Icons.local_offer_outlined, color: Colors.grey.shade400, size: 20),
             labelText: context.l10n.promoCode,
             labelStyle: TextStyle(color: Colors.grey.shade400, fontSize: 14),
             hintText: context.l10n.enterPromoCode,
