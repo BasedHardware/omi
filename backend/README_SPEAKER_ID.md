@@ -1,98 +1,60 @@
 
 # Speaker Identification Module
 
-Self-hosted LLM-based speaker identification for the Omi wearable project.
+Integration with external self-hosted vLLM (OpenAI-compatible) for speaker self-identification and transcript cleaning.
 
 **Fix for:** [Issue #3039](https://github.com/BasedHardware/omi/issues/3039) - Improve speaker detection using self-hosted LLM
 
 ## Overview
 
-Replaces the regex-based speaker detection with a Qwen2.5-1.5B-Instruct LLM that can distinguish between:
-- **Addressed**: "Hey Alice, can you help?" → `["Alice"]`
-- **Mentioned**: "I told Alice about it" → `None`
+This module (`utils/text_speaker_detection.py`) adds LLM-based speaker self-identification alongside the existing regex-based self-identification.
 
-## Setup
+**Pipeline:**
+1. **Regex first** (0 ms, 0 tokens): Catches self-introductions like "I am Alice" instantly.
+2. **Cue guard** (0 ms, 0 tokens): Skips LLM calls unless the segment looks like it may identify the current speaker.
+3. **LLM fallback** (~200-300 ms): Uses Llama 3.1 8B via vLLM to detect the current speaker's own name and clean the transcript.
 
-### 1. Install Dependency
+**Key distinction — Speaker vs. Addressee/Mention:**
+- "Hey, it's Alice" → `["Alice"]` (speaker self-identification)
+- "Hey Alice, can you help?" → `null` (Alice is addressed, not the speaker)
+- "I was talking to Alice about the project" → `null` (Alice is mentioned, not the speaker)
 
-```bash
-pip install llama-cpp-python
-```
+## Configuration
 
-For GPU acceleration:
-```bash
-# Mac (Metal)
-CMAKE_ARGS="-DGGML_METAL=on" pip install llama-cpp-python --force-reinstall
-
-# NVIDIA (CUDA)  
-CMAKE_ARGS="-DGGML_CUDA=on" pip install llama-cpp-python --force-reinstall
-```
-
-### 2. Download Model
-
-```bash
-curl -L -o backend/utils/qwen_1.5b_speaker.gguf \
-  https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct-GGUF/resolve/main/qwen2.5-1.5b-instruct-q4_k_m.gguf
-```
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `VLLM_API_BASE` | `http://localhost:8000/v1` | URL of the OpenAI-compatible vLLM endpoint |
+| `VLLM_API_KEY` | `EMPTY` | API Key (if required by the endpoint) |
+| `VLLM_MODEL_NAME` | `meta-llama/Meta-Llama-3.1-8B-Instruct` | Model name to request |
 
 ## Usage
 
 ```python
-from backend.utils.speaker_identification import identify_speaker_from_transcript
+from utils.text_speaker_detection import identify_speaker_from_transcript
 
-# Returns list of speakers or None
-speakers = identify_speaker_from_transcript("Hey Alice and Bob, can you help?")
-# Result: ['Alice', 'Bob']
+# Regex path (instant):
+speakers = await identify_speaker_from_transcript("I am Alice")
+# ['Alice']
 
-speakers = identify_speaker_from_transcript("I told Alice about the meeting")
-# Result: None
+# LLM path (speaker self-identification):
+speakers = await identify_speaker_from_transcript("Hey, it's Bob.")
+# ['Bob']
 
-# Legacy function (Self-Identification only)
-from backend.utils.speaker_identification import detect_speaker_from_text
-name = detect_speaker_from_text("My name is Alice")
-# Result: 'Alice'
-```
-
-## Performance
-
-| Metric | Value |
-|--------|-------|
-| Accuracy | 100% on test suite |
-| Avg Latency | ~300ms (GPU) |
-| Model Size | 1.1 GB |
-| License | Apache 2.0 |
-
-## Configuration
-
-Environment variables:
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `SPEAKER_MODEL_PATH` | `backend/utils/qwen_1.5b_speaker.gguf` | Path to GGUF model |
-
-## Files
-
-```
-backend/utils/
-├── speaker_identification.py  # Main module
-└── qwen_1.5b_speaker.gguf     # Model file (not in git)
+# LLM path (addressee / mention → null):
+speakers = await identify_speaker_from_transcript("I told Bob about it")
+# None
 ```
 
 ## Testing
 
-Run the comprehensive pytest suite to verify both legacy regex and new LLM logic:
-
+Run unit tests (mocked, no API key needed):
 ```bash
-# From omi project root
-python3 -m pytest backend/tests/test_speaker_identification.py
+cd backend
+python3 -m pytest tests/test_text_speaker_detection.py -v
 ```
 
-Or run manual spot checks:
-
+Run live integration demo against Groq (or any OpenAI-compatible endpoint):
 ```bash
-python3 -c "
-from backend.utils.speaker_identification import identify_speaker_from_transcript
-print(identify_speaker_from_transcript('Hey Alice, can you help?'))
-"
-# Output: ['Alice']
+export GROQ_API_KEY='your_key'
+python3 tests/demo_real_integration.py
 ```

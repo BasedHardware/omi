@@ -58,36 +58,48 @@ TEST_CASES = [
         "expect_method": "regex",
         "description": "Self-identification variant (regex)",
     },
-    # --- LLM path: addressed speakers ---
+    # --- LLM path: speaker self-identification ---
     {
-        "input": "Hey Alice, could you send me that file?",
+        "input": "Hey, it's Alice from support.",
         "expect_speakers": ["Alice"],
         "expect_method": "llm",
-        "description": "Single addressee",
+        "description": "Self-identification with casual intro",
+    },
+    {
+        "input": "This is Dr. Jane Smith speaking.",
+        "expect_speakers": ["Dr. Jane Smith"],
+        "expect_method": "llm",
+        "description": "Self-identification with title",
+    },
+    # --- LLM path: addressees / mentions (should return null) ---
+    {
+        "input": "Hey Alice, could you send me that file?",
+        "expect_speakers": None,
+        "expect_method": "guard",
+        "description": "Addressee — 'Hey Alice' (must be null)",
     },
     {
         "input": "Bob, Sarah, please join the meeting room.",
-        "expect_speakers": ["Bob", "Sarah"],
-        "expect_method": "llm",
-        "description": "Multiple addressees",
+        "expect_speakers": None,
+        "expect_method": "guard",
+        "description": "Multiple addressees (must be null)",
     },
-    # --- LLM path: mentions (should return null) ---
     {
         "input": "I was talking to Mike yesterday about the project.",
         "expect_speakers": None,
-        "expect_method": "llm",
+        "expect_method": "guard",
         "description": "Mention — 'talking to' (must be null)",
     },
     {
         "input": "I told Alice about the meeting.",
         "expect_speakers": None,
-        "expect_method": "llm",
+        "expect_method": "guard",
         "description": "Mention — 'told' (must be null)",
     },
     {
         "input": "I saw Bob at the store.",
         "expect_speakers": None,
-        "expect_method": "llm",
+        "expect_method": "guard",
         "description": "Mention — 'saw' (must be null)",
     },
     # --- LLM path: no names at all ---
@@ -134,6 +146,12 @@ def run_llm(client: OpenAI, text: str):
     return speakers, cleaned, elapsed_ms
 
 
+def run_guard(text: str):
+    """Run the local text speaker detection guard for non-speaker contexts."""
+    speakers, elapsed_ms = run_regex(text)
+    return speakers, elapsed_ms
+
+
 def speakers_match(actual, expected):
     """Compare speaker lists, treating None and [] as equivalent."""
     if expected is None:
@@ -170,6 +188,11 @@ def main():
         if method == "regex":
             speakers, ms = run_regex(text)
             print(f"  Method  : Regex (local)")
+            print(f"  Time    : {ms:.0f} ms")
+            print(f"  Result  : {speakers}")
+        elif method == "guard":
+            speakers, ms = run_guard(text)
+            print(f"  Method  : Guard (local, no LLM)")
             print(f"  Time    : {ms:.0f} ms")
             print(f"  Result  : {speakers}")
         else:
