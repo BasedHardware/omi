@@ -58,8 +58,7 @@ class ChatToolExecutor {
 
   /// Tools available only during onboarding. Listed in the onboarding
   /// system prompt (separate from agenticQA) — never appear in
-  /// post-onboarding chat. Some, like `save_knowledge_graph`, also
-  /// appear in `piMonoChatToolNames` because they're shared.
+  /// post-onboarding chat.
   static let onboardingOnlyToolNames: Set<String> = [
     "request_permission",
     "check_permission_status",
@@ -73,10 +72,27 @@ class ChatToolExecutor {
     "capture_screen",
   ]
 
+  /// Backend RAG tools `execute(_:)` dispatches via `executeBackendTool(_:)`
+  /// (conversations / memories / action-item CRUD). Not in the default
+  /// piMono `<tools>` block today, but the executor handles them — so
+  /// they belong in the registered set, or a prompt that legitimately
+  /// declares one would trip `testDesktopChatToolNamesAreAllRegistered`.
+  static let backendRagToolNames: Set<String> = [
+    "get_conversations",
+    "search_conversations",
+    "get_memories",
+    "search_memories",
+    "get_action_items",
+    "create_action_item",
+    "update_action_item",
+  ]
+
   /// Every tool name `execute(_:)` knows how to dispatch. Must be a
   /// superset of every name the prompts can reference.
   static let allRegisteredToolNames: Set<String> =
-    piMonoChatToolNames.union(onboardingOnlyToolNames)
+    piMonoChatToolNames
+      .union(onboardingOnlyToolNames)
+      .union(backendRagToolNames)
 
   /// Execute a tool call and return the result as a string
   static func execute(_ toolCall: ToolCall) async -> String {

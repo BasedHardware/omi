@@ -182,22 +182,31 @@ final class PromptSchemaConsistencyTests: XCTestCase {
         "proactive_extractions_fts",
     ]
 
-    /// Pull `**name**:` markers out of a prompt. The marker convention
-    /// is lowercase + underscores ending with a colon, plus digits and
-    /// hyphens for forward compat (MCP tool names like
-    /// `mcp__omi-tools__execute_sql` carry hyphens; future tool names
-    /// could legitimately include digits). Headers like
-    /// `**CRITICAL — When to use tools proactively:**` are excluded
-    /// because they contain whitespace and uppercase.
+    /// Pull `**name**:` tool markers out of a prompt. A tool declaration
+    /// is a `**name**:` marker at the START of a line (after optional
+    /// indentation), which is how the `<tools>` block declares each tool.
     ///
-    /// The character class is deliberately `[a-z0-9_\-]+` rather than
-    /// `[a-z_]+`: a narrower pattern would silently skip a future tool
-    /// whose name contained hyphens or digits, masking the very contract
-    /// drift the test exists to catch.
+    /// Anchoring to line-start matters: tool descriptions may document
+    /// parameters with the same bold convention — inline (`… **query**:`)
+    /// or as bullets (`- **query**:`). Neither of those starts a line with
+    /// the marker, so they're correctly excluded and can't be mistaken for
+    /// a tool name. Headers like `**CRITICAL — When to use tools:**` are
+    /// also excluded (whitespace + uppercase).
+    ///
+    /// The name class is deliberately `[a-z0-9_\-]+` rather than `[a-z_]+`:
+    /// a narrower pattern would silently skip a future tool whose name
+    /// contained hyphens or digits (e.g. `mcp__omi-tools__execute_sql`),
+    /// masking the very contract drift the test exists to catch.
     private static func extractToolNames(from prompt: String) -> Set<String> {
         var names: Set<String> = []
-        let pattern = #"\*\*([a-z0-9_\-]+)\*\*:"#
-        guard let regex = try? NSRegularExpression(pattern: pattern) else { return [] }
+        // `^[ \t]*` requires the marker to open the line (after indentation),
+        // not appear mid-line or after a `-` bullet; `.anchorsMatchLines`
+        // makes `^` match each line within the block.
+        let pattern = #"^[ \t]*\*\*([a-z0-9_\-]+)\*\*:"#
+        guard let regex = try? NSRegularExpression(
+            pattern: pattern,
+            options: [.anchorsMatchLines]
+        ) else { return [] }
         let range = NSRange(prompt.startIndex..<prompt.endIndex, in: prompt)
         regex.enumerateMatches(in: prompt, range: range) { match, _, _ in
             guard let match = match,
