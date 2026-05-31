@@ -426,3 +426,72 @@ def test_upgrade_subscription_stripe_invalid_request_returns_message():
 
     assert response.status_code == 400
     assert "Promotion code is not applicable" in response.json()["detail"]
+
+
+def test_upgrade_subscription_global_promo_fallback_when_customer_lookup_empty():
+    _setup_upgrade_mocks()
+    customer_result = MagicMock(data=[])
+    global_result = MagicMock(data=[{"id": "promo_global_fallback", "customer": None}])
+    stripe.PromotionCode.list = MagicMock(side_effect=[customer_result, global_result])
+    updated_sub = _make_stripe_subscription(price_id=ARCH_MONTHLY)
+    stripe.Subscription.modify = MagicMock(return_value=updated_sub)
+
+    response = client.post(
+        "/v1/payments/upgrade-subscription",
+        json={"price_id": ARCH_MONTHLY, "promotion_code": "GLOBAL20"},
+    )
+
+    assert response.status_code == 200
+    calls = stripe.PromotionCode.list.call_args_list
+    assert calls[0].kwargs.get("customer") == "cus_test_123"
+    assert "customer" not in calls[1].kwargs
+    assert stripe.Subscription.modify.call_args.kwargs["discounts"] == [{"promotion_code": "promo_global_fallback"}]
+
+
+def test_upgrade_subscription_customer_restricted_promo_for_other_customer_returns_400():
+    _setup_upgrade_mocks()
+    customer_result = MagicMock(data=[])
+    global_result = MagicMock(data=[{"id": "promo_other", "customer": "cus_someone_else"}])
+    stripe.PromotionCode.list = MagicMock(side_effect=[customer_result, global_result])
+
+    response = client.post(
+        "/v1/payments/upgrade-subscription",
+        json={"price_id": ARCH_MONTHLY, "promotion_code": "RESTRICTED"},
+    )
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "Invalid promotion code."
+
+
+def test_upgrade_subscription_promo_code_whitespace_trimmed():
+    _setup_upgrade_mocks()
+    promo = {"id": "promo_trimmed", "customer": None}
+    stripe.PromotionCode.list = MagicMock(return_value=MagicMock(data=[promo]))
+    updated_sub = _make_stripe_subscription(price_id=ARCH_MONTHLY)
+    stripe.Subscription.modify = MagicMock(return_value=updated_sub)
+
+    response = client.post(
+        "/v1/payments/upgrade-subscription",
+        json={"price_id": ARCH_MONTHLY, "promotion_code": "  SAVE20\n "},
+    )
+
+    assert response.status_code == 200
+    assert stripe.PromotionCode.list.call_args.kwargs["code"] == "SAVE20"
+
+
+def test_upgrade_subscription_promo_with_stripe_object_attrs():
+    from types import SimpleNamespace
+
+    _setup_upgrade_mocks()
+    promo_obj = SimpleNamespace(id="promo_attr_style", customer=None)
+    stripe.PromotionCode.list = MagicMock(return_value=MagicMock(data=[promo_obj]))
+    updated_sub = _make_stripe_subscription(price_id=ARCH_MONTHLY)
+    stripe.Subscription.modify = MagicMock(return_value=updated_sub)
+
+    response = client.post(
+        "/v1/payments/upgrade-subscription",
+        json={"price_id": ARCH_MONTHLY, "promotion_code": "OBJSTYLE"},
+    )
+
+    assert response.status_code == 200
+    assert stripe.Subscription.modify.call_args.kwargs["discounts"] == [{"promotion_code": "promo_attr_style"}]
