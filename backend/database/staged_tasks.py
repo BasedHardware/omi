@@ -33,22 +33,31 @@ def _commit_batch(batch, count):
 
 
 def create_staged_task(uid: str, description: str, **kwargs) -> dict:
-    """Create a staged task.  Deduplicates by case-insensitive description."""
+    """Create a staged task.  Deduplicates by case-insensitive description.
+
+    Uses a ``description_lower`` indexed field so dedup is a single-document
+    equality query (O(1)) instead of an unfiltered collection scan (O(N)).
+    """
     col = _user_col(uid, 'staged_tasks')
 
-    # Deduplicate
+    # Deduplicate — single equality lookup via stored lowercased field
     desc_lower = description.strip().lower()
-    for doc in col.stream():
-        if doc.to_dict().get('description', '').strip().lower() == desc_lower:
-            existing = doc.to_dict()
-            existing['id'] = doc.id
-            return existing
+    existing = (
+        col.where(filter=FieldFilter('description_lower', '==', desc_lower))
+        .limit(1)
+        .stream()
+    )
+    for doc in existing:
+        data = doc.to_dict()
+        data['id'] = doc.id
+        return data
 
     task_id = str(uuid.uuid4())
     now = datetime.now(timezone.utc)
     doc = {
         'id': task_id,
         'description': description,
+        'description_lower': desc_lower,
         'completed': False,
         'created_at': now,
         'updated_at': now,
