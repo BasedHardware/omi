@@ -101,6 +101,7 @@ pytest tests/unit/test_subscription_restructure.py -v
 pytest tests/unit/test_chat_quota.py -v
 pytest tests/unit/test_subscription_plans.py -v
 pytest tests/unit/test_payment_available_plans_source.py -v
+pytest tests/unit/test_payment_promotion_codes.py -v
 pytest tests/unit/test_stripe_webhook_none_guard.py -v
 pytest tests/unit/test_stripe_webhook_behavioral.py -v
 pytest tests/unit/test_voice_duration_limiter.py -v
