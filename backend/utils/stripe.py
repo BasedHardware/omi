@@ -36,7 +36,9 @@ def create_app_monthly_recurring_price(product_id: str, amount_in_cents: int, cu
     return price
 
 
-def create_subscription_checkout_session(uid: str, price_id: str, idempotency_key: str = None, customer_id: str = None):
+def create_subscription_checkout_session(
+    uid: str, price_id: str, idempotency_key: str = None, customer_id: str = None, promotion_code: str = None
+):
     """Create a Stripe Checkout session for a subscription."""
     try:
         success_url = urljoin(base_url, 'v1/payments/success?session_id={CHECKOUT_SESSION_ID}')
@@ -55,7 +57,6 @@ def create_subscription_checkout_session(uid: str, price_id: str, idempotency_ke
             'mode': 'subscription',
             'success_url': success_url,
             'cancel_url': cancel_url,
-            'allow_promotion_codes': True,
             'metadata': {
                 'uid': uid,
                 'sub_type': 'unlimited',
@@ -67,6 +68,16 @@ def create_subscription_checkout_session(uid: str, price_id: str, idempotency_ke
                 }
             },
         }
+
+        # Pre-fill promo code if provided; otherwise let Stripe show its own promo UI
+        if promotion_code:
+            promo_list = stripe.PromotionCode.list(code=promotion_code, active=True, limit=1)
+            if promo_list.data:
+                session_params['discounts'] = [{'promotion_code': promo_list.data[0].id}]
+            else:
+                session_params['allow_promotion_codes'] = True
+        else:
+            session_params['allow_promotion_codes'] = True
 
         if customer_id:
             session_params['customer'] = customer_id
