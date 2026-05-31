@@ -174,8 +174,10 @@ def _send_summary_notification(user_data: tuple):
         navigate_to=f"/daily-summary/{summary_id}",
     )
 
-    # Also send webhook with the full summary data (day_summary_webhook is async, so wrap in asyncio.run)
-    postprocess_executor.submit(asyncio.run, day_summary_webhook(uid, str(summary_data)))
+    # Also send webhook with the full summary data (day_summary_webhook is async, so wrap in asyncio.run).
+    # ``summary`` is the legacy str(...) form, kept for backward compatibility; ``summary_json``
+    # carries the same payload as a real JSON object for receivers to migrate to.
+    postprocess_executor.submit(asyncio.run, day_summary_webhook(uid, str(summary_data), summary_data))
 
     tokens = user_data[1] if len(user_data) > 1 else None
     send_notification(
