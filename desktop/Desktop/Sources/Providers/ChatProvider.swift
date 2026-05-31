@@ -2714,7 +2714,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                 let nowMs = Int(Date().timeIntervalSince1970 * 1000)
                 // Tools without a toolUseId still get tracked under a
                 // synthetic key so the detector's per-tool timer fires.
-                let trackedId = toolUseId ?? "untracked-\(name)"
+                let trackedId = ChatProvider.stallTrackingId(toolUseId: toolUseId, name: name)
                 let detectorKind: StallDetector.EventKind = status == "started"
                     ? .toolStarted(id: trackedId)
                     : .toolCompleted(id: trackedId)
@@ -3298,6 +3298,17 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
 
     // MARK: - Stall detection
 
+    /// The key the `StallDetector` tracks a tool under. Tools that arrive
+    /// without a real `toolUseId` fall back to a name-derived synthetic
+    /// key so their per-tool timer still fires. Registration (in the tool
+    /// activity handler) and the transition match in `applyStallTransitions`
+    /// MUST derive the key identically — routing both through this single
+    /// helper keeps them from diverging (a mismatch silently drops every
+    /// stall transition for `toolUseId`-less tools).
+    nonisolated static func stallTrackingId(toolUseId: String?, name: String) -> String {
+        toolUseId ?? "untracked-\(name)"
+    }
+
     /// Map a `StallDetector.State` to the matching `ToolCallStatus`.
     /// The two enums are deliberately separate — the detector tracks a
     /// 3-state lifecycle independent of UI/persistence concerns.
@@ -3324,7 +3335,8 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             guard case .tool(let id, _, let to) = transition else { continue }
             for i in messages[index].contentBlocks.indices {
                 if case .toolCall(let blockId, let name, let oldStatus, let tuid, let input, let output) = messages[index].contentBlocks[i],
-                   tuid == id, oldStatus.isInFlight {
+                   ChatProvider.stallTrackingId(toolUseId: tuid, name: name) == id,
+                   oldStatus.isInFlight {
                     messages[index].contentBlocks[i] = .toolCall(
                         id: blockId, name: name, status: mapDetectorState(to),
                         toolUseId: tuid, input: input, output: output

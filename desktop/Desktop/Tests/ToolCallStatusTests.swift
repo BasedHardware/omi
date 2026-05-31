@@ -30,4 +30,24 @@ final class ToolCallStatusTests: XCTestCase {
     let inFlightCount = allCases.filter { $0.isInFlight }.count
     XCTAssertEqual(inFlightCount, 3, "exactly running, slow, stalled are in-flight")
   }
+
+  // MARK: - Stall tracking-id derivation
+
+  /// The `StallDetector` registration site and the `applyStallTransitions`
+  /// match site MUST derive a tool's tracking key the same way, or stall
+  /// transitions for `toolUseId`-less tools are silently dropped. Both go
+  /// through `ChatProvider.stallTrackingId`; this locks its contract.
+  func testStallTrackingIdUsesToolUseIdWhenPresent() {
+    XCTAssertEqual(
+      ChatProvider.stallTrackingId(toolUseId: "abc123", name: "execute_sql"),
+      "abc123"
+    )
+  }
+
+  func testStallTrackingIdFallsBackToNameWhenToolUseIdMissing() {
+    XCTAssertEqual(
+      ChatProvider.stallTrackingId(toolUseId: nil, name: "execute_sql"),
+      "untracked-execute_sql"
+    )
+  }
 }
