@@ -4724,7 +4724,10 @@ class AppLocalizationsEl extends AppLocalizations {
   }
 
   @override
-  String accessesAndTriggeredBy(String accessDescription, String triggerDescription) {
+  String accessesAndTriggeredBy(
+    String accessDescription,
+    String triggerDescription,
+  ) {
     return '$accessDescription και είναι $triggerDescription.';
   }
 
@@ -9342,4 +9345,10 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get unableToDetermineFirmwareVersion => 'Δεν είναι δυνατός ο προσδιορισμός της τρέχουσας έκδοσης firmware';
+
+  @override
+  String get promoCode => 'Κωδικός προσφοράς';
+
+  @override
+  String get enterPromoCode => 'Εισάγετε κωδικό προσφοράς';
 }

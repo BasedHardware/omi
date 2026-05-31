@@ -4694,7 +4694,10 @@ class AppLocalizationsSl extends AppLocalizations {
   }
 
   @override
-  String accessesAndTriggeredBy(String accessDescription, String triggerDescription) {
+  String accessesAndTriggeredBy(
+    String accessDescription,
+    String triggerDescription,
+  ) {
     return '$accessDescription in je $triggerDescription.';
   }
 
@@ -9304,4 +9307,10 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String get unableToDetermineFirmwareVersion => 'Trenutne različice vdelane programske opreme ni mogoče določiti';
+
+  @override
+  String get promoCode => 'Promocijska koda';
+
+  @override
+  String get enterPromoCode => 'Vnesite promocijsko kodo';
 }

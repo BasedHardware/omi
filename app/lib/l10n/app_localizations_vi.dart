@@ -4694,7 +4694,10 @@ class AppLocalizationsVi extends AppLocalizations {
   }
 
   @override
-  String accessesAndTriggeredBy(String accessDescription, String triggerDescription) {
+  String accessesAndTriggeredBy(
+    String accessDescription,
+    String triggerDescription,
+  ) {
     return '$accessDescription và $triggerDescription.';
   }
 
@@ -9275,4 +9278,10 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get unableToDetermineFirmwareVersion => 'Không thể xác định phiên bản firmware hiện tại';
+
+  @override
+  String get promoCode => 'Mã khuyến mãi';
+
+  @override
+  String get enterPromoCode => 'Nhập mã khuyến mãi';
 }

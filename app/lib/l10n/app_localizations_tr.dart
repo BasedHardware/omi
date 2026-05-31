@@ -4696,7 +4696,10 @@ class AppLocalizationsTr extends AppLocalizations {
   }
 
   @override
-  String accessesAndTriggeredBy(String accessDescription, String triggerDescription) {
+  String accessesAndTriggeredBy(
+    String accessDescription,
+    String triggerDescription,
+  ) {
     return '$accessDescription ve $triggerDescription.';
   }
 
@@ -9288,4 +9291,10 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get unableToDetermineFirmwareVersion => 'Mevcut donanım yazılımı sürümü belirlenemiyor';
+
+  @override
+  String get promoCode => 'Promosyon kodu';
+
+  @override
+  String get enterPromoCode => 'Promosyon kodunu girin';
 }
