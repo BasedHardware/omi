@@ -80,6 +80,7 @@ def get_sync_job(job_id: str) -> Optional[dict]:
     if job['status'] in ('queued', 'processing'):
         updated_at = job.get('updated_at') or job.get('created_at', 0)
         if time.time() - updated_at > STALE_THRESHOLD_SECONDS:
+            original_status = job['status']
             if job['status'] == 'queued':
                 # Job was never picked up — backend capacity issue, not a failure.
                 job['status'] = 'queued_too_long'
@@ -93,8 +94,8 @@ def get_sync_job(job_id: str) -> Optional[dict]:
             r.set(key, json.dumps(job, default=str), ex=JOB_TTL_SECONDS)
             logger.info(
                 "Stale guard transitioned sync_job %s from %s to %s",
-                job_id, job['status'],
-                'queued_too_long' if job['status'] == 'queued' else 'failed',
+                job_id, original_status,
+                'queued_too_long' if original_status == 'queued' else 'failed',
             )
 
     return job
