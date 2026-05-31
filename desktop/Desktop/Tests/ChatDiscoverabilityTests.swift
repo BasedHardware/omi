@@ -105,6 +105,69 @@ final class ChatDiscoverabilityTests: XCTestCase {
         XCTAssertTrue(prompt.contains("find tasks about shopping"))
     }
 
+    // MARK: - Onboarding Prompt Suggestion Capability Contract
+    //
+    // The starter-prompt vocabulary in OnboardingPromptSuggestionBuilder
+    // must stay answerable using piMono's 7 tools. These tests lock the
+    // invariant so a future edit can't silently overpromise.
+
+    @MainActor
+    func testOnboardingPromptsContainNoUnsupportedCapabilities() {
+        // Lowercased substrings that signal file/code/shell access — none
+        // of which the default piMono chat can do. Intentionally narrow:
+        // false positives drown the signal.
+        let blockedKeywords = [
+            "code",
+            "file",
+            "bash",
+            "shell",
+            "terminal",
+            "github",
+        ]
+        for suggestion in OnboardingPromptSuggestionBuilder.allKnownSuggestions {
+            let lowered = suggestion.lowercased()
+            for keyword in blockedKeywords {
+                XCTAssertFalse(
+                    lowered.contains(keyword),
+                    """
+                    Suggestion '\(suggestion)' references blocked capability '\(keyword)'.
+                    piMono (default chat mode) cannot read files, run shell commands, or \
+                    inspect code. If this suggestion really needs that, it belongs in a \
+                    userClaude-mode-conditional set, not in the always-on vocabulary.
+                    """
+                )
+            }
+        }
+    }
+
+    @MainActor
+    func testOnboardingPromptsUniversalIsFirstInVocabulary() {
+        XCTAssertEqual(
+            OnboardingPromptSuggestionBuilder.allKnownSuggestions.first,
+            OnboardingPromptSuggestionBuilder.universalSuggestion,
+            "universalSuggestion must always be the first entry — build() prepends it unconditionally"
+        )
+    }
+
+    @MainActor
+    func testOnboardingPromptsVocabularyIsBoundedAtSix() {
+        XCTAssertLessThanOrEqual(
+            OnboardingPromptSuggestionBuilder.allKnownSuggestions.count,
+            6,
+            "build() truncates with .prefix(6); any vocabulary entry beyond 6 becomes unreachable in some onboarding paths"
+        )
+    }
+
+    @MainActor
+    func testOnboardingPromptVocabularyHasNoDuplicates() {
+        let unique = Set(OnboardingPromptSuggestionBuilder.allKnownSuggestions)
+        XCTAssertEqual(
+            unique.count,
+            OnboardingPromptSuggestionBuilder.allKnownSuggestions.count,
+            "duplicates in the vocabulary get silently collapsed by build()'s NSOrderedSet dedup — keeps real bugs hidden"
+        )
+    }
+
     // MARK: - Table Annotations Completeness
 
     func testTableAnnotationsIncludeAllExpectedTables() {
