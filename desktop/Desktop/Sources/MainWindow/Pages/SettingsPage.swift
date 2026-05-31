@@ -235,6 +235,7 @@ struct SettingsContentView: View {
   @State private var fallbackPlanCatalog: [SubscriptionPlanOption] = []
   @State private var activeCheckoutPriceId: String?
   @State private var selectedPlanIdForCheckout: String?
+  @State private var upgradePromotionCode = ""
   @State private var isOpeningCustomerPortal: Bool = false
   @State private var activeBillingWebFlow: BillingWebFlow?
   @State private var pendingSubscriptionPriceId: String?
@@ -6759,6 +6760,7 @@ struct SettingsContentView: View {
       || userSubscription?.subscription.plan == .pro
     let isDowngrade = isArchitectUser && plan.id == "unlimited"
     let canPurchase = !isCurrentPlan && !isDowngrade
+    let acceptsPromotionCode = hasPaidSubscription && !(userSubscription?.subscription.cancelAtPeriodEnd ?? false)
 
     VStack(alignment: .leading, spacing: 16) {
       HStack(alignment: .top, spacing: 12) {
@@ -6829,7 +6831,10 @@ struct SettingsContentView: View {
           HStack(spacing: 10) {
             ForEach(sortedPrices(for: plan)) { price in
               Button(action: {
-                startCheckout(for: price.id)
+                startCheckout(
+                  for: price.id,
+                  promotionCode: acceptsPromotionCode ? upgradePromotionCode : nil
+                )
               }) {
                 Group {
                   if activeCheckoutPriceId == price.id {
@@ -6854,6 +6859,12 @@ struct SettingsContentView: View {
               .tint(accent)
               .disabled(activeCheckoutPriceId != nil)
             }
+          }
+
+          if acceptsPromotionCode {
+            TextField("Promo code", text: $upgradePromotionCode)
+              .textFieldStyle(.roundedBorder)
+              .disabled(activeCheckoutPriceId != nil)
           }
         }
       } else if isCurrentPlan {
@@ -7267,11 +7278,13 @@ struct SettingsContentView: View {
     }
   }
 
-  private func startCheckout(for priceId: String) {
+  private func startCheckout(for priceId: String, promotionCode: String? = nil) {
     guard activeCheckoutPriceId == nil else { return }
     activeCheckoutPriceId = priceId
     pendingSubscriptionPriceId = priceId
     subscriptionError = nil
+    let trimmedPromotionCode = promotionCode?.trimmingCharacters(in: .whitespacesAndNewlines)
+    let upgradePromotionCode = trimmedPromotionCode?.isEmpty == false ? trimmedPromotionCode : nil
 
     // If user already has an active paid subscription (not canceled), use upgrade endpoint
     // to schedule the plan change at end of billing period (no double-charging)
@@ -7281,7 +7294,10 @@ struct SettingsContentView: View {
     {
       Task {
         do {
-          _ = try await APIClient.shared.upgradeSubscription(priceId: priceId)
+          _ = try await APIClient.shared.upgradeSubscription(
+            priceId: priceId,
+            promotionCode: upgradePromotionCode
+          )
           await MainActor.run {
             activeCheckoutPriceId = nil
             pendingSubscriptionPriceId = nil
@@ -7293,7 +7309,7 @@ struct SettingsContentView: View {
           await MainActor.run {
             activeCheckoutPriceId = nil
             pendingSubscriptionPriceId = nil
-            subscriptionError = "Failed to schedule plan change."
+            subscriptionError = error.localizedDescription
           }
         }
       }
