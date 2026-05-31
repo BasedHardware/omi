@@ -9304,4 +9304,13 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String get unableToDetermineFirmwareVersion => 'Trenutne različice vdelane programske opreme ni mogoče določiti';
+
+  @override
+  String get promoCode => 'Promocijska koda';
+
+  @override
+  String get enterPromoCode => 'Vnesite promocijsko kodo';
+
+  @override
+  String get invalidPromotionCode => 'Neveljavna promocijska koda.';
 }

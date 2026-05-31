@@ -3035,5 +3035,8 @@
     "syncProcessingBackgroundHint": "See jätkub taustal — võite sellelt ekraanilt lahkuda.",
     "syncCardRateLimited": "Õiglase kasutuse piir on saavutatud — sünkroonimine jätkub automaatselt",
     "syncCardBackendBusy": "Omi serverid on hõivatud — sinu salvestised sünkroonitakse, kui maht vabaneb",
-    "unableToDetermineFirmwareVersion": "Praeguse püsivara versiooni ei õnnestunud tuvastada"
+    "unableToDetermineFirmwareVersion": "Praeguse püsivara versiooni ei õnnestunud tuvastada",
+    "promoCode": "Sooduskood",
+    "enterPromoCode": "Sisestage sooduskood",
+    "invalidPromotionCode": "Kehtetu sooduskood."
 }

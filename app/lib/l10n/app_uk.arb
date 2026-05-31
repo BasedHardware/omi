@@ -3035,5 +3035,8 @@
     "syncProcessingBackgroundHint": "Це триває у фоновому режимі — ви можете залишити цей екран.",
     "syncCardRateLimited": "Досягнуто ліміт використання — синхронізація відновиться автоматично",
     "syncCardBackendBusy": "Сервери Omi перевантажені — ваші записи синхронізуються, щойно з'явиться доступна потужність",
-    "unableToDetermineFirmwareVersion": "Не вдається визначити поточну версію мікропрограми"
+    "unableToDetermineFirmwareVersion": "Не вдається визначити поточну версію мікропрограми",
+    "promoCode": "Промокод",
+    "enterPromoCode": "Введіть промокод",
+    "invalidPromotionCode": "Недійсний промокод."
 }

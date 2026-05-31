@@ -9289,4 +9289,13 @@ class AppLocalizationsSr extends AppLocalizations {
 
   @override
   String get unableToDetermineFirmwareVersion => 'Није могуће одредити тренутну верзију фирмвера';
+
+  @override
+  String get promoCode => 'Промо код';
+
+  @override
+  String get enterPromoCode => 'Унесите промо код';
+
+  @override
+  String get invalidPromotionCode => 'Неважећи промо код.';
 }

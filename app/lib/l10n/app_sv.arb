@@ -3035,5 +3035,8 @@
     "syncProcessingBackgroundHint": "Detta fortsätter i bakgrunden — du kan lämna den här skärmen.",
     "syncCardRateLimited": "Gränsen för skälig användning har nåtts — synkroniseringen återupptas automatiskt",
     "syncCardBackendBusy": "Omis servrar är hårt belastade — dina inspelningar synkroniseras så snart kapacitet frigörs",
-    "unableToDetermineFirmwareVersion": "Det gick inte att fastställa aktuell firmwareversion"
+    "unableToDetermineFirmwareVersion": "Det gick inte att fastställa aktuell firmwareversion",
+    "promoCode": "Kampanjkod",
+    "enterPromoCode": "Ange kampanjkod",
+    "invalidPromotionCode": "Ogiltig kampanjkod."
 }

@@ -10613,5 +10613,8 @@
     "syncProcessingBackgroundHint": "Magpapatuloy ito sa background — puwede mong iwan ang screen na ito.",
     "syncCardRateLimited": "Naabot na ang limitasyon ng patas na paggamit — awtomatikong magpapatuloy ang pag-sync",
     "syncCardBackendBusy": "Abala ang mga server ng Omi — masi-sync ang iyong mga recording kapag may bakanteng kapasidad na muli",
-    "unableToDetermineFirmwareVersion": "Hindi matukoy ang kasalukuyang bersyon ng firmware"
+    "unableToDetermineFirmwareVersion": "Hindi matukoy ang kasalukuyang bersyon ng firmware",
+    "promoCode": "Promo code",
+    "enterPromoCode": "Ilagay ang promo code",
+    "invalidPromotionCode": "Hindi valid na promo code."
 }

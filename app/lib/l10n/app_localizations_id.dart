@@ -9285,4 +9285,13 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get unableToDetermineFirmwareVersion => 'Tidak dapat menentukan versi firmware saat ini';
+
+  @override
+  String get promoCode => 'Kode promo';
+
+  @override
+  String get enterPromoCode => 'Masukkan kode promo';
+
+  @override
+  String get invalidPromotionCode => 'Kode promo tidak valid.';
 }

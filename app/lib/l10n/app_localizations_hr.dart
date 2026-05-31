@@ -9309,4 +9309,13 @@ class AppLocalizationsHr extends AppLocalizations {
 
   @override
   String get unableToDetermineFirmwareVersion => 'Nije moguće utvrditi trenutnu verziju firmvera';
+
+  @override
+  String get promoCode => 'Promo kod';
+
+  @override
+  String get enterPromoCode => 'Unesite promo kod';
+
+  @override
+  String get invalidPromotionCode => 'Nevažeći promo kod.';
 }

@@ -9330,4 +9330,13 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String get unableToDetermineFirmwareVersion => 'Impossibile determinare la versione attuale del firmware';
+
+  @override
+  String get promoCode => 'Codice promozionale';
+
+  @override
+  String get enterPromoCode => 'Inserisci il codice promozionale';
+
+  @override
+  String get invalidPromotionCode => 'Codice promozionale non valido.';
 }

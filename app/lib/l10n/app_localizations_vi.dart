@@ -9275,4 +9275,13 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get unableToDetermineFirmwareVersion => 'Không thể xác định phiên bản firmware hiện tại';
+
+  @override
+  String get promoCode => 'Mã khuyến mãi';
+
+  @override
+  String get enterPromoCode => 'Nhập mã khuyến mãi';
+
+  @override
+  String get invalidPromotionCode => 'Mã khuyến mãi không hợp lệ.';
 }

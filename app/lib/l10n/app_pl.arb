@@ -3070,5 +3070,8 @@
     "syncProcessingBackgroundHint": "To trwa w tle — możesz opuścić ten ekran.",
     "syncCardRateLimited": "Osiągnięto limit uczciwego użytkowania — synchronizacja zostanie wznowiona automatycznie",
     "syncCardBackendBusy": "Serwery Omi są obciążone — twoje nagrania zsynchronizują się, gdy zwolni się przepustowość",
-    "unableToDetermineFirmwareVersion": "Nie można określić bieżącej wersji oprogramowania układowego"
+    "unableToDetermineFirmwareVersion": "Nie można określić bieżącej wersji oprogramowania układowego",
+    "promoCode": "Kod promocyjny",
+    "enterPromoCode": "Wpisz kod promocyjny",
+    "invalidPromotionCode": "Nieprawidłowy kod promocyjny."
 }

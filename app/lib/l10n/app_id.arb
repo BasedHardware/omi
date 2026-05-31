@@ -3077,5 +3077,8 @@
     "syncProcessingBackgroundHint": "Ini berlanjut di latar belakang — Anda dapat meninggalkan layar ini.",
     "syncCardRateLimited": "Batas penggunaan wajar tercapai — sinkronisasi akan dilanjutkan secara otomatis",
     "syncCardBackendBusy": "Server Omi sedang sibuk — rekamanmu akan disinkronkan setelah kapasitas tersedia kembali",
-    "unableToDetermineFirmwareVersion": "Tidak dapat menentukan versi firmware saat ini"
+    "unableToDetermineFirmwareVersion": "Tidak dapat menentukan versi firmware saat ini",
+    "promoCode": "Kode promo",
+    "enterPromoCode": "Masukkan kode promo",
+    "invalidPromotionCode": "Kode promo tidak valid."
 }
