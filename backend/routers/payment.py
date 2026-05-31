@@ -391,11 +391,23 @@ def create_checkout_session_endpoint(request: CreateCheckoutRequest, uid: str = 
     if reactivation_result:
         return reactivation_result
 
+    # Validate promotion code before creating checkout session
+    resolved_checkout_promo_id = None
+    if request.promotion_code:
+        promo_list = stripe.PromotionCode.list(code=request.promotion_code, active=True, limit=1)
+        if not promo_list.data:
+            raise HTTPException(status_code=400, detail="Invalid or expired promotion code.")
+        resolved_checkout_promo_id = promo_list.data[0].id
+
     # Normal checkout flow for new subscriptions (Scenario B or first-time subscribers)
     idempotency_key = str(uuid.uuid4())
     existing_customer_id = users_db.get_stripe_customer_id(uid)
     session = stripe_utils.create_subscription_checkout_session(
-        uid, request.price_id, idempotency_key, customer_id=existing_customer_id, promotion_code=request.promotion_code
+        uid,
+        request.price_id,
+        idempotency_key,
+        customer_id=existing_customer_id,
+        promotion_code_id=resolved_checkout_promo_id,
     )
     if not session:
         raise HTTPException(status_code=500, detail="Could not create checkout session.")
@@ -445,12 +457,12 @@ def upgrade_subscription_endpoint(request: UpgradeSubscriptionRequest, uid: str 
             )
 
         # Validate and resolve promotion code if provided
-        resolved_coupon_id = None
+        resolved_promo_id = None
         if request.promotion_code:
             promo_list = stripe.PromotionCode.list(code=request.promotion_code, active=True, limit=1)
             if not promo_list.data:
                 raise HTTPException(status_code=400, detail="Invalid or expired promotion code.")
-            resolved_coupon_id = promo_list.data[0].coupon.id
+            resolved_promo_id = promo_list.data[0].id
 
         # Cross-plan change (e.g. Unlimited→Architect): immediate swap with proration
         if current_plan != target_plan:
@@ -459,8 +471,8 @@ def upgrade_subscription_endpoint(request: UpgradeSubscriptionRequest, uid: str 
                 'proration_behavior': 'always_invoice',
                 'metadata': {'uid': uid, 'sub_type': target_plan.value},
             }
-            if resolved_coupon_id:
-                modify_params['discounts'] = [{'coupon': resolved_coupon_id}]
+            if resolved_promo_id:
+                modify_params['discounts'] = [{'promotion_code': resolved_promo_id}]
 
             updated_sub = stripe.Subscription.modify(stripe_sub['id'], **modify_params)
 
@@ -510,6 +522,7 @@ def upgrade_subscription_endpoint(request: UpgradeSubscriptionRequest, uid: str 
                             'price': request.price_id,
                         }
                     ],
+                    **({'discounts': [{'promotion_code': resolved_promo_id}]} if resolved_promo_id else {}),
                 },
             ],
             metadata={'uid': uid, 'upgrade_type': f'{current_plan.value}_{target_interval}'},
