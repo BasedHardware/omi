@@ -204,14 +204,16 @@ actor APIClient {
       }
 
       guard (200...299).contains(retryHttpResponse.statusCode) else {
-        throw APIError.httpError(statusCode: retryHttpResponse.statusCode)
+        let detail = Self.extractErrorDetail(from: retryData)
+        throw APIError.httpError(statusCode: retryHttpResponse.statusCode, detail: detail)
       }
 
       return try decoder.decode(T.self, from: retryData)
     }
 
     guard (200...299).contains(httpResponse.statusCode) else {
-      throw APIError.httpError(statusCode: httpResponse.statusCode)
+      let detail = Self.extractErrorDetail(from: data)
+      throw APIError.httpError(statusCode: httpResponse.statusCode, detail: detail)
     }
 
     do {
@@ -240,6 +242,14 @@ actor APIClient {
       throw decodingError
     }
   }
+
+  private static func extractErrorDetail(from data: Data) -> String? {
+    guard
+      let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+      let detail = json["detail"] as? String
+    else { return nil }
+    return detail
+  }
 }
 
 // MARK: - API Errors
@@ -247,8 +257,13 @@ actor APIClient {
 enum APIError: LocalizedError {
   case invalidResponse
   case unauthorized
-  case httpError(statusCode: Int)
+  case httpError(statusCode: Int, detail: String? = nil)
   case decodingError(Error)
+
+  var detail: String? {
+    if case .httpError(_, let detail) = self { return detail }
+    return nil
+  }
 
   var errorDescription: String? {
     switch self {
@@ -256,7 +271,8 @@ enum APIError: LocalizedError {
       return "Invalid response from server"
     case .unauthorized:
       return "Unauthorized - please sign in again"
-    case .httpError(let statusCode):
+    case .httpError(let statusCode, let detail):
+      if let detail { return detail }
       return "HTTP error: \(statusCode)"
     case .decodingError(let error):
       return "Failed to decode response: \(error.localizedDescription)"
@@ -1256,7 +1272,7 @@ extension APIClient {
         customBaseURL: nil
       )
       return response.conversation
-    } catch APIError.httpError(let statusCode) where statusCode == 404 {
+    } catch APIError.httpError(statusCode: let statusCode, detail: _) where statusCode == 404 {
       // 404 = no in-progress conversation found — WS close handler already processed it
       return nil
     }
@@ -4548,28 +4564,40 @@ extension APIClient {
     return try await get("v1/payments/overage-info")
   }
 
-  func createCheckoutSession(priceId: String) async throws -> CheckoutSessionResponse {
+  func createCheckoutSession(priceId: String, promotionCode: String? = nil) async throws
+    -> CheckoutSessionResponse
+  {
     struct Request: Encodable {
       let priceId: String
+      let promotionCode: String?
 
       enum CodingKeys: String, CodingKey {
         case priceId = "price_id"
+        case promotionCode = "promotion_code"
       }
     }
 
-    return try await post("v1/payments/checkout-session", body: Request(priceId: priceId))
+    return try await post(
+      "v1/payments/checkout-session",
+      body: Request(priceId: priceId, promotionCode: promotionCode))
   }
 
-  func upgradeSubscription(priceId: String) async throws -> UpgradeSubscriptionResponse {
+  func upgradeSubscription(priceId: String, promotionCode: String? = nil) async throws
+    -> UpgradeSubscriptionResponse
+  {
     struct Request: Encodable {
       let priceId: String
+      let promotionCode: String?
 
       enum CodingKeys: String, CodingKey {
         case priceId = "price_id"
+        case promotionCode = "promotion_code"
       }
     }
 
-    return try await post("v1/payments/upgrade-subscription", body: Request(priceId: priceId))
+    return try await post(
+      "v1/payments/upgrade-subscription",
+      body: Request(priceId: priceId, promotionCode: promotionCode))
   }
 
   func createCustomerPortalSession() async throws -> CustomerPortalResponse {
