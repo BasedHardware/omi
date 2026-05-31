@@ -246,7 +246,7 @@ class UsageProvider with ChangeNotifier {
     }
   }
 
-  Future<Map<String, dynamic>?> createUserCheckoutSession({required String priceId}) async {
+  Future<Map<String, dynamic>?> createUserCheckoutSession({required String priceId, String? promotionCode}) async {
     if (_isPaymentLoading) return null;
 
     _isPaymentLoading = true;
@@ -254,7 +254,7 @@ class UsageProvider with ChangeNotifier {
     notifyListeners();
 
     try {
-      final sessionData = await createCheckoutSession(priceId: priceId);
+      final sessionData = await createCheckoutSession(priceId: priceId, promotionCode: promotionCode);
       return sessionData;
     } catch (e) {
       _error = 'Failed to create checkout session. Please try again later.';
