@@ -7389,6 +7389,14 @@ struct SettingsContentView: View {
             subscriptionError = response.message ?? "Could not start checkout."
           }
         }
+      } catch let apiError as APIError {
+        logError("Failed to create checkout session", error: apiError)
+        await MainActor.run {
+          activeCheckoutPriceId = nil
+          pendingSubscriptionPriceId = nil
+          pendingCheckoutSessionId = nil
+          subscriptionError = apiError.detail ?? "Failed to open checkout."
+        }
       } catch {
         logError("Failed to create checkout session", error: error)
         await MainActor.run {
