@@ -3843,7 +3843,11 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
 
     /// The key the `StallDetector` tracks a tool under. Tools that arrive
     /// without a real `toolUseId` fall back to a name-derived synthetic
-    /// key so their per-tool timer still fires.
+    /// key so their per-tool timer still fires. Registration (in the tool
+    /// activity handler) and the transition match in `applyStallTransitions`
+    /// MUST derive the key identically — routing both through this single
+    /// helper keeps them from diverging (a mismatch silently drops every
+    /// stall transition for `toolUseId`-less tools).
     nonisolated static func stallTrackingId(toolUseId: String?, name: String) -> String {
         toolUseId ?? "untracked-\(name)"
     }
@@ -3856,6 +3860,17 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             return .failed
         default:
             return .completed
+        }
+    }
+
+    /// Map a `StallDetector.State` to the matching `ToolCallStatus`.
+    /// The two enums are deliberately separate — the detector tracks a
+    /// 3-state lifecycle independent of UI/persistence concerns.
+    private func mapDetectorState(_ state: StallDetector.State) -> ToolCallStatus {
+        switch state {
+        case .running: return .running
+        case .slow: return .slow
+        case .stalled: return .stalled
         }
     }
 
@@ -3881,15 +3896,6 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                     )
                 }
             }
-        }
-    }
-
-    /// Map a `StallDetector.State` to the matching `ToolCallStatus`.
-    private func mapDetectorState(_ state: StallDetector.State) -> ToolCallStatus {
-        switch state {
-        case .running: return .running
-        case .slow: return .slow
-        case .stalled: return .stalled
         }
     }
 
