@@ -1,7 +1,7 @@
 import asyncio
 import json
 from datetime import datetime, timezone
-from typing import List
+from typing import List, Optional
 
 from database.redis_db import (
     get_user_webhook_db,
@@ -91,7 +91,14 @@ async def conversation_created_webhook(uid, memory: Conversation):
         return
 
 
-async def day_summary_webhook(uid, summary: str):
+async def day_summary_webhook(uid, summary: str, summary_json: Optional[dict] = None):
+    """Send the daily summary to the developer webhook.
+
+    ``summary`` is the legacy ``str(summary_data)`` Python repr field, kept
+    for backward compatibility. ``summary_json`` is the same payload as a
+    real JSON object — receivers should prefer it going forward; the
+    legacy ``summary`` field will be deprecated in a future release.
+    """
     toggled = await run_blocking(db_executor, user_webhook_status_db, uid, WebhookType.day_summary)
     if toggled:
         webhook_url = await run_blocking(db_executor, get_user_webhook_db, uid, WebhookType.day_summary)
@@ -107,7 +114,12 @@ async def day_summary_webhook(uid, summary: str):
                 client = get_webhook_client()
                 response = await client.post(
                     webhook_url,
-                    json={'summary': summary, 'uid': uid, 'created_at': datetime.now(timezone.utc).isoformat()},
+                    json={
+                        'summary': summary,
+                        'summary_json': summary_json,
+                        'uid': uid,
+                        'created_at': datetime.now(timezone.utc).isoformat(),
+                    },
                     headers={'Content-Type': 'application/json'},
                 )
             logger.info(f'day_summary_webhook: {webhook_url} {response.status_code}')
