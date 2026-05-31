@@ -6862,9 +6862,30 @@ struct SettingsContentView: View {
           }
 
           if acceptsPromotionCode {
-            TextField("Promo code", text: $upgradePromotionCode)
-              .textFieldStyle(.roundedBorder)
-              .disabled(activeCheckoutPriceId != nil)
+            VStack(alignment: .leading, spacing: 6) {
+              HStack(spacing: 8) {
+                Image(systemName: "tag")
+                  .scaledFont(size: 12)
+                  .foregroundColor(OmiColors.textTertiary)
+                TextField("Promo code", text: $upgradePromotionCode)
+                  .textFieldStyle(.roundedBorder)
+                  .scaledFont(size: 13)
+                  .disabled(activeCheckoutPriceId != nil)
+                  .onChange(of: upgradePromotionCode) { _ in
+                    subscriptionError = nil
+                  }
+              }
+
+              if let error = subscriptionError {
+                HStack(spacing: 4) {
+                  Image(systemName: "exclamationmark.circle")
+                    .scaledFont(size: 11)
+                  Text(error)
+                    .scaledFont(size: 11)
+                }
+                .foregroundColor(OmiColors.warning)
+              }
+            }
           }
         }
       } else if isCurrentPlan {
@@ -7302,6 +7323,7 @@ struct SettingsContentView: View {
             activeCheckoutPriceId = nil
             pendingSubscriptionPriceId = nil
             subscriptionError = nil
+            self.upgradePromotionCode = ""
             loadSubscriptionInfo()
           }
         } catch {
