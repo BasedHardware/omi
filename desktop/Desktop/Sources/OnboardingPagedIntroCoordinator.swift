@@ -1176,7 +1176,7 @@ final class OnboardingPagedIntroCoordinator: ObservableObject {
           ["source_id": "user", "target_id": "goal_\(slug(title))", "label": "prioritizes"]
         ]
       )
-    } catch APIError.httpError(let statusCode) where statusCode == 429 {
+    } catch APIError.httpError(statusCode: let statusCode, detail: _) where statusCode == 429 {
       logError(
         "OnboardingPagedIntroCoordinator: Goal save rate-limited (429)",
         error: APIError.httpError(statusCode: 429))
@@ -1211,7 +1211,7 @@ final class OnboardingPagedIntroCoordinator: ObservableObject {
           unit: unit,
           source: "onboarding_step_flow"
         )
-      } catch APIError.httpError(let statusCode) where statusCode == 429 {
+      } catch APIError.httpError(statusCode: let statusCode, detail: _) where statusCode == 429 {
         lastError = APIError.httpError(statusCode: 429)
         guard attempt < backoffsSec.count else { break }
         log(
