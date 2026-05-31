@@ -3037,5 +3037,6 @@
     "syncCardBackendBusy": "Omin palvelimet ovat ruuhkautuneet — tallenteesi synkronoidaan, kun kapasiteettia vapautuu",
     "unableToDetermineFirmwareVersion": "Nykyistä laiteohjelmistoversiota ei voida määrittää",
     "promoCode": "Tarjouskoodi",
-    "enterPromoCode": "Syötä tarjouskoodi"
+    "enterPromoCode": "Syötä tarjouskoodi",
+    "invalidPromotionCode": "Virheellinen tarjouskoodi."
 }

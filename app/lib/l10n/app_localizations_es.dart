@@ -4680,10 +4680,7 @@ class AppLocalizationsEs extends AppLocalizations {
   }
 
   @override
-  String accessesAndTriggeredBy(
-    String accessDescription,
-    String triggerDescription,
-  ) {
+  String accessesAndTriggeredBy(String accessDescription, String triggerDescription) {
     return '$accessDescription y es $triggerDescription.';
   }
 
@@ -9306,4 +9303,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get enterPromoCode => 'Ingresa el código promocional';
+
+  @override
+  String get invalidPromotionCode => 'Código promocional no válido.';
 }

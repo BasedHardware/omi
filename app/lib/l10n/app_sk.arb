@@ -3042,5 +3042,6 @@
     "syncCardBackendBusy": "Servery Omi sú vyťažené — vaše nahrávky sa zosynchronizujú, hneď ako sa uvoľní kapacita",
     "unableToDetermineFirmwareVersion": "Nedá sa určiť aktuálna verzia firmvéru",
     "promoCode": "Promo kód",
-    "enterPromoCode": "Zadajte promo kód"
+    "enterPromoCode": "Zadajte promo kód",
+    "invalidPromotionCode": "Neplatný promo kód."
 }

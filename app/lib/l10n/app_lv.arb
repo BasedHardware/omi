@@ -3037,5 +3037,6 @@
     "syncCardBackendBusy": "Omi serveri ir noslogoti — jūsu ieraksti tiks sinhronizēti, tiklīdz atbrīvosies jauda",
     "unableToDetermineFirmwareVersion": "Nevar noteikt pašreizējo programmaparatūras versiju",
     "promoCode": "Reklāmas kods",
-    "enterPromoCode": "Ievadiet reklāmas kodu"
+    "enterPromoCode": "Ievadiet reklāmas kodu",
+    "invalidPromotionCode": "Nederīgs reklāmas kods."
 }

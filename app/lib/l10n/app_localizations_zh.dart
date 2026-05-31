@@ -4594,10 +4594,7 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String accessesAndTriggeredBy(
-    String accessDescription,
-    String triggerDescription,
-  ) {
+  String accessesAndTriggeredBy(String accessDescription, String triggerDescription) {
     return '$accessDescription，$triggerDescription。';
   }
 
@@ -9121,4 +9118,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get enterPromoCode => '输入促销代码';
+
+  @override
+  String get invalidPromotionCode => '促销代码无效。';
 }

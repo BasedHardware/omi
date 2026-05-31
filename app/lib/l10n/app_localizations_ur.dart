@@ -4694,10 +4694,7 @@ class AppLocalizationsUr extends AppLocalizations {
   }
 
   @override
-  String accessesAndTriggeredBy(
-    String accessDescription,
-    String triggerDescription,
-  ) {
+  String accessesAndTriggeredBy(String accessDescription, String triggerDescription) {
     return '$accessDescription اور $triggerDescription سے متحرک ہے۔';
   }
 
@@ -9300,4 +9297,7 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get enterPromoCode => 'پرومو کوڈ درج کریں';
+
+  @override
+  String get invalidPromotionCode => 'غلط پرومو کوڈ۔';
 }

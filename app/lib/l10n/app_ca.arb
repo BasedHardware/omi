@@ -3006,5 +3006,6 @@
     "syncCardBackendBusy": "Els servidors d'Omi estan saturats — els enregistraments se sincronitzaran quan hi hagi capacitat disponible",
     "unableToDetermineFirmwareVersion": "No s'ha pogut determinar la versió actual del firmware",
     "promoCode": "Codi promocional",
-    "enterPromoCode": "Introduïu el codi promocional"
+    "enterPromoCode": "Introduïu el codi promocional",
+    "invalidPromotionCode": "Codi promocional no vàlid."
 }

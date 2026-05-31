@@ -4650,10 +4650,7 @@ class AppLocalizationsAr extends AppLocalizations {
   }
 
   @override
-  String accessesAndTriggeredBy(
-    String accessDescription,
-    String triggerDescription,
-  ) {
+  String accessesAndTriggeredBy(String accessDescription, String triggerDescription) {
     return '$accessDescription و$triggerDescription.';
   }
 
@@ -9231,4 +9228,7 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get enterPromoCode => 'أدخل الرمز الترويجي';
+
+  @override
+  String get invalidPromotionCode => 'رمز ترويجي غير صالح.';
 }

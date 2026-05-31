@@ -3038,5 +3038,6 @@
     "syncCardBackendBusy": "Los servidores de Omi están saturados — tus grabaciones se sincronizarán cuando haya capacidad disponible",
     "unableToDetermineFirmwareVersion": "No se puede determinar la versión actual del firmware",
     "promoCode": "Código promocional",
-    "enterPromoCode": "Ingresa el código promocional"
+    "enterPromoCode": "Ingresa el código promocional",
+    "invalidPromotionCode": "Código promocional no válido."
 }

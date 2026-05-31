@@ -4692,10 +4692,7 @@ class AppLocalizationsBn extends AppLocalizations {
   }
 
   @override
-  String accessesAndTriggeredBy(
-    String accessDescription,
-    String triggerDescription,
-  ) {
+  String accessesAndTriggeredBy(String accessDescription, String triggerDescription) {
     return '$accessDescription এবং $triggerDescription দ্বারা ট্রিগার।';
   }
 
@@ -9293,4 +9290,7 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String get enterPromoCode => 'প্রোমো কোড লিখুন';
+
+  @override
+  String get invalidPromotionCode => 'অবৈধ প্রোমো কোড।';
 }

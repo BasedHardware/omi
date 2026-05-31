@@ -10615,5 +10615,6 @@
     "syncCardBackendBusy": "Omi کے سرورز مصروف ہیں — گنجائش بحال ہوتے ہی آپ کی ریکارڈنگز سنک ہو جائیں گی",
     "unableToDetermineFirmwareVersion": "موجودہ فرم ویئر ورژن کا تعین نہیں کیا جا سکا",
     "promoCode": "پرومو کوڈ",
-    "enterPromoCode": "پرومو کوڈ درج کریں"
+    "enterPromoCode": "پرومو کوڈ درج کریں",
+    "invalidPromotionCode": "غلط پرومو کوڈ۔"
 }

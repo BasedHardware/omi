@@ -10615,5 +10615,6 @@
     "syncCardBackendBusy": "Abala ang mga server ng Omi — masi-sync ang iyong mga recording kapag may bakanteng kapasidad na muli",
     "unableToDetermineFirmwareVersion": "Hindi matukoy ang kasalukuyang bersyon ng firmware",
     "promoCode": "Promo code",
-    "enterPromoCode": "Ilagay ang promo code"
+    "enterPromoCode": "Ilagay ang promo code",
+    "invalidPromotionCode": "Hindi valid na promo code."
 }

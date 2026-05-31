@@ -4726,10 +4726,7 @@ class AppLocalizationsTl extends AppLocalizations {
   }
 
   @override
-  String accessesAndTriggeredBy(
-    String accessDescription,
-    String triggerDescription,
-  ) {
+  String accessesAndTriggeredBy(String accessDescription, String triggerDescription) {
     return '$accessDescription at ay $triggerDescription.';
   }
 
@@ -9370,4 +9367,7 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get enterPromoCode => 'Ilagay ang promo code';
+
+  @override
+  String get invalidPromotionCode => 'Hindi valid na promo code.';
 }

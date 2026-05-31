@@ -4705,10 +4705,7 @@ class AppLocalizationsKn extends AppLocalizations {
   }
 
   @override
-  String accessesAndTriggeredBy(
-    String accessDescription,
-    String triggerDescription,
-  ) {
+  String accessesAndTriggeredBy(String accessDescription, String triggerDescription) {
     return '$accessDescription ಮತ್ತು $triggerDescription ಆಗಿದೆ.';
   }
 
@@ -9317,4 +9314,7 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get enterPromoCode => 'ಪ್ರೋಮೋ ಕೋಡ್ ನಮೂದಿಸಿ';
+
+  @override
+  String get invalidPromotionCode => 'ಅಮಾನ್ಯ ಪ್ರೋಮೋ ಕೋಡ್.';
 }

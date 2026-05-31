@@ -3005,5 +3005,6 @@
     "syncCardBackendBusy": "Omis Server sind ausgelastet — deine Aufnahmen werden synchronisiert, sobald wieder Kapazität verfügbar ist",
     "unableToDetermineFirmwareVersion": "Aktuelle Firmware-Version konnte nicht ermittelt werden",
     "promoCode": "Aktionscode",
-    "enterPromoCode": "Aktionscode eingeben"
+    "enterPromoCode": "Aktionscode eingeben",
+    "invalidPromotionCode": "Ungültiger Aktionscode."
 }

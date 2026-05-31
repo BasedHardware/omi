@@ -3042,5 +3042,6 @@
     "syncCardBackendBusy": "Máy chủ Omi đang quá tải — bản ghi của bạn sẽ được đồng bộ khi dung lượng được khôi phục",
     "unableToDetermineFirmwareVersion": "Không thể xác định phiên bản firmware hiện tại",
     "promoCode": "Mã khuyến mãi",
-    "enterPromoCode": "Nhập mã khuyến mãi"
+    "enterPromoCode": "Nhập mã khuyến mãi",
+    "invalidPromotionCode": "Mã khuyến mãi không hợp lệ."
 }

@@ -4686,10 +4686,7 @@ class AppLocalizationsFi extends AppLocalizations {
   }
 
   @override
-  String accessesAndTriggeredBy(
-    String accessDescription,
-    String triggerDescription,
-  ) {
+  String accessesAndTriggeredBy(String accessDescription, String triggerDescription) {
     return '$accessDescription ja on $triggerDescription.';
   }
 
@@ -9286,4 +9283,7 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get enterPromoCode => 'Syötä tarjouskoodi';
+
+  @override
+  String get invalidPromotionCode => 'Virheellinen tarjouskoodi.';
 }

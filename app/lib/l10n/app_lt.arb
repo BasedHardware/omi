@@ -3037,5 +3037,6 @@
     "syncCardBackendBusy": "Omi serveriai užimti — jūsų įrašai bus sinchronizuoti, kai atsilaisvins pajėgumai",
     "unableToDetermineFirmwareVersion": "Nepavyko nustatyti dabartinės programinės aparatinės įrangos versijos",
     "promoCode": "Reklamos kodas",
-    "enterPromoCode": "Įveskite reklamos kodą"
+    "enterPromoCode": "Įveskite reklamos kodą",
+    "invalidPromotionCode": "Neteisingas reklamos kodas."
 }

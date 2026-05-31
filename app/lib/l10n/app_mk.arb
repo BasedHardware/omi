@@ -10615,5 +10615,6 @@
     "syncCardBackendBusy": "Серверите на Omi се преоптоварени — вашите снимки ќе се синхронизираат штом ќе се ослободи капацитет",
     "unableToDetermineFirmwareVersion": "Не може да се одреди тековната верзија на фирмверот",
     "promoCode": "Промо код",
-    "enterPromoCode": "Внесете промо код"
+    "enterPromoCode": "Внесете промо код",
+    "invalidPromotionCode": "Невалиден промо код."
 }

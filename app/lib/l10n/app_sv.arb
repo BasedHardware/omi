@@ -3037,5 +3037,6 @@
     "syncCardBackendBusy": "Omis servrar är hårt belastade — dina inspelningar synkroniseras så snart kapacitet frigörs",
     "unableToDetermineFirmwareVersion": "Det gick inte att fastställa aktuell firmwareversion",
     "promoCode": "Kampanjkod",
-    "enterPromoCode": "Ange kampanjkod"
+    "enterPromoCode": "Ange kampanjkod",
+    "invalidPromotionCode": "Ogiltig kampanjkod."
 }

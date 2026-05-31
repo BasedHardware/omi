@@ -10615,5 +10615,6 @@
     "syncCardBackendBusy": "Omi serveri su zauzeti — vaši snimci će se sinhronizovati kada se oslobodi kapacitet",
     "unableToDetermineFirmwareVersion": "Nije moguće odrediti trenutnu verziju firmvera",
     "promoCode": "Promo kod",
-    "enterPromoCode": "Unesite promo kod"
+    "enterPromoCode": "Unesite promo kod",
+    "invalidPromotionCode": "Nevažeći promo kod."
 }

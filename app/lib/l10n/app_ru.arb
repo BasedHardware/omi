@@ -3072,5 +3072,6 @@
     "syncCardBackendBusy": "Серверы Omi загружены — ваши записи синхронизируются, как только освободятся мощности",
     "unableToDetermineFirmwareVersion": "Не удаётся определить текущую версию прошивки",
     "promoCode": "Промокод",
-    "enterPromoCode": "Введите промокод"
+    "enterPromoCode": "Введите промокод",
+    "invalidPromotionCode": "Недействительный промокод."
 }

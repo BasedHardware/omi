@@ -4690,10 +4690,7 @@ class AppLocalizationsFa extends AppLocalizations {
   }
 
   @override
-  String accessesAndTriggeredBy(
-    String accessDescription,
-    String triggerDescription,
-  ) {
+  String accessesAndTriggeredBy(String accessDescription, String triggerDescription) {
     return '$accessDescription و $triggerDescription.';
   }
 
@@ -9288,4 +9285,7 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get enterPromoCode => 'کد تخفیف را وارد کنید';
+
+  @override
+  String get invalidPromotionCode => 'کد تخفیف نامعتبر.';
 }

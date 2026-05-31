@@ -3037,5 +3037,6 @@
     "syncCardBackendBusy": "Omi serverid on hõivatud — sinu salvestised sünkroonitakse, kui maht vabaneb",
     "unableToDetermineFirmwareVersion": "Praeguse püsivara versiooni ei õnnestunud tuvastada",
     "promoCode": "Sooduskood",
-    "enterPromoCode": "Sisestage sooduskood"
+    "enterPromoCode": "Sisestage sooduskood",
+    "invalidPromotionCode": "Kehtetu sooduskood."
 }

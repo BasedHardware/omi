@@ -10615,5 +10615,6 @@
     "syncCardBackendBusy": "Серверы Omi загружаныя — вашы запісы сінхранізуюцца, калі з'явіцца магчымасць",
     "unableToDetermineFirmwareVersion": "Не ўдалося вызначыць бягучую версію прашыўкі",
     "promoCode": "Промакод",
-    "enterPromoCode": "Увядзіце промакод"
+    "enterPromoCode": "Увядзіце промакод",
+    "invalidPromotionCode": "Няправільны промакод."
 }

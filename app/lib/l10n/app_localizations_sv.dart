@@ -4688,10 +4688,7 @@ class AppLocalizationsSv extends AppLocalizations {
   }
 
   @override
-  String accessesAndTriggeredBy(
-    String accessDescription,
-    String triggerDescription,
-  ) {
+  String accessesAndTriggeredBy(String accessDescription, String triggerDescription) {
     return '$accessDescription och är $triggerDescription.';
   }
 
@@ -9291,4 +9288,7 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get enterPromoCode => 'Ange kampanjkod';
+
+  @override
+  String get invalidPromotionCode => 'Ogiltig kampanjkod.';
 }

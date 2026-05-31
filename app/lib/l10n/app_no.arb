@@ -3037,5 +3037,6 @@
     "syncCardBackendBusy": "Omis servere er travle — opptakene dine synkroniseres så snart kapasiteten er tilbake",
     "unableToDetermineFirmwareVersion": "Kan ikke bestemme gjeldende fastvareversjon",
     "promoCode": "Kampanjekode",
-    "enterPromoCode": "Skriv inn kampanjekode"
+    "enterPromoCode": "Skriv inn kampanjekode",
+    "invalidPromotionCode": "Ugyldig kampanjekode."
 }

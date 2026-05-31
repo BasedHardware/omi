@@ -3079,5 +3079,6 @@
     "syncCardBackendBusy": "Server Omi sedang sibuk — rekamanmu akan disinkronkan setelah kapasitas tersedia kembali",
     "unableToDetermineFirmwareVersion": "Tidak dapat menentukan versi firmware saat ini",
     "promoCode": "Kode promo",
-    "enterPromoCode": "Masukkan kode promo"
+    "enterPromoCode": "Masukkan kode promo",
+    "invalidPromotionCode": "Kode promo tidak valid."
 }

@@ -10615,5 +10615,6 @@
     "syncCardBackendBusy": "Omi-এর সার্ভার ব্যস্ত — সক্ষমতা ফিরে এলে আপনার রেকর্ডিংগুলি সিঙ্ক হয়ে যাবে",
     "unableToDetermineFirmwareVersion": "বর্তমান ফার্মওয়্যার সংস্করণ নির্ধারণ করা যায়নি",
     "promoCode": "প্রোমো কোড",
-    "enterPromoCode": "প্রোমো কোড লিখুন"
+    "enterPromoCode": "প্রোমো কোড লিখুন",
+    "invalidPromotionCode": "অবৈধ প্রোমো কোড।"
 }

@@ -3072,5 +3072,6 @@
     "syncCardBackendBusy": "Serwery Omi są obciążone — twoje nagrania zsynchronizują się, gdy zwolni się przepustowość",
     "unableToDetermineFirmwareVersion": "Nie można określić bieżącej wersji oprogramowania układowego",
     "promoCode": "Kod promocyjny",
-    "enterPromoCode": "Wpisz kod promocyjny"
+    "enterPromoCode": "Wpisz kod promocyjny",
+    "invalidPromotionCode": "Nieprawidłowy kod promocyjny."
 }

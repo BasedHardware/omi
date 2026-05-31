@@ -4724,10 +4724,7 @@ class AppLocalizationsEl extends AppLocalizations {
   }
 
   @override
-  String accessesAndTriggeredBy(
-    String accessDescription,
-    String triggerDescription,
-  ) {
+  String accessesAndTriggeredBy(String accessDescription, String triggerDescription) {
     return '$accessDescription και είναι $triggerDescription.';
   }
 
@@ -9351,4 +9348,7 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get enterPromoCode => 'Εισάγετε κωδικό προσφοράς';
+
+  @override
+  String get invalidPromotionCode => 'Μη έγκυρος κωδικός προσφοράς.';
 }

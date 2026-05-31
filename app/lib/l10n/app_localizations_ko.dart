@@ -4603,10 +4603,7 @@ class AppLocalizationsKo extends AppLocalizations {
   }
 
   @override
-  String accessesAndTriggeredBy(
-    String accessDescription,
-    String triggerDescription,
-  ) {
+  String accessesAndTriggeredBy(String accessDescription, String triggerDescription) {
     return '$accessDescription 및 $triggerDescription.';
   }
 
@@ -9137,4 +9134,7 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get enterPromoCode => '프로모 코드를 입력하세요';
+
+  @override
+  String get invalidPromotionCode => '유효하지 않은 프로모 코드입니다.';
 }

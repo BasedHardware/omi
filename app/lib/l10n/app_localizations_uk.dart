@@ -4692,10 +4692,7 @@ class AppLocalizationsUk extends AppLocalizations {
   }
 
   @override
-  String accessesAndTriggeredBy(
-    String accessDescription,
-    String triggerDescription,
-  ) {
+  String accessesAndTriggeredBy(String accessDescription, String triggerDescription) {
     return '$accessDescription і $triggerDescription.';
   }
 
@@ -9304,4 +9301,7 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get enterPromoCode => 'Введіть промокод';
+
+  @override
+  String get invalidPromotionCode => 'Недійсний промокод.';
 }

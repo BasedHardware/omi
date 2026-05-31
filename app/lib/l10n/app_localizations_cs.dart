@@ -4680,10 +4680,7 @@ class AppLocalizationsCs extends AppLocalizations {
   }
 
   @override
-  String accessesAndTriggeredBy(
-    String accessDescription,
-    String triggerDescription,
-  ) {
+  String accessesAndTriggeredBy(String accessDescription, String triggerDescription) {
     return '$accessDescription a je $triggerDescription.';
   }
 
@@ -9286,4 +9283,7 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get enterPromoCode => 'Zadejte promo kód';
+
+  @override
+  String get invalidPromotionCode => 'Neplatný promo kód.';
 }

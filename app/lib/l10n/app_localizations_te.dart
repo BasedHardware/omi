@@ -4713,10 +4713,7 @@ class AppLocalizationsTe extends AppLocalizations {
   }
 
   @override
-  String accessesAndTriggeredBy(
-    String accessDescription,
-    String triggerDescription,
-  ) {
+  String accessesAndTriggeredBy(String accessDescription, String triggerDescription) {
     return '$accessDescription మరియు $triggerDescription.';
   }
 
@@ -9335,4 +9332,7 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get enterPromoCode => 'ప్రోమో కోడ్ ఎంటర్ చేయండి';
+
+  @override
+  String get invalidPromotionCode => 'చెల్లని ప్రోమో కోడ్.';
 }

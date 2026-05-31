@@ -4724,10 +4724,7 @@ class AppLocalizationsDe extends AppLocalizations {
   }
 
   @override
-  String accessesAndTriggeredBy(
-    String accessDescription,
-    String triggerDescription,
-  ) {
+  String accessesAndTriggeredBy(String accessDescription, String triggerDescription) {
     return '$accessDescription und wird $triggerDescription.';
   }
 
@@ -9361,4 +9358,7 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get enterPromoCode => 'Aktionscode eingeben';
+
+  @override
+  String get invalidPromotionCode => 'Ungültiger Aktionscode.';
 }

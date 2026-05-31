@@ -10615,5 +10615,6 @@
     "syncCardBackendBusy": "Omi ಸರ್ವರ್‌ಗಳು ಬ್ಯುಸಿಯಾಗಿವೆ — ಸಾಮರ್ಥ್ಯ ಲಭ್ಯವಾದ ತಕ್ಷಣ ನಿಮ್ಮ ರೆಕಾರ್ಡಿಂಗ್‌ಗಳು ಸಿಂಕ್ ಆಗುತ್ತವೆ",
     "unableToDetermineFirmwareVersion": "ಪ್ರಸ್ತುತ ಫರ್ಮ್‌ವೇರ್ ಆವೃತ್ತಿಯನ್ನು ನಿರ್ಧರಿಸಲು ಸಾಧ್ಯವಾಗಲಿಲ್ಲ",
     "promoCode": "ಪ್ರೋಮೋ ಕೋಡ್",
-    "enterPromoCode": "ಪ್ರೋಮೋ ಕೋಡ್ ನಮೂದಿಸಿ"
+    "enterPromoCode": "ಪ್ರೋಮೋ ಕೋಡ್ ನಮೂದಿಸಿ",
+    "invalidPromotionCode": "ಅಮಾನ್ಯ ಪ್ರೋಮೋ ಕೋಡ್."
 }

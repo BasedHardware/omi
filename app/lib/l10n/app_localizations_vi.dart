@@ -4694,10 +4694,7 @@ class AppLocalizationsVi extends AppLocalizations {
   }
 
   @override
-  String accessesAndTriggeredBy(
-    String accessDescription,
-    String triggerDescription,
-  ) {
+  String accessesAndTriggeredBy(String accessDescription, String triggerDescription) {
     return '$accessDescription và $triggerDescription.';
   }
 
@@ -9284,4 +9281,7 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get enterPromoCode => 'Nhập mã khuyến mãi';
+
+  @override
+  String get invalidPromotionCode => 'Mã khuyến mãi không hợp lệ.';
 }

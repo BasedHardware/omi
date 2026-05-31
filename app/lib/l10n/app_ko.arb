@@ -3037,5 +3037,6 @@
     "syncCardBackendBusy": "Omi 서버가 혼잡합니다 — 용량이 확보되는 대로 녹음이 동기화됩니다",
     "unableToDetermineFirmwareVersion": "현재 펌웨어 버전을 확인할 수 없습니다",
     "promoCode": "프로모 코드",
-    "enterPromoCode": "프로모 코드를 입력하세요"
+    "enterPromoCode": "프로모 코드를 입력하세요",
+    "invalidPromotionCode": "유효하지 않은 프로모 코드입니다."
 }

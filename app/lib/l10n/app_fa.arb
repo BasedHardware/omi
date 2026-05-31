@@ -10615,5 +10615,6 @@
     "syncCardBackendBusy": "سرورهای Omi شلوغ هستند — ضبط‌های شما به‌محض آزاد شدن ظرفیت همگام‌سازی می‌شوند",
     "unableToDetermineFirmwareVersion": "تعیین نسخه فعلی سفت‌افزار امکان‌پذیر نیست",
     "promoCode": "کد تخفیف",
-    "enterPromoCode": "کد تخفیف را وارد کنید"
+    "enterPromoCode": "کد تخفیف را وارد کنید",
+    "invalidPromotionCode": "کد تخفیف نامعتبر."
 }

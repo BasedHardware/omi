@@ -3072,5 +3072,6 @@
     "syncCardBackendBusy": "Omi sunucuları yoğun — kapasite boşaldığında kayıtlarınız eşitlenecek",
     "unableToDetermineFirmwareVersion": "Mevcut donanım yazılımı sürümü belirlenemiyor",
     "promoCode": "Promosyon kodu",
-    "enterPromoCode": "Promosyon kodunu girin"
+    "enterPromoCode": "Promosyon kodunu girin",
+    "invalidPromotionCode": "Geçersiz promosyon kodu."
 }

@@ -10615,5 +10615,6 @@
     "syncCardBackendBusy": "השרתים של Omi עמוסים — ההקלטות שלך יסונכרנו ברגע שתתפנה תפוסה",
     "unableToDetermineFirmwareVersion": "לא ניתן לקבוע את גרסת הקושחה הנוכחית",
     "promoCode": "קוד קידום",
-    "enterPromoCode": "הזינו קוד קידום"
+    "enterPromoCode": "הזינו קוד קידום",
+    "invalidPromotionCode": "קוד קידום לא תקין."
 }

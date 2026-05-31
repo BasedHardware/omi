@@ -4709,10 +4709,7 @@ class AppLocalizationsHu extends AppLocalizations {
   }
 
   @override
-  String accessesAndTriggeredBy(
-    String accessDescription,
-    String triggerDescription,
-  ) {
+  String accessesAndTriggeredBy(String accessDescription, String triggerDescription) {
     return '$accessDescription és $triggerDescription.';
   }
 
@@ -9325,4 +9322,7 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get enterPromoCode => 'Adja meg a promóciós kódot';
+
+  @override
+  String get invalidPromotionCode => 'Érvénytelen promóciós kód.';
 }

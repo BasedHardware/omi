@@ -4686,10 +4686,7 @@ class AppLocalizationsLt extends AppLocalizations {
   }
 
   @override
-  String accessesAndTriggeredBy(
-    String accessDescription,
-    String triggerDescription,
-  ) {
+  String accessesAndTriggeredBy(String accessDescription, String triggerDescription) {
     return '$accessDescription ir yra $triggerDescription.';
   }
 
@@ -9299,4 +9296,7 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get enterPromoCode => 'Įveskite reklamos kodą';
+
+  @override
+  String get invalidPromotionCode => 'Neteisingas reklamos kodas.';
 }
