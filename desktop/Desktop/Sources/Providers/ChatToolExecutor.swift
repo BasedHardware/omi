@@ -36,6 +36,48 @@ class ChatToolExecutor {
     followupContinuation = nil
   }
 
+  // MARK: - Tool name registry
+  //
+  // Source of truth for which tool names this executor will dispatch.
+  // Kept in sync with the `case` arms in `execute(_:)` below — if you
+  // add a new case, add the name here too (and
+  // `PromptSchemaConsistencyTests` will fail until you do).
+
+  /// The 7 piMono chat tools advertised in `ChatPrompts.agenticQA` —
+  /// the default chat surface. Used by tests to validate the prompt
+  /// only declares tools that exist.
+  static let piMonoChatToolNames: Set<String> = [
+    "execute_sql",
+    "semantic_search",
+    "search_tasks",
+    "get_daily_recap",
+    "complete_task",
+    "delete_task",
+    "save_knowledge_graph",
+  ]
+
+  /// Tools available only during onboarding. Listed in the onboarding
+  /// system prompt (separate from agenticQA) — never appear in
+  /// post-onboarding chat. Some, like `save_knowledge_graph`, also
+  /// appear in `piMonoChatToolNames` because they're shared.
+  static let onboardingOnlyToolNames: Set<String> = [
+    "request_permission",
+    "check_permission_status",
+    "scan_files",
+    "start_file_scan",
+    "get_file_scan_results",
+    "set_user_preferences",
+    "ask_followup",
+    "complete_onboarding",
+    "get_email_insights",
+    "capture_screen",
+  ]
+
+  /// Every tool name `execute(_:)` knows how to dispatch. Must be a
+  /// superset of every name the prompts can reference.
+  static let allRegisteredToolNames: Set<String> =
+    piMonoChatToolNames.union(onboardingOnlyToolNames)
+
   /// Execute a tool call and return the result as a string
   static func execute(_ toolCall: ToolCall) async -> String {
     log("Executing tool: \(toolCall.name) with args: \(toolCall.arguments)")
