@@ -543,7 +543,7 @@ class _PlansSheetState extends State<PlansSheet> {
           promotionCode: promoCode.isNotEmpty ? promoCode : null,
         );
         if (result != null && result['error'] == true) {
-          final detail = result['detail'] as String? ?? 'Invalid promotion code.';
+          final detail = result['detail'] as String? ?? context.l10n.invalidPromotionCode;
           if (promoCode.isNotEmpty) {
             setState(() => _promoCodeError = detail);
           } else {
@@ -1484,9 +1484,7 @@ class _PlansSheetState extends State<PlansSheet> {
                 : null,
           ),
           onChanged: (_) {
-            if (_promoCodeError != null) {
-              setState(() => _promoCodeError = null);
-            }
+            setState(() => _promoCodeError = null);
           },
         ),
       ],
