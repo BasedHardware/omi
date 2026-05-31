@@ -63,9 +63,9 @@ Future<Map<String, dynamic>?> upgradeSubscription({required String priceId, Stri
   if (response.statusCode == 400) {
     try {
       final errorBody = jsonDecode(response.body);
-      return {'error': true, 'detail': errorBody['detail'] ?? 'Invalid promotion code.'};
+      return {'error': true, 'detail': errorBody['detail']};
     } catch (_) {
-      return {'error': true, 'detail': 'Invalid promotion code.'};
+      return {'error': true};
     }
   }
   return null;
