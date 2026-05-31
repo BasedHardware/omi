@@ -57,20 +57,37 @@ enum PostOnboardingPromptSuggestions {
 // enhancement, out of scope here.
 @MainActor
 enum OnboardingPromptSuggestionBuilder {
+  // Each suggestion is a named constant so `build(from:)` references it
+  // by meaning, not by array position. This avoids two failure modes:
+  // a hardcoded index crashing if the vocabulary shrinks, and a reorder
+  // silently attaching the wrong suggestion to a coordinator condition.
+
   /// Universal opener — always first, always relevant. Answerable via
   /// execute_sql on the goals + action_items tables.
   static let universalSuggestion = "What should I focus on today to achieve my goals?"
+  /// Shown when the onboarding email summary is present.
+  static let emailSuggestion = "What email follow-ups matter most today?"
+  /// Shown when the onboarding calendar summary is present.
+  static let calendarSuggestion = "Where can I find focus time this week?"
+  /// Shown when the user drafted a goal during onboarding.
+  static let goalSuggestion = "Break my goal into the next 3 steps."
+  /// Always shown — backed by semantic_search over screen history.
+  static let screenSuggestion = "What on my screen matters most right now?"
+  /// Always shown — the catch-all prioritisation prompt.
+  static let leverageSuggestion = "What's the highest-leverage thing I can do next?"
 
-  /// Every string `build(from:)` can ever emit, in the order they could
-  /// appear in the returned array. Tests scan this for capability drift.
-  /// Keep at ≤6 entries — `build()` truncates with `.prefix(6)`.
+  /// Every string `build(from:)` can ever emit, in declaration order.
+  /// Derived from the named constants above so the scanned vocabulary
+  /// and what `build()` emits can't drift apart. Tests scan this for
+  /// capability drift; `build()` truncates the assembled list with
+  /// `.prefix(6)`.
   static let allKnownSuggestions: [String] = [
     universalSuggestion,
-    "What email follow-ups matter most today?",
-    "Where can I find focus time this week?",
-    "Break my goal into the next 3 steps.",
-    "What on my screen matters most right now?",
-    "What's the highest-leverage thing I can do next?",
+    emailSuggestion,
+    calendarSuggestion,
+    goalSuggestion,
+    screenSuggestion,
+    leverageSuggestion,
   ]
 
   static func build(from coordinator: OnboardingPagedIntroCoordinator) -> [String] {
@@ -80,19 +97,19 @@ enum OnboardingPromptSuggestionBuilder {
     suggestions.append(universalSuggestion)
 
     if !coordinator.emailSummary.isEmpty {
-      suggestions.append(allKnownSuggestions[1])
+      suggestions.append(emailSuggestion)
     }
 
     if !coordinator.calendarSummary.isEmpty {
-      suggestions.append(allKnownSuggestions[2])
+      suggestions.append(calendarSuggestion)
     }
 
     if !coordinator.goalDraft.isEmpty {
-      suggestions.append(allKnownSuggestions[3])
+      suggestions.append(goalSuggestion)
     }
 
-    suggestions.append(allKnownSuggestions[4])
-    suggestions.append(allKnownSuggestions[5])
+    suggestions.append(screenSuggestion)
+    suggestions.append(leverageSuggestion)
 
     let deduped = Array(NSOrderedSet(array: suggestions).array as? [String] ?? suggestions)
     return Array(deduped.prefix(6))

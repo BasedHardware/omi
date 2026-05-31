@@ -150,11 +150,35 @@ final class ChatDiscoverabilityTests: XCTestCase {
     }
 
     @MainActor
-    func testOnboardingPromptsVocabularyIsBoundedAtSix() {
-        XCTAssertLessThanOrEqual(
+    func testOnboardingPromptsVocabularyIsExactlySix() {
+        // Upper bound: build() truncates with .prefix(6), so a 7th entry
+        // would be unreachable in some onboarding paths. Lower bound:
+        // build() emits the universal opener plus up to five named
+        // suggestions, all of which must be present in the scanned
+        // vocabulary. Pinning to exactly six encodes both constraints.
+        XCTAssertEqual(
             OnboardingPromptSuggestionBuilder.allKnownSuggestions.count,
             6,
-            "build() truncates with .prefix(6); any vocabulary entry beyond 6 becomes unreachable in some onboarding paths"
+            "vocabulary must hold exactly the six named suggestions build() can emit"
+        )
+    }
+
+    @MainActor
+    func testOnboardingPromptsVocabularyMatchesNamedSuggestions() {
+        // The scanned vocabulary must be exactly the named constants
+        // build() draws from — otherwise a suggestion could ship without
+        // being capability-scanned, or a scanned string could be dead.
+        XCTAssertEqual(
+            OnboardingPromptSuggestionBuilder.allKnownSuggestions,
+            [
+                OnboardingPromptSuggestionBuilder.universalSuggestion,
+                OnboardingPromptSuggestionBuilder.emailSuggestion,
+                OnboardingPromptSuggestionBuilder.calendarSuggestion,
+                OnboardingPromptSuggestionBuilder.goalSuggestion,
+                OnboardingPromptSuggestionBuilder.screenSuggestion,
+                OnboardingPromptSuggestionBuilder.leverageSuggestion,
+            ],
+            "allKnownSuggestions must list exactly the named suggestions build() can emit, in order"
         )
     }
 
