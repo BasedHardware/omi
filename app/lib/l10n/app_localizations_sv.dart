@@ -9282,4 +9282,13 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get unableToDetermineFirmwareVersion => 'Det gick inte att fastställa aktuell firmwareversion';
+
+  @override
+  String get promoCode => 'Kampanjkod';
+
+  @override
+  String get enterPromoCode => 'Ange kampanjkod';
+
+  @override
+  String get invalidPromotionCode => 'Ogiltig kampanjkod.';
 }

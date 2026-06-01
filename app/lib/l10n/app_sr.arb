@@ -10613,5 +10613,8 @@
     "syncProcessingBackgroundHint": "Ово се наставља у позадини — можете напустити овај екран.",
     "syncCardRateLimited": "Достигнут је лимит фер коришћења — синхронизација ће се аутоматски наставити",
     "syncCardBackendBusy": "Omi сервери су заузети — ваши снимци ће се синхронизовати чим се ослободи капацитет",
-    "unableToDetermineFirmwareVersion": "Није могуће одредити тренутну верзију фирмвера"
+    "unableToDetermineFirmwareVersion": "Није могуће одредити тренутну верзију фирмвера",
+    "promoCode": "Промо код",
+    "enterPromoCode": "Унесите промо код",
+    "invalidPromotionCode": "Неважећи промо код."
 }

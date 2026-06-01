@@ -3035,5 +3035,8 @@
     "syncProcessingBackgroundHint": "Acest lucru continuă în fundal — poți părăsi acest ecran.",
     "syncCardRateLimited": "Limita de utilizare echitabilă a fost atinsă — sincronizarea va fi reluată automat",
     "syncCardBackendBusy": "Serverele Omi sunt aglomerate — înregistrările tale se vor sincroniza imediat ce se eliberează capacitate",
-    "unableToDetermineFirmwareVersion": "Nu se poate determina versiunea curentă a firmware-ului"
+    "unableToDetermineFirmwareVersion": "Nu se poate determina versiunea curentă a firmware-ului",
+    "promoCode": "Cod promoțional",
+    "enterPromoCode": "Introduceți codul promoțional",
+    "invalidPromotionCode": "Cod promoțional invalid."
 }

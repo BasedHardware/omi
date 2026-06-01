@@ -10613,5 +10613,8 @@
     "syncProcessingBackgroundHint": "Працэс працягваецца ў фонавым рэжыме — вы можаце пакінуць гэты экран.",
     "syncCardRateLimited": "Дасягнуты ліміт сумленнага выкарыстання — сінхранізацыя адновіцца аўтаматычна",
     "syncCardBackendBusy": "Серверы Omi загружаныя — вашы запісы сінхранізуюцца, калі з'явіцца магчымасць",
-    "unableToDetermineFirmwareVersion": "Не ўдалося вызначыць бягучую версію прашыўкі"
+    "unableToDetermineFirmwareVersion": "Не ўдалося вызначыць бягучую версію прашыўкі",
+    "promoCode": "Промакод",
+    "enterPromoCode": "Увядзіце промакод",
+    "invalidPromotionCode": "Няправільны промакод."
 }

@@ -9342,4 +9342,13 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get unableToDetermineFirmwareVersion => 'Δεν είναι δυνατός ο προσδιορισμός της τρέχουσας έκδοσης firmware';
+
+  @override
+  String get promoCode => 'Κωδικός προσφοράς';
+
+  @override
+  String get enterPromoCode => 'Εισάγετε κωδικό προσφοράς';
+
+  @override
+  String get invalidPromotionCode => 'Μη έγκυρος κωδικός προσφοράς.';
 }

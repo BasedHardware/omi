@@ -671,8 +671,8 @@ class _SyncPageState extends State<SyncPage> {
       decoration: BoxDecoration(color: const Color(0xFF1C1C1E), borderRadius: BorderRadius.circular(10)),
       child: Row(
         children: [
-          chip(WalStatusFilter.pending, context.l10n.pending, syncProvider.pendingWals.length),
-          chip(WalStatusFilter.synced, context.l10n.synced, syncProvider.syncedWals.length),
+          chip(WalStatusFilter.pending, context.l10n.pending, syncProvider.pendingStatusCount),
+          chip(WalStatusFilter.synced, context.l10n.synced, syncProvider.syncedStatusCount),
         ],
       ),
     );
@@ -913,28 +913,70 @@ class _SyncPageState extends State<SyncPage> {
   }
 }
 
-Map<DateTime, List<Wal>> _groupWalsByDate(List<Wal> wals) {
-  var groupedWals = <DateTime, List<Wal>>{};
-  wals.sort((a, b) => b.timerStart.compareTo(a.timerStart));
-  for (var wal in wals) {
-    var createdAt = DateTime.fromMillisecondsSinceEpoch(wal.timerStart * 1000).toLocal();
-    var date = DateTime(createdAt.year, createdAt.month, createdAt.day, createdAt.hour);
-    if (!groupedWals.containsKey(date)) groupedWals[date] = [];
-    groupedWals[date]?.add(wal);
-  }
-  for (final date in groupedWals.keys) {
-    groupedWals[date]?.sort((a, b) => b.timerStart.compareTo(a.timerStart));
+/// Groups already-sorted wals (newest first) by year/month/day/hour bucket.
+/// The caller is responsible for passing a sorted input — keeping the sort
+/// outside this function lets [OptimizedWalsListWidget] do it exactly once
+/// per data change instead of on every Consumer rebuild. Previously this
+/// also mutated the input via `.sort()`; that was a hidden side-effect on
+/// the provider's filtered list and is now removed.
+Map<DateTime, List<Wal>> _groupWalsByDate(List<Wal> sortedWals) {
+  final groupedWals = <DateTime, List<Wal>>{};
+  for (final wal in sortedWals) {
+    final createdAt = DateTime.fromMillisecondsSinceEpoch(wal.timerStart * 1000).toLocal();
+    final date = DateTime(createdAt.year, createdAt.month, createdAt.day, createdAt.hour);
+    groupedWals.putIfAbsent(date, () => <Wal>[]).add(wal);
   }
   return groupedWals;
 }
 
-class OptimizedWalsListWidget extends StatelessWidget {
+/// Renders a (potentially very large) list of wals as a [SliverList.builder]
+/// with sticky date-hour headers. The grouping/sort/flatten step is O(n log n);
+/// caching it across rebuilds matters because [SyncProvider] fires
+/// `notifyListeners()` many times per second during active sync. Without the
+/// cache, every notification re-sorted and re-flattened the whole list (10–30ms
+/// per rebuild at 50k items) even though the underlying data hadn't changed.
+///
+/// Invalidation strategy mirrors [SyncProvider.displaySortedWals]: a stamp
+/// derived from the input list's identity and length detects fresh refreshes
+/// (new list assigned by `refreshWals`) while ignoring in-place per-wal status
+/// mutations that don't affect grouping (status flips don't change timerStart).
+class OptimizedWalsListWidget extends StatefulWidget {
   final List<Wal> wals;
   const OptimizedWalsListWidget({super.key, required this.wals});
 
   @override
+  State<OptimizedWalsListWidget> createState() => _OptimizedWalsListWidgetState();
+}
+
+class _OptimizedWalsListWidgetState extends State<OptimizedWalsListWidget> {
+  List<ListItem>? _cache;
+  int _cacheStamp = 0;
+
+  int get _stamp => identityHashCode(widget.wals) ^ widget.wals.length;
+
+  List<ListItem> _flatten() {
+    final stamp = _stamp;
+    final cached = _cache;
+    if (cached != null && _cacheStamp == stamp) return cached;
+    // Defensive copy before sorting so we never mutate the provider's
+    // filtered list — sort is descending by timerStart (newest first).
+    final sorted = List<Wal>.from(widget.wals)..sort((a, b) => b.timerStart.compareTo(a.timerStart));
+    final groupedWals = _groupWalsByDate(sorted);
+    final items = <ListItem>[];
+    for (final entry in groupedWals.entries) {
+      items.add(DateHeaderItem(entry.key));
+      for (int i = 0; i < entry.value.length; i++) {
+        items.add(WalItem(entry.value[i], i, entry.key));
+      }
+    }
+    _cache = items;
+    _cacheStamp = stamp;
+    return items;
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final flattenedItems = _createFlattenedItems(wals);
+    final flattenedItems = _flatten();
 
     return SliverList.builder(
       itemCount: flattenedItems.length,
@@ -958,18 +1000,6 @@ class OptimizedWalsListWidget extends StatelessWidget {
         return const SizedBox.shrink();
       },
     );
-  }
-
-  List<ListItem> _createFlattenedItems(List<Wal> wals) {
-    final groupedWals = _groupWalsByDate(wals);
-    final List<ListItem> items = [];
-    for (final entry in groupedWals.entries) {
-      items.add(DateHeaderItem(entry.key));
-      for (int i = 0; i < entry.value.length; i++) {
-        items.add(WalItem(entry.value[i], i, entry.key));
-      }
-    }
-    return items;
   }
 }
 

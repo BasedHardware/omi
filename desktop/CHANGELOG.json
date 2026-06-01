@@ -5,6 +5,41 @@
   ],
   "releases": [
     {
+      "version": "0.11.435",
+      "date": "2026-05-31",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.434",
+      "date": "2026-05-31",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.433",
+      "date": "2026-05-31",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.432",
+      "date": "2026-05-29",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.431",
+      "date": "2026-05-29",
+      "changes": [
+        "Fixed editing a conversation title not saving"
+      ]
+    },
+    {
       "version": "0.11.429",
       "date": "2026-05-28",
       "changes": [

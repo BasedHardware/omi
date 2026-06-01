@@ -10986,5 +10986,8 @@
     "unableToDetermineFirmwareVersion": "Unable to determine current firmware version",
     "@unableToDetermineFirmwareVersion": {
         "description": "Shown when the device firmware revision cannot be read over BLE, so an OTA update offer would be unreliable."
-    }
+    },
+    "promoCode": "Promo code",
+    "enterPromoCode": "Enter promo code",
+    "invalidPromotionCode": "Invalid promotion code."
 }

@@ -1460,7 +1460,7 @@ class AppLocalizationsPl extends AppLocalizations {
   String get payYourSttProvider => 'Swobodnie korzystaj z Omi. Płacisz tylko swojemu dostawcy STT bezpośrednio.';
 
   @override
-  String get freeMinutesMonth => '1200 darmowych minut/miesiąc w zestawie. Nieograniczone z ';
+  String get freeMinutesMonth => '600 darmowych minut/miesiąc w zestawie. Nieograniczone z ';
 
   @override
   String get omiUnlimited => 'Omi Unlimited';
@@ -4708,7 +4708,7 @@ class AppLocalizationsPl extends AppLocalizations {
   String get noSpecificDataAccessConfigured => 'Nie skonfigurowano konkretnego dostępu do danych.';
 
   @override
-  String get basicPlanDescription => '1200 minut premium + nieograniczone na urządzeniu';
+  String get basicPlanDescription => '600 minut premium + nieograniczone na urządzeniu';
 
   @override
   String get minutes => 'minut';
@@ -6001,7 +6001,7 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get premiumMinutesInfo =>
-      '1200 minut premium/miesiąc. Zakładka Na urządzeniu oferuje nieograniczoną darmową transkrypcję.';
+      '600 minut premium/miesiąc. Zakładka Na urządzeniu oferuje nieograniczoną darmową transkrypcję.';
 
   @override
   String get viewUsage => 'Zobacz wykorzystanie';
@@ -6083,7 +6083,7 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get premiumMinutesMonth =>
-      '1200 minut premium/miesiąc. Karta Na urządzeniu oferuje nieograniczoną bezpłatną transkrypcję. ';
+      '600 minut premium/miesiąc. Karta Na urządzeniu oferuje nieograniczoną bezpłatną transkrypcję. ';
 
   @override
   String get audioProcessedLocally =>
@@ -9302,4 +9302,13 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get unableToDetermineFirmwareVersion => 'Nie można określić bieżącej wersji oprogramowania układowego';
+
+  @override
+  String get promoCode => 'Kod promocyjny';
+
+  @override
+  String get enterPromoCode => 'Wpisz kod promocyjny';
+
+  @override
+  String get invalidPromotionCode => 'Nieprawidłowy kod promocyjny.';
 }

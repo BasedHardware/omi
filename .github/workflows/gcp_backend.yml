@@ -116,6 +116,18 @@ jobs:
           region: ${{ env.REGION }}
           image: gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}
 
+      # Mirror every secret declared in the backend-secrets chart into the
+      # three Cloud Run revisions (additive). GKE picks them up via the helm
+      # chart's ExternalSecret + deployment env refs; Cloud Run needs the
+      # matching --update-secrets bindings. Without this, a new chart key
+      # ships to GKE but stays undefined on Cloud Run, and the new code
+      # reads None even though everything looks deployed.
+      - name: Sync Cloud Run secrets from backend-secrets chart
+        run: |
+          curl -sL https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64 -o /usr/local/bin/yq
+          chmod +x /usr/local/bin/yq
+          bash backend/scripts/sync_cloudrun_secrets_from_chart.sh ${{ vars.ENV }} backend backend-sync backend-integration
+
       # If required, use the Cloud Run url output in later steps
       - name: Show Output
         run: echo ${{ steps.deploy.outputs.url }}

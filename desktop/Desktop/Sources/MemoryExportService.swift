@@ -12,8 +12,18 @@ enum MemoryExportDestination: String, CaseIterable, Identifiable, Sendable {
 
   var id: String { rawValue }
 
-  /// The hosted Omi MCP endpoint every client connects to.
-  static let mcpServerURL = "https://api.omi.me/v1/mcp/sse"
+  /// Base of the hosted Omi API for this build — stable channel hits prod
+  /// (api.omi.me), beta hits dev (api.omiapi.com). Always ends with "/".
+  static var mcpBaseURL: String {
+    DesktopBackendEnvironment.pythonBaseURL()
+  }
+
+  /// The hosted Omi MCP SSE endpoint every client connects to.
+  static var mcpServerURL: String { "\(mcpBaseURL)v1/mcp/sse" }
+
+  /// OAuth endpoints exposed by the same backend for MCP custom-connector setup.
+  static var mcpAuthorizeURL: String { "\(mcpBaseURL)authorize" }
+  static var mcpTokenURL: String { "\(mcpBaseURL)token" }
 
   var title: String {
     switch self {
@@ -188,7 +198,7 @@ enum MemoryExportDestination: String, CaseIterable, Identifiable, Sendable {
           "Open ChatGPT → Settings → Apps → Advanced, enable Developer mode",
           "Create app → name it “Omi Memory” and paste the server URL below",
           "Authentication: OAuth. In Advanced OAuth settings set Client ID “omi”, Client Secret to your key, token auth method “client_secret_post”",
-          "Auth URL: https://api.omi.me/authorize · Token URL: https://api.omi.me/token",
+          "Auth URL: \(Self.mcpAuthorizeURL) · Token URL: \(Self.mcpTokenURL)",
           "Create, then Connect. Syncs to ChatGPT desktop + mobile automatically.",
         ],
         openURL: URL(string: "https://chatgpt.com/"),

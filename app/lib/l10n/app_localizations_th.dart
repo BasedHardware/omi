@@ -1450,7 +1450,7 @@ class AppLocalizationsTh extends AppLocalizations {
   String get payYourSttProvider => 'ใช้ Omi ได้อย่างอิสระ คุณจ่ายเฉพาะผู้ให้บริการ STT ของคุณโดยตรง';
 
   @override
-  String get freeMinutesMonth => 'รวม 1,200 นาทีฟรี/เดือน ไม่จำกัดด้วย ';
+  String get freeMinutesMonth => 'รวม 600 นาทีฟรี/เดือน ไม่จำกัดด้วย ';
 
   @override
   String get omiUnlimited => 'Omi Unlimited';
@@ -4676,7 +4676,7 @@ class AppLocalizationsTh extends AppLocalizations {
   String get noSpecificDataAccessConfigured => 'ไม่มีการกำหนดค่าการเข้าถึงข้อมูลเฉพาะ';
 
   @override
-  String get basicPlanDescription => '1,200 นาทีพรีเมียม + ไม่จำกัดบนอุปกรณ์';
+  String get basicPlanDescription => '600 นาทีพรีเมียม + ไม่จำกัดบนอุปกรณ์';
 
   @override
   String get minutes => 'นาที';
@@ -5959,7 +5959,7 @@ class AppLocalizationsTh extends AppLocalizations {
   String get cloudProvider => 'ผู้ให้บริการคลาวด์';
 
   @override
-  String get premiumMinutesInfo => '1,200 นาทีพรีเมียม/เดือน แท็บบนอุปกรณ์มีการถอดเสียงฟรีไม่จำกัด';
+  String get premiumMinutesInfo => '600 นาทีพรีเมียม/เดือน แท็บบนอุปกรณ์มีการถอดเสียงฟรีไม่จำกัด';
 
   @override
   String get viewUsage => 'ดูการใช้งาน';
@@ -6039,7 +6039,7 @@ class AppLocalizationsTh extends AppLocalizations {
   String get batteryDrainSignificantly => 'การใช้แบตเตอรี่จะเพิ่มขึ้นอย่างมาก';
 
   @override
-  String get premiumMinutesMonth => '1,200 นาทีพรีเมียม/เดือน แท็บบนอุปกรณ์ให้การถอดความฟรีไม่จำกัด ';
+  String get premiumMinutesMonth => '600 นาทีพรีเมียม/เดือน แท็บบนอุปกรณ์ให้การถอดความฟรีไม่จำกัด ';
 
   @override
   String get audioProcessedLocally =>
@@ -9227,4 +9227,13 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get unableToDetermineFirmwareVersion => 'ไม่สามารถระบุเวอร์ชันเฟิร์มแวร์ปัจจุบันได้';
+
+  @override
+  String get promoCode => 'รหัสโปรโมชัน';
+
+  @override
+  String get enterPromoCode => 'กรอกรหัสโปรโมชัน';
+
+  @override
+  String get invalidPromotionCode => 'รหัสโปรโมชันไม่ถูกต้อง';
 }

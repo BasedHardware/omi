@@ -53,7 +53,15 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
 
         return GestureDetector(
           onTap: () async {
-            if (provider.segments.isEmpty && provider.photos.isEmpty) return;
+            final isCaptureActive = provider.recordingState == RecordingState.record ||
+                provider.recordingState == RecordingState.systemAudioRecord ||
+                provider.recordingState == RecordingState.deviceRecord ||
+                provider.recordingState == RecordingState.initialising ||
+                provider.recordingState == RecordingState.interrupted ||
+                provider.recordingState == RecordingState.pause ||
+                provider.havingRecordingDevice ||
+                provider.isPaused;
+            if (!isCaptureActive && provider.segments.isEmpty && provider.photos.isEmpty) return;
             PlatformManager.instance.analytics.liveTranscriptCardClicked(
               hasSegments: provider.segments.isNotEmpty,
               hasPhotos: provider.photos.isNotEmpty,

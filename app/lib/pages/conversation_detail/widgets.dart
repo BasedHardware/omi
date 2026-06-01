@@ -152,7 +152,6 @@ class GetSummaryWidgets extends StatelessWidget {
         onUnlink: () async {
           await provider.unlinkCalendarEvent();
         },
-        onAddSummary: () => provider.addSummaryToCalendarEvent(),
       ),
     );
   }
@@ -1453,13 +1452,11 @@ _getLoadingIndicator() {
 class CalendarEventDetailsSheet extends StatefulWidget {
   final CalendarEventLink calendarEvent;
   final Future<void> Function()? onUnlink;
-  final Future<String?> Function()? onAddSummary;
 
   const CalendarEventDetailsSheet({
     super.key,
     required this.calendarEvent,
     this.onUnlink,
-    this.onAddSummary,
   });
 
   @override
@@ -1468,8 +1465,6 @@ class CalendarEventDetailsSheet extends StatefulWidget {
 
 class _CalendarEventDetailsSheetState extends State<CalendarEventDetailsSheet> {
   bool _unlinking = false;
-  bool _addingSummary = false;
-  bool _summaryAdded = false;
 
   String _fmt(DateTime dt) {
     final h = dt.hour % 12 == 0 ? 12 : dt.hour % 12;
@@ -1552,41 +1547,6 @@ class _CalendarEventDetailsSheetState extends State<CalendarEventDetailsSheet> {
           const SizedBox(height: 24),
           const Divider(color: Color(0xFF2C2C2E)),
           const SizedBox(height: 8),
-          // Add Summary button
-          if (widget.onAddSummary != null && !_summaryAdded)
-            _ActionRow(
-              icon: Icons.note_add_outlined,
-              label: 'Add summary to event',
-              loading: _addingSummary,
-              onTap: () async {
-                setState(() => _addingSummary = true);
-                final link = await widget.onAddSummary!();
-                if (!mounted) return;
-                if (link != null) {
-                  setState(() {
-                    _addingSummary = false;
-                    _summaryAdded = true;
-                  });
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Summary added to calendar event')),
-                  );
-                } else {
-                  setState(() => _addingSummary = false);
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Failed to add summary')),
-                  );
-                }
-              },
-            ),
-          if (_summaryAdded)
-            const Padding(
-              padding: EdgeInsets.symmetric(vertical: 12, horizontal: 4),
-              child: Row(children: [
-                Icon(Icons.check_circle_outline, size: 20, color: Colors.green),
-                SizedBox(width: 12),
-                Text('Summary added', style: TextStyle(color: Colors.green, fontSize: 15)),
-              ]),
-            ),
           // Share with attendees button
           if (widget.calendarEvent.attendeeEmails.isNotEmpty)
             _ActionRow(

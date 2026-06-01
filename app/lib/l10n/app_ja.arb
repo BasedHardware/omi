@@ -3036,5 +3036,8 @@
     "syncProcessingBackgroundHint": "この処理はバックグラウンドで続きます — この画面から移動してかまいません。",
     "syncCardRateLimited": "利用上限に達しました — 同期は自動的に再開されます",
     "syncCardBackendBusy": "Omi のサーバーが混雑しています — 空き容量が戻り次第、録音が同期されます",
-    "unableToDetermineFirmwareVersion": "現在のファームウェアバージョンを特定できません"
+    "unableToDetermineFirmwareVersion": "現在のファームウェアバージョンを特定できません",
+    "promoCode": "プロモコード",
+    "enterPromoCode": "プロモコードを入力",
+    "invalidPromotionCode": "無効なプロモコードです。"
 }

@@ -10613,5 +10613,8 @@
     "syncProcessingBackgroundHint": "To se nadaljuje v ozadju — ta zaslon lahko zapustite.",
     "syncCardRateLimited": "Dosežena je meja poštene uporabe — sinhronizacija se bo samodejno nadaljevala",
     "syncCardBackendBusy": "Strežniki Omi so obremenjeni — vaši posnetki se bodo sinhronizirali, ko se sprosti zmogljivost",
-    "unableToDetermineFirmwareVersion": "Trenutne različice vdelane programske opreme ni mogoče določiti"
+    "unableToDetermineFirmwareVersion": "Trenutne različice vdelane programske opreme ni mogoče določiti",
+    "promoCode": "Promocijska koda",
+    "enterPromoCode": "Vnesite promocijsko kodo",
+    "invalidPromotionCode": "Neveljavna promocijska koda."
 }

@@ -1435,7 +1435,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get payYourSttProvider => '免费使用 Omi。您只需直接向 STT 提供商付费。';
 
   @override
-  String get freeMinutesMonth => '包含 1,200 免费分钟/月。';
+  String get freeMinutesMonth => '包含 600 免费分钟/月。';
 
   @override
   String get omiUnlimited => 'Omi 无限版';
@@ -4607,7 +4607,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get noSpecificDataAccessConfigured => '未配置特定数据访问。';
 
   @override
-  String get basicPlanDescription => '1,200 高级分钟 + 设备端无限';
+  String get basicPlanDescription => '600 高级分钟 + 设备端无限';
 
   @override
   String get minutes => '分钟';
@@ -5875,7 +5875,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get cloudProvider => '云服务提供商';
 
   @override
-  String get premiumMinutesInfo => '每月 1,200 分钟高级时长。本地标签页提供无限免费转录。';
+  String get premiumMinutesInfo => '每月 600 分钟高级时长。本地标签页提供无限免费转录。';
 
   @override
   String get viewUsage => '查看使用量';
@@ -5953,7 +5953,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get batteryDrainSignificantly => '电池消耗将显著增加。';
 
   @override
-  String get premiumMinutesMonth => '每月1,200分钟高级配额。设备端选项卡提供无限免费转录。';
+  String get premiumMinutesMonth => '每月600分钟高级配额。设备端选项卡提供无限免费转录。';
 
   @override
   String get audioProcessedLocally => '音频在本地处理。可离线使用，更私密，但消耗更多电量。';
@@ -9112,4 +9112,13 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get unableToDetermineFirmwareVersion => '无法确定当前固件版本';
+
+  @override
+  String get promoCode => '促销代码';
+
+  @override
+  String get enterPromoCode => '输入促销代码';
+
+  @override
+  String get invalidPromotionCode => '促销代码无效。';
 }

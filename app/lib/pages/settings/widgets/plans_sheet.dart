@@ -50,6 +50,9 @@ class _PlansSheetState extends State<PlansSheet> {
   bool _isUpgrading = false;
   bool _showTrainingDataOptIn = false; // Control visibility of training data opt-in
   bool _isSwitchingToFree = false;
+  final _promoCodeController = TextEditingController();
+  String? _promoCodeError;
+  bool _showPromoCodeField = false;
 
   Future<void> _loadAvailablePlans() async {
     final provider = context.read<UsageProvider>();
@@ -526,6 +529,7 @@ class _PlansSheetState extends State<PlansSheet> {
     }
 
     setState(() => _isUpgrading = true);
+    final promoCode = _promoCodeController.text.trim();
     try {
       Map<String, dynamic>? result;
 
@@ -535,16 +539,31 @@ class _PlansSheetState extends State<PlansSheet> {
               currentSub.plan == PlanType.architect) &&
           currentSub.status == SubscriptionStatus.active &&
           !currentSub.cancelAtPeriodEnd) {
-        result = await provider.upgradeUserSubscription(priceId: priceId);
-        if (result != null) {
-          final daysRemaining = result['days_remaining'] as int? ?? 0;
+        result = await provider.upgradeUserSubscription(
+          priceId: priceId,
+          promotionCode: promoCode.isNotEmpty ? promoCode : null,
+        );
+        if (result != null && result['error'] == true) {
+          final detail = result['detail'] as String? ?? context.l10n.invalidPromotionCode;
+          if (promoCode.isNotEmpty) {
+            setState(() => _promoCodeError = detail);
+          } else {
+            AppSnackbar.showSnackbarError(detail);
+          }
+          return;
+        } else if (result != null) {
+          setState(() => _promoCodeError = null);
+          _promoCodeController.clear();
           AppSnackbar.showSnackbar(context.l10n.planUpgradeScheduledMessage);
         } else {
           AppSnackbar.showSnackbarError(context.l10n.couldNotSchedulePlanChange);
         }
       } else {
         // New subscription (for basic users or canceled subscriptions)
-        final sessionData = await provider.createUserCheckoutSession(priceId: priceId);
+        final sessionData = await provider.createUserCheckoutSession(
+          priceId: priceId,
+          promotionCode: promoCode.isNotEmpty ? promoCode : null,
+        );
         if (sessionData != null && mounted) {
           // Check if this was a reactivation
           if (sessionData.containsKey('status') && sessionData['status'] == 'reactivated') {
@@ -587,6 +606,12 @@ class _PlansSheetState extends State<PlansSheet> {
       _loadAvailablePlans();
     });
     super.initState();
+  }
+
+  @override
+  void dispose() {
+    _promoCodeController.dispose();
+    super.dispose();
   }
 
   @override
@@ -1161,6 +1186,9 @@ class _PlansSheetState extends State<PlansSheet> {
 
                         const SizedBox(height: 24),
 
+                        _buildPromoCodeField(),
+                        const SizedBox(height: 16),
+
                         // Continue/Keep Unlimited button - only show for non-annual unlimited users
                         Builder(
                           builder: (context) {
@@ -1403,6 +1431,84 @@ class _PlansSheetState extends State<PlansSheet> {
           },
         );
       },
+    );
+  }
+
+  Widget _buildPromoCodeField() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        GestureDetector(
+          onTap: () => setState(() => _showPromoCodeField = !_showPromoCodeField),
+          child: Row(
+            children: [
+              Icon(Icons.local_offer_outlined, color: Colors.grey.shade400, size: 18),
+              const SizedBox(width: 8),
+              Text(
+                context.l10n.promoCode,
+                style: TextStyle(color: Colors.grey.shade400, fontSize: 14),
+              ),
+              const SizedBox(width: 4),
+              Icon(
+                _showPromoCodeField ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down,
+                color: Colors.grey.shade400,
+                size: 20,
+              ),
+            ],
+          ),
+        ),
+        if (_showPromoCodeField) ...[
+          const SizedBox(height: 10),
+          TextField(
+            controller: _promoCodeController,
+            style: const TextStyle(color: Colors.white, fontSize: 16),
+            autocorrect: false,
+            enableSuggestions: false,
+            decoration: InputDecoration(
+              hintText: context.l10n.enterPromoCode,
+              hintStyle: TextStyle(color: Colors.grey.shade600, fontSize: 14),
+              filled: true,
+              fillColor: Colors.white.withOpacity(0.08),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide(color: Colors.white.withOpacity(0.2)),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide(color: Colors.white.withOpacity(0.2)),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: const BorderSide(color: Colors.deepPurple),
+              ),
+              errorBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: const BorderSide(color: Colors.red),
+              ),
+              focusedErrorBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: const BorderSide(color: Colors.red),
+              ),
+              errorText: _promoCodeError,
+              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+              suffixIcon: _promoCodeController.text.isNotEmpty
+                  ? IconButton(
+                      icon: Icon(Icons.clear, color: Colors.grey.shade400, size: 20),
+                      onPressed: () {
+                        setState(() {
+                          _promoCodeController.clear();
+                          _promoCodeError = null;
+                        });
+                      },
+                    )
+                  : null,
+            ),
+            onChanged: (_) {
+              setState(() => _promoCodeError = null);
+            },
+          ),
+        ],
+      ],
     );
   }
 

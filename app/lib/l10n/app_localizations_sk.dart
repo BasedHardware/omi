@@ -9269,4 +9269,13 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get unableToDetermineFirmwareVersion => 'Nedá sa určiť aktuálna verzia firmvéru';
+
+  @override
+  String get promoCode => 'Promo kód';
+
+  @override
+  String get enterPromoCode => 'Zadajte promo kód';
+
+  @override
+  String get invalidPromotionCode => 'Neplatný promo kód.';
 }

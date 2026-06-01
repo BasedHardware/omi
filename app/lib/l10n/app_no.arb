@@ -3035,5 +3035,8 @@
     "syncProcessingBackgroundHint": "Dette fortsetter i bakgrunnen — du kan forlate denne skjermen.",
     "syncCardRateLimited": "Grensen for rimelig bruk er nådd — synkroniseringen fortsetter automatisk",
     "syncCardBackendBusy": "Omis servere er travle — opptakene dine synkroniseres så snart kapasiteten er tilbake",
-    "unableToDetermineFirmwareVersion": "Kan ikke bestemme gjeldende fastvareversjon"
+    "unableToDetermineFirmwareVersion": "Kan ikke bestemme gjeldende fastvareversjon",
+    "promoCode": "Kampanjekode",
+    "enterPromoCode": "Skriv inn kampanjekode",
+    "invalidPromotionCode": "Ugyldig kampanjekode."
 }

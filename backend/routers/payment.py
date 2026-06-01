@@ -66,10 +66,12 @@ router = APIRouter()
 
 class CreateCheckoutRequest(BaseModel):
     price_id: str
+    promotion_code: Optional[str] = None
 
 
 class UpgradeSubscriptionRequest(BaseModel):
     price_id: str
+    promotion_code: Optional[str] = None
 
 
 class PricingOption(BaseModel):
@@ -384,6 +386,14 @@ def create_checkout_session_endpoint(request: CreateCheckoutRequest, uid: str = 
     if not can_pay:
         raise HTTPException(status_code=400, detail=reason)
 
+    # Validate promotion code early — reject invalid codes before any subscription changes
+    resolved_checkout_promo_id = None
+    if request.promotion_code:
+        promo_list = stripe.PromotionCode.list(code=request.promotion_code, active=True, limit=1)
+        if not promo_list.data:
+            raise HTTPException(status_code=400, detail="Invalid or expired promotion code.")
+        resolved_checkout_promo_id = promo_list.data[0].id
+
     # Try to reactivate canceled subscription (Scenario A)
     reactivation_result = _try_reactivate_subscription(uid, request.price_id)
     if reactivation_result:
@@ -392,9 +402,17 @@ def create_checkout_session_endpoint(request: CreateCheckoutRequest, uid: str = 
     # Normal checkout flow for new subscriptions (Scenario B or first-time subscribers)
     idempotency_key = str(uuid.uuid4())
     existing_customer_id = users_db.get_stripe_customer_id(uid)
-    session = stripe_utils.create_subscription_checkout_session(
-        uid, request.price_id, idempotency_key, customer_id=existing_customer_id
-    )
+    try:
+        session = stripe_utils.create_subscription_checkout_session(
+            uid,
+            request.price_id,
+            idempotency_key,
+            customer_id=existing_customer_id,
+            promotion_code_id=resolved_checkout_promo_id,
+        )
+    except stripe.error.InvalidRequestError as e:
+        detail = str(e.user_message) if hasattr(e, 'user_message') and e.user_message else str(e)
+        raise HTTPException(status_code=400, detail=detail)
     if not session:
         raise HTTPException(status_code=500, detail="Could not create checkout session.")
     return {"url": session.url, "session_id": session.id}
@@ -442,14 +460,25 @@ def upgrade_subscription_endpoint(request: UpgradeSubscriptionRequest, uid: str 
                 detail="Downgrading from Architect to Unlimited is not available. Please contact support if you need to change your plan.",
             )
 
+        # Validate and resolve promotion code if provided
+        resolved_promo_id = None
+        if request.promotion_code:
+            promo_list = stripe.PromotionCode.list(code=request.promotion_code, active=True, limit=1)
+            if not promo_list.data:
+                raise HTTPException(status_code=400, detail="Invalid or expired promotion code.")
+            resolved_promo_id = promo_list.data[0].id
+
         # Cross-plan change (e.g. Unlimited→Architect): immediate swap with proration
         if current_plan != target_plan:
-            updated_sub = stripe.Subscription.modify(
-                stripe_sub['id'],
-                items=[{'id': current_item_id, 'price': request.price_id}],
-                proration_behavior='always_invoice',
-                metadata={'uid': uid, 'sub_type': target_plan.value},
-            )
+            modify_params = {
+                'items': [{'id': current_item_id, 'price': request.price_id}],
+                'proration_behavior': 'always_invoice',
+                'metadata': {'uid': uid, 'sub_type': target_plan.value},
+            }
+            if resolved_promo_id:
+                modify_params['discounts'] = [{'promotion_code': resolved_promo_id}]
+
+            updated_sub = stripe.Subscription.modify(stripe_sub['id'], **modify_params)
 
             # Update our database immediately
             new_subscription = _build_subscription_from_stripe_object(updated_sub.to_dict())
@@ -497,6 +526,7 @@ def upgrade_subscription_endpoint(request: UpgradeSubscriptionRequest, uid: str 
                             'price': request.price_id,
                         }
                     ],
+                    **({'discounts': [{'promotion_code': resolved_promo_id}]} if resolved_promo_id else {}),
                 },
             ],
             metadata={'uid': uid, 'upgrade_type': f'{current_plan.value}_{target_interval}'},
@@ -517,6 +547,10 @@ def upgrade_subscription_endpoint(request: UpgradeSubscriptionRequest, uid: str 
 
     except HTTPException:
         raise
+    except stripe.error.InvalidRequestError as e:
+        logger.error(f"Stripe rejected subscription change: {sanitize(str(e))}")
+        detail = str(e.user_message) if hasattr(e, 'user_message') and e.user_message else str(e)
+        raise HTTPException(status_code=400, detail=detail)
     except Exception as e:
         logger.error(f"Error processing subscription change: {sanitize(str(e))}")
         raise HTTPException(status_code=500, detail="Failed to process subscription change. Please try again.")

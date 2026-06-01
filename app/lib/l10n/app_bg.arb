@@ -3004,5 +3004,8 @@
     "syncProcessingBackgroundHint": "Това продължава на заден план — можете да напуснете този екран.",
     "syncCardRateLimited": "Достигнат е лимитът за честно ползване — синхронизирането ще се възобнови автоматично",
     "syncCardBackendBusy": "Сървърите на Omi са натоварени — записите ви ще се синхронизират, когато се освободи капацитет",
-    "unableToDetermineFirmwareVersion": "Не може да се определи текущата версия на фърмуера"
+    "unableToDetermineFirmwareVersion": "Не може да се определи текущата версия на фърмуера",
+    "promoCode": "Промо код",
+    "enterPromoCode": "Въведете промо код",
+    "invalidPromotionCode": "Невалиден промо код."
 }

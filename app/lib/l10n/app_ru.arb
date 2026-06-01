@@ -3070,5 +3070,8 @@
     "syncProcessingBackgroundHint": "Это продолжается в фоновом режиме — вы можете покинуть этот экран.",
     "syncCardRateLimited": "Достигнут лимит использования — синхронизация возобновится автоматически",
     "syncCardBackendBusy": "Серверы Omi загружены — ваши записи синхронизируются, как только освободятся мощности",
-    "unableToDetermineFirmwareVersion": "Не удаётся определить текущую версию прошивки"
+    "unableToDetermineFirmwareVersion": "Не удаётся определить текущую версию прошивки",
+    "promoCode": "Промокод",
+    "enterPromoCode": "Введите промокод",
+    "invalidPromotionCode": "Недействительный промокод."
 }

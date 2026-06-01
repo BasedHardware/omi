@@ -9288,4 +9288,13 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get unableToDetermineFirmwareVersion => 'Mevcut donanım yazılımı sürümü belirlenemiyor';
+
+  @override
+  String get promoCode => 'Promosyon kodu';
+
+  @override
+  String get enterPromoCode => 'Promosyon kodunu girin';
+
+  @override
+  String get invalidPromotionCode => 'Geçersiz promosyon kodu.';
 }

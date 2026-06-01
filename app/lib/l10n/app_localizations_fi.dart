@@ -9277,4 +9277,13 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get unableToDetermineFirmwareVersion => 'Nykyistä laiteohjelmistoversiota ei voida määrittää';
+
+  @override
+  String get promoCode => 'Tarjouskoodi';
+
+  @override
+  String get enterPromoCode => 'Syötä tarjouskoodi';
+
+  @override
+  String get invalidPromotionCode => 'Virheellinen tarjouskoodi.';
 }

@@ -3070,5 +3070,8 @@
     "syncProcessingBackgroundHint": "Cela continue en arrière-plan — vous pouvez quitter cet écran.",
     "syncCardRateLimited": "Limite d'utilisation atteinte — la synchronisation reprendra automatiquement",
     "syncCardBackendBusy": "Les serveurs Omi sont saturés — vos enregistrements se synchroniseront dès que la capacité sera rétablie",
-    "unableToDetermineFirmwareVersion": "Impossible de déterminer la version actuelle du firmware"
+    "unableToDetermineFirmwareVersion": "Impossible de déterminer la version actuelle du firmware",
+    "promoCode": "Code promo",
+    "enterPromoCode": "Entrez le code promo",
+    "invalidPromotionCode": "Code promo invalide."
 }

@@ -191,6 +191,7 @@
         <service
             android:name="com.friend.ios.OmiBleForegroundService"
             android:foregroundServiceType="connectedDevice"
+            android:stopWithTask="false"
             android:exported="false" />
 
     </application>

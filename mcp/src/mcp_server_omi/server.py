@@ -66,6 +66,7 @@ if not base_url or base_url == "":
 
 class OmiTools(str, Enum):
     GET_MEMORIES = "get_memories"
+    SEARCH_MEMORIES = "search_memories"
     CREATE_MEMORY = "create_memory"
     DELETE_MEMORY = "delete_memory"
     EDIT_MEMORY = "edit_memory"
@@ -108,6 +109,15 @@ class EditMemory(BaseModel):
     )
     memory_id: str = Field(description="The ID of the memory to edit.")
     content: str = Field(description="The new content for the memory.")
+
+
+class SearchMemories(BaseModel):
+    api_key: Optional[str] = Field(
+        description="The user's MCP API key. If not provided, it will be read from the OMI_API_KEY environment variable. For more details, see https://docs.omi.me/doc/developer/MCP",
+        default=None,
+    )
+    query: str = Field(description="Natural language search query to find relevant memories.")
+    limit: int = Field(description="Maximum number of results to return.", default=10)
 
 
 class GetConversations(BaseModel):
@@ -189,6 +199,22 @@ def edit_memory(api_key: str, memory_id: str, content: str) -> dict:
         headers={"Authorization": f"Bearer {api_key}"},
         params={"value": content},
     )
+    return response.json()
+
+
+def search_memories(
+    logger: logging.Logger,
+    api_key: str,
+    query: str,
+    limit: int = 10,
+) -> List:
+    logger.info(f"Searching memories with limit={limit}")
+    response = requests.get(
+        f"{base_url}memories/search",
+        params={"query": query, "limit": limit},
+        headers={"Authorization": f"Bearer {api_key}"},
+    )
+    response.raise_for_status()
     return response.json()
 
 
@@ -274,6 +300,11 @@ async def serve(uid: str | None) -> None:
                 inputSchema=GetMemories.model_json_schema(),
             ),
             Tool(
+                name=OmiTools.SEARCH_MEMORIES,
+                description="Semantic search across memories. Returns memories ranked by relevance to a natural language query.",
+                inputSchema=SearchMemories.model_json_schema(),
+            ),
+            Tool(
                 name=OmiTools.CREATE_MEMORY,
                 description="Create a new memory. A memory is a known fact about the user across multiple domains.",
                 inputSchema=CreateMemory.model_json_schema(),
@@ -331,6 +362,18 @@ async def serve(uid: str | None) -> None:
                 offset=arguments.get("offset", 0),
                 limit=arguments.get("limit", 100),
                 categories=categories_enum,
+            )
+            return [TextContent(type="text", text=json.dumps(result, indent=2))]
+
+        elif name == OmiTools.SEARCH_MEMORIES:
+            query = arguments.get("query")
+            if not query:
+                raise ValueError("query is required for search_memories")
+            result = search_memories(
+                logger,
+                api_key,
+                query=query,
+                limit=arguments.get("limit", 10),
             )
             return [TextContent(type="text", text=json.dumps(result, indent=2))]
 

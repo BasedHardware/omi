@@ -1,6 +1,13 @@
 name: Upgrade Backend Listen Helm Chart
 
 on:
+  # Auto-apply when chart values or templates change on main, so new secret
+  # bindings / env-var references ship to GKE without a manual workflow_dispatch.
+  push:
+    branches: [ "main" ]
+    paths:
+      - 'backend/charts/backend-listen/**'
+      - 'backend/charts/backend-secrets/**'
   workflow_dispatch:
     inputs:
       environment:
@@ -17,7 +24,9 @@ env:
 
 jobs:
   helm-upgrade:
-    environment: ${{ github.event.inputs.environment }}
+    # On manual dispatch use the chosen environment; on auto push only deploy
+    # to dev (prod still requires an explicit workflow_dispatch for safety).
+    environment: ${{ github.event.inputs.environment || 'development' }}
     permissions:
       contents: 'read'
       id-token: 'write'
@@ -25,6 +34,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Validate Environment Input
+        if: github.event_name == 'workflow_dispatch'
         run: |
           if [[ "${{ github.event.inputs.environment }}" != "development" && "${{ github.event.inputs.environment }}" != "prod" ]]; then
             echo "Invalid environment: ${{ github.event.inputs.environment }}. Must be 'development' or 'prod'."
@@ -34,7 +44,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.inputs.branch }}
+          ref: ${{ github.event.inputs.branch || github.ref }}
 
       - name: Install Helm
         uses: azure/setup-helm@v3
@@ -62,6 +72,23 @@ jobs:
             ./backend/charts/backend-listen \
             -f ./backend/charts/backend-listen/${{ vars.ENV }}_omi_backend_listen_values.yaml \
             --dry-run
+
+      # The ExternalSecret resource (which tells external-secrets which GCP
+      # Secret Manager keys to sync into the K8s `*-omi-backend-secrets`
+      # secret) lives in this chart. Without re-applying it, a new chart key
+      # never reaches K8s, and the deployment's secretKeyRef resolves to an
+      # empty value — code reads os.getenv(...) as None.
+      - name: Upgrade backend-secrets Helm chart
+        run: |
+          helm -n ${{ vars.ENV }}-omi-backend upgrade --install ${{ vars.ENV }}-omi-backend-secrets \
+            ./backend/charts/backend-secrets \
+            -f ./backend/charts/backend-secrets/${{ vars.ENV }}_omi_backend_secrets_values.yaml
+          # Trigger an immediate sync so newly-listed keys are pulled before the
+          # listen deployment restarts (otherwise its env refs resolve empty).
+          kubectl -n ${{ vars.ENV }}-omi-backend annotate externalsecret \
+            ${{ vars.ENV }}-omi-backend-external-secret \
+            force-sync="$(date +%s)" --overwrite
+          sleep 10
 
       - name: Upgrade backend-listen Helm chart
         run: |

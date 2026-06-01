@@ -235,6 +235,8 @@ struct SettingsContentView: View {
   @State private var fallbackPlanCatalog: [SubscriptionPlanOption] = []
   @State private var activeCheckoutPriceId: String?
   @State private var selectedPlanIdForCheckout: String?
+  @State private var upgradePromotionCode: String = ""
+  @State private var isPromoCodeExpanded: Bool = false
   @State private var isOpeningCustomerPortal: Bool = false
   @State private var activeBillingWebFlow: BillingWebFlow?
   @State private var pendingSubscriptionPriceId: String?
@@ -379,6 +381,11 @@ struct SettingsContentView: View {
   @AppStorage("dev_deepgram_api_key") private var devDeepgramKey: String = ""
   @State private var byokKeyStatuses: [BYOKProvider: BYOKValidator.Status] = [:]
   @State private var byokActivationError: String?
+
+  // MCP key creation state (Settings → Advanced → MCP)
+  @State private var mcpCreatedKey: String?
+  @State private var mcpIsCreatingKey: Bool = false
+  @State private var mcpError: String?
 
   init(
     appState: AppState,
@@ -3285,8 +3292,148 @@ struct SettingsContentView: View {
       advancedCategoryHeader(title: "Developer API Keys", icon: "key")
       developerKeysSubsection
 
+      advancedCategoryHeader(title: "MCP", icon: "antenna.radiowaves.left.and.right")
+      mcpSubsection
+
       advancedCategoryHeader(title: "Dev Tools", icon: "hammer")
       devToolsSubsection
+    }
+  }
+
+  // MARK: - MCP Subsection
+
+  private var mcpSubsection: some View {
+    VStack(spacing: 20) {
+      // Server URL — channel-aware (beta hits dev backend, stable hits prod).
+      settingsCard(settingId: "advanced.mcp.serverurl") {
+        VStack(alignment: .leading, spacing: 8) {
+          HStack(spacing: 10) {
+            Image(systemName: "link")
+              .scaledFont(size: 14)
+              .foregroundColor(OmiColors.textSecondary)
+            Text("Server URL")
+              .scaledFont(size: 14, weight: .semibold)
+              .foregroundColor(OmiColors.textPrimary)
+            Spacer()
+            Button {
+              NSPasteboard.general.clearContents()
+              NSPasteboard.general.setString(MemoryExportDestination.mcpServerURL, forType: .string)
+            } label: {
+              HStack(spacing: 6) {
+                Image(systemName: "doc.on.doc")
+                Text("Copy")
+              }
+              .scaledFont(size: 12, weight: .medium)
+              .foregroundColor(OmiColors.textPrimary)
+              .padding(.horizontal, 10)
+              .padding(.vertical, 6)
+              .background(
+                RoundedRectangle(cornerRadius: 8).fill(OmiColors.backgroundQuaternary.opacity(0.6)))
+            }
+            .buttonStyle(.plain)
+          }
+          Text(MemoryExportDestination.mcpServerURL)
+            .scaledFont(size: 12, weight: .medium)
+            .foregroundColor(OmiColors.textSecondary)
+            .textSelection(.enabled)
+          Text(
+            AppBuild.currentUpdateChannel == "beta"
+              ? "Beta channel — points at the dev backend."
+              : "Stable channel — points at production."
+          )
+          .scaledFont(size: 11)
+          .foregroundColor(OmiColors.textTertiary)
+        }
+      }
+
+      // Create an MCP key — shown once after creation; user copies + pastes into Claude/ChatGPT/etc.
+      settingsCard(settingId: "advanced.mcp.createkey") {
+        VStack(alignment: .leading, spacing: 12) {
+          HStack(spacing: 10) {
+            Image(systemName: "key.fill")
+              .scaledFont(size: 14)
+              .foregroundColor(OmiColors.textSecondary)
+            VStack(alignment: .leading, spacing: 2) {
+              Text("MCP API Key")
+                .scaledFont(size: 14, weight: .semibold)
+                .foregroundColor(OmiColors.textPrimary)
+              Text("Use this key as the OAuth Client Secret in Claude/ChatGPT/your agent.")
+                .scaledFont(size: 11)
+                .foregroundColor(OmiColors.textTertiary)
+            }
+            Spacer()
+            Button {
+              Task { await createMCPKeyFromSettings() }
+            } label: {
+              Text(mcpIsCreatingKey ? "Creating…" : "Create Key")
+                .scaledFont(size: 12, weight: .medium)
+                .foregroundColor(.black)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
+                .background(RoundedRectangle(cornerRadius: 8).fill(Color.white))
+            }
+            .buttonStyle(.plain)
+            .disabled(mcpIsCreatingKey)
+          }
+
+          if let key = mcpCreatedKey {
+            VStack(alignment: .leading, spacing: 8) {
+              Text("Copy this now — it's only shown once.")
+                .scaledFont(size: 11)
+                .foregroundColor(OmiColors.warning)
+              HStack(spacing: 8) {
+                Text(key)
+                  .scaledFont(size: 12, weight: .medium)
+                  .foregroundColor(OmiColors.textPrimary)
+                  .textSelection(.enabled)
+                  .lineLimit(1)
+                  .truncationMode(.middle)
+                  .frame(maxWidth: .infinity, alignment: .leading)
+                Button {
+                  NSPasteboard.general.clearContents()
+                  NSPasteboard.general.setString(key, forType: .string)
+                } label: {
+                  Image(systemName: "doc.on.doc")
+                    .scaledFont(size: 12)
+                    .foregroundColor(OmiColors.textPrimary)
+                    .padding(6)
+                    .background(
+                      RoundedRectangle(cornerRadius: 6)
+                        .fill(OmiColors.backgroundQuaternary.opacity(0.6)))
+                }
+                .buttonStyle(.plain)
+              }
+              .padding(10)
+              .background(
+                RoundedRectangle(cornerRadius: 8)
+                  .fill(OmiColors.backgroundSecondary.opacity(0.6)))
+            }
+          }
+
+          if let err = mcpError {
+            HStack(spacing: 8) {
+              Image(systemName: "exclamationmark.triangle.fill")
+                .foregroundColor(OmiColors.warning)
+              Text(err)
+                .scaledFont(size: 11)
+                .foregroundColor(OmiColors.warning)
+            }
+          }
+        }
+      }
+    }
+  }
+
+  @MainActor
+  private func createMCPKeyFromSettings() async {
+    mcpError = nil
+    mcpIsCreatingKey = true
+    defer { mcpIsCreatingKey = false }
+    do {
+      let key = try await APIClient.shared.createMCPKey(name: "Desktop")
+      mcpCreatedKey = key
+    } catch {
+      mcpError = "Couldn't create key: \(error.localizedDescription)"
     }
   }
 
@@ -6677,6 +6824,48 @@ struct SettingsContentView: View {
           .overlay(OmiColors.backgroundQuaternary)
 
         VStack(alignment: .leading, spacing: 10) {
+          VStack(alignment: .leading, spacing: 6) {
+            Button(action: {
+              withAnimation(.easeInOut(duration: 0.2)) {
+                isPromoCodeExpanded.toggle()
+              }
+            }) {
+              HStack(spacing: 6) {
+                Image(systemName: "tag")
+                  .scaledFont(size: 12)
+                Text("Promo code")
+                  .scaledFont(size: 12)
+                Image(systemName: isPromoCodeExpanded ? "chevron.up" : "chevron.down")
+                  .scaledFont(size: 10)
+              }
+              .foregroundColor(OmiColors.textTertiary)
+            }
+            .buttonStyle(.plain)
+
+            if isPromoCodeExpanded {
+              VStack(alignment: .leading, spacing: 6) {
+                TextField("Enter promo code", text: $upgradePromotionCode)
+                  .textFieldStyle(.roundedBorder)
+                  .scaledFont(size: 13)
+                  .disabled(activeCheckoutPriceId != nil)
+                  .onChange(of: upgradePromotionCode) { _ in
+                    subscriptionError = nil
+                  }
+
+                if let error = subscriptionError {
+                  HStack(spacing: 4) {
+                    Image(systemName: "exclamationmark.circle")
+                      .scaledFont(size: 11)
+                    Text(error)
+                      .scaledFont(size: 11)
+                  }
+                  .foregroundColor(OmiColors.warning)
+                }
+              }
+              .transition(.opacity.combined(with: .move(edge: .top)))
+            }
+          }
+
           Text("Choose billing")
             .scaledFont(size: 12, weight: .semibold)
             .foregroundColor(OmiColors.textTertiary)
@@ -7128,6 +7317,9 @@ struct SettingsContentView: View {
     pendingSubscriptionPriceId = priceId
     subscriptionError = nil
 
+    let promotionCode = upgradePromotionCode.trimmingCharacters(in: .whitespacesAndNewlines)
+    let promoToSend: String? = promotionCode.isEmpty ? nil : promotionCode
+
     // If user already has an active paid subscription (not canceled), use upgrade endpoint
     // to schedule the plan change at end of billing period (no double-charging)
     if hasPaidSubscription,
@@ -7136,12 +7328,20 @@ struct SettingsContentView: View {
     {
       Task {
         do {
-          _ = try await APIClient.shared.upgradeSubscription(priceId: priceId)
+          _ = try await APIClient.shared.upgradeSubscription(
+            priceId: priceId, promotionCode: promoToSend)
           await MainActor.run {
             activeCheckoutPriceId = nil
             pendingSubscriptionPriceId = nil
             subscriptionError = nil
+            self.upgradePromotionCode = ""
             loadSubscriptionInfo()
+          }
+        } catch let apiError as APIError {
+          await MainActor.run {
+            activeCheckoutPriceId = nil
+            pendingSubscriptionPriceId = nil
+            subscriptionError = apiError.detail ?? "Failed to schedule plan change."
           }
         } catch {
           logError("Failed to schedule plan change", error: error)
@@ -7157,7 +7357,8 @@ struct SettingsContentView: View {
 
     Task {
       do {
-        let response = try await APIClient.shared.createCheckoutSession(priceId: priceId)
+        let response = try await APIClient.shared.createCheckoutSession(
+          priceId: priceId, promotionCode: promoToSend)
         let apiBaseURL = await APIClient.shared.baseURL
         await MainActor.run {
           activeCheckoutPriceId = nil
@@ -7187,6 +7388,14 @@ struct SettingsContentView: View {
           await MainActor.run {
             subscriptionError = response.message ?? "Could not start checkout."
           }
+        }
+      } catch let apiError as APIError {
+        logError("Failed to create checkout session", error: apiError)
+        await MainActor.run {
+          activeCheckoutPriceId = nil
+          pendingSubscriptionPriceId = nil
+          pendingCheckoutSessionId = nil
+          subscriptionError = apiError.detail ?? "Failed to open checkout."
         }
       } catch {
         logError("Failed to create checkout session", error: error)
