@@ -1,5 +1,4 @@
 import 'dart:math' as math;
-import 'dart:math';
 
 import 'package:flutter/material.dart';
 
@@ -22,8 +21,8 @@ class WaveformPainter extends CustomPainter {
       ..strokeWidth = 2
       ..strokeCap = StrokeCap.round;
 
-    final barWidth = 2.0;
-    final spacing = 2.0;
+    const barWidth = 2.0;
+    const spacing = 2.0;
     final barCount = (size.width / (barWidth + spacing)).floor();
 
     if (waveformData != null && waveformData!.isNotEmpty) {
@@ -67,7 +66,7 @@ class WaveformPainter extends CustomPainter {
       final useActivePaint = isPlaying && i <= progressBarIndex;
 
       // Use more dynamic scaling with lower minimum height
-      final minHeight = 1.0; // Lower minimum for more dynamic range
+      const minHeight = 1.0; // Lower minimum for more dynamic range
       final scaledHeight = height * 1.2; // Slightly amplify the height
       final displayHeight = math.max(scaledHeight, minHeight);
       final displayHalfHeight = displayHeight / 2;
@@ -96,7 +95,7 @@ class WaveformPainter extends CustomPainter {
 
       // Draw a subtle vertical line from dot to waveform
       final linePaint = Paint()
-        ..color = const Color(0xFF4A90E2).withOpacity(0.5)
+        ..color = const Color(0xFF4A90E2).withValues(alpha: 0.5)
         ..strokeWidth = 1.0;
 
       canvas.drawLine(Offset(progressX, size.height * 0.05 + 6), Offset(progressX, size.height * 0.95), linePaint);

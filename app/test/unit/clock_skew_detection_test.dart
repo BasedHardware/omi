@@ -149,20 +149,20 @@ void main() {
 
   group('ClockSkewEvent.skewMinutes', () {
     test('converts seconds to minutes (ceiling)', () {
-      expect(ClockSkewEvent(serverTime: null, clientTime: null, skewSeconds: 900, hint: null).skewMinutes, 15);
-      expect(ClockSkewEvent(serverTime: null, clientTime: null, skewSeconds: 300, hint: null).skewMinutes, 5);
-      expect(ClockSkewEvent(serverTime: null, clientTime: null, skewSeconds: 301, hint: null).skewMinutes, 6);
+      expect(const ClockSkewEvent(serverTime: null, clientTime: null, skewSeconds: 900, hint: null).skewMinutes, 15);
+      expect(const ClockSkewEvent(serverTime: null, clientTime: null, skewSeconds: 300, hint: null).skewMinutes, 5);
+      expect(const ClockSkewEvent(serverTime: null, clientTime: null, skewSeconds: 301, hint: null).skewMinutes, 6);
     });
 
     test('minimum 1 minute', () {
-      expect(ClockSkewEvent(serverTime: null, clientTime: null, skewSeconds: 0, hint: null).skewMinutes, 1);
-      expect(ClockSkewEvent(serverTime: null, clientTime: null, skewSeconds: 1, hint: null).skewMinutes, 1);
-      expect(ClockSkewEvent(serverTime: null, clientTime: null, skewSeconds: 59, hint: null).skewMinutes, 1);
+      expect(const ClockSkewEvent(serverTime: null, clientTime: null, skewSeconds: 0, hint: null).skewMinutes, 1);
+      expect(const ClockSkewEvent(serverTime: null, clientTime: null, skewSeconds: 1, hint: null).skewMinutes, 1);
+      expect(const ClockSkewEvent(serverTime: null, clientTime: null, skewSeconds: 59, hint: null).skewMinutes, 1);
     });
 
     test('handles negative skew (abs value)', () {
-      expect(ClockSkewEvent(serverTime: null, clientTime: null, skewSeconds: -900, hint: null).skewMinutes, 15);
-      expect(ClockSkewEvent(serverTime: null, clientTime: null, skewSeconds: -1, hint: null).skewMinutes, 1);
+      expect(const ClockSkewEvent(serverTime: null, clientTime: null, skewSeconds: -900, hint: null).skewMinutes, 15);
+      expect(const ClockSkewEvent(serverTime: null, clientTime: null, skewSeconds: -1, hint: null).skewMinutes, 1);
     });
   });
 
@@ -174,7 +174,7 @@ void main() {
       detector.resetForTesting();
     });
 
-    http.Response _makeValid408() {
+    http.Response makeValid408() {
       return _make408(
         body: jsonEncode({'error': 'clock_skew', 'skew_seconds': 900}),
       );
@@ -184,7 +184,7 @@ void main() {
       final events = <ClockSkewEvent>[];
       final sub = detector.onClockSkew.listen(events.add);
 
-      detector.checkResponse(_makeValid408());
+      detector.checkResponse(makeValid408());
       await Future.delayed(Duration.zero);
 
       expect(events, hasLength(1));
@@ -196,8 +196,8 @@ void main() {
       final events = <ClockSkewEvent>[];
       final sub = detector.onClockSkew.listen(events.add);
 
-      detector.checkResponse(_makeValid408());
-      detector.checkResponse(_makeValid408());
+      detector.checkResponse(makeValid408());
+      detector.checkResponse(makeValid408());
       await Future.delayed(Duration.zero);
 
       expect(events, hasLength(1));
@@ -230,7 +230,7 @@ void main() {
       final events = <ClockSkewEvent>[];
       final sub = detector.onClockSkew.listen(events.add);
 
-      detector.checkResponse(_makeValid408());
+      detector.checkResponse(makeValid408());
       await Future.delayed(Duration.zero);
       expect(events, hasLength(1));
 
@@ -239,7 +239,7 @@ void main() {
         DateTime.now().subtract(const Duration(seconds: 46)),
       );
 
-      detector.checkResponse(_makeValid408());
+      detector.checkResponse(makeValid408());
       await Future.delayed(Duration.zero);
       expect(events, hasLength(2));
       await sub.cancel();
@@ -249,7 +249,7 @@ void main() {
       final events = <ClockSkewEvent>[];
       final sub = detector.onClockSkew.listen(events.add);
 
-      detector.checkResponse(_makeValid408());
+      detector.checkResponse(makeValid408());
       await Future.delayed(Duration.zero);
       expect(events, hasLength(1));
 
@@ -258,7 +258,7 @@ void main() {
         DateTime.now().subtract(const Duration(seconds: 44)),
       );
 
-      detector.checkResponse(_makeValid408());
+      detector.checkResponse(makeValid408());
       await Future.delayed(Duration.zero);
       expect(events, hasLength(1)); // Still suppressed
       await sub.cancel();
@@ -268,7 +268,7 @@ void main() {
       final events = <ClockSkewEvent>[];
       final sub = detector.onClockSkew.listen(events.add);
 
-      detector.checkResponse(_makeValid408());
+      detector.checkResponse(makeValid408());
       await Future.delayed(Duration.zero);
       expect(events, hasLength(1));
 
@@ -277,7 +277,7 @@ void main() {
         DateTime.now().subtract(const Duration(seconds: 45)),
       );
 
-      detector.checkResponse(_makeValid408());
+      detector.checkResponse(makeValid408());
       await Future.delayed(Duration.zero);
       // At exactly 45s, difference == cooldown, so !(diff < cooldown) → emits
       expect(events, hasLength(2));
@@ -290,7 +290,7 @@ void main() {
       final sub1 = detector.onClockSkew.listen(events1.add);
       final sub2 = detector.onClockSkew.listen(events2.add);
 
-      detector.checkResponse(_makeValid408());
+      detector.checkResponse(makeValid408());
       await Future.delayed(Duration.zero);
 
       expect(events1, hasLength(1));

@@ -215,7 +215,7 @@ class _PermissionsPageState extends State<PermissionsPage> with WidgetsBindingOb
   }
 
   Widget _buildPermissionRow({
-    required IconData icon,
+    required FaIconData icon,
     required String title,
     required bool isGranted,
     required VoidCallback onTap,

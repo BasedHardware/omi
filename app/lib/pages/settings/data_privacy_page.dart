@@ -186,7 +186,7 @@ class _DataPrivacyPageState extends State<DataPrivacyPage> {
                                   margin: const EdgeInsets.only(bottom: 10),
                                   shape: RoundedRectangleBorder(
                                     borderRadius: BorderRadius.circular(12),
-                                    side: BorderSide(color: Color(0xFF35343B), width: 1),
+                                    side: const BorderSide(color: Color(0xFF35343B), width: 1),
                                   ),
                                   elevation: 0,
                                   clipBehavior: Clip.antiAlias,
@@ -215,7 +215,7 @@ class _DataPrivacyPageState extends State<DataPrivacyPage> {
               ),
               if (isLoading && !isMigrating)
                 Container(
-                  color: Colors.black.withOpacity(0.5),
+                  color: Colors.black.withValues(alpha: 0.5),
                   child: const Center(child: CircularProgressIndicator()),
                 ),
             ],

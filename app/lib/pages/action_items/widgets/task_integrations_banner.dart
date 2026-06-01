@@ -25,12 +25,12 @@ class TaskIntegrationsBanner extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         decoration: BoxDecoration(
           gradient: LinearGradient(
-            colors: [Colors.deepPurple.withOpacity(0.3), Colors.purple.withOpacity(0.3)],
+            colors: [Colors.deepPurple.withValues(alpha: 0.3), Colors.purple.withValues(alpha: 0.3)],
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
           ),
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: Colors.deepPurpleAccent.withOpacity(0.2), width: 1),
+          border: Border.all(color: Colors.deepPurpleAccent.withValues(alpha: 0.2), width: 1),
         ),
         child: Row(
           children: [
@@ -102,7 +102,7 @@ class TaskIntegrationsBanner extends StatelessWidget {
   }
 
   Widget _buildOverlappingLogo(String path, double size) {
-    return Container(
+    return SizedBox(
       width: size,
       height: size,
       child: ClipRRect(

@@ -465,7 +465,7 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
                               width: 36,
                               height: 36,
                               margin: const EdgeInsets.all(8),
-                              decoration: BoxDecoration(color: Colors.grey.withOpacity(0.3), shape: BoxShape.circle),
+                              decoration: BoxDecoration(color: Colors.grey.withValues(alpha: 0.3), shape: BoxShape.circle),
                               child: IconButton(
                                 padding: EdgeInsets.zero,
                                 onPressed: () {
@@ -544,7 +544,7 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
                                 width: 36,
                                 height: 36,
                                 margin: const EdgeInsets.all(8),
-                                decoration: BoxDecoration(color: Colors.grey.withOpacity(0.3), shape: BoxShape.circle),
+                                decoration: BoxDecoration(color: Colors.grey.withValues(alpha: 0.3), shape: BoxShape.circle),
                                 child: IconButton(
                                   padding: EdgeInsets.zero,
                                   onPressed: () {

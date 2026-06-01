@@ -40,9 +40,9 @@ class _MemoryEditSheetState extends State<MemoryEditSheet> {
     return Padding(
       padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
       child: Container(
-        decoration: BoxDecoration(
-          color: const Color(0xFF1F1F25),
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+        decoration: const BoxDecoration(
+          color: Color(0xFF1F1F25),
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
         ),
         padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
         child: Column(
@@ -55,7 +55,7 @@ class _MemoryEditSheetState extends State<MemoryEditSheet> {
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                   decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.1),
+                    color: Colors.white.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(16),
                   ),
                   child: Row(
@@ -114,8 +114,8 @@ class _MemoryEditSheetState extends State<MemoryEditSheet> {
                   foregroundColor: Colors.white,
                   padding: const EdgeInsets.symmetric(vertical: 14),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                  disabledBackgroundColor: Colors.deepPurpleAccent.withOpacity(0.5),
-                  disabledForegroundColor: Colors.white.withOpacity(0.7),
+                  disabledBackgroundColor: Colors.deepPurpleAccent.withValues(alpha: 0.5),
+                  disabledForegroundColor: Colors.white.withValues(alpha: 0.7),
                 ),
                 child: _isSaving
                     ? const SizedBox(

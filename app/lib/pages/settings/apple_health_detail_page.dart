@@ -230,7 +230,7 @@ class _AppleHealthDetailPageState extends State<AppleHealthDetailPage> {
               AnimatedLoadingButton(
                 text: isConnected ? context.l10n.appleHealthDisconnectCta : context.l10n.appleHealthConnectCta,
                 loaderColor: isConnected ? Colors.white : Colors.black,
-                color: isConnected ? Colors.red.withOpacity(0.15) : Colors.white,
+                color: isConnected ? Colors.red.withValues(alpha: 0.15) : Colors.white,
                 textStyle: TextStyle(
                   fontSize: 16,
                   fontWeight: FontWeight.w600,
@@ -288,7 +288,7 @@ class _AppleHealthDetailPageState extends State<AppleHealthDetailPage> {
         Container(
           padding: const EdgeInsets.all(8),
           decoration: BoxDecoration(
-            color: const Color(0xFFFF2D55).withOpacity(0.12),
+            color: const Color(0xFFFF2D55).withValues(alpha: 0.12),
             borderRadius: BorderRadius.circular(8),
           ),
           child: Icon(icon, color: const Color(0xFFFF2D55), size: 22),

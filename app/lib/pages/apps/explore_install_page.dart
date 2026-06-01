@@ -22,7 +22,6 @@ import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/debouncer.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/ui_guidelines.dart';
-import 'package:omi/pages/apps/widgets/create_options_sheet.dart';
 
 String filterValueToString(dynamic value) {
   if (value is String) {
@@ -606,7 +605,7 @@ class ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticKe
                                               }
                                               provider.applyFilters();
                                             },
-                                            icon: const Icon(
+                                            icon: const FaIcon(
                                               FontAwesomeIcons.magnifyingGlass,
                                               color: Colors.white70,
                                               size: 14,
@@ -624,7 +623,7 @@ class ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticKe
                                                 hintText: context.l10n.searchAppsPlaceholder,
                                                 leading: const Padding(
                                                   padding: EdgeInsets.only(left: 6.0),
-                                                  child: Icon(
+                                                  child: FaIcon(
                                                     FontAwesomeIcons.magnifyingGlass,
                                                     color: Colors.white70,
                                                     size: 14,
@@ -861,7 +860,7 @@ class ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticKe
                                               builder: (context) => const FilterBottomSheet(),
                                             );
                                           },
-                                          icon: const Icon(FontAwesomeIcons.filter, size: 16, color: Colors.white),
+                                          icon: const FaIcon(FontAwesomeIcons.filter, size: 16, color: Colors.white),
                                           label: Text(
                                             context.l10n.filters,
                                             style: const TextStyle(
@@ -903,7 +902,7 @@ class ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticKe
                                                   builder: (context) => const FilterBottomSheet(),
                                                 );
                                               },
-                                              icon: const Icon(
+                                              icon: const FaIcon(
                                                 FontAwesomeIcons.filter,
                                                 size: 16,
                                                 color: Colors.white,

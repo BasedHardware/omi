@@ -17,7 +17,7 @@ class NotificationScopesChipsWidget extends StatelessWidget {
         decoration: BoxDecoration(
           color: isSelected ? Colors.white : Colors.transparent,
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: isSelected ? Colors.white : Colors.grey.withOpacity(0.3), width: 1),
+          border: Border.all(color: isSelected ? Colors.white : Colors.grey.withValues(alpha: 0.3), width: 1),
         ),
         child: Center(
           child: Text(

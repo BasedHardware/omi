@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
@@ -67,9 +66,9 @@ void main() {
 
       // Collect frame timing data manually
       final frameTimings = <FrameTiming>[];
-      final frameCallback = (List<FrameTiming> timings) {
+      void frameCallback(List<FrameTiming> timings) {
         frameTimings.addAll(timings);
-      };
+      }
 
       // Register frame callback
       WidgetsBinding.instance.addTimingsCallback(frameCallback);
@@ -143,20 +142,20 @@ class _TestApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
+    return const MaterialApp(
       home: Scaffold(
         body: Center(
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const Text('Animation Performance Test'),
-              const SizedBox(height: 20),
+              Text('Animation Performance Test'),
+              SizedBox(height: 20),
               // Simulate animations similar to the app
-              const _AnimatedWidget(),
-              const SizedBox(height: 20),
-              const _ShimmerWidget(),
-              const SizedBox(height: 20),
-              const _TypingIndicatorWidget(),
+              _AnimatedWidget(),
+              SizedBox(height: 20),
+              _ShimmerWidget(),
+              SizedBox(height: 20),
+              _TypingIndicatorWidget(),
             ],
           ),
         ),
@@ -200,7 +199,7 @@ class _AnimatedWidgetState extends State<_AnimatedWidget> with SingleTickerProvi
           width: 200,
           height: 50,
           decoration: BoxDecoration(
-            color: Colors.blue.withOpacity(0.3 + _controller.value * 0.7),
+            color: Colors.blue.withValues(alpha: 0.3 + _controller.value * 0.7),
             borderRadius: BorderRadius.circular(8),
           ),
           child: const Center(child: Text('Waveform Animation')),
@@ -296,7 +295,7 @@ class _TypingIndicatorWidgetState extends State<_TypingIndicatorWidget> with Sin
           child: Container(
             width: 8,
             height: 8,
-            decoration: BoxDecoration(color: Colors.grey.withOpacity(0.5 + value * 0.5), shape: BoxShape.circle),
+            decoration: BoxDecoration(color: Colors.grey.withValues(alpha: 0.5 + value * 0.5), shape: BoxShape.circle),
           ),
         );
       },

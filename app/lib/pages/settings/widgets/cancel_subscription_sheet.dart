@@ -499,7 +499,7 @@ class _CancelSubscriptionFlowState extends State<CancelSubscriptionFlow> {
     );
   }
 
-  Widget _featureRow(IconData icon, String text) {
+  Widget _featureRow(FaIconData icon, String text) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
       child: Container(
@@ -533,6 +533,6 @@ class _CancelSubscriptionFlowState extends State<CancelSubscriptionFlow> {
 
 class _Reason {
   final String key;
-  final IconData icon;
+  final FaIconData icon;
   const _Reason(this.key, this.icon);
 }

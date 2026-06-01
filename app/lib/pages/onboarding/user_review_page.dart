@@ -67,7 +67,7 @@ class _UserReviewPageState extends State<UserReviewPage> {
         // Bottom drawer card - wraps content
         Container(
           width: double.infinity,
-          padding: EdgeInsets.fromLTRB(32, 8, 32, 4),
+          padding: const EdgeInsets.fromLTRB(32, 8, 32, 4),
           decoration: const BoxDecoration(
             color: Colors.black,
             borderRadius: BorderRadius.only(topLeft: Radius.circular(40), topRight: Radius.circular(40)),
@@ -113,7 +113,7 @@ class _UserReviewPageState extends State<UserReviewPage> {
                       backgroundColor: Colors.deepPurple,
                       foregroundColor: Colors.white,
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
-                      disabledBackgroundColor: Colors.deepPurple.withOpacity(0.5),
+                      disabledBackgroundColor: Colors.deepPurple.withValues(alpha: 0.5),
                     ),
                     child: _isLoading
                         ? const SizedBox(

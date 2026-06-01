@@ -41,7 +41,7 @@ class WrappedShareFrame extends StatelessWidget {
                 child: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
                   decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.15),
+                    color: Colors.white.withValues(alpha: 0.15),
                     borderRadius: BorderRadius.circular(30),
                   ),
                   child: const Text(
@@ -389,7 +389,7 @@ class MemorableDaysShareTemplate extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
                 decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.2),
+                  color: Colors.white.withValues(alpha: 0.2),
                   borderRadius: BorderRadius.circular(16),
                 ),
                 child: Text(
@@ -406,7 +406,7 @@ class MemorableDaysShareTemplate extends StatelessWidget {
               Text(
                 '· ${day['dateStr'] ?? ''}',
                 style: TextStyle(
-                  color: Colors.white.withOpacity(0.7),
+                  color: Colors.white.withValues(alpha: 0.7),
                   fontSize: 22,
                   fontWeight: FontWeight.w500,
                   decoration: TextDecoration.none,
@@ -428,7 +428,7 @@ class MemorableDaysShareTemplate extends StatelessWidget {
           Text(
             day['description'] ?? '',
             style: TextStyle(
-              color: Colors.white.withOpacity(0.8),
+              color: Colors.white.withValues(alpha: 0.8),
               fontSize: 24,
               fontWeight: FontWeight.w400,
               decoration: TextDecoration.none,
@@ -494,7 +494,7 @@ class MyBuddiesShareTemplate extends StatelessWidget {
           Container(
             width: 44,
             height: 44,
-            decoration: BoxDecoration(color: Colors.white.withOpacity(0.2), shape: BoxShape.circle),
+            decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.2), shape: BoxShape.circle),
             child: Center(
               child: Text(
                 '${index + 1}',
@@ -526,7 +526,7 @@ class MyBuddiesShareTemplate extends StatelessWidget {
                 Text(
                   buddy['relationship'] ?? '',
                   style: TextStyle(
-                    color: Colors.white.withOpacity(0.7),
+                    color: Colors.white.withValues(alpha: 0.7),
                     fontSize: 20,
                     fontWeight: FontWeight.w600,
                     decoration: TextDecoration.none,
@@ -536,7 +536,7 @@ class MyBuddiesShareTemplate extends StatelessWidget {
                 Text(
                   buddy['context'] ?? '',
                   style: TextStyle(
-                    color: Colors.white.withOpacity(0.6),
+                    color: Colors.white.withValues(alpha: 0.6),
                     fontSize: 22,
                     fontStyle: FontStyle.italic,
                     decoration: TextDecoration.none,
@@ -602,13 +602,13 @@ class ObsessionsShareTemplate extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                 decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.2),
+                  color: Colors.white.withValues(alpha: 0.2),
                   borderRadius: BorderRadius.circular(14),
                 ),
                 child: Text(
                   label,
                   style: TextStyle(
-                    color: Colors.white.withOpacity(0.9),
+                    color: Colors.white.withValues(alpha: 0.9),
                     fontSize: 18,
                     fontWeight: FontWeight.w700,
                     letterSpacing: 1,
@@ -666,12 +666,12 @@ class MovieRecsShareTemplate extends StatelessWidget {
           Container(
             width: 50,
             height: 50,
-            decoration: BoxDecoration(color: Colors.white.withOpacity(0.15), borderRadius: BorderRadius.circular(12)),
+            decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(12)),
             child: Center(
               child: Text(
                 '#${index + 1}',
                 style: TextStyle(
-                  color: Colors.white.withOpacity(0.9),
+                  color: Colors.white.withValues(alpha: 0.9),
                   fontSize: 22,
                   fontWeight: FontWeight.w700,
                   decoration: TextDecoration.none,
@@ -749,7 +749,7 @@ class StruggleShareTemplate extends StatelessWidget {
           Text(
             context.l10n.wrappedButYouPushedThrough,
             style: TextStyle(
-              color: Colors.white.withOpacity(0.7),
+              color: Colors.white.withValues(alpha: 0.7),
               fontSize: 32,
               fontWeight: FontWeight.w500,
               decoration: TextDecoration.none,
@@ -813,7 +813,7 @@ class BiggestWinShareTemplate extends StatelessWidget {
           Text(
             context.l10n.wrappedYouDidIt,
             style: TextStyle(
-              color: Colors.white.withOpacity(0.7),
+              color: Colors.white.withValues(alpha: 0.7),
               fontSize: 32,
               fontWeight: FontWeight.w500,
               decoration: TextDecoration.none,
@@ -858,7 +858,7 @@ class TopPhrasesShareTemplate extends StatelessWidget {
             width: 50,
             height: 50,
             decoration: BoxDecoration(
-              gradient: LinearGradient(colors: [Colors.white.withOpacity(0.3), Colors.white.withOpacity(0.1)]),
+              gradient: LinearGradient(colors: [Colors.white.withValues(alpha: 0.3), Colors.white.withValues(alpha: 0.1)]),
               shape: BoxShape.circle,
             ),
             child: Center(
@@ -991,7 +991,7 @@ class FinalCollageShareTemplate extends StatelessWidget {
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
                   decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.1),
+                    color: Colors.white.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(20),
                   ),
                   child: Text(
@@ -1048,7 +1048,7 @@ class FinalCollageShareTemplate extends StatelessWidget {
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
                 decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.1),
+                  color: Colors.white.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(30),
                 ),
                 child: const Text(
@@ -1098,7 +1098,7 @@ class FinalCollageShareTemplate extends StatelessWidget {
         Text(
           label,
           style: TextStyle(
-            color: Colors.white.withOpacity(0.8),
+            color: Colors.white.withValues(alpha: 0.8),
             fontSize: 20,
             fontWeight: FontWeight.w500,
             decoration: TextDecoration.none,

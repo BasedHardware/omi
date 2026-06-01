@@ -281,7 +281,7 @@ class _BatteryInfoWidgetState extends State<BatteryInfoWidget> {
                                             child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
                                           )
                                         else
-                                          const Icon(FontAwesomeIcons.microphone, size: 12, color: Colors.white),
+                                          const FaIcon(FontAwesomeIcons.microphone, size: 12, color: Colors.white),
                                         const SizedBox(width: 6),
                                         Text(
                                           isRecording
@@ -392,7 +392,7 @@ class _RecordOptionsSheet extends StatelessWidget {
           ),
           const SizedBox(height: 18),
           _RecordOption(
-            icon: FontAwesomeIcons.microphone,
+            faIcon: FontAwesomeIcons.microphone,
             title: context.l10n.recordWithPhoneMic,
             subtitle: context.l10n.recordWithPhoneMicSubtitle,
             onTap: onPickPhoneMic,
@@ -411,12 +411,13 @@ class _RecordOptionsSheet extends StatelessWidget {
 }
 
 class _RecordOption extends StatelessWidget {
-  final IconData icon;
+  final IconData? icon;
+  final FaIconData? faIcon;
   final String title;
   final String subtitle;
   final VoidCallback onTap;
 
-  const _RecordOption({required this.icon, required this.title, required this.subtitle, required this.onTap});
+  const _RecordOption({this.icon, this.faIcon, required this.title, required this.subtitle, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
@@ -448,7 +449,9 @@ class _RecordOption extends StatelessWidget {
                   ),
                 ],
               ),
-              child: Icon(icon, color: Colors.white, size: 18),
+              child: faIcon != null
+                  ? FaIcon(faIcon!, color: Colors.white, size: 18)
+                  : Icon(icon, color: Colors.white, size: 18),
             ),
             const SizedBox(width: 14),
             Expanded(

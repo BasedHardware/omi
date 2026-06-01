@@ -41,9 +41,9 @@ class OmiIconButton extends AdaptiveWidget {
     final baseColor = color ?? (filled ? ResponsiveHelper.purplePrimary : ResponsiveHelper.textSecondary);
 
     final bgColor = neutral
-        ? ResponsiveHelper.backgroundTertiary.withOpacity(0.6)
+        ? ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.6)
         : filled
-        ? (solid ? baseColor : baseColor.withOpacity(0.15))
+        ? (solid ? baseColor : baseColor.withValues(alpha: 0.15))
         : Colors.transparent;
 
     final iconColor = neutral
@@ -53,7 +53,7 @@ class OmiIconButton extends AdaptiveWidget {
         : baseColor;
 
     final border = style == OmiIconButtonStyle.outline
-        ? Border.all(color: baseColor.withOpacity(borderOpacity), width: 1)
+        ? Border.all(color: baseColor.withValues(alpha: borderOpacity), width: 1)
         : null;
 
     return Material(

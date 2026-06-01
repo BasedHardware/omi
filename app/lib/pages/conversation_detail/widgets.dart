@@ -1,4 +1,3 @@
-import 'dart:ui';
 
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/material.dart';
@@ -262,7 +261,7 @@ class GetSummaryWidgets extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
         decoration: BoxDecoration(
-          color: folder != null ? folder.colorValue.withOpacity(0.2) : Colors.grey.withOpacity(0.2),
+          color: folder != null ? folder.colorValue.withValues(alpha: 0.2) : Colors.grey.withValues(alpha: 0.2),
           borderRadius: BorderRadius.circular(20),
         ),
         child: Row(
@@ -451,7 +450,7 @@ class GetSummaryWidgets extends StatelessWidget {
                 children: [
                   Text(
                     label,
-                    style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w500),
+                    style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w500),
                   ),
                   const SizedBox(height: 2),
                   Text(description, style: TextStyle(color: Colors.grey.shade500, fontSize: 13)),
@@ -998,8 +997,8 @@ class _AppResultDetailWidgetState extends State<AppResultDetailWidget> {
                             ),
                           ),
                           const SizedBox(
-                            child: Icon(Icons.arrow_forward_ios, color: Colors.white, size: 20),
                             width: 42,
+                            child: Icon(Icons.arrow_forward_ios, color: Colors.white, size: 20),
                           ),
                         ],
                       ),

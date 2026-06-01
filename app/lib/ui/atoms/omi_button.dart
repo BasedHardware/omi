@@ -69,12 +69,12 @@ class OmiButton extends AdaptiveWidget {
                         begin: Alignment.topLeft,
                         end: Alignment.bottomRight,
                       )
-                    : LinearGradient(
+                    : const LinearGradient(
                         colors: [ResponsiveHelper.backgroundTertiary, ResponsiveHelper.backgroundTertiary],
                       ),
                 borderRadius: BorderRadius.circular(12),
                 boxShadow: enabled
-                    ? [BoxShadow(color: primaryColor.withOpacity(0.3), blurRadius: 8, offset: const Offset(0, 4))]
+                    ? [BoxShadow(color: primaryColor.withValues(alpha: 0.3), blurRadius: 8, offset: const Offset(0, 4))]
                     : null,
               ),
               child: Row(
@@ -99,7 +99,7 @@ class OmiButton extends AdaptiveWidget {
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
               decoration: BoxDecoration(
-                color: ResponsiveHelper.backgroundTertiary.withOpacity(0.6),
+                color: ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.6),
                 borderRadius: BorderRadius.circular(8),
               ),
               child: Row(

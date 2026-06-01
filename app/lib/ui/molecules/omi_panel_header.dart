@@ -12,7 +12,7 @@ import 'package:omi/utils/responsive/responsive_helper.dart';
 /// – Re-uses atom components so visual language is consistent with [OmiSectionHeader].
 class OmiPanelHeader extends StatelessWidget {
   /// Leading icon for the panel (e.g. `FontAwesomeIcons.fileLines`).
-  final IconData icon;
+  final FaIconData icon;
 
   /// Panel title.
   final String title;
@@ -43,8 +43,8 @@ class OmiPanelHeader extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
-        color: ResponsiveHelper.backgroundSecondary.withOpacity(0.6),
-        border: Border(bottom: BorderSide(color: ResponsiveHelper.backgroundTertiary.withOpacity(0.3), width: 1)),
+        color: ResponsiveHelper.backgroundSecondary.withValues(alpha: 0.6),
+        border: Border(bottom: BorderSide(color: ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.3), width: 1)),
       ),
       child: Row(
         children: [
@@ -73,7 +73,7 @@ class OmiPanelHeader extends StatelessWidget {
               color: ResponsiveHelper.textTertiary,
               fontSize: 12,
               borderRadius: 12,
-              backgroundColor: ResponsiveHelper.backgroundTertiary.withOpacity(0.6),
+              backgroundColor: ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.6),
             ),
           ],
 

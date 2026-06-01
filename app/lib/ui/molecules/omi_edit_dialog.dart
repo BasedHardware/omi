@@ -31,7 +31,7 @@ class OmiEditDialog {
             color: ResponsiveHelper.backgroundSecondary,
             borderRadius: BorderRadius.circular(16),
             border: Border.all(color: ResponsiveHelper.backgroundTertiary, width: 1),
-            boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.3), blurRadius: 24, offset: const Offset(0, 12))],
+            boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.3), blurRadius: 24, offset: const Offset(0, 12))],
           ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -44,7 +44,7 @@ class OmiEditDialog {
                     width: 48,
                     height: 48,
                     decoration: BoxDecoration(
-                      color: iconColor.withOpacity(0.1),
+                      color: iconColor.withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: Icon(icon, size: 24, color: iconColor),

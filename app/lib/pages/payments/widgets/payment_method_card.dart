@@ -50,7 +50,7 @@ class PaymentMethodCard extends StatelessWidget {
           borderRadius: BorderRadius.circular(12),
           border: !isConnected
               ? Border.all(
-                  color: Colors.white.withOpacity(0.3),
+                  color: Colors.white.withValues(alpha: 0.3),
                   width: 2,
                   strokeAlign: BorderSide.strokeAlignOutside,
                   style: BorderStyle.solid,
@@ -65,7 +65,7 @@ class PaymentMethodCard extends StatelessWidget {
                 Container(
                   padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.1),
+                    color: Colors.white.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: icon,
@@ -83,7 +83,7 @@ class PaymentMethodCard extends StatelessWidget {
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                         decoration: BoxDecoration(
-                          color: isActive ? Colors.green.withOpacity(0.2) : Colors.white.withOpacity(0.1),
+                          color: isActive ? Colors.green.withValues(alpha: 0.2) : Colors.white.withValues(alpha: 0.1),
                           borderRadius: BorderRadius.circular(12),
                         ),
                         child: Row(
@@ -93,13 +93,13 @@ class PaymentMethodCard extends StatelessWidget {
                               const Icon(Icons.check_circle, color: Colors.green, size: 16),
                               const SizedBox(width: 4),
                             ] else if (isConnected && !isActive) ...[
-                              Icon(Icons.circle, color: Colors.white.withOpacity(0.7), size: 16),
+                              Icon(Icons.circle, color: Colors.white.withValues(alpha: 0.7), size: 16),
                               const SizedBox(width: 4),
                             ],
                             Text(
                               subtitle,
                               style: TextStyle(
-                                color: isActive ? Colors.green : Colors.white.withOpacity(0.7),
+                                color: isActive ? Colors.green : Colors.white.withValues(alpha: 0.7),
                                 fontSize: 14,
                                 fontWeight: isActive ? FontWeight.w500 : FontWeight.normal,
                               ),
@@ -131,7 +131,7 @@ class PaymentMethodCard extends StatelessWidget {
                 ],
                 if (!isActive && isConnected) ...[
                   PopupMenuButton<String>(
-                    icon: Icon(Icons.more_vert, color: Colors.white.withOpacity(0.7)),
+                    icon: Icon(Icons.more_vert, color: Colors.white.withValues(alpha: 0.7)),
                     onSelected: (value) {
                       if (value == 'update') {
                         onManageTap?.call();

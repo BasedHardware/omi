@@ -4,7 +4,6 @@ import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart';
-import 'package:meta/meta.dart';
 
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/models/sync_state.dart';
@@ -203,7 +202,7 @@ class LocalWalSyncImpl implements LocalWalSync {
           break;
         }
       }
-      Logger.debug("${low} - ${high} - ${syncedOffset} - ${chunkFrameCount} - ${_framesPerSecond}");
+      Logger.debug("$low - $high - $syncedOffset - $chunkFrameCount - $_framesPerSecond");
 
       Wal wal;
       var walIdx = _wals.indexWhere(

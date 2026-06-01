@@ -40,7 +40,7 @@ class _PaymentsPageState extends State<PaymentsPage> {
       decoration: BoxDecoration(
         color: const Color(0xFF1F1F25),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Color(0xFF35343B), width: 1),
+        border: Border.all(color: const Color(0xFF35343B), width: 1),
       ),
       child: Row(
         children: [
@@ -127,24 +127,24 @@ class _PaymentsPageState extends State<PaymentsPage> {
       decoration: BoxDecoration(
         color: const Color(0xFF14141A),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.white.withOpacity(0.06), width: 1),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.06), width: 1),
       ),
       child: Row(
         children: [
           Container(
             padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.04),
+              color: Colors.white.withValues(alpha: 0.04),
               borderRadius: BorderRadius.circular(8),
             ),
-            child: Icon(Icons.schedule_outlined, color: Colors.white.withOpacity(0.45), size: 22),
+            child: Icon(Icons.schedule_outlined, color: Colors.white.withValues(alpha: 0.45), size: 22),
           ),
           const SizedBox(width: 14),
           Expanded(
             child: Text(
               context.l10n.morePaymentMethodsComingSoon,
               style: TextStyle(
-                color: Colors.white.withOpacity(0.6),
+                color: Colors.white.withValues(alpha: 0.6),
                 fontSize: 15,
                 fontWeight: FontWeight.w400,
               ),

@@ -267,7 +267,7 @@ class _DeviceDiagnosticsState extends State<DeviceDiagnostics> {
   }
 
   Widget _statusCard({
-    required IconData icon,
+    required FaIconData icon,
     required String label,
     required String value,
     Color? valueColor,

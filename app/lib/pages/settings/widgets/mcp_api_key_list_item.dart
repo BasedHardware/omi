@@ -46,7 +46,7 @@ class McpApiKeyListItem extends StatelessWidget {
             onTap: () => _showDeleteConfirmation(context, apiKey),
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-              decoration: BoxDecoration(color: Colors.red.withOpacity(0.15), borderRadius: BorderRadius.circular(8)),
+              decoration: BoxDecoration(color: Colors.red.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(8)),
               child: Text(
                 context.l10n.revoke,
                 style: const TextStyle(color: Colors.redAccent, fontSize: 13, fontWeight: FontWeight.w500),

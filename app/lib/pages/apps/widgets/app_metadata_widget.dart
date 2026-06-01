@@ -80,7 +80,7 @@ class AppMetadataWidget extends StatelessWidget {
                               decoration: BoxDecoration(
                                 color: Colors.transparent,
                                 borderRadius: BorderRadius.circular(12.0),
-                                border: Border.all(color: Colors.grey.withOpacity(0.3), width: 1),
+                                border: Border.all(color: Colors.grey.withValues(alpha: 0.3), width: 1),
                               ),
                               width: double.infinity,
                               child: Row(
@@ -107,7 +107,7 @@ class AppMetadataWidget extends StatelessWidget {
                                     child: Container(
                                       padding: const EdgeInsets.all(6.0),
                                       decoration: BoxDecoration(borderRadius: BorderRadius.circular(8.0)),
-                                      child: FaIcon(FontAwesomeIcons.copy, color: Colors.white, size: 16),
+                                      child: const FaIcon(FontAwesomeIcons.copy, color: Colors.white, size: 16),
                                     ),
                                   ),
                                 ],
@@ -193,11 +193,11 @@ class AppMetadataWidget extends StatelessWidget {
                                 contentPadding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 14.0),
                                 border: OutlineInputBorder(
                                   borderRadius: BorderRadius.circular(12.0),
-                                  borderSide: BorderSide(color: Colors.grey.withOpacity(0.3), width: 1),
+                                  borderSide: BorderSide(color: Colors.grey.withValues(alpha: 0.3), width: 1),
                                 ),
                                 enabledBorder: OutlineInputBorder(
                                   borderRadius: BorderRadius.circular(12.0),
-                                  borderSide: BorderSide(color: Colors.grey.withOpacity(0.3), width: 1),
+                                  borderSide: BorderSide(color: Colors.grey.withValues(alpha: 0.3), width: 1),
                                 ),
                                 focusedBorder: OutlineInputBorder(
                                   borderRadius: BorderRadius.circular(12.0),
@@ -293,7 +293,7 @@ class AppMetadataWidget extends StatelessWidget {
                                 decoration: BoxDecoration(
                                   color: Colors.transparent,
                                   borderRadius: BorderRadius.circular(12.0),
-                                  border: Border.all(color: Colors.grey.withOpacity(0.3), width: 1),
+                                  border: Border.all(color: Colors.grey.withValues(alpha: 0.3), width: 1),
                                 ),
                                 width: double.infinity,
                                 child: Row(
@@ -327,7 +327,7 @@ class AppMetadataWidget extends StatelessWidget {
                               padding: const EdgeInsets.all(16.0),
                               decoration: BoxDecoration(
                                 borderRadius: BorderRadius.circular(12.0),
-                                border: Border.all(color: Colors.grey.withOpacity(0.3), width: 1),
+                                border: Border.all(color: Colors.grey.withValues(alpha: 0.3), width: 1),
                               ),
                               constraints: BoxConstraints(minHeight: MediaQuery.sizeOf(context).height * 0.1),
                               child: Skeletonizer.zone(
@@ -337,7 +337,7 @@ class AppMetadataWidget extends StatelessWidget {
                                   highlightColor: Colors.grey[600]!,
                                   duration: const Duration(seconds: 1),
                                 ),
-                                child: Bone.multiText(),
+                                child: const Bone.multiText(),
                               ),
                             )
                           : TextFormField(
@@ -358,11 +358,11 @@ class AppMetadataWidget extends StatelessWidget {
                                 contentPadding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 16.0),
                                 border: OutlineInputBorder(
                                   borderRadius: BorderRadius.circular(12.0),
-                                  borderSide: BorderSide(color: Colors.grey.withOpacity(0.3), width: 1),
+                                  borderSide: BorderSide(color: Colors.grey.withValues(alpha: 0.3), width: 1),
                                 ),
                                 enabledBorder: OutlineInputBorder(
                                   borderRadius: BorderRadius.circular(12.0),
-                                  borderSide: BorderSide(color: Colors.grey.withOpacity(0.3), width: 1),
+                                  borderSide: BorderSide(color: Colors.grey.withValues(alpha: 0.3), width: 1),
                                 ),
                                 focusedBorder: OutlineInputBorder(
                                   borderRadius: BorderRadius.circular(12.0),
@@ -471,7 +471,7 @@ class AppMetadataWidget extends StatelessWidget {
                             margin: const EdgeInsets.only(left: 2.0, right: 2.0, top: 10, bottom: 6),
                             padding: const EdgeInsets.symmetric(horizontal: 2.0, vertical: 10.0),
                             decoration: BoxDecoration(
-                              color: Color(0xFF35343B),
+                              color: const Color(0xFF35343B),
                               borderRadius: BorderRadius.circular(10.0),
                             ),
                             width: double.infinity,
@@ -493,7 +493,7 @@ class AppMetadataWidget extends StatelessWidget {
                             ),
                           ),
                         )
-                      : SizedBox.shrink(),
+                      : const SizedBox.shrink(),
                 ],
               ),
             ),

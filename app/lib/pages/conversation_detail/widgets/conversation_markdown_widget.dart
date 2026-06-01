@@ -184,7 +184,7 @@ class _ConversationMarkdownWidgetState extends State<ConversationMarkdownWidget>
                     currentResultIndex: localSearchIndex,
                   ),
                 );
-              }).toList()
+              })
             else
               _getMarkdownWidgetWithSearch(context, widget.content),
           ],
@@ -200,7 +200,7 @@ class _ConversationMarkdownWidgetState extends State<ConversationMarkdownWidget>
     String searchQuery = '',
     int currentResultIndex = -1,
   }) {
-    var style = TextStyle(color: Colors.white, fontSize: 16, height: 1.5);
+    var style = const TextStyle(color: Colors.white, fontSize: 16, height: 1.5);
 
     String processedContent = content;
 
@@ -219,7 +219,7 @@ class _ConversationMarkdownWidgetState extends State<ConversationMarkdownWidget>
         p: style.copyWith(height: 1.5),
         pPadding: const EdgeInsets.only(bottom: 12),
         blockquote: style.copyWith(backgroundColor: Colors.transparent, color: Colors.white),
-        blockquoteDecoration: BoxDecoration(color: Color(0xFF35343B), borderRadius: BorderRadius.circular(4)),
+        blockquoteDecoration: BoxDecoration(color: const Color(0xFF35343B), borderRadius: BorderRadius.circular(4)),
         code: style.copyWith(
           backgroundColor: Colors.transparent,
           decoration: TextDecoration.none,

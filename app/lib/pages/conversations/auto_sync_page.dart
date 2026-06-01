@@ -358,7 +358,7 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
   }
 
   Widget _settingRow({
-    required IconData icon,
+    required FaIconData icon,
     required String label,
     required bool isOn,
     required VoidCallback onTap,
@@ -923,7 +923,7 @@ class _ManageStorageSheet extends StatelessWidget {
 }
 
 class _StorageRow extends StatelessWidget {
-  final IconData icon;
+  final FaIconData icon;
   final Color iconColor;
   final String title;
   final String subtitle;

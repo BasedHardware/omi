@@ -592,7 +592,7 @@ class _AppListItemState extends State<_AppListItem> {
               children: [
                 Padding(
                   padding: const EdgeInsets.fromLTRB(0, 1, 0, 0),
-                  child: Icon(FontAwesomeIcons.solidStar, size: 7, color: Colors.amber.shade300),
+                  child: FaIcon(FontAwesomeIcons.solidStar, size: 7, color: Colors.amber.shade300),
                 ),
                 const SizedBox(width: 4),
                 Text(
@@ -621,7 +621,7 @@ class _AppListItemState extends State<_AppListItem> {
               children: [
                 Padding(
                   padding: const EdgeInsets.fromLTRB(0, 1, 0, 0),
-                  child: Icon(FontAwesomeIcons.clock, size: 7, color: Colors.grey.shade400),
+                  child: FaIcon(FontAwesomeIcons.clock, size: 7, color: Colors.grey.shade400),
                 ),
                 const SizedBox(width: 4),
                 Text(
@@ -709,7 +709,7 @@ class _CreateTemplateListItem extends StatelessWidget {
           leading: const CircleAvatar(
             backgroundColor: Colors.white,
             radius: 16,
-            child: Icon(FontAwesomeIcons.plus, color: Colors.black, size: 18),
+            child: FaIcon(FontAwesomeIcons.plus, color: Colors.black, size: 18),
           ),
           title: Text(
             context.l10n.createCustomTemplate,

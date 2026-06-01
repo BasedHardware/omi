@@ -42,7 +42,7 @@ Wal _makeWal({
     status: status,
     storage: storage,
     device: device,
-    filePath: 'test_audio_${timerStart}.bin',
+    filePath: 'test_audio_$timerStart.bin',
   );
 }
 

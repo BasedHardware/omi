@@ -369,7 +369,7 @@ class _ImportHistoryPageState extends State<ImportHistoryPage> {
                         color: Colors.deepPurple.withValues(alpha: 0.8),
                         borderRadius: BorderRadius.circular(8),
                       ),
-                      child: const Icon(FontAwesomeIcons.plus, color: Colors.white, size: 16),
+                      child: const FaIcon(FontAwesomeIcons.plus, color: Colors.white, size: 16),
                     )
             else
               Icon(Icons.lock_outline, color: Colors.grey.shade700, size: 20),

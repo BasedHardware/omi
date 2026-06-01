@@ -163,12 +163,12 @@ class SectionAppItemCard extends StatelessWidget {
                   placeholder: (context, url) => Container(
                     width: 60,
                     height: 60,
-                    decoration: BoxDecoration(color: Color(0xFF35343B), borderRadius: BorderRadius.circular(8)),
+                    decoration: BoxDecoration(color: const Color(0xFF35343B), borderRadius: BorderRadius.circular(8)),
                   ),
                   errorWidget: (context, url, error) => Container(
                     width: 60,
                     height: 60,
-                    decoration: BoxDecoration(color: Color(0xFF35343B), borderRadius: BorderRadius.circular(8)),
+                    decoration: BoxDecoration(color: const Color(0xFF35343B), borderRadius: BorderRadius.circular(8)),
                     child: const Icon(Icons.error_outline, color: Colors.white54, size: 24),
                   ),
                 ),

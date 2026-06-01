@@ -311,7 +311,7 @@ class HomeContentPageState extends State<HomeContentPage> with AutomaticKeepAliv
   }
 
   Widget _buildDailyRecapsPreview(BuildContext context) {
-    final cardHeight = 130.0;
+    const cardHeight = 130.0;
     if (_loadingSummaries) {
       return Padding(
         padding: const EdgeInsets.only(top: 12),
@@ -503,7 +503,7 @@ class HomeContentPageState extends State<HomeContentPage> with AutomaticKeepAliv
         padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
         child: ClipRRect(
           borderRadius: BorderRadius.circular(24),
-          child: SizedBox(
+          child: const SizedBox(
             height: 180,
             child: IgnorePointer(
               child: MemoryGraphPage(

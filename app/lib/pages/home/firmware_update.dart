@@ -110,7 +110,7 @@ class _FirmwareUpdateState extends State<FirmwareUpdate> with FirmwareMixin {
   }
 
   Widget _buildVersionItem({
-    required IconData icon,
+    required FaIconData icon,
     required String label,
     required String version,
     Color? iconColor,

@@ -17,7 +17,6 @@ import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/env/env.dart';
 import 'package:omi/utils/logger.dart';
-import 'package:omi/utils/logger.dart';
 
 class AuthService {
   static final AuthService _instance = AuthService._internal();

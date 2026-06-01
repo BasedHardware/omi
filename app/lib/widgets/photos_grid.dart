@@ -39,17 +39,17 @@ class PhotosGridComponent extends StatelessWidget {
                     base64Decode(photo.base64),
                     fit: BoxFit.cover,
                     gaplessPlayback: true,
-                    color: photo.discarded ? Color(0xFF35343B) : null,
+                    color: photo.discarded ? const Color(0xFF35343B) : null,
                     colorBlendMode: photo.discarded ? BlendMode.saturation : null,
                   ),
                   if (photo.discarded)
                     Container(
-                      color: Colors.black.withOpacity(0.5),
+                      color: Colors.black.withValues(alpha: 0.5),
                       child: const Icon(Icons.visibility_off_outlined, color: Colors.white70, size: 28),
                     ),
                   if (isProcessing)
                     Container(
-                      color: Colors.black.withOpacity(0.5),
+                      color: Colors.black.withValues(alpha: 0.5),
                       child: const Center(
                         child: SizedBox(
                           width: 20,

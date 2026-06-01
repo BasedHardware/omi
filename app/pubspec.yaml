@@ -125,7 +125,7 @@ dependencies:
   flutter_svg: ^2.0.16
   file_picker: 8.3.2
   photo_view: ^0.15.0
-  font_awesome_flutter: ^10.8.0
+  font_awesome_flutter: ^11.0.0
   in_app_review: ^2.0.9
   fl_chart: ^0.68.0
   image: ^4.3.0
@@ -140,8 +140,11 @@ dependencies:
   marionette_flutter: ^0.3.0
   quick_actions: ^1.0.0
 
+  pigeon: any
+  markdown: any
 dependency_overrides:
   js: ^0.7.1
+  intercom_flutter_platform_interface: 2.0.6
   uuid: ^4.4.0
   opus_flutter_ios:
     git:
@@ -166,8 +169,8 @@ dev_dependencies:
   build_runner: ^2.4.15
   flutter_flavorizr: ^2.2.3
   flutter_gen_runner: 5.10.0
-  pigeon: ^26.0.1
 
+  connectivity_plus_platform_interface: any
 flutter_launcher_icons:
   android: true
   ios: true

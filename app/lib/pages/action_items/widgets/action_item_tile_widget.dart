@@ -8,7 +8,6 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:provider/provider.dart';
 
 import 'package:omi/backend/http/api/action_items.dart';
-import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/schema.dart';
 import 'package:omi/pages/settings/task_integrations_page.dart';
 import 'package:omi/pages/settings/usage_page.dart';
@@ -115,31 +114,31 @@ class _ActionItemTileWidgetState extends State<ActionItemTileWidget> {
 
     // For snoozed tab, always show actual date/time instead of relative labels
     if (widget.isSnoozedTab) {
-      chipColor = Colors.grey.withOpacity(0.2);
+      chipColor = Colors.grey.withValues(alpha: 0.2);
       textColor = Colors.grey.shade400;
       dueDateText = _formatDueDate(context, dueDate, showFullDate: true);
     } else if (widget.actionItem.completed) {
-      chipColor = Colors.grey.withOpacity(0.2);
+      chipColor = Colors.grey.withValues(alpha: 0.2);
       textColor = Colors.grey.shade500;
       dueDateText = _formatDueDate(context, dueDate);
     } else if (isOverdue) {
-      chipColor = Colors.red.withOpacity(0.15);
+      chipColor = Colors.red.withValues(alpha: 0.15);
       textColor = Colors.red.shade300;
       dueDateText = _formatDueDate(context, dueDate);
     } else if (isToday) {
-      chipColor = Colors.yellow.withOpacity(0.15);
+      chipColor = Colors.yellow.withValues(alpha: 0.15);
       textColor = Colors.yellow.shade300;
       dueDateText = context.l10n.today;
     } else if (isTomorrow) {
-      chipColor = Colors.blue.withOpacity(0.15);
+      chipColor = Colors.blue.withValues(alpha: 0.15);
       textColor = Colors.blue.shade300;
       dueDateText = context.l10n.tomorrow;
     } else if (isThisWeek) {
-      chipColor = Colors.green.withOpacity(0.15);
+      chipColor = Colors.green.withValues(alpha: 0.15);
       textColor = Colors.green.shade300;
       dueDateText = _formatDueDate(context, dueDate);
     } else {
-      chipColor = Colors.purple.withOpacity(0.15);
+      chipColor = Colors.purple.withValues(alpha: 0.15);
       textColor = Colors.purple.shade300;
       dueDateText = _formatDueDate(context, dueDate);
     }
@@ -272,7 +271,7 @@ class _ActionItemTileWidgetState extends State<ActionItemTileWidget> {
                     height: 24,
                     decoration: BoxDecoration(
                       borderRadius: BorderRadius.circular(6),
-                      color: displayApp.iconColor.withOpacity(0.2),
+                      color: displayApp.iconColor.withValues(alpha: 0.2),
                     ),
                     child: Icon(displayApp.icon, color: displayApp.iconColor, size: 16),
                   ),
@@ -906,7 +905,7 @@ class _ActionItemTileWidgetState extends State<ActionItemTileWidget> {
       color: Colors.transparent,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
-        side: BorderSide(color: Colors.transparent, width: 0),
+        side: const BorderSide(color: Colors.transparent, width: 0),
       ),
       clipBehavior: Clip.hardEdge,
       child: InkWell(

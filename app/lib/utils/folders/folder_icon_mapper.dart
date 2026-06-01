@@ -4,12 +4,12 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
 /// Maps folder icon strings (emojis) to FontAwesome IconData.
 /// Falls back to a folder icon for unknown values.
-IconData folderIconToFa(String? iconString) {
+FaIconData folderIconToFa(String? iconString) {
   return _emojiToFaMap[iconString] ?? FontAwesomeIcons.folder;
 }
 
 /// Mapping from emoji strings to FontAwesome icons.
-const Map<String, IconData> _emojiToFaMap = {
+const Map<String, FaIconData> _emojiToFaMap = {
   '📁': FontAwesomeIcons.solidFolder,
   '💼': FontAwesomeIcons.briefcase,
   '🏠': FontAwesomeIcons.solidHouse,

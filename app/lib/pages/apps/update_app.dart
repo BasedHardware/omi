@@ -172,7 +172,7 @@ class _UpdateAppPageState extends State<UpdateAppPage> {
                                               height: height,
                                               margin: const EdgeInsets.only(right: 8),
                                               decoration: BoxDecoration(
-                                                color: Color(0xFF35343B),
+                                                color: const Color(0xFF35343B),
                                                 borderRadius: BorderRadius.circular(8),
                                               ),
                                               child: provider.isUploadingThumbnail

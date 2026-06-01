@@ -47,7 +47,7 @@ void main() {
               child: Shimmer.fromColors(
                 baseColor: const Color(0xFF2A2A32),
                 highlightColor: const Color(0xFF3D3D47),
-                child: Container(width: 100, height: 100),
+                child: const SizedBox(width: 100, height: 100),
               ),
             ),
           ),

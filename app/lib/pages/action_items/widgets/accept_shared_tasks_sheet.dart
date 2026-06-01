@@ -101,9 +101,9 @@ class _AcceptSharedTasksSheetState extends State<AcceptSharedTasksSheet> {
                     margin: const EdgeInsets.only(bottom: 8),
                     padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                     decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.05),
+                      color: Colors.white.withValues(alpha: 0.05),
                       borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: Colors.white.withOpacity(0.08)),
+                      border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
                     ),
                     child: Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -151,7 +151,7 @@ class _AcceptSharedTasksSheetState extends State<AcceptSharedTasksSheet> {
                   foregroundColor: Colors.white,
                   padding: const EdgeInsets.symmetric(vertical: 14),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                  disabledBackgroundColor: Colors.deepPurple.withOpacity(0.5),
+                  disabledBackgroundColor: Colors.deepPurple.withValues(alpha: 0.5),
                 ),
                 child: _isAccepting
                     ? const SizedBox(

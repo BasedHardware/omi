@@ -55,11 +55,11 @@ class OmiChoiceChip extends AdaptiveWidget {
           padding: expand ? const EdgeInsets.all(12) : const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
           decoration: BoxDecoration(
             color: selected
-                ? ResponsiveHelper.purplePrimary.withOpacity(0.2)
-                : ResponsiveHelper.backgroundTertiary.withOpacity(0.6),
+                ? ResponsiveHelper.purplePrimary.withValues(alpha: 0.2)
+                : ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.6),
             borderRadius: BorderRadius.circular(8),
             border: Border.all(
-              color: selected ? ResponsiveHelper.purplePrimary : ResponsiveHelper.backgroundTertiary.withOpacity(0.3),
+              color: selected ? ResponsiveHelper.purplePrimary : ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.3),
               width: 1,
             ),
           ),

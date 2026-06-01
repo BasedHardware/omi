@@ -58,6 +58,7 @@ class PureSocket implements IPureSocket {
 
   PureSocket(this.url);
 
+  @override
   void setListener(IPureSocketListener listener) {
     _listener = listener;
   }
@@ -68,7 +69,7 @@ class PureSocket implements IPureSocket {
       return false;
     }
 
-    Logger.debug("request wss ${url}");
+    Logger.debug("request wss $url");
     final headers = await buildHeaders(requireAuthCheck: true);
 
     _channel = IOWebSocketChannel.connect(

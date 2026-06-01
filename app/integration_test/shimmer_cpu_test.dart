@@ -388,8 +388,8 @@ void main() {
 
       final savings = multiShimmerTimings.length - staticSkeletonTimings.length;
       debugPrint('║ Replacing Shimmer with static skeleton would save:           ║');
-      debugPrint('║   ~$savings frames over 10 seconds'.padRight(61) + '║');
-      debugPrint('║   ~${(savings / 10).toStringAsFixed(0)} frames/second'.padRight(61) + '║');
+      debugPrint('${'║   ~$savings frames over 10 seconds'.padRight(61)}║');
+      debugPrint('${'║   ~${(savings / 10).toStringAsFixed(0)} frames/second'.padRight(61)}║');
       debugPrint('╚══════════════════════════════════════════════════════════════╝');
 
       expect(

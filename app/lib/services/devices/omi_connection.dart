@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:math';
 import 'dart:typed_data';
 
-import 'package:flutter/foundation.dart';
 
 import 'package:version/version.dart';
 
@@ -294,7 +293,7 @@ class OmiDeviceConnection extends DeviceConnection {
         );
         return result;
       } finally {
-        await sub?.cancel();
+        await sub.cancel();
       }
     } catch (e) {
       Logger.debug('OmiDeviceConnection: Error listing storage files: $e');
@@ -341,8 +340,8 @@ class OmiDeviceConnection extends DeviceConnection {
         final result = await completer.future;
         return result;
       } finally {
-        await subscription?.cancel();
-        timeout?.cancel();
+        await subscription.cancel();
+        timeout.cancel();
       }
     } catch (e) {
       Logger.debug('OmiDeviceConnection: Error deleting storage file: $e');
@@ -799,10 +798,10 @@ class OmiDeviceConnection extends DeviceConnection {
             Logger.debug('Accelerometer z direction: ${accelerometerData[2]}');
             Logger.debug('Gyroscope z direction: ${accelerometerData[5]}\n');
             //simple threshold fall calcaultor
-            var fall_number = sqrt(
+            var fallNumber = sqrt(
               pow(accelerometerData[0], 2) + pow(accelerometerData[1], 2) + pow(accelerometerData[2], 2),
             );
-            if (fall_number > 30.0) {
+            if (fallNumber > 30.0) {
               await NotificationUtil.triggerFallNotification();
             }
           }

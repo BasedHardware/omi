@@ -36,10 +36,10 @@ class OmiContextMenu {
       position: RelativeRect.fromLTRB(position.dx, position.dy, position.dx, position.dy),
       color: ResponsiveHelper.backgroundSecondary,
       surfaceTintColor: Colors.transparent,
-      shadowColor: Colors.black.withOpacity(0.3),
+      shadowColor: Colors.black.withValues(alpha: 0.3),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
-        side: BorderSide(color: ResponsiveHelper.backgroundTertiary.withOpacity(0.4), width: 1),
+        side: BorderSide(color: ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.4), width: 1),
       ),
       elevation: 12,
       constraints: const BoxConstraints(minWidth: 220, maxWidth: 280),
@@ -66,7 +66,7 @@ class OmiContextMenu {
                 gradient: LinearGradient(
                   colors: [
                     Colors.transparent,
-                    ResponsiveHelper.backgroundTertiary.withOpacity(0.5),
+                    ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.5),
                     Colors.transparent,
                   ],
                 ),

@@ -46,8 +46,8 @@ class _TestPromptsPageState extends State<TestPromptsPage> {
               decoration: InputDecoration(
                 labelText: context.l10n.prompt,
                 labelStyle: const TextStyle(color: Colors.white),
-                border: OutlineInputBorder(borderSide: BorderSide.none),
-                contentPadding: EdgeInsets.all(0),
+                border: const OutlineInputBorder(borderSide: BorderSide.none),
+                contentPadding: const EdgeInsets.all(0),
               ),
               keyboardType: TextInputType.multiline,
               maxLines: 10,

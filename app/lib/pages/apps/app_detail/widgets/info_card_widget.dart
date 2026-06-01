@@ -35,7 +35,7 @@ class InfoCardWidget extends StatelessWidget {
           bottom: 6,
         ),
         decoration: BoxDecoration(
-          color: const Color(0xFF1F1F25).withOpacity(0.8),
+          color: const Color(0xFF1F1F25).withValues(alpha: 0.8),
           borderRadius: BorderRadius.circular(16.0),
         ),
         child: Column(
@@ -74,7 +74,7 @@ class InfoCardWidget extends StatelessWidget {
                       (chip) => Chip(
                         label: Text(chip, style: const TextStyle(color: Colors.white)),
                         backgroundColor: Colors.transparent,
-                        shape: StadiumBorder(side: BorderSide(color: Color(0xFF35343B))),
+                        shape: const StadiumBorder(side: BorderSide(color: Color(0xFF35343B))),
                       ),
                     )
                     .toList(),
@@ -90,7 +90,7 @@ class InfoCardWidget extends StatelessWidget {
                       (chip) => Chip(
                         label: Text(chip, style: const TextStyle(color: Colors.white)),
                         backgroundColor: Colors.transparent,
-                        shape: StadiumBorder(side: BorderSide(color: Color(0xFF35343B))),
+                        shape: const StadiumBorder(side: BorderSide(color: Color(0xFF35343B))),
                       ),
                     )
                     .toList(),

@@ -78,7 +78,7 @@ class _ReviewsListPageState extends State<ReviewsListPage> {
                     hintText: context.l10n.writeYourReply,
                     hintStyle: TextStyle(color: Colors.grey.shade500),
                     filled: true,
-                    fillColor: Colors.black.withOpacity(0.3),
+                    fillColor: Colors.black.withValues(alpha: 0.3),
                     border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide.none),
                     contentPadding: const EdgeInsets.all(12),
                   ),
@@ -182,7 +182,7 @@ class _ReviewsListPageState extends State<ReviewsListPage> {
           width: 36,
           height: 36,
           margin: const EdgeInsets.all(8),
-          decoration: BoxDecoration(color: Colors.grey.withOpacity(0.3), shape: BoxShape.circle),
+          decoration: BoxDecoration(color: Colors.grey.withValues(alpha: 0.3), shape: BoxShape.circle),
           child: IconButton(
             padding: EdgeInsets.zero,
             onPressed: () => Navigator.pop(context),
@@ -244,7 +244,7 @@ class _ReviewsListPageState extends State<ReviewsListPage> {
                       padding: const EdgeInsets.only(top: 60.0),
                       child: Column(
                         children: [
-                          Icon(FontAwesomeIcons.star, size: 48, color: Colors.grey.shade600),
+                          FaIcon(FontAwesomeIcons.star, size: 48, color: Colors.grey.shade600),
                           const SizedBox(height: 16),
                           Text(
                             context.l10n.noReviewsFound,
@@ -277,7 +277,7 @@ class _ReviewsListPageState extends State<ReviewsListPage> {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         decoration: BoxDecoration(
-          color: selected ? Colors.deepPurple : Colors.grey.shade800.withOpacity(0.5),
+          color: selected ? Colors.deepPurple : Colors.grey.shade800.withValues(alpha: 0.5),
           borderRadius: BorderRadius.circular(20),
           border: Border.all(color: selected ? Colors.deepPurple : Colors.grey.shade700, width: 1),
         ),
@@ -301,7 +301,7 @@ class _ReviewsListPageState extends State<ReviewsListPage> {
     return Container(
       padding: const EdgeInsets.all(16.0),
       decoration: BoxDecoration(
-        color: const Color(0xFF1F1F25).withOpacity(0.8),
+        color: const Color(0xFF1F1F25).withValues(alpha: 0.8),
         borderRadius: BorderRadius.circular(16.0),
       ),
       child: Column(
@@ -363,7 +363,7 @@ class _ReviewsListPageState extends State<ReviewsListPage> {
                       children: List.generate(5, (index) {
                         return Padding(
                           padding: const EdgeInsets.only(right: 4),
-                          child: Icon(
+                          child: FaIcon(
                             FontAwesomeIcons.solidStar,
                             size: 14,
                             color: index < review.score.round() ? Colors.deepPurple : Colors.grey.shade700,
@@ -386,7 +386,7 @@ class _ReviewsListPageState extends State<ReviewsListPage> {
             const SizedBox(height: 16),
             Container(
               padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(color: Colors.black.withOpacity(0.3), borderRadius: BorderRadius.circular(12)),
+              decoration: BoxDecoration(color: Colors.black.withValues(alpha: 0.3), borderRadius: BorderRadius.circular(12)),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -421,7 +421,7 @@ class _ReviewsListPageState extends State<ReviewsListPage> {
               alignment: Alignment.centerRight,
               child: TextButton.icon(
                 onPressed: () => _showReplyDialog(review),
-                icon: Icon(
+                icon: FaIcon(
                   review.response.isNotEmpty ? FontAwesomeIcons.pencil : FontAwesomeIcons.reply,
                   size: 12,
                   color: Colors.deepPurple,

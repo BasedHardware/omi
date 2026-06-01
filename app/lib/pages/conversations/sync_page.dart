@@ -20,7 +20,7 @@ import 'private_cloud_sync_page.dart';
 import 'synced_conversations_page.dart';
 import 'wal_item_detail/wal_item_detail_page.dart';
 
-Widget _buildFaIcon(IconData icon, {double size = 18, Color color = const Color(0xFF8E8E93)}) {
+Widget _buildFaIcon(FaIconData icon, {double size = 18, Color color = const Color(0xFF8E8E93)}) {
   return Padding(
     padding: const EdgeInsets.only(left: 2, top: 1),
     child: FaIcon(icon, size: size, color: color),
@@ -235,7 +235,7 @@ class _SyncPageState extends State<SyncPage> {
   }
 
   Widget _buildSettingsItem({
-    required IconData icon,
+    required FaIconData icon,
     required String title,
     String? status,
     VoidCallback? onTap,
@@ -730,7 +730,7 @@ class _SyncPageState extends State<SyncPage> {
 
     // Build a single flattened list with source headers interleaved
     final List<_PendingListItem> items = [];
-    void addSection(String label, IconData icon, Color color, List<Wal> wals) {
+    void addSection(String label, FaIconData icon, Color color, List<Wal> wals) {
       items.add(_PendingListItem.header(label, icon, color, wals.length));
       for (final wal in wals) {
         items.add(_PendingListItem.wal(wal));
@@ -1020,7 +1020,7 @@ class WalItem extends ListItem {
 class _PendingListItem {
   final bool isHeader;
   final String? label;
-  final IconData? icon;
+  final FaIconData? icon;
   final Color? color;
   final int? count;
   final Wal? wal;
@@ -1132,7 +1132,7 @@ class _ManageStorageSheet extends StatelessWidget {
 }
 
 class _StorageRow extends StatelessWidget {
-  final IconData icon;
+  final FaIconData icon;
   final Color iconColor;
   final String title;
   final String subtitle;

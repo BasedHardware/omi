@@ -37,7 +37,7 @@ class AudioDownloadProgressSheet extends StatefulWidget {
       isDismissible: state == AudioDownloadState.error,
       enableDrag: state == AudioDownloadState.error,
       backgroundColor: Colors.transparent,
-      barrierColor: Colors.black.withOpacity(0.5),
+      barrierColor: Colors.black.withValues(alpha: 0.5),
       builder: (ctx) => AudioDownloadProgressSheet(
         state: state,
         progress: progress,
@@ -86,7 +86,7 @@ class _AudioDownloadProgressSheetState extends State<AudioDownloadProgressSheet>
         decoration: BoxDecoration(
           color: const Color(0xFF1C1C1E),
           borderRadius: BorderRadius.circular(20),
-          boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.4), blurRadius: 30, offset: const Offset(0, 10))],
+          boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.4), blurRadius: 30, offset: const Offset(0, 10))],
         ),
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
@@ -115,7 +115,7 @@ class _AudioDownloadProgressSheetState extends State<AudioDownloadProgressSheet>
             child: Container(
               width: 64,
               height: 64,
-              decoration: BoxDecoration(color: Colors.green.withOpacity(0.15), shape: BoxShape.circle),
+              decoration: BoxDecoration(color: Colors.green.withValues(alpha: 0.15), shape: BoxShape.circle),
               child: const Icon(Icons.check, size: 36, color: Colors.green),
             ),
           );
@@ -127,7 +127,7 @@ class _AudioDownloadProgressSheetState extends State<AudioDownloadProgressSheet>
       return Container(
         width: 64,
         height: 64,
-        decoration: BoxDecoration(color: Colors.red.withOpacity(0.15), shape: BoxShape.circle),
+        decoration: BoxDecoration(color: Colors.red.withValues(alpha: 0.15), shape: BoxShape.circle),
         child: const Icon(Icons.error_outline, size: 36, color: Colors.red),
       );
     }

@@ -257,9 +257,9 @@ class _ActionItemFormSheetState extends State<ActionItemFormSheet> {
     } else {
       // Show short form: "Sat, Jan 31" or "Sat, Jan 31, 2027" if different year
       if (date.year == now.year) {
-        dateStr = DateFormat.E(locale).format(date) + ', ' + DateFormat.MMMd(locale).format(date);
+        dateStr = '${DateFormat.E(locale).format(date)}, ${DateFormat.MMMd(locale).format(date)}';
       } else {
-        dateStr = DateFormat.E(locale).format(date) + ', ' + DateFormat.yMMMd(locale).format(date);
+        dateStr = '${DateFormat.E(locale).format(date)}, ${DateFormat.yMMMd(locale).format(date)}';
       }
     }
 
@@ -425,7 +425,7 @@ class _ActionItemFormSheetState extends State<ActionItemFormSheet> {
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                   decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.05),
+                    color: Colors.white.withValues(alpha: 0.05),
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Row(

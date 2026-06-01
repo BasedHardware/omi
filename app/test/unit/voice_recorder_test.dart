@@ -328,7 +328,7 @@ void main() {
     });
 
     test('WAV slightly over threshold splits into 2 chunks', () async {
-      final pcmLength = VoiceRecorderProvider.maxChunkPcmBytes + 1000;
+      const pcmLength = VoiceRecorderProvider.maxChunkPcmBytes + 1000;
       final wavFile = await createWavFile(pcmLength);
       final chunks = await VoiceRecorderProvider.splitWavFileIfNeeded(wavFile, 16000, 1);
 
@@ -363,7 +363,7 @@ void main() {
     test('PCM data continuity across chunks preserves original data', () async {
       // Use small data to test continuity precisely (can't use maxChunkPcmBytes — too slow)
       // We test the production method with a file just over 10MB
-      final pcmLength = VoiceRecorderProvider.maxChunkPcmBytes + 500;
+      const pcmLength = VoiceRecorderProvider.maxChunkPcmBytes + 500;
       final wavFile = await createWavFile(pcmLength);
 
       final originalBytes = await wavFile.readAsBytes();
@@ -395,7 +395,7 @@ void main() {
     });
 
     test('total PCM bytes across all chunks matches original', () async {
-      final pcmLength = VoiceRecorderProvider.maxChunkPcmBytes * 3 + 50000;
+      const pcmLength = VoiceRecorderProvider.maxChunkPcmBytes * 3 + 50000;
       final wavFile = await createWavFile(pcmLength);
       final chunks = await VoiceRecorderProvider.splitWavFileIfNeeded(wavFile, 16000, 1);
 

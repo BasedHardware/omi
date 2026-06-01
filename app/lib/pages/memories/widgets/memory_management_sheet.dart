@@ -17,9 +17,9 @@ class MemoryManagementSheet extends StatelessWidget {
     return Consumer<MemoriesProvider>(
       builder: (context, provider, child) {
         return Container(
-          decoration: BoxDecoration(
+          decoration: const BoxDecoration(
             color: AppStyles.backgroundSecondary,
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+            borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
           ),
           child: SafeArea(
             child: Column(
@@ -156,7 +156,7 @@ class MemoryManagementSheet extends StatelessWidget {
             context,
             context.l10n.makeAllPrivate,
             Icons.lock_outline,
-            Colors.white.withOpacity(0.1),
+            Colors.white.withValues(alpha: 0.1),
             () => _makeAllMemoriesPrivate(context),
           ),
           const SizedBox(height: 12),
@@ -164,7 +164,7 @@ class MemoryManagementSheet extends StatelessWidget {
             context,
             context.l10n.makeAllPublic,
             Icons.public,
-            Colors.white.withOpacity(0.1),
+            Colors.white.withValues(alpha: 0.1),
             () => _makeAllMemoriesPublic(context),
           ),
           const SizedBox(height: 24),
@@ -174,7 +174,7 @@ class MemoryManagementSheet extends StatelessWidget {
             context,
             context.l10n.deleteAllMemories,
             Icons.delete_outline,
-            Colors.red.withOpacity(0.1),
+            Colors.red.withValues(alpha: 0.1),
             () => _confirmDeleteAllMemories(context),
             textColor: Colors.red,
             iconColor: Colors.red,

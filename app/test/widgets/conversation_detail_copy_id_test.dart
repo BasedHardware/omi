@@ -51,7 +51,7 @@ class CopyConversationIdHarness extends StatelessWidget {
                 Clipboard.setData(ClipboardData(text: conversationId));
                 ScaffoldMessenger.of(innerContext).showSnackBar(
                   SnackBar(
-                    content: Text(AppLocalizations.of(innerContext)!.conversationIdCopied),
+                    content: Text(AppLocalizations.of(innerContext).conversationIdCopied),
                   ),
                 );
                 HapticFeedback.lightImpact();
@@ -73,7 +73,7 @@ void main() {
         buildTestApp(
           Builder(
             builder: (context) {
-              l10n = AppLocalizations.of(context)!;
+              l10n = AppLocalizations.of(context);
               return const SizedBox.shrink();
             },
           ),
@@ -88,7 +88,7 @@ void main() {
         buildTestApp(
           Builder(
             builder: (context) {
-              l10n = AppLocalizations.of(context)!;
+              l10n = AppLocalizations.of(context);
               return const SizedBox.shrink();
             },
           ),

@@ -52,7 +52,7 @@ class _CreateTemplateBottomSheetState extends State<CreateTemplateBottomSheet> {
 
     // Draw white background
     final bgPaint = Paint()..color = Colors.white;
-    canvas.drawRect(Rect.fromLTWH(0, 0, size, size), bgPaint);
+    canvas.drawRect(const Rect.fromLTWH(0, 0, size, size), bgPaint);
 
     // Draw emoji text
     final textPainter = TextPainter(
@@ -401,7 +401,7 @@ class _CreateTemplateBottomSheetState extends State<CreateTemplateBottomSheet> {
                                         _isPublic = value;
                                       });
                                     },
-                              activeColor: const Color(0xFF6366F1),
+                              activeThumbColor: const Color(0xFF6366F1),
                             ),
                           ],
                         ),

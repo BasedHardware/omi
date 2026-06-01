@@ -10,12 +10,12 @@ class CustomRefreshIndicator extends StatefulWidget {
   final double minDragStartThreshold;
 
   const CustomRefreshIndicator({
-    Key? key,
+    super.key,
     required this.child,
     required this.onRefresh,
     this.triggerDistance = 120.0,
     this.minDragStartThreshold = 60.0,
-  }) : super(key: key);
+  });
 
   @override
   State<CustomRefreshIndicator> createState() => _CustomRefreshIndicatorState();
@@ -182,7 +182,7 @@ class _CustomRefreshIndicatorState extends State<CustomRefreshIndicator> with Ti
                   gradient: LinearGradient(
                     begin: Alignment.topCenter,
                     end: Alignment.bottomCenter,
-                    colors: [Colors.black.withOpacity(0.3), Colors.transparent],
+                    colors: [Colors.black.withValues(alpha: 0.3), Colors.transparent],
                   ),
                 ),
                 child: Padding(
@@ -216,10 +216,10 @@ class CircularDotsIndicator extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     final center = Offset(size.width / 2, size.height / 2);
     final radius = size.width / 2 - 12;
-    final dotRadius = 3.0;
+    const dotRadius = 3.0;
 
     // Calculate how many dots should be filled
-    final totalDots = 8;
+    const totalDots = 8;
     final filledDots = isRefreshing ? totalDots : (progress * totalDots).round().clamp(0, totalDots);
 
     // Add rotation when refreshing
@@ -245,12 +245,12 @@ class CircularDotsIndicator extends CustomPainter {
 
         final paint = Paint()
           ..style = PaintingStyle.fill
-          ..color = Colors.white.withOpacity(opacity);
+          ..color = Colors.white.withValues(alpha: opacity);
 
         // Add enhanced shadow for spinning dots
         final shadowPaint = Paint()
           ..style = PaintingStyle.fill
-          ..color = Colors.white.withOpacity(opacity * 0.3)
+          ..color = Colors.white.withValues(alpha: opacity * 0.3)
           ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 3.0);
         canvas.drawCircle(dotCenter, (dotRadius + 1) * sizeFactor, shadowPaint);
 
@@ -259,13 +259,13 @@ class CircularDotsIndicator extends CustomPainter {
         // Static dots during pull-down
         final paint = Paint()
           ..style = PaintingStyle.fill
-          ..color = isFilled ? Colors.white : Colors.white.withOpacity(0.3);
+          ..color = isFilled ? Colors.white : Colors.white.withValues(alpha: 0.3);
 
         // Add shadow for filled dots
         if (isFilled) {
           final shadowPaint = Paint()
             ..style = PaintingStyle.fill
-            ..color = Colors.white.withOpacity(0.3)
+            ..color = Colors.white.withValues(alpha: 0.3)
             ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 2.0);
           canvas.drawCircle(dotCenter, dotRadius + 1, shadowPaint);
         }

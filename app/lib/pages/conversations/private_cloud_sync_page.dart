@@ -75,7 +75,7 @@ class _PrivateCloudSyncPageState extends State<PrivateCloudSyncPage> {
     );
   }
 
-  Widget _buildFaIcon(IconData icon, {double size = 18, Color color = const Color(0xFF8E8E93)}) {
+  Widget _buildFaIcon(FaIconData icon, {double size = 18, Color color = const Color(0xFF8E8E93)}) {
     return Padding(
       padding: const EdgeInsets.only(left: 2, top: 1),
       child: FaIcon(icon, size: size, color: color),
@@ -137,7 +137,7 @@ class _PrivateCloudSyncPageState extends State<PrivateCloudSyncPage> {
                                 Container(
                                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                                   decoration: BoxDecoration(
-                                    color: isEnabled ? Colors.green.withOpacity(0.2) : const Color(0xFF2A2A2E),
+                                    color: isEnabled ? Colors.green.withValues(alpha: 0.2) : const Color(0xFF2A2A2E),
                                     borderRadius: BorderRadius.circular(100),
                                   ),
                                   child: Text(

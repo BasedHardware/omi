@@ -146,12 +146,10 @@ class _ScoreWidgetState extends State<ScoreWidget> with SingleTickerProviderStat
       for (var conv in allConversations) {
         final convDate = conv.createdAt;
         if (convDate.isAfter(today) && convDate.isBefore(todayEnd)) {
-          if (conv.structured?.actionItems != null) {
-            for (var item in conv.structured!.actionItems) {
-              todayTasksTotal++;
-              if (item.completed) {
-                todayTasksDone++;
-              }
+          for (var item in conv.structured.actionItems) {
+            todayTasksTotal++;
+            if (item.completed) {
+              todayTasksDone++;
             }
           }
         }
@@ -197,12 +195,10 @@ class _ScoreWidgetState extends State<ScoreWidget> with SingleTickerProviderStat
         for (var conv in allConversations) {
           final convDate = conv.createdAt;
           if (convDate.isAfter(dayStart) && convDate.isBefore(dayEnd)) {
-            if (conv.structured?.actionItems != null) {
-              for (var item in conv.structured!.actionItems) {
-                tasksTotal++;
-                if (item.completed) {
-                  tasksDone++;
-                }
+            for (var item in conv.structured.actionItems) {
+              tasksTotal++;
+              if (item.completed) {
+                tasksDone++;
               }
             }
           }
@@ -410,14 +406,14 @@ class _ScoreWidgetState extends State<ScoreWidget> with SingleTickerProviderStat
                               style: TextStyle(
                                 fontSize: 13,
                                 fontWeight: FontWeight.w500,
-                                color: Colors.white.withOpacity(0.6),
+                                color: Colors.white.withValues(alpha: 0.6),
                               ),
                             ),
                             const SizedBox(width: 6),
                             Container(
                               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                               decoration: BoxDecoration(
-                                color: statusColor.withOpacity(0.2),
+                                color: statusColor.withValues(alpha: 0.2),
                                 borderRadius: BorderRadius.circular(4),
                               ),
                               child: Text(
@@ -430,7 +426,7 @@ class _ScoreWidgetState extends State<ScoreWidget> with SingleTickerProviderStat
                         const SizedBox(height: 4),
                         Text(
                           quickTip,
-                          style: TextStyle(fontSize: 13, color: Colors.white.withOpacity(0.5)),
+                          style: TextStyle(fontSize: 13, color: Colors.white.withValues(alpha: 0.5)),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
@@ -441,7 +437,7 @@ class _ScoreWidgetState extends State<ScoreWidget> with SingleTickerProviderStat
                   AnimatedRotation(
                     turns: _isExpanded ? 0.5 : 0,
                     duration: const Duration(milliseconds: 200),
-                    child: Icon(Icons.keyboard_arrow_down_rounded, color: Colors.white.withOpacity(0.4), size: 24),
+                    child: Icon(Icons.keyboard_arrow_down_rounded, color: Colors.white.withValues(alpha: 0.4), size: 24),
                   ),
                 ],
               ),
@@ -463,7 +459,7 @@ class _ScoreWidgetState extends State<ScoreWidget> with SingleTickerProviderStat
                           style: TextStyle(
                             fontSize: 12,
                             fontWeight: FontWeight.w500,
-                            color: Colors.white.withOpacity(0.5),
+                            color: Colors.white.withValues(alpha: 0.5),
                           ),
                         ),
                         if (_history.length >= 2) _buildTrendIndicator(),
@@ -495,7 +491,7 @@ class _ScoreWidgetState extends State<ScoreWidget> with SingleTickerProviderStat
                           style: TextStyle(
                             fontSize: 12,
                             fontWeight: FontWeight.w500,
-                            color: Colors.white.withOpacity(0.5),
+                            color: Colors.white.withValues(alpha: 0.5),
                           ),
                         ),
                         const SizedBox(height: 12),
@@ -529,7 +525,7 @@ class _ScoreWidgetState extends State<ScoreWidget> with SingleTickerProviderStat
                     margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
-                      color: const Color(0xFF35343B).withOpacity(0.5),
+                      color: const Color(0xFF35343B).withValues(alpha: 0.5),
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: Column(
@@ -537,14 +533,14 @@ class _ScoreWidgetState extends State<ScoreWidget> with SingleTickerProviderStat
                       children: [
                         Row(
                           children: [
-                            Icon(Icons.tips_and_updates_outlined, size: 14, color: Colors.white.withOpacity(0.5)),
+                            Icon(Icons.tips_and_updates_outlined, size: 14, color: Colors.white.withValues(alpha: 0.5)),
                             const SizedBox(width: 6),
                             Text(
                               'How to improve',
                               style: TextStyle(
                                 fontSize: 11,
                                 fontWeight: FontWeight.w600,
-                                color: Colors.white.withOpacity(0.5),
+                                color: Colors.white.withValues(alpha: 0.5),
                               ),
                             ),
                           ],
@@ -567,11 +563,11 @@ class _ScoreWidgetState extends State<ScoreWidget> with SingleTickerProviderStat
                         child: Row(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            Icon(Icons.info_outline_rounded, size: 14, color: Colors.white.withOpacity(0.4)),
+                            Icon(Icons.info_outline_rounded, size: 14, color: Colors.white.withValues(alpha: 0.4)),
                             const SizedBox(width: 6),
                             Text(
                               'How is this calculated?',
-                              style: TextStyle(fontSize: 12, color: Colors.white.withOpacity(0.4)),
+                              style: TextStyle(fontSize: 12, color: Colors.white.withValues(alpha: 0.4)),
                             ),
                           ],
                         ),
@@ -669,7 +665,7 @@ class _ScoreWidgetState extends State<ScoreWidget> with SingleTickerProviderStat
                     style: TextStyle(
                       fontSize: 10,
                       fontWeight: point.isToday ? FontWeight.w600 : FontWeight.w400,
-                      color: point.isToday ? Colors.white.withOpacity(0.8) : Colors.white.withOpacity(0.4),
+                      color: point.isToday ? Colors.white.withValues(alpha: 0.8) : Colors.white.withValues(alpha: 0.4),
                     ),
                   ),
                 ],
@@ -690,11 +686,11 @@ class _ScoreWidgetState extends State<ScoreWidget> with SingleTickerProviderStat
       children: [
         Row(
           children: [
-            Icon(icon, size: 14, color: Colors.white.withOpacity(0.6)),
+            Icon(icon, size: 14, color: Colors.white.withValues(alpha: 0.6)),
             const SizedBox(width: 6),
             Text(
               label,
-              style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: Colors.white.withOpacity(0.8)),
+              style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: Colors.white.withValues(alpha: 0.8)),
             ),
             const Spacer(),
             Text(
@@ -717,7 +713,7 @@ class _ScoreWidgetState extends State<ScoreWidget> with SingleTickerProviderStat
           ),
         ),
         const SizedBox(height: 4),
-        Text(detail, style: TextStyle(fontSize: 10, color: Colors.white.withOpacity(0.4))),
+        Text(detail, style: TextStyle(fontSize: 10, color: Colors.white.withValues(alpha: 0.4))),
       ],
     );
   }
@@ -745,7 +741,7 @@ class _ScoreWidgetState extends State<ScoreWidget> with SingleTickerProviderStat
           .map(
             (tip) => Padding(
               padding: const EdgeInsets.only(bottom: 4),
-              child: Text(tip, style: TextStyle(fontSize: 12, color: Colors.white.withOpacity(0.7), height: 1.4)),
+              child: Text(tip, style: TextStyle(fontSize: 12, color: Colors.white.withValues(alpha: 0.7), height: 1.4)),
             ),
           )
           .toList(),
@@ -759,9 +755,9 @@ class _ScoreWidgetState extends State<ScoreWidget> with SingleTickerProviderStat
         return AlertDialog(
           backgroundColor: const Color(0xFF1F1F25),
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          title: Text(
+          title: const Text(
             'How Grade Works',
-            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600, color: Colors.white),
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600, color: Colors.white),
           ),
           content: Column(
             mainAxisSize: MainAxisSize.min,
@@ -794,10 +790,10 @@ class _ScoreWidgetState extends State<ScoreWidget> with SingleTickerProviderStat
       children: [
         Text(
           title,
-          style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Colors.white.withOpacity(0.9)),
+          style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Colors.white.withValues(alpha: 0.9)),
         ),
         const SizedBox(height: 4),
-        Text(description, style: TextStyle(fontSize: 13, color: Colors.white.withOpacity(0.6), height: 1.4)),
+        Text(description, style: TextStyle(fontSize: 13, color: Colors.white.withValues(alpha: 0.6), height: 1.4)),
       ],
     );
   }
@@ -831,7 +827,7 @@ class _LineChartPainter extends CustomPainter {
     double getY(double rating) {
       // Invert Y because canvas Y increases downward
       // Map 0-5 to chartHeight-10 to 10 (with some padding)
-      final padding = 12.0;
+      const padding = 12.0;
       final availableHeight = chartHeight - padding * 2;
       return padding + (1 - rating / 5) * availableHeight;
     }
@@ -853,7 +849,7 @@ class _LineChartPainter extends CustomPainter {
     // Draw connecting lines between valid points
     if (validPoints.length >= 2) {
       final linePaint = Paint()
-        ..color = Colors.white.withOpacity(0.3)
+        ..color = Colors.white.withValues(alpha: 0.3)
         ..strokeWidth = 2
         ..style = PaintingStyle.stroke
         ..strokeCap = StrokeCap.round;
@@ -880,7 +876,7 @@ class _LineChartPainter extends CustomPainter {
         // Outer glow for today
         if (point.isToday) {
           final glowPaint = Paint()
-            ..color = color.withOpacity(0.3)
+            ..color = color.withValues(alpha: 0.3)
             ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 6);
           canvas.drawCircle(Offset(x, y), 8, glowPaint);
         }
@@ -905,7 +901,7 @@ class _LineChartPainter extends CustomPainter {
             style: TextStyle(
               fontSize: 10,
               fontWeight: FontWeight.w600,
-              color: point.isToday ? color : Colors.white.withOpacity(0.6),
+              color: point.isToday ? color : Colors.white.withValues(alpha: 0.6),
             ),
           ),
           textDirection: ui.TextDirection.ltr,

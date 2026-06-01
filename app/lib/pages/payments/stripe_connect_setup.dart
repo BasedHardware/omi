@@ -117,7 +117,7 @@ class _StripeConnectSetupState extends State<StripeConnectSetup> with SingleTick
                                       const SizedBox(height: 8),
                                       ElevatedButton(
                                         style: ElevatedButton.styleFrom(
-                                          backgroundColor: Colors.white.withOpacity(0.1),
+                                          backgroundColor: Colors.white.withValues(alpha: 0.1),
                                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                                           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                                         ),
@@ -171,7 +171,7 @@ class _StripeConnectSetupState extends State<StripeConnectSetup> with SingleTick
                                 ? Container(
                                     padding: const EdgeInsets.all(12),
                                     decoration: BoxDecoration(
-                                      color: Colors.red.withOpacity(0.1),
+                                      color: Colors.red.withValues(alpha: 0.1),
                                       borderRadius: BorderRadius.circular(8),
                                     ),
                                     child: Row(
@@ -247,7 +247,7 @@ class _StripeConnectSetupState extends State<StripeConnectSetup> with SingleTick
                                     border: Border.all(color: const Color(0xFF635BFF), width: 3),
                                     boxShadow: [
                                       BoxShadow(
-                                        color: const Color(0xFF635BFF).withOpacity(0.5),
+                                        color: const Color(0xFF635BFF).withValues(alpha: 0.5),
                                         blurRadius: 20 * _pulseController.value,
                                         spreadRadius: 10 * _pulseController.value,
                                       ),
@@ -303,21 +303,21 @@ class _StripeConnectSetupState extends State<StripeConnectSetup> with SingleTick
                               decoration: BoxDecoration(
                                 gradient: LinearGradient(
                                   colors: [
-                                    const Color(0xFF635BFF).withOpacity(0.15),
-                                    Colors.purple.shade900.withOpacity(0.1),
+                                    const Color(0xFF635BFF).withValues(alpha: 0.15),
+                                    Colors.purple.shade900.withValues(alpha: 0.1),
                                   ],
                                   begin: Alignment.topLeft,
                                   end: Alignment.bottomRight,
                                 ),
                                 borderRadius: BorderRadius.circular(20),
-                                border: Border.all(color: const Color(0xFF635BFF).withOpacity(0.3), width: 1),
+                                border: Border.all(color: const Color(0xFF635BFF).withValues(alpha: 0.3), width: 1),
                               ),
                               child: Column(
                                 children: [
                                   Container(
                                     padding: const EdgeInsets.all(16),
                                     decoration: BoxDecoration(
-                                      color: const Color(0xFF635BFF).withOpacity(0.1),
+                                      color: const Color(0xFF635BFF).withValues(alpha: 0.1),
                                       shape: BoxShape.circle,
                                     ),
                                     child: const Icon(
@@ -396,7 +396,7 @@ class _StripeConnectSetupState extends State<StripeConnectSetup> with SingleTick
         Container(
           padding: const EdgeInsets.all(8),
           decoration: BoxDecoration(
-            color: const Color(0xFF635BFF).withOpacity(0.1),
+            color: const Color(0xFF635BFF).withValues(alpha: 0.1),
             borderRadius: BorderRadius.circular(8),
           ),
           child: Icon(icon, color: const Color(0xFF635BFF), size: 24),

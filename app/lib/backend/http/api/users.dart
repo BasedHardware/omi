@@ -142,7 +142,7 @@ Future<bool> deletePermissionAndRecordings() async {
   return response.statusCode == 200;
 }
 
-/**/
+/// /
 
 Future<bool> setPrivateCloudSyncEnabled(bool value) async {
   var response = await makeApiCall(

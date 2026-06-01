@@ -71,7 +71,7 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
     super.dispose();
   }
 
-  IconData _getBatteryIcon(int batteryLevel) {
+  FaIconData _getBatteryIcon(int batteryLevel) {
     if (batteryLevel > 75) {
       return FontAwesomeIcons.batteryFull;
     } else if (batteryLevel > 50) {
@@ -101,7 +101,7 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
   }
 
   Widget _buildProfileStyleItem({
-    required IconData icon,
+    required FaIconData icon,
     required String title,
     String? chipValue,
     String? copyValue,
@@ -223,7 +223,7 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
             onTap: provider.connectedDevice != null
                 ? () {
                     // Route to OmiGlass OTA page for openglass devices
-                    final deviceName = provider.connectedDevice?.name?.toLowerCase() ?? '';
+                    final deviceName = provider.connectedDevice?.name.toLowerCase() ?? '';
                     final isOpenGlass = provider.connectedDevice?.type == DeviceType.openglass ||
                         deviceName.contains('openglass') ||
                         deviceName.contains('omiglass') ||

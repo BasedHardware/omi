@@ -260,7 +260,7 @@ class ChatAppsDropdownWidget extends StatelessWidget {
             ],
           ),
         );
-      }).toList(),
+      }),
     ];
   }
 }

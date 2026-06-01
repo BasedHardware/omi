@@ -87,7 +87,7 @@ class _AuthComponentState extends State<AuthComponent> {
                           child: Row(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              const Icon(FontAwesomeIcons.apple, size: 24),
+                              const FaIcon(FontAwesomeIcons.apple, size: 24),
                               const SizedBox(width: 8),
                               Text(
                                 context.l10n.signInWithApple,
@@ -121,7 +121,7 @@ class _AuthComponentState extends State<AuthComponent> {
                         child: Row(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            const Icon(FontAwesomeIcons.google, size: 20),
+                            const FaIcon(FontAwesomeIcons.google, size: 20),
                             const SizedBox(width: 8),
                             Text(
                               context.l10n.signInWithGoogle,
@@ -138,7 +138,7 @@ class _AuthComponentState extends State<AuthComponent> {
                     RichText(
                       textAlign: TextAlign.center,
                       text: TextSpan(
-                        style: TextStyle(color: Colors.white.withOpacity(0.6), fontSize: 11, fontFamily: 'Manrope'),
+                        style: TextStyle(color: Colors.white.withValues(alpha: 0.6), fontSize: 11, fontFamily: 'Manrope'),
                         children: [
                           TextSpan(text: context.l10n.byContinuingAgree),
                           TextSpan(

@@ -12,7 +12,7 @@ import 'package:omi/utils/l10n_extensions.dart';
 class ApiKeysWidget extends StatefulWidget {
   final String appId;
 
-  const ApiKeysWidget({Key? key, required this.appId}) : super(key: key);
+  const ApiKeysWidget({super.key, required this.appId});
 
   @override
   State<ApiKeysWidget> createState() => _ApiKeysWidgetState();
@@ -186,8 +186,8 @@ class _ApiKeysWidgetState extends State<ApiKeysWidget> {
                     backgroundColor: Theme.of(context).colorScheme.secondary,
                     foregroundColor: Colors.white,
                     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                    disabledBackgroundColor: Theme.of(context).colorScheme.secondary.withOpacity(0.7),
-                    disabledForegroundColor: Colors.white.withOpacity(0.7),
+                    disabledBackgroundColor: Theme.of(context).colorScheme.secondary.withValues(alpha: 0.7),
+                    disabledForegroundColor: Colors.white.withValues(alpha: 0.7),
                   ),
                 ),
               ],
@@ -280,16 +280,16 @@ class _ApiKeysWidgetState extends State<ApiKeysWidget> {
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
       itemCount: provider.apiKeys.length,
-      separatorBuilder: (context, index) => SizedBox(height: 12),
+      separatorBuilder: (context, index) => const SizedBox(height: 12),
       itemBuilder: (context, index) {
         final key = provider.apiKeys[index];
         return Container(
-          decoration: BoxDecoration(color: Color(0xFF35343B), borderRadius: BorderRadius.circular(10.0)),
+          decoration: BoxDecoration(color: const Color(0xFF35343B), borderRadius: BorderRadius.circular(10.0)),
           child: ListTile(
             contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
             title: Text(key.label, style: const TextStyle(fontWeight: FontWeight.bold)),
             subtitle: Text(
-              '${DateFormat('MMM d, yyyy HH:mm', Localizations.localeOf(context).languageCode).format(key.createdAt)}',
+              DateFormat('MMM d, yyyy HH:mm', Localizations.localeOf(context).languageCode).format(key.createdAt),
               style: Theme.of(context).textTheme.labelMedium,
             ),
             trailing: SizedBox(

@@ -705,7 +705,7 @@ void main() {
       );
 
       await tester.pumpWidget(
-        buildTestApp(FairUseSuccessHarness(
+        buildTestApp(const FairUseSuccessHarness(
           status: {
             'stage': 'warning',
             'case_ref': 'FU-99887',

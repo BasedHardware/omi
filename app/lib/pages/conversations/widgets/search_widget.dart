@@ -228,7 +228,7 @@ class _SearchWidgetState extends State<SearchWidget> {
                 ),
                 child: IconButton(
                   padding: EdgeInsets.zero,
-                  icon: Icon(
+                  icon: FaIcon(
                     convoProvider.selectedDate != null ? FontAwesomeIcons.calendarDay : FontAwesomeIcons.calendarDays,
                     size: 18,
                     color: convoProvider.selectedDate != null ? Colors.white : Colors.white70,

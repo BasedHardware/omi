@@ -27,13 +27,13 @@ class LanguageSelectorWidget extends StatefulWidget {
   final Function(String?, String?) onLanguageSelected;
 
   const LanguageSelectorWidget({
-    Key? key,
+    super.key,
     required this.availableLanguages,
     this.selectedLanguage,
     this.selectedLanguageName,
     required this.languageScrollController,
     required this.onLanguageSelected,
-  }) : super(key: key);
+  });
 
   @override
   State<LanguageSelectorWidget> createState() => _LanguageSelectorWidgetState();
@@ -156,7 +156,7 @@ class _LanguageSelectorWidgetState extends State<LanguageSelectorWidget> {
                         title: Text(language.key, style: const TextStyle(color: Colors.white)),
                         trailing: isSelected ? const Icon(Icons.check_circle, color: Colors.deepPurple) : null,
                         selected: isSelected,
-                        selectedTileColor: Colors.deepPurple.withOpacity(0.2),
+                        selectedTileColor: Colors.deepPurple.withValues(alpha: 0.2),
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                         onTap: () {
                           setState(() {

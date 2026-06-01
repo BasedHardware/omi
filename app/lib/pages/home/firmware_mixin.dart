@@ -36,7 +36,7 @@ mixin FirmwareMixin<T extends StatefulWidget> on State<T> {
   /// Process ZIP file and return firmware image list
   Future<List<mcumgr.Image>> processZipFile(Uint8List zipFileData) async {
     // Create temporary directory
-    final prefix = 'firmware_${Uuid().v4()}';
+    final prefix = 'firmware_${const Uuid().v4()}';
     final systemTempDir = await getTemporaryDirectory();
     final tempDir = Directory('${systemTempDir.path}/$prefix');
     await tempDir.create();

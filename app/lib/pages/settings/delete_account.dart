@@ -530,7 +530,7 @@ class _DeleteAccountState extends State<DeleteAccount> {
     );
   }
 
-  Widget _featureRow(IconData icon, String text) {
+  Widget _featureRow(FaIconData icon, String text) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
       child: Container(
@@ -564,6 +564,6 @@ class _DeleteAccountState extends State<DeleteAccount> {
 
 class _Reason {
   final String key;
-  final IconData icon;
+  final FaIconData icon;
   const _Reason(this.key, this.icon);
 }

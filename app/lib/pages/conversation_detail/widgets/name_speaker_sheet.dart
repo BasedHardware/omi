@@ -372,7 +372,7 @@ class _NameSpeakerBottomSheetState extends State<NameSpeakerBottomSheet> {
               padding: const EdgeInsets.only(right: 8.0),
               child: Text(
                 context.l10n.managePeople,
-                style: TextStyle(
+                style: const TextStyle(
                   color: Colors.white70,
                   fontSize: 14,
                   decoration: TextDecoration.underline,

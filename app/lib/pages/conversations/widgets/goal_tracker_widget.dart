@@ -470,30 +470,30 @@ class _GoalTrackerWidgetState extends State<GoalTrackerWidget> with WidgetsBindi
                 fontSize: 11,
                 fontWeight: FontWeight.w500,
                 letterSpacing: 1.5,
-                color: Colors.white.withOpacity(0.3),
+                color: Colors.white.withValues(alpha: 0.3),
               ),
             ),
             const SizedBox(height: 12),
             if (hasSuggestion) ...[
               Text(
                 _suggestion!.suggestedTitle,
-                style: TextStyle(fontSize: 14, color: Colors.white.withOpacity(0.7)),
+                style: TextStyle(fontSize: 14, color: Colors.white.withValues(alpha: 0.7)),
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 8),
               Text(
                 context.l10n.tapToTrackThisGoal,
-                style: TextStyle(fontSize: 12, color: Colors.white.withOpacity(0.35)),
+                style: TextStyle(fontSize: 12, color: Colors.white.withValues(alpha: 0.35)),
               ),
             ] else ...[
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(Icons.add_rounded, size: 18, color: Colors.white.withOpacity(0.4)),
+                  Icon(Icons.add_rounded, size: 18, color: Colors.white.withValues(alpha: 0.4)),
                   const SizedBox(width: 8),
                   Text(
                     context.l10n.tapToSetAGoal,
-                    style: TextStyle(fontSize: 14, color: Colors.white.withOpacity(0.5)),
+                    style: TextStyle(fontSize: 14, color: Colors.white.withValues(alpha: 0.5)),
                   ),
                 ],
               ),
@@ -525,7 +525,7 @@ class _GoalTrackerWidgetState extends State<GoalTrackerWidget> with WidgetsBindi
                     fontSize: 10,
                     fontWeight: FontWeight.w500,
                     letterSpacing: 1.5,
-                    color: Colors.white.withOpacity(0.3),
+                    color: Colors.white.withValues(alpha: 0.3),
                   ),
                 ),
                 const SizedBox(height: 8),
@@ -547,14 +547,14 @@ class _GoalTrackerWidgetState extends State<GoalTrackerWidget> with WidgetsBindi
                                 style: TextStyle(
                                   fontSize: 14,
                                   fontWeight: FontWeight.w400,
-                                  color: Colors.white.withOpacity(0.7),
+                                  color: Colors.white.withValues(alpha: 0.7),
                                 ),
                                 textAlign: TextAlign.center,
                                 maxLines: 2,
                               ),
                             ),
                             const SizedBox(width: 6),
-                            Icon(Icons.edit, size: 12, color: Colors.white.withOpacity(0.25)),
+                            Icon(Icons.edit, size: 12, color: Colors.white.withValues(alpha: 0.25)),
                           ],
                         ),
                 ),
@@ -596,7 +596,7 @@ class _GoalTrackerWidgetState extends State<GoalTrackerWidget> with WidgetsBindi
                                     ),
                                     Padding(
                                       padding: const EdgeInsets.only(left: 4, top: 4),
-                                      child: Icon(Icons.edit, size: 12, color: Colors.white.withOpacity(0.25)),
+                                      child: Icon(Icons.edit, size: 12, color: Colors.white.withValues(alpha: 0.25)),
                                     ),
                                   ],
                                 ),
@@ -624,13 +624,13 @@ class _GoalTrackerWidgetState extends State<GoalTrackerWidget> with WidgetsBindi
                     Expanded(
                       child: Text(
                         _advice!,
-                        style: TextStyle(fontSize: 14, color: Colors.white.withOpacity(0.6), height: 1.4),
+                        style: TextStyle(fontSize: 14, color: Colors.white.withValues(alpha: 0.6), height: 1.4),
                         maxLines: 3,
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
                     const SizedBox(width: 8),
-                    Icon(Icons.chevron_right, size: 20, color: Colors.white.withOpacity(0.3)),
+                    Icon(Icons.chevron_right, size: 20, color: Colors.white.withValues(alpha: 0.3)),
                   ],
                 ),
               ),
@@ -649,12 +649,12 @@ class _GoalTrackerWidgetState extends State<GoalTrackerWidget> with WidgetsBindi
             controller: _goalTitleController,
             autofocus: true,
             textAlign: TextAlign.center,
-            style: TextStyle(fontSize: 14, color: Colors.white.withOpacity(0.9)),
+            style: TextStyle(fontSize: 14, color: Colors.white.withValues(alpha: 0.9)),
             decoration: InputDecoration(
               isDense: true,
               contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
               filled: true,
-              fillColor: Colors.white.withOpacity(0.1),
+              fillColor: Colors.white.withValues(alpha: 0.1),
               border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide.none),
             ),
             onSubmitted: (_) => _saveTitle(),
@@ -690,7 +690,7 @@ class _GoalTrackerWidgetState extends State<GoalTrackerWidget> with WidgetsBindi
                 padding: const EdgeInsets.symmetric(horizontal: 20),
                 child: Text(
                   '/',
-                  style: TextStyle(fontSize: 36, fontWeight: FontWeight.w200, color: Colors.white.withOpacity(0.2)),
+                  style: TextStyle(fontSize: 36, fontWeight: FontWeight.w200, color: Colors.white.withValues(alpha: 0.2)),
                 ),
               ),
               _numField(_targetValueController, context.l10n.target.toUpperCase(), Colors.white60),
@@ -727,12 +727,12 @@ class _GoalTrackerWidgetState extends State<GoalTrackerWidget> with WidgetsBindi
                 child: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 10),
                   decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.1),
+                    color: Colors.white.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(20),
                   ),
                   child: Text(
                     context.l10n.cancel,
-                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Colors.white.withOpacity(0.6)),
+                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Colors.white.withValues(alpha: 0.6)),
                   ),
                 ),
               ),
@@ -752,7 +752,7 @@ class _GoalTrackerWidgetState extends State<GoalTrackerWidget> with WidgetsBindi
             fontSize: 10,
             fontWeight: FontWeight.w600,
             letterSpacing: 1,
-            color: Colors.white.withOpacity(0.35),
+            color: Colors.white.withValues(alpha: 0.35),
           ),
         ),
         const SizedBox(height: 6),
@@ -767,7 +767,7 @@ class _GoalTrackerWidgetState extends State<GoalTrackerWidget> with WidgetsBindi
               isDense: true,
               contentPadding: const EdgeInsets.symmetric(vertical: 8),
               filled: true,
-              fillColor: Colors.white.withOpacity(0.05),
+              fillColor: Colors.white.withValues(alpha: 0.05),
               border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide.none),
             ),
           ),
@@ -806,7 +806,7 @@ class _GaugePainter extends CustomPainter {
       final p2 = Offset(center.dx + outerRadius * math.cos(angle), center.dy + outerRadius * math.sin(angle));
 
       final paint = Paint()
-        ..color = isFilled ? color : Colors.white.withOpacity(0.15)
+        ..color = isFilled ? color : Colors.white.withValues(alpha: 0.15)
         ..strokeWidth = 3
         ..strokeCap = StrokeCap.round;
 

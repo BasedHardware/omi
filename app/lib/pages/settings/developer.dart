@@ -110,7 +110,7 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
   Widget _buildExperimentalItem({
     required String title,
     required String description,
-    required IconData icon,
+    required FaIconData icon,
     required bool value,
     required ValueChanged<bool>? onChanged,
   }) {
@@ -136,7 +136,7 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
             ],
           ),
         ),
-        Switch(value: value, onChanged: onChanged, activeColor: const Color(0xFF22C55E)),
+        Switch(value: value, onChanged: onChanged, activeThumbColor: const Color(0xFF22C55E)),
       ],
     );
   }
@@ -144,7 +144,7 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
   Widget _buildWebhookItem({
     required String title,
     required String description,
-    required IconData icon,
+    required FaIconData icon,
     required bool isEnabled,
     required ValueChanged<bool> onToggle,
     required TextEditingController controller,
@@ -174,7 +174,7 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
                 ],
               ),
             ),
-            Switch(value: isEnabled, onChanged: onToggle, activeColor: const Color(0xFF22C55E)),
+            Switch(value: isEnabled, onChanged: onToggle, activeThumbColor: const Color(0xFF22C55E)),
           ],
         ),
         if (isEnabled) ...[
@@ -326,7 +326,7 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
       onTap: onTap,
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-        decoration: BoxDecoration(color: Colors.white.withOpacity(0.1), borderRadius: BorderRadius.circular(20)),
+        decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(20)),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -416,6 +416,7 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
     );
   }
 
+  @override
   Widget build(BuildContext context) {
     return GestureDetector(
       onTap: () => FocusScope.of(context).unfocus(),
@@ -663,7 +664,7 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
                                 await DebugLogManager.setEnabled(v);
                                 setState(() {});
                               },
-                              activeColor: const Color(0xFF22C55E),
+                              activeThumbColor: const Color(0xFF22C55E),
                             ),
                           ],
                         ),
@@ -792,7 +793,7 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
                                 child: Container(
                                   padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
                                   decoration: BoxDecoration(
-                                    color: Colors.red.withOpacity(0.15),
+                                    color: Colors.red.withValues(alpha: 0.15),
                                     borderRadius: BorderRadius.circular(10),
                                   ),
                                   child: Row(
@@ -1573,7 +1574,7 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
                                       Container(
                                         padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
                                         decoration: BoxDecoration(
-                                          color: Colors.purple.withOpacity(0.2),
+                                          color: Colors.purple.withValues(alpha: 0.2),
                                           borderRadius: BorderRadius.circular(10),
                                         ),
                                         child: const Text(
@@ -1606,7 +1607,7 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
                               Switch(
                                 value: provider.claudeAgentEnabled,
                                 onChanged: (v) => provider.onClaudeAgentChanged(v),
-                                activeColor: const Color(0xFF22C55E),
+                                activeThumbColor: const Color(0xFF22C55E),
                               ),
                           ],
                         ),
@@ -1993,7 +1994,7 @@ class _ManualFirmwareFlashPageState extends State<_ManualFirmwareFlashPage> with
                 borderRadius: BorderRadius.circular(4),
               ),
               const SizedBox(height: 8),
-              Text('${installProgress}%', style: TextStyle(color: Colors.grey.shade400, fontSize: 14)),
+              Text('$installProgress%', style: TextStyle(color: Colors.grey.shade400, fontSize: 14)),
             ],
 
             // Success

@@ -374,7 +374,7 @@ class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBinding
                         errorBuilder: (context, error, stackTrace) {
                           return Container(
                             decoration: BoxDecoration(
-                              color: isAvailable ? app.iconColor.withOpacity(0.2) : Colors.grey.withOpacity(0.1),
+                              color: isAvailable ? app.iconColor.withValues(alpha: 0.2) : Colors.grey.withValues(alpha: 0.1),
                               borderRadius: BorderRadius.circular(8),
                             ),
                             child: Icon(app.icon, color: isAvailable ? app.iconColor : Colors.grey, size: 24),
@@ -384,7 +384,7 @@ class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBinding
                     )
                   : Container(
                       decoration: BoxDecoration(
-                        color: isAvailable ? app.iconColor.withOpacity(0.2) : Colors.grey.withOpacity(0.1),
+                        color: isAvailable ? app.iconColor.withValues(alpha: 0.2) : Colors.grey.withValues(alpha: 0.1),
                         borderRadius: BorderRadius.circular(8),
                       ),
                       child: Icon(app.icon, color: isAvailable ? app.iconColor : Colors.grey, size: 24),
@@ -454,7 +454,7 @@ class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBinding
             Container(
               width: 40,
               height: 40,
-              decoration: BoxDecoration(color: Colors.purple.withOpacity(0.2), borderRadius: BorderRadius.circular(8)),
+              decoration: BoxDecoration(color: Colors.purple.withValues(alpha: 0.2), borderRadius: BorderRadius.circular(8)),
               child: const Icon(Icons.add_circle_outline, color: Colors.purple, size: 24),
             ),
             const SizedBox(width: 16),
@@ -468,7 +468,7 @@ class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBinding
             // Arrow icon
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-              decoration: BoxDecoration(color: Colors.purple.withOpacity(0.2), borderRadius: BorderRadius.circular(16)),
+              decoration: BoxDecoration(color: Colors.purple.withValues(alpha: 0.2), borderRadius: BorderRadius.circular(16)),
               child: const Icon(Icons.arrow_forward_ios, color: Colors.purple, size: 12),
             ),
           ],

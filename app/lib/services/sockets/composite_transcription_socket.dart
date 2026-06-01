@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
 
-import 'package:flutter/material.dart';
 
 import 'package:omi/services/custom_stt_log_service.dart';
 import 'package:omi/services/sockets/pure_socket.dart';

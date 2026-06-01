@@ -39,7 +39,7 @@ class PlatformManager {
   Future<String> _getDeviceIdHash() async {
     // Check if already stored
     String? storedHash = SharedPreferencesUtil().deviceIdHash;
-    if (storedHash != null && storedHash.isNotEmpty) {
+    if (storedHash.isNotEmpty) {
       return storedHash;
     }
 

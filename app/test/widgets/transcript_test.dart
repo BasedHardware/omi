@@ -28,7 +28,7 @@ void main() {
     await SharedPreferencesUtil.init();
   }
 
-  TranscriptSegment _segment(String id, int speakerId) {
+  TranscriptSegment segment0(String id, int speakerId) {
     // Note: speakerId is extracted from speaker string by TranscriptSegment constructor
     return TranscriptSegment(
       id: id,
@@ -87,7 +87,7 @@ void main() {
     });
 
     testWidgets('shows Speaker X when no person is assigned', (tester) async {
-      final segment = _segment('seg2', 0);
+      final segment = segment0('seg2', 0);
 
       await tester.pumpWidget(
         MaterialApp(
@@ -108,7 +108,7 @@ void main() {
     });
 
     testWidgets('Tag button is removed from UI', (tester) async {
-      final segment = _segment('seg3', 1);
+      final segment = segment0('seg3', 1);
       final suggestion = SpeakerLabelSuggestionEvent(
         speakerId: 1,
         personId: 'person-456',

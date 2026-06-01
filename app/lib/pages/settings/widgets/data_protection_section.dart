@@ -45,7 +45,7 @@ class _DataProtectionSectionState extends State<DataProtectionSection> {
         ),
         content: RichText(
           text: TextSpan(
-            style: TextStyle(color: Colors.white.withOpacity(0.8), height: 1.5, fontSize: 15),
+            style: TextStyle(color: Colors.white.withValues(alpha: 0.8), height: 1.5, fontSize: 15),
             children: [
               TextSpan(text: '${context.l10n.e2eeDescription}\n\n'),
               TextSpan(
@@ -93,7 +93,7 @@ class _DataProtectionSectionState extends State<DataProtectionSection> {
                   context.l10n.migrationInProgressMessage,
                   textAlign: TextAlign.center,
                   style: TextStyle(
-                    color: Theme.of(context).colorScheme.secondary.withOpacity(0.9),
+                    color: Theme.of(context).colorScheme.secondary.withValues(alpha: 0.9),
                     fontStyle: FontStyle.italic,
                   ),
                 ),
@@ -114,7 +114,7 @@ class _DataProtectionSectionState extends State<DataProtectionSection> {
         padding: const EdgeInsets.all(16),
         margin: const EdgeInsets.only(bottom: 24),
         decoration: BoxDecoration(
-          color: Colors.red.withOpacity(0.15),
+          color: Colors.red.withValues(alpha: 0.15),
           borderRadius: BorderRadius.circular(12),
           border: Border.all(color: Colors.red.shade300),
         ),
@@ -159,7 +159,7 @@ class _DataProtectionSectionState extends State<DataProtectionSection> {
       padding: const EdgeInsets.all(16),
       margin: const EdgeInsets.only(bottom: 24),
       decoration: BoxDecoration(
-        color: Color(0xFF35343B).withOpacity(0.5),
+        color: const Color(0xFF35343B).withValues(alpha: 0.5),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: Colors.deepPurple.shade300),
       ),
@@ -216,7 +216,7 @@ class _DataProtectionSectionState extends State<DataProtectionSection> {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.deepPurple.withOpacity(0.15),
+        color: Colors.deepPurple.withValues(alpha: 0.15),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: Theme.of(context).colorScheme.secondary, width: 1.5),
       ),
@@ -255,7 +255,7 @@ class _DataProtectionSectionState extends State<DataProtectionSection> {
         decoration: BoxDecoration(
           color: const Color(0xFF1A1A1A),
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: Color(0xFF35343B)),
+          border: Border.all(color: const Color(0xFF35343B)),
         ),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,

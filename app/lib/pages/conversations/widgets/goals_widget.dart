@@ -264,7 +264,7 @@ class GoalsWidgetState extends State<GoalsWidget> with WidgetsBindingObserver {
                   Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(context.l10n.icon, style: TextStyle(color: Colors.white.withOpacity(0.5), fontSize: 12)),
+                      Text(context.l10n.icon, style: TextStyle(color: Colors.white.withValues(alpha: 0.5), fontSize: 12)),
                       const SizedBox(height: 8),
                       SizedBox(
                         height: 44,
@@ -285,10 +285,10 @@ class GoalsWidgetState extends State<GoalsWidget> with WidgetsBindingObserver {
                                 height: 44,
                                 margin: const EdgeInsets.only(right: 8),
                                 decoration: BoxDecoration(
-                                  color: isSelected ? Colors.white.withOpacity(0.15) : Colors.white.withOpacity(0.05),
+                                  color: isSelected ? Colors.white.withValues(alpha: 0.15) : Colors.white.withValues(alpha: 0.05),
                                   borderRadius: BorderRadius.circular(12),
                                   border:
-                                      isSelected ? Border.all(color: Colors.white.withOpacity(0.3), width: 2) : null,
+                                      isSelected ? Border.all(color: Colors.white.withValues(alpha: 0.3), width: 2) : null,
                                 ),
                                 child: Center(child: Text(emoji, style: const TextStyle(fontSize: 22))),
                               ),
@@ -304,7 +304,7 @@ class GoalsWidgetState extends State<GoalsWidget> with WidgetsBindingObserver {
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(context.l10n.goalTitle, style: TextStyle(color: Colors.white.withOpacity(0.5), fontSize: 12)),
+                    Text(context.l10n.goalTitle, style: TextStyle(color: Colors.white.withValues(alpha: 0.5), fontSize: 12)),
                     const SizedBox(height: 8),
                     TextField(
                       controller: _titleController,
@@ -312,7 +312,7 @@ class GoalsWidgetState extends State<GoalsWidget> with WidgetsBindingObserver {
                       style: const TextStyle(color: Colors.white, fontSize: 16),
                       decoration: InputDecoration(
                         filled: true,
-                        fillColor: Colors.white.withOpacity(0.08),
+                        fillColor: Colors.white.withValues(alpha: 0.08),
                         contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12),
@@ -333,7 +333,7 @@ class GoalsWidgetState extends State<GoalsWidget> with WidgetsBindingObserver {
                         children: [
                           Text(
                             context.l10n.current,
-                            style: TextStyle(color: Colors.white.withOpacity(0.5), fontSize: 12),
+                            style: TextStyle(color: Colors.white.withValues(alpha: 0.5), fontSize: 12),
                           ),
                           const SizedBox(height: 8),
                           TextField(
@@ -342,7 +342,7 @@ class GoalsWidgetState extends State<GoalsWidget> with WidgetsBindingObserver {
                             style: const TextStyle(color: Colors.white, fontSize: 16),
                             decoration: InputDecoration(
                               filled: true,
-                              fillColor: Colors.white.withOpacity(0.08),
+                              fillColor: Colors.white.withValues(alpha: 0.08),
                               contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
                               border: OutlineInputBorder(
                                 borderRadius: BorderRadius.circular(12),
@@ -360,7 +360,7 @@ class GoalsWidgetState extends State<GoalsWidget> with WidgetsBindingObserver {
                         children: [
                           Text(
                             context.l10n.target,
-                            style: TextStyle(color: Colors.white.withOpacity(0.5), fontSize: 12),
+                            style: TextStyle(color: Colors.white.withValues(alpha: 0.5), fontSize: 12),
                           ),
                           const SizedBox(height: 8),
                           TextField(
@@ -369,7 +369,7 @@ class GoalsWidgetState extends State<GoalsWidget> with WidgetsBindingObserver {
                             style: const TextStyle(color: Colors.white, fontSize: 16),
                             decoration: InputDecoration(
                               filled: true,
-                              fillColor: Colors.white.withOpacity(0.08),
+                              fillColor: Colors.white.withValues(alpha: 0.08),
                               contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
                               border: OutlineInputBorder(
                                 borderRadius: BorderRadius.circular(12),
@@ -591,7 +591,7 @@ class GoalsWidgetState extends State<GoalsWidget> with WidgetsBindingObserver {
                 height: 40,
                 margin: const EdgeInsets.only(right: 12),
                 decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.1),
+                  color: Colors.white.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Center(child: Text(emoji, style: const TextStyle(fontSize: 18))),
@@ -618,7 +618,7 @@ class GoalsWidgetState extends State<GoalsWidget> with WidgetsBindingObserver {
                               data: SliderThemeData(
                                 trackHeight: 6,
                                 activeTrackColor: color,
-                                inactiveTrackColor: Colors.white.withOpacity(0.1),
+                                inactiveTrackColor: Colors.white.withValues(alpha: 0.1),
                                 thumbColor: color,
                                 thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 0),
                                 overlayShape: const RoundSliderOverlayShape(overlayRadius: 12),
@@ -649,7 +649,7 @@ class GoalsWidgetState extends State<GoalsWidget> with WidgetsBindingObserver {
                           '${_rawNum(goal.currentValue)}/${_rawNum(goal.targetValue)}',
                           style: TextStyle(
                             fontSize: 12,
-                            color: Colors.white.withOpacity(0.5),
+                            color: Colors.white.withValues(alpha: 0.5),
                             fontWeight: FontWeight.w500,
                           ),
                         ),

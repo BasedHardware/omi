@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'dart:io';
 import 'dart:ui';
 
@@ -415,7 +414,7 @@ Future<void> _dismissAnyPopup(WidgetTester tester) async {
         debugPrint('      >>> Popup still visible, trying again...');
         // Try tapping the TextButton widget directly
         final textButtons = find.byType(TextButton);
-        if (textButtons.evaluate().length >= 1) {
+        if (textButtons.evaluate().isNotEmpty) {
           // The "Maybe later" is usually the last TextButton in the dialog
           await tester.tap(textButtons.last, warnIfMissed: false);
           await tester.pump(const Duration(milliseconds: 500));
