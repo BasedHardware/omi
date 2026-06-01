@@ -1,9 +1,14 @@
 {
-  "unreleased": [
-    "Fixed editing a conversation title not saving",
-    "Fixed misleading \"recordings aren't lost\" copy on the monthly-limit popup when the menu-bar Screen Capture or Audio Recording toggle was the trigger"
-  ],
+  "unreleased": [],
   "releases": [
+    {
+      "version": "0.11.436",
+      "date": "2026-06-01",
+      "changes": [
+        "Fixed editing a conversation title not saving",
+        "Fixed misleading \"recordings aren't lost\" copy on the monthly-limit popup when the menu-bar Screen Capture or Audio Recording toggle was the trigger"
+      ]
+    },
     {
       "version": "0.11.435",
       "date": "2026-05-31",
