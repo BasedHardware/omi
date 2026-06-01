@@ -1076,20 +1076,23 @@ enum MemoryCategory: String, Codable, CaseIterable {
   case system
   case interesting
   case manual
+  case workflow
 
   var displayName: String {
     switch self {
-    case .system: return "System"
-    case .interesting: return "Interesting"
+    case .system: return "About You"
+    case .interesting: return "Insights"
     case .manual: return "Manual"
+    case .workflow: return "Workflow"
     }
   }
 
   var icon: String {
     switch self {
-    case .system: return "gearshape"
-    case .interesting: return "sparkles"
+    case .system: return "person"
+    case .interesting: return "lightbulb"
     case .manual: return "square.and.pencil"
+    case .workflow: return "arrow.triangle.branch"
     }
   }
 }
