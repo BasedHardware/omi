@@ -58,6 +58,11 @@ class SharedPreferencesUtil {
 
   set deviceIsV2(bool value) => saveBool('deviceIsV2', value);
 
+  // Android: keep the device connected and transcribing after the app is fully closed. Default off.
+  bool get backgroundModeEnabled => getBool('backgroundModeEnabled');
+
+  set backgroundModeEnabled(bool value) => saveBool('backgroundModeEnabled', value);
+
   // Double tap behavior: 0 = end conversation (default), 1 = pause/mute, 2 = star ongoing conversation
   int get doubleTapAction => getInt('doubleTapAction');
 
