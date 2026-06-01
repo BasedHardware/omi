@@ -927,7 +927,9 @@ class CaptureProvider extends ChangeNotifier
       }),
     );
     await SharedPreferencesUtil().saveBool('nativeBleForegroundReady', false);
-    await SharedPreferencesUtil().saveBool('nativeBleStreamingEnabled', true);
+    // Native background streaming only runs when the user has opted into Background Mode;
+    // otherwise the foreground service is torn down on app close and there's nothing to stream to.
+    await SharedPreferencesUtil().saveBool('nativeBleStreamingEnabled', SharedPreferencesUtil().backgroundModeEnabled);
   }
 
   MapEntry<String, String>? _nativeBleAudioTarget(BtDevice device) {
