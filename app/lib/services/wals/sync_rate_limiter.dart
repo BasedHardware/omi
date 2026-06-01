@@ -65,13 +65,16 @@ class SyncRateLimiter extends ChangeNotifier {
 
   RateLimitReason? get reason {
     final now = DateTime.now().millisecondsSinceEpoch;
-    if (_backendBusyUntilMs > now) return RateLimitReason.backendBusy;
     final persisted = SharedPreferencesUtil().getInt(_prefKeyUntil);
-    if (persisted > now) {
-      final name = SharedPreferencesUtil().getString(_prefKeyReason);
-      return RateLimitReason.values.asNameMap()[name] ?? RateLimitReason.rateLimit;
+    final busyActive = _backendBusyUntilMs > now;
+    final rateActive = persisted > now;
+    if (!busyActive && !rateActive) return null;
+    // Match `until`'s max-based pick so reason and deadline refer to the same cooldown.
+    if (busyActive && (!rateActive || _backendBusyUntilMs >= persisted)) {
+      return RateLimitReason.backendBusy;
     }
-    return null;
+    final name = SharedPreferencesUtil().getString(_prefKeyReason);
+    return RateLimitReason.values.asNameMap()[name] ?? RateLimitReason.rateLimit;
   }
 
   /// Pause uploads. Honors the server's Retry-After (seconds) when present,
@@ -80,9 +83,8 @@ class SyncRateLimiter extends ChangeNotifier {
   /// also picks the persistence mode (rateLimit persists, backendBusy is
   /// in-memory only).
   void markLimited({int? retryAfterSeconds, RateLimitReason reason = RateLimitReason.rateLimit}) {
-    final requested = (retryAfterSeconds != null && retryAfterSeconds > 0)
-        ? retryAfterSeconds
-        : _defaultCooldownSeconds;
+    final requested =
+        (retryAfterSeconds != null && retryAfterSeconds > 0) ? retryAfterSeconds : _defaultCooldownSeconds;
     final secs = requested > _maxCooldownSeconds ? _maxCooldownSeconds : requested;
     final untilMs = DateTime.now().add(Duration(seconds: secs)).millisecondsSinceEpoch;
     if (reason == RateLimitReason.backendBusy) {
