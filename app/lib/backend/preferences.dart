@@ -58,7 +58,6 @@ class SharedPreferencesUtil {
 
   set deviceIsV2(bool value) => saveBool('deviceIsV2', value);
 
-  // Android: keep the device connected and transcribing after the app is fully closed. Default off.
   bool get backgroundModeEnabled => getBool('backgroundModeEnabled');
 
   set backgroundModeEnabled(bool value) => saveBool('backgroundModeEnabled', value);

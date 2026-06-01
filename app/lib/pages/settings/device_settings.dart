@@ -708,9 +708,6 @@ class _DeviceSettingsState extends State<DeviceSettings> {
 
     if (!value) return;
 
-    // Background reconnection depends on a CompanionDeviceManager association so the OS can
-    // wake the service when the device reappears. Native-BLE users already have one from
-    // onboarding; only request it if it's somehow missing.
     try {
       final hasAssociation = await BleHostApi().hasCompanionDeviceAssociation();
       if (!hasAssociation) {

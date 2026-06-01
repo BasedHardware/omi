@@ -927,8 +927,6 @@ class CaptureProvider extends ChangeNotifier
       }),
     );
     await SharedPreferencesUtil().saveBool('nativeBleForegroundReady', false);
-    // Native background streaming only runs when the user has opted into Background Mode;
-    // otherwise the foreground service is torn down on app close and there's nothing to stream to.
     await SharedPreferencesUtil().saveBool('nativeBleStreamingEnabled', SharedPreferencesUtil().backgroundModeEnabled);
   }
 
