@@ -200,16 +200,18 @@ def get_conversations(
     if starred is not None:
         conversations_ref = conversations_ref.where(filter=FieldFilter('starred', '==', starred))
 
-    # Apply date range filters if provided
+    # Filter and order by `started_at` (recording time), not `created_at`
+    # (commit time): the two diverge for re-processed/merged conversations
+    # and `started_at` is what the user means by "this conversation's date".
     if start_date:
-        conversations_ref = conversations_ref.where(filter=FieldFilter('created_at', '>=', start_date))
+        conversations_ref = conversations_ref.where(filter=FieldFilter('started_at', '>=', start_date))
     if end_date:
-        conversations_ref = conversations_ref.where(filter=FieldFilter('created_at', '<=', end_date))
+        conversations_ref = conversations_ref.where(filter=FieldFilter('started_at', '<=', end_date))
 
-    # Sort
-    conversations_ref = conversations_ref.order_by('created_at', direction=firestore.Query.DESCENDING)
+    conversations_ref = conversations_ref.order_by('started_at', direction=firestore.Query.DESCENDING).order_by(
+        'created_at', direction=firestore.Query.DESCENDING
+    )
 
-    # Limits
     conversations_ref = conversations_ref.limit(limit).offset(offset)
 
     conversations = [doc.to_dict() for doc in conversations_ref.stream()]
@@ -258,16 +260,15 @@ def get_conversations_without_photos(
     if starred is not None:
         conversations_ref = conversations_ref.where(filter=FieldFilter('starred', '==', starred))
 
-    # Apply date range filters if provided
     if start_date:
-        conversations_ref = conversations_ref.where(filter=FieldFilter('created_at', '>=', start_date))
+        conversations_ref = conversations_ref.where(filter=FieldFilter('started_at', '>=', start_date))
     if end_date:
-        conversations_ref = conversations_ref.where(filter=FieldFilter('created_at', '<=', end_date))
+        conversations_ref = conversations_ref.where(filter=FieldFilter('started_at', '<=', end_date))
 
-    # Sort
-    conversations_ref = conversations_ref.order_by('created_at', direction=firestore.Query.DESCENDING)
+    conversations_ref = conversations_ref.order_by('started_at', direction=firestore.Query.DESCENDING).order_by(
+        'created_at', direction=firestore.Query.DESCENDING
+    )
 
-    # Limits
     conversations_ref = conversations_ref.limit(limit).offset(offset)
 
     conversations = [doc.to_dict() for doc in conversations_ref.stream()]
