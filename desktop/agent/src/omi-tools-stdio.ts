@@ -141,7 +141,10 @@ Don't use when (if those tools are available):
 Note: Database is read-only (SELECT only). SELECT queries auto-limit to 200 rows.
 Supports FTS5 MATCH queries for keyword search (e.g., WHERE screenshots_fts MATCH 'keyword').
 
-Key tables: screenshots (appName, windowTitle, ocrText, timestamp), transcription_sessions (title, overview, startedAt, finishedAt), transcription_segments (sessionId, speaker, text, startTime), action_items (description, completed, priority, dueAt, category), memories (content, category, source), staged_tasks (description, priority, source), focus_sessions (status, appOrSite, durationSeconds), observations (appName, contextSummary, currentActivity), goals (title, goalType, targetValue, currentValue), indexed_files (path, filename, fileType, folder), live_notes (sessionId, text, timestamp), ai_user_profiles (profileText, generatedAt).`,
+Key tables: screenshots (appName, windowTitle, ocrText, timestamp), transcription_sessions (title, overview, startedAt, finishedAt), transcription_segments (sessionId, speaker, text, startTime), action_items (description, completed, priority, dueAt, category), memories (content, category, source), staged_tasks (description, priority, source), focus_sessions (status, appOrSite, durationSeconds), observations (appName, contextSummary, currentActivity), goals (title, goalType, targetValue, currentValue), indexed_files (path, filename, fileType, folder), live_notes (sessionId, text, timestamp), ai_user_profiles (profileText, generatedAt).
+FTS tables (use MATCH, JOIN <fts>.rowid = <table>.id, rank by bm25(<fts>)): screenshots_fts(ocrText, windowTitle, appName), action_items_fts(description), staged_tasks_fts(description), proactive_extractions_fts(content, reasoning, contextSummary).
+Key relationships: transcription_segments.sessionId → transcription_sessions.id; action_items/observations/focus_sessions/memories/staged_tasks/proactive_extractions .screenshotId → screenshots.id; action_items/memories .conversationId → transcription_sessions.backendId.
+For exact column lists or any uncommon column, introspect first: SELECT sql FROM sqlite_master WHERE name='<table>'.`,
     inputSchema: {
       type: "object" as const,
       properties: {

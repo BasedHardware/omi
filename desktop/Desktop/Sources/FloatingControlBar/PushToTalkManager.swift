@@ -51,11 +51,14 @@ class PushToTalkManager: ObservableObject {
   /// Active query tracer for the current PTT session (nil when not recording)
   private var activeTracer: QueryTracer?
 
-  private func makeActiveTracer() -> QueryTracer {
-    QueryTracer(
+  /// Create the per-session tracer, store it, and open the recording span.
+  private func startActiveTracer() {
+    let tracer = QueryTracer(
       query: "(ptt recording)",
       inputMode: ShortcutSettings.shared.pttTranscriptionMode == .batch ? .voicePTTBatch : .voicePTTLive
     )
+    self.activeTracer = tracer
+    tracer.begin("ptt_recording")
   }
 
   // Batch mode: accumulate raw audio for post-recording transcription
@@ -240,9 +243,7 @@ class PushToTalkManager: ObservableObject {
       sound?.play()
     }
 
-    let tracer = makeActiveTracer()
-    self.activeTracer = tracer
-    tracer.begin("ptt_recording")
+    startActiveTracer()
 
     let isFollowUp = isCurrentSessionFollowUp
     AnalyticsManager.shared.floatingBarPTTStarted(mode: isFollowUp ? "follow_up_hold" : "hold")
@@ -278,9 +279,7 @@ class PushToTalkManager: ObservableObject {
       currentContextSnapshot = nil
 
       if activeTracer == nil {
-        let tracer = makeActiveTracer()
-        self.activeTracer = tracer
-        tracer.begin("ptt_recording")
+        startActiveTracer()
       }
 
       let preOverlayImage = ScreenCaptureManager.captureScreenImage()

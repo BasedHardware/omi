@@ -1677,6 +1677,45 @@ class FloatingControlBarManager {
         generation == activeQueryGeneration
     }
 
+    /// Heuristic: does this floating-bar query likely refer to what's on the user's screen?
+    ///
+    /// Capturing + attaching a screenshot costs ~1.5k input tokens and ~100-240ms of capture
+    /// latency on the pre-LLM critical path. Most queries (greetings, task/memory/recall) don't
+    /// need the screen, so we skip it for them and only capture when the query contains a visual
+    /// or deictic cue. Biased toward capturing on ambiguity — a false positive only wastes tokens,
+    /// while a false negative loses screen context — but clearly non-visual queries skip it.
+    static func queryNeedsScreenshot(_ text: String) -> Bool {
+        // Tokenize: lowercase, split on non-alphanumerics (so "see?", "this." match as words).
+        let tokens = text.lowercased()
+            .replacingOccurrences(of: "[^a-z0-9]+", with: " ", options: .regularExpression)
+            .split(separator: " ").map(String.init)
+        let cues: Set<String> = [
+            "screen", "screenshot", "see", "seeing", "look", "looking", "show", "showing",
+            "display", "displayed", "view", "viewing", "visible", "highlighted", "selected",
+            "this", "that", "these", "those", "here", "picture", "image", "photo", "page",
+            "window", "tab", "chart", "graph", "diagram", "button", "dialog", "popup", "menu",
+            // Deictic "choice" cues — the chat prompt treats these as screen-grounded
+            // (see ChatPrompts "which one / which option / which suits me").
+            "which", "option", "options", "choose", "suits",
+        ]
+        // Deictic words are visual only when NOT part of a temporal phrase: "this week",
+        // "that day" are about time, not the screen — don't trigger a capture for those.
+        let deictic: Set<String> = ["this", "that", "these", "those"]
+        let timeWords: Set<String> = [
+            "week", "weeks", "month", "months", "year", "years", "day", "days", "today",
+            "tonight", "morning", "afternoon", "evening", "night", "weekend", "weekends",
+            "quarter", "hour", "hours", "minute", "minutes", "time", "moment", "yesterday",
+            "tomorrow", "summer", "winter", "spring", "fall",
+        ]
+        for (i, tok) in tokens.enumerated() where cues.contains(tok) {
+            if deictic.contains(tok), i + 1 < tokens.count, timeWords.contains(tokens[i + 1]) {
+                continue  // temporal ("this week") — not a screen reference
+            }
+            return true
+        }
+        return false
+    }
+
     private func sendAIQuery(
         _ message: String, barWindow: FloatingControlBarWindow, provider: ChatProvider
     ) async {
@@ -1711,12 +1750,19 @@ class FloatingControlBarManager {
 
         let currentTracer = QueryTracerContext.current
         currentTracer?.begin("pre_llm")
-        let screenshotData = await Task.detached { () -> Data? in
-            currentTracer?.begin("screenshot_capture")
-            let data = ScreenCaptureManager.captureScreenData()
-            currentTracer?.end("screenshot_capture")
-            return data
-        }.value
+        // Only capture the screen when the query plausibly refers to it. Skipping capture for
+        // non-visual queries removes ~1.5k input tokens and ~100-240ms of capture latency from
+        // the critical path. See queryNeedsScreenshot.
+        let needsScreenshot = Self.queryNeedsScreenshot(message)
+        let screenshotData: Data? =
+            needsScreenshot
+            ? await Task.detached { () -> Data? in
+                currentTracer?.begin("screenshot_capture")
+                let data = ScreenCaptureManager.captureScreenData()
+                currentTracer?.end("screenshot_capture")
+                return data
+            }.value
+            : nil
         barWindow.orderFrontRegardless()
 
         AnalyticsManager.shared.floatingBarQuerySent(

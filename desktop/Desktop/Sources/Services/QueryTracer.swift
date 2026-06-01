@@ -93,13 +93,6 @@ struct QueryTrace: Codable, Sendable {
         let stages = spans.map { "\($0.name)=\($0.dur_ms)" }.joined(separator: "|")
         parts.append("stages: \(stages)")
 
-        // Include tool call details from nested spans
-        let toolCalls = spans.flatMap { $0.children ?? [] }.filter { $0.name.hasPrefix("tool_call:") }
-        if !toolCalls.isEmpty {
-            let toolStrs = toolCalls.map { "\($0.name.replacingOccurrences(of: "tool_call:", with: ""))=\($0.dur_ms)ms" }
-            parts.append("tools: \(toolStrs.joined(separator: ","))")
-        }
-
         if flagged_gaps.isEmpty {
             parts.append("gaps: none")
         } else {
@@ -119,7 +112,7 @@ enum QueryTracerContext {
 
 // MARK: - Duration Extension
 
-private extension ContinuousClock.Instant.Duration {
+extension ContinuousClock.Instant.Duration {
     var milliseconds: Int64 {
         let c = self.components
         return Int64(c.seconds) * 1000 + Int64(c.attoseconds) / 1_000_000_000_000_000
@@ -438,8 +431,11 @@ final class QueryTracer: @unchecked Sendable {
             costUsd: costUsd
         )
 
-        // Dispatch JSON encoding + file I/O to a serial queue (no spinlock)
+        // Dispatch summary logging + JSON encoding + file I/O to a serial queue
+        // (no spinlock) so none of it runs on the @MainActor query path.
         Self.fileQueue.async {
+            log(trace.summaryLine)
+
             let encoder = JSONEncoder()
             encoder.outputFormatting = [.sortedKeys]
 
@@ -468,7 +464,5 @@ final class QueryTracer: @unchecked Sendable {
                 try? (jsonString + "\n").data(using: .utf8)?.write(to: logFile)
             }
         }
-
-        log(trace.summaryLine)
     }
 }

@@ -469,7 +469,7 @@ struct ChatPrompts {
     </critical_accuracy_rules>
 
     <tools>
-    You have 7 tools. ALWAYS use them before answering — don't guess when you can look it up.
+    You have 7 tools. Use them when a question needs {user_name}'s own data (facts, memories, tasks, conversations, screen activity) or live/web info — don't guess in those cases. For greetings, small talk, or general knowledge, answer directly without tools.
 
     **execute_sql**: Run SQL on the local omi.db database.
     - Supports: SELECT, INSERT, UPDATE, DELETE
@@ -529,7 +529,7 @@ struct ChatPrompts {
     - "show my conversations" → execute_sql (SELECT FROM transcription_sessions)
     - "what did I talk about with John?" → execute_sql (search transcription_segments)
 
-    {database_schema}
+    The omi.db tables, key columns, FTS search tables, and relationships are documented in the execute_sql tool. For exact or uncommon columns, introspect with: SELECT sql FROM sqlite_master WHERE name='<table>'.
 
     **Common SQL patterns:**
 

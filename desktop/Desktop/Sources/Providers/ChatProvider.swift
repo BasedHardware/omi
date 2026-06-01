@@ -470,9 +470,9 @@ class ChatProvider: ObservableObject {
 ================================================================================
 🚨 FLOATING BAR MODE — READ THIS FIRST BEFORE ANYTHING ELSE 🚨
 ================================================================================
-ALWAYS check the user's memories and facts using available tools (get_memories, search_memories, execute_sql) before answering ANY question. The user expects personalized answers based on what you know about them.
+When a question is about the user — their facts, preferences, tasks, conversations, plans, or screen activity — check their memories/data with the available tools (get_memories, search_memories, execute_sql) before answering, and never fabricate personal details: look them up. But for greetings, small talk, and general-knowledge questions (e.g. "what's up", "how are you", "what time is it"), answer directly and do NOT call tools — calling tools when the question doesn't need the user's data is slow, burns the rate limit, and adds nothing.
 NEVER ask follow-up questions or ask for clarification. ALWAYS give a direct, concrete answer immediately using whatever you know about the user from their memories, context, and facts. If memories mention their devices, preferences, work, budget, or interests — use that to give a specific recommendation, not a generic one.
-If the question contains a product name, software name, or proper noun — search the web for it before answering, even if you think you know what it is.
+If the question hinges on a product/software/proper noun you're not confident about, search the web before answering. If you already know it, just answer — don't search needlessly.
 If a screenshot is attached and the user asks a deictic question like "which one", "which option", "which suits me", "what should I choose", or "what's on my screen", ground the answer in the visible options first and prefer what is actually on screen over unrelated context.
 If the screenshot already clearly shows the relevant options, do not ignore it just because the query is short or ambiguous.
 Respond concisely in 1-2 sentences. No lists. No headers. NEVER ask follow-up questions — just answer.
@@ -837,6 +837,48 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
     func invalidateAgentSession(sessionKey: String) async {
         guard agentBridgeStarted else { return }
         await agentBridge.invalidateSession(sessionKey: sessionKey)
+    }
+
+    /// Input-token ceiling for the floating-bar ACP session. The ACP SDK keeps the full
+    /// turn history (including large tool results) inside the session, so input climbs every
+    /// turn — observed drifting 17k → 26k across a handful of queries, slowing TTFT and
+    /// tripping the 30k-tokens/min rate limit. When a floating query crosses this, we reset
+    /// the session in the background so the next one starts back near the base-prompt floor.
+    private static let floatingSessionTokenCeiling = 21_000
+
+    /// Guards against overlapping resets when several bloated queries land in quick succession.
+    private var floatingSessionResetInFlight = false
+
+    /// Reset the floating-bar ACP session to shed accumulated context (conversation history +
+    /// tool-result bloat). Runs a small background Task that re-records the floating session with a
+    /// freshly re-seeded system prompt (recent chat history only). This call does NOT hit the model
+    /// and burns no tokens.
+    ///
+    /// Cost / mechanism (pi-mono path): pi-mono is single-session and bakes the system prompt as a
+    /// process launch flag, so the reset actually takes effect on the NEXT floating query — because
+    /// the re-seeded prompt differs from the running process's, `createSession` restarts the Pi
+    /// subprocess, which is what wipes the bloated history. So the restart cost (≈ a process spawn)
+    /// lands on that next query, NOT here in the background. Confirm via "[pi-mono] subprocess
+    /// restarted with new system prompt" in the app log. Mirrors the floating warmup in
+    /// ensureBridgeStarted — keep them in sync.
+    func resetFloatingSessionContext() {
+        guard agentBridgeStarted, !modeSwitchInProgress, !floatingSessionResetInFlight else { return }
+        floatingSessionResetInFlight = true
+        Task { @MainActor in
+            defer { floatingSessionResetInFlight = false }
+            await preparePromptContextIfNeeded()
+            let mainSystemPrompt = buildSystemPrompt(contextString: formatMemoriesSection())
+            let floatingSystemPrompt = Self.floatingBarSystemPromptPrefix + "\n\n" + mainSystemPrompt
+            let floatingModel = ShortcutSettings.shared.selectedModel.isEmpty
+                ? ModelQoS.Claude.defaultSelection
+                : ShortcutSettings.shared.selectedModel
+            cachedMainSystemPrompt = mainSystemPrompt
+            await agentBridge.invalidateSession(sessionKey: "floating")
+            await agentBridge.warmupSession(cwd: workingDirectory, sessions: [
+                .init(key: "floating", model: floatingModel, systemPrompt: floatingSystemPrompt)
+            ])
+            log("ChatProvider: floating session context reset — next floating query rebuilds on a fresh process")
+        }
     }
 
     /// Test that the Playwright Chrome extension is connected and working.
@@ -2679,8 +2721,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                 let toolCall = ToolCall(name: name, arguments: input, thoughtSignature: nil)
                 let toolStart = ContinuousClock.now
                 let result = await ChatToolExecutor.execute(toolCall)
-                let toolDurMs = Int64((ContinuousClock.now - toolStart).components.seconds * 1000
-                    + (ContinuousClock.now - toolStart).components.attoseconds / 1_000_000_000_000_000)
+                let toolDurMs = (ContinuousClock.now - toolStart).milliseconds
                 log("OMI tool \(name) executed for callId=\(callId)")
 
                 // Capture full tool input/output in trace
@@ -2874,6 +2915,23 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                 cacheWriteTokens: queryResult.cacheWriteTokens,
                 costUsd: queryResult.costUsd
             )
+
+            // Bound the floating-bar session: if accumulated history + tool results pushed input
+            // past the ceiling, schedule a session-context reset. The reset burns no tokens; it
+            // forces the NEXT floating query to rebuild its session on a fresh Pi process (the
+            // subprocess-restart cost lands on that query), shedding history so input drops back
+            // near the base-prompt floor instead of drifting toward the 30k-tokens/min limit.
+            // See resetFloatingSessionContext.
+            // Count cached tokens: once prompt caching is enabled the static
+            // prefix moves out of inputTokens into cacheRead/cacheWrite, so the
+            // full re-sent context is inputTokens + cacheRead + cacheWrite — using
+            // inputTokens alone would never reach the ceiling on a cache hit.
+            let floatingInputTokens =
+                queryResult.inputTokens + queryResult.cacheReadTokens + queryResult.cacheWriteTokens
+            if sessionKey == "floating", floatingInputTokens > Self.floatingSessionTokenCeiling {
+                log("ChatProvider: floating input \(floatingInputTokens) > ceiling \(Self.floatingSessionTokenCeiling) — scheduling session-context reset")
+                resetFloatingSessionContext()
+            }
 
             // Release the sending lock as soon as the AI response is visible in the
             // UI. Backend persistence is slow (can timeout at 30s+) and should not
