@@ -232,6 +232,7 @@ async def _stream_handler(
     custom_stt_mode: CustomSttMode = CustomSttMode.disabled,
     onboarding_mode: bool = False,
     speaker_auto_assign_enabled: bool = False,
+    create_speakers: bool = True,
     vad_gate_override: Optional[str] = None,
     call_id: Optional[str] = None,
 ):
@@ -2227,7 +2228,7 @@ async def _stream_handler(
                         person = user_db.get_person_by_name(uid, detected_name)
                         if person:
                             person_id = person['id']
-                        else:
+                        elif create_speakers:
                             # Backend creates person if missing
                             person_id = str(uuid.uuid4())
                             user_db.create_person(
@@ -2239,10 +2240,14 @@ async def _stream_handler(
                                     'updated_at': datetime.now(timezone.utc),
                                 },
                             )
+                        else:
+                            # User disabled auto-create: don't persist a new person.
+                            # Still surface the detected name so it can be tagged manually.
+                            person_id = None
                         _send_message_event(
                             SpeakerLabelSuggestionEvent(
                                 speaker_id=segment.speaker_id,
-                                person_id=_person_id_for_client(person_id),
+                                person_id=_person_id_for_client(person_id) if person_id else "",
                                 person_name=detected_name,
                                 segment_id=segment.id,
                             )
@@ -2250,9 +2255,10 @@ async def _stream_handler(
                         # Set maps for future segments, but only if diarization is active
                         # (speaker_id > 0 means diarization assigned a real speaker)
                         # Set maps for future segments using helper function
-                        if should_update_speaker_to_person_map(segment.speaker_id):
-                            speaker_to_person_map[segment.speaker_id] = (person_id, detected_name)
-                        segment_person_assignment_map[segment.id] = person_id
+                        if person_id:
+                            if should_update_speaker_to_person_map(segment.speaker_id):
+                                speaker_to_person_map[segment.speaker_id] = (person_id, detected_name)
+                            segment_person_assignment_map[segment.id] = person_id
                         suggested_segments.add(segment.id)
 
         # Wait for speaker_identification_task to finish consuming its queue and spawning
@@ -2868,6 +2874,7 @@ async def _listen(
     custom_stt_mode: CustomSttMode = CustomSttMode.disabled,
     onboarding_mode: bool = False,
     speaker_auto_assign_enabled: bool = False,
+    create_speakers: bool = True,
     vad_gate_override: Optional[str] = None,
     call_id: Optional[str] = None,
 ):
@@ -2895,6 +2902,7 @@ async def _listen(
         custom_stt_mode=custom_stt_mode,
         onboarding_mode=onboarding_mode,
         speaker_auto_assign_enabled=speaker_auto_assign_enabled,
+        create_speakers=create_speakers,
         vad_gate_override=vad_gate_override,
         call_id=call_id,
     )
@@ -2916,6 +2924,7 @@ async def listen_handler(
     custom_stt: str = 'disabled',
     onboarding: str = 'disabled',
     speaker_auto_assign: str = 'disabled',
+    create_speakers: bool = True,
     vad_gate: str = '',
     call_id: Optional[str] = None,
 ):
@@ -2937,6 +2946,7 @@ async def listen_handler(
         custom_stt_mode=custom_stt_mode,
         onboarding_mode=onboarding_mode,
         speaker_auto_assign_enabled=speaker_auto_assign_enabled,
+        create_speakers=create_speakers,
         vad_gate_override=vad_gate_override,
         call_id=call_id,
     )
