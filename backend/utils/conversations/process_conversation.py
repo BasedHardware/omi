@@ -843,7 +843,7 @@ def process_conversation(
             logger.error(f"Error creating audio files: {e}")
 
     conversation.status = ConversationStatus.completed
-    conversations_db.upsert_conversation(uid, conversation.as_dict_cleaned_dates())
+    conversations_db.upsert_conversation(uid, conversation.dict())
 
     # Update folder conversation count after conversation is saved
     if assigned_folder_id:
