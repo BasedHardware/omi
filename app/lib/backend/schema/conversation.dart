@@ -411,7 +411,9 @@ class ServerConversation {
   }
 
   int getDurationInSeconds() {
-    if (finishedAt != null && startedAt != null) {
+    // started_at is the streaming-session origin, not this conversation's start,
+    // so finishedAt - startedAt over-counts; prefer the transcript span (#4056).
+    if (transcriptSegments.isEmpty && finishedAt != null && startedAt != null) {
       return finishedAt!.difference(startedAt!).inSeconds;
     }
     return _getDurationInSecondsByTranscripts();
