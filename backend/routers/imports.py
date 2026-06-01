@@ -7,7 +7,7 @@ import os
 import uuid
 from typing import List, Optional
 
-from utils.executors import storage_executor
+from utils.executors import db_executor, storage_executor, run_blocking
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 
@@ -50,7 +50,7 @@ async def import_limitless_data(
         raise HTTPException(status_code=400, detail="File must be a ZIP archive")
 
     # Create import job
-    job = create_import_job(uid, ImportSourceType.limitless)
+    job = await run_blocking(db_executor, create_import_job, uid, ImportSourceType.limitless)
 
     # Save uploaded file to temp directory
     os.makedirs(TEMP_DIR, exist_ok=True)
@@ -58,17 +58,19 @@ async def import_limitless_data(
 
     try:
         # Stream the file to disk to avoid loading it all into memory
-        f = open(zip_path, 'wb')
+        f = await run_blocking(storage_executor, open, zip_path, 'wb')
         try:
             while contents := await file.read(1024 * 1024):  # Read in 1MB chunks
-                loop = asyncio.get_running_loop()
-                await loop.run_in_executor(storage_executor, f.write, contents)
+                await run_blocking(storage_executor, f.write, contents)
         finally:
             f.close()
     except Exception as e:
         # Clean up on error
-        import_jobs_db.update_import_job(
-            job.id, {'status': ImportJobStatus.failed.value, 'error': f"Failed to save uploaded file: {str(e)}"}
+        await run_blocking(
+            db_executor,
+            import_jobs_db.update_import_job,
+            job.id,
+            {'status': ImportJobStatus.failed.value, 'error': f"Failed to save uploaded file: {str(e)}"},
         )
         raise HTTPException(status_code=500, detail=f"Failed to save uploaded file: {str(e)}")
 
@@ -86,7 +88,7 @@ async def import_limitless_data(
     response_model=List[ImportJobResponse],
     tags=['import'],
 )
-async def get_import_jobs(
+def get_import_jobs(
     uid: str = Depends(auth.get_current_user_uid),
     limit: int = 50,
 ):
@@ -117,7 +119,7 @@ async def get_import_jobs(
     response_model=ImportJobResponse,
     tags=['import'],
 )
-async def get_import_job_status(
+def get_import_job_status(
     job_id: str,
     uid: str = Depends(auth.get_current_user_uid),
 ):
@@ -154,7 +156,7 @@ async def get_import_job_status(
     '/v1/import/limitless/conversations',
     tags=['import'],
 )
-async def delete_limitless_conversations(
+def delete_limitless_conversations(
     uid: str = Depends(auth.get_current_user_uid),
 ):
     """

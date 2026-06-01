@@ -1,3 +1,4 @@
+import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 
@@ -6,7 +7,6 @@ import 'package:provider/provider.dart';
 
 import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/providers/conversation_provider.dart';
-import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
 class DailySummarySettingsPage extends StatefulWidget {
@@ -25,7 +25,7 @@ class _DailySummarySettingsPageState extends State<DailySummarySettingsPage> {
   void initState() {
     super.initState();
     _loadSettings();
-    MixpanelManager().dailySummarySettingsOpened();
+    PlatformManager.instance.analytics.dailySummarySettingsOpened();
   }
 
   Future<void> _loadSettings() async {
@@ -52,13 +52,13 @@ class _DailySummarySettingsPageState extends State<DailySummarySettingsPage> {
   Future<void> _updateEnabled(bool value) async {
     setState(() => _enabled = value);
     await setDailySummarySettings(enabled: value);
-    MixpanelManager().dailySummaryToggled(enabled: value);
+    PlatformManager.instance.analytics.dailySummaryToggled(enabled: value);
   }
 
   Future<void> _updateHour(int hour) async {
     setState(() => _selectedHour = hour);
     await setDailySummarySettings(hour: hour);
-    MixpanelManager().dailySummaryTimeChanged(hour: hour);
+    PlatformManager.instance.analytics.dailySummaryTimeChanged(hour: hour);
   }
 
   Future<void> _showHourPicker() async {
@@ -172,7 +172,7 @@ class _DailySummarySettingsPageState extends State<DailySummarySettingsPage> {
       Navigator.pop(context); // Dismiss loading
 
       if (summaryId != null) {
-        MixpanelManager().dailySummaryTestGenerated(date: dateStr);
+        PlatformManager.instance.analytics.dailySummaryTestGenerated(date: dateStr);
 
         // Refresh the hasDailySummaries flag so the Recap tab shows
         Provider.of<ConversationProvider>(context, listen: false).checkHasDailySummaries();
@@ -184,7 +184,7 @@ class _DailySummarySettingsPageState extends State<DailySummarySettingsPage> {
           ),
         );
       } else {
-        MixpanelManager().dailySummaryTestGenerationFailed(date: dateStr);
+        PlatformManager.instance.analytics.dailySummaryTestGenerationFailed(date: dateStr);
 
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(

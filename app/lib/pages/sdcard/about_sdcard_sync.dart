@@ -68,7 +68,7 @@ class _AboutSdCardSyncState extends State<AboutSdCardSync> {
                     style: const TextStyle(color: Colors.white, fontSize: 16),
                   ),
                   const SizedBox(height: 18),
-                  const Icon(Icons.wifi_protected_setup_sharp, size: 40, color: Colors.grey),
+                  const Icon(Icons.sync, size: 40, color: Colors.grey),
                   const SizedBox(height: 8),
                   Text(
                     context.l10n.serverProcessesAudio,

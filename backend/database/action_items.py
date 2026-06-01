@@ -419,6 +419,37 @@ def delete_action_item(uid: str, action_item_id: str) -> bool:
     return True
 
 
+def delete_action_items_batch(uid: str, action_item_ids: List[str]) -> List[str]:
+    """
+    Delete multiple action items by id, chunking into 500-op Firestore batches.
+
+    Skips per-id existence reads: batch.delete() is a no-op for missing
+    docs, and downstream vector + FCM cleanup are both idempotent for
+    unknown ids.
+    """
+    if not action_item_ids:
+        return []
+
+    user_ref = db.collection('users').document(uid)
+    action_items_ref = user_ref.collection(action_items_collection)
+
+    batch = db.batch()
+    count = 0
+
+    for item_id in action_item_ids:
+        batch.delete(action_items_ref.document(item_id))
+        count += 1
+        if count >= 499:  # Firestore batch limit is 500
+            batch.commit()
+            batch = db.batch()
+            count = 0
+
+    if count > 0:
+        batch.commit()
+
+    return list(action_item_ids)
+
+
 def delete_action_items_for_conversation(uid: str, conversation_id: str) -> int:
     """
     Delete all action items for a specific conversation.

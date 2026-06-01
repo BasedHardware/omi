@@ -273,4 +273,13 @@ pub fn deprecated_routes() -> Router<AppState> {
             get(deprecated_handler).patch(deprecated_handler),
         )
         .route("/v1/users/delete-account", delete(deprecated_handler))
+        // ── Deepgram proxy (removed #7137, was deprecated since 2026-04-05) ──
+        .route(
+            "/v1/proxy/deepgram/v1/listen",
+            post(deprecated_handler),
+        )
+        .route(
+            "/v1/proxy/deepgram/ws/v1/listen",
+            get(deprecated_handler).post(deprecated_handler),
+        )
 }

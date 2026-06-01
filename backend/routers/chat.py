@@ -7,9 +7,20 @@ from datetime import datetime, timezone
 from typing import List, Optional
 from pathlib import Path
 
-from utils.executors import critical_executor
+from utils.executors import critical_executor, db_executor, llm_executor, storage_executor, run_blocking
 
-from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile, File, Form, WebSocket, WebSocketDisconnect
+from fastapi import (
+    APIRouter,
+    Depends,
+    Header,
+    HTTPException,
+    Request,
+    UploadFile,
+    File,
+    Form,
+    WebSocket,
+    WebSocketDisconnect,
+)
 from fastapi.responses import StreamingResponse
 from multipart.multipart import shutil
 
@@ -43,7 +54,7 @@ from utils.llm.goals import extract_and_update_goal_progress
 from database.redis_db import try_acquire_goal_extraction_lock, check_rate_limit, store_chat_share, get_chat_share
 from database.users import set_chat_message_rating_score
 from utils.rate_limit_config import get_effective_limit, RATE_LIMIT_SHADOW
-from utils.subscription import enforce_chat_quota
+from utils.subscription import enforce_chat_quota, is_trial_paywalled
 from utils.other import endpoints as auth, storage
 from utils.other.chat_file import FileChatTool
 from utils.retrieval.graph import execute_graph_chat, execute_chat_stream, execute_persona_chat_stream
@@ -173,6 +184,7 @@ def send_message(
     plugin_id: Optional[str] = None,
     app_id: Optional[str] = None,
     uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "chat:send_message")),
+    x_app_platform: Optional[str] = Header(None, alias='X-App-Platform'),
 ):
     # Hard cap: Free by question count, Architect by cost_usd. Operator enters
     # overage mode silently. If exceeded, instead of raising 402 (which mobile
@@ -182,7 +194,7 @@ def send_message(
     # any other reply. Desktop pre-checks via /v1/users/me/usage-quota and
     # never reaches here when over.
     try:
-        enforce_chat_quota(uid)
+        enforce_chat_quota(uid, platform=x_app_platform)
     except HTTPException as exc:
         if exc.status_code != 402 or not isinstance(exc.detail, dict):
             raise
@@ -241,7 +253,7 @@ def send_message(
 
     # Check for goal progress (background) — rate-limited to one call per user per 5 min
     if try_acquire_goal_extraction_lock(uid):
-        critical_executor.submit(extract_and_update_goal_progress, uid, data.text)
+        llm_executor.submit(extract_and_update_goal_progress, uid, data.text)
 
     app = get_available_app_by_id(compat_app_id, uid)
     app = App(**app) if app else None
@@ -457,12 +469,13 @@ def get_messages(
 
 
 @router.post("/v2/voice-messages")
-async def create_voice_message_stream(
+def create_voice_message_stream(
     files: List[UploadFile] = File(...),
     language: Optional[str] = Form(None),
     uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "voice:message")),
+    x_app_platform: Optional[str] = Header(None, alias='X-App-Platform'),
 ):
-    enforce_chat_quota(uid)
+    enforce_chat_quota(uid, platform=x_app_platform)
 
     # wav
     paths = retrieve_file_paths(files, uid)
@@ -495,6 +508,7 @@ async def create_voice_message_stream(
 async def transcribe_voice_message(
     request: Request,
     uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "voice:transcribe")),
+    x_app_platform: Optional[str] = Header(None, alias='X-App-Platform'),
 ):
     """Transcribe audio and return the transcript text.
 
@@ -504,6 +518,12 @@ async def transcribe_voice_message(
 
     Returns {"transcript": "...", "language": "..."}.
     """
+    # Trial paywall: reject paywalled desktop PTT before hitting Deepgram.
+    # Narrow to trial-only on purpose — full enforce_chat_quota here would
+    # change mobile behavior for users past their existing 30/mo chat cap.
+    if is_trial_paywalled(uid, x_app_platform):
+        raise HTTPException(status_code=402, detail={'error': 'quota_exceeded', 'plan_type': 'basic'})
+
     content_type = request.headers.get("content-type", "")
 
     if "application/octet-stream" in content_type:
@@ -575,12 +595,15 @@ async def transcribe_voice_message(
     other_file_paths = []
 
     # Process all files in a single loop
+    def _save_wav(path, file_obj):
+        with open(path, "wb") as buffer:
+            shutil.copyfileobj(file_obj, buffer)
+
     for file in upload_files:
         if file.filename.lower().endswith('.wav'):
             # For WAV files, save directly to a temporary path
             temp_path = f"/tmp/{uid}_{uuid.uuid4()}.wav"
-            with open(temp_path, "wb") as buffer:
-                shutil.copyfileobj(file.file, buffer)
+            await run_blocking(storage_executor, _save_wav, temp_path, file.file)
             wav_paths.append(temp_path)
         else:
             # For other files, collect paths for later conversion
@@ -683,6 +706,7 @@ async def transcribe_voice_message_stream(
     codec: str = 'linear16',
     channels: int = 1,
     keywords: Optional[str] = None,
+    x_app_platform: Optional[str] = Header(None, alias='X-App-Platform'),
 ):
     """WebSocket endpoint for PTT live mode transcription-only streaming.
 
@@ -706,6 +730,12 @@ async def transcribe_voice_message_stream(
     """
     await websocket.accept()
 
+    # Paywalled desktop users — close before opening DG connection so we don't
+    # bill Deepgram for a PTT stream that wouldn't be allowed to chat anyway.
+    if is_trial_paywalled(uid, x_app_platform):
+        await websocket.close(code=1008, reason='trial_expired')
+        return
+
     if codec != 'linear16':
         await websocket.close(code=1008, reason='Unsupported codec; only linear16 is supported')
         return
@@ -721,7 +751,9 @@ async def transcribe_voice_message_stream(
     # Inline rate limiting for WebSocket (can't use Depends(with_rate_limit))
     try:
         max_requests, window = get_effective_limit('voice:transcribe_stream')
-        allowed, remaining, retry_after = check_rate_limit(uid, 'voice:transcribe_stream', max_requests, window)
+        allowed, remaining, retry_after = await run_blocking(
+            critical_executor, check_rate_limit, uid, 'voice:transcribe_stream', max_requests, window
+        )
         if not allowed:
             if not RATE_LIMIT_SHADOW:
                 await websocket.close(code=1008, reason=f'Rate limit exceeded. Retry in {retry_after}s.')

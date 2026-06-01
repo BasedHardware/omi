@@ -64,6 +64,12 @@ embedding_inference_v2.to(device)
 os.makedirs('_temp', exist_ok=True)
 
 
+def _load_audio_for_inference(file_path: str) -> dict:
+    """Load audio into memory to avoid pyannote's TorchCodec file decoder path."""
+    waveform, sample_rate = torchaudio.load(file_path)
+    return {"waveform": waveform, "sample_rate": sample_rate}
+
+
 def embedding_endpoint(file: UploadFile):
     """
     Extract speaker embedding from an audio file.
@@ -87,8 +93,8 @@ def embedding_endpoint(file: UploadFile):
         # Validate audio duration before inference (issue #4572)
         _validate_audio_duration(file_path)
 
-        # Extract embedding
-        embedding = embedding_inference(file_path)
+        # Preload waveform to avoid pyannote's TorchCodec file decoder path.
+        embedding = embedding_inference(_load_audio_for_inference(file_path))
 
         # Convert numpy array to list for JSON serialization
         return embedding.tolist()
@@ -122,8 +128,8 @@ def embedding_endpoint_v2(file: UploadFile):
         # Validate audio duration before inference (issue #4572)
         _validate_audio_duration(file_path)
 
-        # Extract embedding using v2 model
-        embedding = embedding_inference_v2(file_path)
+        # Preload waveform to avoid pyannote's TorchCodec file decoder path.
+        embedding = embedding_inference_v2(_load_audio_for_inference(file_path))
 
         # Convert numpy array to list for JSON serialization
         return embedding.tolist()

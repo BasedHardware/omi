@@ -102,7 +102,7 @@ def _cached_anthropic(api_key: str) -> anthropic.AsyncAnthropic:
     cache_key = _hash_key(api_key)
     inst = _anthropic_cache.get(cache_key)
     if inst is None:
-        inst = anthropic.AsyncAnthropic(api_key=api_key)
+        inst = anthropic.AsyncAnthropic(api_key=api_key, timeout=120.0, max_retries=1)
         _anthropic_cache[cache_key] = inst
     return inst
 
@@ -111,7 +111,7 @@ def _create_byok_client(
     model: str, provider: str, byok_key: str, streaming: bool = False, feature: str = ''
 ) -> Optional[ChatOpenAI]:
     """Create a ChatOpenAI using the user's BYOK key. Returns None if BYOK not supported for this provider."""
-    kwargs: Dict[str, Any] = {'callbacks': [_usage_callback]}
+    kwargs: Dict[str, Any] = {'callbacks': [_usage_callback], 'request_timeout': 120, 'max_retries': 1}
     if model == 'gpt-5.1':
         kwargs['extra_body'] = {"prompt_cache_retention": "24h"}
     if streaming:
@@ -137,7 +137,7 @@ def _create_byok_client(
 
 
 # Anthropic client for chat agent (module-level, BYOK-aware)
-_default_anthropic_client = anthropic.AsyncAnthropic()  # uses ANTHROPIC_API_KEY env var
+_default_anthropic_client = anthropic.AsyncAnthropic(timeout=120.0, max_retries=1)
 anthropic_client = _AnthropicClientProxy(_default_anthropic_client)
 
 
@@ -417,7 +417,11 @@ def _get_or_create_openai_llm(model_name: str, streaming: bool = False) -> ChatO
     """Get or create a cached ChatOpenAI for an OpenAI model."""
     key = (model_name, streaming, 'openai')
     if key not in _llm_cache:
-        kwargs: Dict[str, Any] = {'callbacks': [_usage_callback]}
+        kwargs: Dict[str, Any] = {
+            'callbacks': [_usage_callback],
+            'request_timeout': 120,
+            'max_retries': 1,
+        }
         if model_name == 'gpt-5.1':
             kwargs['extra_body'] = {"prompt_cache_retention": "24h"}
         if streaming:
@@ -444,6 +448,8 @@ def _get_or_create_openrouter_llm(
             'base_url': "https://openrouter.ai/api/v1",
             'default_headers': {"X-Title": "Omi Chat"},
             'callbacks': [_usage_callback],
+            'request_timeout': 120,
+            'max_retries': 1,
         }
         if temperature is not None:
             kwargs['temperature'] = temperature
@@ -472,22 +478,19 @@ def _get_or_create_gemini_llm(model_name: str, streaming: bool = False) -> BaseC
         use_vertex = os.environ.get('USE_VERTEX_AI', '').lower() == 'true'
         gcp_project = os.environ.get('GOOGLE_CLOUD_PROJECT', '') if use_vertex else ''
         gemini_key = os.environ.get('GEMINI_API_KEY', '')
-        kwargs: Dict[str, Any] = {'callbacks': [_usage_callback]}
+        kwargs: Dict[str, Any] = {'callbacks': [_usage_callback], 'timeout': 120, 'max_retries': 1}
         if streaming:
             kwargs['streaming'] = True
 
         if gcp_project:
-            # Vertex AI — explicit opt-in, uses ADC (GOOGLE_APPLICATION_CREDENTIALS)
             gcp_location = os.environ.get('GCP_LOCATION', 'us-central1')
             _llm_cache[key] = ChatGoogleGenerativeAI(
                 model=model_name, project=gcp_project, location=gcp_location, **kwargs
             )
         elif gemini_key:
-            # AI Studio — uses API key, paid-tier quota
             kwargs['google_api_key'] = gemini_key
             _llm_cache[key] = ChatGoogleGenerativeAI(model=model_name, **kwargs)
         else:
-            # No credentials — constructable placeholder, fails at invoke time
             logger.warning('No USE_VERTEX_AI or GEMINI_API_KEY — Gemini calls will fail at invoke time')
             _llm_cache[key] = ChatOpenAI(
                 model=model_name, api_key='not-set', base_url=_GEMINI_OPENAI_BASE_URL, **kwargs
@@ -621,7 +624,7 @@ ANTHROPIC_AGENT_COMPLEX_MODEL = get_model('chat_agent')
 # Legacy module-level alias (kept for test compatibility).
 # Production code should use get_llm(feature) exclusively.
 # ---------------------------------------------------------------------------
-llm_mini = ChatOpenAI(model='gpt-4.1-mini', callbacks=[_usage_callback])
+llm_mini = ChatOpenAI(model='gpt-4.1-mini', callbacks=[_usage_callback], request_timeout=120, max_retries=1)
 
 # ---------------------------------------------------------------------------
 # Embeddings, parser, utilities

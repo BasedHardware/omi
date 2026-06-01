@@ -168,6 +168,7 @@ actor AppleNotesReaderService {
           _ = try await APIClient.shared.createMemory(
             content: memory,
             visibility: "private",
+            category: .system,
             tags: ["apple_notes", "import", "profile"],
             source: "apple_notes",
             headline: "Apple Notes Insight"
@@ -348,6 +349,7 @@ actor AppleNotesReaderService {
       _ = try await APIClient.shared.createMemory(
         content: content,
         visibility: "private",
+        category: .system,
         tags: ["apple_notes", "import", "note"],
         source: "apple_notes",
         windowTitle: "Apple Notes — \(dateFormatter.string(from: note.modifiedAt))",

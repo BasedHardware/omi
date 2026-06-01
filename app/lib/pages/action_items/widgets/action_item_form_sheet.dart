@@ -1,3 +1,4 @@
+import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -11,7 +12,6 @@ import 'package:share_plus/share_plus.dart';
 import 'package:omi/backend/http/api/action_items.dart' as action_items_api;
 import 'package:omi/backend/schema/schema.dart';
 import 'package:omi/providers/action_items_provider.dart';
-import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/responsive/responsive_helper.dart';
 import 'package:omi/widgets/calendar_date_picker_sheet.dart';
@@ -72,8 +72,7 @@ class _ActionItemFormSheetState extends State<ActionItemFormSheet> {
       String newDescription = _textController.text.trim();
       bool descriptionChanged = newDescription != widget.actionItem!.description;
       // Compare due dates - handle null cases explicitly
-      bool dueDateChanged =
-          (_selectedDueDate == null && widget.actionItem!.dueAt != null) ||
+      bool dueDateChanged = (_selectedDueDate == null && widget.actionItem!.dueAt != null) ||
           (_selectedDueDate != null && widget.actionItem!.dueAt == null) ||
           (_selectedDueDate != null &&
               widget.actionItem!.dueAt != null &&
@@ -109,7 +108,7 @@ class _ActionItemFormSheetState extends State<ActionItemFormSheet> {
 
         // Track action item edit
         if (descriptionChanged || dueDateChanged) {
-          MixpanelManager().actionItemEdited(
+          PlatformManager.instance.analytics.actionItemEdited(
             actionItemId: widget.actionItem!.id,
             titleChanged: descriptionChanged,
             dateChanged: dueDateChanged,
@@ -146,7 +145,10 @@ class _ActionItemFormSheetState extends State<ActionItemFormSheet> {
 
         if (createdItem != null) {
           // Track manually added action item
-          MixpanelManager().actionItemManuallyAdded(actionItemId: createdItem.id, timestamp: DateTime.now());
+          PlatformManager.instance.analytics.actionItemManuallyAdded(
+            actionItemId: createdItem.id,
+            timestamp: DateTime.now(),
+          );
         } else if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
@@ -206,7 +208,10 @@ class _ActionItemFormSheetState extends State<ActionItemFormSheet> {
       final url = result['url'] as String;
       HapticFeedback.lightImpact();
       await Share.share(url);
-      MixpanelManager().track('Action Item Shared', properties: {'actionItemId': widget.actionItem!.id});
+      PlatformManager.instance.analytics.track(
+        'Action Item Shared',
+        properties: {'actionItemId': widget.actionItem!.id},
+      );
     } else {
       ScaffoldMessenger.of(
         context,
@@ -472,8 +477,8 @@ class _DateTimePickerSheetState extends State<DateTimePickerSheet> {
         color: isSelected == true
             ? ResponsiveHelper.purplePrimary
             : isCurrentYear == true
-            ? ResponsiveHelper.purplePrimary.withValues(alpha: 0.3)
-            : Colors.transparent,
+                ? ResponsiveHelper.purplePrimary.withValues(alpha: 0.3)
+                : Colors.transparent,
         borderRadius: BorderRadius.circular(8),
       ),
       child: Center(

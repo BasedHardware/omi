@@ -204,14 +204,16 @@ actor APIClient {
       }
 
       guard (200...299).contains(retryHttpResponse.statusCode) else {
-        throw APIError.httpError(statusCode: retryHttpResponse.statusCode)
+        let detail = Self.extractErrorDetail(from: retryData)
+        throw APIError.httpError(statusCode: retryHttpResponse.statusCode, detail: detail)
       }
 
       return try decoder.decode(T.self, from: retryData)
     }
 
     guard (200...299).contains(httpResponse.statusCode) else {
-      throw APIError.httpError(statusCode: httpResponse.statusCode)
+      let detail = Self.extractErrorDetail(from: data)
+      throw APIError.httpError(statusCode: httpResponse.statusCode, detail: detail)
     }
 
     do {
@@ -240,6 +242,14 @@ actor APIClient {
       throw decodingError
     }
   }
+
+  private static func extractErrorDetail(from data: Data) -> String? {
+    guard
+      let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+      let detail = json["detail"] as? String
+    else { return nil }
+    return detail
+  }
 }
 
 // MARK: - API Errors
@@ -247,8 +257,13 @@ actor APIClient {
 enum APIError: LocalizedError {
   case invalidResponse
   case unauthorized
-  case httpError(statusCode: Int)
+  case httpError(statusCode: Int, detail: String? = nil)
   case decodingError(Error)
+
+  var detail: String? {
+    if case .httpError(_, let detail) = self { return detail }
+    return nil
+  }
 
   var errorDescription: String? {
     switch self {
@@ -256,11 +271,30 @@ enum APIError: LocalizedError {
       return "Invalid response from server"
     case .unauthorized:
       return "Unauthorized - please sign in again"
-    case .httpError(let statusCode):
+    case .httpError(let statusCode, let detail):
+      if let detail { return detail }
       return "HTTP error: \(statusCode)"
     case .decodingError(let error):
       return "Failed to decode response: \(error.localizedDescription)"
     }
+  }
+}
+
+// MARK: - MCP API
+
+struct MCPKeyCreatedResponse: Codable {
+  let id: String
+  let name: String
+  let key: String
+}
+
+extension APIClient {
+  /// Creates a new MCP API key and returns the raw secret (shown only once by the server).
+  /// Used to wire Omi memory into external MCP clients (Claude, ChatGPT, Claude Code, Codex).
+  func createMCPKey(name: String = "Desktop") async throws -> String {
+    struct Body: Encodable { let name: String }
+    let response: MCPKeyCreatedResponse = try await post("v1/mcp/keys", body: Body(name: name))
+    return response.key
   }
 }
 
@@ -369,15 +403,12 @@ extension APIClient {
 
   /// Updates the title of a conversation
   func updateConversationTitle(id: String, title: String) async throws {
-    struct TitleUpdate: Encodable {
-      let title: String
-    }
-
-    let url = URL(string: baseURL + "v1/conversations/\(id)")!
+    var components = URLComponents(string: baseURL + "v1/conversations/\(id)/title")!
+    components.queryItems = [URLQueryItem(name: "title", value: title)]
+    let url = components.url!
     var request = URLRequest(url: url)
     request.httpMethod = "PATCH"
     request.allHTTPHeaderFields = try await buildHeaders(requireAuth: true)
-    request.httpBody = try JSONEncoder().encode(TitleUpdate(title: title))
 
     let (_, response) = try await session.data(for: request)
     guard let httpResponse = response as? HTTPURLResponse,
@@ -1241,7 +1272,7 @@ extension APIClient {
         customBaseURL: nil
       )
       return response.conversation
-    } catch APIError.httpError(let statusCode) where statusCode == 404 {
+    } catch APIError.httpError(statusCode: let statusCode, detail: _) where statusCode == 404 {
       // 404 = no in-progress conversation found — WS close handler already processed it
       return nil
     }
@@ -1451,18 +1482,25 @@ struct CreateMemoryResponse: Codable {
 }
 
 /// One item in a POST /v3/memories/batch payload. Mirrors the `Memory` model
-/// in `backend/models/memories.py` (the server hardcodes category=manual on
-/// batch creation, so we intentionally don't send it).
+/// in `backend/models/memories.py`. The server honors `category`, so batch
+/// imports default to `.system` ("About You") rather than landing in "Manual".
 struct MemoryBatchItem: Encodable {
   let content: String
   let visibility: String
+  let category: String
   let tags: [String]
   let headline: String?
 
-  init(content: String, visibility: String = "private", tags: [String] = [], headline: String? = nil)
-  {
+  init(
+    content: String,
+    visibility: String = "private",
+    category: MemoryCategory = .system,
+    tags: [String] = [],
+    headline: String? = nil
+  ) {
     self.content = content
     self.visibility = visibility
+    self.category = category.rawValue
     self.tags = tags
     self.headline = headline
   }
@@ -3743,6 +3781,10 @@ struct UserSubscriptionResponse: Codable {
   let memoriesCreatedLimit: Int
   let availablePlans: [SubscriptionPlanOption]
   let showSubscriptionUI: Bool
+  // Set for Neo subscribers whose current billing period started before the
+  // policy change in #7496 — they retain desktop access until this unix-seconds
+  // timestamp (their `current_period_end`). Null for everyone else.
+  let desktopGrandfatherUntil: Int?
 
   enum CodingKeys: String, CodingKey {
     case subscription
@@ -3756,6 +3798,28 @@ struct UserSubscriptionResponse: Codable {
     case memoriesCreatedLimit = "memories_created_limit"
     case availablePlans = "available_plans"
     case showSubscriptionUI = "show_subscription_ui"
+    case desktopGrandfatherUntil = "desktop_grandfather_until"
+  }
+
+  // Defensive decode: only `subscription` is required. The usage counters and
+  // plan catalog default when absent so a backend that's behind on schema
+  // (notably the dev backend the beta channel routes to, which can lag prod or
+  // omit newer fields like `memories_created_used`) doesn't blank the entire
+  // Plan & Usage page with "Failed to load plan information."
+  init(from decoder: Decoder) throws {
+    let c = try decoder.container(keyedBy: CodingKeys.self)
+    subscription = try c.decode(UserSubscriptionInfo.self, forKey: .subscription)
+    transcriptionSecondsUsed = try c.decodeIfPresent(Int.self, forKey: .transcriptionSecondsUsed) ?? 0
+    transcriptionSecondsLimit = try c.decodeIfPresent(Int.self, forKey: .transcriptionSecondsLimit) ?? 0
+    wordsTranscribedUsed = try c.decodeIfPresent(Int.self, forKey: .wordsTranscribedUsed) ?? 0
+    wordsTranscribedLimit = try c.decodeIfPresent(Int.self, forKey: .wordsTranscribedLimit) ?? 0
+    insightsGainedUsed = try c.decodeIfPresent(Int.self, forKey: .insightsGainedUsed) ?? 0
+    insightsGainedLimit = try c.decodeIfPresent(Int.self, forKey: .insightsGainedLimit) ?? 0
+    memoriesCreatedUsed = try c.decodeIfPresent(Int.self, forKey: .memoriesCreatedUsed) ?? 0
+    memoriesCreatedLimit = try c.decodeIfPresent(Int.self, forKey: .memoriesCreatedLimit) ?? 0
+    availablePlans = try c.decodeIfPresent([SubscriptionPlanOption].self, forKey: .availablePlans) ?? []
+    showSubscriptionUI = try c.decodeIfPresent(Bool.self, forKey: .showSubscriptionUI) ?? true
+    desktopGrandfatherUntil = try c.decodeIfPresent(Int.self, forKey: .desktopGrandfatherUntil)
   }
 }
 
@@ -3841,6 +3905,27 @@ struct OverageInfoResponse: Codable {
 
 struct CustomerPortalResponse: Codable {
   let url: String
+}
+
+/// Trial metadata from `/v1/users/me/trial` (Python backend) — timing info for countdown UI
+struct TrialMetadataResponse: Codable {
+  let trialStartedAt: Int?
+  let trialEndsAt: Int?
+  let trialRemainingSeconds: Int
+  let trialExpired: Bool
+  let trialDurationSeconds: Int
+  let trialFeatures: [String]
+  let planAfterTrial: String
+
+  enum CodingKeys: String, CodingKey {
+    case trialStartedAt = "trial_started_at"
+    case trialEndsAt = "trial_ends_at"
+    case trialRemainingSeconds = "trial_remaining_seconds"
+    case trialExpired = "trial_expired"
+    case trialDurationSeconds = "trial_duration_seconds"
+    case trialFeatures = "trial_features"
+    case planAfterTrial = "plan_after_trial"
+  }
 }
 
 /// User profile response
@@ -3966,11 +4051,9 @@ struct MemorySettingsResponse: Codable {
 
 struct FloatingBarSettingsResponse: Codable {
   var voiceAnswersEnabled: Bool?
-  var elevenLabsVoiceID: String?
 
   enum CodingKeys: String, CodingKey {
     case voiceAnswersEnabled = "voice_answers_enabled"
-    case elevenLabsVoiceID = "elevenlabs_voice_id"
   }
 }
 
@@ -4120,11 +4203,72 @@ extension APIClient {
     return try await post("v2/messages/share", body: body)
   }
 
+  /// Upload one or more files to be attached to a chat message.
+  /// Mirrors the Flutter app's `uploadFilesServer` (lib/backend/http/api/messages.dart) —
+  /// same `/v2/files` multipart endpoint, same response shape.
+  func uploadChatFiles(
+    _ uploads: [(data: Data, fileName: String, mimeType: String)],
+    appId: String? = nil
+  ) async throws -> [ChatFileResponse] {
+    var endpoint = "v2/files"
+    if let appId = appId, !appId.isEmpty, appId != "no_selected" {
+      endpoint += "?app_id=\(appId)"
+    }
+    let url = URL(string: baseURL + endpoint)!
+
+    let boundary = "Boundary-\(UUID().uuidString)"
+    var request = URLRequest(url: url)
+    request.httpMethod = "POST"
+    request.allHTTPHeaderFields = try await buildHeaders(requireAuth: true)
+    request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
+
+    var body = Data()
+    let lineBreak = "\r\n"
+    for upload in uploads {
+      body.append("--\(boundary)\(lineBreak)".data(using: .utf8)!)
+      body.append(
+        "Content-Disposition: form-data; name=\"files\"; filename=\"\(upload.fileName)\"\(lineBreak)"
+          .data(using: .utf8)!)
+      body.append("Content-Type: \(upload.mimeType)\(lineBreak)\(lineBreak)".data(using: .utf8)!)
+      body.append(upload.data)
+      body.append(lineBreak.data(using: .utf8)!)
+    }
+    body.append("--\(boundary)--\(lineBreak)".data(using: .utf8)!)
+    request.httpBody = body
+
+    let (data, response) = try await session.data(for: request)
+    guard let http = response as? HTTPURLResponse else { throw APIError.invalidResponse }
+    if http.statusCode == 401 { throw APIError.unauthorized }
+    guard (200...299).contains(http.statusCode) else {
+      throw APIError.httpError(statusCode: http.statusCode)
+    }
+    return try decoder.decode([ChatFileResponse].self, from: data)
+  }
+
 }
 
 /// Response from rating a message
 struct MessageStatusResponse: Codable {
   let status: String
+}
+
+/// Response shape for `POST /v2/files` — mirrors backend `FileChat` model.
+struct ChatFileResponse: Codable {
+  let id: String
+  let name: String?
+  let mimeType: String?
+  let thumbnail: String?
+  let thumbName: String?
+  let openaiFileId: String?
+
+  enum CodingKeys: String, CodingKey {
+    case id
+    case name
+    case thumbnail
+    case mimeType = "mime_type"
+    case thumbName = "thumb_name"
+    case openaiFileId = "openai_file_id"
+  }
 }
 
 /// Response from sharing chat messages
@@ -4276,9 +4420,11 @@ struct ChatMessageDB: Codable, Identifiable {
   let sessionId: String?
   let rating: Int?
   let reported: Bool
+  /// JSON string with extra info (attachments, etc.); see ChatMessage.decodeAttachments.
+  let metadata: String?
 
   enum CodingKeys: String, CodingKey {
-    case id, text, sender, rating, reported
+    case id, text, sender, rating, reported, metadata
     case createdAt = "created_at"
     case appId = "app_id"
     case sessionId = "session_id"
@@ -4294,6 +4440,7 @@ struct ChatMessageDB: Codable, Identifiable {
     sessionId = try container.decodeIfPresent(String.self, forKey: .sessionId)
     rating = try container.decodeIfPresent(Int.self, forKey: .rating)
     reported = try container.decodeIfPresent(Bool.self, forKey: .reported) ?? false
+    metadata = try container.decodeIfPresent(String.self, forKey: .metadata)
   }
 }
 
@@ -4405,6 +4552,10 @@ extension APIClient {
     return try await get("v1/users/me/subscription")
   }
 
+  func getTrialMetadata() async throws -> TrialMetadataResponse {
+    return try await get("v1/users/me/trial")
+  }
+
   func getAvailablePlans() async throws -> AvailablePlansResponse {
     return try await get("v1/payments/available-plans")
   }
@@ -4413,28 +4564,40 @@ extension APIClient {
     return try await get("v1/payments/overage-info")
   }
 
-  func createCheckoutSession(priceId: String) async throws -> CheckoutSessionResponse {
+  func createCheckoutSession(priceId: String, promotionCode: String? = nil) async throws
+    -> CheckoutSessionResponse
+  {
     struct Request: Encodable {
       let priceId: String
+      let promotionCode: String?
 
       enum CodingKeys: String, CodingKey {
         case priceId = "price_id"
+        case promotionCode = "promotion_code"
       }
     }
 
-    return try await post("v1/payments/checkout-session", body: Request(priceId: priceId))
+    return try await post(
+      "v1/payments/checkout-session",
+      body: Request(priceId: priceId, promotionCode: promotionCode))
   }
 
-  func upgradeSubscription(priceId: String) async throws -> UpgradeSubscriptionResponse {
+  func upgradeSubscription(priceId: String, promotionCode: String? = nil) async throws
+    -> UpgradeSubscriptionResponse
+  {
     struct Request: Encodable {
       let priceId: String
+      let promotionCode: String?
 
       enum CodingKeys: String, CodingKey {
         case priceId = "price_id"
+        case promotionCode = "promotion_code"
       }
     }
 
-    return try await post("v1/payments/upgrade-subscription", body: Request(priceId: priceId))
+    return try await post(
+      "v1/payments/upgrade-subscription",
+      body: Request(priceId: priceId, promotionCode: promotionCode))
   }
 
   func createCustomerPortalSession() async throws -> CustomerPortalResponse {
@@ -4622,66 +4785,48 @@ extension APIClient {
     return try await get("v1/config/api-keys", customBaseURL: rustBackendURL)
   }
 
-  // MARK: - TTS Proxy (issue #6622)
-
   struct TtsSynthesizeRequest: Encodable {
     let text: String
     let voiceId: String
-    let modelId: String
-    let outputFormat: String
-    let voiceSettings: TtsVoiceSettings
+    let instructions: String?
 
     enum CodingKeys: String, CodingKey {
       case text
       case voiceId = "voice_id"
-      case modelId = "model_id"
-      case outputFormat = "output_format"
-      case voiceSettings = "voice_settings"
+      case instructions
     }
   }
 
-  struct TtsVoiceSettings: Encodable {
-    let stability: Double
-    let similarityBoost: Double
-    let style: Double
-    let useSpeakerBoost: Bool
-
-    enum CodingKeys: String, CodingKey {
-      case stability
-      case similarityBoost = "similarity_boost"
-      case style
-      case useSpeakerBoost = "use_speaker_boost"
-    }
-  }
-
-  /// Synthesize speech via the backend TTS proxy (ElevenLabs key stays server-side).
-  /// Returns raw audio data (audio/mpeg).
-  func synthesizeSpeech(request: TtsSynthesizeRequest) async throws -> Data {
+  func synthesizeSpeech(request body: TtsSynthesizeRequest) async throws -> Data {
     let base = rustBackendURL
-    let url = URL(string: base + "v1/tts/synthesize")!
-    var urlRequest = URLRequest(url: url)
-    urlRequest.httpMethod = "POST"
-    urlRequest.allHTTPHeaderFields = try await buildHeaders(requireAuth: true)
-    urlRequest.httpBody = try JSONEncoder().encode(request)
-    urlRequest.timeoutInterval = 60
+    guard !base.isEmpty, let url = URL(string: base + "v1/tts/synthesize") else {
+      throw APIError.invalidResponse
+    }
+    var request = URLRequest(url: url)
+    request.httpMethod = "POST"
+    request.timeoutInterval = 60
+    request.allHTTPHeaderFields = try await buildHeaders()
+    request.httpBody = try JSONEncoder().encode(body)
 
-    let (data, response) = try await session.data(for: urlRequest)
+    let (data, response) = try await session.data(for: request)
     guard let httpResponse = response as? HTTPURLResponse else {
       throw APIError.invalidResponse
     }
 
     if httpResponse.statusCode == 401 {
-      // Retry with refreshed token
       let authService = await MainActor.run { AuthService.shared }
       _ = try await authService.getIdToken(forceRefresh: true)
 
-      var retryRequest = urlRequest
+      var retryRequest = request
       retryRequest.setValue(
         try await authService.getAuthHeader(), forHTTPHeaderField: "Authorization")
 
       let (retryData, retryResponse) = try await session.data(for: retryRequest)
       guard let retryHttpResponse = retryResponse as? HTTPURLResponse else {
         throw APIError.invalidResponse
+      }
+      guard retryHttpResponse.statusCode != 401 else {
+        throw APIError.unauthorized
       }
       guard (200...299).contains(retryHttpResponse.statusCode) else {
         throw APIError.httpError(statusCode: retryHttpResponse.statusCode)
@@ -4692,6 +4837,7 @@ extension APIClient {
     guard (200...299).contains(httpResponse.statusCode) else {
       throw APIError.httpError(statusCode: httpResponse.statusCode)
     }
+
     return data
   }
 
@@ -4839,4 +4985,77 @@ extension APIClient {
     let body = UpdateActionItemRequest(completed: completed, description: description, dueAt: dueAt)
     return try await patch("v1/tools/action-items/\(id)", body: body, customBaseURL: nil)
   }
+
+  // MARK: - X (Twitter) Connector
+
+  /// Ask the Python backend for the X OAuth authorize URL. The desktop passes
+  /// its own deep link so the backend can redirect back to this exact build.
+  func xOAuthURL(successRedirectURL: String) async throws -> XOAuthURLResponse {
+    let encoded = successRedirectURL.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
+    return try await get("v1/x/oauth-url?success_redirect_url=\(encoded)")
+  }
+
+  func xConnectionStatus() async throws -> XConnectionStatus {
+    try await get("v1/x/connection-status")
+  }
+
+  @discardableResult
+  func xSync() async throws -> XSyncResult {
+    try await post("v1/x/sync")
+  }
+
+  func xDisconnect() async throws {
+    let _: XSimpleOK = try await post("v1/x/disconnect")
+  }
+}
+
+struct XOAuthURLResponse: Decodable {
+  let success: Bool
+  let authUrl: String?
+  let error: String?
+  enum CodingKeys: String, CodingKey {
+    case success
+    case authUrl = "auth_url"
+    case error
+  }
+}
+
+struct XConnectionStatus: Decodable {
+  let success: Bool
+  let connected: Bool
+  let handle: String?
+  let postCount: Int?
+  let memoryCount: Int?
+  let syncing: Bool?
+  let lastSyncedAt: String?
+  let lastSyncSource: String?
+  enum CodingKeys: String, CodingKey {
+    case success
+    case connected
+    case handle
+    case postCount = "post_count"
+    case memoryCount = "memory_count"
+    case syncing
+    case lastSyncedAt = "last_synced_at"
+    case lastSyncSource = "last_sync_source"
+  }
+}
+
+struct XSyncResult: Decodable {
+  let success: Bool
+  let source: String?
+  let newPosts: Int?
+  let memoriesCreated: Int?
+  let error: String?
+  enum CodingKeys: String, CodingKey {
+    case success
+    case source
+    case newPosts = "new_posts"
+    case memoriesCreated = "memories_created"
+    case error
+  }
+}
+
+struct XSimpleOK: Decodable {
+  let success: Bool
 }

@@ -26,7 +26,8 @@ class ResponseItem(BaseModel):
     person_id: Optional[str] = None
 
 
-device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+# SpeechBrain 1.x expects run_opts["device"] to be a string, not torch.device.
+device = 'cuda:0' if torch.cuda.is_available() else 'cpu'
 model = SpeakerRecognition.from_hparams(
     source="speechbrain/spkrec-ecapa-voxceleb",
     savedir="pretrained_models/spkrec-ecapa-voxceleb",

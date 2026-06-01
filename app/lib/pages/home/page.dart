@@ -59,7 +59,6 @@ import 'package:omi/services/quick_actions_service.dart';
 import 'package:omi/utils/platform/platform_service.dart';
 import 'package:omi/services/announcement_service.dart';
 import 'package:omi/services/notifications.dart';
-import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/audio/foreground.dart';
 import 'package:omi/utils/l10n_extensions.dart';
@@ -354,10 +353,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
           // All async setup (streamDeviceRecording, refreshMessages) is already awaited above,
           // so the widget tree is fully settled — push directly.
           if (mounted) {
-            Navigator.push(
-              context,
-              MaterialPageRoute(builder: (context) => const ChatPage(isPivotBottom: false)),
-            );
+            Navigator.push(context, MaterialPageRoute(builder: (context) => const ChatPage(isPivotBottom: false)));
           }
           break;
         case "settings":
@@ -404,7 +400,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
         case "daily-summary":
           if (detailPageId != null && detailPageId.isNotEmpty) {
             // Track notification opened
-            MixpanelManager().dailySummaryNotificationOpened(
+            PlatformManager.instance.analytics.dailySummaryNotificationOpened(
               summaryId: detailPageId,
               date: '', // Date not available in navigate_to, will be fetched when detail page loads
             );
@@ -684,12 +680,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                               },
                             ),
                             if (home.selectedIndex == 0)
-                              Positioned(
-                                left: 16,
-                                right: 16,
-                                bottom: 78,
-                                child: _buildChatBar(context),
-                              ),
+                              Positioned(left: 16, right: 16, bottom: 78, child: _buildChatBar(context)),
                           ],
                         );
                       },
@@ -715,7 +706,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
     return GestureDetector(
       onTap: () {
         HapticFeedback.lightImpact();
-        MixpanelManager().bottomNavigationTabClicked('Chat');
+        PlatformManager.instance.analytics.bottomNavigationTabClicked('Chat');
         Navigator.push(context, MaterialPageRoute(builder: (context) => const ChatPage(isPivotBottom: false)));
       },
       child: Container(
@@ -726,15 +717,17 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
           border: Border.all(color: const Color(0xFF35343B), width: 1),
           boxShadow: [
             BoxShadow(
-                color: Colors.black.withValues(alpha: 0.65),
-                blurRadius: 60,
-                spreadRadius: 14,
-                offset: const Offset(0, -16)),
+              color: Colors.black.withValues(alpha: 0.65),
+              blurRadius: 60,
+              spreadRadius: 14,
+              offset: const Offset(0, -16),
+            ),
             BoxShadow(
-                color: Colors.black.withValues(alpha: 0.45),
-                blurRadius: 32,
-                spreadRadius: 6,
-                offset: const Offset(0, -8)),
+              color: Colors.black.withValues(alpha: 0.45),
+              blurRadius: 32,
+              spreadRadius: 6,
+              offset: const Offset(0, -8),
+            ),
             BoxShadow(color: Colors.black.withValues(alpha: 0.25), blurRadius: 10, offset: const Offset(0, 2)),
           ],
         ),
@@ -751,11 +744,11 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
             GestureDetector(
               onTap: () {
                 HapticFeedback.lightImpact();
-                MixpanelManager().bottomNavigationTabClicked('Chat Voice');
+                PlatformManager.instance.analytics.bottomNavigationTabClicked('Chat Voice');
                 Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                        builder: (context) => const ChatPage(isPivotBottom: false, autoStartVoice: true)));
+                  context,
+                  MaterialPageRoute(builder: (context) => const ChatPage(isPivotBottom: false, autoStartVoice: true)),
+                );
               },
               child: Container(
                 width: 42,
@@ -907,7 +900,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                                     );
                                                     Navigator.of(context).pop();
                                                     await provider.clearDateFilter();
-                                                    MixpanelManager().calendarFilterCleared();
+                                                    PlatformManager.instance.analytics.calendarFilterCleared();
                                                   },
                                                   child: Text(
                                                     context.l10n.removeFilter,
@@ -924,7 +917,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                                     );
                                                     Navigator.of(context).pop();
                                                     await provider.filterConversationsByDate(selectedDate);
-                                                    MixpanelManager().calendarFilterApplied(selectedDate);
+                                                    PlatformManager.instance.analytics.calendarFilterApplied(
+                                                      selectedDate,
+                                                    );
                                                   },
                                                   child: Text(
                                                     context.l10n.done,
@@ -990,7 +985,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                           icon: const Icon(FontAwesomeIcons.arrowUpFromBracket, size: 16, color: Colors.white70),
                           onPressed: () {
                             HapticFeedback.mediumImpact();
-                            MixpanelManager().exportTasksBannerClicked();
+                            PlatformManager.instance.analytics.exportTasksBannerClicked();
                             Navigator.of(
                               context,
                             ).push(MaterialPageRoute(builder: (context) => const TaskIntegrationsPage()));
@@ -1037,7 +1032,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                           subtitle: context.l10n.createAndShareYourApp,
                           iconWidget: const Icon(Icons.apps, size: 18),
                           onTap: () {
-                            MixpanelManager().pageOpened('Submit App');
+                            PlatformManager.instance.analytics.pageOpened('Submit App');
                             routeToPage(context, const AddAppPage());
                           },
                         ),
@@ -1046,7 +1041,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                           subtitle: context.l10n.connectExternalAiTools,
                           iconWidget: const Icon(Icons.cable, size: 18),
                           onTap: () {
-                            MixpanelManager().pageOpened('Add MCP Server');
+                            PlatformManager.instance.analytics.pageOpened('Add MCP Server');
                             routeToPage(context, const AddMcpServerPage());
                           },
                         ),
@@ -1077,7 +1072,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                   icon: const Icon(FontAwesomeIcons.gear, size: 16, color: Colors.white70),
                   onPressed: () {
                     HapticFeedback.mediumImpact();
-                    MixpanelManager().pageOpened('Settings');
+                    PlatformManager.instance.analytics.pageOpened('Settings');
                     String language = SharedPreferencesUtil().userPrimaryLanguage;
                     bool hasSpeech = SharedPreferencesUtil().hasSpeakerProfile;
                     String transcriptModel = SharedPreferencesUtil().transcriptionModel;

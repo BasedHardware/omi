@@ -10,6 +10,8 @@ pub struct Config {
     pub port: u16,
     /// Gemini API key for LLM calls
     pub gemini_api_key: Option<String>,
+    /// OpenAI API key for server-side TTS proxy calls
+    pub openai_api_key: Option<String>,
     /// Firebase project ID (used for Firestore)
     pub firebase_project_id: Option<String>,
     /// Firebase project ID for auth token validation (defaults to firebase_project_id)
@@ -65,19 +67,12 @@ pub struct Config {
     pub gce_source_image: Option<String>,
     /// GCS bucket for agent startup script (from AGENT_GCS_BUCKET)
     pub agent_gcs_bucket: Option<String>,
-    /// Deepgram API key for transcription (served to desktop clients)
-    pub deepgram_api_key: Option<String>,
     /// Anthropic API key for chat (server-side only, used by /v2/chat/completions proxy)
     pub anthropic_api_key: Option<String>,
     /// Legacy Anthropic key served to old desktop clients via /api-keys (deprecated; remove after major release)
     pub desktop_legacy_anthropic_key: Option<String>,
-    /// ElevenLabs API key for TTS proxy (used server-side by /v1/tts/synthesize, never served to clients)
-    pub elevenlabs_api_key: Option<String>,
     /// Google Calendar API key (served to desktop clients)
     pub google_calendar_api_key: Option<String>,
-    /// When true, omit ElevenLabs API key from /v1/config/api-keys response.
-    /// Set this after all clients have updated to use the TTS proxy (issue #6622).
-    pub disable_elevenlabs_key_response: bool,
     /// When true, route Gemini calls through Vertex AI instead of AI Studio.
     /// Uses service account auth (GOOGLE_APPLICATION_CREDENTIALS) instead of API key.
     pub use_vertex_ai: bool,
@@ -99,6 +94,7 @@ impl Config {
                     10201
                 }),
             gemini_api_key: env::var("GEMINI_API_KEY").ok(),
+            openai_api_key: env::var("OPENAI_API_KEY").ok(),
             firebase_project_id: env::var("FIREBASE_PROJECT_ID").ok()
                 .or_else(|| env::var("GCP_PROJECT_ID").ok()),
             firebase_auth_project_id: env::var("FIREBASE_AUTH_PROJECT_ID").ok(),
@@ -142,14 +138,9 @@ impl Config {
                     .map(|proj| format!("projects/{}/global/images/family/omi-agent", proj))
             }),
             agent_gcs_bucket: env::var("AGENT_GCS_BUCKET").ok(),
-            deepgram_api_key: env::var("DEEPGRAM_API_KEY").ok(),
             anthropic_api_key: env::var("ANTHROPIC_API_KEY").ok(),
             desktop_legacy_anthropic_key: env::var("DESKTOP_LEGACY_ANTHROPIC_KEY").ok(),
-            elevenlabs_api_key: env::var("ELEVENLABS_API_KEY").ok(),
             google_calendar_api_key: env::var("GOOGLE_CALENDAR_API_KEY").ok(),
-            disable_elevenlabs_key_response: env::var("DISABLE_ELEVENLABS_KEY_RESPONSE")
-                .map(|v| v == "true" || v == "1")
-                .unwrap_or(false),
             use_vertex_ai: env::var("USE_VERTEX_AI")
                 .map(|v| v != "false" && v != "0")
                 .unwrap_or(true),

@@ -119,13 +119,6 @@ impl KnowledgeGraphEdge {
 // API Request/Response Types
 // ============================================================================
 
-/// Response containing the full knowledge graph
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct KnowledgeGraphResponse {
-    pub nodes: Vec<KnowledgeGraphNode>,
-    pub edges: Vec<KnowledgeGraphEdge>,
-}
-
 /// Request to rebuild the knowledge graph from memories
 #[derive(Debug, Clone, Deserialize)]
 #[allow(dead_code)]
@@ -134,43 +127,3 @@ pub struct RebuildGraphRequest {
     pub limit: Option<usize>,
 }
 
-/// Response for rebuild status
-#[derive(Debug, Clone, Serialize)]
-pub struct RebuildGraphResponse {
-    pub status: String,
-    pub message: String,
-}
-
-/// Entity extracted by LLM from a memory
-#[derive(Debug, Clone, Deserialize)]
-pub struct ExtractedEntity {
-    pub name: String,
-    #[serde(rename = "type")]
-    pub entity_type: String,
-    #[serde(default)]
-    pub aliases: Vec<String>,
-}
-
-/// Relationship extracted by LLM from a memory
-#[derive(Debug, Clone, Deserialize)]
-pub struct ExtractedRelationship {
-    pub source: String,
-    pub target: String,
-    pub relationship: String,
-}
-
-/// LLM extraction result for a memory
-#[derive(Debug, Clone, Deserialize)]
-pub struct ExtractedKnowledge {
-    #[serde(default)]
-    pub entities: Vec<ExtractedEntity>,
-    #[serde(default)]
-    pub relationships: Vec<ExtractedRelationship>,
-}
-
-/// Status response for graph operations
-#[derive(Debug, Clone, Serialize)]
-pub struct KnowledgeGraphStatusResponse {
-    pub success: bool,
-    pub message: String,
-}

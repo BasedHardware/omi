@@ -303,11 +303,11 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
               ),
 
               // Section header - show "Daily Recaps" or "Conversations" with optional recording pill.
-              // Hidden entirely when the user has fewer than 3 non-discarded
+              // Hidden entirely when the user has zero non-discarded
               // conversations (and isn't on the Daily Recaps view) — those
               // users get the empty-state hero below instead.
               if (convoProvider.showDailySummaries ||
-                  _nonDiscardedConversationCount(convoProvider) >= 3 ||
+                  _nonDiscardedConversationCount(convoProvider) > 0 ||
                   convoProvider.isLoadingConversations ||
                   convoProvider.isFetchingConversations)
                 SliverToBoxAdapter(
@@ -329,9 +329,9 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
                 ),
 
               // Folder tabs - hide when showing daily recaps OR when the user
-              // hasn't built up enough conversations yet (matches the title).
+              // has no conversations yet (matches the title).
               if (!convoProvider.showDailySummaries &&
-                  (_nonDiscardedConversationCount(convoProvider) >= 3 ||
+                  (_nonDiscardedConversationCount(convoProvider) > 0 ||
                       convoProvider.isLoadingConversations ||
                       convoProvider.isFetchingConversations))
                 Consumer2<FolderProvider, ConversationProvider>(
@@ -355,20 +355,22 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
               // Show daily summaries list or conversations based on filter
               if (convoProvider.showDailySummaries)
                 const DailySummariesList()
-              else if (_nonDiscardedConversationCount(convoProvider) < 3 &&
+              else if (_nonDiscardedConversationCount(convoProvider) == 0 &&
                   !convoProvider.isLoadingConversations &&
                   !convoProvider.isFetchingConversations &&
+                  !convoProvider.isAwaitingInitialFetchRetry &&
                   !convoProvider.showStarredOnly &&
                   convoProvider.selectedFolderId == null)
-                // Friendly hero for users who haven't built up enough
-                // conversations yet — matches the polished Tasks empty state.
+                // Friendly hero for brand-new users with zero conversations —
+                // matches the polished Tasks empty state.
                 SliverFillRemaining(
                   hasScrollBody: false,
                   child: Center(child: _buildNoConversationsHero(context)),
                 )
               else if (convoProvider.groupedConversations.isEmpty &&
                   !convoProvider.isLoadingConversations &&
-                  !convoProvider.isFetchingConversations)
+                  !convoProvider.isFetchingConversations &&
+                  !convoProvider.isAwaitingInitialFetchRetry)
                 SliverToBoxAdapter(
                   child: Center(
                     child: Padding(
@@ -378,7 +380,9 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
                   ),
                 )
               else if (convoProvider.groupedConversations.isEmpty &&
-                  (convoProvider.isLoadingConversations || convoProvider.isFetchingConversations))
+                  (convoProvider.isLoadingConversations ||
+                      convoProvider.isFetchingConversations ||
+                      convoProvider.isAwaitingInitialFetchRetry))
                 _buildLoadingShimmer()
               else
                 SliverList(

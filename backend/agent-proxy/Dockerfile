@@ -1,4 +1,4 @@
-FROM python:3.11-slim
+FROM gcr.io/based-hardware-dev/python:3.11-slim-forky
 
 WORKDIR /app
 

@@ -23,6 +23,7 @@ import database.memories as memories_db
 import database.conversations as conversations_db
 import database.mcp_api_key as mcp_api_key_db
 import database.vector_db as vector_db
+import database.x_posts as x_posts_db
 from models.memories import MemoryDB, Memory, MemoryCategory
 from utils.conversations.render import redact_conversation_for_list
 from models.conversation_enums import CategoryEnum
@@ -32,6 +33,41 @@ router = APIRouter()
 
 # Store active sessions
 active_sessions: dict = {}
+
+MCP_RESOURCE_URL = "https://api.omi.me/v1/mcp/sse"
+MCP_AUTHORIZATION_SERVER_URL = "https://api.omi.me"
+MCP_AUTHORIZATION_ENDPOINT = f"{MCP_AUTHORIZATION_SERVER_URL}/authorize"
+MCP_TOKEN_ENDPOINT = f"{MCP_AUTHORIZATION_SERVER_URL}/token"
+MCP_PROTECTED_RESOURCE_METADATA_URL = f"{MCP_AUTHORIZATION_SERVER_URL}/.well-known/oauth-protected-resource"
+OPENAI_APPS_CHALLENGE_TOKEN = "ZsVB_wpc4R35_tHloCZCokY6H2fBkKyBJrz-4MtXjYE"
+
+MCP_SCOPES_SUPPORTED = [
+    "memories.read",
+    "memories.write",
+    "conversations.read",
+]
+
+READ_ONLY_ANNOTATIONS = {
+    "readOnlyHint": True,
+    "destructiveHint": False,
+    "openWorldHint": False,
+}
+
+WRITE_ANNOTATIONS = {
+    "readOnlyHint": False,
+    "destructiveHint": False,
+    "openWorldHint": False,
+}
+
+DESTRUCTIVE_WRITE_ANNOTATIONS = {
+    "readOnlyHint": False,
+    "destructiveHint": True,
+    "openWorldHint": False,
+}
+
+MEMORIES_READ_SECURITY = [{"type": "oauth2", "scopes": ["memories.read"]}]
+MEMORIES_WRITE_SECURITY = [{"type": "oauth2", "scopes": ["memories.write"]}]
+CONVERSATIONS_READ_SECURITY = [{"type": "oauth2", "scopes": ["conversations.read"]}]
 
 
 class MCPSession:
@@ -60,11 +96,30 @@ def authenticate_api_key(authorization: Optional[str]) -> Optional[str]:
     return mcp_api_key_db.get_user_id_by_api_key(token)
 
 
+def invalid_mcp_auth_exception(
+    detail: str = "Invalid or missing API key. Provide via Authorization header.",
+) -> HTTPException:
+    """Return an MCP OAuth discovery hint for clients that need authorization."""
+    return HTTPException(
+        status_code=401,
+        detail=detail,
+        headers={
+            "WWW-Authenticate": (
+                f'Bearer resource_metadata="{MCP_PROTECTED_RESOURCE_METADATA_URL}", '
+                'error="invalid_token", '
+                'error_description="Valid Omi MCP OAuth bearer token required"'
+            )
+        },
+    )
+
+
 # MCP Tool Definitions
 MCP_TOOLS = [
     {
         "name": "get_memories",
         "description": "Retrieve a list of memories. A memory is a known fact about the user across multiple domains.",
+        "annotations": READ_ONLY_ANNOTATIONS,
+        "securitySchemes": MEMORIES_READ_SECURITY,
         "inputSchema": {
             "type": "object",
             "properties": {
@@ -82,6 +137,8 @@ MCP_TOOLS = [
     {
         "name": "create_memory",
         "description": "Create a new memory. A memory is a known fact about the user across multiple domains.",
+        "annotations": WRITE_ANNOTATIONS,
+        "securitySchemes": MEMORIES_WRITE_SECURITY,
         "inputSchema": {
             "type": "object",
             "properties": {
@@ -98,6 +155,8 @@ MCP_TOOLS = [
     {
         "name": "delete_memory",
         "description": "Delete a memory by ID.",
+        "annotations": DESTRUCTIVE_WRITE_ANNOTATIONS,
+        "securitySchemes": MEMORIES_WRITE_SECURITY,
         "inputSchema": {
             "type": "object",
             "properties": {"memory_id": {"type": "string", "description": "The ID of the memory to delete"}},
@@ -107,6 +166,8 @@ MCP_TOOLS = [
     {
         "name": "edit_memory",
         "description": "Edit a memory's content.",
+        "annotations": DESTRUCTIVE_WRITE_ANNOTATIONS,
+        "securitySchemes": MEMORIES_WRITE_SECURITY,
         "inputSchema": {
             "type": "object",
             "properties": {
@@ -119,6 +180,8 @@ MCP_TOOLS = [
     {
         "name": "get_conversations",
         "description": "Retrieve a list of conversation metadata. To get full transcripts, use get_conversation_by_id.",
+        "annotations": READ_ONLY_ANNOTATIONS,
+        "securitySchemes": CONVERSATIONS_READ_SECURITY,
         "inputSchema": {
             "type": "object",
             "properties": {
@@ -138,6 +201,8 @@ MCP_TOOLS = [
     {
         "name": "get_conversation_by_id",
         "description": "Retrieve a conversation by ID including each segment of the transcript.",
+        "annotations": READ_ONLY_ANNOTATIONS,
+        "securitySchemes": CONVERSATIONS_READ_SECURITY,
         "inputSchema": {
             "type": "object",
             "properties": {
@@ -149,6 +214,8 @@ MCP_TOOLS = [
     {
         "name": "search_memories",
         "description": "Semantic search across the user's memories. Returns memories ranked by relevance to the query.",
+        "annotations": READ_ONLY_ANNOTATIONS,
+        "securitySchemes": MEMORIES_READ_SECURITY,
         "inputSchema": {
             "type": "object",
             "properties": {
@@ -161,6 +228,8 @@ MCP_TOOLS = [
     {
         "name": "search_conversations",
         "description": "Semantic search across the user's conversations. Returns conversations ranked by relevance to the query.",
+        "annotations": READ_ONLY_ANNOTATIONS,
+        "securitySchemes": CONVERSATIONS_READ_SECURITY,
         "inputSchema": {
             "type": "object",
             "properties": {
@@ -172,7 +241,74 @@ MCP_TOOLS = [
             "required": ["query"],
         },
     },
+    {
+        "name": "search_x_posts",
+        "description": (
+            "Semantic search across the user's imported X (Twitter) posts — their actual tweets and "
+            "bookmarks, not just extracted memories. Returns posts ranked by relevance to the query."
+        ),
+        "annotations": READ_ONLY_ANNOTATIONS,
+        "securitySchemes": MEMORIES_READ_SECURITY,
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "query": {"type": "string", "description": "Natural language search query"},
+                "limit": {"type": "integer", "description": "Maximum number of results to return", "default": 10},
+            },
+            "required": ["query"],
+        },
+    },
+    {
+        "name": "get_x_posts",
+        "description": (
+            "Retrieve the user's imported X (Twitter) posts, newest first. Optionally filter by kind "
+            "(tweet or bookmark). Returns the raw post text, created_at, and id."
+        ),
+        "annotations": READ_ONLY_ANNOTATIONS,
+        "securitySchemes": MEMORIES_READ_SECURITY,
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "kind": {
+                    "type": "string",
+                    "enum": ["tweet", "bookmark"],
+                    "description": "Filter to only tweets or only bookmarks (omit for all)",
+                },
+                "limit": {"type": "integer", "description": "Number of posts to retrieve", "default": 50},
+            },
+        },
+    },
 ]
+
+
+@router.get("/.well-known/oauth-protected-resource", tags=["mcp"])
+def oauth_protected_resource_metadata():
+    return {
+        "resource": MCP_RESOURCE_URL,
+        "authorization_servers": [MCP_AUTHORIZATION_SERVER_URL],
+        "scopes_supported": MCP_SCOPES_SUPPORTED,
+        "bearer_methods_supported": ["header"],
+        "resource_documentation": "https://docs.omi.me/doc/developer/mcp/setup",
+    }
+
+
+@router.get("/.well-known/oauth-authorization-server", tags=["mcp"])
+def oauth_authorization_server_metadata():
+    return {
+        "issuer": MCP_AUTHORIZATION_SERVER_URL,
+        "authorization_endpoint": MCP_AUTHORIZATION_ENDPOINT,
+        "token_endpoint": MCP_TOKEN_ENDPOINT,
+        "response_types_supported": ["code"],
+        "grant_types_supported": ["authorization_code"],
+        "code_challenge_methods_supported": ["S256", "plain"],
+        "token_endpoint_auth_methods_supported": ["client_secret_post"],
+        "scopes_supported": MCP_SCOPES_SUPPORTED,
+    }
+
+
+@router.get("/.well-known/openai-apps-challenge", tags=["mcp"])
+def openai_apps_challenge():
+    return Response(content=OPENAI_APPS_CHALLENGE_TOKEN, media_type="text/plain")
 
 
 class ToolExecutionError(Exception):
@@ -403,6 +539,42 @@ def execute_tool(user_id: str, tool_name: str, arguments: dict) -> dict:
 
         return {"conversations": results}
 
+    elif tool_name == "search_x_posts":
+        query = arguments.get("query")
+        if not query:
+            raise ToolExecutionError("query is required")
+        limit = arguments.get("limit", 10)
+
+        matches = vector_db.find_similar_x_posts(user_id, query, limit=limit)
+        if not matches:
+            return {"posts": []}
+
+        score_map = {str(m['post_id']): m.get('score', 0) for m in matches}
+        posts = x_posts_db.get_x_posts_by_ids(user_id, [m['post_id'] for m in matches])
+        results = []
+        for p in posts:
+            results.append(
+                {
+                    "id": p.get("id"),
+                    "text": p.get("text"),
+                    "kind": p.get("kind"),
+                    "created_at": p.get("created_at"),
+                    "relevance_score": round(score_map.get(str(p.get("id")), 0), 4),
+                }
+            )
+        results.sort(key=lambda x: x.get("relevance_score", 0), reverse=True)
+        return {"posts": results}
+
+    elif tool_name == "get_x_posts":
+        limit = arguments.get("limit", 50)
+        kind = arguments.get("kind")
+        posts = x_posts_db.get_x_posts(user_id, limit=limit, kind=kind)
+        results = [
+            {"id": p.get("id"), "text": p.get("text"), "kind": p.get("kind"), "created_at": p.get("created_at")}
+            for p in posts
+        ]
+        return {"posts": results}
+
     else:
         raise ToolExecutionError(f"Unknown tool: {tool_name}", code=-32601)
 
@@ -483,7 +655,7 @@ def handle_mcp_message(
 
 
 @router.get("/authorize", tags=["mcp"])
-async def mcp_authorize(
+def mcp_authorize(
     response_type: str,
     client_id: str,
     redirect_uri: str,
@@ -553,7 +725,7 @@ async def mcp_streamable_http(
     # Authenticate
     user_id = authenticate_api_key(authorization)
     if not user_id:
-        raise HTTPException(status_code=401, detail="Invalid or missing API key. Provide via Authorization header.")
+        raise invalid_mcp_auth_exception()
 
     # Rate limit per-user
     check_rate_limit_inline(user_id, "mcp:sse")
@@ -637,7 +809,7 @@ async def mcp_sse_get(
     # Authenticate
     user_id = authenticate_api_key(authorization)
     if not user_id:
-        raise HTTPException(status_code=401, detail="Invalid or missing API key. Provide via Authorization header.")
+        raise invalid_mcp_auth_exception()
 
     # For backwards compatibility, also support the old SSE flow
     # Return an empty SSE stream that just sends keepalives
@@ -662,7 +834,7 @@ async def mcp_sse_get(
 
 
 @router.delete("/v1/mcp/sse", tags=["mcp"])
-async def mcp_delete_session(
+def mcp_delete_session(
     mcp_session_id: Optional[str] = Header(None, alias="Mcp-Session-Id"),
     authorization: Optional[str] = Header(None, alias="Authorization"),
 ):
@@ -671,7 +843,7 @@ async def mcp_delete_session(
     """
     user_id = authenticate_api_key(authorization)
     if not user_id:
-        raise HTTPException(status_code=401, detail="Invalid or missing API key")
+        raise invalid_mcp_auth_exception("Invalid or missing API key")
 
     if not mcp_session_id:
         raise HTTPException(status_code=400, detail="Mcp-Session-Id header required")
@@ -689,7 +861,7 @@ async def mcp_delete_session(
 
 
 @router.get("/v1/mcp/sse/info", tags=["mcp"])
-async def mcp_sse_info(request: Request):
+def mcp_sse_info(request: Request):
     """
     Get information about the pre-hosted MCP server.
     """

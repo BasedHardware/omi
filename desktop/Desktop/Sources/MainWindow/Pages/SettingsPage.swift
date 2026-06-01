@@ -235,6 +235,8 @@ struct SettingsContentView: View {
   @State private var fallbackPlanCatalog: [SubscriptionPlanOption] = []
   @State private var activeCheckoutPriceId: String?
   @State private var selectedPlanIdForCheckout: String?
+  @State private var upgradePromotionCode: String = ""
+  @State private var isPromoCodeExpanded: Bool = false
   @State private var isOpeningCustomerPortal: Bool = false
   @State private var activeBillingWebFlow: BillingWebFlow?
   @State private var pendingSubscriptionPriceId: String?
@@ -379,6 +381,11 @@ struct SettingsContentView: View {
   @AppStorage("dev_deepgram_api_key") private var devDeepgramKey: String = ""
   @State private var byokKeyStatuses: [BYOKProvider: BYOKValidator.Status] = [:]
   @State private var byokActivationError: String?
+
+  // MCP key creation state (Settings → Advanced → MCP)
+  @State private var mcpCreatedKey: String?
+  @State private var mcpIsCreatingKey: Bool = false
+  @State private var mcpError: String?
 
   init(
     appState: AppState,
@@ -1350,21 +1357,7 @@ struct SettingsContentView: View {
             Divider()
               .background(OmiColors.backgroundQuaternary)
 
-            settingRow(
-              title: "Frequency", subtitle: "How often to receive notifications",
-              settingId: "notifications.frequency"
-            ) {
-              Picker("", selection: $notificationFrequency) {
-                ForEach(frequencyOptions, id: \.0) { option in
-                  Text(option.1).tag(option.0)
-                }
-              }
-              .pickerStyle(.menu)
-              .frame(width: 120)
-              .onChange(of: notificationFrequency) { _, newValue in
-                updateNotificationSettings(frequency: newValue)
-              }
-            }
+            notificationFrequencySlider(settingId: "notifications.frequency")
 
             settingRow(
               title: "Focus Notifications", subtitle: "Show notification on focus changes",
@@ -1746,10 +1739,218 @@ struct SettingsContentView: View {
     }
   }
 
+  // MARK: - Trial Countdown Card
+
+  @ViewBuilder
+  private var trialCountdownCard: some View {
+    if let trial = appState.trialMetadata, trial.trialStartedAt != nil, !trial.trialExpired {
+      settingsCard(settingId: "planusage.trial") {
+        VStack(alignment: .leading, spacing: 14) {
+          HStack(spacing: 16) {
+            Image(systemName: "clock.fill")
+              .scaledFont(size: 28)
+              .foregroundColor(trialTimeColor(remaining: trial.trialRemainingSeconds))
+
+            VStack(alignment: .leading, spacing: 4) {
+              Text("Premium Trial Active")
+                .scaledFont(size: 16, weight: .semibold)
+                .foregroundColor(OmiColors.textPrimary)
+
+              Text(trialCountdownText(remaining: trial.trialRemainingSeconds))
+                .scaledFont(size: 13)
+                .foregroundColor(trialTimeColor(remaining: trial.trialRemainingSeconds))
+            }
+
+            Spacer()
+
+            // Progress ring
+            ZStack {
+              Circle()
+                .stroke(OmiColors.backgroundQuaternary, lineWidth: 3)
+              Circle()
+                .trim(from: 0, to: trialProgress(trial))
+                .stroke(trialTimeColor(remaining: trial.trialRemainingSeconds), style: StrokeStyle(lineWidth: 3, lineCap: .round))
+                .rotationEffect(.degrees(-90))
+            }
+            .frame(width: 32, height: 32)
+          }
+
+          Divider().overlay(OmiColors.backgroundQuaternary)
+
+          VStack(alignment: .leading, spacing: 8) {
+            Text("Included in your trial")
+              .scaledFont(size: 12, weight: .semibold)
+              .foregroundColor(OmiColors.textTertiary)
+
+            trialFeatureRow(text: "Unlimited listening & transcription")
+            trialFeatureRow(text: "Unlimited memories & insights")
+            trialFeatureRow(text: "Chat questions")
+          }
+        }
+      }
+    } else if let trial = appState.trialMetadata,
+      trial.trialExpired,
+      // Suppress the trial-expired card entirely for grandfathered Neo users.
+      // The backend already returns trial_expired=false for them, but
+      // trialMetadata is polled on a 60s timer; defensive guard so a stale
+      // cached value during/after a backend deploy doesn't briefly stack the
+      // "Trial Ended" card on top of the grandfather notice. The grandfather
+      // notice is rendered separately via neoDesktopGrandfatherCard.
+      userSubscription?.desktopGrandfatherUntil == nil
+    {
+      // Neo subscribers who aren't grandfathered land on this card too because
+      // Neo doesn't grant desktop access (per #7496). The generic "Trial Ended"
+      // copy is confusing for them — they're on a paid plan, just not one that
+      // includes Mac. Detect that case and switch to plan-specific copy.
+      let isNeoWithoutDesktop = userSubscription?.subscription.plan == .unlimited
+      settingsCard(settingId: "planusage.trial-expired") {
+        VStack(alignment: .leading, spacing: 14) {
+          HStack(spacing: 16) {
+            Image(systemName: "exclamationmark.circle.fill")
+              .scaledFont(size: 28)
+              .foregroundColor(OmiColors.warning)
+
+            VStack(alignment: .leading, spacing: 4) {
+              Text(isNeoWithoutDesktop ? "Desktop access not included" : "Trial Ended")
+                .scaledFont(size: 16, weight: .semibold)
+                .foregroundColor(OmiColors.textPrimary)
+
+              Text(
+                isNeoWithoutDesktop
+                  ? "Neo is available on mobile and web. To use Omi on Mac, upgrade to Operator or Architect."
+                  : "Upgrade to keep unlimited access"
+              )
+              .scaledFont(size: 13)
+              .foregroundColor(OmiColors.textSecondary)
+            }
+
+            Spacer()
+          }
+
+          Divider().overlay(OmiColors.backgroundQuaternary)
+
+          Button(action: {
+            selectedPlanIdForCheckout = "operator"
+          }) {
+            Text("View Plans")
+              .scaledFont(size: 13, weight: .semibold)
+              .padding(.horizontal, 16)
+              .padding(.vertical, 8)
+          }
+          .buttonStyle(.borderedProminent)
+          .tint(OmiColors.purplePrimary)
+        }
+      }
+    }
+  }
+
+  // MARK: - Neo desktop grandfather notice
+  //
+  // Surfaced for Neo subscribers whose current billing period started before
+  // the #7496 policy change. They keep desktop access until their period
+  // ends — this card tells them when, so the change doesn't surprise them
+  // at the next renewal. Backend computes the date as
+  // `desktop_grandfather_until` on /v1/users/me/subscription (#7513).
+  @ViewBuilder
+  private var neoDesktopGrandfatherCard: some View {
+    if let until = userSubscription?.desktopGrandfatherUntil,
+      userSubscription?.subscription.plan == .unlimited
+    {
+      let endsOn = Date(timeIntervalSince1970: TimeInterval(until))
+      let formatter: DateFormatter = {
+        let f = DateFormatter()
+        f.dateStyle = .long
+        f.timeStyle = .none
+        return f
+      }()
+      settingsCard(settingId: "planusage.neo-grandfather") {
+        VStack(alignment: .leading, spacing: 14) {
+          HStack(spacing: 16) {
+            Image(systemName: "info.circle.fill")
+              .scaledFont(size: 28)
+              .foregroundColor(OmiColors.purplePrimary)
+
+            VStack(alignment: .leading, spacing: 4) {
+              Text("Neo desktop access ends \(formatter.string(from: endsOn))")
+                .scaledFont(size: 16, weight: .semibold)
+                .foregroundColor(OmiColors.textPrimary)
+
+              Text(
+                "Your Neo plan continues to include desktop access through this billing period. After it ends, upgrade to Operator or Architect to keep using Omi on Mac."
+              )
+              .scaledFont(size: 13)
+              .foregroundColor(OmiColors.textSecondary)
+            }
+
+            Spacer()
+          }
+
+          Divider().overlay(OmiColors.backgroundQuaternary)
+
+          Button(action: {
+            selectedPlanIdForCheckout = "operator"
+          }) {
+            Text("View Plans")
+              .scaledFont(size: 13, weight: .semibold)
+              .padding(.horizontal, 16)
+              .padding(.vertical, 8)
+          }
+          .buttonStyle(.borderedProminent)
+          .tint(OmiColors.purplePrimary)
+        }
+      }
+    }
+  }
+
+  private func trialFeatureRow(text: String) -> some View {
+    HStack(spacing: 8) {
+      ZStack {
+        Circle()
+          .fill(OmiColors.purplePrimary.opacity(0.16))
+          .frame(width: 18, height: 18)
+        Image(systemName: "checkmark")
+          .scaledFont(size: 9, weight: .bold)
+          .foregroundColor(OmiColors.purplePrimary)
+      }
+      Text(text)
+        .scaledFont(size: 13, weight: .medium)
+        .foregroundColor(OmiColors.textSecondary)
+    }
+  }
+
+  private func trialCountdownText(remaining: Int) -> String {
+    if remaining <= 0 { return "Expired" }
+    let hours = remaining / 3600
+    let minutes = (remaining % 3600) / 60
+    if hours >= 24 {
+      let days = hours / 24
+      let leftoverHours = hours % 24
+      return "\(days)d \(leftoverHours)h remaining"
+    }
+    if hours > 0 {
+      return "\(hours)h \(minutes)m remaining"
+    }
+    return "\(minutes)m remaining"
+  }
+
+  private func trialTimeColor(remaining: Int) -> Color {
+    if remaining <= 3600 { return OmiColors.warning }      // < 1 hour: warning orange
+    if remaining <= 24 * 3600 { return .yellow }           // < 24 hours: yellow
+    return OmiColors.success                                // plenty of time: green
+  }
+
+  private func trialProgress(_ trial: TrialMetadataResponse) -> CGFloat {
+    guard trial.trialDurationSeconds > 0 else { return 0 }
+    return CGFloat(trial.trialRemainingSeconds) / CGFloat(trial.trialDurationSeconds)
+  }
+
   // MARK: - Plan and Usage Section
 
   private var planUsageSection: some View {
     VStack(spacing: 20) {
+      trialCountdownCard
+      neoDesktopGrandfatherCard
+
       settingsCard(settingId: "planusage.current") {
         VStack(alignment: .leading, spacing: 14) {
           HStack(spacing: 16) {
@@ -2283,15 +2484,8 @@ struct SettingsContentView: View {
         }
         Spacer()
         Picker("", selection: $shortcutSettings.selectedVoiceID) {
-          Section("Female") {
-            ForEach(ShortcutSettings.availableVoices.filter { $0.gender == .female }) { voice in
-              Text(voice.name).tag(voice.id)
-            }
-          }
-          Section("Male") {
-            ForEach(ShortcutSettings.availableVoices.filter { $0.gender == .male }) { voice in
-              Text(voice.name).tag(voice.id)
-            }
+          ForEach(ShortcutSettings.availableVoices) { voice in
+            Text(voice.name).tag(voice.id)
           }
         }
         .pickerStyle(.menu)
@@ -3098,8 +3292,148 @@ struct SettingsContentView: View {
       advancedCategoryHeader(title: "Developer API Keys", icon: "key")
       developerKeysSubsection
 
+      advancedCategoryHeader(title: "MCP", icon: "antenna.radiowaves.left.and.right")
+      mcpSubsection
+
       advancedCategoryHeader(title: "Dev Tools", icon: "hammer")
       devToolsSubsection
+    }
+  }
+
+  // MARK: - MCP Subsection
+
+  private var mcpSubsection: some View {
+    VStack(spacing: 20) {
+      // Server URL — channel-aware (beta hits dev backend, stable hits prod).
+      settingsCard(settingId: "advanced.mcp.serverurl") {
+        VStack(alignment: .leading, spacing: 8) {
+          HStack(spacing: 10) {
+            Image(systemName: "link")
+              .scaledFont(size: 14)
+              .foregroundColor(OmiColors.textSecondary)
+            Text("Server URL")
+              .scaledFont(size: 14, weight: .semibold)
+              .foregroundColor(OmiColors.textPrimary)
+            Spacer()
+            Button {
+              NSPasteboard.general.clearContents()
+              NSPasteboard.general.setString(MemoryExportDestination.mcpServerURL, forType: .string)
+            } label: {
+              HStack(spacing: 6) {
+                Image(systemName: "doc.on.doc")
+                Text("Copy")
+              }
+              .scaledFont(size: 12, weight: .medium)
+              .foregroundColor(OmiColors.textPrimary)
+              .padding(.horizontal, 10)
+              .padding(.vertical, 6)
+              .background(
+                RoundedRectangle(cornerRadius: 8).fill(OmiColors.backgroundQuaternary.opacity(0.6)))
+            }
+            .buttonStyle(.plain)
+          }
+          Text(MemoryExportDestination.mcpServerURL)
+            .scaledFont(size: 12, weight: .medium)
+            .foregroundColor(OmiColors.textSecondary)
+            .textSelection(.enabled)
+          Text(
+            AppBuild.currentUpdateChannel == "beta"
+              ? "Beta channel — points at the dev backend."
+              : "Stable channel — points at production."
+          )
+          .scaledFont(size: 11)
+          .foregroundColor(OmiColors.textTertiary)
+        }
+      }
+
+      // Create an MCP key — shown once after creation; user copies + pastes into Claude/ChatGPT/etc.
+      settingsCard(settingId: "advanced.mcp.createkey") {
+        VStack(alignment: .leading, spacing: 12) {
+          HStack(spacing: 10) {
+            Image(systemName: "key.fill")
+              .scaledFont(size: 14)
+              .foregroundColor(OmiColors.textSecondary)
+            VStack(alignment: .leading, spacing: 2) {
+              Text("MCP API Key")
+                .scaledFont(size: 14, weight: .semibold)
+                .foregroundColor(OmiColors.textPrimary)
+              Text("Use this key as the OAuth Client Secret in Claude/ChatGPT/your agent.")
+                .scaledFont(size: 11)
+                .foregroundColor(OmiColors.textTertiary)
+            }
+            Spacer()
+            Button {
+              Task { await createMCPKeyFromSettings() }
+            } label: {
+              Text(mcpIsCreatingKey ? "Creating…" : "Create Key")
+                .scaledFont(size: 12, weight: .medium)
+                .foregroundColor(.black)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
+                .background(RoundedRectangle(cornerRadius: 8).fill(Color.white))
+            }
+            .buttonStyle(.plain)
+            .disabled(mcpIsCreatingKey)
+          }
+
+          if let key = mcpCreatedKey {
+            VStack(alignment: .leading, spacing: 8) {
+              Text("Copy this now — it's only shown once.")
+                .scaledFont(size: 11)
+                .foregroundColor(OmiColors.warning)
+              HStack(spacing: 8) {
+                Text(key)
+                  .scaledFont(size: 12, weight: .medium)
+                  .foregroundColor(OmiColors.textPrimary)
+                  .textSelection(.enabled)
+                  .lineLimit(1)
+                  .truncationMode(.middle)
+                  .frame(maxWidth: .infinity, alignment: .leading)
+                Button {
+                  NSPasteboard.general.clearContents()
+                  NSPasteboard.general.setString(key, forType: .string)
+                } label: {
+                  Image(systemName: "doc.on.doc")
+                    .scaledFont(size: 12)
+                    .foregroundColor(OmiColors.textPrimary)
+                    .padding(6)
+                    .background(
+                      RoundedRectangle(cornerRadius: 6)
+                        .fill(OmiColors.backgroundQuaternary.opacity(0.6)))
+                }
+                .buttonStyle(.plain)
+              }
+              .padding(10)
+              .background(
+                RoundedRectangle(cornerRadius: 8)
+                  .fill(OmiColors.backgroundSecondary.opacity(0.6)))
+            }
+          }
+
+          if let err = mcpError {
+            HStack(spacing: 8) {
+              Image(systemName: "exclamationmark.triangle.fill")
+                .foregroundColor(OmiColors.warning)
+              Text(err)
+                .scaledFont(size: 11)
+                .foregroundColor(OmiColors.warning)
+            }
+          }
+        }
+      }
+    }
+  }
+
+  @MainActor
+  private func createMCPKeyFromSettings() async {
+    mcpError = nil
+    mcpIsCreatingKey = true
+    defer { mcpIsCreatingKey = false }
+    do {
+      let key = try await APIClient.shared.createMCPKey(name: "Desktop")
+      mcpCreatedKey = key
+    } catch {
+      mcpError = "Couldn't create key: \(error.localizedDescription)"
     }
   }
 
@@ -5309,6 +5643,10 @@ struct SettingsContentView: View {
           try? await APIClient.shared.activateBYOK(fingerprints: fingerprints)
           await FloatingBarUsageLimiter.shared.fetchPlan()
           await MainActor.run {
+            // Clear any sticky paywall flag from a prior `freemium_threshold_reached`
+            // event — once all 4 BYOK keys validate, the user is on the free BYOK
+            // plan and shouldn't be locked out of capture/transcription anymore.
+            AppState.current?.isPaywalled = false
             byokKeyStatuses = results
             byokActivationError = nil
           }
@@ -5501,6 +5839,102 @@ struct SettingsContentView: View {
         }
       }
     }
+  }
+
+  /// Stepped slider for `notifications.frequency` matching the voice-speed slider
+  /// pattern. Six positions: Off / Minimal / Low / Balanced / High / Maximum.
+  /// Sits inside the existing Notifications card, so it does not wrap itself in
+  /// another `settingsCard` — it just applies the highlight modifier directly.
+  private func notificationFrequencySlider(settingId: String) -> some View {
+    let stepCount = frequencyOptions.count  // 6
+    let segmentCount = CGFloat(stepCount - 1)
+    let currentIndex = max(0, min(stepCount - 1, notificationFrequency))
+    let currentLabel = frequencyOptions[currentIndex].1
+
+    let body = VStack(alignment: .leading, spacing: 12) {
+      HStack(alignment: .center) {
+        VStack(alignment: .leading, spacing: 2) {
+          Text("Frequency")
+            .scaledFont(size: 14)
+            .foregroundColor(OmiColors.textSecondary)
+          Text("How often to receive notifications")
+            .scaledFont(size: 12)
+            .foregroundColor(OmiColors.textTertiary)
+        }
+        Spacer()
+        Text(currentLabel)
+          .scaledFont(size: 13, weight: .semibold)
+          .foregroundColor(OmiColors.purplePrimary)
+          .padding(.horizontal, 10)
+          .padding(.vertical, 4)
+          .background(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+              .fill(OmiColors.purplePrimary.opacity(0.15))
+          )
+      }
+
+      GeometryReader { geo in
+        let trackWidth = geo.size.width
+
+        ZStack(alignment: .leading) {
+          RoundedRectangle(cornerRadius: 4)
+            .fill(OmiColors.backgroundQuaternary)
+            .frame(height: 6)
+
+          RoundedRectangle(cornerRadius: 4)
+            .fill(OmiColors.purplePrimary)
+            .frame(width: trackWidth * CGFloat(currentIndex) / segmentCount, height: 6)
+
+          ForEach(0..<stepCount, id: \.self) { i in
+            Circle()
+              .fill(
+                i <= currentIndex ? OmiColors.purplePrimary : OmiColors.backgroundQuaternary
+              )
+              .frame(width: 8, height: 8)
+              .position(
+                x: trackWidth * CGFloat(i) / segmentCount,
+                y: 3
+              )
+          }
+
+          Circle()
+            .fill(Color.white)
+            .frame(width: 22, height: 22)
+            .shadow(color: .black.opacity(0.25), radius: 3, y: 1)
+            .position(
+              x: trackWidth * CGFloat(currentIndex) / segmentCount,
+              y: 3
+            )
+            .gesture(
+              DragGesture(minimumDistance: 0)
+                .onChanged { value in
+                  let fraction = max(0, min(1, value.location.x / trackWidth))
+                  let nearestIndex = Int(round(fraction * segmentCount))
+                  let clamped = max(0, min(stepCount - 1, nearestIndex))
+                  if clamped != notificationFrequency {
+                    notificationFrequency = clamped
+                    updateNotificationSettings(frequency: clamped)
+                  }
+                }
+            )
+        }
+      }
+      .frame(height: 22)
+
+      HStack {
+        Text(frequencyOptions.first?.1 ?? "Off")
+          .scaledFont(size: 11)
+          .foregroundColor(OmiColors.textTertiary)
+        Spacer()
+        Text(frequencyOptions.last?.1 ?? "Maximum")
+          .scaledFont(size: 11)
+          .foregroundColor(OmiColors.textTertiary)
+      }
+    }
+
+    return body.modifier(
+      SettingHighlightModifier(
+        settingId: settingId, highlightedSettingId: $highlightedSettingId))
   }
 
   private func tierPickerRow(tier: Int, label: String, subtitle: String) -> some View {
@@ -6390,6 +6824,48 @@ struct SettingsContentView: View {
           .overlay(OmiColors.backgroundQuaternary)
 
         VStack(alignment: .leading, spacing: 10) {
+          VStack(alignment: .leading, spacing: 6) {
+            Button(action: {
+              withAnimation(.easeInOut(duration: 0.2)) {
+                isPromoCodeExpanded.toggle()
+              }
+            }) {
+              HStack(spacing: 6) {
+                Image(systemName: "tag")
+                  .scaledFont(size: 12)
+                Text("Promo code")
+                  .scaledFont(size: 12)
+                Image(systemName: isPromoCodeExpanded ? "chevron.up" : "chevron.down")
+                  .scaledFont(size: 10)
+              }
+              .foregroundColor(OmiColors.textTertiary)
+            }
+            .buttonStyle(.plain)
+
+            if isPromoCodeExpanded {
+              VStack(alignment: .leading, spacing: 6) {
+                TextField("Enter promo code", text: $upgradePromotionCode)
+                  .textFieldStyle(.roundedBorder)
+                  .scaledFont(size: 13)
+                  .disabled(activeCheckoutPriceId != nil)
+                  .onChange(of: upgradePromotionCode) { _ in
+                    subscriptionError = nil
+                  }
+
+                if let error = subscriptionError {
+                  HStack(spacing: 4) {
+                    Image(systemName: "exclamationmark.circle")
+                      .scaledFont(size: 11)
+                    Text(error)
+                      .scaledFont(size: 11)
+                  }
+                  .foregroundColor(OmiColors.warning)
+                }
+              }
+              .transition(.opacity.combined(with: .move(edge: .top)))
+            }
+          }
+
           Text("Choose billing")
             .scaledFont(size: 12, weight: .semibold)
             .foregroundColor(OmiColors.textTertiary)
@@ -6725,6 +7201,8 @@ struct SettingsContentView: View {
           dailySummaryHour = dailySummary.hour
           notificationsEnabled = notifications.enabled
           notificationFrequency = notifications.frequency
+          // Mirror to UserDefaults so NotificationService can throttle without a backend roundtrip.
+          UserDefaults.standard.set(notifications.frequency, forKey: NotificationService.frequencyDefaultsKey)
           userLanguage = language.language
           recordingPermissionEnabled = recording.enabled
           privateCloudSyncEnabled = cloudSync.enabled
@@ -6777,6 +7255,17 @@ struct SettingsContentView: View {
           {
             self.selectedPlanIdForCheckout = nil
           }
+          // Clear the sticky paywall flag whenever the subscription endpoint
+          // reports a non-basic active plan. Catches the case where a paid user
+          // hit the paywall once (e.g. WS connected before payment cleared
+          // the trial cache) — without this they'd stay paywalled until the
+          // next app restart even after their Operator/Architect plan is active.
+          if subscription.subscription.plan != .basic,
+             subscription.subscription.status == .active,
+             AppState.current?.isPaywalled == true {
+            AppState.current?.isPaywalled = false
+            log("Paywall: cleared sticky flag — subscription \(subscription.subscription.plan.rawValue) is active")
+          }
           isLoadingSubscription = false
         }
       } catch {
@@ -6828,6 +7317,9 @@ struct SettingsContentView: View {
     pendingSubscriptionPriceId = priceId
     subscriptionError = nil
 
+    let promotionCode = upgradePromotionCode.trimmingCharacters(in: .whitespacesAndNewlines)
+    let promoToSend: String? = promotionCode.isEmpty ? nil : promotionCode
+
     // If user already has an active paid subscription (not canceled), use upgrade endpoint
     // to schedule the plan change at end of billing period (no double-charging)
     if hasPaidSubscription,
@@ -6836,12 +7328,20 @@ struct SettingsContentView: View {
     {
       Task {
         do {
-          _ = try await APIClient.shared.upgradeSubscription(priceId: priceId)
+          _ = try await APIClient.shared.upgradeSubscription(
+            priceId: priceId, promotionCode: promoToSend)
           await MainActor.run {
             activeCheckoutPriceId = nil
             pendingSubscriptionPriceId = nil
             subscriptionError = nil
+            self.upgradePromotionCode = ""
             loadSubscriptionInfo()
+          }
+        } catch let apiError as APIError {
+          await MainActor.run {
+            activeCheckoutPriceId = nil
+            pendingSubscriptionPriceId = nil
+            subscriptionError = apiError.detail ?? "Failed to schedule plan change."
           }
         } catch {
           logError("Failed to schedule plan change", error: error)
@@ -6857,7 +7357,8 @@ struct SettingsContentView: View {
 
     Task {
       do {
-        let response = try await APIClient.shared.createCheckoutSession(priceId: priceId)
+        let response = try await APIClient.shared.createCheckoutSession(
+          priceId: priceId, promotionCode: promoToSend)
         let apiBaseURL = await APIClient.shared.baseURL
         await MainActor.run {
           activeCheckoutPriceId = nil
@@ -6887,6 +7388,14 @@ struct SettingsContentView: View {
           await MainActor.run {
             subscriptionError = response.message ?? "Could not start checkout."
           }
+        }
+      } catch let apiError as APIError {
+        logError("Failed to create checkout session", error: apiError)
+        await MainActor.run {
+          activeCheckoutPriceId = nil
+          pendingSubscriptionPriceId = nil
+          pendingCheckoutSessionId = nil
+          subscriptionError = apiError.detail ?? "Failed to open checkout."
         }
       } catch {
         logError("Failed to create checkout session", error: error)
@@ -7082,6 +7591,11 @@ struct SettingsContentView: View {
   }
 
   private func updateNotificationSettings(enabled: Bool? = nil, frequency: Int? = nil) {
+    if let frequency {
+      // Mirror locally so NotificationService picks up the new throttle level immediately,
+      // even before the backend round-trip completes.
+      UserDefaults.standard.set(frequency, forKey: NotificationService.frequencyDefaultsKey)
+    }
     Task {
       do {
         let _ = try await APIClient.shared.updateNotificationSettings(

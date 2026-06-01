@@ -478,4 +478,82 @@ void main() {
       provider.dispose();
     });
   });
+
+  // Regression coverage for issue #6499: before this change, a socket drop
+  // during phone-mic recording (e.g. triggered by an iOS audio session
+  // interruption from an incoming call) left recordingState stuck at `record`,
+  // so the UI kept claiming the session was live while the pipeline was dead.
+  group('onClosed recordingState reflection (#6499)', () {
+    test('flips record to interrupted when socket drops during phone mic', () {
+      final provider = CaptureProvider();
+      provider.onConnectionStateChanged(true);
+      provider.updateRecordingState(RecordingState.record);
+
+      provider.onClosed();
+
+      expect(provider.recordingState, RecordingState.interrupted);
+      // Stop the state so the keepalive timer doesn't try to reconnect.
+      provider.updateRecordingState(RecordingState.stop);
+      provider.dispose();
+    });
+
+    test('leaves deviceRecord state untouched when socket drops', () {
+      final provider = CaptureProvider();
+      provider.onConnectionStateChanged(true);
+      provider.updateRecordingState(RecordingState.deviceRecord);
+
+      provider.onClosed();
+
+      expect(provider.recordingState, RecordingState.deviceRecord);
+      provider.updateRecordingState(RecordingState.stop);
+      provider.dispose();
+    });
+
+    test('leaves stop state untouched when onClosed fires after user stop', () {
+      final provider = CaptureProvider();
+      provider.onConnectionStateChanged(true);
+      provider.updateRecordingState(RecordingState.stop);
+
+      provider.onClosed();
+
+      expect(provider.recordingState, RecordingState.stop);
+      provider.dispose();
+    });
+
+    test('onConnected restores record from interrupted', () {
+      final provider = CaptureProvider();
+      provider.onConnectionStateChanged(true);
+      provider.updateRecordingState(RecordingState.record);
+
+      provider.onClosed();
+      expect(provider.recordingState, RecordingState.interrupted);
+
+      provider.onConnected();
+
+      expect(provider.recordingState, RecordingState.record);
+      provider.updateRecordingState(RecordingState.stop);
+      provider.dispose();
+    });
+
+    test('onConnected does not alter stop state', () {
+      final provider = CaptureProvider();
+      provider.onConnectionStateChanged(true);
+      provider.updateRecordingState(RecordingState.stop);
+
+      provider.onConnected();
+
+      expect(provider.recordingState, RecordingState.stop);
+      provider.dispose();
+    });
+
+    test('recordingDeviceServiceReady includes interrupted state', () {
+      final provider = CaptureProvider();
+      provider.updateRecordingState(RecordingState.interrupted);
+
+      expect(provider.recordingDeviceServiceReady, isTrue);
+
+      provider.updateRecordingState(RecordingState.stop);
+      provider.dispose();
+    });
+  });
 }

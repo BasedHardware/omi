@@ -16,6 +16,7 @@ import 'package:omi/services/notifications/action_item_notification_handler.dart
 import 'package:omi/services/notifications/important_conversation_notification_handler.dart';
 import 'package:omi/services/notifications/merge_notification_handler.dart';
 import 'package:omi/services/notifications/notification_interface.dart';
+import 'package:omi/services/voice_playback/omi_voice_playback_service.dart';
 import 'package:omi/utils/analytics/intercom.dart';
 import 'package:omi/utils/logger.dart';
 
@@ -219,6 +220,9 @@ class _FCMNotificationService implements NotificationInterface {
         } else if (messageType == 'action_item_delete') {
           ActionItemNotificationHandler.handleDeletionMessage(data);
           return;
+        } else if (messageType == 'action_item_batch_delete') {
+          ActionItemNotificationHandler.handleBatchDeletionMessage(data);
+          return;
         } else if (messageType == 'merge_completed') {
           MergeNotificationHandler.handleMergeCompleted(data, channel.channelKey!, isAppInForeground: true);
           return;
@@ -238,14 +242,18 @@ class _FCMNotificationService implements NotificationInterface {
           _serverMessageStreamController.add(ServerMessage.fromJson(data));
         }
         if (noti != null && _shouldShowForegroundNotificationOnFCMMessageReceived()) {
-          _showForegroundNotification(noti: noti, payload: payload);
+          if (!OmiVoicePlaybackService.instance.isSpeaking) {
+            _showForegroundNotification(noti: noti, payload: payload);
+          }
         }
         return;
       }
 
       // Announcement likes
       if (noti != null && _shouldShowForegroundNotificationOnFCMMessageReceived()) {
-        _showForegroundNotification(noti: noti, layout: NotificationLayout.BigText);
+        if (!OmiVoicePlaybackService.instance.isSpeaking) {
+          _showForegroundNotification(noti: noti, layout: NotificationLayout.BigText);
+        }
         return;
       }
     });

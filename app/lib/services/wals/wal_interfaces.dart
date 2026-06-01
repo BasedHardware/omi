@@ -5,7 +5,14 @@ import 'package:omi/services/audio_sources/audio_source.dart';
 import 'package:omi/services/wals/wal.dart';
 
 // Re-export for convenience
-export 'package:omi/backend/http/api/conversations.dart' show syncLocalFilesV2, SyncJobPollCallback;
+export 'package:omi/backend/http/api/conversations.dart'
+    show
+        uploadLocalFilesV2,
+        UploadFilesResult,
+        fetchSyncJobStatus,
+        SyncJobFetch,
+        SyncJobFetchOutcome,
+        SyncRateLimitedException;
 
 abstract class IWalSyncProgressListener {
   void onWalSyncedProgress(
@@ -17,14 +24,6 @@ abstract class IWalSyncProgressListener {
     int? uploadedBytes,
     int? totalBytesToUpload,
   });
-}
-
-/// Listener for WiFi connection progress
-abstract class IWifiConnectionListener {
-  void onEnablingDeviceWifi();
-  void onConnectingToDevice();
-  void onConnected();
-  void onConnectionFailed(String error);
 }
 
 abstract class IWalServiceListener extends IWalSyncListener {
@@ -39,15 +38,8 @@ abstract class IWalSyncListener {
 abstract class IWalSync {
   Future<List<Wal>> getMissingWals();
   Future deleteWal(Wal wal);
-  Future<SyncLocalFilesResponse?> syncAll({
-    IWalSyncProgressListener? progress,
-    IWifiConnectionListener? connectionListener,
-  });
-  Future<SyncLocalFilesResponse?> syncWal({
-    required Wal wal,
-    IWalSyncProgressListener? progress,
-    IWifiConnectionListener? connectionListener,
-  });
+  Future<SyncLocalFilesResponse?> syncAll({IWalSyncProgressListener? progress});
+  Future<SyncLocalFilesResponse?> syncWal({required Wal wal, IWalSyncProgressListener? progress});
   void cancelSync();
 
   void start();
@@ -97,16 +89,6 @@ abstract class SDCardWalSync implements IWalSync {
   Future<void> deleteAllPendingWals();
   bool get isSyncing;
   double get currentSpeedKBps;
-
-  Future<bool> isWifiSyncSupported();
-  Future<bool> setWifiCredentials(String ssid, String password);
-  Future<void> clearWifiCredentials();
-  Future<void> loadWifiCredentials();
-  Map<String, String?>? getWifiCredentials();
-  Future<SyncLocalFilesResponse?> syncWithWifi({
-    IWalSyncProgressListener? progress,
-    IWifiConnectionListener? connectionListener,
-  });
 }
 
 abstract class StorageSync implements IWalSync {
@@ -117,6 +99,19 @@ abstract class StorageSync implements IWalSync {
   bool get isSyncing;
   double get currentSpeedKBps;
   Future<bool> hasFilesToSync();
+}
+
+/// Ring-buffer storage sync (firmware 3.0.20+).
+/// Mirrors StorageSync, with the ring as a single logical stream rather than a list of files.
+abstract class RingStorageSync implements IWalSync {
+  void setLocalSync(LocalWalSync localSync);
+  void setDevice(BtDevice? device);
+  Future<void> deleteAllSyncedWals();
+  Future<void> deleteAllPendingWals();
+  bool get isSyncing;
+  double get currentSpeedKBps;
+  Future<bool> hasFilesToSync();
+  Future<void> refreshWalsFromDevice();
 }
 
 abstract class FlashPageWalSync implements IWalSync {

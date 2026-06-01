@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -18,7 +19,6 @@ import 'package:omi/providers/device_provider.dart';
 import 'package:omi/services/devices.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/utils/analytics/intercom.dart';
-import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/other/temp.dart';
@@ -40,9 +40,6 @@ class _DeviceSettingsState extends State<DeviceSettings> {
   double _micGain = 5.0;
   bool _isMicGainLoaded = false;
   bool? _hasMicGainFeature;
-
-  // WiFi sync state
-  bool _isWifiSupported = false;
 
   Timer? _debounce;
   Timer? _micGainDebounce;
@@ -131,13 +128,6 @@ class _DeviceSettingsState extends State<DeviceSettings> {
               _isMicGainLoaded = true; // Loaded, but no value, use default
             });
           }
-        }
-
-        final wifiSupported = await connection.isWifiSyncSupported();
-        if (mounted) {
-          setState(() {
-            _isWifiSupported = wifiSupported;
-          });
         }
       }
     }
@@ -335,16 +325,6 @@ class _DeviceSettingsState extends State<DeviceSettings> {
             copyValue: manufacturer,
             showChevron: false,
           ),
-          // WiFi Sync
-          if (_isWifiSupported) ...[
-            const Divider(height: 1, color: Color(0xFF3C3C43)),
-            _buildProfileStyleItem(
-              icon: FontAwesomeIcons.wifi,
-              title: context.l10n.wifiSync,
-              chipValue: context.l10n.available,
-              showChevron: false,
-            ),
-          ],
         ],
       ),
     );
@@ -746,7 +726,7 @@ class _DeviceSettingsState extends State<DeviceSettings> {
                 provider.setIsConnected(false);
                 await provider.setConnectedDevice(null);
                 provider.updateConnectingStatus(false);
-                MixpanelManager().disconnectFriendClicked();
+                PlatformManager.instance.analytics.disconnectFriendClicked();
                 if (context.mounted) {
                   Navigator.of(context).pop();
                   ScaffoldMessenger.of(

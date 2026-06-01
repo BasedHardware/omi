@@ -257,7 +257,8 @@ export async function POST(request: NextRequest) {
       }
 
       // 1. Send Stripe Transfer with idempotency key to prevent duplicate payments
-      const idempotencyKey = `affiliate_payout_${affiliate_id}_${Math.round(amount * 100)}`;
+      const todayUtc = new Date().toISOString().slice(0, 10);
+      const idempotencyKey = `affiliate_payout_${affiliate_id}_${Math.round(amount * 100)}_${todayUtc}`;
       const transfer = await stripe.transfers.create(
         {
           amount: Math.round(amount * 100), // cents

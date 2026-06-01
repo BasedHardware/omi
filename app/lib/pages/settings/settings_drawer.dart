@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
@@ -28,7 +29,6 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:omi/backend/http/api/announcements.dart';
 import 'package:omi/pages/announcements/changelog_sheet.dart';
-import 'package:omi/utils/analytics/mixpanel.dart';
 import 'device_settings.dart';
 import '../conversations/auto_sync_page.dart';
 import '../conversations/sync_page.dart';
@@ -295,7 +295,7 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
     void goToIntegrations() =>
         Navigator.of(context).push(MaterialPageRoute(builder: (context) => const IntegrationsPage()));
     void goToPermissions() {
-      MixpanelManager().permissionsSettingsOpened();
+      PlatformManager.instance.analytics.permissionsSettingsOpened();
       routeToPage(context, const PermissionsPage());
     }
 
@@ -341,7 +341,6 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
         _SearchableItem(title: context.l10n.deviceName, icon: deviceIcon, onTap: goToDevice),
         _SearchableItem(title: context.l10n.firmware, icon: deviceIcon, onTap: goToDevice),
         _SearchableItem(title: context.l10n.sdCardSync, icon: deviceIcon, onTap: goToDevice),
-        _SearchableItem(title: context.l10n.wifiSync, icon: deviceIcon, onTap: goToDevice),
         _SearchableItem(title: context.l10n.doubleTap, icon: deviceIcon, onTap: goToDevice),
         _SearchableItem(title: context.l10n.ledBrightness, icon: deviceIcon, onTap: goToDevice),
         _SearchableItem(title: context.l10n.micGain, icon: deviceIcon, onTap: goToDevice),
@@ -397,7 +396,7 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
         title: context.l10n.whatsNew,
         icon: const FaIcon(FontAwesomeIcons.solidStar, color: Color(0xFF8E8E93), size: 20),
         onTap: () {
-          MixpanelManager().whatsNewOpened();
+          PlatformManager.instance.analytics.whatsNewOpened();
           ChangelogSheet.showWithLoading(context, () => getAppChangelogs(limit: 5));
         },
       ),
@@ -595,7 +594,7 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
                   title: context.l10n.permissions,
                   icon: const FaIcon(FontAwesomeIcons.shieldHalved, color: Color(0xFF8E8E93), size: 20),
                   onTap: () {
-                    MixpanelManager().permissionsSettingsOpened();
+                    PlatformManager.instance.analytics.permissionsSettingsOpened();
                     routeToPage(context, const PermissionsPage());
                   },
                 ),
@@ -654,7 +653,7 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
                   title: context.l10n.whatsNew,
                   icon: const FaIcon(FontAwesomeIcons.solidStar, color: Color(0xFF8E8E93), size: 20),
                   onTap: () {
-                    MixpanelManager().whatsNewOpened();
+                    PlatformManager.instance.analytics.whatsNewOpened();
                     ChangelogSheet.showWithLoading(context, () => getAppChangelogs(limit: 5));
                   },
                 ),

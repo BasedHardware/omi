@@ -117,4 +117,19 @@ class ActionItemNotificationHandler {
 
     await cancelNotification(actionItemId);
   }
+
+  /// Handle bulk action item deletion data message. Backend packs ids into a
+  /// comma-joined string because FCM data values must be strings; we just
+  /// fan out cancellation client-side — no network involved.
+  static Future<void> handleBatchDeletionMessage(Map<String, dynamic> data) async {
+    final raw = data['ids'];
+    if (raw == null || raw.toString().isEmpty) {
+      Logger.debug('[ActionItem] Invalid batch deletion data');
+      return;
+    }
+    final ids = raw.toString().split(',').where((id) => id.isNotEmpty);
+    for (final id in ids) {
+      await cancelNotification(id);
+    }
+  }
 }

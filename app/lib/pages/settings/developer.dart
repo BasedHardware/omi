@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -27,7 +28,6 @@ import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/developer_mode_provider.dart';
 import 'package:omi/providers/mcp_provider.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
-import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/debug_log_manager.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
@@ -307,7 +307,7 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
       child: InkWell(
         onTap: () {
           launchUrl(Uri.parse(url));
-          MixpanelManager().pageOpened('$label Docs');
+          PlatformManager.instance.analytics.pageOpened('$label Docs');
         },
         borderRadius: BorderRadius.circular(20),
         child: Padding(
@@ -823,6 +823,8 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
                         ? null
                         : () async {
                             if (provider.loadingExportMemories) return;
+                            // Capture l10n before async gaps
+                            final exportTitle = context.l10n.exportAllData;
                             setState(() => provider.loadingExportMemories = true);
                             ScaffoldMessenger.of(context).showSnackBar(
                               SnackBar(
@@ -834,23 +836,29 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
                             final filePath = '${directory.path}/omi-export.json';
                             final exportedPath = await exportUserDataToFile(filePath);
                             if (exportedPath == null) {
+                              // Always reset the flag so the button is re-enabled even if widget is unmounted
+                              provider.loadingExportMemories = false;
                               if (context.mounted) {
                                 ScaffoldMessenger.of(
                                   context,
                                 ).showSnackBar(const SnackBar(content: Text('Export failed. Please try again.')));
+                                setState(() {});
                               }
-                              setState(() => provider.loadingExportMemories = false);
                               return;
                             }
 
-                            final result = await Share.shareXFiles([
-                              XFile(exportedPath),
-                            ], text: 'Exported Data from Omi');
+                            final result = await Share.shareXFiles(
+                              [XFile(exportedPath)],
+                              subject: exportTitle,
+                              text: exportTitle,
+                            );
                             if (result.status == ShareResultStatus.success) {
                               Logger.debug('Export shared');
                             }
-                            MixpanelManager().exportMemories();
-                            setState(() => provider.loadingExportMemories = false);
+                            PlatformManager.instance.analytics.exportMemories();
+                            // Always reset the flag so the button is re-enabled even if widget is unmounted
+                            provider.loadingExportMemories = false;
+                            if (mounted) setState(() {});
                           },
                     child: Container(
                       padding: const EdgeInsets.all(16),

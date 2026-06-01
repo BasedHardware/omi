@@ -1,7 +1,8 @@
 import AppKit
 import Foundation
+import Sentry
 
-/// Unified analytics manager that sends events to PostHog (with Heap dispatch for select events)
+/// Unified analytics manager that sends events to PostHog.
 /// Use this instead of calling PostHogManager directly
 @MainActor
 class AnalyticsManager {
@@ -25,19 +26,16 @@ class AnalyticsManager {
       return
     }
     PostHogManager.shared.initialize()
-    HeapManager.shared.initialize()
   }
 
   // MARK: - User Identification
 
   func identify() {
     PostHogManager.shared.identify()
-    HeapManager.shared.identify()
   }
 
   func reset() {
     PostHogManager.shared.reset()
-    HeapManager.shared.reset()
   }
 
   // MARK: - Opt In/Out
@@ -54,19 +52,15 @@ class AnalyticsManager {
 
   func onboardingStepCompleted(step: Int, stepName: String) {
     PostHogManager.shared.onboardingStepCompleted(step: step, stepName: stepName)
-    HeapManager.shared.track(
-      "Onboarding Step Completed", properties: ["step": "\(step)", "step_name": stepName])
   }
 
   func onboardingHowDidYouHear(source: String) {
     let props: [String: Any] = ["source": source, "is_referral": source == "Friend"]
     PostHogManager.shared.track("Onboarding How Did You Hear", properties: props)
-    HeapManager.shared.track("Onboarding How Did You Hear", properties: ["source": source, "is_referral": "\(source == "Friend")"])
   }
 
   func onboardingCompleted() {
     PostHogManager.shared.onboardingCompleted()
-    HeapManager.shared.track("Onboarding Completed")
   }
 
   func onboardingChatToolUsed(tool: String, properties: [String: Any] = [:]) {
@@ -100,22 +94,18 @@ class AnalyticsManager {
 
   func signInStarted(provider: String) {
     PostHogManager.shared.signInStarted(provider: provider)
-    HeapManager.shared.track("Sign In Started", properties: ["provider": provider])
   }
 
   func signInCompleted(provider: String) {
     PostHogManager.shared.signInCompleted(provider: provider)
-    HeapManager.shared.track("Sign In Completed", properties: ["provider": provider])
   }
 
   func signInFailed(provider: String, error: String) {
     PostHogManager.shared.signInFailed(provider: provider, error: error)
-    HeapManager.shared.track("Sign In Failed", properties: ["provider": provider, "error": error])
   }
 
   func signedOut() {
     PostHogManager.shared.signedOut()
-    HeapManager.shared.track("Signed Out")
   }
 
   // MARK: - Monitoring Events
@@ -263,7 +253,6 @@ class AnalyticsManager {
 
   func appLaunched() {
     PostHogManager.shared.appLaunched()
-    HeapManager.shared.track("App Launched")
   }
 
   func trackStartupTiming(
@@ -271,13 +260,18 @@ class AnalyticsManager {
     databaseInitFailed: Bool
   ) {
     guard !Self.isDevBuild else { return }
-    let properties: [String: Any] = [
+    // Routed to Sentry as a breadcrumb (perf telemetry, not product analytics) so the data
+    // is attached to any same-session crash report without creating a per-launch analytics
+    // event. If we ever need real perf metrics, wire up SentrySDK.startTransaction here.
+    let breadcrumb = Breadcrumb(level: .info, category: "app.startup")
+    breadcrumb.message = "App Startup Timing"
+    breadcrumb.data = [
       "db_init_ms": round(dbInitMs),
       "time_to_interactive_ms": round(timeToInteractiveMs),
       "had_unclean_shutdown": hadUncleanShutdown,
       "database_init_failed": databaseInitFailed,
     ]
-    PostHogManager.shared.track("App Startup Timing", properties: properties)
+    SentrySDK.addBreadcrumb(breadcrumb)
   }
 
   /// Track first launch with comprehensive system diagnostics
@@ -302,7 +296,6 @@ class AnalyticsManager {
 
     // Track in all analytics systems
     PostHogManager.shared.firstLaunch(diagnostics: diagnostics)
-    HeapManager.shared.track("First Launch")
 
     log("Analytics: First launch diagnostics tracked")
   }
@@ -369,14 +362,6 @@ class AnalyticsManager {
     return diagnostics
   }
 
-  func appBecameActive() {
-    PostHogManager.shared.appBecameActive()
-  }
-
-  func appResignedActive() {
-    PostHogManager.shared.appResignedActive()
-  }
-
   // MARK: - Conversation Events
   // Note: The event is named "Memory Created" in analytics for historical reasons,
   // but it actually tracks when a conversation/recording is created, not a "memory".
@@ -398,7 +383,6 @@ class AnalyticsManager {
     var props = properties
     props["category"] = category
     PostHogManager.shared.track("Share Action", properties: props)
-    HeapManager.shared.track("Share Action", properties: ["category": category])
   }
 
   func memoryListItemClicked(conversationId: String) {
@@ -442,7 +426,6 @@ class AnalyticsManager {
 
   func deleteAccountConfirmed() {
     PostHogManager.shared.deleteAccountConfirmed()
-    HeapManager.shared.track("Delete Account Confirmed")
   }
 
   func deleteAccountCancelled() {
@@ -560,11 +543,6 @@ class AnalyticsManager {
 
   // MARK: - Launch At Login Events
 
-  /// Track launch at login status once per app launch (not continuously)
-  func launchAtLoginStatusChecked(enabled: Bool) {
-    PostHogManager.shared.launchAtLoginStatusChecked(enabled: enabled)
-  }
-
   /// Track when launch at login state changes
   /// - Parameters:
   ///   - enabled: New state
@@ -651,30 +629,12 @@ class AnalyticsManager {
 
   // MARK: - Update Events
 
-  func updateCheckStarted() {
-    PostHogManager.shared.updateCheckStarted()
-  }
-
   func updateAvailable(version: String) {
     PostHogManager.shared.updateAvailable(version: version)
   }
 
   func updateInstalled(version: String) {
     PostHogManager.shared.updateInstalled(version: version)
-  }
-
-  func updateNotFound() {
-    PostHogManager.shared.updateNotFound()
-  }
-
-  func updateCheckFailed(
-    error: String, errorDomain: String, errorCode: Int, underlyingError: String? = nil,
-    underlyingDomain: String? = nil, underlyingCode: Int? = nil
-  ) {
-    PostHogManager.shared.updateCheckFailed(
-      error: error, errorDomain: errorDomain, errorCode: errorCode,
-      underlyingError: underlyingError, underlyingDomain: underlyingDomain,
-      underlyingCode: underlyingCode)
   }
 
   // MARK: - Notification Events
@@ -722,18 +682,6 @@ class AnalyticsManager {
 
   func chatBridgeModeChanged(from oldMode: String, to newMode: String) {
     PostHogManager.shared.chatBridgeModeChanged(from: oldMode, to: newMode)
-  }
-
-  // MARK: - Settings State
-
-  /// Track the current state of key settings (screenshots, memory extraction, notifications)
-  /// Called when monitoring starts and daily while monitoring is active
-  func trackSettingsState(
-    screenshotsEnabled: Bool, memoryExtractionEnabled: Bool, memoryNotificationsEnabled: Bool
-  ) {
-    PostHogManager.shared.settingsStateTracked(
-      screenshotsEnabled: screenshotsEnabled, memoryExtractionEnabled: memoryExtractionEnabled,
-      memoryNotificationsEnabled: memoryNotificationsEnabled)
   }
 
   // MARK: - All Settings State (Comprehensive daily report)
@@ -942,32 +890,4 @@ class AnalyticsManager {
     PostHogManager.shared.track("knowledge_graph_build_failed", properties: props)
   }
 
-  // MARK: - Display Info
-
-  /// Track display characteristics (notch, screen size, etc.)
-  /// Called at app launch to help diagnose menu bar visibility issues
-  func trackDisplayInfo() {
-    guard let screen = NSScreen.main else { return }
-
-    let frame = screen.frame
-    let visibleFrame = screen.visibleFrame
-    let safeAreaInsets = screen.safeAreaInsets
-
-    // Detect notch: MacBooks with notch have safeAreaInsets.top > 0
-    let hasNotch = safeAreaInsets.top > 0
-
-    // Calculate menu bar height (difference between frame and visible frame at top)
-    let menuBarHeight = frame.height - visibleFrame.height - visibleFrame.origin.y
-
-    let displayInfo: [String: Any] = [
-      "screen_width": Int(frame.width),
-      "screen_height": Int(frame.height),
-      "has_notch": hasNotch,
-      "safe_area_top": Int(safeAreaInsets.top),
-      "menu_bar_height": Int(menuBarHeight),
-      "scale_factor": screen.backingScaleFactor,
-    ]
-
-    PostHogManager.shared.displayInfoTracked(info: displayInfo)
-  }
 }

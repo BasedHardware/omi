@@ -1,6 +1,11 @@
 #!/bin/bash
 set -e
 
+# Force C locale for numeric formatting so `printf %f` accepts the
+# dot-decimal values produced by `bc` even when the user's shell runs in
+# a non-English locale (e.g. de_DE.UTF-8 expects a comma separator).
+export LC_NUMERIC=C
+
 # ─── Help ──────────────────────────────────────────────────────────────
 if [ "$1" = "--help" ] || [ "$1" = "-h" ]; then
     cat <<'USAGE'
@@ -15,7 +20,9 @@ Options (via environment variables):
   OMI_APP_NAME="Omi Dev"   App name (default: "Omi Dev")
   OMI_PYTHON_API_URL="..."  Python backend URL (subscriptions, payments, etc; default: https://api.omi.me)
   OMI_SIGN_IDENTITY="..."  Code signing identity (auto-detected if not set)
-  OMI_ENABLE_LOCAL_AUTOMATION=1  Enable agent-swift automation bridge
+  OMI_ENABLE_LOCAL_AUTOMATION=1   Force the automation bridge on (auto-on for non-prod bundles; see scripts/omi-ctl)
+  OMI_DISABLE_LOCAL_AUTOMATION=1  Run a dev build "clean" with the bridge off
+  OMI_AUTOMATION_PORT=47777       Bridge port (set per bundle when running several at once)
 
 Required files:
   Backend-Rust/.env         Environment variables (copy from ../.env.example)
@@ -394,18 +401,20 @@ if [ -d "$SPARKLE_FRAMEWORK" ]; then
     cp -R "$SPARKLE_FRAMEWORK" "$APP_BUNDLE/Contents/Frameworks/"
 fi
 
-# Copy HeapSwiftCore framework and its dependency CSSwiftProtobuf
-HEAP_FRAMEWORK="Desktop/.build/artifacts/heap-swift-core-sdk/HeapSwiftCore/HeapSwiftCore.xcframework/macos-arm64_x86_64/HeapSwiftCore.framework"
-if [ -d "$HEAP_FRAMEWORK" ]; then
-    substep "Copying HeapSwiftCore framework"
-    rm -rf "$APP_BUNDLE/Contents/Frameworks/HeapSwiftCore.framework"
-    cp -R "$HEAP_FRAMEWORK" "$APP_BUNDLE/Contents/Frameworks/"
+# Copy Sentry framework
+SENTRY_FRAMEWORK="Desktop/.build/arm64-apple-macosx/debug/Sentry.framework"
+if [ -d "$SENTRY_FRAMEWORK" ]; then
+    substep "Copying Sentry framework"
+    rm -rf "$APP_BUNDLE/Contents/Frameworks/Sentry.framework"
+    cp -R "$SENTRY_FRAMEWORK" "$APP_BUNDLE/Contents/Frameworks/"
 fi
-CSPROTOBUF_FRAMEWORK="Desktop/.build/artifacts/csswiftprotobuf/CSSwiftProtobuf/CSSwiftProtobuf.xcframework/macos-arm64_x86_64/CSSwiftProtobuf.framework"
-if [ -d "$CSPROTOBUF_FRAMEWORK" ]; then
-    substep "Copying CSSwiftProtobuf framework"
-    rm -rf "$APP_BUNDLE/Contents/Frameworks/CSSwiftProtobuf.framework"
-    cp -R "$CSPROTOBUF_FRAMEWORK" "$APP_BUNDLE/Contents/Frameworks/"
+
+# Copy onnxruntime framework
+ONNX_FRAMEWORK="Desktop/.build/arm64-apple-macosx/debug/onnxruntime.framework"
+if [ -d "$ONNX_FRAMEWORK" ]; then
+    substep "Copying onnxruntime framework"
+    rm -rf "$APP_BUNDLE/Contents/Frameworks/onnxruntime.framework"
+    cp -R "$ONNX_FRAMEWORK" "$APP_BUNDLE/Contents/Frameworks/"
 fi
 
 # Copy libwebp dylibs and rewrite load paths
@@ -562,9 +571,13 @@ if [ -n "$SIGN_IDENTITY" ]; then
         substep "Signing Sparkle framework"
         codesign --force --options runtime --sign "$SIGN_IDENTITY" "$APP_BUNDLE/Contents/Frameworks/Sparkle.framework"
     fi
-    if [ -d "$APP_BUNDLE/Contents/Frameworks/CSSwiftProtobuf.framework" ]; then
-        substep "Signing CSSwiftProtobuf framework"
-        codesign --force --options runtime --sign "$SIGN_IDENTITY" "$APP_BUNDLE/Contents/Frameworks/CSSwiftProtobuf.framework"
+    if [ -d "$APP_BUNDLE/Contents/Frameworks/Sentry.framework" ]; then
+        substep "Signing Sentry framework"
+        codesign --force --options runtime --sign "$SIGN_IDENTITY" "$APP_BUNDLE/Contents/Frameworks/Sentry.framework"
+    fi
+    if [ -d "$APP_BUNDLE/Contents/Frameworks/onnxruntime.framework" ]; then
+        substep "Signing onnxruntime framework"
+        codesign --force --options runtime --sign "$SIGN_IDENTITY" "$APP_BUNDLE/Contents/Frameworks/onnxruntime.framework"
     fi
     if [ -f "$APP_BUNDLE/Contents/Frameworks/libsharpyuv.0.dylib" ]; then
         substep "Signing libsharpyuv"
@@ -573,10 +586,6 @@ if [ -n "$SIGN_IDENTITY" ]; then
     if [ -f "$APP_BUNDLE/Contents/Frameworks/libwebp.7.dylib" ]; then
         substep "Signing libwebp"
         codesign --force --options runtime --sign "$SIGN_IDENTITY" "$APP_BUNDLE/Contents/Frameworks/libwebp.7.dylib"
-    fi
-    if [ -d "$APP_BUNDLE/Contents/Frameworks/HeapSwiftCore.framework" ]; then
-        substep "Signing HeapSwiftCore framework"
-        codesign --force --options runtime --sign "$SIGN_IDENTITY" "$APP_BUNDLE/Contents/Frameworks/HeapSwiftCore.framework"
     fi
     # Sign the bundled node binary with developer identity + Node.entitlements
     # (macOS requires executables inside app bundles to be properly signed)

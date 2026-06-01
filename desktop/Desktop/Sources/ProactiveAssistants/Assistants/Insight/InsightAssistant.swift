@@ -328,7 +328,7 @@ actor InsightAssistant: ProactiveAssistant {
             let response = try await APIClient.shared.createMemory(
                 content: insight.insight,
                 visibility: "private",
-                category: .system,
+                category: .interesting,
                 confidence: insight.confidence,
                 sourceApp: insight.sourceApp,
                 contextSummary: insightResult.contextSummary,
@@ -590,7 +590,8 @@ actor InsightAssistant: ProactiveAssistant {
                         contents: iterContents,
                         systemPrompt: iterSystemPrompt,
                         tools: iterTools,
-                        forceToolCall: iterForce
+                        forceToolCall: iterForce,
+                        thinkingBudget: 1024
                     )
                 }
             } catch {
@@ -739,7 +740,8 @@ actor InsightAssistant: ProactiveAssistant {
                         contents: p2Contents,
                         systemPrompt: p2SystemPrompt,
                         tools: p2Tools,
-                        forceToolCall: p2Force
+                        forceToolCall: p2Force,
+                        thinkingBudget: 1024
                     )
                 }
             } catch {

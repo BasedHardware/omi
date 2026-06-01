@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -8,7 +9,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:omi/backend/http/api/goals.dart';
 import 'package:omi/providers/goals_provider.dart';
-import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
 /// Multi-goal widget supporting up to 3 goals with minimalistic UI
@@ -202,7 +202,7 @@ class GoalsWidgetState extends State<GoalsWidget> with WidgetsBindingObserver {
       return;
     }
 
-    MixpanelManager().goalAddButtonTapped(source: 'home');
+    PlatformManager.instance.analytics.goalAddButtonTapped(source: 'home');
     HapticFeedback.lightImpact();
     _titleController.clear();
     _currentController.text = '0';
@@ -277,7 +277,7 @@ class GoalsWidgetState extends State<GoalsWidget> with WidgetsBindingObserver {
                             return GestureDetector(
                               onTap: () {
                                 HapticFeedback.selectionClick();
-                                MixpanelManager().goalEmojiSelected(emoji: emoji);
+                                PlatformManager.instance.analytics.goalEmojiSelected(emoji: emoji);
                                 setSheetState(() => _selectedEmoji = emoji);
                               },
                               child: Container(
@@ -287,9 +287,8 @@ class GoalsWidgetState extends State<GoalsWidget> with WidgetsBindingObserver {
                                 decoration: BoxDecoration(
                                   color: isSelected ? Colors.white.withOpacity(0.15) : Colors.white.withOpacity(0.05),
                                   borderRadius: BorderRadius.circular(12),
-                                  border: isSelected
-                                      ? Border.all(color: Colors.white.withOpacity(0.3), width: 2)
-                                      : null,
+                                  border:
+                                      isSelected ? Border.all(color: Colors.white.withOpacity(0.3), width: 2) : null,
                                 ),
                                 child: Center(child: Text(emoji, style: const TextStyle(fontSize: 22))),
                               ),
@@ -391,7 +390,11 @@ class GoalsWidgetState extends State<GoalsWidget> with WidgetsBindingObserver {
                       Expanded(
                         child: TextButton(
                           onPressed: () async {
-                            MixpanelManager().goalDeleted(goalId: existingGoal.id, source: 'home', method: 'button');
+                            PlatformManager.instance.analytics.goalDeleted(
+                              goalId: existingGoal.id,
+                              source: 'home',
+                              method: 'button',
+                            );
                             Navigator.pop(context);
                             await _deleteGoal(existingGoal);
                           },
@@ -442,7 +445,7 @@ class GoalsWidgetState extends State<GoalsWidget> with WidgetsBindingObserver {
       // Update existing goal via provider
       await goalsProvider.updateGoal(existingGoal.id, title: title, currentValue: current, targetValue: target);
 
-      MixpanelManager().goalUpdated(goalId: existingGoal.id, source: 'home');
+      PlatformManager.instance.analytics.goalUpdated(goalId: existingGoal.id, source: 'home');
       // Save emoji
       setState(() {
         _goalEmojis[existingGoal.id] = _selectedEmoji;
@@ -458,7 +461,7 @@ class GoalsWidgetState extends State<GoalsWidget> with WidgetsBindingObserver {
       );
 
       if (created != null) {
-        MixpanelManager().goalCreated(
+        PlatformManager.instance.analytics.goalCreated(
           goalId: created.id,
           titleLength: title.length,
           targetValue: target,
@@ -568,12 +571,12 @@ class GoalsWidgetState extends State<GoalsWidget> with WidgetsBindingObserver {
         child: const Icon(Icons.delete, color: Colors.white),
       ),
       onDismissed: (direction) async {
-        MixpanelManager().goalDeleted(goalId: goal.id, source: 'home', method: 'swipe');
+        PlatformManager.instance.analytics.goalDeleted(goalId: goal.id, source: 'home', method: 'swipe');
         await _deleteGoal(goal);
       },
       child: GestureDetector(
         onTap: () {
-          MixpanelManager().goalItemTappedForEdit(goalId: goal.id, source: 'home');
+          PlatformManager.instance.analytics.goalItemTappedForEdit(goalId: goal.id, source: 'home');
           _editGoal(goal);
         },
         child: Container(
@@ -629,7 +632,7 @@ class GoalsWidgetState extends State<GoalsWidget> with WidgetsBindingObserver {
                                 divisions: goal.targetValue >= 1 ? goal.targetValue.toInt() : null,
                                 onChanged: (value) => _updateGoalProgressUI(goal, value),
                                 onChangeEnd: (value) {
-                                  MixpanelManager().goalProgressChanged(
+                                  PlatformManager.instance.analytics.goalProgressChanged(
                                     goalId: goal.id,
                                     oldValue: goal.currentValue,
                                     newValue: value,

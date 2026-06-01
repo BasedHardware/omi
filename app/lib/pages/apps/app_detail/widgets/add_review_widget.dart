@@ -1,3 +1,4 @@
+import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/material.dart';
 
 import 'package:flutter_rating_bar/flutter_rating_bar.dart';
@@ -7,7 +8,6 @@ import 'package:omi/backend/http/api/apps.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/app.dart';
 import 'package:omi/providers/connectivity_provider.dart';
-import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/widgets/animated_loading_button.dart';
@@ -139,10 +139,10 @@ class _AddReviewWidgetState extends State<AddReviewWidget> {
               duration: const Duration(milliseconds: 300),
               height: showReviewField
                   ? (showButton
-                        ? (MediaQuery.sizeOf(context).height < 680
-                              ? MediaQuery.sizeOf(context).height * 0.28
-                              : MediaQuery.sizeOf(context).height * 0.2)
-                        : MediaQuery.sizeOf(context).height * 0.132)
+                      ? (MediaQuery.sizeOf(context).height < 680
+                          ? MediaQuery.sizeOf(context).height * 0.28
+                          : MediaQuery.sizeOf(context).height * 0.2)
+                      : MediaQuery.sizeOf(context).height * 0.132)
                   : 0,
               child: !showReviewField
                   ? null
@@ -243,10 +243,10 @@ class _AddReviewWidgetState extends State<AddReviewWidget> {
                                         var index = appsList.indexWhere((element) => element.id == widget.app.id);
                                         appsList[index] = widget.app;
                                         SharedPreferencesUtil().appsList = appsList;
-                                        MixpanelManager().appRated(widget.app.id.toString(), rating);
+                                        PlatformManager.instance.analytics.appRated(widget.app.id.toString(), rating);
 
                                         // Track review added
-                                        MixpanelManager().appDetailReviewAdded(
+                                        PlatformManager.instance.analytics.appDetailReviewAdded(
                                           appId: widget.app.id,
                                           rating: rating.toInt(),
                                           hasComment: reviewController.text.trim().isNotEmpty,

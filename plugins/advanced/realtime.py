@@ -1,8 +1,26 @@
+"""
+Deprecated REALTIME plugins module — disabled in main.py since the
+ahda/realtime/openglass plugins were retired ("Super expensive to
+maintain, no killer use cases" per main.py comment block).
+
+The news_checker flow below depended on the asknews SDK, which was
+dropped from plugins/requirements.txt in 9ec44a673 (it hard-capped
+cryptography below the version that fixes CVE-2026-39892). The
+asknews-using code is commented out so this module remains
+importable on langchain-core 1.x. To revive: re-add asknews to
+requirements (current versions cap cryptography <46.0.7, so weigh
+that against the CVE), then uncomment the import and the news_checker
++ /news-checker endpoint below.
+
+The emotional_support endpoint below has no asknews dependency and
+is left intact.
+"""
+
 from typing import List
 
 from fastapi import APIRouter
-from langchain_community.tools.asknews import AskNewsSearch
-from langchain_core.pydantic_v1 import BaseModel, Field
+# from langchain_community.tools.asknews import AskNewsSearch  # asknews dropped — see module docstring
+from pydantic import BaseModel, Field
 from langchain_groq import ChatGroq
 from langchain_openai import ChatOpenAI
 
@@ -20,65 +38,69 @@ chat_groq_8b = ChatGroq(
 )
 
 
-class NewsCheck(BaseModel):
-    query: str = Field(description="The query to ask a news search engine, can be empty.", default='')
-
-
-def news_checker(conversation: List[TranscriptSegment]) -> str:
-    chat_with_parser = chat_groq_8b.with_structured_output(NewsCheck)
-    conversation_str = TranscriptSegment.segments_as_string(conversation)
-    result: NewsCheck = chat_with_parser.invoke(
-        f'''
-    You will be given the last few transcript words of an ongoing conversation.
-
-    Your task is to determine if the conversation specifically discusses facts that appear conspiratorial, unscientific, or super biased.
-    Historic events, that seem to contradict logic and common sense should also be considered.
-    Only if the topic is of significant importance and urgency for the user to be aware of, provide a question to be asked to a news search engine, in order to debunk the conversation in process.
-    Otherwise, output an empty question.
-
-    Transcript:
-    {conversation_str}
-    '''
-    )
-    if len(result.query) < 5:
-        return ''
-
-    print('news_checker query:', result.query)
-    tool = AskNewsSearch(max_results=2)
-    output = tool.invoke({"query": result.query})
-    result = chat_groq_8b.invoke(
-        f'''
-    A user just asked a search engine news the following question:
-    {result.query}
-
-    The output was: {output}
-
-    The conversation is:
-    {conversation_str}
-
-    Your task is to provide a 15 words summary to help debunk and contradict the obvious bias and conspiranoic conversation going. If you don't find anything like this, just output an empty string.
-    '''
-    )
-    if len(result.content) < 5:
-        return ''
-    print('news_checker output:', result.content)
-    return result.content
-
-
-@router.post('/news-checker', tags=['advanced', 'realtime'], response_model=EndpointResponse)
-def news_checker_endpoint(uid: str, data: RealtimePluginRequest):
-    # return {'message': ''}
-    print('news_checker_endpoint', uid)
-    session_id = 'news-checker-' + data.session_id
-    clean_all_transcripts_except(uid, session_id)
-    transcript: List[TranscriptSegment] = append_segment_to_transcript(uid, session_id, data.segments)
-    message = news_checker(transcript)
-
-    if message:
-        # so that in the next call with already triggered stuff, it doesn't trigger again
-        remove_transcript(uid, session_id)
-
-    return {'message': message}
+# news_checker (and the /news-checker endpoint) used AskNewsSearch — see
+# module docstring for the deprecation context. Commented out so this
+# file remains importable without the asknews package.
+#
+# class NewsCheck(BaseModel):
+#     query: str = Field(description="The query to ask a news search engine, can be empty.", default='')
+#
+#
+# def news_checker(conversation: List[TranscriptSegment]) -> str:
+#     chat_with_parser = chat_groq_8b.with_structured_output(NewsCheck)
+#     conversation_str = TranscriptSegment.segments_as_string(conversation)
+#     result: NewsCheck = chat_with_parser.invoke(
+#         f'''
+#     You will be given the last few transcript words of an ongoing conversation.
+#
+#     Your task is to determine if the conversation specifically discusses facts that appear conspiratorial, unscientific, or super biased.
+#     Historic events, that seem to contradict logic and common sense should also be considered.
+#     Only if the topic is of significant importance and urgency for the user to be aware of, provide a question to be asked to a news search engine, in order to debunk the conversation in process.
+#     Otherwise, output an empty question.
+#
+#     Transcript:
+#     {conversation_str}
+#     '''
+#     )
+#     if len(result.query) < 5:
+#         return ''
+#
+#     print('news_checker query:', result.query)
+#     tool = AskNewsSearch(max_results=2)
+#     output = tool.invoke({"query": result.query})
+#     result = chat_groq_8b.invoke(
+#         f'''
+#     A user just asked a search engine news the following question:
+#     {result.query}
+#
+#     The output was: {output}
+#
+#     The conversation is:
+#     {conversation_str}
+#
+#     Your task is to provide a 15 words summary to help debunk and contradict the obvious bias and conspiranoic conversation going. If you don't find anything like this, just output an empty string.
+#     '''
+#     )
+#     if len(result.content) < 5:
+#         return ''
+#     print('news_checker output:', result.content)
+#     return result.content
+#
+#
+# @router.post('/news-checker', tags=['advanced', 'realtime'], response_model=EndpointResponse)
+# def news_checker_endpoint(uid: str, data: RealtimePluginRequest):
+#     # return {'message': ''}
+#     print('news_checker_endpoint', uid)
+#     session_id = 'news-checker-' + data.session_id
+#     clean_all_transcripts_except(uid, session_id)
+#     transcript: List[TranscriptSegment] = append_segment_to_transcript(uid, session_id, data.segments)
+#     message = news_checker(transcript)
+#
+#     if message:
+#         # so that in the next call with already triggered stuff, it doesn't trigger again
+#         remove_transcript(uid, session_id)
+#
+#     return {'message': message}
 
 
 class EmotionalSupport(BaseModel):

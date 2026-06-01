@@ -1,3 +1,4 @@
+import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
@@ -8,6 +9,7 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:provider/provider.dart';
 import 'package:pull_down_button/pull_down_button.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:shimmer/shimmer.dart';
 import 'package:tuple/tuple.dart';
 
 import 'package:omi/backend/http/api/conversations.dart';
@@ -20,10 +22,11 @@ import 'package:omi/pages/conversation_detail/widgets.dart';
 import 'package:omi/pages/home/page.dart';
 import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
+import 'package:omi/providers/integration_provider.dart';
 import 'package:omi/providers/people_provider.dart';
+import 'package:omi/pages/settings/integrations_page.dart' show IntegrationApp, IntegrationsPage;
 import 'package:omi/services/app_review_service.dart';
 import 'package:omi/services/audio_download_service.dart';
-import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/other/temp.dart';
@@ -78,6 +81,7 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
   bool _isSharing = false;
   bool _isTogglingStarred = false;
   bool _isDownloadingAudio = false;
+  bool _providerInitialized = false;
 
   // Search functionality
   bool _isSearching = false;
@@ -177,7 +181,7 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
             selectedTab = ConversationTab.summary;
         }
         if (tabName != null) {
-          MixpanelManager().conversationDetailTabChanged(tabName);
+          PlatformManager.instance.analytics.conversationDetailTabChanged(tabName);
         }
         if (_searchQuery.isNotEmpty) {
           _updateSearchResults();
@@ -193,6 +197,7 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
 
       // Ensure the provider has the conversation data from the widget parameter
       provider.setCachedConversation(widget.conversation);
+      _providerInitialized = true;
 
       conversationProvider.groupConversationsByDate();
 
@@ -314,7 +319,10 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
 
   void _handleMenuSelection(BuildContext context, String value, ConversationDetailProvider provider) async {
     // Track the menu action selection
-    MixpanelManager().conversationThreeDotsMenuActionSelected(conversationId: provider.conversation.id, action: value);
+    PlatformManager.instance.analytics.conversationThreeDotsMenuActionSelected(
+      conversationId: provider.conversation.id,
+      action: value,
+    );
 
     switch (value) {
       case 'copy_transcript':
@@ -325,8 +333,8 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
         final conversation = provider.conversation;
         final summaryContent =
             conversation.appResults.isNotEmpty && conversation.appResults[0].content.trim().isNotEmpty
-            ? conversation.appResults[0].content.trim()
-            : conversation.structured.toString();
+                ? conversation.appResults[0].content.trim()
+                : conversation.structured.toString();
         _copyContent(context, summaryContent);
         break;
       case 'download_audio':
@@ -355,10 +363,70 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
           await provider.reprocessConversation();
         }
         break;
+      case 'link_event':
+        _handleLinkEvent(context, provider);
+        break;
+      case 'copy_conversation_id':
+        Clipboard.setData(ClipboardData(text: provider.conversation.id));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(context.l10n.conversationIdCopied)));
+        HapticFeedback.lightImpact();
+        break;
       case 'delete':
         _handleDelete(context, provider);
         break;
     }
+  }
+
+  void _handleLinkEvent(BuildContext context, ConversationDetailProvider provider) {
+    // Check if Google Calendar is connected
+    final integrationProvider = Provider.of<IntegrationProvider>(context, listen: false);
+    final isConnected = integrationProvider.hasLoaded
+        ? integrationProvider.isAppConnected(IntegrationApp.googleCalendar)
+        : SharedPreferencesUtil().getBool('google_calendar_connected');
+
+    if (!isConnected) {
+      _showCalendarNotConnectedDialog(context);
+      return;
+    }
+
+    // Show event picker directly
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (context) => const CalendarEventPickerSheet(),
+    );
+  }
+
+  void _showCalendarNotConnectedDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (c) => AlertDialog(
+        backgroundColor: const Color(0xFF1C1C1E),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text('Google Calendar Not Connected', style: TextStyle(color: Colors.white)),
+        content: const Text(
+          'Connect your Google Calendar to link conversations to calendar events.',
+          style: TextStyle(color: Color(0xFF8E8E93)),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(c),
+            child: const Text('Cancel', style: TextStyle(color: Color(0xFF8E8E93))),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(c);
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const IntegrationsPage()),
+              );
+            },
+            child: const Text('Connect', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
   }
 
   void _handleDelete(BuildContext context, ConversationDetailProvider provider) {
@@ -414,7 +482,10 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
     final startTime = DateTime.now();
 
     // Track share start
-    MixpanelManager().audioShareStarted(conversationId: provider.conversation.id, audioFileCount: audioFileCount);
+    PlatformManager.instance.analytics.audioShareStarted(
+      conversationId: provider.conversation.id,
+      audioFileCount: audioFileCount,
+    );
 
     AudioDownloadState currentState = AudioDownloadState.preparing;
     double currentProgress = 0.0;
@@ -476,7 +547,7 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
 
         // Track successful completion
         final durationSeconds = DateTime.now().difference(startTime).inSeconds;
-        MixpanelManager().audioShareCompleted(
+        PlatformManager.instance.analytics.audioShareCompleted(
           conversationId: provider.conversation.id,
           audioFileCount: audioFileCount,
           wasCombined: audioFileCount > 1,
@@ -490,7 +561,7 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
         }
 
         // Track failure (no audio available)
-        MixpanelManager().audioShareFailed(
+        PlatformManager.instance.analytics.audioShareFailed(
           conversationId: provider.conversation.id,
           errorMessage: 'No audio files available',
         );
@@ -499,7 +570,10 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
       Logger.debug('Error downloading audio: $e');
 
       // Track failure
-      MixpanelManager().audioShareFailed(conversationId: provider.conversation.id, errorMessage: e.toString());
+      PlatformManager.instance.analytics.audioShareFailed(
+        conversationId: provider.conversation.id,
+        errorMessage: e.toString(),
+      );
 
       currentState = AudioDownloadState.error;
       updateSheet?.call(() {});
@@ -563,6 +637,21 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
 
   @override
   Widget build(BuildContext context) {
+    // Empty shell on first build (before initState's setCachedConversation
+    // post-frame); after init, an unresolved conversation pops the route.
+    final detailProvider = context.watch<ConversationDetailProvider>();
+    if (detailProvider.conversationOrNull == null) {
+      if (_providerInitialized) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted) return;
+          if (Navigator.of(context).canPop()) {
+            Navigator.of(context).pop();
+          }
+        });
+      }
+      return Scaffold(backgroundColor: Theme.of(context).colorScheme.primary);
+    }
+
     return PopScope(
       canPop: true,
       child: MessageListener<ConversationDetailProvider>(
@@ -655,10 +744,10 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                                         provider.conversation.starred = newStarredState;
                                         // Update in conversation provider
                                         context.read<ConversationProvider>().updateConversationInSortedList(
-                                          provider.conversation,
-                                        );
+                                              provider.conversation,
+                                            );
                                         // Track star/unstar action
-                                        MixpanelManager().conversationStarToggled(
+                                        PlatformManager.instance.analytics.conversationStarToggled(
                                           conversation: provider.conversation,
                                           starred: newStarredState,
                                           source: 'detail_page_button',
@@ -724,7 +813,7 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                                       }
                                       provider.updateVisibilityLocally(ConversationVisibility.shared);
                                       // Track share event
-                                      MixpanelManager().conversationShared(
+                                      PlatformManager.instance.analytics.conversationShared(
                                         conversation: provider.conversation,
                                         shareMethod: 'url_share',
                                       );
@@ -783,7 +872,7 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                                     _searchFocusNode.unfocus();
                                   } else {
                                     _searchFocusNode.requestFocus();
-                                    MixpanelManager().conversationDetailSearchClicked(
+                                    PlatformManager.instance.analytics.conversationDetailSearchClicked(
                                       conversationId: provider.conversation.id,
                                     );
                                   }
@@ -810,6 +899,11 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                                 iconWidget: FaIcon(FontAwesomeIcons.clone, size: 16),
                                 onTap: () => _handleMenuSelection(context, 'copy_summary', provider),
                               ),
+                              PullDownMenuItem(
+                                title: context.l10n.copyConversationId,
+                                iconWidget: FaIcon(FontAwesomeIcons.clipboard, size: 16),
+                                onTap: () => _handleMenuSelection(context, 'copy_conversation_id', provider),
+                              ),
                               if (provider.conversation.hasAudio())
                                 PullDownMenuItem(
                                   title: context.l10n.shareAudio,
@@ -823,6 +917,20 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                               //   iconWidget: FaIcon(FontAwesomeIcons.paperPlane, size: 16),
                               //   onTap: () => _handleMenuSelection(context, 'trigger_integration', provider),
                               // ),
+                              if (provider.conversation.calendarEvent == null)
+                                PullDownMenuItem(
+                                  title: 'Link Event',
+                                  iconWidget: ClipRRect(
+                                    borderRadius: BorderRadius.circular(4),
+                                    child: Image.asset(
+                                      'assets/integration_app_logos/google-calendar.png',
+                                      width: 17,
+                                      height: 17,
+                                      fit: BoxFit.cover,
+                                    ),
+                                  ),
+                                  onTap: () => _handleMenuSelection(context, 'link_event', provider),
+                                ),
                               PullDownMenuItem(
                                 title: context.l10n.testPrompt,
                                 iconWidget: FaIcon(FontAwesomeIcons.commentDots, size: 16),
@@ -843,7 +951,7 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                             buttonBuilder: (context, showMenu) => GestureDetector(
                               onTap: () {
                                 HapticFeedback.mediumImpact();
-                                MixpanelManager().conversationThreeDotsMenuOpened(
+                                PlatformManager.instance.analytics.conversationThreeDotsMenuOpened(
                                   conversationId: provider.conversation.id,
                                 );
                                 showMenu();
@@ -961,57 +1069,56 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                 ),
               ),
 
-              // Floating bottom bar
-              Positioned(
-                bottom: 32,
-                left: 0,
-                right: 0,
-                child: Consumer<ConversationDetailProvider>(
-                  builder: (context, provider, child) {
-                    final conversation = provider.conversation;
-                    final hasActionItems = conversation.structured.actionItems
-                        .where((item) => !item.deleted)
-                        .isNotEmpty;
-                    return ConversationBottomBar(
-                      mode: ConversationBottomBarMode.detail,
-                      selectedTab: selectedTab,
-                      conversation: conversation,
-                      hasSegments:
-                          conversation.transcriptSegments.isNotEmpty ||
-                          conversation.photos.isNotEmpty ||
-                          conversation.externalIntegration != null,
-                      hasActionItems: hasActionItems,
-                      onSeekFunctionReady: (seekFunction) {
-                        WidgetsBinding.instance.addPostFrameCallback((_) {
-                          if (mounted) {
-                            setState(() {
-                              _seekToSegmentCallback = seekFunction;
-                            });
+              // Floating bottom bar — hidden while keyboard is up (e.g. inline summary edit)
+              if (MediaQuery.of(context).viewInsets.bottom == 0)
+                Positioned(
+                  bottom: 32,
+                  left: 0,
+                  right: 0,
+                  child: Consumer<ConversationDetailProvider>(
+                    builder: (context, provider, child) {
+                      final conversation = provider.conversation;
+                      final hasActionItems =
+                          conversation.structured.actionItems.where((item) => !item.deleted).isNotEmpty;
+                      return ConversationBottomBar(
+                        mode: ConversationBottomBarMode.detail,
+                        selectedTab: selectedTab,
+                        conversation: conversation,
+                        hasSegments: conversation.transcriptSegments.isNotEmpty ||
+                            conversation.photos.isNotEmpty ||
+                            conversation.externalIntegration != null,
+                        hasActionItems: hasActionItems,
+                        onSeekFunctionReady: (seekFunction) {
+                          WidgetsBinding.instance.addPostFrameCallback((_) {
+                            if (mounted) {
+                              setState(() {
+                                _seekToSegmentCallback = seekFunction;
+                              });
+                            }
+                          });
+                        },
+                        onTabSelected: (tab) {
+                          int index;
+                          switch (tab) {
+                            case ConversationTab.transcript:
+                              index = 0;
+                              break;
+                            case ConversationTab.summary:
+                              index = 1;
+                              break;
+                            case ConversationTab.actionItems:
+                              index = 2;
+                              break;
                           }
-                        });
-                      },
-                      onTabSelected: (tab) {
-                        int index;
-                        switch (tab) {
-                          case ConversationTab.transcript:
-                            index = 0;
-                            break;
-                          case ConversationTab.summary:
-                            index = 1;
-                            break;
-                          case ConversationTab.actionItems:
-                            index = 2;
-                            break;
-                        }
-                        _controller!.animateTo(index);
-                      },
-                      onStopPressed: () {
-                        // Empty since we don't show the stop button in detail mode
-                      },
-                    );
-                  },
+                          _controller!.animateTo(index);
+                        },
+                        onStopPressed: () {
+                          // Empty since we don't show the stop button in detail mode
+                        },
+                      );
+                    },
+                  ),
                 ),
-              ),
 
               // thinh's comment: temporary disabled
               //// Unassigned segments notification - positioned above the bottom bar
@@ -1240,7 +1347,7 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                                   if (value.isNotEmpty) {
                                     // Track search query with results
                                     final provider = Provider.of<ConversationDetailProvider>(context, listen: false);
-                                    MixpanelManager().conversationDetailSearchQueryEntered(
+                                    PlatformManager.instance.analytics.conversationDetailSearchQueryEntered(
                                       conversationId: provider.conversation.id,
                                       query: value,
                                       resultsCount: _totalSearchResults,
@@ -1282,46 +1389,390 @@ class _SummaryTabState extends State<SummaryTab> with AutomaticKeepAliveClientMi
   @override
   Widget build(BuildContext context) {
     super.build(context);
-    return Listener(
-      onPointerDown: (PointerDownEvent event) {
+    return GestureDetector(
+      behavior: HitTestBehavior.translucent,
+      onTap: () {
         FocusScope.of(context).unfocus();
+        // If search is empty, call the callback to close search
         if (widget.searchQuery.isEmpty && widget.onTapWhenSearchEmpty != null) {
           widget.onTapWhenSearchEmpty!();
         }
       },
-      child: GestureDetector(
-        behavior: HitTestBehavior.translucent,
-        onTap: () {
-          FocusScope.of(context).unfocus();
-          // If search is empty, call the callback to close search
-          if (widget.searchQuery.isEmpty && widget.onTapWhenSearchEmpty != null) {
-            widget.onTapWhenSearchEmpty!();
-          }
+      child: Selector<ConversationDetailProvider, Tuple3<bool, bool, Function(int)>>(
+        selector: (context, provider) =>
+            Tuple3(provider.conversation.discarded, provider.showRatingUI, provider.setConversationRating),
+        builder: (context, data, child) {
+          return Stack(
+            children: [
+              ListView(
+                shrinkWrap: true,
+                keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.manual,
+                children: [
+                  const GetSummaryWidgets(),
+                  data.item1
+                      ? const ReprocessDiscardedWidget()
+                      : GetAppsWidgets(
+                          searchQuery: widget.searchQuery,
+                          currentResultIndex: widget.currentResultIndex,
+                          canStartEditing: () {
+                            final connectivityProvider = Provider.of<ConnectivityProvider>(context, listen: false);
+                            if (!connectivityProvider.isConnected) {
+                              ConnectivityProvider.showNoInternetDialog(context);
+                              return false;
+                            }
+                            return true;
+                          },
+                          onEditStarted: (_) => PlatformManager.instance.analytics.editSummaryStarted(),
+                          onEditCancelled: (_) => PlatformManager.instance.analytics.editSummaryCancelled(),
+                          onSaveSummary: (appId, newContent) {
+                            PlatformManager.instance.analytics.editSummarySaved();
+                            context.read<ConversationDetailProvider>().saveEditingSummary(appId, newContent);
+                          },
+                        ),
+                  const GetGeolocationWidgets(),
+                  const SizedBox(height: 150),
+                ],
+              ),
+            ],
+          );
         },
-        child: Selector<ConversationDetailProvider, Tuple3<bool, bool, Function(int)>>(
-          selector: (context, provider) =>
-              Tuple3(provider.conversation.discarded, provider.showRatingUI, provider.setConversationRating),
-          builder: (context, data, child) {
-            return Stack(
+      ),
+    );
+  }
+}
+
+/// Bottom sheet for picking a calendar event to link
+class CalendarEventPickerSheet extends StatefulWidget {
+  const CalendarEventPickerSheet({super.key});
+
+  @override
+  State<CalendarEventPickerSheet> createState() => _CalendarEventPickerSheetState();
+}
+
+class _CalendarEventPickerSheetState extends State<CalendarEventPickerSheet> {
+  List<CalendarEventLink> _events = [];
+  String? _suggestedEventId;
+  bool _isLoading = true;
+  bool _isLinking = false;
+  String? _linkingEventId;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadEvents();
+  }
+
+  Future<void> _loadEvents() async {
+    final provider = Provider.of<ConversationDetailProvider>(context, listen: false);
+    final events = await provider.listCalendarEventsForPicker();
+
+    if (mounted) {
+      final conversation = provider.conversation;
+      final conversationStart = conversation.startedAt ?? conversation.createdAt;
+      final conversationEnd = conversation.finishedAt ?? conversationStart.add(const Duration(hours: 1));
+
+      String? bestMatchId;
+      double bestOverlapSeconds = 0;
+
+      for (final event in events) {
+        final overlapStart = event.startTime.isAfter(conversationStart) ? event.startTime : conversationStart;
+        final overlapEnd = event.endTime.isBefore(conversationEnd) ? event.endTime : conversationEnd;
+        final overlapDuration = overlapEnd.difference(overlapStart).inSeconds.toDouble();
+
+        if (overlapDuration > 0) {
+          final eventDuration = event.endTime.difference(event.startTime).inSeconds.toDouble();
+          final overlapPercentage = eventDuration > 0 ? overlapDuration / eventDuration : 0;
+
+          if ((overlapDuration >= 300 || overlapPercentage >= 0.5) && overlapDuration > bestOverlapSeconds) {
+            bestOverlapSeconds = overlapDuration;
+            bestMatchId = event.eventId;
+          }
+        }
+      }
+
+      final sortedEvents = List<CalendarEventLink>.from(events);
+      if (bestMatchId != null) {
+        sortedEvents.sort((a, b) {
+          if (a.eventId == bestMatchId) return -1;
+          if (b.eventId == bestMatchId) return 1;
+          return a.startTime.compareTo(b.startTime);
+        });
+      }
+
+      setState(() {
+        _events = sortedEvents;
+        _suggestedEventId = bestMatchId;
+        _isLoading = false;
+      });
+    }
+  }
+
+  String _formatTime(DateTime time) {
+    return dateTimeFormat('h:mm a', time);
+  }
+
+  String _formatDate(DateTime time) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final yesterday = today.subtract(const Duration(days: 1));
+    final dateOnly = DateTime(time.year, time.month, time.day);
+
+    if (dateOnly == today) {
+      return 'Today';
+    } else if (dateOnly == yesterday) {
+      return 'Yesterday';
+    } else if (time.year == now.year) {
+      return dateTimeFormat('MMM d', time);
+    } else {
+      return dateTimeFormat('MMM d, yyyy', time);
+    }
+  }
+
+  Future<void> _linkEvent(CalendarEventLink event) async {
+    setState(() {
+      _isLinking = true;
+      _linkingEventId = event.eventId;
+    });
+    HapticFeedback.mediumImpact();
+
+    final provider = Provider.of<ConversationDetailProvider>(context, listen: false);
+    final linked = await provider.linkCalendarEvent(event.eventId);
+
+    if (!mounted) return;
+
+    if (linked != null) {
+      Navigator.pop(context);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Linked to "${event.title}"')),
+      );
+    } else {
+      setState(() {
+        _isLinking = false;
+        _linkingEventId = null;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Failed to link calendar event')),
+      );
+    }
+  }
+
+  Widget _buildShimmerList() {
+    return Shimmer.fromColors(
+      baseColor: Colors.grey.shade800,
+      highlightColor: Colors.grey.shade600,
+      child: ListView.builder(
+        shrinkWrap: true,
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        itemCount: 4,
+        itemBuilder: (context, index) {
+          return Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                ListView(
-                  shrinkWrap: true,
-                  children: [
-                    const GetSummaryWidgets(),
-                    data.item1
-                        ? const ReprocessDiscardedWidget()
-                        : GetAppsWidgets(
-                            searchQuery: widget.searchQuery,
-                            currentResultIndex: widget.currentResultIndex,
-                          ),
-                    const GetGeolocationWidgets(),
-                    const SizedBox(height: 150),
-                  ],
+                Container(
+                  width: 36,
+                  height: 36,
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Container(
+                        height: 14,
+                        width: double.infinity,
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      Container(
+                        height: 12,
+                        width: 140,
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 14),
+                Container(
+                  width: 22,
+                  height: 22,
+                  decoration: const BoxDecoration(
+                    color: Colors.white,
+                    shape: BoxShape.circle,
+                  ),
                 ),
               ],
-            );
-          },
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildEventTile(CalendarEventLink event, bool isSuggested, bool isLinkingThis) {
+    return GestureDetector(
+      onTap: _isLinking ? null : () => _linkEvent(event),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            ClipRRect(
+              borderRadius: BorderRadius.circular(8),
+              child: Image.asset(
+                'assets/integration_app_logos/google-calendar.png',
+                width: 36,
+                height: 36,
+                fit: BoxFit.cover,
+              ),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    event.title,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 15,
+                      fontWeight: FontWeight.w500,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 6),
+                  if (isSuggested)
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: Colors.deepPurple.withValues(alpha: 0.4),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: const Text(
+                        'Suggested',
+                        style: TextStyle(
+                          color: Colors.white70,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    )
+                  else
+                    Text(
+                      '${_formatDate(event.startTime)}, ${_formatTime(event.startTime)} – ${_formatTime(event.endTime)}',
+                      style: TextStyle(
+                        color: Colors.grey.shade500,
+                        fontSize: 13,
+                      ),
+                    ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 14),
+            _isLinking && isLinkingThis
+                ? const SizedBox(
+                    width: 22,
+                    height: 22,
+                    child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white70),
+                  )
+                : Icon(
+                    Icons.add_circle_outline,
+                    color: _isLinking ? Colors.grey.shade700 : Colors.grey,
+                    size: 22,
+                  ),
+          ],
         ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.7),
+      decoration: const BoxDecoration(
+        color: Color(0xFF1C1C1E),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            margin: const EdgeInsets.only(top: 12),
+            width: 36,
+            height: 4,
+            decoration: BoxDecoration(
+              color: Colors.grey.shade600,
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: Row(
+              children: [
+                const Text(
+                  'Link Event',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 18,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const Spacer(),
+                GestureDetector(
+                  onTap: () => Navigator.pop(context),
+                  child: const Icon(Icons.close, color: Colors.grey, size: 24),
+                ),
+              ],
+            ),
+          ),
+          const Divider(color: Color(0xFF2A2A2E), height: 1),
+          Flexible(
+            child: _isLoading
+                ? _buildShimmerList()
+                : _events.isEmpty
+                    ? const Center(
+                        child: Padding(
+                          padding: EdgeInsets.all(40),
+                          child: Text(
+                            'No calendar events found around this time.',
+                            style: TextStyle(color: Colors.grey, fontSize: 15),
+                            textAlign: TextAlign.center,
+                          ),
+                        ),
+                      )
+                    : ListView.separated(
+                        shrinkWrap: true,
+                        padding: const EdgeInsets.symmetric(vertical: 8),
+                        itemCount: _events.length,
+                        separatorBuilder: (_, __) => const Divider(
+                          color: Color(0xFF2A2A2E),
+                          height: 1,
+                          indent: 16,
+                          endIndent: 16,
+                        ),
+                        itemBuilder: (context, index) {
+                          final event = _events[index];
+                          final isLinkingThis = _linkingEventId == event.eventId;
+                          final isSuggested = event.eventId == _suggestedEventId;
+                          return _buildEventTile(event, isSuggested, isLinkingThis);
+                        },
+                      ),
+          ),
+          SizedBox(height: MediaQuery.of(context).padding.bottom + 8),
+        ],
       ),
     );
   }
@@ -1411,13 +1862,11 @@ class _TranscriptWidgetsState extends State<TranscriptWidgets> with AutomaticKee
                 }
                 final segments = provider.conversation.transcriptSegments;
                 final segment = segments[segmentIndex];
-                final person = segment.personId != null
-                    ? SharedPreferencesUtil().getPersonById(segment.personId!)
-                    : null;
-                final speakerName =
-                    person?.name ??
+                final person =
+                    segment.personId != null ? SharedPreferencesUtil().getPersonById(segment.personId!) : null;
+                final speakerName = person?.name ??
                     context.l10n.speakerWithId('${TranscriptSegment.getDisplaySpeakerId(segment.speakerId, segments)}');
-                MixpanelManager().editSegmentTextStarted();
+                PlatformManager.instance.analytics.editSegmentTextStarted();
                 bool saved = false;
                 showEditSegmentBottomSheet(
                   context,
@@ -1425,11 +1874,11 @@ class _TranscriptWidgetsState extends State<TranscriptWidgets> with AutomaticKee
                   speakerName: speakerName,
                   onSave: (newText) {
                     saved = true;
-                    MixpanelManager().editSegmentTextSaved();
+                    PlatformManager.instance.analytics.editSegmentTextSaved();
                     provider.saveEditingSegmentText(segmentIndex, newText);
                   },
                   onDismissed: () {
-                    if (!saved) MixpanelManager().editSegmentTextCancelled();
+                    if (!saved) PlatformManager.instance.analytics.editSegmentTextCancelled();
                   },
                 );
               },
@@ -1464,7 +1913,9 @@ class _TranscriptWidgetsState extends State<TranscriptWidgets> with AutomaticKee
                               }
                             }
 
-                            MixpanelManager().taggedSegment(finalPersonId == 'user' ? 'User' : 'User Person');
+                            PlatformManager.instance.analytics.taggedSegment(
+                              finalPersonId == 'user' ? 'User' : 'User Person',
+                            );
 
                             for (final segmentId in segmentIds) {
                               final segmentIndex = provider.conversation.transcriptSegments.indexWhere(
@@ -1472,9 +1923,8 @@ class _TranscriptWidgetsState extends State<TranscriptWidgets> with AutomaticKee
                               );
                               if (segmentIndex == -1) continue;
                               provider.conversation.transcriptSegments[segmentIndex].isUser = finalPersonId == 'user';
-                              provider.conversation.transcriptSegments[segmentIndex].personId = finalPersonId == 'user'
-                                  ? null
-                                  : finalPersonId;
+                              provider.conversation.transcriptSegments[segmentIndex].personId =
+                                  finalPersonId == 'user' ? null : finalPersonId;
                             }
                             await assignBulkConversationTranscriptSegments(
                               provider.conversation.id,
@@ -1637,14 +2087,14 @@ class _ActionItemDetailWidgetState extends State<ActionItemDetailWidget> {
       );
       if (currentIndex != -1) {
         if (newValue) {
-          MixpanelManager().checkedActionItem(provider.conversation, currentIndex);
+          PlatformManager.instance.analytics.checkedActionItem(provider.conversation, currentIndex);
 
           if (!await _appReviewService.hasCompletedFirstActionItem()) {
             await _appReviewService.markFirstActionItemCompleted();
             _appReviewService.showReviewPromptIfNeeded(context, isProcessingFirstConversation: false);
           }
         } else {
-          MixpanelManager().uncheckedActionItem(provider.conversation, currentIndex);
+          PlatformManager.instance.analytics.uncheckedActionItem(provider.conversation, currentIndex);
         }
       }
     } catch (e) {

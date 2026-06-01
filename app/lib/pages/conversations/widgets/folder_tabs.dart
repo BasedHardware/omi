@@ -1,3 +1,4 @@
+import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -9,7 +10,6 @@ import 'package:omi/backend/schema/folder.dart';
 import 'package:omi/pages/conversations/widgets/create_folder_sheet.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/folder_provider.dart';
-import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/folders/folder_icon_mapper.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/responsive/responsive_helper.dart';
@@ -91,7 +91,7 @@ class _FolderTabsState extends State<FolderTabs> {
         skipFolderTracking: true,
         onTap: () {
           // Track starred filter toggle with the NEW state (opposite of current)
-          MixpanelManager().starredFilterToggled(
+          PlatformManager.instance.analytics.starredFilterToggled(
             enabled: !widget.showStarredOnly,
             selectedFolderId: widget.selectedFolderId,
           );
@@ -215,7 +215,7 @@ class _FolderTab extends StatelessWidget {
     HapticFeedback.mediumImpact();
 
     // Track context menu opened
-    MixpanelManager().folderContextMenuOpened(folderId: folder!.id, folderName: folder!.name);
+    PlatformManager.instance.analytics.folderContextMenuOpened(folderId: folder!.id, folderName: folder!.name);
 
     showModalBottomSheet(
       context: context,
@@ -234,7 +234,7 @@ class _FolderTab extends StatelessWidget {
       onTap: () {
         // Track folder selection (skip for Starred tab which has its own tracking)
         if (!skipFolderTracking) {
-          MixpanelManager().folderSelected(folderId: folder?.id, folderName: label);
+          PlatformManager.instance.analytics.folderSelected(folderId: folder?.id, folderName: label);
         }
         onTap();
       },
@@ -280,7 +280,7 @@ class _AddFolderButton extends StatelessWidget {
       child: GestureDetector(
         onTap: () async {
           HapticFeedback.mediumImpact();
-          MixpanelManager().createFolderButtonClicked();
+          PlatformManager.instance.analytics.createFolderButtonClicked();
           await showCreateFolderBottomSheet(context);
         },
         child: Container(
@@ -324,7 +324,7 @@ class _FolderContextMenu extends StatelessWidget {
           Navigator.pop(ctx);
 
           // Track folder deletion
-          MixpanelManager().folderDeleted(
+          PlatformManager.instance.analytics.folderDeleted(
             folderId: folder.id,
             folderName: folder.name,
             conversationCount: folder.conversationCount,

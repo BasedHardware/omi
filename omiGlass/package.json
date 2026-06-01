@@ -10,7 +10,8 @@
     "prebuild": "expo prebuild",
     "deploy": "gh-pages -t -d dist",
     "predeploy": "expo export -p web",
-    "prompts": "ts-node ./prompts/generate.ts"
+    "prompts": "ts-node ./prompts/generate.ts",
+    "postinstall": "patch-package"
   },
   "dependencies": {
     "@expo/metro-runtime": "~4.0.1",
@@ -35,8 +36,15 @@
     "@types/react": "~18.3.12",
     "@types/web-bluetooth": "^0.0.20",
     "gh-pages": "^6.1.1",
+    "patch-package": "^8.0.0",
     "ts-node": "^10.9.2",
     "typescript": "~5.3.3"
+  },
+  "overrides": {
+    "tar": "^7.5.11",
+    "@xmldom/xmldom": "^0.8.13",
+    "postcss": "^8.5.10",
+    "uuid": "^11.1.1"
   },
   "private": true
 }

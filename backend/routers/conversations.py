@@ -14,6 +14,7 @@ from utils.other.storage import delete_conversation_audio_files
 from models.calendar_context import CalendarMeetingContext
 from models.conversation import (
     BulkAssignSegmentsRequest,
+    CalendarEventLink,
     Conversation,
     CreateConversationResponse,
     DeleteActionItemRequest,
@@ -25,6 +26,7 @@ from models.conversation import (
     TestPromptRequest,
     UpdateActionItemDescriptionRequest,
     UpdateSegmentTextRequest,
+    UpdateSummaryRequest,
 )
 from utils.conversations.factory import deserialize_conversation
 from utils.conversations.render import redact_conversations_for_list
@@ -43,6 +45,13 @@ from utils.speaker_identification import extract_speaker_samples
 from utils.other import endpoints as auth
 from utils.other.storage import get_conversation_recording_if_exists
 from utils.app_integrations import trigger_external_integrations
+from utils.conversations.calendar_linking import (
+    get_overlapping_calendar_event,
+    write_conversation_link_to_calendar_event,
+)
+from utils.conversations.calendar_utils import extract_attendees, parse_event_times
+from utils.retrieval.tools.calendar_tools import get_google_calendar_event
+from utils.retrieval.tools.google_utils import refresh_google_token
 from utils.conversations.location import get_google_maps_location
 import logging
 
@@ -177,6 +186,164 @@ def get_conversation_by_id(conversation_id: str, uid: str = Depends(auth.get_cur
 def patch_conversation_title(conversation_id: str, title: str, uid: str = Depends(auth.get_current_user_uid)):
     _get_valid_conversation_by_id(uid, conversation_id)
     conversations_db.update_conversation_title(uid, conversation_id, title)
+    return {'status': 'Ok'}
+
+
+@router.delete("/v1/conversations/{conversation_id}/calendar-event", tags=['conversations'])
+def unlink_calendar_event(conversation_id: str, uid: str = Depends(auth.get_current_user_uid)):
+    """
+    Unlink a calendar event from a conversation.
+    This removes the calendar_event field from the conversation.
+    """
+    _get_valid_conversation_by_id(uid, conversation_id)
+    conversations_db.update_conversation(uid, conversation_id, {'calendar_event': None})
+    return {'status': 'Ok'}
+
+
+class LinkCalendarEventRequest(BaseModel):
+    event_id: str
+
+
+def _event_to_calendar_event_link(event: dict) -> Optional[CalendarEventLink]:
+    """Convert a raw Google Calendar event to CalendarEventLink model."""
+    start_time, end_time = parse_event_times(event)
+    if start_time is None or end_time is None:
+        return None
+
+    attendee_names, attendee_emails = extract_attendees(event)
+
+    return CalendarEventLink(
+        event_id=event.get('id', ''),
+        title=event.get('summary', 'Untitled Event'),
+        attendees=attendee_names,
+        attendee_emails=attendee_emails,
+        start_time=start_time,
+        end_time=end_time,
+        html_link=event.get('htmlLink'),
+    )
+
+
+@router.post(
+    "/v1/conversations/{conversation_id}/calendar-event", response_model=CalendarEventLink, tags=['conversations']
+)
+async def link_calendar_event(
+    conversation_id: str,
+    request: LinkCalendarEventRequest,
+    uid: str = Depends(auth.get_current_user_uid),
+):
+    """
+    Link a specific Google Calendar event to an existing conversation.
+    Fetches the event details and stores the calendar_event on the conversation.
+    """
+    _get_valid_conversation_by_id(uid, conversation_id)
+
+    # Get Google Calendar access token
+    integration = users_db.get_integration(uid, 'google_calendar')
+    if not integration or not integration.get('connected'):
+        raise HTTPException(status_code=400, detail="Google Calendar not connected")
+
+    access_token = integration.get('access_token')
+    if not access_token:
+        raise HTTPException(status_code=400, detail="No access token found")
+
+    # Fetch the event from Google Calendar
+    try:
+        event = await get_google_calendar_event(access_token, request.event_id)
+    except Exception as e:
+        error_msg = str(e)
+        # Try to refresh token if authentication failed
+        if "error 401" in error_msg.lower() or "authentication failed" in error_msg.lower():
+            new_token = await refresh_google_token(uid, integration)
+            if new_token:
+                try:
+                    event = await get_google_calendar_event(new_token, request.event_id)
+                except Exception as retry_error:
+                    raise HTTPException(status_code=500, detail=f"Failed after token refresh: {str(retry_error)}")
+            else:
+                raise HTTPException(status_code=401, detail="Google Calendar authentication expired. Please reconnect.")
+        else:
+            raise HTTPException(status_code=500, detail=f"Failed to fetch calendar event: {error_msg}")
+
+    # Convert to CalendarEventLink
+    calendar_event = _event_to_calendar_event_link(event)
+    if calendar_event is None:
+        raise HTTPException(status_code=400, detail="Could not parse calendar event times")
+
+    # Persist to Firestore
+    conversations_db.update_conversation(
+        uid, conversation_id, {'calendar_event': calendar_event.model_dump(mode='json')}
+    )
+
+    # Automatically write the conversation link into the calendar event description
+    await write_conversation_link_to_calendar_event(uid, calendar_event.event_id, conversation_id)
+
+    return calendar_event
+
+
+@router.post(
+    "/v1/conversations/{conversation_id}/calendar-event/auto-link",
+    response_model=CalendarEventLink,
+    tags=['conversations'],
+)
+async def auto_link_calendar_event(conversation_id: str, uid: str = Depends(auth.get_current_user_uid)):
+    """
+    Auto-link a conversation to the best overlapping Google Calendar event.
+    Uses the conversation's started_at/finished_at to find a matching event.
+    Returns 404 if no overlapping event is found.
+    """
+    conversation = _get_valid_conversation_by_id(uid, conversation_id)
+
+    # Get conversation times
+    started_at = conversation.get('started_at')
+    finished_at = conversation.get('finished_at')
+
+    # Fall back to created_at if times are not available
+    if not started_at:
+        started_at = conversation.get('created_at')
+    if not finished_at:
+        finished_at = started_at
+
+    if not started_at:
+        raise HTTPException(status_code=400, detail="Conversation has no timestamp information")
+
+    # Parse datetimes if they're strings
+    if isinstance(started_at, str):
+        started_at = datetime.fromisoformat(started_at.replace('Z', '+00:00'))
+    if isinstance(finished_at, str):
+        finished_at = datetime.fromisoformat(finished_at.replace('Z', '+00:00'))
+
+    # Ensure timezone-aware
+    if started_at.tzinfo is None:
+        started_at = started_at.replace(tzinfo=timezone.utc)
+    if finished_at.tzinfo is None:
+        finished_at = finished_at.replace(tzinfo=timezone.utc)
+
+    # Find overlapping calendar event
+    calendar_event = await get_overlapping_calendar_event(uid, started_at, finished_at)
+
+    if calendar_event is None:
+        raise HTTPException(status_code=404, detail="No overlapping calendar event found")
+
+    # Persist to Firestore
+    conversations_db.update_conversation(
+        uid, conversation_id, {'calendar_event': calendar_event.model_dump(mode='json')}
+    )
+
+    # Automatically write the conversation link into the calendar event description
+    await write_conversation_link_to_calendar_event(uid, calendar_event.event_id, conversation_id)
+
+    return calendar_event
+
+
+@router.patch("/v1/conversations/{conversation_id}/summary", tags=['conversations'])
+def patch_conversation_summary(
+    conversation_id: str, data: UpdateSummaryRequest, uid: str = Depends(auth.get_current_user_uid)
+):
+    result = conversations_db.update_conversation_summary(uid, conversation_id, data.app_id, data.content)
+    if result == 'not_found':
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    if result == 'app_result_not_found':
+        raise HTTPException(status_code=404, detail="App summary not found for this conversation")
     return {'status': 'Ok'}
 
 
@@ -718,7 +885,7 @@ def test_prompt(
 
 
 @router.post('/v1/conversations/merge', response_model=MergeConversationsResponse, tags=['conversations'])
-async def merge_conversations(
+def merge_conversations(
     request: MergeConversationsRequest,
     background_tasks: BackgroundTasks,
     uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "conversations:merge")),

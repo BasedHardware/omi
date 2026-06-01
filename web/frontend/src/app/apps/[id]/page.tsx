@@ -11,10 +11,11 @@ import { getAppById, getAppsByCategory } from '@/src/lib/api/apps';
 import envConfig from '@/src/constants/envConfig';
 
 type Props = {
-  params: { id: string };
+  params: Promise<{ id: string }>;
 };
 
-export async function generateMetadata({ params }: Props): Promise<Metadata> {
+export async function generateMetadata(props: Props): Promise<Metadata> {
+  const params = await props.params;
   const plugin = await getAppById(params.id);
 
   if (!plugin) {
@@ -168,7 +169,10 @@ function formatDate(dateString: string): string {
   });
 }
 
-export default async function PluginDetailView({ params }: { params: { id: string } }) {
+export default async function PluginDetailView(props: {
+  params: Promise<{ id: string }>;
+}) {
+  const params = await props.params;
   const plugin = await getAppById(params.id);
 
   if (!plugin) {
@@ -180,7 +184,7 @@ export default async function PluginDetailView({ params }: { params: { id: strin
   );
   const stats = (await statsResponse.json()) as PluginStat[];
 
-  const userAgent = headers().get('user-agent') || '';
+  const userAgent = (await headers()).get('user-agent') || '';
   const link = getPlatformLink(userAgent);
 
   // Get related apps based on category

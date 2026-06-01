@@ -15,6 +15,10 @@ on:
         description: 'Branch to deploy from'
         required: true
         default: 'main'
+      release_version:
+        description: 'Release version (optional)'
+        required: false
+        default: ''
 
 env:
   SERVICE: pusher
@@ -87,3 +91,22 @@ jobs:
       # If required, use the Cloud Run url output in later steps
       - name: Show Output
         run: echo ${{ steps.deploy.outputs.url }}
+
+      - name: Generate deployment summary
+        if: always() && github.event.inputs.environment == 'prod'
+        uses: ./.github/actions/deployment-summary
+        with:
+          environment: ${{ github.event.inputs.environment }}
+          release_version: ${{ github.event.inputs.release_version }}
+          status: ${{ job.status }}
+          service: ${{ env.SERVICE }}
+
+      - name: Notify deployment status on Telegram
+        if: always() && github.event.inputs.environment == 'prod'
+        uses: ./.github/actions/deployment-notifier
+        with:
+          environment: ${{ github.event.inputs.environment }}
+          release_version: ${{ github.event.inputs.release_version }}
+          status: ${{ job.status }}
+          telegram_bot_token: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          telegram_chat_id: ${{ secrets.TELEGRAM_CHAT_ID }}

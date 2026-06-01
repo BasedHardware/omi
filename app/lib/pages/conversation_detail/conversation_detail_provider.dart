@@ -7,7 +7,10 @@ import 'package:flutter_provider_utilities/flutter_provider_utilities.dart';
 
 import 'package:omi/backend/http/api/apps.dart';
 import 'package:omi/backend/http/api/audio.dart';
-import 'package:omi/backend/http/api/conversations.dart';
+import 'package:omi/backend/http/api/conversations.dart'
+    hide unlinkCalendarEvent, autoLinkCalendarEvent, linkCalendarEvent;
+import 'package:omi/backend/http/api/conversations.dart' as conv_api
+    show unlinkCalendarEvent, autoLinkCalendarEvent, linkCalendarEvent;
 import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/app.dart';
@@ -16,7 +19,6 @@ import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/providers/app_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
-import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 
@@ -55,7 +57,11 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
   }
 
   ServerConversation? _cachedConversation;
-  ServerConversation get conversation {
+
+  /// Non-throwing variant of [conversation]. Build paths must use this so a
+  /// transient miss (conversation deleted under us, day-group emptied) returns
+  /// null instead of throwing from inside a Consumer's builder.
+  ServerConversation? get conversationOrNull {
     final list = conversationProvider?.groupedConversations[selectedDate];
     final id = _cachedConversationId;
 
@@ -77,7 +83,15 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
       return _cachedConversation = result;
     }
 
-    throw StateError("No valid conversation found");
+    return null;
+  }
+
+  /// Non-null accessor for call sites that already know the conversation is
+  /// valid (gestures, async handlers). Build paths use [conversationOrNull].
+  ServerConversation get conversation {
+    final c = conversationOrNull;
+    if (c == null) throw StateError("No valid conversation found");
+    return c;
   }
 
   List<bool> appResponseExpanded = [];
@@ -118,6 +132,40 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
     final success = await updateConversationSegmentText(conversation.id, segment.id, newText.trim());
     if (!success && !_isDisposed) {
       conversation.transcriptSegments[segmentIndex].text = oldText;
+      notifyListeners();
+    }
+  }
+
+  Future<void> saveEditingSummary(String? appId, String newContent) async {
+    final trimmed = newContent.trim();
+    if (trimmed.isEmpty) return;
+
+    if (appId == null) {
+      final oldOverview = conversation.structured.overview;
+      if (trimmed == oldOverview) return;
+
+      conversation.structured.overview = trimmed;
+      notifyListeners();
+
+      final success = await updateConversationSummary(conversation.id, null, trimmed);
+      if (!success && !_isDisposed) {
+        conversation.structured.overview = oldOverview;
+        notifyListeners();
+      }
+      return;
+    }
+
+    final index = conversation.appResults.indexWhere((r) => r.appId == appId);
+    if (index < 0) return;
+    final oldContent = conversation.appResults[index].content;
+    if (trimmed == oldContent) return;
+
+    conversation.appResults[index].content = trimmed;
+    notifyListeners();
+
+    final success = await updateConversationSummary(conversation.id, appId, trimmed);
+    if (!success && !_isDisposed) {
+      conversation.appResults[index].content = oldContent;
       notifyListeners();
     }
   }
@@ -284,7 +332,7 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
     try {
       var updatedConversation = await reProcessConversationServer(conversation.id, appId: appId);
       if (_isDisposed) return false;
-      MixpanelManager().reProcessConversation(conversation);
+      PlatformManager.instance.analytics.reProcessConversation(conversation);
       updateReprocessConversationLoadingState(false);
       updateReprocessConversationId('');
       if (updatedConversation == null) {
@@ -315,7 +363,7 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
       return true;
     } catch (err, stacktrace) {
       print(err);
-      var conversationReporting = MixpanelManager().getConversationEventProperties(conversation);
+      var conversationReporting = PlatformManager.instance.analytics.getConversationEventProperties(conversation);
       await PlatformManager.instance.crashReporter.reportCrash(
         err,
         stacktrace,
@@ -398,9 +446,8 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
       if (_isDisposed) return;
 
       // Preserve locally added apps that aren't in the API response yet
-      final locallyAddedApps = _cachedEnabledConversationApps
-          .where((app) => _locallyAddedAppIds.contains(app.id))
-          .toList();
+      final locallyAddedApps =
+          _cachedEnabledConversationApps.where((app) => _locallyAddedAppIds.contains(app.id)).toList();
 
       _cachedEnabledConversationApps.clear();
       _cachedEnabledConversationApps.addAll(apps);
@@ -538,6 +585,102 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
       _cachedConversation!.visibility = newVisibility;
       conversationProvider?.updateConversation(_cachedConversation!);
       notifyListeners();
+    }
+  }
+
+  /// Unlinks the calendar event from the current conversation
+  Future<bool> unlinkCalendarEvent() async {
+    try {
+      final success = await conv_api.unlinkCalendarEvent(conversation.id);
+      if (success) {
+        _updateLocalConversationWithCalendarEvent(null);
+        notifyListeners();
+        return true;
+      }
+      return false;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  /// Helper method to update the local conversation state with a calendar event
+  void _updateLocalConversationWithCalendarEvent(CalendarEventLink? calendarEvent) {
+    if (_cachedConversation != null) {
+      final updatedConversation = ServerConversation(
+        id: _cachedConversation!.id,
+        createdAt: _cachedConversation!.createdAt,
+        structured: _cachedConversation!.structured,
+        startedAt: _cachedConversation!.startedAt,
+        finishedAt: _cachedConversation!.finishedAt,
+        transcriptSegments: _cachedConversation!.transcriptSegments,
+        appResults: _cachedConversation!.appResults,
+        suggestedSummarizationApps: _cachedConversation!.suggestedSummarizationApps,
+        geolocation: _cachedConversation!.geolocation,
+        photos: _cachedConversation!.photos,
+        audioFiles: _cachedConversation!.audioFiles,
+        discarded: _cachedConversation!.discarded,
+        deleted: _cachedConversation!.deleted,
+        source: _cachedConversation!.source,
+        language: _cachedConversation!.language,
+        externalIntegration: _cachedConversation!.externalIntegration,
+        calendarEvent: calendarEvent,
+        status: _cachedConversation!.status,
+        isLocked: _cachedConversation!.isLocked,
+        starred: _cachedConversation!.starred,
+        folderId: _cachedConversation!.folderId,
+        visibility: _cachedConversation!.visibility,
+      );
+      _cachedConversation = updatedConversation;
+      conversationProvider?.updateConversation(updatedConversation);
+    }
+    notifyListeners();
+  }
+
+  /// Auto-links the conversation to the best overlapping calendar event
+  Future<CalendarEventLink?> autoLinkCalendarEvent() async {
+    try {
+      final calendarEvent = await conv_api.autoLinkCalendarEvent(conversation.id);
+      if (calendarEvent != null) {
+        _updateLocalConversationWithCalendarEvent(calendarEvent);
+      }
+      return calendarEvent;
+    } catch (e) {
+      debugPrint('Error auto-linking calendar event: $e');
+      return null;
+    }
+  }
+
+  /// Links the conversation to a specific calendar event by event ID
+  Future<CalendarEventLink?> linkCalendarEvent(String eventId) async {
+    try {
+      final calendarEvent = await conv_api.linkCalendarEvent(conversation.id, eventId);
+      if (calendarEvent != null) {
+        _updateLocalConversationWithCalendarEvent(calendarEvent);
+      }
+      return calendarEvent;
+    } catch (e) {
+      debugPrint('Error linking calendar event: $e');
+      return null;
+    }
+  }
+
+  /// Lists Google Calendar events around the conversation time for the picker UI
+  Future<List<CalendarEventLink>> listCalendarEventsForPicker() async {
+    try {
+      final conversationStart = conversation.startedAt ?? conversation.createdAt;
+      final conversationEnd = conversation.finishedAt ?? conversationStart.add(const Duration(hours: 1));
+
+      final timeMin = conversationStart.subtract(const Duration(hours: 2));
+      final timeMax = conversationEnd.add(const Duration(hours: 2));
+
+      return await listGoogleCalendarEvents(
+        timeMin: timeMin,
+        timeMax: timeMax,
+        maxResults: 30,
+      );
+    } catch (e) {
+      debugPrint('Error listing calendar events: $e');
+      return [];
     }
   }
 

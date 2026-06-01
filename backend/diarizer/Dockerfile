@@ -1,4 +1,4 @@
-FROM python:3.11 AS builder
+FROM gcr.io/based-hardware-dev/python:3.11-slim-forky AS builder
 
 ENV PATH="/opt/venv/bin:$PATH"
 RUN python -m venv /opt/venv
@@ -6,21 +6,21 @@ RUN python -m venv /opt/venv
 COPY backend/diarizer/requirements.txt /tmp/requirements.txt
 RUN pip install --no-cache-dir -r /tmp/requirements.txt
 
-FROM python:3.11-slim
-# Python 3.11 on Debian 12 (Bookworm)
+FROM gcr.io/based-hardware-dev/python:3.11-slim-forky
+# Python 3.11 on Debian 14 (Forky)
 
 WORKDIR /app
 ENV PATH="/usr/local/nvidia/bin:/usr/local/cuda/bin:/opt/venv/bin:$PATH"
 ENV LD_LIBRARY_PATH="/usr/local/nvidia/lib:/usr/local/nvidia/lib64"
 
-# Install CUDA Toolkit 12.6 Update 3
+# Install CUDA Runtime 13.2 Update 1 only; the pod runs inference and does not need build tools like nvcc.
 RUN apt-get update && apt-get -y install build-essential ffmpeg curl unzip wget && \ 
-wget https://developer.download.nvidia.com/compute/cuda/12.6.3/local_installers/cuda-repo-debian12-12-6-local_12.6.3-560.35.05-1_amd64.deb && \
-dpkg -i cuda-repo-debian12-12-6-local_12.6.3-560.35.05-1_amd64.deb && \
-cp /var/cuda-repo-debian12-12-6-local/cuda-*-keyring.gpg /usr/share/keyrings/ && \
+wget https://developer.download.nvidia.com/compute/cuda/13.2.1/local_installers/cuda-repo-debian13-13-2-local_13.2.1-595.58.03-1_amd64.deb && \
+dpkg -i cuda-repo-debian13-13-2-local_13.2.1-595.58.03-1_amd64.deb && \
+cp /var/cuda-repo-debian13-13-2-local/cuda-*-keyring.gpg /usr/share/keyrings/ && \
 apt-get update && \
-apt-get -y install cuda-toolkit-12-6 && \
-rm -rf /var/lib/apt/lists/* cuda-repo-debian11-12-6-local_12.6.3-560.35.05-1_amd64.deb
+apt-get -y install cuda-runtime-13-2 && \
+rm -rf /var/lib/apt/lists/* cuda-repo-debian13-13-2-local_13.2.1-595.58.03-1_amd64.deb
 
 COPY --from=builder /opt/venv /opt/venv
 COPY backend/diarizer/ .

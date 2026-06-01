@@ -52,9 +52,6 @@ public class ProactiveAssistantsPlugin: NSObject {
     private var wasMonitoringBeforeLock = false
     private var systemEventObservers: [NSObjectProtocol] = []
 
-    // Daily settings state tracking
-    private var settingsStateTimer: Timer?
-
     // Video call throttling: reduce capture frequency when a call app is frontmost
     // to avoid competing with the call app for CPU/GPU (ScreenCaptureKit, encoding, OCR).
     private var videoCallFrameCounter = 0
@@ -76,6 +73,14 @@ public class ProactiveAssistantsPlugin: NSObject {
     private var lastDistributionTime: Date = .distantPast
     /// Fallback interval: re-distribute even without context change to catch visual-only updates.
     private let distributionFallbackInterval: TimeInterval = 60
+    private let messagingDistributionFallbackInterval: TimeInterval = 15
+
+    /// Apps where new content can arrive while the user stays focused. Reusing the same
+    /// list TaskAssistant uses for its fast in-app trigger so the two layers stay aligned.
+    private static let messagingFastPathApps: Set<String> = [
+        "Telegram", "Messages", "iMessage", "WhatsApp", "Signal",
+        "Slack", "Discord", "Messenger",
+    ]
 
     /// Apps whose primary purpose is video/audio calls.
     private static let videoCallApps: Set<String> = [
@@ -229,6 +234,23 @@ public class ProactiveAssistantsPlugin: NSObject {
         // Guard against both active monitoring and pending startup (race condition fix)
         guard !isMonitoring && !isStartingMonitoring else {
             completion(isMonitoring, nil)
+            return
+        }
+
+        // Paywall hard-stop: refuse to start screen capture + Gemini analysis
+        // when the user is past their trial. `AppState` writes
+        // `desktop_isPaywalled` to UserDefaults whenever it flips so other
+        // singletons can synchronously check. Toggle UI also gates on this.
+        // BYOK users (all four keys configured locally) are never paywalled,
+        // so they bypass this gate even if the flag is transiently stale.
+        if !APIKeyService.isByokActive && UserDefaults.standard.bool(forKey: "desktop_isPaywalled") {
+            log("Paywall: refusing startMonitoring (trial expired)")
+            NotificationCenter.default.post(
+                name: .showUsageLimitPopup,
+                object: nil,
+                userInfo: ["reason": "trial_expired"]
+            )
+            completion(false, "trial_expired")
             return
         }
 
@@ -456,8 +478,6 @@ public class ProactiveAssistantsPlugin: NSObject {
 
         sendEvent(type: "monitoringStarted", data: [:])
         AnalyticsManager.shared.monitoringStarted()
-        trackSettingsState()
-        startSettingsStateTimer()
         NotificationCenter.default.post(
             name: .assistantMonitoringStateDidChange,
             object: nil,
@@ -478,8 +498,6 @@ public class ProactiveAssistantsPlugin: NSObject {
         analysisDelayTimer = nil
         distributionDebounceTimer?.invalidate()
         distributionDebounceTimer = nil
-        settingsStateTimer?.invalidate()
-        settingsStateTimer = nil
         isInDelayPeriod = false
         lastDistributedApp = nil
         lastDistributedWindowTitle = nil
@@ -681,7 +699,7 @@ public class ProactiveAssistantsPlugin: NSObject {
         let (realAppName, windowTitle, windowID) = await WindowMonitor.getActiveWindowInfoAsync()
 
         // Check if the current app is excluded from Rewind capture
-        let isRewindExcluded = realAppName.map { RewindSettings.shared.isAppExcluded($0) } ?? false
+        var isRewindExcluded = realAppName.map { RewindSettings.shared.isAppExcluded($0) } ?? false
 
         // Throttle capture when a video call app is frontmost to reduce CPU contention.
         // Captures 1 out of every N frames (e.g., effective ~5s interval at default 1s capture rate).
@@ -736,8 +754,9 @@ public class ProactiveAssistantsPlugin: NSObject {
         }
         currentWindowTitle = windowTitle
 
-        // Use real app name from window info, fall back to cached if unavailable
-        let appName = realAppName ?? currentApp
+        // Use real app name from window info, fall back to cached if unavailable.
+        // Mutable because windowGone retry may re-resolve to a different app.
+        var appName = realAppName ?? currentApp
 
         // Always capture frames (other features may need them)
         // macOS 14+: capture CGImage directly, encode JPEG once for assistants,
@@ -757,11 +776,26 @@ public class ProactiveAssistantsPlugin: NSObject {
                     // failure. This used to trip the consecutive-failure counter and falsely
                     // declare "screen recording permission lost" after normal user actions.
                     cgImage = await screenCaptureService.captureActiveWindowCGImage()
+                    // Privacy: re-resolve app name since active window may have changed
+                    let (retryApp, retryTitle, _) = await WindowMonitor.getActiveWindowInfoAsync()
+                    if let retryApp = retryApp {
+                        appName = retryApp
+                        currentWindowTitle = retryTitle
+                        isRewindExcluded = RewindSettings.shared.isAppExcluded(retryApp)
+                    }
                 case .failed:
                     cgImage = nil
                 }
             } else {
                 cgImage = await screenCaptureService.captureActiveWindowCGImage()
+                // Privacy: re-resolve app name since captureActiveWindowCGImage captures
+                // whatever is currently active, which may differ from the earlier resolution.
+                let (fallbackApp, fallbackTitle, _) = await WindowMonitor.getActiveWindowInfoAsync()
+                if let fallbackApp = fallbackApp {
+                    appName = fallbackApp
+                    currentWindowTitle = fallbackTitle
+                    isRewindExcluded = RewindSettings.shared.isAppExcluded(fallbackApp)
+                }
             }
             if let cgImage = cgImage,
                let appName = appName {
@@ -788,14 +822,23 @@ public class ProactiveAssistantsPlugin: NSObject {
                         captureTime: captureTime
                     )
 
-                    // Always track the frame for context switch detection (even during delay)
-                    AssistantCoordinator.shared.trackFrame(frame)
-
-                    if !isInDelayPeriod {
-                        distributeFrameIfChanged(frame)
-                    } else {
-                        // During delay, still distribute to assistants that need it (e.g. refocus detection)
-                        AssistantCoordinator.shared.distributeFrameDuringDelay(frame)
+                    // Privacy gate: skip ALL assistant paths for Rewind-excluded apps.
+                    // This includes trackFrame — the tracked frame can be passed to assistants
+                    // via onContextSwitch (e.g. TaskAssistant), so excluded frames must never
+                    // be stored as lastTrackedFrame.
+                    // Context switch detection still works: it uses lastTrackedApp/lastTrackedWindowTitle
+                    // (set by checkContextSwitch), not lastTrackedFrame.
+                    if isRewindExcluded {
+                        log("PrivacyGate: Blocked frame from Rewind-excluded app '\(appName)' — not sent to assistants")
+                    }
+                    if !isRewindExcluded {
+                        AssistantCoordinator.shared.trackFrame(frame)
+                        if !isInDelayPeriod {
+                            distributeFrameIfChanged(frame)
+                        } else {
+                            // During delay, still distribute to assistants that need it (e.g. refocus detection)
+                            AssistantCoordinator.shared.distributeFrameDuringDelay(frame)
+                        }
                     }
                 }
 
@@ -841,6 +884,16 @@ public class ProactiveAssistantsPlugin: NSObject {
         } else if let jpegData = await screenCaptureService.captureActiveWindowAsync(),
            let appName = appName {
             // macOS 13.x fallback: existing JPEG-based path
+            // Privacy: re-resolve app name since captureActiveWindowAsync captures
+            // whatever is currently active, which may differ from the earlier resolution.
+            var resolvedApp = appName
+            let (freshApp, freshTitle, _) = await WindowMonitor.getActiveWindowInfoAsync()
+            if let freshApp = freshApp {
+                resolvedApp = freshApp
+                currentWindowTitle = freshTitle
+                isRewindExcluded = RewindSettings.shared.isAppExcluded(freshApp)
+            }
+
             if !lastCaptureSucceeded {
                 log("Screen capture recovered after \(consecutiveFailures) failures")
             }
@@ -851,19 +904,24 @@ public class ProactiveAssistantsPlugin: NSObject {
 
             let frame = CapturedFrame(
                 jpegData: jpegData,
-                appName: appName,
+                appName: resolvedApp,
                 windowTitle: currentWindowTitle,
                 frameNumber: frameCount
             )
 
-            // Always track the frame for context switch detection (even during delay)
-            AssistantCoordinator.shared.trackFrame(frame)
-
-            if !isInDelayPeriod {
-                distributeFrameIfChanged(frame)
-            } else {
-                // During delay, still distribute to assistants that need it (e.g. refocus detection)
-                AssistantCoordinator.shared.distributeFrameDuringDelay(frame)
+            // Privacy gate: skip ALL assistant paths for Rewind-excluded apps
+            // (including trackFrame — see macOS 14+ path comment for rationale).
+            if isRewindExcluded {
+                log("PrivacyGate: Blocked frame from Rewind-excluded app '\(resolvedApp)' — not sent to assistants")
+            }
+            if !isRewindExcluded {
+                AssistantCoordinator.shared.trackFrame(frame)
+                if !isInDelayPeriod {
+                    distributeFrameIfChanged(frame)
+                } else {
+                    // During delay, still distribute to assistants that need it (e.g. refocus detection)
+                    AssistantCoordinator.shared.distributeFrameDuringDelay(frame)
+                }
             }
 
             if !isRewindExcluded {
@@ -921,7 +979,12 @@ public class ProactiveAssistantsPlugin: NSObject {
         )
 
         let timeSinceLastDistribution = Date().timeIntervalSince(lastDistributionTime)
-        let fallbackDue = timeSinceLastDistribution >= distributionFallbackInterval
+        // Messaging apps get a much shorter same-context fallback so a new chat message
+        // reaches the analyzer in ~15s, even when you stay in the app the whole time.
+        let activeFallbackInterval = Self.messagingFastPathApps.contains(frame.appName)
+            ? messagingDistributionFallbackInterval
+            : distributionFallbackInterval
+        let fallbackDue = timeSinceLastDistribution >= activeFallbackInterval
 
         if contextChanged {
             // Update tracking immediately so subsequent captures in the same new context
@@ -954,27 +1017,6 @@ public class ProactiveAssistantsPlugin: NSObject {
         distributionDebounceTimer = nil
 
         AssistantCoordinator.shared.distributeFrame(frame)
-    }
-
-    // MARK: - Settings State Tracking
-
-    /// Track current settings state to analytics
-    private func trackSettingsState() {
-        AnalyticsManager.shared.trackSettingsState(
-            screenshotsEnabled: isMonitoring,
-            memoryExtractionEnabled: MemoryAssistantSettings.shared.isEnabled,
-            memoryNotificationsEnabled: MemoryAssistantSettings.shared.notificationsEnabled
-        )
-    }
-
-    /// Start a daily timer to report settings state
-    private func startSettingsStateTimer() {
-        settingsStateTimer?.invalidate()
-        settingsStateTimer = Timer.scheduledTimer(withTimeInterval: 86400, repeats: true) { [weak self] _ in
-            Task { @MainActor in
-                self?.trackSettingsState()
-            }
-        }
     }
 
     // MARK: - Event Broadcasting
@@ -1274,7 +1316,8 @@ public class ProactiveAssistantsPlugin: NSObject {
             NotificationService.shared.sendNotification(
                 title: "Screen Recording Permission Required",
                 message: "omi needs screen recording permission to continue monitoring. Please re-enable it in System Settings.",
-                deliverSystemBanner: true
+                deliverSystemBanner: true,
+                respectFrequency: false
             )
         }
     }
@@ -1582,7 +1625,8 @@ public class ProactiveAssistantsPlugin: NSObject {
             NotificationService.shared.sendNotification(
                 title: NotificationService.screenCaptureResetTitle,
                 message: "Screen recording permission needs to be re-enabled. Click to open Settings.",
-                deliverSystemBanner: true
+                deliverSystemBanner: true,
+                respectFrequency: false
             )
             return
         }
@@ -1596,7 +1640,8 @@ public class ProactiveAssistantsPlugin: NSObject {
         NotificationService.shared.sendNotification(
             title: NotificationService.screenCaptureResetTitle,
             message: "Screen recording permission needs to be re-enabled. Click to open Settings.",
-            deliverSystemBanner: true
+            deliverSystemBanner: true,
+            respectFrequency: false
         )
     }
 }

@@ -1,4 +1,4 @@
-// API proxy routes — forward Gemini and Deepgram requests to upstream APIs.
+// API proxy routes — forward Gemini requests to upstream APIs.
 // Keys stay server-side; desktop client authenticates via Firebase token only.
 //
 // Issue #5861: Remove client-side API key exposure risk.
@@ -8,13 +8,14 @@
 use axum::{
     body::Bytes,
     extract::{DefaultBodyLimit, Path, State},
-    http::StatusCode,
+    http::{HeaderMap, StatusCode},
     response::{IntoResponse, Response},
-    routing::{any, post},
+    routing::post,
     Router,
 };
 
-use crate::auth::AuthUser;
+use crate::auth::{AuthUser, PaywalledAuthUser};
+use crate::byok;
 use crate::AppState;
 
 use super::rate_limit::{self, RateDecision};
@@ -39,6 +40,12 @@ const GEMINI_MAX_BODY_SIZE: usize = 5 * 1024 * 1024;
 /// Maximum allowed max_output_tokens in generation_config.
 /// App uses 8192 (GeminiClient.swift:553,922,1026).
 const MAX_OUTPUT_TOKENS_CAP: u64 = 8192;
+
+/// Default thinking budget injected when client omits thinkingConfig.
+/// Gemini 2.5 Flash thinking output costs $3.50/M vs $0.60/M regular (5.8x).
+/// 1024 tokens caps reasoning for old clients; current Swift client sends budget=0
+/// explicitly on all production paths.
+const DEFAULT_THINKING_BUDGET: u64 = 1024;
 
 /// Proxy-specific error type — allows JSON 429 responses alongside bare status codes.
 enum ProxyError {
@@ -73,10 +80,13 @@ impl IntoResponse for ProxyError {
 /// Rate-limited per user: Tier 1 (allow), Tier 2 (degrade Pro→Flash), Tier 3 (reject 429).
 async fn gemini_proxy(
     State(state): State<AppState>,
-    user: AuthUser,
+    user: PaywalledAuthUser,
+    headers: HeaderMap,
     Path(path): Path<String>,
     body: Bytes,
 ) -> Result<Response, ProxyError> {
+    let byok_stripped = user.byok_stripped;
+    let user: AuthUser = user.into();
     // Rewrite preview models to stable equivalents (old app compat)
     let path = crate::llm::model_qos::rewrite_preview_model(&path);
 
@@ -101,24 +111,79 @@ async fn gemini_proxy(
         ProxyError::Status(StatusCode::BAD_REQUEST)
     })?;
 
-    // Rate limit check
-    let decision = state.gemini_rate_limiter.check_and_record(&user.uid, state.redis.as_ref()).await;
-    if decision == RateDecision::Reject {
-        tracing::warn!("gemini_proxy: rate limit rejected uid={}", user.uid);
-        return Err(ProxyError::RateLimited);
+    // BYOK: check for user-provided Gemini API key (issue #7357).
+    // When present, use AI Studio with the user's key, skip Vertex AI routing
+    // and server-key rate limiting (the user pays their own bill).
+    // If byok_stripped, the user is not BYOK-enrolled — ignore their headers.
+    let byok_gemini_key = byok::get_byok_key_if_active(&headers, byok::HEADER_GEMINI, byok_stripped);
+    let is_byok = byok_gemini_key.is_some();
+
+    // Rate limit check — skip when using BYOK key
+    if !is_byok {
+        let decision = state.gemini_rate_limiter.check_and_record(&user.uid, state.redis.as_ref()).await;
+        if decision == RateDecision::Reject {
+            tracing::warn!("gemini_proxy: rate limit rejected uid={}", user.uid);
+            return Err(ProxyError::RateLimited);
+        }
+
+        // Apply model degradation if needed
+        let effective_path = rate_limit::maybe_rewrite_model_path(&path, &decision, action);
+        if effective_path != path {
+            tracing::info!(
+                "gemini_proxy: degraded uid={} {} -> {}",
+                user.uid,
+                path,
+                effective_path
+            );
+        }
+
+        // Non-BYOK path: use server key with Vertex AI / AI Studio routing
+        return gemini_proxy_server_key(
+            &state, &user, &effective_path, action, model, &sanitized_body,
+        )
+        .await;
     }
 
-    // Apply model degradation if needed
-    let effective_path = rate_limit::maybe_rewrite_model_path(&path, &decision, action);
-    if effective_path != path {
-        tracing::info!(
-            "gemini_proxy: degraded uid={} {} -> {}",
-            user.uid,
-            path,
-            effective_path
-        );
-    }
+    // BYOK path: always use AI Studio with the user's API key.
+    // Vertex AI requires our service account — can't mix with user's API key.
+    // Skip Vertex-specific transforms (embedContent→predict) since AI Studio
+    // handles embedContent natively.
+    let byok_key = byok_gemini_key.unwrap();
+    tracing::info!("gemini_proxy: using BYOK Gemini key for uid={}", user.uid);
 
+    let url = build_gemini_url(&path, byok_key);
+    let upstream = reqwest::Client::new()
+        .post(&url)
+        .header("content-type", "application/json")
+        .body(sanitized_body)
+        .send()
+        .await
+        .map_err(|e| {
+            // Use without_url() to avoid leaking BYOK API key from the query string
+            tracing::error!("gemini_proxy: BYOK upstream request failed: {}", e.without_url());
+            ProxyError::Status(StatusCode::BAD_GATEWAY)
+        })?;
+
+    let status =
+        StatusCode::from_u16(upstream.status().as_u16()).unwrap_or(StatusCode::BAD_GATEWAY);
+    let bytes = upstream.bytes().await.map_err(|e| {
+        tracing::error!("gemini_proxy: failed to read upstream body: {}", e.without_url());
+        ProxyError::Status(StatusCode::BAD_GATEWAY)
+    })?;
+
+    Ok((status, bytes).into_response())
+}
+
+/// Non-BYOK Gemini proxy: uses server key with Vertex AI / AI Studio routing,
+/// rate limiting, model degradation, and body transforms.
+async fn gemini_proxy_server_key(
+    state: &AppState,
+    user: &AuthUser,
+    effective_path: &str,
+    action: &str,
+    model: &str,
+    sanitized_body: &[u8],
+) -> Result<Response, ProxyError> {
     // Resolve provider route: single dispatch point for all provider-specific behavior.
     // Returns provider, action override, and body transforms needed.
     use crate::llm::model_qos::{resolve_route, BodyTransform, Provider, ResponseTransform};
@@ -126,12 +191,12 @@ async fn gemini_proxy(
 
     // Apply request body transform if needed (e.g., embedContent → predict format)
     let request_body = match route.request_transform {
-        BodyTransform::EmbedToPredict => transform_embed_request_to_vertex(&sanitized_body)
+        BodyTransform::EmbedToPredict => transform_embed_request_to_vertex(sanitized_body)
             .map_err(|e| {
                 tracing::warn!("gemini_proxy: embed body transform failed: {}", e);
                 ProxyError::Status(StatusCode::BAD_REQUEST)
             })?,
-        BodyTransform::None => sanitized_body.clone(),
+        BodyTransform::None => sanitized_body.to_vec(),
     };
 
     // Apply Vertex action override (e.g., :embedContent → :predict)
@@ -164,11 +229,11 @@ async fn gemini_proxy(
                 Err(e) => {
                     if let Some(gemini_key) = state.config.gemini_api_key.as_ref() {
                         tracing::warn!("gemini_proxy: Vertex AI token failed, falling back to API key: {}", e);
-                        let url = build_gemini_url(&effective_path, gemini_key);
+                        let url = build_gemini_url(effective_path, gemini_key);
                         reqwest::Client::new()
                             .post(&url)
                             .header("content-type", "application/json")
-                            .body(sanitized_body.clone())
+                            .body(sanitized_body.to_vec())
                             .send()
                             .await
                     } else {
@@ -181,11 +246,11 @@ async fn gemini_proxy(
             // Vertex AI requested but not configured → AI Studio
             let gemini_key = state.config.gemini_api_key.as_ref()
                 .ok_or(ProxyError::Status(StatusCode::SERVICE_UNAVAILABLE))?;
-            let url = build_gemini_url(&effective_path, gemini_key);
+            let url = build_gemini_url(effective_path, gemini_key);
             reqwest::Client::new()
                 .post(&url)
                 .header("content-type", "application/json")
-                .body(sanitized_body.clone())
+                .body(sanitized_body.to_vec())
                 .send()
                 .await
         }
@@ -193,11 +258,11 @@ async fn gemini_proxy(
         // AI Studio route
         let gemini_key = state.config.gemini_api_key.as_ref()
             .ok_or(ProxyError::Status(StatusCode::SERVICE_UNAVAILABLE))?;
-        let url = build_gemini_url(&effective_path, gemini_key);
+        let url = build_gemini_url(effective_path, gemini_key);
         reqwest::Client::new()
             .post(&url)
             .header("content-type", "application/json")
-            .body(sanitized_body.clone())
+            .body(sanitized_body.to_vec())
             .send()
             .await
     };
@@ -237,11 +302,14 @@ async fn gemini_proxy(
 /// Rate-limited per user with same tiers as gemini_proxy.
 async fn gemini_stream_proxy(
     State(state): State<AppState>,
-    user: AuthUser,
+    user: PaywalledAuthUser,
+    headers: HeaderMap,
     Path(path): Path<String>,
     axum::extract::Query(query): axum::extract::Query<std::collections::HashMap<String, String>>,
     body: Bytes,
 ) -> Result<Response, ProxyError> {
+    let byok_stripped = user.byok_stripped;
+    let user: AuthUser = user.into();
     // Rewrite preview models to stable equivalents (old app compat)
     let path = crate::llm::model_qos::rewrite_preview_model(&path);
 
@@ -265,24 +333,72 @@ async fn gemini_stream_proxy(
         ProxyError::Status(StatusCode::BAD_REQUEST)
     })?;
 
-    // Rate limit check
-    let decision = state.gemini_rate_limiter.check_and_record(&user.uid, state.redis.as_ref()).await;
-    if decision == RateDecision::Reject {
-        tracing::warn!("gemini_stream_proxy: rate limit rejected uid={}", user.uid);
-        return Err(ProxyError::RateLimited);
+    // BYOK: check for user-provided Gemini API key (issue #7357).
+    let byok_gemini_key = byok::get_byok_key_if_active(&headers, byok::HEADER_GEMINI, byok_stripped);
+    let is_byok = byok_gemini_key.is_some();
+
+    // Rate limit check — skip when using BYOK key
+    if !is_byok {
+        let decision = state.gemini_rate_limiter.check_and_record(&user.uid, state.redis.as_ref()).await;
+        if decision == RateDecision::Reject {
+            tracing::warn!("gemini_stream_proxy: rate limit rejected uid={}", user.uid);
+            return Err(ProxyError::RateLimited);
+        }
+
+        // Apply model degradation if needed
+        let effective_path = rate_limit::maybe_rewrite_model_path(&path, &decision, action);
+        if effective_path != path {
+            tracing::info!(
+                "gemini_stream_proxy: degraded uid={} {} -> {}",
+                user.uid,
+                path,
+                effective_path
+            );
+        }
+
+        // Non-BYOK: server key with Vertex AI / AI Studio routing
+        return gemini_stream_server_key(&state, &effective_path, action, model, sanitized_body, &query).await;
     }
 
-    // Apply model degradation if needed
-    let effective_path = rate_limit::maybe_rewrite_model_path(&path, &decision, action);
-    if effective_path != path {
-        tracing::info!(
-            "gemini_stream_proxy: degraded uid={} {} -> {}",
-            user.uid,
-            path,
-            effective_path
-        );
-    }
+    // BYOK path: always use AI Studio with user's key, skip Vertex AI.
+    let byok_key = byok_gemini_key.unwrap();
+    tracing::info!("gemini_stream_proxy: using BYOK Gemini key for uid={}", user.uid);
 
+    let upstream_url = build_gemini_stream_url(&path, byok_key, &query);
+    let upstream = reqwest::Client::new()
+        .post(&upstream_url)
+        .header("content-type", "application/json")
+        .body(sanitized_body)
+        .send()
+        .await
+        .map_err(|e| {
+            // Use without_url() to avoid leaking BYOK API key from the query string
+            tracing::error!("gemini_stream_proxy: BYOK upstream request failed: {}", e.without_url());
+            ProxyError::Status(StatusCode::BAD_GATEWAY)
+        })?;
+
+    let status =
+        StatusCode::from_u16(upstream.status().as_u16()).unwrap_or(StatusCode::BAD_GATEWAY);
+
+    let stream = upstream.bytes_stream();
+    let body = axum::body::Body::from_stream(stream);
+
+    Ok(Response::builder()
+        .status(status)
+        .header("content-type", "text/event-stream")
+        .body(body)
+        .unwrap())
+}
+
+/// Non-BYOK streaming Gemini proxy: server key with Vertex AI / AI Studio routing.
+async fn gemini_stream_server_key(
+    state: &AppState,
+    effective_path: &str,
+    action: &str,
+    model: &str,
+    sanitized_body: Vec<u8>,
+    query: &std::collections::HashMap<String, String>,
+) -> Result<Response, ProxyError> {
     // Resolve provider route (same dispatch as non-streaming proxy)
     use crate::llm::model_qos::{resolve_route, Provider};
     let route = resolve_route(model, action);
@@ -290,12 +406,12 @@ async fn gemini_stream_proxy(
     // Build and send request: Vertex AI or AI Studio
     let upstream = if route.provider == Provider::VertexAi {
         if let Some(ref vertex) = state.vertex_auth {
-            let mut url = vertex.build_url_from_path(&effective_path).ok_or_else(|| {
+            let mut url = vertex.build_url_from_path(effective_path).ok_or_else(|| {
                 tracing::error!("gemini_stream_proxy: failed to parse path for Vertex AI: {}", effective_path);
                 ProxyError::Status(StatusCode::BAD_REQUEST)
             })?;
             // Append extra query params (e.g., alt=sse) for streaming
-            for (k, v) in &query {
+            for (k, v) in query {
                 url.push(if url.contains('?') { '&' } else { '?' });
                 url.push_str(&urlencoding::encode(k));
                 url.push('=');
@@ -314,7 +430,7 @@ async fn gemini_stream_proxy(
                 Err(e) => {
                     if let Some(gemini_key) = state.config.gemini_api_key.as_ref() {
                         tracing::warn!("gemini_stream_proxy: Vertex AI token failed, falling back to API key: {}", e);
-                        let upstream_url = build_gemini_stream_url(&effective_path, gemini_key, &query);
+                        let upstream_url = build_gemini_stream_url(effective_path, gemini_key, query);
                         reqwest::Client::new()
                             .post(&upstream_url)
                             .header("content-type", "application/json")
@@ -331,7 +447,7 @@ async fn gemini_stream_proxy(
             // Vertex AI requested but not configured → AI Studio
             let gemini_key = state.config.gemini_api_key.as_ref()
                 .ok_or(ProxyError::Status(StatusCode::SERVICE_UNAVAILABLE))?;
-            let upstream_url = build_gemini_stream_url(&effective_path, gemini_key, &query);
+            let upstream_url = build_gemini_stream_url(effective_path, gemini_key, query);
             reqwest::Client::new()
                 .post(&upstream_url)
                 .header("content-type", "application/json")
@@ -343,7 +459,7 @@ async fn gemini_stream_proxy(
         // AI Studio route
         let gemini_key = state.config.gemini_api_key.as_ref()
             .ok_or(ProxyError::Status(StatusCode::SERVICE_UNAVAILABLE))?;
-        let upstream_url = build_gemini_stream_url(&effective_path, gemini_key, &query);
+        let upstream_url = build_gemini_stream_url(effective_path, gemini_key, query);
         reqwest::Client::new()
             .post(&upstream_url)
             .header("content-type", "application/json")
@@ -369,216 +485,6 @@ async fn gemini_stream_proxy(
         .header("content-type", "text/event-stream")
         .body(body)
         .unwrap())
-}
-
-/// Epoch seconds for Deepgram proxy deprecation: 2026-04-05 05:00:00 UTC.
-const DEEPGRAM_DEPRECATION_EPOCH: u64 = 1_775_365_200;
-
-/// Check if the Deepgram proxy deprecation period has passed.
-/// Returns true after 2026-04-05 05:00:00 UTC (~26h after PR #6287 merge, rounded up).
-fn is_deepgram_proxy_deprecated() -> bool {
-    use std::time::{SystemTime, UNIX_EPOCH};
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_secs() >= DEEPGRAM_DEPRECATION_EPOCH)
-        .unwrap_or(false)
-}
-
-/// Testable: returns true when `now_epoch` is at or after the deprecation cutoff.
-#[cfg(test)]
-fn is_deprecated_at(now_epoch: u64) -> bool {
-    now_epoch >= DEEPGRAM_DEPRECATION_EPOCH
-}
-
-/// POST /v1/proxy/deepgram/v1/listen — DEPRECATED.
-/// STT moved to Python backend endpoints: POST /v2/voice-message/transcribe
-/// and WS /v2/voice-message/transcribe-stream (PR #6287).
-/// Returns 410 Gone after 2026-04-05 05:00 UTC; proxies to Deepgram until then.
-async fn deepgram_listen_proxy(
-    State(state): State<AppState>,
-    _user: AuthUser,
-    axum::extract::OriginalUri(original_uri): axum::extract::OriginalUri,
-    body: Bytes,
-) -> Result<Response, StatusCode> {
-    if is_deepgram_proxy_deprecated() {
-        tracing::warn!("deepgram_listen_proxy: endpoint deprecated, returning 410 Gone");
-        return Ok((
-            StatusCode::GONE,
-            "Deepgram proxy is deprecated. Use POST /v2/voice-message/transcribe instead.",
-        )
-            .into_response());
-    }
-
-    let dg_key = state
-        .config
-        .deepgram_api_key
-        .as_ref()
-        .ok_or(StatusCode::SERVICE_UNAVAILABLE)?;
-
-    let query = original_uri.query().unwrap_or("");
-    let url = build_deepgram_rest_url(query);
-
-    let upstream = reqwest::Client::new()
-        .post(&url)
-        .header("authorization", build_deepgram_auth_header(dg_key))
-        .header("content-type", "application/octet-stream")
-        .body(body)
-        .send()
-        .await
-        .map_err(|e| {
-            tracing::error!("deepgram_listen_proxy: upstream request failed: {}", e);
-            StatusCode::BAD_GATEWAY
-        })?;
-
-    let status =
-        StatusCode::from_u16(upstream.status().as_u16()).unwrap_or(StatusCode::BAD_GATEWAY);
-    let bytes = upstream.bytes().await.map_err(|e| {
-        tracing::error!("deepgram_listen_proxy: failed to read upstream body: {}", e);
-        StatusCode::BAD_GATEWAY
-    })?;
-
-    Ok((status, bytes).into_response())
-}
-
-/// WS /v1/proxy/deepgram/ws/v1/listen — DEPRECATED.
-/// STT moved to Python backend: WS /v2/voice-message/transcribe-stream (PR #6287).
-/// Returns 410 Gone after 2026-04-05 05:00 UTC; proxies to Deepgram until then.
-async fn deepgram_ws_proxy(
-    ws: axum::extract::WebSocketUpgrade,
-    State(state): State<AppState>,
-    _user: AuthUser,
-    axum::extract::OriginalUri(original_uri): axum::extract::OriginalUri,
-) -> Result<Response, StatusCode> {
-    if is_deepgram_proxy_deprecated() {
-        tracing::warn!("deepgram_ws_proxy: endpoint deprecated, returning 410 Gone");
-        return Ok((
-            StatusCode::GONE,
-            "Deepgram WS proxy is deprecated. Use WS /v2/voice-message/transcribe-stream instead.",
-        )
-            .into_response());
-    }
-
-    let dg_key = state
-        .config
-        .deepgram_api_key
-        .as_ref()
-        .ok_or(StatusCode::SERVICE_UNAVAILABLE)?
-        .clone();
-
-    let query = original_uri.query().unwrap_or("").to_string();
-    let upstream_url = build_deepgram_ws_url(&query);
-
-    Ok(ws.on_upgrade(move |client_socket| async move {
-        if let Err(e) = proxy_ws_bidirectional(client_socket, &upstream_url, &dg_key).await {
-            tracing::error!("deepgram_ws_proxy: proxy error: {}", e);
-        }
-    })
-    .into_response())
-}
-
-/// Which side of the proxy terminated first
-#[derive(Debug)]
-enum ProxyCloseOrigin {
-    ClientClosed,
-    UpstreamClosed,
-    ClientError,
-    UpstreamError,
-}
-
-/// Bidirectional WebSocket proxy between client (axum) and upstream (tokio-tungstenite).
-/// When one side closes or errors, a close frame is forwarded to the other side before teardown.
-async fn proxy_ws_bidirectional(
-    client_socket: axum::extract::ws::WebSocket,
-    upstream_url: &str,
-    api_key: &str,
-) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    use axum::extract::ws::Message as AxumMsg;
-    use futures::{SinkExt, StreamExt};
-    use tokio_tungstenite::tungstenite::{
-        client::IntoClientRequest, http::HeaderValue, Message as TungMsg,
-    };
-
-    // Connect to upstream Deepgram with auth header
-    let mut request = upstream_url.into_client_request()?;
-    request.headers_mut().insert(
-        "Authorization",
-        HeaderValue::from_str(&format!("Token {}", api_key))?,
-    );
-
-    let (upstream_ws, _) = tokio_tungstenite::connect_async(request).await?;
-    let (mut upstream_sink, mut upstream_stream) = upstream_ws.split();
-    let (mut client_sink, mut client_stream) = client_socket.split();
-
-    // Client → Upstream
-    let client_to_upstream = async {
-        while let Some(result) = client_stream.next().await {
-            match result {
-                Ok(msg) => {
-                    let tung_msg = match msg {
-                        AxumMsg::Text(t) => TungMsg::Text(t),
-                        AxumMsg::Binary(b) => TungMsg::Binary(b),
-                        AxumMsg::Ping(p) => TungMsg::Ping(p),
-                        AxumMsg::Pong(p) => TungMsg::Pong(p),
-                        AxumMsg::Close(_) => {
-                            let _ = upstream_sink.close().await;
-                            return ProxyCloseOrigin::ClientClosed;
-                        }
-                    };
-                    if upstream_sink.send(tung_msg).await.is_err() {
-                        return ProxyCloseOrigin::UpstreamError;
-                    }
-                }
-                Err(_) => return ProxyCloseOrigin::ClientError,
-            }
-        }
-        ProxyCloseOrigin::ClientClosed
-    };
-
-    // Upstream → Client
-    let upstream_to_client = async {
-        while let Some(result) = upstream_stream.next().await {
-            match result {
-                Ok(msg) => {
-                    let axum_msg = match msg {
-                        TungMsg::Text(t) => AxumMsg::Text(t),
-                        TungMsg::Binary(b) => AxumMsg::Binary(b),
-                        TungMsg::Ping(p) => AxumMsg::Ping(p),
-                        TungMsg::Pong(p) => AxumMsg::Pong(p),
-                        TungMsg::Close(_) => {
-                            let _ = client_sink.close().await;
-                            return ProxyCloseOrigin::UpstreamClosed;
-                        }
-                        TungMsg::Frame(_) => continue,
-                    };
-                    if client_sink.send(axum_msg).await.is_err() {
-                        return ProxyCloseOrigin::ClientError;
-                    }
-                }
-                Err(_) => return ProxyCloseOrigin::UpstreamError,
-            }
-        }
-        ProxyCloseOrigin::UpstreamClosed
-    };
-
-    // Run both directions concurrently; when either ends, gracefully close the other side
-    let origin = tokio::select! {
-        origin = client_to_upstream => origin,
-        origin = upstream_to_client => origin,
-    };
-
-    // Forward close frame to the surviving side with a timeout to prevent hanging
-    let close_timeout = std::time::Duration::from_secs(5);
-    tracing::debug!("deepgram_ws_proxy: proxy ended ({:?})", origin);
-    match origin {
-        ProxyCloseOrigin::UpstreamClosed | ProxyCloseOrigin::UpstreamError => {
-            let _ = tokio::time::timeout(close_timeout, client_sink.close()).await;
-        }
-        ProxyCloseOrigin::ClientClosed | ProxyCloseOrigin::ClientError => {
-            let _ = tokio::time::timeout(close_timeout, upstream_sink.close()).await;
-        }
-    }
-
-    Ok(())
 }
 
 /// Extract the action from a Gemini API path (e.g., "models/gemini-3-flash:generateContent" → "generateContent")
@@ -609,6 +515,7 @@ fn is_gemini_model_allowed(model: &str) -> bool {
 ///   - Cap generation_config.max_output_tokens to MAX_OUTPUT_TOKENS_CAP
 ///   - Reject candidate_count > 1
 ///   - Strip safety_settings and cached_content
+///   - Inject default thinkingConfig if absent (cost control for Gemini 2.5)
 ///   - Preserve all other fields (contents, system_instruction, tools, etc.)
 ///
 /// For embedContent/batchEmbedContents:
@@ -712,8 +619,11 @@ fn sanitize_gemini_body(body: &[u8], action: &str) -> Result<Vec<u8>, String> {
         // Validate inside generation_config / generationConfig.
         // Check BOTH casings to prevent dual-key bypass where an attacker
         // sends an empty generation_config + a real generationConfig.
+        let mut found_generation_config = false;
         for gc_key in &["generation_config", "generationConfig"] {
             if let Some(gc) = obj.get_mut(*gc_key).and_then(|v| v.as_object_mut()) {
+                found_generation_config = true;
+
                 // Reject candidate_count > 1
                 for cc_key in &["candidate_count", "candidateCount"] {
                     if let Some(v) = gc.get(*cc_key) {
@@ -735,7 +645,28 @@ fn sanitize_gemini_body(body: &[u8], action: &str) -> Result<Vec<u8>, String> {
                         }
                     }
                 }
+
+                // Defense-in-depth: inject default thinking budget if client omits it.
+                // Gemini 2.5 Flash defaults to unlimited thinking which is 5.8x more
+                // expensive than regular output tokens. Cap at 1024 when absent.
+                let has_thinking = gc.contains_key("thinking_config")
+                    || gc.contains_key("thinkingConfig");
+                if !has_thinking {
+                    gc.insert(
+                        "thinkingConfig".to_string(),
+                        serde_json::json!({"thinkingBudget": DEFAULT_THINKING_BUDGET}),
+                    );
+                }
             }
+        }
+
+        // If no generation_config exists at all (legacy clients), create one
+        // with the default thinking budget to prevent unlimited thinking spend.
+        if !found_generation_config {
+            obj.insert(
+                "generationConfig".to_string(),
+                serde_json::json!({"thinkingConfig": {"thinkingBudget": DEFAULT_THINKING_BUDGET}}),
+            );
         }
     }
 
@@ -830,34 +761,12 @@ fn build_gemini_stream_url(
     url
 }
 
-/// Build upstream Deepgram REST URL preserving query params
-fn build_deepgram_rest_url(query: &str) -> String {
-    format!("https://api.deepgram.com/v1/listen?{}", query)
-}
-
-/// Build upstream Deepgram WS URL preserving query params
-fn build_deepgram_ws_url(query: &str) -> String {
-    format!("wss://api.deepgram.com/v1/listen?{}", query)
-}
-
-/// Build Deepgram auth header
-fn build_deepgram_auth_header(api_key: &str) -> String {
-    format!("Token {}", api_key)
-}
-
 pub fn proxy_routes() -> Router<AppState> {
     Router::new()
         // Gemini HTTP proxy (non-streaming)
         .route("/v1/proxy/gemini/*path", post(gemini_proxy))
         // Gemini streaming proxy (SSE)
         .route("/v1/proxy/gemini-stream/*path", post(gemini_stream_proxy))
-        // Deepgram batch (pre-recorded) transcription proxy
-        .route("/v1/proxy/deepgram/v1/listen", post(deepgram_listen_proxy))
-        // Deepgram streaming WebSocket proxy
-        .route(
-            "/v1/proxy/deepgram/ws/v1/listen",
-            any(deepgram_ws_proxy),
-        )
         // Issue #6624: 5 MB body size limit for proxy routes only (not global).
         // Normal app payloads are 300-600 KB; 5 MB gives ~8x headroom.
         .layer(DefaultBodyLimit::max(GEMINI_MAX_BODY_SIZE))
@@ -1577,36 +1486,6 @@ mod tests {
         );
     }
 
-    // --- Deepgram URL construction ---
-
-    #[test]
-    fn deepgram_rest_url_preserves_query() {
-        let url = build_deepgram_rest_url("model=nova-3&language=en&encoding=linear16");
-        assert_eq!(
-            url,
-            "https://api.deepgram.com/v1/listen?model=nova-3&language=en&encoding=linear16"
-        );
-    }
-
-    #[test]
-    fn deepgram_ws_url_preserves_query() {
-        let url = build_deepgram_ws_url("model=nova-3&channels=2");
-        assert_eq!(
-            url,
-            "wss://api.deepgram.com/v1/listen?model=nova-3&channels=2"
-        );
-    }
-
-    // --- Deepgram auth header ---
-
-    #[test]
-    fn deepgram_auth_header_format() {
-        assert_eq!(
-            build_deepgram_auth_header("dg-test-key"),
-            "Token dg-test-key"
-        );
-    }
-
     // --- ProxyError::RateLimited response ---
 
     #[tokio::test]
@@ -1631,54 +1510,6 @@ mod tests {
         assert_eq!(parsed["error"]["status"], "RESOURCE_EXHAUSTED");
         let msg = parsed["error"]["message"].as_str().unwrap().to_lowercase();
         assert!(msg.contains("resource exhausted"));
-    }
-
-    // --- ProxyCloseOrigin ---
-
-    // --- Deepgram deprecation boundary ---
-
-    #[test]
-    fn deepgram_deprecation_timestamp_matches_target_date() {
-        // 2026-04-05 05:00:00 UTC
-        assert_eq!(DEEPGRAM_DEPRECATION_EPOCH, 1_775_365_200);
-    }
-
-    #[test]
-    fn deepgram_deprecation_before_cutoff() {
-        assert!(!is_deprecated_at(DEEPGRAM_DEPRECATION_EPOCH - 1));
-    }
-
-    #[test]
-    fn deepgram_deprecation_at_cutoff() {
-        assert!(is_deprecated_at(DEEPGRAM_DEPRECATION_EPOCH));
-    }
-
-    #[test]
-    fn deepgram_deprecation_after_cutoff() {
-        assert!(is_deprecated_at(DEEPGRAM_DEPRECATION_EPOCH + 1));
-    }
-
-    // --- ProxyCloseOrigin ---
-
-    #[test]
-    fn proxy_close_origin_debug_variants() {
-        // Verify all variants exist and produce distinct debug output
-        let variants = [
-            ProxyCloseOrigin::ClientClosed,
-            ProxyCloseOrigin::UpstreamClosed,
-            ProxyCloseOrigin::ClientError,
-            ProxyCloseOrigin::UpstreamError,
-        ];
-        let debug_strs: Vec<String> = variants.iter().map(|v| format!("{:?}", v)).collect();
-        assert_eq!(debug_strs.len(), 4);
-        // All distinct
-        let unique: std::collections::HashSet<&String> = debug_strs.iter().collect();
-        assert_eq!(unique.len(), 4, "All ProxyCloseOrigin variants should have distinct Debug output");
-        // Verify expected names
-        assert!(debug_strs.contains(&"ClientClosed".to_string()));
-        assert!(debug_strs.contains(&"UpstreamClosed".to_string()));
-        assert!(debug_strs.contains(&"ClientError".to_string()));
-        assert!(debug_strs.contains(&"UpstreamError".to_string()));
     }
 
     // --- Embedding body transform (AI Studio → Vertex AI predict) ---
@@ -1857,5 +1688,152 @@ mod tests {
         assert!(url.contains("alt=sse"));
         // Vertex AI uses Bearer auth, not API key in URL — but query params are forwarded as-is
         assert!(url.starts_with("https://us-central1-aiplatform.googleapis.com"));
+    }
+
+    // --- Thinking budget injection ---
+
+    #[test]
+    fn sanitize_injects_thinking_budget_when_absent() {
+        let body = serde_json::json!({
+            "contents": [{"role": "user", "parts": [{"text": "hello"}]}],
+            "generation_config": {"max_output_tokens": 1000}
+        });
+        let result = sanitize_gemini_body(
+            serde_json::to_vec(&body).unwrap().as_slice(),
+            "generateContent",
+        ).unwrap();
+        let parsed: serde_json::Value = serde_json::from_slice(&result).unwrap();
+        let gc = &parsed["generation_config"];
+        assert_eq!(
+            gc["thinkingConfig"]["thinkingBudget"],
+            serde_json::json!(DEFAULT_THINKING_BUDGET),
+            "should inject default thinking budget when absent"
+        );
+    }
+
+    #[test]
+    fn sanitize_preserves_existing_thinking_config_snake() {
+        let body = serde_json::json!({
+            "contents": [{"role": "user", "parts": [{"text": "hello"}]}],
+            "generation_config": {
+                "max_output_tokens": 1000,
+                "thinking_config": {"thinking_budget": 0}
+            }
+        });
+        let result = sanitize_gemini_body(
+            serde_json::to_vec(&body).unwrap().as_slice(),
+            "generateContent",
+        ).unwrap();
+        let parsed: serde_json::Value = serde_json::from_slice(&result).unwrap();
+        let gc = &parsed["generation_config"];
+        // Should not overwrite existing thinking_config
+        assert_eq!(gc["thinking_config"]["thinking_budget"], serde_json::json!(0));
+        assert!(gc.get("thinkingConfig").is_none(), "should not inject when thinking_config present");
+    }
+
+    #[test]
+    fn sanitize_preserves_existing_thinking_config_camel() {
+        let body = serde_json::json!({
+            "contents": [{"role": "user", "parts": [{"text": "hello"}]}],
+            "generationConfig": {
+                "maxOutputTokens": 1000,
+                "thinkingConfig": {"thinkingBudget": 4096}
+            }
+        });
+        let result = sanitize_gemini_body(
+            serde_json::to_vec(&body).unwrap().as_slice(),
+            "generateContent",
+        ).unwrap();
+        let parsed: serde_json::Value = serde_json::from_slice(&result).unwrap();
+        let gc = &parsed["generationConfig"];
+        assert_eq!(gc["thinkingConfig"]["thinkingBudget"], serde_json::json!(4096));
+    }
+
+    #[test]
+    fn sanitize_no_thinking_injection_for_embed() {
+        let body = serde_json::json!({
+            "content": {"parts": [{"text": "hello"}]}
+        });
+        let result = sanitize_gemini_body(
+            serde_json::to_vec(&body).unwrap().as_slice(),
+            "embedContent",
+        ).unwrap();
+        let parsed: serde_json::Value = serde_json::from_slice(&result).unwrap();
+        // Embed requests have no generation_config, so no injection
+        assert!(parsed.get("thinkingConfig").is_none());
+        assert!(parsed.get("generation_config").is_none());
+    }
+
+    #[test]
+    fn sanitize_injects_generation_config_when_absent() {
+        // Legacy clients may send only contents with no generation_config at all.
+        // Proxy must create generationConfig with thinking budget to prevent
+        // unlimited thinking spend.
+        let body = serde_json::json!({
+            "contents": [{"parts": [{"text": "hello"}]}]
+        });
+        let result = sanitize_gemini_body(
+            serde_json::to_vec(&body).unwrap().as_slice(),
+            "generateContent",
+        ).unwrap();
+        let parsed: serde_json::Value = serde_json::from_slice(&result).unwrap();
+        let gc = parsed.get("generationConfig").expect("generationConfig should be created");
+        let tc = gc.get("thinkingConfig").expect("thinkingConfig should be injected");
+        assert_eq!(tc["thinkingBudget"], DEFAULT_THINKING_BUDGET);
+    }
+
+    #[test]
+    fn sanitize_dual_generation_config_both_get_thinking() {
+        // Attacker sends both casings — both should get thinking budget injected.
+        let body = serde_json::json!({
+            "contents": [{"parts": [{"text": "hello"}]}],
+            "generation_config": {"max_output_tokens": 100},
+            "generationConfig": {"maxOutputTokens": 200}
+        });
+        let result = sanitize_gemini_body(
+            serde_json::to_vec(&body).unwrap().as_slice(),
+            "generateContent",
+        ).unwrap();
+        let parsed: serde_json::Value = serde_json::from_slice(&result).unwrap();
+        // Both casings should have thinkingConfig injected
+        let gc_snake = parsed.get("generation_config").unwrap().as_object().unwrap();
+        assert!(gc_snake.contains_key("thinkingConfig"));
+        let gc_camel = parsed.get("generationConfig").unwrap().as_object().unwrap();
+        assert!(gc_camel.contains_key("thinkingConfig"));
+    }
+
+    #[test]
+    fn sanitize_null_generation_config_gets_new_one() {
+        // Malformed: generation_config is null — proxy should create a fresh one.
+        let body = serde_json::json!({
+            "contents": [{"parts": [{"text": "hello"}]}],
+            "generation_config": null
+        });
+        let result = sanitize_gemini_body(
+            serde_json::to_vec(&body).unwrap().as_slice(),
+            "generateContent",
+        ).unwrap();
+        let parsed: serde_json::Value = serde_json::from_slice(&result).unwrap();
+        // null generation_config is not an object, so proxy creates generationConfig
+        let gc = parsed.get("generationConfig").expect("generationConfig should be created");
+        let tc = gc.get("thinkingConfig").expect("thinkingConfig should be injected");
+        assert_eq!(tc["thinkingBudget"], DEFAULT_THINKING_BUDGET);
+    }
+
+    #[test]
+    fn sanitize_string_generation_config_gets_new_one() {
+        // Malformed: generation_config is a string — proxy should create a fresh one.
+        let body = serde_json::json!({
+            "contents": [{"parts": [{"text": "hello"}]}],
+            "generation_config": "invalid"
+        });
+        let result = sanitize_gemini_body(
+            serde_json::to_vec(&body).unwrap().as_slice(),
+            "generateContent",
+        ).unwrap();
+        let parsed: serde_json::Value = serde_json::from_slice(&result).unwrap();
+        let gc = parsed.get("generationConfig").expect("generationConfig should be created");
+        let tc = gc.get("thinkingConfig").expect("thinkingConfig should be injected");
+        assert_eq!(tc["thinkingBudget"], DEFAULT_THINKING_BUDGET);
     }
 }

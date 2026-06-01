@@ -299,6 +299,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
       // App code already handles HTTP errors and reports meaningful ones explicitly.
       options.enableCaptureFailedRequests = false
       options.maxBreadcrumbs = 100
+      // App-hang detection fires on the main thread stalling. The default 2s threshold
+      // flags transient jank (disk/IPC stalls, GC-like dealloc storms) that dominates
+      // event volume without being individually actionable. Raise to 3s so only
+      // sustained freezes — the ones users actually feel — are reported.
+      options.appHangTimeoutInterval = 3.0
       options.beforeSend = { event in
         // Allow user feedback through from all builds (dev + prod)
         if event.message?.formatted.hasPrefix("User Report") == true { return event }
@@ -311,17 +316,42 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         {
           return nil
         }
-        // Filter out NSURLErrorCancelled (-999) — these are intentional cancellations
-        // (e.g. proactive assistants cancelling in-flight Gemini requests on context switch)
+        // Filter out transient network/socket errors captured as exceptions —
+        // offline, timeouts, dropped connections, cancellations. These are not
+        // actionable app bugs and dominate event volume. (logError filters the
+        // message-event path; this covers SDK-auto and legacy exception captures.)
+        // NSURLErrorDomain: -999 cancelled, -1001 timeout, -1003/-1004 host/connect,
+        // -1005 lost, -1009 offline, -1011 bad response, -1020 not allowed.
+        // NSPOSIXErrorDomain: 54 reset, 57 not connected, 89 cancelled.
+        let transientNetworkCodes: [(domain: String, codes: [String])] = [
+          (
+            "NSURLErrorDomain",
+            ["-999", "-1001", "-1003", "-1004", "-1005", "-1009", "-1011", "-1020"]
+          ),
+          ("NSPOSIXErrorDomain", ["54", "57", "89"]),
+        ]
         if let exceptions = event.exceptions,
           exceptions.contains(where: { exc in
             let value = exc.value ?? ""
-            return exc.type == "NSURLErrorDomain" && (
-              value.contains("Code=-999") || value.contains("Code: -999")
-            )
+            return transientNetworkCodes.contains { entry in
+              exc.type == entry.domain
+                && entry.codes.contains { value.contains("Code=\($0)") || value.contains("Code: \($0)") }
+            }
           })
         {
           return nil
+        }
+        // Filter out backend Gemini key-expiry/auth failures. These mean the
+        // server-side API key needs rotation — a backend config issue, not a
+        // per-client bug. A single expired key otherwise floods Sentry with one
+        // event per request across every user.
+        if let message = event.message?.formatted {
+          let lower = message.lowercased()
+          if lower.contains("api key expired") || lower.contains("renew the api key")
+            || lower.contains("api_key_invalid")
+          {
+            return nil
+          }
         }
         // Filter out AuthError.notSignedIn — this is thrown when token refresh transiently
         // fails (network blip, expired token mid-refresh). The user is still signed in per
@@ -352,7 +382,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     AnalyticsManager.shared.initialize()
     AnalyticsManager.shared.detectAndReportCrash()
     AnalyticsManager.shared.appLaunched()
-    AnalyticsManager.shared.trackDisplayInfo()
 
     // Tier gating: migrate old boolean key to new 6-tier system
     TierManager.migrateExistingUsersIfNeeded()
@@ -406,6 +435,12 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
       // Fetch subscription plan for floating bar usage limits
       Task { await FloatingBarUsageLimiter.shared.fetchPlan() }
 
+      // Start trial metadata polling (countdown UI + pre-expiry nudges)
+      if let state = AppState.current {
+        state.startTrialMetadataRefresh()
+        TrialBannerService.shared.start(appState: state)
+      }
+
       // Check tier eligibility (at most once per day)
       Task {
         await TierManager.shared.checkTierIfNeeded()
@@ -431,12 +466,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
       queue: .main
     ) { [weak self] _ in
       self?.updateOnboardingLifecyclePolicy(reason: "user_defaults_changed")
-    }
-
-    // Track launch at login status once per app launch
-    Task { @MainActor in
-      let isEnabled = LaunchAtLoginManager.shared.isEnabled
-      AnalyticsManager.shared.launchAtLoginStatusChecked(enabled: isEnabled)
     }
 
     // Register for Apple Events to handle URL scheme
@@ -785,12 +814,15 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     // Create menu
     let menu = NSMenu()
 
-    // Quick toggles for screen capture and audio recording
+    // Quick toggles for screen capture and audio recording.
+    // When paywalled (trial expired / usage limit hit) both render OFF — the
+    // features can't run, and tapping a toggle surfaces the upgrade popup.
+    let paywalled = AppState.isPaywalledEffective
     let screenCaptureItem = NSMenuItem()
     let screenCaptureView = makeToggleItemView(
       title: "Screen Capture",
       iconName: "rectangle.dashed.badge.record",
-      isOn: AssistantSettings.shared.screenAnalysisEnabled
+      isOn: !paywalled && AssistantSettings.shared.screenAnalysisEnabled
         && ProactiveAssistantsPlugin.shared.isMonitoring,
       action: #selector(screenCaptureToggled(_:))
     )
@@ -801,7 +833,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     let audioRecordingView = makeToggleItemView(
       title: "Audio Recording",
       iconName: "mic.fill",
-      isOn: AssistantSettings.shared.transcriptionEnabled,
+      isOn: !paywalled && AssistantSettings.shared.transcriptionEnabled,
       action: #selector(audioRecordingToggled(_:))
     )
     audioRecordingItem.view = audioRecordingView
@@ -993,6 +1025,14 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     AnalyticsManager.shared.settingToggled(setting: "monitoring", enabled: enabled)
 
     if enabled {
+      // Paywall gate: trial expired / usage limit hit. Refuse to enable,
+      // revert the toggle, and surface the same upgrade popup as everywhere else.
+      if AppState.isPaywalledEffective {
+        sender.state = .off
+        NotificationCenter.default.post(
+          name: .showUsageLimitPopup, object: nil, userInfo: ["reason": "trial_expired"])
+        return
+      }
       if !ProactiveAssistantsPlugin.shared.hasScreenRecordingPermission {
         // No permission — revert toggle and open preferences
         sender.state = .off
@@ -1022,6 +1062,15 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
       action: enabled ? "audio_recording_on" : "audio_recording_off")
     AnalyticsManager.shared.settingToggled(setting: "transcription", enabled: enabled)
 
+    // Paywall gate: trial expired / usage limit hit. Refuse to enable,
+    // revert the toggle, and surface the same upgrade popup as everywhere else.
+    if enabled && AppState.isPaywalledEffective {
+      sender.state = .off
+      NotificationCenter.default.post(
+        name: .showUsageLimitPopup, object: nil, userInfo: ["reason": "trial_expired"])
+      return
+    }
+
     AssistantSettings.shared.transcriptionEnabled = enabled
     // Request the main view to start/stop transcription (needs AppState)
     NotificationCenter.default.post(
@@ -1035,9 +1084,13 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
   func menuWillOpen(_ menu: NSMenu) {
     log("AppDelegate: [MENUBAR] Menu opened by user")
     AnalyticsManager.shared.menuBarOpened()
-    // Refresh toggle states to match current runtime state
-    screenCaptureSwitch?.state = ProactiveAssistantsPlugin.shared.isMonitoring ? .on : .off
-    audioRecordingSwitch?.state = AssistantSettings.shared.transcriptionEnabled ? .on : .off
+    // Refresh toggle states to match current runtime state. When paywalled,
+    // force both OFF — the features can't run until the user upgrades.
+    let paywalled = AppState.isPaywalledEffective
+    screenCaptureSwitch?.state =
+      (!paywalled && ProactiveAssistantsPlugin.shared.isMonitoring) ? .on : .off
+    audioRecordingSwitch?.state =
+      (!paywalled && AssistantSettings.shared.transcriptionEnabled) ? .on : .off
   }
 
   func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
@@ -1181,6 +1234,17 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
   }
 
   private func updateOnboardingLifecyclePolicy(reason: String) {
+    // Only the production/beta bundle (com.omi.computer-macos) should relaunch on login.
+    // Dev and named test bundles must always opt out — otherwise every local build that was
+    // open at shutdown gets relaunched on the next restart, swarming the screen with dev apps.
+    guard AppBuild.isProductionBundle else {
+      guard !relaunchOnLoginSuppressedForOnboarding else { return }
+      NSApp.disableRelaunchOnLogin()
+      relaunchOnLoginSuppressedForOnboarding = true
+      log("AppDelegate: Disabled relaunch on login for non-production bundle (\(reason))")
+      return
+    }
+
     let hasCompletedOnboarding = UserDefaults.standard.bool(forKey: "hasCompletedOnboarding")
 
     if hasCompletedOnboarding {
@@ -1251,12 +1315,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
   }
 
   func applicationDidBecomeActive(_ notification: Notification) {
-    AnalyticsManager.shared.appBecameActive()
     // Sync remote assistant settings so server-side changes take effect promptly
     Task { await SettingsSyncManager.shared.syncFromServer() }
-  }
-
-  func applicationWillResignActive(_ notification: Notification) {
-    AnalyticsManager.shared.appResignedActive()
   }
 }

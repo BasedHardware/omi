@@ -1,11 +1,24 @@
 """
 Redis-backed sync job storage for v2 async sync-local-files.
 
-Jobs are ephemeral — they exist only long enough for the app to poll results.
-Redis is the right store: no Firestore costs, automatic TTL cleanup.
+Jobs are ephemeral — they exist only long enough for the app to reconcile
+results. Redis is the right store: no Firestore costs, automatic TTL cleanup.
 
 Key format: sync_job:{job_id}
-TTL: 1 hour (refreshed on each update)
+TTL: 24 hours (refreshed on each update)
+
+The TTL governs how long a finished job's result stays queryable. The client
+uploads audio, marks the recording "uploaded", and reconciles it against this
+job_id later. A 24h window covers the common "open the app about once a day"
+pattern, so the app can learn a job already succeeded and just fetch the
+conversation ids instead of re-uploading and re-transcribing the audio.
+
+This is an efficiency window, NOT a correctness mechanism: the client keeps
+the local audio file until the job is confirmed synced, so an expired/unknown
+job always falls back to a safe re-upload (server dedups by segment timestamp).
+
+Do NOT conflate with STALE_THRESHOLD_SECONDS below — that is a separate
+in-flight processing-liveness guard and must stay short.
 """
 
 import json
@@ -19,7 +32,7 @@ from database.redis_db import r
 logger = logging.getLogger(__name__)
 
 JOB_KEY_PREFIX = 'sync_job:'
-JOB_TTL_SECONDS = 3600  # 1 hour
+JOB_TTL_SECONDS = 86400  # 24 hours — reconcile window (see module docstring)
 STALE_THRESHOLD_SECONDS = 600  # 10 minutes — if processing exceeds this, treat as failed
 
 

@@ -1,8 +1,8 @@
+import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/material.dart';
 
 import 'package:omi/pages/apps/add_app.dart';
 import 'package:omi/pages/apps/add_mcp_server_page.dart';
-import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
 
@@ -24,9 +24,9 @@ class CreateOptionsSheet extends StatelessWidget {
           Text(
             context.l10n.whatWouldYouLikeToCreate,
             style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-              fontWeight: FontWeight.w400,
-              color: Theme.of(context).colorScheme.onSurface,
-            ),
+                  fontWeight: FontWeight.w400,
+                  color: Theme.of(context).colorScheme.onSurface,
+                ),
           ),
           const SizedBox(height: 24),
           Card(
@@ -47,7 +47,7 @@ class CreateOptionsSheet extends StatelessWidget {
               ),
               onTap: () {
                 Navigator.pop(context);
-                MixpanelManager().pageOpened('Submit App');
+                PlatformManager.instance.analytics.pageOpened('Submit App');
                 routeToPage(context, const AddAppPage());
               },
             ),
@@ -71,7 +71,7 @@ class CreateOptionsSheet extends StatelessWidget {
               ),
               onTap: () {
                 Navigator.pop(context);
-                MixpanelManager().pageOpened('Add MCP Server');
+                PlatformManager.instance.analytics.pageOpened('Add MCP Server');
                 routeToPage(context, const AddMcpServerPage());
               },
             ),

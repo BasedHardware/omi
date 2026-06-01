@@ -1,10 +1,10 @@
+import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/material.dart';
 
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
 import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/preferences.dart';
-import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
 class _SourceOption {
@@ -174,7 +174,7 @@ class _FoundOmiWidgetState extends State<FoundOmiWidget> {
                                 : _selectedSource!;
                             SharedPreferencesUtil().foundOmiSource = source;
                             updateUserOnboardingState(acquisitionSource: source);
-                            MixpanelManager().onboardingUserAcquisitionSource(source);
+                            PlatformManager.instance.analytics.onboardingUserAcquisitionSource(source);
                             widget.goNext();
                           }
                         : null,

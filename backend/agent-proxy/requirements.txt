@@ -1,8 +1,8 @@
-fastapi==0.115.0
+fastapi==0.121.0
 uvicorn[standard]==0.30.6
 uvloop==0.20.0
 websockets==12.0
 firebase-admin==6.5.0
-cryptography
+cryptography==46.0.7
 httpx==0.28.0
 google-auth==2.32.0
