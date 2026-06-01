@@ -667,6 +667,14 @@
     "@doubleTap": {
         "description": "Double tap action label"
     },
+    "singleTap": "Single Tap",
+    "@singleTap": {
+        "description": "Single tap action label"
+    },
+    "tripleTap": "Triple Tap",
+    "@tripleTap": {
+        "description": "Triple tap action label"
+    },
     "ledBrightness": "LED Brightness",
     "@ledBrightness": {
         "description": "LED brightness setting"

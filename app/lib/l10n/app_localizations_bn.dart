@@ -509,6 +509,12 @@ class AppLocalizationsBn extends AppLocalizations {
   String get doubleTap => 'দ্বিগুণ ট্যাপ';
 
   @override
+  String get singleTap => 'Single Tap';
+
+  @override
+  String get tripleTap => 'Triple Tap';
+
+  @override
   String get ledBrightness => 'LED উজ্জ্বলতা';
 
   @override

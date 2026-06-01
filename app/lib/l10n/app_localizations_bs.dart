@@ -510,6 +510,12 @@ class AppLocalizationsBs extends AppLocalizations {
   String get doubleTap => 'Dupli dodir';
 
   @override
+  String get singleTap => 'Single Tap';
+
+  @override
+  String get tripleTap => 'Triple Tap';
+
+  @override
   String get ledBrightness => 'Svetlina LED-a';
 
   @override

@@ -505,6 +505,12 @@ class AppLocalizationsAr extends AppLocalizations {
   String get doubleTap => 'نقرة مزدوجة';
 
   @override
+  String get singleTap => 'Single Tap';
+
+  @override
+  String get tripleTap => 'Triple Tap';
+
+  @override
   String get ledBrightness => 'سطوع LED';
 
   @override

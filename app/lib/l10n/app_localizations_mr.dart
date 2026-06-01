@@ -510,6 +510,12 @@ class AppLocalizationsMr extends AppLocalizations {
   String get doubleTap => 'दुहेरी टॅप';
 
   @override
+  String get singleTap => 'Single Tap';
+
+  @override
+  String get tripleTap => 'Triple Tap';
+
+  @override
   String get ledBrightness => 'LED चमक';
 
   @override

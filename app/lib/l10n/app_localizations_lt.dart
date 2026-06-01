@@ -510,6 +510,12 @@ class AppLocalizationsLt extends AppLocalizations {
   String get doubleTap => 'Dvigubas bakstelėjimas';
 
   @override
+  String get singleTap => 'Single Tap';
+
+  @override
+  String get tripleTap => 'Triple Tap';
+
+  @override
   String get ledBrightness => 'LED ryškumas';
 
   @override

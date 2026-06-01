@@ -512,6 +512,12 @@ class AppLocalizationsFr extends AppLocalizations {
   String get doubleTap => 'Double appui';
 
   @override
+  String get singleTap => 'Single Tap';
+
+  @override
+  String get tripleTap => 'Triple Tap';
+
+  @override
   String get ledBrightness => 'Luminosité LED';
 
   @override
