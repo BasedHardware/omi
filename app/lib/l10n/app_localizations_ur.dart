@@ -9300,4 +9300,11 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get invalidPromotionCode => 'غلط پرومو کوڈ۔';
+
+  @override
+  String get backgroundModeTitle => 'Background Mode';
+
+  @override
+  String get backgroundModeDescription =>
+      'Keep your Omi connected and transcribing even when the app is fully closed. Turns off automatically when the device goes out of range to save battery.';
 }

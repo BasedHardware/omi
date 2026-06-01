@@ -9137,4 +9137,11 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get invalidPromotionCode => '유효하지 않은 프로모 코드입니다.';
+
+  @override
+  String get backgroundModeTitle => 'Background Mode';
+
+  @override
+  String get backgroundModeDescription =>
+      'Keep your Omi connected and transcribing even when the app is fully closed. Turns off automatically when the device goes out of range to save battery.';
 }

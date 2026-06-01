@@ -17306,6 +17306,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Invalid promotion code.'**
   String get invalidPromotionCode;
+
+  /// Title for the background connection mode toggle in device settings (Android only)
+  ///
+  /// In en, this message translates to:
+  /// **'Background Mode'**
+  String get backgroundModeTitle;
+
+  /// Subtitle explaining the background mode toggle
+  ///
+  /// In en, this message translates to:
+  /// **'Keep your Omi connected and transcribing even when the app is fully closed. Turns off automatically when the device goes out of range to save battery.'**
+  String get backgroundModeDescription;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {
