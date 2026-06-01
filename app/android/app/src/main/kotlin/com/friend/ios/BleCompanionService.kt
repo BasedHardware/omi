@@ -38,6 +38,10 @@ class BleCompanionService : CompanionDeviceService() {
         Log.i(TAG, "Device appeared: $address")
 
         if (!hasBluetoothPermission()) return
+        if (!OmiBleForegroundService.isBackgroundModeEnabled(applicationContext)) {
+            Log.i(TAG, "Device appeared but Background Mode is off; not starting service")
+            return
+        }
 
         val prefs = applicationContext.getSharedPreferences("ble_config", Context.MODE_PRIVATE)
         if (prefs.getBoolean("user_disconnected", false)) return
@@ -57,6 +61,18 @@ class BleCompanionService : CompanionDeviceService() {
 
     private fun handleDeviceDisappeared() {
         Log.i(TAG, "Device disappeared")
+
+        // When the app is fully closed and the OS reports the device gone (a long, debounced
+        // signal), stop the service instead of retrying reconnection forever — it just drains
+        // battery until the device physically returns, at which point onDeviceAppeared restarts us.
+        // API 36+ only (pre-36 disappear callbacks are unreliable). No-op while Flutter is alive,
+        // since the foreground session owns the connection then.
+        if (Build.VERSION.SDK_INT < 36) return
+        if (OmiBleManager.isFlutterAlive) return
+        if (!OmiBleForegroundService.isBackgroundModeEnabled(applicationContext)) return
+
+        Log.i(TAG, "Stopping foreground service after sustained device disappearance")
+        OmiBleForegroundService.stopService(applicationContext)
     }
 
     // ---- Lifecycle ----
@@ -66,6 +82,7 @@ class BleCompanionService : CompanionDeviceService() {
         Log.i(TAG, "onCreate")
 
         if (!hasBluetoothPermission()) return
+        if (!OmiBleForegroundService.isBackgroundModeEnabled(applicationContext)) return
 
         val prefs = applicationContext.getSharedPreferences("ble_config", Context.MODE_PRIVATE)
         if (prefs.getBoolean("user_disconnected", false)) return
