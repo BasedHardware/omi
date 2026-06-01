@@ -848,7 +848,6 @@ class _ActionItemTileWidgetState extends State<ActionItemTileWidget> {
       title: widget.actionItem.description,
       notes: 'From Omi',
       dueDate: widget.actionItem.dueAt,
-      listName: 'Reminders',
     );
 
     final success = calendarItemId != null;
