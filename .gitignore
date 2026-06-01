@@ -1,3 +1,4 @@
+ONBOARDING.md
 *.env
 .env*
 !.env.template
