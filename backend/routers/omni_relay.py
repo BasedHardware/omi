@@ -4,12 +4,22 @@ import os
 from urllib.parse import quote
 
 import websockets
-from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, Depends, Header, WebSocket, WebSocketDisconnect
 
-from utils.other.endpoints import get_current_user_uid_ws_listen
+from utils.executors import critical_executor, run_blocking
+from utils.other.endpoints import _verify_ws_auth
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
+
+
+async def _relay_uid(authorization: str = Header(None)) -> str:
+    """Token-only WS auth for the relay. Unlike get_current_user_uid_ws_listen,
+    it does NOT run BYOK validation — the relay uses platform keys server-side,
+    so a BYOK-enrolled user without forwarded BYOK headers must not be rejected.
+    No rate limit either (PTT reconnects every turn)."""
+    return await run_blocking(critical_executor, _verify_ws_auth, authorization)
+
 
 # Realtime "omni" relay.
 #
@@ -49,7 +59,7 @@ def _upstream(provider: str, model: str | None):
 
 
 @router.websocket("/v1/omni/relay")
-async def omni_relay(websocket: WebSocket, uid: str = Depends(get_current_user_uid_ws_listen)):
+async def omni_relay(websocket: WebSocket, uid: str = Depends(_relay_uid)):
     provider = websocket.query_params.get("provider", "gemini")
     model = websocket.query_params.get("model")
     upstream_cfg, err = _upstream(provider, model)
