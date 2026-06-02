@@ -1,4 +1,4 @@
-enum MemoryCategory { system, interesting, manual }
+enum MemoryCategory { system, interesting, manual, workflow }
 
 enum MemoryVisibility { private, public }
 
@@ -8,6 +8,7 @@ MemoryCategory _parseMemoryCategory(String? category) {
   if (category == 'manual') return MemoryCategory.manual;
   if (category == 'interesting') return MemoryCategory.interesting;
   if (category == 'system') return MemoryCategory.system;
+  if (category == 'workflow') return MemoryCategory.workflow;
   // Legacy categories map to system (facts about user)
   if (['core', 'hobbies', 'lifestyle', 'interests', 'work', 'skills', 'habits', 'other'].contains(category)) {
     return MemoryCategory.system;
