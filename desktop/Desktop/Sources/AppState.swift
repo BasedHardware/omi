@@ -335,6 +335,17 @@ class AppState: ObservableObject {
   private var localSystemService: LocalTranscriptionService?
   private var useLocalSTT = false
 
+  /// True on Apple Silicon (M-series), where on-device Parakeet runs on the Neural Engine.
+  /// Desktop transcribes with Parakeet here by default; Intel Macs fall back to cloud STT.
+  static let isAppleSilicon: Bool = {
+    var value: Int32 = 0
+    var size = MemoryLayout<Int32>.size
+    if sysctlbyname("hw.optional.arm64", &value, &size, nil, 0) == 0 {
+      return value == 1
+    }
+    return false
+  }()
+
   // Speaker segments for diarized transcription (sliding window — older segments are in SQLite)
   private var speakerSegments: [SpeakerSegment] = []
   private let maxInMemorySegments = 200
@@ -1438,9 +1449,12 @@ class AppState: ObservableObject {
         "Transcription: Using language=\(effectiveLanguage) (autoDetect=\(AssistantSettings.shared.transcriptionAutoDetect), selected=\(AssistantSettings.shared.transcriptionLanguage))"
       )
 
-      // On-device Parakeet (FluidAudio) when OMI_LOCAL_STT=1 — bypasses the Python backend STT.
-      useLocalSTT = ProcessInfo.processInfo.environment["OMI_LOCAL_STT"] == "1"
-        || UserDefaults.standard.bool(forKey: "useLocalSTT")
+      // Desktop transcribes on-device with Parakeet by default on Apple Silicon — no Deepgram.
+      // Intel Macs (no Neural Engine) fall back to the cloud path. Force cloud for debugging with
+      // OMI_FORCE_CLOUD_STT=1 or `defaults write <bundle> forceCloudSTT -bool true`.
+      let forceCloudSTT = ProcessInfo.processInfo.environment["OMI_FORCE_CLOUD_STT"] == "1"
+        || UserDefaults.standard.bool(forKey: "forceCloudSTT")
+      useLocalSTT = !forceCloudSTT && Self.isAppleSilicon
       if useLocalSTT {
         log("Transcription: ON-DEVICE Parakeet mode (OMI_LOCAL_STT) — no cloud STT")
         // Segments are delivered on the main actor by the service, so no Task hop here.

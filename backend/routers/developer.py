@@ -39,7 +39,7 @@ from dependencies import (
     get_uid_with_goals_read,
     get_uid_with_goals_write,
 )
-from utils.other.endpoints import with_rate_limit
+from utils.other.endpoints import with_rate_limit, get_current_user_uid
 from models.dev_api_key import DevApiKey, DevApiKeyCreate, DevApiKeyCreated
 from utils.scopes import AVAILABLE_SCOPES, validate_scopes
 from utils.apps import update_personas_async
@@ -919,58 +919,12 @@ def get_conversation_endpoint(
     return conversation
 
 
-@router.post("/v1/dev/user/conversations/from-segments", response_model=ConversationResponse, tags=["developer"])
-def create_conversation_from_segments(
-    request: CreateConversationFromTranscriptRequest,
-    uid: str = Depends(with_rate_limit(get_uid_with_conversations_write, "dev:conversations")),
-):
-    """
-    Create a new conversation from structured transcript segments.
-
-    This endpoint is for advanced integrations that have speaker diarization and timing information.
-    It processes the transcript segments through the full conversation pipeline.
-
-    **Transcript Segments:**
-    - **text**: The text spoken (required)
-    - **speaker**: Speaker identifier like 'SPEAKER_00', 'SPEAKER_01' (default: 'SPEAKER_00')
-    - **speaker_id**: Numeric speaker ID (auto-calculated from speaker if not provided)
-    - **is_user**: Whether this segment is from the user (default: False)
-    - **person_id**: ID of known person speaking (optional)
-    - **start**: Start time in seconds, e.g., 0.0, 1.5, 60.2 (required)
-    - **end**: End time in seconds, e.g., 1.5, 3.0, 65.8 (required)
-
-    **Other Parameters:**
-    - **source**: Source of conversation (default: external_integration). Options:
-      - omi, friend, openglass, phone, desktop, apple_watch, bee, plaud, frame, etc.
-    - **started_at**: When conversation started (defaults to now)
-    - **finished_at**: When conversation finished (calculated from last segment if not provided)
-    - **language**: Language code (default: 'en')
-    - **geolocation**: Optional geolocation data
-
-    **Example:**
-    ```json
-    {
-      "transcript_segments": [
-        {
-          "text": "Hey, how are you doing?",
-          "speaker": "SPEAKER_00",
-          "is_user": true,
-          "start": 0.0,
-          "end": 2.5
-        },
-        {
-          "text": "I'm doing great, thanks!",
-          "speaker": "SPEAKER_01",
-          "is_user": false,
-          "start": 2.8,
-          "end": 5.2
-        }
-      ],
-      "source": "phone",
-      "language": "en"
-    }
-    ```
-    """
+def _create_conversation_from_segments(
+    uid: str, request: CreateConversationFromTranscriptRequest
+) -> ConversationResponse:
+    """Shared impl: validate already-transcribed segments, build a CreateConversation, run the full
+    processing pipeline (title, memories, action items, sync), and return the result. Used by both
+    the developer-API-key endpoint and the Firebase-authed user endpoint (on-device transcription)."""
     if not request.transcript_segments or len(request.transcript_segments) == 0:
         raise HTTPException(status_code=422, detail="transcript_segments cannot be empty")
 
@@ -1051,6 +1005,74 @@ def create_conversation_from_segments(
         status=conversation.status.value if conversation.status else 'completed',
         discarded=conversation.discarded,
     )
+
+
+@router.post("/v1/conversations/from-segments", response_model=ConversationResponse, tags=["conversations"])
+def create_conversation_from_segments_user(
+    request: CreateConversationFromTranscriptRequest,
+    uid: str = Depends(with_rate_limit(get_current_user_uid, "conversations:from-segments")),
+):
+    """Create a conversation from already-transcribed segments (Firebase-authed).
+
+    Used by clients that transcribe ON-DEVICE (e.g. the macOS desktop app with Parakeet) and need
+    the conversation persisted, processed (memories/summaries), and synced across devices — exactly
+    like a cloud-transcribed conversation, but without the live `/v4/listen` websocket."""
+    return _create_conversation_from_segments(uid, request)
+
+
+@router.post("/v1/dev/user/conversations/from-segments", response_model=ConversationResponse, tags=["developer"])
+def create_conversation_from_segments(
+    request: CreateConversationFromTranscriptRequest,
+    uid: str = Depends(with_rate_limit(get_uid_with_conversations_write, "dev:conversations")),
+):
+    """
+    Create a new conversation from structured transcript segments.
+
+    This endpoint is for advanced integrations that have speaker diarization and timing information.
+    It processes the transcript segments through the full conversation pipeline.
+
+    **Transcript Segments:**
+    - **text**: The text spoken (required)
+    - **speaker**: Speaker identifier like 'SPEAKER_00', 'SPEAKER_01' (default: 'SPEAKER_00')
+    - **speaker_id**: Numeric speaker ID (auto-calculated from speaker if not provided)
+    - **is_user**: Whether this segment is from the user (default: False)
+    - **person_id**: ID of known person speaking (optional)
+    - **start**: Start time in seconds, e.g., 0.0, 1.5, 60.2 (required)
+    - **end**: End time in seconds, e.g., 1.5, 3.0, 65.8 (required)
+
+    **Other Parameters:**
+    - **source**: Source of conversation (default: external_integration). Options:
+      - omi, friend, openglass, phone, desktop, apple_watch, bee, plaud, frame, etc.
+    - **started_at**: When conversation started (defaults to now)
+    - **finished_at**: When conversation finished (calculated from last segment if not provided)
+    - **language**: Language code (default: 'en')
+    - **geolocation**: Optional geolocation data
+
+    **Example:**
+    ```json
+    {
+      "transcript_segments": [
+        {
+          "text": "Hey, how are you doing?",
+          "speaker": "SPEAKER_00",
+          "is_user": true,
+          "start": 0.0,
+          "end": 2.5
+        },
+        {
+          "text": "I'm doing great, thanks!",
+          "speaker": "SPEAKER_01",
+          "is_user": false,
+          "start": 2.8,
+          "end": 5.2
+        }
+      ],
+      "source": "phone",
+      "language": "en"
+    }
+    ```
+    """
+    return _create_conversation_from_segments(uid, request)
 
 
 @router.delete("/v1/dev/user/conversations/{conversation_id}", tags=["developer"])
