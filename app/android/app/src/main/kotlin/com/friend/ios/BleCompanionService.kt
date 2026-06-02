@@ -60,19 +60,12 @@ class BleCompanionService : CompanionDeviceService() {
     }
 
     private fun handleDeviceDisappeared() {
-        Log.i(TAG, "Device disappeared")
-
-        // When the app is fully closed and the OS reports the device gone (a long, debounced
-        // signal), stop the service instead of retrying reconnection forever — it just drains
-        // battery until the device physically returns, at which point onDeviceAppeared restarts us.
-        // API 36+ only (pre-36 disappear callbacks are unreliable). No-op while Flutter is alive,
-        // since the foreground session owns the connection then.
-        if (Build.VERSION.SDK_INT < 36) return
-        if (OmiBleManager.isFlutterAlive) return
-        if (!OmiBleForegroundService.isBackgroundModeEnabled(applicationContext)) return
-
-        Log.i(TAG, "Stopping foreground service after sustained device disappearance")
-        OmiBleForegroundService.stopService(applicationContext)
+        // Intentionally a no-op. Omi holds a live connection, and a connected BLE peripheral stops
+        // advertising — so the OS fires BLE_DISAPPEARED while we are connected and streaming.
+        // Stopping the service here tears down a healthy link (and then flaps). A genuinely off /
+        // out-of-range device is handled by the parked autoConnect, which is low power and
+        // auto-reconnects when it returns.
+        Log.i(TAG, "Device disappeared (ignored; live-connection model)")
     }
 
     // ---- Lifecycle ----
