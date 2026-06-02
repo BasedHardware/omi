@@ -270,6 +270,7 @@ struct SettingsContentView: View {
 
   // AI Chat settings
   @AppStorage("chatBridgeMode") private var chatBridgeMode: String = "piMono"
+  @AppStorage("realtimeOmniProvider") private var realtimeOmniProvider: String = RealtimeOmniProvider.auto.rawValue
   @AppStorage("askModeEnabled") private var askModeEnabled = false
   @AppStorage("claudeMdEnabled") private var claudeMdEnabled = true
   @AppStorage("projectClaudeMdEnabled") private var projectClaudeMdEnabled = true
@@ -3473,6 +3474,45 @@ struct SettingsContentView: View {
 
   private var aiSetupSubsection: some View {
     VStack(spacing: 20) {
+      settingsCard(settingId: "aichat.realtimevoice") {
+        VStack(alignment: .leading, spacing: 12) {
+          HStack {
+            Image(systemName: "waveform")
+              .scaledFont(size: 16)
+              .foregroundColor(OmiColors.textTertiary)
+
+            Text("Voice Model")
+              .scaledFont(size: 15, weight: .semibold)
+              .foregroundColor(OmiColors.textPrimary)
+
+            Spacer()
+
+            Picker("", selection: $realtimeOmniProvider) {
+              ForEach(RealtimeOmniProvider.allCases, id: \.rawValue) { p in
+                Text(p.displayName).tag(p.rawValue)
+              }
+            }
+            .pickerStyle(.menu)
+            .frame(width: 200)
+            .onChange(of: realtimeOmniProvider) { _, newValue in
+              if newValue == RealtimeOmniProvider.auto.rawValue {
+                AutoModelSelector.shared.refreshIfStale()
+              }
+            }
+          }
+
+          if let p = RealtimeOmniProvider(rawValue: realtimeOmniProvider), p == .auto {
+            Text("\(p.subtitle) · currently \(RealtimeOmniSettings.shared.effectiveProvider.displayName)")
+              .scaledFont(size: 12)
+              .foregroundColor(OmiColors.textTertiary)
+          } else if let p = RealtimeOmniProvider(rawValue: realtimeOmniProvider) {
+            Text(p.subtitle)
+              .scaledFont(size: 12)
+              .foregroundColor(OmiColors.textTertiary)
+          }
+        }
+      }
+
       settingsCard(settingId: "aichat.provider") {
         VStack(alignment: .leading, spacing: 12) {
           HStack {
