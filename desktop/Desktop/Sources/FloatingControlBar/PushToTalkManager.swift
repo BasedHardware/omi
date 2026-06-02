@@ -45,6 +45,9 @@ class PushToTalkManager: ObservableObject {
   // Mic chunks captured before the relay finishes connecting (raw 16k PCM),
   // flushed once the service exists so the user's first words aren't clipped.
   private var omniPreconnectBuffer: [Data] = []
+  // True once the omni model returned any transcript this turn — gates the
+  // Deepgram fallback so a benign trailing socket error doesn't trigger it.
+  private var omniReceivedTranscript = false
   private var audioCaptureService: AudioCaptureService?
   private var transcriptSegments: [String] = []
   private var lastInterimText: String = ""
@@ -612,6 +615,10 @@ class PushToTalkManager: ObservableObject {
               } else {
                 self.omniPreconnectBuffer.append(audioData)
               }
+              // Also retain the raw turn for a Deepgram fallback if omni fails.
+              self.batchAudioLock.lock()
+              self.batchAudioBuffer.append(audioData)
+              self.batchAudioLock.unlock()
             } else if batchMode {
               // Batch mode: accumulate audio in buffer
               self.batchAudioLock.lock()
@@ -719,7 +726,11 @@ extension PushToTalkManager: RealtimeOmniServiceDelegate {
   fileprivate func startOmniTranscription() -> Bool {
     let provider = RealtimeOmniSettings.shared.effectiveProvider
     isOmniSTT = true
+    omniReceivedTranscript = false
     omniPreconnectBuffer.removeAll()
+    // Keep a copy of the whole turn so we can fall back to Deepgram if the relay
+    // is unreachable (e.g. backend not yet on prod) — PTT must never break.
+    batchAudioLock.lock(); batchAudioBuffer = Data(); batchAudioLock.unlock()
     startMicCapture()  // capture immediately; chunks buffer until the relay connects
     Task { @MainActor [weak self] in
       guard let self, self.isOmniSTT else { return }
@@ -788,6 +799,7 @@ extension PushToTalkManager: RealtimeOmniServiceDelegate {
   func omniDidReceiveInputTranscript(_ text: String, isFinal: Bool) {
     guard state == .listening || state == .lockedListening
             || state == .pendingLockDecision || state == .finalizing else { return }
+    if !text.isEmpty { omniReceivedTranscript = true }
     if isFinal {
       let finalText = text.isEmpty ? lastInterimText : text
       let trimmed = finalText.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -821,6 +833,41 @@ extension PushToTalkManager: RealtimeOmniServiceDelegate {
 
   func omniDidError(_ message: String) {
     logError("PushToTalkManager: omni STT error: \(message)")
-    stopListening()
+    // If the omni model already gave us a transcript this turn, the error is a
+    // benign teardown — ignore it. Otherwise the relay is unreachable (e.g. the
+    // backend isn't on prod yet): fall back to Deepgram so PTT never breaks.
+    guard !omniReceivedTranscript,
+          state == .listening || state == .lockedListening
+            || state == .pendingLockDecision || state == .finalizing
+    else { return }
+    fallBackToDeepgram()
+  }
+
+  /// Transcribe the buffered turn audio via Deepgram when omni is unavailable.
+  fileprivate func fallBackToDeepgram() {
+    log("PushToTalkManager: omni unavailable — falling back to Deepgram for this turn")
+    isOmniSTT = false
+    realtimeOmniService?.stop()
+    realtimeOmniService = nil
+    batchAudioLock.lock()
+    let audio = batchAudioBuffer
+    batchAudioLock.unlock()
+    guard !audio.isEmpty else { sendTranscript(); return }
+    barState?.voiceTranscript = "Transcribing…"
+    Task { @MainActor [weak self] in
+      guard let self else { return }
+      do {
+        let language = AssistantSettings.shared.effectiveTranscriptionLanguage
+        let transcript = try await TranscriptionService.batchTranscribe(
+          audioData: audio, language: language,
+          contextKeywords: self.currentContextSnapshot?.keywords ?? [])
+        if let transcript, !transcript.isEmpty { self.transcriptSegments = [transcript] }
+      } catch {
+        logError("PushToTalkManager: Deepgram fallback failed", error: error)
+      }
+      self.liveFinalizationTimeout?.cancel()
+      self.liveFinalizationTimeout = nil
+      self.sendTranscript()
+    }
   }
 }
