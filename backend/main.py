@@ -16,6 +16,8 @@ from routers import (
     chat,
     firmware,
     transcribe,
+    omni_relay,
+    auto_model,
     notifications,
     speech_profile,
     agents,
@@ -89,6 +91,8 @@ MultiPartParser.max_part_size = 200 * 1024 * 1024  # 200 MB
 app = FastAPI()
 
 app.include_router(transcribe.router)
+app.include_router(omni_relay.router)
+app.include_router(auto_model.router)
 app.include_router(conversations.router)
 app.include_router(action_items.router)
 app.include_router(task_integrations.router)
