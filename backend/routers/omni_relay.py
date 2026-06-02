@@ -4,10 +4,17 @@ import os
 from urllib.parse import quote
 
 import websockets
-from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect, WebSocketException
 
-from utils.byok import get_byok_key
-from utils.other.endpoints import get_current_user_uid_ws_listen
+from utils.byok import (
+    BYOK_HEADERS,
+    extract_byok_from_websocket,
+    get_byok_key,
+    set_byok_keys,
+    validate_byok_websocket,
+)
+from utils.executors import critical_executor, run_blocking
+from utils.other.endpoints import _verify_ws_auth
 from utils.subscription import is_trial_paywalled
 
 router = APIRouter()
@@ -56,12 +63,39 @@ def _upstream(provider: str, model: str | None):
 
 
 @router.websocket("/v1/omni/relay")
-async def omni_relay(websocket: WebSocket, uid: str = Depends(get_current_user_uid_ws_listen)):
-    # Same desktop gate as /v4/listen: entitled plans (Operator/Architect) and
-    # BYOK users pass; un-entitled desktop users past their trial are paywalled.
+async def omni_relay(websocket: WebSocket):
+    # Manual auth (read the header directly so we control logging and avoid any
+    # WS header-DI surprises). Token first, then BYOK validate, then the gate.
+    authz = websocket.headers.get("authorization")
+    byok_present = [p for p, h in BYOK_HEADERS.items() if websocket.headers.get(h)]
+    logger.info(
+        f"omni relay connect: auth_present={bool(authz)} byok={byok_present} "
+        f"provider={websocket.query_params.get('provider')}"
+    )
+    try:
+        uid = await run_blocking(critical_executor, _verify_ws_auth, authz)
+    except WebSocketException as e:
+        logger.warning(f"omni relay auth rejected: code={e.code} reason={e.reason}")
+        await websocket.close(code=e.code, reason=e.reason or "unauthorized")
+        return
+
+    # BYOK: validate forwarded keys (same as /v4/listen). Keys then resolve via get_byok_key.
+    byok = extract_byok_from_websocket(websocket)
+    if byok:
+        set_byok_keys(byok)
+        byok_err = await run_blocking(critical_executor, validate_byok_websocket, uid)
+        if byok_err:
+            logger.warning(f"omni relay BYOK invalid uid={uid}: {byok_err}")
+            await websocket.close(code=4003, reason=byok_err)
+            return
+
+    # Same desktop gate as /v4/listen: Operator/Architect + BYOK pass; un-entitled
+    # desktop users past their trial are paywalled.
     if is_trial_paywalled(uid, "desktop"):
+        logger.info(f"omni relay paywalled uid={uid}")
         await websocket.close(code=1008, reason="trial_expired")
         return
+
     provider = websocket.query_params.get("provider", "gemini")
     model = websocket.query_params.get("model")
     upstream_cfg, err = _upstream(provider, model)
