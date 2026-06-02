@@ -1096,6 +1096,15 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
       (!paywalled && AssistantSettings.shared.transcriptionEnabled) ? .on : .off
   }
 
+  func menuDidClose(_ menu: NSMenu) {
+    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+      for window in NSApp.windows where window.title.hasPrefix("Item-") && window.isVisible {
+        log("AppDelegate: [MENUBAR] Cleaning up lingering menu popup window: \(window.frame)")
+        window.orderOut(nil)
+      }
+    }
+  }
+
   func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
     let shouldTerminate = !UserDefaults.standard.bool(forKey: "hasCompletedOnboarding")
     if shouldTerminate {
