@@ -1,0 +1,10 @@
+# Parakeet ASR GPU service.
+# NOTE: exact transitive pins (torch/CUDA alignment) must be locked from a real GPU build —
+# the CUDA runtime in the Dockerfile (13.2) must match the torch wheel NeMo pulls.
+fastapi==0.121.0
+uvicorn[standard]==0.34.0
+python-multipart==0.0.18
+numpy==2.4.0
+soundfile==0.13.1
+# NVIDIA NeMo ASR (Parakeet TDT). Pulls torch/torchaudio transitively; pin after a GPU build.
+nemo_toolkit[asr]>=2.2.0
