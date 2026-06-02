@@ -316,6 +316,22 @@ class TestSyncJobsRedis:
         assert result['status'] == 'failed'
         assert 'timed out' in result['error']
 
+    def test_get_sync_job_does_not_mark_stale_queued_as_failed(self):
+        """Queued jobs waiting for capacity must NOT be marked as failed."""
+        mod, mock_redis = self._load_sync_jobs_module()
+        stale_queued = {
+            'job_id': 'sq-1',
+            'uid': 'uid',
+            'status': 'queued',
+            'updated_at': time.time() - 700,
+            'created_at': time.time() - 800,
+        }
+        mock_redis.get.return_value = json.dumps(stale_queued).encode()
+
+        result = mod.get_sync_job('sq-1')
+        assert result['status'] == 'queued'
+        assert result.get('error') is None
+
     def test_get_sync_job_does_not_mark_fresh_as_stale(self):
         """Processing jobs within threshold should not be marked failed."""
         mod, mock_redis = self._load_sync_jobs_module()
