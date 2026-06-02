@@ -20,8 +20,8 @@ logger = logging.getLogger(__name__)
 # (the realtime audio variants aren't in AA's LLM index, so we use the closest
 # representative model).
 PROXY = {
-    "geminiFlashLive": "gemini-3-1-flash",
-    "gptRealtime2": "gpt-realtime",
+    "geminiFlashLive": "gemini-3-5-flash",
+    "gptRealtime2": "gpt-5",
 }
 QUALITY_WEIGHT = 0.65
 SPEED_WEIGHT = 0.35
