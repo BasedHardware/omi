@@ -15,6 +15,7 @@ let package = Package(
     .package(url: "https://github.com/gonzalezreal/swift-markdown-ui", from: "2.4.0"),
     .package(
       url: "https://github.com/microsoft/onnxruntime-swift-package-manager.git", from: "1.20.0"),
+    .package(url: "https://github.com/FluidInference/FluidAudio.git", from: "0.14.8"),
   ],
   targets: [
     .target(
@@ -43,6 +44,7 @@ let package = Package(
         .product(name: "Sparkle", package: "Sparkle"),
         .product(name: "MarkdownUI", package: "swift-markdown-ui"),
         .product(name: "onnxruntime", package: "onnxruntime-swift-package-manager"),
+        .product(name: "FluidAudio", package: "FluidAudio"),
       ],
       path: "Sources",
       resources: [
