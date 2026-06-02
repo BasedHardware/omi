@@ -460,7 +460,9 @@ def _get_or_create_openrouter_llm(
     return _llm_cache[key]
 
 
-def _get_or_create_gemini_llm(model_name: str, streaming: bool = False) -> BaseChatModel:
+def _get_or_create_gemini_llm(
+    model_name: str, streaming: bool = False, thinking_budget: Optional[int] = None
+) -> BaseChatModel:
     """Get or create a cached ChatGoogleGenerativeAI for a Gemini model via native SDK.
 
     Routing priority:
@@ -471,9 +473,15 @@ def _get_or_create_gemini_llm(model_name: str, streaming: bool = False) -> BaseC
     Vertex AI requires explicit opt-in via USE_VERTEX_AI=true because GOOGLE_CLOUD_PROJECT
     is already set for Firestore and the service account may lack Vertex AI permissions.
 
+    thinking_budget: when set (e.g. 0), caps Gemini 2.5 internal "thinking" tokens.
+    Gemini 2.5 Flash defaults thinking ON (dynamic budget), billed as output tokens —
+    for mechanical calls (titles/extraction/classification) that adds cost with no quality
+    gain, so callers pass thinking_budget=0. Only applies to gemini-2.5* models (Gemini 3
+    uses thinking_level instead and ignores this).
+
     BYOK users still go through the OpenAI-compat endpoint via _create_byok_client().
     """
-    key = (model_name, streaming, 'gemini')
+    key = (model_name, streaming, 'gemini', thinking_budget)
     if key not in _llm_cache:
         use_vertex = os.environ.get('USE_VERTEX_AI', '').lower() == 'true'
         gcp_project = os.environ.get('GOOGLE_CLOUD_PROJECT', '') if use_vertex else ''
@@ -481,6 +489,8 @@ def _get_or_create_gemini_llm(model_name: str, streaming: bool = False) -> BaseC
         kwargs: Dict[str, Any] = {'callbacks': [_usage_callback], 'timeout': 120, 'max_retries': 1}
         if streaming:
             kwargs['streaming'] = True
+        if thinking_budget is not None and model_name.startswith('gemini-2.5'):
+            kwargs['thinking_budget'] = thinking_budget
 
         if gcp_project:
             gcp_location = os.environ.get('GCP_LOCATION', 'us-central1')
@@ -504,7 +514,10 @@ def _get_default_client(model: str, provider: str, streaming: bool, feature: str
         temp = _OPENROUTER_TEMPERATURES.get(feature)
         return _get_or_create_openrouter_llm(model, streaming, temp)
     if provider == 'gemini':
-        return _get_or_create_gemini_llm(model, streaming)
+        # All Gemini-routed features are mechanical (titles, follow-ups, onboarding,
+        # app integrations, trends) — reasoning features use Anthropic/OpenAI. Disable
+        # Gemini 2.5 "thinking" (on by default, billed as output tokens) for these.
+        return _get_or_create_gemini_llm(model, streaming, thinking_budget=0)
     return _get_or_create_openai_llm(model, streaming)
 
 
