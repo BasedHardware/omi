@@ -44,7 +44,7 @@ actor TaskPromotionService {
                 guard !Task.isCancelled else { break }
                 guard let self = self else { break }
                 log("TaskPromotion: Safety-net timer fired")
-                await self.promoteIfNeeded()
+                await self.promoteIfNeeded(bypassDebounce: true)
             }
         }
     }
@@ -56,13 +56,13 @@ actor TaskPromotionService {
     /// (either cap reached or no staged tasks available).
     /// Returns the list of promoted tasks so callers can insert them directly.
     @discardableResult
-    func promoteIfNeeded(shouldNotify: Bool = true) async -> [TaskActionItem] {
+    func promoteIfNeeded(shouldNotify: Bool = true, bypassDebounce: Bool = false) async -> [TaskActionItem] {
         guard !isPromoting else {
             log("TaskPromotion: Already promoting, skipping")
             return []
         }
         let secondsSinceLastPromotion = Date().timeIntervalSince(lastPromotedAt)
-        guard secondsSinceLastPromotion >= promotionDebounceInterval else {
+        guard bypassDebounce || secondsSinceLastPromotion >= promotionDebounceInterval else {
             log("TaskPromotion: Debounced — promoted \(Int(secondsSinceLastPromotion))s ago")
             return []
         }
@@ -82,6 +82,7 @@ actor TaskPromotionService {
                 let response = try await APIClient.shared.promoteTopStagedTask()
 
                 if response.promoted, let promotedTask = response.promotedTask {
+                    lastPromotedAt = Date()
                     promotedTasks.append(promotedTask)
                     log("TaskPromotion: Promoted task \(promotedTask.id) — \"\(promotedTask.description.prefix(60))\"")
 
@@ -126,7 +127,6 @@ actor TaskPromotionService {
         }
 
         if !promotedTasks.isEmpty {
-            lastPromotedAt = Date()
             let count = promotedTasks.count
             log("TaskPromotion: Promoted \(count) tasks total")
             await MainActor.run {
