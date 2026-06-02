@@ -7,8 +7,10 @@ actor TaskPromotionService {
     static let shared = TaskPromotionService()
 
     private let targetCount = 5
+    private let promotionDebounceInterval: TimeInterval = 30
     private var safetyTimer: Task<Void, Never>?
     private var isPromoting = false
+    private var lastPromotedAt = Date.distantPast
 
     private init() {}
 
@@ -57,6 +59,11 @@ actor TaskPromotionService {
     func promoteIfNeeded(shouldNotify: Bool = true) async -> [TaskActionItem] {
         guard !isPromoting else {
             log("TaskPromotion: Already promoting, skipping")
+            return []
+        }
+        let secondsSinceLastPromotion = Date().timeIntervalSince(lastPromotedAt)
+        guard secondsSinceLastPromotion >= promotionDebounceInterval else {
+            log("TaskPromotion: Debounced — promoted \(Int(secondsSinceLastPromotion))s ago")
             return []
         }
         isPromoting = true
@@ -119,6 +126,7 @@ actor TaskPromotionService {
         }
 
         if !promotedTasks.isEmpty {
+            lastPromotedAt = Date()
             let count = promotedTasks.count
             log("TaskPromotion: Promoted \(count) tasks total")
             await MainActor.run {
