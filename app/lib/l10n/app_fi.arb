@@ -3038,5 +3038,8 @@
     "unableToDetermineFirmwareVersion": "Nykyistä laiteohjelmistoversiota ei voida määrittää",
     "promoCode": "Tarjouskoodi",
     "enterPromoCode": "Syötä tarjouskoodi",
-    "invalidPromotionCode": "Virheellinen tarjouskoodi."
+    "invalidPromotionCode": "Virheellinen tarjouskoodi.",
+    "pairingLostTitle": "Ei voida muodostaa yhteyttä Omiin",
+    "pairingLostBody": "Avaa puhelimesi Bluetooth-asetukset, poista nykyinen Omi listalta ja yritä uudelleen.",
+    "pairingLostButton": "Avaa Bluetooth-asetukset"
 }

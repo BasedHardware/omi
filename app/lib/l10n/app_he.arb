@@ -10616,5 +10616,8 @@
     "unableToDetermineFirmwareVersion": "לא ניתן לקבוע את גרסת הקושחה הנוכחית",
     "promoCode": "קוד קידום",
     "enterPromoCode": "הזינו קוד קידום",
-    "invalidPromotionCode": "קוד קידום לא תקין."
+    "invalidPromotionCode": "קוד קידום לא תקין.",
+    "pairingLostTitle": "לא ניתן להתחבר לאומי שלך",
+    "pairingLostBody": "אנא פתח את הגדרות ה-Bluetooth של הטלפון שלך, הסר את ה-Omi הקיים מהרשימה, לאחר מכן חזור ונסה שוב.",
+    "pairingLostButton": "פתח את הגדרות בלוטות'"
 }

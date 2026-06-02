@@ -10616,5 +10616,8 @@
     "unableToDetermineFirmwareVersion": "বর্তমান ফার্মওয়্যার সংস্করণ নির্ধারণ করা যায়নি",
     "promoCode": "প্রোমো কোড",
     "enterPromoCode": "প্রোমো কোড লিখুন",
-    "invalidPromotionCode": "অবৈধ প্রোমো কোড।"
+    "invalidPromotionCode": "অবৈধ প্রোমো কোড।",
+    "pairingLostTitle": "আপনার ওমির সাথে সংযোগ করা যাচ্ছে না।",
+    "pairingLostBody": "অনুগ্রহ করে আপনার ফোনের ব্লুটুথ সেটিংসে গিয়ে তালিকা থেকে বিদ্যমান Omi-কে সরিয়ে দিন, তারপর ফিরে এসে আবার চেষ্টা করুন।",
+    "pairingLostButton": "ব্লুটুথ সেটিংস খুলুন"
 }

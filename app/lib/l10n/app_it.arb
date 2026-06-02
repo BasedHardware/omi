@@ -3038,5 +3038,8 @@
     "unableToDetermineFirmwareVersion": "Impossibile determinare la versione attuale del firmware",
     "promoCode": "Codice promozionale",
     "enterPromoCode": "Inserisci il codice promozionale",
-    "invalidPromotionCode": "Codice promozionale non valido."
+    "invalidPromotionCode": "Codice promozionale non valido.",
+    "pairingLostTitle": "Impossibile connettersi al tuo Omi",
+    "pairingLostBody": "Apri le impostazioni Bluetooth del tuo telefono, rimuovi Omi dall'elenco e riprova.",
+    "pairingLostButton": "Apri le impostazioni Bluetooth"
 }

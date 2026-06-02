@@ -9317,4 +9317,14 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get invalidPromotionCode => 'ಅಮಾನ್ಯ ಪ್ರೋಮೋ ಕೋಡ್.';
+
+  @override
+  String get pairingLostTitle => 'ನಿಮ್ಮ Omi ಗೆ ಸಂಪರ್ಕಿಸಲು ಸಾಧ್ಯವಾಗುತ್ತಿಲ್ಲ.';
+
+  @override
+  String get pairingLostBody =>
+      'ದಯವಿಟ್ಟು ನಿಮ್ಮ ಫೋನ್‌ನ ಬ್ಲೂಟೂತ್ ಸೆಟ್ಟಿಂಗ್‌ಗಳನ್ನು ತೆರೆಯಿರಿ, ಪಟ್ಟಿಯಿಂದ ಅಸ್ತಿತ್ವದಲ್ಲಿರುವ ಓಮಿಯನ್ನು ತೆಗೆದುಹಾಕಿ, ನಂತರ ಹಿಂತಿರುಗಿ ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.';
+
+  @override
+  String get pairingLostButton => 'ಬ್ಲೂಟೂತ್ ಸೆಟ್ಟಿಂಗ್‌ಗಳನ್ನು ತೆರೆಯಿರಿ';
 }

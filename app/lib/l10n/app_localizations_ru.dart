@@ -9319,4 +9319,14 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get invalidPromotionCode => 'Недействительный промокод.';
+
+  @override
+  String get pairingLostTitle => 'Не удаётся подключиться к Omi.';
+
+  @override
+  String get pairingLostBody =>
+      'Пожалуйста, откройте настройки Bluetooth на своем телефоне, удалите существующее приложение Omi из списка, затем вернитесь и попробуйте снова.';
+
+  @override
+  String get pairingLostButton => 'Откройте настройки Bluetooth';
 }

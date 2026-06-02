@@ -3038,5 +3038,8 @@
     "unableToDetermineFirmwareVersion": "Nepavyko nustatyti dabartinės programinės aparatinės įrangos versijos",
     "promoCode": "Reklamos kodas",
     "enterPromoCode": "Įveskite reklamos kodą",
-    "invalidPromotionCode": "Neteisingas reklamos kodas."
+    "invalidPromotionCode": "Neteisingas reklamos kodas.",
+    "pairingLostTitle": "Nepavyksta prisijungti prie jūsų „Omi“",
+    "pairingLostBody": "Atidarykite telefono „Bluetooth“ nustatymus, pašalinkite esamą „Omi“ iš sąrašo ir bandykite dar kartą.",
+    "pairingLostButton": "Atidaryti „Bluetooth“ nustatymus"
 }

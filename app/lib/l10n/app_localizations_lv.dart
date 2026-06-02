@@ -9308,4 +9308,14 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get invalidPromotionCode => 'Nederīgs reklāmas kods.';
+
+  @override
+  String get pairingLostTitle => 'Nevar izveidot savienojumu ar jūsu Omi';
+
+  @override
+  String get pairingLostBody =>
+      'Lūdzu, atveriet tālruņa Bluetooth iestatījumus, noņemiet esošo Omi no saraksta un pēc tam atgriezieties un mēģiniet vēlreiz.';
+
+  @override
+  String get pairingLostButton => 'Atvērt Bluetooth iestatījumus';
 }

@@ -3134,5 +3134,8 @@
     "unableToDetermineFirmwareVersion": "A jelenlegi firmware verziója nem határozható meg",
     "promoCode": "Promóciós kód",
     "enterPromoCode": "Adja meg a promóciós kódot",
-    "invalidPromotionCode": "Érvénytelen promóciós kód."
+    "invalidPromotionCode": "Érvénytelen promóciós kód.",
+    "pairingLostTitle": "Nem tudok csatlakozni az Omi-hoz",
+    "pairingLostBody": "Kérjük, nyissa meg a telefon Bluetooth-beállításait, távolítsa el a meglévő Omi-t a listából, majd próbálja újra.",
+    "pairingLostButton": "Nyissa meg a Bluetooth-beállításokat"
 }

@@ -220,6 +220,13 @@ abstract class BleHostApi {
   @async
   @SwiftFunction('requestCompanionDeviceAssociation(deviceAddress:)')
   String requestCompanionDeviceAssociation(String deviceAddress);
+
+  /// Open the system Bluetooth settings page so the user can forget a stale
+  /// bond. iOS uses the App-Prefs:root=Bluetooth deep-link (falls back to the
+  /// general Settings app on iOS versions where Apple has restricted the URL);
+  /// Android fires the Settings.ACTION_BLUETOOTH_SETTINGS intent.
+  @SwiftFunction('openBluetoothSettings()')
+  void openBluetoothSettings();
 }
 
 @FlutterApi()

@@ -3038,5 +3038,8 @@
     "unableToDetermineFirmwareVersion": "Tidak dapat menentukan versi perisian tegar semasa",
     "promoCode": "Kod promo",
     "enterPromoCode": "Masukkan kod promo",
-    "invalidPromotionCode": "Kod promo tidak sah."
+    "invalidPromotionCode": "Kod promo tidak sah.",
+    "pairingLostTitle": "Tidak dapat bersambung ke Omi anda",
+    "pairingLostBody": "Sila buka tetapan Bluetooth telefon anda, alih keluar Omi sedia ada daripada senarai, kemudian kembali dan cuba lagi.",
+    "pairingLostButton": "Buka Tetapan Bluetooth"
 }

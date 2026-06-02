@@ -3043,5 +3043,8 @@
     "unableToDetermineFirmwareVersion": "Không thể xác định phiên bản firmware hiện tại",
     "promoCode": "Mã khuyến mãi",
     "enterPromoCode": "Nhập mã khuyến mãi",
-    "invalidPromotionCode": "Mã khuyến mãi không hợp lệ."
+    "invalidPromotionCode": "Mã khuyến mãi không hợp lệ.",
+    "pairingLostTitle": "Không thể kết nối với Omi của bạn",
+    "pairingLostBody": "Vui lòng mở cài đặt Bluetooth trên điện thoại, xóa thiết bị Omi hiện có khỏi danh sách, sau đó quay lại và thử lại.",
+    "pairingLostButton": "Mở cài đặt Bluetooth"
 }

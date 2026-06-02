@@ -3007,5 +3007,8 @@
     "unableToDetermineFirmwareVersion": "No s'ha pogut determinar la versió actual del firmware",
     "promoCode": "Codi promocional",
     "enterPromoCode": "Introduïu el codi promocional",
-    "invalidPromotionCode": "Codi promocional no vàlid."
+    "invalidPromotionCode": "Codi promocional no vàlid.",
+    "pairingLostTitle": "No em puc connectar al teu Omi",
+    "pairingLostBody": "Obriu la configuració de Bluetooth del telèfon, elimineu l'Omi existent de la llista i torneu-ho a provar.",
+    "pairingLostButton": "Obre la configuració de Bluetooth"
 }

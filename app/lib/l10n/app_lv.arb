@@ -3038,5 +3038,8 @@
     "unableToDetermineFirmwareVersion": "Nevar noteikt pašreizējo programmaparatūras versiju",
     "promoCode": "Reklāmas kods",
     "enterPromoCode": "Ievadiet reklāmas kodu",
-    "invalidPromotionCode": "Nederīgs reklāmas kods."
+    "invalidPromotionCode": "Nederīgs reklāmas kods.",
+    "pairingLostTitle": "Nevar izveidot savienojumu ar jūsu Omi",
+    "pairingLostBody": "Lūdzu, atveriet tālruņa Bluetooth iestatījumus, noņemiet esošo Omi no saraksta un pēc tam atgriezieties un mēģiniet vēlreiz.",
+    "pairingLostButton": "Atvērt Bluetooth iestatījumus"
 }

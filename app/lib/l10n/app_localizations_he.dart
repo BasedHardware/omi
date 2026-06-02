@@ -9216,4 +9216,14 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get invalidPromotionCode => 'קוד קידום לא תקין.';
+
+  @override
+  String get pairingLostTitle => 'לא ניתן להתחבר לאומי שלך';
+
+  @override
+  String get pairingLostBody =>
+      'אנא פתח את הגדרות ה-Bluetooth של הטלפון שלך, הסר את ה-Omi הקיים מהרשימה, לאחר מכן חזור ונסה שוב.';
+
+  @override
+  String get pairingLostButton => 'פתח את הגדרות בלוטות\'';
 }

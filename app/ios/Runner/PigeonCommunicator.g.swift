@@ -827,6 +827,11 @@ protocol BleHostApi {
   func hasCompanionDeviceAssociation() throws -> Bool
   /// (Android only) Initiate CompanionDeviceManager association for a device.
   func requestCompanionDeviceAssociation(deviceAddress: String, completion: @escaping (Result<String, Error>) -> Void)
+  /// Open the system Bluetooth settings page so the user can forget a stale
+  /// bond. iOS uses the App-Prefs:root=Bluetooth deep-link (falls back to the
+  /// general Settings app on iOS versions where Apple has restricted the URL);
+  /// Android fires the Settings.ACTION_BLUETOOTH_SETTINGS intent.
+  func openBluetoothSettings() throws
 }
 
 /// Generated setup class from Pigeon to handle messages through the `binaryMessenger`.
@@ -1108,6 +1113,23 @@ class BleHostApiSetup {
       }
     } else {
       requestCompanionDeviceAssociationChannel.setMessageHandler(nil)
+    }
+    /// Open the system Bluetooth settings page so the user can forget a stale
+    /// bond. iOS uses the App-Prefs:root=Bluetooth deep-link (falls back to the
+    /// general Settings app on iOS versions where Apple has restricted the URL);
+    /// Android fires the Settings.ACTION_BLUETOOTH_SETTINGS intent.
+    let openBluetoothSettingsChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.omi_pigeon.BleHostApi.openBluetoothSettings\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
+    if let api = api {
+      openBluetoothSettingsChannel.setMessageHandler { _, reply in
+        do {
+          try api.openBluetoothSettings()
+          reply(wrapResult(nil))
+        } catch {
+          reply(wrapError(error))
+        }
+      }
+    } else {
+      openBluetoothSettingsChannel.setMessageHandler(nil)
     }
   }
 }

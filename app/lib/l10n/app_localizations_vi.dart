@@ -9284,4 +9284,14 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get invalidPromotionCode => 'Mã khuyến mãi không hợp lệ.';
+
+  @override
+  String get pairingLostTitle => 'Không thể kết nối với Omi của bạn';
+
+  @override
+  String get pairingLostBody =>
+      'Vui lòng mở cài đặt Bluetooth trên điện thoại, xóa thiết bị Omi hiện có khỏi danh sách, sau đó quay lại và thử lại.';
+
+  @override
+  String get pairingLostButton => 'Mở cài đặt Bluetooth';
 }

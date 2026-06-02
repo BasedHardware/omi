@@ -364,8 +364,14 @@ final class OmiBleManager: NSObject {
         case .connectionTimeout: return "connection_timeout"
         case .peripheralDisconnected: return "remote_device_terminated"
         case .connectionFailed: return "connection_failed_instant_passed"
+        case .peerRemovedPairingInformation: return "pairing_lost"
         default: return "gatt_error_\(cbError.code.rawValue)"
         }
+    }
+
+    private static func isPairingLostError(_ error: Error?) -> Bool {
+        guard let cbError = error as? CBError else { return false }
+        return cbError.code == .peerRemovedPairingInformation
     }
 
     /// Append a disconnect/fail event to the per-device history ring buffer.
@@ -608,6 +614,7 @@ extension OmiBleManager: CBCentralManagerDelegate {
     func centralManager(_ central: CBCentralManager, didFailToConnect peripheral: CBPeripheral, error: Error?) {
         let uuid = peripheralUuidString(peripheral)
         let isManual = manuallyDisconnected.contains(uuid)
+        let pairingLost = Self.isPairingLostError(error)
         NSLog("[OmiBle] didFailToConnect: \(peripheral.name ?? "<nil>"), uuid=\(uuid), error=\(error?.localizedDescription ?? "nil")")
         cleanupPeripheral(uuid)
 
@@ -624,11 +631,14 @@ extension OmiBleManager: CBCentralManagerDelegate {
             incrementFailToConnectCount(uuid: uuid)
         }
 
-        flutterApi?.onPeripheralDisconnected(peripheralUuid: uuid, error: error?.localizedDescription) { _ in }
+        let flutterError = pairingLost ? "pairing_lost" : error?.localizedDescription
+        flutterApi?.onPeripheralDisconnected(peripheralUuid: uuid, error: flutterError) { _ in }
 
         // Retry previously-connected peripherals — otherwise a failed connect silently
         // drops the user. iOS queues this at the chipset level; it's free while waiting.
-        if !isManual, everConnected.contains(uuid) {
+        // Skip retry on pairing_lost: the OS-level bond is broken and every retry will
+        // fail with the same error until the user forgets the device in iOS Settings.
+        if !isManual, !pairingLost, everConnected.contains(uuid) {
             DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(200)) { [weak self] in
                 guard let self = self else { return }
                 self.centralManager.connect(peripheral, options: nil)
@@ -639,6 +649,7 @@ extension OmiBleManager: CBCentralManagerDelegate {
     func centralManager(_ central: CBCentralManager, didDisconnectPeripheral peripheral: CBPeripheral, error: Error?) {
         let uuid = peripheralUuidString(peripheral)
         let isManual = manuallyDisconnected.contains(uuid)
+        let pairingLost = Self.isPairingLostError(error)
         NSLog("[OmiBle] didDisconnect: \(peripheral.name ?? "<nil>"), uuid=\(uuid), error=\(error?.localizedDescription ?? "nil")")
         cleanupPeripheral(uuid)
 
@@ -657,10 +668,12 @@ extension OmiBleManager: CBCentralManagerDelegate {
         }
         connectionStartTimes.removeValue(forKey: uuid)
 
-        flutterApi?.onPeripheralDisconnected(peripheralUuid: uuid, error: error?.localizedDescription) { _ in }
+        let flutterError = pairingLost ? "pairing_lost" : error?.localizedDescription
+        flutterApi?.onPeripheralDisconnected(peripheralUuid: uuid, error: flutterError) { _ in }
 
-        // Auto-reconnect unless manually disconnected
-        if !isManual {
+        // Auto-reconnect unless manually disconnected. Skip on pairing_lost — the bond
+        // is broken and retries will loop until the user forgets the device.
+        if !isManual, !pairingLost {
             DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(200)) { [weak self] in
                 guard let self = self else { return }
                 // iOS handles this at the BLE chipset level — zero CPU/radio cost while waiting

@@ -9325,4 +9325,14 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get invalidPromotionCode => 'Érvénytelen promóciós kód.';
+
+  @override
+  String get pairingLostTitle => 'Nem tudok csatlakozni az Omi-hoz';
+
+  @override
+  String get pairingLostBody =>
+      'Kérjük, nyissa meg a telefon Bluetooth-beállításait, távolítsa el a meglévő Omi-t a listából, majd próbálja újra.';
+
+  @override
+  String get pairingLostButton => 'Nyissa meg a Bluetooth-beállításokat';
 }

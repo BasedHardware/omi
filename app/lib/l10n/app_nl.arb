@@ -3038,5 +3038,8 @@
     "unableToDetermineFirmwareVersion": "Kan de huidige firmwareversie niet bepalen",
     "promoCode": "Promotiecode",
     "enterPromoCode": "Voer promotiecode in",
-    "invalidPromotionCode": "Ongeldige promotiecode."
+    "invalidPromotionCode": "Ongeldige promotiecode.",
+    "pairingLostTitle": "Kan geen verbinding maken met uw Omi",
+    "pairingLostBody": "Open de Bluetooth-instellingen van je telefoon, verwijder de Omi uit de lijst en probeer het daarna opnieuw.",
+    "pairingLostButton": "Open de Bluetooth-instellingen"
 }

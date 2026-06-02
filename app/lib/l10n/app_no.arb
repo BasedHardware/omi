@@ -3038,5 +3038,8 @@
     "unableToDetermineFirmwareVersion": "Kan ikke bestemme gjeldende fastvareversjon",
     "promoCode": "Kampanjekode",
     "enterPromoCode": "Skriv inn kampanjekode",
-    "invalidPromotionCode": "Ugyldig kampanjekode."
+    "invalidPromotionCode": "Ugyldig kampanjekode.",
+    "pairingLostTitle": "Kan ikke koble til Omi-en din",
+    "pairingLostBody": "Åpne telefonens Bluetooth-innstillinger, fjern den eksisterende Omi-en fra listen, og prøv deretter på nytt.",
+    "pairingLostButton": "Åpne Bluetooth-innstillingene"
 }

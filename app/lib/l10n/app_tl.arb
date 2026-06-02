@@ -10616,5 +10616,8 @@
     "unableToDetermineFirmwareVersion": "Hindi matukoy ang kasalukuyang bersyon ng firmware",
     "promoCode": "Promo code",
     "enterPromoCode": "Ilagay ang promo code",
-    "invalidPromotionCode": "Hindi valid na promo code."
+    "invalidPromotionCode": "Hindi valid na promo code.",
+    "pairingLostTitle": "Hindi makakonekta sa iyong Omi",
+    "pairingLostBody": "Pakibuksan ang mga setting ng Bluetooth ng iyong telepono, alisin ang kasalukuyang Omi sa listahan, pagkatapos ay bumalik at subukang muli.",
+    "pairingLostButton": "Buksan ang Mga Setting ng Bluetooth"
 }

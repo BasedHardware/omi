@@ -9121,4 +9121,13 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get invalidPromotionCode => '促销代码无效。';
+
+  @override
+  String get pairingLostTitle => '无法连接到您的 Omi';
+
+  @override
+  String get pairingLostBody => '请打开手机的蓝牙设置，从列表中删除现有的 Omi，然后回来重试。';
+
+  @override
+  String get pairingLostButton => '打开蓝牙设置';
 }

@@ -3060,5 +3060,8 @@
     "unableToDetermineFirmwareVersion": "无法确定当前固件版本",
     "promoCode": "促销代码",
     "enterPromoCode": "输入促销代码",
-    "invalidPromotionCode": "促销代码无效。"
+    "invalidPromotionCode": "促销代码无效。",
+    "pairingLostTitle": "无法连接到您的 Omi",
+    "pairingLostBody": "请打开手机的蓝牙设置，从列表中删除现有的 Omi，然后回来重试。",
+    "pairingLostButton": "打开蓝牙设置"
 }

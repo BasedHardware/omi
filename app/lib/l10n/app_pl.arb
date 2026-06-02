@@ -3073,5 +3073,8 @@
     "unableToDetermineFirmwareVersion": "Nie można określić bieżącej wersji oprogramowania układowego",
     "promoCode": "Kod promocyjny",
     "enterPromoCode": "Wpisz kod promocyjny",
-    "invalidPromotionCode": "Nieprawidłowy kod promocyjny."
+    "invalidPromotionCode": "Nieprawidłowy kod promocyjny.",
+    "pairingLostTitle": "Nie można połączyć się z Omi",
+    "pairingLostBody": "Otwórz ustawienia Bluetooth w telefonie, usuń istniejące urządzenie Omi z listy, a następnie wróć i spróbuj ponownie.",
+    "pairingLostButton": "Otwórz ustawienia Bluetooth"
 }

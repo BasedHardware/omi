@@ -3038,5 +3038,8 @@
     "unableToDetermineFirmwareVersion": "Det gick inte att fastställa aktuell firmwareversion",
     "promoCode": "Kampanjkod",
     "enterPromoCode": "Ange kampanjkod",
-    "invalidPromotionCode": "Ogiltig kampanjkod."
+    "invalidPromotionCode": "Ogiltig kampanjkod.",
+    "pairingLostTitle": "Kan inte ansluta till din Omi",
+    "pairingLostBody": "Öppna telefonens Bluetooth-inställningar, ta bort den befintliga Omi från listan och försök sedan igen.",
+    "pairingLostButton": "Öppna Bluetooth-inställningar"
 }

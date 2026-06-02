@@ -3038,5 +3038,8 @@
     "unableToDetermineFirmwareVersion": "Не вдається визначити поточну версію мікропрограми",
     "promoCode": "Промокод",
     "enterPromoCode": "Введіть промокод",
-    "invalidPromotionCode": "Недійсний промокод."
+    "invalidPromotionCode": "Недійсний промокод.",
+    "pairingLostTitle": "Не вдається підключитися до вашого Omi",
+    "pairingLostBody": "Будь ласка, відкрийте налаштування Bluetooth вашого телефону, видаліть існуючий Omi зі списку, а потім поверніться та спробуйте ще раз.",
+    "pairingLostButton": "Відкрийте налаштування Bluetooth"
 }

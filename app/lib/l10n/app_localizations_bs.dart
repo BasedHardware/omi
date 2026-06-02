@@ -9311,4 +9311,14 @@ class AppLocalizationsBs extends AppLocalizations {
 
   @override
   String get invalidPromotionCode => 'Nevažeći promo kod.';
+
+  @override
+  String get pairingLostTitle => 'Ne mogu se povezati s vašim Omi uređajem';
+
+  @override
+  String get pairingLostBody =>
+      'Molimo vas da otvorite Bluetooth postavke na telefonu, uklonite postojeći Omi sa liste, a zatim se vratite i pokušajte ponovo.';
+
+  @override
+  String get pairingLostButton => 'Otvori postavke Bluetootha';
 }

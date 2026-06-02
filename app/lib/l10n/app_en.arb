@@ -10989,5 +10989,17 @@
     },
     "promoCode": "Promo code",
     "enterPromoCode": "Enter promo code",
-    "invalidPromotionCode": "Invalid promotion code."
+    "invalidPromotionCode": "Invalid promotion code.",
+    "pairingLostTitle": "Can't connect to your Omi",
+    "@pairingLostTitle": {
+        "description": "Title of the dialog shown when the BLE pairing between phone and Omi is broken (iOS peerRemovedPairingInformation / Android GATT_AUTH_FAIL or GATT_INSUF_ENCRYPTION). The user must remove the existing Omi from their phone's Bluetooth list to recover."
+    },
+    "pairingLostBody": "Please open your phone's Bluetooth settings, remove the existing Omi from the list, then come back and try again.",
+    "@pairingLostBody": {
+        "description": "Body of the pairing-lost recovery dialog. Plain instructions, no jargon."
+    },
+    "pairingLostButton": "Open Bluetooth Settings",
+    "@pairingLostButton": {
+        "description": "Confirm button on the pairing-lost dialog. Acts as the dismiss action; user manually navigates to system Bluetooth settings."
+    }
 }

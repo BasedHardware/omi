@@ -9297,4 +9297,14 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get invalidPromotionCode => 'Geçersiz promosyon kodu.';
+
+  @override
+  String get pairingLostTitle => 'Omi cihazınıza bağlanamıyorum.';
+
+  @override
+  String get pairingLostBody =>
+      'Lütfen telefonunuzun Bluetooth ayarlarını açın, mevcut Omi uygulamasını listeden kaldırın, ardından geri dönüp tekrar deneyin.';
+
+  @override
+  String get pairingLostButton => 'Bluetooth Ayarlarını Açın';
 }

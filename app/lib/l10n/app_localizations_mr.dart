@@ -9296,4 +9296,14 @@ class AppLocalizationsMr extends AppLocalizations {
 
   @override
   String get invalidPromotionCode => 'अवैध प्रोमो कोड.';
+
+  @override
+  String get pairingLostTitle => 'तुमच्या ओमीशी कनेक्ट होऊ शकत नाही';
+
+  @override
+  String get pairingLostBody =>
+      'कृपया तुमच्या फोनचे ब्लूटूथ सेटिंग्ज उघडा, यादीतून असलेले \'Omi\' काढून टाका, त्यानंतर परत येऊन पुन्हा प्रयत्न करा.';
+
+  @override
+  String get pairingLostButton => 'ब्लूटूथ सेटिंग्ज उघडा';
 }

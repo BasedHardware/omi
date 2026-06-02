@@ -9306,4 +9306,14 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get invalidPromotionCode => 'Código promocional no válido.';
+
+  @override
+  String get pairingLostTitle => 'No puedo conectarme a tu Omi';
+
+  @override
+  String get pairingLostBody =>
+      'Por favor, abre la configuración de Bluetooth de tu teléfono, elimina el dispositivo Omi de la lista y vuelve a intentarlo.';
+
+  @override
+  String get pairingLostButton => 'Abrir la configuración de Bluetooth';
 }

@@ -10616,5 +10616,8 @@
     "unableToDetermineFirmwareVersion": "Не ўдалося вызначыць бягучую версію прашыўкі",
     "promoCode": "Промакод",
     "enterPromoCode": "Увядзіце промакод",
-    "invalidPromotionCode": "Няправільны промакод."
+    "invalidPromotionCode": "Няправільны промакод.",
+    "pairingLostTitle": "Не ўдаецца падключыцца да вашага Omi",
+    "pairingLostBody": "Калі ласка, адкрыйце налады Bluetooth вашага тэлефона, выдаліце існуючы Omi са спісу, а затым вярніцеся і паспрабуйце яшчэ раз.",
+    "pairingLostButton": "Адкрыйце налады Bluetooth"
 }

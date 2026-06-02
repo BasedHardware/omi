@@ -3038,5 +3038,8 @@
     "unableToDetermineFirmwareVersion": "Δεν είναι δυνατός ο προσδιορισμός της τρέχουσας έκδοσης firmware",
     "promoCode": "Κωδικός προσφοράς",
     "enterPromoCode": "Εισάγετε κωδικό προσφοράς",
-    "invalidPromotionCode": "Μη έγκυρος κωδικός προσφοράς."
+    "invalidPromotionCode": "Μη έγκυρος κωδικός προσφοράς.",
+    "pairingLostTitle": "Δεν είναι δυνατή η σύνδεση με το Omi σας",
+    "pairingLostBody": "Ανοίξτε τις ρυθμίσεις Bluetooth του τηλεφώνου σας, καταργήστε το υπάρχον Omi από τη λίστα και, στη συνέχεια, επιστρέψτε και προσπαθήστε ξανά.",
+    "pairingLostButton": "Άνοιγμα ρυθμίσεων Bluetooth"
 }

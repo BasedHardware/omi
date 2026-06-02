@@ -3038,5 +3038,8 @@
     "unableToDetermineFirmwareVersion": "Nu se poate determina versiunea curentă a firmware-ului",
     "promoCode": "Cod promoțional",
     "enterPromoCode": "Introduceți codul promoțional",
-    "invalidPromotionCode": "Cod promoțional invalid."
+    "invalidPromotionCode": "Cod promoțional invalid.",
+    "pairingLostTitle": "Nu mă pot conecta la Omi-ul tău",
+    "pairingLostBody": "Deschideți setările Bluetooth ale telefonului, eliminați dispozitivul Omi existent din listă, apoi reveniți și încercați din nou.",
+    "pairingLostButton": "Deschideți setările Bluetooth"
 }

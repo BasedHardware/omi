@@ -2,6 +2,7 @@ package com.friend.ios
 
 import android.app.Activity
 import android.content.Intent
+import android.provider.Settings
 import android.util.Log
 import androidx.core.content.ContextCompat
 
@@ -145,6 +146,31 @@ class BleHostApiImpl(private val getActivity: () -> Activity?) : BleHostApi {
 
         companionAssociationCallback = callback
         cm.associate(deviceAddress = deviceAddress)
+    }
+
+    // ── System settings deep-link ──
+
+    override fun openBluetoothSettings() {
+        val activity = getActivity() ?: run {
+            Log.w(TAG, "openBluetoothSettings: no activity available")
+            return
+        }
+        val intent = Intent(Settings.ACTION_BLUETOOTH_SETTINGS).apply {
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        try {
+            activity.startActivity(intent)
+        } catch (e: Exception) {
+            Log.e(TAG, "openBluetoothSettings failed: ${e.message}")
+            // Fallback to general settings if the Bluetooth-specific intent isn't resolvable.
+            try {
+                activity.startActivity(Intent(Settings.ACTION_SETTINGS).apply {
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                })
+            } catch (e2: Exception) {
+                Log.e(TAG, "openBluetoothSettings fallback also failed: ${e2.message}")
+            }
+        }
     }
 
     /**

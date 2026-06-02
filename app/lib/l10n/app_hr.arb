@@ -10616,5 +10616,8 @@
     "unableToDetermineFirmwareVersion": "Nije moguće utvrditi trenutnu verziju firmvera",
     "promoCode": "Promo kod",
     "enterPromoCode": "Unesite promo kod",
-    "invalidPromotionCode": "Nevažeći promo kod."
+    "invalidPromotionCode": "Nevažeći promo kod.",
+    "pairingLostTitle": "Ne mogu se povezati s vašim Omi uređajem",
+    "pairingLostBody": "Otvorite postavke Bluetootha na telefonu, uklonite postojeći Omi s popisa, a zatim se vratite i pokušajte ponovno.",
+    "pairingLostButton": "Otvori postavke Bluetootha"
 }

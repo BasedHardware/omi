@@ -3039,5 +3039,8 @@
     "unableToDetermineFirmwareVersion": "現在のファームウェアバージョンを特定できません",
     "promoCode": "プロモコード",
     "enterPromoCode": "プロモコードを入力",
-    "invalidPromotionCode": "無効なプロモコードです。"
+    "invalidPromotionCode": "無効なプロモコードです。",
+    "pairingLostTitle": "Omiに接続できません",
+    "pairingLostBody": "スマートフォンのBluetooth設定を開き、リストから既存のOmiを削除してから、もう一度お試しください。",
+    "pairingLostButton": "Bluetooth設定を開く"
 }

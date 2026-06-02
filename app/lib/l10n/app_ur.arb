@@ -10616,5 +10616,8 @@
     "unableToDetermineFirmwareVersion": "موجودہ فرم ویئر ورژن کا تعین نہیں کیا جا سکا",
     "promoCode": "پرومو کوڈ",
     "enterPromoCode": "پرومو کوڈ درج کریں",
-    "invalidPromotionCode": "غلط پرومو کوڈ۔"
+    "invalidPromotionCode": "غلط پرومو کوڈ۔",
+    "pairingLostTitle": "آپ کے Omi سے رابطہ نہیں ہو سکتا",
+    "pairingLostBody": "براہ کرم اپنے فون کی بلوٹوتھ سیٹنگز کھولیں، فہرست سے موجودہ Omi کو ہٹائیں، پھر واپس آئیں اور دوبارہ کوشش کریں۔",
+    "pairingLostButton": "بلوٹوتھ کی ترتیبات کھولیں۔"
 }

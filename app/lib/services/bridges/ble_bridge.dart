@@ -31,6 +31,21 @@ class BleBridge implements BleFlutterApi {
   void Function(BlePeripheral peripheral)? peripheralDiscoveredCallback;
   void Function(List<String> peripheralUuids)? stateRestoredCallback;
 
+  /// Fired when a peripheral disconnect carries the normalized "pairing_lost"
+  /// error token from native (iOS CBError.peerRemovedPairingInformation /
+  /// Android GATT statuses 137 and 15). Listener surfaces the recovery dialog
+  /// regardless of which screen is in front.
+  void Function(String peripheralUuid)? pairingLostCallback;
+
+  /// Token sent by native layers to flag a stale-bond disconnect. See iOS
+  /// OmiBleManager.bleReasonString and Android OmiBleForegroundService.handleDisconnection.
+  static const String pairingLostToken = 'pairing_lost';
+
+  static bool isPairingLostError(String? error) {
+    if (error == null) return false;
+    return error.toLowerCase().contains(pairingLostToken);
+  }
+
   void registerPeripheral({
     required String peripheralUuid,
     CharacteristicValueCallback? onCharacteristicValue,
@@ -78,6 +93,9 @@ class BleBridge implements BleFlutterApi {
   void onPeripheralDisconnected(String peripheralUuid, String? error) {
     final key = peripheralUuid.toUpperCase();
     _disconnectCallbacks[key]?.call(false, error);
+    if (isPairingLostError(error)) {
+      pairingLostCallback?.call(key);
+    }
   }
 
   @override

@@ -16,6 +16,7 @@ import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/services/devices.dart';
 import 'package:omi/services/devices/omi_connection.dart';
 import 'package:omi/services/notifications.dart';
+import 'package:omi/services/bridges/ble_bridge.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/services/battery_widget_service.dart';
 import 'package:omi/services/wals/wal_syncs.dart';
@@ -71,8 +72,42 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   void Function(BtDevice device)? onDeviceConnected;
   void Function(BtDevice device, int fileCount, int totalBytes)? onOfflineDataDetected;
 
+  bool _pairingLostDialogShowing = false;
+
   DeviceProvider() {
     ServiceManager.instance().device.subscribe(this, this);
+    BleBridge.instance.pairingLostCallback = (uuid) => _showPairingLostDialog();
+  }
+
+  void _showPairingLostDialog() {
+    if (_pairingLostDialogShowing) return;
+    final ctx = globalNavigatorKey.currentContext;
+    if (ctx == null) return;
+    _pairingLostDialogShowing = true;
+    showDialog(
+      context: ctx,
+      barrierDismissible: false,
+      builder: (dialogContext) => ConfirmationDialog(
+        title: dialogContext.l10n.pairingLostTitle,
+        description: dialogContext.l10n.pairingLostBody,
+        confirmText: dialogContext.l10n.pairingLostButton,
+        onConfirm: () async {
+          Navigator.pop(dialogContext);
+          // Open the system Bluetooth settings page so the user can forget the
+          // existing Omi entry. iOS uses App-Prefs:root=Bluetooth (with a fallback
+          // to UIApplication.openSettingsURLString); Android fires
+          // Settings.ACTION_BLUETOOTH_SETTINGS. await so PlatformException from
+          // the Pigeon channel is caught here rather than escaping as an
+          // unhandled future error.
+          try {
+            await BleHostApi().openBluetoothSettings();
+          } catch (e) {
+            Logger.debug('openBluetoothSettings failed: $e');
+          }
+        },
+        onCancel: () {},
+      ),
+    ).whenComplete(() => _pairingLostDialogShowing = false);
   }
 
   void setProviders(CaptureProvider provider) {
@@ -368,6 +403,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     _discoveryTimer?.cancel();
     _disconnectDebouncer.cancel();
     _connectDebouncer.cancel();
+    BleBridge.instance.pairingLostCallback = null;
     ServiceManager.instance().device.unsubscribe(this);
     super.dispose();
   }
