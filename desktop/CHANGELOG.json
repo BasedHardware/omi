@@ -1,6 +1,7 @@
 {
   "unreleased": [
-    "Memories filter now matches mobile (Manual, About You, Insights) and adds a Workflow category; removed the old Focus/Distracted/Productivity filters"
+    "Memories filter now matches mobile (Manual, About You, Insights) and adds a Workflow category; removed the old Focus/Distracted/Productivity filters",
+    "Memories: one-time cache cleanup removes stale/duplicate entries so Manual shows only memories you created"
   ],
   "releases": [
     {
