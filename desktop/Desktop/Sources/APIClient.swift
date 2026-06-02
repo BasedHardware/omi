@@ -1282,6 +1282,45 @@ extension APIClient {
   }
 }
 
+// MARK: - Create Conversation From Segments (on-device transcription upload)
+
+extension APIClient {
+  /// One transcript segment for the from-segments upload (matches backend DevTranscriptSegment).
+  struct UploadSegment: Encodable {
+    let text: String
+    let speaker: String
+    let speaker_id: Int?
+    let is_user: Bool
+    let person_id: String?
+    let start: Double
+    let end: Double
+  }
+
+  struct CreateConversationFromSegmentsRequest: Encodable {
+    let transcript_segments: [UploadSegment]
+    let source: String
+    let started_at: String?  // ISO8601
+    let finished_at: String?  // ISO8601
+    let language: String
+  }
+
+  struct CreateConversationFromSegmentsResponse: Decodable {
+    let id: String
+    let status: String
+    let discarded: Bool
+  }
+
+  /// Upload an already-transcribed (on-device Parakeet) conversation to the backend so it is
+  /// persisted, processed (memories/summaries), and synced to every device — the same pipeline a
+  /// cloud-transcribed conversation goes through, without the live `/v4/listen` websocket.
+  /// Endpoint: POST /v1/conversations/from-segments (Firebase-authed).
+  func createConversationFromSegments(_ request: CreateConversationFromSegmentsRequest)
+    async throws -> CreateConversationFromSegmentsResponse
+  {
+    return try await post("v1/conversations/from-segments", body: request, customBaseURL: nil)
+  }
+}
+
 // MARK: - Memories API
 
 extension APIClient {
