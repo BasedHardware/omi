@@ -9289,4 +9289,14 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get invalidPromotionCode => 'Código promocional inválido.';
+
+  @override
+  String get backgroundModeTitle => 'Modo em segundo plano';
+
+  @override
+  String get backgroundModeDescription => 'Mantenha o seu Omi gravando mesmo quando o app está totalmente fechado.';
+
+  @override
+  String get backgroundModeNote =>
+      'Por enquanto funciona apenas com dispositivos Omi e está em constante aprimoramento.';
 }

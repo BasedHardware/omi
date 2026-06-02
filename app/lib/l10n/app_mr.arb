@@ -10616,5 +10616,8 @@
     "unableToDetermineFirmwareVersion": "सद्य फर्मवेअर आवृत्ती निर्धारित करता आली नाही",
     "promoCode": "प्रोमो कोड",
     "enterPromoCode": "प्रोमो कोड प्रविष्ट करा",
-    "invalidPromotionCode": "अवैध प्रोमो कोड."
+    "invalidPromotionCode": "अवैध प्रोमो कोड.",
+    "backgroundModeTitle": "बॅकग्राउंड मोड",
+    "backgroundModeDescription": "अ‍ॅप पूर्णपणे बंद असतानाही तुमचे Omi रेकॉर्डिंग सुरू ठेवा.",
+    "backgroundModeNote": "सध्या फक्त Omi उपकरणांसह कार्य करते आणि सतत सुधारित केले जात आहे."
 }

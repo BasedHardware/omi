@@ -3073,5 +3073,8 @@
     "unableToDetermineFirmwareVersion": "Mevcut donanım yazılımı sürümü belirlenemiyor",
     "promoCode": "Promosyon kodu",
     "enterPromoCode": "Promosyon kodunu girin",
-    "invalidPromotionCode": "Geçersiz promosyon kodu."
+    "invalidPromotionCode": "Geçersiz promosyon kodu.",
+    "backgroundModeTitle": "Arka Plan Modu",
+    "backgroundModeDescription": "Uygulama tamamen kapalıyken bile Omi'nizi kayıtta tutun.",
+    "backgroundModeNote": "Şimdilik yalnızca Omi cihazlarıyla çalışır ve sürekli geliştirilmektedir."
 }

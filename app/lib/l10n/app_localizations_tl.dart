@@ -9370,4 +9370,13 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get invalidPromotionCode => 'Hindi valid na promo code.';
+
+  @override
+  String get backgroundModeTitle => 'Background Mode';
+
+  @override
+  String get backgroundModeDescription => 'Panatilihing nagre-record ang iyong Omi kahit na ganap nang sarado ang app.';
+
+  @override
+  String get backgroundModeNote => 'Sa ngayon ay gumagana lang sa mga Omi device at patuloy na pinapabuti.';
 }

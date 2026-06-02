@@ -9286,4 +9286,13 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get invalidPromotionCode => 'Neplatný promo kód.';
+
+  @override
+  String get backgroundModeTitle => 'Režim na pozadí';
+
+  @override
+  String get backgroundModeDescription => 'Udržujte nahrávání Omi, i když je aplikace úplně zavřená.';
+
+  @override
+  String get backgroundModeNote => 'Zatím funguje pouze se zařízeními Omi a průběžně se vylepšuje.';
 }

@@ -3005,5 +3005,8 @@
     "unableToDetermineFirmwareVersion": "تعذر تحديد إصدار البرنامج الثابت الحالي",
     "promoCode": "رمز ترويجي",
     "enterPromoCode": "أدخل الرمز الترويجي",
-    "invalidPromotionCode": "رمز ترويجي غير صالح."
+    "invalidPromotionCode": "رمز ترويجي غير صالح.",
+    "backgroundModeTitle": "الوضع في الخلفية",
+    "backgroundModeDescription": "حافِظ على تسجيل Omi حتى عند إغلاق التطبيق تمامًا.",
+    "backgroundModeNote": "يعمل حاليًا مع أجهزة Omi فقط، ويجري تحسينه باستمرار."
 }

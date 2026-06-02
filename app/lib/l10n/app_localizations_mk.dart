@@ -9335,4 +9335,13 @@ class AppLocalizationsMk extends AppLocalizations {
 
   @override
   String get invalidPromotionCode => 'Невалиден промо код.';
+
+  @override
+  String get backgroundModeTitle => 'Режим во заднина';
+
+  @override
+  String get backgroundModeDescription => 'Зачувајте го снимањето на Omi дури и кога апликацијата е целосно затворена.';
+
+  @override
+  String get backgroundModeNote => 'Засега работи само со уреди Omi и постојано се подобрува.';
 }

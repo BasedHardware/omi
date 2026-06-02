@@ -3060,5 +3060,8 @@
     "unableToDetermineFirmwareVersion": "无法确定当前固件版本",
     "promoCode": "促销代码",
     "enterPromoCode": "输入促销代码",
-    "invalidPromotionCode": "促销代码无效。"
+    "invalidPromotionCode": "促销代码无效。",
+    "backgroundModeTitle": "后台模式",
+    "backgroundModeDescription": "即使完全关闭应用，也能让你的 Omi 继续录音。",
+    "backgroundModeNote": "目前仅支持 Omi 设备，并在持续改进中。"
 }

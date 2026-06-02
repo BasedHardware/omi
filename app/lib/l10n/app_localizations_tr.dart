@@ -9297,4 +9297,13 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get invalidPromotionCode => 'Geçersiz promosyon kodu.';
+
+  @override
+  String get backgroundModeTitle => 'Arka Plan Modu';
+
+  @override
+  String get backgroundModeDescription => 'Uygulama tamamen kapalıyken bile Omi\'nizi kayıtta tutun.';
+
+  @override
+  String get backgroundModeNote => 'Şimdilik yalnızca Omi cihazlarıyla çalışır ve sürekli geliştirilmektedir.';
 }

@@ -9299,4 +9299,13 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get invalidPromotionCode => 'Neteisingas reklamos kodas.';
+
+  @override
+  String get backgroundModeTitle => 'Fono režimas';
+
+  @override
+  String get backgroundModeDescription => 'Palikite Omi įrašinėti net kai programėlė visiškai uždaryta.';
+
+  @override
+  String get backgroundModeNote => 'Kol kas veikia tik su Omi įrenginiais ir nuolat tobulinama.';
 }

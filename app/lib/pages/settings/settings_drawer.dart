@@ -322,6 +322,8 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
       _SearchableItem(title: context.l10n.speechProfile, icon: profileIcon, onTap: goToProfile),
       _SearchableItem(title: context.l10n.identifyingOthers, icon: profileIcon, onTap: goToProfile),
       _SearchableItem(title: context.l10n.voiceResponseMode, icon: profileIcon, onTap: goToProfile),
+      if (Platform.isAndroid)
+        _SearchableItem(title: context.l10n.backgroundModeTitle, icon: profileIcon, onTap: goToProfile),
       _SearchableItem(title: context.l10n.paymentMethods, icon: profileIcon, onTap: goToProfile),
       _SearchableItem(title: context.l10n.conversationDisplay, icon: profileIcon, onTap: goToProfile),
       _SearchableItem(title: context.l10n.dataPrivacy, icon: profileIcon, onTap: goToProfile),

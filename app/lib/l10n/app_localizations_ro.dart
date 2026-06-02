@@ -9331,4 +9331,13 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get invalidPromotionCode => 'Cod promoțional invalid.';
+
+  @override
+  String get backgroundModeTitle => 'Mod în fundal';
+
+  @override
+  String get backgroundModeDescription => 'Păstrează Omi în înregistrare chiar și când aplicația este complet închisă.';
+
+  @override
+  String get backgroundModeNote => 'Deocamdată funcționează doar cu dispozitive Omi și este îmbunătățit continuu.';
 }

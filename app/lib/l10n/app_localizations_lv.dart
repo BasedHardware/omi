@@ -9308,4 +9308,13 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get invalidPromotionCode => 'Nederīgs reklāmas kods.';
+
+  @override
+  String get backgroundModeTitle => 'Fona režīms';
+
+  @override
+  String get backgroundModeDescription => 'Saglabājiet Omi ierakstīšanu pat tad, kad lietotne ir pilnībā aizvērta.';
+
+  @override
+  String get backgroundModeNote => 'Pagaidām darbojas tikai ar Omi ierīcēm un tiek nepārtraukti uzlabota.';
 }

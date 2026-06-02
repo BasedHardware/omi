@@ -9351,4 +9351,14 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get invalidPromotionCode => 'Μη έγκυρος κωδικός προσφοράς.';
+
+  @override
+  String get backgroundModeTitle => 'Λειτουργία παρασκηνίου';
+
+  @override
+  String get backgroundModeDescription =>
+      'Διατηρήστε την εγγραφή του Omi ακόμη και όταν η εφαρμογή είναι εντελώς κλειστή.';
+
+  @override
+  String get backgroundModeNote => 'Προς το παρόν λειτουργεί μόνο με συσκευές Omi και βελτιώνεται συνεχώς.';
 }

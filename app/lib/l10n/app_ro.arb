@@ -3038,5 +3038,8 @@
     "unableToDetermineFirmwareVersion": "Nu se poate determina versiunea curentă a firmware-ului",
     "promoCode": "Cod promoțional",
     "enterPromoCode": "Introduceți codul promoțional",
-    "invalidPromotionCode": "Cod promoțional invalid."
+    "invalidPromotionCode": "Cod promoțional invalid.",
+    "backgroundModeTitle": "Mod în fundal",
+    "backgroundModeDescription": "Păstrează Omi în înregistrare chiar și când aplicația este complet închisă.",
+    "backgroundModeNote": "Deocamdată funcționează doar cu dispozitive Omi și este îmbunătățit continuu."
 }

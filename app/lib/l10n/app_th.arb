@@ -3038,5 +3038,8 @@
     "unableToDetermineFirmwareVersion": "ไม่สามารถระบุเวอร์ชันเฟิร์มแวร์ปัจจุบันได้",
     "promoCode": "รหัสโปรโมชัน",
     "enterPromoCode": "กรอกรหัสโปรโมชัน",
-    "invalidPromotionCode": "รหัสโปรโมชันไม่ถูกต้อง"
+    "invalidPromotionCode": "รหัสโปรโมชันไม่ถูกต้อง",
+    "backgroundModeTitle": "โหมดเบื้องหลัง",
+    "backgroundModeDescription": "ให้ Omi ของคุณบันทึกต่อไปแม้ปิดแอปไปทั้งหมดแล้ว",
+    "backgroundModeNote": "ขณะนี้ใช้ได้กับอุปกรณ์ Omi เท่านั้น และกำลังพัฒนาอย่างต่อเนื่อง"
 }

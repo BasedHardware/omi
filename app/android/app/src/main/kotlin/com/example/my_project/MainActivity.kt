@@ -88,10 +88,14 @@ class MainActivity: FlutterActivity() {
     }
 
     override fun onDestroy() {
-        // The BLE foreground service owns the pendant connection and must survive
-        // a normal task close so the pendant can keep recording in the background.
         if (isFinishing) {
             OmiBleManager.isFlutterAlive = false
+            // With Background Mode on, the foreground service keeps the pendant connected and
+            // transcribing after a task close. With it off (default), tear it down so the device
+            // disconnects when the app is closed.
+            if (!OmiBleForegroundService.isBackgroundModeEnabled(this)) {
+                OmiBleForegroundService.stopService(this)
+            }
         }
         super.onDestroy()
     }

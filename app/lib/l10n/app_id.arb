@@ -3080,5 +3080,8 @@
     "unableToDetermineFirmwareVersion": "Tidak dapat menentukan versi firmware saat ini",
     "promoCode": "Kode promo",
     "enterPromoCode": "Masukkan kode promo",
-    "invalidPromotionCode": "Kode promo tidak valid."
+    "invalidPromotionCode": "Kode promo tidak valid.",
+    "backgroundModeTitle": "Mode Latar Belakang",
+    "backgroundModeDescription": "Biarkan Omi tetap merekam meskipun aplikasi ditutup sepenuhnya.",
+    "backgroundModeNote": "Untuk saat ini hanya berfungsi dengan perangkat Omi dan terus ditingkatkan."
 }

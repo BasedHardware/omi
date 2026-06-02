@@ -10616,5 +10616,8 @@
     "unableToDetermineFirmwareVersion": "לא ניתן לקבוע את גרסת הקושחה הנוכחית",
     "promoCode": "קוד קידום",
     "enterPromoCode": "הזינו קוד קידום",
-    "invalidPromotionCode": "קוד קידום לא תקין."
+    "invalidPromotionCode": "קוד קידום לא תקין.",
+    "backgroundModeTitle": "מצב רקע",
+    "backgroundModeDescription": "השאירו את ה-Omi מקליט גם כשהאפליקציה סגורה לחלוטין.",
+    "backgroundModeNote": "כרגע עובד רק עם מכשירי Omi ומשתפר באופן מתמיד."
 }

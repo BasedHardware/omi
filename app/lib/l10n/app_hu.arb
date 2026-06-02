@@ -3134,5 +3134,8 @@
     "unableToDetermineFirmwareVersion": "A jelenlegi firmware verziója nem határozható meg",
     "promoCode": "Promóciós kód",
     "enterPromoCode": "Adja meg a promóciós kódot",
-    "invalidPromotionCode": "Érvénytelen promóciós kód."
+    "invalidPromotionCode": "Érvénytelen promóciós kód.",
+    "backgroundModeTitle": "Háttérmód",
+    "backgroundModeDescription": "Tartsd az Omi-t felvételen akkor is, amikor az alkalmazás teljesen be van zárva.",
+    "backgroundModeNote": "Egyelőre csak Omi eszközökkel működik, és folyamatosan fejlesztjük."
 }

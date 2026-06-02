@@ -9311,4 +9311,13 @@ class AppLocalizationsBs extends AppLocalizations {
 
   @override
   String get invalidPromotionCode => 'Nevažeći promo kod.';
+
+  @override
+  String get backgroundModeTitle => 'Pozadinski način rada';
+
+  @override
+  String get backgroundModeDescription => 'Zadržite Omi snimanje čak i kada je aplikacija potpuno zatvorena.';
+
+  @override
+  String get backgroundModeNote => 'Zasad radi samo s Omi uređajima i kontinuirano se poboljšava.';
 }

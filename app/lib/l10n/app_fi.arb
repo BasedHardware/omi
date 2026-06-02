@@ -3038,5 +3038,8 @@
     "unableToDetermineFirmwareVersion": "Nykyistä laiteohjelmistoversiota ei voida määrittää",
     "promoCode": "Tarjouskoodi",
     "enterPromoCode": "Syötä tarjouskoodi",
-    "invalidPromotionCode": "Virheellinen tarjouskoodi."
+    "invalidPromotionCode": "Virheellinen tarjouskoodi.",
+    "backgroundModeTitle": "Taustatila",
+    "backgroundModeDescription": "Pidä Omi tallentamassa, vaikka sovellus olisi kokonaan suljettu.",
+    "backgroundModeNote": "Toimii toistaiseksi vain Omi-laitteiden kanssa ja sitä kehitetään jatkuvasti."
 }

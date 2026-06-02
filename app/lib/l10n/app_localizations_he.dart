@@ -9216,4 +9216,13 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get invalidPromotionCode => 'קוד קידום לא תקין.';
+
+  @override
+  String get backgroundModeTitle => 'מצב רקע';
+
+  @override
+  String get backgroundModeDescription => 'השאירו את ה-Omi מקליט גם כשהאפליקציה סגורה לחלוטין.';
+
+  @override
+  String get backgroundModeNote => 'כרגע עובד רק עם מכשירי Omi ומשתפר באופן מתמיד.';
 }

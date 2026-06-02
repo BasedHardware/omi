@@ -9288,4 +9288,13 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get invalidPromotionCode => 'کد تخفیف نامعتبر.';
+
+  @override
+  String get backgroundModeTitle => 'حالت پس‌زمینه';
+
+  @override
+  String get backgroundModeDescription => 'حتی وقتی برنامه کاملاً بسته است، ضبط Omi شما را ادامه دهید.';
+
+  @override
+  String get backgroundModeNote => 'فعلاً فقط با دستگاه‌های Omi کار می‌کند و به‌طور مداوم در حال بهبود است.';
 }

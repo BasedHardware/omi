@@ -3043,5 +3043,8 @@
     "unableToDetermineFirmwareVersion": "Không thể xác định phiên bản firmware hiện tại",
     "promoCode": "Mã khuyến mãi",
     "enterPromoCode": "Nhập mã khuyến mãi",
-    "invalidPromotionCode": "Mã khuyến mãi không hợp lệ."
+    "invalidPromotionCode": "Mã khuyến mãi không hợp lệ.",
+    "backgroundModeTitle": "Chế độ nền",
+    "backgroundModeDescription": "Giữ cho Omi của bạn tiếp tục ghi âm ngay cả khi ứng dụng đã đóng hoàn toàn.",
+    "backgroundModeNote": "Hiện chỉ hoạt động với thiết bị Omi và đang được cải thiện liên tục."
 }

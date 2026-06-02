@@ -10616,5 +10616,8 @@
     "unableToDetermineFirmwareVersion": "Hindi matukoy ang kasalukuyang bersyon ng firmware",
     "promoCode": "Promo code",
     "enterPromoCode": "Ilagay ang promo code",
-    "invalidPromotionCode": "Hindi valid na promo code."
+    "invalidPromotionCode": "Hindi valid na promo code.",
+    "backgroundModeTitle": "Background Mode",
+    "backgroundModeDescription": "Panatilihing nagre-record ang iyong Omi kahit na ganap nang sarado ang app.",
+    "backgroundModeNote": "Sa ngayon ay gumagana lang sa mga Omi device at patuloy na pinapabuti."
 }

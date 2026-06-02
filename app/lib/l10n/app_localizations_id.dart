@@ -9294,4 +9294,13 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get invalidPromotionCode => 'Kode promo tidak valid.';
+
+  @override
+  String get backgroundModeTitle => 'Mode Latar Belakang';
+
+  @override
+  String get backgroundModeDescription => 'Biarkan Omi tetap merekam meskipun aplikasi ditutup sepenuhnya.';
+
+  @override
+  String get backgroundModeNote => 'Untuk saat ini hanya berfungsi dengan perangkat Omi dan terus ditingkatkan.';
 }

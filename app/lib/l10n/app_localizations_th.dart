@@ -9236,4 +9236,13 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get invalidPromotionCode => 'รหัสโปรโมชันไม่ถูกต้อง';
+
+  @override
+  String get backgroundModeTitle => 'โหมดเบื้องหลัง';
+
+  @override
+  String get backgroundModeDescription => 'ให้ Omi ของคุณบันทึกต่อไปแม้ปิดแอปไปทั้งหมดแล้ว';
+
+  @override
+  String get backgroundModeNote => 'ขณะนี้ใช้ได้กับอุปกรณ์ Omi เท่านั้น และกำลังพัฒนาอย่างต่อเนื่อง';
 }

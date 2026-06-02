@@ -9321,4 +9321,13 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get invalidPromotionCode => 'Невалиден промо код.';
+
+  @override
+  String get backgroundModeTitle => 'Фонов режим';
+
+  @override
+  String get backgroundModeDescription => 'Запазете записа на Omi дори когато приложението е напълно затворено.';
+
+  @override
+  String get backgroundModeNote => 'Засега работи само с устройства Omi и непрекъснато се подобрява.';
 }

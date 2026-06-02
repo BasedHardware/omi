@@ -3006,5 +3006,8 @@
     "unableToDetermineFirmwareVersion": "Aktuelle Firmware-Version konnte nicht ermittelt werden",
     "promoCode": "Aktionscode",
     "enterPromoCode": "Aktionscode eingeben",
-    "invalidPromotionCode": "Ungültiger Aktionscode."
+    "invalidPromotionCode": "Ungültiger Aktionscode.",
+    "backgroundModeTitle": "Hintergrundmodus",
+    "backgroundModeDescription": "Lass deinen Omi weiter aufnehmen, auch wenn die App vollständig geschlossen ist.",
+    "backgroundModeNote": "Funktioniert vorerst nur mit Omi-Geräten und wird kontinuierlich verbessert."
 }

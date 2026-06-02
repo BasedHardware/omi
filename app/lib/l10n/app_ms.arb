@@ -3038,5 +3038,8 @@
     "unableToDetermineFirmwareVersion": "Tidak dapat menentukan versi perisian tegar semasa",
     "promoCode": "Kod promo",
     "enterPromoCode": "Masukkan kod promo",
-    "invalidPromotionCode": "Kod promo tidak sah."
+    "invalidPromotionCode": "Kod promo tidak sah.",
+    "backgroundModeTitle": "Mod Latar Belakang",
+    "backgroundModeDescription": "Pastikan Omi anda terus merakam walaupun apl ditutup sepenuhnya.",
+    "backgroundModeNote": "Buat masa ini hanya berfungsi dengan peranti Omi dan sentiasa diperbaiki."
 }

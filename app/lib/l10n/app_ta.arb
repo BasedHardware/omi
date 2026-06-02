@@ -10616,5 +10616,8 @@
     "unableToDetermineFirmwareVersion": "தற்போதைய ஃபார்ம்வேர் பதிப்பை தீர்மானிக்க முடியவில்லை",
     "promoCode": "விளம்பர குறியீடு",
     "enterPromoCode": "விளம்பர குறியீட்டை உள்ளிடவும்",
-    "invalidPromotionCode": "தவறான விளம்பர குறியீடு."
+    "invalidPromotionCode": "தவறான விளம்பர குறியீடு.",
+    "backgroundModeTitle": "பின்னணி பயன்முறை",
+    "backgroundModeDescription": "ஆப்ஸ் முழுவதுமாக மூடப்பட்டிருந்தாலும் உங்கள் Omi பதிவைத் தொடரவும்.",
+    "backgroundModeNote": "தற்போது Omi சாதனங்களுடன் மட்டுமே செயல்படுகிறது, தொடர்ந்து மேம்படுத்தப்படுகிறது."
 }

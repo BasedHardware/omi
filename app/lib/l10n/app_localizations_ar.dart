@@ -9231,4 +9231,13 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get invalidPromotionCode => 'رمز ترويجي غير صالح.';
+
+  @override
+  String get backgroundModeTitle => 'الوضع في الخلفية';
+
+  @override
+  String get backgroundModeDescription => 'حافِظ على تسجيل Omi حتى عند إغلاق التطبيق تمامًا.';
+
+  @override
+  String get backgroundModeNote => 'يعمل حاليًا مع أجهزة Omi فقط، ويجري تحسينه باستمرار.';
 }

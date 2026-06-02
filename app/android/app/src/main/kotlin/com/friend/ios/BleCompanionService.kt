@@ -38,6 +38,10 @@ class BleCompanionService : CompanionDeviceService() {
         Log.i(TAG, "Device appeared: $address")
 
         if (!hasBluetoothPermission()) return
+        if (!OmiBleForegroundService.isBackgroundModeEnabled(applicationContext)) {
+            Log.i(TAG, "Device appeared but Background Mode is off; not starting service")
+            return
+        }
 
         val prefs = applicationContext.getSharedPreferences("ble_config", Context.MODE_PRIVATE)
         if (prefs.getBoolean("user_disconnected", false)) return
@@ -56,7 +60,12 @@ class BleCompanionService : CompanionDeviceService() {
     }
 
     private fun handleDeviceDisappeared() {
-        Log.i(TAG, "Device disappeared")
+        // Intentionally a no-op. Omi holds a live connection, and a connected BLE peripheral stops
+        // advertising — so the OS fires BLE_DISAPPEARED while we are connected and streaming.
+        // Stopping the service here tears down a healthy link (and then flaps). A genuinely off /
+        // out-of-range device is handled by the parked autoConnect, which is low power and
+        // auto-reconnects when it returns.
+        Log.i(TAG, "Device disappeared (ignored; live-connection model)")
     }
 
     // ---- Lifecycle ----
@@ -66,6 +75,7 @@ class BleCompanionService : CompanionDeviceService() {
         Log.i(TAG, "onCreate")
 
         if (!hasBluetoothPermission()) return
+        if (!OmiBleForegroundService.isBackgroundModeEnabled(applicationContext)) return
 
         val prefs = applicationContext.getSharedPreferences("ble_config", Context.MODE_PRIVATE)
         if (prefs.getBoolean("user_disconnected", false)) return

@@ -9135,4 +9135,13 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get invalidPromotionCode => '無効なプロモコードです。';
+
+  @override
+  String get backgroundModeTitle => 'バックグラウンドモード';
+
+  @override
+  String get backgroundModeDescription => 'アプリを完全に閉じても Omi の録音を続けます。';
+
+  @override
+  String get backgroundModeNote => '現在は Omi デバイスのみ対応しており、継続的に改善しています。';
 }

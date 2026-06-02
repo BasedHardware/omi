@@ -927,7 +927,7 @@ class CaptureProvider extends ChangeNotifier
       }),
     );
     await SharedPreferencesUtil().saveBool('nativeBleForegroundReady', false);
-    await SharedPreferencesUtil().saveBool('nativeBleStreamingEnabled', true);
+    await SharedPreferencesUtil().saveBool('nativeBleStreamingEnabled', SharedPreferencesUtil().backgroundModeEnabled);
   }
 
   MapEntry<String, String>? _nativeBleAudioTarget(BtDevice device) {

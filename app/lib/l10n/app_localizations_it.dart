@@ -9339,4 +9339,14 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String get invalidPromotionCode => 'Codice promozionale non valido.';
+
+  @override
+  String get backgroundModeTitle => 'Modalità in background';
+
+  @override
+  String get backgroundModeDescription =>
+      'Mantieni il tuo Omi in registrazione anche quando l\'app è completamente chiusa.';
+
+  @override
+  String get backgroundModeNote => 'Per ora funziona solo con i dispositivi Omi ed è in continuo miglioramento.';
 }

@@ -72,6 +72,13 @@ class OmiBleForegroundService : Service() {
 
         fun isActive(): Boolean = instance != null
 
+        /** User opt-in (default off). When off, the service does not persist past app close —
+         *  it stops on task removal and is not sticky, restoring the pre-#7483 behavior. Read from
+         *  the Flutter pref written by SharedPreferencesUtil (`flutter.` prefix). */
+        fun isBackgroundModeEnabled(context: Context): Boolean =
+            context.getSharedPreferences("FlutterSharedPreferences", Context.MODE_PRIVATE)
+                .getBoolean("flutter.backgroundModeEnabled", false)
+
         fun startService(context: Context, deviceAddress: String, requiresBond: Boolean = false, caller: String = "unknown") {
             if (caller.startsWith("CompanionSvc")) {
                 val now = System.currentTimeMillis()
@@ -601,12 +608,14 @@ class OmiBleForegroundService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         startForeground(NOTIFICATION_ID, buildNotification("Connecting to Omi..."))
 
+        val backgroundMode = isBackgroundModeEnabled(this)
         val address = intent?.getStringExtra("device_address")
         val requiresBond = intent?.getBooleanExtra("requires_bond", false) ?: false
 
         if (address != null) {
             manageDevice(address, requiresBond)
-        } else {
+        } else if (backgroundMode) {
+            // Restart after process death (sticky): restore the device we were managing.
             val saved = getSharedPreferences(PREFS_NAME, MODE_PRIVATE).getString(PREFS_KEY, null)
             val parts = saved?.split("|")
             if (parts?.size == 2) {
@@ -616,13 +625,22 @@ class OmiBleForegroundService : Service() {
                 Log.i(TAG, "onStartCommand: no device address or saved device, stopping")
                 stopSelf()
             }
+        } else {
+            Log.i(TAG, "onStartCommand: background mode off and no device address, stopping")
+            stopSelf()
         }
 
-        return START_STICKY
+        // Background mode off ⇒ non-sticky, so the OS won't resurrect the service after the app is closed.
+        return if (backgroundMode) START_STICKY else START_NOT_STICKY
     }
 
     override fun onTaskRemoved(rootIntent: Intent?) {
-        Log.i(TAG, "Task removed; keeping BLE foreground service alive")
+        if (isBackgroundModeEnabled(this)) {
+            Log.i(TAG, "Task removed; keeping BLE foreground service alive (background mode on)")
+        } else {
+            Log.i(TAG, "Task removed; stopping BLE foreground service (background mode off)")
+            stopSelf()
+        }
         super.onTaskRemoved(rootIntent)
     }
 

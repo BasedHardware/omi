@@ -3007,5 +3007,8 @@
     "unableToDetermineFirmwareVersion": "No s'ha pogut determinar la versió actual del firmware",
     "promoCode": "Codi promocional",
     "enterPromoCode": "Introduïu el codi promocional",
-    "invalidPromotionCode": "Codi promocional no vàlid."
+    "invalidPromotionCode": "Codi promocional no vàlid.",
+    "backgroundModeTitle": "Mode en segon pla",
+    "backgroundModeDescription": "Mantén l'Omi gravant fins i tot quan l'aplicació està completament tancada.",
+    "backgroundModeNote": "De moment només funciona amb dispositius Omi i es millora contínuament."
 }

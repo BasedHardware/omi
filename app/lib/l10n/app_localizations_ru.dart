@@ -9319,4 +9319,13 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get invalidPromotionCode => 'Недействительный промокод.';
+
+  @override
+  String get backgroundModeTitle => 'Фоновый режим';
+
+  @override
+  String get backgroundModeDescription => 'Продолжайте запись Omi, даже когда приложение полностью закрыто.';
+
+  @override
+  String get backgroundModeNote => 'Пока работает только с устройствами Omi и постоянно улучшается.';
 }

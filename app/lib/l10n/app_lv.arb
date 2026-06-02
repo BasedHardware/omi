@@ -3038,5 +3038,8 @@
     "unableToDetermineFirmwareVersion": "Nevar noteikt pašreizējo programmaparatūras versiju",
     "promoCode": "Reklāmas kods",
     "enterPromoCode": "Ievadiet reklāmas kodu",
-    "invalidPromotionCode": "Nederīgs reklāmas kods."
+    "invalidPromotionCode": "Nederīgs reklāmas kods.",
+    "backgroundModeTitle": "Fona režīms",
+    "backgroundModeDescription": "Saglabājiet Omi ierakstīšanu pat tad, kad lietotne ir pilnībā aizvērta.",
+    "backgroundModeNote": "Pagaidām darbojas tikai ar Omi ierīcēm un tiek nepārtraukti uzlabota."
 }

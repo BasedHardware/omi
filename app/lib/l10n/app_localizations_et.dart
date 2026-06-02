@@ -9283,4 +9283,13 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get invalidPromotionCode => 'Kehtetu sooduskood.';
+
+  @override
+  String get backgroundModeTitle => 'Taustarežiim';
+
+  @override
+  String get backgroundModeDescription => 'Hoia oma Omi salvestamas ka siis, kui rakendus on täielikult suletud.';
+
+  @override
+  String get backgroundModeNote => 'Praegu töötab ainult Omi seadmetega ja seda täiustatakse pidevalt.';
 }

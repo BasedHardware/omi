@@ -9314,4 +9314,13 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String get invalidPromotionCode => 'Няправільны промакод.';
+
+  @override
+  String get backgroundModeTitle => 'Фонавы рэжым';
+
+  @override
+  String get backgroundModeDescription => 'Працягвайце запіс Omi, нават калі праграма цалкам закрыта.';
+
+  @override
+  String get backgroundModeNote => 'Пакуль працуе толькі з прыладамі Omi і пастаянна ўдасканальваецца.';
 }

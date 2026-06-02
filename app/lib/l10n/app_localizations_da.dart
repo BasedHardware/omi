@@ -9271,4 +9271,13 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get invalidPromotionCode => 'Ugyldig kampagnekode.';
+
+  @override
+  String get backgroundModeTitle => 'Baggrundstilstand';
+
+  @override
+  String get backgroundModeDescription => 'Hold din Omi i gang med at optage, selv når appen er helt lukket.';
+
+  @override
+  String get backgroundModeNote => 'Fungerer indtil videre kun med Omi-enheder og forbedres løbende.';
 }

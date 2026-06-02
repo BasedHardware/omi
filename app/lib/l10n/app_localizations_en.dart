@@ -9281,4 +9281,13 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get invalidPromotionCode => 'Invalid promotion code.';
+
+  @override
+  String get backgroundModeTitle => 'Background Mode';
+
+  @override
+  String get backgroundModeDescription => 'Keep your Omi recording even when the app is fully closed.';
+
+  @override
+  String get backgroundModeNote => 'Works with Omi devices only for now, and is being improved continuously.';
 }

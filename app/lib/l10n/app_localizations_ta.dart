@@ -9352,4 +9352,13 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get invalidPromotionCode => 'தவறான விளம்பர குறியீடு.';
+
+  @override
+  String get backgroundModeTitle => 'பின்னணி பயன்முறை';
+
+  @override
+  String get backgroundModeDescription => 'ஆப்ஸ் முழுவதுமாக மூடப்பட்டிருந்தாலும் உங்கள் Omi பதிவைத் தொடரவும்.';
+
+  @override
+  String get backgroundModeNote => 'தற்போது Omi சாதனங்களுடன் மட்டுமே செயல்படுகிறது, தொடர்ந்து மேம்படுத்தப்படுகிறது.';
 }

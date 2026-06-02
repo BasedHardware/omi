@@ -9286,4 +9286,13 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get invalidPromotionCode => 'Virheellinen tarjouskoodi.';
+
+  @override
+  String get backgroundModeTitle => 'Taustatila';
+
+  @override
+  String get backgroundModeDescription => 'Pidä Omi tallentamassa, vaikka sovellus olisi kokonaan suljettu.';
+
+  @override
+  String get backgroundModeNote => 'Toimii toistaiseksi vain Omi-laitteiden kanssa ja sitä kehitetään jatkuvasti.';
 }

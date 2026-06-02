@@ -3043,5 +3043,8 @@
     "unableToDetermineFirmwareVersion": "Nedá sa určiť aktuálna verzia firmvéru",
     "promoCode": "Promo kód",
     "enterPromoCode": "Zadajte promo kód",
-    "invalidPromotionCode": "Neplatný promo kód."
+    "invalidPromotionCode": "Neplatný promo kód.",
+    "backgroundModeTitle": "Režim na pozadí",
+    "backgroundModeDescription": "Udržujte nahrávanie Omi, aj keď je aplikácia úplne zatvorená.",
+    "backgroundModeNote": "Zatiaľ funguje len so zariadeniami Omi a priebežne sa vylepšuje."
 }

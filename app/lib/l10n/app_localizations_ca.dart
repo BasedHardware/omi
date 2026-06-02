@@ -9338,4 +9338,14 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get invalidPromotionCode => 'Codi promocional no vàlid.';
+
+  @override
+  String get backgroundModeTitle => 'Mode en segon pla';
+
+  @override
+  String get backgroundModeDescription =>
+      'Mantén l\'Omi gravant fins i tot quan l\'aplicació està completament tancada.';
+
+  @override
+  String get backgroundModeNote => 'De moment només funciona amb dispositius Omi i es millora contínuament.';
 }

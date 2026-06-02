@@ -9121,4 +9121,13 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get invalidPromotionCode => '促销代码无效。';
+
+  @override
+  String get backgroundModeTitle => '后台模式';
+
+  @override
+  String get backgroundModeDescription => '即使完全关闭应用，也能让你的 Omi 继续录音。';
+
+  @override
+  String get backgroundModeNote => '目前仅支持 Omi 设备，并在持续改进中。';
 }

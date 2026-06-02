@@ -10989,5 +10989,17 @@
     },
     "promoCode": "Promo code",
     "enterPromoCode": "Enter promo code",
-    "invalidPromotionCode": "Invalid promotion code."
+    "invalidPromotionCode": "Invalid promotion code.",
+    "backgroundModeTitle": "Background Mode",
+    "@backgroundModeTitle": {
+        "description": "Title for the background connection mode toggle in device settings (Android only)"
+    },
+    "backgroundModeDescription": "Keep your Omi recording even when the app is fully closed.",
+    "@backgroundModeDescription": {
+        "description": "Subtitle explaining the background mode toggle"
+    },
+    "backgroundModeNote": "Works with Omi devices only for now, and is being improved continuously.",
+    "@backgroundModeNote": {
+        "description": "Caveat note shown in the Background Mode sheet"
+    }
 }
