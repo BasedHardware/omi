@@ -204,11 +204,13 @@ struct DesktopHomeView: View {
               // Set up floating control bar (only show if user hasn't disabled it)
               FloatingControlBarManager.shared.setup(
                 appState: appState, chatProvider: viewModelContainer.chatProvider)
+              if FloatingControlBarManager.shared.isEnabled {
+                FloatingControlBarManager.shared.show()
+              }
 
               // Set up push-to-talk voice input
               if let barState = FloatingControlBarManager.shared.barState {
                 PushToTalkManager.shared.setup(barState: barState)
-                CursorPTTOverlayManager.shared.showIdle()
               }
             }
             .task {

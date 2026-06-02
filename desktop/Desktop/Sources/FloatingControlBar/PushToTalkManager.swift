@@ -136,6 +136,15 @@ class PushToTalkManager: ObservableObject {
       return
     }
 
+    // Let the first shortcut press reveal the compact bar instead of requiring it
+    // to already be visible. This keeps onboarding step 3 quiet on entry while
+    // still allowing the user to trigger the bar by pressing the key.
+    if pttActive, !FloatingControlBarManager.shared.isVisible {
+      FloatingControlBarManager.shared.show()
+    }
+
+    guard FloatingControlBarManager.shared.isVisible else { return }
+
     if pttActive {
       handleShortcutDown()
     } else if shortcut.modifierOnly {
@@ -436,7 +445,6 @@ class PushToTalkManager: ObservableObject {
 
     guard hasQuery else {
       log("PushToTalkManager: no transcript to send")
-      CursorPTTOverlayManager.shared.dismiss()
       return
     }
 
@@ -455,9 +463,6 @@ class PushToTalkManager: ObservableObject {
     } else {
       log("PushToTalkManager: sending query (\(query.count) chars): \(query)")
       FloatingControlBarManager.shared.openAIInputWithQuery(query, fromVoice: true)
-    }
-    if let barState {
-      CursorPTTOverlayManager.shared.startResponding(barState: barState)
     }
   }
 
@@ -621,7 +626,6 @@ class PushToTalkManager: ObservableObject {
       transcriptSegments.append(segment.text)
     }
     lastInterimText = ""
-    barState?.voiceTranscript = transcriptSegments.joined(separator: " ")
 
     // In finalizing state, segments mean backend is done — send immediately
     if state == .finalizing {
@@ -646,18 +650,14 @@ class PushToTalkManager: ObservableObject {
       barState.voiceFollowUpTranscript = ""
     }
 
-    // Drive cursor overlay
-    let overlayPhase = CursorPTTOverlayManager.shared.overlayState.phase
-    if isShowingVoiceUI && !wasListening {
-      CursorPTTOverlayManager.shared.startListening(barState: barState)
-    } else if !isShowingVoiceUI && overlayPhase == .listening {
-      if state == .idle {
-        // Cancelled or immediate finalize with no audio — return to idle dot
-        CursorPTTOverlayManager.shared.dismiss()
-      } else {
-        // Any finalization path (finalizing, pendingLockDecision) — show spinner
-        CursorPTTOverlayManager.shared.startProcessing()
-      }
+    // Skip resize when in follow-up mode, expanded AI conversation, or during onboarding
+    // (during onboarding the floating bar shouldn't appear as a separate window)
+    let isOnboarding = !UserDefaults.standard.bool(forKey: "hasCompletedOnboarding")
+    guard !skipResize && !barState.isVoiceFollowUp && !barState.showingAIConversation && !isOnboarding else { return }
+    if barState.isVoiceListening && !wasListening {
+      FloatingControlBarManager.shared.resizeForPTT(expanded: true)
+    } else if !barState.isVoiceListening && wasListening {
+      FloatingControlBarManager.shared.resizeForPTT(expanded: false)
     }
   }
 }

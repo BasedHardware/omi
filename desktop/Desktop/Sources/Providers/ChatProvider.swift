@@ -1699,9 +1699,6 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             "project_claude_md:\(projectClaudeMdContent?.count ?? 0)c, " +
             "skills:\(skillsSectionSize)c")
 
-        // Append computer use capability instructions
-        prompt += OmiComputerUseTool.systemPromptFragment
-
         return prompt
     }
 
@@ -2759,18 +2756,10 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             flushStreamingBuffer()
 
             // Determine the final text to display and save
-            var messageText: String
+            let messageText: String
             if let index = messages.firstIndex(where: { $0.id == aiMessageId }) {
                 // Message still in memory — update it in-place
                 messageText = messages[index].text.isEmpty ? queryResult.text : messages[index].text
-
-                // Strip computer_use tag from final text and fire executor
-                if let computeResult = OmiComputerUseTool.parse(from: messageText) {
-                    messageText = computeResult.cleanText
-                    OmiActionExecutor.shared.execute(plan: computeResult.plan, transcript: trimmedText)
-                    log("OmiComputerUseTool: fired executor for plan '\(computeResult.plan.description)'")
-                }
-
                 messages[index].text = messageText
                 messages[index].isStreaming = false
                 messages[index].metadata = MessageMetadata(
