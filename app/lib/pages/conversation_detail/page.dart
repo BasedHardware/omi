@@ -539,8 +539,8 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
 
         await Future.delayed(const Duration(milliseconds: 500));
 
-        if (mounted) {
-          Navigator.of(sheetContext).pop();
+        if (sheetContext.mounted) {
+          Navigator.maybeOf(sheetContext)?.pop();
         }
 
         await Share.shareXFiles([XFile(file.path, mimeType: 'audio/wav')]);
@@ -556,8 +556,8 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
 
         await service.cleanup();
       } else {
-        if (mounted) {
-          Navigator.of(sheetContext).pop();
+        if (sheetContext.mounted) {
+          Navigator.maybeOf(sheetContext)?.pop();
         }
 
         // Track failure (no audio available)
@@ -580,9 +580,10 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
 
       await Future.delayed(const Duration(seconds: 2));
 
-      if (mounted) {
-        Navigator.of(sheetContext).pop();
-
+      if (sheetContext.mounted) {
+        Navigator.maybeOf(sheetContext)?.pop();
+      }
+      if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(context.l10n.audioDownloadFailed),
@@ -739,7 +740,7 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                                         provider.conversation.id,
                                         newStarredState,
                                       );
-                                      if (!mounted) return;
+                                      if (!context.mounted) return;
                                       if (success) {
                                         provider.conversation.starred = newStarredState;
                                         // Update in conversation provider
@@ -2091,7 +2092,9 @@ class _ActionItemDetailWidgetState extends State<ActionItemDetailWidget> {
 
           if (!await _appReviewService.hasCompletedFirstActionItem()) {
             await _appReviewService.markFirstActionItemCompleted();
-            _appReviewService.showReviewPromptIfNeeded(context, isProcessingFirstConversation: false);
+            if (mounted) {
+              _appReviewService.showReviewPromptIfNeeded(context, isProcessingFirstConversation: false);
+            }
           }
         } else {
           PlatformManager.instance.analytics.uncheckedActionItem(provider.conversation, currentIndex);
