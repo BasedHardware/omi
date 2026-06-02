@@ -1,9 +1,12 @@
+import asyncio
 import logging
 import os
 import time
 
 import httpx
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
+
+from utils.other.endpoints import get_current_user_uid
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -30,6 +33,7 @@ TTL_SECONDS = 24 * 3600
 AA_URL = "https://artificialanalysis.ai/api/v2/data/llms/models"
 
 _cache = {"provider": None, "ts": 0.0, "detail": {}}
+_cache_lock = asyncio.Lock()
 
 
 def _score(quality, speed):
@@ -73,17 +77,21 @@ async def _fetch_and_score():
 
 
 @router.get("/v1/auto/model-pick")
-async def auto_model_pick():
+async def auto_model_pick(uid: str = Depends(get_current_user_uid)):
     """Current best realtime-voice provider for 'Auto' users (daily-cached)."""
     now = time.time()
     if _cache["provider"] is None or (now - _cache["ts"]) > TTL_SECONDS:
-        try:
-            provider, detail = await _fetch_and_score()
-            _cache.update(provider=provider, ts=now, detail=detail)
-        except Exception as e:
-            logger.error(f"auto model-pick fetch failed: {e}")
-            if _cache["provider"] is None:
-                _cache.update(provider="geminiFlashLive", ts=now, detail={"reason": f"error: {e}"})
+        # Serialize concurrent refreshes so a cache miss fires only one AA fetch.
+        async with _cache_lock:
+            now = time.time()  # re-check after acquiring the lock
+            if _cache["provider"] is None or (now - _cache["ts"]) > TTL_SECONDS:
+                try:
+                    provider, detail = await _fetch_and_score()
+                    _cache.update(provider=provider, ts=now, detail=detail)
+                except Exception as e:
+                    logger.error(f"auto model-pick fetch failed: {e}")
+                    if _cache["provider"] is None:
+                        _cache.update(provider="geminiFlashLive", ts=now, detail={"reason": f"error: {e}"})
     return {
         "provider": _cache["provider"],
         "updated_at": _cache["ts"],
