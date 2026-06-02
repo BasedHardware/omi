@@ -17316,8 +17316,14 @@ abstract class AppLocalizations {
   /// Subtitle explaining the background mode toggle
   ///
   /// In en, this message translates to:
-  /// **'Keep your Omi connected and transcribing even when the app is fully closed. Turns off automatically when the device goes out of range to save battery.'**
+  /// **'Keep your Omi recording even when the app is fully closed.'**
   String get backgroundModeDescription;
+
+  /// Caveat note shown in the Background Mode sheet
+  ///
+  /// In en, this message translates to:
+  /// **'Works with Omi devices only for now, and is being improved continuously.'**
+  String get backgroundModeNote;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {
