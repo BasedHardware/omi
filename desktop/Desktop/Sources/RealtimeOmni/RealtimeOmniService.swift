@@ -254,6 +254,11 @@ final class RealtimeOmniService: NSObject {
         guard let url = comps.url else { return nil }
         var r = URLRequest(url: url)
         r.setValue(authHeader, forHTTPHeaderField: "Authorization")
+        // Forward BYOK keys so BYOK users connect with their own provider key
+        // (the backend validates them and uses them upstream — same as /v4/listen).
+        for (provider, entry) in APIKeyService.byokSnapshot {
+            r.setValue(entry.key, forHTTPHeaderField: provider.headerName)
+        }
         return r
     }
 
