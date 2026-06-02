@@ -1434,6 +1434,21 @@ class _GetDevToolsOptionsState extends State<GetDevToolsOptions> {
   }
 }
 
+_copyContent(BuildContext context, String content) {
+  Clipboard.setData(ClipboardData(text: content));
+  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(context.l10n.transcriptCopiedToClipboard)));
+  HapticFeedback.lightImpact();
+  Navigator.pop(context);
+}
+
+_getLoadingIndicator() {
+  return const SizedBox(
+    width: 24,
+    height: 24,
+    child: CircularProgressIndicator(valueColor: AlwaysStoppedAnimation<Color>(Colors.white)),
+  );
+}
+
 class CalendarEventDetailsSheet extends StatefulWidget {
   final CalendarEventLink calendarEvent;
   final Future<void> Function()? onUnlink;
