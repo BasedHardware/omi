@@ -9280,11 +9280,11 @@ class AppLocalizationsSk extends AppLocalizations {
   String get invalidPromotionCode => 'Neplatný promo kód.';
 
   @override
-  String get backgroundModeTitle => 'Background Mode';
+  String get backgroundModeTitle => 'Režim na pozadí';
 
   @override
-  String get backgroundModeDescription => 'Keep your Omi recording even when the app is fully closed.';
+  String get backgroundModeDescription => 'Udržujte nahrávanie Omi, aj keď je aplikácia úplne zatvorená.';
 
   @override
-  String get backgroundModeNote => 'Works with Omi devices only for now, and is being improved continuously.';
+  String get backgroundModeNote => 'Zatiaľ funguje len so zariadeniami Omi a priebežne sa vylepšuje.';
 }

@@ -3007,5 +3007,8 @@
     "unableToDetermineFirmwareVersion": "Не може да се определи текущата версия на фърмуера",
     "promoCode": "Промо код",
     "enterPromoCode": "Въведете промо код",
-    "invalidPromotionCode": "Невалиден промо код."
+    "invalidPromotionCode": "Невалиден промо код.",
+    "backgroundModeTitle": "Фонов режим",
+    "backgroundModeDescription": "Запазете записа на Omi дори когато приложението е напълно затворено.",
+    "backgroundModeNote": "Засега работи само с устройства Omi и непрекъснато се подобрява."
 }

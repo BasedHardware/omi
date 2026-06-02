@@ -3038,5 +3038,8 @@
     "unableToDetermineFirmwareVersion": "현재 펌웨어 버전을 확인할 수 없습니다",
     "promoCode": "프로모 코드",
     "enterPromoCode": "프로모 코드를 입력하세요",
-    "invalidPromotionCode": "유효하지 않은 프로모 코드입니다."
+    "invalidPromotionCode": "유효하지 않은 프로모 코드입니다.",
+    "backgroundModeTitle": "백그라운드 모드",
+    "backgroundModeDescription": "앱을 완전히 닫아도 Omi 녹음을 계속 유지합니다.",
+    "backgroundModeNote": "현재는 Omi 기기에서만 작동하며 지속적으로 개선되고 있습니다."
 }

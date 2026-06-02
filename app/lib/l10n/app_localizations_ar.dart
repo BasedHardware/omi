@@ -9233,11 +9233,11 @@ class AppLocalizationsAr extends AppLocalizations {
   String get invalidPromotionCode => 'رمز ترويجي غير صالح.';
 
   @override
-  String get backgroundModeTitle => 'Background Mode';
+  String get backgroundModeTitle => 'الوضع في الخلفية';
 
   @override
-  String get backgroundModeDescription => 'Keep your Omi recording even when the app is fully closed.';
+  String get backgroundModeDescription => 'حافِظ على تسجيل Omi حتى عند إغلاق التطبيق تمامًا.';
 
   @override
-  String get backgroundModeNote => 'Works with Omi devices only for now, and is being improved continuously.';
+  String get backgroundModeNote => 'يعمل حاليًا مع أجهزة Omi فقط، ويجري تحسينه باستمرار.';
 }

@@ -9238,11 +9238,11 @@ class AppLocalizationsTh extends AppLocalizations {
   String get invalidPromotionCode => 'รหัสโปรโมชันไม่ถูกต้อง';
 
   @override
-  String get backgroundModeTitle => 'Background Mode';
+  String get backgroundModeTitle => 'โหมดเบื้องหลัง';
 
   @override
-  String get backgroundModeDescription => 'Keep your Omi recording even when the app is fully closed.';
+  String get backgroundModeDescription => 'ให้ Omi ของคุณบันทึกต่อไปแม้ปิดแอปไปทั้งหมดแล้ว';
 
   @override
-  String get backgroundModeNote => 'Works with Omi devices only for now, and is being improved continuously.';
+  String get backgroundModeNote => 'ขณะนี้ใช้ได้กับอุปกรณ์ Omi เท่านั้น และกำลังพัฒนาอย่างต่อเนื่อง';
 }

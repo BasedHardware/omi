@@ -3038,5 +3038,8 @@
     "unableToDetermineFirmwareVersion": "Kan de huidige firmwareversie niet bepalen",
     "promoCode": "Promotiecode",
     "enterPromoCode": "Voer promotiecode in",
-    "invalidPromotionCode": "Ongeldige promotiecode."
+    "invalidPromotionCode": "Ongeldige promotiecode.",
+    "backgroundModeTitle": "Achtergrondmodus",
+    "backgroundModeDescription": "Houd je Omi aan het opnemen, zelfs wanneer de app volledig gesloten is.",
+    "backgroundModeNote": "Werkt voorlopig alleen met Omi-apparaten en wordt voortdurend verbeterd."
 }

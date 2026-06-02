@@ -9296,11 +9296,11 @@ class AppLocalizationsId extends AppLocalizations {
   String get invalidPromotionCode => 'Kode promo tidak valid.';
 
   @override
-  String get backgroundModeTitle => 'Background Mode';
+  String get backgroundModeTitle => 'Mode Latar Belakang';
 
   @override
-  String get backgroundModeDescription => 'Keep your Omi recording even when the app is fully closed.';
+  String get backgroundModeDescription => 'Biarkan Omi tetap merekam meskipun aplikasi ditutup sepenuhnya.';
 
   @override
-  String get backgroundModeNote => 'Works with Omi devices only for now, and is being improved continuously.';
+  String get backgroundModeNote => 'Untuk saat ini hanya berfungsi dengan perangkat Omi dan terus ditingkatkan.';
 }

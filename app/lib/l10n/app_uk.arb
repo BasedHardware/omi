@@ -3038,5 +3038,8 @@
     "unableToDetermineFirmwareVersion": "Не вдається визначити поточну версію мікропрограми",
     "promoCode": "Промокод",
     "enterPromoCode": "Введіть промокод",
-    "invalidPromotionCode": "Недійсний промокод."
+    "invalidPromotionCode": "Недійсний промокод.",
+    "backgroundModeTitle": "Фоновий режим",
+    "backgroundModeDescription": "Продовжуйте запис Omi, навіть коли застосунок повністю закрито.",
+    "backgroundModeNote": "Наразі працює лише з пристроями Omi і постійно вдосконалюється."
 }

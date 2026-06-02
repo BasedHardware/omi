@@ -3073,5 +3073,8 @@
     "unableToDetermineFirmwareVersion": "Impossible de déterminer la version actuelle du firmware",
     "promoCode": "Code promo",
     "enterPromoCode": "Entrez le code promo",
-    "invalidPromotionCode": "Code promo invalide."
+    "invalidPromotionCode": "Code promo invalide.",
+    "backgroundModeTitle": "Mode arrière-plan",
+    "backgroundModeDescription": "Gardez votre Omi en enregistrement même lorsque l'application est entièrement fermée.",
+    "backgroundModeNote": "Fonctionne uniquement avec les appareils Omi pour l'instant, et s'améliore en continu."
 }

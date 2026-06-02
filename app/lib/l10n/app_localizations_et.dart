@@ -9285,11 +9285,11 @@ class AppLocalizationsEt extends AppLocalizations {
   String get invalidPromotionCode => 'Kehtetu sooduskood.';
 
   @override
-  String get backgroundModeTitle => 'Background Mode';
+  String get backgroundModeTitle => 'Taustarežiim';
 
   @override
-  String get backgroundModeDescription => 'Keep your Omi recording even when the app is fully closed.';
+  String get backgroundModeDescription => 'Hoia oma Omi salvestamas ka siis, kui rakendus on täielikult suletud.';
 
   @override
-  String get backgroundModeNote => 'Works with Omi devices only for now, and is being improved continuously.';
+  String get backgroundModeNote => 'Praegu töötab ainult Omi seadmetega ja seda täiustatakse pidevalt.';
 }

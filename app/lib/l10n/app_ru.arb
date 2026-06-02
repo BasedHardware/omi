@@ -3073,5 +3073,8 @@
     "unableToDetermineFirmwareVersion": "Не удаётся определить текущую версию прошивки",
     "promoCode": "Промокод",
     "enterPromoCode": "Введите промокод",
-    "invalidPromotionCode": "Недействительный промокод."
+    "invalidPromotionCode": "Недействительный промокод.",
+    "backgroundModeTitle": "Фоновый режим",
+    "backgroundModeDescription": "Продолжайте запись Omi, даже когда приложение полностью закрыто.",
+    "backgroundModeNote": "Пока работает только с устройствами Omi и постоянно улучшается."
 }

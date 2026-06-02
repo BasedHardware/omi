@@ -10616,5 +10616,8 @@
     "unableToDetermineFirmwareVersion": "تعیین نسخه فعلی سفت‌افزار امکان‌پذیر نیست",
     "promoCode": "کد تخفیف",
     "enterPromoCode": "کد تخفیف را وارد کنید",
-    "invalidPromotionCode": "کد تخفیف نامعتبر."
+    "invalidPromotionCode": "کد تخفیف نامعتبر.",
+    "backgroundModeTitle": "حالت پس‌زمینه",
+    "backgroundModeDescription": "حتی وقتی برنامه کاملاً بسته است، ضبط Omi شما را ادامه دهید.",
+    "backgroundModeNote": "فعلاً فقط با دستگاه‌های Omi کار می‌کند و به‌طور مداوم در حال بهبود است."
 }

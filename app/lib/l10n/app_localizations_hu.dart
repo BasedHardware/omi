@@ -9327,11 +9327,12 @@ class AppLocalizationsHu extends AppLocalizations {
   String get invalidPromotionCode => 'Érvénytelen promóciós kód.';
 
   @override
-  String get backgroundModeTitle => 'Background Mode';
+  String get backgroundModeTitle => 'Háttérmód';
 
   @override
-  String get backgroundModeDescription => 'Keep your Omi recording even when the app is fully closed.';
+  String get backgroundModeDescription =>
+      'Tartsd az Omi-t felvételen akkor is, amikor az alkalmazás teljesen be van zárva.';
 
   @override
-  String get backgroundModeNote => 'Works with Omi devices only for now, and is being improved continuously.';
+  String get backgroundModeNote => 'Egyelőre csak Omi eszközökkel működik, és folyamatosan fejlesztjük.';
 }

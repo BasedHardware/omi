@@ -9375,8 +9375,8 @@ class AppLocalizationsTl extends AppLocalizations {
   String get backgroundModeTitle => 'Background Mode';
 
   @override
-  String get backgroundModeDescription => 'Keep your Omi recording even when the app is fully closed.';
+  String get backgroundModeDescription => 'Panatilihing nagre-record ang iyong Omi kahit na ganap nang sarado ang app.';
 
   @override
-  String get backgroundModeNote => 'Works with Omi devices only for now, and is being improved continuously.';
+  String get backgroundModeNote => 'Sa ngayon ay gumagana lang sa mga Omi device at patuloy na pinapabuti.';
 }

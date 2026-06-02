@@ -3038,5 +3038,8 @@
     "unableToDetermineFirmwareVersion": "Δεν είναι δυνατός ο προσδιορισμός της τρέχουσας έκδοσης firmware",
     "promoCode": "Κωδικός προσφοράς",
     "enterPromoCode": "Εισάγετε κωδικό προσφοράς",
-    "invalidPromotionCode": "Μη έγκυρος κωδικός προσφοράς."
+    "invalidPromotionCode": "Μη έγκυρος κωδικός προσφοράς.",
+    "backgroundModeTitle": "Λειτουργία παρασκηνίου",
+    "backgroundModeDescription": "Διατηρήστε την εγγραφή του Omi ακόμη και όταν η εφαρμογή είναι εντελώς κλειστή.",
+    "backgroundModeNote": "Προς το παρόν λειτουργεί μόνο με συσκευές Omi και βελτιώνεται συνεχώς."
 }

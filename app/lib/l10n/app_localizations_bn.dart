@@ -9295,11 +9295,11 @@ class AppLocalizationsBn extends AppLocalizations {
   String get invalidPromotionCode => 'অবৈধ প্রোমো কোড।';
 
   @override
-  String get backgroundModeTitle => 'Background Mode';
+  String get backgroundModeTitle => 'ব্যাকগ্রাউন্ড মোড';
 
   @override
-  String get backgroundModeDescription => 'Keep your Omi recording even when the app is fully closed.';
+  String get backgroundModeDescription => 'অ্যাপ সম্পূর্ণ বন্ধ থাকলেও আপনার Omi রেকর্ডিং চালু রাখুন।';
 
   @override
-  String get backgroundModeNote => 'Works with Omi devices only for now, and is being improved continuously.';
+  String get backgroundModeNote => 'আপাতত শুধু Omi ডিভাইসের সাথে কাজ করে এবং ক্রমাগত উন্নত করা হচ্ছে।';
 }

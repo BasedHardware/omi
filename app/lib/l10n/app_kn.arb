@@ -10616,5 +10616,8 @@
     "unableToDetermineFirmwareVersion": "ಪ್ರಸ್ತುತ ಫರ್ಮ್‌ವೇರ್ ಆವೃತ್ತಿಯನ್ನು ನಿರ್ಧರಿಸಲು ಸಾಧ್ಯವಾಗಲಿಲ್ಲ",
     "promoCode": "ಪ್ರೋಮೋ ಕೋಡ್",
     "enterPromoCode": "ಪ್ರೋಮೋ ಕೋಡ್ ನಮೂದಿಸಿ",
-    "invalidPromotionCode": "ಅಮಾನ್ಯ ಪ್ರೋಮೋ ಕೋಡ್."
+    "invalidPromotionCode": "ಅಮಾನ್ಯ ಪ್ರೋಮೋ ಕೋಡ್.",
+    "backgroundModeTitle": "ಹಿನ್ನೆಲೆ ಮೋಡ್",
+    "backgroundModeDescription": "ಆ್ಯಪ್ ಸಂಪೂರ್ಣವಾಗಿ ಮುಚ್ಚಿದ್ದರೂ ನಿಮ್ಮ Omi ರೆಕಾರ್ಡಿಂಗ್ ಮುಂದುವರಿಸಿ.",
+    "backgroundModeNote": "ಸದ್ಯಕ್ಕೆ Omi ಸಾಧನಗಳೊಂದಿಗೆ ಮಾತ್ರ ಕೆಲಸ ಮಾಡುತ್ತದೆ ಮತ್ತು ನಿರಂತರವಾಗಿ ಸುಧಾರಿಸಲಾಗುತ್ತಿದೆ."
 }

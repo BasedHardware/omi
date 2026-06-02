@@ -9286,11 +9286,11 @@ class AppLocalizationsVi extends AppLocalizations {
   String get invalidPromotionCode => 'Mã khuyến mãi không hợp lệ.';
 
   @override
-  String get backgroundModeTitle => 'Background Mode';
+  String get backgroundModeTitle => 'Chế độ nền';
 
   @override
-  String get backgroundModeDescription => 'Keep your Omi recording even when the app is fully closed.';
+  String get backgroundModeDescription => 'Giữ cho Omi của bạn tiếp tục ghi âm ngay cả khi ứng dụng đã đóng hoàn toàn.';
 
   @override
-  String get backgroundModeNote => 'Works with Omi devices only for now, and is being improved continuously.';
+  String get backgroundModeNote => 'Hiện chỉ hoạt động với thiết bị Omi và đang được cải thiện liên tục.';
 }

@@ -9137,11 +9137,11 @@ class AppLocalizationsJa extends AppLocalizations {
   String get invalidPromotionCode => '無効なプロモコードです。';
 
   @override
-  String get backgroundModeTitle => 'Background Mode';
+  String get backgroundModeTitle => 'バックグラウンドモード';
 
   @override
-  String get backgroundModeDescription => 'Keep your Omi recording even when the app is fully closed.';
+  String get backgroundModeDescription => 'アプリを完全に閉じても Omi の録音を続けます。';
 
   @override
-  String get backgroundModeNote => 'Works with Omi devices only for now, and is being improved continuously.';
+  String get backgroundModeNote => '現在は Omi デバイスのみ対応しており、継続的に改善しています。';
 }

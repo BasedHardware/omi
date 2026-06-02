@@ -9340,11 +9340,12 @@ class AppLocalizationsCa extends AppLocalizations {
   String get invalidPromotionCode => 'Codi promocional no vàlid.';
 
   @override
-  String get backgroundModeTitle => 'Background Mode';
+  String get backgroundModeTitle => 'Mode en segon pla';
 
   @override
-  String get backgroundModeDescription => 'Keep your Omi recording even when the app is fully closed.';
+  String get backgroundModeDescription =>
+      'Mantén l\'Omi gravant fins i tot quan l\'aplicació està completament tancada.';
 
   @override
-  String get backgroundModeNote => 'Works with Omi devices only for now, and is being improved continuously.';
+  String get backgroundModeNote => 'De moment només funciona amb dispositius Omi i es millora contínuament.';
 }

@@ -3038,5 +3038,8 @@
     "unableToDetermineFirmwareVersion": "Praeguse püsivara versiooni ei õnnestunud tuvastada",
     "promoCode": "Sooduskood",
     "enterPromoCode": "Sisestage sooduskood",
-    "invalidPromotionCode": "Kehtetu sooduskood."
+    "invalidPromotionCode": "Kehtetu sooduskood.",
+    "backgroundModeTitle": "Taustarežiim",
+    "backgroundModeDescription": "Hoia oma Omi salvestamas ka siis, kui rakendus on täielikult suletud.",
+    "backgroundModeNote": "Praegu töötab ainult Omi seadmetega ja seda täiustatakse pidevalt."
 }

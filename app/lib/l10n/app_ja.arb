@@ -3039,5 +3039,8 @@
     "unableToDetermineFirmwareVersion": "現在のファームウェアバージョンを特定できません",
     "promoCode": "プロモコード",
     "enterPromoCode": "プロモコードを入力",
-    "invalidPromotionCode": "無効なプロモコードです。"
+    "invalidPromotionCode": "無効なプロモコードです。",
+    "backgroundModeTitle": "バックグラウンドモード",
+    "backgroundModeDescription": "アプリを完全に閉じても Omi の録音を続けます。",
+    "backgroundModeNote": "現在は Omi デバイスのみ対応しており、継続的に改善しています。"
 }

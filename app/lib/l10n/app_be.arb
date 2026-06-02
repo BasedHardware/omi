@@ -10616,5 +10616,8 @@
     "unableToDetermineFirmwareVersion": "Не ўдалося вызначыць бягучую версію прашыўкі",
     "promoCode": "Промакод",
     "enterPromoCode": "Увядзіце промакод",
-    "invalidPromotionCode": "Няправільны промакод."
+    "invalidPromotionCode": "Няправільны промакод.",
+    "backgroundModeTitle": "Фонавы рэжым",
+    "backgroundModeDescription": "Працягвайце запіс Omi, нават калі праграма цалкам закрыта.",
+    "backgroundModeNote": "Пакуль працуе толькі з прыладамі Omi і пастаянна ўдасканальваецца."
 }

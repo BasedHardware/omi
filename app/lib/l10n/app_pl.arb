@@ -3073,5 +3073,8 @@
     "unableToDetermineFirmwareVersion": "Nie można określić bieżącej wersji oprogramowania układowego",
     "promoCode": "Kod promocyjny",
     "enterPromoCode": "Wpisz kod promocyjny",
-    "invalidPromotionCode": "Nieprawidłowy kod promocyjny."
+    "invalidPromotionCode": "Nieprawidłowy kod promocyjny.",
+    "backgroundModeTitle": "Tryb w tle",
+    "backgroundModeDescription": "Utrzymuj nagrywanie Omi nawet po całkowitym zamknięciu aplikacji.",
+    "backgroundModeNote": "Na razie działa tylko z urządzeniami Omi i jest stale ulepszany."
 }

@@ -3038,5 +3038,8 @@
     "unableToDetermineFirmwareVersion": "Det gick inte att fastställa aktuell firmwareversion",
     "promoCode": "Kampanjkod",
     "enterPromoCode": "Ange kampanjkod",
-    "invalidPromotionCode": "Ogiltig kampanjkod."
+    "invalidPromotionCode": "Ogiltig kampanjkod.",
+    "backgroundModeTitle": "Bakgrundsläge",
+    "backgroundModeDescription": "Håll din Omi inspelande även när appen är helt stängd.",
+    "backgroundModeNote": "Fungerar än så länge bara med Omi-enheter och förbättras kontinuerligt."
 }

@@ -9123,11 +9123,11 @@ class AppLocalizationsZh extends AppLocalizations {
   String get invalidPromotionCode => '促销代码无效。';
 
   @override
-  String get backgroundModeTitle => 'Background Mode';
+  String get backgroundModeTitle => '后台模式';
 
   @override
-  String get backgroundModeDescription => 'Keep your Omi recording even when the app is fully closed.';
+  String get backgroundModeDescription => '即使完全关闭应用，也能让你的 Omi 继续录音。';
 
   @override
-  String get backgroundModeNote => 'Works with Omi devices only for now, and is being improved continuously.';
+  String get backgroundModeNote => '目前仅支持 Omi 设备，并在持续改进中。';
 }

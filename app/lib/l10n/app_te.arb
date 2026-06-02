@@ -10616,5 +10616,8 @@
     "unableToDetermineFirmwareVersion": "ప్రస్తుత ఫర్మ్‌వేర్ సంస్కరణను నిర్ధారించలేకపోయాము",
     "promoCode": "ప్రోమో కోడ్",
     "enterPromoCode": "ప్రోమో కోడ్ ఎంటర్ చేయండి",
-    "invalidPromotionCode": "చెల్లని ప్రోమో కోడ్."
+    "invalidPromotionCode": "చెల్లని ప్రోమో కోడ్.",
+    "backgroundModeTitle": "నేపథ్య మోడ్",
+    "backgroundModeDescription": "యాప్ పూర్తిగా మూసివేయబడినా మీ Omi రికార్డింగ్‌ను కొనసాగించండి.",
+    "backgroundModeNote": "ప్రస్తుతం Omi పరికరాలతో మాత్రమే పనిచేస్తుంది మరియు నిరంతరం మెరుగుపరచబడుతోంది."
 }

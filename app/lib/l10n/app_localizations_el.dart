@@ -9353,11 +9353,12 @@ class AppLocalizationsEl extends AppLocalizations {
   String get invalidPromotionCode => 'Μη έγκυρος κωδικός προσφοράς.';
 
   @override
-  String get backgroundModeTitle => 'Background Mode';
+  String get backgroundModeTitle => 'Λειτουργία παρασκηνίου';
 
   @override
-  String get backgroundModeDescription => 'Keep your Omi recording even when the app is fully closed.';
+  String get backgroundModeDescription =>
+      'Διατηρήστε την εγγραφή του Omi ακόμη και όταν η εφαρμογή είναι εντελώς κλειστή.';
 
   @override
-  String get backgroundModeNote => 'Works with Omi devices only for now, and is being improved continuously.';
+  String get backgroundModeNote => 'Προς το παρόν λειτουργεί μόνο με συσκευές Omi και βελτιώνεται συνεχώς.';
 }

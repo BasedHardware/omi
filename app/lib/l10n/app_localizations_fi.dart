@@ -9288,11 +9288,11 @@ class AppLocalizationsFi extends AppLocalizations {
   String get invalidPromotionCode => 'Virheellinen tarjouskoodi.';
 
   @override
-  String get backgroundModeTitle => 'Background Mode';
+  String get backgroundModeTitle => 'Taustatila';
 
   @override
-  String get backgroundModeDescription => 'Keep your Omi recording even when the app is fully closed.';
+  String get backgroundModeDescription => 'Pidä Omi tallentamassa, vaikka sovellus olisi kokonaan suljettu.';
 
   @override
-  String get backgroundModeNote => 'Works with Omi devices only for now, and is being improved continuously.';
+  String get backgroundModeNote => 'Toimii toistaiseksi vain Omi-laitteiden kanssa ja sitä kehitetään jatkuvasti.';
 }

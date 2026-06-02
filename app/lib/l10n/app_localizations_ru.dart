@@ -9321,11 +9321,11 @@ class AppLocalizationsRu extends AppLocalizations {
   String get invalidPromotionCode => 'Недействительный промокод.';
 
   @override
-  String get backgroundModeTitle => 'Background Mode';
+  String get backgroundModeTitle => 'Фоновый режим';
 
   @override
-  String get backgroundModeDescription => 'Keep your Omi recording even when the app is fully closed.';
+  String get backgroundModeDescription => 'Продолжайте запись Omi, даже когда приложение полностью закрыто.';
 
   @override
-  String get backgroundModeNote => 'Works with Omi devices only for now, and is being improved continuously.';
+  String get backgroundModeNote => 'Пока работает только с устройствами Omi и постоянно улучшается.';
 }

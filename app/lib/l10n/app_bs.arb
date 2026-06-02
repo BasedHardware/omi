@@ -10616,5 +10616,8 @@
     "unableToDetermineFirmwareVersion": "Nije moguće odrediti trenutnu verziju firmvera",
     "promoCode": "Promo kod",
     "enterPromoCode": "Unesite promo kod",
-    "invalidPromotionCode": "Nevažeći promo kod."
+    "invalidPromotionCode": "Nevažeći promo kod.",
+    "backgroundModeTitle": "Pozadinski način rada",
+    "backgroundModeDescription": "Zadržite Omi snimanje čak i kada je aplikacija potpuno zatvorena.",
+    "backgroundModeNote": "Zasad radi samo s Omi uređajima i kontinuirano se poboljšava."
 }

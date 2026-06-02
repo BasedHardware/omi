@@ -9299,11 +9299,11 @@ class AppLocalizationsTr extends AppLocalizations {
   String get invalidPromotionCode => 'Geçersiz promosyon kodu.';
 
   @override
-  String get backgroundModeTitle => 'Background Mode';
+  String get backgroundModeTitle => 'Arka Plan Modu';
 
   @override
-  String get backgroundModeDescription => 'Keep your Omi recording even when the app is fully closed.';
+  String get backgroundModeDescription => 'Uygulama tamamen kapalıyken bile Omi\'nizi kayıtta tutun.';
 
   @override
-  String get backgroundModeNote => 'Works with Omi devices only for now, and is being improved continuously.';
+  String get backgroundModeNote => 'Şimdilik yalnızca Omi cihazlarıyla çalışır ve sürekli geliştirilmektedir.';
 }

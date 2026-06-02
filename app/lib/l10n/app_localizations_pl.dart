@@ -9313,11 +9313,11 @@ class AppLocalizationsPl extends AppLocalizations {
   String get invalidPromotionCode => 'Nieprawidłowy kod promocyjny.';
 
   @override
-  String get backgroundModeTitle => 'Background Mode';
+  String get backgroundModeTitle => 'Tryb w tle';
 
   @override
-  String get backgroundModeDescription => 'Keep your Omi recording even when the app is fully closed.';
+  String get backgroundModeDescription => 'Utrzymuj nagrywanie Omi nawet po całkowitym zamknięciu aplikacji.';
 
   @override
-  String get backgroundModeNote => 'Works with Omi devices only for now, and is being improved continuously.';
+  String get backgroundModeNote => 'Na razie działa tylko z urządzeniami Omi i jest stale ulepszany.';
 }

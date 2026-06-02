@@ -9293,11 +9293,11 @@ class AppLocalizationsSv extends AppLocalizations {
   String get invalidPromotionCode => 'Ogiltig kampanjkod.';
 
   @override
-  String get backgroundModeTitle => 'Background Mode';
+  String get backgroundModeTitle => 'Bakgrundsläge';
 
   @override
-  String get backgroundModeDescription => 'Keep your Omi recording even when the app is fully closed.';
+  String get backgroundModeDescription => 'Håll din Omi inspelande även när appen är helt stängd.';
 
   @override
-  String get backgroundModeNote => 'Works with Omi devices only for now, and is being improved continuously.';
+  String get backgroundModeNote => 'Fungerar än så länge bara med Omi-enheter och förbättras kontinuerligt.';
 }

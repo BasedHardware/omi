@@ -10616,5 +10616,8 @@
     "unableToDetermineFirmwareVersion": "موجودہ فرم ویئر ورژن کا تعین نہیں کیا جا سکا",
     "promoCode": "پرومو کوڈ",
     "enterPromoCode": "پرومو کوڈ درج کریں",
-    "invalidPromotionCode": "غلط پرومو کوڈ۔"
+    "invalidPromotionCode": "غلط پرومو کوڈ۔",
+    "backgroundModeTitle": "بیک گراؤنڈ موڈ",
+    "backgroundModeDescription": "ایپ مکمل طور پر بند ہونے پر بھی اپنے Omi کی ریکارڈنگ جاری رکھیں۔",
+    "backgroundModeNote": "فی الحال صرف Omi آلات کے ساتھ کام کرتا ہے اور مسلسل بہتر بنایا جا رہا ہے۔"
 }

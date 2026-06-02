@@ -9306,11 +9306,11 @@ class AppLocalizationsUk extends AppLocalizations {
   String get invalidPromotionCode => 'Недійсний промокод.';
 
   @override
-  String get backgroundModeTitle => 'Background Mode';
+  String get backgroundModeTitle => 'Фоновий режим';
 
   @override
-  String get backgroundModeDescription => 'Keep your Omi recording even when the app is fully closed.';
+  String get backgroundModeDescription => 'Продовжуйте запис Omi, навіть коли застосунок повністю закрито.';
 
   @override
-  String get backgroundModeNote => 'Works with Omi devices only for now, and is being improved continuously.';
+  String get backgroundModeNote => 'Наразі працює лише з пристроями Omi і постійно вдосконалюється.';
 }

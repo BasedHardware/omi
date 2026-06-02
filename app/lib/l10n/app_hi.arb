@@ -3039,5 +3039,8 @@
     "unableToDetermineFirmwareVersion": "वर्तमान फ़र्मवेयर संस्करण निर्धारित नहीं किया जा सका",
     "promoCode": "प्रोमो कोड",
     "enterPromoCode": "प्रोमो कोड दर्ज करें",
-    "invalidPromotionCode": "अमान्य प्रोमो कोड।"
+    "invalidPromotionCode": "अमान्य प्रोमो कोड।",
+    "backgroundModeTitle": "बैकग्राउंड मोड",
+    "backgroundModeDescription": "ऐप पूरी तरह बंद होने पर भी अपने Omi की रिकॉर्डिंग जारी रखें।",
+    "backgroundModeNote": "फ़िलहाल केवल Omi डिवाइस के साथ काम करता है और इसे लगातार बेहतर बनाया जा रहा है।"
 }

@@ -9319,11 +9319,11 @@ class AppLocalizationsKn extends AppLocalizations {
   String get invalidPromotionCode => 'ಅಮಾನ್ಯ ಪ್ರೋಮೋ ಕೋಡ್.';
 
   @override
-  String get backgroundModeTitle => 'Background Mode';
+  String get backgroundModeTitle => 'ಹಿನ್ನೆಲೆ ಮೋಡ್';
 
   @override
-  String get backgroundModeDescription => 'Keep your Omi recording even when the app is fully closed.';
+  String get backgroundModeDescription => 'ಆ್ಯಪ್ ಸಂಪೂರ್ಣವಾಗಿ ಮುಚ್ಚಿದ್ದರೂ ನಿಮ್ಮ Omi ರೆಕಾರ್ಡಿಂಗ್ ಮುಂದುವರಿಸಿ.';
 
   @override
-  String get backgroundModeNote => 'Works with Omi devices only for now, and is being improved continuously.';
+  String get backgroundModeNote => 'ಸದ್ಯಕ್ಕೆ Omi ಸಾಧನಗಳೊಂದಿಗೆ ಮಾತ್ರ ಕೆಲಸ ಮಾಡುತ್ತದೆ ಮತ್ತು ನಿರಂತರವಾಗಿ ಸುಧಾರಿಸಲಾಗುತ್ತಿದೆ.';
 }

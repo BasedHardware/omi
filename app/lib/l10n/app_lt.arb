@@ -3038,5 +3038,8 @@
     "unableToDetermineFirmwareVersion": "Nepavyko nustatyti dabartinės programinės aparatinės įrangos versijos",
     "promoCode": "Reklamos kodas",
     "enterPromoCode": "Įveskite reklamos kodą",
-    "invalidPromotionCode": "Neteisingas reklamos kodas."
+    "invalidPromotionCode": "Neteisingas reklamos kodas.",
+    "backgroundModeTitle": "Fono režimas",
+    "backgroundModeDescription": "Palikite Omi įrašinėti net kai programėlė visiškai uždaryta.",
+    "backgroundModeNote": "Kol kas veikia tik su Omi įrenginiais ir nuolat tobulinama."
 }

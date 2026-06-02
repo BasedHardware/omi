@@ -3038,5 +3038,8 @@
     "unableToDetermineFirmwareVersion": "Kan ikke bestemme gjeldende fastvareversjon",
     "promoCode": "Kampanjekode",
     "enterPromoCode": "Skriv inn kampanjekode",
-    "invalidPromotionCode": "Ugyldig kampanjekode."
+    "invalidPromotionCode": "Ugyldig kampanjekode.",
+    "backgroundModeTitle": "Bakgrunnsmodus",
+    "backgroundModeDescription": "Hold Omi-en din i opptak selv når appen er helt lukket.",
+    "backgroundModeNote": "Fungerer foreløpig bare med Omi-enheter og forbedres kontinuerlig."
 }

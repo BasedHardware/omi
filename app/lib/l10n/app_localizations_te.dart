@@ -9337,11 +9337,11 @@ class AppLocalizationsTe extends AppLocalizations {
   String get invalidPromotionCode => 'చెల్లని ప్రోమో కోడ్.';
 
   @override
-  String get backgroundModeTitle => 'Background Mode';
+  String get backgroundModeTitle => 'నేపథ్య మోడ్';
 
   @override
-  String get backgroundModeDescription => 'Keep your Omi recording even when the app is fully closed.';
+  String get backgroundModeDescription => 'యాప్ పూర్తిగా మూసివేయబడినా మీ Omi రికార్డింగ్‌ను కొనసాగించండి.';
 
   @override
-  String get backgroundModeNote => 'Works with Omi devices only for now, and is being improved continuously.';
+  String get backgroundModeNote => 'ప్రస్తుతం Omi పరికరాలతో మాత్రమే పనిచేస్తుంది మరియు నిరంతరం మెరుగుపరచబడుతోంది.';
 }
