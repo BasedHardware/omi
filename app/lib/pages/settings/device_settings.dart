@@ -20,9 +20,7 @@ import 'package:omi/services/devices.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/utils/analytics/intercom.dart';
 import 'package:omi/utils/l10n_extensions.dart';
-import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/other/temp.dart';
-import 'package:omi/utils/platform/platform_service.dart';
 import 'package:omi/widgets/dialog.dart';
 
 class DeviceSettings extends StatefulWidget {
@@ -702,67 +700,6 @@ class _DeviceSettingsState extends State<DeviceSettings> {
     );
   }
 
-  Future<void> _onBackgroundModeChanged(bool value, DeviceProvider provider) async {
-    setState(() => SharedPreferencesUtil().backgroundModeEnabled = value);
-    await SharedPreferencesUtil().saveBool('nativeBleStreamingEnabled', value);
-
-    if (!value) return;
-
-    try {
-      final hasAssociation = await BleHostApi().hasCompanionDeviceAssociation();
-      if (!hasAssociation) {
-        final deviceId = provider.connectedDevice?.id ?? SharedPreferencesUtil().btDevice.id;
-        if (deviceId.isNotEmpty) {
-          await BleHostApi().requestCompanionDeviceAssociation(deviceId);
-        }
-      }
-    } catch (e) {
-      Logger.debug('[DeviceSettings] background mode association check failed: $e');
-    }
-  }
-
-  Widget _buildBackgroundModeSection(DeviceProvider provider) {
-    final enabled = SharedPreferencesUtil().backgroundModeEnabled;
-    return Container(
-      decoration: BoxDecoration(color: const Color(0xFF1C1C1E), borderRadius: BorderRadius.circular(20)),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-        child: Row(
-          children: [
-            const SizedBox(
-              width: 24,
-              height: 24,
-              child: FaIcon(FontAwesomeIcons.towerBroadcast, color: Color(0xFF8E8E93), size: 20),
-            ),
-            const SizedBox(width: 16),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    context.l10n.backgroundModeTitle,
-                    style: const TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.w400),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    context.l10n.backgroundModeDescription,
-                    style: TextStyle(color: Colors.grey.shade500, fontSize: 13, height: 1.3),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(width: 12),
-            Switch(
-              value: enabled,
-              activeThumbColor: Colors.white,
-              onChanged: (value) => _onBackgroundModeChanged(value, provider),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
   Widget _buildActionsSection(DeviceProvider provider) {
     return Container(
       decoration: BoxDecoration(color: const Color(0xFF1C1C1E), borderRadius: BorderRadius.circular(20)),
@@ -940,10 +877,6 @@ class _DeviceSettingsState extends State<DeviceSettings> {
                   _buildSectionHeader(context.l10n.customizationSection),
                   _buildCustomizationSection(),
                   const SizedBox(height: 32),
-                  if (PlatformService.isAndroid) ...[
-                    _buildBackgroundModeSection(provider),
-                    const SizedBox(height: 32),
-                  ],
                   _buildSectionHeader(context.l10n.deviceInfoSection),
                   _buildDeviceInfoSection(provider.pairedDevice, provider),
                   const SizedBox(height: 32),
