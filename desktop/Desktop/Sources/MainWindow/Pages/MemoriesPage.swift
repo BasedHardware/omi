@@ -463,8 +463,60 @@ class MemoriesViewModel: ObservableObject {
 
     isLoading = false
 
-    // Kick off one-time full sync in background (populates SQLite with all memories)
-    Task { await performFullSyncIfNeeded() }
+    // Kick off one-time full sync, then a one-time cache reconcile, in background.
+    Task {
+      await performFullSyncIfNeeded()
+      await reconcileCacheIfNeeded()
+    }
+  }
+
+  /// One-time cache reconcile. The local SQLite cache can diverge from the
+  /// backend (the source of truth): stale categories after the server-side
+  /// category cleanup, plus "orphan" rows whose backendId no longer exists on
+  /// the backend. This re-pulls every backend memory (fixing categories via the
+  /// normal upsert) and soft-deletes synced local rows the backend no longer
+  /// has. Local-only unsynced memories are preserved. Runs once per user.
+  private func reconcileCacheIfNeeded() async {
+    let userId = UserDefaults.standard.string(forKey: "auth_userId") ?? "unknown"
+    let reconcileKey = "memoriesCacheReconcile_v1_\(userId)"
+
+    guard !UserDefaults.standard.bool(forKey: reconcileKey) else { return }
+
+    log("MemoriesViewModel: Starting one-time cache reconcile for user \(userId)")
+
+    var offset = 0
+    let batchSize = 500
+    var backendIds = Set<String>()
+
+    do {
+      while true {
+        let batch = try await APIClient.shared.getMemories(limit: batchSize, offset: offset)
+        if batch.isEmpty { break }
+
+        try await MemoryStorage.shared.syncServerMemories(batch)
+        for memory in batch { backendIds.insert(memory.id) }
+        offset += batch.count
+
+        if batch.count < batchSize { break }
+      }
+
+      // Guard against pruning on a partial/failed pull: only reconcile when the
+      // backend actually returned memories. An empty result here would otherwise
+      // wrongly delete the entire local cache.
+      guard !backendIds.isEmpty else {
+        log("MemoriesViewModel: Cache reconcile skipped pruning (no backend memories returned)")
+        return
+      }
+
+      let removed = try await MemoryStorage.shared.softDeleteSyncedOrphans(keepingBackendIds: backendIds)
+      UserDefaults.standard.set(true, forKey: reconcileKey)
+      log("MemoriesViewModel: Cache reconcile removed \(removed) orphaned local memories")
+
+      await loadTagCountsFromDatabase()
+      await loadMemories()
+    } catch {
+      logError("MemoriesViewModel: Cache reconcile failed (will retry next launch)", error: error)
+    }
   }
 
   /// One-time background sync that fetches ALL memories from the API and stores in SQLite.
