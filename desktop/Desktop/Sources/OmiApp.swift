@@ -241,6 +241,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     log("AppDelegate: applicationDidFinishLaunching started (mode: \(OMIApp.launchMode.rawValue))")
     log("AppDelegate: AuthState.isSignedIn=\(AuthState.shared.isSignedIn)")
 
+    // Refresh the "Auto" realtime-voice model pick from Artificial Analysis (daily, cached).
+    AutoModelSelector.shared.refreshIfStale()
+
     // Force macOS to use the correct app icon (bypasses icon cache).
     // Apply squircle mask with proper margins because NSApp.applicationIconImage
     // renders the raw image without macOS auto-masking.
