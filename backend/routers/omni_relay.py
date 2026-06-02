@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import os
+from urllib.parse import quote
 
 import websockets
 from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect
@@ -41,7 +42,8 @@ def _upstream(provider: str, model: str | None):
         key = os.getenv("OPENAI_API_KEY")
         if not key:
             return None, "OPENAI_API_KEY not configured"
-        url = OPENAI_URL.format(model=model or "gpt-realtime-2")
+        # URL-encode the client-supplied model so it can't inject extra query params.
+        url = OPENAI_URL.format(model=quote(model or "gpt-realtime-2", safe=""))
         return (url, {"Authorization": f"Bearer {key}"}), None
     return None, f"unsupported provider: {provider}"
 
