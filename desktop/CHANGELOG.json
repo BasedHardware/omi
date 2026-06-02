@@ -1,5 +1,7 @@
 {
-  "unreleased": [],
+  "unreleased": [
+    "Memories: one-time cache cleanup removes stale/duplicate entries so Manual shows only memories you created"
+  ],
   "releases": [
     {
       "version": "0.11.437",
