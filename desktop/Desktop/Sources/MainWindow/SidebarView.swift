@@ -152,6 +152,9 @@ struct SidebarView: View {
         if isCollapsed {
           collapsedExpandButton
             .padding(.horizontal, 8)
+        } else {
+          listeningToggleButton
+            .padding(.horizontal, 16)
         }
 
         Spacer().frame(height: isCollapsed ? 8 : 16)
@@ -495,6 +498,45 @@ struct SidebarView: View {
     .padding(.horizontal, 12)
     .padding(.vertical, 8)
     .help("Expand sidebar")
+  }
+
+  private var listeningToggleButton: some View {
+    let isListening = appState.isConversationListening
+    let color = isListening ? OmiColors.success : OmiColors.warning
+
+    return Button {
+      appState.toggleListening(source: "ui")
+    } label: {
+      HStack(spacing: 8) {
+        Image(systemName: isListening ? "ear.fill" : "ear.slash.fill")
+          .scaledFont(size: 13, weight: .semibold)
+          .foregroundColor(color)
+          .frame(width: 16)
+
+        Text(isListening ? "Listening" : "Paused")
+          .scaledFont(size: 13, weight: .semibold)
+          .foregroundColor(OmiColors.textPrimary)
+
+        Spacer(minLength: 0)
+
+        Circle()
+          .fill(color)
+          .frame(width: 7, height: 7)
+      }
+      .padding(.horizontal, 12)
+      .padding(.vertical, 8)
+      .background(
+        Capsule()
+          .fill(color.opacity(0.14))
+      )
+      .overlay(
+        Capsule()
+          .stroke(color.opacity(0.35), lineWidth: 1)
+      )
+      .contentShape(Capsule())
+    }
+    .buttonStyle(.plain)
+    .help(isListening ? "Pause conversation listening" : "Resume conversation listening")
   }
 
   private var proBadge: some View {

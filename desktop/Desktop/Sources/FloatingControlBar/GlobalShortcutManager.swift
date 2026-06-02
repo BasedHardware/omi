@@ -14,9 +14,11 @@ class GlobalShortcutManager {
 
     private enum HotKeyID: UInt32 {
         case askOmi = 2
+        case toggleListening = 3
     }
 
     private var shortcutObserver: NSObjectProtocol?
+    private var toggleListeningShortcutObserver: NSObjectProtocol?
 
     private init() {
         var eventType = EventTypeSpec(
@@ -39,6 +41,13 @@ class GlobalShortcutManager {
         ) { [weak self] _ in
             self?.registerAskOmi()
         }
+        toggleListeningShortcutObserver = NotificationCenter.default.addObserver(
+            forName: ShortcutSettings.toggleListeningShortcutChanged,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            self?.registerToggleListening()
+        }
     }
 
     func registerShortcuts() {
@@ -46,6 +55,7 @@ class GlobalShortcutManager {
         guard !isRegistrationSuspended else { return }
         // Register Ask Omi shortcut from user settings
         registerAskOmi()
+        registerToggleListening()
     }
 
     func setRegistrationSuspended(_ suspended: Bool) {
@@ -76,6 +86,26 @@ class GlobalShortcutManager {
         }
         registerHotKey(keyCode: Int(keyCode), modifiers: askOmiShortcut.carbonModifiers, id: .askOmi)
         NSLog("GlobalShortcutManager: Registered Ask Omi shortcut: \(askOmiShortcut.displayLabel)")
+    }
+
+    private func registerToggleListening() {
+        guard !isRegistrationSuspended else { return }
+        if let ref = hotKeyRefs.removeValue(forKey: .toggleListening) {
+            UnregisterEventHotKey(ref)
+        }
+        let (enabled, shortcut) = MainActor.assumeIsolated {
+            (ShortcutSettings.shared.toggleListeningEnabled, ShortcutSettings.shared.toggleListeningShortcut)
+        }
+        guard enabled else {
+            NSLog("GlobalShortcutManager: Toggle Listening shortcut is disabled")
+            return
+        }
+        guard shortcut.supportsGlobalHotKey, let keyCode = shortcut.keyCode else {
+            NSLog("GlobalShortcutManager: Toggle Listening shortcut is not a registerable hotkey")
+            return
+        }
+        registerHotKey(keyCode: Int(keyCode), modifiers: shortcut.carbonModifiers, id: .toggleListening)
+        NSLog("GlobalShortcutManager: Registered Toggle Listening shortcut: \(shortcut.displayLabel)")
     }
 
     private func registerHotKey(keyCode: Int, modifiers: Int, id: HotKeyID) {
@@ -115,6 +145,11 @@ class GlobalShortcutManager {
             NSLog("GlobalShortcutManager: Ask Omi shortcut detected")
             DispatchQueue.main.async {
                 FloatingControlBarManager.shared.toggleAIInput()
+            }
+        case .toggleListening:
+            NSLog("GlobalShortcutManager: Toggle Listening shortcut detected")
+            DispatchQueue.main.async {
+                NotificationCenter.default.post(name: .toggleListeningShortcutPressed, object: nil)
             }
         }
 
