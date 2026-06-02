@@ -4,21 +4,14 @@ import os
 from urllib.parse import quote
 
 import websockets
-from fastapi import APIRouter, Depends, Header, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect
 
-from utils.executors import critical_executor, run_blocking
-from utils.other.endpoints import _verify_ws_auth
+from utils.byok import get_byok_key
+from utils.other.endpoints import get_current_user_uid_ws_listen
+from utils.subscription import is_trial_paywalled
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
-
-
-async def _relay_uid(authorization: str = Header(None)) -> str:
-    """Token-only WS auth for the relay. Unlike get_current_user_uid_ws_listen,
-    it does NOT run BYOK validation — the relay uses platform keys server-side,
-    so a BYOK-enrolled user without forwarded BYOK headers must not be rejected.
-    No rate limit either (PTT reconnects every turn)."""
-    return await run_blocking(critical_executor, _verify_ws_auth, authorization)
 
 
 # Realtime "omni" relay.
@@ -42,16 +35,20 @@ OPENAI_URL = "wss://api.openai.com/v1/realtime?model={model}"
 
 
 def _upstream(provider: str, model: str | None):
-    """Return (url, headers) for the chosen provider, or (None, reason)."""
+    """Return (url, headers) for the chosen provider, or (None, reason).
+
+    Prefers the caller's BYOK key (so BYOK users pay their own way, same as the
+    rest of the API); falls back to the platform key for entitled non-BYOK users.
+    """
     if provider == "gemini":
-        key = os.getenv("GEMINI_API_KEY")
+        key = get_byok_key("gemini") or os.getenv("GEMINI_API_KEY")
         if not key:
-            return None, "GEMINI_API_KEY not configured"
+            return None, "no Gemini key (BYOK or platform)"
         return (GEMINI_URL.format(key=key), {}), None
     if provider == "openai":
-        key = os.getenv("OPENAI_API_KEY")
+        key = get_byok_key("openai") or os.getenv("OPENAI_API_KEY")
         if not key:
-            return None, "OPENAI_API_KEY not configured"
+            return None, "no OpenAI key (BYOK or platform)"
         # URL-encode the client-supplied model so it can't inject extra query params.
         url = OPENAI_URL.format(model=quote(model or "gpt-realtime-2", safe=""))
         return (url, {"Authorization": f"Bearer {key}"}), None
@@ -59,7 +56,12 @@ def _upstream(provider: str, model: str | None):
 
 
 @router.websocket("/v1/omni/relay")
-async def omni_relay(websocket: WebSocket, uid: str = Depends(_relay_uid)):
+async def omni_relay(websocket: WebSocket, uid: str = Depends(get_current_user_uid_ws_listen)):
+    # Same desktop gate as /v4/listen: entitled plans (Operator/Architect) and
+    # BYOK users pass; un-entitled desktop users past their trial are paywalled.
+    if is_trial_paywalled(uid, "desktop"):
+        await websocket.close(code=1008, reason="trial_expired")
+        return
     provider = websocket.query_params.get("provider", "gemini")
     model = websocket.query_params.get("model")
     upstream_cfg, err = _upstream(provider, model)
