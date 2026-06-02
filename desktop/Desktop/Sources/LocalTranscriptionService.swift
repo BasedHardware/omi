@@ -32,6 +32,11 @@ final class LocalTranscriptionService: @unchecked Sendable {
     private var buffer: [Float] = []
     private var isReady = false
     private var isFlushing = false
+    /// Set false when retiring the service (stop/finish) so no new samples enter the buffer while
+    /// the final drain is in flight — otherwise audio captured during the ~100ms drain (capture is
+    /// still running across a finishConversation rotation) would be appended past the snapshot and
+    /// silently dropped.
+    private var acceptingAudio = true
     private var emittedSeconds = 0.0  // absolute start offset of the next emitted segment
 
     private var pumpTask: Task<Void, Never>?
@@ -79,13 +84,21 @@ final class LocalTranscriptionService: @unchecked Sendable {
         let floats = Self.int16ToFloat32(data)
         guard !floats.isEmpty else { return }
         lock.lock()
-        buffer.append(contentsOf: floats)
+        if acceptingAudio {
+            buffer.append(contentsOf: floats)
+        }
         lock.unlock()
     }
 
+    /// Fire-and-forget stop. Prefer `await finish()` whenever the session lifecycle allows it —
+    /// `finish()` guarantees the final tail is persisted before the caller rotates/clears the
+    /// session. `stop()` only drains on a detached Task, so a caller that mutates session state
+    /// right after (e.g. the 4-hour restart path) can still race; it exists for teardown sites
+    /// that don't have an async context.
     func stop() {
         pumpTask?.cancel()
         pumpTask = nil
+        lock.lock(); acceptingAudio = false; lock.unlock()
         // Strong `self` (not weak): the caller (AppState) nils its reference immediately after
         // stop(), so a weak capture could deallocate the service before the final tail is
         // transcribed. The strong reference keeps it alive until drainAll() finishes.
@@ -99,6 +112,10 @@ final class LocalTranscriptionService: @unchecked Sendable {
     func finish() async {
         pumpTask?.cancel()
         pumpTask = nil
+        // Stop buffering new audio first so the single drain below captures the complete buffer —
+        // capture can still be running (finishConversation rotation) and would otherwise append
+        // past the drain snapshot.
+        lock.lock(); acceptingAudio = false; lock.unlock()
         await drainAll()
     }
 
