@@ -16,6 +16,8 @@ export class OmiConnection {
   private device: Device | null = null;
   private isConnecting: boolean = false;
   private _connectedDeviceId: string | null = null;
+  private _disconnectedSubscription: Subscription | null = null;
+  private _activeMonitors: Subscription[] = [];
 
   // Public getter for the connected device ID
   get connectedDeviceId(): string | null {
@@ -104,7 +106,8 @@ export class OmiConnection {
       this._connectedDeviceId = deviceId;
 
       // Set up disconnection listener
-      device.onDisconnected((_: any, disconnectedDevice: any) => {
+      this._disconnectedSubscription = device.onDisconnected((_: any, disconnectedDevice: any) => {
+        this._cleanupSubscriptions();
         this.device = null;
         this._connectedDeviceId = null;
         if (onConnectionStateChanged) {
@@ -129,14 +132,41 @@ export class OmiConnection {
   }
 
   /**
+   * Clean up all active subscriptions (monitors, disconnection listener)
+   */
+  private _cleanupSubscriptions(): void {
+    // Remove all active monitor subscriptions
+    for (const sub of this._activeMonitors) {
+      sub.remove();
+    }
+    this._activeMonitors = [];
+
+    // Remove disconnection listener
+    if (this._disconnectedSubscription) {
+      this._disconnectedSubscription.remove();
+      this._disconnectedSubscription = null;
+    }
+  }
+
+  /**
    * Disconnect from the currently connected device
    */
   async disconnect(): Promise<void> {
     if (this.device) {
+      this._cleanupSubscriptions();
       await this.device.cancelConnection();
       this.device = null;
       this._connectedDeviceId = null;
     }
+  }
+
+  /**
+   * Destroy the connection and release all native resources.
+   * Must be called when the OmiConnection is no longer needed.
+   */
+  async destroy(): Promise<void> {
+    await this.disconnect();
+    this.bleManager.destroy();
   }
 
   /**
@@ -351,6 +381,9 @@ export class OmiConnection {
 
         console.log('Subscribed to audio bytes stream from Omi Device');
 
+        // Track the subscription for automatic cleanup on disconnect
+        this._activeMonitors.push(subscription);
+
         // Return the subscription so it can be used to stop listening
         return subscription;
       } catch (e) {
@@ -370,6 +403,8 @@ export class OmiConnection {
   async stopAudioBytesListener(subscription: Subscription): Promise<void> {
     if (subscription) {
       subscription.remove();
+      // Remove from active monitors list
+      this._activeMonitors = this._activeMonitors.filter(s => s !== subscription);
     }
   }
 
