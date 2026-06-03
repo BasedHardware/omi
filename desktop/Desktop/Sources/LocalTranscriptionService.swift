@@ -1,5 +1,32 @@
 import Foundation
+import AVFoundation
+import SoundAnalysis
 import FluidAudio
+
+/// Tallies Apple SoundAnalysis frames over one window to decide if it's music/singing vs speech.
+/// Used to keep songs / TV / videos playing through *system audio* from becoming "conversations".
+@available(macOS 12.0, *)
+private final class MusicTally: NSObject, SNResultsObserving {
+    private(set) var frames = 0
+    private(set) var musicFrames = 0
+    private(set) var speechFrames = 0
+
+    func request(_ request: SNRequest, didProduce result: SNResult) {
+        guard let cr = result as? SNClassificationResult, let top = cr.classifications.first else { return }
+        frames += 1
+        guard top.confidence > 0.3 else { return }
+        let id = top.identifier.lowercased()
+        if id == "speech" {
+            speechFrames += 1
+        } else if id == "music" || id == "singing" || id.contains("music") {
+            musicFrames += 1
+        }
+    }
+
+    /// Music when music frames dominate speech *and* make up a meaningful share of the window —
+    /// so a call (other party's speech through system audio) is kept, but a song is dropped.
+    var isMusic: Bool { frames > 0 && musicFrames > speechFrames && musicFrames * 3 >= frames }
+}
 
 /// On-device speech-to-text via FluidAudio (NVIDIA Parakeet TDT, CoreML on the Apple Neural Engine).
 ///
@@ -158,6 +185,15 @@ final class LocalTranscriptionService: @unchecked Sendable {
         let rms = (window.reduce(Float(0)) { $0 + $1 * $1 } / Float(window.count)).squareRoot()
         guard rms > 0.004 else { return }
 
+        // Music/video gate: don't turn songs, TV, or videos playing through *system audio* into
+        // "conversations" — only real conversations/calls should be transcribed. Applied to the
+        // system channel only; the mic channel (the user's own voice) is never gated. Runs Apple's
+        // on-device SoundAnalysis classifier *before* Parakeet, so music also costs us no transcription.
+        if !isUser, Self.windowIsMusic(window, sampleRate: sampleRate) {
+            log(String(format: "LocalTranscriptionService[sys]: skipped %.1fs music/video window (rms=%.4f)", durSec, rms))
+            return
+        }
+
         do {
             // Fresh decoder state per window. Persisting TdtDecoderState across arbitrary 10 s
             // windows makes the transducer decoder drift — it starts looping ("...AND AND AND"),
@@ -197,6 +233,49 @@ final class LocalTranscriptionService: @unchecked Sendable {
                        isUser ? "mic" : "sys", durSec, rms, result.confidence, result.rtfx, text))
         } catch {
             logError("LocalTranscriptionService: transcribe failed", error: error)
+        }
+    }
+
+    /// Classify a 16 kHz mono window as music/singing (vs speech) using Apple's on-device
+    /// SoundAnalysis. Returns true → caller skips transcribing it. Fails *open* (returns false) on
+    /// any error or on macOS < 12, so audio is never silently dropped when classification is unsure.
+    private static func windowIsMusic(_ window: [Float], sampleRate: Int) -> Bool {
+        guard #available(macOS 12.0, *) else { return false }
+        guard window.count >= sampleRate,  // need ~1s+ for a stable classification
+              let format = AVAudioFormat(commonFormat: .pcmFormatFloat32,
+                                         sampleRate: Double(sampleRate), channels: 1, interleaved: false),
+              let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: AVAudioFrameCount(window.count)),
+              let channel = buffer.floatChannelData
+        else { return false }
+        buffer.frameLength = AVAudioFrameCount(window.count)
+        window.withUnsafeBufferPointer { channel[0].update(from: $0.baseAddress!, count: window.count) }
+
+        // SoundAnalysis ships a file analyzer and a stream analyzer; the file analyzer's synchronous
+        // analyze() blocks until the observer has all results, so we write the window to a temp WAV.
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("omi_music_\(UUID().uuidString).wav")
+        defer { try? FileManager.default.removeItem(at: url) }
+
+        do {
+            let settings: [String: Any] = [
+                AVFormatIDKey: kAudioFormatLinearPCM,
+                AVSampleRateKey: Double(sampleRate),
+                AVNumberOfChannelsKey: 1,
+                AVLinearPCMBitDepthKey: 16,
+                AVLinearPCMIsFloatKey: false,
+                AVLinearPCMIsBigEndianKey: false,
+            ]
+            let file = try AVAudioFile(forWriting: url, settings: settings)
+            try file.write(from: buffer)
+
+            let analyzer = try SNAudioFileAnalyzer(url: url)
+            let request = try SNClassifySoundRequest(classifierIdentifier: .version1)
+            let tally = MusicTally()
+            try analyzer.add(request, withObserver: tally)
+            analyzer.analyze()  // synchronous: tally fully populated before this returns
+            return tally.isMusic
+        } catch {
+            return false
         }
     }
 
