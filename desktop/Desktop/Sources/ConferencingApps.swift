@@ -1,3 +1,4 @@
+import CoreAudio
 import CoreGraphics
 import Foundation
 
@@ -40,6 +41,26 @@ enum ConferencingApps {
         "Teams - Microsoft",  // Teams web app
     ]
 
+    /// Bundle IDs (lowercased) of native conferencing apps, used for mic-in-use ("in a call")
+    /// detection. A native call app that is *running but idle* (open, not in a call) is NOT using
+    /// the microphone, so it won't be treated as a meeting.
+    static let nativeCallBundleIDs: Set<String> = [
+        "us.zoom.xos",  // Zoom
+        "com.microsoft.teams",  // Microsoft Teams (classic)
+        "com.microsoft.teams2",  // Microsoft Teams (new)
+        "com.apple.facetime",  // FaceTime
+        "cisco-systems.spark",  // Webex App
+        "com.cisco.webexmeetingsapp",  // Webex Meetings
+        "com.webex.meetingmanager",  // Webex (older)
+        "com.logmein.gotomeeting",  // GoTo Meeting
+        "com.logmein.goto",  // GoTo
+    ]
+
+    /// Whether a bundle ID belongs to a known native conferencing app (case-insensitive).
+    static func isNativeCallApp(bundleID: String) -> Bool {
+        nativeCallBundleIDs.contains(bundleID.lowercased())
+    }
+
     /// True if a single window — identified by its owner app and (optional) title — indicates a call.
     /// - Native call app: true on the owner name alone (no title / Screen Recording permission needed).
     /// - Browser app: true iff the title contains a call keyword (the title requires Screen Recording
@@ -61,40 +82,106 @@ enum ConferencingApps {
         return false
     }
 
-    /// Scan all on-screen windows and report whether any indicates an active call.
+    /// Whether a conferencing call is currently active.
     ///
-    /// Owner names are available without Screen Recording permission; window titles (needed to
-    /// distinguish browser-based calls) require it. We only consider normal-layer, reasonably
-    /// sized windows so menu-bar / status-item helper windows of a backgrounded call app don't
-    /// count as a meeting.
+    /// - **Native call apps** (Zoom, Teams, FaceTime, Webex, …): detected by **active microphone
+    ///   use** — i.e. actually *in a call*, not merely open. Uses the macOS 14.4+ CoreAudio process
+    ///   API and needs no Screen Recording permission. A backgrounded-but-idle call app is not
+    ///   using the mic, so it does not count as a meeting.
+    /// - **Browser-based calls** (Google Meet, Teams web): detected by the browser's call **window
+    ///   title**, which requires Screen Recording permission (without it, browser calls aren't
+    ///   detected; native calls still are).
     static func isMeetingActiveNow() -> Bool {
+        if #available(macOS 14.4, *), nativeCallAppIsUsingMicrophone() {
+            return true
+        }
+        return browserCallWindowPresent()
+    }
+
+    /// True if any known native conferencing app is currently using the microphone (in a call).
+    @available(macOS 14.4, *)
+    static func nativeCallAppIsUsingMicrophone() -> Bool {
+        for process in audioProcessObjects() where processIsRunningInput(process) {
+            if let bundleID = processBundleID(process), isNativeCallApp(bundleID: bundleID) {
+                return true
+            }
+        }
+        return false
+    }
+
+    /// True if an on-screen browser window's title indicates a call. Window titles require Screen
+    /// Recording permission; without it this returns false (native-app calls are still detected).
+    private static func browserCallWindowPresent() -> Bool {
         guard
             let windows = CGWindowListCopyWindowInfo(
                 [.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID) as? [[String: Any]]
         else {
             return false
         }
-
         for window in windows {
-            // Skip non-normal layers (menu bar items, status items, overlays live above layer 0).
             let layer = window[kCGWindowLayer as String] as? Int ?? -1
             guard layer == 0 else { continue }
-
-            // Skip tiny helper windows (a backgrounded call app may keep a small status window).
-            if let bounds = window[kCGWindowBounds as String] as? [String: CGFloat],
-                let width = bounds["Width"], let height = bounds["Height"],
-                width < 120 || height < 120
-            {
-                continue
-            }
-
-            let owner = window[kCGWindowOwnerName as String] as? String
-            let title = window[kCGWindowName as String] as? String
-            if isCallWindow(ownerName: owner, title: title) {
+            guard let owner = window[kCGWindowOwnerName as String] as? String,
+                browserApps.contains(owner),
+                let title = window[kCGWindowName as String] as? String
+            else { continue }
+            let lower = title.lowercased()
+            for keyword in browserCallKeywords where lower.contains(keyword.lowercased()) {
                 return true
             }
         }
-
         return false
+    }
+
+    // MARK: - CoreAudio process API (macOS 14.4+) — microphone-in-use detection
+
+    @available(macOS 14.4, *)
+    private static func audioProcessObjects() -> [AudioObjectID] {
+        let system = AudioObjectID(kAudioObjectSystemObject)
+        var address = AudioObjectPropertyAddress(
+            mSelector: kAudioHardwarePropertyProcessObjectList,
+            mScope: kAudioObjectPropertyScopeGlobal,
+            mElement: kAudioObjectPropertyElementMain)
+        var dataSize: UInt32 = 0
+        guard AudioObjectGetPropertyDataSize(system, &address, 0, nil, &dataSize) == noErr else {
+            return []
+        }
+        let count = Int(dataSize) / MemoryLayout<AudioObjectID>.size
+        guard count > 0 else { return [] }
+        var objects = [AudioObjectID](repeating: 0, count: count)
+        guard AudioObjectGetPropertyData(system, &address, 0, nil, &dataSize, &objects) == noErr
+        else { return [] }
+        return objects
+    }
+
+    @available(macOS 14.4, *)
+    private static func processIsRunningInput(_ process: AudioObjectID) -> Bool {
+        var address = AudioObjectPropertyAddress(
+            mSelector: kAudioProcessPropertyIsRunningInput,
+            mScope: kAudioObjectPropertyScopeGlobal,
+            mElement: kAudioObjectPropertyElementMain)
+        var value: UInt32 = 0
+        var size = UInt32(MemoryLayout<UInt32>.size)
+        guard AudioObjectGetPropertyData(process, &address, 0, nil, &size, &value) == noErr else {
+            return false
+        }
+        return value != 0
+    }
+
+    @available(macOS 14.4, *)
+    private static func processBundleID(_ process: AudioObjectID) -> String? {
+        var address = AudioObjectPropertyAddress(
+            mSelector: kAudioProcessPropertyBundleID,
+            mScope: kAudioObjectPropertyScopeGlobal,
+            mElement: kAudioObjectPropertyElementMain)
+        var unmanaged: Unmanaged<CFString>?
+        var size = UInt32(MemoryLayout<Unmanaged<CFString>?>.size)
+        let status = withUnsafeMutablePointer(to: &unmanaged) {
+            AudioObjectGetPropertyData(process, &address, 0, nil, &size, $0)
+        }
+        guard status == noErr, let bundleID = unmanaged?.takeRetainedValue() as String?,
+            !bundleID.isEmpty
+        else { return nil }
+        return bundleID
     }
 }
