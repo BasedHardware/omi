@@ -73,6 +73,8 @@ def _compare_versions(a, b):
 
 
 _announcements_mod._compare_versions = _compare_versions
+# subscription.py imports the public name `compare_versions`.
+_announcements_mod.compare_versions = _compare_versions
 
 # database.users needs the functions payment.py imports by name
 _users_mod = sys.modules["database.users"]
@@ -88,6 +90,9 @@ for _attr in [
     "get_paypal_payment_details",
 ]:
     setattr(_users_mod, _attr, MagicMock())
+# has_ever_purchased() (via the available-plans endpoint) reads the Stripe
+# customer id; default to None so test users look like never-purchased.
+_users_mod.get_stripe_customer_id = MagicMock(return_value=None)
 
 # database.redis_db
 _redis_mod = sys.modules["database.redis_db"]
@@ -126,6 +131,7 @@ _stripe_utils.create_subscription_checkout_session = MagicMock()
 
 _endpoints_mod = sys.modules["utils.other.endpoints"]
 _endpoints_mod.get_current_user_uid = lambda: "test-user"
+_endpoints_mod.get_current_user_uid_no_byok_validation = lambda: "test-user"
 
 # Ensure utils.other has endpoints attr for `from utils.other import endpoints`
 sys.modules["utils.other"].endpoints = _endpoints_mod
