@@ -198,11 +198,15 @@ struct ConversationRowView: View {
 
   /// Re-runs LLM processing for this conversation. Used when a conversation
   /// finished processing but ended up with no title — usually a transient
-  /// LLM failure that resolves on retry. Updates the row in place with the
-  /// regenerated payload on success.
+  /// LLM failure that resolves on retry. Replaces the row with the refreshed
+  /// payload so the badge/CTA also update (a `.failed` conversation that
+  /// reprocesses successfully should flip to `.completed`, not just gain a
+  /// title — otherwise `displayState` keeps returning `.failed`).
   private func reprocessConversation() async {
     guard !isReprocessing else { return }
     isReprocessing = true
+
+    AnalyticsManager.shared.conversationReprocessedDefault(conversationId: conversation.id)
 
     do {
       let refreshed = try await APIClient.shared.reprocessConversation(
@@ -213,7 +217,10 @@ struct ConversationRowView: View {
         conversation.id, title: refreshed.structured.title)
 
       await MainActor.run {
-        appState.updateConversationTitle(conversation.id, title: refreshed.structured.title)
+        // Replace the whole conversation, not just the title — `status`,
+        // `structured.overview`, action items etc. all change on reprocess
+        // and the row's display state derives from `status` AND title.
+        appState.replaceConversation(refreshed)
       }
       log("Reprocessed conversation \(conversation.id) → \(refreshed.structured.title)")
     } catch {

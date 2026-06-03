@@ -531,6 +531,10 @@ class AnalyticsManager {
     PostHogManager.shared.conversationReprocessed(conversationId: conversationId, appId: appId)
   }
 
+  func conversationReprocessedDefault(conversationId: String) {
+    PostHogManager.shared.conversationReprocessedDefault(conversationId: conversationId)
+  }
+
   // MARK: - Settings Events (Additional)
 
   func settingToggled(setting: String, enabled: Bool) {
