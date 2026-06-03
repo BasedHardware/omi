@@ -13,6 +13,11 @@ final class FloatingBarUsageLimiter: ObservableObject {
 
     @Published private(set) var hasPaidPlan: Bool = false
 
+    /// True when the user is on Neo (unlimited) without desktop access — Neo is a
+    /// mobile/web plan, so on desktop we surface a banner nudging them to Operator.
+    /// Grandfathered Neo subscribers (desktopGrandfatherUntil set) are excluded.
+    @Published private(set) var neoNeedsDesktopUpgrade: Bool = false
+
     /// Server-reported quota snapshot, plus an optimistic local delta for queries
     /// sent since the last server sync.
     private(set) var serverQuota: APIClient.ChatUsageQuota?
@@ -29,6 +34,15 @@ final class FloatingBarUsageLimiter: ObservableObject {
         do {
             let response = try await APIClient.shared.getUserSubscription()
             applyPlan(plan: response.subscription.plan, status: response.subscription.status)
+            // Neo (unlimited) has no desktop entitlement; show the upgrade banner
+            // unless this subscriber is grandfathered for the current period or is
+            // BYOK-active (BYOK users pay their own LLM/STT bill and the backend
+            // grants them desktop access, so the "upgrade to Operator" nudge would
+            // be wrong for them).
+            neoNeedsDesktopUpgrade =
+                response.subscription.plan == .unlimited
+                && response.desktopGrandfatherUntil == nil
+                && !APIKeyService.isByokActive
         } catch {
             log("FloatingBarUsageLimiter: failed to fetch plan: \(error.localizedDescription)")
         }
@@ -59,6 +73,7 @@ final class FloatingBarUsageLimiter: ObservableObject {
         serverQuota = nil
         optimisticDelta = 0
         hasPaidPlan = false
+        neoNeedsDesktopUpgrade = false
         UserDefaults.standard.removeObject(forKey: Self.cachedPlanKey)
     }
 
