@@ -74,6 +74,8 @@ from utils.stt.streaming import (
     STTService,
     get_stt_service_for_language,
     process_audio_dg,
+    process_audio_parakeet,
+    ParakeetStreamingSocket,
 )
 from utils.stt.vad_gate import VADStreamingGate, VAD_GATE_MODE, is_gate_enabled
 from utils.fair_use import (
@@ -127,6 +129,19 @@ router = APIRouter()
 
 
 PUSHER_ENABLED = bool(os.getenv('HOSTED_PUSHER_API_URL'))
+
+
+def _select_stt_processor(uid: str):
+    """Pick the streaming STT backend. Defaults to Deepgram; opt into the self-hosted
+    Parakeet service with PARAKEET_STT_ENABLED=1 (optionally restricted to a comma-separated
+    PARAKEET_STT_UIDS allowlist). Both env vars are unset in prod, so prod stays on Deepgram."""
+    if os.getenv('PARAKEET_STT_ENABLED') == '1':
+        allow = os.getenv('PARAKEET_STT_UIDS', '').strip()
+        if not allow or uid in {u.strip() for u in allow.split(',') if u.strip()}:
+            logger.info(f'STT backend: Parakeet (self-hosted) for uid={uid}')
+            return process_audio_parakeet
+    return process_audio_dg
+
 
 # Freemium: Send notification when credits threshold is reached
 FREEMIUM_THRESHOLD_SECONDS = 180  # 3 minutes remaining - notify user
@@ -999,7 +1014,7 @@ async def _stream_handler(
                         return cb
 
                     callback = make_multi_channel_callback(ch_config)
-                    stt_sockets_multi[i] = await process_audio_dg(
+                    stt_sockets_multi[i] = await _select_stt_processor(uid)(
                         callback,
                         stt_language,
                         TARGET_SAMPLE_RATE,
@@ -1041,7 +1056,7 @@ async def _stream_handler(
                     logger.exception('VAD gate init failed, continuing without gate uid=%s session=%s', uid, session_id)
                     vad_gate = None
 
-            deepgram_socket = await process_audio_dg(
+            deepgram_socket = await _select_stt_processor(uid)(
                 stream_transcript,
                 stt_language,
                 sample_rate,
@@ -2727,6 +2742,18 @@ async def _stream_handler(
             except asyncio.CancelledError:
                 pass
 
+        # Parakeet drains its final window inline (async finish). Do it HERE — before
+        # shutdown_event/draining stream_transcript_process — so the tail segments land in
+        # realtime_segment_buffers while the processor is still running to consume them.
+        # (Deepgram delivers via its own callbacks and is finished in the finally block.)
+        try:
+            _final_stt = stt_sockets_multi if is_multi_channel else [deepgram_socket]
+            for _s in _final_stt:
+                if isinstance(_s, ParakeetStreamingSocket):
+                    await _s.finish()
+        except Exception as e:
+            logger.error(f"Error draining Parakeet STT: {e} {uid} {session_id}")
+
         shutdown_event.set()
         await drain_tasks(bg_main_tasks, timeout=BG_DRAIN_TIMEOUT, label="listen_bg", cancel=False)
 
@@ -2771,16 +2798,21 @@ async def _stream_handler(
 
         websocket_active = False
 
-        # STT sockets
+        # STT sockets. finish() is sync for Deepgram but async for Parakeet (it drains the
+        # final audio window inline) — await the coroutine form so the tail isn't dropped.
         try:
             if is_multi_channel:
                 for mc_stt_socket in stt_sockets_multi:
                     if mc_stt_socket:
-                        mc_stt_socket.finish()
+                        _r = mc_stt_socket.finish()
+                        if asyncio.iscoroutine(_r):
+                            await _r
             else:
                 if deepgram_socket:
                     # GatedDeepgramSocket.finish() handles finalize automatically
-                    deepgram_socket.finish()
+                    _r = deepgram_socket.finish()
+                    if asyncio.iscoroutine(_r):
+                        await _r
         except Exception as e:
             logger.error(f"Error closing STT sockets: {e} {uid} {session_id}")
 
