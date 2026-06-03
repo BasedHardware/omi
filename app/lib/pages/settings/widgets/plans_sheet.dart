@@ -301,36 +301,36 @@ class _PlansSheetState extends State<PlansSheet> {
       builder: (ctx) => AlertDialog(
         backgroundColor: const Color(0xFF1F1F25),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text(
-          'Downgrade to Freemium?',
-          style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
+        title: Text(
+          context.l10n.downgradeToFreemiumTitle,
+          style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
         ),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('You will experience these limitations:', style: TextStyle(color: Colors.grey.shade300, fontSize: 14)),
+            Text(context.l10n.downgradeLimitationsHeading, style: TextStyle(color: Colors.grey.shade300, fontSize: 14)),
             const SizedBox(height: 16),
-            _buildDowngradeLimitationRow(Icons.battery_alert, '7x battery consumption'),
+            _buildDowngradeLimitationRow(Icons.battery_alert, context.l10n.downgradeLimitBattery),
             const SizedBox(height: 10),
-            _buildDowngradeLimitationRow(Icons.warning_amber, '30% less transcription quality'),
+            _buildDowngradeLimitationRow(Icons.warning_amber, context.l10n.downgradeLimitQuality),
             const SizedBox(height: 10),
-            _buildDowngradeLimitationRow(Icons.timer_off, '5-7 second delay'),
+            _buildDowngradeLimitationRow(Icons.timer_off, context.l10n.downgradeLimitDelay),
             const SizedBox(height: 10),
-            _buildDowngradeLimitationRow(Icons.person_off, 'Cannot identify speakers'),
+            _buildDowngradeLimitationRow(Icons.person_off, context.l10n.downgradeLimitSpeakers),
           ],
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text(
-              'Cancel',
-              style: TextStyle(color: Colors.white, fontWeight: FontWeight.w500),
+            child: Text(
+              context.l10n.cancel,
+              style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w500),
             ),
           ),
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(true),
-            child: Text('Downgrade Anyway', style: TextStyle(color: Colors.red.shade400)),
+            child: Text(context.l10n.downgradeAnyway, style: TextStyle(color: Colors.red.shade400)),
           ),
         ],
       ),

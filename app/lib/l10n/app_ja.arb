@@ -3042,5 +3042,21 @@
     "invalidPromotionCode": "無効なプロモコードです。",
     "backgroundModeTitle": "バックグラウンドモード",
     "backgroundModeDescription": "アプリを完全に閉じても Omi の録音を続けます。",
-    "backgroundModeNote": "現在は Omi デバイスのみ対応しており、継続的に改善しています。"
+    "backgroundModeNote": "現在は Omi デバイスのみ対応しており、継続的に改善しています。",
+    "downgradeToFreemiumTitle": "フリーミアムにダウングレードしますか？",
+    "downgradeLimitationsHeading": "以下の制限が適用されます：",
+    "downgradeLimitBattery": "バッテリー消費が7倍",
+    "downgradeLimitQuality": "文字起こし品質が30%低下",
+    "downgradeLimitDelay": "5〜7秒の遅延",
+    "downgradeLimitSpeakers": "話者を識別できません",
+    "downgradeAnyway": "それでもダウングレード",
+    "googleCalendarNotConnected": "Google カレンダーが未接続です",
+    "googleCalendarConnectPrompt": "会話をカレンダーの予定に紐付けるには、Google カレンダーを接続してください。",
+    "connect": "接続",
+    "linkedToEvent": "「{title}」に紐付けました",
+    "failedToLinkCalendarEvent": "カレンダーの予定への紐付けに失敗しました",
+    "thanksForYourFeedback": "フィードバックありがとうございます！",
+    "copyMessage": "メッセージをコピー",
+    "searchSettings": "設定を検索…",
+    "errorLoadingAudio": "音声の読み込みエラー"
 }
