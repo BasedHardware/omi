@@ -37,7 +37,16 @@ final class RealtimeOmniTestHarness: NSObject, RealtimeOmniServiceDelegate {
         let svc = RealtimeOmniService(
             provider: provider, relayBaseURL: relayBaseURL, authHeader: authHeader, sttOnly: true, delegate: self)
         service = svc
+        // Start streaming audio immediately — BEFORE the connection handshake
+        // completes — exactly like PushToTalkManager (mic starts on key-down and
+        // chunks flow during connect). This is what surfaces the Gemini
+        // audio-before-activityStart 1007 bug; sending only after omniDidConnect
+        // (as before) hid it. The service buffers until the session is open.
+        let rate = svc.requiredInputSampleRate
+        feed = rate == 16000 ? pcm16k : PushToTalkManager.resamplePCM16(pcm16k, from: 16000, to: rate)
+        sendIndex = 0
         svc.start()
+        pump()
         Task { [weak self] in
             try? await Task.sleep(nanoseconds: UInt64(timeoutSeconds * 1_000_000_000))
             self?.finish(reason: "timeout")
@@ -49,10 +58,6 @@ final class RealtimeOmniTestHarness: NSObject, RealtimeOmniServiceDelegate {
 
     func omniDidConnect() {
         connected = true
-        let rate = service?.requiredInputSampleRate ?? 16000
-        feed = rate == 16000 ? pcm16k : PushToTalkManager.resamplePCM16(pcm16k, from: 16000, to: rate)
-        sendIndex = 0
-        pump()
     }
 
     private func pump() {

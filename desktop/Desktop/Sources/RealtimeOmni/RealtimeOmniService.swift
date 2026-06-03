@@ -48,6 +48,7 @@ final class RealtimeOmniService: NSObject {
     private var isOpen = false
     private var terminated = false  // fire omniDidError at most once per turn
     private var pendingAudio: [Data] = []
+    private var pendingCommit = false  // turn ended before the session opened; commit after activityStart
 
     // Gemini's Live endpoint resets BOTH of Apple's WebSocket stacks
     // (URLSession drops after the HTTP/2 upgrade; Network.framework gets
@@ -113,6 +114,7 @@ final class RealtimeOmniService: NSObject {
         nw = nil
         isOpen = false
         pendingAudio.removeAll()
+        pendingCommit = false
     }
 
     // MARK: - Network.framework transport (Gemini, HTTP/1.1 WebSocket)
@@ -172,6 +174,14 @@ final class RealtimeOmniService: NSObject {
     /// Feed mic PCM16 mono at `requiredInputSampleRate`. Caller is responsible for
     /// resampling to that rate (16k mic → 24k for OpenAI).
     func sendAudio(_ pcm: Data) {
+        // Buffer until the session is open. PTT starts the mic immediately and
+        // streams chunks during the connect handshake (plus a pre-connect buffer
+        // flush), so audio can arrive before setup completes. Gemini in manual-VAD
+        // mode rejects any audio that precedes `activityStart` with close 1007
+        // ("invalid argument") — markReady() sends activityStart and *then* flushes
+        // pendingAudio, so queuing here preserves that ordering. (The test harness
+        // only sends after omniDidConnect, so it never exercised this race.)
+        guard isOpen else { pendingAudio.append(pcm); return }
         let b64 = pcm.base64EncodedString()
         switch provider {
         case .gptRealtime2:
@@ -183,6 +193,10 @@ final class RealtimeOmniService: NSObject {
 
     /// Signal end of the user's PTT turn.
     func commitInputTurn() {
+        // If the turn ended before the session opened (very short press), defer the
+        // commit so it can't precede setup/activityStart — markReady() flushes it
+        // after the buffered audio, keeping the frame order activityStart→audio→end.
+        guard isOpen else { pendingCommit = true; return }
         switch provider {
         case .gptRealtime2:
             send(json: ["type": "input_audio_buffer.commit"])
@@ -360,6 +374,10 @@ final class RealtimeOmniService: NSObject {
         }
         for chunk in pendingAudio { sendAudio(chunk) }
         pendingAudio.removeAll()
+        if pendingCommit {
+            pendingCommit = false
+            commitInputTurn()
+        }
         delegate?.omniDidConnect()
     }
 
