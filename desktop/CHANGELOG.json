@@ -3,7 +3,7 @@
     "Fixed drag handle on Tasks page not appearing when hovering over a row",
     "Fixed drag-to-reorder on Tasks page not persisting when date filters are active",
     "Fixed drag-to-reorder on Tasks page \u2014 dragged row now visually dims while in flight",
-    "Added a System Audio setting to record other apps' audio always, only during meetings, or never"
+    "Added a System Audio setting (Always / Only during meetings / Never); 'Only during meetings' records mic + system audio only while you're in a call"
   ],
   "releases": [
     {
