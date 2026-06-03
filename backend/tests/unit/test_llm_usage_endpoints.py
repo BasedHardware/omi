@@ -105,6 +105,7 @@ for attr in [
     "get_chat_quota_snapshot",
     "get_plan_display_name",
     "filter_plans_for_user",
+    "has_ever_purchased",
     "should_show_new_plans",
     "adapt_plans_for_legacy_client",
     "legacy_plan_features",
