@@ -9320,4 +9320,106 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get backgroundModeNote => 'Na razie działa tylko z urządzeniami Omi i jest stale ulepszany.';
+
+  @override
+  String get accuracy => 'Dokładność';
+
+  @override
+  String get base => 'Podstawowy';
+
+  @override
+  String get cloudTranscription => 'Transkrypcja w chmurze';
+
+  @override
+  String get deepgram => 'Deepgram';
+
+  @override
+  String get deleteModel => 'Usuń model';
+
+  @override
+  String get deleteModelConfirm => 'Czy na pewno chcesz usunąć ten model?';
+
+  @override
+  String get downloaded => 'Pobrano';
+
+  @override
+  String get faster => 'Szybciej';
+
+  @override
+  String get filterAuto => 'Auto';
+
+  @override
+  String get higher => 'Wyższa';
+
+  @override
+  String get large => 'Duży';
+
+  @override
+  String get lower => 'Niższa';
+
+  @override
+  String get medium => 'Średni';
+
+  @override
+  String get modelDeleted => 'Model usunięty';
+
+  @override
+  String get modelDownloadFailed => 'Pobieranie modelu nie powiodło się';
+
+  @override
+  String get modelDownloadFailedDesc => 'Nie udało się pobrać modelu Whisper. Spróbuj ponownie.';
+
+  @override
+  String get modelDownloaded => 'Model pobrany';
+
+  @override
+  String get modelDownloadedDesc => 'Model Whisper został pomyślnie pobrany';
+
+  @override
+  String get modelSize => 'Rozmiar modelu';
+
+  @override
+  String get none => 'Brak';
+
+  @override
+  String get onDeviceTranscription => 'Transkrypcja na urządzeniu';
+
+  @override
+  String get onDeviceTranscriptionDesc => 'Transkrypcja jest przetwarzana lokalnie na Twoim urządzeniu';
+
+  @override
+  String get slower => 'Wolniej';
+
+  @override
+  String get small => 'Mały';
+
+  @override
+  String get soniox => 'Soniox';
+
+  @override
+  String get speechToTextProvider => 'Dostawca mowy na tekst';
+
+  @override
+  String get speechToTextProviderDesc => 'Wybierz usługę używaną do transkrypcji';
+
+  @override
+  String get speechmatics => 'Speechmatics';
+
+  @override
+  String get speed => 'Szybkość';
+
+  @override
+  String get tiny => 'Bardzo mały';
+
+  @override
+  String get transcriptionLanguage => 'Język transkrypcji';
+
+  @override
+  String get transcriptionLanguageDesc => 'Wybierz język transkrypcji mowy';
+
+  @override
+  String get whisperModel => 'Model Whisper';
+
+  @override
+  String get whisperModelDesc => 'Wybierz model do transkrypcji na urządzeniu';
 }

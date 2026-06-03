@@ -9295,4 +9295,106 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get backgroundModeNote => 'Toimii toistaiseksi vain Omi-laitteiden kanssa ja sitä kehitetään jatkuvasti.';
+
+  @override
+  String get accuracy => 'Tarkkuus';
+
+  @override
+  String get base => 'Perus';
+
+  @override
+  String get cloudTranscription => 'Pilvitranskriptio';
+
+  @override
+  String get deepgram => 'Deepgram';
+
+  @override
+  String get deleteModel => 'Poista malli';
+
+  @override
+  String get deleteModelConfirm => 'Haluatko varmasti poistaa tämän mallin?';
+
+  @override
+  String get downloaded => 'Ladattu';
+
+  @override
+  String get faster => 'Nopeampi';
+
+  @override
+  String get filterAuto => 'Auto';
+
+  @override
+  String get higher => 'Korkeampi';
+
+  @override
+  String get large => 'Suuri';
+
+  @override
+  String get lower => 'Matalampi';
+
+  @override
+  String get medium => 'Keskikokoinen';
+
+  @override
+  String get modelDeleted => 'Malli poistettu';
+
+  @override
+  String get modelDownloadFailed => 'Mallin lataus epäonnistui';
+
+  @override
+  String get modelDownloadFailedDesc => 'Whisper-mallin lataus epäonnistui. Yritä uudelleen.';
+
+  @override
+  String get modelDownloaded => 'Malli ladattu';
+
+  @override
+  String get modelDownloadedDesc => 'Whisper-malli on ladattu onnistuneesti';
+
+  @override
+  String get modelSize => 'Mallin koko';
+
+  @override
+  String get none => 'Ei mitään';
+
+  @override
+  String get onDeviceTranscription => 'Laitteella tapahtuva transkriptio';
+
+  @override
+  String get onDeviceTranscriptionDesc => 'Transkriptio käsitellään paikallisesti laitteellasi';
+
+  @override
+  String get slower => 'Hitaampi';
+
+  @override
+  String get small => 'Pieni';
+
+  @override
+  String get soniox => 'Soniox';
+
+  @override
+  String get speechToTextProvider => 'Puheesta tekstiksi -palveluntarjoaja';
+
+  @override
+  String get speechToTextProviderDesc => 'Valitse transkriptioon käytettävä palvelu';
+
+  @override
+  String get speechmatics => 'Speechmatics';
+
+  @override
+  String get speed => 'Nopeus';
+
+  @override
+  String get tiny => 'Pikkuruinen';
+
+  @override
+  String get transcriptionLanguage => 'Transkription kieli';
+
+  @override
+  String get transcriptionLanguageDesc => 'Valitse puheen transkription kieli';
+
+  @override
+  String get whisperModel => 'Whisper-malli';
+
+  @override
+  String get whisperModelDesc => 'Valitse malli laitteella tapahtuvaan transkriptioon';
 }

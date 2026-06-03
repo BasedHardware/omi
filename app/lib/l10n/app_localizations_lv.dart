@@ -9317,4 +9317,106 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get backgroundModeNote => 'Pagaidām darbojas tikai ar Omi ierīcēm un tiek nepārtraukti uzlabota.';
+
+  @override
+  String get accuracy => 'Precizitāte';
+
+  @override
+  String get base => 'Pamata';
+
+  @override
+  String get cloudTranscription => 'Mākoņa transkripcija';
+
+  @override
+  String get deepgram => 'Deepgram';
+
+  @override
+  String get deleteModel => 'Dzēst modeli';
+
+  @override
+  String get deleteModelConfirm => 'Vai tiešām vēlaties dzēst šo modeli?';
+
+  @override
+  String get downloaded => 'Lejupielādēts';
+
+  @override
+  String get faster => 'Ātrāk';
+
+  @override
+  String get filterAuto => 'Auto';
+
+  @override
+  String get higher => 'Augstāka';
+
+  @override
+  String get large => 'Liels';
+
+  @override
+  String get lower => 'Zemāka';
+
+  @override
+  String get medium => 'Vidējs';
+
+  @override
+  String get modelDeleted => 'Modelis dzēsts';
+
+  @override
+  String get modelDownloadFailed => 'Modeļa lejupielāde neizdevās';
+
+  @override
+  String get modelDownloadFailedDesc => 'Neizdevās lejupielādēt Whisper modeli. Lūdzu, mēģiniet vēlreiz.';
+
+  @override
+  String get modelDownloaded => 'Modelis lejupielādēts';
+
+  @override
+  String get modelDownloadedDesc => 'Whisper modelis veiksmīgi lejupielādēts';
+
+  @override
+  String get modelSize => 'Modeļa izmērs';
+
+  @override
+  String get none => 'Nav';
+
+  @override
+  String get onDeviceTranscription => 'Ierīces transkripcija';
+
+  @override
+  String get onDeviceTranscriptionDesc => 'Transkripcija tiek apstrādāta lokāli jūsu ierīcē';
+
+  @override
+  String get slower => 'Lēnāk';
+
+  @override
+  String get small => 'Mazs';
+
+  @override
+  String get soniox => 'Soniox';
+
+  @override
+  String get speechToTextProvider => 'Runas-teksta nodrošinātājs';
+
+  @override
+  String get speechToTextProviderDesc => 'Izvēlieties transkripcijas pakalpojumu';
+
+  @override
+  String get speechmatics => 'Speechmatics';
+
+  @override
+  String get speed => 'Ātrums';
+
+  @override
+  String get tiny => 'Sīks';
+
+  @override
+  String get transcriptionLanguage => 'Transkripcijas valoda';
+
+  @override
+  String get transcriptionLanguageDesc => 'Izvēlieties runas transkripcijas valodu';
+
+  @override
+  String get whisperModel => 'Whisper modelis';
+
+  @override
+  String get whisperModelDesc => 'Izvēlieties modeli ierīces transkripcijai';
 }

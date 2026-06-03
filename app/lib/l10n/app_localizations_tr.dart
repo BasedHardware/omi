@@ -9306,4 +9306,106 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get backgroundModeNote => 'Şimdilik yalnızca Omi cihazlarıyla çalışır ve sürekli geliştirilmektedir.';
+
+  @override
+  String get accuracy => 'Doğruluk';
+
+  @override
+  String get base => 'Temel';
+
+  @override
+  String get cloudTranscription => 'Bulut transkripsiyonu';
+
+  @override
+  String get deepgram => 'Deepgram';
+
+  @override
+  String get deleteModel => 'Modeli sil';
+
+  @override
+  String get deleteModelConfirm => 'Bu modeli silmek istediğinizden emin misiniz?';
+
+  @override
+  String get downloaded => 'İndirildi';
+
+  @override
+  String get faster => 'Daha hızlı';
+
+  @override
+  String get filterAuto => 'Auto';
+
+  @override
+  String get higher => 'Daha yüksek';
+
+  @override
+  String get large => 'Büyük';
+
+  @override
+  String get lower => 'Daha düşük';
+
+  @override
+  String get medium => 'Orta';
+
+  @override
+  String get modelDeleted => 'Model silindi';
+
+  @override
+  String get modelDownloadFailed => 'Model indirme başarısız';
+
+  @override
+  String get modelDownloadFailedDesc => 'Whisper modeli indirilemedi. Lütfen tekrar deneyin.';
+
+  @override
+  String get modelDownloaded => 'Model indirildi';
+
+  @override
+  String get modelDownloadedDesc => 'Whisper modeli başarıyla indirildi';
+
+  @override
+  String get modelSize => 'Model boyutu';
+
+  @override
+  String get none => 'Yok';
+
+  @override
+  String get onDeviceTranscription => 'Cihaz üzerinde transkripsiyon';
+
+  @override
+  String get onDeviceTranscriptionDesc => 'Transkripsiyon cihazınızda yerel olarak işlenir';
+
+  @override
+  String get slower => 'Daha yavaş';
+
+  @override
+  String get small => 'Küçük';
+
+  @override
+  String get soniox => 'Soniox';
+
+  @override
+  String get speechToTextProvider => 'Konuşmadan metne sağlayıcı';
+
+  @override
+  String get speechToTextProviderDesc => 'Transkripsiyon için kullanılan hizmeti seçin';
+
+  @override
+  String get speechmatics => 'Speechmatics';
+
+  @override
+  String get speed => 'Hız';
+
+  @override
+  String get tiny => 'Çok küçük';
+
+  @override
+  String get transcriptionLanguage => 'Transkripsiyon dili';
+
+  @override
+  String get transcriptionLanguageDesc => 'Konuşma transkripsiyonu için dil seçin';
+
+  @override
+  String get whisperModel => 'Whisper modeli';
+
+  @override
+  String get whisperModelDesc => 'Cihaz üzerinde transkripsiyon için model seçin';
 }

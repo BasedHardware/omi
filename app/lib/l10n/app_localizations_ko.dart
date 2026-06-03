@@ -9146,4 +9146,106 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get backgroundModeNote => '현재는 Omi 기기에서만 작동하며 지속적으로 개선되고 있습니다.';
+
+  @override
+  String get accuracy => '정확도';
+
+  @override
+  String get base => '기본';
+
+  @override
+  String get cloudTranscription => '클라우드 전사';
+
+  @override
+  String get deepgram => 'Deepgram';
+
+  @override
+  String get deleteModel => '모델 삭제';
+
+  @override
+  String get deleteModelConfirm => '이 모델을 삭제하시겠습니까?';
+
+  @override
+  String get downloaded => '다운로드됨';
+
+  @override
+  String get faster => '더 빠름';
+
+  @override
+  String get filterAuto => 'Auto';
+
+  @override
+  String get higher => '더 높음';
+
+  @override
+  String get large => '큼';
+
+  @override
+  String get lower => '더 낮음';
+
+  @override
+  String get medium => '중간';
+
+  @override
+  String get modelDeleted => '모델 삭제됨';
+
+  @override
+  String get modelDownloadFailed => '모델 다운로드 실패';
+
+  @override
+  String get modelDownloadFailedDesc => 'Whisper 모델 다운로드에 실패했습니다. 다시 시도해 주세요.';
+
+  @override
+  String get modelDownloaded => '모델 다운로드됨';
+
+  @override
+  String get modelDownloadedDesc => 'Whisper 모델이 성공적으로 다운로드되었습니다';
+
+  @override
+  String get modelSize => '모델 크기';
+
+  @override
+  String get none => '없음';
+
+  @override
+  String get onDeviceTranscription => '온디바이스 전사';
+
+  @override
+  String get onDeviceTranscriptionDesc => '전사가 기기에서 로컬로 처리됩니다';
+
+  @override
+  String get slower => '더 느림';
+
+  @override
+  String get small => '작음';
+
+  @override
+  String get soniox => 'Soniox';
+
+  @override
+  String get speechToTextProvider => '음성-텍스트 변환 제공자';
+
+  @override
+  String get speechToTextProviderDesc => '전사에 사용할 서비스를 선택하세요';
+
+  @override
+  String get speechmatics => 'Speechmatics';
+
+  @override
+  String get speed => '속도';
+
+  @override
+  String get tiny => '아주 작음';
+
+  @override
+  String get transcriptionLanguage => '전사 언어';
+
+  @override
+  String get transcriptionLanguageDesc => '음성 전사 언어를 선택하세요';
+
+  @override
+  String get whisperModel => 'Whisper 모델';
+
+  @override
+  String get whisperModelDesc => '온디바이스 전사에 사용할 모델을 선택하세요';
 }

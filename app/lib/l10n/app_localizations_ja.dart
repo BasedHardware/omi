@@ -9144,4 +9144,106 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get backgroundModeNote => '現在は Omi デバイスのみ対応しており、継続的に改善しています。';
+
+  @override
+  String get accuracy => '精度';
+
+  @override
+  String get base => 'ベース';
+
+  @override
+  String get cloudTranscription => 'クラウド文字起こし';
+
+  @override
+  String get deepgram => 'Deepgram';
+
+  @override
+  String get deleteModel => 'モデルを削除';
+
+  @override
+  String get deleteModelConfirm => 'このモデルを削除してもよろしいですか？';
+
+  @override
+  String get downloaded => 'ダウンロード済み';
+
+  @override
+  String get faster => 'より速い';
+
+  @override
+  String get filterAuto => '自動';
+
+  @override
+  String get higher => 'より高い';
+
+  @override
+  String get large => '大';
+
+  @override
+  String get lower => 'より低い';
+
+  @override
+  String get medium => '中';
+
+  @override
+  String get modelDeleted => 'モデルが削除されました';
+
+  @override
+  String get modelDownloadFailed => 'モデルのダウンロードに失敗しました';
+
+  @override
+  String get modelDownloadFailedDesc => 'Whisperモデルのダウンロードに失敗しました。もう一度お試しください。';
+
+  @override
+  String get modelDownloaded => 'モデルがダウンロードされました';
+
+  @override
+  String get modelDownloadedDesc => 'Whisperモデルが正常にダウンロードされました';
+
+  @override
+  String get modelSize => 'モデルサイズ';
+
+  @override
+  String get none => 'なし';
+
+  @override
+  String get onDeviceTranscription => 'オンデバイス文字起こし';
+
+  @override
+  String get onDeviceTranscriptionDesc => '文字起こしはデバイス上でローカルに処理されます';
+
+  @override
+  String get slower => 'より遅い';
+
+  @override
+  String get small => '小';
+
+  @override
+  String get soniox => 'Soniox';
+
+  @override
+  String get speechToTextProvider => '音声認識プロバイダー';
+
+  @override
+  String get speechToTextProviderDesc => '文字起こしに使用するサービスを選択してください';
+
+  @override
+  String get speechmatics => 'Speechmatics';
+
+  @override
+  String get speed => '速度';
+
+  @override
+  String get tiny => '極小';
+
+  @override
+  String get transcriptionLanguage => '文字起こし言語';
+
+  @override
+  String get transcriptionLanguageDesc => '音声文字起こしの言語を選択してください';
+
+  @override
+  String get whisperModel => 'Whisperモデル';
+
+  @override
+  String get whisperModelDesc => 'オンデバイス文字起こし用のモデルを選択してください';
 }

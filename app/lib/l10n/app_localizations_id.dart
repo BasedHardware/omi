@@ -9303,4 +9303,106 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get backgroundModeNote => 'Untuk saat ini hanya berfungsi dengan perangkat Omi dan terus ditingkatkan.';
+
+  @override
+  String get accuracy => 'Akurasi';
+
+  @override
+  String get base => 'Dasar';
+
+  @override
+  String get cloudTranscription => 'Transkripsi cloud';
+
+  @override
+  String get deepgram => 'Deepgram';
+
+  @override
+  String get deleteModel => 'Hapus model';
+
+  @override
+  String get deleteModelConfirm => 'Apakah Anda yakin ingin menghapus model ini?';
+
+  @override
+  String get downloaded => 'Terunduh';
+
+  @override
+  String get faster => 'Lebih cepat';
+
+  @override
+  String get filterAuto => 'Auto';
+
+  @override
+  String get higher => 'Lebih tinggi';
+
+  @override
+  String get large => 'Besar';
+
+  @override
+  String get lower => 'Lebih rendah';
+
+  @override
+  String get medium => 'Sedang';
+
+  @override
+  String get modelDeleted => 'Model dihapus';
+
+  @override
+  String get modelDownloadFailed => 'Pengunduhan model gagal';
+
+  @override
+  String get modelDownloadFailedDesc => 'Gagal mengunduh model Whisper. Silakan coba lagi.';
+
+  @override
+  String get modelDownloaded => 'Model terunduh';
+
+  @override
+  String get modelDownloadedDesc => 'Model Whisper berhasil diunduh';
+
+  @override
+  String get modelSize => 'Ukuran model';
+
+  @override
+  String get none => 'Tidak ada';
+
+  @override
+  String get onDeviceTranscription => 'Transkripsi di perangkat';
+
+  @override
+  String get onDeviceTranscriptionDesc => 'Transkripsi diproses secara lokal di perangkat Anda';
+
+  @override
+  String get slower => 'Lebih lambat';
+
+  @override
+  String get small => 'Kecil';
+
+  @override
+  String get soniox => 'Soniox';
+
+  @override
+  String get speechToTextProvider => 'Penyedia ucapan-ke-teks';
+
+  @override
+  String get speechToTextProviderDesc => 'Pilih layanan yang digunakan untuk transkripsi';
+
+  @override
+  String get speechmatics => 'Speechmatics';
+
+  @override
+  String get speed => 'Kecepatan';
+
+  @override
+  String get tiny => 'Sangat kecil';
+
+  @override
+  String get transcriptionLanguage => 'Bahasa transkripsi';
+
+  @override
+  String get transcriptionLanguageDesc => 'Pilih bahasa untuk transkripsi ucapan';
+
+  @override
+  String get whisperModel => 'Model Whisper';
+
+  @override
+  String get whisperModelDesc => 'Pilih model untuk transkripsi di perangkat';
 }

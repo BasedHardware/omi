@@ -9321,4 +9321,106 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get backgroundModeNote => 'Werkt voorlopig alleen met Omi-apparaten en wordt voortdurend verbeterd.';
+
+  @override
+  String get accuracy => 'Nauwkeurigheid';
+
+  @override
+  String get base => 'Basis';
+
+  @override
+  String get cloudTranscription => 'Cloud transcriptie';
+
+  @override
+  String get deepgram => 'Deepgram';
+
+  @override
+  String get deleteModel => 'Model verwijderen';
+
+  @override
+  String get deleteModelConfirm => 'Weet je zeker dat je dit model wilt verwijderen?';
+
+  @override
+  String get downloaded => 'Gedownload';
+
+  @override
+  String get faster => 'Sneller';
+
+  @override
+  String get filterAuto => 'Auto';
+
+  @override
+  String get higher => 'Hoger';
+
+  @override
+  String get large => 'Groot';
+
+  @override
+  String get lower => 'Lager';
+
+  @override
+  String get medium => 'Gemiddeld';
+
+  @override
+  String get modelDeleted => 'Model verwijderd';
+
+  @override
+  String get modelDownloadFailed => 'Model downloaden mislukt';
+
+  @override
+  String get modelDownloadFailedDesc => 'Kan het Whisper-model niet downloaden. Probeer het opnieuw.';
+
+  @override
+  String get modelDownloaded => 'Model gedownload';
+
+  @override
+  String get modelDownloadedDesc => 'Het Whisper-model is succesvol gedownload';
+
+  @override
+  String get modelSize => 'Modelgrootte';
+
+  @override
+  String get none => 'Geen';
+
+  @override
+  String get onDeviceTranscription => 'On-device transcriptie';
+
+  @override
+  String get onDeviceTranscriptionDesc => 'Transcriptie wordt lokaal op je apparaat verwerkt';
+
+  @override
+  String get slower => 'Langzamer';
+
+  @override
+  String get small => 'Klein';
+
+  @override
+  String get soniox => 'Soniox';
+
+  @override
+  String get speechToTextProvider => 'Spraak-naar-tekst provider';
+
+  @override
+  String get speechToTextProviderDesc => 'Selecteer de dienst voor transcriptie';
+
+  @override
+  String get speechmatics => 'Speechmatics';
+
+  @override
+  String get speed => 'Snelheid';
+
+  @override
+  String get tiny => 'Heel klein';
+
+  @override
+  String get transcriptionLanguage => 'Transcriptietaal';
+
+  @override
+  String get transcriptionLanguageDesc => 'Selecteer de taal voor spraaktranscriptie';
+
+  @override
+  String get whisperModel => 'Whisper-model';
+
+  @override
+  String get whisperModelDesc => 'Selecteer het model voor on-device transcriptie';
 }

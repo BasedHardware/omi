@@ -9292,4 +9292,106 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get backgroundModeNote => 'Praegu töötab ainult Omi seadmetega ja seda täiustatakse pidevalt.';
+
+  @override
+  String get accuracy => 'Täpsus';
+
+  @override
+  String get base => 'Baas';
+
+  @override
+  String get cloudTranscription => 'Pilves transkriptsioon';
+
+  @override
+  String get deepgram => 'Deepgram';
+
+  @override
+  String get deleteModel => 'Kustuta mudel';
+
+  @override
+  String get deleteModelConfirm => 'Kas oled kindel, et soovid selle mudeli kustutada?';
+
+  @override
+  String get downloaded => 'Alla laaditud';
+
+  @override
+  String get faster => 'Kiirem';
+
+  @override
+  String get filterAuto => 'Auto';
+
+  @override
+  String get higher => 'Kõrgem';
+
+  @override
+  String get large => 'Suur';
+
+  @override
+  String get lower => 'Madalam';
+
+  @override
+  String get medium => 'Keskmine';
+
+  @override
+  String get modelDeleted => 'Mudel kustutatud';
+
+  @override
+  String get modelDownloadFailed => 'Mudeli allalaadimine ebaõnnestus';
+
+  @override
+  String get modelDownloadFailedDesc => 'Whisper mudeli allalaadimine ebaõnnestus. Palun proovi uuesti.';
+
+  @override
+  String get modelDownloaded => 'Mudel alla laaditud';
+
+  @override
+  String get modelDownloadedDesc => 'Whisper mudel on edukalt alla laaditud';
+
+  @override
+  String get modelSize => 'Mudeli suurus';
+
+  @override
+  String get none => 'Puudub';
+
+  @override
+  String get onDeviceTranscription => 'Seadmes transkriptsioon';
+
+  @override
+  String get onDeviceTranscriptionDesc => 'Transkriptsioon töödeldakse kohapeal sinu seadmes';
+
+  @override
+  String get slower => 'Aeglasem';
+
+  @override
+  String get small => 'Väike';
+
+  @override
+  String get soniox => 'Soniox';
+
+  @override
+  String get speechToTextProvider => 'Kõne tekstiks teisendaja';
+
+  @override
+  String get speechToTextProviderDesc => 'Vali transkriptsiooniks kasutatav teenus';
+
+  @override
+  String get speechmatics => 'Speechmatics';
+
+  @override
+  String get speed => 'Kiirus';
+
+  @override
+  String get tiny => 'Pisike';
+
+  @override
+  String get transcriptionLanguage => 'Transkriptsiooni keel';
+
+  @override
+  String get transcriptionLanguageDesc => 'Vali kõne transkriptsiooni keel';
+
+  @override
+  String get whisperModel => 'Whisper mudel';
+
+  @override
+  String get whisperModelDesc => 'Vali seadmes transkriptsiooni mudel';
 }

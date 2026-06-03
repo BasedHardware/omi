@@ -9272,4 +9272,106 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get backgroundModeNote => 'फ़िलहाल केवल Omi डिवाइस के साथ काम करता है और इसे लगातार बेहतर बनाया जा रहा है।';
+
+  @override
+  String get accuracy => 'सटीकता';
+
+  @override
+  String get base => 'बेस';
+
+  @override
+  String get cloudTranscription => 'क्लाउड ट्रांसक्रिप्शन';
+
+  @override
+  String get deepgram => 'दीपग्राम';
+
+  @override
+  String get deleteModel => 'मॉडल हटाएं';
+
+  @override
+  String get deleteModelConfirm => 'क्या आप वाकई इस मॉडल को हटाना चाहते हैं?';
+
+  @override
+  String get downloaded => 'डाउनलोड हो गया';
+
+  @override
+  String get faster => 'तेज़';
+
+  @override
+  String get filterAuto => 'स्वतः';
+
+  @override
+  String get higher => 'अधिक';
+
+  @override
+  String get large => 'बड़ा';
+
+  @override
+  String get lower => 'कम';
+
+  @override
+  String get medium => 'मध्यम';
+
+  @override
+  String get modelDeleted => 'मॉडल हटा दिया गया';
+
+  @override
+  String get modelDownloadFailed => 'मॉडल डाउनलोड विफल';
+
+  @override
+  String get modelDownloadFailedDesc => 'व्हिस्पर मॉडल डाउनलोड करने में विफल। कृपया पुनः प्रयास करें।';
+
+  @override
+  String get modelDownloaded => 'मॉडल डाउनलोड हो गया';
+
+  @override
+  String get modelDownloadedDesc => 'व्हिस्पर मॉडल सफलतापूर्वक डाउनलोड हो गया';
+
+  @override
+  String get modelSize => 'मॉडल का आकार';
+
+  @override
+  String get none => 'कोई नहीं';
+
+  @override
+  String get onDeviceTranscription => 'डिवाइस पर ट्रांसक्रिप्शन';
+
+  @override
+  String get onDeviceTranscriptionDesc => 'ट्रांसक्रिप्शन आपके डिवाइस पर स्थानीय रूप से प्रोसेस किया जाता है';
+
+  @override
+  String get slower => 'धीमा';
+
+  @override
+  String get small => 'छोटा';
+
+  @override
+  String get soniox => 'सोनियॉक्स';
+
+  @override
+  String get speechToTextProvider => 'स्पीच-टू-टेक्स्ट प्रदाता';
+
+  @override
+  String get speechToTextProviderDesc => 'ट्रांसक्रिप्शन के लिए उपयोग की जाने वाली सेवा चुनें';
+
+  @override
+  String get speechmatics => 'स्पीचमैटिक्स';
+
+  @override
+  String get speed => 'गति';
+
+  @override
+  String get tiny => 'बहुत छोटा';
+
+  @override
+  String get transcriptionLanguage => 'ट्रांसक्रिप्शन भाषा';
+
+  @override
+  String get transcriptionLanguageDesc => 'स्पीच ट्रांसक्रिप्शन के लिए भाषा चुनें';
+
+  @override
+  String get whisperModel => 'व्हिस्पर मॉडल';
+
+  @override
+  String get whisperModelDesc => 'डिवाइस पर ट्रांसक्रिप्शन के लिए मॉडल चुनें';
 }
