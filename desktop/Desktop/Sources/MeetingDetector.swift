@@ -13,12 +13,12 @@ import Foundation
 @MainActor
 final class MeetingDetector {
 
-    /// Current meeting state. Updated on the main actor by `evaluate()`.
+    /// Current meeting state. Updated on the main actor by `applyDetected(_:)`.
     private(set) var isMeetingActive: Bool = false
 
     private let pollInterval: TimeInterval
     private let offGracePeriod: TimeInterval
-    private let isMeetingNow: () -> Bool
+    private let probeSignal: () -> ConferencingApps.MeetingSignal
     private let now: () -> Date
     private let onChange: (Bool) -> Void
 
@@ -27,24 +27,27 @@ final class MeetingDetector {
     /// When the call first goes undetected, the time at which we will actually flip to inactive.
     /// `nil` whenever a meeting is detected or no pending-off is in progress.
     private var pendingOffDeadline: Date?
+    /// True once the active session was identified as a *browser* call — enables "sticky" keep-alive
+    /// (a muted browser drops mic input, but we keep recording while it still plays call audio).
+    private var stickyBrowserCall = false
     private var started = false
 
     /// - Parameters:
-    ///   - pollInterval: how often to re-scan windows (browser tab-title changes only surface via the poll).
+    ///   - pollInterval: how often to re-probe (browser tab-title changes only surface via the poll).
     ///   - offGracePeriod: sustained "no meeting" time required before flipping off.
-    ///   - isMeetingNow: meeting probe (injectable for tests).
+    ///   - signalProbe: conferencing-audio probe (injectable for tests).
     ///   - now: clock (injectable for tests).
     ///   - onChange: called on the main actor whenever `isMeetingActive` flips.
     init(
         pollInterval: TimeInterval = 4.0,
         offGracePeriod: TimeInterval = 8.0,
-        isMeetingNow: @escaping () -> Bool = { ConferencingApps.isMeetingActiveNow() },
+        signalProbe: @escaping () -> ConferencingApps.MeetingSignal = { ConferencingApps.meetingSignal() },
         now: @escaping () -> Date = { Date() },
         onChange: @escaping (Bool) -> Void
     ) {
         self.pollInterval = pollInterval
         self.offGracePeriod = offGracePeriod
-        self.isMeetingNow = isMeetingNow
+        self.probeSignal = signalProbe
         self.now = now
         self.onChange = onChange
     }
@@ -99,15 +102,31 @@ final class MeetingDetector {
     /// Probe for an active call off the main actor — the CoreAudio process scan / CGWindowList query
     /// can block (notably right after wake) — then apply the result back on the main actor.
     private func tick() {
-        let probe = isMeetingNow
+        let probe = probeSignal
         Task.detached(priority: .utility) { [weak self] in
-            let detected = probe()
-            await MainActor.run { self?.applyDetected(detected) }
+            let signal = probe()
+            await MainActor.run { self?.applySignal(signal) }
         }
     }
 
-    /// Apply a probe result, honoring the off-hysteresis. Exposed for tests; normally driven by the
-    /// poll timer and workspace notifications via `tick()`.
+    /// Resolve a `MeetingSignal` into an active/inactive decision, applying the sticky browser-call
+    /// keep-alive, then run it through the off-hysteresis. Exposed for tests.
+    func applySignal(_ signal: ConferencingApps.MeetingSignal) {
+        // Sticky: once we're in a browser call, keep it alive while the browser still plays call
+        // audio, even if mic input drops (the user muted). Native calls keep the mic open when muted
+        // so they don't need this.
+        let effective = signal.inCall || (stickyBrowserCall && signal.browserAudioOutput)
+        if effective, signal.browserInvolved {
+            stickyBrowserCall = true
+        }
+        applyDetected(effective)
+        if !isMeetingActive {
+            stickyBrowserCall = false
+        }
+    }
+
+    /// Apply a boolean detection result, honoring the off-hysteresis. Exposed for tests; normally
+    /// driven by the poll timer and workspace notifications via `tick()` → `applySignal(_:)`.
     func applyDetected(_ detected: Bool) {
         if detected {
             // Meeting present: cancel any pending-off and ensure we're active.
