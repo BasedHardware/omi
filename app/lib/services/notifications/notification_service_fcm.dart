@@ -19,6 +19,7 @@ import 'package:omi/services/notifications/notification_interface.dart';
 import 'package:omi/services/voice_playback/omi_voice_playback_service.dart';
 import 'package:omi/utils/analytics/intercom.dart';
 import 'package:omi/utils/logger.dart';
+import 'package:omi/utils/notification_channel_strings.dart';
 
 /// Firebase Cloud Messaging enabled notification service
 /// Supports iOS, Android, macOS, web, and Linux with full FCM functionality
@@ -30,8 +31,8 @@ class _FCMNotificationService implements NotificationInterface {
   final channel = NotificationChannel(
     channelGroupKey: 'channel_group_key',
     channelKey: 'channel',
-    channelName: 'Omi Notifications',
-    channelDescription: 'Notification channel for Omi',
+    channelName: NotificationChannelStrings.omiChannelName,
+    channelDescription: NotificationChannelStrings.omiChannelDescription,
     defaultColor: const Color(0xFF9D50DD),
     ledColor: Colors.white,
   );

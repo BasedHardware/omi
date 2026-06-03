@@ -4,6 +4,7 @@ import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:geolocator/geolocator.dart';
 
 import 'package:omi/utils/logger.dart';
+import 'package:omi/utils/notification_channel_strings.dart';
 
 @pragma('vm:entry-point')
 void _startForegroundCallback() {
@@ -108,8 +109,8 @@ class ForegroundUtil {
       FlutterForegroundTask.init(
         androidNotificationOptions: AndroidNotificationOptions(
           channelId: 'foreground_service',
-          channelName: 'Foreground Service Notification',
-          channelDescription: 'Transcription service is running in the background.',
+          channelName: NotificationChannelStrings.foregroundServiceChannelName,
+          channelDescription: NotificationChannelStrings.foregroundServiceChannelDescription,
           channelImportance: NotificationChannelImportance.LOW,
           priority: NotificationPriority.HIGH,
           // iconData: const NotificationIconData(
