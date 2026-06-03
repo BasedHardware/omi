@@ -115,25 +115,49 @@ enum ConferencingApps {
     ///   title**, which requires Screen Recording permission (without it, browser calls aren't
     ///   detected; native calls still are).
     static func isMeetingActiveNow() -> Bool {
-        if #available(macOS 14.4, *), callAppIsUsingMicrophone() {
-            return true
-        }
-        return browserCallWindowPresent()
+        meetingSignal().inCall
     }
 
-    /// True if a known conferencing app — a native call app OR a web browser — is currently using
-    /// the microphone (in a call). Native call apps usually keep the mic open even when muted; a
-    /// browser drops mic input when muted, so a muted browser call may not be detected this way
-    /// (the window-title fallback covers that when Screen Recording permission is granted).
-    @available(macOS 14.4, *)
-    static func callAppIsUsingMicrophone() -> Bool {
-        for process in audioProcessObjects() where processIsRunningInput(process) {
-            guard let bundleID = processBundleID(process) else { continue }
-            if isNativeCallApp(bundleID: bundleID) || isBrowserBundleID(bundleID) {
-                return true
+    /// A snapshot of conferencing-related audio activity, consumed by `MeetingDetector` (including its
+    /// "sticky" logic that keeps a *muted* browser call alive via continued browser audio output).
+    struct MeetingSignal {
+        /// High-confidence "you're in a call": a native call app on the mic, a browser on the mic,
+        /// or a browser call window title (the latter needs Screen Recording permission).
+        var inCall: Bool
+        /// The current signal involves a browser — so it's eligible for sticky keep-alive.
+        var browserInvolved: Bool
+        /// A browser is currently playing audio output (used to keep a muted browser call alive).
+        var browserAudioOutput: Bool
+
+        static let none = MeetingSignal(
+            inCall: false, browserInvolved: false, browserAudioOutput: false)
+    }
+
+    /// Compute the current `MeetingSignal` from audio-process activity (macOS 14.4+) plus browser
+    /// call windows. Native call apps keep the mic open even when muted; a browser drops mic input
+    /// when muted, which is why `browserAudioOutput` is exposed for the detector's sticky logic.
+    static func meetingSignal() -> MeetingSignal {
+        var nativeMic = false
+        var browserMic = false
+        var browserOutput = false
+        if #available(macOS 14.4, *) {
+            for process in audioProcessObjects() {
+                let input = processIsRunningInput(process)
+                let output = processIsRunningOutput(process)
+                guard input || output, let bundleID = processBundleID(process) else { continue }
+                if isNativeCallApp(bundleID: bundleID) {
+                    if input { nativeMic = true }
+                } else if isBrowserBundleID(bundleID) {
+                    if input { browserMic = true }
+                    if output { browserOutput = true }
+                }
             }
         }
-        return false
+        let windowCall = browserCallWindowPresent()
+        return MeetingSignal(
+            inCall: nativeMic || browserMic || windowCall,
+            browserInvolved: browserMic || windowCall,
+            browserAudioOutput: browserOutput)
     }
 
     /// True if an on-screen browser window's title indicates a call. Window titles require Screen
@@ -183,8 +207,20 @@ enum ConferencingApps {
 
     @available(macOS 14.4, *)
     private static func processIsRunningInput(_ process: AudioObjectID) -> Bool {
+        processBoolProperty(process, kAudioProcessPropertyIsRunningInput)
+    }
+
+    @available(macOS 14.4, *)
+    private static func processIsRunningOutput(_ process: AudioObjectID) -> Bool {
+        processBoolProperty(process, kAudioProcessPropertyIsRunningOutput)
+    }
+
+    @available(macOS 14.4, *)
+    private static func processBoolProperty(
+        _ process: AudioObjectID, _ selector: AudioObjectPropertySelector
+    ) -> Bool {
         var address = AudioObjectPropertyAddress(
-            mSelector: kAudioProcessPropertyIsRunningInput,
+            mSelector: selector,
             mScope: kAudioObjectPropertyScopeGlobal,
             mElement: kAudioObjectPropertyElementMain)
         var value: UInt32 = 0
