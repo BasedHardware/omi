@@ -270,8 +270,11 @@ def get_available_plans_endpoint(
                 scheduled_price_id = price_map.get(scheduled_price_id, scheduled_price_id)
 
         current_plan = current_subscription.plan if current_subscription else PlanType.basic
+        ever_purchased = subscription_utils.has_ever_purchased(uid, current_subscription)
         pricing_options: List[PricingOption] = []
-        for definition in filter_plans_for_user(all_definitions, current_plan, platform=x_app_platform):
+        for definition in filter_plans_for_user(
+            all_definitions, current_plan, platform=x_app_platform, ever_purchased=ever_purchased
+        ):
             monthly_price_id = definition["monthly_price_id"]
             annual_price_id = definition["annual_price_id"]
             if monthly_price_id:
