@@ -261,6 +261,12 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
     if (_isRegenerating || _summary == null) return;
     setState(() => _isRegenerating = true);
 
+    // Capture the navigator BEFORE the await so we can dismiss the spinner
+    // unconditionally — even if the widget unmounts mid-flight (route
+    // popped from outside, OS kills the activity), the navigator is still
+    // alive and pop() works without needing a valid widget context.
+    final rootNavigator = Navigator.of(context, rootNavigator: true);
+
     // Fullscreen blocking spinner — barrierDismissible=false so the user
     // can't half-cancel and get into a torn state.
     showDialog<void>(
@@ -270,8 +276,13 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
     );
 
     final result = await regenerateDailySummary(widget.summaryId);
+
+    // Dismiss spinner first, then bail if widget is gone. Order matters:
+    // mounted check before pop would orphan the dialog on dispose.
+    if (rootNavigator.canPop()) {
+      rootNavigator.pop();
+    }
     if (!mounted) return;
-    Navigator.of(context, rootNavigator: true).pop(); // dismiss spinner
 
     if (result.success && result.summary != null) {
       setState(() {

@@ -1383,8 +1383,13 @@ def regenerate_daily_summary(summary_id: str, uid: str = Depends(auth.get_curren
     if get_generic_cache(cooldown_key):
         raise HTTPException(
             status_code=429,
-            detail=f'Please wait a few seconds before regenerating this recap again.',
+            detail='Please wait a few seconds before regenerating this recap again.',
         )
+    # Set the cooldown BEFORE the LLM call, not after. The check-then-set
+    # window was wide enough that two concurrent requests could both pass
+    # the guard and double-bill the LLM. This isn't atomic SETNX, but the
+    # eager set closes the practical race for accidental double-taps.
+    set_generic_cache(cooldown_key, {'at': datetime.utcnow().isoformat()}, ttl=_REGENERATE_COOLDOWN_SECONDS)
 
     # Resolve the user's local day boundaries the same way the scheduled job
     # does, so the regenerated payload uses the identical conversation set.
@@ -1411,14 +1416,17 @@ def regenerate_daily_summary(summary_id: str, uid: str = Depends(auth.get_curren
     conversations = deserialize_conversations(conversations_data)
 
     summary_data = generate_comprehensive_daily_summary(uid, conversations, date_str, start_date_utc, end_date_utc)
-    # Preserve fields readers care about that the generator doesn't set
-    # (visibility/sharing state shouldn't reset on regenerate).
+    # Preserve fields readers care about that the generator silently resets:
+    # - visibility: sharing state shouldn't toggle off on regenerate
+    # - created_at: generator stamps a fresh utcnow(), but UI sorts/displays
+    #   summaries by when they were first created, not last regenerated
     if 'visibility' in summary:
         summary_data['visibility'] = summary['visibility']
+    if 'created_at' in summary:
+        summary_data['created_at'] = summary['created_at']
     summary_data['regenerated_at'] = datetime.utcnow().isoformat()
 
     daily_summaries_db.update_daily_summary(uid, summary_id, summary_data)
-    set_generic_cache(cooldown_key, {'at': datetime.utcnow().isoformat()}, ttl=_REGENERATE_COOLDOWN_SECONDS)
 
     refreshed = daily_summaries_db.get_daily_summary(uid, summary_id)
     return refreshed or {**summary_data, 'id': summary_id}
