@@ -63,20 +63,20 @@ final class MeetingDetector {
         ] {
             let observer = nc.addObserver(forName: name, object: nil, queue: .main) {
                 [weak self] _ in
-                Task { @MainActor in self?.evaluate() }
+                Task { @MainActor in self?.tick() }
             }
             workspaceObservers.append(observer)
         }
 
         timer = Timer.scheduledTimer(withTimeInterval: pollInterval, repeats: true) {
             [weak self] _ in
-            Task { @MainActor in self?.evaluate() }
+            Task { @MainActor in self?.tick() }
         }
 
-        // Establish initial state right away (no onChange suppression — a real meeting at start
-        // should immediately gate system audio on).
-        evaluate()
-        log("MeetingDetector: started (poll=\(pollInterval)s, offGrace=\(offGracePeriod)s, active=\(isMeetingActive))")
+        // Establish the initial state. The probe runs off the main actor and is applied
+        // asynchronously (and surfaced via onChange), so the caller's gate converges shortly after.
+        tick()
+        log("MeetingDetector: started (poll=\(pollInterval)s, offGrace=\(offGracePeriod)s)")
     }
 
     /// Stop all observation. Resets pending-off state; `isMeetingActive` is left as-is.
@@ -96,17 +96,25 @@ final class MeetingDetector {
         log("MeetingDetector: stopped")
     }
 
-    /// Re-evaluate meeting state, applying off-hysteresis. Exposed for tests; normally driven by
-    /// the poll timer and workspace notifications.
-    func evaluate() {
-        let detected = isMeetingNow()
+    /// Probe for an active call off the main actor — the CoreAudio process scan / CGWindowList query
+    /// can block (notably right after wake) — then apply the result back on the main actor.
+    private func tick() {
+        let probe = isMeetingNow
+        Task.detached(priority: .utility) { [weak self] in
+            let detected = probe()
+            await MainActor.run { self?.applyDetected(detected) }
+        }
+    }
 
+    /// Apply a probe result, honoring the off-hysteresis. Exposed for tests; normally driven by the
+    /// poll timer and workspace notifications via `tick()`.
+    func applyDetected(_ detected: Bool) {
         if detected {
             // Meeting present: cancel any pending-off and ensure we're active.
             pendingOffDeadline = nil
             setActive(true)
         } else if isMeetingActive {
-            // Meeting just/again undetected while active: arm or honor the off grace period.
+            // Meeting undetected while active: arm or honor the off grace period.
             if let deadline = pendingOffDeadline {
                 if now() >= deadline {
                     pendingOffDeadline = nil
