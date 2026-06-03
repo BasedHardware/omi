@@ -129,6 +129,28 @@ final class MeetingDetectorTests: XCTestCase {
         XCTAssertFalse(detector.isMeetingActive)
         XCTAssertEqual(changes, [], "no edges while never in a meeting")
     }
+
+    func testStickyBrowserCallStaysActiveWhileMutedThenEndsWhenAudioStops() {
+        var changes = [Bool]()
+        let detector = makeDetector(offGrace: 8.0, onChange: { changes.append($0) })
+
+        // In a browser call (browser is using the mic).
+        detector.applySignal(.init(inCall: true, browserInvolved: true, browserAudioOutput: true))
+        XCTAssertTrue(detector.isMeetingActive)
+
+        // User mutes: mic input drops (inCall=false) but the browser still plays the call's audio.
+        detector.applySignal(.init(inCall: false, browserInvolved: false, browserAudioOutput: true))
+        now = now.addingTimeInterval(30)
+        detector.applySignal(.init(inCall: false, browserInvolved: false, browserAudioOutput: true))
+        XCTAssertTrue(detector.isMeetingActive, "muted browser call stays active while audio plays")
+
+        // Call ends: browser stops playing audio → flips off after the grace period.
+        detector.applySignal(.none)
+        now = now.addingTimeInterval(9)
+        detector.applySignal(.none)
+        XCTAssertFalse(detector.isMeetingActive)
+        XCTAssertEqual(changes, [true, false])
+    }
 }
 
 // MARK: - AssistantSettings.systemAudioCaptureMode
