@@ -131,15 +131,14 @@ router = APIRouter()
 PUSHER_ENABLED = bool(os.getenv('HOSTED_PUSHER_API_URL'))
 
 
-def _select_stt_processor(uid: str):
-    """Pick the streaming STT backend. Defaults to Deepgram; opt into the self-hosted
-    Parakeet service with PARAKEET_STT_ENABLED=1 (optionally restricted to a comma-separated
-    PARAKEET_STT_UIDS allowlist). Both env vars are unset in prod, so prod stays on Deepgram."""
-    if os.getenv('PARAKEET_STT_ENABLED') == '1':
-        allow = os.getenv('PARAKEET_STT_UIDS', '').strip()
-        if not allow or uid in {u.strip() for u in allow.split(',') if u.strip()}:
-            logger.info(f'STT backend: Parakeet (self-hosted) for uid={uid}')
-            return process_audio_parakeet
+def _select_stt_processor(requested_stt_service: Optional[str]):
+    """Pick the streaming STT backend. Defaults to Deepgram. Routes to the self-hosted Parakeet
+    service only when the user opted in by selecting it (client sends stt_service=parakeet) AND the
+    service is configured (HOSTED_PARAKEET_API_URL set — unset in envs without it). Opt-in per user;
+    everyone else stays on Deepgram."""
+    if requested_stt_service == 'parakeet' and os.getenv('HOSTED_PARAKEET_API_URL'):
+        logger.info('STT backend: Parakeet (self-hosted, user-selected)')
+        return process_audio_parakeet
     return process_audio_dg
 
 
@@ -349,6 +348,10 @@ async def _stream_handler(
 
     # Convert 'auto' to 'multi' for consistency
     language = 'multi' if language == 'auto' else language
+
+    # The client's requested engine (transcriptionModel), e.g. 'parakeet' when the user picks
+    # "Omi Parakeet" — captured before get_stt_service_for_language() overwrites stt_service below.
+    requested_stt_service = stt_service
 
     # Determine the best STT service
     stt_service, stt_language, stt_model = get_stt_service_for_language(
@@ -1014,7 +1017,7 @@ async def _stream_handler(
                         return cb
 
                     callback = make_multi_channel_callback(ch_config)
-                    stt_sockets_multi[i] = await _select_stt_processor(uid)(
+                    stt_sockets_multi[i] = await _select_stt_processor(requested_stt_service)(
                         callback,
                         stt_language,
                         TARGET_SAMPLE_RATE,
@@ -1056,7 +1059,7 @@ async def _stream_handler(
                     logger.exception('VAD gate init failed, continuing without gate uid=%s session=%s', uid, session_id)
                     vad_gate = None
 
-            deepgram_socket = await _select_stt_processor(uid)(
+            deepgram_socket = await _select_stt_processor(requested_stt_service)(
                 stream_transcript,
                 stt_language,
                 sample_rate,
@@ -2972,7 +2975,7 @@ async def listen_handler(
         codec,
         channels,
         include_speech_profile,
-        None,
+        stt_service,  # pass the client's requested engine through (used to opt into Parakeet)
         conversation_timeout=conversation_timeout,
         source=source,
         custom_stt_mode=custom_stt_mode,
