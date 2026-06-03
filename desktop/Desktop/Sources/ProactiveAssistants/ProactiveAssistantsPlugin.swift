@@ -82,16 +82,9 @@ public class ProactiveAssistantsPlugin: NSObject {
         "Slack", "Discord", "Messenger",
     ]
 
-    /// Apps whose primary purpose is video/audio calls.
-    private static let videoCallApps: Set<String> = [
-        "Microsoft Teams",
-        "zoom.us",
-        "FaceTime",
-        "Webex",
-        "Cisco Webex Meetings",
-        "GoTo Meeting",
-        "GoToMeeting",
-    ]
+    // Conferencing-app catalog (call apps / browser apps / call keywords) now lives in the
+    // shared `ConferencingApps` enum, used here (call throttling) and by `MeetingDetector`
+    // (system-audio gating).
 
     /// Bundle IDs of third-party and system screenshot/screen-recording apps.
     /// When one of these is frontmost, Omi's 3s capture loop contends with the
@@ -118,24 +111,6 @@ public class ProactiveAssistantsPlugin: NSObject {
         "com.capto.Capto",                   // Capto
         "com.pixelmatorteam.screenshot",     // Pixelmator screenshot
         "com.tencent.xin.lemon",             // WeCom screenshot
-    ]
-
-    /// Keywords in browser window titles that indicate a video call.
-    private static let videoCallBrowserKeywords: [String] = [
-        "Google Meet",
-        "meet.google.com",
-        "Teams - Microsoft",  // Teams web app
-    ]
-
-    /// Browser app names (for window-title-based call detection).
-    private static let browserApps: Set<String> = [
-        "Google Chrome",
-        "Arc",
-        "Safari",
-        "Firefox",
-        "Microsoft Edge",
-        "Brave Browser",
-        "Opera",
     ]
 
     // Auto-retry state for transient failures (Exposé, Mission Control, etc.)
@@ -1325,25 +1300,9 @@ public class ProactiveAssistantsPlugin: NSObject {
     // MARK: - Video Call Detection
 
     /// Check if the frontmost app (and optionally window title) indicates an active video call.
+    /// Delegates to the shared `ConferencingApps` catalog (also used by `MeetingDetector`).
     private func isVideoCallApp(appName: String?, windowTitle: String?) -> Bool {
-        guard let appName = appName else { return false }
-
-        // Direct match: dedicated video call apps
-        if Self.videoCallApps.contains(appName) {
-            return true
-        }
-
-        // Browser-based calls: check window title for call keywords
-        if Self.browserApps.contains(appName), let title = windowTitle {
-            let lowercaseTitle = title.lowercased()
-            for keyword in Self.videoCallBrowserKeywords {
-                if lowercaseTitle.contains(keyword.lowercased()) {
-                    return true
-                }
-            }
-        }
-
-        return false
+        return ConferencingApps.isCallWindow(ownerName: appName, title: windowTitle)
     }
 
     // MARK: - Screenshot App Detection
