@@ -4703,7 +4703,10 @@ class AppLocalizationsMs extends AppLocalizations {
   }
 
   @override
-  String accessesAndTriggeredBy(String accessDescription, String triggerDescription) {
+  String accessesAndTriggeredBy(
+    String accessDescription,
+    String triggerDescription,
+  ) {
     return '$accessDescription dan $triggerDescription.';
   }
 
@@ -9318,4 +9321,19 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get backgroundModeNote => 'Buat masa ini hanya berfungsi dengan peranti Omi dan sentiasa diperbaiki.';
+
+  @override
+  String get regenerateRecap => 'Jana semula ringkasan';
+
+  @override
+  String get recapRegeneratedSnackbar => 'Ringkasan dijana semula';
+
+  @override
+  String get recapRegenerateFailed => 'Tidak dapat menjana semula ringkasan. Cuba sebentar lagi.';
+
+  @override
+  String get recapRegenerateCooldown => 'Sila tunggu beberapa saat sebelum menjana semula.';
+
+  @override
+  String get recapRegenerateNoConversations => 'Tiada perbualan untuk diringkaskan untuk hari ini.';
 }

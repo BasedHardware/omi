@@ -10619,5 +10619,10 @@
     "invalidPromotionCode": "చెల్లని ప్రోమో కోడ్.",
     "backgroundModeTitle": "నేపథ్య మోడ్",
     "backgroundModeDescription": "యాప్ పూర్తిగా మూసివేయబడినా మీ Omi రికార్డింగ్‌ను కొనసాగించండి.",
-    "backgroundModeNote": "ప్రస్తుతం Omi పరికరాలతో మాత్రమే పనిచేస్తుంది మరియు నిరంతరం మెరుగుపరచబడుతోంది."
+    "backgroundModeNote": "ప్రస్తుతం Omi పరికరాలతో మాత్రమే పనిచేస్తుంది మరియు నిరంతరం మెరుగుపరచబడుతోంది.",
+    "regenerateRecap": "సారాంశాన్ని పునరుత్పత్తి చేయండి",
+    "recapRegeneratedSnackbar": "సారాంశం పునరుత్పత్తి అయింది",
+    "recapRegenerateFailed": "సారాంశాన్ని పునరుత్పత్తి చేయలేకపోయాము. తర్వాత మళ్లీ ప్రయత్నించండి.",
+    "recapRegenerateCooldown": "మళ్లీ పునరుత్పత్తి చేయడానికి ముందు దయచేసి కొన్ని సెకన్లు వేచి ఉండండి.",
+    "recapRegenerateNoConversations": "ఈ రోజుకి సారాంశీకరించడానికి సంభాషణలు లేవు."
 }

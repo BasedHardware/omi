@@ -4680,7 +4680,10 @@ class AppLocalizationsEs extends AppLocalizations {
   }
 
   @override
-  String accessesAndTriggeredBy(String accessDescription, String triggerDescription) {
+  String accessesAndTriggeredBy(
+    String accessDescription,
+    String triggerDescription,
+  ) {
     return '$accessDescription y es $triggerDescription.';
   }
 
@@ -9315,4 +9318,19 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get backgroundModeNote => 'Por ahora solo funciona con dispositivos Omi y se mejora continuamente.';
+
+  @override
+  String get regenerateRecap => 'Regenerar resumen';
+
+  @override
+  String get recapRegeneratedSnackbar => 'Resumen regenerado';
+
+  @override
+  String get recapRegenerateFailed => 'No se pudo regenerar el resumen. Inténtalo de nuevo más tarde.';
+
+  @override
+  String get recapRegenerateCooldown => 'Espera unos segundos antes de regenerar de nuevo.';
+
+  @override
+  String get recapRegenerateNoConversations => 'No hay conversaciones para resumir en este día.';
 }

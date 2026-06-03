@@ -3041,5 +3041,10 @@
     "invalidPromotionCode": "Nederīgs reklāmas kods.",
     "backgroundModeTitle": "Fona režīms",
     "backgroundModeDescription": "Saglabājiet Omi ierakstīšanu pat tad, kad lietotne ir pilnībā aizvērta.",
-    "backgroundModeNote": "Pagaidām darbojas tikai ar Omi ierīcēm un tiek nepārtraukti uzlabota."
+    "backgroundModeNote": "Pagaidām darbojas tikai ar Omi ierīcēm un tiek nepārtraukti uzlabota.",
+    "regenerateRecap": "Atjaunot kopsavilkumu",
+    "recapRegeneratedSnackbar": "Kopsavilkums atjaunots",
+    "recapRegenerateFailed": "Kopsavilkumu neizdevās atjaunot. Mēģiniet vēlāk vēlreiz.",
+    "recapRegenerateCooldown": "Lūdzu, pagaidiet dažas sekundes pirms atkārtotas ģenerēšanas.",
+    "recapRegenerateNoConversations": "Šajā dienā nav sarunu, ko apkopot."
 }

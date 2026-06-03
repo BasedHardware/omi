@@ -10619,5 +10619,10 @@
     "invalidPromotionCode": "অবৈধ প্রোমো কোড।",
     "backgroundModeTitle": "ব্যাকগ্রাউন্ড মোড",
     "backgroundModeDescription": "অ্যাপ সম্পূর্ণ বন্ধ থাকলেও আপনার Omi রেকর্ডিং চালু রাখুন।",
-    "backgroundModeNote": "আপাতত শুধু Omi ডিভাইসের সাথে কাজ করে এবং ক্রমাগত উন্নত করা হচ্ছে।"
+    "backgroundModeNote": "আপাতত শুধু Omi ডিভাইসের সাথে কাজ করে এবং ক্রমাগত উন্নত করা হচ্ছে।",
+    "regenerateRecap": "রিক্যাপ পুনরায় তৈরি করুন",
+    "recapRegeneratedSnackbar": "রিক্যাপ পুনরায় তৈরি হয়েছে",
+    "recapRegenerateFailed": "রিক্যাপ পুনরায় তৈরি করা যায়নি। পরে আবার চেষ্টা করুন।",
+    "recapRegenerateCooldown": "পুনরায় তৈরি করার আগে কয়েক সেকেন্ড অপেক্ষা করুন।",
+    "recapRegenerateNoConversations": "এই দিনের জন্য সংক্ষেপ করার কোনো কথোপকথন নেই।"
 }

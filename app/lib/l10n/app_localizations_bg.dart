@@ -4700,7 +4700,10 @@ class AppLocalizationsBg extends AppLocalizations {
   }
 
   @override
-  String accessesAndTriggeredBy(String accessDescription, String triggerDescription) {
+  String accessesAndTriggeredBy(
+    String accessDescription,
+    String triggerDescription,
+  ) {
     return '$accessDescription и е $triggerDescription.';
   }
 
@@ -9330,4 +9333,19 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get backgroundModeNote => 'Засега работи само с устройства Omi и непрекъснато се подобрява.';
+
+  @override
+  String get regenerateRecap => 'Регенерирай резюмето';
+
+  @override
+  String get recapRegeneratedSnackbar => 'Резюмето е регенерирано';
+
+  @override
+  String get recapRegenerateFailed => 'Резюмето не можа да бъде регенерирано. Опитайте отново по-късно.';
+
+  @override
+  String get recapRegenerateCooldown => 'Моля, изчакайте няколко секунди преди повторно регенериране.';
+
+  @override
+  String get recapRegenerateNoConversations => 'Няма разговори за обобщаване за този ден.';
 }

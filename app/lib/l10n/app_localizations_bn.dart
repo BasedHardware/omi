@@ -4692,7 +4692,10 @@ class AppLocalizationsBn extends AppLocalizations {
   }
 
   @override
-  String accessesAndTriggeredBy(String accessDescription, String triggerDescription) {
+  String accessesAndTriggeredBy(
+    String accessDescription,
+    String triggerDescription,
+  ) {
     return '$accessDescription এবং $triggerDescription দ্বারা ট্রিগার।';
   }
 
@@ -9302,4 +9305,19 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String get backgroundModeNote => 'আপাতত শুধু Omi ডিভাইসের সাথে কাজ করে এবং ক্রমাগত উন্নত করা হচ্ছে।';
+
+  @override
+  String get regenerateRecap => 'রিক্যাপ পুনরায় তৈরি করুন';
+
+  @override
+  String get recapRegeneratedSnackbar => 'রিক্যাপ পুনরায় তৈরি হয়েছে';
+
+  @override
+  String get recapRegenerateFailed => 'রিক্যাপ পুনরায় তৈরি করা যায়নি। পরে আবার চেষ্টা করুন।';
+
+  @override
+  String get recapRegenerateCooldown => 'পুনরায় তৈরি করার আগে কয়েক সেকেন্ড অপেক্ষা করুন।';
+
+  @override
+  String get recapRegenerateNoConversations => 'এই দিনের জন্য সংক্ষেপ করার কোনো কথোপকথন নেই।';
 }

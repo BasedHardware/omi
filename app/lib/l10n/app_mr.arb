@@ -10619,5 +10619,10 @@
     "invalidPromotionCode": "अवैध प्रोमो कोड.",
     "backgroundModeTitle": "बॅकग्राउंड मोड",
     "backgroundModeDescription": "अ‍ॅप पूर्णपणे बंद असतानाही तुमचे Omi रेकॉर्डिंग सुरू ठेवा.",
-    "backgroundModeNote": "सध्या फक्त Omi उपकरणांसह कार्य करते आणि सतत सुधारित केले जात आहे."
+    "backgroundModeNote": "सध्या फक्त Omi उपकरणांसह कार्य करते आणि सतत सुधारित केले जात आहे.",
+    "regenerateRecap": "सारांश पुन्हा तयार करा",
+    "recapRegeneratedSnackbar": "सारांश पुन्हा तयार केला",
+    "recapRegenerateFailed": "सारांश पुन्हा तयार करता आला नाही. नंतर पुन्हा प्रयत्न करा.",
+    "recapRegenerateCooldown": "पुन्हा तयार करण्यापूर्वी कृपया काही सेकंद थांबा.",
+    "recapRegenerateNoConversations": "या दिवसासाठी सारांश करण्यासाठी कोणतेही संभाषण नाही."
 }

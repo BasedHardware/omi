@@ -3076,5 +3076,10 @@
     "invalidPromotionCode": "Code promo invalide.",
     "backgroundModeTitle": "Mode arrière-plan",
     "backgroundModeDescription": "Gardez votre Omi en enregistrement même lorsque l'application est entièrement fermée.",
-    "backgroundModeNote": "Fonctionne uniquement avec les appareils Omi pour l'instant, et s'améliore en continu."
+    "backgroundModeNote": "Fonctionne uniquement avec les appareils Omi pour l'instant, et s'améliore en continu.",
+    "regenerateRecap": "Régénérer le récapitulatif",
+    "recapRegeneratedSnackbar": "Récapitulatif régénéré",
+    "recapRegenerateFailed": "Impossible de régénérer le récapitulatif. Réessayez plus tard.",
+    "recapRegenerateCooldown": "Veuillez patienter quelques secondes avant de régénérer.",
+    "recapRegenerateNoConversations": "Aucune conversation à résumer pour cette journée."
 }
