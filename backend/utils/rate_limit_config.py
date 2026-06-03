@@ -52,7 +52,12 @@ RATE_POLICIES: dict[str, tuple[int, int]] = {
     # Platform tools — backend RAG endpoints
     "tools:search": (60, 3600),
     "tools:mutate": (60, 3600),
-    "mcp:sse": (200, 3600),
+    # MCP transport POSTs (initialize/tools-list/tool-calls) are cheap reads, but
+    # one user often runs many concurrent MCP clients (multiple IDE/agent sessions)
+    # under a single account, and clients reconnect in bursts. A tight cap here turns
+    # a reconnect storm into a 429 death-spiral, so this is sized for heavy multi-session
+    # use rather than a single client. Tune via RATE_LIMIT_BOOST for events.
+    "mcp:sse": (2000, 3600),
     # Memories — single LLM call each
     "memories:create": (60, 3600),
     # Memory batch writes — each request can create up to 100 memories, so the
