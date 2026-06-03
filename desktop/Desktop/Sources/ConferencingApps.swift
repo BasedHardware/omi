@@ -61,6 +61,29 @@ enum ConferencingApps {
         nativeCallBundleIDs.contains(bundleID.lowercased())
     }
 
+    /// Bundle-ID prefixes (lowercased) of web browsers. A browser process using the **microphone**
+    /// indicates a browser-based call (Google Meet, Teams web, etc.). Browsers route call audio
+    /// through helper processes (e.g. `net.imput.helium.helper`, `com.google.Chrome.helper`), so we
+    /// match by prefix rather than exact bundle ID.
+    static let browserBundleIDPrefixes: [String] = [
+        "com.google.chrome",
+        "company.thebrowser",  // Arc
+        "net.imput.helium",  // Helium
+        "org.mozilla.firefox",
+        "com.microsoft.edgemac",
+        "com.brave.browser",
+        "com.operasoftware.opera",
+        "com.vivaldi.vivaldi",
+        "com.apple.safari",
+        "com.apple.webkit.gpu",  // Safari / WebKit media process
+    ]
+
+    /// Whether a bundle ID belongs to a web browser (or one of its helpers), by prefix match.
+    static func isBrowserBundleID(_ bundleID: String) -> Bool {
+        let lower = bundleID.lowercased()
+        return browserBundleIDPrefixes.contains { lower.hasPrefix($0) }
+    }
+
     /// True if a single window — identified by its owner app and (optional) title — indicates a call.
     /// - Native call app: true on the owner name alone (no title / Screen Recording permission needed).
     /// - Browser app: true iff the title contains a call keyword (the title requires Screen Recording
@@ -92,17 +115,21 @@ enum ConferencingApps {
     ///   title**, which requires Screen Recording permission (without it, browser calls aren't
     ///   detected; native calls still are).
     static func isMeetingActiveNow() -> Bool {
-        if #available(macOS 14.4, *), nativeCallAppIsUsingMicrophone() {
+        if #available(macOS 14.4, *), callAppIsUsingMicrophone() {
             return true
         }
         return browserCallWindowPresent()
     }
 
-    /// True if any known native conferencing app is currently using the microphone (in a call).
+    /// True if a known conferencing app — a native call app OR a web browser — is currently using
+    /// the microphone (in a call). Native call apps usually keep the mic open even when muted; a
+    /// browser drops mic input when muted, so a muted browser call may not be detected this way
+    /// (the window-title fallback covers that when Screen Recording permission is granted).
     @available(macOS 14.4, *)
-    static func nativeCallAppIsUsingMicrophone() -> Bool {
+    static func callAppIsUsingMicrophone() -> Bool {
         for process in audioProcessObjects() where processIsRunningInput(process) {
-            if let bundleID = processBundleID(process), isNativeCallApp(bundleID: bundleID) {
+            guard let bundleID = processBundleID(process) else { continue }
+            if isNativeCallApp(bundleID: bundleID) || isBrowserBundleID(bundleID) {
                 return true
             }
         }
