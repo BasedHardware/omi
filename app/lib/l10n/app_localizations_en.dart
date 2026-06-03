@@ -9290,4 +9290,106 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get backgroundModeNote => 'Works with Omi devices only for now, and is being improved continuously.';
+
+  @override
+  String get accuracy => 'Accuracy';
+
+  @override
+  String get base => 'Base';
+
+  @override
+  String get cloudTranscription => 'Cloud Transcription';
+
+  @override
+  String get deepgram => 'Deepgram';
+
+  @override
+  String get deleteModel => 'Delete Model';
+
+  @override
+  String get deleteModelConfirm => 'Are you sure you want to delete this model?';
+
+  @override
+  String get downloaded => 'Downloaded';
+
+  @override
+  String get faster => 'Faster';
+
+  @override
+  String get filterAuto => 'Auto';
+
+  @override
+  String get higher => 'Higher';
+
+  @override
+  String get large => 'Large';
+
+  @override
+  String get lower => 'Lower';
+
+  @override
+  String get medium => 'Medium';
+
+  @override
+  String get modelDeleted => 'Model deleted';
+
+  @override
+  String get modelDownloadFailed => 'Model download failed';
+
+  @override
+  String get modelDownloadFailedDesc => 'Failed to download Whisper model. Please try again.';
+
+  @override
+  String get modelDownloaded => 'Model downloaded';
+
+  @override
+  String get modelDownloadedDesc => 'Whisper model downloaded successfully';
+
+  @override
+  String get modelSize => 'Model Size';
+
+  @override
+  String get none => 'None';
+
+  @override
+  String get onDeviceTranscription => 'On-Device Transcription';
+
+  @override
+  String get onDeviceTranscriptionDesc => 'Transcription is processed locally on your device';
+
+  @override
+  String get slower => 'Slower';
+
+  @override
+  String get small => 'Small';
+
+  @override
+  String get soniox => 'Soniox';
+
+  @override
+  String get speechToTextProvider => 'Speech-to-Text Provider';
+
+  @override
+  String get speechToTextProviderDesc => 'Choose the service used for transcription';
+
+  @override
+  String get speechmatics => 'Speechmatics';
+
+  @override
+  String get speed => 'Speed';
+
+  @override
+  String get tiny => 'Tiny';
+
+  @override
+  String get transcriptionLanguage => 'Transcription Language';
+
+  @override
+  String get transcriptionLanguageDesc => 'Choose the language for speech transcription';
+
+  @override
+  String get whisperModel => 'Whisper Model';
+
+  @override
+  String get whisperModelDesc => 'Choose the model for on-device transcription';
 }

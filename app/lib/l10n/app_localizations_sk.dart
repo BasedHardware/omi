@@ -9287,4 +9287,106 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get backgroundModeNote => 'Zatiaľ funguje len so zariadeniami Omi a priebežne sa vylepšuje.';
+
+  @override
+  String get accuracy => 'Presnosť';
+
+  @override
+  String get base => 'Základný';
+
+  @override
+  String get cloudTranscription => 'Cloudový prepis';
+
+  @override
+  String get deepgram => 'Deepgram';
+
+  @override
+  String get deleteModel => 'Odstrániť model';
+
+  @override
+  String get deleteModelConfirm => 'Naozaj chcete odstrániť tento model?';
+
+  @override
+  String get downloaded => 'Stiahnuté';
+
+  @override
+  String get faster => 'Rýchlejšie';
+
+  @override
+  String get filterAuto => 'Auto';
+
+  @override
+  String get higher => 'Vyššia';
+
+  @override
+  String get large => 'Veľký';
+
+  @override
+  String get lower => 'Nižšia';
+
+  @override
+  String get medium => 'Stredný';
+
+  @override
+  String get modelDeleted => 'Model odstránený';
+
+  @override
+  String get modelDownloadFailed => 'Sťahovanie modelu zlyhalo';
+
+  @override
+  String get modelDownloadFailedDesc => 'Nepodarilo sa stiahnuť model Whisper. Skúste to znova.';
+
+  @override
+  String get modelDownloaded => 'Model stiahnutý';
+
+  @override
+  String get modelDownloadedDesc => 'Model Whisper bol úspešne stiahnutý';
+
+  @override
+  String get modelSize => 'Veľkosť modelu';
+
+  @override
+  String get none => 'Žiadny';
+
+  @override
+  String get onDeviceTranscription => 'Prepis na zariadení';
+
+  @override
+  String get onDeviceTranscriptionDesc => 'Prepis sa spracováva lokálne na vašom zariadení';
+
+  @override
+  String get slower => 'Pomalšie';
+
+  @override
+  String get small => 'Malý';
+
+  @override
+  String get soniox => 'Soniox';
+
+  @override
+  String get speechToTextProvider => 'Poskytovateľ reči na text';
+
+  @override
+  String get speechToTextProviderDesc => 'Vyberte službu používanú na prepis';
+
+  @override
+  String get speechmatics => 'Speechmatics';
+
+  @override
+  String get speed => 'Rýchlosť';
+
+  @override
+  String get tiny => 'Drobný';
+
+  @override
+  String get transcriptionLanguage => 'Jazyk prepisu';
+
+  @override
+  String get transcriptionLanguageDesc => 'Vyberte jazyk pre prepis reči';
+
+  @override
+  String get whisperModel => 'Model Whisper';
+
+  @override
+  String get whisperModelDesc => 'Vyberte model pre prepis na zariadení';
 }

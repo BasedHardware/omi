@@ -9130,4 +9130,106 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get backgroundModeNote => '目前仅支持 Omi 设备，并在持续改进中。';
+
+  @override
+  String get accuracy => '准确度';
+
+  @override
+  String get base => '基础';
+
+  @override
+  String get cloudTranscription => '云端转录';
+
+  @override
+  String get deepgram => 'Deepgram';
+
+  @override
+  String get deleteModel => '删除模型';
+
+  @override
+  String get deleteModelConfirm => '您确定要删除此模型吗？';
+
+  @override
+  String get downloaded => '已下载';
+
+  @override
+  String get faster => '更快';
+
+  @override
+  String get filterAuto => '自动';
+
+  @override
+  String get higher => '较高';
+
+  @override
+  String get large => '大';
+
+  @override
+  String get lower => '较低';
+
+  @override
+  String get medium => '中';
+
+  @override
+  String get modelDeleted => '模型已删除';
+
+  @override
+  String get modelDownloadFailed => '模型下载失败';
+
+  @override
+  String get modelDownloadFailedDesc => '无法下载Whisper模型。请重试。';
+
+  @override
+  String get modelDownloaded => '模型已下载';
+
+  @override
+  String get modelDownloadedDesc => 'Whisper模型已成功下载';
+
+  @override
+  String get modelSize => '模型大小';
+
+  @override
+  String get none => '无';
+
+  @override
+  String get onDeviceTranscription => '设备端转录';
+
+  @override
+  String get onDeviceTranscriptionDesc => '转录在您的设备上本地处理';
+
+  @override
+  String get slower => '更慢';
+
+  @override
+  String get small => '小';
+
+  @override
+  String get soniox => 'Soniox';
+
+  @override
+  String get speechToTextProvider => '语音转文字提供商';
+
+  @override
+  String get speechToTextProviderDesc => '选择用于转录的服务';
+
+  @override
+  String get speechmatics => 'Speechmatics';
+
+  @override
+  String get speed => '速度';
+
+  @override
+  String get tiny => '极小';
+
+  @override
+  String get transcriptionLanguage => '转录语言';
+
+  @override
+  String get transcriptionLanguageDesc => '选择语音转录的语言';
+
+  @override
+  String get whisperModel => 'Whisper模型';
+
+  @override
+  String get whisperModelDesc => '选择设备端转录的模型';
 }

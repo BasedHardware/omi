@@ -9245,4 +9245,106 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get backgroundModeNote => 'ขณะนี้ใช้ได้กับอุปกรณ์ Omi เท่านั้น และกำลังพัฒนาอย่างต่อเนื่อง';
+
+  @override
+  String get accuracy => 'ความแม่นยำ';
+
+  @override
+  String get base => 'พื้นฐาน';
+
+  @override
+  String get cloudTranscription => 'การถอดความบนคลาวด์';
+
+  @override
+  String get deepgram => 'Deepgram';
+
+  @override
+  String get deleteModel => 'ลบโมเดล';
+
+  @override
+  String get deleteModelConfirm => 'คุณแน่ใจหรือไม่ว่าต้องการลบโมเดลนี้?';
+
+  @override
+  String get downloaded => 'ดาวน์โหลดแล้ว';
+
+  @override
+  String get faster => 'เร็วกว่า';
+
+  @override
+  String get filterAuto => 'Auto';
+
+  @override
+  String get higher => 'สูงกว่า';
+
+  @override
+  String get large => 'ใหญ่';
+
+  @override
+  String get lower => 'ต่ำกว่า';
+
+  @override
+  String get medium => 'กลาง';
+
+  @override
+  String get modelDeleted => 'ลบโมเดลแล้ว';
+
+  @override
+  String get modelDownloadFailed => 'การดาวน์โหลดโมเดลล้มเหลว';
+
+  @override
+  String get modelDownloadFailedDesc => 'ไม่สามารถดาวน์โหลดโมเดล Whisper ได้ กรุณาลองใหม่อีกครั้ง';
+
+  @override
+  String get modelDownloaded => 'ดาวน์โหลดโมเดลแล้ว';
+
+  @override
+  String get modelDownloadedDesc => 'ดาวน์โหลดโมเดล Whisper สำเร็จแล้ว';
+
+  @override
+  String get modelSize => 'ขนาดโมเดล';
+
+  @override
+  String get none => 'ไม่มี';
+
+  @override
+  String get onDeviceTranscription => 'การถอดความบนอุปกรณ์';
+
+  @override
+  String get onDeviceTranscriptionDesc => 'การถอดความประมวลผลในเครื่องบนอุปกรณ์ของคุณ';
+
+  @override
+  String get slower => 'ช้ากว่า';
+
+  @override
+  String get small => 'เล็ก';
+
+  @override
+  String get soniox => 'Soniox';
+
+  @override
+  String get speechToTextProvider => 'ผู้ให้บริการแปลงเสียงเป็นข้อความ';
+
+  @override
+  String get speechToTextProviderDesc => 'เลือกบริการที่ใช้สำหรับการถอดความ';
+
+  @override
+  String get speechmatics => 'Speechmatics';
+
+  @override
+  String get speed => 'ความเร็ว';
+
+  @override
+  String get tiny => 'เล็กมาก';
+
+  @override
+  String get transcriptionLanguage => 'ภาษาการถอดความ';
+
+  @override
+  String get transcriptionLanguageDesc => 'เลือกภาษาสำหรับการถอดความเสียงพูด';
+
+  @override
+  String get whisperModel => 'โมเดล Whisper';
+
+  @override
+  String get whisperModelDesc => 'เลือกโมเดลสำหรับการถอดความบนอุปกรณ์';
 }

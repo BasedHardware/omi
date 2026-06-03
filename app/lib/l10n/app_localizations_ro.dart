@@ -9340,4 +9340,106 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get backgroundModeNote => 'Deocamdată funcționează doar cu dispozitive Omi și este îmbunătățit continuu.';
+
+  @override
+  String get accuracy => 'Acuratețe';
+
+  @override
+  String get base => 'Bază';
+
+  @override
+  String get cloudTranscription => 'Transcriere în cloud';
+
+  @override
+  String get deepgram => 'Deepgram';
+
+  @override
+  String get deleteModel => 'Ștergere model';
+
+  @override
+  String get deleteModelConfirm => 'Sigur doriți să ștergeți acest model?';
+
+  @override
+  String get downloaded => 'Descărcat';
+
+  @override
+  String get faster => 'Mai rapid';
+
+  @override
+  String get filterAuto => 'Auto';
+
+  @override
+  String get higher => 'Mai mare';
+
+  @override
+  String get large => 'Mare';
+
+  @override
+  String get lower => 'Mai mică';
+
+  @override
+  String get medium => 'Mediu';
+
+  @override
+  String get modelDeleted => 'Model șters';
+
+  @override
+  String get modelDownloadFailed => 'Descărcarea modelului a eșuat';
+
+  @override
+  String get modelDownloadFailedDesc => 'Nu s-a putut descărca modelul Whisper. Vă rugăm să încercați din nou.';
+
+  @override
+  String get modelDownloaded => 'Model descărcat';
+
+  @override
+  String get modelDownloadedDesc => 'Modelul Whisper a fost descărcat cu succes';
+
+  @override
+  String get modelSize => 'Dimensiune model';
+
+  @override
+  String get none => 'Niciunul';
+
+  @override
+  String get onDeviceTranscription => 'Transcriere pe dispozitiv';
+
+  @override
+  String get onDeviceTranscriptionDesc => 'Transcrierea este procesată local pe dispozitivul dvs.';
+
+  @override
+  String get slower => 'Mai lent';
+
+  @override
+  String get small => 'Mic';
+
+  @override
+  String get soniox => 'Soniox';
+
+  @override
+  String get speechToTextProvider => 'Furnizor vorbire-în-text';
+
+  @override
+  String get speechToTextProviderDesc => 'Selectați serviciul utilizat pentru transcriere';
+
+  @override
+  String get speechmatics => 'Speechmatics';
+
+  @override
+  String get speed => 'Viteză';
+
+  @override
+  String get tiny => 'Minuscul';
+
+  @override
+  String get transcriptionLanguage => 'Limba transcrierii';
+
+  @override
+  String get transcriptionLanguageDesc => 'Selectați limba pentru transcrierea vorbirii';
+
+  @override
+  String get whisperModel => 'Model Whisper';
+
+  @override
+  String get whisperModelDesc => 'Selectați modelul pentru transcrierea pe dispozitiv';
 }

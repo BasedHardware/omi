@@ -9378,4 +9378,106 @@ class AppLocalizationsFr extends AppLocalizations {
   @override
   String get backgroundModeNote =>
       'Fonctionne uniquement avec les appareils Omi pour l\'instant, et s\'améliore en continu.';
+
+  @override
+  String get accuracy => 'Précision';
+
+  @override
+  String get base => 'Base';
+
+  @override
+  String get cloudTranscription => 'Transcription cloud';
+
+  @override
+  String get deepgram => 'Deepgram';
+
+  @override
+  String get deleteModel => 'Supprimer le modèle';
+
+  @override
+  String get deleteModelConfirm => 'Êtes-vous sûr de vouloir supprimer ce modèle ?';
+
+  @override
+  String get downloaded => 'Téléchargé';
+
+  @override
+  String get faster => 'Plus rapide';
+
+  @override
+  String get filterAuto => 'Auto';
+
+  @override
+  String get higher => 'Plus haute';
+
+  @override
+  String get large => 'Grand';
+
+  @override
+  String get lower => 'Plus basse';
+
+  @override
+  String get medium => 'Moyen';
+
+  @override
+  String get modelDeleted => 'Modèle supprimé';
+
+  @override
+  String get modelDownloadFailed => 'Échec du téléchargement du modèle';
+
+  @override
+  String get modelDownloadFailedDesc => 'Échec du téléchargement du modèle Whisper. Veuillez réessayer.';
+
+  @override
+  String get modelDownloaded => 'Modèle téléchargé';
+
+  @override
+  String get modelDownloadedDesc => 'Le modèle Whisper a été téléchargé avec succès';
+
+  @override
+  String get modelSize => 'Taille du modèle';
+
+  @override
+  String get none => 'Aucun';
+
+  @override
+  String get onDeviceTranscription => 'Transcription sur appareil';
+
+  @override
+  String get onDeviceTranscriptionDesc => 'La transcription est traitée localement sur votre appareil';
+
+  @override
+  String get slower => 'Plus lent';
+
+  @override
+  String get small => 'Petit';
+
+  @override
+  String get soniox => 'Soniox';
+
+  @override
+  String get speechToTextProvider => 'Fournisseur de reconnaissance vocale';
+
+  @override
+  String get speechToTextProviderDesc => 'Sélectionnez le service utilisé pour la transcription';
+
+  @override
+  String get speechmatics => 'Speechmatics';
+
+  @override
+  String get speed => 'Vitesse';
+
+  @override
+  String get tiny => 'Minuscule';
+
+  @override
+  String get transcriptionLanguage => 'Langue de transcription';
+
+  @override
+  String get transcriptionLanguageDesc => 'Sélectionnez la langue pour la transcription vocale';
+
+  @override
+  String get whisperModel => 'Modèle Whisper';
+
+  @override
+  String get whisperModelDesc => 'Sélectionnez le modèle pour la transcription sur appareil';
 }

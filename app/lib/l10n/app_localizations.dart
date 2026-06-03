@@ -17324,6 +17324,210 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Works with Omi devices only for now, and is being improved continuously.'**
   String get backgroundModeNote;
+
+  /// Label for accuracy metric of an on-device transcription model
+  ///
+  /// In en, this message translates to:
+  /// **'Accuracy'**
+  String get accuracy;
+
+  /// Whisper model size: base
+  ///
+  /// In en, this message translates to:
+  /// **'Base'**
+  String get base;
+
+  /// Section title for cloud-based transcription providers
+  ///
+  /// In en, this message translates to:
+  /// **'Cloud Transcription'**
+  String get cloudTranscription;
+
+  /// Brand name for the Deepgram speech-to-text provider
+  ///
+  /// In en, this message translates to:
+  /// **'Deepgram'**
+  String get deepgram;
+
+  /// Action label to delete a downloaded on-device transcription model
+  ///
+  /// In en, this message translates to:
+  /// **'Delete Model'**
+  String get deleteModel;
+
+  /// Confirmation prompt shown before deleting a downloaded model
+  ///
+  /// In en, this message translates to:
+  /// **'Are you sure you want to delete this model?'**
+  String get deleteModelConfirm;
+
+  /// Status label indicating an on-device model has been downloaded
+  ///
+  /// In en, this message translates to:
+  /// **'Downloaded'**
+  String get downloaded;
+
+  /// Relative speed indicator: faster
+  ///
+  /// In en, this message translates to:
+  /// **'Faster'**
+  String get faster;
+
+  /// Filter option label meaning "automatic"
+  ///
+  /// In en, this message translates to:
+  /// **'Auto'**
+  String get filterAuto;
+
+  /// Relative quality/accuracy indicator: higher
+  ///
+  /// In en, this message translates to:
+  /// **'Higher'**
+  String get higher;
+
+  /// Whisper model size: large
+  ///
+  /// In en, this message translates to:
+  /// **'Large'**
+  String get large;
+
+  /// Relative quality/accuracy indicator: lower
+  ///
+  /// In en, this message translates to:
+  /// **'Lower'**
+  String get lower;
+
+  /// Whisper model size: medium
+  ///
+  /// In en, this message translates to:
+  /// **'Medium'**
+  String get medium;
+
+  /// Toast shown after an on-device model is deleted
+  ///
+  /// In en, this message translates to:
+  /// **'Model deleted'**
+  String get modelDeleted;
+
+  /// Toast title when a model download fails
+  ///
+  /// In en, this message translates to:
+  /// **'Model download failed'**
+  String get modelDownloadFailed;
+
+  /// Toast body when a Whisper model download fails
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to download Whisper model. Please try again.'**
+  String get modelDownloadFailedDesc;
+
+  /// Toast shown after an on-device model is downloaded
+  ///
+  /// In en, this message translates to:
+  /// **'Model downloaded'**
+  String get modelDownloaded;
+
+  /// Toast body when a Whisper model is downloaded successfully
+  ///
+  /// In en, this message translates to:
+  /// **'Whisper model downloaded successfully'**
+  String get modelDownloadedDesc;
+
+  /// Label for the size of an on-device transcription model
+  ///
+  /// In en, this message translates to:
+  /// **'Model Size'**
+  String get modelSize;
+
+  /// Generic "none" option label
+  ///
+  /// In en, this message translates to:
+  /// **'None'**
+  String get none;
+
+  /// Section title for on-device transcription settings
+  ///
+  /// In en, this message translates to:
+  /// **'On-Device Transcription'**
+  String get onDeviceTranscription;
+
+  /// Description of on-device transcription behavior
+  ///
+  /// In en, this message translates to:
+  /// **'Transcription is processed locally on your device'**
+  String get onDeviceTranscriptionDesc;
+
+  /// Relative speed indicator: slower
+  ///
+  /// In en, this message translates to:
+  /// **'Slower'**
+  String get slower;
+
+  /// Whisper model size: small
+  ///
+  /// In en, this message translates to:
+  /// **'Small'**
+  String get small;
+
+  /// Brand name for the Soniox speech-to-text provider
+  ///
+  /// In en, this message translates to:
+  /// **'Soniox'**
+  String get soniox;
+
+  /// Label for the speech-to-text provider selector
+  ///
+  /// In en, this message translates to:
+  /// **'Speech-to-Text Provider'**
+  String get speechToTextProvider;
+
+  /// Description for the speech-to-text provider selector
+  ///
+  /// In en, this message translates to:
+  /// **'Choose the service used for transcription'**
+  String get speechToTextProviderDesc;
+
+  /// Brand name for the Speechmatics speech-to-text provider
+  ///
+  /// In en, this message translates to:
+  /// **'Speechmatics'**
+  String get speechmatics;
+
+  /// Label for speed metric of an on-device transcription model
+  ///
+  /// In en, this message translates to:
+  /// **'Speed'**
+  String get speed;
+
+  /// Whisper model size: tiny
+  ///
+  /// In en, this message translates to:
+  /// **'Tiny'**
+  String get tiny;
+
+  /// Label for the transcription language selector
+  ///
+  /// In en, this message translates to:
+  /// **'Transcription Language'**
+  String get transcriptionLanguage;
+
+  /// Description for the transcription language selector
+  ///
+  /// In en, this message translates to:
+  /// **'Choose the language for speech transcription'**
+  String get transcriptionLanguageDesc;
+
+  /// Label for the Whisper on-device transcription model selector
+  ///
+  /// In en, this message translates to:
+  /// **'Whisper Model'**
+  String get whisperModel;
+
+  /// Description for the Whisper on-device transcription model selector
+  ///
+  /// In en, this message translates to:
+  /// **'Choose the model for on-device transcription'**
+  String get whisperModelDesc;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

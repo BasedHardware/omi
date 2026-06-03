@@ -11001,5 +11001,141 @@
     "backgroundModeNote": "Works with Omi devices only for now, and is being improved continuously.",
     "@backgroundModeNote": {
         "description": "Caveat note shown in the Background Mode sheet"
+    },
+    "accuracy": "Accuracy",
+    "@accuracy": {
+        "description": "Label for accuracy metric of an on-device transcription model"
+    },
+    "base": "Base",
+    "@base": {
+        "description": "Whisper model size: base"
+    },
+    "cloudTranscription": "Cloud Transcription",
+    "@cloudTranscription": {
+        "description": "Section title for cloud-based transcription providers"
+    },
+    "deepgram": "Deepgram",
+    "@deepgram": {
+        "description": "Brand name for the Deepgram speech-to-text provider"
+    },
+    "deleteModel": "Delete Model",
+    "@deleteModel": {
+        "description": "Action label to delete a downloaded on-device transcription model"
+    },
+    "deleteModelConfirm": "Are you sure you want to delete this model?",
+    "@deleteModelConfirm": {
+        "description": "Confirmation prompt shown before deleting a downloaded model"
+    },
+    "downloaded": "Downloaded",
+    "@downloaded": {
+        "description": "Status label indicating an on-device model has been downloaded"
+    },
+    "faster": "Faster",
+    "@faster": {
+        "description": "Relative speed indicator: faster"
+    },
+    "filterAuto": "Auto",
+    "@filterAuto": {
+        "description": "Filter option label meaning \"automatic\""
+    },
+    "higher": "Higher",
+    "@higher": {
+        "description": "Relative quality/accuracy indicator: higher"
+    },
+    "large": "Large",
+    "@large": {
+        "description": "Whisper model size: large"
+    },
+    "lower": "Lower",
+    "@lower": {
+        "description": "Relative quality/accuracy indicator: lower"
+    },
+    "medium": "Medium",
+    "@medium": {
+        "description": "Whisper model size: medium"
+    },
+    "modelDeleted": "Model deleted",
+    "@modelDeleted": {
+        "description": "Toast shown after an on-device model is deleted"
+    },
+    "modelDownloadFailed": "Model download failed",
+    "@modelDownloadFailed": {
+        "description": "Toast title when a model download fails"
+    },
+    "modelDownloadFailedDesc": "Failed to download Whisper model. Please try again.",
+    "@modelDownloadFailedDesc": {
+        "description": "Toast body when a Whisper model download fails"
+    },
+    "modelDownloaded": "Model downloaded",
+    "@modelDownloaded": {
+        "description": "Toast shown after an on-device model is downloaded"
+    },
+    "modelDownloadedDesc": "Whisper model downloaded successfully",
+    "@modelDownloadedDesc": {
+        "description": "Toast body when a Whisper model is downloaded successfully"
+    },
+    "modelSize": "Model Size",
+    "@modelSize": {
+        "description": "Label for the size of an on-device transcription model"
+    },
+    "none": "None",
+    "@none": {
+        "description": "Generic \"none\" option label"
+    },
+    "onDeviceTranscription": "On-Device Transcription",
+    "@onDeviceTranscription": {
+        "description": "Section title for on-device transcription settings"
+    },
+    "onDeviceTranscriptionDesc": "Transcription is processed locally on your device",
+    "@onDeviceTranscriptionDesc": {
+        "description": "Description of on-device transcription behavior"
+    },
+    "slower": "Slower",
+    "@slower": {
+        "description": "Relative speed indicator: slower"
+    },
+    "small": "Small",
+    "@small": {
+        "description": "Whisper model size: small"
+    },
+    "soniox": "Soniox",
+    "@soniox": {
+        "description": "Brand name for the Soniox speech-to-text provider"
+    },
+    "speechToTextProvider": "Speech-to-Text Provider",
+    "@speechToTextProvider": {
+        "description": "Label for the speech-to-text provider selector"
+    },
+    "speechToTextProviderDesc": "Choose the service used for transcription",
+    "@speechToTextProviderDesc": {
+        "description": "Description for the speech-to-text provider selector"
+    },
+    "speechmatics": "Speechmatics",
+    "@speechmatics": {
+        "description": "Brand name for the Speechmatics speech-to-text provider"
+    },
+    "speed": "Speed",
+    "@speed": {
+        "description": "Label for speed metric of an on-device transcription model"
+    },
+    "tiny": "Tiny",
+    "@tiny": {
+        "description": "Whisper model size: tiny"
+    },
+    "transcriptionLanguage": "Transcription Language",
+    "@transcriptionLanguage": {
+        "description": "Label for the transcription language selector"
+    },
+    "transcriptionLanguageDesc": "Choose the language for speech transcription",
+    "@transcriptionLanguageDesc": {
+        "description": "Description for the transcription language selector"
+    },
+    "whisperModel": "Whisper Model",
+    "@whisperModel": {
+        "description": "Label for the Whisper on-device transcription model selector"
+    },
+    "whisperModelDesc": "Choose the model for on-device transcription",
+    "@whisperModelDesc": {
+        "description": "Description for the Whisper on-device transcription model selector"
     }
 }

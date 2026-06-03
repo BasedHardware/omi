@@ -9308,4 +9308,106 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get backgroundModeNote => 'Kol kas veikia tik su Omi įrenginiais ir nuolat tobulinama.';
+
+  @override
+  String get accuracy => 'Tikslumas';
+
+  @override
+  String get base => 'Bazinis';
+
+  @override
+  String get cloudTranscription => 'Debesies transkripcija';
+
+  @override
+  String get deepgram => 'Deepgram';
+
+  @override
+  String get deleteModel => 'Ištrinti modelį';
+
+  @override
+  String get deleteModelConfirm => 'Ar tikrai norite ištrinti šį modelį?';
+
+  @override
+  String get downloaded => 'Atsisiųsta';
+
+  @override
+  String get faster => 'Greitesnis';
+
+  @override
+  String get filterAuto => 'Auto';
+
+  @override
+  String get higher => 'Aukštesnis';
+
+  @override
+  String get large => 'Didelis';
+
+  @override
+  String get lower => 'Žemesnis';
+
+  @override
+  String get medium => 'Vidutinis';
+
+  @override
+  String get modelDeleted => 'Modelis ištrintas';
+
+  @override
+  String get modelDownloadFailed => 'Modelio atsisiuntimas nepavyko';
+
+  @override
+  String get modelDownloadFailedDesc => 'Nepavyko atsisiųsti Whisper modelio. Bandykite dar kartą.';
+
+  @override
+  String get modelDownloaded => 'Modelis atsisiųstas';
+
+  @override
+  String get modelDownloadedDesc => 'Whisper modelis sėkmingai atsisiųstas';
+
+  @override
+  String get modelSize => 'Modelio dydis';
+
+  @override
+  String get none => 'Nėra';
+
+  @override
+  String get onDeviceTranscription => 'Transkripcija įrenginyje';
+
+  @override
+  String get onDeviceTranscriptionDesc => 'Transkripcija apdorojama vietoje jūsų įrenginyje';
+
+  @override
+  String get slower => 'Lėtesnis';
+
+  @override
+  String get small => 'Mažas';
+
+  @override
+  String get soniox => 'Soniox';
+
+  @override
+  String get speechToTextProvider => 'Kalbos į tekstą teikėjas';
+
+  @override
+  String get speechToTextProviderDesc => 'Pasirinkite transkripcijai naudojamą paslaugą';
+
+  @override
+  String get speechmatics => 'Speechmatics';
+
+  @override
+  String get speed => 'Greitis';
+
+  @override
+  String get tiny => 'Mažytis';
+
+  @override
+  String get transcriptionLanguage => 'Transkripcijos kalba';
+
+  @override
+  String get transcriptionLanguageDesc => 'Pasirinkite kalbos transkripcijos kalbą';
+
+  @override
+  String get whisperModel => 'Whisper modelis';
+
+  @override
+  String get whisperModelDesc => 'Pasirinkite modelį transkripcijai įrenginyje';
 }

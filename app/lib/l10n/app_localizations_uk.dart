@@ -9313,4 +9313,106 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get backgroundModeNote => 'Наразі працює лише з пристроями Omi і постійно вдосконалюється.';
+
+  @override
+  String get accuracy => 'Точність';
+
+  @override
+  String get base => 'Базова';
+
+  @override
+  String get cloudTranscription => 'Хмарна транскрипція';
+
+  @override
+  String get deepgram => 'Deepgram';
+
+  @override
+  String get deleteModel => 'Видалити модель';
+
+  @override
+  String get deleteModelConfirm => 'Ви впевнені, що хочете видалити цю модель?';
+
+  @override
+  String get downloaded => 'Завантажено';
+
+  @override
+  String get faster => 'Швидше';
+
+  @override
+  String get filterAuto => 'Auto';
+
+  @override
+  String get higher => 'Вища';
+
+  @override
+  String get large => 'Велика';
+
+  @override
+  String get lower => 'Нижча';
+
+  @override
+  String get medium => 'Середня';
+
+  @override
+  String get modelDeleted => 'Модель видалено';
+
+  @override
+  String get modelDownloadFailed => 'Помилка завантаження моделі';
+
+  @override
+  String get modelDownloadFailedDesc => 'Не вдалося завантажити модель Whisper. Будь ласка, спробуйте ще раз.';
+
+  @override
+  String get modelDownloaded => 'Модель завантажено';
+
+  @override
+  String get modelDownloadedDesc => 'Модель Whisper успішно завантажено';
+
+  @override
+  String get modelSize => 'Розмір моделі';
+
+  @override
+  String get none => 'Немає';
+
+  @override
+  String get onDeviceTranscription => 'Транскрипція на пристрої';
+
+  @override
+  String get onDeviceTranscriptionDesc => 'Транскрипція обробляється локально на вашому пристрої';
+
+  @override
+  String get slower => 'Повільніше';
+
+  @override
+  String get small => 'Мала';
+
+  @override
+  String get soniox => 'Soniox';
+
+  @override
+  String get speechToTextProvider => 'Постачальник мовлення в текст';
+
+  @override
+  String get speechToTextProviderDesc => 'Виберіть сервіс для транскрипції';
+
+  @override
+  String get speechmatics => 'Speechmatics';
+
+  @override
+  String get speed => 'Швидкість';
+
+  @override
+  String get tiny => 'Крихітна';
+
+  @override
+  String get transcriptionLanguage => 'Мова транскрипції';
+
+  @override
+  String get transcriptionLanguageDesc => 'Виберіть мову для транскрипції мовлення';
+
+  @override
+  String get whisperModel => 'Модель Whisper';
+
+  @override
+  String get whisperModelDesc => 'Виберіть модель для транскрипції на пристрої';
 }

@@ -9361,4 +9361,106 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get backgroundModeNote => 'Προς το παρόν λειτουργεί μόνο με συσκευές Omi και βελτιώνεται συνεχώς.';
+
+  @override
+  String get accuracy => 'Ακρίβεια';
+
+  @override
+  String get base => 'Βασικό';
+
+  @override
+  String get cloudTranscription => 'Μεταγραφή στο cloud';
+
+  @override
+  String get deepgram => 'Deepgram';
+
+  @override
+  String get deleteModel => 'Διαγραφή μοντέλου';
+
+  @override
+  String get deleteModelConfirm => 'Είστε σίγουροι ότι θέλετε να διαγράψετε αυτό το μοντέλο;';
+
+  @override
+  String get downloaded => 'Λήφθηκε';
+
+  @override
+  String get faster => 'Ταχύτερο';
+
+  @override
+  String get filterAuto => 'Auto';
+
+  @override
+  String get higher => 'Υψηλότερη';
+
+  @override
+  String get large => 'Μεγάλο';
+
+  @override
+  String get lower => 'Χαμηλότερη';
+
+  @override
+  String get medium => 'Μεσαίο';
+
+  @override
+  String get modelDeleted => 'Το μοντέλο διαγράφηκε';
+
+  @override
+  String get modelDownloadFailed => 'Η λήψη του μοντέλου απέτυχε';
+
+  @override
+  String get modelDownloadFailedDesc => 'Αποτυχία λήψης του μοντέλου Whisper. Προσπαθήστε ξανά.';
+
+  @override
+  String get modelDownloaded => 'Το μοντέλο λήφθηκε';
+
+  @override
+  String get modelDownloadedDesc => 'Το μοντέλο Whisper λήφθηκε με επιτυχία';
+
+  @override
+  String get modelSize => 'Μέγεθος μοντέλου';
+
+  @override
+  String get none => 'Κανένα';
+
+  @override
+  String get onDeviceTranscription => 'Μεταγραφή στη συσκευή';
+
+  @override
+  String get onDeviceTranscriptionDesc => 'Η μεταγραφή επεξεργάζεται τοπικά στη συσκευή σας';
+
+  @override
+  String get slower => 'Πιο αργό';
+
+  @override
+  String get small => 'Μικρό';
+
+  @override
+  String get soniox => 'Soniox';
+
+  @override
+  String get speechToTextProvider => 'Πάροχος μετατροπής ομιλίας σε κείμενο';
+
+  @override
+  String get speechToTextProviderDesc => 'Επιλέξτε την υπηρεσία που χρησιμοποιείται για τη μεταγραφή';
+
+  @override
+  String get speechmatics => 'Speechmatics';
+
+  @override
+  String get speed => 'Ταχύτητα';
+
+  @override
+  String get tiny => 'Μικροσκοπικό';
+
+  @override
+  String get transcriptionLanguage => 'Γλώσσα μεταγραφής';
+
+  @override
+  String get transcriptionLanguageDesc => 'Επιλέξτε τη γλώσσα για τη μεταγραφή ομιλίας';
+
+  @override
+  String get whisperModel => 'Μοντέλο Whisper';
+
+  @override
+  String get whisperModelDesc => 'Επιλέξτε το μοντέλο για μεταγραφή στη συσκευή';
 }

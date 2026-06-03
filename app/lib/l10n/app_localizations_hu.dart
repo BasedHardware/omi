@@ -9335,4 +9335,106 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get backgroundModeNote => 'Egyelőre csak Omi eszközökkel működik, és folyamatosan fejlesztjük.';
+
+  @override
+  String get accuracy => 'Pontosság';
+
+  @override
+  String get base => 'Alap';
+
+  @override
+  String get cloudTranscription => 'Felhő átírás';
+
+  @override
+  String get deepgram => 'Deepgram';
+
+  @override
+  String get deleteModel => 'Modell törlése';
+
+  @override
+  String get deleteModelConfirm => 'Biztosan törölni szeretnéd ezt a modellt?';
+
+  @override
+  String get downloaded => 'Letöltve';
+
+  @override
+  String get faster => 'Gyorsabb';
+
+  @override
+  String get filterAuto => 'Auto';
+
+  @override
+  String get higher => 'Magasabb';
+
+  @override
+  String get large => 'Nagy';
+
+  @override
+  String get lower => 'Alacsonyabb';
+
+  @override
+  String get medium => 'Közepes';
+
+  @override
+  String get modelDeleted => 'Modell törölve';
+
+  @override
+  String get modelDownloadFailed => 'Modell letöltése sikertelen';
+
+  @override
+  String get modelDownloadFailedDesc => 'Nem sikerült letölteni a Whisper modellt. Kérjük, próbáld újra.';
+
+  @override
+  String get modelDownloaded => 'Modell letöltve';
+
+  @override
+  String get modelDownloadedDesc => 'A Whisper modell sikeresen letöltve';
+
+  @override
+  String get modelSize => 'Modell mérete';
+
+  @override
+  String get none => 'Nincs';
+
+  @override
+  String get onDeviceTranscription => 'Eszközön történő átírás';
+
+  @override
+  String get onDeviceTranscriptionDesc => 'Az átírás helyileg történik az eszközödön';
+
+  @override
+  String get slower => 'Lassabb';
+
+  @override
+  String get small => 'Kicsi';
+
+  @override
+  String get soniox => 'Soniox';
+
+  @override
+  String get speechToTextProvider => 'Beszéd-szöveg szolgáltató';
+
+  @override
+  String get speechToTextProviderDesc => 'Válaszd ki az átíráshoz használt szolgáltatást';
+
+  @override
+  String get speechmatics => 'Speechmatics';
+
+  @override
+  String get speed => 'Sebesség';
+
+  @override
+  String get tiny => 'Apró';
+
+  @override
+  String get transcriptionLanguage => 'Átírás nyelve';
+
+  @override
+  String get transcriptionLanguageDesc => 'Válaszd ki a beszédátírás nyelvét';
+
+  @override
+  String get whisperModel => 'Whisper modell';
+
+  @override
+  String get whisperModelDesc => 'Válaszd ki a modellt az eszközön történő átíráshoz';
 }

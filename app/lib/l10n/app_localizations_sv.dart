@@ -9300,4 +9300,106 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get backgroundModeNote => 'Fungerar än så länge bara med Omi-enheter och förbättras kontinuerligt.';
+
+  @override
+  String get accuracy => 'Noggrannhet';
+
+  @override
+  String get base => 'Bas';
+
+  @override
+  String get cloudTranscription => 'Molntranskription';
+
+  @override
+  String get deepgram => 'Deepgram';
+
+  @override
+  String get deleteModel => 'Ta bort modell';
+
+  @override
+  String get deleteModelConfirm => 'Är du säker på att du vill ta bort denna modell?';
+
+  @override
+  String get downloaded => 'Nedladdad';
+
+  @override
+  String get faster => 'Snabbare';
+
+  @override
+  String get filterAuto => 'Auto';
+
+  @override
+  String get higher => 'Högre';
+
+  @override
+  String get large => 'Stor';
+
+  @override
+  String get lower => 'Lägre';
+
+  @override
+  String get medium => 'Medium';
+
+  @override
+  String get modelDeleted => 'Modell borttagen';
+
+  @override
+  String get modelDownloadFailed => 'Modellnedladdning misslyckades';
+
+  @override
+  String get modelDownloadFailedDesc => 'Kunde inte ladda ner Whisper-modellen. Försök igen.';
+
+  @override
+  String get modelDownloaded => 'Modell nedladdad';
+
+  @override
+  String get modelDownloadedDesc => 'Whisper-modellen har laddats ner';
+
+  @override
+  String get modelSize => 'Modellstorlek';
+
+  @override
+  String get none => 'Ingen';
+
+  @override
+  String get onDeviceTranscription => 'Transkription på enheten';
+
+  @override
+  String get onDeviceTranscriptionDesc => 'Transkription bearbetas lokalt på din enhet';
+
+  @override
+  String get slower => 'Långsammare';
+
+  @override
+  String get small => 'Liten';
+
+  @override
+  String get soniox => 'Soniox';
+
+  @override
+  String get speechToTextProvider => 'Tal-till-text-leverantör';
+
+  @override
+  String get speechToTextProviderDesc => 'Välj tjänsten som används för transkription';
+
+  @override
+  String get speechmatics => 'Speechmatics';
+
+  @override
+  String get speed => 'Hastighet';
+
+  @override
+  String get tiny => 'Pytteliten';
+
+  @override
+  String get transcriptionLanguage => 'Transkriptionsspråk';
+
+  @override
+  String get transcriptionLanguageDesc => 'Välj språk för taltranskription';
+
+  @override
+  String get whisperModel => 'Whisper-modell';
+
+  @override
+  String get whisperModelDesc => 'Välj modell för transkription på enheten';
 }

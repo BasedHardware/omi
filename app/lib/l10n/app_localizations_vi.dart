@@ -9293,4 +9293,106 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get backgroundModeNote => 'Hiện chỉ hoạt động với thiết bị Omi và đang được cải thiện liên tục.';
+
+  @override
+  String get accuracy => 'Độ chính xác';
+
+  @override
+  String get base => 'Cơ bản';
+
+  @override
+  String get cloudTranscription => 'Phiên âm đám mây';
+
+  @override
+  String get deepgram => 'Deepgram';
+
+  @override
+  String get deleteModel => 'Xóa mô hình';
+
+  @override
+  String get deleteModelConfirm => 'Bạn có chắc chắn muốn xóa mô hình này?';
+
+  @override
+  String get downloaded => 'Đã tải xuống';
+
+  @override
+  String get faster => 'Nhanh hơn';
+
+  @override
+  String get filterAuto => 'Auto';
+
+  @override
+  String get higher => 'Cao hơn';
+
+  @override
+  String get large => 'Lớn';
+
+  @override
+  String get lower => 'Thấp hơn';
+
+  @override
+  String get medium => 'Trung bình';
+
+  @override
+  String get modelDeleted => 'Đã xóa mô hình';
+
+  @override
+  String get modelDownloadFailed => 'Tải xuống mô hình thất bại';
+
+  @override
+  String get modelDownloadFailedDesc => 'Không thể tải xuống mô hình Whisper. Vui lòng thử lại.';
+
+  @override
+  String get modelDownloaded => 'Đã tải xuống mô hình';
+
+  @override
+  String get modelDownloadedDesc => 'Mô hình Whisper đã được tải xuống thành công';
+
+  @override
+  String get modelSize => 'Kích thước mô hình';
+
+  @override
+  String get none => 'Không có';
+
+  @override
+  String get onDeviceTranscription => 'Phiên âm trên thiết bị';
+
+  @override
+  String get onDeviceTranscriptionDesc => 'Phiên âm được xử lý cục bộ trên thiết bị của bạn';
+
+  @override
+  String get slower => 'Chậm hơn';
+
+  @override
+  String get small => 'Nhỏ';
+
+  @override
+  String get soniox => 'Soniox';
+
+  @override
+  String get speechToTextProvider => 'Nhà cung cấp chuyển giọng nói thành văn bản';
+
+  @override
+  String get speechToTextProviderDesc => 'Chọn dịch vụ được sử dụng để phiên âm';
+
+  @override
+  String get speechmatics => 'Speechmatics';
+
+  @override
+  String get speed => 'Tốc độ';
+
+  @override
+  String get tiny => 'Rất nhỏ';
+
+  @override
+  String get transcriptionLanguage => 'Ngôn ngữ phiên âm';
+
+  @override
+  String get transcriptionLanguageDesc => 'Chọn ngôn ngữ cho phiên âm giọng nói';
+
+  @override
+  String get whisperModel => 'Mô hình Whisper';
+
+  @override
+  String get whisperModelDesc => 'Chọn mô hình cho phiên âm trên thiết bị';
 }
