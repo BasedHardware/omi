@@ -1694,9 +1694,13 @@ class AppState: ObservableObject {
   }
 
   /// Start microphone capture and wire its chunks/level to the active sink (the mixer in cloud mode,
-  /// the mic Parakeet instance in local mode). No-op if already capturing.
-  private func startMicCaptureIfNeeded() async {
-    guard let mic = audioCaptureService, !mic.capturing else { return }
+  /// the mic Parakeet instance in local mode).
+  /// - Returns: true if the mic is capturing after the call (already capturing or started OK);
+  ///   false on a hard start failure (or if the session was torn down during the async start).
+  @discardableResult
+  private func startMicCaptureIfNeeded() async -> Bool {
+    guard let mic = audioCaptureService else { return false }
+    guard !mic.capturing else { return true }
     do {
       try await mic.startCapture(
         onAudioChunk: { [weak self] audioData in
@@ -1716,11 +1720,13 @@ class AppState: ObservableObject {
       // swapped (silent-mic fallback) — while we were awaiting it, undo the just-started capture.
       guard isTranscribing, audioCaptureService === mic else {
         mic.stopCapture()
-        return
+        return false
       }
       log("Transcription: Microphone capture started")
+      return true
     } catch {
       logError("Transcription: Failed to start microphone capture", error: error)
+      return false
     }
   }
 
@@ -1814,7 +1820,15 @@ class AppState: ObservableObject {
     // Microphone
     if let mic = audioCaptureService {
       if shouldCapture, !mic.capturing {
-        await startMicCaptureIfNeeded()
+        let started = await startMicCaptureIfNeeded()
+        if !started, isTranscribing {
+          // Hard mic failure on a required start — stop the session rather than leave it silently
+          // "recording" with no audio (the silent-mic watchdog handles zero-sample mics separately).
+          log("Transcription: stopping — microphone could not start")
+          captureGateInFlight = false
+          stopTranscription()
+          return
+        }
       } else if !shouldCapture, mic.capturing {
         mic.stopCapture()
         AudioLevelMonitor.shared.updateMicrophoneLevel(0)
