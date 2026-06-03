@@ -371,3 +371,45 @@ format and conversation lifecycle unchanged).
   system-audio level indicator (silent when gated off) + the settings caption.
 - Slack huddles / Discord voice / other voice channels in the catalog (easy to add later).
 - Per-meeting analytics beyond a single mode-change event.
+
+## 11. Addendum — refinements from live testing (2026-06-03)
+
+Two changes were made after exercising the feature live; they supersede the window-scan detection
+and system-audio-only gating described above.
+
+### 11.1 Meeting detection: microphone-in-use (supersedes window-scan for native apps)
+
+Live testing surfaced a false positive: a conferencing app *open but not in a call* (e.g. Zoom left
+running in the background) was detected as a meeting, so "Only during meetings" behaved like
+"Always." Detection now distinguishes *in a call* from *app open*:
+
+- **Native call apps** (Zoom, Teams, FaceTime, Webex, GoTo): detected by **active microphone use**
+  via the macOS 14.4+ CoreAudio process API (`kAudioHardwarePropertyProcessObjectList` +
+  `kAudioProcessPropertyIsRunningInput` + `kAudioProcessPropertyBundleID`). An idle app isn't using
+  the mic, so it no longer counts. No Screen Recording permission required. Bundle IDs live in
+  `ConferencingApps.nativeCallBundleIDs`.
+- **Browser-based calls** (Google Meet, Teams web): still detected by call **window title**
+  (`browserCallWindowPresent()`), which requires Screen Recording permission.
+- `ConferencingApps.isCallWindow(...)` is unchanged and still used by `ProactiveAssistantsPlugin`
+  for screen-capture throttling.
+
+Validated with a standalone CoreAudio harness: with Omi recording, only Omi showed mic-in-use; an
+idle Zoom did not.
+
+### 11.2 "Only during meetings" gates the whole recording (mic + system), not just the tap
+
+Per user decision, "Only during meetings" now pauses the **entire** recording outside calls — the
+microphone is stopped too (its indicator goes dark), not just the system-audio tap. Implementation:
+`reconcileSystemAudio` became `reconcileCapture`, which gates both the mic (`AudioCaptureService`)
+and the system tap by meeting state while keeping the transcription session armed (`isTranscribing`
+stays true). A new `@Published var isAwaitingMeeting` drives a "Waiting for a meeting…" state in the
+Audio Recording card.
+
+- Always / Never: microphone runs for the whole session (system audio per mode) — unchanged.
+- Only during meetings: nothing captured until a call (mic-in-use) is detected; mic + system start
+  together and pause when the call ends.
+
+Known behavior (acceptable for v1): the conversation/session is created when recording is armed and
+spans the armed period, receiving audio only during calls (silence gaps between meetings); the
+backend's silence-based segmentation handles splitting. Per-meeting conversation boundaries are a
+possible future refinement. Call start/end detection has up to ~`pollInterval` (4s) latency.
