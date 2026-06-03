@@ -307,37 +307,75 @@ LEGACY_PRICE_MAP = {
 }
 
 
+# Platform identifiers for the two mobile clients (X-App-Platform header).
+_MOBILE_PLATFORM_TOKENS = {'ios', 'android'}
+
+
 def _platform_hidden_plans(platform: Optional[str]) -> set:
     """Plans that are hidden from the purchase catalog for the given platform.
 
     Desktop (macOS) sells Operator + Architect (pricier tier with usage-based
-    overage on Operator), so Neo is dropped from the desktop picker. Mobile
-    and all other clients are left alone — their catalog is unchanged.
+    overage on Operator), so Neo is dropped from the desktop picker.
+
+    Mobile (ios/android): Neo is deprecated for new acquisition — it's hidden
+    from the purchase catalog on every mobile build so brand-new / never-paid
+    users only see Operator + Architect. Existing Neo subscribers and anyone
+    who has ever bought a plan are re-included by `filter_plans_for_user`'s
+    escapes, so their resubscribe / manage UI still works.
+
+    Web and any other client are left alone — their catalog is unchanged.
     """
-    if (platform or '').lower() == 'macos':
+    p = (platform or '').lower()
+    if p == 'macos' or p in _MOBILE_PLATFORM_TOKENS:
         return {PlanType.unlimited}
     return set()
+
+
+def has_ever_purchased(uid: str, subscription: Optional[Subscription] = None) -> bool:
+    """True if the user has ever gone through subscription checkout.
+
+    Used to keep the deprecated Neo plan visible on mobile to lapsed/returning
+    subscribers (so they can resubscribe) while hiding it from brand-new users
+    who never bought a plan. A Stripe customer id is created at first checkout
+    and persists across cancellations and plan changes; a current paid plan or
+    a stored stripe_subscription_id are cheaper positive signals checked first.
+    """
+    if subscription is not None:
+        if is_paid_plan(subscription.plan):
+            return True
+        if subscription.stripe_subscription_id:
+            return True
+    return bool(users_db.get_stripe_customer_id(uid))
 
 
 def filter_plans_for_user(
     definitions: list[dict],
     current_plan: PlanType,
     platform: Optional[str] = None,
+    ever_purchased: bool = False,
 ) -> list[dict]:
     """Drop legacy / platform-hidden plans from the purchase catalog.
 
     Subscribers already on a "wrong-platform" plan (e.g. a Neo subscriber
     opening the desktop app) still see their current plan so the management UI
-    works. Only the *purchase* catalog is filtered.
+    works. On mobile, Neo also stays visible to anyone who has ever purchased a
+    plan (`ever_purchased`) so lapsed subscribers can resubscribe — new /
+    never-paid users don't see it. Only the *purchase* catalog is filtered.
     """
     hidden = _platform_hidden_plans(platform)
+    is_mobile = (platform or '').lower() in _MOBILE_PLATFORM_TOKENS
     out: list[dict] = []
     for d in definitions:
         plan_type = d.get('plan_type')
         if d.get('legacy') and plan_type != current_plan:
             continue
         if plan_type in hidden and plan_type != current_plan:
-            continue
+            # Mobile-only escape: keep the deprecated Neo plan visible to users
+            # who have bought a plan before (so they can resubscribe/manage).
+            if is_mobile and plan_type == PlanType.unlimited and ever_purchased:
+                pass
+            else:
+                continue
         out.append(d)
     return out
 
