@@ -6,6 +6,7 @@ import 'package:omi/models/stt_response_schema.dart';
 
 enum SttProvider {
   omi,
+  omiParakeet,
   openai,
   openaiDiarize,
   deepgram,
@@ -210,6 +211,17 @@ class SttProviderConfig {
       requestType: SttRequestType.streaming,
       responseSchema: const SttResponseSchema(),
     ),
+    SttProvider.omiParakeet: SttProviderConfig(
+      provider: SttProvider.omiParakeet,
+      displayName: 'Omi Parakeet',
+      description: 'Omi-hosted NVIDIA Parakeet — high-accuracy cloud transcription, no API key',
+      icon: FontAwesomeIcons.feather,
+      requiresApiKey: false,
+      requestType: SttRequestType.multipartForm,
+      supportedLanguages: SttLanguages.whisperSupported,
+      defaultLanguage: 'multi',
+      responseSchema: SttResponseSchema.openAI,
+    ),
     SttProvider.openai: SttProviderConfig(
       provider: SttProvider.openai,
       displayName: 'OpenAI Whisper',
@@ -390,21 +402,22 @@ class SttProviderConfig {
 
   /// Available request config templates for custom STT configuration
   static Map<String, Map<String, dynamic>> get requestTemplates => {
-    'OpenAI': get(SttProvider.openai).buildRequestConfig(apiKey: 'YOUR_API_KEY', language: 'en', model: 'whisper-1'),
-    'Deepgram': get(
-      SttProvider.deepgramLive,
-    ).buildRequestConfig(apiKey: 'YOUR_API_KEY', language: 'multi', model: 'nova-3'),
-    'Fal.AI': get(SttProvider.falai).buildRequestConfig(apiKey: 'YOUR_API_KEY', language: 'en'),
-    'Google Gemini': get(
-      SttProvider.geminiLive,
-    ).buildRequestConfig(apiKey: 'YOUR_API_KEY', language: 'en', model: 'gemini-2.5-flash'),
-    'Whisper': get(SttProvider.localWhisper).buildRequestConfig(language: 'en'),
-  };
+        'OpenAI':
+            get(SttProvider.openai).buildRequestConfig(apiKey: 'YOUR_API_KEY', language: 'en', model: 'whisper-1'),
+        'Deepgram': get(
+          SttProvider.deepgramLive,
+        ).buildRequestConfig(apiKey: 'YOUR_API_KEY', language: 'multi', model: 'nova-3'),
+        'Fal.AI': get(SttProvider.falai).buildRequestConfig(apiKey: 'YOUR_API_KEY', language: 'en'),
+        'Google Gemini': get(
+          SttProvider.geminiLive,
+        ).buildRequestConfig(apiKey: 'YOUR_API_KEY', language: 'en', model: 'gemini-2.5-flash'),
+        'Whisper': get(SttProvider.localWhisper).buildRequestConfig(language: 'en'),
+      };
 
   Map<String, dynamic> getFullTemplateJson() => {
-    'request_type': requestType,
-    'response_schema': responseSchema.toJson(),
-  };
+        'request_type': requestType,
+        'response_schema': responseSchema.toJson(),
+      };
 
   /// Build complete request config with API key, language, and model
   /// Returns unified structure: url, request_type, headers, params, audio_field_name
@@ -513,6 +526,12 @@ class SttProviderConfig {
 
       case SttProvider.customLive:
         config['url'] = 'wss://your-stt-api.com/stream';
+        config['params'] = {'language': lang};
+        break;
+
+      case SttProvider.omiParakeet:
+        config['url'] = 'https://parakeet.omiapi.com/v1/transcribe';
+        config['audio_field_name'] = 'file';
         config['params'] = {'language': lang};
         break;
 
