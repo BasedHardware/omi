@@ -140,6 +140,9 @@ de-duplication (the only change to existing code outside AppState/Settings).
   native calls are still detected; browser calls degrade to undetected. This degradation is
   logged once and documented in the setting's caption.
 
+Scanning *all* on-screen windows (not just the frontmost, as the existing plugin does) is
+intentional: you stay "in a meeting" while taking notes in another app with the call window behind it.
+
 Known limitation (documented, accepted for v1): a native call app left running but idle counts as
 "active." Mitigated by the off-grace period (§5b) and the reality that users typically quit these
 apps. Per-app in-call window-title signatures and mic-in-use detection are explicit future work
@@ -167,7 +170,7 @@ final class MeetingDetector {
 
 - **Triggers:** a repeating `Timer` (`pollInterval`, default 4s) **plus** `NSWorkspace`
   `didActivate` / `didLaunchApplication` / `didTerminateApplication` notifications for
-  responsiveness when apps open/close/switch. (Browser tab-title changes only surface via the poll.)
+  responsiveness when apps open/close/switch. Browser tab-title changes — e.g. joining a Google Meet in an already-foreground tab — fire no `NSWorkspace` event, so meeting-on can lag up to `pollInterval` (~4s); acceptable for v1.
 - **Hysteresis:** transitions **on** immediately; transitions **off** only after `offGracePeriod`
   (default 8s) of sustained "no meeting", to avoid flapping when a call window briefly disappears
   (screen share popups, window focus changes). Implemented with a pending-off timestamp checked on
@@ -186,8 +189,9 @@ var systemAudioCaptureMode: SystemAudioCaptureMode { get set }   // key "systemA
 ```
 
 - Getter reads the string key (default `.always`); setter writes it and posts
-  `.transcriptionSettingsDidChange` (the existing notification AppState/SettingsPage already use
-  for recording-related changes).
+  `.transcriptionSettingsDidChange` — the existing notification `AssistantSettings` already posts
+  on recording-setting changes. Note: this notification currently has **no** `AppState` observer;
+  §5d adds one. (It is posted from `AssistantSettings` but observed nowhere today.)
 - **Migration / back-compat:** the existing hidden `disableSystemAudioCapture` debug flag is
   preserved as an override. Effective mode is computed in AppState (§5d), not stored:
   `effectiveSystemAudioMode = disableSystemAudioCapture ? .never : systemAudioCaptureMode`.
