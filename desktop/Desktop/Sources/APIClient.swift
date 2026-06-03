@@ -570,6 +570,27 @@ enum ConversationStatus: String, Codable {
   case failed = "failed"
 }
 
+/// What the conversation row/header should communicate about a conversation's
+/// state. Computed from `status`, `isLocked`, and `structured.title` together
+/// so the UI can show a meaningful label instead of collapsing every empty-
+/// title case to "Untitled".
+enum ConversationDisplayState: Equatable {
+  /// Normal: LLM produced a title.
+  case titled(String)
+  /// Pipeline is still running. Title will arrive soon.
+  case processing
+  /// Conversation is locked (subscription gating). Title intentionally hidden.
+  case locked
+  /// Processing finished but the title slot is empty AND the transcript has
+  /// recoverable content — usually a silent LLM failure. Surface a reprocess
+  /// affordance.
+  case untitledRecoverable
+  /// Empty/very short capture — genuinely nothing to title. No CTA.
+  case untitledEmpty
+  /// Pipeline reported failure. Reprocess affordance offered.
+  case failed
+}
+
 enum ConversationSource: String, Codable {
   case friend
   case omi
@@ -712,9 +733,69 @@ struct ServerConversation: Codable, Identifiable, Equatable {
     self.inputDeviceName = inputDeviceName
   }
 
-  /// Returns the title from structured data, or a fallback
+  /// Returns the title from structured data, or a fallback.
+  ///
+  /// Prefer ``displayTitle`` in UI surfaces — it disambiguates between "no
+  /// title because still processing", "no title because locked", and "no
+  /// title because the LLM gave up" instead of collapsing all three to a
+  /// flat "Untitled Conversation" string. This getter stays for callers
+  /// that need a single plain string (exports, log lines, copy-to-clipboard).
   var title: String {
     structured.title.isEmpty ? "Untitled Conversation" : structured.title
+  }
+
+  /// What a row/header should actually render for this conversation's state.
+  ///
+  /// Four cases the UI used to collapse into the same "Untitled" string:
+  /// 1. processing / in-progress / merging → "Processing…" (no real title yet)
+  /// 2. locked (subscription gating) → "Locked"
+  /// 3. completed but empty title + non-trivial transcript → "Untitled" with
+  ///    a reprocess affordance — the LLM didn't produce a title, usually a
+  ///    transient processing failure that's recoverable.
+  /// 4. genuinely empty/short capture → "Untitled", no CTA (probably ambient
+  ///    noise; pushing reprocess would just burn tokens).
+  var displayState: ConversationDisplayState {
+    if isLocked {
+      return .locked
+    }
+    switch status {
+    case .inProgress, .processing, .merging:
+      return .processing
+    case .failed:
+      return .failed
+    case .completed:
+      if !structured.title.isEmpty {
+        return .titled(structured.title)
+      }
+      // Heuristic: a "real" conversation has at least one transcript segment
+      // long enough to plausibly have content (≥ 5 words). Below that, it's
+      // probably ambient/accidental capture and we shouldn't push reprocess.
+      let hasRecoverableContent = transcriptSegments.contains { seg in
+        seg.text.split(whereSeparator: { $0.isWhitespace }).count >= 5
+      }
+      return hasRecoverableContent ? .untitledRecoverable : .untitledEmpty
+    }
+  }
+
+  /// The string a row/header should display in the title slot.
+  var displayTitle: String {
+    switch displayState {
+    case .titled(let title): return title
+    case .processing: return "Processing…"
+    case .locked: return "Locked"
+    case .failed: return "Failed to process"
+    case .untitledRecoverable, .untitledEmpty: return "Untitled"
+    }
+  }
+
+  /// True when the conversation has content but no title and the user can
+  /// recover it by re-running the LLM processing step. Drives the "Reprocess"
+  /// affordance in the UI.
+  var canReprocess: Bool {
+    switch displayState {
+    case .untitledRecoverable, .failed: return true
+    default: return false
+    }
   }
 
   /// Returns the overview/summary from structured data
@@ -3206,6 +3287,14 @@ extension APIClient {
     let body = ReprocessRequest(app_id: appId)
     let _: ReprocessResponse = try await post(
       "v1/conversations/\(conversationId)/reprocess", body: body)
+  }
+
+  /// Reprocess a conversation through the default pipeline (no specific app).
+  /// Returns the refreshed conversation, which now has a regenerated title
+  /// and structured payload.
+  func reprocessConversation(conversationId: String) async throws -> ServerConversation {
+    return try await post(
+      "v1/conversations/\(conversationId)/reprocess", body: EmptyBody())
   }
 }
 
