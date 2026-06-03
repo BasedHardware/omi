@@ -28,6 +28,16 @@ final class ConferencingAppsTests: XCTestCase {
         XCTAssertFalse(ConferencingApps.isCallWindow(ownerName: "Finder", title: "Zoom Meeting"))
         XCTAssertFalse(ConferencingApps.isCallWindow(ownerName: nil, title: "Google Meet"))
     }
+
+    func testNativeCallBundleIDMatchingIsCaseInsensitive() {
+        XCTAssertTrue(ConferencingApps.isNativeCallApp(bundleID: "us.zoom.xos"))
+        XCTAssertTrue(ConferencingApps.isNativeCallApp(bundleID: "US.Zoom.XOS"))
+        XCTAssertTrue(ConferencingApps.isNativeCallApp(bundleID: "com.microsoft.teams2"))
+        XCTAssertTrue(ConferencingApps.isNativeCallApp(bundleID: "com.apple.facetime"))
+        // Omi itself (which is always using the mic while recording) must not count as a meeting.
+        XCTAssertFalse(ConferencingApps.isNativeCallApp(bundleID: "com.omi.omi-mtg-sysaudio"))
+        XCTAssertFalse(ConferencingApps.isNativeCallApp(bundleID: "com.google.Chrome"))
+    }
 }
 
 // MARK: - MeetingDetector hysteresis
