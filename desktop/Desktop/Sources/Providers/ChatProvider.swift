@@ -686,6 +686,22 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
     init() {
         log("ChatProvider initialized, will start Claude bridge on first use")
 
+        // When the last in-flight save completes, re-run any poll cycle
+        // that was deferred while saves were active. Keeps suppression
+        // from permanently dropping a fetch of other-platform messages.
+        //
+        // The flag is intentionally NOT cleared here — only
+        // `pollForNewMessages` clears it, and only once it actually gets
+        // past its guards and commits to a fetch. Otherwise a retry that
+        // bails again (e.g. on `isSending` because the next turn is mid-
+        // stream) would drop the deferral permanently; leaving the flag
+        // set lets the next drain (e.g. the AI-response save) retry once
+        // sending has finished.
+        pendingSaves.onDrained = { [weak self] in
+            guard let self, self.pollDeferredDuringSave else { return }
+            Task { [weak self] in await self?.pollForNewMessages() }
+        }
+
         // Migrate legacy "agentSDK" persisted mode to the new default "piMono".
         // Pre-6594 installs may have the old agentSDK tag saved; the settings
         // picker no longer offers it, so leaving it stored would leave the UI
@@ -2111,6 +2127,27 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
     /// Prevents overlapping fetches when activation + Cmd+R fire back-to-back.
     private let pollGate = ReentrancyGate()
 
+    /// Defense-in-depth against the saveMessage / pollForNewMessages
+    /// race. `isSending` is released *before* the AI message save
+    /// completes (intentional — to unblock the next query), which opens a
+    /// window where the poll can observe the just-saved AI message and
+    /// treat it as new-from-another-platform. The existing 200-char
+    /// text-prefix merge at `pollForNewMessages` catches most of these,
+    /// but a counter-based suppression eliminates the race window
+    /// entirely instead of relying on text heuristics that fail on short
+    /// common replies ("Yes", "Got it"). Every saveMessage call site
+    /// begins/ends the counter; the poll skips when the counter is
+    /// active. Sites are documented inline at each `saveMessage(...)` call.
+    private let pendingSaves = PendingSaveCounter()
+
+    /// Set when a `pollForNewMessages` cycle bailed *because* a save was
+    /// in flight. `pollForNewMessages` is only triggered by activation /
+    /// Cmd+R (there is no periodic poll), so a dropped cycle would leave
+    /// messages from other platforms unfetched until the next activation.
+    /// `pendingSaves.onDrained` re-runs the poll once saves finish, but
+    /// only when this flag says one was actually deferred.
+    private var pollDeferredDuringSave = false
+
     /// Fetch new messages from other platforms (e.g. mobile).
     /// Merges new messages into the existing array without disrupting the UI.
     private func pollForNewMessages() async {
@@ -2124,11 +2161,28 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
         // Skip if we're actively sending. Note: isSending is released *before* the AI
         // message is saved to the backend (to unblock the next query). This means the
         // poll can run while saveMessage() is still in-flight — see the race note below.
+        //
+        // `pendingSaves.isActive` closes the same race window from the save side
+        // — any in-flight saveMessage (user msg, AI msg, follow-up, partial-on-error,
+        // proactive notification) keeps the poll suppressed until it lands. This is
+        // defense-in-depth over the 200-char text-prefix merge below at lines ~2192.
         guard !isSending, !isLoading, !isLoadingSessions else { return }
+        // A save in flight means a local message hasn't reconciled its
+        // server ID yet — defer rather than risk observing it as new.
+        // Mark the cycle deferred so `pendingSaves.onDrained` re-runs it.
+        guard !pendingSaves.isActive else { pollDeferredDuringSave = true; return }
         // Skip if messages haven't been loaded yet (initial load not done)
         guard !messages.isEmpty || sessionsLoadError != nil else { return }
         // Skip if there's an active streaming message
         guard !messages.contains(where: { $0.isStreaming }) else { return }
+
+        // Past all the deferral-relevant guards — this cycle is actually
+        // going to fetch, so any pending deferral is now being honored.
+        // Cleared HERE (not in onDrained) so a retry that bailed earlier
+        // on `isSending`/streaming keeps the flag set and gets retried by
+        // the next drain. The post-fetch recheck below re-sets it if a
+        // save sneaks in during getMessages.
+        pollDeferredDuringSave = false
 
         do {
             let persistedMessages: [ChatMessageDB]
@@ -2146,6 +2200,19 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                     limit: messagesPageSize
                 )
             }
+
+            // A save may have begun *while* getMessages was awaiting — e.g.
+            // a proactive assistant message appended via appendAssistantMessage
+            // (FloatingControlBarWindow) after this poll already passed the
+            // pendingSaves guard above. That message can be in the batch we
+            // just fetched, carrying a server ID the local copy hasn't adopted
+            // yet. Re-check here and bail this cycle; the next poll after the
+            // save lands reconciles it by ID. Without this, the post-guard
+            // window stays open for the proactive paths. Mark the cycle
+            // deferred so the drain handler re-runs it — otherwise the
+            // just-fetched batch (including any genuine new messages from
+            // other platforms) would be dropped until the next activation.
+            guard !pendingSaves.isActive else { pollDeferredDuringSave = true; return }
 
             // Build a lookup of existing IDs for fast O(1) checks.
             let existingIds = Set(messages.map(\.id))
@@ -2245,10 +2312,15 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
         )
         messages.append(userMessage)
 
-        // Persist to backend and sync server ID back to prevent poll duplicates
+        // Persist to backend and sync server ID back to prevent poll duplicates.
+        //
+        // saveMessage site 1 of 5: user follow-up message sent
+        // mid-query. Fire-and-forget Task. `pendingSaves` guards the
+        // poll for the lifetime of this save.
         let capturedSessionId = isInDefaultChat ? nil : currentSessionId
         let capturedAppId = overrideAppId ?? selectedAppId
         let localId = userMessage.id
+        pendingSaves.begin()
         Task { [weak self] in
             do {
                 let response = try await APIClient.shared.saveMessage(
@@ -2262,9 +2334,11 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                         self?.messages[index].id = response.id
                         self?.messages[index].isSynced = true
                     }
+                    self?.pendingSaves.end()
                 }
                 log("Saved follow-up message to backend: \(response.id)")
             } catch {
+                await MainActor.run { self?.pendingSaves.end() }
                 logError("Failed to persist follow-up message", error: error)
             }
         }
@@ -2289,6 +2363,10 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
 
         messages.append(aiMessage)
 
+        // saveMessage site 2 of 5: AI message synthesized from a
+        // proactive notification (no bridge query, no streaming).
+        // Fire-and-forget Task.
+        pendingSaves.begin()
         Task { [weak self] in
             do {
                 let response = try await APIClient.shared.saveMessage(
@@ -2302,9 +2380,11 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                         self?.messages[index].id = response.id
                         self?.messages[index].isSynced = true
                     }
+                    self?.pendingSaves.end()
                 }
                 log("Saved assistant message to backend: \(response.id)")
             } catch {
+                await MainActor.run { self?.pendingSaves.end() }
                 logError("Failed to persist assistant message", error: error)
             }
         }
@@ -2543,6 +2623,13 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
         let capturedSessionId = sessionId
         let capturedAppId = overrideAppId ?? selectedAppId
         if !isFollowUp {
+            // saveMessage site 3 of 5: user message at turn start.
+            // Fire-and-forget Task launched before the bridge query so
+            // it doesn't block streaming. `isSending` already gates the
+            // poll until the AI response lands, but `pendingSaves`
+            // provides defense-in-depth in case the save outlives the
+            // bridge query (slow backend, retry, etc.).
+            pendingSaves.begin()
             Task { [weak self] in
                 do {
                     let response = try await APIClient.shared.saveMessage(
@@ -2559,9 +2646,11 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                             self?.messages[index].id = response.id
                             self?.messages[index].isSynced = true
                         }
+                        self?.pendingSaves.end()
                     }
                     log("Saved user message to backend: \(response.id)")
                 } catch {
+                    await MainActor.run { self?.pendingSaves.end() }
                     logError("Failed to persist user message", error: error)
                     // Non-critical - continue with chat
                 }
@@ -2805,6 +2894,23 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             // before this update runs.
             let textToSave = queryResult.text.isEmpty ? messageText : queryResult.text
             if !textToSave.isEmpty {
+                // saveMessage site 4 of 5 (THE CRITICAL ONE): AI
+                // response on the success path. `isSending=false` was
+                // already released a few lines above to unblock the
+                // next query, so the poll could fire DURING this await
+                // and observe the just-saved AI message before the
+                // local UUID has been updated to the server ID below.
+                // The counter closes that window — `pendingSaves`
+                // stays active until the save lands AND the in-memory
+                // ID has been synced. The pre-existing 200-char
+                // text-prefix merge at `pollForNewMessages` stays as
+                // a secondary safety net.
+                // `defer` guarantees the counter is released on every exit
+                // path — success, throw, or any future early return added
+                // inside this block — so a missed `end()` can't permanently
+                // suppress the poll.
+                pendingSaves.begin()
+                defer { pendingSaves.end() }
                 do {
                     let toolMetadata = serializeToolCallMetadata(messageId: aiMessageId)
                     let response = try await APIClient.shared.saveMessage(
@@ -2917,9 +3023,14 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                     messages[index].isStreaming = false
                     completeRemainingToolCalls(messageId: aiMessageId)
                     log("Bridge error after partial response — keeping \(messages[index].text.count) chars of streamed text")
-                    // Still try to persist the partial response
+                    // Still try to persist the partial response.
+                    //
+                    // saveMessage site 5 of 5: partial AI
+                    // response after a bridge error. Fire-and-forget
+                    // Task; same counter pattern as the other sites.
                     let partialText = messages[index].text
                     let partialToolMetadata = self.serializeToolCallMetadata(messageId: aiMessageId)
+                    pendingSaves.begin()
                     Task { [weak self] in
                         do {
                             let response = try await APIClient.shared.saveMessage(
@@ -2934,9 +3045,11 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                                     self?.messages[syncIndex].id = response.id
                                     self?.messages[syncIndex].isSynced = true
                                 }
+                                self?.pendingSaves.end()
                             }
                             log("Saved partial AI response to backend: \(response.id)")
                         } catch {
+                            await MainActor.run { self?.pendingSaves.end() }
                             logError("Failed to persist partial AI response", error: error)
                         }
                     }
