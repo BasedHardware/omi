@@ -331,10 +331,12 @@ struct ConversationDetailView: View {
       // Title + timestamp subtitle
       VStack(alignment: .leading, spacing: OmiSpacing.hairline) {
         HStack(spacing: OmiSpacing.sm) {
-          Text(displayConversation.title)
+          Text(displayConversation.displayTitle)
             .scaledFont(size: OmiType.heading, weight: .semibold)
-            .foregroundColor(Ink.primary)
+            .foregroundColor(detailTitleColor)
             .lineLimit(1)
+
+          ConversationStatusBadge(state: displayConversation.displayState)
 
           // Edit title button (inline with title)
           Button(action: {
@@ -355,11 +357,6 @@ struct ConversationDetailView: View {
       }
 
       Spacer()
-
-      // Status badge
-      if displayConversation.status != .completed {
-        statusBadge
-      }
 
       // View Transcript pill button
       viewTranscriptButton
@@ -560,30 +557,13 @@ struct ConversationDetailView: View {
     }
   }
 
-  private var statusBadge: some View {
-    Text(displayConversation.status.rawValue.replacingOccurrences(of: "_", with: " ").capitalized)
-      .scaledFont(size: OmiType.caption, weight: .medium)
-      .foregroundColor(statusColor)
-      .padding(.horizontal, OmiSpacing.sm)
-      .padding(.vertical, OmiSpacing.xxs)
-      .background(
-        Capsule()
-          .fill(statusColor.opacity(0.2))
-      )
-  }
-
-  private var statusColor: Color {
-    switch displayConversation.status {
-    case .completed:
-      return Ink.listeningGreen
-    case .processing, .merging:
-      // Neutral: "working" is not a state with something to do about it, and the accent is
-      // already spent. Green/orange/red carry the states that are.
-      return Ink.secondary
-    case .inProgress:
-      return PageGlass.warning
-    case .failed:
-      return Ink.errorRed
+  /// Title color in the header — dim placeholder titles (Processing /
+  /// Locked / Untitled) so they read as secondary text rather than as the
+  /// real title of the conversation.
+  private var detailTitleColor: Color {
+    switch displayConversation.displayState {
+    case .titled: return Ink.primary
+    default: return Ink.secondary
     }
   }
 
