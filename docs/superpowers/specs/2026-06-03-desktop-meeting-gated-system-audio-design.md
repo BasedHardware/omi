@@ -388,13 +388,32 @@ running in the background) was detected as a meeting, so "Only during meetings" 
   `kAudioProcessPropertyIsRunningInput` + `kAudioProcessPropertyBundleID`). An idle app isn't using
   the mic, so it no longer counts. No Screen Recording permission required. Bundle IDs live in
   `ConferencingApps.nativeCallBundleIDs`.
-- **Browser-based calls** (Google Meet, Teams web): still detected by call **window title**
-  (`browserCallWindowPresent()`), which requires Screen Recording permission.
+- **Browser-based calls** (Google Meet, Teams web): detected by a **browser process using the
+  microphone** — `callAppIsUsingMicrophone()` also matches browser bundle-id *prefixes*
+  (`ConferencingApps.browserBundleIDPrefixes`), since browsers route call audio through helper
+  processes (e.g. `net.imput.helium.helper`, `com.google.Chrome.helper`). Permission-free; catches
+  an unmuted browser call. Falls back to call **window title** (`browserCallWindowPresent()`, needs
+  Screen Recording permission), which also covers a *muted* browser call.
+  - Known limitation: a browser drops mic input when muted, so a muted Meet call is detected only via
+    the window-title fallback (i.e. only when Screen Recording permission is granted). After the
+    off-grace period a sustained mute would pause capture. Native call apps (Zoom/Teams) keep the mic
+    open when muted, so they're unaffected.
 - `ConferencingApps.isCallWindow(...)` is unchanged and still used by `ProactiveAssistantsPlugin`
   for screen-capture throttling.
 
-Validated with a standalone CoreAudio harness: with Omi recording, only Omi showed mic-in-use; an
-idle Zoom did not.
+Validated live: with a Zoom app merely open (no call), no process used the mic and detection stayed
+`active=false`; joining a Google Meet call in a browser showed `net.imput.helium.helper` using the
+mic and detection flipped `active=true`, starting capture. A standalone CoreAudio harness confirmed
+the same.
+
+### 11.3 Code-review fixes applied
+
+- Mic-start hard failure now stops the session (with logging) instead of leaving a silently-dead
+  "recording" — restoring pre-refactor behavior (`startMicCaptureIfNeeded` returns success).
+- The meeting probe runs **off the main actor** (`MeetingDetector.tick()` → `applyDetected`) so the
+  CoreAudio/CGWindowList scan can't stall the UI, notably after wake.
+- `AudioMixer.start()` is idempotent (`guard isRunning`) so the silent-mic fallback can't reset
+  buffers/clock mid-stream.
 
 ### 11.2 "Only during meetings" gates the whole recording (mic + system), not just the tap
 
