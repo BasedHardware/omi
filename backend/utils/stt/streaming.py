@@ -1,6 +1,9 @@
 import asyncio
+import io
 import os
 import random
+import threading
+import wave
 from enum import Enum
 from typing import Callable, List, Optional
 
@@ -8,8 +11,10 @@ import websockets
 from deepgram import DeepgramClient, DeepgramClientOptions, LiveTranscriptionEvents
 from deepgram.clients.live.v1 import LiveOptions
 
+from utils.async_tasks import create_named_task
 from utils.byok import get_byok_key
 from utils.executors import sync_executor, run_blocking
+from utils.http_client import get_stt_client, get_stt_semaphore
 from utils.stt.safe_socket import KeepaliveConfig, SafeDeepgramSocket  # noqa: F401 — re-exported for backward compat
 from utils.stt.vad_gate import GatedDeepgramSocket
 import logging
@@ -416,3 +421,204 @@ def connect_to_deepgram(
         raise Exception(f'Could not open socket: WebSocketException {e}')
     except Exception as e:
         raise Exception(f'Could not open socket: {e}')
+
+
+# ---------------------------------------------------------------------------
+# Parakeet (self-hosted) streaming-shaped STT
+#
+# The Parakeet service is a *batch* endpoint (POST /v1/transcribe, whole file ->
+# {text, segments}). The listen pipeline drives a *streaming* socket (sync .send(pcm)
+# + .finish(), async stream_transcript callbacks). This wrapper bridges the two: it
+# buffers PCM16 mono into fixed windows, POSTs each window to the service, and feeds
+# the resulting segments to stream_transcript — same interface as process_audio_dg.
+#
+# Gated by HOSTED_PARAKEET_API_URL (unset in prod -> never used; prod stays on Deepgram).
+# Diarization is not done here (Parakeet doesn't diarize) — segments come through as a
+# single speaker, matching how the backend treats single-channel audio.
+# ---------------------------------------------------------------------------
+
+PARAKEET_WINDOW_SECONDS = float(os.getenv('PARAKEET_WINDOW_SECONDS', '6.0'))
+
+
+def _pcm16_to_wav_bytes(pcm: bytes, sample_rate: int) -> bytes:
+    buf = io.BytesIO()
+    with wave.open(buf, 'wb') as w:
+        w.setnchannels(1)
+        w.setsampwidth(2)  # int16
+        w.setframerate(sample_rate)
+        w.writeframes(pcm)
+    return buf.getvalue()
+
+
+class ParakeetStreamingSocket:
+    """Streaming-shaped wrapper over the batch Parakeet /v1/transcribe service.
+
+    Mirrors the SafeDeepgramSocket interface the listen pipeline uses (sync send/finish).
+    """
+
+    def __init__(
+        self, stream_transcript, api_url: str, sample_rate: int, window_seconds: float = PARAKEET_WINDOW_SECONDS
+    ):
+        self._stream_transcript = stream_transcript
+        self._url = api_url.rstrip('/') + '/v1/transcribe'
+        self._sample_rate = sample_rate
+        self._window_bytes = int(sample_rate * 2 * window_seconds)  # int16 mono
+        self._buf = bytearray()
+        self._lock = threading.Lock()
+        self._emitted_seconds = 0.0
+        self._closed = False
+        self._pump_task: Optional[asyncio.Task] = None
+        # Surfaced to the listen loop via is_connection_dead so a crashed pump is detected
+        # and drained like a dead Deepgram socket (the receive loop polls is_connection_dead).
+        self._dead = False
+        self._dead_reason: Optional[str] = None
+
+    def start(self):
+        # Named + tracked so it's supervised/drained like the other WS-scoped tasks.
+        self._pump_task = create_named_task(self._pump(), name="parakeet_stt_pump")
+
+    # --- interface the listen pipeline calls ---
+    def send(self, data: bytes):
+        if self._closed or not data:
+            return
+        with self._lock:
+            self._buf.extend(data)
+
+    async def finish(self):
+        """Drain the final (sub-window) chunk INLINE before returning.
+
+        The listen teardown calls this and then closes the client socket / cancels the
+        transcript-processing task, so the tail must be transcribed and delivered to
+        stream_transcript() *here*, not on the next pump tick (which would be dropped).
+        """
+        self._closed = True
+        pump, self._pump_task = self._pump_task, None
+        if pump is not None:
+            try:
+                # The pump observes _closed, force-flushes whatever remains, then exits.
+                await pump
+            except asyncio.CancelledError:
+                pass
+            except Exception:
+                logger.exception("Parakeet pump await error during finish")
+        # Backstop: if the pump died early (and left audio buffered), drain it here so the
+        # tail is never silently lost. No-op when the pump already emptied the buffer.
+        await self._flush(force=True)
+
+    # --- SafeDeepgramSocket-compatible health interface (the listen loop polls these) ---
+    @property
+    def is_connection_dead(self) -> bool:
+        # Transient POST errors are retried on the next window (stay alive). Only a crashed
+        # pump (no consumer for buffered audio) reports dead so the listen loop tears down.
+        return self._dead
+
+    @property
+    def death_reason(self) -> Optional[str]:
+        return self._dead_reason
+
+    @property
+    def keepalive_count(self) -> int:
+        return 0
+
+    def set_close_reason(self, reason: str) -> None:
+        pass
+
+    def finalize(self) -> None:
+        # No persistent connection to finalize; the tail is drained by finish().
+        pass
+
+    # --- internals ---
+    async def _pump(self):
+        try:
+            while True:
+                await asyncio.sleep(0.5)
+                closing = self._closed
+                await self._flush(force=closing)
+                if closing:
+                    break
+        except asyncio.CancelledError:
+            pass
+        except Exception as e:
+            logger.exception("Parakeet pump loop error")
+            self._dead = True
+            self._dead_reason = f'parakeet pump crashed: {e}'
+
+    async def _flush(self, force: bool):
+        with self._lock:
+            avail = len(self._buf)
+            if not (avail >= self._window_bytes or (force and avail > 0)):
+                return
+            take = avail if force else self._window_bytes
+            chunk = bytes(self._buf[:take])
+            del self._buf[:take]
+            start = self._emitted_seconds
+            dur = (take // 2) / self._sample_rate
+            self._emitted_seconds += dur
+
+        segments = await self._transcribe_chunk(chunk, start, dur)
+        if segments:
+            self._stream_transcript(segments)
+
+    async def _transcribe_chunk(self, pcm: bytes, start: float, dur: float) -> List[dict]:
+        wav = _pcm16_to_wav_bytes(pcm, self._sample_rate)
+        try:
+            client = get_stt_client()
+            async with get_stt_semaphore():
+                resp = await client.post(self._url, files={'file': ('audio.wav', wav, 'audio/wav')})
+            resp.raise_for_status()
+            data = resp.json()
+        except Exception as e:
+            logger.error(f"Parakeet transcribe failed: {e}")
+            return []
+
+        out: List[dict] = []
+        for s in data.get('segments', []) or []:
+            text = (s.get('text') or '').strip()
+            if not text:
+                continue
+            out.append(
+                {
+                    'speaker': 'SPEAKER_0',
+                    'start': start + float(s.get('start', 0.0)),
+                    'end': start + float(s.get('end', 0.0)),
+                    'text': text,
+                    'is_user': False,
+                    'person_id': None,
+                }
+            )
+        if not out and (data.get('text') or '').strip():
+            out.append(
+                {
+                    'speaker': 'SPEAKER_0',
+                    'start': start,
+                    'end': start + dur,
+                    'text': data['text'].strip(),
+                    'is_user': False,
+                    'person_id': None,
+                }
+            )
+        return out
+
+
+async def process_audio_parakeet(
+    stream_transcript,
+    language: str,
+    sample_rate: int,
+    channels: int,
+    model: str = 'parakeet',
+    keywords: List[str] = [],
+    vad_gate=None,
+    is_active: Optional[Callable[[], bool]] = None,
+):
+    """Drop-in replacement for process_audio_dg backed by the self-hosted Parakeet service.
+
+    Returns a ParakeetStreamingSocket (sync send/finish) or None if not configured.
+    """
+    api_url = os.getenv('HOSTED_PARAKEET_API_URL')
+    if not api_url:
+        logger.error('process_audio_parakeet: HOSTED_PARAKEET_API_URL not set')
+        return None
+    logger.info(f'process_audio_parakeet {language} {sample_rate} {channels} -> {api_url}')
+    socket = ParakeetStreamingSocket(stream_transcript, api_url, sample_rate)
+    socket.start()
+    return socket
