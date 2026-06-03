@@ -168,6 +168,14 @@ extension AppState {
     }
   }
 
+  /// Replace a conversation in local state with a freshly-fetched server
+  /// version. Used after reprocess so the row sees the new `status` and full
+  /// `structured` payload (not just title), which matters when reprocess
+  /// transitions a `.failed` conversation back to `.completed`.
+  func replaceConversation(_ refreshed: ServerConversation) {
+    conversationRepository.replace(refreshed)
+  }
+
   func loadConversationDetail(
     _ conversation: ServerConversation,
     onCached: ((ServerConversation) -> Void)? = nil
