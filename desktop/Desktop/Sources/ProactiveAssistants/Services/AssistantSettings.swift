@@ -5,6 +5,15 @@ import Foundation
 class AssistantSettings {
     static let shared = AssistantSettings()
 
+    /// Controls when system audio (audio from other apps — calls, videos, music) is captured
+    /// during a recording. `always` = capture for the whole recording (default, prior behavior);
+    /// `onlyDuringMeetings` = capture only while a conferencing call is detected; `never` = never.
+    enum SystemAudioCaptureMode: String {
+        case always
+        case onlyDuringMeetings
+        case never
+    }
+
     // MARK: - UserDefaults Keys
 
     private let cooldownIntervalKey = "assistantsCooldownInterval"
@@ -17,6 +26,7 @@ class AssistantSettings {
     private let transcriptionVocabularyKey = "transcriptionVocabulary"
     private let vadGateEnabledKey = "vadGateEnabled"
     private let batchTranscriptionEnabledKey = "batchTranscriptionEnabled"
+    private let systemAudioCaptureModeKey = "systemAudioCaptureMode"
 
     // MARK: - Default Values
 
@@ -30,6 +40,7 @@ class AssistantSettings {
     private let defaultTranscriptionVocabulary: [String] = []
     private let defaultVadGateEnabled = false
     private let defaultBatchTranscriptionEnabled = false
+    private let defaultSystemAudioCaptureMode: SystemAudioCaptureMode = .always
 
     private init() {
         // Register defaults
@@ -44,6 +55,7 @@ class AssistantSettings {
             transcriptionVocabularyKey: defaultTranscriptionVocabulary,
             vadGateEnabledKey: defaultVadGateEnabled,
             batchTranscriptionEnabledKey: defaultBatchTranscriptionEnabled,
+            systemAudioCaptureModeKey: defaultSystemAudioCaptureMode.rawValue,
         ])
     }
 
@@ -187,6 +199,23 @@ class AssistantSettings {
         }
     }
 
+    /// When system audio (audio from other apps) is captured during a recording.
+    /// Default `.always` preserves the prior behavior. The hidden `disableSystemAudioCapture`
+    /// debug UserDefault still forces "never" — see `AppState.effectiveSystemAudioMode`.
+    /// Posts `.systemAudioCaptureModeDidChange` so an active recording can re-apply the gate live.
+    var systemAudioCaptureMode: SystemAudioCaptureMode {
+        get {
+            let raw =
+                UserDefaults.standard.string(forKey: systemAudioCaptureModeKey)
+                ?? defaultSystemAudioCaptureMode.rawValue
+            return SystemAudioCaptureMode(rawValue: raw) ?? defaultSystemAudioCaptureMode
+        }
+        set {
+            UserDefaults.standard.set(newValue.rawValue, forKey: systemAudioCaptureModeKey)
+            NotificationCenter.default.post(name: .systemAudioCaptureModeDidChange, object: nil)
+        }
+    }
+
     /// Returns vocabulary with "Omi" always included (for DeepGram)
     var effectiveVocabulary: [String] {
         var vocab = Set(transcriptionVocabulary)
@@ -206,6 +235,7 @@ class AssistantSettings {
         transcriptionVocabulary = defaultTranscriptionVocabulary
         vadGateEnabled = defaultVadGateEnabled
         batchTranscriptionEnabled = defaultBatchTranscriptionEnabled
+        systemAudioCaptureMode = defaultSystemAudioCaptureMode
     }
 
     // MARK: - Supported Languages
@@ -368,6 +398,7 @@ extension Notification.Name {
     static let assistantMonitoringStateDidChange = Notification.Name("assistantMonitoringStateDidChange")
     static let assistantMonitoringToggleRequested = Notification.Name("assistantMonitoringToggleRequested")
     static let transcriptionSettingsDidChange = Notification.Name("transcriptionSettingsDidChange")
+    static let systemAudioCaptureModeDidChange = Notification.Name("systemAudioCaptureModeDidChange")
 }
 
 // MARK: - Backward Compatibility
