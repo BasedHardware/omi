@@ -62,6 +62,13 @@ class AudioMixer {
     ///   16-bit PCM at 16kHz depending on `outputMode`.
     func start(onChunk: @escaping AudioChunkHandler) {
         bufferLock.lock()
+        if isRunning {
+            // Already running — don't reset buffers/clock mid-stream (e.g. a silent-mic fallback
+            // re-arming the capture). Just refresh the sink handler.
+            onMixedChunk = onChunk
+            bufferLock.unlock()
+            return
+        }
         self.onMixedChunk = onChunk
         self.isRunning = true
         micBuffer = Data()
