@@ -2,6 +2,13 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.11.444",
+      "date": "2026-06-03",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
       "version": "0.11.443",
       "date": "2026-06-03",
       "changes": [
