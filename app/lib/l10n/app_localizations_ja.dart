@@ -9144,4 +9144,54 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get backgroundModeNote => '現在は Omi デバイスのみ対応しており、継続的に改善しています。';
+
+  @override
+  String get downgradeToFreemiumTitle => 'フリーミアムにダウングレードしますか？';
+
+  @override
+  String get downgradeLimitationsHeading => '以下の制限が適用されます：';
+
+  @override
+  String get downgradeLimitBattery => 'バッテリー消費が7倍';
+
+  @override
+  String get downgradeLimitQuality => '文字起こし品質が30%低下';
+
+  @override
+  String get downgradeLimitDelay => '5〜7秒の遅延';
+
+  @override
+  String get downgradeLimitSpeakers => '話者を識別できません';
+
+  @override
+  String get downgradeAnyway => 'それでもダウングレード';
+
+  @override
+  String get googleCalendarNotConnected => 'Google カレンダーが未接続です';
+
+  @override
+  String get googleCalendarConnectPrompt => '会話をカレンダーの予定に紐付けるには、Google カレンダーを接続してください。';
+
+  @override
+  String get connect => '接続';
+
+  @override
+  String linkedToEvent(Object title) {
+    return '「${title}」に紐付けました';
+  }
+
+  @override
+  String get failedToLinkCalendarEvent => 'カレンダーの予定への紐付けに失敗しました';
+
+  @override
+  String get thanksForYourFeedback => 'フィードバックありがとうございます！';
+
+  @override
+  String get copyMessage => 'メッセージをコピー';
+
+  @override
+  String get searchSettings => '設定を検索…';
+
+  @override
+  String get errorLoadingAudio => '音声の読み込みエラー';
 }

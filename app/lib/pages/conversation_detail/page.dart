@@ -404,15 +404,15 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
       builder: (c) => AlertDialog(
         backgroundColor: const Color(0xFF1C1C1E),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text('Google Calendar Not Connected', style: TextStyle(color: Colors.white)),
-        content: const Text(
-          'Connect your Google Calendar to link conversations to calendar events.',
-          style: TextStyle(color: Color(0xFF8E8E93)),
+        title: Text(context.l10n.googleCalendarNotConnected, style: const TextStyle(color: Colors.white)),
+        content: Text(
+          context.l10n.googleCalendarConnectPrompt,
+          style: const TextStyle(color: Color(0xFF8E8E93)),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(c),
-            child: const Text('Cancel', style: TextStyle(color: Color(0xFF8E8E93))),
+            child: Text(context.l10n.cancel, style: const TextStyle(color: Color(0xFF8E8E93))),
           ),
           TextButton(
             onPressed: () {
@@ -422,7 +422,7 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                 MaterialPageRoute(builder: (context) => const IntegrationsPage()),
               );
             },
-            child: const Text('Connect', style: TextStyle(color: Colors.white)),
+            child: Text(context.l10n.connect, style: const TextStyle(color: Colors.white)),
           ),
         ],
       ),
@@ -1544,7 +1544,7 @@ class _CalendarEventPickerSheetState extends State<CalendarEventPickerSheet> {
     if (linked != null) {
       Navigator.pop(context);
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Linked to "${event.title}"')),
+        SnackBar(content: Text(context.l10n.linkedToEvent(event.title))),
       );
     } else {
       setState(() {
@@ -1552,7 +1552,7 @@ class _CalendarEventPickerSheetState extends State<CalendarEventPickerSheet> {
         _linkingEventId = null;
       });
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Failed to link calendar event')),
+        SnackBar(content: Text(context.l10n.failedToLinkCalendarEvent)),
       );
     }
   }
