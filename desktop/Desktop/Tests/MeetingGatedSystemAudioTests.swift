@@ -38,6 +38,17 @@ final class ConferencingAppsTests: XCTestCase {
         XCTAssertFalse(ConferencingApps.isNativeCallApp(bundleID: "com.omi.omi-mtg-sysaudio"))
         XCTAssertFalse(ConferencingApps.isNativeCallApp(bundleID: "com.google.Chrome"))
     }
+
+    func testBrowserBundleIDPrefixMatchingCatchesHelpers() {
+        // Browsers route call audio through helper processes — match by prefix.
+        XCTAssertTrue(ConferencingApps.isBrowserBundleID("net.imput.helium.helper"))  // Helium (Meet)
+        XCTAssertTrue(ConferencingApps.isBrowserBundleID("com.google.Chrome.helper"))
+        XCTAssertTrue(ConferencingApps.isBrowserBundleID("company.thebrowser.Browser"))  // Arc
+        XCTAssertTrue(ConferencingApps.isBrowserBundleID("com.apple.WebKit.GPU"))
+        // Not browsers.
+        XCTAssertFalse(ConferencingApps.isBrowserBundleID("com.omi.omi-mtg-sysaudio"))
+        XCTAssertFalse(ConferencingApps.isBrowserBundleID("us.zoom.xos"))
+    }
 }
 
 // MARK: - MeetingDetector hysteresis
@@ -45,8 +56,7 @@ final class ConferencingAppsTests: XCTestCase {
 @MainActor
 final class MeetingDetectorTests: XCTestCase {
 
-    // Injected, test-controlled meeting probe + clock (no timers/observers — evaluate() is driven directly).
-    private var meetingNow = false
+    // Test-controlled clock; hysteresis is driven directly via applyDetected(_:) (no timers/probe).
     private var now = Date(timeIntervalSince1970: 1000)
 
     private func makeDetector(
@@ -55,7 +65,6 @@ final class MeetingDetectorTests: XCTestCase {
         MeetingDetector(
             pollInterval: 4.0,
             offGracePeriod: offGrace,
-            isMeetingNow: { [weak self] in self?.meetingNow ?? false },
             now: { [weak self] in self?.now ?? Date(timeIntervalSince1970: 0) },
             onChange: onChange
         )
@@ -65,8 +74,7 @@ final class MeetingDetectorTests: XCTestCase {
         var changes = [Bool]()
         let detector = makeDetector(onChange: { changes.append($0) })
 
-        meetingNow = true
-        detector.evaluate()
+        detector.applyDetected(true)
 
         XCTAssertTrue(detector.isMeetingActive)
         XCTAssertEqual(changes, [true])
@@ -76,23 +84,21 @@ final class MeetingDetectorTests: XCTestCase {
         var changes = [Bool]()
         let detector = makeDetector(offGrace: 8.0, onChange: { changes.append($0) })
 
-        meetingNow = true
-        detector.evaluate()  // -> on
+        detector.applyDetected(true)  // -> on
         XCTAssertTrue(detector.isMeetingActive)
 
         // Meeting disappears: arms pending-off, does NOT flip immediately.
-        meetingNow = false
-        detector.evaluate()
+        detector.applyDetected(false)
         XCTAssertTrue(detector.isMeetingActive, "should stay active during grace period")
 
         // Still within the grace window.
         now = now.addingTimeInterval(5)
-        detector.evaluate()
+        detector.applyDetected(false)
         XCTAssertTrue(detector.isMeetingActive, "still within grace window")
 
         // Grace elapsed (5 + 4 = 9s > 8s).
         now = now.addingTimeInterval(4)
-        detector.evaluate()
+        detector.applyDetected(false)
         XCTAssertFalse(detector.isMeetingActive, "flips off after sustained grace period")
         XCTAssertEqual(changes, [true, false])
     }
@@ -101,18 +107,13 @@ final class MeetingDetectorTests: XCTestCase {
         var changes = [Bool]()
         let detector = makeDetector(offGrace: 8.0, onChange: { changes.append($0) })
 
-        meetingNow = true
-        detector.evaluate()  // -> on
-
-        meetingNow = false
-        detector.evaluate()  // arm pending-off
+        detector.applyDetected(true)  // -> on
+        detector.applyDetected(false)  // arm pending-off
         now = now.addingTimeInterval(5)
-
-        meetingNow = true
-        detector.evaluate()  // reappears within grace -> cancels pending-off
-
+        detector.applyDetected(true)  // reappears within grace -> cancels pending-off
         now = now.addingTimeInterval(20)
-        detector.evaluate()  // long after the original deadline; should still be active
+        detector.applyDetected(true)  // long after the original deadline; should still be active
+
         XCTAssertTrue(detector.isMeetingActive)
         XCTAssertEqual(changes, [true], "no spurious off edge")
     }
@@ -121,10 +122,9 @@ final class MeetingDetectorTests: XCTestCase {
         var changes = [Bool]()
         let detector = makeDetector(onChange: { changes.append($0) })
 
-        meetingNow = false
-        detector.evaluate()
+        detector.applyDetected(false)
         now = now.addingTimeInterval(100)
-        detector.evaluate()
+        detector.applyDetected(false)
 
         XCTAssertFalse(detector.isMeetingActive)
         XCTAssertEqual(changes, [], "no edges while never in a meeting")
