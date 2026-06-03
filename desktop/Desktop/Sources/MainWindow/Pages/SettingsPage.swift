@@ -611,9 +611,16 @@ struct SettingsContentView: View {
       settingsCard(settingId: "general.audiorecording") {
         HStack(spacing: 16) {
           Circle()
-            .fill(isTranscribing ? OmiColors.success : OmiColors.textTertiary.opacity(0.3))
+            .fill(
+              isTranscribing
+                ? (appState.isAwaitingMeeting ? OmiColors.warning : OmiColors.success)
+                : OmiColors.textTertiary.opacity(0.3)
+            )
             .frame(width: 12, height: 12)
-            .shadow(color: isTranscribing ? OmiColors.success.opacity(0.5) : .clear, radius: 6)
+            .shadow(
+              color: isTranscribing
+                ? (appState.isAwaitingMeeting ? OmiColors.warning : OmiColors.success).opacity(0.5)
+                : .clear, radius: 6)
 
           Image(systemName: "mic.fill")
             .scaledFont(size: 16)
@@ -627,7 +634,9 @@ struct SettingsContentView: View {
             Text(
               transcriptionError
                 ?? (isTranscribing
-                  ? "Recording and transcribing audio" : "Audio recording is paused")
+                  ? (appState.isAwaitingMeeting
+                    ? "Waiting for a meeting…" : "Recording and transcribing audio")
+                  : "Audio recording is paused")
             )
             .scaledFont(size: 13)
             .foregroundColor(transcriptionError != nil ? OmiColors.warning : OmiColors.textTertiary)
@@ -698,7 +707,7 @@ struct SettingsContentView: View {
 
             if systemAudioCaptureMode == .onlyDuringMeetings {
               Text(
-                "Omi captures other apps' audio only while a call app like Zoom, Google Meet, or Teams is active. Detecting browser-based calls (e.g. Google Meet) requires Screen Recording permission."
+                "Omi captures other apps' audio only while you're in a call (e.g. Zoom, Teams, FaceTime). Detecting browser-based calls like Google Meet requires Screen Recording permission."
               )
               .scaledFont(size: 12)
               .foregroundColor(OmiColors.textTertiary)
