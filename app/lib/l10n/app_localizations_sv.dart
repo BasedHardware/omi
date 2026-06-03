@@ -4688,7 +4688,10 @@ class AppLocalizationsSv extends AppLocalizations {
   }
 
   @override
-  String accessesAndTriggeredBy(String accessDescription, String triggerDescription) {
+  String accessesAndTriggeredBy(
+    String accessDescription,
+    String triggerDescription,
+  ) {
     return '$accessDescription och är $triggerDescription.';
   }
 
@@ -9300,4 +9303,19 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get backgroundModeNote => 'Fungerar än så länge bara med Omi-enheter och förbättras kontinuerligt.';
+
+  @override
+  String get regenerateRecap => 'Återskapa sammanfattningen';
+
+  @override
+  String get recapRegeneratedSnackbar => 'Sammanfattningen återskapad';
+
+  @override
+  String get recapRegenerateFailed => 'Det gick inte att återskapa sammanfattningen. Försök igen senare.';
+
+  @override
+  String get recapRegenerateCooldown => 'Vänta några sekunder innan du genererar igen.';
+
+  @override
+  String get recapRegenerateNoConversations => 'Inga samtal att sammanfatta för den här dagen.';
 }

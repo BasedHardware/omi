@@ -3041,5 +3041,10 @@
     "invalidPromotionCode": "Virheellinen tarjouskoodi.",
     "backgroundModeTitle": "Taustatila",
     "backgroundModeDescription": "Pidä Omi tallentamassa, vaikka sovellus olisi kokonaan suljettu.",
-    "backgroundModeNote": "Toimii toistaiseksi vain Omi-laitteiden kanssa ja sitä kehitetään jatkuvasti."
+    "backgroundModeNote": "Toimii toistaiseksi vain Omi-laitteiden kanssa ja sitä kehitetään jatkuvasti.",
+    "regenerateRecap": "Luo yhteenveto uudelleen",
+    "recapRegeneratedSnackbar": "Yhteenveto luotu uudelleen",
+    "recapRegenerateFailed": "Yhteenvedon uudelleenluonti epäonnistui. Yritä myöhemmin uudelleen.",
+    "recapRegenerateCooldown": "Odota muutama sekunti ennen uudelleen luomista.",
+    "recapRegenerateNoConversations": "Tänä päivänä ei ole keskusteluja yhteenvedettäväksi."
 }

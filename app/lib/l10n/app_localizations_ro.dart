@@ -4710,7 +4710,10 @@ class AppLocalizationsRo extends AppLocalizations {
   }
 
   @override
-  String accessesAndTriggeredBy(String accessDescription, String triggerDescription) {
+  String accessesAndTriggeredBy(
+    String accessDescription,
+    String triggerDescription,
+  ) {
     return '$accessDescription și este $triggerDescription.';
   }
 
@@ -9340,4 +9343,19 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get backgroundModeNote => 'Deocamdată funcționează doar cu dispozitive Omi și este îmbunătățit continuu.';
+
+  @override
+  String get regenerateRecap => 'Regenerează rezumatul';
+
+  @override
+  String get recapRegeneratedSnackbar => 'Rezumat regenerat';
+
+  @override
+  String get recapRegenerateFailed => 'Rezumatul nu a putut fi regenerat. Încercați din nou mai târziu.';
+
+  @override
+  String get recapRegenerateCooldown => 'Vă rugăm să așteptați câteva secunde înainte de a regenera.';
+
+  @override
+  String get recapRegenerateNoConversations => 'Nu există conversații de rezumat pentru această zi.';
 }

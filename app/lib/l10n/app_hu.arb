@@ -3137,5 +3137,10 @@
     "invalidPromotionCode": "Érvénytelen promóciós kód.",
     "backgroundModeTitle": "Háttérmód",
     "backgroundModeDescription": "Tartsd az Omi-t felvételen akkor is, amikor az alkalmazás teljesen be van zárva.",
-    "backgroundModeNote": "Egyelőre csak Omi eszközökkel működik, és folyamatosan fejlesztjük."
+    "backgroundModeNote": "Egyelőre csak Omi eszközökkel működik, és folyamatosan fejlesztjük.",
+    "regenerateRecap": "Összegzés újragenerálása",
+    "recapRegeneratedSnackbar": "Összegzés újragenerálva",
+    "recapRegenerateFailed": "Nem sikerült újragenerálni az összegzést. Próbáld újra később.",
+    "recapRegenerateCooldown": "Kérlek, várj néhány másodpercet az újragenerálás előtt.",
+    "recapRegenerateNoConversations": "Erre a napra nincsenek összegezhető beszélgetések."
 }

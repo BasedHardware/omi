@@ -3041,5 +3041,10 @@
     "invalidPromotionCode": "Ongeldige promotiecode.",
     "backgroundModeTitle": "Achtergrondmodus",
     "backgroundModeDescription": "Houd je Omi aan het opnemen, zelfs wanneer de app volledig gesloten is.",
-    "backgroundModeNote": "Werkt voorlopig alleen met Omi-apparaten en wordt voortdurend verbeterd."
+    "backgroundModeNote": "Werkt voorlopig alleen met Omi-apparaten en wordt voortdurend verbeterd.",
+    "regenerateRecap": "Samenvatting opnieuw genereren",
+    "recapRegeneratedSnackbar": "Samenvatting opnieuw gegenereerd",
+    "recapRegenerateFailed": "Kon de samenvatting niet opnieuw genereren. Probeer het later opnieuw.",
+    "recapRegenerateCooldown": "Wacht een paar seconden voordat je opnieuw genereert.",
+    "recapRegenerateNoConversations": "Geen gesprekken om voor deze dag samen te vatten."
 }

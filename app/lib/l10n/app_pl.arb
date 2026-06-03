@@ -3076,5 +3076,10 @@
     "invalidPromotionCode": "Nieprawidłowy kod promocyjny.",
     "backgroundModeTitle": "Tryb w tle",
     "backgroundModeDescription": "Utrzymuj nagrywanie Omi nawet po całkowitym zamknięciu aplikacji.",
-    "backgroundModeNote": "Na razie działa tylko z urządzeniami Omi i jest stale ulepszany."
+    "backgroundModeNote": "Na razie działa tylko z urządzeniami Omi i jest stale ulepszany.",
+    "regenerateRecap": "Wygeneruj podsumowanie ponownie",
+    "recapRegeneratedSnackbar": "Podsumowanie wygenerowane ponownie",
+    "recapRegenerateFailed": "Nie udało się ponownie wygenerować podsumowania. Spróbuj później.",
+    "recapRegenerateCooldown": "Poczekaj kilka sekund przed ponownym wygenerowaniem.",
+    "recapRegenerateNoConversations": "Brak rozmów do podsumowania w tym dniu."
 }

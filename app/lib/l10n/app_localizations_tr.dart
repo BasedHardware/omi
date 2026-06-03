@@ -4696,7 +4696,10 @@ class AppLocalizationsTr extends AppLocalizations {
   }
 
   @override
-  String accessesAndTriggeredBy(String accessDescription, String triggerDescription) {
+  String accessesAndTriggeredBy(
+    String accessDescription,
+    String triggerDescription,
+  ) {
     return '$accessDescription ve $triggerDescription.';
   }
 
@@ -9306,4 +9309,19 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get backgroundModeNote => 'Şimdilik yalnızca Omi cihazlarıyla çalışır ve sürekli geliştirilmektedir.';
+
+  @override
+  String get regenerateRecap => 'Özeti yeniden oluştur';
+
+  @override
+  String get recapRegeneratedSnackbar => 'Özet yeniden oluşturuldu';
+
+  @override
+  String get recapRegenerateFailed => 'Özet yeniden oluşturulamadı. Lütfen daha sonra tekrar deneyin.';
+
+  @override
+  String get recapRegenerateCooldown => 'Yeniden oluşturmadan önce lütfen birkaç saniye bekleyin.';
+
+  @override
+  String get recapRegenerateNoConversations => 'Bu gün için özetlenecek konuşma bulunamadı.';
 }

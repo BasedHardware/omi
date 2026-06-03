@@ -3041,5 +3041,10 @@
     "invalidPromotionCode": "Codice promozionale non valido.",
     "backgroundModeTitle": "Modalità in background",
     "backgroundModeDescription": "Mantieni il tuo Omi in registrazione anche quando l'app è completamente chiusa.",
-    "backgroundModeNote": "Per ora funziona solo con i dispositivi Omi ed è in continuo miglioramento."
+    "backgroundModeNote": "Per ora funziona solo con i dispositivi Omi ed è in continuo miglioramento.",
+    "regenerateRecap": "Rigenera il riepilogo",
+    "recapRegeneratedSnackbar": "Riepilogo rigenerato",
+    "recapRegenerateFailed": "Impossibile rigenerare il riepilogo. Riprova più tardi.",
+    "recapRegenerateCooldown": "Attendi qualche secondo prima di rigenerare.",
+    "recapRegenerateNoConversations": "Nessuna conversazione da riepilogare per questo giorno."
 }

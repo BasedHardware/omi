@@ -4686,7 +4686,10 @@ class AppLocalizationsLt extends AppLocalizations {
   }
 
   @override
-  String accessesAndTriggeredBy(String accessDescription, String triggerDescription) {
+  String accessesAndTriggeredBy(
+    String accessDescription,
+    String triggerDescription,
+  ) {
     return '$accessDescription ir yra $triggerDescription.';
   }
 
@@ -9308,4 +9311,19 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get backgroundModeNote => 'Kol kas veikia tik su Omi įrenginiais ir nuolat tobulinama.';
+
+  @override
+  String get regenerateRecap => 'Sukurti santrauką iš naujo';
+
+  @override
+  String get recapRegeneratedSnackbar => 'Santrauka sukurta iš naujo';
+
+  @override
+  String get recapRegenerateFailed => 'Nepavyko iš naujo sukurti santraukos. Bandykite vėliau.';
+
+  @override
+  String get recapRegenerateCooldown => 'Palaukite kelias sekundes prieš generuodami iš naujo.';
+
+  @override
+  String get recapRegenerateNoConversations => 'Šiai dienai nėra pokalbių, kuriuos būtų galima apibendrinti.';
 }

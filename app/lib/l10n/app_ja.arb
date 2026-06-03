@@ -3042,5 +3042,10 @@
     "invalidPromotionCode": "無効なプロモコードです。",
     "backgroundModeTitle": "バックグラウンドモード",
     "backgroundModeDescription": "アプリを完全に閉じても Omi の録音を続けます。",
-    "backgroundModeNote": "現在は Omi デバイスのみ対応しており、継続的に改善しています。"
+    "backgroundModeNote": "現在は Omi デバイスのみ対応しており、継続的に改善しています。",
+    "regenerateRecap": "要約を再生成",
+    "recapRegeneratedSnackbar": "要約を再生成しました",
+    "recapRegenerateFailed": "要約を再生成できませんでした。後でもう一度お試しください。",
+    "recapRegenerateCooldown": "再生成する前に数秒お待ちください。",
+    "recapRegenerateNoConversations": "この日の要約対象となる会話はありません。"
 }

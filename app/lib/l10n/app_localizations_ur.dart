@@ -4694,7 +4694,10 @@ class AppLocalizationsUr extends AppLocalizations {
   }
 
   @override
-  String accessesAndTriggeredBy(String accessDescription, String triggerDescription) {
+  String accessesAndTriggeredBy(
+    String accessDescription,
+    String triggerDescription,
+  ) {
     return '$accessDescription اور $triggerDescription سے متحرک ہے۔';
   }
 
@@ -9309,4 +9312,19 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get backgroundModeNote => 'فی الحال صرف Omi آلات کے ساتھ کام کرتا ہے اور مسلسل بہتر بنایا جا رہا ہے۔';
+
+  @override
+  String get regenerateRecap => 'خلاصہ دوبارہ بنائیں';
+
+  @override
+  String get recapRegeneratedSnackbar => 'خلاصہ دوبارہ بن گیا';
+
+  @override
+  String get recapRegenerateFailed => 'خلاصہ دوبارہ نہیں بنایا جا سکا۔ بعد میں دوبارہ کوشش کریں۔';
+
+  @override
+  String get recapRegenerateCooldown => 'دوبارہ بنانے سے پہلے براہ کرم چند سیکنڈ انتظار کریں۔';
+
+  @override
+  String get recapRegenerateNoConversations => 'اس دن کے لیے خلاصہ کرنے کے لیے کوئی گفتگو نہیں ہے۔';
 }

@@ -3077,5 +3077,10 @@
     "invalidPromotionCode": "Código promocional inválido.",
     "backgroundModeTitle": "Modo em segundo plano",
     "backgroundModeDescription": "Mantenha o seu Omi gravando mesmo quando o app está totalmente fechado.",
-    "backgroundModeNote": "Por enquanto funciona apenas com dispositivos Omi e está em constante aprimoramento."
+    "backgroundModeNote": "Por enquanto funciona apenas com dispositivos Omi e está em constante aprimoramento.",
+    "regenerateRecap": "Regenerar resumo",
+    "recapRegeneratedSnackbar": "Resumo regenerado",
+    "recapRegenerateFailed": "Não foi possível regenerar o resumo. Tente novamente mais tarde.",
+    "recapRegenerateCooldown": "Aguarde alguns segundos antes de regenerar novamente.",
+    "recapRegenerateNoConversations": "Nenhuma conversa para resumir neste dia."
 }

@@ -3041,5 +3041,10 @@
     "invalidPromotionCode": "Недійсний промокод.",
     "backgroundModeTitle": "Фоновий режим",
     "backgroundModeDescription": "Продовжуйте запис Omi, навіть коли застосунок повністю закрито.",
-    "backgroundModeNote": "Наразі працює лише з пристроями Omi і постійно вдосконалюється."
+    "backgroundModeNote": "Наразі працює лише з пристроями Omi і постійно вдосконалюється.",
+    "regenerateRecap": "Створити підсумок знову",
+    "recapRegeneratedSnackbar": "Підсумок створено знову",
+    "recapRegenerateFailed": "Не вдалося створити підсумок заново. Спробуйте пізніше.",
+    "recapRegenerateCooldown": "Зачекайте кілька секунд перед повторним створенням.",
+    "recapRegenerateNoConversations": "Немає розмов для підбиття підсумку за цей день."
 }

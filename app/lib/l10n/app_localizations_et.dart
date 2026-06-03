@@ -4685,7 +4685,10 @@ class AppLocalizationsEt extends AppLocalizations {
   }
 
   @override
-  String accessesAndTriggeredBy(String accessDescription, String triggerDescription) {
+  String accessesAndTriggeredBy(
+    String accessDescription,
+    String triggerDescription,
+  ) {
     return '$accessDescription ja on $triggerDescription.';
   }
 
@@ -9292,4 +9295,19 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get backgroundModeNote => 'Praegu töötab ainult Omi seadmetega ja seda täiustatakse pidevalt.';
+
+  @override
+  String get regenerateRecap => 'Loo kokkuvõte uuesti';
+
+  @override
+  String get recapRegeneratedSnackbar => 'Kokkuvõte loodi uuesti';
+
+  @override
+  String get recapRegenerateFailed => 'Kokkuvõtet ei õnnestunud uuesti luua. Proovi hiljem uuesti.';
+
+  @override
+  String get recapRegenerateCooldown => 'Palun oota mõni sekund enne uuesti loomist.';
+
+  @override
+  String get recapRegenerateNoConversations => 'Selle päeva jaoks pole vestlusi, mida kokku võtta.';
 }

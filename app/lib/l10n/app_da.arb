@@ -3050,5 +3050,10 @@
     "invalidPromotionCode": "Ugyldig kampagnekode.",
     "backgroundModeTitle": "Baggrundstilstand",
     "backgroundModeDescription": "Hold din Omi i gang med at optage, selv når appen er helt lukket.",
-    "backgroundModeNote": "Fungerer indtil videre kun med Omi-enheder og forbedres løbende."
+    "backgroundModeNote": "Fungerer indtil videre kun med Omi-enheder og forbedres løbende.",
+    "regenerateRecap": "Generér resumé igen",
+    "recapRegeneratedSnackbar": "Resumé genereret igen",
+    "recapRegenerateFailed": "Kunne ikke generere resuméet igen. Prøv igen senere.",
+    "recapRegenerateCooldown": "Vent et par sekunder, før du genererer igen.",
+    "recapRegenerateNoConversations": "Ingen samtaler at opsummere for denne dag."
 }
