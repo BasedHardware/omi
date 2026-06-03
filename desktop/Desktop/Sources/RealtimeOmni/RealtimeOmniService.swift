@@ -46,6 +46,7 @@ final class RealtimeOmniService: NSObject {
     private var task: URLSessionWebSocketTask?
     private lazy var session = URLSession(configuration: .default, delegate: self, delegateQueue: nil)
     private var isOpen = false
+    private var terminated = false  // fire omniDidError at most once per turn
     private var pendingAudio: [Data] = []
 
     // Gemini's Live endpoint resets BOTH of Apple's WebSocket stacks
@@ -76,10 +77,21 @@ final class RealtimeOmniService: NSObject {
 
     // MARK: Lifecycle
 
+    /// Fire omniDidError at most once — a single WS teardown raises receive-fail
+    /// + didClose + didComplete, which previously fanned out into many fallbacks.
+    private func notifyError(_ message: String) {
+        Task { @MainActor in
+            guard !self.terminated else { return }
+            self.terminated = true
+            self.delegate?.omniDidError(message)
+        }
+    }
+
+
     func start() {
         guard let request = makeRequest(), let url = request.url else {
             let name = provider.displayName
-            Task { @MainActor in self.delegate?.omniDidError("Could not build \(name) request URL") }
+            notifyError("Could not build \(name) request URL")
             return
         }
         log("RealtimeOmni: connecting \(provider.displayName) → \(url.host ?? "?")")
@@ -123,7 +135,7 @@ final class RealtimeOmniService: NSObject {
                 self.receiveNW()
                 self.sendSessionSetup()
             case .failed(let err):
-                Task { @MainActor in self.delegate?.omniDidError("NW failed: \(err)") }
+                notifyError("NW failed: \(err)")
             case .cancelled:
                 break
             default:
@@ -137,7 +149,7 @@ final class RealtimeOmniService: NSObject {
         nw?.receiveMessage { [weak self] data, _, _, error in
             guard let self else { return }
             if let error {
-                Task { @MainActor in self.delegate?.omniDidError("NW receive: \(error)") }
+                notifyError("NW receive: \(error)")
                 return
             }
             if let data { Task { @MainActor in self.handleMessage(data) } }
@@ -151,7 +163,7 @@ final class RealtimeOmniService: NSObject {
         let ctx = NWConnection.ContentContext(identifier: "send", metadata: [meta])
         conn.send(content: Data(text.utf8), contentContext: ctx, isComplete: true,
                   completion: .contentProcessed { [weak self] error in
-            if let error { Task { @MainActor in self?.delegate?.omniDidError("NW send: \(error)") } }
+            if let error { self?.notifyError("NW send: \(error)") }
         })
     }
 
@@ -254,6 +266,11 @@ final class RealtimeOmniService: NSObject {
         guard let url = comps.url else { return nil }
         var r = URLRequest(url: url)
         r.setValue(authHeader, forHTTPHeaderField: "Authorization")
+        // Forward BYOK keys so BYOK users connect with their own provider key
+        // (the backend validates them and uses them upstream — same as /v4/listen).
+        for (provider, entry) in APIKeyService.byokSnapshot {
+            r.setValue(entry.key, forHTTPHeaderField: provider.headerName)
+        }
         return r
     }
 
@@ -265,7 +282,7 @@ final class RealtimeOmniService: NSObject {
             switch result {
             case .failure(let error):
                 log("RealtimeOmni: receive failed: \(error)")
-                Task { @MainActor in self.delegate?.omniDidError(error.localizedDescription) }
+                notifyError(error.localizedDescription)
             case .success(let message):
                 let data: Data?
                 switch message {
@@ -304,7 +321,7 @@ final class RealtimeOmniService: NSObject {
             delegate?.omniDidFinishTurn()
         case "error":
             let msg = (e["error"] as? [String: Any])?["message"] as? String ?? "OpenAI realtime error"
-            delegate?.omniDidError(msg)
+            if !terminated { terminated = true; delegate?.omniDidError(msg) }
         default:
             break
         }
@@ -356,7 +373,7 @@ final class RealtimeOmniService: NSObject {
             return
         }
         task?.send(.string(text)) { [weak self] error in
-            if let error { Task { @MainActor in self?.delegate?.omniDidError(error.localizedDescription) } }
+            if let error { self?.notifyError(error.localizedDescription) }
         }
     }
 }
@@ -375,13 +392,13 @@ extension RealtimeOmniService: URLSessionWebSocketDelegate {
     func urlSession(_ session: URLSession, webSocketTask: URLSessionWebSocketTask,
                     didCloseWith closeCode: URLSessionWebSocketTask.CloseCode, reason: Data?) {
         let r = reason.flatMap { String(data: $0, encoding: .utf8) } ?? ""
-        Task { @MainActor in self.delegate?.omniDidError("WebSocket closed (\(closeCode.rawValue)) \(r)") }
+        notifyError("WebSocket closed (\(closeCode.rawValue)) \(r)")
     }
 
     func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
         log("RealtimeOmni: didComplete err=\(String(describing: error))")
         if let error {
-            Task { @MainActor in self.delegate?.omniDidError("WebSocket failed: \(error.localizedDescription)") }
+            notifyError("WebSocket failed: \(error.localizedDescription)")
         }
     }
 }
