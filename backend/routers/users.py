@@ -91,6 +91,7 @@ from utils.subscription import (
 from database import user_usage as user_usage_db
 from utils import stripe as stripe_utils
 from utils.log_sanitizer import sanitize
+from utils.twilio_service import delete_user_caller_ids
 from utils.llm.followup import followup_question_prompt
 from utils.notifications import send_notification, send_training_data_submitted_notification
 from utils.llm.external_integrations import generate_comprehensive_daily_summary
@@ -142,6 +143,11 @@ class DeleteAccountRequest(BaseModel):
 
 def _background_wipe_user_data(uid: str):
     try:
+        # Twilio caller IDs first, while the phone_numbers subcollection still
+        # carries the twilio_sid metadata. delete_user_caller_ids is best-effort
+        # — Twilio errors are logged inside and never propagate, so a momentary
+        # Twilio outage cannot leave the user half-deleted in Firestore.
+        delete_user_caller_ids(uid)
         delete_user_data(uid)
         logger.info(f'delete_account background wipe complete for {uid}')
     except Exception as e:
