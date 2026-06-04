@@ -40,7 +40,6 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
   bool _showAdvanced = false;
   bool _showLogs = true;
   bool _isSaving = false;
-  Timer? _logRefreshTimer;
   String? _validationError;
 
   // On-device model download state
@@ -419,11 +418,15 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
     String? audioFieldName;
 
     if (requestJson != null && _requestJsonCustomized[_selectedProvider] == true) {
-      url = requestJson['url'];
-      requestType = requestJson['request_type'];
-      headers = requestJson['headers'] != null ? Map<String, String>.from(requestJson['headers']) : null;
-      params = requestJson['params'] != null ? Map<String, String>.from(requestJson['params']) : null;
-      audioFieldName = requestJson['audio_field_name'];
+      url = requestJson['url']?.toString();
+      requestType = requestJson['request_type']?.toString();
+      headers = requestJson['headers'] is Map
+          ? (requestJson['headers'] as Map).map((k, v) => MapEntry(k.toString(), v.toString()))
+          : null;
+      params = requestJson['params'] is Map
+          ? (requestJson['params'] as Map).map((k, v) => MapEntry(k.toString(), v.toString()))
+          : null;
+      audioFieldName = requestJson['audio_field_name']?.toString();
     }
 
     // Use URL from text field for custom providers
