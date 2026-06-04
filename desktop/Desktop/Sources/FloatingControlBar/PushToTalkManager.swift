@@ -426,7 +426,10 @@ class PushToTalkManager: ObservableObject {
       transcriptionService?.finishStream()
       log("PushToTalkManager: finalizing (live) — mic stopped, waiting for final transcript")
 
-      // Safety timeout: if Deepgram doesn't send a final segment within 3s, send what we have
+      // Safety timeout: if Deepgram doesn't send a final segment in time, send
+      // what we have. The accumulated interim text is used as a fallback in
+      // sendTranscript(), so an early cutoff doesn't drop words — it just stops
+      // us idling for the worst case. Halved from 3s to cut perceived latency.
       let timeout = DispatchWorkItem { [weak self] in
         Task { @MainActor in
           guard let self, self.state == .finalizing else { return }
@@ -435,7 +438,7 @@ class PushToTalkManager: ObservableObject {
         }
       }
       liveFinalizationTimeout = timeout
-      DispatchQueue.main.asyncAfter(deadline: .now() + 3.0, execute: timeout)
+      DispatchQueue.main.asyncAfter(deadline: .now() + 1.5, execute: timeout)
     }
   }
 

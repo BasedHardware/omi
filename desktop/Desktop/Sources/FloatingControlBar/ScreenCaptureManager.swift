@@ -2,6 +2,13 @@ import AppKit
 import CWebP
 
 class ScreenCaptureManager {
+    /// Longest-edge cap for screenshots sent to the model. Claude downscales
+    /// vision input to ~1568px on its longest side anyway, so capturing/encoding
+    /// at native Retina resolution (often 3-5K) just wastes encode time, upload
+    /// bandwidth, vision tokens (cost), and server-side processing — with zero
+    /// quality gain. Cap here so every floating-bar query stays cheap and fast.
+    static let maxLongestEdge = 1568
+
     /// Returns a CGImage for the screen under the mouse cursor.
     static func captureScreenImage() -> CGImage? {
         guard CGPreflightScreenCaptureAccess() else {
@@ -21,12 +28,20 @@ class ScreenCaptureManager {
     /// Returns WebP data for the screen under the mouse cursor at full Retina
     /// resolution, compressed in memory via libwebp. No disk I/O.
     static func captureScreenData() -> Data? {
+        let startedAt = CFAbsoluteTimeGetCurrent()
         guard let image = captureScreenImage() else { return nil }
 
-        let width = image.width
-        let height = image.height
+        let nativeWidth = image.width
+        let nativeHeight = image.height
 
-        // Render CGImage into an RGBA bitmap context
+        // Downscale so the longest edge is at most `maxLongestEdge`. Drawing the
+        // CGImage into a smaller context scales it for us; for screens already
+        // below the cap this is a no-op (scale == 1).
+        let scale = min(1.0, Double(maxLongestEdge) / Double(max(nativeWidth, nativeHeight)))
+        let width = max(1, Int((Double(nativeWidth) * scale).rounded()))
+        let height = max(1, Int((Double(nativeHeight) * scale).rounded()))
+
+        // Render CGImage into an RGBA bitmap context (at the downscaled size)
         guard let context = CGContext(
             data: nil,
             width: width,
@@ -39,6 +54,7 @@ class ScreenCaptureManager {
             log("ScreenCaptureManager: Could not create bitmap context")
             return nil
         }
+        context.interpolationQuality = .medium
         context.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height))
 
         guard let pixelData = context.data else {
@@ -59,7 +75,8 @@ class ScreenCaptureManager {
         let data = Data(bytes: webpPtr, count: size)
         WebPFree(webpPtr)
 
-        log("ScreenCaptureManager: Screenshot captured \(width)x\(height), WebP \(data.count / 1024) KB")
+        let elapsedMs = Int((CFAbsoluteTimeGetCurrent() - startedAt) * 1000)
+        log("ScreenCaptureManager: captured \(nativeWidth)x\(nativeHeight) → \(width)x\(height), WebP \(data.count / 1024) KB in \(elapsedMs)ms")
         return data
     }
 
