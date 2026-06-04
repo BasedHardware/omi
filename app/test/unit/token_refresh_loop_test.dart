@@ -56,20 +56,23 @@ Future<String?> getIdTokenFixed({
 
 /// Simulates getAuthHeader() logic after fix (#5927 + #7631).
 /// Re-reads hasAuthToken after refresh, only overwrites on non-null result.
-/// #7631: clears stale token when refresh fails AND token is known expired.
+/// #7631: clears stale token when refresh fails AND token is truly expired
+/// (past DateTime.now()), not just in the 5-min proactive refresh buffer.
 Future<String> getAuthHeaderFixed({
   required MockTokenCache cache,
   required bool isExpirationDateValid,
+  bool? isExpired,
   required Future<String?> Function() getIdToken,
   required bool isSignedIn,
 }) async {
+  final tokenIsExpired = isExpired ?? !isExpirationDateValid;
   bool hasAuthToken = cache.authToken.isNotEmpty;
 
   if (!hasAuthToken || !isExpirationDateValid) {
     final refreshedToken = await getIdToken();
     if (refreshedToken != null) {
       cache.authToken = refreshedToken;
-    } else if (!isExpirationDateValid) {
+    } else if (tokenIsExpired) {
       cache.authToken = '';
     }
     hasAuthToken = cache.authToken.isNotEmpty;
@@ -515,6 +518,20 @@ void main() {
       }
       expect(caught, isNotNull, reason: 'expired token + null refresh must throw, not return stale token');
       expect(cache.authToken, isEmpty, reason: 'stale expired token must be cleared');
+    });
+
+    test('near-expiry token in buffer + null refresh: preserves token (#7631)', () async {
+      final cache = MockTokenCache()..authToken = 'near-expiry-but-valid';
+      final header = await getAuthHeaderFixed(
+        cache: cache,
+        isExpirationDateValid: false,
+        isExpired: false,
+        getIdToken: () async => null,
+        isSignedIn: true,
+      );
+      expect(header, equals('Bearer near-expiry-but-valid'),
+          reason: 'near-expiry but not-yet-expired token must be preserved on transient refresh failure');
+      expect(cache.authToken, equals('near-expiry-but-valid'));
     });
 
     test('valid expiration: skips refresh entirely', () async {
