@@ -216,7 +216,7 @@ class TestSafeModulateSocket(unittest.TestCase):
             loop.close()
 
     def test_send_then_drain_ordering(self):
-        """Audio sent via send() arrives at ws; no EOS frame sent (Modulate uses silence detection)."""
+        """Audio sent via send() arrives at ws; drain sends empty text frame EOS per Modulate docs."""
         sent_data = []
         ws = AsyncMock()
         ws.send = AsyncMock(side_effect=lambda d: sent_data.append(d))
@@ -235,7 +235,7 @@ class TestSafeModulateSocket(unittest.TestCase):
         try:
             result = loop.run_until_complete(run())
             self.assertIn(b'audio_chunk', result, 'audio_chunk was not sent')
-            self.assertNotIn(b'', result, 'empty frame must not be sent to Modulate')
+            self.assertIn('', result, 'empty text frame EOS must be sent on drain')
             self.assertNotIn(b'__EOS__', result, 'EOS sentinel must not be forwarded to ws')
         finally:
             loop.close()
@@ -1194,6 +1194,50 @@ class TestLanguageRoutingExtended(unittest.TestCase):
         service, lang, model = get_stt_service_for_language('en_US')
         self.assertEqual(service, STTService.modulate)
         self.assertEqual(lang, 'en')
+
+
+class TestPrerecordedServiceRouting(unittest.TestCase):
+
+    @patch('utils.stt.pre_recorded.stt_prerecorded_model', 'dg-nova-3')
+    def test_default_routes_to_deepgram(self):
+        from utils.stt.pre_recorded import PrerecordedSTTService, get_prerecorded_service
+
+        svc, lang, model = get_prerecorded_service('en')
+        self.assertEqual(svc, PrerecordedSTTService.DEEPGRAM)
+        self.assertEqual(model, 'nova-3')
+
+    @patch('utils.stt.pre_recorded.stt_prerecorded_model', 'modulate-velma-2')
+    def test_modulate_routes_correctly(self):
+        from utils.stt.pre_recorded import PrerecordedSTTService, get_prerecorded_service
+
+        svc, lang, model = get_prerecorded_service('en')
+        self.assertEqual(svc, PrerecordedSTTService.MODULATE)
+        self.assertEqual(lang, 'en')
+        self.assertEqual(model, 'velma-2')
+
+    @patch('utils.stt.pre_recorded.stt_prerecorded_model', 'modulate-velma-2')
+    def test_modulate_normalizes_locale(self):
+        from utils.stt.pre_recorded import PrerecordedSTTService, get_prerecorded_service
+
+        svc, lang, model = get_prerecorded_service('pt-BR')
+        self.assertEqual(svc, PrerecordedSTTService.MODULATE)
+        self.assertEqual(lang, 'pt')
+
+    @patch('utils.stt.pre_recorded.stt_prerecorded_model', 'dg-nova-2')
+    def test_custom_deepgram_model(self):
+        from utils.stt.pre_recorded import PrerecordedSTTService, get_prerecorded_service
+
+        svc, lang, model = get_prerecorded_service('en')
+        self.assertEqual(svc, PrerecordedSTTService.DEEPGRAM)
+        self.assertEqual(model, 'nova-2')
+
+    @patch('utils.stt.pre_recorded.stt_prerecorded_model', 'dg-nova-3')
+    def test_multi_language_routes_to_deepgram(self):
+        from utils.stt.pre_recorded import PrerecordedSTTService, get_prerecorded_service
+
+        svc, lang, model = get_prerecorded_service('multi')
+        self.assertEqual(svc, PrerecordedSTTService.DEEPGRAM)
+        self.assertEqual(lang, 'multi')
 
 
 if __name__ == '__main__':
