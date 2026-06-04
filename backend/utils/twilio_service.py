@@ -1,3 +1,4 @@
+import logging
 import os
 from typing import Optional
 
@@ -5,6 +6,8 @@ from twilio.rest import Client
 from twilio.jwt.access_token import AccessToken
 from twilio.jwt.access_token.grants import VoiceGrant
 from twilio.request_validator import RequestValidator
+
+logger = logging.getLogger(__name__)
 
 account_sid = os.getenv('TWILIO_ACCOUNT_SID')
 auth_token = os.getenv('TWILIO_AUTH_TOKEN')
@@ -138,6 +141,37 @@ def delete_caller_id(sid: str) -> bool:
         return True
     except Exception:
         return False
+
+
+def delete_user_caller_ids(uid: str) -> int:
+    # Delete every verified Twilio caller ID owned by `uid`.
+    #
+    # Returns the number of caller IDs successfully deleted. Best-effort: any
+    # individual failure (Twilio 5xx, already-deleted, list-phone-numbers
+    # error) is logged and swallowed so account-deletion callers can run this
+    # before a Firestore wipe without risking a half-deleted user if Twilio is
+    # momentarily down.
+    from database import phone_calls as phone_calls_db
+
+    try:
+        numbers = phone_calls_db.get_phone_numbers(uid)
+    except Exception as e:
+        logger.error(f'delete_user_caller_ids: list phone_numbers failed: {e}')
+        return 0
+
+    deleted = 0
+    for number in numbers:
+        sid = number.get('twilio_sid')
+        if not sid:
+            continue
+        try:
+            if delete_caller_id(sid):
+                deleted += 1
+            else:
+                logger.warning(f'delete_user_caller_ids: twilio reported failure for sid={sid}')
+        except Exception as e:
+            logger.error(f'delete_user_caller_ids: twilio raised for sid={sid}: {e}')
+    return deleted
 
 
 def list_caller_ids() -> list:
