@@ -7,6 +7,8 @@ from twilio.jwt.access_token import AccessToken
 from twilio.jwt.access_token.grants import VoiceGrant
 from twilio.request_validator import RequestValidator
 
+from database import phone_calls as phone_calls_db
+
 logger = logging.getLogger(__name__)
 
 account_sid = os.getenv('TWILIO_ACCOUNT_SID')
@@ -146,13 +148,13 @@ def delete_caller_id(sid: str) -> bool:
 def delete_user_caller_ids(uid: str) -> int:
     # Delete every verified Twilio caller ID owned by `uid`.
     #
-    # Returns the number of caller IDs successfully deleted. Best-effort: any
-    # individual failure (Twilio 5xx, already-deleted, list-phone-numbers
-    # error) is logged and swallowed so account-deletion callers can run this
-    # before a Firestore wipe without risking a half-deleted user if Twilio is
-    # momentarily down.
-    from database import phone_calls as phone_calls_db
-
+    # Returns the number of caller IDs successfully deleted. Best-effort by
+    # design — Twilio API errors are absorbed by delete_caller_id() itself
+    # (returns False), and the only way an exception reaches the outer guard
+    # is if _get_client() raises (e.g. missing TWILIO_* env vars). Both paths
+    # are logged but never propagate, so callers (account-deletion background
+    # wipe) can safely run this before a Firestore wipe without risking a
+    # half-deleted user if Twilio is misconfigured or momentarily down.
     try:
         numbers = phone_calls_db.get_phone_numbers(uid)
     except Exception as e:
@@ -170,7 +172,9 @@ def delete_user_caller_ids(uid: str) -> int:
             else:
                 logger.warning(f'delete_user_caller_ids: twilio reported failure for sid={sid}')
         except Exception as e:
-            logger.error(f'delete_user_caller_ids: twilio raised for sid={sid}: {e}')
+            # Reachable only if _get_client() itself raises before delete_caller_id's
+            # internal try/except — Twilio API errors are already swallowed there.
+            logger.error(f'delete_user_caller_ids: twilio client unavailable for sid={sid}: {e}')
     return deleted
 
 

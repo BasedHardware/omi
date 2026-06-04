@@ -66,8 +66,11 @@ def test_delete_user_caller_ids_skips_entries_without_sid():
 
 
 def test_delete_user_caller_ids_continues_when_one_raises():
-    # An exception escaping delete_caller_id (rather than the swallowed False
-    # return path) must not abort cleanup of the remaining caller IDs.
+    # Simulates _get_client() raising mid-loop (e.g. credentials were rotated
+    # and the cached client got reset between entries). Twilio API errors
+    # themselves don't reach this path — delete_caller_id swallows those and
+    # returns False — but the outer guard exists for _get_client() failures,
+    # and it must not abort cleanup of the remaining caller IDs.
     numbers = [
         {'id': 'a', 'twilio_sid': 'PNaaaa'},
         {'id': 'b', 'twilio_sid': 'PNbbbb'},
@@ -76,7 +79,7 @@ def test_delete_user_caller_ids_continues_when_one_raises():
 
     def fake_delete(sid):
         if sid == 'PNbbbb':
-            raise RuntimeError('twilio 503')
+            raise RuntimeError('twilio client unavailable')
         return True
 
     with patch.object(twilio_service, 'delete_caller_id', side_effect=fake_delete) as mock_delete, patch.object(
