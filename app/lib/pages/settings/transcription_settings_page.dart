@@ -40,7 +40,6 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
   bool _showAdvanced = false;
   bool _showLogs = true;
   bool _isSaving = false;
-  Timer? _logRefreshTimer;
   String? _validationError;
 
   // On-device model download state
