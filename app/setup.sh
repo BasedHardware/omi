@@ -95,8 +95,9 @@ function detect_apple_team_id() {
     done < <(find "$profiles_dir" -name '*.mobileprovision' -print0 2>/dev/null)
   fi
 
-  # 3. Fallback: grab first team ID that has a valid signing cert in the keychain
+  # 3. Fallback: collect all team IDs that have a valid signing cert in the keychain
   if [ -z "$team_id" ] && [ -d "$profiles_dir" ]; then
+    local seen_teams=()
     while IFS= read -r -d '' profile; do
       local plist candidate
       plist=$(security cms -D -i "$profile" 2>/dev/null) || continue
@@ -105,20 +106,41 @@ function detect_apple_team_id() {
         - 2>/dev/null)
       if [ -n "$candidate" ]; then
         if security find-identity -v -p codesigning 2>/dev/null | grep -q "$candidate"; then
-          team_id="$candidate"
-          break
+          local already_seen=false
+          for t in "${seen_teams[@]:-}"; do [ "$t" = "$candidate" ] && already_seen=true && break; done
+          $already_seen || seen_teams+=("$candidate")
         fi
       fi
     done < <(find "$profiles_dir" -name '*.mobileprovision' -print0 2>/dev/null)
+
+    if [ "${#seen_teams[@]}" -eq 1 ]; then
+      team_id="${seen_teams[0]}"
+    elif [ "${#seen_teams[@]}" -gt 1 ]; then
+      echo "⚠️  Multiple Apple Developer accounts found. Choose one:" >&2
+      for i in "${!seen_teams[@]}"; do
+        echo "   $((i+1))) ${seen_teams[$i]}" >&2
+      done
+      local choice
+      read -rp "   Enter number [1-${#seen_teams[@]}]: " choice
+      if [[ "$choice" =~ ^[0-9]+$ ]] && [ "$choice" -ge 1 ] && [ "$choice" -le "${#seen_teams[@]}" ]; then
+        team_id="${seen_teams[$((choice-1))]}"
+      fi
+    fi
   fi
 
-  # 4. Last resort: prompt the user
+  # 4. Last resort: prompt the user (with format validation)
   if [ -z "$team_id" ]; then
     echo "⚠️  Could not auto-detect your Apple Development Team ID." >&2
     echo "   Find it at: https://developer.apple.com/account -> Membership" >&2
     echo "   or run: APPLE_DEVELOPMENT_TEAM=XXXXXXXXXX bash setup.sh ios" >&2
-    read -rp "   Enter your Team ID (10 characters): " team_id
-    team_id=$(echo "${team_id}" | tr '[:lower:]' '[:upper:]' | tr -d ' ')
+    while true; do
+      read -rp "   Enter your Team ID (10 uppercase alphanumeric characters): " team_id
+      team_id=$(echo "${team_id}" | tr '[:lower:]' '[:upper:]' | tr -d ' ')
+      if [[ "$team_id" =~ ^[A-Z0-9]{10}$ ]]; then
+        break
+      fi
+      echo "   ❌ Invalid Team ID '${team_id}' — must be exactly 10 uppercase letters/digits." >&2
+    done
   fi
 
   echo "$team_id"
