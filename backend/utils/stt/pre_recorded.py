@@ -553,6 +553,75 @@ def modulate_prerecorded(
         raise RuntimeError(f'Modulate transcription (url) failed after {attempts + 1} attempts: {e}')
 
 
+def prerecorded(
+    audio_url: str,
+    speakers_count: int = None,
+    attempts: int = 0,
+    return_language: bool = False,
+    diarize: bool = True,
+    language: Optional[str] = None,
+    model: str = "nova-3",
+    keywords: Optional[Sequence[str]] = None,
+) -> Union[List[dict], Tuple[List[dict], str]]:
+    """Route pre-recorded URL transcription through STT_PRERECORDED_MODEL."""
+    svc, stt_lang, stt_model = get_prerecorded_service(language or 'multi')
+    if svc == PrerecordedSTTService.MODULATE:
+        return modulate_prerecorded(
+            audio_url,
+            speakers_count=speakers_count,
+            attempts=attempts,
+            return_language=return_language,
+            diarize=diarize,
+            language=stt_lang,
+        )
+    return deepgram_prerecorded(
+        audio_url,
+        speakers_count=speakers_count,
+        attempts=attempts,
+        return_language=return_language,
+        diarize=diarize,
+        language=stt_lang,
+        model=stt_model,
+        keywords=keywords,
+    )
+
+
+def prerecorded_from_bytes(
+    audio_bytes: bytes,
+    sample_rate: int = 16000,
+    diarize: bool = True,
+    attempts: int = 0,
+    encoding: Optional[str] = None,
+    channels: int = 1,
+    language: Optional[str] = None,
+    model: str = "nova-3",
+    return_language: bool = False,
+    keywords: Optional[Sequence[str]] = None,
+) -> Union[List[dict], Tuple[List[dict], str]]:
+    """Route pre-recorded bytes transcription through STT_PRERECORDED_MODEL."""
+    svc, stt_lang, stt_model = get_prerecorded_service(language or 'multi')
+    if svc == PrerecordedSTTService.MODULATE:
+        return modulate_prerecorded_from_bytes(
+            audio_bytes,
+            sample_rate=sample_rate,
+            diarize=diarize,
+            attempts=attempts,
+            return_language=return_language,
+        )
+    return deepgram_prerecorded_from_bytes(
+        audio_bytes,
+        sample_rate=sample_rate,
+        diarize=diarize,
+        attempts=attempts,
+        encoding=encoding,
+        channels=channels,
+        language=stt_lang,
+        model=stt_model,
+        return_language=return_language,
+        keywords=keywords,
+    )
+
+
 def _words_cleaning(words: List[dict]):
     words_cleaned: List[dict] = []
     for i, w in enumerate(words):
