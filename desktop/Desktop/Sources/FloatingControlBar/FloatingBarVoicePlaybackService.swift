@@ -46,6 +46,8 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate {
   private var hasEmittedFirstChunk = false
   private var audioPlayer: AVAudioPlayer?
   private let speechSynthesizer = AVSpeechSynthesizer()
+  /// Set externally — TaskLocals don't propagate into TTS callbacks.
+  var tracer: QueryTracer?
 
   private override init() {}
 
@@ -128,6 +130,7 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate {
     // Cancel filler and stop filler audio when first real chunk is ready
     if !hasStartedRealPlayback && text.count > 0 {
       hasStartedRealPlayback = true
+      tracer?.begin("tts_start")
       fillerTask?.cancel()
       fillerTask = nil
       audioPlayer?.stop()
@@ -241,6 +244,7 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate {
     currentResponseID = nil
     interruptedResponseID = nil
     shouldInterruptNextResponse = false
+    tracer = nil
   }
 
   /// Play a short preview of the given voice so the user can hear it
@@ -336,6 +340,7 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate {
       player.prepareToPlay()
       player.play()
       audioPlayer = player
+      tracer?.end("tts_start")
     } catch {
       log(
         "FloatingBarVoicePlaybackService: could not start audio playback: \(error.localizedDescription)"
@@ -350,6 +355,7 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate {
     utterance.volume = 1.0
     utterance.voice = preferredSystemVoice()
     speechSynthesizer.speak(utterance)
+    tracer?.end("tts_start")
   }
 
   nonisolated func audioPlayerDidFinishPlaying(_ player: AVAudioPlayer, successfully flag: Bool) {

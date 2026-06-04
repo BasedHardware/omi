@@ -87,10 +87,14 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
         setupViews()
 
         if ShortcutSettings.shared.draggableBarEnabled,
-           let savedPosition = UserDefaults.standard.string(forKey: FloatingControlBarWindow.positionKey) {
+            let savedPosition = UserDefaults.standard.string(
+                forKey: FloatingControlBarWindow.positionKey)
+        {
             let origin = NSPointFromString(savedPosition)
             // Verify saved position is on a visible screen
-            let onScreen = NSScreen.screens.contains { $0.visibleFrame.contains(NSPoint(x: origin.x + 14, y: origin.y + 14)) }
+            let onScreen = NSScreen.screens.contains {
+                $0.visibleFrame.contains(NSPoint(x: origin.x + 14, y: origin.y + 14))
+            }
             if onScreen {
                 self.setFrameOrigin(origin)
             } else {
@@ -105,7 +109,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
     override var canBecomeMain: Bool { false }
 
     override func keyDown(with event: NSEvent) {
-        if event.keyCode == 53 { // Escape
+        if event.keyCode == 53 {  // Escape
             handleEscapeKey()
             return
         }
@@ -141,12 +145,13 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
             onShareLink: { [weak self] in await self?.onShareLink?() }
         ).environmentObject(state)
 
-        hostingView = FloatingBarHostingView(rootView: AnyView(
-            swiftUIView
-                .withFontScaling()
-                .preferredColorScheme(.dark)
-                .environment(\.colorScheme, .dark)
-        ))
+        hostingView = FloatingBarHostingView(
+            rootView: AnyView(
+                swiftUIView
+                    .withFontScaling()
+                    .preferredColorScheme(.dark)
+                    .environment(\.colorScheme, .dark)
+            ))
         hostingView?.appearance = NSAppearance(named: .vibrantDark)
 
         // CRITICAL: Use a container view instead of making NSHostingView the contentView directly.
@@ -224,7 +229,8 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
 
         // Find which screen the cursor is on
         let mouseLocation = NSEvent.mouseLocation
-        guard let targetScreen = NSScreen.screens.first(where: { $0.frame.contains(mouseLocation) }) else { return }
+        guard let targetScreen = NSScreen.screens.first(where: { $0.frame.contains(mouseLocation) })
+        else { return }
 
         // Already on the same screen — nothing to do
         let currentScreen = self.screen ?? NSScreen.main
@@ -236,12 +242,17 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
 
         if ShortcutSettings.shared.draggableBarEnabled {
             // Translate position proportionally
-            let relX = currentVisible.width > 0 ? (frame.origin.x - currentVisible.origin.x) / currentVisible.width : 0.5
-            let relY = currentVisible.height > 0 ? (frame.origin.y - currentVisible.origin.y) / currentVisible.height : 1.0
+            let relX =
+                currentVisible.width > 0
+                ? (frame.origin.x - currentVisible.origin.x) / currentVisible.width : 0.5
+            let relY =
+                currentVisible.height > 0
+                ? (frame.origin.y - currentVisible.origin.y) / currentVisible.height : 1.0
             let newX = targetVisible.origin.x + relX * targetVisible.width
             let newY = targetVisible.origin.y + relY * targetVisible.height
             setFrameOrigin(NSPoint(x: newX, y: newY))
-            UserDefaults.standard.set(NSStringFromPoint(frame.origin), forKey: FloatingControlBarWindow.positionKey)
+            UserDefaults.standard.set(
+                NSStringFromPoint(frame.origin), forKey: FloatingControlBarWindow.positionKey)
         } else {
             // Non-draggable: center on new screen
             let x = targetVisible.midX - frame.width / 2
@@ -378,7 +389,8 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
 
     private func hideBar() {
         self.orderOut(nil)
-        AnalyticsManager.shared.floatingBarToggled(visible: false, source: state.showingAIConversation ? "escape_ai" : "bar_button")
+        AnalyticsManager.shared.floatingBarToggled(
+            visible: false, source: state.showingAIConversation ? "escape_ai" : "bar_button")
         onHide?()
     }
 
@@ -476,8 +488,8 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
             .debounce(for: .milliseconds(50), scheduler: DispatchQueue.main)
             .sink { [weak self] height in
                 guard let self = self,
-                      self.state.showingAIConversation,
-                      !self.state.showingAIResponse
+                    self.state.showingAIConversation,
+                    !self.state.showingAIResponse
                 else { return }
                 self.resizeToFixedHeight(height)
             }
@@ -537,7 +549,9 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
         )
     }
 
-    private func resizeAnchored(to size: NSSize, makeResizable: Bool, animated: Bool = false, anchorTop: Bool = false) {
+    private func resizeAnchored(
+        to size: NSSize, makeResizable: Bool, animated: Bool = false, anchorTop: Bool = false
+    ) {
         // Cancel any pending resizeToFixedHeight work item to prevent stale resizes
         resizeWorkItem?.cancel()
         resizeWorkItem = nil
@@ -546,11 +560,14 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
             width: max(size.width, FloatingControlBarWindow.minBarSize.width),
             height: max(size.height, FloatingControlBarWindow.minBarSize.height)
         )
-        let newOrigin = anchorTop
+        let newOrigin =
+            anchorTop
             ? originForTopCenterAnchor(newSize: constrainedSize)
             : originForCenterAnchor(newSize: constrainedSize)
 
-        log("FloatingControlBar: resizeAnchored to \(constrainedSize) resizable=\(makeResizable) animated=\(animated) from=\(frame.size)")
+        log(
+            "FloatingControlBar: resizeAnchored to \(constrainedSize) resizable=\(makeResizable) animated=\(animated) from=\(frame.size)"
+        )
 
         if makeResizable {
             styleMask.insert(.resizable)
@@ -568,7 +585,8 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
         NSAnimationContext.current.duration = animated ? 0.3 : 0
         NSAnimationContext.current.allowsImplicitAnimation = false
         NSAnimationContext.current.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
-        self.setFrame(NSRect(origin: newOrigin, size: constrainedSize), display: true, animate: animated)
+        self.setFrame(
+            NSRect(origin: newOrigin, size: constrainedSize), display: true, animate: animated)
         NSAnimationContext.endGrouping()
 
         self.isResizingProgrammatically = false
@@ -579,7 +597,8 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
         let width = FloatingControlBarWindow.expandedWidth
         let size = NSSize(width: width, height: height)
         resizeWorkItem = DispatchWorkItem { [weak self] in
-            self?.resizeAnchored(to: size, makeResizable: false, animated: animated, anchorTop: true)
+            self?.resizeAnchored(
+                to: size, makeResizable: false, animated: animated, anchorTop: true)
         }
         if let workItem = resizeWorkItem {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.05, execute: workItem)
@@ -588,18 +607,22 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
 
     /// Resize for hover expand/collapse — anchored from center so the circle grows outward.
     func resizeForHover(expanded: Bool) {
-        guard !state.showingAIConversation, !state.isVoiceListening, !state.isShowingNotification, !suppressHoverResize else { return }
+        guard !state.showingAIConversation, !state.isVoiceListening, !state.isShowingNotification,
+            !suppressHoverResize
+        else { return }
         resizeWorkItem?.cancel()
         resizeWorkItem = nil
 
-        let targetSize = expanded ? FloatingControlBarWindow.expandedBarSize : FloatingControlBarWindow.minBarSize
+        let targetSize =
+            expanded
+            ? FloatingControlBarWindow.expandedBarSize : FloatingControlBarWindow.minBarSize
 
         let doResize: () -> Void = { [weak self] in
             guard let self = self else { return }
             guard !self.state.showingAIConversation,
-                  !self.state.isVoiceListening,
-                  !self.state.isShowingNotification,
-                  !self.suppressHoverResize
+                !self.state.isVoiceListening,
+                !self.state.isShowingNotification,
+                !self.suppressHoverResize
             else { return }
             let newOrigin = NSPoint(
                 x: self.frame.midX - targetSize.width / 2,
@@ -607,7 +630,8 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
             )
             self.styleMask.remove(.resizable)
             self.isResizingProgrammatically = true
-            self.setFrame(NSRect(origin: newOrigin, size: targetSize), display: true, animate: false)
+            self.setFrame(
+                NSRect(origin: newOrigin, size: targetSize), display: true, animate: false)
             self.isResizingProgrammatically = false
         }
 
@@ -629,8 +653,11 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
 
     /// Resize window for PTT state (expanded when listening, compact circle when idle)
     func resizeForPTTState(expanded: Bool) {
-        let size = expanded
-            ? NSSize(width: FloatingControlBarWindow.expandedWidth, height: FloatingControlBarWindow.expandedBarSize.height)
+        let size =
+            expanded
+            ? NSSize(
+                width: FloatingControlBarWindow.expandedWidth,
+                height: FloatingControlBarWindow.expandedBarSize.height)
             : FloatingControlBarWindow.minBarSize
         resizeAnchored(to: size, makeResizable: false, animated: true)
     }
@@ -662,7 +689,9 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
     /// Restore the compact pill size when we temporarily surface the bar outside
     /// of an active hover, notification, voice session, or AI conversation.
     func normalizeForTemporaryShow() {
-        guard !state.showingAIConversation, !state.isVoiceListening, state.currentNotification == nil else { return }
+        guard !state.showingAIConversation, !state.isVoiceListening,
+            state.currentNotification == nil
+        else { return }
         resizeAnchored(to: Self.minBarSize, makeResizable: false, animated: false, anchorTop: true)
     }
 
@@ -670,7 +699,9 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
         // Determine the 2× cap from the user's saved (or default) preferred height.
         let savedSize = UserDefaults.standard.string(forKey: FloatingControlBarWindow.sizeKey)
             .map(NSSizeFromString)
-        let baseHeight = savedSize.map { max($0.height, Self.defaultBaseResponseHeight) } ?? Self.defaultBaseResponseHeight
+        let baseHeight =
+            savedSize.map { max($0.height, Self.defaultBaseResponseHeight) }
+            ?? Self.defaultBaseResponseHeight
         let maxHeight = baseHeight * 2
 
         // Start at the larger of minResponseHeight or current frame height so we never
@@ -690,9 +721,9 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
             .debounce(for: .milliseconds(80), scheduler: DispatchQueue.main)
             .sink { [weak self] contentHeight in
                 guard let self = self,
-                      self.state.showingAIResponse,
-                      !self.isUserResizing,
-                      contentHeight > 0
+                    self.state.showingAIResponse,
+                    !self.isUserResizing,
+                    contentHeight > 0
                 else { return }
                 let targetHeight = (contentHeight + Self.responseViewOverhead).rounded()
                 let clampedHeight = min(max(targetHeight, Self.minResponseHeight), maxHeight)
@@ -754,7 +785,9 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
         let center = NSPoint(x: barFrame.midX, y: barFrame.midY)
         let onScreen = NSScreen.screens.contains { $0.visibleFrame.contains(center) }
         if !onScreen {
-            log("FloatingControlBarWindow: bar center \(center) is off-screen after monitor change, re-centering")
+            log(
+                "FloatingControlBarWindow: bar center \(center) is off-screen after monitor change, re-centering"
+            )
             UserDefaults.standard.removeObject(forKey: FloatingControlBarWindow.positionKey)
             centerOnMainScreen()
         }
@@ -770,7 +803,8 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
         // window for automation — do NOT produce a mouse-down event, so we
         // leave the conversation open in those cases.
         let eventType = NSApp.currentEvent?.type
-        let isMouseClick = eventType == .leftMouseDown
+        let isMouseClick =
+            eventType == .leftMouseDown
             || eventType == .rightMouseDown
             || eventType == .otherMouseDown
         guard isMouseClick else { return }
@@ -894,7 +928,8 @@ class FloatingControlBarManager {
         }
         set {
             if let newValue {
-                UserDefaults.standard.set(newValue.timeIntervalSince1970, forKey: Self.kSnoozedUntil)
+                UserDefaults.standard.set(
+                    newValue.timeIntervalSince1970, forKey: Self.kSnoozedUntil)
             } else {
                 UserDefaults.standard.removeObject(forKey: Self.kSnoozedUntil)
             }
@@ -940,7 +975,8 @@ class FloatingControlBarManager {
             self.snoozedUntil = nil
             return
         }
-        let timer = Timer.scheduledTimer(withTimeInterval: interval, repeats: false) { [weak self] _ in
+        let timer = Timer.scheduledTimer(withTimeInterval: interval, repeats: false) {
+            [weak self] _ in
             Task { @MainActor in self?.endSnooze() }
         }
         snoozeTimer = timer
@@ -989,9 +1025,14 @@ class FloatingControlBarManager {
         floatingChatProvider = floatingProvider
 
         barWindow.onSendQuery = { [weak self, weak barWindow, weak floatingProvider] message in
-            guard let self = self, let barWindow = barWindow, let provider = floatingProvider else { return }
+            guard let self = self, let barWindow = barWindow, let provider = floatingProvider else {
+                return
+            }
             Task { @MainActor in
-                await self.routeQuery(message, barWindow: barWindow, provider: provider, fromVoice: false)
+                await self.withQueryTracer(query: message, fromVoice: false) {
+                    await self.routeQuery(
+                        message, barWindow: barWindow, provider: provider, fromVoice: false)
+                }
             }
         }
 
@@ -1027,7 +1068,8 @@ class FloatingControlBarManager {
             }
             guard !orderedUniqueMessageIds.isEmpty else { return nil }
             do {
-                let response = try await APIClient.shared.shareChatMessages(messageIds: orderedUniqueMessageIds)
+                let response = try await APIClient.shared.shareChatMessages(
+                    messageIds: orderedUniqueMessageIds)
                 return response.url
             } catch {
                 log("Failed to get chat share link: \(error)")
@@ -1096,17 +1138,23 @@ class FloatingControlBarManager {
 
     /// Show the floating bar and persist the preference.
     func show() {
-        log("FloatingControlBarManager: show() called, window=\(window != nil), isVisible=\(window?.isVisible ?? false)")
+        log(
+            "FloatingControlBarManager: show() called, window=\(window != nil), isVisible=\(window?.isVisible ?? false)"
+        )
         isEnabled = true
         if isSnoozed {
-            log("FloatingControlBarManager: show() suppressed because bar is snoozed until \(snoozedUntil?.description ?? "?")")
+            log(
+                "FloatingControlBarManager: show() suppressed because bar is snoozed until \(snoozedUntil?.description ?? "?")"
+            )
             return
         }
         window?.makeKeyAndOrderFront(nil)
         log("FloatingControlBarManager: show() done, frame=\(window?.frame ?? .zero)")
 
         // Auto-focus input if AI conversation is open
-        if let window = window, window.state.showingAIConversation && !window.state.showingAIResponse {
+        if let window = window,
+            window.state.showingAIConversation && !window.state.showingAIResponse
+        {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
                 window.focusInputField()
             }
@@ -1153,7 +1201,9 @@ class FloatingControlBarManager {
         }
 
         if isSnoozed {
-            log("FloatingControlBarManager: dropping notification because bar is snoozed until \(snoozedUntil?.description ?? "?")")
+            log(
+                "FloatingControlBarManager: dropping notification because bar is snoozed until \(snoozedUntil?.description ?? "?")"
+            )
             return
         }
 
@@ -1183,8 +1233,10 @@ class FloatingControlBarManager {
     }
 
     func flushQueuedNotificationsIfPossible() {
-        guard let window, window.state.currentNotification == nil, !window.state.showingAIConversation,
-              !pendingNotifications.isEmpty else { return }
+        guard let window, window.state.currentNotification == nil,
+            !window.state.showingAIConversation,
+            !pendingNotifications.isEmpty
+        else { return }
         let nextNotification = pendingNotifications.removeFirst()
         presentNotification(nextNotification, in: window)
     }
@@ -1278,7 +1330,13 @@ class FloatingControlBarManager {
         window.onSendQuery = { [weak self, weak window, weak provider] message in
             guard let self = self, let window = window, let provider = provider else { return }
             Task { @MainActor in
-                await self.routeQuery(message, barWindow: window, provider: provider, fromVoice: window.state.currentQueryFromVoice)
+                await self.withQueryTracer(
+                    query: message, fromVoice: window.state.currentQueryFromVoice
+                ) {
+                    await self.routeQuery(
+                        message, barWindow: window, provider: provider,
+                        fromVoice: window.state.currentQueryFromVoice)
+                }
             }
         }
 
@@ -1305,7 +1363,20 @@ class FloatingControlBarManager {
         // Auto-send the query. PTT bypasses the typed onSendQuery closure, so
         // we need to apply the same router rule here ourselves.
         Task { @MainActor in
-            await self.routeQuery(query, barWindow: window, provider: provider, fromVoice: fromVoice)
+            await self.withQueryTracer(query: query, fromVoice: fromVoice) {
+                await self.routeQuery(
+                    query, barWindow: window, provider: provider, fromVoice: fromVoice)
+            }
+        }
+    }
+
+    /// Run `body` inside a QueryTracer task-local, reusing an existing tracer or creating a new one.
+    private func withQueryTracer(query: String, fromVoice: Bool, _ body: () async -> Void) async {
+        let tracer =
+            QueryTracerContext.current
+            ?? QueryTracer(query: query, inputMode: fromVoice ? .voicePTTBatch : .text)
+        await QueryTracerContext.$current.withValue(tracer) {
+            await body()
         }
     }
 
@@ -1319,30 +1390,9 @@ class FloatingControlBarManager {
         provider: ChatProvider,
         fromVoice: Bool
     ) async {
-        // Show the thinking state immediately so there's no perceptible lag
-        // while the router thinks. If the router decides "agent" we'll tear
-        // this down before the chat actually streams anything.
         prepareVisibleQueryState(message, in: barWindow, fromVoice: fromVoice)
 
-        let decision = await AgentPillsManager.classify(message)
-        if decision.route == .agent {
-            let model = ShortcutSettings.shared.selectedModel.isEmpty
-                ? "claude-sonnet-4-6"
-                : ShortcutSettings.shared.selectedModel
-            _ = AgentPillsManager.shared.spawnFromUserQuery(
-                message,
-                model: model,
-                fromVoice: fromVoice,
-                preFetchedTitle: decision.title,
-                preFetchedAck: decision.ack
-            )
-            // Tear down the inline state we set up for the thinking spinner.
-            barWindow.state.aiInputText = ""
-            barWindow.closeAIConversation()
-            return
-        }
-        // Chat route: continue with the normal inline flow. sendAIQuery will
-        // re-prepare the visible state, which is idempotent.
+        // Skip AgentPillsManager.classify() — always inline chat until agent path is stable.
         await sendAIQuery(message, barWindow: barWindow, provider: provider)
     }
 
@@ -1357,8 +1407,10 @@ class FloatingControlBarManager {
 
         // Archive current exchange
         if let currentMessage = window.state.currentAIMessage,
-           !currentMessage.text.isEmpty || !currentMessage.contentBlocks.isEmpty {
-            let currentQuery = window.state.displayedQuery.trimmingCharacters(in: .whitespacesAndNewlines)
+            !currentMessage.text.isEmpty || !currentMessage.contentBlocks.isEmpty
+        {
+            let currentQuery = window.state.displayedQuery.trimmingCharacters(
+                in: .whitespacesAndNewlines)
             window.state.chatHistory.append(
                 FloatingChatExchange(
                     question: currentQuery.isEmpty ? nil : currentQuery,
@@ -1377,7 +1429,9 @@ class FloatingControlBarManager {
 
         window.state.currentQueryFromVoice = fromVoice
         Task { @MainActor in
-            await self.sendAIQuery(query, barWindow: window, provider: provider)
+            await self.withQueryTracer(query: query, fromVoice: fromVoice) {
+                await self.sendAIQuery(query, barWindow: window, provider: provider)
+            }
         }
     }
 
@@ -1397,7 +1451,9 @@ class FloatingControlBarManager {
         _ = openNotificationConversation(notificationID: notification.id, in: window)
     }
 
-    private func presentNotification(_ notification: FloatingBarNotification, in window: FloatingControlBarWindow) {
+    private func presentNotification(
+        _ notification: FloatingBarNotification, in window: FloatingControlBarWindow
+    ) {
         persistNotificationMessageIfNeeded(notification)
 
         if !window.isVisible {
@@ -1471,17 +1527,22 @@ class FloatingControlBarManager {
         mostRecentNotificationID = notification.id
     }
 
-    private func openRecentNotificationConversationIfAvailable(in window: FloatingControlBarWindow) -> Bool {
+    private func openRecentNotificationConversationIfAvailable(in window: FloatingControlBarWindow)
+        -> Bool
+    {
         guard let mostRecentNotificationID else { return false }
         return openNotificationConversation(notificationID: mostRecentNotificationID, in: window)
     }
 
     @discardableResult
-    private func openNotificationConversation(notificationID: UUID, in window: FloatingControlBarWindow) -> Bool {
+    private func openNotificationConversation(
+        notificationID: UUID, in window: FloatingControlBarWindow
+    ) -> Bool {
         purgeExpiredNotificationMessages()
 
         guard let stored = storedNotificationMessages[notificationID],
-              Date().timeIntervalSince(stored.createdAt) <= Self.recentNotificationReuseInterval else {
+            Date().timeIntervalSince(stored.createdAt) <= Self.recentNotificationReuseInterval
+        else {
             return false
         }
         guard let provider = activeFloatingProvider() else { return false }
@@ -1505,7 +1566,9 @@ class FloatingControlBarManager {
 
         let bodyText = stored.notification.message.trimmingCharacters(in: .whitespacesAndNewlines)
         let messageText = bodyText.isEmpty ? stored.notification.title : bodyText
-        let notificationMessage = provider.appendAssistantMessage(messageText) ?? ChatMessage(text: messageText, sender: .ai)
+        let notificationMessage =
+            provider.appendAssistantMessage(messageText)
+            ?? ChatMessage(text: messageText, sender: .ai)
 
         window.state.showingAIConversation = true
         window.state.showingAIResponse = true
@@ -1541,7 +1604,8 @@ class FloatingControlBarManager {
         guard let currentMessage = window.state.currentAIMessage else { return }
         guard !currentMessage.text.isEmpty || !currentMessage.contentBlocks.isEmpty else { return }
 
-        let currentQuery = window.state.displayedQuery.trimmingCharacters(in: .whitespacesAndNewlines)
+        let currentQuery = window.state.displayedQuery.trimmingCharacters(
+            in: .whitespacesAndNewlines)
         window.state.chatHistory.append(
             FloatingChatExchange(
                 question: currentQuery.isEmpty ? nil : currentQuery,
@@ -1559,7 +1623,8 @@ class FloatingControlBarManager {
             now.timeIntervalSince(stored.createdAt) <= Self.recentNotificationReuseInterval
         }
 
-        if let mostRecentNotificationID, storedNotificationMessages[mostRecentNotificationID] == nil {
+        if let mostRecentNotificationID, storedNotificationMessages[mostRecentNotificationID] == nil
+        {
             self.mostRecentNotificationID = nil
         }
     }
@@ -1585,7 +1650,9 @@ class FloatingControlBarManager {
 
     // MARK: - AI Query
 
-    private func prepareVisibleQueryState(_ message: String, in barWindow: FloatingControlBarWindow, fromVoice: Bool) {
+    private func prepareVisibleQueryState(
+        _ message: String, in barWindow: FloatingControlBarWindow, fromVoice: Bool
+    ) {
         activeQueryGeneration += 1
         chatCancellable?.cancel()
         chatCancellable = nil
@@ -1610,7 +1677,48 @@ class FloatingControlBarManager {
         generation == activeQueryGeneration
     }
 
-    private func sendAIQuery(_ message: String, barWindow: FloatingControlBarWindow, provider: ChatProvider) async {
+    /// Heuristic: does this floating-bar query likely refer to what's on the user's screen?
+    ///
+    /// Capturing + attaching a screenshot costs ~1.5k input tokens and ~100-240ms of capture
+    /// latency on the pre-LLM critical path. Most queries (greetings, task/memory/recall) don't
+    /// need the screen, so we skip it for them and only capture when the query contains a visual
+    /// or deictic cue. Biased toward capturing on ambiguity — a false positive only wastes tokens,
+    /// while a false negative loses screen context — but clearly non-visual queries skip it.
+    static func queryNeedsScreenshot(_ text: String) -> Bool {
+        // Tokenize: lowercase, split on non-alphanumerics (so "see?", "this." match as words).
+        let tokens = text.lowercased()
+            .replacingOccurrences(of: "[^a-z0-9]+", with: " ", options: .regularExpression)
+            .split(separator: " ").map(String.init)
+        let cues: Set<String> = [
+            "screen", "screenshot", "see", "seeing", "look", "looking", "show", "showing",
+            "display", "displayed", "view", "viewing", "visible", "highlighted", "selected",
+            "this", "that", "these", "those", "here", "picture", "image", "photo", "page",
+            "window", "tab", "chart", "graph", "diagram", "button", "dialog", "popup", "menu",
+            // Deictic "choice" cues — the chat prompt treats these as screen-grounded
+            // (see ChatPrompts "which one / which option / which suits me").
+            "which", "option", "options", "choose", "suits",
+        ]
+        // Deictic words are visual only when NOT part of a temporal phrase: "this week",
+        // "that day" are about time, not the screen — don't trigger a capture for those.
+        let deictic: Set<String> = ["this", "that", "these", "those"]
+        let timeWords: Set<String> = [
+            "week", "weeks", "month", "months", "year", "years", "day", "days", "today",
+            "tonight", "morning", "afternoon", "evening", "night", "weekend", "weekends",
+            "quarter", "hour", "hours", "minute", "minutes", "time", "moment", "yesterday",
+            "tomorrow", "summer", "winter", "spring", "fall",
+        ]
+        for (i, tok) in tokens.enumerated() where cues.contains(tok) {
+            if deictic.contains(tok), i + 1 < tokens.count, timeWords.contains(tokens[i + 1]) {
+                continue  // temporal ("this week") — not a screen reference
+            }
+            return true
+        }
+        return false
+    }
+
+    private func sendAIQuery(
+        _ message: String, barWindow: FloatingControlBarWindow, provider: ChatProvider
+    ) async {
         let queryFromVoice = barWindow.state.currentQueryFromVoice
         prepareVisibleQueryState(message, in: barWindow, fromVoice: queryFromVoice)
         let generation = activeQueryGeneration
@@ -1623,7 +1731,8 @@ class FloatingControlBarManager {
                 barWindow.state.isAILoading = false
                 barWindow.state.showingAIResponse = true
                 barWindow.state.currentAIMessage = ChatMessage(
-                    text: "You've reached \(limiter.limitDescription). Upgrade to keep chatting without restrictions.",
+                    text:
+                        "You've reached \(limiter.limitDescription). Upgrade to keep chatting without restrictions.",
                     sender: .ai
                 )
                 barWindow.resizeToResponseHeightPublic(animated: true)
@@ -1639,17 +1748,31 @@ class FloatingControlBarManager {
         }
         FloatingBarVoicePlaybackService.shared.interruptCurrentResponse()
 
-        let screenshotData = await Task.detached { () -> Data? in
-            return ScreenCaptureManager.captureScreenData()
-        }.value
+        let currentTracer = QueryTracerContext.current
+        currentTracer?.begin("pre_llm")
+        // Only capture the screen when the query plausibly refers to it. Skipping capture for
+        // non-visual queries removes ~1.5k input tokens and ~100-240ms of capture latency from
+        // the critical path. See queryNeedsScreenshot.
+        let needsScreenshot = Self.queryNeedsScreenshot(message)
+        let screenshotData: Data? =
+            needsScreenshot
+            ? await Task.detached { () -> Data? in
+                currentTracer?.begin("screenshot_capture")
+                let data = ScreenCaptureManager.captureScreenData()
+                currentTracer?.end("screenshot_capture")
+                return data
+            }.value
+            : nil
         barWindow.orderFrontRegardless()
 
-        AnalyticsManager.shared.floatingBarQuerySent(messageLength: message.count, hasScreenshot: screenshotData != nil)
+        AnalyticsManager.shared.floatingBarQuerySent(
+            messageLength: message.count, hasScreenshot: screenshotData != nil)
 
         let shouldPlayVoice = ShortcutSettings.shared.shouldSpeakFloatingBarResponse(
             forVoiceQuery: barWindow.state.currentQueryFromVoice
         )
         if shouldPlayVoice {
+            FloatingBarVoicePlaybackService.shared.tracer = currentTracer
             FloatingBarVoicePlaybackService.shared.playFillerIfEnabled()
         }
 
@@ -1671,8 +1794,9 @@ class FloatingControlBarManager {
                 guard let self, self.isActiveQueryGeneration(generation) else { return }
                 // Find the AI response message added after our query
                 guard messages.count > messageCountBefore,
-                      let aiMessage = messages.last,
-                      aiMessage.sender == .ai else { return }
+                    let aiMessage = messages.last,
+                    aiMessage.sender == .ai
+                else { return }
 
                 // Store the full ChatMessage (preserves contentBlocks, tool calls, thinking)
                 barWindow?.state.currentAIMessage = aiMessage
@@ -1699,10 +1823,12 @@ class FloatingControlBarManager {
                 }
             }
 
-        let floatingModel = ShortcutSettings.shared.selectedModel.isEmpty
+        let floatingModel =
+            ShortcutSettings.shared.selectedModel.isEmpty
             ? ModelQoS.Claude.defaultSelection
             : ShortcutSettings.shared.selectedModel
         let notificationContextSuffix = notificationContextSuffixIfNeeded(for: message)
+        currentTracer?.end("pre_llm")
         await provider.sendMessage(
             message,
             model: floatingModel,
@@ -1721,7 +1847,9 @@ class FloatingControlBarManager {
 
         guard isActiveQueryGeneration(generation) else { return }
         let newMessages = Array(provider.messages.dropFirst(messageCountBefore))
-        if let syncedUserMessage = newMessages.last(where: { $0.sender == .user && $0.text == message && $0.isSynced }) {
+        if let syncedUserMessage = newMessages.last(where: {
+            $0.sender == .user && $0.text == message && $0.isSynced
+        }) {
             barWindow.state.currentQuestionMessageId = syncedUserMessage.id
         }
         if let finalAIMessage = newMessages.last(where: { $0.sender == .ai }) {
@@ -1743,9 +1871,11 @@ class FloatingControlBarManager {
             } else {
                 barWindow.state.currentAIMessage = ChatMessage(text: "⚠️ \(errorText)", sender: .ai)
             }
-        } else if barWindow.state.currentAIMessage == nil || barWindow.state.aiResponseText.isEmpty {
+        } else if barWindow.state.currentAIMessage == nil || barWindow.state.aiResponseText.isEmpty
+        {
             // No error message and no response — something else went wrong
-            barWindow.state.currentAIMessage = ChatMessage(text: "Failed to get a response. Please try again.", sender: .ai)
+            barWindow.state.currentAIMessage = ChatMessage(
+                text: "Failed to get a response. Please try again.", sender: .ai)
         }
 
         // Ensure the response view is visible and resized (handles the case where
@@ -1798,17 +1928,18 @@ class FloatingControlBarManager {
             }
         }
 
-        let provenanceBlock = provenanceLines.isEmpty ? "" : "\n\n" + provenanceLines.joined(separator: "\n")
+        let provenanceBlock =
+            provenanceLines.isEmpty ? "" : "\n\n" + provenanceLines.joined(separator: "\n")
 
         return """
-<floating_bar_notification_context>
-Before the user's latest message, you proactively sent this assistant message in the floating bar.
-Treat it as your immediately previous turn in the same conversation and answer as a continuation.
+            <floating_bar_notification_context>
+            Before the user's latest message, you proactively sent this assistant message in the floating bar.
+            Treat it as your immediately previous turn in the same conversation and answer as a continuation.
 
-Assistant message:
-\(pendingNotificationContext.message.text)\(provenanceBlock)
-</floating_bar_notification_context>
-"""
+            Assistant message:
+            \(pendingNotificationContext.message.text)\(provenanceBlock)
+            </floating_bar_notification_context>
+            """
     }
 
     func clearPendingNotificationContext() {

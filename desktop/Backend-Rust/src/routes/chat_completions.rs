@@ -214,11 +214,24 @@ fn translate_request(
     );
     let anthropic_tool_choice = translate_tool_choice(&req.tool_choice)?;
 
+    // Emit the system prompt as a content block with an ephemeral cache_control
+    // breakpoint. Render order is tools → system → messages, so a breakpoint on
+    // the system block caches the entire static tools+system prefix (~11k tokens
+    // for desktop chat). Stable within a session → cache hits on every query after
+    // the first. (Sonnet min cacheable = 2048 tokens; our prefix clears it easily.)
+    let system = system_prompt.map(|s| {
+        json!([{
+            "type": "text",
+            "text": s,
+            "cache_control": { "type": "ephemeral" }
+        }])
+    });
+
     Ok(AnthropicRequest {
         model: upstream_model.to_string(),
         max_tokens,
         messages: anthropic_messages,
-        system: system_prompt,
+        system,
         temperature: req.temperature,
         stream: req.stream,
         tools: if is_tool_choice_none { None } else { anthropic_tools },
@@ -1091,7 +1104,10 @@ mod tests {
 
         let result = translate_request(&req, "claude-sonnet-4-6").unwrap();
         assert_eq!(result.model, "claude-sonnet-4-6");
-        assert_eq!(result.system, Some("You are helpful.".to_string()));
+        // system is now an ephemeral-cached content-block array, not a bare string.
+        let system = result.system.as_ref().expect("system block should be present");
+        assert_eq!(system[0]["text"], "You are helpful.");
+        assert_eq!(system[0]["cache_control"]["type"], "ephemeral");
         assert_eq!(result.messages.len(), 1); // only user message, system extracted
         assert_eq!(result.messages[0].role, "user");
         assert_eq!(result.max_tokens, 1024);
@@ -1179,7 +1195,8 @@ mod tests {
         };
 
         let result = translate_request(&req, "claude-sonnet-4-6").unwrap();
-        assert_eq!(result.system, Some("You are terse.".to_string()));
+        let system = result.system.as_ref().expect("system block should be present");
+        assert_eq!(system[0]["text"], "You are terse.");
         assert_eq!(result.messages.len(), 1, "developer msg must be extracted, not forwarded");
         assert_eq!(result.messages[0].role, "user");
     }
@@ -1771,6 +1788,7 @@ mod tests {
             prompt_tokens: 10,
             completion_tokens: 20,
             total_tokens: 30,
+            prompt_tokens_details: None,
         };
         let chunk = make_chunk("id-3", 3000, "omi-sonnet", delta, Some("stop".to_string()), Some(usage));
         assert_eq!(chunk["usage"]["prompt_tokens"], 10);

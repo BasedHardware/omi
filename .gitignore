@@ -18,6 +18,9 @@ yarn.lock
 # Coordination (AI agent collab manifests)
 .coordination/
 
+# Git worktrees
+.worktrees/
+
 # General
 .idea/
 .next/

@@ -104,6 +104,16 @@ pub struct Usage {
     pub prompt_tokens: i64,
     pub completion_tokens: i64,
     pub total_tokens: i64,
+    // OpenAI-standard cached-token reporting. Populated from Anthropic's
+    // cache_read_input_tokens so prompt-cache hits propagate through pi-mono
+    // (usage.cacheRead) to the Swift query trace. Omitted when zero.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub prompt_tokens_details: Option<PromptTokensDetails>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct PromptTokensDetails {
+    pub cached_tokens: i64,
 }
 
 // ── Streaming chunk types ───────────────────────────────────────────────────
@@ -163,8 +173,10 @@ pub struct AnthropicRequest {
     pub model: String,
     pub max_tokens: u64,
     pub messages: Vec<AnthropicMessage>,
+    // String or array-of-content-blocks. We emit the block form with a
+    // cache_control breakpoint to cache the static tools+system prefix.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub system: Option<String>,
+    pub system: Option<serde_json::Value>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub temperature: Option<f64>,
     pub stream: bool,
@@ -376,9 +388,17 @@ pub fn anthropic_usage_to_openai(usage: &AnthropicUsage) -> Usage {
         + usage.cache_creation_input_tokens
         + usage.cache_read_input_tokens;
     let completion_tokens = usage.output_tokens;
+    let prompt_tokens_details = if usage.cache_read_input_tokens > 0 {
+        Some(PromptTokensDetails {
+            cached_tokens: usage.cache_read_input_tokens,
+        })
+    } else {
+        None
+    };
     Usage {
         prompt_tokens,
         completion_tokens,
         total_tokens: prompt_tokens + completion_tokens,
+        prompt_tokens_details,
     }
 }

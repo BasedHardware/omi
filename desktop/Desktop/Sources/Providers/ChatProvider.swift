@@ -478,9 +478,9 @@ class ChatProvider: ObservableObject {
 ================================================================================
 🚨 FLOATING BAR MODE — READ THIS FIRST BEFORE ANYTHING ELSE 🚨
 ================================================================================
-ALWAYS check the user's memories and facts using available tools (get_memories, search_memories, execute_sql) before answering ANY question. The user expects personalized answers based on what you know about them.
+When a question is about the user — their facts, preferences, tasks, conversations, plans, or screen activity — check their memories/data with the available tools (get_memories, search_memories, execute_sql) before answering, and never fabricate personal details: look them up. But for greetings, small talk, and general-knowledge questions (e.g. "what's up", "how are you", "what time is it"), answer directly and do NOT call tools — calling tools when the question doesn't need the user's data is slow, burns the rate limit, and adds nothing.
 NEVER ask follow-up questions or ask for clarification. ALWAYS give a direct, concrete answer immediately using whatever you know about the user from their memories, context, and facts. If memories mention their devices, preferences, work, budget, or interests — use that to give a specific recommendation, not a generic one.
-If the question contains a product name, software name, or proper noun — search the web for it before answering, even if you think you know what it is.
+If the question hinges on a product/software/proper noun you're not confident about, search the web before answering. If you already know it, just answer — don't search needlessly.
 If a screenshot is attached and the user asks a deictic question like "which one", "which option", "which suits me", "what should I choose", or "what's on my screen", ground the answer in the visible options first and prefer what is actually on screen over unrelated context.
 If the screenshot already clearly shows the relevant options, do not ignore it just because the query is short or ambiguous.
 Respond concisely in 1-2 sentences. No lists. No headers. NEVER ask follow-up questions — just answer.
@@ -862,6 +862,48 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
     func invalidateAgentSession(sessionKey: String) async {
         guard agentBridgeStarted else { return }
         await agentBridge.invalidateSession(sessionKey: sessionKey)
+    }
+
+    /// Input-token ceiling for the floating-bar ACP session. The ACP SDK keeps the full
+    /// turn history (including large tool results) inside the session, so input climbs every
+    /// turn — observed drifting 17k → 26k across a handful of queries, slowing TTFT and
+    /// tripping the 30k-tokens/min rate limit. When a floating query crosses this, we reset
+    /// the session in the background so the next one starts back near the base-prompt floor.
+    private static let floatingSessionTokenCeiling = 21_000
+
+    /// Guards against overlapping resets when several bloated queries land in quick succession.
+    private var floatingSessionResetInFlight = false
+
+    /// Reset the floating-bar ACP session to shed accumulated context (conversation history +
+    /// tool-result bloat). Runs a small background Task that re-records the floating session with a
+    /// freshly re-seeded system prompt (recent chat history only). This call does NOT hit the model
+    /// and burns no tokens.
+    ///
+    /// Cost / mechanism (pi-mono path): pi-mono is single-session and bakes the system prompt as a
+    /// process launch flag, so the reset actually takes effect on the NEXT floating query — because
+    /// the re-seeded prompt differs from the running process's, `createSession` restarts the Pi
+    /// subprocess, which is what wipes the bloated history. So the restart cost (≈ a process spawn)
+    /// lands on that next query, NOT here in the background. Confirm via "[pi-mono] subprocess
+    /// restarted with new system prompt" in the app log. Mirrors the floating warmup in
+    /// ensureBridgeStarted — keep them in sync.
+    func resetFloatingSessionContext() {
+        guard agentBridgeStarted, !modeSwitchInProgress, !floatingSessionResetInFlight else { return }
+        floatingSessionResetInFlight = true
+        Task { @MainActor in
+            defer { floatingSessionResetInFlight = false }
+            await preparePromptContextIfNeeded()
+            let mainSystemPrompt = buildSystemPrompt(contextString: formatMemoriesSection())
+            let floatingSystemPrompt = Self.floatingBarSystemPromptPrefix + "\n\n" + mainSystemPrompt
+            let floatingModel = ShortcutSettings.shared.selectedModel.isEmpty
+                ? ModelQoS.Claude.defaultSelection
+                : ShortcutSettings.shared.selectedModel
+            cachedMainSystemPrompt = mainSystemPrompt
+            await agentBridge.invalidateSession(sessionKey: "floating")
+            await agentBridge.warmupSession(cwd: workingDirectory, sessions: [
+                .init(key: "floating", model: floatingModel, systemPrompt: floatingSystemPrompt)
+            ])
+            log("ChatProvider: floating session context reset — next floating query rebuilds on a fresh process")
+        }
     }
 
     /// Test that the Playwright Chrome extension is connected and working.
@@ -2560,11 +2602,17 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             usageLimiter.recordQuery()
         }
 
+        let tracer = QueryTracerContext.current
+
         // Ensure bridge is running
+        tracer?.begin("bridge_ensure")
         guard await ensureBridgeStarted() else {
+            tracer?.end("bridge_ensure", metadata: ["error": "bridge_failed"])
+            tracer?.finalize(tokenCount: 0, model: model ?? modelOverride)
             errorMessage = "AI not available"
             return
         }
+        tracer?.end("bridge_ensure", metadata: ["status": "ok"])
 
         // Show upgrade prompt if over threshold but don't block the message
         if bridgeMode != BridgeMode.userClaude.rawValue && omiAICumulativeCostUsd >= 50.0 {
@@ -2582,6 +2630,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             }
             guard let sid = currentSessionId else {
                 errorMessage = "Failed to create chat session"
+                tracer?.finalize(tokenCount: 0, model: model ?? modelOverride)
                 return
             }
             sessionId = sid
@@ -2763,15 +2812,43 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
 
             // Query the active bridge with streaming
             // Callbacks for agent bridge
+            // Mutable flags for TTFT / generation tracking.
+            var isFirstResponse = true   // TTFT: first output of any kind (text or tool_use)
+            var isGenerating = false     // generation span: tracks actual text streaming
             let textDeltaHandler: AgentBridge.TextDeltaHandler = { [weak self] delta in
+                // Tracer is thread-safe (OSAllocatedUnfairLock) — call directly so
+                // spans close before finalize(). Wrapping in Task { @MainActor }
+                // made them fire-and-forget, racing with finalize().
+                if isFirstResponse {
+                    isFirstResponse = false
+                    tracer?.end("ttft")
+                    tracer?.markTTFT()
+                }
+                if !isGenerating {
+                    isGenerating = true
+                    tracer?.begin("generation")
+                }
                 Task { @MainActor [weak self] in
                     self?.appendToMessage(id: aiMessageId, text: delta)
                 }
             }
             let toolCallHandler: AgentBridge.ToolCallHandler = { callId, name, input in
                 let toolCall = ToolCall(name: name, arguments: input, thoughtSignature: nil)
+                let toolStart = ContinuousClock.now
                 let result = await ChatToolExecutor.execute(toolCall)
+                let toolDurMs = (ContinuousClock.now - toolStart).milliseconds
                 log("OMI tool \(name) executed for callId=\(callId)")
+
+                // Capture full tool input/output in trace
+                let inputJson = (try? String(data: JSONSerialization.data(withJSONObject: input), encoding: .utf8)) ?? "\(input)"
+                tracer?.captureToolExecution(
+                    toolUseId: callId,
+                    name: name,
+                    input: inputJson,
+                    output: result,
+                    durationMs: toolDurMs
+                )
+
                 // Track SQL query stats for metadata
                 if name == "execute_sql" {
                     sqlQueryCount += 1
@@ -2784,7 +2861,37 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                 return result
             }
             let toolActivityHandler: AgentBridge.ToolActivityHandler = { [weak self] name, status, toolUseId, input in
+                // Tracer spans outside Task { @MainActor } — tracer is thread-safe,
+                // and wrapping in fire-and-forget Tasks raced with finalize().
+                // Use toolUseId as span key so repeated calls to the same tool
+                // (e.g. 10x delete_task) each get their own span instead of
+                // colliding on the name-based lastIndex(where:) lookup.
+                let spanKey = "tool:\(toolUseId ?? name)"
+                if status == "started" {
+                    // If first response from model is a tool_use, that's our TTFT
+                    if isFirstResponse {
+                        isFirstResponse = false
+                        tracer?.end("ttft")
+                        tracer?.markTTFT()
+                    }
+                    tracer?.begin(spanKey, metadata: ["tool": name])
+                    toolNames.append(name)
+                    toolStartTimes[toolUseId ?? name] = Date()
+                } else if status == "completed" {
+                    tracer?.end(spanKey)
+                }
+                // Capture duration before entering MainActor task — toolStartTimes
+                // is mutated above and the Task may race.
+                let completedDurationMs: Int? = {
+                    if status == "completed", let startTime = toolStartTimes.removeValue(forKey: toolUseId ?? name) {
+                        return Int(Date().timeIntervalSince(startTime) * 1000)
+                    }
+                    return nil
+                }()
                 Task { @MainActor [weak self] in
+                    if let durationMs = completedDurationMs {
+                        AnalyticsManager.shared.chatToolCallCompleted(toolName: name, durationMs: durationMs)
+                    }
                     self?.addToolActivity(
                         messageId: aiMessageId,
                         toolName: name,
@@ -2793,8 +2900,6 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                         input: input
                     )
                     if status == "started" {
-                        toolNames.append(name)
-                        toolStartTimes[name] = Date()
                         if (name.contains("browser") || name.contains("playwright")) {
                             let token = UserDefaults.standard.string(forKey: "playwrightExtensionToken") ?? ""
                             if token.isEmpty {
@@ -2819,9 +2924,6 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                                 FloatingControlBarManager.shared.showTemporarily()
                             }
                         }
-                    } else if status == "completed", let startTime = toolStartTimes.removeValue(forKey: name) {
-                        let durationMs = Int(Date().timeIntervalSince(startTime) * 1000)
-                        AnalyticsManager.shared.chatToolCallCompleted(toolName: name, durationMs: durationMs)
                     }
                 }
             }
@@ -2835,6 +2937,18 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                     self?.addToolResult(messageId: aiMessageId, toolUseId: toolUseId, name: name, output: output)
                 }
             }
+
+            let currentModel = model ?? modelOverride ?? "unknown"
+
+            // Capture full request for trace — system prompt + message history
+            tracer?.captureRequest(
+                systemPrompt: systemPrompt,
+                messages: Array(messages.suffix(40)).map { ["role": $0.sender == .user ? "user" : "assistant", "content": $0.text] },
+                hasScreenshot: imageData != nil
+            )
+
+            tracer?.begin("llm_request", metadata: ["model": currentModel])
+            tracer?.begin("ttft")
 
             let queryResult = try await agentBridge.query(
                 prompt: trimmedText,
@@ -2896,6 +3010,42 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                 // Message no longer in memory (user switched away from this session).
                 messageText = queryResult.text
                 log("Chat response arrived after session switch")
+            }
+
+            // Capture response text in trace
+            tracer?.captureResponse(text: messageText)
+
+            // Finalize QueryTracer spans on success.
+            // End ttft defensively — if the model's first output was a tool_use
+            // (not text), textDeltaHandler never fired and ttft is still open.
+            tracer?.end("ttft")
+            tracer?.end("generation")
+            tracer?.end("llm_request")
+            tracer?.finalize(
+                tokenCount: queryResult.outputTokens,
+                model: model ?? modelOverride,
+                inputTokens: queryResult.inputTokens,
+                outputTokens: queryResult.outputTokens,
+                cacheReadTokens: queryResult.cacheReadTokens,
+                cacheWriteTokens: queryResult.cacheWriteTokens,
+                costUsd: queryResult.costUsd
+            )
+
+            // Bound the floating-bar session: if accumulated history + tool results pushed input
+            // past the ceiling, schedule a session-context reset. The reset burns no tokens; it
+            // forces the NEXT floating query to rebuild its session on a fresh Pi process (the
+            // subprocess-restart cost lands on that query), shedding history so input drops back
+            // near the base-prompt floor instead of drifting toward the 30k-tokens/min limit.
+            // See resetFloatingSessionContext.
+            // Count cached tokens: once prompt caching is enabled the static
+            // prefix moves out of inputTokens into cacheRead/cacheWrite, so the
+            // full re-sent context is inputTokens + cacheRead + cacheWrite — using
+            // inputTokens alone would never reach the ceiling on a cache hit.
+            let floatingInputTokens =
+                queryResult.inputTokens + queryResult.cacheReadTokens + queryResult.cacheWriteTokens
+            if sessionKey == "floating", floatingInputTokens > Self.floatingSessionTokenCeiling {
+                log("ChatProvider: floating input \(floatingInputTokens) > ceiling \(Self.floatingSessionTokenCeiling) — scheduling session-context reset")
+                resetFloatingSessionContext()
             }
 
             // Release the sending lock as soon as the AI response is visible in the
@@ -3106,6 +3256,12 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             } else {
                 errorMessage = error.localizedDescription
             }
+
+            // Finalize QueryTracer spans on error (same defensive ttft close).
+            tracer?.end("ttft")
+            tracer?.end("generation")
+            tracer?.end("llm_request")
+            tracer?.finalize(tokenCount: 0, model: model ?? modelOverride)
         }
 
         isSending = false
