@@ -183,9 +183,13 @@ fn translate_request(
         }
     }
 
-    // Translate tools
-    let anthropic_tools = req.tools.as_ref().map(|tools| {
-        tools
+    // Translate tools. Tool definitions are identical on every turn of a
+    // session, so we mark the LAST tool with a `cache_control` breakpoint —
+    // Anthropic then caches all preceding tool definitions, cutting input-token
+    // processing latency and cost on every subsequent turn (5-min TTL, renewed
+    // on each hit).
+    let anthropic_tools: Option<Vec<AnthropicTool>> = req.tools.as_ref().map(|tools| {
+        let mut translated: Vec<AnthropicTool> = tools
             .iter()
             .map(|t| AnthropicTool {
                 name: t.function.name.clone(),
@@ -195,8 +199,13 @@ fn translate_request(
                     .parameters
                     .clone()
                     .unwrap_or(json!({"type": "object", "properties": {}})),
+                cache_control: None,
             })
-            .collect()
+            .collect();
+        if let Some(last) = translated.last_mut() {
+            last.cache_control = Some(json!({"type": "ephemeral"}));
+        }
+        translated
     });
 
     let max_tokens = req
@@ -214,11 +223,23 @@ fn translate_request(
     );
     let anthropic_tool_choice = translate_tool_choice(&req.tool_choice)?;
 
+    // Serialize the system prompt as a content block with a `cache_control`
+    // breakpoint. In Anthropic's cache ordering (tools → system → messages),
+    // this caches the stable tools+system prefix together, so only the
+    // per-turn messages (and the screenshot) are processed fresh.
+    let system = system_prompt.map(|text| {
+        json!([{
+            "type": "text",
+            "text": text,
+            "cache_control": {"type": "ephemeral"}
+        }])
+    });
+
     Ok(AnthropicRequest {
         model: upstream_model.to_string(),
         max_tokens,
         messages: anthropic_messages,
-        system: system_prompt,
+        system,
         temperature: req.temperature,
         stream: req.stream,
         tools: if is_tool_choice_none { None } else { anthropic_tools },
@@ -1091,7 +1112,14 @@ mod tests {
 
         let result = translate_request(&req, "claude-sonnet-4-6").unwrap();
         assert_eq!(result.model, "claude-sonnet-4-6");
-        assert_eq!(result.system, Some("You are helpful.".to_string()));
+        assert_eq!(
+            result.system,
+            Some(json!([{
+                "type": "text",
+                "text": "You are helpful.",
+                "cache_control": {"type": "ephemeral"}
+            }]))
+        );
         assert_eq!(result.messages.len(), 1); // only user message, system extracted
         assert_eq!(result.messages[0].role, "user");
         assert_eq!(result.max_tokens, 1024);
@@ -1179,7 +1207,14 @@ mod tests {
         };
 
         let result = translate_request(&req, "claude-sonnet-4-6").unwrap();
-        assert_eq!(result.system, Some("You are terse.".to_string()));
+        assert_eq!(
+            result.system,
+            Some(json!([{
+                "type": "text",
+                "text": "You are terse.",
+                "cache_control": {"type": "ephemeral"}
+            }]))
+        );
         assert_eq!(result.messages.len(), 1, "developer msg must be extracted, not forwarded");
         assert_eq!(result.messages[0].role, "user");
     }

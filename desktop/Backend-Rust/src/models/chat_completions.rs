@@ -163,8 +163,11 @@ pub struct AnthropicRequest {
     pub model: String,
     pub max_tokens: u64,
     pub messages: Vec<AnthropicMessage>,
+    // System is serialized as Anthropic content blocks (not a bare string) so we
+    // can attach a `cache_control` breakpoint for prompt caching of the stable
+    // tools+system prefix. See translate_request.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub system: Option<String>,
+    pub system: Option<serde_json::Value>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub temperature: Option<f64>,
     pub stream: bool,
@@ -186,6 +189,10 @@ pub struct AnthropicTool {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
     pub input_schema: serde_json::Value,
+    // Optional prompt-caching breakpoint. Set on the last tool so Anthropic
+    // caches the (stable) tool definitions across turns.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cache_control: Option<serde_json::Value>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
