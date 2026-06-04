@@ -1240,5 +1240,50 @@ class TestPrerecordedServiceRouting(unittest.TestCase):
         self.assertEqual(lang, 'multi')
 
 
+class TestPrerecordedProviderFactory(unittest.TestCase):
+
+    @patch('utils.stt.pre_recorded.stt_prerecorded_model', 'dg-nova-3')
+    def test_factory_returns_deepgram_by_default(self):
+        from utils.stt.pre_recorded import DeepgramPrerecordedProvider, get_prerecorded_provider
+
+        provider = get_prerecorded_provider()
+        self.assertIsInstance(provider, DeepgramPrerecordedProvider)
+        self.assertEqual(provider._model, 'nova-3')
+
+    @patch('utils.stt.pre_recorded.stt_prerecorded_model', 'dg-nova-2')
+    def test_factory_returns_deepgram_custom_model(self):
+        from utils.stt.pre_recorded import DeepgramPrerecordedProvider, get_prerecorded_provider
+
+        provider = get_prerecorded_provider()
+        self.assertIsInstance(provider, DeepgramPrerecordedProvider)
+        self.assertEqual(provider._model, 'nova-2')
+
+    @patch('utils.stt.pre_recorded.stt_prerecorded_model', 'modulate-velma-2')
+    def test_factory_returns_modulate(self):
+        from utils.stt.pre_recorded import ModulatePrerecordedProvider, get_prerecorded_provider
+
+        provider = get_prerecorded_provider()
+        self.assertIsInstance(provider, ModulatePrerecordedProvider)
+
+    def test_providers_implement_abc(self):
+        from utils.stt.pre_recorded import (
+            DeepgramPrerecordedProvider,
+            ModulatePrerecordedProvider,
+            PrerecordedSTTProvider,
+        )
+
+        self.assertTrue(issubclass(DeepgramPrerecordedProvider, PrerecordedSTTProvider))
+        self.assertTrue(issubclass(ModulatePrerecordedProvider, PrerecordedSTTProvider))
+
+    def test_modulate_provider_normalizes_locale(self):
+        from utils.stt.pre_recorded import ModulatePrerecordedProvider
+
+        provider = ModulatePrerecordedProvider()
+        self.assertEqual(provider._normalize_lang('pt-BR'), 'pt')
+        self.assertEqual(provider._normalize_lang('en_US'), 'en')
+        self.assertEqual(provider._normalize_lang('zh-CN'), 'zh')
+        self.assertEqual(provider._normalize_lang(None), 'en')
+
+
 if __name__ == '__main__':
     unittest.main()
