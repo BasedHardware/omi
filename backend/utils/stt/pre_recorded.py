@@ -68,7 +68,7 @@ def get_prerecorded_service(language: str = 'en') -> Tuple[str, str, str]:
     m = stt_prerecorded_model.strip()
     if m.startswith('dg-'):
         dg_model = m.replace('dg-', '', 1)
-        lang = language if language in _deepgram_nova3_languages else 'multi'
+        lang = language if (language is None or language in _deepgram_nova3_languages) else 'multi'
         return PrerecordedSTTService.DEEPGRAM, lang, dg_model
     if m == 'modulate-velma-2':
         base_lang = language.split('-')[0].split('_')[0].lower() if language else 'en'
@@ -608,7 +608,7 @@ class DeepgramPrerecordedProvider(PrerecordedSTTProvider):
         language=None,
         keywords=None,
     ):
-        lang = language if language in _deepgram_nova3_languages else 'multi'
+        lang = language if (language is None or language in _deepgram_nova3_languages) else 'multi'
         return deepgram_prerecorded(
             audio_url,
             speakers_count=speakers_count,
@@ -632,7 +632,7 @@ class DeepgramPrerecordedProvider(PrerecordedSTTProvider):
         return_language=False,
         keywords=None,
     ):
-        lang = language if language in _deepgram_nova3_languages else 'multi'
+        lang = language if (language is None or language in _deepgram_nova3_languages) else 'multi'
         return deepgram_prerecorded_from_bytes(
             audio_bytes,
             sample_rate=sample_rate,
@@ -685,6 +685,8 @@ class ModulatePrerecordedProvider(PrerecordedSTTProvider):
         return_language=False,
         keywords=None,
     ):
+        if encoding:
+            audio_bytes = _wrap_pcm_as_wav(audio_bytes, sample_rate, channels)
         return modulate_prerecorded_from_bytes(
             audio_bytes,
             sample_rate=sample_rate,
@@ -692,6 +694,19 @@ class ModulatePrerecordedProvider(PrerecordedSTTProvider):
             attempts=attempts,
             return_language=return_language,
         )
+
+
+def _wrap_pcm_as_wav(pcm_bytes: bytes, sample_rate: int, channels: int, bits_per_sample: int = 16) -> bytes:
+    """Wrap raw PCM bytes in a WAV container for APIs that require it."""
+    import wave as _wave
+
+    buf = BytesIO()
+    with _wave.open(buf, 'wb') as wf:
+        wf.setnchannels(channels)
+        wf.setsampwidth(bits_per_sample // 8)
+        wf.setframerate(sample_rate)
+        wf.writeframes(pcm_bytes)
+    return buf.getvalue()
 
 
 def get_prerecorded_provider() -> PrerecordedSTTProvider:
