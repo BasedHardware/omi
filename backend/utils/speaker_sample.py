@@ -11,7 +11,7 @@ from typing import Optional, Tuple
 
 from utils.executors import sync_executor, run_blocking
 from utils.other.storage import delete_speech_profile_blob, download_speech_profile_bytes
-from utils.stt.pre_recorded import deepgram_prerecorded_from_bytes
+from utils.stt.pre_recorded import prerecorded_from_bytes
 from utils.text_utils import compute_text_containment
 
 MIN_WORDS = 5
@@ -43,7 +43,7 @@ async def verify_and_transcribe_sample(
         - other reasons indicate quality issues (sample may be dropped)
     """
     try:
-        words = await run_blocking(sync_executor, deepgram_prerecorded_from_bytes, audio_bytes, sample_rate, True)
+        words = await run_blocking(sync_executor, prerecorded_from_bytes, audio_bytes, sample_rate, True)
     except RuntimeError as e:
         # Transient transcription failure - distinguish from quality issues
         return None, False, f"transcription_failed: {e}"
