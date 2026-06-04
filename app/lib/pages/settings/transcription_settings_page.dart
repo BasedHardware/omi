@@ -419,15 +419,15 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
     String? audioFieldName;
 
     if (requestJson != null && _requestJsonCustomized[_selectedProvider] == true) {
-      url = requestJson['url'];
-      requestType = requestJson['request_type'];
+      url = requestJson['url']?.toString();
+      requestType = requestJson['request_type']?.toString();
       headers = requestJson['headers'] is Map
           ? (requestJson['headers'] as Map).map((k, v) => MapEntry(k.toString(), v.toString()))
           : null;
       params = requestJson['params'] is Map
           ? (requestJson['params'] as Map).map((k, v) => MapEntry(k.toString(), v.toString()))
           : null;
-      audioFieldName = requestJson['audio_field_name'];
+      audioFieldName = requestJson['audio_field_name']?.toString();
     }
 
     // Use URL from text field for custom providers
