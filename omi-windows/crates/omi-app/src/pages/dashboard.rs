@@ -114,7 +114,7 @@ pub fn DashboardPage() -> Element {
                 h2 { "Live Transcript" }
                 div { class: "transcript-content",
                     {
-                        let segments = &live_transcript.read().segments;
+                        let segments = live_transcript.read().segments.clone();
                         if segments.is_empty() {
                             rsx! {
                                 p { class: "text-muted transcript-empty",
@@ -123,7 +123,7 @@ pub fn DashboardPage() -> Element {
                             }
                         } else {
                             rsx! {
-                                for seg in segments.iter() {
+                                for seg in segments {
                                     div {
                                         class: if seg.is_final { "transcript-segment final" } else { "transcript-segment interim" },
                                         span { class: "speaker-badge", "S{seg.speaker}" }
@@ -141,7 +141,10 @@ pub fn DashboardPage() -> Element {
                 div { class: "card",
                     h3 { "Segments" }
                     p { class: "card-stat",
-                        "{live_transcript.read().segments.iter().filter(|s| s.is_final).count()}"
+                        {
+                            let n = live_transcript.read().segments.iter().filter(|s| s.is_final).count();
+                            format!("{n}")
+                        }
                     }
                     p { class: "text-muted", "finalized" }
                 }

@@ -40,6 +40,25 @@ pub struct AppConfig {
     #[serde(default)]
     pub groq_api_key: String,
 
+    /// Anthropic API key (claude-*)
+    #[serde(default)]
+    pub anthropic_api_key: String,
+
+    /// Anthropic model name
+    #[serde(default = "default_anthropic_model")]
+    pub anthropic_model: String,
+
+    /// Primary provider for interactive / low-latency requests (chat, agent).
+    /// One of: "auto" | "openai" | "azure" | "groq" | "anthropic"
+    #[serde(default = "default_auto")]
+    pub primary_provider: String,
+
+    /// Provider for background tasks (extraction, summarization, OCR).
+    /// Separating this avoids rate-limiting the interactive experience.
+    /// One of: "auto" | "openai" | "azure" | "groq" | "anthropic"
+    #[serde(default = "default_auto")]
+    pub background_provider: String,
+
     /// Screen capture interval in seconds
     #[serde(default = "default_capture_interval")]
     pub capture_interval_secs: u64,
@@ -122,6 +141,20 @@ pub struct AppConfig {
     /// How often (in minutes) the proactive engine polls for idle reminders.
     #[serde(default = "default_proactive_tick_mins")]
     pub proactive_tick_mins: u64,
+
+    // ── Persona ───────────────────────────────────────────────────────────────
+
+    /// Display name for the AI assistant (default: "Omi")
+    #[serde(default = "default_persona_name")]
+    pub persona_name: String,
+
+    /// Custom instructions injected into every system prompt
+    #[serde(default)]
+    pub persona_instructions: String,
+
+    /// User's own name — helps the AI personalize responses
+    #[serde(default)]
+    pub user_name: String,
 }
 
 fn default_backend_url() -> String {
@@ -153,6 +186,12 @@ fn default_openai_model() -> String {
 }
 
 fn default_proactive_tick_mins() -> u64 { 5 }
+fn default_anthropic_model() -> String { "claude-3-5-haiku-20241022".to_string() }
+fn default_auto() -> String { "auto".to_string() }
+
+fn default_persona_name() -> String {
+    "Omi".to_string()
+}
 
 impl Default for AppConfig {
     fn default() -> Self {
@@ -165,6 +204,10 @@ impl Default for AppConfig {
             openai_base_url: default_openai_base_url(),
             openai_model: default_openai_model(),
             groq_api_key: String::new(),
+            anthropic_api_key: String::new(),
+            anthropic_model: default_anthropic_model(),
+            primary_provider: default_auto(),
+            background_provider: default_auto(),
             capture_interval_secs: default_capture_interval(),
             screen_capture_enabled: false,
             ocr_enabled: true,
@@ -185,6 +228,9 @@ impl Default for AppConfig {
             agent_script_path: String::new(),
             proactive_agent_enabled: true,
             proactive_tick_mins: default_proactive_tick_mins(),
+            persona_name: default_persona_name(),
+            persona_instructions: String::new(),
+            user_name: String::new(),
         }
     }
 }

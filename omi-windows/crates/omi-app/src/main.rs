@@ -21,13 +21,29 @@ fn main() {
     // Load .env from working directory (omi-windows/.env)
     dotenvy::dotenv().ok();
 
+    // Write logs to %APPDATA%\omi\debug.log so they're visible even without a console
+    let log_dir = std::path::PathBuf::from(
+        std::env::var("APPDATA").unwrap_or_else(|_| ".".into()),
+    ).join("omi");
+    std::fs::create_dir_all(&log_dir).ok();
+    let log_path = log_dir.join("debug.log");
+    // Truncate (overwrite) log on each launch for a clean read
+    let log_file = std::fs::OpenOptions::new()
+        .create(true).write(true).truncate(true).open(&log_path)
+        .expect("open log file");
+    let log_writer = std::sync::Mutex::new(log_file);
+
     tracing_subscriber::fmt()
         .with_env_filter(
             tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| "info".into()),
+                .unwrap_or_else(|_| "omi=debug,omi_transcription=debug,omi_audio=debug".into()),
         )
         .with_target(false)
+        .with_ansi(false)
+        .with_writer(log_writer)
         .init();
+
+    eprintln!("Logging to: {}", log_path.display());
 
     tracing::info!("Starting Omi Windows");
 

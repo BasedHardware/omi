@@ -152,15 +152,10 @@ impl AgentRuntime {
         system_prompt: &str,
         cfg: &crate::config::AppConfig,
     ) -> Result<()> {
-        let (api_key, url, model) = crate::llm::resolve_llm_endpoint(cfg);
-        if api_key.is_empty() {
-            anyhow::bail!("No LLM API key configured. Set an OpenAI, Groq, or Azure key in Settings → API Keys.");
-        }
-
         let session_id = uuid::Uuid::new_v4().to_string();
         let _ = self.inner.event_tx.send(AgentEvent::Init { session_id: session_id.clone() });
 
-        // Build message list for the LLM
+        // Build message list: system prompt first, then conversation history
         let mut llm_messages = vec![crate::llm::LlmMessage {
             role: "system".into(),
             content: system_prompt.to_string(),
@@ -169,27 +164,25 @@ impl AgentRuntime {
             llm_messages.push(crate::llm::LlmMessage { role: role.clone(), content: content.clone() });
         }
 
-        tracing::info!("[AGENT native] Calling LLM: model={model} turns={}", llm_messages.len());
+        tracing::info!("[AGENT native] Calling LLM streaming: turns={}", llm_messages.len());
 
-        let response = crate::llm::complete(&api_key, &url, &model, llm_messages, Some(1200)).await
-            .map_err(|e| anyhow::anyhow!("LLM call failed: {e}"))?;
+        // Real SSE streaming — tokens arrive as they are generated
+        let event_tx = self.inner.event_tx.clone();
+        let response = crate::llm::complete_streaming(
+            cfg,
+            crate::llm::LlmUseCase::Chat,
+            llm_messages,
+            Some(1200),
+            move |token| {
+                let _ = event_tx.send(AgentEvent::TextDelta { text: token });
+            },
+        ).await.map_err(|e| anyhow::anyhow!("LLM streaming failed: {e}"))?;
 
-        // Emit as a series of text_delta chunks (word-by-word) to animate typing
-        let words: Vec<&str> = response.split(' ').collect();
-        let chunk_size = 4; // emit 4 words at a time
-        for chunk in words.chunks(chunk_size) {
-            let mut text = chunk.join(" ");
-            text.push(' ');
-            let _ = self.inner.event_tx.send(AgentEvent::TextDelta { text });
-            tokio::task::yield_now().await; // let the UI re-render between chunks
-        }
-
-        let input_tokens = 0u32; // not tracked for native mode
         let output_tokens = response.split_whitespace().count() as u32;
         let _ = self.inner.event_tx.send(AgentEvent::Result {
             text: response,
             session_id,
-            input_tokens,
+            input_tokens: 0,
             output_tokens,
         });
 

@@ -1,9 +1,41 @@
-/// Shared LLM utilities: chat completions + post-conversation processing.
+/// Shared LLM utilities — multi-provider with per-use-case routing.
+///
+/// # Provider priority (auto mode)
+/// Primary (chat/agent):    Anthropic → Groq → OpenAI/Azure
+/// Background (extraction): OpenAI/Azure → Anthropic → Groq
+/// This ensures interactive chat is never blocked by background summarisation
+/// jobs hammering the same rate-limited endpoint simultaneously.
+
+use std::sync::OnceLock;
 
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
+use tokio::sync::Semaphore;
+use futures_util::StreamExt;
 
 use crate::config::AppConfig;
+
+// ── Per-provider concurrency semaphores (prevent rate-limit pile-ups) ────────
+
+static GROQ_SEM:      OnceLock<Semaphore> = OnceLock::new();
+static ANTHROPIC_SEM: OnceLock<Semaphore> = OnceLock::new();
+static OPENAI_SEM:    OnceLock<Semaphore> = OnceLock::new();
+
+fn groq_sem()      -> &'static Semaphore { GROQ_SEM.get_or_init(|| Semaphore::new(2)) }
+fn anthropic_sem() -> &'static Semaphore { ANTHROPIC_SEM.get_or_init(|| Semaphore::new(3)) }
+fn openai_sem()    -> &'static Semaphore { OPENAI_SEM.get_or_init(|| Semaphore::new(4)) }
+
+// ── Use-case enum ─────────────────────────────────────────────────────────────
+
+/// Which class of workload is making the LLM call.
+/// Used to route to the correct provider so background jobs don't starve the UI.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LlmUseCase {
+    /// User-facing interactive call (chat, agent, floating bar). Latency-sensitive.
+    Chat,
+    /// Background processing (extraction, summarisation, OCR). Can tolerate a bit more latency.
+    Background,
+}
 
 // ── Request / response types ─────────────────────────────────────────────────
 
@@ -39,6 +71,19 @@ struct LlmResponseMsg {
     content: String,
 }
 
+// Anthropic Messages API response
+#[derive(Deserialize)]
+struct AnthropicResponse {
+    content: Vec<AnthropicBlock>,
+}
+
+#[derive(Deserialize)]
+struct AnthropicBlock {
+    #[serde(rename = "type")]
+    block_type: String,
+    text: Option<String>,
+}
+
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 pub struct ScreenshotMemoryExtraction {
     pub content: String,
@@ -54,38 +99,371 @@ pub struct ScreenshotExtraction {
     pub action_items: Vec<String>,
 }
 
-// ── Endpoint resolution ──────────────────────────────────────────────────────
+// ── Resolved provider context ─────────────────────────────────────────────────
 
-/// Resolve (api_key, url, model) from AppConfig, falling back to env vars.
-pub fn resolve_llm_endpoint(cfg: &AppConfig) -> (String, String, String) {
+#[derive(Debug, Clone)]
+enum Provider {
+    OpenAI { key: String, url: String, model: String },
+    Azure  { key: String, url: String, model: String },
+    Groq   { key: String, model: String },
+    Anthropic { key: String, model: String },
+}
+
+impl Provider {
+    fn label(&self) -> &'static str {
+        match self {
+            Self::OpenAI { .. }    => "openai",
+            Self::Azure { .. }     => "azure",
+            Self::Groq { .. }      => "groq",
+            Self::Anthropic { .. } => "anthropic",
+        }
+    }
+
+    fn is_configured(&self) -> bool {
+        match self {
+            Self::OpenAI { key, url, .. }    => !key.is_empty() && !url.is_empty(),
+            Self::Azure { key, url, .. }     => !key.is_empty() && !url.is_empty(),
+            Self::Groq { key, .. }           => !key.is_empty(),
+            Self::Anthropic { key, .. }      => !key.is_empty(),
+        }
+    }
+}
+
+/// Build a Provider from a named string + config.
+fn provider_from_name(name: &str, cfg: &AppConfig) -> Option<Provider> {
+    match name {
+        "groq" if !cfg.groq_api_key.is_empty() => Some(Provider::Groq {
+            key: cfg.groq_api_key.clone(),
+            model: "llama-3.3-70b-versatile".into(),
+        }),
+        "anthropic" if !cfg.anthropic_api_key.is_empty() => Some(Provider::Anthropic {
+            key: cfg.anthropic_api_key.clone(),
+            model: cfg.anthropic_model.clone(),
+        }),
+        "openai" if !cfg.openai_api_key.is_empty() => {
+            let base = cfg.openai_base_url.trim_end_matches('/');
+            // Azure detection: base URL contains azure.com
+            if base.contains("azure.com") {
+                Some(Provider::Azure {
+                    key: cfg.openai_api_key.clone(),
+                    url: azure_chat_url(base),
+                    model: cfg.openai_model.clone(),
+                })
+            } else {
+                Some(Provider::OpenAI {
+                    key: cfg.openai_api_key.clone(),
+                    url: format!("{base}/chat/completions"),
+                    model: cfg.openai_model.clone(),
+                })
+            }
+        }
+        "azure" if !cfg.openai_api_key.is_empty() => {
+            let base = cfg.openai_base_url.trim_end_matches('/');
+            Some(Provider::Azure {
+                key: cfg.openai_api_key.clone(),
+                url: azure_chat_url(base),
+                model: cfg.openai_model.clone(),
+            })
+        }
+        _ => None,
+    }
+}
+
+/// Build the correct Azure completions URL, adding api-version if missing.
+fn azure_chat_url(base: &str) -> String {
+    // Azure full path pattern:
+    //   https://{resource}.openai.azure.com/openai/deployments/{deploy}/chat/completions?api-version=2024-02-01
+    let has_path = base.contains("/chat/completions");
+    let has_version = base.contains("api-version");
+    if has_path && has_version {
+        return base.to_string();
+    }
+    let base = base.trim_end_matches('/');
+    if has_path {
+        format!("{base}?api-version=2024-02-01")
+    } else {
+        format!("{base}/chat/completions?api-version=2024-02-01")
+    }
+}
+
+/// Collect every configured provider in priority order for the given use-case.
+fn all_providers_for(cfg: &AppConfig, use_case: LlmUseCase) -> Vec<Provider> {
     let azure_key = std::env::var("AZURE_API_KEY").unwrap_or_default();
     let azure_base = std::env::var("AZURE_BASE_URL").unwrap_or_default();
     let azure_model = std::env::var("AZURE_MODEL").unwrap_or_else(|_| "gpt-4o-mini".into());
 
-    if !cfg.groq_api_key.is_empty() {
-        return (
-            cfg.groq_api_key.clone(),
-            "https://api.groq.com/openai/v1/chat/completions".into(),
-            "llama-3.3-70b-versatile".into(),
-        );
+    // If user selected a specific provider, try that first
+    let pref = match use_case {
+        LlmUseCase::Chat       => cfg.primary_provider.as_str(),
+        LlmUseCase::Background => cfg.background_provider.as_str(),
+    };
+
+    let mut out: Vec<Provider> = Vec::new();
+
+    // Named preference (if not "auto")
+    if pref != "auto" {
+        if let Some(p) = provider_from_name(pref, cfg) {
+            if p.is_configured() { out.push(p); }
+        }
     }
-    if !azure_key.is_empty() && !azure_base.is_empty() {
-        return (azure_key, azure_base, azure_model);
+
+    // Auto priority lists — different order per use-case to avoid starving the UI
+    let fallback_order: &[&str] = match use_case {
+        // Interactive: prefer fast/cheap providers
+        LlmUseCase::Chat => &["anthropic", "groq", "openai"],
+        // Background: prefer higher-quota/cheaper providers first
+        LlmUseCase::Background => &["openai", "anthropic", "groq"],
+    };
+
+    for name in fallback_order {
+        if let Some(p) = provider_from_name(name, cfg) {
+            if p.is_configured() && !out.iter().any(|x| x.label() == p.label()) {
+                out.push(p);
+            }
+        }
     }
-    if !cfg.openai_api_key.is_empty() {
-        let base = cfg.openai_base_url.trim_end_matches('/').to_string();
-        return (
-            cfg.openai_api_key.clone(),
-            format!("{base}/chat/completions"),
-            cfg.openai_model.clone(),
-        );
+
+    // Env-var Azure fallback
+    if !azure_key.is_empty() && !azure_base.is_empty()
+        && !out.iter().any(|x| x.label() == "azure")
+    {
+        out.push(Provider::Azure {
+            key: azure_key,
+            url: azure_chat_url(&azure_base),
+            model: azure_model,
+        });
     }
-    (String::new(), String::new(), String::new())
+
+    out
 }
 
-// ── Core completion call ─────────────────────────────────────────────────────
+/// Convenience wrapper: resolve single (key, url, model) for legacy callers.
+/// Prefers the Chat use-case ordering.
+pub fn resolve_llm_endpoint(cfg: &AppConfig) -> (String, String, String) {
+    match all_providers_for(cfg, LlmUseCase::Chat).into_iter().next() {
+        Some(Provider::OpenAI    { key, url, model }) => (key, url, model),
+        Some(Provider::Azure     { key, url, model }) => (key, url, model),
+        Some(Provider::Groq      { key, model })      => (
+            key,
+            "https://api.groq.com/openai/v1/chat/completions".into(),
+            model,
+        ),
+        Some(Provider::Anthropic { key, model })      => (key, "anthropic".into(), model),
+        None => (String::new(), String::new(), String::new()),
+    }
+}
 
-/// Call the LLM and return the assistant response text.
+// ── Core completion calls ─────────────────────────────────────────────────────
+
+/// Streaming entry point — emits tokens via `on_token` as they arrive (SSE).
+/// Falls back to a single non-streaming call for Anthropic.
+/// Returns the full accumulated response text.
+pub async fn complete_streaming<F>(
+    cfg: &AppConfig,
+    use_case: LlmUseCase,
+    messages: Vec<LlmMessage>,
+    max_tokens: Option<u32>,
+    on_token: F,
+) -> Result<String>
+where
+    F: Fn(String) + Send,
+{
+    let providers = all_providers_for(cfg, use_case);
+    if providers.is_empty() {
+        anyhow::bail!("No LLM provider configured. Add a key in Settings → API Keys.");
+    }
+
+    let mut last_err = anyhow::anyhow!("No providers attempted");
+    for provider in &providers {
+        let result = match provider {
+            Provider::Anthropic { key, model } => {
+                // Anthropic doesn't use the same SSE format; call non-streaming and emit once
+                let _permit = anthropic_sem().acquire().await.ok();
+                match call_anthropic(key, model, &messages, max_tokens).await {
+                    Ok(text) => { on_token(text.clone()); Ok(text) }
+                    Err(e) => Err(e),
+                }
+            }
+            Provider::Groq { key, model } => {
+                let _permit = groq_sem().acquire().await.ok();
+                call_openai_streaming(
+                    key,
+                    "https://api.groq.com/openai/v1/chat/completions",
+                    model, &messages, max_tokens, false, &on_token,
+                ).await
+            }
+            Provider::OpenAI { key, url, model } => {
+                let _permit = openai_sem().acquire().await.ok();
+                call_openai_streaming(key, url, model, &messages, max_tokens, false, &on_token).await
+            }
+            Provider::Azure { key, url, model } => {
+                let _permit = openai_sem().acquire().await.ok();
+                call_openai_streaming(key, url, model, &messages, max_tokens, true, &on_token).await
+            }
+        };
+        match result {
+            Ok(text) => return Ok(text),
+            Err(e) => {
+                tracing::warn!("[LLM stream] Provider {} failed: {e} — trying next", provider.label());
+                last_err = e;
+            }
+        }
+    }
+    Err(last_err)
+}
+
+/// SSE streaming call to any OpenAI-compatible endpoint.
+async fn call_openai_streaming<F>(
+    api_key: &str,
+    url: &str,
+    model: &str,
+    messages: &[LlmMessage],
+    max_tokens: Option<u32>,
+    is_azure: bool,
+    on_token: &F,
+) -> Result<String>
+where
+    F: Fn(String),
+{
+    use futures_util::StreamExt;
+
+    let req = LlmRequest {
+        model: model.to_string(),
+        messages: messages.to_vec(),
+        stream: true,
+        temperature: Some(0.3),
+        max_tokens,
+    };
+
+    let mut builder = reqwest::Client::new().post(url).json(&req);
+    if is_azure {
+        builder = builder.header("api-key", api_key).header("Content-Type", "application/json");
+    } else {
+        builder = builder.header("Authorization", format!("Bearer {api_key}"));
+    }
+
+    let resp = builder.send().await.context("Streaming LLM request failed")?;
+    let status = resp.status();
+    if !status.is_success() {
+        let body = resp.text().await.unwrap_or_default();
+        anyhow::bail!("LLM streaming error {status}: {}", &body[..body.len().min(300)]);
+    }
+
+    let mut stream = resp.bytes_stream();
+    let mut full_text = String::new();
+    let mut buf = String::new();
+
+    while let Some(chunk) = stream.next().await {
+        let bytes = chunk.context("SSE read error")?;
+        buf.push_str(&String::from_utf8_lossy(&bytes));
+
+        // Process all complete lines in the buffer
+        while let Some(pos) = buf.find('\n') {
+            let line = buf[..pos].trim().to_string();
+            buf = buf[pos + 1..].to_string();
+
+            if let Some(data) = line.strip_prefix("data: ") {
+                if data == "[DONE]" { break; }
+                if let Ok(v) = serde_json::from_str::<serde_json::Value>(data) {
+                    if let Some(content) = v
+                        .get("choices").and_then(|c| c.get(0))
+                        .and_then(|c| c.get("delta"))
+                        .and_then(|d| d.get("content"))
+                        .and_then(|c| c.as_str())
+                    {
+                        if !content.is_empty() {
+                            full_text.push_str(content);
+                            on_token(content.to_string());
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    Ok(full_text)
+}
+
+/// High-level entry point: pick best available provider for `use_case`,
+/// retry once on 429/5xx, fall back to the next provider on failure.
+pub async fn complete_for(
+    cfg: &AppConfig,
+    use_case: LlmUseCase,
+    messages: Vec<LlmMessage>,
+    max_tokens: Option<u32>,
+) -> Result<String> {
+    let providers = all_providers_for(cfg, use_case);
+    if providers.is_empty() {
+        anyhow::bail!("No LLM provider configured. Add a key in Settings → API Keys.");
+    }
+
+    let mut last_err = anyhow::anyhow!("No providers attempted");
+    for provider in &providers {
+        match call_provider(provider, messages.clone(), max_tokens).await {
+            Ok(text) => return Ok(text),
+            Err(e) => {
+                tracing::warn!("[LLM] Provider {} failed: {e} — trying next", provider.label());
+                last_err = e;
+            }
+        }
+    }
+    Err(last_err)
+}
+
+async fn call_provider(
+    provider: &Provider,
+    messages: Vec<LlmMessage>,
+    max_tokens: Option<u32>,
+) -> Result<String> {
+    const MAX_RETRIES: u32 = 2;
+    let mut backoff_ms = 400u64;
+
+    for attempt in 0..MAX_RETRIES {
+        let result = match provider {
+            Provider::Anthropic { key, model } => {
+                let _permit = anthropic_sem().acquire().await.ok();
+                call_anthropic(key, model, &messages, max_tokens).await
+            }
+            Provider::Groq { key, model } => {
+                let _permit = groq_sem().acquire().await.ok();
+                call_openai_compat(
+                    key,
+                    "https://api.groq.com/openai/v1/chat/completions",
+                    model,
+                    &messages,
+                    max_tokens,
+                    false,
+                ).await
+            }
+            Provider::OpenAI { key, url, model } => {
+                let _permit = openai_sem().acquire().await.ok();
+                call_openai_compat(key, url, model, &messages, max_tokens, false).await
+            }
+            Provider::Azure { key, url, model } => {
+                let _permit = openai_sem().acquire().await.ok();
+                call_openai_compat(key, url, model, &messages, max_tokens, true).await
+            }
+        };
+
+        match result {
+            Ok(text) => return Ok(text),
+            Err(ref e) if is_retryable(e) && attempt < MAX_RETRIES - 1 => {
+                tracing::warn!("[LLM] Retryable error (attempt {attempt}): {e} — waiting {backoff_ms}ms");
+                tokio::time::sleep(tokio::time::Duration::from_millis(backoff_ms)).await;
+                backoff_ms *= 3;
+            }
+            Err(e) => return Err(e),
+        }
+    }
+    unreachable!()
+}
+
+fn is_retryable(e: &anyhow::Error) -> bool {
+    let msg = e.to_string();
+    msg.contains("429") || msg.contains("503") || msg.contains("529") || msg.contains("overloaded")
+}
+
+/// Legacy single-provider call (used by callers that already resolved the endpoint).
 pub async fn complete(
     api_key: &str,
     url: &str,
@@ -93,11 +471,24 @@ pub async fn complete(
     messages: Vec<LlmMessage>,
     max_tokens: Option<u32>,
 ) -> Result<String> {
+    if url == "anthropic" {
+        return call_anthropic(api_key, model, &messages, max_tokens).await;
+    }
     let is_azure = url.contains("azure.com");
+    call_openai_compat(api_key, url, model, &messages, max_tokens, is_azure).await
+}
 
+async fn call_openai_compat(
+    api_key: &str,
+    url: &str,
+    model: &str,
+    messages: &[LlmMessage],
+    max_tokens: Option<u32>,
+    is_azure: bool,
+) -> Result<String> {
     let req = LlmRequest {
         model: model.to_string(),
-        messages,
+        messages: messages.to_vec(),
         stream: false,
         temperature: Some(0.3),
         max_tokens,
@@ -131,6 +522,64 @@ pub async fn complete(
         .context("LLM returned no choices")
 }
 
+/// Call Anthropic Messages API.
+/// The first message with role="system" is extracted as the system prompt.
+async fn call_anthropic(
+    api_key: &str,
+    model: &str,
+    messages: &[LlmMessage],
+    max_tokens: Option<u32>,
+) -> Result<String> {
+    // Separate system prompt from conversation messages
+    let system: Option<String> = messages.iter()
+        .find(|m| m.role == "system")
+        .map(|m| m.content.clone());
+
+    let conv_messages: Vec<serde_json::Value> = messages.iter()
+        .filter(|m| m.role != "system")
+        .map(|m| serde_json::json!({ "role": m.role, "content": m.content }))
+        .collect();
+
+    // Anthropic requires at least one message
+    if conv_messages.is_empty() {
+        anyhow::bail!("Anthropic requires at least one non-system message");
+    }
+
+    let mut body = serde_json::json!({
+        "model": model,
+        "max_tokens": max_tokens.unwrap_or(1024),
+        "messages": conv_messages,
+    });
+    if let Some(sys) = system {
+        body["system"] = serde_json::Value::String(sys);
+    }
+
+    let resp = reqwest::Client::new()
+        .post("https://api.anthropic.com/v1/messages")
+        .header("x-api-key", api_key)
+        .header("anthropic-version", "2023-06-01")
+        .header("content-type", "application/json")
+        .json(&body)
+        .send()
+        .await
+        .context("Anthropic request failed")?;
+
+    let status = resp.status();
+    let text = resp.text().await.unwrap_or_default();
+
+    if !status.is_success() {
+        anyhow::bail!("Anthropic error {status}: {}", &text[..text.len().min(400)]);
+    }
+
+    let parsed: AnthropicResponse = serde_json::from_str(&text)
+        .with_context(|| format!("Failed to parse Anthropic response: {}", &text[..text.len().min(300)]))?;
+
+    parsed.content.into_iter()
+        .find(|b| b.block_type == "text")
+        .and_then(|b| b.text)
+        .context("Anthropic returned no text block")
+}
+
 // ── Post-conversation processing ─────────────────────────────────────────────
 
 /// Summarize a completed conversation and extract memories.
@@ -153,9 +602,8 @@ pub async fn process_conversation(
         return;
     }
 
-    let (api_key, url, model) = resolve_llm_endpoint(cfg);
-    if api_key.is_empty() {
-        tracing::warn!("[LLM] No LLM API key configured, skipping summarization");
+    if all_providers_for(cfg, LlmUseCase::Background).is_empty() {
+        tracing::warn!("[LLM] No LLM provider configured, skipping summarization");
         return;
     }
 
@@ -169,8 +617,9 @@ pub async fn process_conversation(
         Transcript:\n{transcript}"
     );
 
-    let summary_result = complete(
-        &api_key, &url, &model,
+    let summary_result = complete_for(
+        cfg,
+        LlmUseCase::Background,
         vec![LlmMessage { role: "user".into(), content: summary_prompt }],
         Some(300),
     ).await;
@@ -223,8 +672,9 @@ pub async fn process_conversation(
         Transcript:\n{transcript}"
     );
 
-    let action_result = complete(
-        &api_key, &url, &model,
+    let action_result = complete_for(
+        cfg,
+        LlmUseCase::Background,
         vec![LlmMessage { role: "user".into(), content: action_prompt }],
         Some(600),
     ).await;
@@ -288,8 +738,9 @@ pub async fn process_conversation(
         Transcript:\n{transcript}"
     );
 
-    let memory_result = complete(
-        &api_key, &url, &model,
+    let memory_result = complete_for(
+        cfg,
+        LlmUseCase::Background,
         vec![LlmMessage { role: "user".into(), content: memory_prompt }],
         Some(700),
     ).await;
@@ -341,9 +792,8 @@ pub async fn summarize_ocr_snippets(
         return Ok(String::new());
     }
 
-    let (api_key, url, model) = resolve_llm_endpoint(cfg);
-    if api_key.is_empty() {
-        tracing::warn!("[LLM] No LLM API key configured, skipping OCR summarization");
+    if all_providers_for(cfg, LlmUseCase::Background).is_empty() {
+        tracing::warn!("[LLM] No LLM provider configured, skipping OCR summarization");
         return Ok(String::new());
     }
 
@@ -360,10 +810,9 @@ pub async fn summarize_ocr_snippets(
         joined
     );
 
-    let resp = complete(
-        &api_key,
-        &url,
-        &model,
+    let resp = complete_for(
+        cfg,
+        LlmUseCase::Background,
         vec![LlmMessage { role: "user".into(), content: prompt }],
         Some(200),
     )
@@ -389,9 +838,8 @@ pub async fn extract_screenshot_artifacts(
         _ => return Ok(ScreenshotExtraction::default()),
     };
 
-    let (api_key, url, model) = resolve_llm_endpoint(cfg);
-    if api_key.is_empty() {
-        tracing::warn!("[LLM] No LLM API key configured, skipping screenshot extraction");
+    if all_providers_for(cfg, LlmUseCase::Background).is_empty() {
+        tracing::warn!("[LLM] No LLM provider configured, skipping screenshot extraction");
         return Ok(ScreenshotExtraction::default());
     }
 
@@ -411,10 +859,9 @@ pub async fn extract_screenshot_artifacts(
         OCR text:\n{ocr_short}"
     );
 
-    let resp = complete(
-        &api_key,
-        &url,
-        &model,
+    let resp = complete_for(
+        cfg,
+        LlmUseCase::Background,
         vec![LlmMessage { role: "user".into(), content: prompt }],
         Some(250),
     )
@@ -455,11 +902,6 @@ pub async fn deduplicate_memories(
         return Ok(0);
     }
 
-    let (api_key, url, model) = resolve_llm_endpoint(cfg);
-    if api_key.is_empty() {
-        anyhow::bail!("No LLM API key configured");
-    }
-
     let numbered: String = mems.iter().enumerate()
         .map(|(i, m)| format!("{}. [{}] {}", i + 1, m.category.as_deref().unwrap_or("general"), m.content))
         .collect::<Vec<_>>()
@@ -474,8 +916,9 @@ pub async fn deduplicate_memories(
         Memories:\n{numbered}"
     );
 
-    let resp = complete(
-        &api_key, &url, &model,
+    let resp = complete_for(
+        cfg,
+        LlmUseCase::Background,
         vec![LlmMessage { role: "user".into(), content: prompt }],
         Some(400),
     ).await?;

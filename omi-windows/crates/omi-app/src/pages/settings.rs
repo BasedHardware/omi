@@ -163,6 +163,32 @@ pub fn SettingsPage() -> Element {
                     }
                 }
                 div { class: "settings-row",
+                    label { class: "settings-label", "Anthropic Key" }
+                    input {
+                        class: "settings-input",
+                        r#type: "password",
+                        placeholder: "sk-ant-...",
+                        value: "{config.read().anthropic_api_key}",
+                        onchange: move |e| {
+                            config.write().anthropic_api_key = e.value();
+                            let _ = config.read().save();
+                        },
+                    }
+                }
+                div { class: "settings-row",
+                    label { class: "settings-label", "Anthropic Model" }
+                    input {
+                        class: "settings-input",
+                        r#type: "text",
+                        placeholder: "claude-3-5-sonnet-20241022",
+                        value: "{config.read().anthropic_model}",
+                        onchange: move |e| {
+                            config.write().anthropic_model = e.value();
+                            let _ = config.read().save();
+                        },
+                    }
+                }
+                div { class: "settings-row",
                     label { class: "settings-label", "OpenAI Base URL" }
                     input {
                         class: "settings-input",
@@ -186,6 +212,41 @@ pub fn SettingsPage() -> Element {
                             config.write().openai_model = e.value();
                             let _ = config.read().save();
                         },
+                    }
+                }
+            }
+            
+            // LLM Routing section
+            section { class: "settings-section",
+                h2 { "LLM Routing" }
+                div { class: "settings-row",
+                    label { class: "settings-label", "Primary Provider (Chat)" }
+                    select {
+                        class: "settings-input",
+                        value: "{config.read().primary_provider}",
+                        onchange: move |e| {
+                            config.write().primary_provider = e.value();
+                            let _ = config.read().save();
+                        },
+                        option { value: "auto", "Auto Fallback" }
+                        option { value: "openai", "OpenAI / Azure" }
+                        option { value: "anthropic", "Anthropic" }
+                        option { value: "groq", "Groq" }
+                    }
+                }
+                div { class: "settings-row",
+                    label { class: "settings-label", "Background Provider" }
+                    select {
+                        class: "settings-input",
+                        value: "{config.read().background_provider}",
+                        onchange: move |e| {
+                            config.write().background_provider = e.value();
+                            let _ = config.read().save();
+                        },
+                        option { value: "auto", "Auto Fallback" }
+                        option { value: "openai", "OpenAI / Azure" }
+                        option { value: "anthropic", "Anthropic" }
+                        option { value: "groq", "Groq" }
                     }
                 }
             }

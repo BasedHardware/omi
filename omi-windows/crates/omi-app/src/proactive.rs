@@ -117,28 +117,26 @@ impl ProactiveEngine {
                     );
                     // Fire-and-forget: runtime will send events to its own broadcast
                     let runtime = runtime.clone();
-                    let (api_key, url, model) = crate::llm::resolve_llm_endpoint(cfg);
-                    if !api_key.is_empty() {
-                        tokio::spawn(async move {
-                            match crate::llm::complete(
-                                &api_key,
-                                &url,
-                                &model,
-                                vec![crate::llm::LlmMessage { role: "user".into(), content: prompt }],
-                                Some(150),
-                            ).await {
-                                Ok(text) => {
-                                    let text = text.trim();
-                                    if !text.is_empty() && text != "NOTHING" {
-                                        tracing::info!("[PROACTIVE] Memory-based insight: {text}");
-                                        // Surface as a query to the agent so the user can follow up
-                                        let _ = runtime.query(text, None, None).await;
-                                    }
+                    let cfg_clone = cfg.clone();
+                    
+                    tokio::spawn(async move {
+                        match crate::llm::complete_for(
+                            &cfg_clone,
+                            crate::llm::LlmUseCase::Background,
+                            vec![crate::llm::LlmMessage { role: "user".into(), content: prompt }],
+                            Some(150),
+                        ).await {
+                            Ok(text) => {
+                                let text = text.trim();
+                                if !text.is_empty() && text != "NOTHING" {
+                                    tracing::info!("[PROACTIVE] Memory-based insight: {text}");
+                                    // Surface as a query to the agent so the user can follow up
+                                    let _ = runtime.query(text, None, None).await;
                                 }
-                                Err(e) => tracing::warn!("[PROACTIVE] LLM insight failed: {e}"),
                             }
-                        });
-                    }
+                            Err(e) => tracing::warn!("[PROACTIVE] LLM insight failed: {e}"),
+                        }
+                    });
                 }
             }
         }

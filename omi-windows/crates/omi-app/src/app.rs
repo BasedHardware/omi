@@ -195,31 +195,11 @@ pub fn App() -> Element {
     // ── Start agent runtime if enabled ───────────────────────────────────────────────
     use_hook(move || {
         let cfg = config.read().clone();
+        // Initialize native Agent Runtime
         if cfg.agent_enabled {
-            let rt = runtime.read().clone();
-            let node = if cfg.node_path.is_empty() {
-                crate::agent_runtime::find_node()
-            } else {
-                Some(cfg.node_path.clone())
-            };
-            let script = if cfg.agent_script_path.is_empty() {
-                crate::agent_runtime::find_agent_script()
-            } else {
-                Some(cfg.agent_script_path.clone())
-            };
-            let model = {
-                let (_, _, m) = crate::llm::resolve_llm_endpoint(&cfg);
-                m
-            };
-            if let (Some(n), Some(s)) = (node, script) {
-                spawn(async move {
-                    if let Err(e) = rt.start(&n, &s, Some(&model)).await {
-                        tracing::error!("[AGENT] Failed to start: {e}");
-                    }
-                });
-            } else {
-                tracing::warn!("[AGENT] agent_enabled=true but Node.js or agent script not found");
-            }
+            // We no longer spawn Node.js! All execution paths route through `agent_runtime.query_native()`.
+            // Just leaving this scope so existing config bindings remain clean.
+            tracing::info!("[AGENT] Native Rust Agent Runtime initialized.");
         }
 
         // Proactive engine: consume events → update suggestions signal

@@ -18,6 +18,7 @@ serde_json = { workspace = true }
 reqwest = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
+futures-util = { workspace = true }
 anyhow = { workspace = true }
 chrono = { workspace = true }
 

@@ -132,7 +132,7 @@ pub async fn run_deepgram_stream(
     // Task: send audio data to Deepgram
     let send_task = tokio::spawn(async move {
         let mut chunk_count: u64 = 0;
-        let mut total_bytes: u64 = 0;
+        let total_bytes: u64 = 0;
         tracing::info!("[TRANSCRIPTION] Audio send task started, waiting for audio chunks...");
         loop {
             match audio_rx.recv().await {
