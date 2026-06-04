@@ -64,6 +64,11 @@ Future<String> getAuthHeader() async {
     final refreshedToken = await AuthService.instance.getIdToken();
     if (refreshedToken != null) {
       SharedPreferencesUtil().authToken = refreshedToken;
+    } else if (!isExpirationDateValid) {
+      // Refresh failed AND token is known expired — clear the stale cached
+      // token so we don't keep retrying with an invalid bearer. This lets
+      // the AuthTokenUnavailableException path below trigger sign-out.
+      SharedPreferencesUtil().authToken = '';
     }
     hasAuthToken = SharedPreferencesUtil().authToken.isNotEmpty;
   }
