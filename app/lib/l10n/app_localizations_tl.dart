@@ -1465,7 +1465,7 @@ class AppLocalizationsTl extends AppLocalizations {
   String get payYourSttProvider => 'Gamitin ang omi nang libre. Direkta lang sa iyong STT provider ang babayaran mo.';
 
   @override
-  String get freeMinutesMonth => '1,200 libreng minuto/buwan kasama. Unlimited sa ';
+  String get freeMinutesMonth => '600 libreng minuto/buwan kasama. Unlimited sa ';
 
   @override
   String get omiUnlimited => 'Omi Unlimited';
@@ -4739,7 +4739,7 @@ class AppLocalizationsTl extends AppLocalizations {
   String get noSpecificDataAccessConfigured => 'Walang specific data access na na-configure.';
 
   @override
-  String get basicPlanDescription => '1,200 premium mins + unlimited on-device';
+  String get basicPlanDescription => '600 premium mins + unlimited on-device';
 
   @override
   String get minutes => 'minutes';
@@ -6041,7 +6041,7 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get premiumMinutesInfo =>
-      '1,200 premium na minuto/buwan. Ang On-Device tab ay nag-aalok ng unlimited na libreng transcription.';
+      '600 premium na minuto/buwan. Ang On-Device tab ay nag-aalok ng unlimited na libreng transcription.';
 
   @override
   String get viewUsage => 'Tingnan ang paggamit';
@@ -6124,7 +6124,7 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get premiumMinutesMonth =>
-      '1,200 premium na minuto/buwan. Ang On-Device tab ay nag-aalok ng unlimited na libreng transcription. ';
+      '600 premium na minuto/buwan. Ang On-Device tab ay nag-aalok ng unlimited na libreng transcription. ';
 
   @override
   String get audioProcessedLocally =>
@@ -9512,4 +9512,37 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get plusPlan => 'Plus Plan';
+
+  @override
+  String get promoCode => 'Promo code';
+
+  @override
+  String get enterPromoCode => 'Ilagay ang promo code';
+
+  @override
+  String get invalidPromotionCode => 'Hindi valid na promo code.';
+
+  @override
+  String get backgroundModeTitle => 'Background Mode';
+
+  @override
+  String get backgroundModeDescription => 'Panatilihing nagre-record ang iyong Omi kahit na ganap nang sarado ang app.';
+
+  @override
+  String get backgroundModeNote => 'Sa ngayon ay gumagana lang sa mga Omi device at patuloy na pinapabuti.';
+
+  @override
+  String get regenerateRecap => 'Buuin muli ang buod';
+
+  @override
+  String get recapRegeneratedSnackbar => 'Nabuo muli ang buod';
+
+  @override
+  String get recapRegenerateFailed => 'Hindi nagawang muling buuin ang buod. Subukang muli mamaya.';
+
+  @override
+  String get recapRegenerateCooldown => 'Mangyaring maghintay ng ilang segundo bago bumuo muli.';
+
+  @override
+  String get recapRegenerateNoConversations => 'Walang mga pag-uusap na ibubuod para sa araw na ito.';
 }

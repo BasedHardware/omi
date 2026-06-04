@@ -1451,7 +1451,7 @@ class AppLocalizationsHi extends AppLocalizations {
   String get payYourSttProvider => 'Omi का मुफ्त उपयोग करें। आप केवल सीधे STT प्रदाता को भुगतान करते हैं।';
 
   @override
-  String get freeMinutesMonth => '1,200 मुफ़्त मिनट/माह शामिल हैं।';
+  String get freeMinutesMonth => '600 मुफ़्त मिनट/माह शामिल हैं।';
 
   @override
   String get omiUnlimited => 'Omi असीमित';
@@ -4674,7 +4674,7 @@ class AppLocalizationsHi extends AppLocalizations {
   String get noSpecificDataAccessConfigured => 'कोई विशिष्ट डेटा एक्सेस कॉन्फ़िगर नहीं किया गया।';
 
   @override
-  String get basicPlanDescription => '1,200 प्रीमियम मिनट + डिवाइस पर असीमित';
+  String get basicPlanDescription => '600 प्रीमियम मिनट + डिवाइस पर असीमित';
 
   @override
   String get minutes => 'मिनट';
@@ -5966,7 +5966,7 @@ class AppLocalizationsHi extends AppLocalizations {
   String get cloudProvider => 'क्लाउड प्रदाता';
 
   @override
-  String get premiumMinutesInfo => '1,200 प्रीमियम मिनट/माह। ऑन-डिवाइस टैब असीमित मुफ्त ट्रांसक्रिप्शन प्रदान करता है।';
+  String get premiumMinutesInfo => '600 प्रीमियम मिनट/माह। ऑन-डिवाइस टैब असीमित मुफ्त ट्रांसक्रिप्शन प्रदान करता है।';
 
   @override
   String get viewUsage => 'उपयोग देखें';
@@ -6047,8 +6047,7 @@ class AppLocalizationsHi extends AppLocalizations {
   String get batteryDrainSignificantly => 'बैटरी की खपत काफी बढ़ जाएगी।';
 
   @override
-  String get premiumMinutesMonth =>
-      '1,200 प्रीमियम मिनट/माह। ऑन-डिवाइस टैब असीमित मुफ्त ट्रांसक्रिप्शन प्रदान करता है। ';
+  String get premiumMinutesMonth => '600 प्रीमियम मिनट/माह। ऑन-डिवाइस टैब असीमित मुफ्त ट्रांसक्रिप्शन प्रदान करता है। ';
 
   @override
   String get audioProcessedLocally =>
@@ -9406,4 +9405,37 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get plusPlan => 'Plus Plan';
+
+  @override
+  String get promoCode => 'प्रोमो कोड';
+
+  @override
+  String get enterPromoCode => 'प्रोमो कोड दर्ज करें';
+
+  @override
+  String get invalidPromotionCode => 'अमान्य प्रोमो कोड।';
+
+  @override
+  String get backgroundModeTitle => 'बैकग्राउंड मोड';
+
+  @override
+  String get backgroundModeDescription => 'ऐप पूरी तरह बंद होने पर भी अपने Omi की रिकॉर्डिंग जारी रखें।';
+
+  @override
+  String get backgroundModeNote => 'फ़िलहाल केवल Omi डिवाइस के साथ काम करता है और इसे लगातार बेहतर बनाया जा रहा है।';
+
+  @override
+  String get regenerateRecap => 'रीकैप पुनः बनाएं';
+
+  @override
+  String get recapRegeneratedSnackbar => 'रीकैप पुनः बनाया गया';
+
+  @override
+  String get recapRegenerateFailed => 'रीकैप पुनः नहीं बनाया जा सका। बाद में पुनः प्रयास करें।';
+
+  @override
+  String get recapRegenerateCooldown => 'पुनः बनाने से पहले कुछ सेकंड प्रतीक्षा करें।';
+
+  @override
+  String get recapRegenerateNoConversations => 'इस दिन के लिए सारांश बनाने के लिए कोई बातचीत नहीं है।';
 }

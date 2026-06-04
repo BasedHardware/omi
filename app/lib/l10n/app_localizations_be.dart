@@ -1460,7 +1460,7 @@ class AppLocalizationsBe extends AppLocalizations {
   String get payYourSttProvider => 'Свабодна выкарыстоўвайце omi. Вы плаціце толькі вашаму паставальніку STT прама.';
 
   @override
-  String get freeMinutesMonth => '1200 свабодных мінут/месяц уключана. Неабмежавана з ';
+  String get freeMinutesMonth => '600 свабодных мінут/месяц уключана. Неабмежавана з ';
 
   @override
   String get omiUnlimited => 'Omi Unlimited';
@@ -6008,7 +6008,7 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String get premiumMinutesInfo =>
-      '1200 премыум хвілін/месяц. Вкладка На прыборы прапанавае неабмежаваную бясплатную транскрыпцыю.';
+      '600 премыум хвілін/месяц. Вкладка На прыборы прапанавае неабмежаваную бясплатную транскрыпцыю.';
 
   @override
   String get viewUsage => 'Прагляд выкарыстання';
@@ -6090,7 +6090,7 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String get premiumMinutesMonth =>
-      '1200 премыум хвілін/месяц. Вкладка На прыборы прапанавае неабмежаваную бясплатную транскрыпцыю. ';
+      '600 премыум хвілін/месяц. Вкладка На прыборы прапанавае неабмежаваную бясплатную транскрыпцыю. ';
 
   @override
   String get audioProcessedLocally =>
@@ -9456,4 +9456,37 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String get plusPlan => 'Plus Plan';
+
+  @override
+  String get promoCode => 'Промакод';
+
+  @override
+  String get enterPromoCode => 'Увядзіце промакод';
+
+  @override
+  String get invalidPromotionCode => 'Няправільны промакод.';
+
+  @override
+  String get backgroundModeTitle => 'Фонавы рэжым';
+
+  @override
+  String get backgroundModeDescription => 'Працягвайце запіс Omi, нават калі праграма цалкам закрыта.';
+
+  @override
+  String get backgroundModeNote => 'Пакуль працуе толькі з прыладамі Omi і пастаянна ўдасканальваецца.';
+
+  @override
+  String get regenerateRecap => 'Згенераваць рэзюмэ паўторна';
+
+  @override
+  String get recapRegeneratedSnackbar => 'Рэзюмэ перагенеравана';
+
+  @override
+  String get recapRegenerateFailed => 'Не атрымалася перагенераваць рэзюмэ. Паспрабуйце пазней.';
+
+  @override
+  String get recapRegenerateCooldown => 'Калі ласка, пачакайце некалькі секунд перад паўторнай генерацыяй.';
+
+  @override
+  String get recapRegenerateNoConversations => 'Няма размоў для рэзюмавання гэтага дня.';
 }

@@ -536,6 +536,33 @@ actor MemoryStorage {
         log("MemoryStorage: Soft deleted memory with backendId \(backendId)")
     }
 
+    /// Soft-delete synced memories whose backendId is no longer present on the
+    /// backend. Used by the one-time cache reconcile to clear orphaned local rows
+    /// that diverged from the authoritative backend (e.g. after the server-side
+    /// category cleanup). Local-only unsynced memories (backendId NULL) are kept.
+    @discardableResult
+    func softDeleteSyncedOrphans(keepingBackendIds keep: Set<String>) async throws -> Int {
+        let db = try await ensureInitialized()
+
+        return try await db.write { database -> Int in
+            let candidates =
+                try MemoryRecord
+                .filter(Column("backendId") != nil)
+                .filter(Column("deleted") == false)
+                .fetchAll(database)
+
+            var removed = 0
+            for var record in candidates {
+                guard let backendId = record.backendId, !keep.contains(backendId) else { continue }
+                record.deleted = true
+                record.updatedAt = Date()
+                try record.update(database)
+                removed += 1
+            }
+            return removed
+        }
+    }
+
     /// Soft delete all memories
     func deleteAllMemories() async throws {
         let db = try await ensureInitialized()

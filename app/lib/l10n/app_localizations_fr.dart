@@ -9509,4 +9509,39 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get plusPlan => 'Plus Plan';
+
+  @override
+  String get promoCode => 'Code promo';
+
+  @override
+  String get enterPromoCode => 'Entrez le code promo';
+
+  @override
+  String get invalidPromotionCode => 'Code promo invalide.';
+
+  @override
+  String get backgroundModeTitle => 'Mode arrière-plan';
+
+  @override
+  String get backgroundModeDescription =>
+      'Gardez votre Omi en enregistrement même lorsque l\'application est entièrement fermée.';
+
+  @override
+  String get backgroundModeNote =>
+      'Fonctionne uniquement avec les appareils Omi pour l\'instant, et s\'améliore en continu.';
+
+  @override
+  String get regenerateRecap => 'Régénérer le récapitulatif';
+
+  @override
+  String get recapRegeneratedSnackbar => 'Récapitulatif régénéré';
+
+  @override
+  String get recapRegenerateFailed => 'Impossible de régénérer le récapitulatif. Réessayez plus tard.';
+
+  @override
+  String get recapRegenerateCooldown => 'Veuillez patienter quelques secondes avant de régénérer.';
+
+  @override
+  String get recapRegenerateNoConversations => 'Aucune conversation à résumer pour cette journée.';
 }

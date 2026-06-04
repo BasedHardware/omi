@@ -1437,7 +1437,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get payYourSttProvider => 'Omi를 자유롭게 사용하세요. STT 제공업체에 직접 비용을 지불하기만 하면 됩니다.';
 
   @override
-  String get freeMinutesMonth => '월 1,200분 무료 포함. ';
+  String get freeMinutesMonth => '월 600분 무료 포함. ';
 
   @override
   String get omiUnlimited => 'Omi Unlimited';
@@ -4616,7 +4616,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get noSpecificDataAccessConfigured => '특정 데이터 액세스가 구성되지 않았습니다.';
 
   @override
-  String get basicPlanDescription => '1,200 프리미엄 분 + 무제한 온디바이스';
+  String get basicPlanDescription => '600 프리미엄 분 + 무제한 온디바이스';
 
   @override
   String get minutes => '분';
@@ -5886,7 +5886,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get cloudProvider => '클라우드 제공자';
 
   @override
-  String get premiumMinutesInfo => '월 1,200분의 프리미엄 사용 시간. 온디바이스 탭에서 무제한 무료 음성 인식을 제공합니다.';
+  String get premiumMinutesInfo => '월 600분의 프리미엄 사용 시간. 온디바이스 탭에서 무제한 무료 음성 인식을 제공합니다.';
 
   @override
   String get viewUsage => '사용량 보기';
@@ -5964,7 +5964,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get batteryDrainSignificantly => '배터리 소모가 크게 증가합니다.';
 
   @override
-  String get premiumMinutesMonth => '월 1,200 프리미엄 분. 온디바이스 탭은 무제한 무료 전사를 제공합니다. ';
+  String get premiumMinutesMonth => '월 600 프리미엄 분. 온디바이스 탭은 무제한 무료 전사를 제공합니다. ';
 
   @override
   String get audioProcessedLocally => '오디오가 로컬에서 처리됩니다. 오프라인 작동, 더 프라이빗하지만 배터리 사용량이 더 많습니다.';
@@ -9278,4 +9278,37 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get plusPlan => 'Plus Plan';
+
+  @override
+  String get promoCode => '프로모 코드';
+
+  @override
+  String get enterPromoCode => '프로모 코드를 입력하세요';
+
+  @override
+  String get invalidPromotionCode => '유효하지 않은 프로모 코드입니다.';
+
+  @override
+  String get backgroundModeTitle => '백그라운드 모드';
+
+  @override
+  String get backgroundModeDescription => '앱을 완전히 닫아도 Omi 녹음을 계속 유지합니다.';
+
+  @override
+  String get backgroundModeNote => '현재는 Omi 기기에서만 작동하며 지속적으로 개선되고 있습니다.';
+
+  @override
+  String get regenerateRecap => '요약 재생성';
+
+  @override
+  String get recapRegeneratedSnackbar => '요약이 재생성되었습니다';
+
+  @override
+  String get recapRegenerateFailed => '요약을 재생성할 수 없습니다. 나중에 다시 시도하세요.';
+
+  @override
+  String get recapRegenerateCooldown => '다시 생성하기 전에 몇 초 기다려 주세요.';
+
+  @override
+  String get recapRegenerateNoConversations => '이 날짜에 요약할 대화가 없습니다.';
 }

@@ -9428,4 +9428,37 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get plusPlan => 'Plus Plan';
+
+  @override
+  String get promoCode => 'Promo kód';
+
+  @override
+  String get enterPromoCode => 'Zadejte promo kód';
+
+  @override
+  String get invalidPromotionCode => 'Neplatný promo kód.';
+
+  @override
+  String get backgroundModeTitle => 'Režim na pozadí';
+
+  @override
+  String get backgroundModeDescription => 'Udržujte nahrávání Omi, i když je aplikace úplně zavřená.';
+
+  @override
+  String get backgroundModeNote => 'Zatím funguje pouze se zařízeními Omi a průběžně se vylepšuje.';
+
+  @override
+  String get regenerateRecap => 'Znovu vygenerovat shrnutí';
+
+  @override
+  String get recapRegeneratedSnackbar => 'Shrnutí bylo znovu vygenerováno';
+
+  @override
+  String get recapRegenerateFailed => 'Shrnutí se nepodařilo znovu vygenerovat. Zkuste to později.';
+
+  @override
+  String get recapRegenerateCooldown => 'Před opětovným generováním prosím počkejte několik sekund.';
+
+  @override
+  String get recapRegenerateNoConversations => 'Pro tento den nejsou žádné konverzace k shrnutí.';
 }

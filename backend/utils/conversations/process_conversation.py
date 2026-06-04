@@ -80,6 +80,10 @@ from utils.retrieval.rag import retrieve_rag_conversation_context
 from utils.webhooks import conversation_created_webhook
 from utils.notifications import send_action_item_data_message
 from utils.task_sync import auto_sync_action_items_batch
+from utils.conversations.calendar_linking import (
+    get_overlapping_calendar_event,
+    write_conversation_link_to_calendar_event,
+)
 from utils.other.storage import precache_conversation_audio
 
 logger = logging.getLogger(__name__)
@@ -741,6 +745,23 @@ def process_conversation(
 
     structured, discarded = _get_structured(uid, language_code, conversation, force_process, people=people)
     conversation = _get_conversation_obj(uid, structured, conversation)
+
+    # Check for overlapping calendar events and auto-write conversation link to the event description
+    if not discarded and conversation.started_at and conversation.finished_at and conversation.calendar_event is None:
+        try:
+            calendar_event = asyncio.run(
+                get_overlapping_calendar_event(
+                    uid,
+                    conversation.started_at,
+                    conversation.finished_at,
+                )
+            )
+            if calendar_event:
+                conversation.calendar_event = calendar_event
+                asyncio.run(write_conversation_link_to_calendar_event(uid, calendar_event.event_id, conversation.id))
+        except Exception as e:
+            logger.error(f"Error during calendar event linking: {e}")
+            pass
 
     # AI-based folder assignment
     assigned_folder_id = None

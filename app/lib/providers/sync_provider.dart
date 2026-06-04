@@ -27,6 +27,10 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
   bool _isLoadingWals = false;
   bool get isLoadingWals => _isLoadingWals;
 
+  // Memoization cache for displaySortedWals — see getter below.
+  List<Wal>? _sortedCache;
+  int _sortedCacheStamp = 0;
+
   // Storage filter
   WalStorage? _storageFilter;
   WalStorage? get storageFilter => _storageFilter;
@@ -43,20 +47,77 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
   // `uploaded` is not yet backed up (the server job is still processing), so
   // it counts as pending — keeps it visible in the legacy SyncPage and in
   // pending counts until the reconciler confirms it `synced`.
-  List<Wal> get pendingWals => _allWals
-      .where((w) =>
-          w.status == WalStatus.miss ||
-          w.status == WalStatus.uploaded ||
-          w.status == WalStatus.corrupted ||
-          w.isSyncing)
-      .toList();
+  bool _isPending(Wal w) =>
+      w.status == WalStatus.miss || w.status == WalStatus.uploaded || w.status == WalStatus.corrupted || w.isSyncing;
+
+  // Memoized status-filtered partitions of _allWals. Returning a stable
+  // List<Wal> reference between rebuilds is load-bearing — downstream the
+  // legacy SyncPage's OptimizedWalsListWidget stamps its grouped-flatten
+  // cache off the input list's identity, so without stable refs here the
+  // widget-level cache misses every rebuild and recomputes the sort.
+  //
+  // Invalidation: stamp = identityHashCode(_allWals) ^ _allWals.length.
+  // This works because every wal-status mutation path in the codebase
+  // (sdcard, flash, storage, local) flips state in place, then notifies
+  // the provider, which calls refreshWals() to reassign _allWals from
+  // the wal service (see refreshWals at the bottom of this class). The
+  // new list has a new identityHashCode → stamp changes → cache invalidates.
+  // In-place flips that don't go through refreshWals would not invalidate
+  // — but there are none today; if any are added, route them through
+  // refreshWals or bump a version counter here.
+  //
+  // Both partitions are computed in a single pass to avoid two iterations
+  // over a potentially 50k-item list. Both caches share the same stamp.
+  List<Wal>? _pendingWalsCache;
+  List<Wal>? _syncedWalsCache;
+  int _filteredWalsCacheStamp = 0;
+
+  void _ensureFilteredCaches() {
+    final stamp = identityHashCode(_allWals) ^ _allWals.length;
+    if (_pendingWalsCache != null && _filteredWalsCacheStamp == stamp) return;
+    final pending = <Wal>[];
+    final synced = <Wal>[];
+    for (final w in _allWals) {
+      if (w.status == WalStatus.synced) {
+        synced.add(w);
+      } else if (_isPending(w)) {
+        pending.add(w);
+      }
+    }
+    _pendingWalsCache = pending;
+    _syncedWalsCache = synced;
+    _filteredWalsCacheStamp = stamp;
+  }
+
+  List<Wal> get pendingWals {
+    _ensureFilteredCaches();
+    return _pendingWalsCache!;
+  }
+
+  List<Wal> get syncedWals {
+    _ensureFilteredCaches();
+    return _syncedWalsCache!;
+  }
 
   List<Wal> get uploadedWals => _allWals.where((w) => w.status == WalStatus.uploaded).toList();
 
   List<Wal> get pendingDeletableWals =>
       _allWals.where((w) => !w.isSyncing && (w.status == WalStatus.miss || w.status == WalStatus.corrupted)).toList();
 
-  List<Wal> get syncedWals => _allWals.where((w) => w.status == WalStatus.synced).toList();
+  // Count-only accessors for status-chip badges. Read length from the
+  // shared cached partitions so the chips don't trigger an extra iteration
+  // when the cache is already warm. Names disambiguate from the existing
+  // `syncedWalsCount` / `syncingWalsCount` getters further down which key
+  // off `syncDisplayState` (different semantic, auto-sync page surface).
+  int get pendingStatusCount {
+    _ensureFilteredCaches();
+    return _pendingWalsCache!.length;
+  }
+
+  int get syncedStatusCount {
+    _ensureFilteredCaches();
+    return _syncedWalsCache!.length;
+  }
 
   /// True while a fair-use (429) cooldown is active — uploads are paused.
   bool get isRateLimited => SyncRateLimiter.instance.isLimited;
@@ -78,9 +139,20 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
   /// All recordings, newest first. The redesigned list shows synced and
   /// unsynced recordings together so backed-up work is never hidden behind a
   /// tab the user has to discover.
+  ///
+  /// Memoized: re-sorts only when the underlying list reference or length
+  /// changes. Sort key is `timerStart`, which is immutable per Wal, so
+  /// in-place status mutations don't invalidate the order. With tens of
+  /// thousands of wals and frequent `notifyListeners()` during active sync
+  /// this avoids 5–15ms of redundant sort work per rebuild.
   List<Wal> get displaySortedWals {
+    final stamp = identityHashCode(_allWals) ^ _allWals.length;
+    final cached = _sortedCache;
+    if (cached != null && _sortedCacheStamp == stamp) return cached;
     final list = List<Wal>.from(_allWals);
     list.sort((a, b) => b.timerStart.compareTo(a.timerStart));
+    _sortedCache = list;
+    _sortedCacheStamp = stamp;
     return list;
   }
 

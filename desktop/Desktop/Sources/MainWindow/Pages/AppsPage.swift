@@ -128,9 +128,11 @@ struct AppsPage: View {
             // Content
             if appProvider.isLoading {
                 loadingShimmerView
-            } else if appProvider.apps.isEmpty && appProvider.popularApps.isEmpty {
-                emptyView
             } else {
+                // Always render the page (Imports/Exports are local connectors
+                // and must show even when the marketplace API returned no apps).
+                // The marketplace sections inside the else branch are each
+                // self-gated and skip when empty.
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 24) {
                         if !searchText.isEmpty || hasActiveFilters {
@@ -295,6 +297,12 @@ struct AppsPage: View {
                 }
             )
             .frame(width: 520, height: 620)
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .desktopAutomationOpenExportRequested)) { note in
+            if let raw = note.userInfo?["destination"] as? String,
+                let dest = MemoryExportDestination(rawValue: raw) {
+                selectedExportDestination = dest
+            }
         }
         .onAppear {
             // If apps are already loaded, notify sidebar to clear loading indicator
@@ -578,6 +586,17 @@ struct ImportConnector: Identifiable {
             isConnected: false
         ),
         ImportConnector(
+            id: "x",
+            title: "X (Twitter)",
+            subtitle: "Your posts & bookmarks",
+            description: "Connect your X account so Omi learns from your tweets and bookmarks.",
+            brand: .x,
+            statusText: "Not connected",
+            metricText: nil,
+            actionTitle: "Connect",
+            isConnected: false
+        ),
+        ImportConnector(
             id: "chatgpt",
             title: "ChatGPT",
             subtitle: "Memory import",
@@ -853,6 +872,8 @@ final class ImportConnectorStatusStore: ObservableObject {
             return count == 1 ? "file indexed" : "files indexed"
         case "apple-notes":
             return count == 1 ? "note" : "notes"
+        case "x":
+            return count == 1 ? "post" : "posts"
         default:
             return count == 1 ? "item" : "items"
         }
@@ -874,11 +895,13 @@ struct ImportsSection: View {
                 .scaledFont(size: 18, weight: .semibold)
                 .foregroundColor(OmiColors.textPrimary)
 
-            LazyVGrid(columns: [
-                GridItem(.adaptive(minimum: 220), spacing: 16)
-            ], spacing: 16) {
-                ForEach(connectors) { connector in
-                    ImportConnectorCard(
+            VStack(spacing: 0) {
+                ForEach(Array(connectors.enumerated()), id: \.element.id) { index, connector in
+                    if index > 0 {
+                        Divider()
+                            .background(OmiColors.backgroundTertiary)
+                    }
+                    ImportConnectorRow(
                         connector: connector,
                         snapshot: statusStore.snapshot(for: connector)
                     ) {
@@ -886,7 +909,52 @@ struct ImportsSection: View {
                     }
                 }
             }
+            .background(OmiColors.backgroundPrimary)
+            .cornerRadius(12)
+            .overlay(
+                RoundedRectangle(cornerRadius: 12)
+                    .stroke(OmiColors.backgroundTertiary, lineWidth: 1)
+            )
         }
+    }
+}
+
+struct ImportConnectorRow: View {
+    let connector: ImportConnector
+    let snapshot: ImportConnectorStatusStore.Snapshot
+    let action: () -> Void
+
+    @State private var isHovering = false
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 12) {
+                ConnectorBrandIcon(brand: connector.brand, size: 34, cornerRadius: 9)
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(connector.title)
+                        .scaledFont(size: 14, weight: .medium)
+                        .foregroundColor(OmiColors.textPrimary)
+                        .lineLimit(1)
+
+                    Text(connector.description)
+                        .scaledFont(size: 12)
+                        .foregroundColor(OmiColors.textTertiary)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                }
+
+                Spacer(minLength: 12)
+
+                ImportConnectorActionButton(title: snapshot.actionTitle, isConnected: snapshot.isConnected)
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 11)
+            .background(isHovering ? OmiColors.backgroundSecondary : Color.clear)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .onHover { isHovering = $0 }
     }
 }
 
@@ -1066,6 +1134,94 @@ private final class ImportConnectorSheetModel: ObservableObject {
             errorMessage = error.localizedDescription
             return nil
         }
+    }
+
+    /// Connect X via backend-mediated OAuth: open the authorize URL in the
+    /// browser, then poll the backend until the account is linked. The backend
+    /// kicks off the first ingest, so once connected we surface the synced count.
+    func connectX() async -> SyncResult? {
+        beginRun(
+            title: "Connecting to X",
+            detail: "Opening x.com to authorize access to your posts and bookmarks."
+        )
+        defer { finishRun() }
+
+        // Deep link back to THIS build (dev vs prod URL schemes differ).
+        let scheme = Self.appURLScheme()
+        let redirect = "\(scheme)://x/callback"
+
+        do {
+            let resp = try await APIClient.shared.xOAuthURL(successRedirectURL: redirect)
+            guard resp.success, let authUrl = resp.authUrl, let url = URL(string: authUrl) else {
+                errorMessage = resp.error == "x_oauth_not_configured"
+                    ? "X connector isn't configured on the server yet."
+                    : "Couldn't start the X connection."
+                return nil
+            }
+            NSWorkspace.shared.open(url)
+            updateProgress(
+                title: "Waiting for X authorization",
+                detail: "Approve access in your browser. This window updates automatically."
+            )
+
+            // Phase 1: wait until the account is linked (callback completed).
+            var linked: XConnectionStatus?
+            for _ in 0..<60 {
+                try? await Task.sleep(for: .seconds(2))
+                if let status = try? await APIClient.shared.xConnectionStatus(), status.connected {
+                    linked = status
+                    break
+                }
+            }
+            guard let linked else {
+                errorMessage = "Didn't hear back from X. If you approved access, try again."
+                return nil
+            }
+
+            let handle = linked.handle ?? "you"
+
+            // Phase 2: the OAuth callback kicks off the first import in the
+            // background. Poll while it runs, surfacing live counts, until the
+            // backend marks syncing complete (or counts stop growing).
+            var posts = linked.postCount ?? 0
+            var memories = linked.memoryCount ?? 0
+            for _ in 0..<90 {
+                let status = try? await APIClient.shared.xConnectionStatus()
+                posts = status?.postCount ?? posts
+                memories = status?.memoryCount ?? memories
+                updateProgress(
+                    title: "Importing your X data",
+                    detail: "Saved \(posts.formatted()) posts · \(memories.formatted()) memories so far…"
+                )
+                // Done once the backend clears the syncing flag and we have data.
+                if status?.syncing == false && posts > 0 { break }
+                try? await Task.sleep(for: .seconds(2))
+            }
+
+            if posts > 0 {
+                let memClause = memories > 0
+                    ? " — \(memories.formatted()) memories added. View them in Memories."
+                    : ". Extracted memories appear in Memories."
+                statusMessage = "Imported \(posts.formatted()) posts from @\(handle)\(memClause)"
+            } else {
+                statusMessage = "Connected to X as @\(handle). Import is still running; check back shortly."
+            }
+            return SyncResult(sourceCount: posts, memoryCount: memories > 0 ? memories : nil, newItems: posts)
+        } catch {
+            errorMessage = error.localizedDescription
+            return nil
+        }
+    }
+
+    static func appURLScheme() -> String {
+        if let urlTypes = Bundle.main.infoDictionary?["CFBundleURLTypes"] as? [[String: Any]],
+            let first = urlTypes.first,
+            let schemes = first["CFBundleURLSchemes"] as? [String],
+            let scheme = schemes.first
+        {
+            return scheme
+        }
+        return "omi-computer"
     }
 
     func importCalendar() async -> SyncResult? {
@@ -1322,6 +1478,16 @@ struct ImportConnectorSheet: View {
                                 lastDeltaCount: result.newItems
                             )
                         }
+                    case "x":
+                        if let result = await model.connectX() {
+                            statusStore.markSynced(
+                                connectorID: connector.id,
+                                sourceCount: result.sourceCount,
+                                memoryCount: result.memoryCount,
+                                lastDeltaCount: result.newItems,
+                                availabilityText: "Posts & bookmarks"
+                            )
+                        }
                     case "apple-notes":
                         if let result = await model.importAppleNotes() {
                             statusStore.markSynced(
@@ -1423,6 +1589,8 @@ struct ImportConnectorSheet: View {
             return model.isRunning ? "Importing…" : "Connect Gmail"
         case "apple-notes":
             return model.isRunning ? "Importing…" : "Connect Apple Notes"
+        case "x":
+            return model.isRunning ? "Connecting…" : "Connect X"
         case "local-files":
             return model.isRunning ? "Reindexing…" : "Reindex Local Files"
         default:

@@ -5,6 +5,7 @@ import android.app.*
 import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothGatt
+import android.bluetooth.BluetoothGattService
 import android.content.*
 import android.os.Handler
 import android.os.IBinder
@@ -47,7 +48,6 @@ class OmiBleForegroundService : Service() {
         private const val MAX_DISCONNECT_HISTORY = 20
         private const val RSSI_TREND_WINDOW_MS = 15_000L
         private const val RSSI_TREND_FADING_DROP_DB = 10
-
         /** Classify the RSSI trajectory in the window before [nowMs]. See BleDisconnectEvent.rssiTrend
          *  for the semantics of each label. */
         private fun classifyRssiTrend(samples: List<Pair<Long, Int>>, nowMs: Long): String {
@@ -71,6 +71,13 @@ class OmiBleForegroundService : Service() {
         private var lastCompanionRequestTimestamp: Long = 0
 
         fun isActive(): Boolean = instance != null
+
+        /** User opt-in (default off). When off, the service does not persist past app close —
+         *  it stops on task removal and is not sticky, restoring the pre-#7483 behavior. Read from
+         *  the Flutter pref written by SharedPreferencesUtil (`flutter.` prefix). */
+        fun isBackgroundModeEnabled(context: Context): Boolean =
+            context.getSharedPreferences("FlutterSharedPreferences", Context.MODE_PRIVATE)
+                .getBoolean("flutter.backgroundModeEnabled", false)
 
         fun startService(context: Context, deviceAddress: String, requiresBond: Boolean = false, caller: String = "unknown") {
             if (caller.startsWith("CompanionSvc")) {
@@ -138,6 +145,7 @@ class OmiBleForegroundService : Service() {
     private var isBluetoothEnabled = true
     private val syncLock = Any()
     private val bleManager get() = OmiBleManager.instance
+    private val backgroundAudioStreamer by lazy { OmiBackgroundAudioStreamer(applicationContext) }
 
     // ── Connection listener — receives GATT events from OmiBleManager ──
 
@@ -237,9 +245,54 @@ class OmiBleForegroundService : Service() {
 
     private fun fireDeviceReady(address: String, services: List<BleService>) {
         val addr = address.uppercase()
-        bleManager.mainHandler.post {
-            bleManager.flutterApi?.onDeviceReady(addr, services) {}
+        ensureBackgroundAudioSubscription(addr, services)
+        if (OmiBleManager.isFlutterAlive) {
+            bleManager.mainHandler.post {
+                bleManager.flutterApi?.onDeviceReady(addr, services) {}
+            }
         }
+    }
+
+    private fun ensureBackgroundAudioSubscription(address: String, services: List<BleService>) {
+        if (OmiBleManager.isFlutterAlive) return
+        val target = backgroundAudioStreamer.configuredAudioTargetFor(address) ?: return
+        val hasTarget = services.any { service ->
+            service.uuid.equals(target.first, ignoreCase = true) &&
+                service.characteristicUuids.any { it.equals(target.second, ignoreCase = true) }
+        }
+        if (!hasTarget) return
+
+        Log.i(TAG, "Ensuring BLE audio subscription for background transcription on $address")
+        bleManager.subscribeCharacteristic(address, target.first, target.second)
+    }
+
+    private fun mapGattServices(services: List<BluetoothGattService>): List<BleService> =
+        services.map { service ->
+            BleService(
+                uuid = service.uuid.toString().lowercase(),
+                characteristicUuids = service.characteristics?.map { it.uuid.toString().lowercase() } ?: emptyList()
+            )
+        }
+
+    private fun notifyReadyForConnectedGatt(address: String): Boolean {
+        val addr = address.uppercase()
+        val gatt = bleManager.connectedGatts[addr] ?: return false
+        val services = gatt.services
+
+        if (!services.isNullOrEmpty()) {
+            Log.i(TAG, "notifyReadyForConnectedGatt: re-emitting ready for $addr (${services.size} services)")
+            fireDeviceReady(addr, mapGattServices(services))
+            return true
+        }
+
+        Log.i(TAG, "notifyReadyForConnectedGatt: rediscovering services for already-connected $addr")
+        bleManager.enqueueCommand {
+            if (!gatt.discoverServices()) {
+                Log.e(TAG, "notifyReadyForConnectedGatt: discoverServices returned false for $addr")
+                bleManager.completeCommand()
+            }
+        }
+        return true
     }
 
     // ── Managed device lifecycle ──
@@ -260,7 +313,16 @@ class OmiBleForegroundService : Service() {
         }
 
         val existing = managedDevices[addr]
-        if (existing != null && bleManager.isPeripheralConnected(addr)) return
+        if (existing != null && bleManager.isPeripheralConnected(addr)) {
+            if (requiresBond && !existing.requiresBond) existing.requiresBond = true
+            existing.retryCount = 0
+            existing.currentGattHash = bleManager.connectedGatts[addr]?.hashCode()
+            existing.hasEverConnected = true
+            existing.currentAttemptEstablished = true
+            updateNotification("Connected to Omi")
+            notifyReadyForConnectedGatt(addr)
+            return
+        }
 
         if (existing != null) {
             if (requiresBond && !existing.requiresBond) existing.requiresBond = true
@@ -530,30 +592,62 @@ class OmiBleForegroundService : Service() {
             RECEIVER_NOT_EXPORTED
         )
         bleManager.connectionListener = connectionListener
+        bleManager.characteristicValueListener = object : OmiBleManager.CharacteristicValueListener {
+            override fun onCharacteristicValue(
+                address: String,
+                serviceUuid: String,
+                characteristicUuid: String,
+                value: ByteArray
+            ) {
+                backgroundAudioStreamer.handleCharacteristic(address, serviceUuid, characteristicUuid, value)
+            }
+        }
         Log.d(TAG, "Service created")
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         startForeground(NOTIFICATION_ID, buildNotification("Connecting to Omi..."))
 
+        val backgroundMode = isBackgroundModeEnabled(this)
         val address = intent?.getStringExtra("device_address")
+        val requiresBond = intent?.getBooleanExtra("requires_bond", false) ?: false
 
         if (address != null) {
-            val requiresBond = intent.getBooleanExtra("requires_bond", false)
             manageDevice(address, requiresBond)
+        } else if (backgroundMode) {
+            // Restart after process death (sticky): restore the device we were managing.
+            val saved = getSharedPreferences(PREFS_NAME, MODE_PRIVATE).getString(PREFS_KEY, null)
+            val parts = saved?.split("|")
+            if (parts?.size == 2) {
+                Log.i(TAG, "onStartCommand: restoring saved device ${parts[0]}")
+                manageDevice(parts[0], parts[1].toBoolean())
+            } else {
+                Log.i(TAG, "onStartCommand: no device address or saved device, stopping")
+                stopSelf()
+            }
         } else {
-            // No device specified — Omi streams via WebSocket which needs the app.
-            // No point keeping BLE alive without it.
-            Log.i(TAG, "onStartCommand: no device address, stopping")
+            Log.i(TAG, "onStartCommand: background mode off and no device address, stopping")
             stopSelf()
         }
 
-        return START_NOT_STICKY
+        // Background mode off ⇒ non-sticky, so the OS won't resurrect the service after the app is closed.
+        return if (backgroundMode) START_STICKY else START_NOT_STICKY
+    }
+
+    override fun onTaskRemoved(rootIntent: Intent?) {
+        if (isBackgroundModeEnabled(this)) {
+            Log.i(TAG, "Task removed; keeping BLE foreground service alive (background mode on)")
+        } else {
+            Log.i(TAG, "Task removed; stopping BLE foreground service (background mode off)")
+            stopSelf()
+        }
+        super.onTaskRemoved(rootIntent)
     }
 
     override fun onDestroy() {
         Log.d(TAG, "Service destroying")
         isDestroying = true
+        backgroundAudioStreamer.stop("service_destroyed")
 
         for ((addr, managed) in managedDevices) {
             managed.pendingReconnect?.let { handler.removeCallbacks(it) }
@@ -568,6 +662,7 @@ class OmiBleForegroundService : Service() {
         managedDevices.clear()
 
         bleManager.connectionListener = null
+        bleManager.characteristicValueListener = null
         instance = null
 
         try { unregisterReceiver(bluetoothReceiver) } catch (_: Exception) {}

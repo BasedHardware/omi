@@ -235,6 +235,8 @@ struct SettingsContentView: View {
   @State private var fallbackPlanCatalog: [SubscriptionPlanOption] = []
   @State private var activeCheckoutPriceId: String?
   @State private var selectedPlanIdForCheckout: String?
+  @State private var upgradePromotionCode: String = ""
+  @State private var isPromoCodeExpanded: Bool = false
   @State private var isOpeningCustomerPortal: Bool = false
   @State private var activeBillingWebFlow: BillingWebFlow?
   @State private var pendingSubscriptionPriceId: String?
@@ -268,6 +270,7 @@ struct SettingsContentView: View {
 
   // AI Chat settings
   @AppStorage("chatBridgeMode") private var chatBridgeMode: String = "piMono"
+  @AppStorage("realtimeOmniProvider") private var realtimeOmniProvider: String = RealtimeOmniProvider.auto.rawValue
   @AppStorage("askModeEnabled") private var askModeEnabled = false
   @AppStorage("claudeMdEnabled") private var claudeMdEnabled = true
   @AppStorage("projectClaudeMdEnabled") private var projectClaudeMdEnabled = true
@@ -379,6 +382,11 @@ struct SettingsContentView: View {
   @AppStorage("dev_deepgram_api_key") private var devDeepgramKey: String = ""
   @State private var byokKeyStatuses: [BYOKProvider: BYOKValidator.Status] = [:]
   @State private var byokActivationError: String?
+
+  // MCP key creation state (Settings → Advanced → MCP)
+  @State private var mcpCreatedKey: String?
+  @State private var mcpIsCreatingKey: Bool = false
+  @State private var mcpError: String?
 
   init(
     appState: AppState,
@@ -1143,7 +1151,7 @@ struct SettingsContentView: View {
               .foregroundColor(OmiColors.textTertiary)
 
             Text(
-              "Single language mode supports 42 languages including Ukrainian, Russian, and more."
+              "Single language mode supports \(AssistantSettings.supportedLanguages.count) languages including Chinese, Ukrainian, Russian, and more."
             )
             .scaledFont(size: 11)
             .foregroundColor(OmiColors.textTertiary)
@@ -1781,7 +1789,21 @@ struct SettingsContentView: View {
           }
         }
       }
-    } else if let trial = appState.trialMetadata, trial.trialExpired {
+    } else if let trial = appState.trialMetadata,
+      trial.trialExpired,
+      // Suppress the trial-expired card entirely for grandfathered Neo users.
+      // The backend already returns trial_expired=false for them, but
+      // trialMetadata is polled on a 60s timer; defensive guard so a stale
+      // cached value during/after a backend deploy doesn't briefly stack the
+      // "Trial Ended" card on top of the grandfather notice. The grandfather
+      // notice is rendered separately via neoDesktopGrandfatherCard.
+      userSubscription?.desktopGrandfatherUntil == nil
+    {
+      // Neo subscribers who aren't grandfathered land on this card too because
+      // Neo doesn't grant desktop access (per #7496). The generic "Trial Ended"
+      // copy is confusing for them — they're on a paid plan, just not one that
+      // includes Mac. Detect that case and switch to plan-specific copy.
+      let isNeoWithoutDesktop = userSubscription?.subscription.plan == .unlimited
       settingsCard(settingId: "planusage.trial-expired") {
         VStack(alignment: .leading, spacing: 14) {
           HStack(spacing: 16) {
@@ -1790,13 +1812,75 @@ struct SettingsContentView: View {
               .foregroundColor(OmiColors.warning)
 
             VStack(alignment: .leading, spacing: 4) {
-              Text("Trial Ended")
+              Text(isNeoWithoutDesktop ? "Desktop access not included" : "Trial Ended")
                 .scaledFont(size: 16, weight: .semibold)
                 .foregroundColor(OmiColors.textPrimary)
 
-              Text("Upgrade to keep unlimited access")
-                .scaledFont(size: 13)
-                .foregroundColor(OmiColors.textSecondary)
+              Text(
+                isNeoWithoutDesktop
+                  ? "Neo is available on mobile and web. To use Omi on Mac, upgrade to Operator or Architect."
+                  : "Upgrade to keep unlimited access"
+              )
+              .scaledFont(size: 13)
+              .foregroundColor(OmiColors.textSecondary)
+            }
+
+            Spacer()
+          }
+
+          Divider().overlay(OmiColors.backgroundQuaternary)
+
+          Button(action: {
+            selectedPlanIdForCheckout = "operator"
+          }) {
+            Text("View Plans")
+              .scaledFont(size: 13, weight: .semibold)
+              .padding(.horizontal, 16)
+              .padding(.vertical, 8)
+          }
+          .buttonStyle(.borderedProminent)
+          .tint(OmiColors.purplePrimary)
+        }
+      }
+    }
+  }
+
+  // MARK: - Neo desktop grandfather notice
+  //
+  // Surfaced for Neo subscribers whose current billing period started before
+  // the #7496 policy change. They keep desktop access until their period
+  // ends — this card tells them when, so the change doesn't surprise them
+  // at the next renewal. Backend computes the date as
+  // `desktop_grandfather_until` on /v1/users/me/subscription (#7513).
+  @ViewBuilder
+  private var neoDesktopGrandfatherCard: some View {
+    if let until = userSubscription?.desktopGrandfatherUntil,
+      userSubscription?.subscription.plan == .unlimited
+    {
+      let endsOn = Date(timeIntervalSince1970: TimeInterval(until))
+      let formatter: DateFormatter = {
+        let f = DateFormatter()
+        f.dateStyle = .long
+        f.timeStyle = .none
+        return f
+      }()
+      settingsCard(settingId: "planusage.neo-grandfather") {
+        VStack(alignment: .leading, spacing: 14) {
+          HStack(spacing: 16) {
+            Image(systemName: "info.circle.fill")
+              .scaledFont(size: 28)
+              .foregroundColor(OmiColors.purplePrimary)
+
+            VStack(alignment: .leading, spacing: 4) {
+              Text("Neo desktop access ends \(formatter.string(from: endsOn))")
+                .scaledFont(size: 16, weight: .semibold)
+                .foregroundColor(OmiColors.textPrimary)
+
+              Text(
+                "Your Neo plan continues to include desktop access through this billing period. After it ends, upgrade to Operator or Architect to keep using Omi on Mac."
+              )
+              .scaledFont(size: 13)
+              .foregroundColor(OmiColors.textSecondary)
             }
 
             Spacer()
@@ -1866,6 +1950,7 @@ struct SettingsContentView: View {
   private var planUsageSection: some View {
     VStack(spacing: 20) {
       trialCountdownCard
+      neoDesktopGrandfatherCard
 
       settingsCard(settingId: "planusage.current") {
         VStack(alignment: .leading, spacing: 14) {
@@ -3235,8 +3320,148 @@ struct SettingsContentView: View {
       advancedCategoryHeader(title: "Developer API Keys", icon: "key")
       developerKeysSubsection
 
+      advancedCategoryHeader(title: "MCP", icon: "antenna.radiowaves.left.and.right")
+      mcpSubsection
+
       advancedCategoryHeader(title: "Dev Tools", icon: "hammer")
       devToolsSubsection
+    }
+  }
+
+  // MARK: - MCP Subsection
+
+  private var mcpSubsection: some View {
+    VStack(spacing: 20) {
+      // Server URL — channel-aware (beta hits dev backend, stable hits prod).
+      settingsCard(settingId: "advanced.mcp.serverurl") {
+        VStack(alignment: .leading, spacing: 8) {
+          HStack(spacing: 10) {
+            Image(systemName: "link")
+              .scaledFont(size: 14)
+              .foregroundColor(OmiColors.textSecondary)
+            Text("Server URL")
+              .scaledFont(size: 14, weight: .semibold)
+              .foregroundColor(OmiColors.textPrimary)
+            Spacer()
+            Button {
+              NSPasteboard.general.clearContents()
+              NSPasteboard.general.setString(MemoryExportDestination.mcpServerURL, forType: .string)
+            } label: {
+              HStack(spacing: 6) {
+                Image(systemName: "doc.on.doc")
+                Text("Copy")
+              }
+              .scaledFont(size: 12, weight: .medium)
+              .foregroundColor(OmiColors.textPrimary)
+              .padding(.horizontal, 10)
+              .padding(.vertical, 6)
+              .background(
+                RoundedRectangle(cornerRadius: 8).fill(OmiColors.backgroundQuaternary.opacity(0.6)))
+            }
+            .buttonStyle(.plain)
+          }
+          Text(MemoryExportDestination.mcpServerURL)
+            .scaledFont(size: 12, weight: .medium)
+            .foregroundColor(OmiColors.textSecondary)
+            .textSelection(.enabled)
+          Text(
+            AppBuild.currentUpdateChannel == "beta"
+              ? "Beta channel — points at the dev backend."
+              : "Stable channel — points at production."
+          )
+          .scaledFont(size: 11)
+          .foregroundColor(OmiColors.textTertiary)
+        }
+      }
+
+      // Create an MCP key — shown once after creation; user copies + pastes into Claude/ChatGPT/etc.
+      settingsCard(settingId: "advanced.mcp.createkey") {
+        VStack(alignment: .leading, spacing: 12) {
+          HStack(spacing: 10) {
+            Image(systemName: "key.fill")
+              .scaledFont(size: 14)
+              .foregroundColor(OmiColors.textSecondary)
+            VStack(alignment: .leading, spacing: 2) {
+              Text("MCP API Key")
+                .scaledFont(size: 14, weight: .semibold)
+                .foregroundColor(OmiColors.textPrimary)
+              Text("Use this key as the OAuth Client Secret in Claude/ChatGPT/your agent.")
+                .scaledFont(size: 11)
+                .foregroundColor(OmiColors.textTertiary)
+            }
+            Spacer()
+            Button {
+              Task { await createMCPKeyFromSettings() }
+            } label: {
+              Text(mcpIsCreatingKey ? "Creating…" : "Create Key")
+                .scaledFont(size: 12, weight: .medium)
+                .foregroundColor(.black)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
+                .background(RoundedRectangle(cornerRadius: 8).fill(Color.white))
+            }
+            .buttonStyle(.plain)
+            .disabled(mcpIsCreatingKey)
+          }
+
+          if let key = mcpCreatedKey {
+            VStack(alignment: .leading, spacing: 8) {
+              Text("Copy this now — it's only shown once.")
+                .scaledFont(size: 11)
+                .foregroundColor(OmiColors.warning)
+              HStack(spacing: 8) {
+                Text(key)
+                  .scaledFont(size: 12, weight: .medium)
+                  .foregroundColor(OmiColors.textPrimary)
+                  .textSelection(.enabled)
+                  .lineLimit(1)
+                  .truncationMode(.middle)
+                  .frame(maxWidth: .infinity, alignment: .leading)
+                Button {
+                  NSPasteboard.general.clearContents()
+                  NSPasteboard.general.setString(key, forType: .string)
+                } label: {
+                  Image(systemName: "doc.on.doc")
+                    .scaledFont(size: 12)
+                    .foregroundColor(OmiColors.textPrimary)
+                    .padding(6)
+                    .background(
+                      RoundedRectangle(cornerRadius: 6)
+                        .fill(OmiColors.backgroundQuaternary.opacity(0.6)))
+                }
+                .buttonStyle(.plain)
+              }
+              .padding(10)
+              .background(
+                RoundedRectangle(cornerRadius: 8)
+                  .fill(OmiColors.backgroundSecondary.opacity(0.6)))
+            }
+          }
+
+          if let err = mcpError {
+            HStack(spacing: 8) {
+              Image(systemName: "exclamationmark.triangle.fill")
+                .foregroundColor(OmiColors.warning)
+              Text(err)
+                .scaledFont(size: 11)
+                .foregroundColor(OmiColors.warning)
+            }
+          }
+        }
+      }
+    }
+  }
+
+  @MainActor
+  private func createMCPKeyFromSettings() async {
+    mcpError = nil
+    mcpIsCreatingKey = true
+    defer { mcpIsCreatingKey = false }
+    do {
+      let key = try await APIClient.shared.createMCPKey(name: "Desktop")
+      mcpCreatedKey = key
+    } catch {
+      mcpError = "Couldn't create key: \(error.localizedDescription)"
     }
   }
 
@@ -3276,6 +3501,45 @@ struct SettingsContentView: View {
 
   private var aiSetupSubsection: some View {
     VStack(spacing: 20) {
+      settingsCard(settingId: "aichat.realtimevoice") {
+        VStack(alignment: .leading, spacing: 12) {
+          HStack {
+            Image(systemName: "waveform")
+              .scaledFont(size: 16)
+              .foregroundColor(OmiColors.textTertiary)
+
+            Text("Voice Model")
+              .scaledFont(size: 15, weight: .semibold)
+              .foregroundColor(OmiColors.textPrimary)
+
+            Spacer()
+
+            Picker("", selection: $realtimeOmniProvider) {
+              ForEach(RealtimeOmniProvider.allCases, id: \.rawValue) { p in
+                Text(p.displayName).tag(p.rawValue)
+              }
+            }
+            .pickerStyle(.menu)
+            .frame(width: 200)
+            .onChange(of: realtimeOmniProvider) { _, newValue in
+              if newValue == RealtimeOmniProvider.auto.rawValue {
+                AutoModelSelector.shared.refreshIfStale()
+              }
+            }
+          }
+
+          if let p = RealtimeOmniProvider(rawValue: realtimeOmniProvider), p == .auto {
+            Text("\(p.subtitle) · currently \(RealtimeOmniSettings.shared.effectiveProvider.displayName)")
+              .scaledFont(size: 12)
+              .foregroundColor(OmiColors.textTertiary)
+          } else if let p = RealtimeOmniProvider(rawValue: realtimeOmniProvider) {
+            Text(p.subtitle)
+              .scaledFont(size: 12)
+              .foregroundColor(OmiColors.textTertiary)
+          }
+        }
+      }
+
       settingsCard(settingId: "aichat.provider") {
         VStack(alignment: .leading, spacing: 12) {
           HStack {
@@ -6661,6 +6925,48 @@ struct SettingsContentView: View {
           .overlay(OmiColors.backgroundQuaternary)
 
         VStack(alignment: .leading, spacing: 10) {
+          VStack(alignment: .leading, spacing: 6) {
+            Button(action: {
+              withAnimation(.easeInOut(duration: 0.2)) {
+                isPromoCodeExpanded.toggle()
+              }
+            }) {
+              HStack(spacing: 6) {
+                Image(systemName: "tag")
+                  .scaledFont(size: 12)
+                Text("Promo code")
+                  .scaledFont(size: 12)
+                Image(systemName: isPromoCodeExpanded ? "chevron.up" : "chevron.down")
+                  .scaledFont(size: 10)
+              }
+              .foregroundColor(OmiColors.textTertiary)
+            }
+            .buttonStyle(.plain)
+
+            if isPromoCodeExpanded {
+              VStack(alignment: .leading, spacing: 6) {
+                TextField("Enter promo code", text: $upgradePromotionCode)
+                  .textFieldStyle(.roundedBorder)
+                  .scaledFont(size: 13)
+                  .disabled(activeCheckoutPriceId != nil)
+                  .onChange(of: upgradePromotionCode) { _ in
+                    subscriptionError = nil
+                  }
+
+                if let error = subscriptionError {
+                  HStack(spacing: 4) {
+                    Image(systemName: "exclamationmark.circle")
+                      .scaledFont(size: 11)
+                    Text(error)
+                      .scaledFont(size: 11)
+                  }
+                  .foregroundColor(OmiColors.warning)
+                }
+              }
+              .transition(.opacity.combined(with: .move(edge: .top)))
+            }
+          }
+
           Text("Choose billing")
             .scaledFont(size: 12, weight: .semibold)
             .foregroundColor(OmiColors.textTertiary)
@@ -7007,14 +7313,16 @@ struct SettingsContentView: View {
           AssistantSettings.shared.transcriptionVocabulary = transcription.vocabulary
 
           // Sync backend language to local if different (backend is source of truth for language)
-          if !language.language.isEmpty && language.language != transcriptionLanguage {
-            transcriptionLanguage = language.language
-            AssistantSettings.shared.transcriptionLanguage = language.language
+          let normalizedLanguage = AssistantSettings.normalizeTranscriptionLanguageCode(language.language)
+          if !language.language.isEmpty && normalizedLanguage != transcriptionLanguage {
+            transcriptionLanguage = normalizedLanguage
+            AssistantSettings.shared.transcriptionLanguage = normalizedLanguage
           }
 
           // Sync single language mode from backend (inverted to auto-detect)
           // Only update if we got a valid response and it differs
-          let backendAutoDetect = !transcription.singleLanguageMode
+          let backendAutoDetect =
+            !transcription.singleLanguageMode && AssistantSettings.supportsAutoDetect(normalizedLanguage)
           if backendAutoDetect != transcriptionAutoDetect {
             transcriptionAutoDetect = backendAutoDetect
             AssistantSettings.shared.transcriptionAutoDetect = backendAutoDetect
@@ -7112,6 +7420,9 @@ struct SettingsContentView: View {
     pendingSubscriptionPriceId = priceId
     subscriptionError = nil
 
+    let promotionCode = upgradePromotionCode.trimmingCharacters(in: .whitespacesAndNewlines)
+    let promoToSend: String? = promotionCode.isEmpty ? nil : promotionCode
+
     // If user already has an active paid subscription (not canceled), use upgrade endpoint
     // to schedule the plan change at end of billing period (no double-charging)
     if hasPaidSubscription,
@@ -7120,12 +7431,20 @@ struct SettingsContentView: View {
     {
       Task {
         do {
-          _ = try await APIClient.shared.upgradeSubscription(priceId: priceId)
+          _ = try await APIClient.shared.upgradeSubscription(
+            priceId: priceId, promotionCode: promoToSend)
           await MainActor.run {
             activeCheckoutPriceId = nil
             pendingSubscriptionPriceId = nil
             subscriptionError = nil
+            self.upgradePromotionCode = ""
             loadSubscriptionInfo()
+          }
+        } catch let apiError as APIError {
+          await MainActor.run {
+            activeCheckoutPriceId = nil
+            pendingSubscriptionPriceId = nil
+            subscriptionError = apiError.detail ?? "Failed to schedule plan change."
           }
         } catch {
           logError("Failed to schedule plan change", error: error)
@@ -7141,7 +7460,8 @@ struct SettingsContentView: View {
 
     Task {
       do {
-        let response = try await APIClient.shared.createCheckoutSession(priceId: priceId)
+        let response = try await APIClient.shared.createCheckoutSession(
+          priceId: priceId, promotionCode: promoToSend)
         let apiBaseURL = await APIClient.shared.baseURL
         await MainActor.run {
           activeCheckoutPriceId = nil
@@ -7171,6 +7491,14 @@ struct SettingsContentView: View {
           await MainActor.run {
             subscriptionError = response.message ?? "Could not start checkout."
           }
+        }
+      } catch let apiError as APIError {
+        logError("Failed to create checkout session", error: apiError)
+        await MainActor.run {
+          activeCheckoutPriceId = nil
+          pendingSubscriptionPriceId = nil
+          pendingCheckoutSessionId = nil
+          subscriptionError = apiError.detail ?? "Failed to open checkout."
         }
       } catch {
         logError("Failed to create checkout session", error: error)

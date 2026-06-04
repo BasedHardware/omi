@@ -2880,7 +2880,7 @@ abstract class AppLocalizations {
   /// No description provided for @freeMinutesMonth.
   ///
   /// In en, this message translates to:
-  /// **'1,200 free minutes/month included. Unlimited with '**
+  /// **'600 free minutes/month included. Unlimited with '**
   String get freeMinutesMonth;
 
   /// No description provided for @omiUnlimited.
@@ -8934,7 +8934,7 @@ abstract class AppLocalizations {
   /// Description of basic plan features in usage page
   ///
   /// In en, this message translates to:
-  /// **'1,200 premium mins + unlimited on-device'**
+  /// **'600 premium mins + unlimited on-device'**
   String get basicPlanDescription;
 
   /// Unit label for minutes
@@ -11352,7 +11352,7 @@ abstract class AppLocalizations {
   /// Info about premium minutes
   ///
   /// In en, this message translates to:
-  /// **'1,200 premium minutes/month. On-Device tab offers unlimited free transcription.'**
+  /// **'600 premium minutes/month. On-Device tab offers unlimited free transcription.'**
   String get premiumMinutesInfo;
 
   /// Link to view usage
@@ -11496,7 +11496,7 @@ abstract class AppLocalizations {
   /// Description of premium minutes quota
   ///
   /// In en, this message translates to:
-  /// **'1,200 premium minutes/month. On-Device tab offers unlimited free transcription. '**
+  /// **'600 premium minutes/month. On-Device tab offers unlimited free transcription. '**
   String get premiumMinutesMonth;
 
   /// Description of on-device processing
@@ -17570,6 +17570,72 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Plus Plan'**
   String get plusPlan;
+
+  /// No description provided for @promoCode.
+  ///
+  /// In en, this message translates to:
+  /// **'Promo code'**
+  String get promoCode;
+
+  /// No description provided for @enterPromoCode.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter promo code'**
+  String get enterPromoCode;
+
+  /// No description provided for @invalidPromotionCode.
+  ///
+  /// In en, this message translates to:
+  /// **'Invalid promotion code.'**
+  String get invalidPromotionCode;
+
+  /// Title for the background connection mode toggle in device settings (Android only)
+  ///
+  /// In en, this message translates to:
+  /// **'Background Mode'**
+  String get backgroundModeTitle;
+
+  /// Subtitle explaining the background mode toggle
+  ///
+  /// In en, this message translates to:
+  /// **'Keep your Omi recording even when the app is fully closed.'**
+  String get backgroundModeDescription;
+
+  /// Caveat note shown in the Background Mode sheet
+  ///
+  /// In en, this message translates to:
+  /// **'Works with Omi devices only for now, and is being improved continuously.'**
+  String get backgroundModeNote;
+
+  /// No description provided for @regenerateRecap.
+  ///
+  /// In en, this message translates to:
+  /// **'Regenerate recap'**
+  String get regenerateRecap;
+
+  /// No description provided for @recapRegeneratedSnackbar.
+  ///
+  /// In en, this message translates to:
+  /// **'Recap regenerated'**
+  String get recapRegeneratedSnackbar;
+
+  /// No description provided for @recapRegenerateFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t regenerate the recap. Try again later.'**
+  String get recapRegenerateFailed;
+
+  /// No description provided for @recapRegenerateCooldown.
+  ///
+  /// In en, this message translates to:
+  /// **'Please wait a few seconds before regenerating again.'**
+  String get recapRegenerateCooldown;
+
+  /// No description provided for @recapRegenerateNoConversations.
+  ///
+  /// In en, this message translates to:
+  /// **'No conversations to summarize for this day.'**
+  String get recapRegenerateNoConversations;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

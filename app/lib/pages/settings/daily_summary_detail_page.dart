@@ -8,7 +8,8 @@ import 'package:latlong2/latlong.dart';
 import 'package:share_plus/share_plus.dart';
 
 import 'package:omi/backend/http/api/conversations.dart' as conversations_api;
-import 'package:omi/backend/http/api/users.dart' show deleteDailySummary, getDailySummary, setDailySummaryVisibility;
+import 'package:omi/backend/http/api/users.dart'
+    show deleteDailySummary, getDailySummary, regenerateDailySummary, setDailySummaryVisibility;
 import 'package:omi/backend/schema/daily_summary.dart';
 import 'package:omi/pages/conversation_detail/maps_util.dart';
 import 'package:omi/pages/conversation_detail/page.dart';
@@ -31,6 +32,7 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
   bool _isLoading = true;
   bool _isSharing = false;
   bool _isDeleting = false;
+  bool _isRegenerating = false;
   late AnimationController _animationController;
   late Animation<double> _fadeAnimation;
 
@@ -178,9 +180,7 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
     }
   }
 
-  /// Bottom sheet menu opened by the SliverAppBar's 3-dot icon. Today only
-  /// "delete" lives here — keeping the sheet pattern so future actions
-  /// (share, regenerate, etc.) plug in without restructuring.
+  /// Bottom sheet menu opened by the SliverAppBar's 3-dot icon.
   Future<void> _showActionsSheet() async {
     if (_summary == null) return;
 
@@ -189,6 +189,13 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
         context: context,
         builder: (sheetCtx) => CupertinoActionSheet(
           actions: [
+            CupertinoActionSheetAction(
+              onPressed: () {
+                Navigator.pop(sheetCtx);
+                _regenerateRecap();
+              },
+              child: Text(context.l10n.regenerateRecap),
+            ),
             CupertinoActionSheetAction(
               isDestructiveAction: true,
               onPressed: () {
@@ -216,6 +223,17 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
           mainAxisSize: MainAxisSize.min,
           children: [
             ListTile(
+              leading: const Icon(Icons.refresh, color: Colors.white),
+              title: Text(
+                context.l10n.regenerateRecap,
+                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+              ),
+              onTap: () {
+                Navigator.pop(sheetCtx);
+                _regenerateRecap();
+              },
+            ),
+            ListTile(
               leading: const Icon(Icons.delete_outline, color: Color(0xFFFF6B6B)),
               title: Text(
                 context.l10n.deleteRecap,
@@ -234,6 +252,53 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
         ),
       ),
     );
+  }
+
+  /// Re-runs LLM generation server-side and overwrites the same doc in place.
+  /// Shows a blocking spinner because the call can take several seconds and
+  /// the user is staring at stale content until it returns.
+  Future<void> _regenerateRecap() async {
+    if (_isRegenerating || _summary == null) return;
+    setState(() => _isRegenerating = true);
+
+    // Capture the navigator BEFORE the await so we can dismiss the spinner
+    // unconditionally — even if the widget unmounts mid-flight (route
+    // popped from outside, OS kills the activity), the navigator is still
+    // alive and pop() works without needing a valid widget context.
+    final rootNavigator = Navigator.of(context, rootNavigator: true);
+
+    // Fullscreen blocking spinner — barrierDismissible=false so the user
+    // can't half-cancel and get into a torn state.
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const Center(child: CircularProgressIndicator(color: Colors.white)),
+    );
+
+    final result = await regenerateDailySummary(widget.summaryId);
+
+    // Dismiss spinner first, then bail if widget is gone. Order matters:
+    // mounted check before pop would orphan the dialog on dispose.
+    if (rootNavigator.canPop()) {
+      rootNavigator.pop();
+    }
+    if (!mounted) return;
+
+    if (result.success && result.summary != null) {
+      setState(() {
+        _summary = result.summary;
+        _isRegenerating = false;
+      });
+      AppSnackbar.showSnackbar(context.l10n.recapRegeneratedSnackbar);
+    } else {
+      setState(() => _isRegenerating = false);
+      final message = result.statusCode == 429
+          ? (result.errorDetail ?? context.l10n.recapRegenerateCooldown)
+          : result.statusCode == 400
+              ? (result.errorDetail ?? context.l10n.recapRegenerateNoConversations)
+              : context.l10n.recapRegenerateFailed;
+      AppSnackbar.showSnackbarError(message);
+    }
   }
 
   Future<void> _confirmDelete() async {

@@ -3043,5 +3043,16 @@
     "syncProcessingBackgroundHint": "Esto continúa en segundo plano — puedes salir de esta pantalla.",
     "syncCardRateLimited": "Se alcanzó el límite de uso — la sincronización se reanudará automáticamente",
     "syncCardBackendBusy": "Los servidores de Omi están saturados — tus grabaciones se sincronizarán cuando haya capacidad disponible",
-    "unableToDetermineFirmwareVersion": "No se puede determinar la versión actual del firmware"
+    "unableToDetermineFirmwareVersion": "No se puede determinar la versión actual del firmware",
+    "promoCode": "Código promocional",
+    "enterPromoCode": "Ingresa el código promocional",
+    "invalidPromotionCode": "Código promocional no válido.",
+    "backgroundModeTitle": "Modo en segundo plano",
+    "backgroundModeDescription": "Mantén tu Omi grabando incluso cuando la app está completamente cerrada.",
+    "backgroundModeNote": "Por ahora solo funciona con dispositivos Omi y se mejora continuamente.",
+    "regenerateRecap": "Regenerar resumen",
+    "recapRegeneratedSnackbar": "Resumen regenerado",
+    "recapRegenerateFailed": "No se pudo regenerar el resumen. Inténtalo de nuevo más tarde.",
+    "recapRegenerateCooldown": "Espera unos segundos antes de regenerar de nuevo.",
+    "recapRegenerateNoConversations": "No hay conversaciones para resumir en este día."
 }

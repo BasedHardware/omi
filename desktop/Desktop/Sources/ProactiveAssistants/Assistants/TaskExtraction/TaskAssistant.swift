@@ -253,6 +253,11 @@ actor TaskAssistant: ProactiveAssistant {
     }
 
     func analyze(frame: CapturedFrame) async -> AssistantResult? {
+        // Defense-in-depth: skip Rewind privacy-excluded apps (password managers, keychains)
+        if RewindSettings.shared.isAppExcluded(frame.appName) {
+            return nil
+        }
+
         // Only analyze apps on the whitelist
         let allowed = await MainActor.run { TaskAssistantSettings.shared.isAppAllowed(frame.appName) }
         if !allowed {
@@ -559,6 +564,14 @@ actor TaskAssistant: ProactiveAssistant {
 
         guard let frame = frame else {
             log("Task: Context switch but no frame available")
+            return
+        }
+
+        // Defense-in-depth: skip Rewind privacy-excluded apps
+        if RewindSettings.shared.isAppExcluded(frame.appName) {
+            log("Task: Context switch from Rewind-excluded app '\(frame.appName)', skipping")
+            fallbackTimerTask?.cancel()
+            fallbackTimerTask = nil
             return
         }
 

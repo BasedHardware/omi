@@ -2,100 +2,50 @@ import AppKit
 import Combine
 import SwiftUI
 
-/// All available tags for filtering memories
+/// Memory categories for filtering. Mirrors the mobile app: filtering is driven
+/// purely by the backend `category` field (no tag-derived pseudo-categories), so
+/// desktop and mobile stay in lockstep. Labels match mobile exactly.
 enum MemoryTag: String, CaseIterable, Identifiable {
-  // Focus tags - shown first
-  case focus
-  case focused
-  case distracted
-  // Tips tag (from advice system)
-  case tips
-  // Memory categories
+  case manual
   case system
   case interesting
-  case manual
-  // Tip subcategories (from advice system)
-  case productivity
-  case health
-  case communication
-  case learning
-  case other
+  case workflow
 
   var id: String { rawValue }
 
   var displayName: String {
     switch self {
-    case .focus: return "Focus"
-    case .focused: return "Focused"
-    case .distracted: return "Distracted"
-    case .tips: return "Tips"
-    case .system: return "System"
-    case .interesting: return "Interesting"
     case .manual: return "Manual"
-    case .productivity: return "Productivity"
-    case .health: return "Health"
-    case .communication: return "Communication"
-    case .learning: return "Learning"
-    case .other: return "Other"
+    case .system: return "About You"
+    case .interesting: return "Insights"
+    case .workflow: return "Workflow"
     }
   }
 
   var icon: String {
     switch self {
-    case .focus: return "eye"
-    case .focused: return "eye.fill"
-    case .distracted: return "eye.slash.fill"
-    case .tips: return "lightbulb.fill"
-    case .system: return "gearshape"
-    case .interesting: return "sparkles"
     case .manual: return "square.and.pencil"
-    case .productivity: return "chart.line.uptrend.xyaxis"
-    case .health: return "heart.fill"
-    case .communication: return "bubble.left.and.bubble.right.fill"
-    case .learning: return "book.fill"
-    case .other: return "ellipsis.circle"
+    case .system: return "person"
+    case .interesting: return "lightbulb"
+    case .workflow: return "arrow.triangle.branch"
     }
   }
 
-  var color: Color {
+  var color: Color { OmiColors.textSecondary }
+
+  /// Backend category this filter maps to.
+  var category: MemoryCategory {
     switch self {
-    case .focus: return OmiColors.textSecondary
-    case .focused: return OmiColors.textSecondary
-    case .distracted: return OmiColors.textSecondary
-    case .tips: return OmiColors.textSecondary
-    case .system: return OmiColors.textSecondary
-    case .interesting: return OmiColors.textSecondary
-    case .manual: return OmiColors.textSecondary
-    case .productivity: return OmiColors.textSecondary
-    case .health: return OmiColors.textSecondary
-    case .communication: return OmiColors.textSecondary
-    case .learning: return OmiColors.textSecondary
-    case .other: return OmiColors.textTertiary
+    case .manual: return .manual
+    case .system: return .system
+    case .interesting: return .interesting
+    case .workflow: return .workflow
     }
   }
 
-  /// Check if a memory matches this tag
+  /// Check if a memory matches this category (by backend category, like mobile).
   func matches(_ memory: ServerMemory) -> Bool {
-    switch self {
-    case .focus:
-      return memory.tags.contains("focus")
-    case .focused:
-      return memory.tags.contains("focused")
-    case .distracted:
-      return memory.tags.contains("distracted")
-    case .tips:
-      return memory.tags.contains("tips")
-    case .system:
-      // System memories that aren't tips or focus events
-      return memory.category == .system && !memory.tags.contains("tips")
-        && !memory.tags.contains("focus")
-    case .interesting:
-      return memory.category == .interesting && !memory.tags.contains("tips")
-    case .manual:
-      return memory.category == .manual && !memory.tags.contains("tips")
-    case .productivity, .health, .communication, .learning, .other:
-      return memory.tags.contains(rawValue)
-    }
+    memory.category == category
   }
 }
 
@@ -297,36 +247,10 @@ class MemoriesViewModel: ObservableObject {
       let totalCount = try await MemoryStorage.shared.getLocalMemoriesCount()
       totalMemoriesCount = totalCount
 
-      // Focus tags
-      counts[.focus] = try await MemoryStorage.shared.getLocalMemoriesCount(tags: ["focus"])
-      counts[.focused] = try await MemoryStorage.shared.getLocalMemoriesCount(tags: ["focused"])
-      counts[.distracted] = try await MemoryStorage.shared.getLocalMemoriesCount(tags: [
-        "distracted"
-      ])
-
-      // Tips tag
-      counts[.tips] = try await MemoryStorage.shared.getLocalMemoriesCount(tags: ["tips"])
-
-      // Category counts - need to exclude tips and focus from system
-      let systemTotal = try await MemoryStorage.shared.getLocalMemoriesCount(category: "system")
-      let tipsCount = counts[.tips] ?? 0
-      let focusCount = counts[.focus] ?? 0
-      counts[.system] = max(0, systemTotal - tipsCount - focusCount)
-
-      counts[.interesting] = try await MemoryStorage.shared.getLocalMemoriesCount(
-        category: "interesting")
-      counts[.manual] = try await MemoryStorage.shared.getLocalMemoriesCount(category: "manual")
-
-      // Tip subcategories
-      counts[.productivity] = try await MemoryStorage.shared.getLocalMemoriesCount(tags: [
-        "productivity"
-      ])
-      counts[.health] = try await MemoryStorage.shared.getLocalMemoriesCount(tags: ["health"])
-      counts[.communication] = try await MemoryStorage.shared.getLocalMemoriesCount(tags: [
-        "communication"
-      ])
-      counts[.learning] = try await MemoryStorage.shared.getLocalMemoriesCount(tags: ["learning"])
-      counts[.other] = try await MemoryStorage.shared.getLocalMemoriesCount(tags: ["other"])
+      // One count per backend category (mirrors mobile).
+      for tag in MemoryTag.allCases {
+        counts[tag] = try await MemoryStorage.shared.getLocalMemoriesCount(category: tag.rawValue)
+      }
 
       tagCounts = counts
       log("MemoriesViewModel: Loaded tag counts from database (total: \(totalCount))")
@@ -351,48 +275,16 @@ class MemoriesViewModel: ObservableObject {
 
     isLoadingFiltered = true
 
-    // Build filter parameters from selected tags
-    // Tags use OR logic - match ANY selected tag
-    var matchAnyTag: [String] = []
-    var matchAnyCategory: [String] = []
-
-    for tag in selectedTags {
-      switch tag {
-      // Simple tag matches
-      case .focus:
-        matchAnyTag.append("focus")
-      case .focused:
-        matchAnyTag.append("focused")
-      case .distracted:
-        matchAnyTag.append("distracted")
-      case .tips:
-        matchAnyTag.append("tips")
-      case .productivity:
-        matchAnyTag.append("productivity")
-      case .health:
-        matchAnyTag.append("health")
-      case .communication:
-        matchAnyTag.append("communication")
-      case .learning:
-        matchAnyTag.append("learning")
-      case .other:
-        matchAnyTag.append("other")
-      // Category matches (handled separately due to exclusions)
-      case .system, .interesting, .manual:
-        matchAnyCategory.append(tag.rawValue)
-      }
-    }
+    // Filter purely by backend category (OR logic across selected categories).
+    let matchAnyCategory: [String] = selectedTags.map { $0.rawValue }
 
     do {
-      // Query SQLite with OR logic for tags
       let results = try await MemoryStorage.shared.getFilteredMemories(
         limit: 10000,
-        matchAnyTag: matchAnyTag.isEmpty ? nil : matchAnyTag,
+        matchAnyTag: nil,
         matchAnyCategory: matchAnyCategory.isEmpty ? nil : matchAnyCategory
       )
 
-      // Apply complex tag matching (for system/interesting/manual exclusions)
-      // These tags have special matching logic that can't be easily expressed in SQL
       let filteredResults = results.filter { memory in
         selectedTags.contains { tag in tag.matches(memory) }
       }
@@ -571,8 +463,60 @@ class MemoriesViewModel: ObservableObject {
 
     isLoading = false
 
-    // Kick off one-time full sync in background (populates SQLite with all memories)
-    Task { await performFullSyncIfNeeded() }
+    // Kick off one-time full sync, then a one-time cache reconcile, in background.
+    Task {
+      await performFullSyncIfNeeded()
+      await reconcileCacheIfNeeded()
+    }
+  }
+
+  /// One-time cache reconcile. The local SQLite cache can diverge from the
+  /// backend (the source of truth): stale categories after the server-side
+  /// category cleanup, plus "orphan" rows whose backendId no longer exists on
+  /// the backend. This re-pulls every backend memory (fixing categories via the
+  /// normal upsert) and soft-deletes synced local rows the backend no longer
+  /// has. Local-only unsynced memories are preserved. Runs once per user.
+  private func reconcileCacheIfNeeded() async {
+    let userId = UserDefaults.standard.string(forKey: "auth_userId") ?? "unknown"
+    let reconcileKey = "memoriesCacheReconcile_v1_\(userId)"
+
+    guard !UserDefaults.standard.bool(forKey: reconcileKey) else { return }
+
+    log("MemoriesViewModel: Starting one-time cache reconcile for user \(userId)")
+
+    var offset = 0
+    let batchSize = 500
+    var backendIds = Set<String>()
+
+    do {
+      while true {
+        let batch = try await APIClient.shared.getMemories(limit: batchSize, offset: offset)
+        if batch.isEmpty { break }
+
+        try await MemoryStorage.shared.syncServerMemories(batch)
+        for memory in batch { backendIds.insert(memory.id) }
+        offset += batch.count
+
+        if batch.count < batchSize { break }
+      }
+
+      // Guard against pruning on a partial/failed pull: only reconcile when the
+      // backend actually returned memories. An empty result here would otherwise
+      // wrongly delete the entire local cache.
+      guard !backendIds.isEmpty else {
+        log("MemoriesViewModel: Cache reconcile skipped pruning (no backend memories returned)")
+        return
+      }
+
+      let removed = try await MemoryStorage.shared.softDeleteSyncedOrphans(keepingBackendIds: backendIds)
+      UserDefaults.standard.set(true, forKey: reconcileKey)
+      log("MemoriesViewModel: Cache reconcile removed \(removed) orphaned local memories")
+
+      await loadTagCountsFromDatabase()
+      await loadMemories()
+    } catch {
+      logError("MemoriesViewModel: Cache reconcile failed (will retry next launch)", error: error)
+    }
   }
 
   /// One-time background sync that fetches ALL memories from the API and stores in SQLite.
@@ -1545,19 +1489,11 @@ struct MemoriesPage: View {
   }
 
   private func categoryIcon(_ category: MemoryCategory) -> String {
-    switch category {
-    case .system: return "gearshape"
-    case .interesting: return "sparkles"
-    case .manual: return "square.and.pencil"
-    }
+    category.icon
   }
 
   private func categoryColor(_ category: MemoryCategory) -> Color {
-    switch category {
-    case .system: return OmiColors.textSecondary
-    case .interesting: return OmiColors.textSecondary
-    case .manual: return OmiColors.textSecondary
-    }
+    OmiColors.textSecondary
   }
 
   private func tagColorFor(_ tag: String) -> Color {

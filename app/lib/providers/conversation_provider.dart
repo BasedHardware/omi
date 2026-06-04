@@ -550,37 +550,40 @@ class ConversationProvider extends ChangeNotifier {
   }
 
   void _groupSearchConvosByDateWithoutNotify() {
-    groupedConversations = {};
-    for (var conversation in _filterOutConvos(searchedConversations)) {
-      var effectiveDate = conversation.startedAt ?? conversation.createdAt;
-      var date = DateTime(effectiveDate.year, effectiveDate.month, effectiveDate.day);
-      if (!groupedConversations.containsKey(date)) {
-        groupedConversations[date] = [];
-      }
-      groupedConversations[date]?.add(conversation);
-    }
-
-    // Sort
-    for (final date in groupedConversations.keys) {
-      groupedConversations[date]?.sort((a, b) => (b.startedAt ?? b.createdAt).compareTo(a.startedAt ?? a.createdAt));
-    }
+    groupedConversations = _buildGroupedByDate(_filterOutConvos(searchedConversations));
   }
 
   void _groupConversationsByDateWithoutNotify() {
-    groupedConversations = {};
-    for (var conversation in _filterOutConvos(conversations)) {
-      var effectiveDate = conversation.startedAt ?? conversation.createdAt;
-      var date = DateTime(effectiveDate.year, effectiveDate.month, effectiveDate.day);
-      if (!groupedConversations.containsKey(date)) {
-        groupedConversations[date] = [];
-      }
-      groupedConversations[date]?.add(conversation);
+    groupedConversations = _buildGroupedByDate(_filterOutConvos(conversations));
+  }
+
+  /// Buckets conversations into day-keyed groups, sorted newest-first both
+  /// at the day-group level and within each day.
+  ///
+  /// Why the explicit re-ordering at the end matters: the backend returns
+  /// conversations ordered by `created_at` DESC, but we bucket by
+  /// `started_at` (falling back to `created_at`). For re-processed or
+  /// merged conversations these two timestamps diverge — a conversation
+  /// merged today with the original recording date of, say, May 9 lands
+  /// at the top of the API response (newest `created_at`) and creates
+  /// the `May 9` day-bucket first. Dart's default Map iterates in
+  /// insertion order, so without this sort step the UI would render
+  /// `May 9` above today/yesterday. Rebuilding the map in descending
+  /// key order fixes the day-group display order.
+  Map<DateTime, List<ServerConversation>> _buildGroupedByDate(Iterable<ServerConversation> source) {
+    final grouped = <DateTime, List<ServerConversation>>{};
+    for (final conversation in source) {
+      final effectiveDate = conversation.startedAt ?? conversation.createdAt;
+      final date = DateTime(effectiveDate.year, effectiveDate.month, effectiveDate.day);
+      grouped.putIfAbsent(date, () => []).add(conversation);
     }
 
-    // Sort
-    for (final date in groupedConversations.keys) {
-      groupedConversations[date]?.sort((a, b) => (b.startedAt ?? b.createdAt).compareTo(a.startedAt ?? a.createdAt));
+    for (final list in grouped.values) {
+      list.sort((a, b) => (b.startedAt ?? b.createdAt).compareTo(a.startedAt ?? a.createdAt));
     }
+
+    final sortedKeys = grouped.keys.toList()..sort((a, b) => b.compareTo(a));
+    return {for (final k in sortedKeys) k: grouped[k]!};
   }
 
   void groupConversationsByDate() {

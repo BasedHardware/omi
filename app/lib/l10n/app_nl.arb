@@ -3042,5 +3042,16 @@
     "syncProcessingBackgroundHint": "Dit gaat op de achtergrond door — je kunt dit scherm verlaten.",
     "syncCardRateLimited": "Gebruikslimiet bereikt — synchronisatie wordt automatisch hervat",
     "syncCardBackendBusy": "De servers van Omi zijn druk — je opnames worden gesynchroniseerd zodra er weer capaciteit is",
-    "unableToDetermineFirmwareVersion": "Kan de huidige firmwareversie niet bepalen"
+    "unableToDetermineFirmwareVersion": "Kan de huidige firmwareversie niet bepalen",
+    "promoCode": "Promotiecode",
+    "enterPromoCode": "Voer promotiecode in",
+    "invalidPromotionCode": "Ongeldige promotiecode.",
+    "backgroundModeTitle": "Achtergrondmodus",
+    "backgroundModeDescription": "Houd je Omi aan het opnemen, zelfs wanneer de app volledig gesloten is.",
+    "backgroundModeNote": "Werkt voorlopig alleen met Omi-apparaten en wordt voortdurend verbeterd.",
+    "regenerateRecap": "Samenvatting opnieuw genereren",
+    "recapRegeneratedSnackbar": "Samenvatting opnieuw gegenereerd",
+    "recapRegenerateFailed": "Kon de samenvatting niet opnieuw genereren. Probeer het later opnieuw.",
+    "recapRegenerateCooldown": "Wacht een paar seconden voordat je opnieuw genereert.",
+    "recapRegenerateNoConversations": "Geen gesprekken om voor deze dag samen te vatten."
 }

@@ -5990,7 +5990,7 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get premiumMinutesInfo =>
-      '1200 premium-minutter/måned. Fanen På enheten tilbyr ubegrenset gratis transkribering.';
+      '600 premium-minutter/måned. Fanen På enheten tilbyr ubegrenset gratis transkribering.';
 
   @override
   String get viewUsage => 'Se forbruk';
@@ -6070,7 +6070,7 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get premiumMinutesMonth =>
-      '1200 premium minutter/måned. På enheten-fanen tilbyr ubegrenset gratis transkribering. ';
+      '600 premium minutter/måned. På enheten-fanen tilbyr ubegrenset gratis transkribering. ';
 
   @override
   String get audioProcessedLocally => 'Lyd behandles lokalt. Fungerer offline, mer privat, men bruker mer batteri.';
@@ -9425,4 +9425,37 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get plusPlan => 'Plus Plan';
+
+  @override
+  String get promoCode => 'Kampanjekode';
+
+  @override
+  String get enterPromoCode => 'Skriv inn kampanjekode';
+
+  @override
+  String get invalidPromotionCode => 'Ugyldig kampanjekode.';
+
+  @override
+  String get backgroundModeTitle => 'Bakgrunnsmodus';
+
+  @override
+  String get backgroundModeDescription => 'Hold Omi-en din i opptak selv når appen er helt lukket.';
+
+  @override
+  String get backgroundModeNote => 'Fungerer foreløpig bare med Omi-enheter og forbedres kontinuerlig.';
+
+  @override
+  String get regenerateRecap => 'Generer sammendrag på nytt';
+
+  @override
+  String get recapRegeneratedSnackbar => 'Sammendrag generert på nytt';
+
+  @override
+  String get recapRegenerateFailed => 'Kunne ikke generere sammendraget på nytt. Prøv igjen senere.';
+
+  @override
+  String get recapRegenerateCooldown => 'Vent noen sekunder før du genererer på nytt.';
+
+  @override
+  String get recapRegenerateNoConversations => 'Ingen samtaler å oppsummere for denne dagen.';
 }

@@ -46,7 +46,8 @@ bool _isTransientNetworkError(Object e) {
         m.contains('Connection closed') ||
         m.contains('Connection reset') ||
         m.contains('Failed host lookup') ||
-        m.contains('Network is unreachable');
+        m.contains('Network is unreachable') ||
+        m.contains('Bad file descriptor');
   }
   return false;
 }
@@ -63,6 +64,11 @@ Future<String> getAuthHeader() async {
     final refreshedToken = await AuthService.instance.getIdToken();
     if (refreshedToken != null) {
       SharedPreferencesUtil().authToken = refreshedToken;
+    } else if (expiry.isBefore(DateTime.now())) {
+      // Refresh failed AND token is already expired — clear the stale cached
+      // token so we don't keep retrying with an invalid bearer. Only clear
+      // truly expired tokens, not near-expiry ones in the 5-min buffer.
+      SharedPreferencesUtil().authToken = '';
     }
     hasAuthToken = SharedPreferencesUtil().authToken.isNotEmpty;
   }
@@ -236,13 +242,19 @@ Future<http.StreamedResponse> _sendMultipartWithProgress(
   streamedRequest.headers.addAll(request.headers);
   streamedRequest.contentLength = totalBytes;
 
-  progressStream.listen(
+  final subscription = progressStream.listen(
     streamedRequest.sink.add,
-    onError: streamedRequest.sink.addError,
+    onError: (Object e, StackTrace st) {
+      streamedRequest.sink.addError(e, st);
+      streamedRequest.sink.close();
+    },
     onDone: streamedRequest.sink.close,
+    cancelOnError: true,
   );
 
-  return HttpPoolManager.instance.sendStreaming(streamedRequest);
+  final future = HttpPoolManager.instance.sendStreaming(streamedRequest);
+  future.whenComplete(subscription.cancel);
+  return future;
 }
 
 Future<http.MultipartRequest> _buildMultipartRequest({

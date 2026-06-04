@@ -1460,7 +1460,7 @@ class AppLocalizationsUk extends AppLocalizations {
   String get payYourSttProvider => 'Вільно користуйтесь omi. Ви платите лише своєму STT-провайдеру безпосередньо.';
 
   @override
-  String get freeMinutesMonth => '1,200 безкоштовних хвилин/місяць включено. Необмежено з ';
+  String get freeMinutesMonth => '600 безкоштовних хвилин/місяць включено. Необмежено з ';
 
   @override
   String get omiUnlimited => 'Omi Безлімітний';
@@ -5998,7 +5998,7 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get premiumMinutesInfo =>
-      '1200 преміум хвилин/місяць. Вкладка \"На пристрої\" пропонує необмежену транскрипцію.';
+      '600 преміум хвилин/місяць. Вкладка \"На пристрої\" пропонує необмежену транскрипцію.';
 
   @override
   String get viewUsage => 'Переглянути використання';
@@ -6079,7 +6079,7 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get premiumMinutesMonth =>
-      '1200 преміум-хвилин/місяць. Вкладка На пристрої пропонує необмежену безкоштовну транскрипцію. ';
+      '600 преміум-хвилин/місяць. Вкладка На пристрої пропонує необмежену безкоштовну транскрипцію. ';
 
   @override
   String get audioProcessedLocally =>
@@ -9446,4 +9446,37 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get plusPlan => 'Plus Plan';
+
+  @override
+  String get promoCode => 'Промокод';
+
+  @override
+  String get enterPromoCode => 'Введіть промокод';
+
+  @override
+  String get invalidPromotionCode => 'Недійсний промокод.';
+
+  @override
+  String get backgroundModeTitle => 'Фоновий режим';
+
+  @override
+  String get backgroundModeDescription => 'Продовжуйте запис Omi, навіть коли застосунок повністю закрито.';
+
+  @override
+  String get backgroundModeNote => 'Наразі працює лише з пристроями Omi і постійно вдосконалюється.';
+
+  @override
+  String get regenerateRecap => 'Створити підсумок знову';
+
+  @override
+  String get recapRegeneratedSnackbar => 'Підсумок створено знову';
+
+  @override
+  String get recapRegenerateFailed => 'Не вдалося створити підсумок заново. Спробуйте пізніше.';
+
+  @override
+  String get recapRegenerateCooldown => 'Зачекайте кілька секунд перед повторним створенням.';
+
+  @override
+  String get recapRegenerateNoConversations => 'Немає розмов для підбиття підсумку за цей день.';
 }

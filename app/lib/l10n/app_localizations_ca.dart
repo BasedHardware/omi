@@ -9480,4 +9480,38 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get plusPlan => 'Plus Plan';
+
+  @override
+  String get promoCode => 'Codi promocional';
+
+  @override
+  String get enterPromoCode => 'Introduïu el codi promocional';
+
+  @override
+  String get invalidPromotionCode => 'Codi promocional no vàlid.';
+
+  @override
+  String get backgroundModeTitle => 'Mode en segon pla';
+
+  @override
+  String get backgroundModeDescription =>
+      'Mantén l\'Omi gravant fins i tot quan l\'aplicació està completament tancada.';
+
+  @override
+  String get backgroundModeNote => 'De moment només funciona amb dispositius Omi i es millora contínuament.';
+
+  @override
+  String get regenerateRecap => 'Regenera el resum';
+
+  @override
+  String get recapRegeneratedSnackbar => 'Resum regenerat';
+
+  @override
+  String get recapRegenerateFailed => 'No s\'ha pogut regenerar el resum. Torna-ho a provar més tard.';
+
+  @override
+  String get recapRegenerateCooldown => 'Espera uns segons abans de tornar a regenerar.';
+
+  @override
+  String get recapRegenerateNoConversations => 'No hi ha converses per resumir d\'aquest dia.';
 }

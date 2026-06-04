@@ -1437,7 +1437,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get payYourSttProvider => 'omiを無料で使用。STTプロバイダーに直接支払います。';
 
   @override
-  String get freeMinutesMonth => '月1,200分無料。無制限は';
+  String get freeMinutesMonth => '月600分無料。無制限は';
 
   @override
   String get omiUnlimited => 'Omi Unlimited';
@@ -4614,7 +4614,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get noSpecificDataAccessConfigured => '特定のデータアクセスは設定されていません。';
 
   @override
-  String get basicPlanDescription => '1,200プレミアム分 + デバイス無制限';
+  String get basicPlanDescription => '600プレミアム分 + デバイス無制限';
 
   @override
   String get minutes => '分';
@@ -5884,7 +5884,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get cloudProvider => 'クラウドプロバイダー';
 
   @override
-  String get premiumMinutesInfo => '月間1,200分のプレミアム利用可能。オンデバイスタブでは無制限の無料文字起こしが可能です。';
+  String get premiumMinutesInfo => '月間600分のプレミアム利用可能。オンデバイスタブでは無制限の無料文字起こしが可能です。';
 
   @override
   String get viewUsage => '使用状況を表示';
@@ -5962,7 +5962,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get batteryDrainSignificantly => 'バッテリー消費が大幅に増加します。';
 
   @override
-  String get premiumMinutesMonth => '月間1,200プレミアム分。オンデバイスタブでは無制限の無料文字起こしを提供。';
+  String get premiumMinutesMonth => '月間600プレミアム分。オンデバイスタブでは無制限の無料文字起こしを提供。';
 
   @override
   String get audioProcessedLocally => '音声はローカルで処理されます。オフラインで動作し、よりプライベートですが、バッテリー消費が増えます。';
@@ -9276,4 +9276,37 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get plusPlan => 'Plus Plan';
+
+  @override
+  String get promoCode => 'プロモコード';
+
+  @override
+  String get enterPromoCode => 'プロモコードを入力';
+
+  @override
+  String get invalidPromotionCode => '無効なプロモコードです。';
+
+  @override
+  String get backgroundModeTitle => 'バックグラウンドモード';
+
+  @override
+  String get backgroundModeDescription => 'アプリを完全に閉じても Omi の録音を続けます。';
+
+  @override
+  String get backgroundModeNote => '現在は Omi デバイスのみ対応しており、継続的に改善しています。';
+
+  @override
+  String get regenerateRecap => '要約を再生成';
+
+  @override
+  String get recapRegeneratedSnackbar => '要約を再生成しました';
+
+  @override
+  String get recapRegenerateFailed => '要約を再生成できませんでした。後でもう一度お試しください。';
+
+  @override
+  String get recapRegenerateCooldown => '再生成する前に数秒お待ちください。';
+
+  @override
+  String get recapRegenerateNoConversations => 'この日の要約対象となる会話はありません。';
 }

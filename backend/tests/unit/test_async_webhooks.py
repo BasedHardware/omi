@@ -47,7 +47,7 @@ if "utils.notifications" not in sys.modules:
     sys.modules["utils.notifications"] = types.ModuleType("utils.notifications")
 sys.modules["utils.notifications"].send_notification = MagicMock()
 
-from utils.webhooks import realtime_transcript_webhook, send_audio_bytes_developer_webhook
+from utils.webhooks import realtime_transcript_webhook, send_audio_bytes_developer_webhook, day_summary_webhook
 
 
 class TestRealtimeTranscriptWebhook:
@@ -275,6 +275,95 @@ class TestConversationAndSummaryWebhooksStructural:
         assert (
             'requests.post' not in func_body
         ), "day_summary_webhook must not use blocking requests.post — use httpx.AsyncClient"
+
+
+class TestDaySummaryWebhookJsonField:
+    """Verify the new ``summary_json`` field is sent alongside the legacy ``summary`` string.
+
+    The wire format keeps ``summary`` as a Python ``repr`` string for backward
+    compatibility (existing receivers depend on it). The new ``summary_json``
+    field carries the exact same payload as a real JSON object so receivers can
+    migrate off ``ast.literal_eval``-style parsing. These tests pin both
+    behaviours to prevent silent regressions in either direction.
+    """
+
+    _SAMPLE_SUMMARY_JSON = {
+        "id": "summary-abc",
+        "date": "2024-01-15",
+        "headline": "Productive day with three meetings",
+        "overview": "You had a productive day focused on project planning.",
+        "day_emoji": "💼",
+        "stats": {"total_conversations": 3, "total_duration_minutes": 120, "action_items_count": 1},
+        "highlights": [],
+        "action_items": [],
+        "unresolved_questions": [],
+        "decisions_made": [],
+        "knowledge_nuggets": [],
+        "locations": [],
+    }
+
+    @pytest.mark.asyncio
+    async def test_payload_includes_summary_json_as_dict_and_keeps_legacy_summary(self):
+        """Both legacy ``summary`` (str) and new ``summary_json`` (dict) must travel together."""
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+
+        mock_client = AsyncMock()
+        mock_client.post = AsyncMock(return_value=mock_response)
+
+        legacy_summary_str = str(self._SAMPLE_SUMMARY_JSON)
+
+        with patch("utils.webhooks.get_webhook_client", return_value=mock_client):
+            await day_summary_webhook("uid-1", legacy_summary_str, self._SAMPLE_SUMMARY_JSON)
+
+        mock_client.post.assert_called_once()
+        payload = mock_client.post.call_args.kwargs["json"]
+
+        assert isinstance(
+            payload["summary_json"], dict
+        ), f"summary_json must be a JSON object, got {type(payload['summary_json'])}: {payload['summary_json']!r}"
+        assert payload["summary_json"]["headline"] == "Productive day with three meetings"
+
+        assert isinstance(payload["summary"], str), "legacy summary must remain a string for backward compatibility"
+        assert payload["summary"] == legacy_summary_str
+
+        assert payload["uid"] == "uid-1"
+        assert payload["created_at"].endswith("+00:00")
+
+    @pytest.mark.asyncio
+    async def test_summary_json_defaults_to_none_when_not_supplied(self):
+        """Callers that haven't migrated yet still get a well-formed payload (summary_json: null)."""
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+
+        mock_client = AsyncMock()
+        mock_client.post = AsyncMock(return_value=mock_response)
+
+        with patch("utils.webhooks.get_webhook_client", return_value=mock_client):
+            await day_summary_webhook("uid-1", "{'legacy': 'repr'}")
+
+        payload = mock_client.post.call_args.kwargs["json"]
+        assert payload["summary_json"] is None
+        assert payload["summary"] == "{'legacy': 'repr'}"
+
+
+class TestSendSummaryNotificationWiresSummaryJson:
+    """Static guard that ``_send_summary_notification`` passes the dict as ``summary_json``.
+
+    Avoids importing notifications.py (which pulls in Firestore / LLM / pytz) by
+    grepping the source. Mirrors the existing static-wiring tests in
+    test_async_http_infrastructure.py.
+    """
+
+    def test_notifications_passes_summary_data_as_summary_json(self):
+        path = os.path.join(os.path.dirname(__file__), '..', '..', 'utils', 'other', 'notifications.py')
+        with open(path) as f:
+            src = f.read()
+
+        assert 'day_summary_webhook(uid, str(summary_data), summary_data)' in src, (
+            "_send_summary_notification must pass summary_data (dict) as the summary_json arg of day_summary_webhook "
+            "so receivers get a real JSON object alongside the legacy repr string."
+        )
 
 
 class TestCircuitBreakerIntegration:

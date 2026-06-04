@@ -1480,7 +1480,7 @@
     "exportConfiguration": "உள்ளமைப்பை ஏற்றுமதி செய்யவும்",
     "bringYourOwn": "உங்களையே கொண்டு வாருங்கள்",
     "payYourSttProvider": "Omi ஐ சுதந்திரமாகப் பயன்படுத்தவும். நீங்கள் உங்கள் STT வழங்குநரிடம் நேரடியாக பணம் செலுத்துங்கள்.",
-    "freeMinutesMonth": "மாதத்திற்கு 1,200 இலவச நிமிடங்கள் அடங்கியுள்ளது. ",
+    "freeMinutesMonth": "மாதத்திற்கு 600 இலவச நிமிடங்கள் அடங்கியுள்ளது. ",
     "omiUnlimited": "Omi Unlimited",
     "hostRequired": "ஹோஸ்ட் தேவை",
     "validPortRequired": "சரியான போர்ட் தேவை",
@@ -5503,7 +5503,7 @@
     "@noSpecificDataAccessConfigured": {
         "description": "Message shown when app has no specific data access"
     },
-    "basicPlanDescription": "1,200 பிரீமியம் நிமிषங்கள் + சாதனத்தில் வரம்பிலாவை",
+    "basicPlanDescription": "600 பிரீமியம் நிமிषங்கள் + சாதனத்தில் வரம்பிலாவை",
     "@basicPlanDescription": {
         "description": "Description of basic plan features in usage page"
     },
@@ -7278,7 +7278,7 @@
     "@cloudProvider": {
         "description": "Tab label for cloud provider option"
     },
-    "premiumMinutesInfo": "மாத மாதம் 1,200 பிரீமியம் நிமிடங்கள்.온-சாதன ট্যাब সীमाहीन இலவச உபாய கேட்டுபேரல் வழங்குகிறது।",
+    "premiumMinutesInfo": "மாத மாதம் 600 பிரீமியம் நிமிடங்கள்.온-சாதன ট্যাब সীमाहीन இலவச உபாய கேட்டுபேரல் வழங்குகிறது।",
     "@premiumMinutesInfo": {
         "description": "Info about premium minutes"
     },
@@ -7389,7 +7389,7 @@
     "@batteryDrainSignificantly": {
         "description": "Warning about battery drain"
     },
-    "premiumMinutesMonth": "மாத மாதம் 1,200 பிரீமியம் நிமிடங்கள்.온-சாதன ট்যாब சீமाहीन இலவச உபாய கேட்டுபேரல் வழங்குகிறது।",
+    "premiumMinutesMonth": "மாத மாதம் 600 பிரீமியம் நிமிடங்கள்.온-சாதன ট்যாब சீமाहीन இலவச உபாய கேட்டுபேரல் வழங்குகிறது।",
     "@premiumMinutesMonth": {
         "description": "Description of premium minutes quota"
     },
@@ -10620,5 +10620,16 @@
     "syncProcessingBackgroundHint": "இது பின்னணியில் தொடர்கிறது — இந்தத் திரையிலிருந்து நீங்கள் வெளியேறலாம்.",
     "syncCardRateLimited": "நியாயமான பயன்பாட்டு வரம்பை அடைந்தது — ஒத்திசைவு தானாகவே மீண்டும் தொடரும்",
     "syncCardBackendBusy": "Omi சேவையகங்கள் பணிமிகுதியில் உள்ளன — திறன் கிடைத்தவுடன் உங்கள் பதிவுகள் ஒத்திசைக்கப்படும்",
-    "unableToDetermineFirmwareVersion": "தற்போதைய ஃபார்ம்வேர் பதிப்பை தீர்மானிக்க முடியவில்லை"
+    "unableToDetermineFirmwareVersion": "தற்போதைய ஃபார்ம்வேர் பதிப்பை தீர்மானிக்க முடியவில்லை",
+    "promoCode": "விளம்பர குறியீடு",
+    "enterPromoCode": "விளம்பர குறியீட்டை உள்ளிடவும்",
+    "invalidPromotionCode": "தவறான விளம்பர குறியீடு.",
+    "backgroundModeTitle": "பின்னணி பயன்முறை",
+    "backgroundModeDescription": "ஆப்ஸ் முழுவதுமாக மூடப்பட்டிருந்தாலும் உங்கள் Omi பதிவைத் தொடரவும்.",
+    "backgroundModeNote": "தற்போது Omi சாதனங்களுடன் மட்டுமே செயல்படுகிறது, தொடர்ந்து மேம்படுத்தப்படுகிறது.",
+    "regenerateRecap": "சுருக்கத்தை மீண்டும் உருவாக்கு",
+    "recapRegeneratedSnackbar": "சுருக்கம் மீண்டும் உருவாக்கப்பட்டது",
+    "recapRegenerateFailed": "சுருக்கத்தை மீண்டும் உருவாக்க முடியவில்லை. பிறகு மீண்டும் முயற்சிக்கவும்.",
+    "recapRegenerateCooldown": "மீண்டும் உருவாக்குவதற்கு முன் சில வினாடிகள் காத்திருக்கவும்.",
+    "recapRegenerateNoConversations": "இந்த நாளுக்கு சுருக்கமாக மாற்ற உரையாடல்கள் இல்லை."
 }

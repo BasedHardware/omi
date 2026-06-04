@@ -351,3 +351,21 @@ class TestCallSitesMigrated:
             with open(path) as f:
                 content = f.read()
             assert '.as_dict_cleaned_dates()' not in content, f"{rel_path} still uses .as_dict_cleaned_dates()"
+
+    def test_conversation_upsert_uses_native_datetimes(self):
+        """Firestore writes must pass native datetimes so created_at/started_at/finished_at
+        are stored as Timestamps, not ISO strings (mixed types break sort + date filters)."""
+        import os
+
+        backend = os.path.join(os.path.dirname(__file__), '../..')
+        for rel_path in [
+            'utils/conversations/process_conversation.py',
+            'utils/conversations/postprocess_conversation.py',
+            'utils/conversations/merge_conversations.py',
+        ]:
+            path = os.path.join(backend, rel_path)
+            with open(path) as f:
+                content = f.read()
+            assert (
+                'upsert_conversation(uid, conversation.as_dict_cleaned_dates())' not in content
+            ), f"{rel_path} writes ISO strings to Firestore via as_dict_cleaned_dates()"

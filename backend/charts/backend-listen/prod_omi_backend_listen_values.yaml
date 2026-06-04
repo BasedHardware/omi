@@ -339,6 +339,21 @@ env:
       secretKeyRef:
         name: prod-omi-backend-secrets
         key: METRICS_SECRET
+  - name: X_OAUTH_CLIENT_ID
+    valueFrom:
+      secretKeyRef:
+        name: prod-omi-backend-secrets
+        key: X_OAUTH_CLIENT_ID
+  - name: X_OAUTH_CLIENT_SECRET
+    valueFrom:
+      secretKeyRef:
+        name: prod-omi-backend-secrets
+        key: X_OAUTH_CLIENT_SECRET
+  - name: X_OAUTH_REDIRECT_URI
+    valueFrom:
+      secretKeyRef:
+        name: prod-omi-backend-secrets
+        key: X_OAUTH_REDIRECT_URI
 
 resources:
   # We usually recommend not to specify default resources and to leave this as a conscious

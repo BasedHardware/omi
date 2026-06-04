@@ -16,6 +16,8 @@ from routers import (
     chat,
     firmware,
     transcribe,
+    omni_relay,
+    auto_model,
     notifications,
     speech_profile,
     agents,
@@ -35,10 +37,13 @@ from routers import (
     action_items,
     task_integrations,
     integrations,
+    x_connector,
     other,
     developer,
     updates,
     calendar_meetings,
+    google_calendar,
+    calendar_onboarding,
     imports,
     knowledge_graph,
     wrapped,
@@ -87,10 +92,13 @@ MultiPartParser.max_part_size = 200 * 1024 * 1024  # 200 MB
 app = FastAPI()
 
 app.include_router(transcribe.router)
+app.include_router(omni_relay.router)
+app.include_router(auto_model.router)
 app.include_router(conversations.router)
 app.include_router(action_items.router)
 app.include_router(task_integrations.router)
 app.include_router(integrations.router)
+app.include_router(x_connector.router)
 app.include_router(memories.router)
 app.include_router(chat.router)
 app.include_router(speech_profile.router)
@@ -109,6 +117,8 @@ app.include_router(sync.router)
 
 app.include_router(apps.router)
 app.include_router(calendar_meetings.router)
+app.include_router(google_calendar.router)
+app.include_router(calendar_onboarding.router)
 app.include_router(oauth.router)  # Added oauth router (for Omi Apps)
 app.include_router(auth.router)  # Added auth router (for the main Omi App, this is the core auth router)
 

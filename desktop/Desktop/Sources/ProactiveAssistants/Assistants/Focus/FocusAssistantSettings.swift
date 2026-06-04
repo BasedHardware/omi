@@ -141,9 +141,11 @@ class FocusAssistantSettings {
         }
     }
 
-    /// Check if an app is excluded (built-in or user-added)
+    /// Check if an app is excluded (built-in + user-added + Rewind privacy exclusions)
     func isAppExcluded(_ appName: String) -> Bool {
-        TaskAssistantSettings.builtInExcludedApps.contains(appName) || excludedApps.contains(appName)
+        TaskAssistantSettings.builtInExcludedApps.contains(appName)
+            || excludedApps.contains(appName)
+            || RewindSettings.shared.isAppExcluded(appName)
     }
 
     /// Add an app to the exclusion list

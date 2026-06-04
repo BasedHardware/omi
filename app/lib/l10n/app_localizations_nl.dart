@@ -9454,4 +9454,37 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get plusPlan => 'Plus Plan';
+
+  @override
+  String get promoCode => 'Promotiecode';
+
+  @override
+  String get enterPromoCode => 'Voer promotiecode in';
+
+  @override
+  String get invalidPromotionCode => 'Ongeldige promotiecode.';
+
+  @override
+  String get backgroundModeTitle => 'Achtergrondmodus';
+
+  @override
+  String get backgroundModeDescription => 'Houd je Omi aan het opnemen, zelfs wanneer de app volledig gesloten is.';
+
+  @override
+  String get backgroundModeNote => 'Werkt voorlopig alleen met Omi-apparaten en wordt voortdurend verbeterd.';
+
+  @override
+  String get regenerateRecap => 'Samenvatting opnieuw genereren';
+
+  @override
+  String get recapRegeneratedSnackbar => 'Samenvatting opnieuw gegenereerd';
+
+  @override
+  String get recapRegenerateFailed => 'Kon de samenvatting niet opnieuw genereren. Probeer het later opnieuw.';
+
+  @override
+  String get recapRegenerateCooldown => 'Wacht een paar seconden voordat je opnieuw genereert.';
+
+  @override
+  String get recapRegenerateNoConversations => 'Geen gesprekken om voor deze dag samen te vatten.';
 }

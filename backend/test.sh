@@ -18,12 +18,14 @@ pytest tests/unit/test_speaker_assignment.py -v
 pytest tests/unit/test_speaker_id_pipeline.py -v
 pytest tests/unit/test_user_speaker_embedding.py -v
 pytest tests/unit/test_memory_leak_buffers.py -v
+pytest tests/unit/test_mcp_search_memories.py -v
 pytest tests/unit/test_llm_usage_tracker.py -v
 pytest tests/unit/test_process_conversation_usage_context.py -v
 pytest tests/unit/test_llm_usage_db.py -v
 pytest tests/unit/test_llm_usage_endpoints.py -v
 pytest tests/unit/test_app_uid_keyerror.py -v
 pytest tests/unit/test_daily_summary_race_condition.py -v
+pytest tests/unit/test_daily_summary_regenerate.py -v
 pytest tests/unit/test_chat_tools_messages.py -v
 pytest tests/unit/test_prompt_caching.py -v
 pytest tests/unit/test_mentor_notifications.py -v
@@ -106,6 +108,7 @@ pytest tests/unit/test_superwall_webhook.py -v
 pytest tests/unit/test_catalog_filter.py -v
 pytest tests/unit/test_superwall_e2e.py -v
 pytest tests/unit/test_payment_available_plans_source.py -v
+pytest tests/unit/test_payment_promotion_codes.py -v
 pytest tests/unit/test_stripe_webhook_none_guard.py -v
 pytest tests/unit/test_stripe_webhook_behavioral.py -v
 pytest tests/unit/test_voice_duration_limiter.py -v
@@ -123,9 +126,11 @@ pytest tests/unit/test_omi_qos_tiers.py -v
 pytest tests/unit/test_byok_security.py -v
 pytest tests/unit/test_paywall_reconnect_gate.py -v
 pytest tests/unit/test_trial_metadata.py -v
+pytest tests/unit/test_neo_desktop_grandfather.py -v
 pytest tests/unit/test_vertex_ai_system_role.py -v
 pytest tests/unit/test_tts.py -v
 pytest tests/unit/test_webhook_auto_disable.py -v
+pytest tests/unit/test_merge_validation.py -v
 
 # Fair-use integration tests (require Redis; skip gracefully if unavailable)
 if redis-cli ping >/dev/null 2>&1; then

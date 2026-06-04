@@ -1460,7 +1460,7 @@ class AppLocalizationsKn extends AppLocalizations {
   String get payYourSttProvider => 'Omi ಅನ್ನು ಅವಿರತವಾಗಿ ಬಳಸಿ. ನೀವು ಕೇವಲ ನಿಮ್ಮ STT ಪ್ರದಾನಕಾರಕನಿಗೆ ನೇರವಾಗಿ ಪಾವತಿ ಮಾಡಿ.';
 
   @override
-  String get freeMinutesMonth => '1,200 ಅಪ್ರೈಲ್ ಮುಕ್ತ ನಿಮಿಷ/ತಿಂಗಳು. ಅಸೀಮಿತ ';
+  String get freeMinutesMonth => '600 ಅಪ್ರೈಲ್ ಮುಕ್ತ ನಿಮಿಷ/ತಿಂಗಳು. ಅಸೀಮಿತ ';
 
   @override
   String get omiUnlimited => 'Omi Unlimited';
@@ -4718,7 +4718,7 @@ class AppLocalizationsKn extends AppLocalizations {
   String get noSpecificDataAccessConfigured => 'ನಿರ್ದಿಷ್ಟ ಡೇಟಾ ಪ್ರವೇಶ ಸಂರೂಪಿತವಾಗಿಲ್ಲ.';
 
   @override
-  String get basicPlanDescription => '1,200 ಪ್ರೀಮಿಯಮ್ ನಿಮಿಷಗಳು + ಅನಿಯಮಿತ ಆನ್-ಡಿವೈಸ್';
+  String get basicPlanDescription => '600 ಪ್ರೀಮಿಯಮ್ ನಿಮಿಷಗಳು + ಅನಿಯಮಿತ ಆನ್-ಡಿವೈಸ್';
 
   @override
   String get minutes => 'ನಿಮಿಷಗಳು';
@@ -6013,7 +6013,7 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get premiumMinutesInfo =>
-      'ಪ್ರತಿ ತಿಂಗಳು 1,200 ಪ್ರೀಮಿಯಂ ನಿಮಿಷಗಳು. On-Device ಟ್ಯಾಬ್ ಅಸೀಮಿತ ಉಚ್ಛ ಲಿಪ್ಯಂತರ ನೀಡುತ್ತದೆ.';
+      'ಪ್ರತಿ ತಿಂಗಳು 600 ಪ್ರೀಮಿಯಂ ನಿಮಿಷಗಳು. On-Device ಟ್ಯಾಬ್ ಅಸೀಮಿತ ಉಚ್ಛ ಲಿಪ್ಯಂತರ ನೀಡುತ್ತದೆ.';
 
   @override
   String get viewUsage => 'ಬಳಕೆ ವಿವರಿಸಿ';
@@ -6095,7 +6095,7 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get premiumMinutesMonth =>
-      'ಪ್ರತಿ ತಿಂಗಳು 1,200 ಪ್ರೀಮಿಯಂ ನಿಮಿಷಗಳು. On-Device ಟ್ಯಾಬ್ ಅಸೀಮಿತ ಉಚ್ಛ ಲಿಪ್ಯಂತರ ನೀಡುತ್ತದೆ.';
+      'ಪ್ರತಿ ತಿಂಗಳು 600 ಪ್ರೀಮಿಯಂ ನಿಮಿಷಗಳು. On-Device ಟ್ಯಾಬ್ ಅಸೀಮಿತ ಉಚ್ಛ ಲಿಪ್ಯಂತರ ನೀಡುತ್ತದೆ.';
 
   @override
   String get audioProcessedLocally =>
@@ -9459,4 +9459,37 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get plusPlan => 'Plus Plan';
+
+  @override
+  String get promoCode => 'ಪ್ರೋಮೋ ಕೋಡ್';
+
+  @override
+  String get enterPromoCode => 'ಪ್ರೋಮೋ ಕೋಡ್ ನಮೂದಿಸಿ';
+
+  @override
+  String get invalidPromotionCode => 'ಅಮಾನ್ಯ ಪ್ರೋಮೋ ಕೋಡ್.';
+
+  @override
+  String get backgroundModeTitle => 'ಹಿನ್ನೆಲೆ ಮೋಡ್';
+
+  @override
+  String get backgroundModeDescription => 'ಆ್ಯಪ್ ಸಂಪೂರ್ಣವಾಗಿ ಮುಚ್ಚಿದ್ದರೂ ನಿಮ್ಮ Omi ರೆಕಾರ್ಡಿಂಗ್ ಮುಂದುವರಿಸಿ.';
+
+  @override
+  String get backgroundModeNote => 'ಸದ್ಯಕ್ಕೆ Omi ಸಾಧನಗಳೊಂದಿಗೆ ಮಾತ್ರ ಕೆಲಸ ಮಾಡುತ್ತದೆ ಮತ್ತು ನಿರಂತರವಾಗಿ ಸುಧಾರಿಸಲಾಗುತ್ತಿದೆ.';
+
+  @override
+  String get regenerateRecap => 'ಸಾರಾಂಶವನ್ನು ಪುನರುತ್ಪಾದಿಸಿ';
+
+  @override
+  String get recapRegeneratedSnackbar => 'ಸಾರಾಂಶವನ್ನು ಪುನರುತ್ಪಾದಿಸಲಾಗಿದೆ';
+
+  @override
+  String get recapRegenerateFailed => 'ಸಾರಾಂಶವನ್ನು ಪುನರುತ್ಪಾದಿಸಲು ಸಾಧ್ಯವಾಗಲಿಲ್ಲ. ನಂತರ ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.';
+
+  @override
+  String get recapRegenerateCooldown => 'ಪುನರುತ್ಪಾದಿಸುವ ಮೊದಲು ದಯವಿಟ್ಟು ಕೆಲವು ಸೆಕೆಂಡುಗಳು ನಿರೀಕ್ಷಿಸಿ.';
+
+  @override
+  String get recapRegenerateNoConversations => 'ಈ ದಿನಕ್ಕೆ ಸಂಗ್ರಹಿಸಲು ಯಾವುದೇ ಸಂಭಾಷಣೆಗಳಿಲ್ಲ.';
 }

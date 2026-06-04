@@ -3011,5 +3011,16 @@
     "syncProcessingBackgroundHint": "Pokračuje to na pozadí — tuto obrazovku můžete opustit.",
     "syncCardRateLimited": "Byl dosažen limit férového využití — synchronizace bude automaticky pokračovat",
     "syncCardBackendBusy": "Servery Omi jsou vytížené — vaše nahrávky se synchronizují, jakmile bude k dispozici kapacita",
-    "unableToDetermineFirmwareVersion": "Nelze určit aktuální verzi firmwaru"
+    "unableToDetermineFirmwareVersion": "Nelze určit aktuální verzi firmwaru",
+    "promoCode": "Promo kód",
+    "enterPromoCode": "Zadejte promo kód",
+    "invalidPromotionCode": "Neplatný promo kód.",
+    "backgroundModeTitle": "Režim na pozadí",
+    "backgroundModeDescription": "Udržujte nahrávání Omi, i když je aplikace úplně zavřená.",
+    "backgroundModeNote": "Zatím funguje pouze se zařízeními Omi a průběžně se vylepšuje.",
+    "regenerateRecap": "Znovu vygenerovat shrnutí",
+    "recapRegeneratedSnackbar": "Shrnutí bylo znovu vygenerováno",
+    "recapRegenerateFailed": "Shrnutí se nepodařilo znovu vygenerovat. Zkuste to později.",
+    "recapRegenerateCooldown": "Před opětovným generováním prosím počkejte několik sekund.",
+    "recapRegenerateNoConversations": "Pro tento den nejsou žádné konverzace k shrnutí."
 }

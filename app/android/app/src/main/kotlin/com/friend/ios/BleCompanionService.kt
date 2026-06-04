@@ -13,10 +13,6 @@ import java.util.Locale
 /**
  * CompanionDeviceService that receives device appear/disappear events from the OS,
  * even when the app is not running.
- *
- * Omi streams audio via WebSocket which requires the Flutter app. So this service
- * only acts when the app is alive (isFlutterAlive). If the app is dead, starting
- * the foreground service is pointless — there's no WebSocket to stream audio to.
  */
 class BleCompanionService : CompanionDeviceService() {
 
@@ -38,19 +34,14 @@ class BleCompanionService : CompanionDeviceService() {
         return cdm.myAssociations.find { it.id == assocId }
     }
 
-    /**
-     * Check if the Flutter app is alive. Set true in MainActivity.configureFlutterEngine,
-     * set false in MainActivity.onDestroy(isFinishing). Without Flutter, there's no
-     * WebSocket to stream audio to — BLE connection is useless.
-     */
-    private fun isAppAlive(): Boolean {
-        return OmiBleManager.isFlutterAlive
-    }
-
     private fun handleDeviceAppeared(address: String) {
         Log.i(TAG, "Device appeared: $address")
 
-        if (!isAppAlive() || !hasBluetoothPermission()) return
+        if (!hasBluetoothPermission()) return
+        if (!OmiBleForegroundService.isBackgroundModeEnabled(applicationContext)) {
+            Log.i(TAG, "Device appeared but Background Mode is off; not starting service")
+            return
+        }
 
         val prefs = applicationContext.getSharedPreferences("ble_config", Context.MODE_PRIVATE)
         if (prefs.getBoolean("user_disconnected", false)) return
@@ -69,7 +60,12 @@ class BleCompanionService : CompanionDeviceService() {
     }
 
     private fun handleDeviceDisappeared() {
-        Log.i(TAG, "Device disappeared")
+        // Intentionally a no-op. Omi holds a live connection, and a connected BLE peripheral stops
+        // advertising — so the OS fires BLE_DISAPPEARED while we are connected and streaming.
+        // Stopping the service here tears down a healthy link (and then flaps). A genuinely off /
+        // out-of-range device is handled by the parked autoConnect, which is low power and
+        // auto-reconnects when it returns.
+        Log.i(TAG, "Device disappeared (ignored; live-connection model)")
     }
 
     // ---- Lifecycle ----
@@ -78,7 +74,8 @@ class BleCompanionService : CompanionDeviceService() {
         super.onCreate()
         Log.i(TAG, "onCreate")
 
-        if (!isAppAlive() || !hasBluetoothPermission()) return
+        if (!hasBluetoothPermission()) return
+        if (!OmiBleForegroundService.isBackgroundModeEnabled(applicationContext)) return
 
         val prefs = applicationContext.getSharedPreferences("ble_config", Context.MODE_PRIVATE)
         if (prefs.getBoolean("user_disconnected", false)) return

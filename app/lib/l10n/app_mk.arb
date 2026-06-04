@@ -1480,7 +1480,7 @@
     "exportConfiguration": "Извезување конфигурација",
     "bringYourOwn": "Донесете ваше",
     "payYourSttProvider": "Слободно користете omi. Плаќате директно на вашиот STT добавувач.",
-    "freeMinutesMonth": "1,200 слободни минути/месец вклучени. Неограничено со ",
+    "freeMinutesMonth": "600 слободни минути/месец вклучени. Неограничено со ",
     "omiUnlimited": "Omi Unlimited",
     "hostRequired": "Домаќин е задолжителен",
     "validPortRequired": "Валиден порт е задолжителен",
@@ -10620,5 +10620,16 @@
     "syncProcessingBackgroundHint": "Ова продолжува во заднина — може да го напуштите овој екран.",
     "syncCardRateLimited": "Достигнат е лимитот за фер користење — синхронизацијата автоматски ќе продолжи",
     "syncCardBackendBusy": "Серверите на Omi се преоптоварени — вашите снимки ќе се синхронизираат штом ќе се ослободи капацитет",
-    "unableToDetermineFirmwareVersion": "Не може да се одреди тековната верзија на фирмверот"
+    "unableToDetermineFirmwareVersion": "Не може да се одреди тековната верзија на фирмверот",
+    "promoCode": "Промо код",
+    "enterPromoCode": "Внесете промо код",
+    "invalidPromotionCode": "Невалиден промо код.",
+    "backgroundModeTitle": "Режим во заднина",
+    "backgroundModeDescription": "Зачувајте го снимањето на Omi дури и кога апликацијата е целосно затворена.",
+    "backgroundModeNote": "Засега работи само со уреди Omi и постојано се подобрува.",
+    "regenerateRecap": "Регенерирај резиме",
+    "recapRegeneratedSnackbar": "Резимето е регенерирано",
+    "recapRegenerateFailed": "Не успеа регенерирањето на резимето. Обидете се повторно подоцна.",
+    "recapRegenerateCooldown": "Почекајте неколку секунди пред повторно регенерирање.",
+    "recapRegenerateNoConversations": "Нема разговори за сумирање за овој ден."
 }

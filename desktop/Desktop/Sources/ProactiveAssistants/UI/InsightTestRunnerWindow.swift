@@ -476,11 +476,12 @@ struct InsightTestRunnerView: View {
                 return
             }
 
-            // Filter out excluded apps and apps with no name
+            // Filter out excluded apps, Rewind privacy-excluded apps, and apps with no name
             let filtered = allScreenshots.filter { screenshot in
                 !screenshot.appName.isEmpty
                     && !TaskAssistantSettings.builtInExcludedApps.contains(screenshot.appName)
                     && !excludedApps.contains(screenshot.appName)
+                    && !RewindSettings.shared.isAppExcluded(screenshot.appName)
             }
 
             guard !filtered.isEmpty else {
@@ -723,6 +724,7 @@ enum InsightTestRunner {
                 !ss.appName.isEmpty
                     && !TaskAssistantSettings.builtInExcludedApps.contains(ss.appName)
                     && !excludedApps.contains(ss.appName)
+                    && !RewindSettings.shared.isAppExcluded(ss.appName)
             }) else {
                 log("InsightTestCLI: \(label) \(timeFormatter.string(from: window.windowEnd)) — skipped (no non-excluded screenshots)")
                 continue

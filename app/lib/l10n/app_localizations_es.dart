@@ -9448,4 +9448,37 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get plusPlan => 'Plus Plan';
+
+  @override
+  String get promoCode => 'Código promocional';
+
+  @override
+  String get enterPromoCode => 'Ingresa el código promocional';
+
+  @override
+  String get invalidPromotionCode => 'Código promocional no válido.';
+
+  @override
+  String get backgroundModeTitle => 'Modo en segundo plano';
+
+  @override
+  String get backgroundModeDescription => 'Mantén tu Omi grabando incluso cuando la app está completamente cerrada.';
+
+  @override
+  String get backgroundModeNote => 'Por ahora solo funciona con dispositivos Omi y se mejora continuamente.';
+
+  @override
+  String get regenerateRecap => 'Regenerar resumen';
+
+  @override
+  String get recapRegeneratedSnackbar => 'Resumen regenerado';
+
+  @override
+  String get recapRegenerateFailed => 'No se pudo regenerar el resumen. Inténtalo de nuevo más tarde.';
+
+  @override
+  String get recapRegenerateCooldown => 'Espera unos segundos antes de regenerar de nuevo.';
+
+  @override
+  String get recapRegenerateNoConversations => 'No hay conversaciones para resumir en este día.';
 }

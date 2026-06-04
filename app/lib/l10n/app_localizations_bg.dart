@@ -6011,7 +6011,7 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get premiumMinutesInfo =>
-      '1200 премиум минути/месец. Разделът На устройството предлага неограничена безплатна транскрипция.';
+      '600 премиум минути/месец. Разделът На устройството предлага неограничена безплатна транскрипция.';
 
   @override
   String get viewUsage => 'Преглед на използването';
@@ -6094,7 +6094,7 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get premiumMinutesMonth =>
-      '1200 премиум минути/месец. Разделът На устройството предлага неограничена безплатна транскрипция. ';
+      '600 премиум минути/месец. Разделът На устройството предлага неограничена безплатна транскрипция. ';
 
   @override
   String get audioProcessedLocally =>
@@ -9463,4 +9463,37 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get plusPlan => 'Plus Plan';
+
+  @override
+  String get promoCode => 'Промо код';
+
+  @override
+  String get enterPromoCode => 'Въведете промо код';
+
+  @override
+  String get invalidPromotionCode => 'Невалиден промо код.';
+
+  @override
+  String get backgroundModeTitle => 'Фонов режим';
+
+  @override
+  String get backgroundModeDescription => 'Запазете записа на Omi дори когато приложението е напълно затворено.';
+
+  @override
+  String get backgroundModeNote => 'Засега работи само с устройства Omi и непрекъснато се подобрява.';
+
+  @override
+  String get regenerateRecap => 'Регенерирай резюмето';
+
+  @override
+  String get recapRegeneratedSnackbar => 'Резюмето е регенерирано';
+
+  @override
+  String get recapRegenerateFailed => 'Резюмето не можа да бъде регенерирано. Опитайте отново по-късно.';
+
+  @override
+  String get recapRegenerateCooldown => 'Моля, изчакайте няколко секунди преди повторно регенериране.';
+
+  @override
+  String get recapRegenerateNoConversations => 'Няма разговори за обобщаване за този ден.';
 }

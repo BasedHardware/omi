@@ -1463,7 +1463,7 @@ class AppLocalizationsMk extends AppLocalizations {
   String get payYourSttProvider => 'Слободно користете omi. Плаќате директно на вашиот STT добавувач.';
 
   @override
-  String get freeMinutesMonth => '1,200 слободни минути/месец вклучени. Неограничено со ';
+  String get freeMinutesMonth => '600 слободни минути/месец вклучени. Неограничено со ';
 
   @override
   String get omiUnlimited => 'Omi Unlimited';
@@ -9477,4 +9477,37 @@ class AppLocalizationsMk extends AppLocalizations {
 
   @override
   String get plusPlan => 'Plus Plan';
+
+  @override
+  String get promoCode => 'Промо код';
+
+  @override
+  String get enterPromoCode => 'Внесете промо код';
+
+  @override
+  String get invalidPromotionCode => 'Невалиден промо код.';
+
+  @override
+  String get backgroundModeTitle => 'Режим во заднина';
+
+  @override
+  String get backgroundModeDescription => 'Зачувајте го снимањето на Omi дури и кога апликацијата е целосно затворена.';
+
+  @override
+  String get backgroundModeNote => 'Засега работи само со уреди Omi и постојано се подобрува.';
+
+  @override
+  String get regenerateRecap => 'Регенерирај резиме';
+
+  @override
+  String get recapRegeneratedSnackbar => 'Резимето е регенерирано';
+
+  @override
+  String get recapRegenerateFailed => 'Не успеа регенерирањето на резимето. Обидете се повторно подоцна.';
+
+  @override
+  String get recapRegenerateCooldown => 'Почекајте неколку секунди пред повторно регенерирање.';
+
+  @override
+  String get recapRegenerateNoConversations => 'Нема разговори за сумирање за овој ден.';
 }

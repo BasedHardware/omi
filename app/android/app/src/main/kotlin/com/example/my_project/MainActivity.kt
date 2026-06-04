@@ -14,6 +14,7 @@ import io.flutter.plugin.common.MethodChannel
 
 class MainActivity: FlutterActivity() {
     private val CHANNEL = "com.friend.ios/notifyOnKill"
+    private val NATIVE_BLE_TRANSCRIPT_CHANNEL = "com.friend.ios/native_ble_transcript"
     private var bleHostApiImpl: BleHostApiImpl? = null
 
     override fun configureFlutterEngine(@NonNull flutterEngine: FlutterEngine) {
@@ -27,12 +28,24 @@ class MainActivity: FlutterActivity() {
 
         // Register Native BLE Pigeon APIs
         OmiBleManager.initialize(application)
+        getSharedPreferences("FlutterSharedPreferences", MODE_PRIVATE)
+            .edit()
+            .putBoolean("flutter.nativeBleForegroundReady", false)
+            .apply()
         OmiBleManager.isFlutterAlive = true
         OmiBleManager.instance.flutterApi = BleFlutterApi(flutterEngine.dartExecutor.binaryMessenger)
         val hostApi = BleHostApiImpl { this }
         hostApi.initCompanionManager(this)
         bleHostApiImpl = hostApi
         BleHostApi.setUp(flutterEngine.dartExecutor.binaryMessenger, hostApi)
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, NATIVE_BLE_TRANSCRIPT_CHANNEL).setMethodCallHandler {
+            call, result ->
+            if (call.method == "drain") {
+                result.success(OmiBackgroundAudioStreamer.drainCachedTranscriptMessages())
+            } else {
+                result.notImplemented()
+            }
+        }
 
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL).setMethodCallHandler {
             call, result ->
@@ -75,11 +88,14 @@ class MainActivity: FlutterActivity() {
     }
 
     override fun onDestroy() {
-        // When user closes the app (swipe away), stop the foreground service.
-        // The service handles disconnecting all managed devices in onDestroy.
         if (isFinishing) {
             OmiBleManager.isFlutterAlive = false
-            OmiBleForegroundService.stopService(this)
+            // With Background Mode on, the foreground service keeps the pendant connected and
+            // transcribing after a task close. With it off (default), tear it down so the device
+            // disconnects when the app is closed.
+            if (!OmiBleForegroundService.isBackgroundModeEnabled(this)) {
+                OmiBleForegroundService.stopService(this)
+            }
         }
         super.onDestroy()
     }

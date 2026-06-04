@@ -25,6 +25,7 @@ from models.transcript_segment import TranscriptSegment
 __all__ = [
     'AppResult',
     'BulkAssignSegmentsRequest',
+    'CalendarEventLink',
     'Conversation',
     'ConversationPostProcessing',
     'CreateConversation',
@@ -60,6 +61,18 @@ class PluginResult(BaseModel):
 class AppResult(BaseModel):
     app_id: Optional[str]
     content: str
+
+
+class CalendarEventLink(BaseModel):
+    """Links a conversation to a Google Calendar event."""
+
+    event_id: str = Field(description="Google Calendar event ID")
+    title: str = Field(description="Calendar event title")
+    attendees: List[str] = Field(default=[], description="List of attendee display names for UI")
+    attendee_emails: List[str] = Field(default=[], description="List of attendee email addresses")
+    start_time: datetime = Field(description="Event start time")
+    end_time: datetime = Field(description="Event end time")
+    html_link: Optional[str] = Field(default=None, description="Direct link to open event in Google Calendar")
 
 
 class ConversationPostProcessing(BaseModel):
@@ -108,6 +121,9 @@ class Conversation(BaseModel):
     data_protection_level: Optional[str] = None
     folder_id: Optional[str] = Field(default=None, description="ID of the folder this conversation belongs to")
     call_id: Optional[str] = Field(default=None, description="Twilio call SID for phone call conversations")
+
+    # Calendar event link - set when conversation overlaps with a Google Calendar event
+    calendar_event: Optional[CalendarEventLink] = None
 
     def __init__(self, **data):
         super().__init__(**data)

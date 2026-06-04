@@ -1458,7 +1458,7 @@ class AppLocalizationsBn extends AppLocalizations {
       'Omi অবাধে ব্যবহার করুন। আপনি শুধুমাত্র আপনার STT প্রদানকারীকে সরাসরি অর্থ প্রদান করেন।';
 
   @override
-  String get freeMinutesMonth => 'প্রতি মাসে 1,200 বিনামূল্যে মিনিট অন্তর্ভুক্ত। সীমাহীন ';
+  String get freeMinutesMonth => 'প্রতি মাসে 600 বিনামূল্যে মিনিট অন্তর্ভুক্ত। সীমাহীন ';
 
   @override
   String get omiUnlimited => 'Omi আনলিমিটেড';
@@ -9435,4 +9435,37 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String get plusPlan => 'Plus Plan';
+
+  @override
+  String get promoCode => 'প্রোমো কোড';
+
+  @override
+  String get enterPromoCode => 'প্রোমো কোড লিখুন';
+
+  @override
+  String get invalidPromotionCode => 'অবৈধ প্রোমো কোড।';
+
+  @override
+  String get backgroundModeTitle => 'ব্যাকগ্রাউন্ড মোড';
+
+  @override
+  String get backgroundModeDescription => 'অ্যাপ সম্পূর্ণ বন্ধ থাকলেও আপনার Omi রেকর্ডিং চালু রাখুন।';
+
+  @override
+  String get backgroundModeNote => 'আপাতত শুধু Omi ডিভাইসের সাথে কাজ করে এবং ক্রমাগত উন্নত করা হচ্ছে।';
+
+  @override
+  String get regenerateRecap => 'রিক্যাপ পুনরায় তৈরি করুন';
+
+  @override
+  String get recapRegeneratedSnackbar => 'রিক্যাপ পুনরায় তৈরি হয়েছে';
+
+  @override
+  String get recapRegenerateFailed => 'রিক্যাপ পুনরায় তৈরি করা যায়নি। পরে আবার চেষ্টা করুন।';
+
+  @override
+  String get recapRegenerateCooldown => 'পুনরায় তৈরি করার আগে কয়েক সেকেন্ড অপেক্ষা করুন।';
+
+  @override
+  String get recapRegenerateNoConversations => 'এই দিনের জন্য সংক্ষেপ করার কোনো কথোপকথন নেই।';
 }

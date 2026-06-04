@@ -9413,4 +9413,37 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get plusPlan => 'Plus Plan';
+
+  @override
+  String get promoCode => 'Kampagnekode';
+
+  @override
+  String get enterPromoCode => 'Indtast kampagnekode';
+
+  @override
+  String get invalidPromotionCode => 'Ugyldig kampagnekode.';
+
+  @override
+  String get backgroundModeTitle => 'Baggrundstilstand';
+
+  @override
+  String get backgroundModeDescription => 'Hold din Omi i gang med at optage, selv når appen er helt lukket.';
+
+  @override
+  String get backgroundModeNote => 'Fungerer indtil videre kun med Omi-enheder og forbedres løbende.';
+
+  @override
+  String get regenerateRecap => 'Generér resumé igen';
+
+  @override
+  String get recapRegeneratedSnackbar => 'Resumé genereret igen';
+
+  @override
+  String get recapRegenerateFailed => 'Kunne ikke generere resuméet igen. Prøv igen senere.';
+
+  @override
+  String get recapRegenerateCooldown => 'Vent et par sekunder, før du genererer igen.';
+
+  @override
+  String get recapRegenerateNoConversations => 'Ingen samtaler at opsummere for denne dag.';
 }

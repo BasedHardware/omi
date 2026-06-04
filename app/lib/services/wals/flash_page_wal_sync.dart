@@ -101,11 +101,13 @@ class FlashPageWalSyncImpl implements FlashPageWalSync {
   }
 
   Future<List<Wal>> _getMissingWals() async {
-    if (_device == null) return [];
+    // Capture snapshot — setDevice(null) can be called concurrently during awaits
+    final device = _device;
+    if (device == null) return [];
 
-    if (_device!.type != DeviceType.limitless) return [];
+    if (device.type != DeviceType.limitless) return [];
 
-    String deviceId = _device!.id;
+    String deviceId = device.id;
     List<Wal> wals = [];
 
     var storageStatus = await _getStorageStatus(deviceId);
@@ -125,7 +127,7 @@ class FlashPageWalSyncImpl implements FlashPageWalSync {
       int timerStart = DateTime.now().millisecondsSinceEpoch ~/ 1000 - estimatedSeconds;
 
       var connection = await ServiceManager.instance().device.ensureConnection(deviceId);
-      var pd = await _device!.getDeviceInfo(connection);
+      var pd = await device.getDeviceInfo(connection);
       String deviceModel = pd.modelNumber.isNotEmpty ? pd.modelNumber : "Limitless";
 
       wals.add(
@@ -138,7 +140,7 @@ class FlashPageWalSyncImpl implements FlashPageWalSync {
           storageOffset: _oldestPage,
           storageTotalBytes: _newestPage,
           fileNum: _currentSession,
-          device: _device!.id,
+          device: device.id,
           deviceModel: deviceModel,
           totalFrames: pageCount * framesPerFlashPage,
           syncedFrameOffset: 0,
@@ -576,7 +578,11 @@ class FlashPageWalSyncImpl implements FlashPageWalSync {
   void setDevice(BtDevice? device) async {
     _device = device;
     if (device != null && device.type == DeviceType.limitless) {
-      _wals = await _getMissingWals();
+      final wals = await _getMissingWals();
+      // Only assign if _device hasn't changed during the await (e.g. concurrent setDevice(null))
+      if (_device?.id == device.id) {
+        _wals = wals;
+      }
     } else {
       _wals = [];
     }

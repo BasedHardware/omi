@@ -6074,7 +6074,7 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get premiumMinutesMonth =>
-      '1200 premium minučių/mėn. Įrenginyje skirtukas siūlo neribotą nemokamą transkripciją. ';
+      '600 premium minučių/mėn. Įrenginyje skirtukas siūlo neribotą nemokamą transkripciją. ';
 
   @override
   String get audioProcessedLocally =>
@@ -9441,4 +9441,37 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get plusPlan => 'Plus Plan';
+
+  @override
+  String get promoCode => 'Reklamos kodas';
+
+  @override
+  String get enterPromoCode => 'Įveskite reklamos kodą';
+
+  @override
+  String get invalidPromotionCode => 'Neteisingas reklamos kodas.';
+
+  @override
+  String get backgroundModeTitle => 'Fono režimas';
+
+  @override
+  String get backgroundModeDescription => 'Palikite Omi įrašinėti net kai programėlė visiškai uždaryta.';
+
+  @override
+  String get backgroundModeNote => 'Kol kas veikia tik su Omi įrenginiais ir nuolat tobulinama.';
+
+  @override
+  String get regenerateRecap => 'Sukurti santrauką iš naujo';
+
+  @override
+  String get recapRegeneratedSnackbar => 'Santrauka sukurta iš naujo';
+
+  @override
+  String get recapRegenerateFailed => 'Nepavyko iš naujo sukurti santraukos. Bandykite vėliau.';
+
+  @override
+  String get recapRegenerateCooldown => 'Palaukite kelias sekundes prieš generuodami iš naujo.';
+
+  @override
+  String get recapRegenerateNoConversations => 'Šiai dienai nėra pokalbių, kuriuos būtų galima apibendrinti.';
 }

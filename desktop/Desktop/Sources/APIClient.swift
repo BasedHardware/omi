@@ -204,14 +204,16 @@ actor APIClient {
       }
 
       guard (200...299).contains(retryHttpResponse.statusCode) else {
-        throw APIError.httpError(statusCode: retryHttpResponse.statusCode)
+        let detail = Self.extractErrorDetail(from: retryData)
+        throw APIError.httpError(statusCode: retryHttpResponse.statusCode, detail: detail)
       }
 
       return try decoder.decode(T.self, from: retryData)
     }
 
     guard (200...299).contains(httpResponse.statusCode) else {
-      throw APIError.httpError(statusCode: httpResponse.statusCode)
+      let detail = Self.extractErrorDetail(from: data)
+      throw APIError.httpError(statusCode: httpResponse.statusCode, detail: detail)
     }
 
     do {
@@ -240,6 +242,14 @@ actor APIClient {
       throw decodingError
     }
   }
+
+  private static func extractErrorDetail(from data: Data) -> String? {
+    guard
+      let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+      let detail = json["detail"] as? String
+    else { return nil }
+    return detail
+  }
 }
 
 // MARK: - API Errors
@@ -247,8 +257,13 @@ actor APIClient {
 enum APIError: LocalizedError {
   case invalidResponse
   case unauthorized
-  case httpError(statusCode: Int)
+  case httpError(statusCode: Int, detail: String? = nil)
   case decodingError(Error)
+
+  var detail: String? {
+    if case .httpError(_, let detail) = self { return detail }
+    return nil
+  }
 
   var errorDescription: String? {
     switch self {
@@ -256,11 +271,30 @@ enum APIError: LocalizedError {
       return "Invalid response from server"
     case .unauthorized:
       return "Unauthorized - please sign in again"
-    case .httpError(let statusCode):
+    case .httpError(let statusCode, let detail):
+      if let detail { return detail }
       return "HTTP error: \(statusCode)"
     case .decodingError(let error):
       return "Failed to decode response: \(error.localizedDescription)"
     }
+  }
+}
+
+// MARK: - MCP API
+
+struct MCPKeyCreatedResponse: Codable {
+  let id: String
+  let name: String
+  let key: String
+}
+
+extension APIClient {
+  /// Creates a new MCP API key and returns the raw secret (shown only once by the server).
+  /// Used to wire Omi memory into external MCP clients (Claude, ChatGPT, Claude Code, Codex).
+  func createMCPKey(name: String = "Desktop") async throws -> String {
+    struct Body: Encodable { let name: String }
+    let response: MCPKeyCreatedResponse = try await post("v1/mcp/keys", body: Body(name: name))
+    return response.key
   }
 }
 
@@ -369,15 +403,12 @@ extension APIClient {
 
   /// Updates the title of a conversation
   func updateConversationTitle(id: String, title: String) async throws {
-    struct TitleUpdate: Encodable {
-      let title: String
-    }
-
-    let url = URL(string: baseURL + "v1/conversations/\(id)")!
+    var components = URLComponents(string: baseURL + "v1/conversations/\(id)/title")!
+    components.queryItems = [URLQueryItem(name: "title", value: title)]
+    let url = components.url!
     var request = URLRequest(url: url)
     request.httpMethod = "PATCH"
     request.allHTTPHeaderFields = try await buildHeaders(requireAuth: true)
-    request.httpBody = try JSONEncoder().encode(TitleUpdate(title: title))
 
     let (_, response) = try await session.data(for: request)
     guard let httpResponse = response as? HTTPURLResponse,
@@ -1045,20 +1076,23 @@ enum MemoryCategory: String, Codable, CaseIterable {
   case system
   case interesting
   case manual
+  case workflow
 
   var displayName: String {
     switch self {
-    case .system: return "System"
-    case .interesting: return "Interesting"
+    case .system: return "About You"
+    case .interesting: return "Insights"
     case .manual: return "Manual"
+    case .workflow: return "Workflow"
     }
   }
 
   var icon: String {
     switch self {
-    case .system: return "gearshape"
-    case .interesting: return "sparkles"
+    case .system: return "person"
+    case .interesting: return "lightbulb"
     case .manual: return "square.and.pencil"
+    case .workflow: return "arrow.triangle.branch"
     }
   }
 }
@@ -1241,10 +1275,49 @@ extension APIClient {
         customBaseURL: nil
       )
       return response.conversation
-    } catch APIError.httpError(let statusCode) where statusCode == 404 {
+    } catch APIError.httpError(statusCode: let statusCode, detail: _) where statusCode == 404 {
       // 404 = no in-progress conversation found — WS close handler already processed it
       return nil
     }
+  }
+}
+
+// MARK: - Create Conversation From Segments (on-device transcription upload)
+
+extension APIClient {
+  /// One transcript segment for the from-segments upload (matches backend DevTranscriptSegment).
+  struct UploadSegment: Encodable {
+    let text: String
+    let speaker: String
+    let speaker_id: Int?
+    let is_user: Bool
+    let person_id: String?
+    let start: Double
+    let end: Double
+  }
+
+  struct CreateConversationFromSegmentsRequest: Encodable {
+    let transcript_segments: [UploadSegment]
+    let source: String
+    let started_at: String?  // ISO8601
+    let finished_at: String?  // ISO8601
+    let language: String
+  }
+
+  struct CreateConversationFromSegmentsResponse: Decodable {
+    let id: String
+    let status: String
+    let discarded: Bool
+  }
+
+  /// Upload an already-transcribed (on-device Parakeet) conversation to the backend so it is
+  /// persisted, processed (memories/summaries), and synced to every device — the same pipeline a
+  /// cloud-transcribed conversation goes through, without the live `/v4/listen` websocket.
+  /// Endpoint: POST /v1/conversations/from-segments (Firebase-authed).
+  func createConversationFromSegments(_ request: CreateConversationFromSegmentsRequest)
+    async throws -> CreateConversationFromSegmentsResponse
+  {
+    return try await post("v1/conversations/from-segments", body: request, customBaseURL: nil)
   }
 }
 
@@ -3769,6 +3842,10 @@ struct UserSubscriptionResponse: Codable {
   let memoriesCreatedLimit: Int
   let availablePlans: [SubscriptionPlanOption]
   let showSubscriptionUI: Bool
+  // Set for Neo subscribers whose current billing period started before the
+  // policy change in #7496 — they retain desktop access until this unix-seconds
+  // timestamp (their `current_period_end`). Null for everyone else.
+  let desktopGrandfatherUntil: Int?
 
   enum CodingKeys: String, CodingKey {
     case subscription
@@ -3782,6 +3859,7 @@ struct UserSubscriptionResponse: Codable {
     case memoriesCreatedLimit = "memories_created_limit"
     case availablePlans = "available_plans"
     case showSubscriptionUI = "show_subscription_ui"
+    case desktopGrandfatherUntil = "desktop_grandfather_until"
   }
 
   // Defensive decode: only `subscription` is required. The usage counters and
@@ -3802,6 +3880,7 @@ struct UserSubscriptionResponse: Codable {
     memoriesCreatedLimit = try c.decodeIfPresent(Int.self, forKey: .memoriesCreatedLimit) ?? 0
     availablePlans = try c.decodeIfPresent([SubscriptionPlanOption].self, forKey: .availablePlans) ?? []
     showSubscriptionUI = try c.decodeIfPresent(Bool.self, forKey: .showSubscriptionUI) ?? true
+    desktopGrandfatherUntil = try c.decodeIfPresent(Int.self, forKey: .desktopGrandfatherUntil)
   }
 }
 
@@ -4546,28 +4625,40 @@ extension APIClient {
     return try await get("v1/payments/overage-info")
   }
 
-  func createCheckoutSession(priceId: String) async throws -> CheckoutSessionResponse {
+  func createCheckoutSession(priceId: String, promotionCode: String? = nil) async throws
+    -> CheckoutSessionResponse
+  {
     struct Request: Encodable {
       let priceId: String
+      let promotionCode: String?
 
       enum CodingKeys: String, CodingKey {
         case priceId = "price_id"
+        case promotionCode = "promotion_code"
       }
     }
 
-    return try await post("v1/payments/checkout-session", body: Request(priceId: priceId))
+    return try await post(
+      "v1/payments/checkout-session",
+      body: Request(priceId: priceId, promotionCode: promotionCode))
   }
 
-  func upgradeSubscription(priceId: String) async throws -> UpgradeSubscriptionResponse {
+  func upgradeSubscription(priceId: String, promotionCode: String? = nil) async throws
+    -> UpgradeSubscriptionResponse
+  {
     struct Request: Encodable {
       let priceId: String
+      let promotionCode: String?
 
       enum CodingKeys: String, CodingKey {
         case priceId = "price_id"
+        case promotionCode = "promotion_code"
       }
     }
 
-    return try await post("v1/payments/upgrade-subscription", body: Request(priceId: priceId))
+    return try await post(
+      "v1/payments/upgrade-subscription",
+      body: Request(priceId: priceId, promotionCode: promotionCode))
   }
 
   func createCustomerPortalSession() async throws -> CustomerPortalResponse {
@@ -4955,4 +5046,77 @@ extension APIClient {
     let body = UpdateActionItemRequest(completed: completed, description: description, dueAt: dueAt)
     return try await patch("v1/tools/action-items/\(id)", body: body, customBaseURL: nil)
   }
+
+  // MARK: - X (Twitter) Connector
+
+  /// Ask the Python backend for the X OAuth authorize URL. The desktop passes
+  /// its own deep link so the backend can redirect back to this exact build.
+  func xOAuthURL(successRedirectURL: String) async throws -> XOAuthURLResponse {
+    let encoded = successRedirectURL.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
+    return try await get("v1/x/oauth-url?success_redirect_url=\(encoded)")
+  }
+
+  func xConnectionStatus() async throws -> XConnectionStatus {
+    try await get("v1/x/connection-status")
+  }
+
+  @discardableResult
+  func xSync() async throws -> XSyncResult {
+    try await post("v1/x/sync")
+  }
+
+  func xDisconnect() async throws {
+    let _: XSimpleOK = try await post("v1/x/disconnect")
+  }
+}
+
+struct XOAuthURLResponse: Decodable {
+  let success: Bool
+  let authUrl: String?
+  let error: String?
+  enum CodingKeys: String, CodingKey {
+    case success
+    case authUrl = "auth_url"
+    case error
+  }
+}
+
+struct XConnectionStatus: Decodable {
+  let success: Bool
+  let connected: Bool
+  let handle: String?
+  let postCount: Int?
+  let memoryCount: Int?
+  let syncing: Bool?
+  let lastSyncedAt: String?
+  let lastSyncSource: String?
+  enum CodingKeys: String, CodingKey {
+    case success
+    case connected
+    case handle
+    case postCount = "post_count"
+    case memoryCount = "memory_count"
+    case syncing
+    case lastSyncedAt = "last_synced_at"
+    case lastSyncSource = "last_sync_source"
+  }
+}
+
+struct XSyncResult: Decodable {
+  let success: Bool
+  let source: String?
+  let newPosts: Int?
+  let memoriesCreated: Int?
+  let error: String?
+  enum CodingKeys: String, CodingKey {
+    case success
+    case source
+    case newPosts = "new_posts"
+    case memoriesCreated = "memories_created"
+    case error
+  }
+}
+
+struct XSimpleOK: Decodable {
+  let success: Bool
 }

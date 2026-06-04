@@ -60,6 +60,7 @@ from utils.other.chat_file import FileChatTool
 from utils.retrieval.graph import execute_graph_chat, execute_chat_stream, execute_persona_chat_stream
 from utils.llm.usage_tracker import set_usage_context, reset_usage_context, Features
 from utils.users import get_user_display_name
+from utils.log_sanitizer import sanitize_pii
 from utils.observability import submit_langsmith_feedback
 from utils.voice_duration_limiter import (
     compute_pcm_duration_ms,
@@ -212,7 +213,7 @@ def send_message(
         return StreamingResponse(_quota_exceeded_stream(), media_type="text/event-stream")
 
     compat_app_id = app_id or plugin_id
-    logger.info(f'send_message {data.text} {compat_app_id} {uid}')
+    logger.info(f'send_message {sanitize_pii(data.text)} {compat_app_id} {uid}')
 
     if compat_app_id in ['null', '']:
         compat_app_id = None

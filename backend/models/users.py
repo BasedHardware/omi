@@ -88,6 +88,11 @@ class Subscription(BaseModel):
     # `superwall_ios` / `superwall_android` by the Superwall webhook handler.
     source: SubscriptionSource = SubscriptionSource.stripe
     current_period_end: Optional[int] = None
+    # Period start is used by the Neo desktop-grandfather check. Populated by the
+    # Stripe webhook on every subscription event going forward; existing subs
+    # have None until their first post-deploy webhook fires (renewal/cancel/etc.)
+    # and are treated as pre-cutoff (grandfathered) until then.
+    current_period_start: Optional[int] = None
     stripe_subscription_id: Optional[str] = None
     # Identifier from Superwall (their internal sub id) — populated only for
     # mobile purchases. Lets the webhook handler dedupe events.
@@ -168,3 +173,8 @@ class UserSubscriptionResponse(BaseModel):
     # Phone call feature access snapshot — null means the client hasn't been
     # given a quota read (older servers or disabled endpoints).
     phone_call_quota: Optional[PhoneCallQuota] = None
+    # Unix seconds. Set for Neo subscribers who retain desktop access under the
+    # grandfather rule (subscription period started before NEO_DESKTOP_GRANDFATHER_CUTOFF)
+    # — value is `subscription.current_period_end`. Null otherwise. The desktop client
+    # uses this to render a "Neo desktop access ends on <date>" notice.
+    desktop_grandfather_until: Optional[int] = None

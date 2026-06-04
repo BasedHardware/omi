@@ -1459,7 +1459,7 @@ class AppLocalizationsFa extends AppLocalizations {
       'آزادانه از omi استفاده کنید. شما فقط مستقیماً ارائه‌دهنده STT خود را پرداخت می‌کنید.';
 
   @override
-  String get freeMinutesMonth => '1200 دقیقه رایگان/ماه شامل است. نامحدود با ';
+  String get freeMinutesMonth => '600 دقیقه رایگان/ماه شامل است. نامحدود با ';
 
   @override
   String get omiUnlimited => 'Omi Unlimited';
@@ -4703,7 +4703,7 @@ class AppLocalizationsFa extends AppLocalizations {
   String get noSpecificDataAccessConfigured => 'هیچ دسترسی داده خاصی تنظیم‌نشده است.';
 
   @override
-  String get basicPlanDescription => '1,200 دقیقه حرفه‌ای + نامحدود روی‌دستگاه';
+  String get basicPlanDescription => '600 دقیقه حرفه‌ای + نامحدود روی‌دستگاه';
 
   @override
   String get minutes => 'دقیقه';
@@ -5994,7 +5994,7 @@ class AppLocalizationsFa extends AppLocalizations {
   String get cloudProvider => 'ارائه دهنده ابری';
 
   @override
-  String get premiumMinutesInfo => '1,200 دقیقه premium/ماه. برگه On-Device رونویسی رایگان نامحدود را ارائه می دهد.';
+  String get premiumMinutesInfo => '600 دقیقه premium/ماه. برگه On-Device رونویسی رایگان نامحدود را ارائه می دهد.';
 
   @override
   String get viewUsage => 'مشاهده استفاده';
@@ -6074,7 +6074,7 @@ class AppLocalizationsFa extends AppLocalizations {
   String get batteryDrainSignificantly => 'تخلیه باتری به طور قابل توجهی افزایش خواهد یافت.';
 
   @override
-  String get premiumMinutesMonth => '1,200 دقیقه premium/ماه. برگه On-Device رونویسی رایگان نامحدود را ارائه می دهد.';
+  String get premiumMinutesMonth => '600 دقیقه premium/ماه. برگه On-Device رونویسی رایگان نامحدود را ارائه می دهد.';
 
   @override
   String get audioProcessedLocally =>
@@ -9430,4 +9430,37 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get plusPlan => 'Plus Plan';
+
+  @override
+  String get promoCode => 'کد تخفیف';
+
+  @override
+  String get enterPromoCode => 'کد تخفیف را وارد کنید';
+
+  @override
+  String get invalidPromotionCode => 'کد تخفیف نامعتبر.';
+
+  @override
+  String get backgroundModeTitle => 'حالت پس‌زمینه';
+
+  @override
+  String get backgroundModeDescription => 'حتی وقتی برنامه کاملاً بسته است، ضبط Omi شما را ادامه دهید.';
+
+  @override
+  String get backgroundModeNote => 'فعلاً فقط با دستگاه‌های Omi کار می‌کند و به‌طور مداوم در حال بهبود است.';
+
+  @override
+  String get regenerateRecap => 'بازسازی خلاصه';
+
+  @override
+  String get recapRegeneratedSnackbar => 'خلاصه دوباره ساخته شد';
+
+  @override
+  String get recapRegenerateFailed => 'بازسازی خلاصه ممکن نشد. بعداً دوباره تلاش کنید.';
+
+  @override
+  String get recapRegenerateCooldown => 'لطفاً چند ثانیه قبل از بازسازی مجدد صبر کنید.';
+
+  @override
+  String get recapRegenerateNoConversations => 'هیچ مکالمه‌ای برای خلاصه‌سازی این روز وجود ندارد.';
 }

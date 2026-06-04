@@ -20,9 +20,7 @@ import 'package:omi/services/devices.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/utils/analytics/intercom.dart';
 import 'package:omi/utils/l10n_extensions.dart';
-import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/other/temp.dart';
-import 'package:omi/utils/platform/platform_service.dart';
 import 'package:omi/widgets/dialog.dart';
 
 class DeviceSettings extends StatefulWidget {

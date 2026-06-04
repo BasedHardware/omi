@@ -3042,5 +3042,16 @@
     "syncProcessingBackgroundHint": "Detta fortsätter i bakgrunden — du kan lämna den här skärmen.",
     "syncCardRateLimited": "Gränsen för skälig användning har nåtts — synkroniseringen återupptas automatiskt",
     "syncCardBackendBusy": "Omis servrar är hårt belastade — dina inspelningar synkroniseras så snart kapacitet frigörs",
-    "unableToDetermineFirmwareVersion": "Det gick inte att fastställa aktuell firmwareversion"
+    "unableToDetermineFirmwareVersion": "Det gick inte att fastställa aktuell firmwareversion",
+    "promoCode": "Kampanjkod",
+    "enterPromoCode": "Ange kampanjkod",
+    "invalidPromotionCode": "Ogiltig kampanjkod.",
+    "backgroundModeTitle": "Bakgrundsläge",
+    "backgroundModeDescription": "Håll din Omi inspelande även när appen är helt stängd.",
+    "backgroundModeNote": "Fungerar än så länge bara med Omi-enheter och förbättras kontinuerligt.",
+    "regenerateRecap": "Återskapa sammanfattningen",
+    "recapRegeneratedSnackbar": "Sammanfattningen återskapad",
+    "recapRegenerateFailed": "Det gick inte att återskapa sammanfattningen. Försök igen senare.",
+    "recapRegenerateCooldown": "Vänta några sekunder innan du genererar igen.",
+    "recapRegenerateNoConversations": "Inga samtal att sammanfatta för den här dagen."
 }

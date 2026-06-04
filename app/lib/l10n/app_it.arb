@@ -3042,5 +3042,16 @@
     "syncProcessingBackgroundHint": "L'operazione continua in background — puoi lasciare questa schermata.",
     "syncCardRateLimited": "Limite di utilizzo raggiunto — la sincronizzazione riprenderà automaticamente",
     "syncCardBackendBusy": "I server di Omi sono sovraccarichi — le tue registrazioni verranno sincronizzate appena tornerà disponibile capacità",
-    "unableToDetermineFirmwareVersion": "Impossibile determinare la versione attuale del firmware"
+    "unableToDetermineFirmwareVersion": "Impossibile determinare la versione attuale del firmware",
+    "promoCode": "Codice promozionale",
+    "enterPromoCode": "Inserisci il codice promozionale",
+    "invalidPromotionCode": "Codice promozionale non valido.",
+    "backgroundModeTitle": "Modalità in background",
+    "backgroundModeDescription": "Mantieni il tuo Omi in registrazione anche quando l'app è completamente chiusa.",
+    "backgroundModeNote": "Per ora funziona solo con i dispositivi Omi ed è in continuo miglioramento.",
+    "regenerateRecap": "Rigenera il riepilogo",
+    "recapRegeneratedSnackbar": "Riepilogo rigenerato",
+    "recapRegenerateFailed": "Impossibile rigenerare il riepilogo. Riprova più tardi.",
+    "recapRegenerateCooldown": "Attendi qualche secondo prima di rigenerare.",
+    "recapRegenerateNoConversations": "Nessuna conversazione da riepilogare per questo giorno."
 }

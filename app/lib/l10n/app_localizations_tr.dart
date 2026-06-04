@@ -9439,4 +9439,37 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get plusPlan => 'Plus Plan';
+
+  @override
+  String get promoCode => 'Promosyon kodu';
+
+  @override
+  String get enterPromoCode => 'Promosyon kodunu girin';
+
+  @override
+  String get invalidPromotionCode => 'Geçersiz promosyon kodu.';
+
+  @override
+  String get backgroundModeTitle => 'Arka Plan Modu';
+
+  @override
+  String get backgroundModeDescription => 'Uygulama tamamen kapalıyken bile Omi\'nizi kayıtta tutun.';
+
+  @override
+  String get backgroundModeNote => 'Şimdilik yalnızca Omi cihazlarıyla çalışır ve sürekli geliştirilmektedir.';
+
+  @override
+  String get regenerateRecap => 'Özeti yeniden oluştur';
+
+  @override
+  String get recapRegeneratedSnackbar => 'Özet yeniden oluşturuldu';
+
+  @override
+  String get recapRegenerateFailed => 'Özet yeniden oluşturulamadı. Lütfen daha sonra tekrar deneyin.';
+
+  @override
+  String get recapRegenerateCooldown => 'Yeniden oluşturmadan önce lütfen birkaç saniye bekleyin.';
+
+  @override
+  String get recapRegenerateNoConversations => 'Bu gün için özetlenecek konuşma bulunamadı.';
 }

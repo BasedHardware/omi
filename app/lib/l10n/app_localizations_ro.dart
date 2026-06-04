@@ -9473,4 +9473,37 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get plusPlan => 'Plus Plan';
+
+  @override
+  String get promoCode => 'Cod promoțional';
+
+  @override
+  String get enterPromoCode => 'Introduceți codul promoțional';
+
+  @override
+  String get invalidPromotionCode => 'Cod promoțional invalid.';
+
+  @override
+  String get backgroundModeTitle => 'Mod în fundal';
+
+  @override
+  String get backgroundModeDescription => 'Păstrează Omi în înregistrare chiar și când aplicația este complet închisă.';
+
+  @override
+  String get backgroundModeNote => 'Deocamdată funcționează doar cu dispozitive Omi și este îmbunătățit continuu.';
+
+  @override
+  String get regenerateRecap => 'Regenerează rezumatul';
+
+  @override
+  String get recapRegeneratedSnackbar => 'Rezumat regenerat';
+
+  @override
+  String get recapRegenerateFailed => 'Rezumatul nu a putut fi regenerat. Încercați din nou mai târziu.';
+
+  @override
+  String get recapRegenerateCooldown => 'Vă rugăm să așteptați câteva secunde înainte de a regenera.';
+
+  @override
+  String get recapRegenerateNoConversations => 'Nu există conversații de rezumat pentru această zi.';
 }

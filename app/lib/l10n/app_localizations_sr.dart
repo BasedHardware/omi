@@ -9440,4 +9440,37 @@ class AppLocalizationsSr extends AppLocalizations {
 
   @override
   String get plusPlan => 'Plus Plan';
+
+  @override
+  String get promoCode => 'Промо код';
+
+  @override
+  String get enterPromoCode => 'Унесите промо код';
+
+  @override
+  String get invalidPromotionCode => 'Неважећи промо код.';
+
+  @override
+  String get backgroundModeTitle => 'Позадински режим';
+
+  @override
+  String get backgroundModeDescription => 'Задржите Omi снимање чак и када је апликација потпуно затворена.';
+
+  @override
+  String get backgroundModeNote => 'Засад ради само са Omi уређајима и непрекидно се побољшава.';
+
+  @override
+  String get regenerateRecap => 'Поново генериши резиме';
+
+  @override
+  String get recapRegeneratedSnackbar => 'Резиме је поново генерисан';
+
+  @override
+  String get recapRegenerateFailed => 'Није могуће поново генерисати резиме. Покушајте поново касније.';
+
+  @override
+  String get recapRegenerateCooldown => 'Сачекајте неколико секунди пре поновног генерисања.';
+
+  @override
+  String get recapRegenerateNoConversations => 'Нема разговора за сумирање за овај дан.';
 }

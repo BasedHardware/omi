@@ -110,5 +110,5 @@ pip install -e ".[dev]"
 
 ## License
 
-MIT License — this is an unofficial SDK built by the community.
+MIT License — built by the community.
 

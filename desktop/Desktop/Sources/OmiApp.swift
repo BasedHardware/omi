@@ -241,6 +241,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     log("AppDelegate: applicationDidFinishLaunching started (mode: \(OMIApp.launchMode.rawValue))")
     log("AppDelegate: AuthState.isSignedIn=\(AuthState.shared.isSignedIn)")
 
+    // Refresh the "Auto" realtime-voice model pick from Artificial Analysis (daily, cached).
+    AutoModelSelector.shared.refreshIfStale()
+
     // Force macOS to use the correct app icon (bypasses icon cache).
     // Apply squircle mask with proper margins because NSApp.applicationIconImage
     // renders the raw image without macOS auto-masking.
@@ -1093,6 +1096,20 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
       (!paywalled && AssistantSettings.shared.transcriptionEnabled) ? .on : .off
   }
 
+  func menuDidClose(_ menu: NSMenu) {
+    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+      for window in NSApp.windows where self.isMenuPopupWindow(window) && window.isVisible {
+        log("AppDelegate: [MENUBAR] Cleaning up lingering menu popup window: \(window.frame)")
+        window.orderOut(nil)
+      }
+    }
+  }
+
+  private func isMenuPopupWindow(_ window: NSWindow) -> Bool {
+    // AppKit menu popup windows use private classes/titles like "NSPopupMenuWindow" and "Item-0".
+    window.title.hasPrefix("Item-") && window.className.contains("PopupMenuWindow")
+  }
+
   func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
     let shouldTerminate = !UserDefaults.standard.bool(forKey: "hasCompletedOnboarding")
     if shouldTerminate {
@@ -1234,6 +1251,17 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
   }
 
   private func updateOnboardingLifecyclePolicy(reason: String) {
+    // Only the production/beta bundle (com.omi.computer-macos) should relaunch on login.
+    // Dev and named test bundles must always opt out — otherwise every local build that was
+    // open at shutdown gets relaunched on the next restart, swarming the screen with dev apps.
+    guard AppBuild.isProductionBundle else {
+      guard !relaunchOnLoginSuppressedForOnboarding else { return }
+      NSApp.disableRelaunchOnLogin()
+      relaunchOnLoginSuppressedForOnboarding = true
+      log("AppDelegate: Disabled relaunch on login for non-production bundle (\(reason))")
+      return
+    }
+
     let hasCompletedOnboarding = UserDefaults.standard.bool(forKey: "hasCompletedOnboarding")
 
     if hasCompletedOnboarding {

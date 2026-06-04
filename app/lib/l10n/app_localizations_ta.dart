@@ -1467,7 +1467,7 @@ class AppLocalizationsTa extends AppLocalizations {
       'Omi ஐ சுதந்திரமாகப் பயன்படுத்தவும். நீங்கள் உங்கள் STT வழங்குநரிடம் நேரடியாக பணம் செலுத்துங்கள்.';
 
   @override
-  String get freeMinutesMonth => 'மாதத்திற்கு 1,200 இலவச நிமிடங்கள் அடங்கியுள்ளது. ';
+  String get freeMinutesMonth => 'மாதத்திற்கு 600 இலவச நிமிடங்கள் அடங்கியுள்ளது. ';
 
   @override
   String get omiUnlimited => 'Omi Unlimited';
@@ -4732,7 +4732,7 @@ class AppLocalizationsTa extends AppLocalizations {
   String get noSpecificDataAccessConfigured => 'குறிப்பிட்ட தரவு அணுக கட்டமைக்கப்படவில்லை.';
 
   @override
-  String get basicPlanDescription => '1,200 பிரீமியம் நிமிषங்கள் + சாதனத்தில் வரம்பிலாவை';
+  String get basicPlanDescription => '600 பிரீமியம் நிமிषங்கள் + சாதனத்தில் வரம்பிலாவை';
 
   @override
   String get minutes => 'நிமிషங்கள்';
@@ -6032,7 +6032,7 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get premiumMinutesInfo =>
-      'மாத மாதம் 1,200 பிரீமியம் நிமிடங்கள்.온-சாதன ট্যাब সীमाहीन இலவச உபாய கேட்டுபேரல் வழங்குகிறது।';
+      'மாத மாதம் 600 பிரீமியம் நிமிடங்கள்.온-சாதன ট্যাब সীमाहीन இலவச உபாய கேட்டுபேரல் வழங்குகிறது।';
 
   @override
   String get viewUsage => 'பயன்பாட்டைக் கவனிக்கவும்';
@@ -6114,7 +6114,7 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get premiumMinutesMonth =>
-      'மாத மாதம் 1,200 பிரீமியம் நிமிடங்கள்.온-சாதன ট்যாब சீமाहीन இலவச உபாய கேட்டுபேரல் வழங்குகிறது।';
+      'மாத மாதம் 600 பிரீமியம் நிமிடங்கள்.온-சாதன ট்যாब சீமाहीन இலவச உபாய கேட்டுபேரல் வழங்குகிறது।';
 
   @override
   String get audioProcessedLocally =>
@@ -9494,4 +9494,37 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get plusPlan => 'Plus Plan';
+
+  @override
+  String get promoCode => 'விளம்பர குறியீடு';
+
+  @override
+  String get enterPromoCode => 'விளம்பர குறியீட்டை உள்ளிடவும்';
+
+  @override
+  String get invalidPromotionCode => 'தவறான விளம்பர குறியீடு.';
+
+  @override
+  String get backgroundModeTitle => 'பின்னணி பயன்முறை';
+
+  @override
+  String get backgroundModeDescription => 'ஆப்ஸ் முழுவதுமாக மூடப்பட்டிருந்தாலும் உங்கள் Omi பதிவைத் தொடரவும்.';
+
+  @override
+  String get backgroundModeNote => 'தற்போது Omi சாதனங்களுடன் மட்டுமே செயல்படுகிறது, தொடர்ந்து மேம்படுத்தப்படுகிறது.';
+
+  @override
+  String get regenerateRecap => 'சுருக்கத்தை மீண்டும் உருவாக்கு';
+
+  @override
+  String get recapRegeneratedSnackbar => 'சுருக்கம் மீண்டும் உருவாக்கப்பட்டது';
+
+  @override
+  String get recapRegenerateFailed => 'சுருக்கத்தை மீண்டும் உருவாக்க முடியவில்லை. பிறகு மீண்டும் முயற்சிக்கவும்.';
+
+  @override
+  String get recapRegenerateCooldown => 'மீண்டும் உருவாக்குவதற்கு முன் சில வினாடிகள் காத்திருக்கவும்.';
+
+  @override
+  String get recapRegenerateNoConversations => 'இந்த நாளுக்கு சுருக்கமாக மாற்ற உரையாடல்கள் இல்லை.';
 }

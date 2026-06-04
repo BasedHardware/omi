@@ -11,6 +11,7 @@ import database.conversations as conversations_db
 
 # from database.redis_db import get_filter_category_items
 # from database.vector_db import query_vectors_by_metadata
+from database.vector_db import upsert_memory_vector, delete_memory_vector
 import database.vector_db as vector_db
 from models.memories import MemoryDB, Memory, MemoryCategory
 from models.conversation_enums import CategoryEnum
@@ -55,6 +56,10 @@ def create_memory(memory: Memory, uid: str = Depends(with_rate_limit(get_uid_fro
     memory.category = identify_category_for_memory(memory.content)
     memory_db = MemoryDB.from_memory(memory, uid, None, True)
     memories_db.create_memory(uid, memory_db.model_dump())
+    try:
+        upsert_memory_vector(uid, memory_db.id, memory_db.content, memory_db.category.value)
+    except Exception:
+        logger.exception("Vector upsert failed uid=%s memory_id=%s (memory saved, vector missing)", uid, memory_db.id)
     postprocess_executor.submit(update_personas_async, uid)
     return memory_db
 
@@ -72,13 +77,21 @@ def _validate_mcp_memory(uid: str, memory_id: str) -> dict:
 def delete_memory(memory_id: str, uid: str = Depends(get_uid_from_mcp_api_key)):
     _validate_mcp_memory(uid, memory_id)
     memories_db.delete_memory(uid, memory_id)
+    try:
+        delete_memory_vector(uid, memory_id)
+    except Exception:
+        logger.exception("Vector delete failed uid=%s memory_id=%s (Firestore deleted)", uid, memory_id)
     return {"status": "ok"}
 
 
 @router.patch("/v1/mcp/memories/{memory_id}", tags=["mcp"])
 def edit_memory(memory_id: str, value: str, uid: str = Depends(get_uid_from_mcp_api_key)):
-    _validate_mcp_memory(uid, memory_id)
+    memory = _validate_mcp_memory(uid, memory_id)
     memories_db.edit_memory(uid, memory_id, value)
+    try:
+        upsert_memory_vector(uid, memory_id, value, memory.get('category', 'other'))
+    except Exception:
+        logger.exception("Vector upsert failed uid=%s memory_id=%s (memory edited, vector stale)", uid, memory_id)
     return {"status": "ok"}
 
 
@@ -86,6 +99,45 @@ class CleanerMemory(BaseModel):
     id: str
     content: str
     category: MemoryCategory
+
+
+class SearchedMemory(CleanerMemory):
+    relevance_score: float
+
+
+@router.get("/v1/mcp/memories/search", tags=["mcp"], response_model=List[SearchedMemory])
+def search_memories(
+    query: str,
+    limit: int = 10,
+    uid: str = Depends(get_uid_from_mcp_api_key),
+):
+    logger.info(f"search_memories {uid} query={sanitize_pii(query)} limit={limit}")
+    limit = max(1, min(limit, 20))
+    fetch_limit = min(limit * 3, 60)
+    matches = vector_db.find_similar_memories(uid, query, threshold=0.0, limit=fetch_limit)
+    if not matches:
+        return []
+    memory_ids = [m.get("memory_id") for m in matches if m.get("memory_id")]
+    scores = {m.get("memory_id"): m.get("score", 0) for m in matches}
+    if not memory_ids:
+        return []
+    memories_data = memories_db.get_memories_by_ids(uid, memory_ids)
+    results = []
+    for m in memories_data:
+        if m.get('user_review') is False:
+            continue
+        if m.get('is_locked', False):
+            continue
+        results.append(
+            {
+                "id": m.get("id", ""),
+                "content": m.get("content", ""),
+                "category": m.get("category", "other"),
+                "relevance_score": round(scores.get(m.get("id"), 0), 4),
+            }
+        )
+    results.sort(key=lambda x: x["relevance_score"], reverse=True)
+    return results[:limit]
 
 
 @router.get("/v1/mcp/memories", tags=["mcp"], response_model=List[CleanerMemory])

@@ -13,6 +13,7 @@ import 'package:omi/pages/speech_profile/page.dart';
 
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
+import 'package:omi/utils/platform/platform_service.dart';
 
 import 'package:omi/pages/settings/conversation_display_settings.dart';
 
@@ -232,6 +233,88 @@ class _ProfilePageState extends State<ProfilePage> {
     );
   }
 
+  void _showBackgroundModeSheet() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: const Color(0xFF1C1C1E),
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
+      builder: (sheetContext) {
+        return StatefulBuilder(
+          builder: (context, setSheetState) {
+            final enabled = SharedPreferencesUtil().backgroundModeEnabled;
+            void setEnabled(bool value) {
+              SharedPreferencesUtil().backgroundModeEnabled = value;
+              SharedPreferencesUtil().saveBool('nativeBleStreamingEnabled', value);
+              setSheetState(() {});
+              setState(() {});
+            }
+
+            return SafeArea(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Center(
+                      child: Container(
+                        margin: const EdgeInsets.only(bottom: 16),
+                        width: 36,
+                        height: 4,
+                        decoration:
+                            BoxDecoration(color: const Color(0xFF3C3C43), borderRadius: BorderRadius.circular(2)),
+                      ),
+                    ),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            context.l10n.backgroundModeTitle,
+                            style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
+                          ),
+                        ),
+                        Switch(
+                          value: enabled,
+                          activeThumbColor: Colors.white,
+                          activeTrackColor: const Color(0xFF8B5CF6),
+                          onChanged: setEnabled,
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      context.l10n.backgroundModeDescription,
+                      style: TextStyle(color: Colors.grey.shade400, fontSize: 14, height: 1.4),
+                    ),
+                    const SizedBox(height: 16),
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration:
+                          BoxDecoration(color: const Color(0xFF2A2A2E), borderRadius: BorderRadius.circular(12)),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Icon(Icons.info_outline, color: Colors.grey.shade400, size: 18),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Text(
+                              context.l10n.backgroundModeNote,
+                              style: TextStyle(color: Colors.grey.shade400, fontSize: 13, height: 1.4),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -326,6 +409,16 @@ class _ProfilePageState extends State<ProfilePage> {
                   chipValue: _voiceResponseModeLabel(SharedPreferencesUtil().voiceResponseMode),
                   onTap: _showVoiceResponseModeSheet,
                 ),
+                if (PlatformService.isAndroid) ...[
+                  const Divider(height: 1, color: Color(0xFF3C3C43)),
+                  _buildProfileItem(
+                    title: context.l10n.backgroundModeTitle,
+                    icon: const FaIcon(FontAwesomeIcons.towerBroadcast, color: Color(0xFF8E8E93), size: 20),
+                    showBetaTag: true,
+                    chipValue: SharedPreferencesUtil().backgroundModeEnabled ? context.l10n.on : context.l10n.off,
+                    onTap: _showBackgroundModeSheet,
+                  ),
+                ],
               ],
             ),
             const SizedBox(height: 32),

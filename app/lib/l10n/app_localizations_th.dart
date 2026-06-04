@@ -1450,7 +1450,7 @@ class AppLocalizationsTh extends AppLocalizations {
   String get payYourSttProvider => 'ใช้ Omi ได้อย่างอิสระ คุณจ่ายเฉพาะผู้ให้บริการ STT ของคุณโดยตรง';
 
   @override
-  String get freeMinutesMonth => 'รวม 1,200 นาทีฟรี/เดือน ไม่จำกัดด้วย ';
+  String get freeMinutesMonth => 'รวม 600 นาทีฟรี/เดือน ไม่จำกัดด้วย ';
 
   @override
   String get omiUnlimited => 'Omi Unlimited';
@@ -4676,7 +4676,7 @@ class AppLocalizationsTh extends AppLocalizations {
   String get noSpecificDataAccessConfigured => 'ไม่มีการกำหนดค่าการเข้าถึงข้อมูลเฉพาะ';
 
   @override
-  String get basicPlanDescription => '1,200 นาทีพรีเมียม + ไม่จำกัดบนอุปกรณ์';
+  String get basicPlanDescription => '600 นาทีพรีเมียม + ไม่จำกัดบนอุปกรณ์';
 
   @override
   String get minutes => 'นาที';
@@ -5959,7 +5959,7 @@ class AppLocalizationsTh extends AppLocalizations {
   String get cloudProvider => 'ผู้ให้บริการคลาวด์';
 
   @override
-  String get premiumMinutesInfo => '1,200 นาทีพรีเมียม/เดือน แท็บบนอุปกรณ์มีการถอดเสียงฟรีไม่จำกัด';
+  String get premiumMinutesInfo => '600 นาทีพรีเมียม/เดือน แท็บบนอุปกรณ์มีการถอดเสียงฟรีไม่จำกัด';
 
   @override
   String get viewUsage => 'ดูการใช้งาน';
@@ -6039,7 +6039,7 @@ class AppLocalizationsTh extends AppLocalizations {
   String get batteryDrainSignificantly => 'การใช้แบตเตอรี่จะเพิ่มขึ้นอย่างมาก';
 
   @override
-  String get premiumMinutesMonth => '1,200 นาทีพรีเมียม/เดือน แท็บบนอุปกรณ์ให้การถอดความฟรีไม่จำกัด ';
+  String get premiumMinutesMonth => '600 นาทีพรีเมียม/เดือน แท็บบนอุปกรณ์ให้การถอดความฟรีไม่จำกัด ';
 
   @override
   String get audioProcessedLocally =>
@@ -9378,4 +9378,37 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get plusPlan => 'Plus Plan';
+
+  @override
+  String get promoCode => 'รหัสโปรโมชัน';
+
+  @override
+  String get enterPromoCode => 'กรอกรหัสโปรโมชัน';
+
+  @override
+  String get invalidPromotionCode => 'รหัสโปรโมชันไม่ถูกต้อง';
+
+  @override
+  String get backgroundModeTitle => 'โหมดเบื้องหลัง';
+
+  @override
+  String get backgroundModeDescription => 'ให้ Omi ของคุณบันทึกต่อไปแม้ปิดแอปไปทั้งหมดแล้ว';
+
+  @override
+  String get backgroundModeNote => 'ขณะนี้ใช้ได้กับอุปกรณ์ Omi เท่านั้น และกำลังพัฒนาอย่างต่อเนื่อง';
+
+  @override
+  String get regenerateRecap => 'สร้างสรุปใหม่';
+
+  @override
+  String get recapRegeneratedSnackbar => 'สร้างสรุปใหม่แล้ว';
+
+  @override
+  String get recapRegenerateFailed => 'ไม่สามารถสร้างสรุปใหม่ได้ ลองอีกครั้งในภายหลัง';
+
+  @override
+  String get recapRegenerateCooldown => 'โปรดรอสักครู่ก่อนสร้างใหม่อีกครั้ง';
+
+  @override
+  String get recapRegenerateNoConversations => 'ไม่มีการสนทนาที่จะสรุปสำหรับวันนี้';
 }

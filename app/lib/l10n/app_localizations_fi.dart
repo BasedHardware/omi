@@ -9428,4 +9428,37 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get plusPlan => 'Plus Plan';
+
+  @override
+  String get promoCode => 'Tarjouskoodi';
+
+  @override
+  String get enterPromoCode => 'Syötä tarjouskoodi';
+
+  @override
+  String get invalidPromotionCode => 'Virheellinen tarjouskoodi.';
+
+  @override
+  String get backgroundModeTitle => 'Taustatila';
+
+  @override
+  String get backgroundModeDescription => 'Pidä Omi tallentamassa, vaikka sovellus olisi kokonaan suljettu.';
+
+  @override
+  String get backgroundModeNote => 'Toimii toistaiseksi vain Omi-laitteiden kanssa ja sitä kehitetään jatkuvasti.';
+
+  @override
+  String get regenerateRecap => 'Luo yhteenveto uudelleen';
+
+  @override
+  String get recapRegeneratedSnackbar => 'Yhteenveto luotu uudelleen';
+
+  @override
+  String get recapRegenerateFailed => 'Yhteenvedon uudelleenluonti epäonnistui. Yritä myöhemmin uudelleen.';
+
+  @override
+  String get recapRegenerateCooldown => 'Odota muutama sekunti ennen uudelleen luomista.';
+
+  @override
+  String get recapRegenerateNoConversations => 'Tänä päivänä ei ole keskusteluja yhteenvedettäväksi.';
 }

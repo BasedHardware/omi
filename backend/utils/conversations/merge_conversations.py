@@ -31,6 +31,67 @@ import logging
 logger = logging.getLogger(__name__)
 
 
+def _coerce_dt(value):
+    """Coerce a timestamp (datetime or ISO 8601 string) to a tz-aware UTC datetime.
+
+    Conversation docs can carry ``started_at`` / ``finished_at`` as either a
+    Firestore-deserialised ``datetime`` (tz-aware) or as an ISO string (older
+    write paths persisted ``.isoformat()`` instead of a native timestamp).
+    Subtracting two strings throws ``TypeError``; mixing tz-aware with
+    tz-naive also throws. Coercing both sides to a single tz-aware UTC
+    representation keeps the gap math safe regardless of source.
+
+    Returns ``None`` for unparseable input rather than raising — gap warnings
+    are best-effort and a malformed timestamp must not fail the merge call.
+    """
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
+    if isinstance(value, str):
+        try:
+            parsed = datetime.fromisoformat(value.replace('Z', '+00:00'))
+        except ValueError:
+            return None
+        return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
+    return None
+
+
+# Timestamp fields touched by the merge pipeline. Coerced once at the entry
+# point so every downstream caller (sort key, max(), .isoformat(), gap math
+# in _merge_transcript_segments) can assume a uniform tz-aware datetime
+# rather than re-checking the source type at each use site.
+_TIMESTAMP_FIELDS = ('started_at', 'finished_at', 'created_at')
+
+
+def _normalize_conversation_timestamps(conversations: List[Dict]) -> List[Dict]:
+    """Return shallow-copied conversation dicts with timestamp fields coerced.
+
+    Older conversation docs persisted ``started_at`` / ``finished_at`` /
+    ``created_at`` as ISO strings while newer docs store them as Firestore
+    ``Timestamp`` (deserialised to tz-aware ``datetime``). Mixed shapes break
+    ``sorted()`` key comparisons, ``max()``, datetime subtraction in
+    ``_merge_transcript_segments``, and ``.isoformat()`` calls in
+    ``perform_merge_async`` — each of which would otherwise raise and trip
+    the outer ``except`` in ``perform_merge_async``, silently failing the
+    merge for the same user population fixed by ``_coerce_dt`` in the
+    validation step.
+
+    We shallow-copy each dict so the source row in the caller's list isn't
+    mutated. Unparseable timestamps degrade to ``None``; downstream sites
+    already guard against ``None`` (e.g. ``if prev_finished and curr_started``)
+    so a single bad field does not abort the merge.
+    """
+    normalized = []
+    for conv in conversations:
+        c = dict(conv)
+        for field in _TIMESTAMP_FIELDS:
+            if field in c:
+                c[field] = _coerce_dt(c[field])
+        normalized.append(c)
+    return normalized
+
+
 def validate_merge_compatibility(
     conversations: List[Dict],
 ) -> Tuple[bool, Optional[str], Optional[str]]:
@@ -67,11 +128,12 @@ def validate_merge_compatibility(
 
     # Generate warnings for large gaps (but don't reject)
     warnings = []
-    sorted_convs = sorted(conversations, key=lambda c: c.get('started_at', datetime.min))
+    _UTC_MIN = datetime.min.replace(tzinfo=timezone.utc)
+    sorted_convs = sorted(conversations, key=lambda c: _coerce_dt(c.get('started_at')) or _UTC_MIN)
 
     for i in range(1, len(sorted_convs)):
-        prev_finished = sorted_convs[i - 1].get('finished_at')
-        curr_started = sorted_convs[i].get('started_at')
+        prev_finished = _coerce_dt(sorted_convs[i - 1].get('finished_at'))
+        curr_started = _coerce_dt(sorted_convs[i].get('started_at'))
         if prev_finished and curr_started:
             gap_hours = (curr_started - prev_finished).total_seconds() / 3600
             if gap_hours > 1:
@@ -119,8 +181,17 @@ def perform_merge_async(
             _handle_merge_failure(uid, conversation_ids)
             return
 
-        # Sort by started_at (earliest first)
-        sorted_convs = sorted(conversations, key=lambda c: c.get('started_at', datetime.min))
+        # Normalise timestamp fields once so the sort key, max() reducer,
+        # .isoformat() metadata, and _merge_transcript_segments arithmetic
+        # below can all assume tz-aware datetimes regardless of how each
+        # source doc persisted its timestamps. See _coerce_dt for shape
+        # details and rationale.
+        conversations = _normalize_conversation_timestamps(conversations)
+
+        # Sort by started_at (earliest first). _UTC_MIN keeps sort total even
+        # if a doc has no (or an unparseable) started_at.
+        _UTC_MIN = datetime.min.replace(tzinfo=timezone.utc)
+        sorted_convs = sorted(conversations, key=lambda c: c.get('started_at') or _UTC_MIN)
 
         # 2. Merge raw data
         merged_segments = _merge_transcript_segments(sorted_convs)
@@ -131,10 +202,13 @@ def perform_merge_async(
         merged_audio_files = _copy_audio_chunks_for_merge(uid, sorted_convs, new_conversation_id)
 
         # 4. Determine basic fields from source conversations
-        # Use earliest conversation's dates
-        created_at = sorted_convs[0].get('created_at', datetime.now(timezone.utc))
+        # Use earliest conversation's dates. created_at fallback uses
+        # `or` (not `.get(..., default)`) so a present-but-None field still
+        # falls back to "now" — the normaliser turns unparseable strings
+        # into None.
+        created_at = sorted_convs[0].get('created_at') or datetime.now(timezone.utc)
         started_at = sorted_convs[0].get('started_at')
-        finished_at = max(c.get('finished_at', datetime.min) for c in sorted_convs)
+        finished_at = max((c.get('finished_at') or _UTC_MIN) for c in sorted_convs)
         language = sorted_convs[0].get('language', 'en')
         source = sorted_convs[0].get('source', 'omi')
 

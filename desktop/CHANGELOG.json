@@ -1,6 +1,175 @@
 {
-  "unreleased": [],
+  "unreleased": [
+    "Fixed drag handle on Tasks page not appearing when hovering over a row",
+    "Fixed drag-to-reorder on Tasks page not persisting when date filters are active",
+    "Fixed drag-to-reorder on Tasks page — dragged row now visually dims while in flight"
+  ],
   "releases": [
+    {
+      "version": "0.11.446",
+      "date": "2026-06-03",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.445",
+      "date": "2026-06-03",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.444",
+      "date": "2026-06-03",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.443",
+      "date": "2026-06-03",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.442",
+      "date": "2026-06-02",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.441",
+      "date": "2026-06-02",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.439",
+      "date": "2026-06-02",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.438",
+      "date": "2026-06-02",
+      "changes": [
+        "Memories filter now matches mobile (Manual, About You, Insights) and adds a Workflow category; removed the old Focus/Distracted/Productivity filters",
+        "Memories: one-time cache cleanup removes stale/duplicate entries so Manual shows only memories you created"
+      ]
+    },
+    {
+      "version": "0.11.437",
+      "date": "2026-06-01",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.436",
+      "date": "2026-06-01",
+      "changes": [
+        "Fixed editing a conversation title not saving",
+        "Fixed misleading \"recordings aren't lost\" copy on the monthly-limit popup when the menu-bar Screen Capture or Audio Recording toggle was the trigger"
+      ]
+    },
+    {
+      "version": "0.11.435",
+      "date": "2026-05-31",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.434",
+      "date": "2026-05-31",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.433",
+      "date": "2026-05-31",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.432",
+      "date": "2026-05-29",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.431",
+      "date": "2026-05-29",
+      "changes": [
+        "Fixed editing a conversation title not saving"
+      ]
+    },
+    {
+      "version": "0.11.429",
+      "date": "2026-05-28",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.428",
+      "date": "2026-05-28",
+      "changes": [
+        "Plan & Usage: Neo subscribers now see a clear notice about when their desktop access ends, and post-policy Neo subscribers get plan-specific copy instead of \"Trial Ended\"",
+        "Fixed privacy gap where password manager screens could be sent to AI assistants despite being excluded from Rewind"
+      ]
+    },
+    {
+      "version": "0.11.427",
+      "date": "2026-05-27",
+      "changes": [
+        "Added an X (Twitter) connector to import your tweets and bookmarks into Omi"
+      ]
+    },
+    {
+      "version": "0.11.426",
+      "date": "2026-05-26",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.425",
+      "date": "2026-05-26",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.424",
+      "date": "2026-05-26",
+      "changes": [
+        "Redesigned the Apps page connectors as a compact list and added one-tap MCP connection for Claude, ChatGPT, Claude Code, and Codex",
+        "Added an Execute button on MCP connectors so Omi sets up Claude/ChatGPT/Claude Code/Codex for you as a task"
+      ]
+    },
+    {
+      "version": "0.11.423",
+      "date": "2026-05-25",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.422",
+      "date": "2026-05-25",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
     {
       "version": "0.11.421",
       "date": "2026-05-24",
