@@ -1000,17 +1000,13 @@ def process_segment(
                 language=stt_lang,
             )
         else:
-            if single_language_mode and user_language:
-                dg_language, dg_model = get_deepgram_model_for_language(user_language)
-            else:
-                dg_language, dg_model = get_deepgram_model_for_language('multi')
             words, detected_language = deepgram_prerecorded(
                 url,
                 speakers_count=3,
                 attempts=0,
                 return_language=True,
-                language=dg_language,
-                model=dg_model,
+                language=stt_lang,
+                model=stt_model,
                 keywords=vocabulary if vocabulary else None,
             )
         language = user_language if (single_language_mode and user_language) else detected_language
