@@ -1,4 +1,5 @@
 import os
+from abc import ABC, abstractmethod
 from collections import defaultdict
 from io import BytesIO
 from typing import List, Optional, Sequence, Tuple, Union
@@ -18,6 +19,40 @@ _MODULATE_TIMEOUT = httpx.Timeout(connect=10.0, read=300.0, write=30.0, pool=10.
 logger = logging.getLogger(__name__)
 
 stt_prerecorded_model = os.getenv('STT_PRERECORDED_MODEL', 'dg-nova-3')
+
+
+# ---------------------------------------------------------------------------
+# Provider-agnostic ABC — mirrors STTSocket for streaming
+# ---------------------------------------------------------------------------
+
+
+class PrerecordedSTTProvider(ABC):
+
+    @abstractmethod
+    def transcribe_url(
+        self,
+        audio_url: str,
+        speakers_count: int = None,
+        attempts: int = 0,
+        return_language: bool = False,
+        diarize: bool = True,
+        language: Optional[str] = None,
+        keywords: Optional[Sequence[str]] = None,
+    ) -> Union[List[dict], Tuple[List[dict], str]]: ...
+
+    @abstractmethod
+    def transcribe_bytes(
+        self,
+        audio_bytes: bytes,
+        sample_rate: int = 16000,
+        diarize: bool = True,
+        attempts: int = 0,
+        encoding: Optional[str] = None,
+        channels: int = 1,
+        language: Optional[str] = None,
+        return_language: bool = False,
+        keywords: Optional[Sequence[str]] = None,
+    ) -> Union[List[dict], Tuple[List[dict], str]]: ...
 
 
 class PrerecordedSTTService:
@@ -553,6 +588,126 @@ def modulate_prerecorded(
         raise RuntimeError(f'Modulate transcription (url) failed after {attempts + 1} attempts: {e}')
 
 
+# ---------------------------------------------------------------------------
+# Provider implementations
+# ---------------------------------------------------------------------------
+
+
+class DeepgramPrerecordedProvider(PrerecordedSTTProvider):
+
+    def __init__(self, model: str = 'nova-3'):
+        self._model = model
+
+    def transcribe_url(
+        self,
+        audio_url,
+        speakers_count=None,
+        attempts=0,
+        return_language=False,
+        diarize=True,
+        language=None,
+        keywords=None,
+    ):
+        lang = language if language in _deepgram_nova3_languages else 'multi'
+        return deepgram_prerecorded(
+            audio_url,
+            speakers_count=speakers_count,
+            attempts=attempts,
+            return_language=return_language,
+            diarize=diarize,
+            language=lang,
+            model=self._model,
+            keywords=keywords,
+        )
+
+    def transcribe_bytes(
+        self,
+        audio_bytes,
+        sample_rate=16000,
+        diarize=True,
+        attempts=0,
+        encoding=None,
+        channels=1,
+        language=None,
+        return_language=False,
+        keywords=None,
+    ):
+        lang = language if language in _deepgram_nova3_languages else 'multi'
+        return deepgram_prerecorded_from_bytes(
+            audio_bytes,
+            sample_rate=sample_rate,
+            diarize=diarize,
+            attempts=attempts,
+            encoding=encoding,
+            channels=channels,
+            language=lang,
+            model=self._model,
+            return_language=return_language,
+            keywords=keywords,
+        )
+
+
+class ModulatePrerecordedProvider(PrerecordedSTTProvider):
+
+    def _normalize_lang(self, language: Optional[str]) -> str:
+        if not language:
+            return 'en'
+        return language.split('-')[0].split('_')[0].lower()
+
+    def transcribe_url(
+        self,
+        audio_url,
+        speakers_count=None,
+        attempts=0,
+        return_language=False,
+        diarize=True,
+        language=None,
+        keywords=None,
+    ):
+        return modulate_prerecorded(
+            audio_url,
+            speakers_count=speakers_count,
+            attempts=attempts,
+            return_language=return_language,
+            diarize=diarize,
+            language=self._normalize_lang(language),
+        )
+
+    def transcribe_bytes(
+        self,
+        audio_bytes,
+        sample_rate=16000,
+        diarize=True,
+        attempts=0,
+        encoding=None,
+        channels=1,
+        language=None,
+        return_language=False,
+        keywords=None,
+    ):
+        return modulate_prerecorded_from_bytes(
+            audio_bytes,
+            sample_rate=sample_rate,
+            diarize=diarize,
+            attempts=attempts,
+            return_language=return_language,
+        )
+
+
+def get_prerecorded_provider() -> PrerecordedSTTProvider:
+    """Factory: return the active provider based on STT_PRERECORDED_MODEL."""
+    m = stt_prerecorded_model.strip()
+    if m == 'modulate-velma-2':
+        return ModulatePrerecordedProvider()
+    model = m.replace('dg-', '', 1) if m.startswith('dg-') else 'nova-3'
+    return DeepgramPrerecordedProvider(model=model)
+
+
+# ---------------------------------------------------------------------------
+# Convenience wrappers — delegate to the active provider
+# ---------------------------------------------------------------------------
+
+
 def prerecorded(
     audio_url: str,
     speakers_count: int = None,
@@ -564,24 +719,14 @@ def prerecorded(
     keywords: Optional[Sequence[str]] = None,
 ) -> Union[List[dict], Tuple[List[dict], str]]:
     """Route pre-recorded URL transcription through STT_PRERECORDED_MODEL."""
-    svc, stt_lang, stt_model = get_prerecorded_service(language or 'multi')
-    if svc == PrerecordedSTTService.MODULATE:
-        return modulate_prerecorded(
-            audio_url,
-            speakers_count=speakers_count,
-            attempts=attempts,
-            return_language=return_language,
-            diarize=diarize,
-            language=stt_lang,
-        )
-    return deepgram_prerecorded(
+    provider = get_prerecorded_provider()
+    return provider.transcribe_url(
         audio_url,
         speakers_count=speakers_count,
         attempts=attempts,
         return_language=return_language,
         diarize=diarize,
-        language=stt_lang,
-        model=stt_model,
+        language=language,
         keywords=keywords,
     )
 
@@ -599,24 +744,15 @@ def prerecorded_from_bytes(
     keywords: Optional[Sequence[str]] = None,
 ) -> Union[List[dict], Tuple[List[dict], str]]:
     """Route pre-recorded bytes transcription through STT_PRERECORDED_MODEL."""
-    svc, stt_lang, stt_model = get_prerecorded_service(language or 'multi')
-    if svc == PrerecordedSTTService.MODULATE:
-        return modulate_prerecorded_from_bytes(
-            audio_bytes,
-            sample_rate=sample_rate,
-            diarize=diarize,
-            attempts=attempts,
-            return_language=return_language,
-        )
-    return deepgram_prerecorded_from_bytes(
+    provider = get_prerecorded_provider()
+    return provider.transcribe_bytes(
         audio_bytes,
         sample_rate=sample_rate,
         diarize=diarize,
         attempts=attempts,
         encoding=encoding,
         channels=channels,
-        language=stt_lang,
-        model=stt_model,
+        language=language,
         return_language=return_language,
         keywords=keywords,
     )
