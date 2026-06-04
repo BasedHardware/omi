@@ -610,6 +610,8 @@ class SafeModulateSocket(STTSocket):
                 if data == b'':
                     break
                 if data == _EOS_SENTINEL:
+                    # Docs: send empty text frame ("") to signal end of audio stream
+                    await self._ws.send('')
                     break
                 await self._ws.send(data)
         except websockets.exceptions.ConnectionClosed as e:
