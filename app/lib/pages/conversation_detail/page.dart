@@ -1073,6 +1073,12 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
               // Floating bottom bar — hidden while keyboard is up (e.g. inline summary edit)
               if (MediaQuery.of(context).viewInsets.bottom == 0)
                 Positioned(
+                  // Stable key so the body Stack's collection-`if` diff matches
+                  // by identity, not by slot+type. Without it the surviving
+                  // search-overlay Positioned below was being reused into this
+                  // slot when the keyboard rose, tearing down the search
+                  // TextField subtree and dropping the IME mid-frame.
+                  key: const ValueKey('detail_floating_bottom_bar'),
                   bottom: 32,
                   left: 0,
                   right: 0,
@@ -1228,6 +1234,11 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
               // Search overlay
               if (_isSearching)
                 Positioned(
+                  // Stable key — same reason as the floating bottom bar above.
+                  // Without it the keyboard pop-up flickered closed because
+                  // the body Stack's diff was reusing this Positioned's
+                  // element into the bar's slot and remounting the TextField.
+                  key: const ValueKey('detail_search_overlay'),
                   top: 0,
                   left: 0,
                   right: 0,
