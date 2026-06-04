@@ -13,8 +13,33 @@ from utils.other.endpoints import timeit
 import logging
 
 _DG_TIMEOUT = httpx.Timeout(connect=10.0, read=120.0, write=30.0, pool=10.0)
+_MODULATE_TIMEOUT = httpx.Timeout(connect=10.0, read=300.0, write=30.0, pool=10.0)
 
 logger = logging.getLogger(__name__)
+
+stt_prerecorded_model = os.getenv('STT_PRERECORDED_MODEL', 'dg-nova-3')
+
+
+class PrerecordedSTTService:
+    DEEPGRAM = 'deepgram'
+    MODULATE = 'modulate'
+
+
+def get_prerecorded_service(language: str = 'en') -> Tuple[str, str, str]:
+    """Route pre-recorded STT based on STT_PRERECORDED_MODEL env var.
+
+    Returns (service, language, model) tuple, same pattern as streaming router.
+    """
+    m = stt_prerecorded_model.strip()
+    if m.startswith('dg-'):
+        dg_model = m.replace('dg-', '', 1)
+        lang = language if language in _deepgram_nova3_languages else 'multi'
+        return PrerecordedSTTService.DEEPGRAM, lang, dg_model
+    if m == 'modulate-velma-2':
+        base_lang = language.split('-')[0].split('_')[0].lower() if language else 'en'
+        return PrerecordedSTTService.MODULATE, base_lang, 'velma-2'
+    return PrerecordedSTTService.DEEPGRAM, language, 'nova-3'
+
 
 # Initialize Deepgram client for pre-recorded transcription
 # WARN: the pre-recorded transcription is available on deepgram cloud
@@ -501,6 +526,31 @@ def modulate_prerecorded_from_bytes(
         if attempts < 2:
             return modulate_prerecorded_from_bytes(audio_bytes, sample_rate, diarize, attempts + 1, return_language)
         raise RuntimeError(f'Modulate transcription failed after {attempts + 1} attempts: {e}')
+
+
+@timeit
+def modulate_prerecorded(
+    audio_url: str,
+    speakers_count: int = None,
+    attempts: int = 0,
+    return_language: bool = False,
+    diarize: bool = True,
+    language: Optional[str] = None,
+) -> Union[List[dict], Tuple[List[dict], str]]:
+    logger.info(f'modulate_prerecorded {audio_url} {speakers_count} {attempts}')
+    try:
+        with httpx.Client(timeout=_MODULATE_TIMEOUT) as client:
+            resp = client.get(audio_url)
+            resp.raise_for_status()
+            audio_bytes = resp.content
+        return modulate_prerecorded_from_bytes(
+            audio_bytes, diarize=diarize, attempts=attempts, return_language=return_language
+        )
+    except Exception as e:
+        logger.error(f'Modulate prerecorded (url) error: {e}')
+        if attempts < 1:
+            return modulate_prerecorded(audio_url, speakers_count, attempts + 1, return_language, diarize, language)
+        raise RuntimeError(f'Modulate transcription (url) failed after {attempts + 1} attempts: {e}')
 
 
 def _words_cleaning(words: List[dict]):
