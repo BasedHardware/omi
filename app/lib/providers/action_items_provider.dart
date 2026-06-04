@@ -320,18 +320,24 @@ class ActionItemsProvider extends ChangeNotifier {
         }
         _pushUpdateToAppleReminder(item, dueDate: dueDate);
       } else {
-        // Revert on failure
-        if (index != -1 && originalItem != null) {
-          _actionItems[index] = originalItem;
-          notifyListeners();
+        // Revert on failure — re-find index in case list changed during await
+        if (originalItem != null) {
+          final revertIdx = _actionItems.indexWhere((i) => i.id == item.id);
+          if (revertIdx != -1) {
+            _actionItems[revertIdx] = originalItem;
+            notifyListeners();
+          }
         }
         Logger.debug('Failed to update action item due date on server');
       }
     } catch (e) {
-      // Revert on error
-      if (index != -1 && originalItem != null) {
-        _actionItems[index] = originalItem;
-        notifyListeners();
+      // Revert on error — re-find index in case list changed during await
+      if (originalItem != null) {
+        final revertIdx = _actionItems.indexWhere((i) => i.id == item.id);
+        if (revertIdx != -1) {
+          _actionItems[revertIdx] = originalItem;
+          notifyListeners();
+        }
       }
       Logger.debug('Error updating action item due date: $e');
     }
