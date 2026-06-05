@@ -421,6 +421,35 @@ def create_checkout_session_endpoint(request: CreateCheckoutRequest, uid: str = 
     return {"url": session.url, "session_id": session.id}
 
 
+def _release_attached_schedules(stripe_sub: dict) -> None:
+    """Detach any active/not-started SubscriptionSchedule from this subscription.
+
+    Stripe rejects both Subscription.modify() and SubscriptionSchedule.create()
+    with "You cannot migrate a subscription that is already attached to a
+    schedule" once a schedule is attached — e.g. a user who earlier scheduled a
+    monthly→annual change. That left those users unable to change plans at all.
+    Releasing detaches the schedule without canceling the subscription (billing
+    continues on the current phase), which unblocks the new change. Mirrors the
+    release pattern already used by the cancel-subscription endpoint.
+    """
+    customer_id = stripe_sub.get('customer')
+    sub_id = stripe_sub.get('id')
+    if not customer_id or not sub_id:
+        return
+    try:
+        schedules = stripe.SubscriptionSchedule.list(customer=customer_id, limit=10)
+    except Exception as e:
+        logger.error(f"Error listing subscription schedules before plan change: {sanitize(str(e))}")
+        return
+    for schedule in schedules.data:
+        if schedule.status in ('active', 'not_started') and getattr(schedule, 'subscription', None) == sub_id:
+            try:
+                stripe.SubscriptionSchedule.release(schedule.id)
+                logger.info(f"Released subscription schedule {schedule.id} for {sub_id} before plan change")
+            except Exception as e:
+                logger.error(f"Error releasing subscription schedule {schedule.id}: {sanitize(str(e))}")
+
+
 @router.post('/v1/payments/upgrade-subscription')
 def upgrade_subscription_endpoint(request: UpgradeSubscriptionRequest, uid: str = Depends(auth.get_current_user_uid)):
     """Upgrade or change a user's subscription plan.
@@ -470,6 +499,11 @@ def upgrade_subscription_endpoint(request: UpgradeSubscriptionRequest, uid: str 
             if not promo_list.data:
                 raise HTTPException(status_code=400, detail="Invalid or expired promotion code.")
             resolved_promo_id = promo_list.data[0].id
+
+        # A previously-scheduled change (e.g. monthly→annual) leaves a schedule
+        # attached to the subscription, which Stripe then refuses to modify or
+        # re-schedule. Release it first so the user can switch plans again.
+        _release_attached_schedules(stripe_sub)
 
         # Cross-plan change (e.g. Unlimited→Architect): immediate swap with proration
         if current_plan != target_plan:
