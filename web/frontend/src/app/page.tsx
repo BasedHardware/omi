@@ -22,7 +22,7 @@ export default function Home() {
           with Omi.
         </p>
         <Link
-          href={`https://basedhardware.com/`}
+          href={`https://www.omi.me/`}
           target="_blank"
           className="mx-auto mt-[2.5rem] flex w-fit items-center gap-[0.5rem] rounded-md bg-white/90 p-[0.375rem] px-[0.875rem] text-black transition-colors hover:bg-white"
         >
