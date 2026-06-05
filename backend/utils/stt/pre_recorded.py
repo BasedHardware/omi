@@ -731,13 +731,26 @@ def parakeet_prerecorded_from_bytes(
         if encoding:
             audio_bytes = _wrap_pcm_as_wav(audio_bytes, sample_rate, channels)
 
-        url = api_url.rstrip('/') + '/v1/transcribe'
         secret = os.getenv('ENCRYPTION_SECRET')
         headers = {'Authorization': f'Bearer {secret}'} if secret else {}
         files = {'file': ('audio.wav', BytesIO(audio_bytes), 'audio/wav')}
 
+        use_v2 = diarize and os.getenv('PARAKEET_USE_V2', '1') == '1'
+        if use_v2:
+            url = api_url.rstrip('/') + '/v2/transcribe'
+            data = {'diarize': 'true'}
+        else:
+            url = api_url.rstrip('/') + '/v1/transcribe'
+            data = {}
+
         with httpx.Client(timeout=_PARAKEET_TIMEOUT) as client:
-            response = client.post(url, headers=headers, files=files)
+            response = client.post(url, headers=headers, files=files, data=data if data else None)
+            if response.status_code == 404 and use_v2:
+                url = api_url.rstrip('/') + '/v1/transcribe'
+                response = client.post(
+                    url, headers=headers, files={'file': ('audio.wav', BytesIO(audio_bytes), 'audio/wav')}
+                )
+                use_v2 = False
         response.raise_for_status()
         result = response.json()
 
@@ -760,11 +773,16 @@ def parakeet_prerecorded_from_bytes(
             start = float(seg.get('start', 0.0))
             end = float(seg.get('end', start))
 
-            speaker_label = 'SPEAKER_00'
-            if diarize:
-                speaker_label = _parakeet_assign_speaker_sync(
-                    audio_bytes, sample_rate, start, end, spk_centroids, spk_counts
-                )
+            speaker_label = seg.get('speaker', '') if use_v2 else ''
+            if not speaker_label:
+                speaker_label = 'SPEAKER_00'
+                if diarize:
+                    speaker_label = _parakeet_assign_speaker_sync(
+                        audio_bytes, sample_rate, start, end, spk_centroids, spk_counts
+                    )
+
+            if not speaker_label.startswith('SPEAKER_'):
+                speaker_label = f'SPEAKER_{speaker_label}'
 
             words.append({'timestamp': [start, end], 'speaker': speaker_label, 'text': text})
 
