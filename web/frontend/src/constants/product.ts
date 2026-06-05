@@ -7,9 +7,8 @@ export const PRODUCT_CONFIG = {
   appStoreUrl: 'https://apps.apple.com/us/app/friend-ai-wearable/id6502156163',
   playStoreUrl: 'https://play.google.com/store/apps/details?id=com.friend.ios',
   getPlatformLink(userAgent: string, token?: string, route?: 'chat' | 'tasks'): string {
-    const ua = userAgent.toLowerCase();
-    const isAndroid = /android/i.test(ua);
-    const isIOS = /iphone|ipad|ipod/i.test(ua);
+    const isAndroid = /android/i.test(userAgent);
+    const isIOS = /iphone|ipad|ipod/i.test(userAgent);
 
     if (isAndroid) {
       if (route === 'chat' && token) {
