@@ -561,10 +561,13 @@ class ParakeetStreamingSocket:
 
     async def _transcribe_chunk(self, pcm: bytes, start: float, dur: float) -> List[dict]:
         wav = _pcm16_to_wav_bytes(pcm, self._sample_rate)
+        # Shared-secret auth for the (publicly-reachable) Parakeet endpoint.
+        secret = os.getenv('ENCRYPTION_SECRET')
+        headers = {'Authorization': f'Bearer {secret}'} if secret else None
         try:
             client = get_stt_client()
             async with get_stt_semaphore():
-                resp = await client.post(self._url, files={'file': ('audio.wav', wav, 'audio/wav')})
+                resp = await client.post(self._url, files={'file': ('audio.wav', wav, 'audio/wav')}, headers=headers)
             resp.raise_for_status()
             data = resp.json()
         except Exception as e:
