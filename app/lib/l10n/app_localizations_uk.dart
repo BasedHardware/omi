@@ -4692,7 +4692,10 @@ class AppLocalizationsUk extends AppLocalizations {
   }
 
   @override
-  String accessesAndTriggeredBy(String accessDescription, String triggerDescription) {
+  String accessesAndTriggeredBy(
+    String accessDescription,
+    String triggerDescription,
+  ) {
     return '$accessDescription і $triggerDescription.';
   }
 
@@ -9313,4 +9316,19 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get backgroundModeNote => 'Наразі працює лише з пристроями Omi і постійно вдосконалюється.';
+
+  @override
+  String get regenerateRecap => 'Створити підсумок знову';
+
+  @override
+  String get recapRegeneratedSnackbar => 'Підсумок створено знову';
+
+  @override
+  String get recapRegenerateFailed => 'Не вдалося створити підсумок заново. Спробуйте пізніше.';
+
+  @override
+  String get recapRegenerateCooldown => 'Зачекайте кілька секунд перед повторним створенням.';
+
+  @override
+  String get recapRegenerateNoConversations => 'Немає розмов для підбиття підсумку за цей день.';
 }

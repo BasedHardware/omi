@@ -4690,7 +4690,10 @@ class AppLocalizationsFa extends AppLocalizations {
   }
 
   @override
-  String accessesAndTriggeredBy(String accessDescription, String triggerDescription) {
+  String accessesAndTriggeredBy(
+    String accessDescription,
+    String triggerDescription,
+  ) {
     return '$accessDescription و $triggerDescription.';
   }
 
@@ -9297,4 +9300,19 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get backgroundModeNote => 'فعلاً فقط با دستگاه‌های Omi کار می‌کند و به‌طور مداوم در حال بهبود است.';
+
+  @override
+  String get regenerateRecap => 'بازسازی خلاصه';
+
+  @override
+  String get recapRegeneratedSnackbar => 'خلاصه دوباره ساخته شد';
+
+  @override
+  String get recapRegenerateFailed => 'بازسازی خلاصه ممکن نشد. بعداً دوباره تلاش کنید.';
+
+  @override
+  String get recapRegenerateCooldown => 'لطفاً چند ثانیه قبل از بازسازی مجدد صبر کنید.';
+
+  @override
+  String get recapRegenerateNoConversations => 'هیچ مکالمه‌ای برای خلاصه‌سازی این روز وجود ندارد.';
 }

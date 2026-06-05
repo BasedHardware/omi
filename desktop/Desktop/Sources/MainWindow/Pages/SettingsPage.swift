@@ -1151,7 +1151,7 @@ struct SettingsContentView: View {
               .foregroundColor(OmiColors.textTertiary)
 
             Text(
-              "Single language mode supports 42 languages including Ukrainian, Russian, and more."
+              "Single language mode supports \(AssistantSettings.supportedLanguages.count) languages including Chinese, Ukrainian, Russian, and more."
             )
             .scaledFont(size: 11)
             .foregroundColor(OmiColors.textTertiary)
@@ -7252,14 +7252,16 @@ struct SettingsContentView: View {
           AssistantSettings.shared.transcriptionVocabulary = transcription.vocabulary
 
           // Sync backend language to local if different (backend is source of truth for language)
-          if !language.language.isEmpty && language.language != transcriptionLanguage {
-            transcriptionLanguage = language.language
-            AssistantSettings.shared.transcriptionLanguage = language.language
+          let normalizedLanguage = AssistantSettings.normalizeTranscriptionLanguageCode(language.language)
+          if !language.language.isEmpty && normalizedLanguage != transcriptionLanguage {
+            transcriptionLanguage = normalizedLanguage
+            AssistantSettings.shared.transcriptionLanguage = normalizedLanguage
           }
 
           // Sync single language mode from backend (inverted to auto-detect)
           // Only update if we got a valid response and it differs
-          let backendAutoDetect = !transcription.singleLanguageMode
+          let backendAutoDetect =
+            !transcription.singleLanguageMode && AssistantSettings.supportsAutoDetect(normalizedLanguage)
           if backendAutoDetect != transcriptionAutoDetect {
             transcriptionAutoDetect = backendAutoDetect
             AssistantSettings.shared.transcriptionAutoDetect = backendAutoDetect

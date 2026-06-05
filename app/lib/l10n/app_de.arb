@@ -3009,5 +3009,10 @@
     "invalidPromotionCode": "Ungültiger Aktionscode.",
     "backgroundModeTitle": "Hintergrundmodus",
     "backgroundModeDescription": "Lass deinen Omi weiter aufnehmen, auch wenn die App vollständig geschlossen ist.",
-    "backgroundModeNote": "Funktioniert vorerst nur mit Omi-Geräten und wird kontinuierlich verbessert."
+    "backgroundModeNote": "Funktioniert vorerst nur mit Omi-Geräten und wird kontinuierlich verbessert.",
+    "regenerateRecap": "Zusammenfassung neu erstellen",
+    "recapRegeneratedSnackbar": "Zusammenfassung neu erstellt",
+    "recapRegenerateFailed": "Zusammenfassung konnte nicht neu erstellt werden. Bitte später erneut versuchen.",
+    "recapRegenerateCooldown": "Bitte warte ein paar Sekunden, bevor du erneut generierst.",
+    "recapRegenerateNoConversations": "Keine Konversationen für diesen Tag zum Zusammenfassen."
 }

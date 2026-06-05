@@ -46,7 +46,9 @@ final class RealtimeOmniService: NSObject {
     private var task: URLSessionWebSocketTask?
     private lazy var session = URLSession(configuration: .default, delegate: self, delegateQueue: nil)
     private var isOpen = false
+    private var terminated = false  // fire omniDidError at most once per turn
     private var pendingAudio: [Data] = []
+    private var pendingCommit = false  // turn ended before the session opened; commit after activityStart
 
     // Gemini's Live endpoint resets BOTH of Apple's WebSocket stacks
     // (URLSession drops after the HTTP/2 upgrade; Network.framework gets
@@ -76,10 +78,21 @@ final class RealtimeOmniService: NSObject {
 
     // MARK: Lifecycle
 
+    /// Fire omniDidError at most once — a single WS teardown raises receive-fail
+    /// + didClose + didComplete, which previously fanned out into many fallbacks.
+    private func notifyError(_ message: String) {
+        Task { @MainActor in
+            guard !self.terminated else { return }
+            self.terminated = true
+            self.delegate?.omniDidError(message)
+        }
+    }
+
+
     func start() {
         guard let request = makeRequest(), let url = request.url else {
             let name = provider.displayName
-            Task { @MainActor in self.delegate?.omniDidError("Could not build \(name) request URL") }
+            notifyError("Could not build \(name) request URL")
             return
         }
         log("RealtimeOmni: connecting \(provider.displayName) → \(url.host ?? "?")")
@@ -101,6 +114,7 @@ final class RealtimeOmniService: NSObject {
         nw = nil
         isOpen = false
         pendingAudio.removeAll()
+        pendingCommit = false
     }
 
     // MARK: - Network.framework transport (Gemini, HTTP/1.1 WebSocket)
@@ -123,7 +137,7 @@ final class RealtimeOmniService: NSObject {
                 self.receiveNW()
                 self.sendSessionSetup()
             case .failed(let err):
-                Task { @MainActor in self.delegate?.omniDidError("NW failed: \(err)") }
+                notifyError("NW failed: \(err)")
             case .cancelled:
                 break
             default:
@@ -137,7 +151,7 @@ final class RealtimeOmniService: NSObject {
         nw?.receiveMessage { [weak self] data, _, _, error in
             guard let self else { return }
             if let error {
-                Task { @MainActor in self.delegate?.omniDidError("NW receive: \(error)") }
+                notifyError("NW receive: \(error)")
                 return
             }
             if let data { Task { @MainActor in self.handleMessage(data) } }
@@ -151,7 +165,7 @@ final class RealtimeOmniService: NSObject {
         let ctx = NWConnection.ContentContext(identifier: "send", metadata: [meta])
         conn.send(content: Data(text.utf8), contentContext: ctx, isComplete: true,
                   completion: .contentProcessed { [weak self] error in
-            if let error { Task { @MainActor in self?.delegate?.omniDidError("NW send: \(error)") } }
+            if let error { self?.notifyError("NW send: \(error)") }
         })
     }
 
@@ -160,6 +174,14 @@ final class RealtimeOmniService: NSObject {
     /// Feed mic PCM16 mono at `requiredInputSampleRate`. Caller is responsible for
     /// resampling to that rate (16k mic → 24k for OpenAI).
     func sendAudio(_ pcm: Data) {
+        // Buffer until the session is open. PTT starts the mic immediately and
+        // streams chunks during the connect handshake (plus a pre-connect buffer
+        // flush), so audio can arrive before setup completes. Gemini in manual-VAD
+        // mode rejects any audio that precedes `activityStart` with close 1007
+        // ("invalid argument") — markReady() sends activityStart and *then* flushes
+        // pendingAudio, so queuing here preserves that ordering. (The test harness
+        // only sends after omniDidConnect, so it never exercised this race.)
+        guard isOpen else { pendingAudio.append(pcm); return }
         let b64 = pcm.base64EncodedString()
         switch provider {
         case .gptRealtime2:
@@ -171,6 +193,10 @@ final class RealtimeOmniService: NSObject {
 
     /// Signal end of the user's PTT turn.
     func commitInputTurn() {
+        // If the turn ended before the session opened (very short press), defer the
+        // commit so it can't precede setup/activityStart — markReady() flushes it
+        // after the buffered audio, keeping the frame order activityStart→audio→end.
+        guard isOpen else { pendingCommit = true; return }
         switch provider {
         case .gptRealtime2:
             send(json: ["type": "input_audio_buffer.commit"])
@@ -254,6 +280,11 @@ final class RealtimeOmniService: NSObject {
         guard let url = comps.url else { return nil }
         var r = URLRequest(url: url)
         r.setValue(authHeader, forHTTPHeaderField: "Authorization")
+        // Forward BYOK keys so BYOK users connect with their own provider key
+        // (the backend validates them and uses them upstream — same as /v4/listen).
+        for (provider, entry) in APIKeyService.byokSnapshot {
+            r.setValue(entry.key, forHTTPHeaderField: provider.headerName)
+        }
         return r
     }
 
@@ -265,7 +296,7 @@ final class RealtimeOmniService: NSObject {
             switch result {
             case .failure(let error):
                 log("RealtimeOmni: receive failed: \(error)")
-                Task { @MainActor in self.delegate?.omniDidError(error.localizedDescription) }
+                notifyError(error.localizedDescription)
             case .success(let message):
                 let data: Data?
                 switch message {
@@ -304,7 +335,7 @@ final class RealtimeOmniService: NSObject {
             delegate?.omniDidFinishTurn()
         case "error":
             let msg = (e["error"] as? [String: Any])?["message"] as? String ?? "OpenAI realtime error"
-            delegate?.omniDidError(msg)
+            if !terminated { terminated = true; delegate?.omniDidError(msg) }
         default:
             break
         }
@@ -343,6 +374,10 @@ final class RealtimeOmniService: NSObject {
         }
         for chunk in pendingAudio { sendAudio(chunk) }
         pendingAudio.removeAll()
+        if pendingCommit {
+            pendingCommit = false
+            commitInputTurn()
+        }
         delegate?.omniDidConnect()
     }
 
@@ -356,7 +391,7 @@ final class RealtimeOmniService: NSObject {
             return
         }
         task?.send(.string(text)) { [weak self] error in
-            if let error { Task { @MainActor in self?.delegate?.omniDidError(error.localizedDescription) } }
+            if let error { self?.notifyError(error.localizedDescription) }
         }
     }
 }
@@ -375,13 +410,13 @@ extension RealtimeOmniService: URLSessionWebSocketDelegate {
     func urlSession(_ session: URLSession, webSocketTask: URLSessionWebSocketTask,
                     didCloseWith closeCode: URLSessionWebSocketTask.CloseCode, reason: Data?) {
         let r = reason.flatMap { String(data: $0, encoding: .utf8) } ?? ""
-        Task { @MainActor in self.delegate?.omniDidError("WebSocket closed (\(closeCode.rawValue)) \(r)") }
+        notifyError("WebSocket closed (\(closeCode.rawValue)) \(r)")
     }
 
     func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
         log("RealtimeOmni: didComplete err=\(String(describing: error))")
         if let error {
-            Task { @MainActor in self.delegate?.omniDidError("WebSocket failed: \(error.localizedDescription)") }
+            notifyError("WebSocket failed: \(error.localizedDescription)")
         }
     }
 }

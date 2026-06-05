@@ -1096,6 +1096,20 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
       (!paywalled && AssistantSettings.shared.transcriptionEnabled) ? .on : .off
   }
 
+  func menuDidClose(_ menu: NSMenu) {
+    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+      for window in NSApp.windows where self.isMenuPopupWindow(window) && window.isVisible {
+        log("AppDelegate: [MENUBAR] Cleaning up lingering menu popup window: \(window.frame)")
+        window.orderOut(nil)
+      }
+    }
+  }
+
+  private func isMenuPopupWindow(_ window: NSWindow) -> Bool {
+    // AppKit menu popup windows use private classes/titles like "NSPopupMenuWindow" and "Item-0".
+    window.title.hasPrefix("Item-") && window.className.contains("PopupMenuWindow")
+  }
+
   func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
     let shouldTerminate = !UserDefaults.standard.bool(forKey: "hasCompletedOnboarding")
     if shouldTerminate {

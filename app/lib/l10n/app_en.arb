@@ -11001,5 +11001,10 @@
     "backgroundModeNote": "Works with Omi devices only for now, and is being improved continuously.",
     "@backgroundModeNote": {
         "description": "Caveat note shown in the Background Mode sheet"
-    }
+    },
+    "regenerateRecap": "Regenerate recap",
+    "recapRegeneratedSnackbar": "Recap regenerated",
+    "recapRegenerateFailed": "Couldn't regenerate the recap. Try again later.",
+    "recapRegenerateCooldown": "Please wait a few seconds before regenerating again.",
+    "recapRegenerateNoConversations": "No conversations to summarize for this day."
 }

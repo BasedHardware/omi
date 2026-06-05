@@ -3010,5 +3010,10 @@
     "invalidPromotionCode": "Невалиден промо код.",
     "backgroundModeTitle": "Фонов режим",
     "backgroundModeDescription": "Запазете записа на Omi дори когато приложението е напълно затворено.",
-    "backgroundModeNote": "Засега работи само с устройства Omi и непрекъснато се подобрява."
+    "backgroundModeNote": "Засега работи само с устройства Omi и непрекъснато се подобрява.",
+    "regenerateRecap": "Регенерирай резюмето",
+    "recapRegeneratedSnackbar": "Резюмето е регенерирано",
+    "recapRegenerateFailed": "Резюмето не можа да бъде регенерирано. Опитайте отново по-късно.",
+    "recapRegenerateCooldown": "Моля, изчакайте няколко секунди преди повторно регенериране.",
+    "recapRegenerateNoConversations": "Няма разговори за обобщаване за този ден."
 }

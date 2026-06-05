@@ -4696,7 +4696,10 @@ class AppLocalizationsMr extends AppLocalizations {
   }
 
   @override
-  String accessesAndTriggeredBy(String accessDescription, String triggerDescription) {
+  String accessesAndTriggeredBy(
+    String accessDescription,
+    String triggerDescription,
+  ) {
     return '$accessDescription आणि $triggerDescription आहे.';
   }
 
@@ -9305,4 +9308,19 @@ class AppLocalizationsMr extends AppLocalizations {
 
   @override
   String get backgroundModeNote => 'सध्या फक्त Omi उपकरणांसह कार्य करते आणि सतत सुधारित केले जात आहे.';
+
+  @override
+  String get regenerateRecap => 'सारांश पुन्हा तयार करा';
+
+  @override
+  String get recapRegeneratedSnackbar => 'सारांश पुन्हा तयार केला';
+
+  @override
+  String get recapRegenerateFailed => 'सारांश पुन्हा तयार करता आला नाही. नंतर पुन्हा प्रयत्न करा.';
+
+  @override
+  String get recapRegenerateCooldown => 'पुन्हा तयार करण्यापूर्वी कृपया काही सेकंद थांबा.';
+
+  @override
+  String get recapRegenerateNoConversations => 'या दिवसासाठी सारांश करण्यासाठी कोणतेही संभाषण नाही.';
 }

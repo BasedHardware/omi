@@ -3083,5 +3083,10 @@
     "invalidPromotionCode": "Kode promo tidak valid.",
     "backgroundModeTitle": "Mode Latar Belakang",
     "backgroundModeDescription": "Biarkan Omi tetap merekam meskipun aplikasi ditutup sepenuhnya.",
-    "backgroundModeNote": "Untuk saat ini hanya berfungsi dengan perangkat Omi dan terus ditingkatkan."
+    "backgroundModeNote": "Untuk saat ini hanya berfungsi dengan perangkat Omi dan terus ditingkatkan.",
+    "regenerateRecap": "Buat ulang ringkasan",
+    "recapRegeneratedSnackbar": "Ringkasan dibuat ulang",
+    "recapRegenerateFailed": "Tidak dapat membuat ulang ringkasan. Coba lagi nanti.",
+    "recapRegenerateCooldown": "Mohon tunggu beberapa detik sebelum membuat ulang.",
+    "recapRegenerateNoConversations": "Tidak ada percakapan untuk diringkas pada hari ini."
 }

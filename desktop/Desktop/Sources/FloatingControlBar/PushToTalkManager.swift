@@ -48,6 +48,7 @@ class PushToTalkManager: ObservableObject {
   // True once the omni model returned any transcript this turn — gates the
   // Deepgram fallback so a benign trailing socket error doesn't trigger it.
   private var omniReceivedTranscript = false
+  private var omniTurnSent = false  // dedup: send/fallback the omni turn at most once
   private var audioCaptureService: AudioCaptureService?
   private var transcriptSegments: [String] = []
   private var lastInterimText: String = ""
@@ -727,6 +728,7 @@ extension PushToTalkManager: RealtimeOmniServiceDelegate {
     let provider = RealtimeOmniSettings.shared.effectiveProvider
     isOmniSTT = true
     omniReceivedTranscript = false
+    omniTurnSent = false
     omniPreconnectBuffer.removeAll()
     // Keep a copy of the whole turn so we can fall back to Deepgram if the relay
     // is unreachable (e.g. backend not yet on prod) — PTT must never break.
@@ -810,6 +812,8 @@ extension PushToTalkManager: RealtimeOmniServiceDelegate {
       if state == .finalizing {
         liveFinalizationTimeout?.cancel()
         liveFinalizationTimeout = nil
+        guard !omniTurnSent else { return }
+        omniTurnSent = true
         sendTranscript()
       }
     } else {
@@ -827,6 +831,8 @@ extension PushToTalkManager: RealtimeOmniServiceDelegate {
     if state == .finalizing {
       liveFinalizationTimeout?.cancel()
       liveFinalizationTimeout = nil
+      guard !omniTurnSent else { return }
+      omniTurnSent = true
       sendTranscript()
     }
   }
@@ -845,6 +851,8 @@ extension PushToTalkManager: RealtimeOmniServiceDelegate {
 
   /// Transcribe the buffered turn audio via Deepgram when omni is unavailable.
   fileprivate func fallBackToDeepgram() {
+    guard !omniTurnSent else { return }
+    omniTurnSent = true
     log("PushToTalkManager: omni unavailable — falling back to Deepgram for this turn")
     isOmniSTT = false
     realtimeOmniService?.stop()

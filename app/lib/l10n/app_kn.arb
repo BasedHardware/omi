@@ -10619,5 +10619,10 @@
     "invalidPromotionCode": "ಅಮಾನ್ಯ ಪ್ರೋಮೋ ಕೋಡ್.",
     "backgroundModeTitle": "ಹಿನ್ನೆಲೆ ಮೋಡ್",
     "backgroundModeDescription": "ಆ್ಯಪ್ ಸಂಪೂರ್ಣವಾಗಿ ಮುಚ್ಚಿದ್ದರೂ ನಿಮ್ಮ Omi ರೆಕಾರ್ಡಿಂಗ್ ಮುಂದುವರಿಸಿ.",
-    "backgroundModeNote": "ಸದ್ಯಕ್ಕೆ Omi ಸಾಧನಗಳೊಂದಿಗೆ ಮಾತ್ರ ಕೆಲಸ ಮಾಡುತ್ತದೆ ಮತ್ತು ನಿರಂತರವಾಗಿ ಸುಧಾರಿಸಲಾಗುತ್ತಿದೆ."
+    "backgroundModeNote": "ಸದ್ಯಕ್ಕೆ Omi ಸಾಧನಗಳೊಂದಿಗೆ ಮಾತ್ರ ಕೆಲಸ ಮಾಡುತ್ತದೆ ಮತ್ತು ನಿರಂತರವಾಗಿ ಸುಧಾರಿಸಲಾಗುತ್ತಿದೆ.",
+    "regenerateRecap": "ಸಾರಾಂಶವನ್ನು ಪುನರುತ್ಪಾದಿಸಿ",
+    "recapRegeneratedSnackbar": "ಸಾರಾಂಶವನ್ನು ಪುನರುತ್ಪಾದಿಸಲಾಗಿದೆ",
+    "recapRegenerateFailed": "ಸಾರಾಂಶವನ್ನು ಪುನರುತ್ಪಾದಿಸಲು ಸಾಧ್ಯವಾಗಲಿಲ್ಲ. ನಂತರ ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.",
+    "recapRegenerateCooldown": "ಪುನರುತ್ಪಾದಿಸುವ ಮೊದಲು ದಯವಿಟ್ಟು ಕೆಲವು ಸೆಕೆಂಡುಗಳು ನಿರೀಕ್ಷಿಸಿ.",
+    "recapRegenerateNoConversations": "ಈ ದಿನಕ್ಕೆ ಸಂಗ್ರಹಿಸಲು ಯಾವುದೇ ಸಂಭಾಷಣೆಗಳಿಲ್ಲ."
 }

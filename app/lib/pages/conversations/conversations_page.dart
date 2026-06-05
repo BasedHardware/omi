@@ -133,6 +133,15 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
     return provider.conversations.where((c) => !c.discarded).length;
   }
 
+  // True when any conversation filter is active. When filters are on, the
+  // `conversations` list reflects filtered server results (e.g. an empty list
+  // when "Starred" + a folder yield no matches). Without this, the title and
+  // folder-tab chips would hide on empty filtered results, leaving no way to
+  // clear filters short of restarting the app.
+  bool _hasActiveFilter(ConversationProvider provider) {
+    return provider.showStarredOnly || provider.selectedFolderId != null || provider.selectedDate != null;
+  }
+
   Widget _buildNoConversationsHero(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(32, 0, 32, 120),
@@ -309,7 +318,8 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
               if (convoProvider.showDailySummaries ||
                   _nonDiscardedConversationCount(convoProvider) > 0 ||
                   convoProvider.isLoadingConversations ||
-                  convoProvider.isFetchingConversations)
+                  convoProvider.isFetchingConversations ||
+                  _hasActiveFilter(convoProvider))
                 SliverToBoxAdapter(
                   child: Builder(
                     builder: (context) => Padding(
@@ -329,11 +339,14 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
                 ),
 
               // Folder tabs - hide when showing daily recaps OR when the user
-              // has no conversations yet (matches the title).
+              // has no conversations yet (matches the title). Keep chips
+              // visible whenever a filter is active so the user can always
+              // clear it, even when the filtered result is empty.
               if (!convoProvider.showDailySummaries &&
                   (_nonDiscardedConversationCount(convoProvider) > 0 ||
                       convoProvider.isLoadingConversations ||
-                      convoProvider.isFetchingConversations))
+                      convoProvider.isFetchingConversations ||
+                      _hasActiveFilter(convoProvider)))
                 Consumer2<FolderProvider, ConversationProvider>(
                   builder: (context, folderProvider, convoProvider, _) {
                     return SliverToBoxAdapter(
@@ -359,8 +372,7 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
                   !convoProvider.isLoadingConversations &&
                   !convoProvider.isFetchingConversations &&
                   !convoProvider.isAwaitingInitialFetchRetry &&
-                  !convoProvider.showStarredOnly &&
-                  convoProvider.selectedFolderId == null)
+                  !_hasActiveFilter(convoProvider))
                 // Friendly hero for brand-new users with zero conversations —
                 // matches the polished Tasks empty state.
                 SliverFillRemaining(

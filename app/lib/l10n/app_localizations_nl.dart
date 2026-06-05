@@ -4700,7 +4700,10 @@ class AppLocalizationsNl extends AppLocalizations {
   }
 
   @override
-  String accessesAndTriggeredBy(String accessDescription, String triggerDescription) {
+  String accessesAndTriggeredBy(
+    String accessDescription,
+    String triggerDescription,
+  ) {
     return '$accessDescription en is $triggerDescription.';
   }
 
@@ -9321,4 +9324,19 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get backgroundModeNote => 'Werkt voorlopig alleen met Omi-apparaten en wordt voortdurend verbeterd.';
+
+  @override
+  String get regenerateRecap => 'Samenvatting opnieuw genereren';
+
+  @override
+  String get recapRegeneratedSnackbar => 'Samenvatting opnieuw gegenereerd';
+
+  @override
+  String get recapRegenerateFailed => 'Kon de samenvatting niet opnieuw genereren. Probeer het later opnieuw.';
+
+  @override
+  String get recapRegenerateCooldown => 'Wacht een paar seconden voordat je opnieuw genereert.';
+
+  @override
+  String get recapRegenerateNoConversations => 'Geen gesprekken om voor deze dag samen te vatten.';
 }

@@ -4694,7 +4694,10 @@ class AppLocalizationsVi extends AppLocalizations {
   }
 
   @override
-  String accessesAndTriggeredBy(String accessDescription, String triggerDescription) {
+  String accessesAndTriggeredBy(
+    String accessDescription,
+    String triggerDescription,
+  ) {
     return '$accessDescription và $triggerDescription.';
   }
 
@@ -9293,4 +9296,19 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get backgroundModeNote => 'Hiện chỉ hoạt động với thiết bị Omi và đang được cải thiện liên tục.';
+
+  @override
+  String get regenerateRecap => 'Tạo lại tóm tắt';
+
+  @override
+  String get recapRegeneratedSnackbar => 'Đã tạo lại tóm tắt';
+
+  @override
+  String get recapRegenerateFailed => 'Không thể tạo lại tóm tắt. Vui lòng thử lại sau.';
+
+  @override
+  String get recapRegenerateCooldown => 'Vui lòng đợi vài giây trước khi tạo lại.';
+
+  @override
+  String get recapRegenerateNoConversations => 'Không có cuộc trò chuyện nào để tóm tắt cho ngày này.';
 }

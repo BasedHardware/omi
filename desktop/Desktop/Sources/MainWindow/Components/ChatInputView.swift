@@ -37,6 +37,7 @@ struct ChatInputView: View {
     @AppStorage("askModeEnabled") private var askModeEnabled = false
     @Environment(\.fontScale) private var fontScale
     @State private var isDropTargeted = false
+    @State private var hasMarkedText = false
 
     private var hasText: Bool {
         !inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
@@ -89,7 +90,7 @@ struct ChatInputView: View {
                         .accessibilityHidden(true)
                         .overlay(alignment: .topLeading) {
                             // Placeholder text — padding matches textContainerInset exactly
-                            if inputText.isEmpty {
+                            if inputText.isEmpty && !hasMarkedText {
                                 Text(placeholder)
                                     .scaledFont(size: 14)
                                     .foregroundColor(OmiColors.textTertiary)
@@ -104,7 +105,8 @@ struct ChatInputView: View {
                                 fontSize: round(14 * fontScale),
                                 textColor: NSColor(OmiColors.textPrimary),
                                 textContainerInset: NSSize(width: inputPaddingH, height: inputPaddingV),
-                                onSubmit: handleSubmit
+                                onSubmit: handleSubmit,
+                                onMarkedTextChange: { hasMarkedText = $0 }
                             )
                         }
                         .frame(maxHeight: 200)
@@ -177,6 +179,7 @@ struct ChatInputView: View {
     /// Send is enabled when there's text OR (when supported) any attachment ready
     /// to ship — Flutter allows sending attachments without text.
     private var canSend: Bool {
+        guard !hasMarkedText else { return false }
         if hasText { return true }
         if attachmentsEnabled && !currentAttachments.isEmpty { return true }
         return false

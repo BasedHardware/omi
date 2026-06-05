@@ -4695,7 +4695,10 @@ class AppLocalizationsPl extends AppLocalizations {
   }
 
   @override
-  String accessesAndTriggeredBy(String accessDescription, String triggerDescription) {
+  String accessesAndTriggeredBy(
+    String accessDescription,
+    String triggerDescription,
+  ) {
     return '$accessDescription i jest $triggerDescription.';
   }
 
@@ -9320,4 +9323,19 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get backgroundModeNote => 'Na razie działa tylko z urządzeniami Omi i jest stale ulepszany.';
+
+  @override
+  String get regenerateRecap => 'Wygeneruj podsumowanie ponownie';
+
+  @override
+  String get recapRegeneratedSnackbar => 'Podsumowanie wygenerowane ponownie';
+
+  @override
+  String get recapRegenerateFailed => 'Nie udało się ponownie wygenerować podsumowania. Spróbuj później.';
+
+  @override
+  String get recapRegenerateCooldown => 'Poczekaj kilka sekund przed ponownym wygenerowaniem.';
+
+  @override
+  String get recapRegenerateNoConversations => 'Brak rozmów do podsumowania w tym dniu.';
 }

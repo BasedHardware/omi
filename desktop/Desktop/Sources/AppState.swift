@@ -335,6 +335,17 @@ class AppState: ObservableObject {
   private var localSystemService: LocalTranscriptionService?
   private var useLocalSTT = false
 
+  /// True on Apple Silicon (M-series), where on-device Parakeet runs on the Neural Engine.
+  /// Desktop transcribes with Parakeet here by default; Intel Macs fall back to cloud STT.
+  static let isAppleSilicon: Bool = {
+    var value: Int32 = 0
+    var size = MemoryLayout<Int32>.size
+    if sysctlbyname("hw.optional.arm64", &value, &size, nil, 0) == 0 {
+      return value == 1
+    }
+    return false
+  }()
+
   // Speaker segments for diarized transcription (sliding window — older segments are in SQLite)
   private var speakerSegments: [SpeakerSegment] = []
   private let maxInMemorySegments = 200
@@ -1438,9 +1449,12 @@ class AppState: ObservableObject {
         "Transcription: Using language=\(effectiveLanguage) (autoDetect=\(AssistantSettings.shared.transcriptionAutoDetect), selected=\(AssistantSettings.shared.transcriptionLanguage))"
       )
 
-      // On-device Parakeet (FluidAudio) when OMI_LOCAL_STT=1 — bypasses the Python backend STT.
-      useLocalSTT = ProcessInfo.processInfo.environment["OMI_LOCAL_STT"] == "1"
-        || UserDefaults.standard.bool(forKey: "useLocalSTT")
+      // Desktop transcribes on-device with Parakeet by default on Apple Silicon — no Deepgram.
+      // Intel Macs (no Neural Engine) fall back to the cloud path. Force cloud for debugging with
+      // OMI_FORCE_CLOUD_STT=1 or `defaults write <bundle> forceCloudSTT -bool true`.
+      let forceCloudSTT = ProcessInfo.processInfo.environment["OMI_FORCE_CLOUD_STT"] == "1"
+        || UserDefaults.standard.bool(forKey: "forceCloudSTT")
+      useLocalSTT = !forceCloudSTT && Self.isAppleSilicon
       if useLocalSTT {
         log("Transcription: ON-DEVICE Parakeet mode (OMI_LOCAL_STT) — no cloud STT")
         // Segments are delivered on the main actor by the service, so no Task hop here.
@@ -1814,12 +1828,15 @@ class AppState: ObservableObject {
       let sys = localSystemService
       localMicService = nil
       localSystemService = nil
+      let uploadSessionId = currentSessionId
       Task { @MainActor in
         self.stopAudioCapture()
         await mic?.finish()
         await sys?.finish()
         self.clearTranscriptionState()
         self.silentMicFallbackInProgress = false
+        // Upload the on-device transcript so the conversation syncs + gets memories/summaries.
+        if let uploadSessionId { await self.uploadLocalSession(uploadSessionId) }
       }
       return
     }
@@ -1905,6 +1922,70 @@ class AppState: ObservableObject {
     }
   }
 
+  /// Upload a finished on-device (Parakeet) conversation to the backend so it is persisted,
+  /// processed (memories/summaries), and synced to every device — the same result a cloud
+  /// conversation gets, but the transcript was produced locally. On success, marks the local
+  /// session completed with the returned backend conversation id.
+  private func uploadLocalSession(_ sessionId: Int64) async {
+    // Segment DB writes are scheduled fire-and-forget by handleBackendSegments — let them drain
+    // so the upload includes the final tail segments.
+    try? await Task.sleep(nanoseconds: 1_000_000_000)
+    do {
+      guard let bundle = try await TranscriptionStorage.shared.getSessionWithSegments(id: sessionId)
+      else { return }
+      let session = bundle.session
+      guard !bundle.segments.isEmpty else {
+        log("Transcription: Local session \(sessionId) has no segments — nothing to upload")
+        return
+      }
+
+      let raw: [APIClient.UploadSegment] = bundle.segments.map { seg in
+        APIClient.UploadSegment(
+          text: seg.text,
+          speaker: seg.speakerLabel ?? String(format: "SPEAKER_%02d", seg.speaker),
+          speaker_id: seg.speaker,
+          is_user: seg.isUser,
+          person_id: seg.personId,
+          start: seg.startTime,
+          end: seg.endTime
+        )
+      }
+      // Merge consecutive same-speaker segments to stay under the backend's 500-segment cap
+      // (Parakeet emits ~1 segment per 10s window).
+      var merged: [APIClient.UploadSegment] = []
+      for seg in raw {
+        if let last = merged.last, last.speaker_id == seg.speaker_id {
+          merged[merged.count - 1] = APIClient.UploadSegment(
+            text: last.text + " " + seg.text, speaker: last.speaker, speaker_id: last.speaker_id,
+            is_user: last.is_user, person_id: last.person_id, start: last.start, end: seg.end)
+        } else {
+          merged.append(seg)
+        }
+      }
+      if merged.count > 500 {
+        log("Transcription: Local session \(sessionId) has \(merged.count) segments (>500), truncating")
+        merged = Array(merged.prefix(500))
+      }
+
+      let iso = ISO8601DateFormatter()
+      let request = APIClient.CreateConversationFromSegmentsRequest(
+        transcript_segments: merged,
+        source: "desktop",
+        started_at: iso.string(from: session.startedAt),
+        finished_at: session.finishedAt.map { iso.string(from: $0) },
+        language: session.language
+      )
+      let response = try await APIClient.shared.createConversationFromSegments(request)
+      try? await TranscriptionStorage.shared.markSessionCompleted(
+        id: sessionId, backendId: response.id)
+      log(
+        "Transcription: Uploaded on-device session \(sessionId) → backend conversation \(response.id) (\(merged.count) segments)"
+      )
+    } catch {
+      logError("Transcription: Failed to upload on-device session \(sessionId)", error: error)
+    }
+  }
+
   /// Finish the current conversation and keep recording for a new one.
   /// Disconnects the WebSocket (triggers backend conversation processing) then reconnects.
   func finishConversation() async -> FinishConversationResult {
@@ -1938,6 +2019,12 @@ class AppState: ObservableObject {
       } catch {
         logError("Transcription: Failed to finish DB session \(sessionId)", error: error)
       }
+    }
+
+    // Local mode: upload the just-finished on-device conversation to the backend (async) so it
+    // syncs + gets memories/summaries while we keep recording the next conversation.
+    if useLocalSTT, let uploadSessionId = finishedSessionId {
+      Task { await self.uploadLocalSession(uploadSessionId) }
     }
 
     // Stop the transcription service (closes WebSocket, triggers backend conversation processing)

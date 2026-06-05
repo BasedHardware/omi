@@ -3041,5 +3041,10 @@
     "invalidPromotionCode": "Kehtetu sooduskood.",
     "backgroundModeTitle": "Taustarežiim",
     "backgroundModeDescription": "Hoia oma Omi salvestamas ka siis, kui rakendus on täielikult suletud.",
-    "backgroundModeNote": "Praegu töötab ainult Omi seadmetega ja seda täiustatakse pidevalt."
+    "backgroundModeNote": "Praegu töötab ainult Omi seadmetega ja seda täiustatakse pidevalt.",
+    "regenerateRecap": "Loo kokkuvõte uuesti",
+    "recapRegeneratedSnackbar": "Kokkuvõte loodi uuesti",
+    "recapRegenerateFailed": "Kokkuvõtet ei õnnestunud uuesti luua. Proovi hiljem uuesti.",
+    "recapRegenerateCooldown": "Palun oota mõni sekund enne uuesti loomist.",
+    "recapRegenerateNoConversations": "Selle päeva jaoks pole vestlusi, mida kokku võtta."
 }

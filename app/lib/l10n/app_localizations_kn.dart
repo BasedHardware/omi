@@ -4705,7 +4705,10 @@ class AppLocalizationsKn extends AppLocalizations {
   }
 
   @override
-  String accessesAndTriggeredBy(String accessDescription, String triggerDescription) {
+  String accessesAndTriggeredBy(
+    String accessDescription,
+    String triggerDescription,
+  ) {
     return '$accessDescription ಮತ್ತು $triggerDescription ಆಗಿದೆ.';
   }
 
@@ -9326,4 +9329,19 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get backgroundModeNote => 'ಸದ್ಯಕ್ಕೆ Omi ಸಾಧನಗಳೊಂದಿಗೆ ಮಾತ್ರ ಕೆಲಸ ಮಾಡುತ್ತದೆ ಮತ್ತು ನಿರಂತರವಾಗಿ ಸುಧಾರಿಸಲಾಗುತ್ತಿದೆ.';
+
+  @override
+  String get regenerateRecap => 'ಸಾರಾಂಶವನ್ನು ಪುನರುತ್ಪಾದಿಸಿ';
+
+  @override
+  String get recapRegeneratedSnackbar => 'ಸಾರಾಂಶವನ್ನು ಪುನರುತ್ಪಾದಿಸಲಾಗಿದೆ';
+
+  @override
+  String get recapRegenerateFailed => 'ಸಾರಾಂಶವನ್ನು ಪುನರುತ್ಪಾದಿಸಲು ಸಾಧ್ಯವಾಗಲಿಲ್ಲ. ನಂತರ ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.';
+
+  @override
+  String get recapRegenerateCooldown => 'ಪುನರುತ್ಪಾದಿಸುವ ಮೊದಲು ದಯವಿಟ್ಟು ಕೆಲವು ಸೆಕೆಂಡುಗಳು ನಿರೀಕ್ಷಿಸಿ.';
+
+  @override
+  String get recapRegenerateNoConversations => 'ಈ ದಿನಕ್ಕೆ ಸಂಗ್ರಹಿಸಲು ಯಾವುದೇ ಸಂಭಾಷಣೆಗಳಿಲ್ಲ.';
 }
