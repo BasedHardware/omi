@@ -72,8 +72,8 @@ function getPlatformLink(userAgent: string, token: string) {
         'https://play.google.com/store/apps/details?id=com.friend.ios',
       )};end`
     : isIOS
-    ? `omi://h.omi.me/tasks/${token}`
-    : 'https://www.omi.me';
+      ? `omi://h.omi.me/tasks/${token}`
+      : 'https://www.omi.me';
 }
 
 function formatDueDate(dateStr: string): string {
