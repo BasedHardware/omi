@@ -1,4 +1,5 @@
 import os
+import wave as _wave
 from abc import ABC, abstractmethod
 from collections import defaultdict
 from io import BytesIO
@@ -697,9 +698,6 @@ class ModulatePrerecordedProvider(PrerecordedSTTProvider):
 
 
 def _wrap_pcm_as_wav(pcm_bytes: bytes, sample_rate: int, channels: int, bits_per_sample: int = 16) -> bytes:
-    """Wrap raw PCM bytes in a WAV container for APIs that require it."""
-    import wave as _wave
-
     buf = BytesIO()
     with _wave.open(buf, 'wb') as wf:
         wf.setnchannels(channels)
