@@ -73,7 +73,7 @@ function getPlatformLink(userAgent: string, token: string) {
       )};end`
     : isIOS
     ? `omi://h.omi.me/tasks/${token}`
-    : 'https://omi.me';
+    : 'https://www.omi.me';
 }
 
 function formatDueDate(dateStr: string): string {
