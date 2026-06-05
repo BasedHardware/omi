@@ -1,5 +1,6 @@
 import Image from 'next/image';
 import { redirect } from 'next/navigation';
+import { PRODUCT_CONFIG } from '@/src/constants/product';
 
 export default function Home() {
   redirect('/apps');
@@ -21,7 +22,7 @@ export default function Home() {
           with Omi.
         </p>
         <a
-          href="https://www.omi.me/"
+          href={PRODUCT_CONFIG.storeUrl}
           target="_blank"
           className="mx-auto mt-[2.5rem] flex w-fit items-center gap-[0.5rem] rounded-md bg-white/90 p-[0.375rem] px-[0.875rem] text-black transition-colors hover:bg-white"
         >
