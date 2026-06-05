@@ -209,7 +209,7 @@ export default function AppHeader({
         } ${className}`}
       >
         <h1 className="flex items-center gap-2 text-xl">
-          <Link href="/" className="text-2xl font-bold text-white">
+          <a href="https://www.omi.me" className="text-2xl font-bold text-white">
             <Image
               src={customLogo.src}
               alt={customLogo.alt}
@@ -217,7 +217,7 @@ export default function AppHeader({
               height={64}
               className="h-auto w-[50px]"
             />
-          </Link>
+          </a>
         </h1>
 
         <nav className="hidden items-center space-x-4 md:flex">
