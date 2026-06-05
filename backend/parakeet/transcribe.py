@@ -69,11 +69,14 @@ def _transcribe_nim(file_path: str):
     with open(file_path, "rb") as f:
         audio_bytes = f.read()
 
+    nim_language = os.getenv("NIM_LANGUAGE", "multi")
+
     try:
         with httpx.Client(timeout=httpx.Timeout(connect=5.0, read=120.0, write=30.0, pool=10.0)) as client:
             resp = client.post(
-                f"{_nim_url}/v1/transcribe",
+                f"{_nim_url}/v1/audio/transcriptions",
                 files={"file": ("audio.wav", audio_bytes, "audio/wav")},
+                data={"language": nim_language},
             )
         resp.raise_for_status()
         data = resp.json()
