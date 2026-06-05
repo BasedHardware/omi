@@ -47,32 +47,14 @@ def transcribe_file_v2(file_path: str, diarize: bool = True):
 
     Returns: {"text": str, "segments": [{"text", "start", "end", "speaker"}, ...]}
     Speaker labels are "SPEAKER_0", "SPEAKER_1", etc.
+    Diarization uses embedding-based cosine clustering via HOSTED_SPEAKER_EMBEDDING_API_URL.
     """
-    if INFERENCE_MODE == "nim":
-        return _transcribe_nim_v2(file_path, diarize=diarize)
-    return _transcribe_nemo_v2(file_path, diarize=diarize)
+    return _transcribe_v2_with_diarization(file_path, diarize=diarize)
 
 
-_diar_model = None
-DIARIZATION_MODEL = os.getenv("PARAKEET_DIARIZATION_MODEL", "")
-
-
-def _get_diarization_model():
-    global _diar_model
-    if _diar_model is not None:
-        return _diar_model
-    if not DIARIZATION_MODEL:
-        return None
-    try:
-        from nemo.collections.asr.models import ClusteringDiarizer, NeuralDiarizer
-
-        logger.info(f"Loading diarization model: {DIARIZATION_MODEL}")
-        _diar_model = NeuralDiarizer.from_pretrained(model_name=DIARIZATION_MODEL)
-        logger.info("Diarization model loaded")
-        return _diar_model
-    except Exception as e:
-        logger.warning(f"Could not load diarization model {DIARIZATION_MODEL}: {e}")
-        return None
+SPEAKER_EMBEDDING_URL = os.getenv("HOSTED_SPEAKER_EMBEDDING_API_URL", "")
+SPEAKER_MATCH_THRESHOLD = float(os.getenv("PARAKEET_SPEAKER_THRESHOLD", "0.45"))
+MIN_SEGMENT_DURATION = 0.6
 
 
 def _transcribe_nemo(file_path: str):
@@ -133,86 +115,110 @@ def _transcribe_nim(file_path: str):
         raise
 
 
-def _transcribe_nemo_v2(file_path: str, diarize: bool = True):
-    base = _transcribe_nemo(file_path)
+def _transcribe_v2_with_diarization(file_path: str, diarize: bool = True):
+    base = transcribe_file(file_path)
 
-    if not diarize:
+    if not diarize or not SPEAKER_EMBEDDING_URL:
         for seg in base["segments"]:
             seg["speaker"] = "SPEAKER_0"
         return base
 
-    diar = _get_diarization_model()
-    if diar is None:
-        for seg in base["segments"]:
-            seg["speaker"] = "SPEAKER_0"
-        return base
-
-    try:
-        diar_result = diar.diarize(audio=[file_path])
-        speaker_turns = []
-        if diar_result and len(diar_result) > 0:
-            for turn in diar_result[0]:
-                speaker_turns.append(
-                    {
-                        "start": float(turn.start),
-                        "end": float(turn.end),
-                        "speaker": turn.speaker if hasattr(turn, "speaker") else "SPEAKER_0",
-                    }
-                )
-
-        for seg in base["segments"]:
-            seg_mid = (seg["start"] + seg["end"]) / 2
-            best_speaker = "SPEAKER_0"
-            for turn in speaker_turns:
-                if turn["start"] <= seg_mid <= turn["end"]:
-                    best_speaker = turn["speaker"]
-                    break
-            seg["speaker"] = best_speaker
-
-    except Exception as e:
-        logger.warning(f"NeMo diarization failed, defaulting to SPEAKER_0: {e}")
-        for seg in base["segments"]:
-            seg["speaker"] = "SPEAKER_0"
-
-    return base
-
-
-def _transcribe_nim_v2(file_path: str, diarize: bool = True):
     import httpx
+    import io
+    import numpy as np
+    import wave as _wave
+    from scipy.spatial.distance import cdist
 
     with open(file_path, "rb") as f:
         audio_bytes = f.read()
 
-    nim_language = os.getenv("NIM_LANGUAGE", "multi")
+    centroids = []
+    counts = []
+
+    for seg in base["segments"]:
+        seg_dur = seg["end"] - seg["start"]
+        if seg_dur < MIN_SEGMENT_DURATION:
+            seg["speaker"] = f"SPEAKER_{len(centroids) - 1}" if centroids else "SPEAKER_0"
+            continue
+
+        try:
+            seg_wav = _extract_segment_wav(audio_bytes, seg["start"], seg["end"])
+            if len(seg_wav) < 1000:
+                seg["speaker"] = f"SPEAKER_{len(centroids) - 1}" if centroids else "SPEAKER_0"
+                continue
+
+            emb = _get_embedding(seg_wav)
+            if emb is None:
+                seg["speaker"] = f"SPEAKER_{len(centroids) - 1}" if centroids else "SPEAKER_0"
+                continue
+
+            best_i, best_dist = -1, 1e9
+            for i, c in enumerate(centroids):
+                d = float(cdist(emb, c, metric="cosine")[0, 0])
+                if d < best_dist:
+                    best_i, best_dist = i, d
+
+            if best_i >= 0 and best_dist < SPEAKER_MATCH_THRESHOLD:
+                n = counts[best_i]
+                centroids[best_i] = (centroids[best_i] * n + emb) / (n + 1)
+                counts[best_i] = n + 1
+                seg["speaker"] = f"SPEAKER_{best_i}"
+            else:
+                centroids.append(emb)
+                counts.append(1)
+                seg["speaker"] = f"SPEAKER_{len(centroids) - 1}"
+
+        except Exception as e:
+            logger.warning(f"Diarization failed for segment {seg['start']:.1f}-{seg['end']:.1f}: {e}")
+            seg["speaker"] = f"SPEAKER_{len(centroids) - 1}" if centroids else "SPEAKER_0"
+
+    return base
+
+
+def _extract_segment_wav(wav_bytes: bytes, start: float, end: float) -> bytes:
+    import io
+    import wave as _wave
+
+    buf = io.BytesIO(wav_bytes)
+    with _wave.open(buf, "rb") as wf:
+        sr = wf.getframerate()
+        nch = wf.getnchannels()
+        sw = wf.getsampwidth()
+        start_frame = int(start * sr)
+        end_frame = int(end * sr)
+        wf.setpos(min(start_frame, wf.getnframes()))
+        pcm = wf.readframes(end_frame - start_frame)
+
+    out = io.BytesIO()
+    with _wave.open(out, "wb") as wf:
+        wf.setnchannels(nch)
+        wf.setsampwidth(sw)
+        wf.setframerate(sr)
+        wf.writeframes(pcm)
+    return out.getvalue()
+
+
+def _get_embedding(wav_bytes: bytes):
+    import httpx
+    import numpy as np
 
     try:
-        data = {"language": nim_language}
-        if diarize:
-            data["diarize"] = "true"
-
-        with httpx.Client(timeout=httpx.Timeout(connect=5.0, read=120.0, write=30.0, pool=10.0)) as client:
+        with httpx.Client(timeout=httpx.Timeout(connect=5.0, read=30.0, write=10.0, pool=5.0)) as client:
             resp = client.post(
-                f"{_nim_url}/v1/audio/transcriptions",
-                files={"file": ("audio.wav", audio_bytes, "audio/wav")},
-                data=data,
+                f"{SPEAKER_EMBEDDING_URL}/v2/embedding",
+                files={"file": ("segment.wav", wav_bytes, "audio/wav")},
             )
         resp.raise_for_status()
         result = resp.json()
 
-        text = result.get("text", "") or ""
-        segments = []
-        for s in result.get("segments", []) or []:
-            seg = {
-                "text": s.get("text", s.get("segment", "")),
-                "start": float(s.get("start", 0.0)),
-                "end": float(s.get("end", 0.0)),
-                "speaker": s.get("speaker", "SPEAKER_0"),
-            }
-            segments.append(seg)
-        if not segments and text:
-            segments = [{"text": text, "start": 0.0, "end": 0.0, "speaker": "SPEAKER_0"}]
+        if isinstance(result, list):
+            emb = np.array(result, dtype=np.float32)
+        else:
+            emb = np.array(result["embedding"], dtype=np.float32)
 
-        return {"text": text, "segments": segments}
+        if emb.ndim == 1:
+            emb = emb.reshape(1, -1)
+        return emb
     except Exception as e:
-        logger.error(f"NIM v2 transcribe error: {e}")
-        raise
+        logger.warning(f"Embedding extraction failed: {e}")
+        return None
