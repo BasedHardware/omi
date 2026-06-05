@@ -8,6 +8,7 @@ from pydantic import BaseModel
 
 import database.memories as memories_db
 import database.conversations as conversations_db
+import database.users as users_db
 
 # from database.redis_db import get_filter_category_items
 # from database.vector_db import query_vectors_by_metadata
@@ -93,6 +94,24 @@ def edit_memory(memory_id: str, value: str, uid: str = Depends(get_uid_from_mcp_
     except Exception:
         logger.exception("Vector upsert failed uid=%s memory_id=%s (memory edited, vector stale)", uid, memory_id)
     return {"status": "ok"}
+
+
+class UserProfile(BaseModel):
+    profile_text: Optional[str] = None
+    generated_at: Optional[str] = None
+    data_sources_used: Optional[int] = None
+
+
+@router.get("/v1/mcp/profile", tags=["mcp"], response_model=UserProfile)
+def get_user_profile(uid: str = Depends(get_uid_from_mcp_api_key)):
+    """The user's consolidated, always-current profile. Read this first for facts about the user."""
+    profile = users_db.get_ai_user_profile(uid) or {}
+    generated_at = profile.get("generated_at")
+    return UserProfile(
+        profile_text=profile.get("profile_text"),
+        generated_at=str(generated_at) if generated_at is not None else None,
+        data_sources_used=profile.get("data_sources_used"),
+    )
 
 
 class CleanerMemory(BaseModel):
