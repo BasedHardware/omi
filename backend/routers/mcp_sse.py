@@ -24,6 +24,7 @@ import database.conversations as conversations_db
 import database.mcp_api_key as mcp_api_key_db
 import database.vector_db as vector_db
 import database.x_posts as x_posts_db
+import database.users as users_db
 from models.memories import MemoryDB, Memory, MemoryCategory
 from utils.conversations.render import redact_conversation_for_list
 from models.conversation_enums import CategoryEnum
@@ -115,6 +116,18 @@ def invalid_mcp_auth_exception(
 
 # MCP Tool Definitions
 MCP_TOOLS = [
+    {
+        "name": "get_user_profile",
+        "description": (
+            "Get the user's profile — a single consolidated, always-current summary of who the user is "
+            "(identity, contacts, work, projects, tools, preferences, and current goals). This is the most "
+            "complete and authoritative source of facts about the user. ALWAYS call this first when you need "
+            "any context about the user, before searching individual memories or conversations."
+        ),
+        "annotations": READ_ONLY_ANNOTATIONS,
+        "securitySchemes": MEMORIES_READ_SECURITY,
+        "inputSchema": {"type": "object", "properties": {}},
+    },
     {
         "name": "get_memories",
         "description": "Retrieve a list of memories. A memory is a known fact about the user across multiple domains.",
@@ -323,7 +336,17 @@ class ToolExecutionError(Exception):
 def execute_tool(user_id: str, tool_name: str, arguments: dict) -> dict:
     """Execute an MCP tool and return the result. Raises ToolExecutionError on failure."""
 
-    if tool_name == "get_memories":
+    if tool_name == "get_user_profile":
+        profile = users_db.get_ai_user_profile(user_id)
+        if not profile or not profile.get("profile_text"):
+            return {"profile": None, "message": "No profile has been generated for this user yet."}
+        return {
+            "profile_text": profile.get("profile_text"),
+            "generated_at": profile.get("generated_at"),
+            "data_sources_used": profile.get("data_sources_used"),
+        }
+
+    elif tool_name == "get_memories":
         categories = arguments.get("categories", [])
         limit = arguments.get("limit", 100)
         offset = arguments.get("offset", 0)
@@ -616,6 +639,13 @@ def handle_mcp_message(
                     "protocolVersion": "2025-03-26",
                     "capabilities": {"tools": {}},
                     "serverInfo": {"name": "omi-mcp-server", "version": "1.0.0"},
+                    "instructions": (
+                        "This server exposes the user's Omi memory (their personal AI memory bank). "
+                        "A consolidated, always-current user profile is available via the `get_user_profile` "
+                        "tool — consult it FIRST for any question about who the user is (identity, contacts, "
+                        "work, projects, preferences, goals) before falling back to `search_memories` or "
+                        "`get_memories` for finer-grained or historical details."
+                    ),
                 },
             ),
             new_session_id,
