@@ -72,7 +72,7 @@ export function generateStructuredData(plugin: Plugin, categoryName: string) {
   const appStoreUrl = 'https://apps.apple.com/us/app/friend-ai-wearable/id6502156163';
   const playStoreUrl = 'https://play.google.com/store/apps/details?id=com.friend.ios';
   const productUrl =
-    'https://www.omi.me/products/friend-dev-kit-2?ref=omi_marketplace&utm_source=h.omi.me&utm_campaign=omi_marketplace_floating_banner';
+    'https://www.omi.me/products/omi-dev-kit-2?ref=omi_marketplace&utm_source=h.omi.me&utm_campaign=omi_marketplace_floating_banner';
 
   return {
     __html: JSON.stringify([
@@ -107,15 +107,15 @@ export function generateStructuredData(plugin: Plugin, categoryName: string) {
       {
         '@context': 'https://schema.org',
         '@type': 'Product',
-        name: 'OMI Necklace',
+        name: 'Omi',
         description: 'AI-powered wearable necklace. Real-time AI voice assistant.',
         brand: {
           '@type': 'Brand',
-          name: 'OMI',
+          name: 'Omi',
         },
         offers: {
           '@type': 'Offer',
-          price: '69.99',
+          price: '89',
           priceCurrency: 'USD',
           availability: 'https://schema.org/InStock',
           url: productUrl,
@@ -157,7 +157,7 @@ function getPlatformLink(userAgent: string) {
     ? 'https://play.google.com/store/apps/details?id=com.friend.ios'
     : isIOS
     ? 'https://apps.apple.com/us/app/friend-ai-wearable/id6502156163'
-    : 'https://omi.me';
+    : 'https://www.omi.me';
 }
 
 // Helper function to format date
