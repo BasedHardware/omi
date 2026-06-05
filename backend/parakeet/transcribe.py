@@ -21,7 +21,9 @@ def transcribe_file(file_path: str):
     """
     hyps = _model.transcribe([file_path], timestamps=True)
     hyp = hyps[0]
-    text = getattr(hyp, "text", None) or str(hyp)
+    # NEVER fall back to str(hyp): on empty/no-speech windows that dumps the raw Hypothesis
+    # object (logits/alignment float arrays) as "text". Empty string instead.
+    text = getattr(hyp, "text", None) or ""
 
     segments = []
     timestamp = getattr(hyp, "timestamp", None) or {}
