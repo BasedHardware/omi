@@ -170,6 +170,14 @@ class TaskAssistantSettings {
         - Questions expecting an answer: "What's the status of…?", "When will you…?"
         - Assigned items: "@user", "assigned to you", review requests
 
+        CRITICAL FOR PUBLIC/GROUP CHANNELS:
+        In Discord, Slack, Teams, community chats, and other public/group channels, extract ONLY when the visible evidence shows the user is directly involved:
+        - The message explicitly @mentions the user by name or handle
+        - The user has already replied in the same thread and is an active participant
+        - The message is otherwise clearly addressed to the user by name, role, or visible thread context
+        If the user is merely observing a public channel, or if you cannot tell whether the request is directed at them, call no_task_found.
+        Do NOT extract tasks from broad bug reports, feature requests, or questions posted to the community at large.
+
         WHO COUNTS AS "SOMEONE":
         - A coworker in Slack, Teams, Discord, email
         - A friend/family member in iMessage, WhatsApp, Telegram, Messenger

@@ -298,16 +298,20 @@ class _PhoneCallsPageState extends State<PhoneCallsPage> with SingleTickerProvid
                 // Invisible spacer to balance the backspace button
                 const SizedBox(width: 48),
                 Expanded(
-                  child: Text(
-                    hasDigits ? _dialpadController.text : context.l10n.phoneEnterNumber,
-                    textAlign: TextAlign.center,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontSize: hasDigits ? (_dialpadController.text.length > 12 ? 24 : 32) : 20,
-                      fontWeight: FontWeight.w300,
-                      letterSpacing: hasDigits ? 2 : 0,
-                      color: hasDigits ? Colors.white : Colors.grey[600],
+                  child: GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onLongPressStart: (details) => _showPasteMenu(details.globalPosition),
+                    child: Text(
+                      hasDigits ? _dialpadController.text : context.l10n.phoneEnterNumber,
+                      textAlign: TextAlign.center,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: hasDigits ? (_dialpadController.text.length > 12 ? 24 : 32) : 20,
+                        fontWeight: FontWeight.w300,
+                        letterSpacing: hasDigits ? 2 : 0,
+                        color: hasDigits ? Colors.white : Colors.grey[600],
+                      ),
                     ),
                   ),
                 ),
@@ -415,6 +419,68 @@ class _PhoneCallsPageState extends State<PhoneCallsPage> with SingleTickerProvid
         }),
       ),
     );
+  }
+
+  /// Keep only dialpad-valid characters (digits, *, #) plus a leading +.
+  /// Strips spaces, dashes, parens, dots, and other formatting from pasted text
+  /// like "+1 (415) 555-1234" → "+14155551234".
+  String _sanitizePastedNumber(String input) {
+    final buf = StringBuffer();
+    var seenPlus = false;
+    for (var i = 0; i < input.length; i++) {
+      final ch = input[i];
+      if (ch == '+' && !seenPlus && buf.isEmpty) {
+        buf.write('+');
+        seenPlus = true;
+      } else if (ch.codeUnitAt(0) >= 0x30 && ch.codeUnitAt(0) <= 0x39) {
+        buf.write(ch);
+      } else if (ch == '*' || ch == '#') {
+        buf.write(ch);
+      }
+    }
+    return buf.toString();
+  }
+
+  Future<void> _showPasteMenu(Offset globalPosition) async {
+    HapticFeedback.lightImpact();
+    final clipboardData = await Clipboard.getData(Clipboard.kTextPlain);
+    if (!mounted) return;
+
+    final raw = clipboardData?.text;
+    if (raw == null || raw.trim().isEmpty) return;
+
+    final sanitized = _sanitizePastedNumber(raw);
+    if (sanitized.isEmpty) return;
+
+    final overlay = Overlay.of(context).context.findRenderObject() as RenderBox?;
+    if (overlay == null) return;
+
+    final selected = await showMenu<String>(
+      context: context,
+      color: const Color(0xFF2A2A2E),
+      position: RelativeRect.fromLTRB(
+        globalPosition.dx,
+        globalPosition.dy,
+        overlay.size.width - globalPosition.dx,
+        overlay.size.height - globalPosition.dy,
+      ),
+      items: [
+        PopupMenuItem<String>(
+          value: 'paste',
+          child: Text(
+            context.l10n.paste,
+            style: const TextStyle(color: Colors.white),
+          ),
+        ),
+      ],
+    );
+
+    if (selected == 'paste' && mounted) {
+      HapticFeedback.mediumImpact();
+      setState(() {
+        _dialpadController.text = sanitized;
+      });
+    }
   }
 
   /// Extracts the country code (e.g. "+1", "+91") from an E.164 phone number

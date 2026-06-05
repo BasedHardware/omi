@@ -3008,5 +3008,10 @@
     "invalidPromotionCode": "رمز ترويجي غير صالح.",
     "backgroundModeTitle": "الوضع في الخلفية",
     "backgroundModeDescription": "حافِظ على تسجيل Omi حتى عند إغلاق التطبيق تمامًا.",
-    "backgroundModeNote": "يعمل حاليًا مع أجهزة Omi فقط، ويجري تحسينه باستمرار."
+    "backgroundModeNote": "يعمل حاليًا مع أجهزة Omi فقط، ويجري تحسينه باستمرار.",
+    "regenerateRecap": "إعادة إنشاء الملخص",
+    "recapRegeneratedSnackbar": "تمت إعادة إنشاء الملخص",
+    "recapRegenerateFailed": "تعذرت إعادة إنشاء الملخص. حاول مرة أخرى لاحقًا.",
+    "recapRegenerateCooldown": "يرجى الانتظار بضع ثوانٍ قبل إعادة الإنشاء مرة أخرى.",
+    "recapRegenerateNoConversations": "لا توجد محادثات لتلخيصها في هذا اليوم."
 }

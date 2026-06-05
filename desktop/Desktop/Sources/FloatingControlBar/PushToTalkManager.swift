@@ -39,6 +39,16 @@ class PushToTalkManager: ObservableObject {
 
   // Transcription
   private var transcriptionService: TranscriptionService?
+  // Realtime omni STT (replaces Deepgram). Connects through the omi backend relay.
+  private var realtimeOmniService: RealtimeOmniService?
+  private var isOmniSTT = false
+  // Mic chunks captured before the relay finishes connecting (raw 16k PCM),
+  // flushed once the service exists so the user's first words aren't clipped.
+  private var omniPreconnectBuffer: [Data] = []
+  // True once the omni model returned any transcript this turn — gates the
+  // Deepgram fallback so a benign trailing socket error doesn't trigger it.
+  private var omniReceivedTranscript = false
+  private var omniTurnSent = false  // dedup: send/fallback the omni turn at most once
   private var audioCaptureService: AudioCaptureService?
   private var transcriptSegments: [String] = []
   private var lastInterimText: String = ""
@@ -335,6 +345,25 @@ class PushToTalkManager: ObservableObject {
       sound?.play()
     }
 
+    // Realtime omni: commit the turn and wait for the final transcript.
+    if isOmniSTT {
+      realtimeOmniService?.commitInputTurn()
+      log("PushToTalkManager: finalizing (omni STT) — waiting for final transcript")
+      let timeout = DispatchWorkItem { [weak self] in
+        Task { @MainActor in
+          guard let self, self.state == .finalizing else { return }
+          log("PushToTalkManager: omni finalization timeout — sending transcript")
+          self.sendTranscript()
+        }
+      }
+      liveFinalizationTimeout = timeout
+      // Safety net only — the real send happens the instant the omni model
+      // returns its final transcript (omniDidReceiveInputTranscript isFinal /
+      // omniDidFinishTurn). Generous so the relay round-trip can complete.
+      DispatchQueue.main.asyncAfter(deadline: .now() + 8.0, execute: timeout)
+      return
+    }
+
     let isBatchMode = ShortcutSettings.shared.pttTranscriptionMode == .batch
 
     if isBatchMode {
@@ -501,6 +530,12 @@ class PushToTalkManager: ObservableObject {
       return
     }
 
+    // The floating bar's STT is the realtime omni model (replaces Deepgram):
+    // one omni model transcribes; reasoning/tools/TTS are untouched (the final
+    // transcript still goes to ChatProvider via sendTranscript()/sendQuery()).
+    // Falls back to legacy Deepgram STT only if no provider key is available.
+    if startOmniTranscription() { return }
+
     let isBatchMode = ShortcutSettings.shared.pttTranscriptionMode == .batch
 
     if isBatchMode {
@@ -573,7 +608,19 @@ class PushToTalkManager: ObservableObject {
         try await capture.startCapture(
           onAudioChunk: { [weak self] audioData in
             guard let self else { return }
-            if batchMode {
+            if self.isOmniSTT {
+              // Realtime omni: stream mic PCM (resampled to the provider's rate),
+              // or buffer raw until the relay finishes connecting.
+              if let svc = self.realtimeOmniService {
+                svc.sendAudio(self.resampleForOmni(audioData))
+              } else {
+                self.omniPreconnectBuffer.append(audioData)
+              }
+              // Also retain the raw turn for a Deepgram fallback if omni fails.
+              self.batchAudioLock.lock()
+              self.batchAudioBuffer.append(audioData)
+              self.batchAudioLock.unlock()
+            } else if batchMode {
               // Batch mode: accumulate audio in buffer
               self.batchAudioLock.lock()
               self.batchAudioBuffer.append(audioData)
@@ -614,6 +661,10 @@ class PushToTalkManager: ObservableObject {
     audioCaptureService?.stopCapture()
     transcriptionService?.stop()
     transcriptionService = nil
+    realtimeOmniService?.stop()
+    realtimeOmniService = nil
+    isOmniSTT = false
+    omniPreconnectBuffer.removeAll()
   }
 
   private func handleTranscriptSegments(_ segments: [TranscriptionService.BackendSegment]) {
@@ -658,6 +709,173 @@ class PushToTalkManager: ObservableObject {
       FloatingControlBarManager.shared.resizeForPTT(expanded: true)
     } else if !barState.isVoiceListening && wasListening {
       FloatingControlBarManager.shared.resizeForPTT(expanded: false)
+    }
+  }
+}
+
+// MARK: - Realtime Omni STT integration
+//
+// When "Realtime Voice" is enabled, one omni model (Gemini 3.1 Flash Live or
+// GPT Realtime 2) transcribes the PTT turn instead of Deepgram. The final
+// transcript flows through the unchanged sendTranscript() → ChatProvider path,
+// so agents, tools, memory, vision, and the text input all keep working.
+extension PushToTalkManager: RealtimeOmniServiceDelegate {
+
+  /// Starts realtime omni STT via the omi backend relay. Always returns true
+  /// (omni is the floating bar's STT); on auth failure it stops the turn.
+  @discardableResult
+  fileprivate func startOmniTranscription() -> Bool {
+    let provider = RealtimeOmniSettings.shared.effectiveProvider
+    isOmniSTT = true
+    omniReceivedTranscript = false
+    omniTurnSent = false
+    omniPreconnectBuffer.removeAll()
+    // Keep a copy of the whole turn so we can fall back to Deepgram if the relay
+    // is unreachable (e.g. backend not yet on prod) — PTT must never break.
+    batchAudioLock.lock(); batchAudioBuffer = Data(); batchAudioLock.unlock()
+    startMicCapture()  // capture immediately; chunks buffer until the relay connects
+    Task { @MainActor [weak self] in
+      guard let self, self.isOmniSTT else { return }
+      do {
+        let authHeader = try await AuthService.shared.getAuthHeader()
+        let base = DesktopBackendEnvironment.pythonBaseURL()
+        let service = RealtimeOmniService(
+          provider: provider, relayBaseURL: base, authHeader: authHeader, sttOnly: true, delegate: self)
+        self.realtimeOmniService = service
+        // Flush anything captured while we were fetching auth.
+        for raw in self.omniPreconnectBuffer { service.sendAudio(self.resampleForOmni(raw)) }
+        self.omniPreconnectBuffer.removeAll()
+        service.start()
+        log("PushToTalkManager: started omni STT (\(provider.displayName)) via backend relay")
+      } catch {
+        logError("PushToTalkManager: omni auth failed", error: error)
+        self.stopListening()
+      }
+    }
+    return true
+  }
+
+  // Phase 1 key resolution: env (dev) → TODO BYOK / backend-minted token.
+  fileprivate func resolveOmniKey(for provider: RealtimeOmniProvider) -> String? {
+    let env = ProcessInfo.processInfo.environment
+    let raw: String?
+    switch provider {
+    case .gptRealtime2: raw = env["OPENAI_API_KEY"]
+    case .geminiFlashLive, .auto: raw = env["GEMINI_API_KEY"] ?? env["GOOGLE_API_KEY"]
+    }
+    guard let raw, !raw.trimmingCharacters(in: .whitespaces).isEmpty else { return nil }
+    return raw
+  }
+
+  // Mic is 16kHz PCM16; OpenAI realtime requires ≥24kHz, Gemini wants 16kHz.
+  fileprivate func resampleForOmni(_ pcm16k: Data) -> Data {
+    guard let target = realtimeOmniService?.requiredInputSampleRate, target != 16000 else { return pcm16k }
+    return Self.resamplePCM16(pcm16k, from: 16000, to: target)
+  }
+
+  static func resamplePCM16(_ data: Data, from src: Int, to dst: Int) -> Data {
+    let count = data.count / 2
+    guard count > 1, src != dst else { return data }
+    var input = [Int16](repeating: 0, count: count)
+    _ = input.withUnsafeMutableBytes { data.copyBytes(to: $0, count: count * 2) }
+    let ratio = Double(src) / Double(dst)
+    let outCount = max(1, Int(Double(count) / ratio))
+    var out = [Int16](repeating: 0, count: outCount)
+    for i in 0..<outCount {
+      let pos = Double(i) * ratio
+      let i0 = Int(pos)
+      let i1 = Swift.min(i0 + 1, count - 1)
+      let frac = pos - Double(i0)
+      let s = Double(input[i0]) * (1 - frac) + Double(input[i1]) * frac
+      out[i] = Int16(Swift.max(-32768, Swift.min(32767, s)))
+    }
+    return out.withUnsafeBytes { Data($0) }
+  }
+
+  // MARK: RealtimeOmniServiceDelegate
+
+  func omniDidConnect() {
+    log("PushToTalkManager: omni STT connected")
+  }
+
+  func omniDidReceiveInputTranscript(_ text: String, isFinal: Bool) {
+    guard state == .listening || state == .lockedListening
+            || state == .pendingLockDecision || state == .finalizing else { return }
+    if !text.isEmpty { omniReceivedTranscript = true }
+    if isFinal {
+      let finalText = text.isEmpty ? lastInterimText : text
+      let trimmed = finalText.trimmingCharacters(in: .whitespacesAndNewlines)
+      if !trimmed.isEmpty && !transcriptSegments.contains(trimmed) {
+        transcriptSegments.append(trimmed)
+      }
+      lastInterimText = ""
+      if state == .finalizing {
+        liveFinalizationTimeout?.cancel()
+        liveFinalizationTimeout = nil
+        guard !omniTurnSent else { return }
+        omniTurnSent = true
+        sendTranscript()
+      }
+    } else {
+      lastInterimText += text
+      barState?.voiceTranscript = lastInterimText
+    }
+  }
+
+  func omniDidReceiveAudio(_ pcm24k: Data) {
+    // STT-only: the omni model's own voice is unused; Claude's reply is spoken
+    // by the existing FloatingBarVoicePlaybackService.
+  }
+
+  func omniDidFinishTurn() {
+    if state == .finalizing {
+      liveFinalizationTimeout?.cancel()
+      liveFinalizationTimeout = nil
+      guard !omniTurnSent else { return }
+      omniTurnSent = true
+      sendTranscript()
+    }
+  }
+
+  func omniDidError(_ message: String) {
+    logError("PushToTalkManager: omni STT error: \(message)")
+    // If the omni model already gave us a transcript this turn, the error is a
+    // benign teardown — ignore it. Otherwise the relay is unreachable (e.g. the
+    // backend isn't on prod yet): fall back to Deepgram so PTT never breaks.
+    guard !omniReceivedTranscript,
+          state == .listening || state == .lockedListening
+            || state == .pendingLockDecision || state == .finalizing
+    else { return }
+    fallBackToDeepgram()
+  }
+
+  /// Transcribe the buffered turn audio via Deepgram when omni is unavailable.
+  fileprivate func fallBackToDeepgram() {
+    guard !omniTurnSent else { return }
+    omniTurnSent = true
+    log("PushToTalkManager: omni unavailable — falling back to Deepgram for this turn")
+    isOmniSTT = false
+    realtimeOmniService?.stop()
+    realtimeOmniService = nil
+    batchAudioLock.lock()
+    let audio = batchAudioBuffer
+    batchAudioLock.unlock()
+    guard !audio.isEmpty else { sendTranscript(); return }
+    barState?.voiceTranscript = "Transcribing…"
+    Task { @MainActor [weak self] in
+      guard let self else { return }
+      do {
+        let language = AssistantSettings.shared.effectiveTranscriptionLanguage
+        let transcript = try await TranscriptionService.batchTranscribe(
+          audioData: audio, language: language,
+          contextKeywords: self.currentContextSnapshot?.keywords ?? [])
+        if let transcript, !transcript.isEmpty { self.transcriptSegments = [transcript] }
+      } catch {
+        logError("PushToTalkManager: Deepgram fallback failed", error: error)
+      }
+      self.liveFinalizationTimeout?.cancel()
+      self.liveFinalizationTimeout = nil
+      self.sendTranscript()
     }
   }
 }

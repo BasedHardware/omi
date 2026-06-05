@@ -4601,7 +4601,10 @@ class AppLocalizationsJa extends AppLocalizations {
   }
 
   @override
-  String accessesAndTriggeredBy(String accessDescription, String triggerDescription) {
+  String accessesAndTriggeredBy(
+    String accessDescription,
+    String triggerDescription,
+  ) {
     return '$accessDescription、$triggerDescription。';
   }
 
@@ -9144,4 +9147,19 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get backgroundModeNote => '現在は Omi デバイスのみ対応しており、継続的に改善しています。';
+
+  @override
+  String get regenerateRecap => '要約を再生成';
+
+  @override
+  String get recapRegeneratedSnackbar => '要約を再生成しました';
+
+  @override
+  String get recapRegenerateFailed => '要約を再生成できませんでした。後でもう一度お試しください。';
+
+  @override
+  String get recapRegenerateCooldown => '再生成する前に数秒お待ちください。';
+
+  @override
+  String get recapRegenerateNoConversations => 'この日の要約対象となる会話はありません。';
 }

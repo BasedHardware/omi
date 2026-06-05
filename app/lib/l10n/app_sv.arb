@@ -3041,5 +3041,10 @@
     "invalidPromotionCode": "Ogiltig kampanjkod.",
     "backgroundModeTitle": "Bakgrundsläge",
     "backgroundModeDescription": "Håll din Omi inspelande även när appen är helt stängd.",
-    "backgroundModeNote": "Fungerar än så länge bara med Omi-enheter och förbättras kontinuerligt."
+    "backgroundModeNote": "Fungerar än så länge bara med Omi-enheter och förbättras kontinuerligt.",
+    "regenerateRecap": "Återskapa sammanfattningen",
+    "recapRegeneratedSnackbar": "Sammanfattningen återskapad",
+    "recapRegenerateFailed": "Det gick inte att återskapa sammanfattningen. Försök igen senare.",
+    "recapRegenerateCooldown": "Vänta några sekunder innan du genererar igen.",
+    "recapRegenerateNoConversations": "Inga samtal att sammanfatta för den här dagen."
 }

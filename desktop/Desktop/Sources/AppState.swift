@@ -328,6 +328,23 @@ class AppState: ObservableObject {
   private var systemAudioCaptureService: Any?  // SystemAudioCaptureService (macOS 14.4+)
   private var audioMixer: AudioMixer?
   private var vadGateService: VADGateService?
+  // On-device Parakeet STT (FluidAudio) — used instead of the cloud WebSocket when OMI_LOCAL_STT=1.
+  // On-device Parakeet: separate mic vs system-audio instances so transcripts are diarized by
+  // source — mic = the user ("You"), system audio = another speaker.
+  private var localMicService: LocalTranscriptionService?
+  private var localSystemService: LocalTranscriptionService?
+  private var useLocalSTT = false
+
+  /// True on Apple Silicon (M-series), where on-device Parakeet runs on the Neural Engine.
+  /// Desktop transcribes with Parakeet here by default; Intel Macs fall back to cloud STT.
+  static let isAppleSilicon: Bool = {
+    var value: Int32 = 0
+    var size = MemoryLayout<Int32>.size
+    if sysctlbyname("hw.optional.arm64", &value, &size, nil, 0) == 0 {
+      return value == 1
+    }
+    return false
+  }()
 
   // Speaker segments for diarized transcription (sliding window — older segments are in SQLite)
   private var speakerSegments: [SpeakerSegment] = []
@@ -1432,8 +1449,29 @@ class AppState: ObservableObject {
         "Transcription: Using language=\(effectiveLanguage) (autoDetect=\(AssistantSettings.shared.transcriptionAutoDetect), selected=\(AssistantSettings.shared.transcriptionLanguage))"
       )
 
-      // Always streaming via Python backend /v4/listen
-      transcriptionService = try TranscriptionService(language: effectiveLanguage)
+      // Desktop transcribes on-device with Parakeet by default on Apple Silicon — no Deepgram.
+      // Intel Macs (no Neural Engine) fall back to the cloud path. Force cloud for debugging with
+      // OMI_FORCE_CLOUD_STT=1 or `defaults write <bundle> forceCloudSTT -bool true`.
+      let forceCloudSTT = ProcessInfo.processInfo.environment["OMI_FORCE_CLOUD_STT"] == "1"
+        || UserDefaults.standard.bool(forKey: "forceCloudSTT")
+      useLocalSTT = !forceCloudSTT && Self.isAppleSilicon
+      if useLocalSTT {
+        log("Transcription: ON-DEVICE Parakeet mode (OMI_LOCAL_STT) — no cloud STT")
+        // Segments are delivered on the main actor by the service, so no Task hop here.
+        let onLocalSegments: LocalTranscriptionService.SegmentsHandler = { [weak self] segments in
+          self?.handleBackendSegments(segments)
+        }
+        // Mic = the user; system audio = another speaker. Transcribed separately for diarization.
+        let mic = LocalTranscriptionService(language: effectiveLanguage, isUser: true)
+        mic.start(onSegments: onLocalSegments)
+        localMicService = mic
+        let system = LocalTranscriptionService(language: effectiveLanguage, isUser: false)
+        system.start(onSegments: onLocalSegments)
+        localSystemService = system
+      } else {
+        // Always streaming via Python backend /v4/listen
+        transcriptionService = try TranscriptionService(language: effectiveLanguage)
+      }
 
       // Set conversation source based on audio source
       if effectiveSource == .bleDevice, let device = DeviceProvider.shared.connectedDevice {
@@ -1472,7 +1510,13 @@ class AppState: ObservableObject {
       }
       // For BLE device, BleAudioService will be used in startAudioCapture
 
-      // Streaming mode: start transcription service first, then audio on connect
+      // Streaming mode: start transcription service first, then audio on connect.
+      // Local (Parakeet) mode has no WebSocket — start capture immediately instead.
+      if useLocalSTT {
+        Task { [weak self] in
+          await self?.startAudioCapture(source: effectiveSource)
+        }
+      } else {
       transcriptionService?.start(
         onSegments: { [weak self] segments in
           Task { @MainActor in
@@ -1502,6 +1546,7 @@ class AppState: ObservableObject {
           log("Transcription: Disconnected from Python backend")
         }
       )
+      }
 
       isTranscribing = true
       recordingGeneration &+= 1
@@ -1595,17 +1640,25 @@ class AppState: ObservableObject {
       }
     }
 
-    // Start the mixer — it sums mic + system into a mono stream and forwards it to
-    // the transcription WebSocket.
-    audioMixer?.start { [weak self] monoMixed in
-      self?.transcriptionService?.sendAudio(monoMixed)
+    // Cloud mode: the mixer sums mic + system into one mono stream for the WebSocket.
+    // Local mode: bypass the mixer — mic and system are transcribed by SEPARATE Parakeet
+    // instances so transcripts are diarized by source (mic = you, system = another speaker).
+    if !useLocalSTT {
+      audioMixer?.start { [weak self] monoMixed in
+        self?.transcriptionService?.sendAudio(monoMixed)
+      }
     }
 
     do {
-      // Microphone capture → mixer (mic channel). Level still drives the UI.
+      // Microphone capture → mixer (cloud) or mic Parakeet instance (local). Level drives the UI.
       try await audioCaptureService.startCapture(
         onAudioChunk: { [weak self] audioData in
-          self?.audioMixer?.setMicAudio(audioData)
+          guard let self else { return }
+          if self.useLocalSTT {
+            self.localMicService?.appendAudio(audioData)
+          } else {
+            self.audioMixer?.setMicAudio(audioData)
+          }
         },
         onAudioLevel: { level in
           // Use dedicated monitor to avoid triggering AppState re-renders
@@ -1623,7 +1676,12 @@ class AppState: ObservableObject {
           do {
             try await systemService.startCapture(
               onAudioChunk: { [weak self] audioData in
-                self?.audioMixer?.setSystemAudio(audioData)
+                guard let self else { return }
+                if self.useLocalSTT {
+                  self.localSystemService?.appendAudio(audioData)
+                } else {
+                  self.audioMixer?.setSystemAudio(audioData)
+                }
               },
               onAudioLevel: { level in
                 AudioLevelMonitor.shared.updateSystemLevel(level)
@@ -1761,6 +1819,28 @@ class AppState: ObservableObject {
   /// triggers conversation processing on the backend side. We also call force-process to ensure
   /// the conversation is finalized, preventing the retry service from creating duplicates.
   func stopTranscription() {
+    // On-device path: there is no backend WebSocket/conversation, so skip the cloud
+    // force-process/reconciliation entirely. Stop capture, then AWAIT both Parakeet instances'
+    // final tail flushes (delivered to the still-current session) BEFORE clearing state, so the
+    // last words persist to the right conversation instead of racing the async drain.
+    if useLocalSTT {
+      let mic = localMicService
+      let sys = localSystemService
+      localMicService = nil
+      localSystemService = nil
+      let uploadSessionId = currentSessionId
+      Task { @MainActor in
+        self.stopAudioCapture()
+        await mic?.finish()
+        await sys?.finish()
+        self.clearTranscriptionState()
+        self.silentMicFallbackInProgress = false
+        // Upload the on-device transcript so the conversation syncs + gets memories/summaries.
+        if let uploadSessionId { await self.uploadLocalSession(uploadSessionId) }
+      }
+      return
+    }
+
     // Capture session metadata BEFORE clearing state (clearTranscriptionState sets sessionId to nil)
     let capturedSessionId = currentSessionId
     let capturedStartTime = recordingStartTime
@@ -1842,6 +1922,70 @@ class AppState: ObservableObject {
     }
   }
 
+  /// Upload a finished on-device (Parakeet) conversation to the backend so it is persisted,
+  /// processed (memories/summaries), and synced to every device — the same result a cloud
+  /// conversation gets, but the transcript was produced locally. On success, marks the local
+  /// session completed with the returned backend conversation id.
+  private func uploadLocalSession(_ sessionId: Int64) async {
+    // Segment DB writes are scheduled fire-and-forget by handleBackendSegments — let them drain
+    // so the upload includes the final tail segments.
+    try? await Task.sleep(nanoseconds: 1_000_000_000)
+    do {
+      guard let bundle = try await TranscriptionStorage.shared.getSessionWithSegments(id: sessionId)
+      else { return }
+      let session = bundle.session
+      guard !bundle.segments.isEmpty else {
+        log("Transcription: Local session \(sessionId) has no segments — nothing to upload")
+        return
+      }
+
+      let raw: [APIClient.UploadSegment] = bundle.segments.map { seg in
+        APIClient.UploadSegment(
+          text: seg.text,
+          speaker: seg.speakerLabel ?? String(format: "SPEAKER_%02d", seg.speaker),
+          speaker_id: seg.speaker,
+          is_user: seg.isUser,
+          person_id: seg.personId,
+          start: seg.startTime,
+          end: seg.endTime
+        )
+      }
+      // Merge consecutive same-speaker segments to stay under the backend's 500-segment cap
+      // (Parakeet emits ~1 segment per 10s window).
+      var merged: [APIClient.UploadSegment] = []
+      for seg in raw {
+        if let last = merged.last, last.speaker_id == seg.speaker_id {
+          merged[merged.count - 1] = APIClient.UploadSegment(
+            text: last.text + " " + seg.text, speaker: last.speaker, speaker_id: last.speaker_id,
+            is_user: last.is_user, person_id: last.person_id, start: last.start, end: seg.end)
+        } else {
+          merged.append(seg)
+        }
+      }
+      if merged.count > 500 {
+        log("Transcription: Local session \(sessionId) has \(merged.count) segments (>500), truncating")
+        merged = Array(merged.prefix(500))
+      }
+
+      let iso = ISO8601DateFormatter()
+      let request = APIClient.CreateConversationFromSegmentsRequest(
+        transcript_segments: merged,
+        source: "desktop",
+        started_at: iso.string(from: session.startedAt),
+        finished_at: session.finishedAt.map { iso.string(from: $0) },
+        language: session.language
+      )
+      let response = try await APIClient.shared.createConversationFromSegments(request)
+      try? await TranscriptionStorage.shared.markSessionCompleted(
+        id: sessionId, backendId: response.id)
+      log(
+        "Transcription: Uploaded on-device session \(sessionId) → backend conversation \(response.id) (\(merged.count) segments)"
+      )
+    } catch {
+      logError("Transcription: Failed to upload on-device session \(sessionId)", error: error)
+    }
+  }
+
   /// Finish the current conversation and keep recording for a new one.
   /// Disconnects the WebSocket (triggers backend conversation processing) then reconnects.
   func finishConversation() async -> FinishConversationResult {
@@ -1857,6 +2001,15 @@ class AppState: ObservableObject {
     finishedSessionId = currentSessionId
     finishedRecordingStartTime = recordingStartTime
 
+    // Local mode: flush both Parakeet instances' final tails to the CURRENT session BEFORE we
+    // rotate currentSessionId, so the last sub-window words attach to THIS conversation rather
+    // than racing into the next one. `finish()` delivers its segments on the main actor and
+    // returns only once they're persisted. Fresh instances are armed in the reconnect block below.
+    if useLocalSTT {
+      await localMicService?.finish()
+      await localSystemService?.finish()
+    }
+
     // Mark current DB session as finished before stopping
     // (backend will process it; memory_created event may arrive on the new session's WebSocket)
     if let sessionId = currentSessionId {
@@ -1866,6 +2019,12 @@ class AppState: ObservableObject {
       } catch {
         logError("Transcription: Failed to finish DB session \(sessionId)", error: error)
       }
+    }
+
+    // Local mode: upload the just-finished on-device conversation to the backend (async) so it
+    // syncs + gets memories/summaries while we keep recording the next conversation.
+    if useLocalSTT, let uploadSessionId = finishedSessionId {
+      Task { await self.uploadLocalSession(uploadSessionId) }
     }
 
     // Stop the transcription service (closes WebSocket, triggers backend conversation processing)
@@ -1906,31 +2065,47 @@ class AppState: ObservableObject {
     // Reconnect transcription service for the next conversation
     do {
       let effectiveLanguage = AssistantSettings.shared.effectiveTranscriptionLanguage
-      transcriptionService = try TranscriptionService(language: effectiveLanguage)
-      transcriptionService?.start(
-        onSegments: { [weak self] segments in
-          Task { @MainActor in
-            self?.handleBackendSegments(segments)
-          }
-        },
-        onEvent: { [weak self] event in
-          Task { @MainActor in
-            self?.handleListenEvent(event)
-          }
-        },
-        onError: { [weak self] error in
-          Task { @MainActor in
-            logError("Transcription error (reconnect)", error: error)
-            self?.stopTranscription()
-          }
-        },
-        onConnected: {
-          log("Transcription: Reconnected to Python backend for next conversation")
-        },
-        onDisconnected: {
-          log("Transcription: Disconnected from Python backend")
+      if useLocalSTT {
+        // On-device mode: re-arm fresh local Parakeet instances (mic + system) for the next
+        // conversation — do NOT reconnect the cloud WebSocket. Stopping the old ones flushes
+        // their final tails; the source-routed capture callbacks feed the new instances.
+        let onLocalSegments: LocalTranscriptionService.SegmentsHandler = { [weak self] segments in
+          self?.handleBackendSegments(segments)
         }
-      )
+        let mic = LocalTranscriptionService(language: effectiveLanguage, isUser: true)
+        mic.start(onSegments: onLocalSegments)
+        localMicService = mic
+        let system = LocalTranscriptionService(language: effectiveLanguage, isUser: false)
+        system.start(onSegments: onLocalSegments)
+        localSystemService = system
+        log("Transcription: Re-armed on-device Parakeet (mic + system) for next conversation")
+      } else {
+        transcriptionService = try TranscriptionService(language: effectiveLanguage)
+        transcriptionService?.start(
+          onSegments: { [weak self] segments in
+            Task { @MainActor in
+              self?.handleBackendSegments(segments)
+            }
+          },
+          onEvent: { [weak self] event in
+            Task { @MainActor in
+              self?.handleListenEvent(event)
+            }
+          },
+          onError: { [weak self] error in
+            Task { @MainActor in
+              logError("Transcription error (reconnect)", error: error)
+              self?.stopTranscription()
+            }
+          },
+          onConnected: {
+            log("Transcription: Reconnected to Python backend for next conversation")
+          },
+          onDisconnected: {
+            log("Transcription: Disconnected from Python backend")
+          }
+        )
+      }
     } catch {
       logError("Transcription: Failed to reconnect for next conversation", error: error)
       return .error(error.localizedDescription)
@@ -2001,6 +2176,13 @@ class AppState: ObservableObject {
     // Stop transcription service
     transcriptionService?.stop()
     transcriptionService = nil
+
+    // Stop on-device Parakeet services (if active) — both flush their final tails.
+    localMicService?.stop()
+    localMicService = nil
+    localSystemService?.stop()
+    localSystemService = nil
+    useLocalSTT = false
 
     isTranscribing = false
   }

@@ -3041,5 +3041,10 @@
     "invalidPromotionCode": "Kod promo tidak sah.",
     "backgroundModeTitle": "Mod Latar Belakang",
     "backgroundModeDescription": "Pastikan Omi anda terus merakam walaupun apl ditutup sepenuhnya.",
-    "backgroundModeNote": "Buat masa ini hanya berfungsi dengan peranti Omi dan sentiasa diperbaiki."
+    "backgroundModeNote": "Buat masa ini hanya berfungsi dengan peranti Omi dan sentiasa diperbaiki.",
+    "regenerateRecap": "Jana semula ringkasan",
+    "recapRegeneratedSnackbar": "Ringkasan dijana semula",
+    "recapRegenerateFailed": "Tidak dapat menjana semula ringkasan. Cuba sebentar lagi.",
+    "recapRegenerateCooldown": "Sila tunggu beberapa saat sebelum menjana semula.",
+    "recapRegenerateNoConversations": "Tiada perbualan untuk diringkaskan untuk hari ini."
 }

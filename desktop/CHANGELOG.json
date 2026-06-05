@@ -1,6 +1,59 @@
 {
-  "unreleased": [],
+  "unreleased": [
+    "Fixed drag handle on Tasks page not appearing when hovering over a row",
+    "Fixed drag-to-reorder on Tasks page not persisting when date filters are active",
+    "Fixed drag-to-reorder on Tasks page — dragged row now visually dims while in flight"
+  ],
   "releases": [
+    {
+      "version": "0.11.446",
+      "date": "2026-06-03",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.445",
+      "date": "2026-06-03",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.444",
+      "date": "2026-06-03",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.443",
+      "date": "2026-06-03",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.442",
+      "date": "2026-06-02",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.441",
+      "date": "2026-06-02",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.439",
+      "date": "2026-06-02",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
     {
       "version": "0.11.438",
       "date": "2026-06-02",

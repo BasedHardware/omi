@@ -4694,7 +4694,10 @@ class AppLocalizationsSr extends AppLocalizations {
   }
 
   @override
-  String accessesAndTriggeredBy(String accessDescription, String triggerDescription) {
+  String accessesAndTriggeredBy(
+    String accessDescription,
+    String triggerDescription,
+  ) {
     return '$accessDescription и је $triggerDescription.';
   }
 
@@ -9307,4 +9310,19 @@ class AppLocalizationsSr extends AppLocalizations {
 
   @override
   String get backgroundModeNote => 'Засад ради само са Omi уређајима и непрекидно се побољшава.';
+
+  @override
+  String get regenerateRecap => 'Поново генериши резиме';
+
+  @override
+  String get recapRegeneratedSnackbar => 'Резиме је поново генерисан';
+
+  @override
+  String get recapRegenerateFailed => 'Није могуће поново генерисати резиме. Покушајте поново касније.';
+
+  @override
+  String get recapRegenerateCooldown => 'Сачекајте неколико секунди пре поновног генерисања.';
+
+  @override
+  String get recapRegenerateNoConversations => 'Нема разговора за сумирање за овај дан.';
 }

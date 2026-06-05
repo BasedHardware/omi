@@ -10619,5 +10619,10 @@
     "invalidPromotionCode": "Nevažeći promo kod.",
     "backgroundModeTitle": "Pozadinski način rada",
     "backgroundModeDescription": "Zadržite Omi snimanje čak i kada je aplikacija potpuno zatvorena.",
-    "backgroundModeNote": "Zasad radi samo s Omi uređajima i neprestano se poboljšava."
+    "backgroundModeNote": "Zasad radi samo s Omi uređajima i neprestano se poboljšava.",
+    "regenerateRecap": "Ponovno generiraj sažetak",
+    "recapRegeneratedSnackbar": "Sažetak je ponovno generiran",
+    "recapRegenerateFailed": "Nije bilo moguće ponovno generirati sažetak. Pokušajte kasnije.",
+    "recapRegenerateCooldown": "Pričekajte nekoliko sekundi prije ponovnog generiranja.",
+    "recapRegenerateNoConversations": "Nema razgovora za sažimanje za ovaj dan."
 }

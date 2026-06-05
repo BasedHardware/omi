@@ -4698,7 +4698,10 @@ class AppLocalizationsRu extends AppLocalizations {
   }
 
   @override
-  String accessesAndTriggeredBy(String accessDescription, String triggerDescription) {
+  String accessesAndTriggeredBy(
+    String accessDescription,
+    String triggerDescription,
+  ) {
     return '$accessDescription и $triggerDescription.';
   }
 
@@ -9328,4 +9331,19 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get backgroundModeNote => 'Пока работает только с устройствами Omi и постоянно улучшается.';
+
+  @override
+  String get regenerateRecap => 'Создать резюме заново';
+
+  @override
+  String get recapRegeneratedSnackbar => 'Резюме создано заново';
+
+  @override
+  String get recapRegenerateFailed => 'Не удалось создать резюме заново. Попробуйте позже.';
+
+  @override
+  String get recapRegenerateCooldown => 'Подождите несколько секунд перед повторным созданием.';
+
+  @override
+  String get recapRegenerateNoConversations => 'Нет разговоров для резюмирования за этот день.';
 }

@@ -854,17 +854,37 @@ class TasksViewModel: ObservableObject {
 
         categoryOrder[category] = order
 
-        // Write sortOrder in-memory immediately so getOrderedTasks() reflects the change
+        // Apply the new sortOrder to every source array the displayed list could be
+        // backed by. recomputeDisplayCaches picks displayTasks from searchResults,
+        // filteredFromDatabase, or store.incompleteTasks (in priority order), so a
+        // write to only one of them misses when filters/search are active. Each
+        // reassignment fires its own @Published; recomputeAllCaches at the end folds
+        // them all into categorizedTasks.
         let categoryOffset = (TaskCategory.allCases.firstIndex(of: category) ?? 0) * 100_000
-        for (index, taskId) in order.enumerated() {
-            let newSortOrder = categoryOffset + (index + 1) * 1000
-            if let storeIndex = store.incompleteTasks.firstIndex(where: { $0.id == taskId }) {
-                store.incompleteTasks[storeIndex].sortOrder = newSortOrder
+
+        func applyOrder(to array: inout [TaskActionItem]) {
+            for (index, taskId) in order.enumerated() {
+                let newSortOrder = categoryOffset + (index + 1) * 1000
+                if let i = array.firstIndex(where: { $0.id == taskId }) {
+                    array[i].sortOrder = newSortOrder
+                }
             }
         }
 
-        // Recompute caches immediately so the UI updates
-        recomputeAllCaches()
+        var incomplete = store.incompleteTasks
+        applyOrder(to: &incomplete)
+        store.incompleteTasks = incomplete
+
+        applyOrder(to: &filteredFromDatabase)
+        applyOrder(to: &searchResults)
+
+        // Recompute caches immediately so the UI updates. Suppress the async
+        // SQLite requery — when filters are active, the requery would otherwise
+        // overwrite filteredFromDatabase with stale data before scheduleSortOrderSync
+        // (debounced 500ms) writes the new sortOrders to SQLite. The flag is
+        // cleared via defer inside syncSortOrders once SQLite is fresh.
+        suppressDatabaseRequery = true
+        recomputeDisplayCaches()
 
         // Schedule debounced sync to SQLite + backend
         scheduleSortOrderSync()
@@ -1103,6 +1123,16 @@ class TasksViewModel: ObservableObject {
 
     /// Collect current sort orders from all categories and write to SQLite + backend
     private func syncSortOrders() async {
+        // moveTask sets suppressDatabaseRequery=true to block stale SQLite requeries
+        // during the debounce window. Always reset on exit (incl. errors / cancellation)
+        // so we don't leave the flag stuck on for unrelated callers.
+        defer {
+            suppressDatabaseRequery = false
+            // Recompute caches after syncing sort orders. When non-status filters are
+            // active, recomputeAllCaches will now re-query SQLite (the flag is cleared)
+            // and pick up any membership changes that happened during the debounce window.
+            recomputeAllCaches()
+        }
         var updates: [(id: String, sortOrder: Int, indentLevel: Int)] = []
 
         for category in TaskCategory.allCases {
@@ -3148,9 +3178,17 @@ struct TasksPage: View {
                                     chatCoordinator: chatCoordinator,
                                     dropTargetTaskId: viewModel.dropTargetTaskId,
                                     dropAbove: viewModel.dropAbove,
+                                    draggedTaskId: viewModel.draggedTaskId,
                                     findTaskGlobal: { viewModel.findTask($0) },
                                     onDragStarted: { viewModel.draggedTaskId = $0 },
                                     onDragEnded: {
+                                        // Idempotent: TaskDragItemProvider.deinit fires onDragEnded
+                                        // a second time after the synchronous drop handler. Without
+                                        // this guard, the duplicate dispatch would no-op redundantly
+                                        // in the common case but could clobber state during a rapid
+                                        // re-drag (deinit dispatch is one main.async hop, sub-ms).
+                                        // Keep the guard so the design is strictly idempotent.
+                                        guard viewModel.draggedTaskId != nil else { return }
                                         viewModel.draggedTaskId = nil
                                         viewModel.dropTargetTaskId = nil
                                     },
@@ -3371,9 +3409,12 @@ struct TaskCategorySection: View {
     // Drag-and-drop visual feedback
     var dropTargetTaskId: String?
     var dropAbove: Bool = true
+    var draggedTaskId: String?
     var findTaskGlobal: ((String) -> TaskActionItem?)?
-    var onDragStarted: ((String) -> Void)?
-    var onDragEnded: (() -> Void)?
+    // Non-optional with no-op defaults: this callback is load-bearing for the
+    // dim-while-dragging effect, and a silent nil here was the original bug.
+    var onDragStarted: (String) -> Void = { _ in }
+    var onDragEnded: () -> Void = {}
     var onDragHoverChanged: ((String, Bool) -> Void)?
 
     // Edit mode support
@@ -3496,6 +3537,9 @@ struct TaskCategorySection: View {
                                 onInvestigate: onInvestigate,
                                 onSelect: onSelect,
                                 onHover: onHover,
+                                onDragStarted: onDragStarted,
+                                onDragEnded: onDragEnded,
+                                isBeingDragged: draggedTaskId == task.id,
                                 isChatActive: isChatActive,
                                 activeChatTaskId: activeChatTaskId,
                                 chatCoordinator: chatCoordinator,
@@ -3516,7 +3560,6 @@ struct TaskCategorySection: View {
                                 onMoveTask: { droppedTask, targetIndex in
                                     onMoveTask?(droppedTask, targetIndex, category)
                                 },
-                                onDragStarted: onDragStarted,
                                 onDragEnded: onDragEnded,
                                 onHoverChanged: onDragHoverChanged
                             ))
@@ -3570,7 +3613,6 @@ struct TaskDragDropModifier: ViewModifier {
     var findTask: ((String) -> TaskActionItem?)?
     var findTargetIndex: (() -> Int?)?
     var onMoveTask: ((TaskActionItem, Int) -> Void)?
-    var onDragStarted: ((String) -> Void)?
     var onDragEnded: (() -> Void)?
     var onHoverChanged: ((String, Bool) -> Void)?
 
@@ -3627,6 +3669,29 @@ struct TaskDragDropModifier: ViewModifier {
         } else {
             content
         }
+    }
+}
+
+/// NSItemProvider subclass that fires a callback in `deinit`. AppKit releases
+/// the provider when the drag session ends regardless of outcome — successful
+/// drop, drop on dead space, drop outside the window, or escape cancel — so
+/// `deinit` is the most reliable end-of-drag signal. Replaces a prior
+/// NSEvent.addLocalMonitor/addGlobalMonitor approach that didn't fire from
+/// inside the AppKit drag modal loop, leaving the dragged row stuck dimmed.
+final class TaskDragItemProvider: NSItemProvider {
+    private let onEnd: () -> Void
+
+    init(taskId: String, onEnd: @escaping () -> Void) {
+        self.onEnd = onEnd
+        super.init()
+        registerObject(taskId as NSString, visibility: .all)
+    }
+
+    deinit {
+        // deinit may run off-main when AppKit releases its reference. Hop to
+        // main before mutating @Published state.
+        let cb = onEnd
+        DispatchQueue.main.async { cb() }
     }
 }
 
@@ -3751,6 +3816,16 @@ struct TaskRow: View {
     var onInvestigate: ((TaskActionItem) -> Void)?
     var onSelect: ((TaskActionItem) -> Void)?
     var onHover: ((String?) -> Void)?
+    /// Called when the user begins dragging this row's handle — lets the
+    /// parent ViewModel set `draggedTaskId` for visual feedback on other rows.
+    /// Non-optional with no-op default: load-bearing for the dim effect, and a
+    /// silent-nil here was the original bug we're fixing.
+    var onDragStarted: (String) -> Void = { _ in }
+    /// Fires when the drag actually ends (mouseUp), regardless of drop outcome.
+    /// Required so the dimmed row is restored even if the drop misses every target.
+    var onDragEnded: () -> Void = {}
+    /// True iff this row is the one currently being dragged. Drives the dim effect.
+    var isBeingDragged: Bool = false
     var isChatActive: Bool = false
     var activeChatTaskId: String?
     var chatCoordinator: TaskChatCoordinator?
@@ -3821,7 +3896,14 @@ struct TaskRow: View {
                     .contentShape(Rectangle())
                     .onDrag {
                         log("DRAG: onDrag started for task \(task.id) — \(task.description.prefix(40))")
-                        return NSItemProvider(object: task.id as NSString)
+                        // Notify parent so ViewModel.draggedTaskId is set for visual feedback.
+                        // The async hop is required: SwiftUI is mid-update inside .onDrag, and
+                        // mutating an @Published from here triggers a re-entrant view rebuild
+                        // ("Modifying state during view update" runtime warning). Don't strip it.
+                        DispatchQueue.main.async { onDragStarted(task.id) }
+                        // Drag-end is signaled via the provider's deinit, which AppKit triggers
+                        // when the drag session ends on any path (drop, dead-space, off-window, escape).
+                        return TaskDragItemProvider(taskId: task.id, onEnd: onDragEnded)
                     } preview: {
                         TaskDragPreviewSimple(taskId: task.id, description: task.description)
                     }
@@ -3858,6 +3940,20 @@ struct TaskRow: View {
                 task: task,
                 onDismiss: { showTaskDetail = false }
             )
+        }
+        .opacity(isBeingDragged ? 0.4 : 1.0)
+        .animation(.easeInOut(duration: 0.12), value: isBeingDragged)
+        // Hover lives on the outer body — not on taskRowContent — so the drag
+        // handle (which is a sibling of taskRowContent inside the outer HStack)
+        // reveals when the cursor approaches it, not only when it's over text.
+        .onHover { hovering in
+            isHovering = hovering
+            onHover?(hovering ? task.id : nil)
+            if hovering {
+                NSCursor.pointingHand.push()
+            } else {
+                NSCursor.pop()
+            }
         }
     }
 
@@ -4426,15 +4522,6 @@ struct TaskRow: View {
         .onChange(of: animateToggleTaskId) { _, newValue in
             if newValue == task.id {
                 handleToggle()
-            }
-        }
-        .onHover { hovering in
-            isHovering = hovering
-            onHover?(hovering ? task.id : nil)
-            if hovering {
-                NSCursor.pointingHand.push()
-            } else {
-                NSCursor.pop()
             }
         }
     }

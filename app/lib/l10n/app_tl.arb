@@ -10619,5 +10619,10 @@
     "invalidPromotionCode": "Hindi valid na promo code.",
     "backgroundModeTitle": "Background Mode",
     "backgroundModeDescription": "Panatilihing nagre-record ang iyong Omi kahit na ganap nang sarado ang app.",
-    "backgroundModeNote": "Sa ngayon ay gumagana lang sa mga Omi device at patuloy na pinapabuti."
+    "backgroundModeNote": "Sa ngayon ay gumagana lang sa mga Omi device at patuloy na pinapabuti.",
+    "regenerateRecap": "Buuin muli ang buod",
+    "recapRegeneratedSnackbar": "Nabuo muli ang buod",
+    "recapRegenerateFailed": "Hindi nagawang muling buuin ang buod. Subukang muli mamaya.",
+    "recapRegenerateCooldown": "Mangyaring maghintay ng ilang segundo bago bumuo muli.",
+    "recapRegenerateNoConversations": "Walang mga pag-uusap na ibubuod para sa araw na ito."
 }

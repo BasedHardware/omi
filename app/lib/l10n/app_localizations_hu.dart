@@ -4709,7 +4709,10 @@ class AppLocalizationsHu extends AppLocalizations {
   }
 
   @override
-  String accessesAndTriggeredBy(String accessDescription, String triggerDescription) {
+  String accessesAndTriggeredBy(
+    String accessDescription,
+    String triggerDescription,
+  ) {
     return '$accessDescription és $triggerDescription.';
   }
 
@@ -9335,4 +9338,19 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get backgroundModeNote => 'Egyelőre csak Omi eszközökkel működik, és folyamatosan fejlesztjük.';
+
+  @override
+  String get regenerateRecap => 'Összegzés újragenerálása';
+
+  @override
+  String get recapRegeneratedSnackbar => 'Összegzés újragenerálva';
+
+  @override
+  String get recapRegenerateFailed => 'Nem sikerült újragenerálni az összegzést. Próbáld újra később.';
+
+  @override
+  String get recapRegenerateCooldown => 'Kérlek, várj néhány másodpercet az újragenerálás előtt.';
+
+  @override
+  String get recapRegenerateNoConversations => 'Erre a napra nincsenek összegezhető beszélgetések.';
 }

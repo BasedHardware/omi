@@ -10619,5 +10619,10 @@
     "invalidPromotionCode": "קוד קידום לא תקין.",
     "backgroundModeTitle": "מצב רקע",
     "backgroundModeDescription": "השאירו את ה-Omi מקליט גם כשהאפליקציה סגורה לחלוטין.",
-    "backgroundModeNote": "כרגע עובד רק עם מכשירי Omi ומשתפר באופן מתמיד."
+    "backgroundModeNote": "כרגע עובד רק עם מכשירי Omi ומשתפר באופן מתמיד.",
+    "regenerateRecap": "צור סיכום מחדש",
+    "recapRegeneratedSnackbar": "הסיכום נוצר מחדש",
+    "recapRegenerateFailed": "לא ניתן ליצור מחדש את הסיכום. נסה שוב מאוחר יותר.",
+    "recapRegenerateCooldown": "אנא המתן מספר שניות לפני יצירה מחודשת.",
+    "recapRegenerateNoConversations": "אין שיחות לסיכום עבור היום הזה."
 }
