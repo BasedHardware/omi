@@ -7,7 +7,10 @@ import path from 'node:path';
 function readFile(relativePath) {
   let normalizedPath = relativePath;
   const normalizedCwd = process.cwd().replace(/\\/g, '/');
-  if (normalizedCwd.endsWith('web/frontend') && relativePath.startsWith('web/frontend/')) {
+  if (
+    normalizedCwd.endsWith('web/frontend') &&
+    relativePath.startsWith('web/frontend/')
+  ) {
     normalizedPath = relativePath.slice('web/frontend/'.length);
   }
   const filePath = path.join(process.cwd(), normalizedPath);
@@ -15,38 +18,112 @@ function readFile(relativePath) {
 }
 
 describe('Omi Store & Link Cleanup Validation', () => {
+  describe('web/frontend/src/constants/product.ts', () => {
+    it('defines PRODUCT_CONFIG constants correctly', () => {
+      const content = readFile('web/frontend/src/constants/product.ts');
+      assert.ok(content.includes("name: 'Omi'"), 'Name should be Omi');
+      assert.ok(content.includes("price: '89'"), 'Price should be 89');
+      assert.ok(
+        content.includes("storeUrl: 'https://www.omi.me/'"),
+        'Store URL should be correct',
+      );
+      assert.ok(
+        content.includes("productUrl: 'https://www.omi.me/products/omi-dev-kit-2'"),
+        'Product URL should be correct',
+      );
+      assert.ok(
+        content.includes(
+          "appStoreUrl: 'https://apps.apple.com/us/app/friend-ai-wearable/id6502156163'",
+        ),
+        'App Store URL should be correct',
+      );
+      assert.ok(
+        content.includes(
+          "playStoreUrl: 'https://play.google.com/store/apps/details?id=com.friend.ios'",
+        ),
+        'Play Store URL should be correct',
+      );
+    });
+
+    it('contains getPlatformLink routing logic for iOS, Android, and desktop', () => {
+      const content = readFile('web/frontend/src/constants/product.ts');
+      assert.ok(
+        content.includes(
+          "getPlatformLink(userAgent: string, token?: string, route?: 'chat' | 'tasks')",
+        ),
+        'Should declare getPlatformLink',
+      );
+      assert.ok(
+        content.includes('omi://h.omi.me/chat/${token}'),
+        'Should have iOS chat redirect',
+      );
+      assert.ok(
+        content.includes(
+          'intent://h.omi.me/chat/${token}#Intent;scheme=https;package=com.friend.ios;S.browser_fallback_url=',
+        ),
+        'Should have Android chat redirect',
+      );
+      assert.ok(
+        content.includes('return PRODUCT_CONFIG.storeUrl;'),
+        'Should fall back to storeUrl',
+      );
+    });
+  });
+
   describe('web/frontend/src/app/page.tsx', () => {
-    it('redirects "Order now" link to www.omi.me instead of basedhardware.com', () => {
+    it('references PRODUCT_CONFIG.storeUrl instead of hardcoded link', () => {
       const content = readFile('web/frontend/src/app/page.tsx');
       assert.ok(
-        content.includes('href="https://www.omi.me/"'),
-        'Should link to www.omi.me',
+        content.includes('href={PRODUCT_CONFIG.storeUrl}'),
+        'Should reference storeUrl',
       );
       assert.ok(
         !content.includes('basedhardware.com/'),
-        'Should not link to legacy basedhardware.com',
+        'Should not contain legacy domain',
       );
     });
   });
 
   describe('web/frontend/src/app/components/product-banner/types.ts', () => {
-    it('updates PRODUCT_INFO to name: "Omi" and price: "$89"', () => {
+    it('updates PRODUCT_INFO dynamically from PRODUCT_CONFIG', () => {
       const content = readFile('web/frontend/src/app/components/product-banner/types.ts');
-      assert.ok(content.includes("name: 'Omi'"), 'Name should be Omi');
-      assert.ok(content.includes("price: '$89'"), 'Price should be $89');
-      assert.ok(!content.includes('OMI Necklace'), 'Should not use legacy OMI Necklace');
-      assert.ok(!content.includes('69.99'), 'Should not use legacy price 69.99');
+      assert.ok(
+        content.includes('name: PRODUCT_CONFIG.name'),
+        'Name should be derived from config',
+      );
+      assert.ok(
+        content.includes('price: `$${PRODUCT_CONFIG.price}`'),
+        'Price should be derived from config',
+      );
+      assert.ok(
+        content.includes('url: `${PRODUCT_CONFIG.productUrl}'),
+        'URL should be derived from config',
+      );
     });
   });
 
   describe('web/frontend/src/app/apps/utils/metadata.ts', () => {
-    it('updates productInfo metadata', () => {
+    it('references PRODUCT_CONFIG for productInfo and appStoreInfo', () => {
       const content = readFile('web/frontend/src/app/apps/utils/metadata.ts');
-      assert.ok(content.includes("name: 'Omi'"), 'Product name should be Omi');
-      assert.ok(content.includes("price: '89'"), 'Product price should be 89');
       assert.ok(
-        content.includes("url: 'https://www.omi.me/products/omi-dev-kit-2'"),
-        'Product URL should use omi-dev-kit-2',
+        content.includes('name: PRODUCT_CONFIG.name'),
+        'Product name should pull from config',
+      );
+      assert.ok(
+        content.includes('price: PRODUCT_CONFIG.price'),
+        'Product price should pull from config',
+      );
+      assert.ok(
+        content.includes('url: PRODUCT_CONFIG.productUrl'),
+        'Product URL should pull from config',
+      );
+      assert.ok(
+        content.includes('ios: PRODUCT_CONFIG.appStoreUrl'),
+        'App Store iOS URL should pull from config',
+      );
+      assert.ok(
+        content.includes('android: PRODUCT_CONFIG.playStoreUrl'),
+        'Play Store Android URL should pull from config',
       );
     });
 
@@ -60,23 +137,24 @@ describe('Omi Store & Link Cleanup Validation', () => {
   });
 
   describe('web/frontend/src/app/apps/[id]/page.tsx', () => {
-    it('updates structured data name, price, productUrl and fallback link', () => {
+    it('references PRODUCT_CONFIG and delegates platform redirect logic', () => {
       const content = readFile('web/frontend/src/app/apps/[id]/page.tsx');
-      assert.ok(content.includes("name: 'Omi'"), 'Schema name should be Omi');
-      assert.ok(content.includes("price: '89'"), 'Schema price should be 89');
       assert.ok(
-        content.includes('omi-dev-kit-2?ref='),
-        'Product schema URL should use omi-dev-kit-2',
+        content.includes('applicationSuite: PRODUCT_CONFIG.name'),
+        'Suite name should pull from config',
       );
       assert.ok(
-        content.includes("'https://www.omi.me'"),
-        'Platform fallback on desktop should point to www.omi.me',
+        content.includes('name: PRODUCT_CONFIG.name'),
+        'Product name should pull from config',
       );
       assert.ok(
-        !content.includes('friend-dev-kit-2'),
-        'Should not link to friend-dev-kit-2',
+        content.includes('price: PRODUCT_CONFIG.price'),
+        'Product price should pull from config',
       );
-      assert.ok(!content.includes('OMI Necklace'), 'Should not use OMI Necklace in page');
+      assert.ok(
+        content.includes('return PRODUCT_CONFIG.getPlatformLink(userAgent);'),
+        'Platform redirect should delegate to config',
+      );
     });
   });
 
@@ -105,27 +183,31 @@ describe('Omi Store & Link Cleanup Validation', () => {
   });
 
   describe('Shared page fallbacks (chat, tasks, recaps)', () => {
-    it('updates chat fallback link to www.omi.me', () => {
+    it('updates chat fallback link logic to delegate to config', () => {
       const content = readFile('web/frontend/src/app/chat/[token]/page.tsx');
       assert.ok(
-        content.includes(": 'https://www.omi.me'"),
-        'Chat page fallback should be www.omi.me',
+        content.includes(
+          "return PRODUCT_CONFIG.getPlatformLink(userAgent, token, 'chat');",
+        ),
+        'Chat page fallback should delegate',
       );
     });
 
-    it('updates tasks fallback link to www.omi.me', () => {
+    it('updates tasks fallback link logic to delegate to config', () => {
       const content = readFile('web/frontend/src/app/tasks/[token]/page.tsx');
       assert.ok(
-        content.includes(": 'https://www.omi.me'"),
-        'Tasks page fallback should be www.omi.me',
+        content.includes(
+          "return PRODUCT_CONFIG.getPlatformLink(userAgent, token, 'tasks');",
+        ),
+        'Tasks page fallback should delegate',
       );
     });
 
-    it('updates recaps footer link to www.omi.me', () => {
+    it('updates recaps footer link to reference storeUrl', () => {
       const content = readFile('web/frontend/src/app/recaps/[id]/page.tsx');
       assert.ok(
-        content.includes('href="https://www.omi.me"'),
-        'Recaps page footer link should be www.omi.me',
+        content.includes('href={PRODUCT_CONFIG.storeUrl}'),
+        'Recaps page footer link should reference storeUrl',
       );
     });
   });
