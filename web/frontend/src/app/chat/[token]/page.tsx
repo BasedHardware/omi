@@ -71,7 +71,7 @@ function getPlatformLink(userAgent: string, token: string) {
       )};end`
     : isIOS
     ? `omi://h.omi.me/chat/${token}`
-    : 'https://omi.me';
+    : 'https://www.omi.me';
 }
 
 function formatTimestamp(timestamp: string | null) {
