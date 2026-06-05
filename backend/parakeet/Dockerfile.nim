@@ -1,20 +1,30 @@
-# NVIDIA NIM-based Parakeet deployment.
+# NVIDIA NIM-based Parakeet deployment — auth gateway.
 #
-# Uses the official NIM container for TensorRT-optimized inference (~238x real-time on L4).
-# The NIM container provides its own /v1/transcribe gRPC/REST endpoint, so this Dockerfile
-# wraps it with our FastAPI auth layer and health check.
+# This Dockerfile builds a lightweight FastAPI auth gateway that proxies
+# transcription requests to an NVIDIA NIM ASR sidecar container.
+#
+# The NIM container (nvcr.io/nim/nvidia/parakeet-1-1b-rnnt-multilingual)
+# provides /v1/audio/transcriptions with TensorRT-optimized inference
+# (~238x real-time on L4 GPU). This gateway adds ENCRYPTION_SECRET auth
+# and the /health endpoint for load balancer checks.
 #
 # Build:
-#   docker build -f backend/parakeet/Dockerfile.nim -t parakeet-nim .
+#   docker build -f backend/parakeet/Dockerfile.nim -t parakeet-nim-gateway .
 #
-# Requires:
-#   - NVIDIA GPU (L4 24GB recommended)
-#   - NGC API key for pulling NIM image (NGC_CLI_API_KEY)
-#   - PARAKEET_INFERENCE_MODE=nim
-#   - NIM_INFERENCE_URL=http://localhost:9000 (sidecar pattern)
+# Deployment (sidecar pattern in Kubernetes):
+#   Pod has 2 containers:
+#   1. This gateway (port 8080, no GPU) — handles auth + proxies to NIM
+#   2. NIM container (port 9000, GPU) — actual ASR inference
 #
-# Deployment pattern: run NIM container as a sidecar or separate pod,
-# with this FastAPI service as the auth gateway.
+#   Helm changes needed for NIM mode:
+#   - Add NIM sidecar container with GPU resources
+#   - Add NGC image pull secret (nvcr.io registry)
+#   - Add model cache volume (NIM downloads ~2GB model on first start)
+#   - Set PARAKEET_INFERENCE_MODE=nim, NIM_INFERENCE_URL=http://localhost:9000
+#
+# Local dev (docker-compose):
+#   docker run -d --gpus all -p 9000:9000 nvcr.io/nim/nvidia/parakeet-1-1b-rnnt-multilingual:latest
+#   docker run -p 8080:8080 -e NIM_INFERENCE_URL=http://host.docker.internal:9000 parakeet-nim-gateway
 
 FROM gcr.io/based-hardware-dev/python:3.11-slim-forky
 
