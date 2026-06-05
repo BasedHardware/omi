@@ -36,7 +36,9 @@ RUN python -m venv /opt/venv && \
     fastapi==0.121.0 \
     uvicorn[standard]==0.34.0 \
     python-multipart==0.0.18 \
-    httpx==0.28.1
+    httpx==0.28.1 \
+    numpy==2.4.0 \
+    scipy>=1.11.0
 
 COPY backend/parakeet/main.py .
 COPY backend/parakeet/transcribe.py .
