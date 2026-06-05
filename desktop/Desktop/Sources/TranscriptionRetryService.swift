@@ -222,10 +222,11 @@ class TranscriptionRetryService {
                 startDate: session.startedAt.addingTimeInterval(-5),
                 endDate: finishedAt.addingTimeInterval(5)
             ), let match = existing.first(where: { conv in
-                guard let convStarted = conv.startedAt else { return false }
-                // Must be a desktop conversation with matching start time
-                guard conv.source == .desktop else { return false }
-                return abs(convStarted.timeIntervalSince(session.startedAt)) < 10
+                DesktopConversationMatchPolicy.matchesDesktopConversation(
+                    startedAt: conv.startedAt,
+                    source: conv.source,
+                    sessionStartedAt: session.startedAt
+                )
             }) {
                 log("TranscriptionRetryService: Session \(sessionId) found on backend as \(match.id), marking completed")
                 try await TranscriptionStorage.shared.markSessionCompleted(id: sessionId, backendId: match.id)
