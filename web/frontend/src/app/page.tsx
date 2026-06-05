@@ -1,5 +1,4 @@
 import Image from 'next/image';
-import Link from 'next/link';
 import { redirect } from 'next/navigation';
 
 export default function Home() {
@@ -21,13 +20,13 @@ export default function Home() {
           For now, you can order Omi wearable. Remember everything you want to remember
           with Omi.
         </p>
-        <Link
-          href={`https://www.omi.me/`}
+        <a
+          href="https://www.omi.me/"
           target="_blank"
           className="mx-auto mt-[2.5rem] flex w-fit items-center gap-[0.5rem] rounded-md bg-white/90 p-[0.375rem] px-[0.875rem] text-black transition-colors hover:bg-white"
         >
           Order now
-        </Link>
+        </a>
       </div>
     </div>
   );
