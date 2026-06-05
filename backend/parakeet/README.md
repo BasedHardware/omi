@@ -1,7 +1,8 @@
 # Parakeet ASR GPU service
 
-Self-hosted speech-to-text using **NVIDIA Parakeet TDT** (`parakeet-tdt-0.6b-v3`), the open-source
-replacement for cloud Deepgram. Same deployment shape as `backend/diarizer` and `backend/vad`:
+Self-hosted speech-to-text using **NVIDIA Parakeet TDT** (`parakeet-tdt-0.6b-v3`), an open-source
+**optional/extra** STT engine. **This does NOT replace Deepgram** — Deepgram stays the default; this
+is an additional engine users can opt into. Same deployment shape as `backend/diarizer` and `backend/vad`:
 FastAPI + CUDA on a GKE GPU node pool, reached internally by URL.
 
 ## API
@@ -9,12 +10,12 @@ FastAPI + CUDA on a GKE GPU node pool, reached internally by URL.
 - `GET /health`
 
 Diarization is **not** done here — the backend keeps using the existing diarizer/speaker-id
-services. Parakeet just replaces Deepgram's text+timestamps.
+services. Parakeet only provides text+timestamps.
 
-## Who uses it
-- **Mobile** (iOS + Android): a selectable "Omi Parakeet (cloud)" option in Transcription settings.
-- **Cloud "Omi" tier**: replaces Deepgram → the bulk of the ~$60k/mo bill.
-- **Desktop fallback** (Intel Macs, unsupported languages) where on-device Parakeet can't run.
+## Who uses it (opt-in only)
+- **Mobile** (iOS + Android): an optional "Omi Parakeet (cloud)" engine users can select in Transcription settings.
+- **Desktop** (Apple Silicon): on-device Parakeet is already available; this cloud service is the fallback for Intel Macs / unsupported languages.
+- Deepgram remains the default everywhere; nothing is switched over automatically.
 
 Backend wires in via `STTService.parakeet` + a `process_audio_parakeet()` dispatch (the STT layer is
 Deepgram-only today — see `backend/utils/stt/streaming.py`), reaching this service by
