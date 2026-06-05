@@ -246,6 +246,8 @@ def get_stt_service_for_language(language: str, multi_lang_enabled: bool = True)
         if m == 'modulate-velma-2':
             if base_lang in modulate_languages:
                 return STTService.modulate, base_lang, 'velma-2'
+        if m == 'parakeet' and os.getenv('HOSTED_PARAKEET_API_URL'):
+            return STTService.parakeet, base_lang or 'en', 'parakeet'
 
     # Fallback to deepgram nova-3 with English
     return STTService.deepgram, 'en', 'nova-3'
