@@ -88,6 +88,10 @@ env:
       secretKeyRef:
         name: dev-omi-backend-secrets
         key: ENCRYPTION_SECRET
+  - name: PARAKEET_MODEL
+    value: "nvidia/parakeet-tdt-0.6b-v3"
+  - name: PARAKEET_INFERENCE_MODE
+    value: "nemo"
 
 resources:
   # We usually recommend not to specify default resources and to leave this as a conscious
