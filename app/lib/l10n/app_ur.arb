@@ -10619,5 +10619,10 @@
     "invalidPromotionCode": "غلط پرومو کوڈ۔",
     "backgroundModeTitle": "بیک گراؤنڈ موڈ",
     "backgroundModeDescription": "ایپ مکمل طور پر بند ہونے پر بھی اپنے Omi کی ریکارڈنگ جاری رکھیں۔",
-    "backgroundModeNote": "فی الحال صرف Omi آلات کے ساتھ کام کرتا ہے اور مسلسل بہتر بنایا جا رہا ہے۔"
+    "backgroundModeNote": "فی الحال صرف Omi آلات کے ساتھ کام کرتا ہے اور مسلسل بہتر بنایا جا رہا ہے۔",
+    "regenerateRecap": "خلاصہ دوبارہ بنائیں",
+    "recapRegeneratedSnackbar": "خلاصہ دوبارہ بن گیا",
+    "recapRegenerateFailed": "خلاصہ دوبارہ نہیں بنایا جا سکا۔ بعد میں دوبارہ کوشش کریں۔",
+    "recapRegenerateCooldown": "دوبارہ بنانے سے پہلے براہ کرم چند سیکنڈ انتظار کریں۔",
+    "recapRegenerateNoConversations": "اس دن کے لیے خلاصہ کرنے کے لیے کوئی گفتگو نہیں ہے۔"
 }

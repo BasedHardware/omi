@@ -81,6 +81,7 @@ from utils.subscription import (
     neo_grandfather_until,
     reconcile_basic_plan_with_stripe,
     filter_plans_for_user,
+    has_ever_purchased,
     should_show_new_plans,
     adapt_plans_for_legacy_client,
     legacy_plan_features,
@@ -90,6 +91,7 @@ from utils.subscription import (
 from database import user_usage as user_usage_db
 from utils import stripe as stripe_utils
 from utils.log_sanitizer import sanitize
+from utils.twilio_service import delete_user_caller_ids
 from utils.llm.followup import followup_question_prompt
 from utils.notifications import send_notification, send_training_data_submitted_notification
 from utils.llm.external_integrations import generate_comprehensive_daily_summary
@@ -141,6 +143,11 @@ class DeleteAccountRequest(BaseModel):
 
 def _background_wipe_user_data(uid: str):
     try:
+        # Twilio caller IDs first, while the phone_numbers subcollection still
+        # carries the twilio_sid metadata. delete_user_caller_ids is best-effort
+        # — Twilio errors are logged inside and never propagate, so a momentary
+        # Twilio outage cannot leave the user half-deleted in Firestore.
+        delete_user_caller_ids(uid)
         delete_user_data(uid)
         logger.info(f'delete_account background wipe complete for {uid}')
     except Exception as e:
@@ -938,7 +945,10 @@ def get_user_subscription_endpoint(
     if not new_plans_enabled:
         all_definitions = adapt_plans_for_legacy_client(all_definitions)
     available_plans: List[SubscriptionPlan] = []
-    definitions_for_user = filter_plans_for_user(all_definitions, subscription.plan, platform=x_app_platform)
+    ever_purchased = has_ever_purchased(uid, raw_subscription)
+    definitions_for_user = filter_plans_for_user(
+        all_definitions, subscription.plan, platform=x_app_platform, ever_purchased=ever_purchased
+    )
     for definition in definitions_for_user:
         plan_prices: List[PricingOption] = []
         monthly_price_id = definition["monthly_price_id"]
@@ -1349,6 +1359,83 @@ def delete_daily_summary(summary_id: str, uid: str = Depends(auth.get_current_us
 
     daily_summaries_db.delete_daily_summary(uid, summary_id)
     return {'status': 'ok'}
+
+
+# Cooldown between user-initiated regenerations of the same summary. Cheap
+# guard against double-taps wasting LLM tokens — not a security boundary.
+_REGENERATE_COOLDOWN_SECONDS = 30
+
+
+@router.post('/v1/users/daily-summaries/{summary_id}/regenerate', tags=['v1'])
+def regenerate_daily_summary(summary_id: str, uid: str = Depends(auth.get_current_user_uid)):
+    """
+    Re-run summary generation for the date of an existing daily summary and
+    overwrite the same doc in place. No push notification — the user is
+    already looking at the page.
+    """
+    summary = daily_summaries_db.get_daily_summary(uid, summary_id)
+    if not summary:
+        raise HTTPException(status_code=404, detail='Daily summary not found')
+
+    date_str = summary.get('date')
+    if not date_str:
+        raise HTTPException(status_code=400, detail='Daily summary is missing its date')
+    try:
+        target_date = datetime.strptime(date_str, '%Y-%m-%d').date()
+    except ValueError:
+        raise HTTPException(status_code=400, detail='Daily summary has an invalid date')
+
+    cooldown_key = f'daily_summary_regen:{uid}:{summary_id}'
+    if get_generic_cache(cooldown_key):
+        raise HTTPException(
+            status_code=429,
+            detail='Please wait a few seconds before regenerating this recap again.',
+        )
+    # Set the cooldown BEFORE the LLM call, not after. The check-then-set
+    # window was wide enough that two concurrent requests could both pass
+    # the guard and double-bill the LLM. This isn't atomic SETNX, but the
+    # eager set closes the practical race for accidental double-taps.
+    set_generic_cache(cooldown_key, {'at': datetime.utcnow().isoformat()}, ttl=_REGENERATE_COOLDOWN_SECONDS)
+
+    # Resolve the user's local day boundaries the same way the scheduled job
+    # does, so the regenerated payload uses the identical conversation set.
+    time_zone_name = notification_db.get_user_time_zone(uid)
+    if time_zone_name:
+        try:
+            user_tz = pytz.timezone(time_zone_name)
+            start_of_day = user_tz.localize(datetime.combine(target_date, time.min))
+            end_of_day = user_tz.localize(datetime.combine(target_date, time.max))
+            start_date_utc = start_of_day.astimezone(pytz.utc)
+            end_date_utc = end_of_day.astimezone(pytz.utc)
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f'Timezone error: {str(e)}')
+    else:
+        start_date_utc = datetime.combine(target_date, time.min).replace(tzinfo=pytz.utc)
+        end_date_utc = datetime.combine(target_date, time.max).replace(tzinfo=pytz.utc)
+
+    conversations_data = conversations_db.get_conversations(uid, start_date=start_date_utc, end_date=end_date_utc)
+    if conversations_data:
+        conversations_data = [c for c in conversations_data if not c.get('is_locked', False)]
+    if not conversations_data:
+        raise HTTPException(status_code=400, detail=f'No conversations found for {date_str}')
+
+    conversations = deserialize_conversations(conversations_data)
+
+    summary_data = generate_comprehensive_daily_summary(uid, conversations, date_str, start_date_utc, end_date_utc)
+    # Preserve fields readers care about that the generator silently resets:
+    # - visibility: sharing state shouldn't toggle off on regenerate
+    # - created_at: generator stamps a fresh utcnow(), but UI sorts/displays
+    #   summaries by when they were first created, not last regenerated
+    if 'visibility' in summary:
+        summary_data['visibility'] = summary['visibility']
+    if 'created_at' in summary:
+        summary_data['created_at'] = summary['created_at']
+    summary_data['regenerated_at'] = datetime.utcnow().isoformat()
+
+    daily_summaries_db.update_daily_summary(uid, summary_id, summary_data)
+
+    refreshed = daily_summaries_db.get_daily_summary(uid, summary_id)
+    return refreshed or {**summary_data, 'id': summary_id}
 
 
 @router.get('/v1/daily-summaries/{summary_id}/shared', tags=['v1'])

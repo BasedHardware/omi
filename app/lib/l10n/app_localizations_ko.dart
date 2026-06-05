@@ -4603,7 +4603,10 @@ class AppLocalizationsKo extends AppLocalizations {
   }
 
   @override
-  String accessesAndTriggeredBy(String accessDescription, String triggerDescription) {
+  String accessesAndTriggeredBy(
+    String accessDescription,
+    String triggerDescription,
+  ) {
     return '$accessDescription 및 $triggerDescription.';
   }
 
@@ -9146,4 +9149,19 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get backgroundModeNote => '현재는 Omi 기기에서만 작동하며 지속적으로 개선되고 있습니다.';
+
+  @override
+  String get regenerateRecap => '요약 재생성';
+
+  @override
+  String get recapRegeneratedSnackbar => '요약이 재생성되었습니다';
+
+  @override
+  String get recapRegenerateFailed => '요약을 재생성할 수 없습니다. 나중에 다시 시도하세요.';
+
+  @override
+  String get recapRegenerateCooldown => '다시 생성하기 전에 몇 초 기다려 주세요.';
+
+  @override
+  String get recapRegenerateNoConversations => '이 날짜에 요약할 대화가 없습니다.';
 }

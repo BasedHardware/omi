@@ -3046,5 +3046,10 @@
     "invalidPromotionCode": "Neplatný promo kód.",
     "backgroundModeTitle": "Režim na pozadí",
     "backgroundModeDescription": "Udržujte nahrávanie Omi, aj keď je aplikácia úplne zatvorená.",
-    "backgroundModeNote": "Zatiaľ funguje len so zariadeniami Omi a priebežne sa vylepšuje."
+    "backgroundModeNote": "Zatiaľ funguje len so zariadeniami Omi a priebežne sa vylepšuje.",
+    "regenerateRecap": "Znovu vygenerovať zhrnutie",
+    "recapRegeneratedSnackbar": "Zhrnutie znovu vygenerované",
+    "recapRegenerateFailed": "Zhrnutie sa nepodarilo znovu vygenerovať. Skúste neskôr.",
+    "recapRegenerateCooldown": "Pred opätovným generovaním prosím počkajte niekoľko sekúnd.",
+    "recapRegenerateNoConversations": "Pre tento deň nie sú žiadne konverzácie na zhrnutie."
 }

@@ -383,7 +383,7 @@ final class AgentPillsManager: ObservableObject {
                 pill.query,
                 model: pill.model,
                 systemPromptSuffix: systemPromptSuffix,
-                systemPromptPrefix: ChatProvider.floatingBarSystemPromptPrefix,
+                systemPromptStyle: .floating,
                 sessionKey: "agent-\(pill.id.uuidString)"
             )
             self.complete(pill: pill, provider: provider)

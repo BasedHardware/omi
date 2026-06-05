@@ -25,6 +25,7 @@ pytest tests/unit/test_llm_usage_db.py -v
 pytest tests/unit/test_llm_usage_endpoints.py -v
 pytest tests/unit/test_app_uid_keyerror.py -v
 pytest tests/unit/test_daily_summary_race_condition.py -v
+pytest tests/unit/test_daily_summary_regenerate.py -v
 pytest tests/unit/test_chat_tools_messages.py -v
 pytest tests/unit/test_prompt_caching.py -v
 pytest tests/unit/test_mentor_notifications.py -v
@@ -125,6 +126,7 @@ pytest tests/unit/test_vertex_ai_system_role.py -v
 pytest tests/unit/test_tts.py -v
 pytest tests/unit/test_webhook_auto_disable.py -v
 pytest tests/unit/test_merge_validation.py -v
+pytest tests/unit/test_twilio_account_deletion.py -v
 
 # Fair-use integration tests (require Redis; skip gracefully if unavailable)
 if redis-cli ping >/dev/null 2>&1; then

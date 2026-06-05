@@ -4719,7 +4719,10 @@ class AppLocalizationsTa extends AppLocalizations {
   }
 
   @override
-  String accessesAndTriggeredBy(String accessDescription, String triggerDescription) {
+  String accessesAndTriggeredBy(
+    String accessDescription,
+    String triggerDescription,
+  ) {
     return '$accessDescription மற்றும் $triggerDescription।';
   }
 
@@ -9361,4 +9364,19 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get backgroundModeNote => 'தற்போது Omi சாதனங்களுடன் மட்டுமே செயல்படுகிறது, தொடர்ந்து மேம்படுத்தப்படுகிறது.';
+
+  @override
+  String get regenerateRecap => 'சுருக்கத்தை மீண்டும் உருவாக்கு';
+
+  @override
+  String get recapRegeneratedSnackbar => 'சுருக்கம் மீண்டும் உருவாக்கப்பட்டது';
+
+  @override
+  String get recapRegenerateFailed => 'சுருக்கத்தை மீண்டும் உருவாக்க முடியவில்லை. பிறகு மீண்டும் முயற்சிக்கவும்.';
+
+  @override
+  String get recapRegenerateCooldown => 'மீண்டும் உருவாக்குவதற்கு முன் சில வினாடிகள் காத்திருக்கவும்.';
+
+  @override
+  String get recapRegenerateNoConversations => 'இந்த நாளுக்கு சுருக்கமாக மாற்ற உரையாடல்கள் இல்லை.';
 }

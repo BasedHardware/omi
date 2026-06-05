@@ -528,6 +528,52 @@ Future<bool> setDailySummaryVisibility(String summaryId, {String visibility = 's
   return response?.statusCode == 200;
 }
 
+/// Regenerate a daily summary in place. Backend re-runs generation for the
+/// summary's date and overwrites the same doc. Returns the refreshed
+/// summary on success, null on failure.
+/// Backend route: POST /v1/users/daily-summaries/{summary_id}/regenerate.
+/// Returns a `RegenerateResult` carrying the new summary or a structured
+/// error so the UI can distinguish "no conversations" / cooldown / other.
+class RegenerateDailySummaryResult {
+  final DailySummary? summary;
+  final int? statusCode;
+  final String? errorDetail;
+
+  RegenerateDailySummaryResult({this.summary, this.statusCode, this.errorDetail});
+
+  bool get success => summary != null;
+}
+
+Future<RegenerateDailySummaryResult> regenerateDailySummary(String summaryId) async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/users/daily-summaries/$summaryId/regenerate',
+    headers: {},
+    method: 'POST',
+    body: '',
+  );
+  if (response == null) {
+    return RegenerateDailySummaryResult(statusCode: null, errorDetail: null);
+  }
+  if (response.statusCode != 200) {
+    String? detail;
+    try {
+      final body = jsonDecode(response.body);
+      if (body is Map<String, dynamic>) {
+        final d = body['detail'];
+        if (d is String) detail = d;
+      }
+    } catch (_) {}
+    return RegenerateDailySummaryResult(statusCode: response.statusCode, errorDetail: detail);
+  }
+  try {
+    final data = jsonDecode(response.body);
+    return RegenerateDailySummaryResult(summary: DailySummary.fromJson(data), statusCode: 200);
+  } catch (e) {
+    Logger.debug('Error parsing regenerated daily summary: $e');
+    return RegenerateDailySummaryResult(statusCode: 200);
+  }
+}
+
 /// Delete a daily summary by id. Returns true on success.
 /// Backend route: DELETE /v1/users/daily-summaries/{summary_id}.
 Future<bool> deleteDailySummary(String summaryId) async {

@@ -4594,7 +4594,10 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String accessesAndTriggeredBy(String accessDescription, String triggerDescription) {
+  String accessesAndTriggeredBy(
+    String accessDescription,
+    String triggerDescription,
+  ) {
     return '$accessDescription，$triggerDescription。';
   }
 
@@ -9130,4 +9133,19 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get backgroundModeNote => '目前仅支持 Omi 设备，并在持续改进中。';
+
+  @override
+  String get regenerateRecap => '重新生成回顾';
+
+  @override
+  String get recapRegeneratedSnackbar => '已重新生成回顾';
+
+  @override
+  String get recapRegenerateFailed => '无法重新生成回顾。请稍后重试。';
+
+  @override
+  String get recapRegenerateCooldown => '请等待几秒后再重新生成。';
+
+  @override
+  String get recapRegenerateNoConversations => '这一天没有可以总结的对话。';
 }

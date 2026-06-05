@@ -4699,7 +4699,10 @@ class AppLocalizationsBe extends AppLocalizations {
   }
 
   @override
-  String accessesAndTriggeredBy(String accessDescription, String triggerDescription) {
+  String accessesAndTriggeredBy(
+    String accessDescription,
+    String triggerDescription,
+  ) {
     return '$accessDescription і запушчаны $triggerDescription.';
   }
 
@@ -9323,4 +9326,19 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String get backgroundModeNote => 'Пакуль працуе толькі з прыладамі Omi і пастаянна ўдасканальваецца.';
+
+  @override
+  String get regenerateRecap => 'Згенераваць рэзюмэ паўторна';
+
+  @override
+  String get recapRegeneratedSnackbar => 'Рэзюмэ перагенеравана';
+
+  @override
+  String get recapRegenerateFailed => 'Не атрымалася перагенераваць рэзюмэ. Паспрабуйце пазней.';
+
+  @override
+  String get recapRegenerateCooldown => 'Калі ласка, пачакайце некалькі секунд перад паўторнай генерацыяй.';
+
+  @override
+  String get recapRegenerateNoConversations => 'Няма размоў для рэзюмавання гэтага дня.';
 }

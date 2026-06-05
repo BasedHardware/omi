@@ -4650,7 +4650,10 @@ class AppLocalizationsHe extends AppLocalizations {
   }
 
   @override
-  String accessesAndTriggeredBy(String accessDescription, String triggerDescription) {
+  String accessesAndTriggeredBy(
+    String accessDescription,
+    String triggerDescription,
+  ) {
     return '$accessDescription ו-is $triggerDescription.';
   }
 
@@ -9225,4 +9228,19 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get backgroundModeNote => 'כרגע עובד רק עם מכשירי Omi ומשתפר באופן מתמיד.';
+
+  @override
+  String get regenerateRecap => 'צור סיכום מחדש';
+
+  @override
+  String get recapRegeneratedSnackbar => 'הסיכום נוצר מחדש';
+
+  @override
+  String get recapRegenerateFailed => 'לא ניתן ליצור מחדש את הסיכום. נסה שוב מאוחר יותר.';
+
+  @override
+  String get recapRegenerateCooldown => 'אנא המתן מספר שניות לפני יצירה מחודשת.';
+
+  @override
+  String get recapRegenerateNoConversations => 'אין שיחות לסיכום עבור היום הזה.';
 }

@@ -4726,7 +4726,10 @@ class AppLocalizationsTl extends AppLocalizations {
   }
 
   @override
-  String accessesAndTriggeredBy(String accessDescription, String triggerDescription) {
+  String accessesAndTriggeredBy(
+    String accessDescription,
+    String triggerDescription,
+  ) {
     return '$accessDescription at ay $triggerDescription.';
   }
 
@@ -9379,4 +9382,19 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get backgroundModeNote => 'Sa ngayon ay gumagana lang sa mga Omi device at patuloy na pinapabuti.';
+
+  @override
+  String get regenerateRecap => 'Buuin muli ang buod';
+
+  @override
+  String get recapRegeneratedSnackbar => 'Nabuo muli ang buod';
+
+  @override
+  String get recapRegenerateFailed => 'Hindi nagawang muling buuin ang buod. Subukang muli mamaya.';
+
+  @override
+  String get recapRegenerateCooldown => 'Mangyaring maghintay ng ilang segundo bago bumuo muli.';
+
+  @override
+  String get recapRegenerateNoConversations => 'Walang mga pag-uusap na ibubuod para sa araw na ito.';
 }

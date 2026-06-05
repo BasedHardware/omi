@@ -3041,5 +3041,10 @@
     "invalidPromotionCode": "Cod promoțional invalid.",
     "backgroundModeTitle": "Mod în fundal",
     "backgroundModeDescription": "Păstrează Omi în înregistrare chiar și când aplicația este complet închisă.",
-    "backgroundModeNote": "Deocamdată funcționează doar cu dispozitive Omi și este îmbunătățit continuu."
+    "backgroundModeNote": "Deocamdată funcționează doar cu dispozitive Omi și este îmbunătățit continuu.",
+    "regenerateRecap": "Regenerează rezumatul",
+    "recapRegeneratedSnackbar": "Rezumat regenerat",
+    "recapRegenerateFailed": "Rezumatul nu a putut fi regenerat. Încercați din nou mai târziu.",
+    "recapRegenerateCooldown": "Vă rugăm să așteptați câteva secunde înainte de a regenera.",
+    "recapRegenerateNoConversations": "Nu există conversații de rezumat pentru această zi."
 }

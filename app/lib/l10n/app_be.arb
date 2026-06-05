@@ -10619,5 +10619,10 @@
     "invalidPromotionCode": "Няправільны промакод.",
     "backgroundModeTitle": "Фонавы рэжым",
     "backgroundModeDescription": "Працягвайце запіс Omi, нават калі праграма цалкам закрыта.",
-    "backgroundModeNote": "Пакуль працуе толькі з прыладамі Omi і пастаянна ўдасканальваецца."
+    "backgroundModeNote": "Пакуль працуе толькі з прыладамі Omi і пастаянна ўдасканальваецца.",
+    "regenerateRecap": "Згенераваць рэзюмэ паўторна",
+    "recapRegeneratedSnackbar": "Рэзюмэ перагенеравана",
+    "recapRegenerateFailed": "Не атрымалася перагенераваць рэзюмэ. Паспрабуйце пазней.",
+    "recapRegenerateCooldown": "Калі ласка, пачакайце некалькі секунд перад паўторнай генерацыяй.",
+    "recapRegenerateNoConversations": "Няма размоў для рэзюмавання гэтага дня."
 }

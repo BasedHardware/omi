@@ -208,6 +208,32 @@ final class DesktopAutomationActionRegistry {
         name: .toggleTranscriptionRequested, object: nil, userInfo: ["enabled": enabled])
       return ["enabled": enabled ? "true" : "false"]
     }
+
+    // Fake-voice end-to-end test: inject a raw PCM16/16kHz-mono file through the
+    // real realtime omni STT path and return the transcript. No mic, no human.
+    register(
+      name: "omni_test_turn",
+      summary: "Inject a raw PCM16/16kHz mono file through the omni STT path; returns the transcript",
+      params: ["pcm", "timeout", "provider"]
+    ) { params in
+      guard let path = params["pcm"],
+            let data = try? Data(contentsOf: URL(fileURLWithPath: path)), !data.isEmpty else {
+        return ["error": "missing or unreadable 'pcm' file (expected raw s16le 16k mono)"]
+      }
+      let provider = params["provider"].flatMap(RealtimeOmniProvider.init(rawValue:))
+        ?? RealtimeOmniSettings.shared.effectiveProvider
+      let base = DesktopBackendEnvironment.pythonBaseURL()
+      let authHeader: String
+      do {
+        authHeader = try await AuthService.shared.getAuthHeader()
+      } catch {
+        return ["error": "auth failed: \(error.localizedDescription)"]
+      }
+      let timeout = Double(params["timeout"] ?? "") ?? 20
+      let harness = RealtimeOmniTestHarness(
+        provider: provider, relayBaseURL: base, authHeader: authHeader, pcm16k: data)
+      return await harness.run(timeoutSeconds: timeout)
+    }
   }
 }
 

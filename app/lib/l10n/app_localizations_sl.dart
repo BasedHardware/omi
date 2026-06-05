@@ -4694,7 +4694,10 @@ class AppLocalizationsSl extends AppLocalizations {
   }
 
   @override
-  String accessesAndTriggeredBy(String accessDescription, String triggerDescription) {
+  String accessesAndTriggeredBy(
+    String accessDescription,
+    String triggerDescription,
+  ) {
     return '$accessDescription in je $triggerDescription.';
   }
 
@@ -9322,4 +9325,19 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String get backgroundModeNote => 'Zaenkrat deluje le z napravami Omi in se nenehno izboljšuje.';
+
+  @override
+  String get regenerateRecap => 'Ponovno ustvari povzetek';
+
+  @override
+  String get recapRegeneratedSnackbar => 'Povzetek ponovno ustvarjen';
+
+  @override
+  String get recapRegenerateFailed => 'Povzetka ni bilo mogoče ponovno ustvariti. Poskusite pozneje.';
+
+  @override
+  String get recapRegenerateCooldown => 'Pred ponovnim ustvarjanjem počakajte nekaj sekund.';
+
+  @override
+  String get recapRegenerateNoConversations => 'Za ta dan ni pogovorov za povzemanje.';
 }

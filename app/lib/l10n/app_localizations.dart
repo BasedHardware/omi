@@ -186,7 +186,7 @@ abstract class AppLocalizations {
     Locale('uk'),
     Locale('ur'),
     Locale('vi'),
-    Locale('zh')
+    Locale('zh'),
   ];
 
   /// The app title displayed in various places
@@ -8917,7 +8917,10 @@ abstract class AppLocalizations {
   ///
   /// In en, this message translates to:
   /// **'{accessDescription} and is {triggerDescription}.'**
-  String accessesAndTriggeredBy(String accessDescription, String triggerDescription);
+  String accessesAndTriggeredBy(
+    String accessDescription,
+    String triggerDescription,
+  );
 
   /// Sentence starting with 'Is' for trigger description
   ///
@@ -17324,6 +17327,36 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Works with Omi devices only for now, and is being improved continuously.'**
   String get backgroundModeNote;
+
+  /// No description provided for @regenerateRecap.
+  ///
+  /// In en, this message translates to:
+  /// **'Regenerate recap'**
+  String get regenerateRecap;
+
+  /// No description provided for @recapRegeneratedSnackbar.
+  ///
+  /// In en, this message translates to:
+  /// **'Recap regenerated'**
+  String get recapRegeneratedSnackbar;
+
+  /// No description provided for @recapRegenerateFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t regenerate the recap. Try again later.'**
+  String get recapRegenerateFailed;
+
+  /// No description provided for @recapRegenerateCooldown.
+  ///
+  /// In en, this message translates to:
+  /// **'Please wait a few seconds before regenerating again.'**
+  String get recapRegenerateCooldown;
+
+  /// No description provided for @recapRegenerateNoConversations.
+  ///
+  /// In en, this message translates to:
+  /// **'No conversations to summarize for this day.'**
+  String get recapRegenerateNoConversations;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {
@@ -17384,7 +17417,7 @@ class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> 
         'uk',
         'ur',
         'vi',
-        'zh'
+        'zh',
       ].contains(locale.languageCode);
 
   @override
@@ -17494,8 +17527,10 @@ AppLocalizations lookupAppLocalizations(Locale locale) {
       return AppLocalizationsZh();
   }
 
-  throw FlutterError('AppLocalizations.delegate failed to load unsupported locale "$locale". This is likely '
-      'an issue with the localizations generation tool. Please file an issue '
-      'on GitHub with a reproducible sample app and the gen-l10n configuration '
-      'that was used.');
+  throw FlutterError(
+    'AppLocalizations.delegate failed to load unsupported locale "$locale". This is likely '
+    'an issue with the localizations generation tool. Please file an issue '
+    'on GitHub with a reproducible sample app and the gen-l10n configuration '
+    'that was used.',
+  );
 }
