@@ -250,10 +250,13 @@ class TestTranscribeUrl:
 
     def test_downloads_then_transcribes(self):
         wav = _make_wav()
-        download_resp = MagicMock()
-        download_resp.status_code = 200
-        download_resp.raise_for_status = MagicMock()
-        download_resp.content = wav
+
+        stream_resp = MagicMock()
+        stream_resp.raise_for_status = MagicMock()
+        stream_resp.headers = {'content-length': str(len(wav))}
+        stream_resp.iter_bytes = MagicMock(return_value=iter([wav]))
+        stream_resp.__enter__ = MagicMock(return_value=stream_resp)
+        stream_resp.__exit__ = MagicMock(return_value=False)
 
         transcribe_resp = _mock_parakeet_response("hello", [{"text": "hello", "start": 0.0, "end": 0.5}])
 
@@ -261,13 +264,7 @@ class TestTranscribeUrl:
             mock_client = MagicMock()
             mock_client.__enter__ = MagicMock(return_value=mock_client)
             mock_client.__exit__ = MagicMock(return_value=False)
-
-            def side_effect(*args, **kwargs):
-                if args and args[0] and 'v1/transcribe' not in str(args[0]):
-                    return download_resp
-                return transcribe_resp
-
-            mock_client.get.return_value = download_resp
+            mock_client.stream.return_value = stream_resp
             mock_client.post.return_value = transcribe_resp
             mock_client_cls.return_value = mock_client
 
@@ -276,17 +273,18 @@ class TestTranscribeUrl:
         assert len(words) == 1
         assert words[0]['text'] == 'hello'
 
-    def test_rejects_oversized_download(self):
-        oversized_resp = MagicMock()
-        oversized_resp.status_code = 200
-        oversized_resp.raise_for_status = MagicMock()
-        oversized_resp.content = b'\x00' * (pr._PARAKEET_MAX_DOWNLOAD_BYTES + 1)
+    def test_rejects_oversized_content_length(self):
+        stream_resp = MagicMock()
+        stream_resp.raise_for_status = MagicMock()
+        stream_resp.headers = {'content-length': str(pr._PARAKEET_MAX_DOWNLOAD_BYTES + 1)}
+        stream_resp.__enter__ = MagicMock(return_value=stream_resp)
+        stream_resp.__exit__ = MagicMock(return_value=False)
 
         with patch('httpx.Client') as mock_client_cls:
             mock_client = MagicMock()
             mock_client.__enter__ = MagicMock(return_value=mock_client)
             mock_client.__exit__ = MagicMock(return_value=False)
-            mock_client.get.return_value = oversized_resp
+            mock_client.stream.return_value = stream_resp
             mock_client_cls.return_value = mock_client
 
             with pytest.raises(RuntimeError, match='Parakeet transcription'):
@@ -386,7 +384,6 @@ class TestDiarization:
             mock_client.post.return_value = mock_resp
             mock_client_cls.return_value = mock_client
 
-            pr._parakeet_reset_diarization_state()
             words = pr.parakeet_prerecorded_from_bytes(wav, diarize=True)
 
         assert words[0]['speaker'] == 'SPEAKER_00'
@@ -417,7 +414,6 @@ class TestDiarization:
             mock_client.post.return_value = mock_resp
             mock_client_cls.return_value = mock_client
 
-            pr._parakeet_reset_diarization_state()
             words = pr.parakeet_prerecorded_from_bytes(wav, diarize=True)
 
         assert words[0]['speaker'] == 'SPEAKER_00'
@@ -441,7 +437,6 @@ class TestDiarization:
             mock_client.post.return_value = mock_resp
             mock_client_cls.return_value = mock_client
 
-            pr._parakeet_reset_diarization_state()
             words = pr.parakeet_prerecorded_from_bytes(wav, diarize=True)
 
         assert words[0]['speaker'] == 'SPEAKER_00'
@@ -465,13 +460,16 @@ class TestProviderClass:
 
         assert len(words) == 1
 
-    def test_provider_transcribe_url_resets_state(self):
+    def test_provider_transcribe_url_delegates(self):
         provider = pr.ParakeetPrerecordedProvider()
         wav = _make_wav()
 
-        download_resp = MagicMock()
-        download_resp.raise_for_status = MagicMock()
-        download_resp.content = wav
+        stream_resp = MagicMock()
+        stream_resp.raise_for_status = MagicMock()
+        stream_resp.headers = {'content-length': str(len(wav))}
+        stream_resp.iter_bytes = MagicMock(return_value=iter([wav]))
+        stream_resp.__enter__ = MagicMock(return_value=stream_resp)
+        stream_resp.__exit__ = MagicMock(return_value=False)
 
         transcribe_resp = _mock_parakeet_response()
 
@@ -479,7 +477,7 @@ class TestProviderClass:
             mock_client = MagicMock()
             mock_client.__enter__ = MagicMock(return_value=mock_client)
             mock_client.__exit__ = MagicMock(return_value=False)
-            mock_client.get.return_value = download_resp
+            mock_client.stream.return_value = stream_resp
             mock_client.post.return_value = transcribe_resp
             mock_client_cls.return_value = mock_client
 
