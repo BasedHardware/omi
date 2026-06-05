@@ -869,6 +869,11 @@ class FloatingControlBarManager {
     private var activeQueryGeneration: Int = 0
     private var pendingFollowUpQuery: PendingFollowUpQuery?
 
+    /// Screenshot capture kicked off the moment a query starts routing, so it
+    /// overlaps the (~300-500ms) router classification instead of blocking the
+    /// query. `sendAIQuery` consumes the result rather than capturing inline.
+    private var pendingScreenshotTask: Task<Data?, Never>?
+
     /// Whether the user has enabled the Ask Omi bar (persisted across launches).
     /// Defaults to true for new users.
     var isEnabled: Bool {
@@ -1324,6 +1329,20 @@ class FloatingControlBarManager {
         // this down before the chat actually streams anything.
         prepareVisibleQueryState(message, in: barWindow, fromVoice: fromVoice)
 
+        // Kick off the screenshot now so it runs concurrently with the router
+        // classification below; sendAIQuery will consume it without blocking.
+        beginScreenshotCapture()
+
+        // Fast-path: skip the ~300-700ms LLM router for unambiguously
+        // conversational queries (no action-verb signal). Anything else falls
+        // through to the LLM router, preserving its decision — so this only
+        // removes latency from the obvious-chat majority, never adds misroutes.
+        if FloatingRouterHeuristic.precheck(message) == .chat {
+            log("FloatingBar: heuristic fast-path → chat (LLM router skipped)")
+            await sendAIQuery(message, barWindow: barWindow, provider: provider)
+            return
+        }
+
         let decision = await AgentPillsManager.classify(message)
         if decision.route == .agent {
             let model = ShortcutSettings.shared.selectedModel.isEmpty
@@ -1610,6 +1629,27 @@ class FloatingControlBarManager {
         generation == activeQueryGeneration
     }
 
+    /// Start capturing the current screen off the main thread. Safe to call
+    /// repeatedly; the latest call supersedes any earlier in-flight capture.
+    private func beginScreenshotCapture() {
+        pendingScreenshotTask?.cancel()
+        pendingScreenshotTask = Task.detached(priority: .userInitiated) {
+            ScreenCaptureManager.captureScreenData()
+        }
+    }
+
+    /// Returns the screenshot started at routing time. Falls back to capturing
+    /// one now if none is pending (e.g. a direct sendAIQuery without routing).
+    private func consumePendingScreenshot() async -> Data? {
+        if let task = pendingScreenshotTask {
+            pendingScreenshotTask = nil
+            return await task.value
+        }
+        return await Task.detached(priority: .userInitiated) {
+            ScreenCaptureManager.captureScreenData()
+        }.value
+    }
+
     private func sendAIQuery(_ message: String, barWindow: FloatingControlBarWindow, provider: ChatProvider) async {
         let queryFromVoice = barWindow.state.currentQueryFromVoice
         prepareVisibleQueryState(message, in: barWindow, fromVoice: queryFromVoice)
@@ -1639,9 +1679,9 @@ class FloatingControlBarManager {
         }
         FloatingBarVoicePlaybackService.shared.interruptCurrentResponse()
 
-        let screenshotData = await Task.detached { () -> Data? in
-            return ScreenCaptureManager.captureScreenData()
-        }.value
+        // Consume the screenshot captured at routing time (overlapped with the
+        // router classification) instead of blocking the query on a fresh grab.
+        let screenshotData = await consumePendingScreenshot()
         barWindow.orderFrontRegardless()
 
         AnalyticsManager.shared.floatingBarQuerySent(messageLength: message.count, hasScreenshot: screenshotData != nil)
@@ -1665,6 +1705,11 @@ class FloatingControlBarManager {
         barWindow.state.currentQuestionMessageId = nil
         barWindow.state.isAILoading = true
         var hasSetUpResponseHeight = false
+        // Latency instrumentation: time from submit → first streamed token (TTFT)
+        // and → stream end. Logged once each to /private/tmp/omi*.log.
+        let querySubmitTime = CFAbsoluteTimeGetCurrent()
+        var firstTokenLogged = false
+        var completeLogged = false
         chatCancellable = provider.$messages
             .receive(on: DispatchQueue.main)
             .sink { [weak self, weak barWindow] messages in
@@ -1685,17 +1730,26 @@ class FloatingControlBarManager {
 
                 if aiMessage.isStreaming {
                     barWindow?.state.isAILoading = false
+                    if !firstTokenLogged {
+                        firstTokenLogged = true
+                        let ttftMs = Int((CFAbsoluteTimeGetCurrent() - querySubmitTime) * 1000)
+                        log("FloatingBar: time-to-first-token \(ttftMs)ms")
+                    }
                     if let barWindow = barWindow, !hasSetUpResponseHeight {
                         hasSetUpResponseHeight = true
-                        if !barWindow.state.showingAIResponse {
-                            withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
-                                barWindow.state.showingAIResponse = true
-                            }
-                        }
+                        // Reveal the response container immediately (no entrance
+                        // delay) so the first token paints right away; only the
+                        // window resize animates.
+                        barWindow.state.showingAIResponse = true
                         barWindow.resizeToResponseHeightPublic(animated: true)
                     }
                 } else {
                     barWindow?.state.isAILoading = false
+                    if firstTokenLogged && !completeLogged {
+                        completeLogged = true
+                        let totalMs = Int((CFAbsoluteTimeGetCurrent() - querySubmitTime) * 1000)
+                        log("FloatingBar: response complete in \(totalMs)ms")
+                    }
                 }
             }
 
