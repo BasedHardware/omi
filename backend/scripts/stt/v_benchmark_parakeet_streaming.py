@@ -22,6 +22,7 @@ import os
 import re
 import sys
 import time
+import wave as _wave
 from pathlib import Path
 from typing import List
 
@@ -60,10 +61,8 @@ def load_manifest() -> List[dict]:
 
 
 def read_pcm_from_wav(wav_path: Path) -> bytes:
-    data = wav_path.read_bytes()
-    if data[:4] == b'RIFF':
-        return data[44:]
-    return data
+    with _wave.open(str(wav_path), 'rb') as wf:
+        return wf.readframes(wf.getnframes())
 
 
 async def stream_to_deepgram(audio_pcm: bytes, language: str) -> dict:
