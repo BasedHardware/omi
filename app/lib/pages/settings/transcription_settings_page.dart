@@ -39,6 +39,9 @@ class TranscriptionSettingsPage extends StatefulWidget {
 
 class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
   bool _useCustomStt = false;
+  // "Omi Parakeet" is an Omi-hosted engine (not custom STT): _useCustomStt stays false and the
+  // backend is told via transcriptionModel='parakeet'. This flag distinguishes it from plain Omi.
+  bool _omiParakeet = false;
   SttProvider _selectedProvider = SttProvider.openai;
   bool _showAdvanced = false;
   bool _showLogs = true;
@@ -149,6 +152,7 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
     final activeConfig = SharedPreferencesUtil().customSttConfig;
     setState(() {
       _useCustomStt = activeConfig.isEnabled;
+      _omiParakeet = !_useCustomStt && SharedPreferencesUtil().transcriptionModel == 'parakeet';
       _selectedProvider = activeConfig.provider == SttProvider.omi ? SttProvider.openai : activeConfig.provider;
 
       // Load all provider configs from preferences
@@ -555,13 +559,21 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
       final currentConfig = _buildCurrentConfig();
       final activeConfig = _useCustomStt ? currentConfig : CustomSttConfig(provider: SttProvider.omi);
 
+      // Omi-hosted engine choice (server-side): pick Parakeet vs the default via transcriptionModel.
+      // The backend reads this as stt_service and routes to the self-hosted Parakeet service.
+      final prevModel = SharedPreferencesUtil().transcriptionModel;
+      if (!_useCustomStt) {
+        SharedPreferencesUtil().transcriptionModel = _omiParakeet ? 'parakeet' : 'soniox';
+      }
+      final modelChanged = SharedPreferencesUtil().transcriptionModel != prevModel;
+
       final previousConfig = SharedPreferencesUtil().customSttConfig;
       final configChanged = previousConfig.sttConfigId != activeConfig.sttConfigId;
 
       await SharedPreferencesUtil().saveCustomSttConfig(activeConfig);
       Logger.debug(SharedPreferencesUtil().customSttConfig.provider.toString());
 
-      if (configChanged && mounted) {
+      if ((configChanged || modelChanged) && mounted) {
         await Provider.of<CaptureProvider>(context, listen: false).onTranscriptionSettingsChanged();
       }
 
@@ -1016,9 +1028,8 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
 
   /// Current transcription source, derived from the persisted STT state.
   TranscriptionMode get _currentMode {
-    if (!_useCustomStt) return TranscriptionMode.omi;
+    if (!_useCustomStt) return _omiParakeet ? TranscriptionMode.omiParakeet : TranscriptionMode.omi;
     if (_selectedProvider == SttProvider.onDeviceWhisper) return TranscriptionMode.onDevice;
-    if (_selectedProvider == SttProvider.omiParakeet) return TranscriptionMode.omiParakeet;
     return TranscriptionMode.cloudProvider;
   }
 
@@ -1038,7 +1049,10 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
   void _selectMode(TranscriptionMode mode) {
     switch (mode) {
       case TranscriptionMode.omi:
-        setState(() => _useCustomStt = false);
+        setState(() {
+          _useCustomStt = false;
+          _omiParakeet = false;
+        });
         PlatformManager.instance.analytics.transcriptionSourceSelected(source: 'omi');
         break;
       case TranscriptionMode.onDevice:
@@ -1047,8 +1061,9 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
       case TranscriptionMode.cloudProvider:
         setState(() {
           _useCustomStt = true;
-          // Leaving on-device / Parakeet: fall back to a real BYO cloud provider.
-          if (_selectedProvider == SttProvider.onDeviceWhisper || _selectedProvider == SttProvider.omiParakeet) {
+          _omiParakeet = false;
+          // Leaving on-device: fall back to a real BYO cloud provider.
+          if (_selectedProvider == SttProvider.onDeviceWhisper) {
             _selectedProvider = SttProvider.openai;
           }
         });
@@ -1056,12 +1071,12 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
         _validateAndSetError();
         break;
       case TranscriptionMode.omiParakeet:
+        // Omi-hosted Parakeet — server-routed (transcriptionModel='parakeet' on save), not custom STT.
         setState(() {
-          _useCustomStt = true;
-          _selectedProvider = SttProvider.omiParakeet;
+          _useCustomStt = false;
+          _omiParakeet = true;
         });
         PlatformManager.instance.analytics.transcriptionSourceSelected(source: 'omi_parakeet');
-        _validateAndSetError();
         break;
     }
   }
