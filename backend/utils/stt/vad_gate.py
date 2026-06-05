@@ -1,7 +1,7 @@
 """
 VAD Streaming Gate — Issue #4644
 
-Server-side VAD gate that skips sending silence to Deepgram,
+Server-side VAD gate that skips sending silence to the STT provider,
 using KeepAlive to maintain the connection and Finalize to flush
 pending transcripts on speech→silence transitions.
 
@@ -24,6 +24,7 @@ from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 
+from utils.stt.socket import STTSocket
 from utils.stt.vad import _get_ort_session, make_fresh_state, run_vad_window, VAD_WINDOW_SAMPLES
 
 logger = logging.getLogger('vad_gate')
@@ -65,13 +66,13 @@ class GateOutput:
 # ---------------------------------------------------------------------------
 # DG ↔ Wall-clock timestamp mapper
 # ---------------------------------------------------------------------------
-class DgWallMapper:
-    """Maps DG audio-time timestamps to wall-clock-relative timestamps.
+class WallTimeMapper:
+    """Maps STT provider audio-time timestamps to wall-clock-relative timestamps.
 
-    DG timestamps are continuous (only counting audio actually sent).
-    When we skip silence via KeepAlive, DG time compresses vs wall time.
+    Provider timestamps are continuous (only counting audio actually sent).
+    When we skip silence via KeepAlive, provider time compresses vs wall time.
     This mapper tracks checkpoints at each silence→speech transition to
-    convert DG timestamps back to wall-clock-relative timestamps.
+    convert provider timestamps back to wall-clock-relative timestamps.
     """
 
     _MAX_CHECKPOINTS = 500  # Cap to bound memory for long sessions
@@ -80,7 +81,7 @@ class DgWallMapper:
         self._lock = threading.Lock()
         # Each checkpoint: (dg_sec, wall_rel_sec) at silence→speech transition
         self._checkpoints: List[Tuple[float, float]] = []
-        self._dg_cursor_sec: float = 0.0
+        self._provider_cursor_sec: float = 0.0
         self._sending: bool = False
 
     def on_audio_sent(self, chunk_duration_sec: float, chunk_wall_rel_sec: float) -> None:
@@ -94,9 +95,9 @@ class DgWallMapper:
                 # ranges that cause non-monotonic remapped timestamps.
                 if self._checkpoints:
                     prev_dg, prev_wall = self._checkpoints[-1]
-                    min_wall = prev_wall + (self._dg_cursor_sec - prev_dg)
+                    min_wall = prev_wall + (self._provider_cursor_sec - prev_dg)
                     chunk_wall_rel_sec = max(chunk_wall_rel_sec, min_wall)
-                self._checkpoints.append((self._dg_cursor_sec, chunk_wall_rel_sec))
+                self._checkpoints.append((self._provider_cursor_sec, chunk_wall_rel_sec))
                 # Compact: keep an anchor for early remaps + recent checkpoints.
                 if len(self._checkpoints) > self._MAX_CHECKPOINTS:
                     if self._MAX_CHECKPOINTS <= 1:
@@ -104,7 +105,7 @@ class DgWallMapper:
                     else:
                         self._checkpoints = [self._checkpoints[0]] + self._checkpoints[-(self._MAX_CHECKPOINTS - 1) :]
                 self._sending = True
-            self._dg_cursor_sec += chunk_duration_sec
+            self._provider_cursor_sec += chunk_duration_sec
 
     def on_silence_skipped(self) -> None:
         """Called when silence is skipped (not sent to DG)."""
@@ -127,7 +128,7 @@ class DgWallMapper:
 # VAD Streaming Gate (per-session)
 # ---------------------------------------------------------------------------
 class VADStreamingGate:
-    """Per-session VAD gate that decides whether to send audio to DG.
+    """Per-session VAD gate that decides whether to send audio to the STT provider.
 
     Uses ONNX Silero-VAD model's speech probability (not start/end events)
     for robust per-chunk speech detection. Buffers VAD input samples to handle
@@ -185,7 +186,7 @@ class VADStreamingGate:
         self._pre_roll_total_ms: float = 0.0
 
         # Timestamp mapper
-        self.dg_wall_mapper = DgWallMapper()
+        self.dg_wall_mapper = WallTimeMapper()
 
         # Metrics
         self._chunks_total = 0
@@ -206,8 +207,8 @@ class VADStreamingGate:
     def activate(self) -> None:
         """Switch from shadow to active mode (used after speech profile completes).
 
-        Advances the DgWallMapper cursor to account for all audio sent during
-        shadow mode. Without this, the mapper would think DG cursor is at 0
+        Advances the WallTimeMapper cursor to account for all audio sent during
+        shadow mode. Without this, the mapper would think provider cursor is at 0
         and over-shift all timestamps after the first gated silence gap.
         """
         if self.mode == 'shadow':
@@ -221,7 +222,7 @@ class VADStreamingGate:
             self._vad_state, self._vad_context = make_fresh_state()
             self._vad_buffer = np.array([], dtype=np.float32)
             # Sync mapper cursor: DG received all audio during shadow phase
-            self.dg_wall_mapper._dg_cursor_sec = self._audio_cursor_ms / 1000.0
+            self.dg_wall_mapper._provider_cursor_sec = self._audio_cursor_ms / 1000.0
             logger.info(
                 'VADGate activated shadow->active uid=%s session=%s cursor=%.1fms',
                 self.uid,
@@ -230,7 +231,7 @@ class VADStreamingGate:
             )
 
     def needs_keepalive(self, wall_time: float) -> bool:
-        """Check if a keepalive should be sent to prevent DG timeout."""
+        """Check if a keepalive should be sent to prevent STT provider timeout."""
         if self.mode != 'active':
             return False
         ref_time = self._last_send_wall_time or self._first_audio_wall_time
@@ -526,7 +527,7 @@ class VADStreamingGate:
         }
 
     def remap_segments(self, segments: list) -> None:
-        """Remap DG timestamps to wall-clock-relative if gate is active."""
+        """Remap STT provider timestamps to wall-clock-relative if gate is active."""
         if self.mode == 'active':
             for seg in segments:
                 seg['start'] = self.dg_wall_mapper.dg_to_wall_rel(seg['start'])
@@ -539,13 +540,13 @@ class VADStreamingGate:
 
 
 # ---------------------------------------------------------------------------
-# Gated Deepgram Socket — wraps raw DG connection with VAD gate
+# Gated STT Socket — wraps any STTSocket with VAD gate
 # ---------------------------------------------------------------------------
-class GatedDeepgramSocket:
-    """Wraps a Deepgram LiveConnection with built-in VAD gate.
+class GatedSTTSocket(STTSocket):
+    """Wraps an STTSocket with built-in VAD gate.
 
     When gate is active:
-      - send() runs VAD internally, only forwards speech audio to DG
+      - send() runs VAD internally, only forwards speech audio to the STT provider
       - Automatically calls finalize() on speech→silence transitions
       - finish() flushes pending transcript before closing
     When gate is None or mode='shadow':
@@ -554,9 +555,12 @@ class GatedDeepgramSocket:
     This keeps all VAD logic out of transcribe.py.
     """
 
-    def __init__(self, dg_connection, gate: Optional['VADStreamingGate'] = None):
-        self._conn = dg_connection
+    def __init__(
+        self, stt_connection: STTSocket, gate: Optional['VADStreamingGate'] = None, passthrough_audio: bool = False
+    ):
+        self._conn = stt_connection
         self._gate = gate
+        self._passthrough_audio = passthrough_audio
         # Audio capture for transcript quality validation (off by default)
         self._capture_dir = os.getenv('VAD_GATE_AUDIO_CAPTURE_DIR', '')
         self._raw_file = None
@@ -569,18 +573,16 @@ class GatedDeepgramSocket:
 
     @property
     def is_connection_dead(self) -> bool:
-        """True if DG connection has been detected as dead. Delegates to SafeDeepgramSocket."""
-        if getattr(self._conn, '_is_safe_dg_socket', None) is True:
+        if isinstance(self._conn, STTSocket):
             return self._conn.is_connection_dead
         return False
 
     @property
     def death_reason(self) -> Optional[str]:
-        """Why the DG connection died. Delegates to SafeDeepgramSocket."""
         return self._conn.death_reason
 
     def send(self, data: bytes, wall_time: Optional[float] = None) -> None:
-        """Send audio through VAD gate (if active), then to DG."""
+        """Send audio through VAD gate (if active), then to the STT provider."""
         if self.is_connection_dead:
             return
         if self._gate is None:
@@ -598,11 +600,10 @@ class GatedDeepgramSocket:
             self._raw_file.write(data)
         if self._gated_file and gate_out.audio_to_send:
             self._gated_file.write(gate_out.audio_to_send)
-        if gate_out.audio_to_send:
-            # SafeDeepgramSocket.send() handles dead detection internally
+        if self._passthrough_audio:
+            self._conn.send(data)
+        elif gate_out.audio_to_send:
             self._conn.send(gate_out.audio_to_send)
-        # Keepalive is handled automatically by SafeDeepgramSocket's background thread.
-        # No explicit keep_alive() call needed here (#5870 architecture).
         if gate_out.should_finalize:
             try:
                 self._conn.finalize()
@@ -615,7 +616,7 @@ class GatedDeepgramSocket:
         self._conn.finalize()
 
     def finish(self) -> None:
-        """Close DG connection. Flushes first if gate is active."""
+        """Close STT connection. Flushes first if gate is active."""
         if self._gate is not None and self._gate.mode == 'active':
             try:
                 self._conn.finalize()
@@ -631,7 +632,7 @@ class GatedDeepgramSocket:
                     pass
 
     def remap_segments(self, segments: list) -> None:
-        """Remap DG timestamps from audio-time to wall-clock-relative time."""
+        """Remap STT provider timestamps from audio-time to wall-clock-relative time."""
         if self._gate is not None:
             self._gate.remap_segments(segments)
 
@@ -644,3 +645,8 @@ class GatedDeepgramSocket:
     @property
     def is_gated(self) -> bool:
         return self._gate is not None
+
+
+# Backward-compatibility aliases
+GatedDeepgramSocket = GatedSTTSocket
+DgWallMapper = WallTimeMapper
