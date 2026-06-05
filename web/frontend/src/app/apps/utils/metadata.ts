@@ -1,6 +1,7 @@
 import { Metadata } from 'next';
 import envConfig from '@/src/constants/envConfig';
 import { getCategoryMetadata as getUICategoryMetadata } from './category';
+import { PRODUCT_CONFIG } from '@/src/constants/product';
 
 export interface CategoryMetadata {
   title: string;
@@ -99,16 +100,16 @@ export const categoryMetadata: Record<string, CategoryMetadata> = {
 };
 
 const productInfo = {
-  name: 'Omi',
+  name: PRODUCT_CONFIG.name,
   description: 'AI-powered wearable necklace. Real-time AI voice assistant.',
-  price: '89',
-  currency: 'USD',
-  url: 'https://www.omi.me/products/omi-dev-kit-2',
+  price: PRODUCT_CONFIG.price,
+  currency: PRODUCT_CONFIG.currency,
+  url: PRODUCT_CONFIG.productUrl,
 };
 
 const appStoreInfo = {
-  ios: 'https://apps.apple.com/us/app/friend-ai-wearable/id6502156163',
-  android: 'https://play.google.com/store/apps/details?id=com.friend.ios',
+  ios: PRODUCT_CONFIG.appStoreUrl,
+  android: PRODUCT_CONFIG.playStoreUrl,
 };
 
 export function generateBreadcrumbSchema(category?: string) {
