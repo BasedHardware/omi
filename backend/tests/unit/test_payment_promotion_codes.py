@@ -74,6 +74,20 @@ def test_upgrade_catches_stripe_invalid_request_error():
     assert "stripe.error.InvalidRequestError" in upgrade_section
 
 
+def test_upgrade_releases_attached_schedule_before_change():
+    """A subscription already attached to a schedule must be released before
+    Subscription.modify() / SubscriptionSchedule.create(), otherwise Stripe
+    rejects the change ("cannot migrate a subscription already attached to a
+    schedule") and the user can never switch plans."""
+    source = PAYMENT_SOURCE.read_text()
+    assert "def _release_attached_schedules" in source
+    upgrade_section = source[source.index("def upgrade_subscription_endpoint") :]
+    assert "_release_attached_schedules(stripe_sub)" in upgrade_section
+    release_pos = upgrade_section.index("_release_attached_schedules(stripe_sub)")
+    assert release_pos < upgrade_section.index("stripe.Subscription.modify"), "release must precede modify"
+    assert release_pos < upgrade_section.index("SubscriptionSchedule.create"), "release must precede schedule create"
+
+
 def test_checkout_catches_stripe_invalid_request_error():
     source = PAYMENT_SOURCE.read_text()
     checkout_start = source.index("def create_checkout_session_endpoint")
@@ -266,3 +280,44 @@ def test_checkout_no_promo_omits_promo_id():
     assert response.status_code == 200
     call_kwargs = router.stripe_utils.create_subscription_checkout_session.call_args
     assert call_kwargs[1].get("promotion_code_id") is None
+
+
+# --- _release_attached_schedules helper ---
+
+
+def test_release_attached_schedules_releases_only_matching_active():
+    """Releases active/not_started schedules attached to THIS subscription;
+    skips completed schedules and schedules for other subscriptions."""
+    client, router = _setup_payment_module()
+
+    sched_match = MagicMock(id="ss_active", status="active", subscription="sub_1")
+    sched_not_started = MagicMock(id="ss_pending", status="not_started", subscription="sub_1")
+    sched_other_sub = MagicMock(id="ss_other", status="active", subscription="sub_OTHER")
+    sched_completed = MagicMock(id="ss_done", status="completed", subscription="sub_1")
+
+    with patch.object(router.stripe, "SubscriptionSchedule") as mock_ss:
+        mock_ss.list.return_value = MagicMock(data=[sched_match, sched_not_started, sched_other_sub, sched_completed])
+        router._release_attached_schedules({"id": "sub_1", "customer": "cus_1"})
+
+    mock_ss.list.assert_called_once_with(customer="cus_1", limit=10)
+    released = {c.args[0] for c in mock_ss.release.call_args_list}
+    assert released == {"ss_active", "ss_pending"}
+
+
+def test_release_attached_schedules_noop_without_customer():
+    """No customer/sub id -> no Stripe calls (defensive)."""
+    client, router = _setup_payment_module()
+    with patch.object(router.stripe, "SubscriptionSchedule") as mock_ss:
+        router._release_attached_schedules({"id": "sub_1"})  # missing customer
+        router._release_attached_schedules({"customer": "cus_1"})  # missing id
+    mock_ss.list.assert_not_called()
+
+
+def test_release_attached_schedules_swallows_list_errors():
+    """A Stripe failure while listing schedules must not break the upgrade."""
+    client, router = _setup_payment_module()
+    with patch.object(router.stripe, "SubscriptionSchedule") as mock_ss:
+        mock_ss.list.side_effect = Exception("stripe down")
+        # Should not raise
+        router._release_attached_schedules({"id": "sub_1", "customer": "cus_1"})
+    mock_ss.release.assert_not_called()
