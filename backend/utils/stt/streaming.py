@@ -9,6 +9,7 @@ import wave as _wave
 from enum import Enum
 from typing import Callable, List, Optional
 
+import numpy as np
 import websockets
 from deepgram import DeepgramClient, DeepgramClientOptions, LiveTranscriptionEvents
 from deepgram.clients.live.v1 import LiveOptions
@@ -19,6 +20,11 @@ from utils.executors import sync_executor, run_blocking
 from utils.http_client import get_stt_client, get_stt_semaphore
 from utils.stt.safe_socket import KeepaliveConfig, SafeDeepgramSocket  # noqa: F401 — re-exported for backward compat
 from utils.stt.socket import STTSocket
+from utils.stt.speaker_embedding import (
+    SPEAKER_MATCH_THRESHOLD,
+    async_extract_embedding_from_bytes,
+    compare_embeddings,
+)
 import logging
 
 logger = logging.getLogger(__name__)
@@ -796,6 +802,16 @@ class ParakeetStreamingSocket(STTSocket):
         self._dead = False
         self._dead_reason: Optional[str] = None
 
+        # Basic online diarization: Parakeet returns no speaker info, so we embed each segment's
+        # voice (via the same hosted embedding service the listen pipeline uses downstream) and
+        # cluster into session-stable SPEAKER_N labels. Opt-in: only when that service is wired up.
+        self._diarize = bool(os.getenv('HOSTED_SPEAKER_EMBEDDING_API_URL')) and (
+            os.getenv('PARAKEET_DIARIZATION', '1') == '1'
+        )
+        self._spk_centroids: List[np.ndarray] = []  # running-mean embedding per discovered speaker
+        self._spk_counts: List[int] = []
+        self._last_speaker = 0  # reused for clips too short to embed / on transient embed failures
+
     def start(self):
         # Named + tracked so it's supervised/drained like the other WS-scoped tasks.
         self._pump_task = create_named_task(self._pump(), name="parakeet_stt_pump")
@@ -880,6 +896,52 @@ class ParakeetStreamingSocket(STTSocket):
         if segments:
             self._stream_transcript(segments)
 
+    async def _assign_speaker(self, seg_pcm: bytes) -> int:
+        """Cluster a segment's voice embedding into a session-stable speaker index.
+
+        Online greedy clustering: embed the clip, match it to the nearest known speaker
+        centroid (cosine < SPEAKER_MATCH_THRESHOLD) or start a new one. Falls back to the
+        previous speaker when diarization is off, the clip is too short to embed, or the
+        embedding service errs — so a transient failure never drops or mislabels the segment.
+        """
+        if not self._diarize:
+            return 0
+        # async_extract_embedding_from_bytes needs >= MIN_EMBEDDING_AUDIO_DURATION (0.5s); give a
+        # little margin. Shorter clips (back-channels, one-word turns) inherit the running speaker.
+        if len(seg_pcm) < int(self._sample_rate * 2 * 0.6):
+            return self._last_speaker
+        try:
+            wav = _pcm16_to_wav_bytes(seg_pcm, self._sample_rate)
+            emb = await async_extract_embedding_from_bytes(wav)
+        except Exception as e:
+            logger.warning(f"Parakeet diarization embed failed; reusing speaker {self._last_speaker}: {e}")
+            return self._last_speaker
+
+        best_i, best_dist = -1, 1e9
+        for i, centroid in enumerate(self._spk_centroids):
+            d = compare_embeddings(emb, centroid)
+            if d < best_dist:
+                best_i, best_dist = i, d
+
+        if best_i >= 0 and best_dist < SPEAKER_MATCH_THRESHOLD:
+            # Running-mean keeps the centroid stable as the speaker keeps talking.
+            n = self._spk_counts[best_i]
+            self._spk_centroids[best_i] = (self._spk_centroids[best_i] * n + emb) / (n + 1)
+            self._spk_counts[best_i] = n + 1
+            self._last_speaker = best_i
+            return best_i
+
+        self._spk_centroids.append(emb)
+        self._spk_counts.append(1)
+        self._last_speaker = len(self._spk_centroids) - 1
+        return self._last_speaker
+
+    def _slice_pcm(self, pcm: bytes, rel_start: float, rel_end: float) -> bytes:
+        """Window-relative [rel_start, rel_end] seconds → PCM16 byte slice (clamped)."""
+        b0 = max(0, int(rel_start * self._sample_rate) * 2)
+        b1 = min(len(pcm), int(rel_end * self._sample_rate) * 2)
+        return pcm[b0:b1] if b1 > b0 else b''
+
     async def _transcribe_chunk(self, pcm: bytes, start: float, dur: float) -> List[dict]:
         wav = _pcm16_to_wav_bytes(pcm, self._sample_rate)
         # Shared-secret auth for the (publicly-reachable) Parakeet endpoint.
@@ -900,20 +962,24 @@ class ParakeetStreamingSocket(STTSocket):
             text = (s.get('text') or '').strip()
             if not text:
                 continue
+            rel_start = float(s.get('start', 0.0))
+            rel_end = float(s.get('end', rel_start))
+            speaker = await self._assign_speaker(self._slice_pcm(pcm, rel_start, rel_end))
             out.append(
                 {
-                    'speaker': 'SPEAKER_0',
-                    'start': start + float(s.get('start', 0.0)),
-                    'end': start + float(s.get('end', 0.0)),
+                    'speaker': f'SPEAKER_{speaker}',
+                    'start': start + rel_start,
+                    'end': start + rel_end,
                     'text': text,
                     'is_user': False,
                     'person_id': None,
                 }
             )
         if not out and (data.get('text') or '').strip():
+            speaker = await self._assign_speaker(pcm)
             out.append(
                 {
-                    'speaker': 'SPEAKER_0',
+                    'speaker': f'SPEAKER_{speaker}',
                     'start': start,
                     'end': start + dur,
                     'text': data['text'].strip(),

@@ -2972,7 +2972,7 @@ async def listen_handler(
         codec,
         channels,
         include_speech_profile,
-        None,
+        stt_service,  # pass the client's requested engine through (e.g. 'parakeet')
         conversation_timeout=conversation_timeout,
         source=source,
         custom_stt_mode=custom_stt_mode,
