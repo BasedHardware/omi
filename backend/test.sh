@@ -19,6 +19,7 @@ pytest tests/unit/test_speaker_id_pipeline.py -v
 pytest tests/unit/test_user_speaker_embedding.py -v
 pytest tests/unit/test_parakeet_diarization.py -v
 pytest tests/unit/test_parakeet_prerecorded.py -v
+pytest tests/unit/test_parakeet_nim.py -v
 pytest tests/unit/test_memory_leak_buffers.py -v
 pytest tests/unit/test_mcp_search_memories.py -v
 pytest tests/unit/test_memory_temporal_brain.py -v
