@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react';
 import ShareButton from '../memories/share-button';
 import { usePathname, useRouter } from 'next/navigation';
 import { useAuth } from '../../hooks/useAuth';
+import { PRODUCT_CONFIG } from '@/src/constants/product';
 
 interface NavItem {
   href: string;
@@ -182,12 +183,12 @@ export default function AppHeader({
       }`,
     },
     {
-      href: 'https://www.omi.me/products/omi-dev-kit-2',
+      href: PRODUCT_CONFIG.storeUrl,
       label: 'Order Now',
       className: 'text-white hover:text-gray-300',
     },
     {
-      href: 'https://omi.me/cart',
+      href: `${PRODUCT_CONFIG.storeUrl}cart`,
       label: 'Cart',
       icon: <CartIcon />,
       className: 'flex items-center space-x-2 text-white hover:text-gray-300',
