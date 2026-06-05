@@ -290,6 +290,54 @@ class TestTranscribeUrl:
             with pytest.raises(RuntimeError, match='Parakeet transcription'):
                 pr.parakeet_prerecorded("https://example.com/big.wav", diarize=False)
 
+    def test_rejects_streamed_overflow_without_content_length(self):
+        chunk_size = 10 * 1024 * 1024  # 10MB per chunk
+        num_chunks = (pr._PARAKEET_MAX_DOWNLOAD_BYTES // chunk_size) + 2
+
+        def make_stream_resp():
+            resp = MagicMock()
+            resp.raise_for_status = MagicMock()
+            resp.headers = {}
+            resp.iter_bytes = MagicMock(return_value=iter([b'\x00' * chunk_size] * num_chunks))
+            resp.__enter__ = MagicMock(return_value=resp)
+            resp.__exit__ = MagicMock(return_value=False)
+            return resp
+
+        with patch('httpx.Client') as mock_client_cls:
+            mock_client = MagicMock()
+            mock_client.__enter__ = MagicMock(return_value=mock_client)
+            mock_client.__exit__ = MagicMock(return_value=False)
+            mock_client.stream = MagicMock(side_effect=lambda *a, **kw: make_stream_resp())
+            mock_client_cls.return_value = mock_client
+
+            with pytest.raises(RuntimeError, match='Parakeet transcription'):
+                pr.parakeet_prerecorded("https://example.com/streamed.wav", diarize=False)
+
+
+class TestStreamingFactoryRouting:
+
+    def test_parakeet_in_stt_service_models(self):
+        from utils.stt.streaming import STTService, get_stt_service_for_language
+
+        with patch('utils.stt.streaming.stt_service_models', ['parakeet']), patch.dict(
+            os.environ, {'HOSTED_PARAKEET_API_URL': 'http://fake-parakeet:8080'}
+        ):
+            service, lang, model = get_stt_service_for_language('en')
+            assert service == STTService.parakeet
+            assert model == 'parakeet'
+
+    def test_parakeet_fallback_without_url(self):
+        from utils.stt.streaming import STTService, get_stt_service_for_language
+
+        with patch('utils.stt.streaming.stt_service_models', ['parakeet']), patch.dict(os.environ, {}, clear=False):
+            env_backup = os.environ.pop('HOSTED_PARAKEET_API_URL', None)
+            try:
+                service, lang, model = get_stt_service_for_language('en')
+                assert service == STTService.deepgram
+            finally:
+                if env_backup:
+                    os.environ['HOSTED_PARAKEET_API_URL'] = env_backup
+
 
 class TestOutputFormat:
 
