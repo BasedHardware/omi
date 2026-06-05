@@ -277,16 +277,14 @@ async def test_process_audio_dg_returns_none_when_inactive():
 
 
 @pytest.mark.asyncio
-async def test_process_audio_dg_no_vad_wrap_on_none():
-    """process_audio_dg does not wrap None with GatedDeepgramSocket when VAD gate is provided."""
-    mock_gate = MagicMock()
+async def test_process_audio_dg_returns_none_on_failed_connection():
+    """process_audio_dg returns None when connection cannot be established."""
     with patch('utils.stt.streaming.connect_to_deepgram_with_backoff', new_callable=AsyncMock, return_value=None):
         result = await process_audio_dg(
             stream_transcript=MagicMock(),
             language='en',
             sample_rate=16000,
             channels=1,
-            vad_gate=mock_gate,
             is_active=lambda: False,
         )
     assert result is None
@@ -382,13 +380,11 @@ async def test_process_audio_dg_returns_safe_socket_no_gate():
 
 
 @pytest.mark.asyncio
-async def test_process_audio_dg_returns_gated_socket_with_gate():
-    """process_audio_dg returns GatedDeepgramSocket wrapping SafeDeepgramSocket when VAD gate provided (#5870)."""
+async def test_process_audio_dg_returns_safe_socket_always():
+    """process_audio_dg always returns SafeDeepgramSocket; VAD wrapping is done by caller (#7140)."""
     from utils.stt.safe_socket import SafeDeepgramSocket
-    from utils.stt.vad_gate import GatedDeepgramSocket, VADStreamingGate
 
     mock_dg_conn = MagicMock()
-    mock_gate = VADStreamingGate(sample_rate=16000, channels=1, mode='active', uid='test', session_id='test')
     with patch(
         'utils.stt.streaming.connect_to_deepgram_with_backoff', new_callable=AsyncMock, return_value=mock_dg_conn
     ):
@@ -397,10 +393,8 @@ async def test_process_audio_dg_returns_gated_socket_with_gate():
             language='en',
             sample_rate=16000,
             channels=1,
-            vad_gate=mock_gate,
         )
-    assert isinstance(result, GatedDeepgramSocket)
-    assert isinstance(result._conn, SafeDeepgramSocket)
+    assert isinstance(result, SafeDeepgramSocket)
     assert result.is_connection_dead is False
     result.finish()
 
