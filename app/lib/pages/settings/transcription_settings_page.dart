@@ -27,6 +27,9 @@ import 'package:omi/services/sockets/transcription_service.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
 
+/// Top-level transcription source the user picks from the single dropdown.
+enum TranscriptionMode { omi, onDevice, cloudProvider, omiParakeet }
+
 class TranscriptionSettingsPage extends StatefulWidget {
   const TranscriptionSettingsPage({super.key});
 
@@ -36,6 +39,9 @@ class TranscriptionSettingsPage extends StatefulWidget {
 
 class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
   bool _useCustomStt = false;
+  // "Omi Parakeet" is an Omi-hosted engine (not custom STT): _useCustomStt stays false and the
+  // backend is told via transcriptionModel='parakeet'. This flag distinguishes it from plain Omi.
+  bool _omiParakeet = false;
   SttProvider _selectedProvider = SttProvider.openai;
   bool _showAdvanced = false;
   bool _showLogs = true;
@@ -145,6 +151,7 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
     final activeConfig = SharedPreferencesUtil().customSttConfig;
     setState(() {
       _useCustomStt = activeConfig.isEnabled;
+      _omiParakeet = !_useCustomStt && SharedPreferencesUtil().transcriptionModel == 'parakeet';
       _selectedProvider = activeConfig.provider == SttProvider.omi ? SttProvider.openai : activeConfig.provider;
 
       // Load all provider configs from preferences
@@ -555,13 +562,21 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
       final currentConfig = _buildCurrentConfig();
       final activeConfig = _useCustomStt ? currentConfig : CustomSttConfig(provider: SttProvider.omi);
 
+      // Omi-hosted engine choice (server-side): pick Parakeet vs the default via transcriptionModel.
+      // The backend reads this as stt_service and routes to the self-hosted Parakeet service.
+      final prevModel = SharedPreferencesUtil().transcriptionModel;
+      if (!_useCustomStt) {
+        SharedPreferencesUtil().transcriptionModel = _omiParakeet ? 'parakeet' : 'soniox';
+      }
+      final modelChanged = SharedPreferencesUtil().transcriptionModel != prevModel;
+
       final previousConfig = SharedPreferencesUtil().customSttConfig;
       final configChanged = previousConfig.sttConfigId != activeConfig.sttConfigId;
 
       await SharedPreferencesUtil().saveCustomSttConfig(activeConfig);
       Logger.debug(SharedPreferencesUtil().customSttConfig.provider.toString());
 
-      if (configChanged && mounted) {
+      if ((configChanged || modelChanged) && mounted) {
         await Provider.of<CaptureProvider>(context, listen: false).onTranscriptionSettingsChanged();
       }
 
@@ -1014,69 +1029,93 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
     });
   }
 
-  Widget _buildSourceSelector() {
-    // Determine current active tab
-    // 0: Omi (default)
-    // 1: On-Device
-    // 2: BYO Cloud
-    int currentTab = 0;
-    if (_useCustomStt) {
-      if (_selectedProvider == SttProvider.onDeviceWhisper) {
-        currentTab = 1;
-      } else {
-        currentTab = 2;
-      }
+  /// Current transcription source, derived from the persisted STT state.
+  TranscriptionMode get _currentMode {
+    if (!_useCustomStt) return _omiParakeet ? TranscriptionMode.omiParakeet : TranscriptionMode.omi;
+    if (_selectedProvider == SttProvider.onDeviceWhisper) return TranscriptionMode.onDevice;
+    return TranscriptionMode.cloudProvider;
+  }
+
+  String _modeLabel(TranscriptionMode mode) {
+    switch (mode) {
+      case TranscriptionMode.omi:
+        return context.l10n.transcriptionSourceOmi;
+      case TranscriptionMode.onDevice:
+        return context.l10n.onDevice;
+      case TranscriptionMode.cloudProvider:
+        return context.l10n.cloudProvider;
+      case TranscriptionMode.omiParakeet:
+        return SttProviderConfig.get(SttProvider.omiParakeet).displayName;
     }
+  }
+
+  void _selectMode(TranscriptionMode mode) {
+    switch (mode) {
+      case TranscriptionMode.omi:
+        setState(() {
+          _useCustomStt = false;
+          _omiParakeet = false;
+        });
+        PlatformManager.instance.analytics.transcriptionSourceSelected(source: 'omi');
+        break;
+      case TranscriptionMode.onDevice:
+        _switchToOnDevice();
+        break;
+      case TranscriptionMode.cloudProvider:
+        setState(() {
+          _useCustomStt = true;
+          _omiParakeet = false;
+          // Leaving on-device: fall back to a real BYO cloud provider.
+          if (_selectedProvider == SttProvider.onDeviceWhisper) {
+            _selectedProvider = SttProvider.openai;
+          }
+        });
+        PlatformManager.instance.analytics.transcriptionSourceSelected(source: 'custom_cloud');
+        _validateAndSetError();
+        break;
+      case TranscriptionMode.omiParakeet:
+        // Omi-hosted Parakeet — server-routed (transcriptionModel='parakeet' on save), not custom STT.
+        setState(() {
+          _useCustomStt = false;
+          _omiParakeet = true;
+        });
+        PlatformManager.instance.analytics.transcriptionSourceSelected(source: 'omi_parakeet');
+        break;
+    }
+  }
+
+  Widget _buildSourceSelector() {
+    final mode = _currentMode;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const SizedBox(height: 10),
-        Row(
-          children: [
-            Expanded(
-              child: _buildTabOption(
-                isSelected: currentTab == 0,
-                title: context.l10n.transcriptionSourceOmi,
-                onTap: () {
-                  setState(() {
-                    _useCustomStt = false;
-                    PlatformManager.instance.analytics.transcriptionSourceSelected(source: 'omi');
-                  });
-                },
-              ),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          decoration: BoxDecoration(
+            color: const Color(0xFF1A1A1A),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: Colors.grey.shade800),
+          ),
+          child: DropdownButtonHideUnderline(
+            child: DropdownButton<TranscriptionMode>(
+              value: mode,
+              isExpanded: true,
+              dropdownColor: const Color(0xFF1A1A1A),
+              style: const TextStyle(color: Colors.white, fontSize: 15),
+              icon: Icon(Icons.keyboard_arrow_down, color: Colors.grey.shade500),
+              items: TranscriptionMode.values
+                  .map((m) => DropdownMenuItem<TranscriptionMode>(value: m, child: Text(_modeLabel(m))))
+                  .toList(),
+              onChanged: (m) {
+                if (m != null && m != mode) _selectMode(m);
+              },
             ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: _buildTabOption(
-                isSelected: currentTab == 1,
-                title: context.l10n.onDevice,
-                onTap: _switchToOnDevice,
-              ),
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: _buildTabOption(
-                isSelected: currentTab == 2,
-                title: context.l10n.cloudProvider,
-                onTap: () {
-                  setState(() {
-                    _useCustomStt = true;
-                    // Switch back to a cloud provider if currently valid onDevice
-                    if (_selectedProvider == SttProvider.onDeviceWhisper) {
-                      _selectedProvider = SttProvider.openai;
-                    }
-
-                    // Track source selection
-                    PlatformManager.instance.analytics.transcriptionSourceSelected(source: 'custom_cloud');
-                  });
-                },
-              ),
-            ),
-          ],
+          ),
         ),
         const SizedBox(height: 12),
-        if (currentTab == 0 && context.watch<UsageProvider>().showSubscriptionUI)
+        if (mode == TranscriptionMode.omi && context.watch<UsageProvider>().showSubscriptionUI)
           GestureDetector(
             onTap: () => Navigator.of(
               context,
@@ -1100,43 +1139,16 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
               ),
             ),
           )
-        else if (currentTab == 1)
+        else if (mode == TranscriptionMode.onDevice)
           Text(context.l10n.audioProcessedLocally, style: TextStyle(color: Colors.grey.shade600, fontSize: 12))
-        else if (currentTab == 2)
+        else if (mode == TranscriptionMode.omiParakeet)
+          Text(
+            SttProviderConfig.get(SttProvider.omiParakeet).description,
+            style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
+          )
+        else if (mode == TranscriptionMode.cloudProvider)
           Text(context.l10n.payYourSttProvider, style: TextStyle(color: Colors.grey.shade600, fontSize: 12)),
       ],
-    );
-  }
-
-  Widget _buildTabOption({required bool isSelected, required String title, required VoidCallback onTap}) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 14),
-        decoration: BoxDecoration(
-          color: isSelected ? Colors.white : const Color(0xFF1A1A1A),
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: isSelected ? Colors.white : Colors.grey.shade800, width: 1),
-        ),
-        child: Center(
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                title,
-                style: TextStyle(
-                  color: isSelected ? Colors.black : Colors.grey.shade400,
-                  fontSize: 13, // Slightly smaller to fit 3 tabs
-                  fontWeight: FontWeight.w500,
-                ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ],
-          ),
-        ),
-      ),
     );
   }
 
@@ -1162,9 +1174,9 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
   }
 
   Widget _buildProviderSection() {
-    // If using On-Device Whisper, hide the provider dropdown completely
-    // as the tab selection already determines the provider.
-    if (_selectedProvider == SttProvider.onDeviceWhisper) {
+    // On-Device Whisper and Omi Parakeet are fixed providers chosen from the
+    // top dropdown — there's no sub-provider to pick, so hide this section.
+    if (_selectedProvider == SttProvider.onDeviceWhisper || _selectedProvider == SttProvider.omiParakeet) {
       return const SizedBox.shrink();
     }
 
@@ -1272,6 +1284,9 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
       return _buildCustomPollingConfig();
     } else if (_selectedProvider == SttProvider.customLive) {
       return _buildCustomLiveConfig();
+    } else if (_selectedProvider == SttProvider.omiParakeet) {
+      // Omi-hosted — no API key needed, just language.
+      return _buildLanguageSelector();
     }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
