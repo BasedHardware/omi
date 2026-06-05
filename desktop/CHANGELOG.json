@@ -3,7 +3,8 @@
     "Fixed drag handle on Tasks page not appearing when hovering over a row",
     "Fixed drag-to-reorder on Tasks page not persisting when date filters are active",
     "Fixed drag-to-reorder on Tasks page — dragged row now visually dims while in flight",
-    "Fixed manual tasks producing duplicate rows on every backend sync — orphan adoption now matches by description only, since the backend does not preserve the client-side source value"
+    "Fixed manual tasks producing duplicate rows on every backend sync — orphan adoption now matches by description only, since the backend does not preserve the client-side source value",
+    "Fixed Floating Bar positioning so the input field is no longer hidden behind the macOS Dock"
   ],
   "releases": [
     {
