@@ -2,9 +2,9 @@ import os
 import uuid
 import logging
 
-from fastapi import FastAPI, UploadFile, File, Header, HTTPException
+from fastapi import FastAPI, Form, UploadFile, File, Header, HTTPException
 
-from transcribe import transcribe_file
+from transcribe import transcribe_file, transcribe_file_v2
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -38,6 +38,26 @@ def transcribe(file: UploadFile = File(...), authorization: str = Header(None)):
         with open(file_path, "wb") as f:
             f.write(file.file.read())
         return transcribe_file(file_path)
+    finally:
+        try:
+            os.remove(file_path)
+        except OSError:
+            pass
+
+
+@app.post("/v2/transcribe")
+def transcribe_v2(
+    file: UploadFile = File(...),
+    diarize: bool = Form(True),
+    authorization: str = Header(None),
+):
+    _require_auth(authorization)
+    upload_id = str(uuid.uuid4())
+    file_path = f"_temp/{upload_id}_{file.filename}"
+    try:
+        with open(file_path, "wb") as f:
+            f.write(file.file.read())
+        return transcribe_file_v2(file_path, diarize=diarize)
     finally:
         try:
             os.remove(file_path)
