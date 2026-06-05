@@ -77,6 +77,7 @@ from utils.stt.streaming import (
     make_stream_callback,
     process_audio_dg,
     process_audio_modulate,
+    process_audio_parakeet,
     sort_segments_by_start,
     sort_transcript_segments_in_place,
 )
@@ -340,6 +341,10 @@ async def _stream_handler(
     # Convert 'auto' to 'multi' for consistency
     language = 'multi' if language == 'auto' else language
 
+    # The client's explicitly-requested engine (query param), captured before the
+    # language-based selection below overwrites stt_service.
+    requested_stt_service = stt_service
+
     # Determine the best STT service
     stt_service, stt_language, stt_model = get_stt_service_for_language(
         language, multi_lang_enabled=not single_language_mode
@@ -347,6 +352,11 @@ async def _stream_handler(
     if not stt_service or not stt_language:
         await websocket.close(code=1008, reason=f"The language is not supported, {language}")
         return
+
+    # Opt-in: honor an explicit Parakeet request only when the self-hosted service is configured.
+    # Default stays unchanged (Deepgram / language-selected) — this never auto-switches anyone.
+    if requested_stt_service == 'parakeet' and os.getenv('HOSTED_PARAKEET_API_URL'):
+        stt_service = STTService.parakeet
 
     # Translation language (disabled in single language mode)
     translation_language = None
@@ -983,6 +993,8 @@ async def _stream_handler(
         realtime_segment_buffers.extend(segments)
 
     async def _create_stt_socket(callback, lang, sr, model, kw=None, active_check=None):
+        if stt_service == STTService.parakeet:
+            return await process_audio_parakeet(callback, lang, sr, 1, model=model, keywords=kw, is_active=active_check)
         if stt_service == STTService.modulate:
             return await process_audio_modulate(callback, sr, lang)
         return await process_audio_dg(callback, lang, sr, 1, model=model, keywords=kw, is_active=active_check)
