@@ -749,6 +749,9 @@ def parakeet_prerecorded_from_bytes(
                 return [], language or 'en'
             return []
 
+        spk_centroids: List[np.ndarray] = []
+        spk_counts: List[int] = []
+
         words = []
         for seg in segments:
             text = (seg.get('text') or '').strip()
@@ -760,7 +763,7 @@ def parakeet_prerecorded_from_bytes(
             speaker_label = 'SPEAKER_00'
             if diarize:
                 speaker_label = _parakeet_assign_speaker_sync(
-                    audio_bytes, sample_rate, start, end, encoding is not None
+                    audio_bytes, sample_rate, start, end, spk_centroids, spk_counts
                 )
 
             words.append({'timestamp': [start, end], 'speaker': speaker_label, 'text': text})
@@ -794,13 +797,22 @@ def parakeet_prerecorded(
     logger.info(f'parakeet_prerecorded url_len={len(audio_url)} {speakers_count} {attempts}')
     try:
         with httpx.Client(timeout=_PARAKEET_URL_DOWNLOAD_TIMEOUT) as client:
-            resp = client.get(audio_url)
-            resp.raise_for_status()
-            if len(resp.content) > _PARAKEET_MAX_DOWNLOAD_BYTES:
-                raise ValueError(
-                    f'Audio file too large: {len(resp.content)} bytes (max {_PARAKEET_MAX_DOWNLOAD_BYTES})'
-                )
-            audio_bytes = resp.content
+            with client.stream('GET', audio_url) as resp:
+                resp.raise_for_status()
+                content_length = resp.headers.get('content-length')
+                if content_length and int(content_length) > _PARAKEET_MAX_DOWNLOAD_BYTES:
+                    raise ValueError(
+                        f'Audio file too large: {content_length} bytes (max {_PARAKEET_MAX_DOWNLOAD_BYTES})'
+                    )
+                chunks = []
+                total = 0
+                for chunk in resp.iter_bytes(chunk_size=1024 * 1024):
+                    total += len(chunk)
+                    if total > _PARAKEET_MAX_DOWNLOAD_BYTES:
+                        raise ValueError(f'Audio download exceeded {_PARAKEET_MAX_DOWNLOAD_BYTES} bytes')
+                    chunks.append(chunk)
+                audio_bytes = b''.join(chunks)
+                del chunks
         return parakeet_prerecorded_from_bytes(
             audio_bytes, diarize=diarize, attempts=attempts, return_language=return_language, language=language
         )
@@ -812,31 +824,24 @@ def parakeet_prerecorded(
 
 
 def _parakeet_assign_speaker_sync(
-    wav_bytes: bytes, sample_rate: int, seg_start: float, seg_end: float, is_wav: bool
+    wav_bytes: bytes,
+    sample_rate: int,
+    seg_start: float,
+    seg_end: float,
+    centroids: List[np.ndarray],
+    counts: List[int],
 ) -> str:
     if seg_end - seg_start < 0.6:
         return 'SPEAKER_00'
 
     try:
-        if is_wav:
-            seg_pcm = _extract_pcm_segment_from_wav(wav_bytes, seg_start, seg_end)
-        else:
-            start_byte = int(seg_start * sample_rate * 2)
-            end_byte = int(seg_end * sample_rate * 2)
-            seg_pcm = wav_bytes[start_byte:end_byte]
+        seg_pcm = _extract_pcm_segment_from_wav(wav_bytes, seg_start, seg_end)
 
         if len(seg_pcm) < int(sample_rate * 2 * 0.6):
             return 'SPEAKER_00'
 
         seg_wav = _wrap_pcm_as_wav(seg_pcm, sample_rate, 1)
         emb = extract_embedding_from_bytes(seg_wav)
-
-        if not hasattr(_parakeet_assign_speaker_sync, '_centroids'):
-            _parakeet_assign_speaker_sync._centroids = []
-            _parakeet_assign_speaker_sync._counts = []
-
-        centroids = _parakeet_assign_speaker_sync._centroids
-        counts = _parakeet_assign_speaker_sync._counts
 
         best_i, best_dist = -1, 1e9
         for i, centroid in enumerate(centroids):
@@ -890,7 +895,6 @@ class ParakeetPrerecordedProvider(PrerecordedSTTProvider):
         language=None,
         keywords=None,
     ):
-        _parakeet_reset_diarization_state()
         return parakeet_prerecorded(
             audio_url,
             speakers_count=speakers_count,
@@ -912,7 +916,6 @@ class ParakeetPrerecordedProvider(PrerecordedSTTProvider):
         return_language=False,
         keywords=None,
     ):
-        _parakeet_reset_diarization_state()
         return parakeet_prerecorded_from_bytes(
             audio_bytes,
             sample_rate=sample_rate,
@@ -923,11 +926,6 @@ class ParakeetPrerecordedProvider(PrerecordedSTTProvider):
             language=language,
             return_language=return_language,
         )
-
-
-def _parakeet_reset_diarization_state():
-    _parakeet_assign_speaker_sync._centroids = []
-    _parakeet_assign_speaker_sync._counts = []
 
 
 def get_prerecorded_provider() -> PrerecordedSTTProvider:
