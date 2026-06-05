@@ -206,7 +206,7 @@ MODEL_QOS_PROFILES: Dict[str, Dict[str, Tuple[str, str]]] = {
         'goals': ('gpt-4.1-mini', 'openai'),
         'goals_advice': ('gpt-5.4-mini', 'openai'),
         'notifications': ('gpt-5.4-mini', 'openai'),
-        'proactive_notification': ('gpt-4.1-mini', 'openai'),
+        'proactive_notification': ('llama-3.3-70b-versatile', 'groq'),
         'followup': ('gemini-2.5-flash-lite', 'gemini'),
         'smart_glasses': ('gpt-4.1-nano', 'openai'),
         'openglass': ('gpt-4.1-mini', 'openai'),
@@ -256,7 +256,7 @@ MODEL_QOS_PROFILES: Dict[str, Dict[str, Tuple[str, str]]] = {
         'goals': ('gpt-4.1-mini', 'openai'),
         'goals_advice': ('gpt-5.4', 'openai'),
         'notifications': ('gpt-5.4', 'openai'),
-        'proactive_notification': ('gpt-4.1-mini', 'openai'),
+        'proactive_notification': ('llama-3.3-70b-versatile', 'groq'),
         'followup': ('gpt-4.1-mini', 'openai'),
         'smart_glasses': ('gpt-4.1-mini', 'openai'),
         'openglass': ('gpt-4.1-mini', 'openai'),
@@ -305,7 +305,7 @@ MODEL_QOS_PROFILES: Dict[str, Dict[str, Tuple[str, str]]] = {
         'goals': ('gpt-4.1-mini', 'openai'),
         'goals_advice': ('gpt-5.4', 'openai'),
         'notifications': ('gpt-5.4', 'openai'),
-        'proactive_notification': ('gpt-4.1-mini', 'openai'),
+        'proactive_notification': ('llama-3.3-70b-versatile', 'groq'),
         'followup': ('gpt-4.1-mini', 'openai'),
         'smart_glasses': ('gpt-4.1-mini', 'openai'),
         'openglass': ('gpt-4.1-mini', 'openai'),
@@ -460,6 +460,30 @@ def _get_or_create_openrouter_llm(
     return _llm_cache[key]
 
 
+def _get_or_create_groq_llm(model_name: str, streaming: bool = False) -> ChatOpenAI:
+    """Get or create a cached ChatOpenAI for a Groq model."""
+    key = (model_name, streaming, 'groq')
+    if key not in _llm_cache:
+        groq_api_key = (
+            os.environ.get('PROACTIVE_GROQ_API_KEY')
+            or os.environ.get('GROQ_API_KEY')
+        )
+        if not groq_api_key:
+            logger.warning('No PROACTIVE_GROQ_API_KEY or GROQ_API_KEY set. Groq calls may fail.')
+        kwargs: Dict[str, Any] = {
+            'api_key': groq_api_key,
+            'base_url': "https://api.groq.com/openai/v1",
+            'callbacks': [_usage_callback],
+            'request_timeout': 120,
+            'max_retries': 1,
+        }
+        if streaming:
+            kwargs['streaming'] = True
+            kwargs['stream_options'] = {"include_usage": True}
+        _llm_cache[key] = ChatOpenAI(model=model_name, **kwargs)
+    return _llm_cache[key]
+
+
 def _get_or_create_gemini_llm(model_name: str, streaming: bool = False) -> BaseChatModel:
     """Get or create a cached ChatGoogleGenerativeAI for a Gemini model via native SDK.
 
@@ -505,6 +529,8 @@ def _get_default_client(model: str, provider: str, streaming: bool, feature: str
         return _get_or_create_openrouter_llm(model, streaming, temp)
     if provider == 'gemini':
         return _get_or_create_gemini_llm(model, streaming)
+    if provider == 'groq':
+        return _get_or_create_groq_llm(model, streaming)
     return _get_or_create_openai_llm(model, streaming)
 
 

@@ -72,6 +72,12 @@ IMPORTANT: Most conversations do NOT warrant a notification. Your default answer
 # ---------------------------------------------------------------------------
 
 
+class ProposedAction(BaseModel):
+    action_type: str = Field(description="The type of action to take. One of: create_task, draft_calendar_event, none")
+    description: str = Field(default="", description="Detailed title or description of the task or event.")
+    due_at: Optional[str] = Field(default=None, description="Optional ISO 8601 datetime string for when this task is due or when the event happens.")
+
+
 class NotificationDraft(BaseModel):
     notification_text: str = Field(
         description="The notification. Max 100 chars. Specific and actionable. Like a text from a sharp friend."
@@ -93,6 +99,10 @@ class NotificationDraft(BaseModel):
         ),
     )
     category: str = Field(description="One of: productivity, mistake_prevention, goal_connection, dot_connecting")
+    proposed_action: Optional[ProposedAction] = Field(
+        default=None,
+        description="If this notification suggests a tangible task or calendar event, provide the details here to automatically stage it for the user."
+    )
 
 
 GENERATE_PROMPT = """{user_name}'s conversation was flagged as containing something worth a notification.
@@ -108,6 +118,8 @@ Rules:
 - NEVER start with: Confirm, Ensure, Clarify, Consider, Prioritize, Remember, Review, Align, Make sure, Don't forget
 - Under 100 characters
 - The notification must contain information {user_name} does NOT already have, or a connection they can't see
+- If the notification implies a clear task (e.g., following up with someone, completing a document) or a calendar event, fill out the `proposed_action` field so we can stage it automatically.
+- If you use `proposed_action`, the `notification_text` should reflect that you drafted it (e.g. "Drafted task to follow up with John. Tap to save.")
 
 == {user_name}'S FACTS ==
 {user_facts}

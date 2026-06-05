@@ -11,23 +11,48 @@ Verifies:
 Usage:
     cd backend && python -m tests.eval.test_proactive_tools_eval
 
-Requires OPENAI_API_KEY in environment.
+Requires GROQ_API_KEY (or PROACTIVE_GROQ_API_KEY) and OPENAI_API_KEY in environment.
 """
 
 import json
 import os
 import sys
+from pathlib import Path
 from typing import List, Dict, Any
+
+from dotenv import load_dotenv
+load_dotenv()
 
 from pydantic import BaseModel, Field
 
 from langchain_openai import ChatOpenAI
 
+# Ensure backend root is on sys.path for importing utils
+_backend_root = str(Path(__file__).resolve().parent.parent.parent)
+if _backend_root not in sys.path:
+    sys.path.insert(0, _backend_root)
+
+from utils.llm.clients import get_llm
+
 # ---------------------------------------------------------------------------
 # LLM clients
 # ---------------------------------------------------------------------------
-llm_mini = ChatOpenAI(model="gpt-4.1-mini")
-llm_judge = ChatOpenAI(model="gpt-5.1")
+# Use the same get_llm('proactive_notification') helper as production (resolves to Groq)
+llm_mini = get_llm('proactive_notification')
+
+openai_key = os.environ.get("OPENAI_API_KEY")
+if openai_key:
+    llm_judge = ChatOpenAI(model="gpt-5.1", api_key=openai_key)
+else:
+    groq_key = os.environ.get("PROACTIVE_GROQ_API_KEY") or os.environ.get("GROQ_API_KEY")
+    if groq_key:
+        llm_judge = ChatOpenAI(
+            model="llama-3.3-70b-versatile",
+            api_key=groq_key,
+            base_url="https://api.groq.com/openai/v1"
+        )
+    else:
+        llm_judge = ChatOpenAI(model="gpt-5.1")
 
 
 # ---------------------------------------------------------------------------

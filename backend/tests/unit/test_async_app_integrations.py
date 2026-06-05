@@ -39,6 +39,9 @@ for submod in [
     "llm_usage",
     "chat",
     "goals",
+    "staged_tasks",
+    "user_usage",
+    "announcements",
 ]:
     mod = types.ModuleType(f"database.{submod}")
     sys.modules.setdefault(f"database.{submod}", mod)
@@ -62,6 +65,8 @@ sys.modules["database.notifications"].get_token_only = MagicMock(return_value=No
 sys.modules["database.notifications"].get_mentor_notification_frequency = MagicMock(return_value=0)
 sys.modules["database.conversations"].get_conversations_by_id = MagicMock(return_value=[])
 sys.modules["database.goals"].get_user_goals = MagicMock(return_value=[])
+sys.modules["database.staged_tasks"].create_staged_task = MagicMock()
+sys.modules["database.announcements"].compare_versions = MagicMock(return_value=0)
 
 for name in [
     "utils.apps",
@@ -135,10 +140,15 @@ if _http_mod is not None and not hasattr(_http_mod, '__file__'):
 # run_in_executor calls executor.submit() and wraps the returned Future.
 from concurrent.futures import ThreadPoolExecutor as _TPE
 
+async def mock_run_blocking(executor, func, *args, **kwargs):
+    return func(*args, **kwargs)
+
 if "utils.executors" not in sys.modules:
     sys.modules["utils.executors"] = types.ModuleType("utils.executors")
 sys.modules["utils.executors"].critical_executor = _TPE(max_workers=2, thread_name_prefix="test-critical")
 sys.modules["utils.executors"].storage_executor = _TPE(max_workers=2, thread_name_prefix="test-storage")
+sys.modules["utils.executors"].db_executor = _TPE(max_workers=2, thread_name_prefix="test-db")
+sys.modules["utils.executors"].run_blocking = mock_run_blocking
 
 import importlib
 

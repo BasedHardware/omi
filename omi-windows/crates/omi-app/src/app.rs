@@ -273,8 +273,44 @@ pub fn App() -> Element {
             } else {
                 tracing::warn!("[APP] Screen capture enabled but DB not open");
             }
-        } else if !cfg.screen_capture_enabled {
-            tracing::info!("[APP] Screen capture is DISABLED in config — enable in Settings");
+        }
+    });
+
+    // ── Spawn character overlay window once on mount ──────────────────────────
+    let has_spawned_character = use_signal(|| false);
+    use_effect(move || {
+        if !*has_spawned_character.read() {
+            has_spawned_character.clone().set(true);
+
+            let desktop = dioxus::desktop::window();
+
+            // Build secondary window config
+            let character_cfg = dioxus::desktop::Config::new()
+                .with_window(
+                    dioxus::desktop::tao::window::WindowBuilder::new()
+                        .with_title("Omi Character")
+                        .with_decorations(false)     // borderless
+                        .with_transparent(true)      // transparent background
+                        .with_always_on_top(true)    // always-on-top overlay
+                        .with_resizable(false)
+                        .with_inner_size(dioxus::desktop::tao::dpi::LogicalSize::new(180.0, 180.0))
+                );
+
+            let props = crate::components::character_window::CharacterOverlayProps {
+                suggestions: suggestions.clone(),
+                recording_status: recording_status.clone(),
+                live_transcript: live_transcript.clone(),
+                db: db.clone(),
+                runtime: runtime.clone(),
+                config: config.clone(),
+                suggestion_prompt: suggestion_prompt.clone(),
+            };
+
+            desktop.new_window(
+                VirtualDom::new_with_props(crate::components::character_window::CharacterOverlay, props),
+                character_cfg
+            );
+            tracing::info!("[APP] Spawned proactive character overlay window.");
         }
     });
 

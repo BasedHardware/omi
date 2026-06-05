@@ -59,6 +59,9 @@ for submodule in [
     "daily_summaries",
     "mem_db",
     "notifications",
+    "staged_tasks",
+    "user_usage",
+    "announcements",
 ]:
     mod = _stub_module(f"database.{submodule}")
     setattr(database_mod, submodule, mod)
@@ -132,6 +135,12 @@ def _setup_app_integrations_stubs():
     chat_db_mod = sys.modules.get("database.chat") or _stub_module("database.chat")
     chat_db_mod.add_app_message = MagicMock()
     chat_db_mod.get_app_messages = MagicMock(return_value=[])
+
+    staged_tasks_mod = sys.modules.get("database.staged_tasks") or _stub_module("database.staged_tasks")
+    staged_tasks_mod.create_staged_task = MagicMock()
+
+    announcements_mod = sys.modules.get("database.announcements") or _stub_module("database.announcements")
+    announcements_mod.compare_versions = MagicMock(return_value=0)
 
     vec_mod = sys.modules.get("database.vector_db") or _stub_module("database.vector_db")
     vec_mod.query_vectors_by_metadata = MagicMock(return_value=[])

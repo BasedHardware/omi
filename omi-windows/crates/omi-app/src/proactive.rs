@@ -55,6 +55,7 @@ pub enum ProactiveEvent {
 
 // ── Engine ────────────────────────────────────────────────────────────────────
 
+#[derive(Clone)]
 pub struct ProactiveEngine {
     pub tx: broadcast::Sender<ProactiveEvent>,
 }
@@ -143,8 +144,8 @@ impl ProactiveEngine {
     }
 
     /// Called periodically (every few minutes) to surface idle reminders.
-    pub async fn on_tick(&self, db: &omi_db::Database, _cfg: &AppConfig) {
-        // Pending tasks reminder (only if any)
+    pub async fn on_tick(&self, db: &omi_db::Database, cfg: &AppConfig) {
+        // 1. Pending tasks reminder (only if any)
         if let Ok(items) = db.list_action_items(100) {
             let now = chrono::Utc::now();
             let overdue: Vec<_> = items.iter()
@@ -163,6 +164,70 @@ impl ProactiveEngine {
                     Duration::from_secs(900),
                 );
                 let _ = self.tx.send(ProactiveEvent::NewSuggestion(s));
+            }
+        }
+
+        // 2. LLM-driven proactive second brain analysis
+        if cfg.proactive_agent_enabled {
+            let memories = db.get_memories_text(10).unwrap_or_default();
+            let recent = db.get_recent_context(3).unwrap_or_default();
+            if !recent.is_empty() {
+                let mut context = String::new();
+                for (ts, title, text) in &recent {
+                    context.push_str(&format!("[{ts}] {title}: {text}\n"));
+                }
+
+                let prompt = format!(
+                    "You are Omi, a proactive AI second brain on Windows. Analyze the user's recent conversations and long-term memories below:\n\n\
+                    ## Long-term Memories\n\
+                    {memories}\n\n\
+                    ## Recent Conversations\n\
+                    {context}\n\n\
+                    Generate ONE highly specific proactive suggestion, insight, or reminder that is immediately useful. \
+                    Focus on action items, calendar updates, health, or connections they might have missed.\n\
+                    Keep it short (max 15 words) and highly relevant.\n\
+                    Reply in structured JSON format with EXACTLY three fields:\n\
+                    {{\"text\": \"<the short proactive suggestion>\", \"action\": \"<short button label, e.g., 'Search', 'Review', 'Plan'>\", \"prompt\": \"<detailed instruction query to run in agent chat if clicked>\"}}\n\
+                    If there is no useful suggestion to show, reply with: NOTHING"
+                );
+
+                let cfg_clone = cfg.clone();
+                let tx = self.tx.clone();
+
+                tokio::spawn(async move {
+                    match crate::llm::complete_for(
+                        &cfg_clone,
+                        crate::llm::LlmUseCase::Background,
+                        vec![crate::llm::LlmMessage { role: "user".into(), content: prompt }],
+                        Some(250),
+                    ).await {
+                        Ok(text) => {
+                            let text = text.trim();
+                            if !text.is_empty() && text != "NOTHING" {
+                                let json_str = text.trim_start_matches("```json").trim_start_matches("```").trim_end_matches("```").trim();
+                                if let Ok(json_val) = serde_json::from_str::<serde_json::Value>(json_str) {
+                                    if let (Some(sug_text), Some(action_label), Some(agent_prompt)) = (
+                                        json_val.get("text").and_then(|v| v.as_str()),
+                                        json_val.get("action").and_then(|v| v.as_str()),
+                                        json_val.get("prompt").and_then(|v| v.as_str()),
+                                    ) {
+                                        let s = Suggestion {
+                                            id: uuid::Uuid::new_v4().to_string(),
+                                            text: sug_text.to_string(),
+                                            action_label: action_label.to_string(),
+                                            agent_prompt: Some(agent_prompt.to_string()),
+                                            priority: 65,
+                                            created_at: Instant::now(),
+                                            ttl: Duration::from_secs(300),
+                                        };
+                                        let _ = tx.send(ProactiveEvent::NewSuggestion(s));
+                                    }
+                                }
+                            }
+                        }
+                        Err(e) => tracing::warn!("[PROACTIVE] Periodic LLM evaluation failed: {e}"),
+                    }
+                });
             }
         }
     }

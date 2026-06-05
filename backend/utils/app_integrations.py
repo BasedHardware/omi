@@ -22,6 +22,7 @@ from database.apps import record_app_usage
 from database.chat import add_app_message, get_app_messages
 from database.goals import get_user_goals
 from database.notifications import get_mentor_notification_frequency
+import database.staged_tasks as staged_tasks_db
 from utils.subscription import is_trial_paywalled
 from database.redis_db import (
     get_generic_cache,
@@ -414,6 +415,26 @@ def _process_mentor_proactive_notification(uid: str, conversation_messages: list
         return None
 
     # ── Send ─────────────────────────────────────────────────────────────
+    # ── Handle Proposed Action ───────────────────────────────────────────
+    if draft.proposed_action and draft.proposed_action.action_type != 'none':
+        action = draft.proposed_action
+        desc = action.description or notification_text
+        due_at = action.due_at
+        
+        # We can stage both tasks and calendar events as staged tasks for now
+        # The frontend will pick them up and let the user promote/schedule them.
+        if action.action_type in ('create_task', 'draft_calendar_event'):
+            prefix = "Calendar: " if action.action_type == 'draft_calendar_event' else ""
+            try:
+                staged_tasks_db.create_staged_task(
+                    uid,
+                    description=prefix + desc,
+                    source='proactive_assistant'
+                )
+                logger.info(f"mentor_proactive staged_task_created uid={uid} type={action.action_type}")
+            except Exception as e:
+                logger.error(f"mentor_proactive stage_task_failed uid={uid} error={e}")
+
     if len(notification_text) > 150:
         notification_text = notification_text[:150]
 
