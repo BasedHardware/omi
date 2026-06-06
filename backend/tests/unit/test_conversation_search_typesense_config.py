@@ -1,6 +1,8 @@
 import importlib
 import sys
+import time
 import types
+from concurrent.futures import ThreadPoolExecutor
 
 import pytest
 
@@ -14,11 +16,13 @@ def cleanup_search_module():
     sys.modules.pop(MODULE_NAME, None)
 
 
-def _import_search_module(monkeypatch):
+def _import_search_module(monkeypatch, client_delay=0):
     client_configs = []
 
     class FakeClient:
         def __init__(self, config):
+            if client_delay:
+                time.sleep(client_delay)
             client_configs.append(config)
             documents = types.SimpleNamespace(search=lambda _params: {'hits': []})
             self.collections = {'conversations': types.SimpleNamespace(documents=documents)}
@@ -67,3 +71,16 @@ def test_search_constructs_typesense_client_on_first_use(monkeypatch):
             'connection_timeout_seconds': 2,
         }
     ]
+
+
+def test_typesense_client_initializes_once_for_concurrent_first_use(monkeypatch):
+    monkeypatch.setenv('TYPESENSE_HOST', 'localhost')
+    monkeypatch.setenv('TYPESENSE_HOST_PORT', '8108')
+    monkeypatch.setenv('TYPESENSE_API_KEY', 'dev-key')
+    search_module, client_configs = _import_search_module(monkeypatch, client_delay=0.02)
+
+    with ThreadPoolExecutor(max_workers=8) as executor:
+        clients = list(executor.map(lambda _: search_module._get_typesense_client(), range(8)))
+
+    assert len({id(client) for client in clients}) == 1
+    assert len(client_configs) == 1
