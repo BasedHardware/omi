@@ -3046,5 +3046,6 @@
     "recapRegeneratedSnackbar": "Samenvatting opnieuw gegenereerd",
     "recapRegenerateFailed": "Kon de samenvatting niet opnieuw genereren. Probeer het later opnieuw.",
     "recapRegenerateCooldown": "Wacht een paar seconden voordat je opnieuw genereert.",
-    "recapRegenerateNoConversations": "Geen gesprekken om voor deze dag samen te vatten."
+    "recapRegenerateNoConversations": "Geen gesprekken om voor deze dag samen te vatten.",
+    "sessionExpiredPleaseSignIn": "Session expired. Please sign in again."
 }

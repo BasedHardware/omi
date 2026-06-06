@@ -3081,5 +3081,6 @@
     "recapRegeneratedSnackbar": "Резюме создано заново",
     "recapRegenerateFailed": "Не удалось создать резюме заново. Попробуйте позже.",
     "recapRegenerateCooldown": "Подождите несколько секунд перед повторным созданием.",
-    "recapRegenerateNoConversations": "Нет разговоров для резюмирования за этот день."
+    "recapRegenerateNoConversations": "Нет разговоров для резюмирования за этот день.",
+    "sessionExpiredPleaseSignIn": "Session expired. Please sign in again."
 }

@@ -3081,5 +3081,6 @@
     "recapRegeneratedSnackbar": "Podsumowanie wygenerowane ponownie",
     "recapRegenerateFailed": "Nie udało się ponownie wygenerować podsumowania. Spróbuj później.",
     "recapRegenerateCooldown": "Poczekaj kilka sekund przed ponownym wygenerowaniem.",
-    "recapRegenerateNoConversations": "Brak rozmów do podsumowania w tym dniu."
+    "recapRegenerateNoConversations": "Brak rozmów do podsumowania w tym dniu.",
+    "sessionExpiredPleaseSignIn": "Session expired. Please sign in again."
 }

@@ -10624,5 +10624,6 @@
     "recapRegeneratedSnackbar": "सारांश पुन्हा तयार केला",
     "recapRegenerateFailed": "सारांश पुन्हा तयार करता आला नाही. नंतर पुन्हा प्रयत्न करा.",
     "recapRegenerateCooldown": "पुन्हा तयार करण्यापूर्वी कृपया काही सेकंद थांबा.",
-    "recapRegenerateNoConversations": "या दिवसासाठी सारांश करण्यासाठी कोणतेही संभाषण नाही."
+    "recapRegenerateNoConversations": "या दिवसासाठी सारांश करण्यासाठी कोणतेही संभाषण नाही.",
+    "sessionExpiredPleaseSignIn": "Session expired. Please sign in again."
 }

@@ -3082,5 +3082,6 @@
     "recapRegeneratedSnackbar": "Resumo regenerado",
     "recapRegenerateFailed": "Não foi possível regenerar o resumo. Tente novamente mais tarde.",
     "recapRegenerateCooldown": "Aguarde alguns segundos antes de regenerar novamente.",
-    "recapRegenerateNoConversations": "Nenhuma conversa para resumir neste dia."
+    "recapRegenerateNoConversations": "Nenhuma conversa para resumir neste dia.",
+    "sessionExpiredPleaseSignIn": "Session expired. Please sign in again."
 }

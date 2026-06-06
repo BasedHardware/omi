@@ -3014,5 +3014,6 @@
     "recapRegeneratedSnackbar": "Zusammenfassung neu erstellt",
     "recapRegenerateFailed": "Zusammenfassung konnte nicht neu erstellt werden. Bitte später erneut versuchen.",
     "recapRegenerateCooldown": "Bitte warte ein paar Sekunden, bevor du erneut generierst.",
-    "recapRegenerateNoConversations": "Keine Konversationen für diesen Tag zum Zusammenfassen."
+    "recapRegenerateNoConversations": "Keine Konversationen für diesen Tag zum Zusammenfassen.",
+    "sessionExpiredPleaseSignIn": "Session expired. Please sign in again."
 }

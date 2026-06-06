@@ -3046,5 +3046,6 @@
     "recapRegeneratedSnackbar": "Kopsavilkums atjaunots",
     "recapRegenerateFailed": "Kopsavilkumu neizdevās atjaunot. Mēģiniet vēlāk vēlreiz.",
     "recapRegenerateCooldown": "Lūdzu, pagaidiet dažas sekundes pirms atkārtotas ģenerēšanas.",
-    "recapRegenerateNoConversations": "Šajā dienā nav sarunu, ko apkopot."
+    "recapRegenerateNoConversations": "Šajā dienā nav sarunu, ko apkopot.",
+    "sessionExpiredPleaseSignIn": "Session expired. Please sign in again."
 }

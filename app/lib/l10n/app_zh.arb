@@ -3068,5 +3068,6 @@
     "recapRegeneratedSnackbar": "已重新生成回顾",
     "recapRegenerateFailed": "无法重新生成回顾。请稍后重试。",
     "recapRegenerateCooldown": "请等待几秒后再重新生成。",
-    "recapRegenerateNoConversations": "这一天没有可以总结的对话。"
+    "recapRegenerateNoConversations": "这一天没有可以总结的对话。",
+    "sessionExpiredPleaseSignIn": "Session expired. Please sign in again."
 }

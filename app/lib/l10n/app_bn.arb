@@ -10624,5 +10624,6 @@
     "recapRegeneratedSnackbar": "রিক্যাপ পুনরায় তৈরি হয়েছে",
     "recapRegenerateFailed": "রিক্যাপ পুনরায় তৈরি করা যায়নি। পরে আবার চেষ্টা করুন।",
     "recapRegenerateCooldown": "পুনরায় তৈরি করার আগে কয়েক সেকেন্ড অপেক্ষা করুন।",
-    "recapRegenerateNoConversations": "এই দিনের জন্য সংক্ষেপ করার কোনো কথোপকথন নেই।"
+    "recapRegenerateNoConversations": "এই দিনের জন্য সংক্ষেপ করার কোনো কথোপকথন নেই।",
+    "sessionExpiredPleaseSignIn": "Session expired. Please sign in again."
 }

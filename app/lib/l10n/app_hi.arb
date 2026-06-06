@@ -3047,5 +3047,6 @@
     "recapRegeneratedSnackbar": "रीकैप पुनः बनाया गया",
     "recapRegenerateFailed": "रीकैप पुनः नहीं बनाया जा सका। बाद में पुनः प्रयास करें।",
     "recapRegenerateCooldown": "पुनः बनाने से पहले कुछ सेकंड प्रतीक्षा करें।",
-    "recapRegenerateNoConversations": "इस दिन के लिए सारांश बनाने के लिए कोई बातचीत नहीं है।"
+    "recapRegenerateNoConversations": "इस दिन के लिए सारांश बनाने के लिए कोई बातचीत नहीं है।",
+    "sessionExpiredPleaseSignIn": "Session expired. Please sign in again."
 }

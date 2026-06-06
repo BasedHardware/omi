@@ -3055,5 +3055,6 @@
     "recapRegeneratedSnackbar": "Resumé genereret igen",
     "recapRegenerateFailed": "Kunne ikke generere resuméet igen. Prøv igen senere.",
     "recapRegenerateCooldown": "Vent et par sekunder, før du genererer igen.",
-    "recapRegenerateNoConversations": "Ingen samtaler at opsummere for denne dag."
+    "recapRegenerateNoConversations": "Ingen samtaler at opsummere for denne dag.",
+    "sessionExpiredPleaseSignIn": "Session expired. Please sign in again."
 }

@@ -10624,5 +10624,6 @@
     "recapRegeneratedSnackbar": "Nabuo muli ang buod",
     "recapRegenerateFailed": "Hindi nagawang muling buuin ang buod. Subukang muli mamaya.",
     "recapRegenerateCooldown": "Mangyaring maghintay ng ilang segundo bago bumuo muli.",
-    "recapRegenerateNoConversations": "Walang mga pag-uusap na ibubuod para sa araw na ito."
+    "recapRegenerateNoConversations": "Walang mga pag-uusap na ibubuod para sa araw na ito.",
+    "sessionExpiredPleaseSignIn": "Session expired. Please sign in again."
 }

@@ -3015,5 +3015,6 @@
     "recapRegeneratedSnackbar": "Resum regenerat",
     "recapRegenerateFailed": "No s'ha pogut regenerar el resum. Torna-ho a provar més tard.",
     "recapRegenerateCooldown": "Espera uns segons abans de tornar a regenerar.",
-    "recapRegenerateNoConversations": "No hi ha converses per resumir d'aquest dia."
+    "recapRegenerateNoConversations": "No hi ha converses per resumir d'aquest dia.",
+    "sessionExpiredPleaseSignIn": "Session expired. Please sign in again."
 }

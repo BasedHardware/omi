@@ -3088,5 +3088,6 @@
     "recapRegeneratedSnackbar": "Ringkasan dibuat ulang",
     "recapRegenerateFailed": "Tidak dapat membuat ulang ringkasan. Coba lagi nanti.",
     "recapRegenerateCooldown": "Mohon tunggu beberapa detik sebelum membuat ulang.",
-    "recapRegenerateNoConversations": "Tidak ada percakapan untuk diringkas pada hari ini."
+    "recapRegenerateNoConversations": "Tidak ada percakapan untuk diringkas pada hari ini.",
+    "sessionExpiredPleaseSignIn": "Session expired. Please sign in again."
 }

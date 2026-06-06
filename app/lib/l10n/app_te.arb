@@ -10624,5 +10624,6 @@
     "recapRegeneratedSnackbar": "సారాంశం పునరుత్పత్తి అయింది",
     "recapRegenerateFailed": "సారాంశాన్ని పునరుత్పత్తి చేయలేకపోయాము. తర్వాత మళ్లీ ప్రయత్నించండి.",
     "recapRegenerateCooldown": "మళ్లీ పునరుత్పత్తి చేయడానికి ముందు దయచేసి కొన్ని సెకన్లు వేచి ఉండండి.",
-    "recapRegenerateNoConversations": "ఈ రోజుకి సారాంశీకరించడానికి సంభాషణలు లేవు."
+    "recapRegenerateNoConversations": "ఈ రోజుకి సారాంశీకరించడానికి సంభాషణలు లేవు.",
+    "sessionExpiredPleaseSignIn": "Session expired. Please sign in again."
 }

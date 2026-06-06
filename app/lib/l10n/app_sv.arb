@@ -3046,5 +3046,6 @@
     "recapRegeneratedSnackbar": "Sammanfattningen återskapad",
     "recapRegenerateFailed": "Det gick inte att återskapa sammanfattningen. Försök igen senare.",
     "recapRegenerateCooldown": "Vänta några sekunder innan du genererar igen.",
-    "recapRegenerateNoConversations": "Inga samtal att sammanfatta för den här dagen."
+    "recapRegenerateNoConversations": "Inga samtal att sammanfatta för den här dagen.",
+    "sessionExpiredPleaseSignIn": "Session expired. Please sign in again."
 }

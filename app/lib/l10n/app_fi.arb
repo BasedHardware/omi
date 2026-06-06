@@ -3046,5 +3046,6 @@
     "recapRegeneratedSnackbar": "Yhteenveto luotu uudelleen",
     "recapRegenerateFailed": "Yhteenvedon uudelleenluonti epäonnistui. Yritä myöhemmin uudelleen.",
     "recapRegenerateCooldown": "Odota muutama sekunti ennen uudelleen luomista.",
-    "recapRegenerateNoConversations": "Tänä päivänä ei ole keskusteluja yhteenvedettäväksi."
+    "recapRegenerateNoConversations": "Tänä päivänä ei ole keskusteluja yhteenvedettäväksi.",
+    "sessionExpiredPleaseSignIn": "Session expired. Please sign in again."
 }

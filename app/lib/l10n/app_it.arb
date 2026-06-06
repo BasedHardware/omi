@@ -3046,5 +3046,6 @@
     "recapRegeneratedSnackbar": "Riepilogo rigenerato",
     "recapRegenerateFailed": "Impossibile rigenerare il riepilogo. Riprova più tardi.",
     "recapRegenerateCooldown": "Attendi qualche secondo prima di rigenerare.",
-    "recapRegenerateNoConversations": "Nessuna conversazione da riepilogare per questo giorno."
+    "recapRegenerateNoConversations": "Nessuna conversazione da riepilogare per questo giorno.",
+    "sessionExpiredPleaseSignIn": "Session expired. Please sign in again."
 }

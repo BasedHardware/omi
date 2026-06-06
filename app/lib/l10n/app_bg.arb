@@ -3015,5 +3015,6 @@
     "recapRegeneratedSnackbar": "Резюмето е регенерирано",
     "recapRegenerateFailed": "Резюмето не можа да бъде регенерирано. Опитайте отново по-късно.",
     "recapRegenerateCooldown": "Моля, изчакайте няколко секунди преди повторно регенериране.",
-    "recapRegenerateNoConversations": "Няма разговори за обобщаване за този ден."
+    "recapRegenerateNoConversations": "Няма разговори за обобщаване за този ден.",
+    "sessionExpiredPleaseSignIn": "Session expired. Please sign in again."
 }

@@ -3046,5 +3046,6 @@
     "recapRegeneratedSnackbar": "สร้างสรุปใหม่แล้ว",
     "recapRegenerateFailed": "ไม่สามารถสร้างสรุปใหม่ได้ ลองอีกครั้งในภายหลัง",
     "recapRegenerateCooldown": "โปรดรอสักครู่ก่อนสร้างใหม่อีกครั้ง",
-    "recapRegenerateNoConversations": "ไม่มีการสนทนาที่จะสรุปสำหรับวันนี้"
+    "recapRegenerateNoConversations": "ไม่มีการสนทนาที่จะสรุปสำหรับวันนี้",
+    "sessionExpiredPleaseSignIn": "Session expired. Please sign in again."
 }

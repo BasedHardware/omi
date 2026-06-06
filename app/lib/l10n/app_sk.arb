@@ -3051,5 +3051,6 @@
     "recapRegeneratedSnackbar": "Zhrnutie znovu vygenerované",
     "recapRegenerateFailed": "Zhrnutie sa nepodarilo znovu vygenerovať. Skúste neskôr.",
     "recapRegenerateCooldown": "Pred opätovným generovaním prosím počkajte niekoľko sekúnd.",
-    "recapRegenerateNoConversations": "Pre tento deň nie sú žiadne konverzácie na zhrnutie."
+    "recapRegenerateNoConversations": "Pre tento deň nie sú žiadne konverzácie na zhrnutie.",
+    "sessionExpiredPleaseSignIn": "Session expired. Please sign in again."
 }

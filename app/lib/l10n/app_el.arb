@@ -3046,5 +3046,6 @@
     "recapRegeneratedSnackbar": "Η ανακεφαλαίωση δημιουργήθηκε ξανά",
     "recapRegenerateFailed": "Δεν ήταν δυνατή η αναδημιουργία της ανακεφαλαίωσης. Δοκιμάστε ξανά αργότερα.",
     "recapRegenerateCooldown": "Παρακαλώ περιμένετε λίγα δευτερόλεπτα πριν δοκιμάσετε ξανά.",
-    "recapRegenerateNoConversations": "Δεν υπάρχουν συνομιλίες για ανακεφαλαίωση αυτής της ημέρας."
+    "recapRegenerateNoConversations": "Δεν υπάρχουν συνομιλίες για ανακεφαλαίωση αυτής της ημέρας.",
+    "sessionExpiredPleaseSignIn": "Session expired. Please sign in again."
 }

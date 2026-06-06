@@ -10624,5 +10624,6 @@
     "recapRegeneratedSnackbar": "சுருக்கம் மீண்டும் உருவாக்கப்பட்டது",
     "recapRegenerateFailed": "சுருக்கத்தை மீண்டும் உருவாக்க முடியவில்லை. பிறகு மீண்டும் முயற்சிக்கவும்.",
     "recapRegenerateCooldown": "மீண்டும் உருவாக்குவதற்கு முன் சில வினாடிகள் காத்திருக்கவும்.",
-    "recapRegenerateNoConversations": "இந்த நாளுக்கு சுருக்கமாக மாற்ற உரையாடல்கள் இல்லை."
+    "recapRegenerateNoConversations": "இந்த நாளுக்கு சுருக்கமாக மாற்ற உரையாடல்கள் இல்லை.",
+    "sessionExpiredPleaseSignIn": "Session expired. Please sign in again."
 }

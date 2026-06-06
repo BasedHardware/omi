@@ -10624,5 +10624,6 @@
     "recapRegeneratedSnackbar": "Sažetak je ponovno generiran",
     "recapRegenerateFailed": "Nije bilo moguće ponovno generirati sažetak. Pokušajte kasnije.",
     "recapRegenerateCooldown": "Pričekajte nekoliko sekundi prije ponovnog generiranja.",
-    "recapRegenerateNoConversations": "Nema razgovora za sažimanje za ovaj dan."
+    "recapRegenerateNoConversations": "Nema razgovora za sažimanje za ovaj dan.",
+    "sessionExpiredPleaseSignIn": "Session expired. Please sign in again."
 }

@@ -3142,5 +3142,6 @@
     "recapRegeneratedSnackbar": "Összegzés újragenerálva",
     "recapRegenerateFailed": "Nem sikerült újragenerálni az összegzést. Próbáld újra később.",
     "recapRegenerateCooldown": "Kérlek, várj néhány másodpercet az újragenerálás előtt.",
-    "recapRegenerateNoConversations": "Erre a napra nincsenek összegezhető beszélgetések."
+    "recapRegenerateNoConversations": "Erre a napra nincsenek összegezhető beszélgetések.",
+    "sessionExpiredPleaseSignIn": "Session expired. Please sign in again."
 }

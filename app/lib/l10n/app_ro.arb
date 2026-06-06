@@ -3046,5 +3046,6 @@
     "recapRegeneratedSnackbar": "Rezumat regenerat",
     "recapRegenerateFailed": "Rezumatul nu a putut fi regenerat. Încercați din nou mai târziu.",
     "recapRegenerateCooldown": "Vă rugăm să așteptați câteva secunde înainte de a regenera.",
-    "recapRegenerateNoConversations": "Nu există conversații de rezumat pentru această zi."
+    "recapRegenerateNoConversations": "Nu există conversații de rezumat pentru această zi.",
+    "sessionExpiredPleaseSignIn": "Session expired. Please sign in again."
 }

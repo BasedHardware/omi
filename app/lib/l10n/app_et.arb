@@ -3046,5 +3046,6 @@
     "recapRegeneratedSnackbar": "Kokkuvõte loodi uuesti",
     "recapRegenerateFailed": "Kokkuvõtet ei õnnestunud uuesti luua. Proovi hiljem uuesti.",
     "recapRegenerateCooldown": "Palun oota mõni sekund enne uuesti loomist.",
-    "recapRegenerateNoConversations": "Selle päeva jaoks pole vestlusi, mida kokku võtta."
+    "recapRegenerateNoConversations": "Selle päeva jaoks pole vestlusi, mida kokku võtta.",
+    "sessionExpiredPleaseSignIn": "Session expired. Please sign in again."
 }

@@ -10624,5 +10624,6 @@
     "recapRegeneratedSnackbar": "خلاصه دوباره ساخته شد",
     "recapRegenerateFailed": "بازسازی خلاصه ممکن نشد. بعداً دوباره تلاش کنید.",
     "recapRegenerateCooldown": "لطفاً چند ثانیه قبل از بازسازی مجدد صبر کنید.",
-    "recapRegenerateNoConversations": "هیچ مکالمه‌ای برای خلاصه‌سازی این روز وجود ندارد."
+    "recapRegenerateNoConversations": "هیچ مکالمه‌ای برای خلاصه‌سازی این روز وجود ندارد.",
+    "sessionExpiredPleaseSignIn": "Session expired. Please sign in again."
 }

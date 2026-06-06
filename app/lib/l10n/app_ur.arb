@@ -10624,5 +10624,6 @@
     "recapRegeneratedSnackbar": "خلاصہ دوبارہ بن گیا",
     "recapRegenerateFailed": "خلاصہ دوبارہ نہیں بنایا جا سکا۔ بعد میں دوبارہ کوشش کریں۔",
     "recapRegenerateCooldown": "دوبارہ بنانے سے پہلے براہ کرم چند سیکنڈ انتظار کریں۔",
-    "recapRegenerateNoConversations": "اس دن کے لیے خلاصہ کرنے کے لیے کوئی گفتگو نہیں ہے۔"
+    "recapRegenerateNoConversations": "اس دن کے لیے خلاصہ کرنے کے لیے کوئی گفتگو نہیں ہے۔",
+    "sessionExpiredPleaseSignIn": "Session expired. Please sign in again."
 }

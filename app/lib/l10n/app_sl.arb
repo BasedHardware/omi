@@ -10624,5 +10624,6 @@
     "recapRegeneratedSnackbar": "Povzetek ponovno ustvarjen",
     "recapRegenerateFailed": "Povzetka ni bilo mogoče ponovno ustvariti. Poskusite pozneje.",
     "recapRegenerateCooldown": "Pred ponovnim ustvarjanjem počakajte nekaj sekund.",
-    "recapRegenerateNoConversations": "Za ta dan ni pogovorov za povzemanje."
+    "recapRegenerateNoConversations": "Za ta dan ni pogovorov za povzemanje.",
+    "sessionExpiredPleaseSignIn": "Session expired. Please sign in again."
 }

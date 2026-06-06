@@ -3046,5 +3046,6 @@
     "recapRegeneratedSnackbar": "Підсумок створено знову",
     "recapRegenerateFailed": "Не вдалося створити підсумок заново. Спробуйте пізніше.",
     "recapRegenerateCooldown": "Зачекайте кілька секунд перед повторним створенням.",
-    "recapRegenerateNoConversations": "Немає розмов для підбиття підсумку за цей день."
+    "recapRegenerateNoConversations": "Немає розмов для підбиття підсумку за цей день.",
+    "sessionExpiredPleaseSignIn": "Session expired. Please sign in again."
 }
