@@ -2,9 +2,10 @@ import os
 import uuid
 import logging
 
-from fastapi import FastAPI, Form, UploadFile, File, Header, HTTPException
+from fastapi import FastAPI, Form, UploadFile, File, Header, HTTPException, WebSocket, WebSocketDisconnect, Query
 
 from transcribe import transcribe_file, transcribe_file_v2
+from stream_handler import StreamSession
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -63,6 +64,39 @@ def transcribe_v2(
             os.remove(file_path)
         except OSError:
             pass
+
+
+@app.websocket("/v3/stream")
+async def stream_transcribe(
+    websocket: WebSocket,
+    authorization: str = Query(None),
+    sample_rate: int = Query(16000),
+):
+    if _AUTH_TOKEN and authorization != _AUTH_TOKEN:
+        await websocket.close(code=1008, reason="unauthorized")
+        return
+
+    await websocket.accept()
+    session = StreamSession(sample_rate=sample_rate)
+
+    try:
+        while True:
+            data = await websocket.receive_bytes()
+            segments = await session.feed(data)
+            for seg in segments:
+                await websocket.send_json(seg)
+    except WebSocketDisconnect:
+        pass
+    except Exception as e:
+        logger.error(f"v3/stream error: {e}")
+    finally:
+        final_segments = await session.flush()
+        for seg in final_segments:
+            try:
+                await websocket.send_json(seg)
+            except Exception:
+                break
+        session.cleanup()
 
 
 @app.get("/health")
