@@ -151,16 +151,12 @@ class StreamSession:
             chunk_dur = self._vad_chunk_samples / self._sr
 
             self._pending_audio.extend(vad_chunk)
-            self._audio_buf.extend(vad_chunk)
 
             if is_speech:
                 self._silence_count = 0
-                if not self._is_speaking:
-                    self._is_speaking = True
-                    if self._speech_start_s is None:
-                        self._speech_start_s = self._stream_offset_s
-                    self._prev_text = ""
-                    self._last_chunk_offset = 0
+                if self._speech_start_s is None:
+                    self._speech_start_s = self._stream_offset_s
+                self._is_speaking = True
             else:
                 if self._is_speaking:
                     self._silence_count += 1
@@ -172,25 +168,9 @@ class StreamSession:
                         self._pending_audio.clear()
                         self._is_speaking = False
                         self._speech_start_s = None
-                        self._prev_text = ""
-                        self._last_chunk_offset = 0
-
-            pending_since_last = len(self._pending_audio) - self._last_chunk_offset
-            if pending_since_last >= self._chunk_bytes:
-                if not self._is_speaking:
-                    self._is_speaking = True
-                    if self._speech_start_s is None:
-                        self._speech_start_s = self._stream_offset_s - len(self._pending_audio) / (
-                            self._sr * self._bytes_per_sample
-                        )
-                result = await self._transcribe_chunk()
-                segments.extend(result)
-                self._last_chunk_offset = len(self._pending_audio)
+                        self._silence_count = 0
 
             self._stream_offset_s += chunk_dur
-            if len(self._audio_buf) > self._left_context_bytes * 2:
-                excess = len(self._audio_buf) - self._left_context_bytes
-                del self._audio_buf[:excess]
 
         return segments
 
