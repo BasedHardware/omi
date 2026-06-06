@@ -63,13 +63,37 @@ class TestWebSocketAuthListen(WebSocketAuthTestCase):
                 self.fail("Expected WebSocket to be closed by server")
         self.assertEqual(ctx.exception.code, 1008)
 
-    @patch('utils.other.endpoints.verify_token', side_effect=InvalidIdTokenError('Token expired'))
+    @patch('utils.other.endpoints.verify_token', side_effect=InvalidIdTokenError('bad token'))
     def test_invalid_token_sends_close_1008(self, mock_verify):
         """Invalid token -> WebSocketDisconnect with code 1008."""
         with self.assertRaises(WebSocketDisconnect) as ctx:
             with self.client.websocket_connect("/ws-listen", headers={"Authorization": "Bearer invalid_token"}):
                 self.fail("Expected WebSocket to be closed by server")
         self.assertEqual(ctx.exception.code, 1008)
+
+    @patch('utils.other.endpoints.verify_token', side_effect=InvalidIdTokenError('Token expired'))
+    def test_expired_token_sends_close_4001(self, mock_verify):
+        """Expired token -> WebSocketDisconnect with code 4001 so clients can refresh."""
+        with self.assertRaises(WebSocketDisconnect) as ctx:
+            with self.client.websocket_connect("/ws-listen", headers={"Authorization": "Bearer expired_token"}):
+                self.fail("Expected WebSocket to be closed by server")
+        self.assertEqual(ctx.exception.code, 4001)
+
+    @patch('utils.other.endpoints.verify_token', side_effect=InvalidIdTokenError('Certificate key not found'))
+    def test_certificate_key_error_sends_close_4001(self, mock_verify):
+        """Certificate/key failures -> 4001 so clients can force-refresh the token."""
+        with self.assertRaises(WebSocketDisconnect) as ctx:
+            with self.client.websocket_connect("/ws-listen", headers={"Authorization": "Bearer stale_key_token"}):
+                self.fail("Expected WebSocket to be closed by server")
+        self.assertEqual(ctx.exception.code, 4001)
+
+    @patch('utils.other.endpoints.verify_token', side_effect=InvalidIdTokenError('Token revoked'))
+    def test_revoked_token_sends_close_4004(self, mock_verify):
+        """Revoked token -> WebSocketDisconnect with code 4004 so clients can re-login."""
+        with self.assertRaises(WebSocketDisconnect) as ctx:
+            with self.client.websocket_connect("/ws-listen", headers={"Authorization": "Bearer revoked_token"}):
+                self.fail("Expected WebSocket to be closed by server")
+        self.assertEqual(ctx.exception.code, 4004)
 
     def test_malformed_auth_header_sends_close_1008(self):
         """Malformed auth header -> WebSocketDisconnect with code 1008."""
@@ -184,12 +208,12 @@ class TestWebSocketAuthWithRateLimit(WebSocketAuthTestCase):
 
     @patch('utils.other.endpoints.try_acquire_listen_lock')
     @patch('utils.other.endpoints.verify_token', side_effect=InvalidIdTokenError('expired'))
-    def test_invalid_token_does_not_call_rate_limiter(self, mock_verify, mock_lock):
-        """Invalid token should short-circuit before rate limiter is called."""
+    def test_expired_token_does_not_call_rate_limiter(self, mock_verify, mock_lock):
+        """Expired token should short-circuit before rate limiter is called."""
         with self.assertRaises(WebSocketDisconnect) as ctx:
             with self.client.websocket_connect("/ws-ratelimited", headers={"Authorization": "Bearer bad"}):
                 pass
-        self.assertEqual(ctx.exception.code, 1008)
+        self.assertEqual(ctx.exception.code, 4001)
         mock_lock.assert_not_called()
 
 
