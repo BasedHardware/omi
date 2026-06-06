@@ -29,6 +29,7 @@ class ConversationAudioPlayerWidget extends StatefulWidget {
 
 class _ConversationAudioPlayerWidgetState extends State<ConversationAudioPlayerWidget> {
   final AudioPlayer _audioPlayer = AudioPlayer();
+  bool _disposed = false;
   bool _isLoading = false;
   String? _errorMessage;
   double _playbackSpeed = 1.0;
@@ -52,6 +53,7 @@ class _ConversationAudioPlayerWidgetState extends State<ConversationAudioPlayerW
 
   @override
   void dispose() {
+    _disposed = true;
     _sequenceSubscription?.cancel();
     _errorSubscription?.cancel();
     _audioPlayer.dispose();
@@ -91,6 +93,7 @@ class _ConversationAudioPlayerWidgetState extends State<ConversationAudioPlayerW
 
     try {
       final headers = await getAudioHeaders();
+      if (_disposed) return;
 
       final audioFileIds = widget.conversation.audioFiles.map((af) => af.id).toList();
       final urls = getConversationAudioUrls(
@@ -109,22 +112,21 @@ class _ConversationAudioPlayerWidgetState extends State<ConversationAudioPlayerW
 
       // Listen for playback errors
       _errorSubscription?.cancel();
-      _errorSubscription = _audioPlayer.playbackEventStream
-          .handleError((error) {
-            Logger.debug('Playback error: $error');
-            if (mounted && _retryCount < _maxRetries) {
-              _retryCount++;
-              Future.delayed(const Duration(seconds: 1), () {
-                if (mounted) _setupAudioPlayer();
-              });
-            } else if (mounted) {
-              setState(() {
-                _errorMessage = 'Playback error: ${error.toString()}';
-              });
-            }
-          })
-          .listen((_) {});
+      _errorSubscription = _audioPlayer.playbackEventStream.handleError((error) {
+        Logger.debug('Playback error: $error');
+        if (mounted && _retryCount < _maxRetries) {
+          _retryCount++;
+          Future.delayed(const Duration(seconds: 1), () {
+            if (mounted) _setupAudioPlayer();
+          });
+        } else if (mounted) {
+          setState(() {
+            _errorMessage = 'Playback error: ${error.toString()}';
+          });
+        }
+      }).listen((_) {});
 
+      if (_disposed) return;
       await _audioPlayer.setAudioSource(playlist, preload: true);
 
       _retryCount = 0;
@@ -295,9 +297,9 @@ class _ConversationAudioPlayerWidgetState extends State<ConversationAudioPlayerW
                               ),
                               child: Slider(
                                 value: combinedPosition.inMilliseconds.toDouble().clamp(
-                                  0,
-                                  _totalDuration.inMilliseconds.toDouble(),
-                                ),
+                                      0,
+                                      _totalDuration.inMilliseconds.toDouble(),
+                                    ),
                                 max: _totalDuration.inMilliseconds.toDouble().clamp(1.0, double.infinity),
                                 activeColor: Colors.deepPurpleAccent,
                                 inactiveColor: Colors.grey.shade700,
