@@ -451,17 +451,6 @@ actor MemoryExportService {
     """
   }
 
-  static var omiSkillInstallCommand: String {
-    """
-    : "${OMI_SKILL_DIR:?Set OMI_SKILL_DIR to this agent's skill folder before running this command.}"
-    mkdir -p "$OMI_SKILL_DIR"
-    cat > "$OMI_SKILL_DIR/SKILL.md" <<'OMI_SKILL'
-    \(omiAgentSkillText)
-    OMI_SKILL
-    printf 'Installed Omi guide at %s\\n' "$OMI_SKILL_DIR/SKILL.md"
-    """
-  }
-
   static func omiAgentSetupPrompt(key: String) -> String {
     """
     Set up Omi for this agent.
@@ -477,11 +466,9 @@ actor MemoryExportService {
     Transport:
     Streamable HTTP / MCP over HTTP
 
-    Then install the Omi guide as persistent instructions for this agent. If this agent supports skills, save the guide as a skill named `omi`. If it does not support skills, save the guide wherever this agent keeps durable user or project instructions.
+    Then save this guide as persistent instructions for this agent. If this agent supports skills, add it as a skill named `omi`. If it does not support skills, save it wherever this agent keeps durable user or project instructions.
 
-    You can install the guide by running this shell command after setting OMI_SKILL_DIR to this agent's skill folder:
-
-    \(omiSkillInstallCommand)
+    \(omiAgentSkillText)
 
     After setup, test the connection by listing Omi tools and calling `get_user_profile`. If available, also try `search_memories` with a simple query.
     """

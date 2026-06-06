@@ -416,8 +416,8 @@ struct MemoryExportDestinationSheet: View {
 
       VStack(alignment: .leading, spacing: 8) {
         agentSetupBullet("Omi creates the connection key before copying the prompt.")
-        agentSetupBullet("The agent chooses its own skill or instruction folder.")
-        agentSetupBullet("The prompt asks the agent to connect, install the guide, and test Omi tools.")
+        agentSetupBullet("The agent saves the Omi guide if it supports skills or durable instructions.")
+        agentSetupBullet("The prompt asks the agent to connect to Omi and test the MCP tools.")
       }
 
       Button(model.isLoadingMCPKey ? "Preparing…" : "Copy setup prompt") {
