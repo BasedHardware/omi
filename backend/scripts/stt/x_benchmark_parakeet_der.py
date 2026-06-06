@@ -12,6 +12,7 @@ Usage:
     cd backend && python scripts/stt/x_benchmark_parakeet_der.py
 """
 
+from io import BytesIO
 import json
 import os
 import re
@@ -182,8 +183,6 @@ def trim_wav(wav_path: Path, max_seconds: float) -> bytes:
         max_frames = int(max_seconds * sr)
         actual_frames = min(wf.getnframes(), max_frames)
         pcm = wf.readframes(actual_frames)
-
-    from io import BytesIO
 
     buf = BytesIO()
     with _wave.open(buf, 'wb') as wf:

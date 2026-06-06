@@ -1083,14 +1083,12 @@ class ParakeetWebSocketSocket(STTSocket):
                     task.cancel()
 
     async def _run(self):
-        import websockets as _ws_lib
-
         secret = os.getenv('ENCRYPTION_SECRET', '')
         url = f"{self._ws_url}?sample_rate={self._sample_rate}"
         headers = {"authorization": secret} if secret else {}
 
         try:
-            async with _ws_lib.connect(url, additional_headers=headers, max_size=10 * 1024 * 1024) as ws:
+            async with websockets.connect(url, additional_headers=headers, max_size=10 * 1024 * 1024) as ws:
                 self._ws = ws
                 self._receiver_task = create_named_task(self._receive_loop(ws), name="parakeet_ws_recv")
 
@@ -1110,13 +1108,11 @@ class ParakeetWebSocketSocket(STTSocket):
             self._dead_reason = f"parakeet ws failed: {e}"
 
     async def _receive_loop(self, ws):
-        import json as _json
-
         try:
             async for msg in ws:
                 if isinstance(msg, str):
                     try:
-                        seg = _json.loads(msg)
+                        seg = json.loads(msg)
                         if isinstance(seg, dict) and seg.get("text"):
                             self._stream_transcript([seg])
                     except _json.JSONDecodeError:
