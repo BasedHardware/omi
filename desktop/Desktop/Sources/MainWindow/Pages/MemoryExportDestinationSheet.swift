@@ -103,6 +103,7 @@ final class MemoryExportDestinationSheetModel: ObservableObject {
   @Published var obsidianVaultPath = ""
   @Published var mcpKey: String?
   @Published var isLoadingMCPKey = false
+  @Published var isTestingAgentConnection = false
 
   func loadConfiguration() async {
     obsidianVaultPath = await MemoryExportService.shared.obsidianVaultPath()
@@ -117,6 +118,41 @@ final class MemoryExportDestinationSheetModel: ObservableObject {
       mcpKey = try await MemoryExportService.shared.ensureMCPKey()
     } catch {
       errorMessage = "Couldn't create an MCP key: \(error.localizedDescription)"
+    }
+  }
+
+  func createNewAgentConnectionKey() async {
+    errorMessage = nil
+    statusMessage = nil
+    isLoadingMCPKey = true
+    defer { isLoadingMCPKey = false }
+
+    do {
+      let key = try await MemoryExportService.shared.createNewMCPKey()
+      _ = LocalAgentMCPSettings.createNewToken()
+      mcpKey = key
+      statusMessage = "Created a new connection key. Copy setup again to use it."
+    } catch {
+      errorMessage = "Couldn't create a new connection key: \(error.localizedDescription)"
+    }
+  }
+
+  func testAgentConnection() async {
+    errorMessage = nil
+    statusMessage = nil
+    isTestingAgentConnection = true
+    defer { isTestingAgentConnection = false }
+
+    do {
+      let key = try await MemoryExportService.shared.ensureMCPKey()
+      let localToken = LocalAgentMCPSettings.enable()
+      mcpKey = key
+      let result = try await MemoryExportService.shared.testAgentConnections(
+        hostedKey: key,
+        localToken: localToken)
+      statusMessage = result.summary
+    } catch {
+      errorMessage = "Connection test failed: \(error.localizedDescription)"
     }
   }
 
@@ -436,6 +472,23 @@ struct MemoryExportDestinationSheet: View {
       }
       .buttonStyle(OnboardingCardButtonStyle(isPrimary: true))
       .disabled(model.isLoadingMCPKey)
+
+      HStack(spacing: 10) {
+        Button("Test connection") {
+          Task { await model.testAgentConnection() }
+        }
+        .buttonStyle(OnboardingCardButtonStyle(isPrimary: false))
+        .disabled(model.isLoadingMCPKey || model.isTestingAgentConnection)
+
+        Button("Create new connection key") {
+          Task {
+            await model.createNewAgentConnectionKey()
+            statuses[destination] = await MemoryExportService.shared.status(for: destination)
+          }
+        }
+        .buttonStyle(OnboardingCardButtonStyle(isPrimary: false))
+        .disabled(model.isLoadingMCPKey || model.isTestingAgentConnection)
+      }
     }
   }
 
