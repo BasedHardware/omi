@@ -49,7 +49,7 @@ def test_search_requires_typesense_api_key_when_used(monkeypatch):
     monkeypatch.delenv('TYPESENSE_API_KEY', raising=False)
     search_module, client_configs = _import_search_module(monkeypatch)
 
-    with pytest.raises(Exception, match='TYPESENSE_API_KEY is required to search conversations'):
+    with pytest.raises(RuntimeError, match='TYPESENSE_API_KEY is required to search conversations'):
         search_module.search_conversations(uid='user-1', query='meeting')
 
     assert client_configs == []
