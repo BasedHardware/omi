@@ -184,6 +184,10 @@ class _NemoRNNTStreamingDecoder:
             _cfg_set(decoding_cfg, "greedy.preserve_alignments", False)
             _cfg_set(decoding_cfg, "fused_batch_size", -1)
             _cfg_set(decoding_cfg, "beam.return_best_hypothesis", True)
+            try:
+                _cfg_set(decoding_cfg, "greedy.use_cuda_graph_decoder", False)
+            except Exception:
+                pass
 
         if hasattr(model, "change_decoding_strategy"):
             model.change_decoding_strategy(decoding_cfg)
@@ -286,12 +290,18 @@ class _NemoRNNTStreamingDecoder:
                 encoder_context_batch.chunk,
             )
 
-            chunk_batched_hyps, self._state = self._decoding_computer(
+            decode_result = self._decoding_computer(
                 x=encoder_output,
                 out_len=out_len,
                 prev_batched_state=self._state,
                 multi_biasing_ids=None,
             )
+            if isinstance(decode_result, tuple):
+                chunk_batched_hyps = decode_result[0]
+                self._state = decode_result[1]
+            else:
+                chunk_batched_hyps = decode_result
+                self._state = None
 
             if self._current_batched_hyps is None:
                 self._current_batched_hyps = chunk_batched_hyps
