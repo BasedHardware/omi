@@ -80,11 +80,14 @@ _streaming_import_error_logged = False
 
 try:
     import torch
-    import torchaudio
 
     _torch = torch
 except ImportError:
     _torch = None
+
+try:
+    import torchaudio
+except ImportError:
     torchaudio = None
 
 
