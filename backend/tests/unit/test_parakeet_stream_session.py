@@ -91,6 +91,63 @@ class TestStreamSessionFlush:
         assert result == []
 
 
+class TestStreamSessionRNNTStreaming:
+
+    def test_drain_streaming_asr_decodes_available_chunks(self):
+        class FakeDecoder:
+            def __init__(self):
+                self.calls = []
+
+            def next_input_bytes(self, bytes_per_sample):
+                assert bytes_per_sample == 2
+                return 4 if not self.calls else 2
+
+            def decode_pcm(self, pcm, is_last_chunk=False):
+                self.calls.append((pcm, is_last_chunk))
+                return "hello" if len(self.calls) == 1 else "hello world"
+
+        session = sh.StreamSession(sample_rate=16000)
+        decoder = FakeDecoder()
+        session._streaming_decoder = decoder
+        session._asr_audio_buf = bytearray(b"abcdef")
+
+        session._drain_streaming_asr_sync(force=False)
+
+        assert decoder.calls == [(b"abcd", False), (b"ef", False)]
+        assert session._streaming_text == "hello world"
+        assert session._asr_audio_buf == bytearray()
+
+    def test_streaming_utterance_does_not_call_batch_transcribe_when_text_not_ready(self):
+        session = sh.StreamSession(sample_rate=16000)
+        session._pending_audio = bytearray(_make_pcm(1.0))
+        session._speech_start_s = 0.0
+        session._streaming_text = ""
+
+        with patch.object(session, '_streaming_enabled', return_value=True), patch.object(
+            sh, 'transcribe_file', return_value={"text": "batch", "segments": []}
+        ) as batch_transcribe:
+            result = asyncio.run(session._transcribe_utterance())
+
+        assert result == []
+        assert not batch_transcribe.called
+
+    def test_streaming_utterance_emits_delta_text(self):
+        session = sh.StreamSession(sample_rate=16000)
+        session._pending_audio = bytearray(_make_pcm(1.0))
+        session._speech_start_s = 2.0
+        session._streaming_text = "hello world"
+        session._last_emitted_text = "hello"
+
+        with patch.object(session, '_streaming_enabled', return_value=True), patch.object(
+            session, '_assign_speaker', return_value="SPEAKER_0"
+        ):
+            result = asyncio.run(session._transcribe_utterance())
+
+        assert result[0]["text"] == "world"
+        assert result[0]["start"] == 2.0
+        assert session._last_emitted_text == "hello world"
+
+
 class TestStreamSessionCleanup:
 
     def test_cleanup_clears_all_buffers(self):
