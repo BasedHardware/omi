@@ -232,6 +232,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     signal(SIGPIPE, SIG_IGN)
 
     DesktopAutomationBridge.shared.startIfNeeded()
+    LocalAgentMCPServer.shared.startIfNeeded()
 
     // Strip com.apple.provenance xattrs that macOS adds when Sparkle extracts updates.
     // These break the code signature seal, causing the NEXT update to fail with
