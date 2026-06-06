@@ -47,6 +47,9 @@ firebase_admin_stub.auth = firebase_auth_stub
 invalid_token_error = getattr(firebase_auth_stub, "InvalidIdTokenError", None)
 if not isinstance(invalid_token_error, type) or not issubclass(invalid_token_error, Exception):
     firebase_auth_stub.InvalidIdTokenError = type("InvalidIdTokenError", (Exception,), {})
+certificate_fetch_error = getattr(firebase_auth_stub, "CertificateFetchError", None)
+if not isinstance(certificate_fetch_error, type) or not issubclass(certificate_fetch_error, Exception):
+    firebase_auth_stub.CertificateFetchError = type("CertificateFetchError", (Exception,), {})
 firebase_auth_stub.verify_id_token = MagicMock(side_effect=firebase_auth_stub.InvalidIdTokenError("Invalid token"))
 if not hasattr(firebase_auth_stub, "get_user"):
     firebase_auth_stub.get_user = MagicMock()
@@ -55,7 +58,7 @@ redis_db_stub = sys.modules.setdefault("database.redis_db", types.ModuleType("da
 redis_db_stub.check_rate_limit = MagicMock(return_value=True)
 redis_db_stub.try_acquire_listen_lock = MagicMock(return_value=True)
 
-from firebase_admin.auth import InvalidIdTokenError
+from firebase_admin.auth import CertificateFetchError, InvalidIdTokenError
 
 existing_endpoints = sys.modules.get('utils.other.endpoints')
 if existing_endpoints is not None and not hasattr(existing_endpoints, 'get_current_user_uid_ws_listen'):
@@ -130,6 +133,17 @@ class TestWebSocketAuthListen(WebSocketAuthTestCase):
         """Certificate/key failures -> 4001 so clients can force-refresh the token."""
         with self.assertRaises(WebSocketDisconnect) as ctx:
             with self.client.websocket_connect("/ws-listen", headers={"Authorization": "Bearer stale_key_token"}):
+                self.fail("Expected WebSocket to be closed by server")
+        self.assertEqual(ctx.exception.code, 4001)
+
+    @patch(
+        'utils.other.endpoints.verify_token',
+        side_effect=CertificateFetchError('Certificate fetch failed', RuntimeError('network unavailable')),
+    )
+    def test_certificate_fetch_error_sends_close_4001(self, mock_verify):
+        """Real Firebase cert fetch failures -> 4001 so clients can refresh their token."""
+        with self.assertRaises(WebSocketDisconnect) as ctx:
+            with self.client.websocket_connect("/ws-listen", headers={"Authorization": "Bearer cert_fetch_token"}):
                 self.fail("Expected WebSocket to be closed by server")
         self.assertEqual(ctx.exception.code, 4001)
 
