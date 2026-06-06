@@ -123,7 +123,7 @@ bash test-preflight.sh   # Verify env
 bash test.sh             # Run all tests (CI source of truth)
 ```
 
-On Windows, use `powershell -NoProfile -ExecutionPolicy Bypass -File .\test-preflight.ps1` for the preflight check.
+On Windows, use `powershell -NoProfile -ExecutionPolicy Bypass -File .\test-preflight.ps1` for the preflight check, then `powershell -NoProfile -ExecutionPolicy Bypass -File .\test.ps1` to run the same pytest list from `test.sh` with `PYTHONUTF8=1`.
 
 **New test files must be added to `test.sh`** or they won't run in CI.
 
