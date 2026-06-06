@@ -6,7 +6,7 @@ from fastapi import Depends, Header, HTTPException, WebSocketException
 from fastapi import Request
 from starlette.websockets import WebSocket
 from firebase_admin import auth
-from firebase_admin.auth import CertificateFetchError, ExpiredIdTokenError, InvalidIdTokenError, RevokedIdTokenError
+from firebase_admin.auth import ExpiredIdTokenError, InvalidIdTokenError, RevokedIdTokenError
 import logging
 import redis as redis_pkg
 
@@ -150,13 +150,13 @@ def _verify_ws_auth(authorization: str) -> str:
 def _get_ws_auth_close(error: InvalidIdTokenError) -> tuple[int, str]:
     if isinstance(error, RevokedIdTokenError):
         return WS_AUTH_CODE_RELOGIN_REQUIRED, "Token revoked; re-login required"
-    if isinstance(error, (ExpiredIdTokenError, CertificateFetchError)):
+    if isinstance(error, ExpiredIdTokenError):
         return WS_AUTH_CODE_TOKEN_REFRESH, "Token refresh required"
 
     message = str(error).lower()
     if 'revoked' in message:
         return WS_AUTH_CODE_RELOGIN_REQUIRED, "Token revoked; re-login required"
-    if 'expired' in message or 'certificate' in message or 'key' in message:
+    if 'expired' in message or 'certificate' in message:
         return WS_AUTH_CODE_TOKEN_REFRESH, "Token refresh required"
     return 1008, "Invalid authorization token"
 
