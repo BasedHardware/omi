@@ -286,20 +286,20 @@ struct SettingsSearchItem: Identifiable {
       settingId: "floatingbar.pttsounds"),
     SettingsSearchItem(
       name: "Agents",
-      subtitle: "Connect external agents to Omi over MCP and install the Omi skill",
+      subtitle: "Let other AI tools use your Omi memories when you ask them to",
       keywords: [
         "agents", "mcp", "hermes", "claude", "cursor", "codex", "skill", "connection key",
         "memories", "conversations",
       ], section: .agents, icon: "point.3.connected.trianglepath.dotted",
       settingId: "agents.overview"),
     SettingsSearchItem(
-      name: "Omi Agent Skill",
-      subtitle: "Copy tool-routing guidance for agents that use Omi",
+      name: "Omi Guide for Agents",
+      subtitle: "Copy instructions that help agents use Omi context responsibly",
       keywords: ["skill", "install", "agent instructions", "tool routing", "rewind", "desktop tools"],
       section: .agents, icon: "book.pages", settingId: "agents.skill"),
     SettingsSearchItem(
       name: "MCP Connection Key",
-      subtitle: "Create and verify the key agents use to connect to Omi",
+      subtitle: "Create and check the private key an agent uses to connect",
       keywords: ["mcp key", "api key", "verify endpoint", "connection", "authorization"],
       section: .agents, icon: "key", settingId: "agents.mcp"),
     SettingsSearchItem(

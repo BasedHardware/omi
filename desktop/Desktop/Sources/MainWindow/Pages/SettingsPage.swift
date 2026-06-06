@@ -3328,7 +3328,7 @@ struct SettingsContentView: View {
               .scaledFont(size: 16, weight: .semibold)
               .foregroundColor(OmiColors.textPrimary)
             Text(
-              "Give agents live access to your Omi memories and conversations over MCP, plus a skill that teaches them when to use memories, conversations, or local desktop context."
+              "Let tools like Hermes, Claude, Cursor, and Codex use your Omi memories when you ask them for help. Omi gives them a secure connection and a short guide for using your context responsibly."
             )
             .scaledFont(size: 13)
             .foregroundColor(OmiColors.textTertiary)
@@ -3337,9 +3337,9 @@ struct SettingsContentView: View {
         }
 
         HStack(spacing: 10) {
-          agentCapabilityPill("Hosted MCP", detail: "Memories + conversations")
-          agentCapabilityPill("Omi skill", detail: "Routing instructions")
-          agentCapabilityPill("Desktop tools", detail: "Local Rewind context")
+          agentCapabilityPill("Live memory", detail: "Facts and conversations")
+          agentCapabilityPill("Omi guide", detail: "How agents should use it")
+          agentCapabilityPill("This Mac", detail: "Rewind and local context")
         }
       }
     }
@@ -3355,13 +3355,13 @@ struct SettingsContentView: View {
             .frame(width: 24, height: 24)
 
           VStack(alignment: .leading, spacing: 4) {
-            Text("Omi MCP")
+            Text("Connect to Omi")
               .scaledFont(size: 16, weight: .semibold)
               .foregroundColor(OmiColors.textPrimary)
             Text(
               AppBuild.currentUpdateChannel == "beta"
-                ? "Beta channel uses the dev backend. Agents connect with an MCP key."
-                : "Stable channel uses production. Agents connect with an MCP key."
+                ? "Create a private key an agent can use to reach your Omi account on the beta backend."
+                : "Create a private key an agent can use to reach your Omi account."
             )
             .scaledFont(size: 12)
             .foregroundColor(OmiColors.textTertiary)
@@ -3406,7 +3406,7 @@ struct SettingsContentView: View {
           .disabled(mcpIsVerifying || mcpCreatedKey == nil)
 
           if mcpCreatedKey == nil {
-            Text("Create a key first to verify the endpoint.")
+            Text("Create a key first, then Omi can check the connection.")
               .scaledFont(size: 11)
               .foregroundColor(OmiColors.textTertiary)
           }
@@ -3416,7 +3416,7 @@ struct SettingsContentView: View {
 
         if let key = mcpCreatedKey {
           VStack(alignment: .leading, spacing: 8) {
-            Text("Copy this now — it's only shown once.")
+            Text("Copy this now. For your privacy, Omi will only show it once.")
               .scaledFont(size: 11)
               .foregroundColor(OmiColors.warning)
             HStack(spacing: 8) {
@@ -3468,11 +3468,11 @@ struct SettingsContentView: View {
             .frame(width: 24, height: 24)
 
           VStack(alignment: .leading, spacing: 4) {
-            Text("Omi Agent Skill")
+            Text("Omi guide for agents")
               .scaledFont(size: 16, weight: .semibold)
               .foregroundColor(OmiColors.textPrimary)
             Text(
-              "MCP tells an agent what tools exist. This skill tells it how to choose between hosted memories, conversations, and same-host desktop context."
+              "A small instruction file that helps agents choose the right Omi context, and reminds them not to change memories unless you asked."
             )
             .scaledFont(size: 12)
             .foregroundColor(OmiColors.textTertiary)
@@ -3490,9 +3490,9 @@ struct SettingsContentView: View {
         }
 
         VStack(alignment: .leading, spacing: 8) {
-          agentSkillBullet("Read profile first, then memories for facts and conversations for events.")
-          agentSkillBullet("Use desktop-local tools for Rewind screenshots, local SQL, transcriptions, and screen search.")
-          agentSkillBullet("Treat memory writes/deletes as intentional user actions, not silent side effects.")
+          agentSkillBullet("Use memories for durable facts and conversations for things that happened.")
+          agentSkillBullet("Use this Mac for Rewind, screenshots, transcriptions, and screen search when Omi Desktop is running.")
+          agentSkillBullet("Ask before creating, editing, or deleting memories.")
         }
       }
     }
@@ -3502,10 +3502,10 @@ struct SettingsContentView: View {
     settingsCard(settingId: "agents.install") {
       VStack(alignment: .leading, spacing: 14) {
         VStack(alignment: .leading, spacing: 4) {
-          Text("Install Guides")
+          Text("Set up your agent")
             .scaledFont(size: 16, weight: .semibold)
             .foregroundColor(OmiColors.textPrimary)
-          Text("Copy setup for a known agent, or use the custom MCP details for anything else.")
+          Text("Pick your agent, copy the setup, and paste it where that agent manages connected tools.")
             .scaledFont(size: 12)
             .foregroundColor(OmiColors.textTertiary)
         }
@@ -3744,11 +3744,11 @@ struct SettingsContentView: View {
 
     var subtitle: String {
       switch self {
-      case .hermes: return "Add Omi as a header-auth MCP server, then install the Omi skill."
-      case .claudeDesktop: return "Add hosted MCP config to Claude Desktop."
-      case .cursor: return "Add Omi to a workspace MCP config and pair it with the skill guidance."
-      case .codex: return "Add an MCP config block and install the Omi skill folder."
-      case .custom: return "Use the endpoint, Authorization header, and copied Omi skill."
+      case .hermes: return "Connect Hermes to Omi, then add the Omi guide."
+      case .claudeDesktop: return "Paste this into Claude Desktop's connected tools config."
+      case .cursor: return "Add Omi to your workspace tools and include the Omi guide."
+      case .codex: return "Add Omi as a tool source and install the Omi guide."
+      case .custom: return "Use these connection details with any MCP-capable agent."
       }
     }
 
