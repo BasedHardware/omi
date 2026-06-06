@@ -301,32 +301,6 @@ class StreamSession:
         ]
 
     def _transcribe_pcm(self, pcm_bytes: bytes):
-        if _INFERENCE_MODE == "nim" or _asr_model is None:
-            return self._transcribe_pcm_via_file(pcm_bytes)
-
-        audio = np.frombuffer(pcm_bytes, dtype=np.int16).astype(np.float32) / 32768.0
-        hyps = _asr_model.transcribe([audio], timestamps=True)
-        hyp = hyps[0]
-        text = getattr(hyp, "text", None) or ""
-
-        segments = []
-        timestamp = getattr(hyp, "timestamp", None) or {}
-        for s in timestamp.get("segment", []) or []:
-            segments.append(
-                {
-                    "text": s.get("segment", ""),
-                    "start": float(s.get("start", 0.0)),
-                    "end": float(s.get("end", 0.0)),
-                }
-            )
-        if not segments and text:
-            dur = len(pcm_bytes) / (self._sr * self._bytes_per_sample)
-            segments = [{"text": text, "start": 0.0, "end": dur}]
-
-        del audio
-        return {"text": text, "segments": segments}
-
-    def _transcribe_pcm_via_file(self, pcm_bytes: bytes):
         wav_bytes = self._pcm_to_wav(pcm_bytes)
         tmp = tempfile.NamedTemporaryFile(suffix=".wav", delete=False)
         tmp.write(wav_bytes)
