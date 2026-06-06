@@ -27,7 +27,7 @@ logger = logging.getLogger(__name__)
 
 SPEECH_THRESHOLD = float(os.getenv("PARAKEET_VAD_THRESHOLD", "0.5"))
 MIN_SPEECH_DURATION_S = float(os.getenv("PARAKEET_MIN_SPEECH_S", "0.5"))
-MAX_SPEECH_WINDOW_S = float(os.getenv("PARAKEET_MAX_WINDOW_S", "15.0"))
+MAX_SPEECH_WINDOW_S = float(os.getenv("PARAKEET_MAX_WINDOW_S", "5.0"))
 HANGOVER_S = float(os.getenv("PARAKEET_HANGOVER_S", "0.8"))
 SPEAKER_MATCH_THRESHOLD = float(os.getenv("PARAKEET_SPEAKER_THRESHOLD", "0.45"))
 SPEAKER_EMBEDDING_URL = os.getenv("HOSTED_SPEAKER_EMBEDDING_API_URL", "")
