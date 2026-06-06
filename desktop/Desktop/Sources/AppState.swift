@@ -276,7 +276,8 @@ class AppState: ObservableObject {
       TrialMetadataResponse(
         trialStartedAt: now - (dur - remaining), trialEndsAt: now + remaining,
         trialRemainingSeconds: remaining, trialExpired: expired,
-        trialDurationSeconds: dur, trialFeatures: features, planAfterTrial: "Free"
+        trialDurationSeconds: dur, trialFeatures: features, planAfterTrial: "Free",
+        trialAvailable: false
       )
     }
 
@@ -301,7 +302,8 @@ class AppState: ObservableObject {
       self.trialMetadata = TrialMetadataResponse(
         trialStartedAt: endTime - rtDur, trialEndsAt: endTime,
         trialRemainingSeconds: remaining, trialExpired: remaining == 0,
-        trialDurationSeconds: rtDur, trialFeatures: features, planAfterTrial: "Free"
+        trialDurationSeconds: rtDur, trialFeatures: features, planAfterTrial: "Free",
+        trialAvailable: false
       )
       if remaining == 0 && !self.isPaywalled { self.isPaywalled = true }
     default:
@@ -329,6 +331,54 @@ class AppState: ObservableObject {
     trialRefreshTimer?.invalidate()
     trialRefreshTimer = nil
     trialMetadata = nil
+  }
+
+  // Opt the user into the 3-day desktop trial. Server-side is idempotent;
+  // calling twice returns the same metadata. On success the trial countdown
+  // / banner UI activates on next render (publishes new `trialMetadata`).
+  func startTrial() async {
+    do {
+      let metadata = try await APIClient.shared.startTrial()
+      await MainActor.run {
+        self.trialMetadata = metadata
+      }
+    } catch {
+      log("AppState: startTrial failed: \(error.localizedDescription)")
+    }
+  }
+
+  // Bumped by `markTrialOfferSeen` so SwiftUI observers re-evaluate the
+  // `shouldShowTrialOffer` computed property — UserDefaults reads don't
+  // publish on their own.
+  @Published private var trialOfferSeenTick: Int = 0
+
+  // True iff the desktop should surface the opt-in trial offer right now.
+  // Gated on: backend says it's available, user hasn't opted in yet, and
+  // the per-uid "already saw the offer" flag is unset. Reading
+  // `trialOfferSeenTick` here is intentional — it wires the computed
+  // property to a publisher so dismissals re-trigger view rebuilds.
+  var shouldShowTrialOffer: Bool {
+    _ = trialOfferSeenTick
+    guard let metadata = trialMetadata,
+          metadata.trialAvailable == true,
+          metadata.trialStartedAt == nil,
+          let uid = AuthState.shared.userId
+    else { return false }
+    return !UserDefaults.standard.bool(forKey: trialOfferSeenKey(uid: uid))
+  }
+
+  // Mark the per-uid offer flag so the modal stays dismissed across launches.
+  // Either button on the offer modal calls this; the Settings card entry
+  // point doesn't, because it lives in Settings and is dismissed by closing
+  // the sheet.
+  func markTrialOfferSeen() {
+    guard let uid = AuthState.shared.userId else { return }
+    UserDefaults.standard.set(true, forKey: trialOfferSeenKey(uid: uid))
+    trialOfferSeenTick &+= 1
+  }
+
+  private func trialOfferSeenKey(uid: String) -> String {
+    return "trial_offer_seen_\(uid)"
   }
 
   /// True if notifications are enabled but won't show visual banners
