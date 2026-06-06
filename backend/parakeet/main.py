@@ -75,12 +75,12 @@ async def stream_transcribe(
     websocket: WebSocket,
     sample_rate: int = Query(16000),
 ):
+    await websocket.accept()
+
     auth = websocket.headers.get("authorization", "")
     if _AUTH_TOKEN and auth != _AUTH_TOKEN:
         await websocket.close(code=1008, reason="unauthorized")
         return
-
-    await websocket.accept()
     session = StreamSession(sample_rate=sample_rate)
 
     try:
