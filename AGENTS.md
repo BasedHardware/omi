@@ -129,7 +129,7 @@ The desktop app is a **Swift Package Manager** project (no Xcode project, no `.x
 
 When testing a feature or fix, **always create a separate named bundle** so it runs side-by-side with dev/prod:
 ```bash
-OMI_APP_NAME="omi-fix-rewind" ./run.sh
+cd desktop && OMI_APP_NAME="omi-fix-rewind" ./run.sh
 ```
 This installs `/Applications/omi-fix-rewind.app` with bundle id `com.omi.omi-fix-rewind`, with its own permissions, database, and auth state.
 
@@ -145,7 +145,7 @@ Rules:
 
 Agents can and should self-test the running app — don't stop at a successful compile. The fast path skips the slow parts (web login, sidebar click-through):
 
-1. **Build + launch a named bundle:** `OMI_APP_NAME="omi-<feature>" ./run.sh` (add `OMI_SKIP_TUNNEL=1` for a local backend without a tunnel; `OMI_SKIP_BACKEND=1 OMI_DESKTOP_API_URL=…` to point at a remote backend).
+1. **Build + launch a named bundle:** `cd desktop && OMI_APP_NAME="omi-<feature>" ./run.sh` (add `OMI_SKIP_TUNNEL=1` for a local backend without a tunnel; `OMI_SKIP_BACKEND=1 OMI_DESKTOP_API_URL=…` to point at a remote backend).
 2. **Boot signed-in (no browser):** sign into "Omi Dev" once, then clone the session into the named bundle **before launch** (UserDefaults is read at startup):
    ```bash
    cd desktop && ./scripts/omi-auth-dump.sh                  # capture the Omi Dev session
