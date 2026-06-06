@@ -12,7 +12,7 @@ from scipy.spatial.distance import cdist
 logger = logging.getLogger(__name__)
 
 BATCH_MODEL_NAME = os.getenv("PARAKEET_MODEL", "nvidia/parakeet-tdt-0.6b-v3")
-STREAM_MODEL_NAME = os.getenv("PARAKEET_STREAM_MODEL", BATCH_MODEL_NAME)
+STREAM_MODEL_NAME = os.getenv("PARAKEET_STREAM_MODEL", "")
 INFERENCE_MODE = os.getenv("PARAKEET_INFERENCE_MODE", "nemo")
 
 _batch_model = None
@@ -69,9 +69,10 @@ def _init_nemo():
 
     _batch_model = _load_nemo_model(BATCH_MODEL_NAME)
 
-    if STREAM_MODEL_NAME != BATCH_MODEL_NAME:
+    if STREAM_MODEL_NAME:
         _stream_model = _load_nemo_model(STREAM_MODEL_NAME)
     else:
+        logger.warning("PARAKEET_STREAM_MODEL not set — streaming will use batch model as temporary fallback")
         _stream_model = _batch_model
 
 
