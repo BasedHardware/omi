@@ -3630,8 +3630,16 @@ struct SettingsContentView: View {
     - Read `get_user_profile` first when available for durable user context.
     - Use `search_memories` or `get_memories` for facts, preferences, habits, relationships, projects, and goals.
     - Use `search_conversations` for events, incidents, meetings, and "when did this happen?" questions.
-    - If running on the same host as Omi Desktop, prefer local desktop tools for Rewind screenshots, screen semantic search, local transcriptions, local SQL, daily recaps, staged tasks, and indexed files.
-    - Use structured SQL only for counts, filters, exact task lookup, and local database questions. Use semantic search for fuzzy recall.
+    - If running on the same host as Omi Desktop, prefer local desktop tools for Rewind screenshots, screen semantic search, local transcriptions, local SQL, daily recaps, staged tasks, and indexed files. Use hosted MCP when local Omi is unavailable or the question is only about synced memories/conversations.
+    - Use local `execute_sql` for counts, filters, exact task lookup, local transcriptions, action items, and database questions. Use local `semantic_search` for fuzzy screen-history recall.
+
+    ## Hosted vs Local Routing
+
+    - Durable user facts: hosted MCP first (`get_user_profile`, `search_memories`, `get_memories`), then local memory SQL only if hosted tools are unavailable.
+    - Meetings, calls, and remembered events: hosted `search_conversations` first; use local transcription tables when the question is about same-device recent audio or unsynced local history.
+    - Rewind, screenshots, OCR, app/window history, indexed files, and daily recaps: same-host Omi Desktop tools first. Hosted MCP does not expose raw local screenshots or local-only Rewind data.
+    - Tasks and staged actions: local `execute_sql` plus task tools when available, because task state may be same-host and operational.
+    - Memory writes/deletes: hosted MCP only, and only after explicit user intent.
 
     ## Write Discipline
 
@@ -3768,13 +3776,18 @@ struct SettingsContentView: View {
         return """
           hermes mcp add omi-memory --url \(url) --auth header
 
-          Header:
-          Authorization: Bearer \(key)
+          When Hermes asks "API key / Bearer token", paste:
+          \(key)
+
+          Hermes stores this as MCP_OMI_MEMORY_API_KEY in $HERMES_HOME/.env and sends:
+          Authorization: Bearer ${MCP_OMI_MEMORY_API_KEY}
 
           After setup:
           hermes mcp test omi-memory
+          hermes mcp list
 
-          Install or paste the Omi Agent Skill so Hermes knows when to use memories, conversations, and same-host desktop tools.
+          Install the copied Omi Agent Skill by saving it to:
+          $HERMES_HOME/skills/productivity/omi/SKILL.md
           """
       case .claudeDesktop:
         return """
