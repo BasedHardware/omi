@@ -22,7 +22,7 @@ import numpy as np
 from langdetect import detect as langdetect_detect
 from langdetect.lang_detect_exception import LangDetectException
 from scipy.spatial.distance import cdist
-from transcribe import transcribe_file
+from transcribe import transcribe_file, _model as _asr_model, INFERENCE_MODE as _INFERENCE_MODE
 
 logger = logging.getLogger(__name__)
 
@@ -156,10 +156,8 @@ class StreamSession:
         self._speech_start_s = None
         self._silence_count = 0
 
-        wav_bytes = self._pcm_to_wav(speech_pcm)
-
         loop = asyncio.get_running_loop()
-        result = await loop.run_in_executor(_asr_executor, self._transcribe_wav, wav_bytes)
+        result = await loop.run_in_executor(_asr_executor, self._transcribe_pcm, speech_pcm)
 
         text = result.get("text", "")
         raw_segments = result.get("segments", [])
@@ -203,10 +201,38 @@ class StreamSession:
 
         return output
 
-    def _transcribe_wav(self, wav_bytes: bytes):
+    def _transcribe_pcm(self, pcm_bytes: bytes):
+        if _INFERENCE_MODE == "nim" or _asr_model is None:
+            return self._transcribe_pcm_via_file(pcm_bytes)
+
+        audio = np.frombuffer(pcm_bytes, dtype=np.int16).astype(np.float32) / 32768.0
+        hyps = _asr_model.transcribe([audio], timestamps=True)
+        hyp = hyps[0]
+        text = getattr(hyp, "text", None) or ""
+
+        segments = []
+        timestamp = getattr(hyp, "timestamp", None) or {}
+        for s in timestamp.get("segment", []) or []:
+            segments.append(
+                {
+                    "text": s.get("segment", ""),
+                    "start": float(s.get("start", 0.0)),
+                    "end": float(s.get("end", 0.0)),
+                }
+            )
+        if not segments and text:
+            dur = len(pcm_bytes) / (self._sr * self._bytes_per_sample)
+            segments = [{"text": text, "start": 0.0, "end": dur}]
+
+        del audio
+        return {"text": text, "segments": segments}
+
+    def _transcribe_pcm_via_file(self, pcm_bytes: bytes):
+        wav_bytes = self._pcm_to_wav(pcm_bytes)
         tmp = tempfile.NamedTemporaryFile(suffix=".wav", delete=False)
         tmp.write(wav_bytes)
         tmp.close()
+        del wav_bytes
         try:
             return transcribe_file(tmp.name)
         finally:
