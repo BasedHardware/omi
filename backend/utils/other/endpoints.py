@@ -6,7 +6,7 @@ from fastapi import Depends, Header, HTTPException, WebSocketException
 from fastapi import Request
 from starlette.websockets import WebSocket
 from firebase_admin import auth
-from firebase_admin.auth import InvalidIdTokenError
+from firebase_admin.auth import CertificateFetchError, ExpiredIdTokenError, InvalidIdTokenError, RevokedIdTokenError
 import logging
 import redis as redis_pkg
 
@@ -17,6 +17,9 @@ from utils.executors import critical_executor, run_blocking
 from utils.rate_limit_config import RATE_POLICIES, RATE_LIMIT_SHADOW, get_effective_limit
 
 logger = logging.getLogger(__name__)
+
+WS_AUTH_CODE_TOKEN_REFRESH = 4001
+WS_AUTH_CODE_RELOGIN_REQUIRED = 4004
 
 
 def get_user(uid: str):
@@ -136,11 +139,26 @@ def _verify_ws_auth(authorization: str) -> str:
         token = authorization.split(' ')[1]
         return verify_token(token)
     except InvalidIdTokenError as e:
-        logger.error(f"WebSocket auth failed: {e}")
-        raise WebSocketException(code=1008, reason="Invalid or expired token")
+        close_code, reason = _get_ws_auth_close(e)
+        logger.error("WebSocket auth failed: code=%s error=%s", close_code, e)
+        raise WebSocketException(code=close_code, reason=reason)
     except Exception as e:
         logger.error(f"WebSocket auth error: {e}")
         raise WebSocketException(code=1008, reason="Auth error")
+
+
+def _get_ws_auth_close(error: InvalidIdTokenError) -> tuple[int, str]:
+    if isinstance(error, RevokedIdTokenError):
+        return WS_AUTH_CODE_RELOGIN_REQUIRED, "Token revoked; re-login required"
+    if isinstance(error, (ExpiredIdTokenError, CertificateFetchError)):
+        return WS_AUTH_CODE_TOKEN_REFRESH, "Token refresh required"
+
+    message = str(error).lower()
+    if 'revoked' in message:
+        return WS_AUTH_CODE_RELOGIN_REQUIRED, "Token revoked; re-login required"
+    if 'expired' in message or 'certificate' in message or 'key' in message:
+        return WS_AUTH_CODE_TOKEN_REFRESH, "Token refresh required"
+    return 1008, "Invalid authorization token"
 
 
 async def get_current_user_uid_ws_listen(
