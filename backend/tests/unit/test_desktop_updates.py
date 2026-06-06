@@ -59,6 +59,15 @@ class TestParseDesktopVersion:
         assert result is not None
         assert result["version"] == "1.2.3+100"
 
+    def test_two_component_macos_tag_defaults_patch_to_zero(self):
+        result = _parse_desktop_version("v11.3+11003-macos")
+        assert result is not None
+        assert result["major"] == "11"
+        assert result["minor"] == "3"
+        assert result["patch"] == "0"
+        assert result["build"] == "11003"
+        assert result["version"] == "11.3.0+11003"
+
     def test_desktop_auto_tag(self):
         result = _parse_desktop_version("v1.2.3+100-desktop-auto")
         assert result is not None
@@ -364,6 +373,18 @@ class TestGetLiveDesktopReleases:
         with patch("routers.updates.get_omi_github_releases", new_callable=AsyncMock, return_value=releases):
             result = await _get_live_desktop_releases("macos")
         assert len(result) == 1
+
+    @pytest.mark.asyncio
+    async def test_two_component_macos_tag_accepted(self):
+        from routers.updates import _get_live_desktop_releases
+
+        releases = [
+            _make_github_release("v11.3+11003-macos", body_kv={"isLive": "true"}),
+        ]
+        with patch("routers.updates.get_omi_github_releases", new_callable=AsyncMock, return_value=releases):
+            result = await _get_live_desktop_releases("macos")
+        assert len(result) == 1
+        assert result[0]["version_info"]["version"] == "11.3.0+11003"
 
 
 # --- Appcast XML endpoint ---
