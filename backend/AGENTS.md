@@ -123,6 +123,8 @@ bash test-preflight.sh   # Verify env
 bash test.sh             # Run all tests (CI source of truth)
 ```
 
+On Windows, use `powershell -NoProfile -ExecutionPolicy Bypass -File .\test-preflight.ps1` for the preflight check.
+
 **New test files must be added to `test.sh`** or they won't run in CI.
 
 Pre-mock heavy deps before importing the module under test. Use `patch.object(target_module, "func")` not string-based `patch("module.func")` — the string form silently patches the wrong reference if the function was already imported. When modules construct objects at import time, use lazy getters to avoid triggering heavy init in tests.
