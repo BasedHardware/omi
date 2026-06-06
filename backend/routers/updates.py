@@ -24,17 +24,19 @@ def _xml_attr(value: str) -> str:
 def _parse_desktop_version(tag_name: str) -> Optional[Dict[str, str]]:
     """
     Parse desktop version from tag name.
-    Expected format: v1.0.77+464-desktop-cm or v1.0.77+464-macos-cm or v1.0.77+464-desktop-auto or v0.6.4+6004-macos
+    Expected format: v1.0.77+464-desktop-cm or v1.0.77+464-macos-cm or v1.0.77+464-desktop-auto or v0.6.4+6004-macos.
+    Newer desktop tags may omit the patch component, e.g. v11.3+11003-macos.
     Returns dict with version info or None if invalid.
     """
-    # Match pattern: v{major}.{minor}.{patch}+{build}-{platform}[-{cm|auto}]
-    pattern = r'^v?(\d+)\.(\d+)\.(\d+)\+(\d+)-(?:desktop|macos|windows|linux)(?:-(?:cm|auto))?$'
+    # Match pattern: v{major}.{minor}[.{patch}]+{build}-{platform}[-{cm|auto}]
+    pattern = r'^v?(\d+)\.(\d+)(?:\.(\d+))?\+(\d+)-(?:desktop|macos|windows|linux)(?:-(?:cm|auto))?$'
     match = re.match(pattern, tag_name, re.IGNORECASE)
 
     if not match:
         return None
 
     major, minor, patch, build = match.groups()
+    patch = patch or "0"
 
     return {
         'major': major,
