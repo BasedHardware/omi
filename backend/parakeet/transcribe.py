@@ -48,13 +48,23 @@ def _load_nemo_model(model_name: str):
     except AttributeError:
         pass
 
+    import torch
+
+    use_bf16 = os.getenv("PARAKEET_BF16", "1") == "1" and torch.cuda.is_available() and torch.cuda.is_bf16_supported()
+
     last_err = None
     for cls in model_classes:
         try:
             logger.info(f"Trying {cls.__name__}.from_pretrained({model_name})")
-            model = cls.from_pretrained(model_name=model_name)
+            model = cls.from_pretrained(model_name=model_name, map_location="cpu")
+            if use_bf16:
+                logger.info(f"Converting {model_name} to BF16 (halves GPU memory)")
+                model = model.to(torch.bfloat16)
+            model = model.cuda() if torch.cuda.is_available() else model
             model.eval()
-            logger.info(f"Model {model_name} loaded via {cls.__name__}")
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+            logger.info(f"Model {model_name} loaded via {cls.__name__} (bf16={use_bf16})")
             return model
         except (TypeError, Exception) as e:
             last_err = e
