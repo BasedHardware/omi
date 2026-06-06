@@ -3310,7 +3310,7 @@ struct SettingsContentView: View {
       agentsOverviewCard
       agentsMCPConnectionCard
       agentSkillCard
-      agentInstallTargetsCard
+      agentSetupCard
     }
   }
 
@@ -3498,65 +3498,62 @@ struct SettingsContentView: View {
     }
   }
 
-  private var agentInstallTargetsCard: some View {
+  private var agentSetupCard: some View {
     settingsCard(settingId: "agents.install") {
       VStack(alignment: .leading, spacing: 14) {
-        VStack(alignment: .leading, spacing: 4) {
-          Text("Set up your agent")
-            .scaledFont(size: 16, weight: .semibold)
-            .foregroundColor(OmiColors.textPrimary)
-          Text("Pick your agent, copy the setup, and paste it where that agent manages connected tools.")
+        HStack(alignment: .top, spacing: 12) {
+          Image(systemName: "terminal")
+            .scaledFont(size: 16)
+            .foregroundColor(OmiColors.purplePrimary)
+            .frame(width: 24, height: 24)
+
+          VStack(alignment: .leading, spacing: 4) {
+            Text("Set up any agent")
+              .scaledFont(size: 16, weight: .semibold)
+              .foregroundColor(OmiColors.textPrimary)
+            Text(
+              "Copy one setup prompt into your agent. It should know how to add MCP tools for itself; Omi only provides the server details and guide."
+            )
             .scaledFont(size: 12)
             .foregroundColor(OmiColors.textTertiary)
-        }
-
-        VStack(spacing: 10) {
-          ForEach(AgentInstallTarget.allCases) { target in
-            agentInstallTargetRow(target)
+            .fixedSize(horizontal: false, vertical: true)
           }
+
+          Spacer()
+        }
+
+        VStack(alignment: .leading, spacing: 8) {
+          agentSkillBullet("Paste the setup prompt into the agent you want to connect.")
+          agentSkillBullet("The agent must choose its own skill folder, then use the install command to write the Omi guide there.")
+          agentSkillBullet("If the agent does not support skills, it can save the guide as persistent instructions.")
+        }
+
+        HStack(spacing: 10) {
+          Button {
+            copyToPasteboard(omiAgentSetupPrompt)
+          } label: {
+            iconTextButtonLabel(icon: "doc.on.doc", text: "Copy Setup Prompt")
+          }
+          .buttonStyle(.plain)
+
+          Button {
+            copyToPasteboard(omiSkillInstallCommand)
+          } label: {
+            iconTextButtonLabel(icon: "terminal", text: "Copy Install Command")
+          }
+          .buttonStyle(.plain)
+
+          Button {
+            copyToPasteboard(omiMCPDetailsText)
+          } label: {
+            iconTextButtonLabel(icon: "link", text: "Copy MCP Details")
+          }
+          .buttonStyle(.plain)
+
+          Spacer()
         }
       }
     }
-  }
-
-  private func agentInstallTargetRow(_ target: AgentInstallTarget) -> some View {
-    HStack(alignment: .center, spacing: 12) {
-      ZStack {
-        RoundedRectangle(cornerRadius: 10, style: .continuous)
-          .fill(OmiColors.backgroundSecondary)
-          .overlay(
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
-              .stroke(Color.white.opacity(0.06), lineWidth: 1))
-        Image(systemName: target.icon)
-          .scaledFont(size: 15, weight: .semibold)
-          .foregroundColor(OmiColors.textSecondary)
-      }
-      .frame(width: 36, height: 36)
-
-      VStack(alignment: .leading, spacing: 3) {
-        Text(target.title)
-          .scaledFont(size: 14, weight: .semibold)
-          .foregroundColor(OmiColors.textPrimary)
-        Text(target.subtitle)
-          .scaledFont(size: 12)
-          .foregroundColor(OmiColors.textTertiary)
-          .fixedSize(horizontal: false, vertical: true)
-      }
-
-      Spacer()
-
-      Button {
-        copyToPasteboard(target.setupText(key: agentSetupKey))
-      } label: {
-        iconTextButtonLabel(icon: "doc.on.doc", text: target.copyLabel)
-      }
-      .buttonStyle(.plain)
-    }
-    .padding(12)
-    .background(
-      RoundedRectangle(cornerRadius: 10)
-        .fill(OmiColors.backgroundSecondary.opacity(0.45))
-    )
   }
 
   private func agentCapabilityPill(_ title: String, detail: String) -> some View {
@@ -3654,6 +3651,55 @@ struct SettingsContentView: View {
     """
   }
 
+  private var omiMCPDetailsText: String {
+    """
+    Omi MCP server URL:
+    \(MemoryExportDestination.mcpServerURL)
+
+    Authorization header:
+    Authorization: Bearer \(agentSetupKey)
+
+    Transport:
+    Streamable HTTP / MCP over HTTP
+    """
+  }
+
+  private var omiAgentSetupPrompt: String {
+    """
+    Set up Omi for this agent.
+
+    Add Omi as an MCP server using these details:
+
+    Server URL:
+    \(MemoryExportDestination.mcpServerURL)
+
+    Authorization header:
+    Authorization: Bearer \(agentSetupKey)
+
+    Transport:
+    Streamable HTTP / MCP over HTTP
+
+    Then install the Omi guide as persistent instructions for this agent. If this agent supports skills, save the guide as a skill named `omi`. If it does not support skills, save the guide wherever this agent keeps durable user or project instructions.
+
+    You can install the guide by running this shell command after setting OMI_SKILL_DIR to this agent's skill folder:
+
+    \(omiSkillInstallCommand)
+
+    After setup, test the connection by listing Omi tools and calling `get_user_profile`. If available, also try `search_memories` with a simple query.
+    """
+  }
+
+  private var omiSkillInstallCommand: String {
+    """
+    : "${OMI_SKILL_DIR:?Set OMI_SKILL_DIR to this agent's skill folder before running this command.}"
+    mkdir -p "$OMI_SKILL_DIR"
+    cat > "$OMI_SKILL_DIR/SKILL.md" <<'OMI_SKILL'
+    \(omiAgentSkillText)
+    OMI_SKILL
+    printf 'Installed Omi guide at %s\\n' "$OMI_SKILL_DIR/SKILL.md"
+    """
+  }
+
   private func copyToPasteboard(_ value: String) {
     NSPasteboard.general.clearContents()
     NSPasteboard.general.setString(value, forType: .string)
@@ -3720,121 +3766,6 @@ struct SettingsContentView: View {
         "Omi MCP endpoint is reachable with this key. Run the agent-side test after installing."
     } catch {
       mcpError = "MCP verify failed: \(error.localizedDescription)"
-    }
-  }
-
-  private enum AgentInstallTarget: String, CaseIterable, Identifiable {
-    case hermes
-    case claudeDesktop
-    case cursor
-    case codex
-    case custom
-
-    var id: String { rawValue }
-
-    var title: String {
-      switch self {
-      case .hermes: return "Hermes"
-      case .claudeDesktop: return "Claude Desktop"
-      case .cursor: return "Cursor"
-      case .codex: return "Codex"
-      case .custom: return "Custom Agent"
-      }
-    }
-
-    var subtitle: String {
-      switch self {
-      case .hermes: return "Connect Hermes to Omi, then add the Omi guide."
-      case .claudeDesktop: return "Paste this into Claude Desktop's connected tools config."
-      case .cursor: return "Add Omi to your workspace tools and include the Omi guide."
-      case .codex: return "Add Omi as a tool source and install the Omi guide."
-      case .custom: return "Use these connection details with any MCP-capable agent."
-      }
-    }
-
-    var icon: String {
-      switch self {
-      case .hermes: return "bolt.horizontal.circle"
-      case .claudeDesktop: return "sparkles"
-      case .cursor: return "cursorarrow.click"
-      case .codex: return "chevron.left.forwardslash.chevron.right"
-      case .custom: return "terminal"
-      }
-    }
-
-    var copyLabel: String {
-      switch self {
-      case .hermes, .codex: return "Copy Setup"
-      case .claudeDesktop, .cursor, .custom: return "Copy Config"
-      }
-    }
-
-    func setupText(key: String) -> String {
-      let url = MemoryExportDestination.mcpServerURL
-      switch self {
-      case .hermes:
-        return """
-          hermes mcp add omi-memory --url \(url) --auth header
-
-          When Hermes asks "API key / Bearer token", paste:
-          \(key)
-
-          Hermes stores this as MCP_OMI_MEMORY_API_KEY in $HERMES_HOME/.env and sends:
-          Authorization: Bearer ${MCP_OMI_MEMORY_API_KEY}
-
-          After setup:
-          hermes mcp test omi-memory
-          hermes mcp list
-
-          Install the copied Omi Agent Skill by saving it to:
-          $HERMES_HOME/skills/productivity/omi/SKILL.md
-          """
-      case .claudeDesktop:
-        return """
-          {
-            "mcpServers": {
-              "omi-memory": {
-                "url": "\(url)",
-                "headers": {
-                  "Authorization": "Bearer \(key)"
-                }
-              }
-            }
-          }
-          """
-      case .cursor:
-        return """
-          {
-            "mcpServers": {
-              "omi-memory": {
-                "url": "\(url)",
-                "headers": {
-                  "Authorization": "Bearer \(key)"
-                }
-              }
-            }
-          }
-
-          Also add the Omi Agent Skill to the workspace agent instructions so Cursor knows Omi's memory/conversation/local-desktop routing rules.
-          """
-      case .codex:
-        return """
-          [mcp_servers.omi-memory]
-          command = "npx"
-          args = ["-y", "mcp-remote", "\(url)", "--header", "Authorization: Bearer \(key)"]
-
-          Install the Omi Agent Skill into $CODEX_HOME/skills/omi so Codex knows when to use hosted MCP vs same-host desktop context.
-          """
-      case .custom:
-        return """
-          Server URL: \(url)
-          Transport: Streamable HTTP (MCP 2025-03-26)
-          Header: Authorization: Bearer \(key)
-
-          Start with JSON-RPC initialize, then tools/list.
-          Install or paste the Omi Agent Skill so the agent has routing and write-discipline guidance beyond MCP schemas.
-          """
-      }
     }
   }
 
