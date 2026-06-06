@@ -59,6 +59,7 @@ for submodule in [
     "daily_summaries",
     "mem_db",
     "notifications",
+    "webhook_health",
 ]:
     mod = _stub_module(f"database.{submodule}")
     setattr(database_mod, submodule, mod)
@@ -128,6 +129,7 @@ memory_mod.get_prompt_memories = mock_get_prompt_memories
 def _setup_app_integrations_stubs():
     """Stub all app_integrations dependencies so it can be imported in tests."""
     apps_mod = sys.modules.get("database.apps") or _stub_module("database.apps")
+    apps_mod.get_app_by_id_db = MagicMock(return_value=None)
     apps_mod.record_app_usage = MagicMock()
     chat_db_mod = sys.modules.get("database.chat") or _stub_module("database.chat")
     chat_db_mod.add_app_message = MagicMock()
@@ -138,6 +140,8 @@ def _setup_app_integrations_stubs():
     conv_db_mod = sys.modules.get("database.conversations") or _stub_module("database.conversations")
     conv_db_mod.get_conversations_by_id = MagicMock(return_value=[])
     conv_db_mod.get_conversations = MagicMock(return_value=[])
+    users_db_mod = sys.modules.get("database.users") or _stub_module("database.users")
+    users_db_mod.get_user_language_preference = MagicMock(return_value='en')
 
     noti_msg_mod = _stub_module("models.notification_message")
     mock_noti_msg = MagicMock()
@@ -157,9 +161,20 @@ def _setup_app_integrations_stubs():
     apps_util_mod = _stub_module("utils.apps")
     apps_util_mod.get_available_apps = MagicMock(return_value=[])
 
+    subscription_mod = _stub_module("utils.subscription")
+    subscription_mod.is_trial_paywalled = MagicMock(return_value=False)
+
     notifications_util_mod = _stub_module("utils.notifications")
     mock_send = MagicMock()
     notifications_util_mod.send_notification = mock_send
+
+    redis_mod.delete_app_cache_by_id = MagicMock()
+
+    webhook_health_mod = sys.modules.get("database.webhook_health") or _stub_module("database.webhook_health")
+    webhook_health_mod.record_app_webhook_failure = MagicMock(return_value=0)
+    webhook_health_mod.record_app_webhook_success = MagicMock()
+    webhook_health_mod.is_app_webhook_disabled = MagicMock(return_value=False)
+    webhook_health_mod.disable_app_in_firestore = MagicMock()
 
     # Ensure database.notifications has get_mentor_notification_frequency for app_integrations import
     noti_db_mod = sys.modules.get("database.notifications") or _stub_module("database.notifications")
@@ -190,17 +205,17 @@ def _make_segments(count: int) -> list:
 
 def _read_mentor_source() -> str:
     backend_dir = Path(__file__).resolve().parent.parent.parent
-    return (backend_dir / "utils" / "mentor_notifications.py").read_text()
+    return (backend_dir / "utils" / "mentor_notifications.py").read_text(encoding="utf-8")
 
 
 def _read_proactive_source() -> str:
     backend_dir = Path(__file__).resolve().parent.parent.parent
-    return (backend_dir / "utils" / "llm" / "proactive_notification.py").read_text()
+    return (backend_dir / "utils" / "llm" / "proactive_notification.py").read_text(encoding="utf-8")
 
 
 def _read_integrations_source() -> str:
     backend_dir = Path(__file__).resolve().parent.parent.parent
-    return (backend_dir / "utils" / "app_integrations.py").read_text()
+    return (backend_dir / "utils" / "app_integrations.py").read_text(encoding="utf-8")
 
 
 def test_no_raw_openai_client():
