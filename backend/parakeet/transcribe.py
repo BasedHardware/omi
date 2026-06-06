@@ -43,18 +43,34 @@ def transcribe_file(file_path: str):
 
 
 def transcribe_file_v2(file_path: str, diarize: bool = True):
-    """V2: transcribe with optional speaker diarization.
+    """V2: transcribe with speaker diarization and language detection.
 
-    Returns: {"text": str, "segments": [{"text", "start", "end", "speaker"}, ...]}
-    Speaker labels are "SPEAKER_0", "SPEAKER_1", etc.
-    Diarization uses embedding-based cosine clustering via HOSTED_SPEAKER_EMBEDDING_API_URL.
+    Returns: {"text": str, "segments": [...], "detected_language": str}
+    Segments include "speaker" labels (SPEAKER_0, SPEAKER_1, etc).
+    Language detected via langdetect from transcribed text.
     """
-    return _transcribe_v2_with_diarization(file_path, diarize=diarize)
+    result = _transcribe_v2_with_diarization(file_path, diarize=diarize)
+    result["detected_language"] = detect_language_from_text(result.get("text", ""))
+    return result
 
 
 SPEAKER_EMBEDDING_URL = os.getenv("HOSTED_SPEAKER_EMBEDDING_API_URL", "")
 SPEAKER_MATCH_THRESHOLD = float(os.getenv("PARAKEET_SPEAKER_THRESHOLD", "0.45"))
 MIN_SEGMENT_DURATION = 0.6
+
+from langdetect import detect as langdetect_detect, DetectorFactory
+from langdetect.lang_detect_exception import LangDetectException
+
+DetectorFactory.seed = 0
+
+
+def detect_language_from_text(text: str) -> str:
+    if not text or len(text.strip()) < 10:
+        return 'en'
+    try:
+        return langdetect_detect(text)
+    except LangDetectException:
+        return 'en'
 
 
 def _transcribe_nemo(file_path: str):
