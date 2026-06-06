@@ -1,5 +1,13 @@
+import io
 import os
 import logging
+import wave as _wave
+
+import httpx
+import numpy as np
+from langdetect import detect as langdetect_detect
+from langdetect.lang_detect_exception import LangDetectException
+from scipy.spatial.distance import cdist
 
 logger = logging.getLogger(__name__)
 
@@ -10,9 +18,17 @@ _model = None
 _nim_url = None
 
 
+try:
+    import nemo.collections.asr as nemo_asr
+except ImportError:
+    nemo_asr = None
+
+
 def _init_nemo():
     global _model
-    import nemo.collections.asr as nemo_asr
+
+    if nemo_asr is None:
+        raise RuntimeError("nemo_toolkit[asr] is not installed")
 
     logger.info(f"Loading NeMo model: {MODEL_NAME}")
 
@@ -86,11 +102,6 @@ SPEAKER_EMBEDDING_URL = os.getenv("HOSTED_SPEAKER_EMBEDDING_API_URL", "")
 SPEAKER_MATCH_THRESHOLD = float(os.getenv("PARAKEET_SPEAKER_THRESHOLD", "0.45"))
 MIN_SEGMENT_DURATION = 0.6
 
-from langdetect import detect as langdetect_detect, DetectorFactory
-from langdetect.lang_detect_exception import LangDetectException
-
-DetectorFactory.seed = 0
-
 
 def detect_language_from_text(text: str) -> str:
     if not text or len(text.strip()) < 10:
@@ -123,7 +134,6 @@ def _transcribe_nemo(file_path: str):
 
 
 def _transcribe_nim(file_path: str):
-    import httpx
 
     with open(file_path, "rb") as f:
         audio_bytes = f.read()
@@ -166,12 +176,6 @@ def _transcribe_v2_with_diarization(file_path: str, diarize: bool = True):
         for seg in base["segments"]:
             seg["speaker"] = "SPEAKER_0"
         return base
-
-    import httpx
-    import io
-    import numpy as np
-    import wave as _wave
-    from scipy.spatial.distance import cdist
 
     with open(file_path, "rb") as f:
         audio_bytes = f.read()
@@ -220,8 +224,6 @@ def _transcribe_v2_with_diarization(file_path: str, diarize: bool = True):
 
 
 def _extract_segment_wav(wav_bytes: bytes, start: float, end: float) -> bytes:
-    import io
-    import wave as _wave
 
     buf = io.BytesIO(wav_bytes)
     with _wave.open(buf, "rb") as wf:
@@ -243,8 +245,6 @@ def _extract_segment_wav(wav_bytes: bytes, start: float, end: float) -> bytes:
 
 
 def _get_embedding(wav_bytes: bytes):
-    import httpx
-    import numpy as np
 
     try:
         with httpx.Client(timeout=httpx.Timeout(connect=5.0, read=30.0, write=10.0, pool=5.0)) as client:

@@ -22,6 +22,7 @@ import numpy as np
 from langdetect import detect as langdetect_detect
 from langdetect.lang_detect_exception import LangDetectException
 from scipy.spatial.distance import cdist
+from transcribe import transcribe_file
 
 logger = logging.getLogger(__name__)
 
@@ -207,8 +208,6 @@ class StreamSession:
         tmp.write(wav_bytes)
         tmp.close()
         try:
-            from transcribe import transcribe_file
-
             return transcribe_file(tmp.name)
         finally:
             os.unlink(tmp.name)
