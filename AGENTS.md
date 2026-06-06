@@ -34,7 +34,7 @@ These rules apply to every AI agent working in this repository. This file is the
 - **No in-function imports** — all imports at module top level.
 - **Import hierarchy** (low → high): `database/` → `utils/` → `routers/` → `main.py`. Never import upward.
 - **Memory management** — `del` byte arrays after processing, `.clear()` dicts/lists holding data.
-- **Async I/O** — never `requests.*` in async (use `httpx.AsyncClient` pools from `utils/http_client.py`), never `Thread().start().join()` (use `critical_executor`/`storage_executor`), never `time.sleep()` in async (use `asyncio.sleep()`). Run `python scripts/scan_async_blockers.py` before committing.
+- **Async I/O** — never `requests.*` in async (use `httpx.AsyncClient` pools from `utils/http_client.py`), never `Thread().start().join()` (use `critical_executor`/`storage_executor`), never `time.sleep()` in async (use `asyncio.sleep()`). Run `python scripts/scan_async_blockers.py` from `backend/` before committing.
 - **`async def` vs `def` endpoints** — use `def` for endpoints that only call sync code (Firestore, Redis, file I/O); FastAPI runs `def` in a threadpool automatically. Only use `async def` when the endpoint genuinely `await`s something (httpx, file.read(), WebSocket, asyncio.sleep) or uses asyncio APIs directly. Never call sync DB/storage/file functions directly inside `async def` — wrap with `await run_blocking(executor, func, args)`.
 - **Blocking calls in async** — these block the event loop: `database.*` functions (Firestore sync SDK), `open()`/`shutil.*` (file I/O), `upload_*`/`delete_*` from storage (GCS SDK), `creds.refresh()` (Google auth HTTP). In `async def`, always offload via `await run_blocking(executor, func, args)` from `utils.executors`. Pool assignment: `critical_executor` for auth/rate-limits, `db_executor` for Firestore/Redis CRUD, `llm_executor` for LLM calls, `storage_executor` for GCS/file I/O, `postprocess_executor` for coordinators, `sync_executor` for STT/VAD. See `backend/CLAUDE.md` for full rules. Never use bare `asyncio.to_thread()`.
 
@@ -117,10 +117,10 @@ The desktop app is a **Swift Package Manager** project (no Xcode project, no `.x
 
 #### Building & Running
 
-- `./run.sh` — full local dev (build Swift app + Rust backend + Cloudflare tunnel + launch).
-- `./run.sh --yolo` — quick start against the prod backend, no local services.
+- `cd desktop && ./run.sh` — full local dev (build Swift app + Rust backend + Cloudflare tunnel + launch).
+- `cd desktop && ./run.sh --yolo` — quick start against the prod backend, no local services.
 - `OMI_SKIP_BACKEND=1` — app only, use remote backend via `OMI_DESKTOP_API_URL`. `OMI_SKIP_TUNNEL=1` — no Cloudflare tunnel.
-- Compile-only check: `xcrun swift build -c debug --package-path Desktop` (the `xcrun` prefix is required to match the SDK).
+- Compile-only check: `cd desktop && xcrun swift build -c debug --package-path Desktop` (the `xcrun` prefix is required to match the SDK).
 - **DO NOT** use bare `swift build`, `xcodebuild`, or launch from `build/` directly. Always launch via `./run.sh` (installs to `/Applications/` and registers with LaunchServices, required for permission "Quit & Reopen").
 - Release builds are handled entirely by Codemagic CI (no local release script).
 - For PRs that change function signatures or cross-file types, run a clean release build before merge: `cd desktop && rm -rf .build && xcrun swift build -c release --triple arm64-apple-macosx` — incremental debug builds miss stale-cache type errors that Codemagic's clean release build catches later.
