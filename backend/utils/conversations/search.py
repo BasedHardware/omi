@@ -1,6 +1,7 @@
 import logging
 import os
 from datetime import datetime, timezone
+from threading import Lock
 from typing import Any, Dict, List, Optional, cast
 
 import typesense
@@ -35,19 +36,50 @@ def _is_typesense_transient_error(exc: BaseException) -> bool:
     }
 
 
-client = typesense.Client(
-    {
-        'nodes': [
-            {
-                'host': os.getenv('TYPESENSE_HOST'),
-                'port': os.getenv('TYPESENSE_HOST_PORT'),
-                'protocol': os.getenv('TYPESENSE_PROTOCOL', 'https'),
-            }
-        ],
-        'api_key': os.getenv('TYPESENSE_API_KEY'),
-        'connection_timeout_seconds': 2,
-    }
-)
+_typesense_client = None
+_typesense_client_lock = Lock()
+
+
+def _get_required_env_var(name: str) -> str:
+    value = os.getenv(name)
+    if not value:
+        raise RuntimeError(f"{name} is required to search conversations")
+    return value
+
+
+def _create_typesense_client() -> Any:
+    return typesense.Client(
+        {
+            'nodes': [
+                {
+                    'host': _get_required_env_var('TYPESENSE_HOST'),
+                    'port': _get_required_env_var('TYPESENSE_HOST_PORT'),
+                    'protocol': os.getenv('TYPESENSE_PROTOCOL', 'https'),
+                }
+            ],
+            'api_key': _get_required_env_var('TYPESENSE_API_KEY'),
+            'connection_timeout_seconds': 2,
+        }
+    )
+
+
+def _get_typesense_client() -> Any:
+    global _typesense_client
+    client = _typesense_client
+    if client is not None:
+        return client
+
+    with _typesense_client_lock:
+        client = _typesense_client
+        if client is None:
+            client = _create_typesense_client()
+            _typesense_client = client
+        return client
+
+
+def get_typesense_client() -> Any:
+    """Return the shared lazy Typesense client for backend keyword indexes."""
+    return _get_typesense_client()
 
 
 def _utc_iso(ts: int) -> str:
@@ -81,6 +113,8 @@ def search_conversations(
                 'current_page': page,
                 'per_page': per_page,
             }
+
+        client = _get_typesense_client()
 
         filter_by = f'userId:={uid}'
         if not include_discarded:
