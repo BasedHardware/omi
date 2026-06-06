@@ -223,6 +223,34 @@ modulate_languages = {
     'cy',
 }
 
+parakeet_languages = {
+    'multi',
+    'en',
+    'es',
+    'fr',
+    'de',
+    'it',
+    'pt',
+    'nl',
+    'pl',
+    'ro',
+    'sv',
+    'da',
+    'no',
+    'fi',
+    'cs',
+    'sk',
+    'hu',
+    'bg',
+    'hr',
+    'sl',
+    'sr',
+    'uk',
+    'ca',
+    'et',
+    'lt',
+}
+
 stt_service_models = os.getenv('STT_SERVICE_MODELS', 'dg-nova-3').split(',')
 
 
@@ -247,7 +275,9 @@ def get_stt_service_for_language(language: str, multi_lang_enabled: bool = True)
             if base_lang in modulate_languages:
                 return STTService.modulate, base_lang, 'velma-2'
         if m == 'parakeet' and os.getenv('HOSTED_PARAKEET_API_URL'):
-            return STTService.parakeet, base_lang or 'en', 'parakeet'
+            if base_lang in parakeet_languages:
+                return STTService.parakeet, base_lang or 'en', 'parakeet'
+            continue
 
     # Fallback to deepgram nova-3 with English
     return STTService.deepgram, 'en', 'nova-3'
