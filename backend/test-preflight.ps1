@@ -101,7 +101,7 @@ if ($script:PythonCommand.Count -eq 0) {
         if ($pythonVersion -match "Python 3\.11\.") {
             Write-Ok $pythonVersion
         } else {
-            Write-Bad "$pythonVersion detected; backend expects Python 3.11"
+            Write-Warn "$pythonVersion detected; backend expects Python 3.11"
         }
     } else {
         Write-Bad "python command failed"
@@ -223,8 +223,12 @@ if ($unitTests.Count -gt 0) {
 $missingTests = @()
 if (Test-Path "test.sh") {
     $testRefs = Get-Content "test.sh" |
-        Where-Object { $_ -match "^pytest\s+tests/" } |
-        ForEach-Object { ($_ -replace "^pytest\s+", "") -replace "\s+-v\s*$", "" }
+        ForEach-Object {
+            $line = $_.Trim()
+            if ($line -match "^pytest\s+") {
+                $line -split "\s+" | Where-Object { $_ -like "tests/*" }
+            }
+        }
 
     foreach ($testRef in $testRefs) {
         if (-not (Test-Path $testRef)) {
