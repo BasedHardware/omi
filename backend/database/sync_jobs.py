@@ -88,6 +88,16 @@ def get_sync_job(job_id: str) -> Optional[dict]:
             job['completed_at'] = now
             # Persist the failure status
             r.set(key, json.dumps(job, default=str), ex=JOB_TTL_SECONDS)
+    elif job['status'] == 'queued':
+        updated_at = job.get('updated_at') or job.get('created_at', 0)
+        now = time.time()
+        if now - updated_at > STALE_THRESHOLD_SECONDS:
+            logger.warning(
+                "sync_job_stale_queued job_id=%s uid=%s age_seconds=%.0f",
+                job_id,
+                job.get('uid'),
+                now - updated_at,
+            )
 
     return job
 
