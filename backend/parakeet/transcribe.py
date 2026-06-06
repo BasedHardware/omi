@@ -11,10 +11,12 @@ from scipy.spatial.distance import cdist
 
 logger = logging.getLogger(__name__)
 
-MODEL_NAME = os.getenv("PARAKEET_MODEL", "nvidia/parakeet-tdt-0.6b-v3")
+BATCH_MODEL_NAME = os.getenv("PARAKEET_MODEL", "nvidia/parakeet-tdt-0.6b-v3")
+STREAM_MODEL_NAME = os.getenv("PARAKEET_STREAM_MODEL", BATCH_MODEL_NAME)
 INFERENCE_MODE = os.getenv("PARAKEET_INFERENCE_MODE", "nemo")
 
-_model = None
+_batch_model = None
+_stream_model = None
 _nim_url = None
 
 
@@ -24,13 +26,11 @@ except ImportError:
     nemo_asr = None
 
 
-def _init_nemo():
-    global _model
-
+def _load_nemo_model(model_name: str):
     if nemo_asr is None:
         raise RuntimeError("nemo_toolkit[asr] is not installed")
 
-    logger.info(f"Loading NeMo model: {MODEL_NAME}")
+    logger.info(f"Loading NeMo model: {model_name}")
 
     model_classes = [
         nemo_asr.models.ASRModel,
@@ -51,17 +51,28 @@ def _init_nemo():
     last_err = None
     for cls in model_classes:
         try:
-            logger.info(f"Trying {cls.__name__}.from_pretrained({MODEL_NAME})")
-            _model = cls.from_pretrained(model_name=MODEL_NAME)
-            _model.eval()
-            logger.info(f"NeMo model loaded via {cls.__name__}")
-            return
+            logger.info(f"Trying {cls.__name__}.from_pretrained({model_name})")
+            model = cls.from_pretrained(model_name=model_name)
+            model.eval()
+            logger.info(f"Model {model_name} loaded via {cls.__name__}")
+            return model
         except (TypeError, Exception) as e:
             last_err = e
-            logger.warning(f"{cls.__name__} failed: {e}")
+            logger.warning(f"{cls.__name__} failed for {model_name}: {e}")
             continue
 
-    raise RuntimeError(f"Could not load model {MODEL_NAME} with any NeMo class: {last_err}")
+    raise RuntimeError(f"Could not load model {model_name} with any NeMo class: {last_err}")
+
+
+def _init_nemo():
+    global _batch_model, _stream_model
+
+    _batch_model = _load_nemo_model(BATCH_MODEL_NAME)
+
+    if STREAM_MODEL_NAME != BATCH_MODEL_NAME:
+        _stream_model = _load_nemo_model(STREAM_MODEL_NAME)
+    else:
+        _stream_model = _batch_model
 
 
 def _init_nim():
@@ -74,6 +85,8 @@ if INFERENCE_MODE == "nim":
     _init_nim()
 else:
     _init_nemo()
+
+_model = _batch_model
 
 
 def transcribe_file(file_path: str):
