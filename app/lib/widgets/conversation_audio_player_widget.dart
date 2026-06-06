@@ -127,7 +127,14 @@ class _ConversationAudioPlayerWidgetState extends State<ConversationAudioPlayerW
       }).listen((_) {});
 
       if (_disposed) return;
-      await _audioPlayer.setAudioSource(playlist, preload: true);
+      try {
+        await _audioPlayer.setAudioSource(playlist, preload: true);
+      } catch (e) {
+        // If disposed mid-flight (proxy server started then player was killed),
+        // swallow the error silently — the widget is already gone.
+        if (_disposed) return;
+        rethrow;
+      }
 
       _retryCount = 0;
 
