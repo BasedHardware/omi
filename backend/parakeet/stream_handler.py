@@ -22,7 +22,7 @@ import numpy as np
 from langdetect import detect as langdetect_detect
 from langdetect.lang_detect_exception import LangDetectException
 from scipy.spatial.distance import cdist
-from transcribe import transcribe_file, _model as _asr_model, INFERENCE_MODE as _INFERENCE_MODE
+from transcribe import transcribe_file, _stream_model as _asr_model, INFERENCE_MODE as _INFERENCE_MODE
 
 try:
     from pyannote.audio import Model as _PyannoteModel, Inference as _PyannoteInference
