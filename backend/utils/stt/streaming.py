@@ -1137,26 +1137,19 @@ async def process_audio_parakeet(
     keywords: List[str] = [],
     is_active: Optional[Callable[[], bool]] = None,
 ):
-    """STT path backed by the self-hosted Parakeet service.
+    """STT path backed by the self-hosted Parakeet /v3/stream WebSocket.
 
-    Uses /v3/stream WebSocket (VAD + diarization built-in) if available,
-    falls back to /v1/transcribe HTTP (batch-per-window) otherwise.
+    Server-side VAD + diarization — the backend just relays PCM chunks
+    and receives speaker-labeled segments.
     """
     api_url = os.getenv('HOSTED_PARAKEET_API_URL')
     if not api_url:
         logger.error('process_audio_parakeet: HOSTED_PARAKEET_API_URL not set')
         return None
 
-    use_ws = os.getenv('PARAKEET_USE_STREAM_WS', '1') == '1'
-    if use_ws:
-        ws_url = api_url.replace('http://', 'ws://').replace('https://', 'wss://').rstrip('/') + '/v3/stream'
-        logger.info(f'process_audio_parakeet WS {language} {sample_rate} -> {ws_url}')
-        socket = ParakeetWebSocketSocket(stream_transcript, ws_url, sample_rate)
-        socket.start()
-        return socket
-
-    logger.info(f'process_audio_parakeet HTTP {language} {sample_rate} -> {api_url}')
-    socket = ParakeetStreamingSocket(stream_transcript, api_url, sample_rate)
+    ws_url = api_url.replace('http://', 'ws://').replace('https://', 'wss://').rstrip('/') + '/v3/stream'
+    logger.info(f'process_audio_parakeet {language} {sample_rate} -> {ws_url}')
+    socket = ParakeetWebSocketSocket(stream_transcript, ws_url, sample_rate)
     socket.start()
     return socket
 
