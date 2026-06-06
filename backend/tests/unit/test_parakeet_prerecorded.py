@@ -57,16 +57,22 @@ class TestFactoryRouting:
             assert service == pr.PrerecordedSTTService.PARAKEET
             assert model == 'parakeet'
 
-    def test_parakeet_routing_with_language(self):
+    def test_parakeet_routing_with_supported_language(self):
         with patch.object(pr, 'stt_prerecorded_model', 'parakeet'):
-            service, lang, model = pr.get_prerecorded_service('vi')
+            service, lang, model = pr.get_prerecorded_service('fr')
             assert service == pr.PrerecordedSTTService.PARAKEET
-            assert lang == 'vi'
+            assert lang == 'fr'
 
-    def test_parakeet_routing_normalizes_language(self):
+    def test_parakeet_fallback_to_deepgram_for_unsupported_language(self):
         with patch.object(pr, 'stt_prerecorded_model', 'parakeet'):
             service, lang, model = pr.get_prerecorded_service('zh-CN')
-            assert lang == 'zh'
+            assert service == pr.PrerecordedSTTService.DEEPGRAM
+
+    def test_parakeet_fallback_for_cjk(self):
+        with patch.object(pr, 'stt_prerecorded_model', 'parakeet'):
+            for unsupported in ['ja', 'zh', 'ko', 'hi', 'vi']:
+                service, lang, model = pr.get_prerecorded_service(unsupported)
+                assert service == pr.PrerecordedSTTService.DEEPGRAM, f'{unsupported} should fall back to Deepgram'
 
     def test_get_prerecorded_provider_returns_parakeet(self):
         with patch.object(pr, 'stt_prerecorded_model', 'parakeet'):
@@ -325,6 +331,15 @@ class TestStreamingFactoryRouting:
             service, lang, model = get_stt_service_for_language('en')
             assert service == STTService.parakeet
             assert model == 'parakeet'
+
+    def test_parakeet_streaming_fallback_for_cjk(self):
+        from utils.stt.streaming import STTService, get_stt_service_for_language
+
+        with patch('utils.stt.streaming.stt_service_models', ['parakeet', 'dg-nova-3']), patch.dict(
+            os.environ, {'HOSTED_PARAKEET_API_URL': 'http://fake-parakeet:8080'}
+        ):
+            service, lang, model = get_stt_service_for_language('ja')
+            assert service == STTService.deepgram, 'Japanese should fall back to Deepgram'
 
     def test_parakeet_fallback_without_url(self):
         from utils.stt.streaming import STTService, get_stt_service_for_language
