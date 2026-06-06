@@ -790,7 +790,8 @@ def parakeet_prerecorded_from_bytes(
             words.append({'timestamp': [0.0, 0.0], 'speaker': 'SPEAKER_00', 'text': full_text})
 
         if return_language:
-            return words, language or 'en'
+            detected = result.get('detected_language') or language or 'en'
+            return words, detected
 
         return words
 
