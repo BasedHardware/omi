@@ -36,19 +36,19 @@ def create_staged_task(uid: str, description: str, **kwargs) -> dict:
     """Create a staged task.  Deduplicates by case-insensitive description."""
     col = _user_col(uid, 'staged_tasks')
 
-    # Deduplicate
     desc_lower = description.strip().lower()
-    for doc in col.stream():
-        if doc.to_dict().get('description', '').strip().lower() == desc_lower:
-            existing = doc.to_dict()
-            existing['id'] = doc.id
-            return existing
+    existing_docs = col.where(filter=FieldFilter('description_lower', '==', desc_lower)).limit(1).stream()
+    for doc in existing_docs:
+        existing = doc.to_dict()
+        existing['id'] = doc.id
+        return existing
 
     task_id = str(uuid.uuid4())
     now = datetime.now(timezone.utc)
     doc = {
         'id': task_id,
         'description': description,
+        'description_lower': desc_lower,
         'completed': False,
         'created_at': now,
         'updated_at': now,
@@ -181,6 +181,7 @@ def migrate_ai_tasks(uid: str) -> dict:
     batch = db.batch()
     batch_count = 0
     for task in to_move:
+        task['description_lower'] = (task.get('description') or '').strip().lower()
         batch.set(staged_col.document(task['id']), task)
         batch.delete(col.document(task['id']))
         batch_count += 2  # set + delete = 2 operations
@@ -206,6 +207,7 @@ def migrate_conversation_items_to_staged(uid: str) -> dict:
         if data.get('conversation_id') and not data.get('source'):
             data['id'] = doc.id
             data['source'] = 'conversation_migration'
+            data['description_lower'] = (data.get('description') or '').strip().lower()
             batch.set(staged_col.document(doc.id), data)
             batch.delete(col.document(doc.id))
             moved += 1
