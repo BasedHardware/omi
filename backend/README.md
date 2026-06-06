@@ -115,6 +115,24 @@ This README provides a quick setup guide for the Omi backend. For a comprehensiv
     deactivate
     ```
 
+## Running Backend Tests on Windows
+
+From PowerShell, run the Windows preflight before the backend test suite:
+
+```powershell
+cd backend
+powershell -NoProfile -ExecutionPolicy Bypass -File .\test-preflight.ps1
+```
+
+If you have multiple Python versions installed, pass the Python 3.11 executable explicitly:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\test-preflight.ps1 -Python C:\Path\To\Python311\python.exe
+```
+
+The preflight checks Python, pytest, formatter availability, key backend imports, optional integration environment
+variables, Redis CLI connectivity, and whether every test referenced by `test.sh` exists.
+
 ## Additional Resources
 
 - [Full Backend Setup Documentation](https://docs.omi.me/developer/backend/Backend_Setup)
