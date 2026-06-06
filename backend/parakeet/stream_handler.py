@@ -32,7 +32,7 @@ except ImportError:
 
 logger = logging.getLogger(__name__)
 
-SPEECH_THRESHOLD = float(os.getenv("PARAKEET_VAD_THRESHOLD", "0.3"))
+SPEECH_THRESHOLD = float(os.getenv("PARAKEET_VAD_THRESHOLD", "0.5"))
 MIN_SPEECH_DURATION_S = float(os.getenv("PARAKEET_MIN_SPEECH_S", "0.5"))
 HANGOVER_S = float(os.getenv("PARAKEET_HANGOVER_S", "0.8"))
 CHUNK_SECONDS = float(os.getenv("PARAKEET_CHUNK_S", "2.0"))
@@ -150,19 +150,20 @@ class StreamSession:
             is_speech = self._run_vad(vad_chunk)
             chunk_dur = self._vad_chunk_samples / self._sr
 
+            self._pending_audio.extend(vad_chunk)
+            self._audio_buf.extend(vad_chunk)
+
             if is_speech:
                 self._silence_count = 0
                 if not self._is_speaking:
                     self._is_speaking = True
-                    self._speech_start_s = self._stream_offset_s
+                    if self._speech_start_s is None:
+                        self._speech_start_s = self._stream_offset_s
                     self._prev_text = ""
                     self._last_chunk_offset = 0
-                self._pending_audio.extend(vad_chunk)
             else:
                 if self._is_speaking:
                     self._silence_count += 1
-                    self._pending_audio.extend(vad_chunk)
-
                     if self._silence_count >= self._hangover_chunks:
                         speech_dur = len(self._pending_audio) / (self._sr * self._bytes_per_sample)
                         if speech_dur >= MIN_SPEECH_DURATION_S:
@@ -175,13 +176,18 @@ class StreamSession:
                         self._last_chunk_offset = 0
 
             pending_since_last = len(self._pending_audio) - self._last_chunk_offset
-            if self._is_speaking and pending_since_last >= self._chunk_bytes:
+            if pending_since_last >= self._chunk_bytes:
+                if not self._is_speaking:
+                    self._is_speaking = True
+                    if self._speech_start_s is None:
+                        self._speech_start_s = self._stream_offset_s - len(self._pending_audio) / (
+                            self._sr * self._bytes_per_sample
+                        )
                 result = await self._transcribe_chunk()
                 segments.extend(result)
                 self._last_chunk_offset = len(self._pending_audio)
 
             self._stream_offset_s += chunk_dur
-            self._audio_buf.extend(vad_chunk)
             if len(self._audio_buf) > self._left_context_bytes * 2:
                 excess = len(self._audio_buf) - self._left_context_bytes
                 del self._audio_buf[:excess]
