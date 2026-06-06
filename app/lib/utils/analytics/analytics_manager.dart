@@ -1,3 +1,5 @@
+import 'dart:math';
+
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/memory.dart';
@@ -135,6 +137,19 @@ class AnalyticsManager {
       '\$name': SharedPreferencesUtil().fullName,
       '\$email': SharedPreferencesUtil().email,
     });
+  }
+
+  static final Random _sampleRng = Random();
+
+  // Sample a high-frequency event probabilistically (0.0 drops all, 1.0 keeps
+  // all). Surviving events carry a `sample_rate` property so trend queries can
+  // scale counts back up in SQL. Used for UI noise (bottom-nav taps, etc.)
+  // where exact per-tap counts don't change a dashboard answer but the
+  // firehose drives PostHog cost.
+  void _sampledTrack(String eventName, double rate, {Map<String, dynamic>? properties}) {
+    if (_sampleRng.nextDouble() >= rate) return;
+    final props = <String, dynamic>{...?properties, 'sample_rate': rate};
+    track(eventName, properties: props);
   }
 
   void track(String eventName, {Map<String, dynamic>? properties}) =>
@@ -275,7 +290,10 @@ class AnalyticsManager {
 
   void calendarSelected() => track('Calendar Selected');
 
-  void bottomNavigationTabClicked(String tab) => track('Bottom Navigation Tab Clicked', properties: {'tab': tab});
+  // Bottom-nav tap firehose — sampled at 10%. Aggregate share between tabs is
+  // what dashboards actually need; the absolute click count was pure cost.
+  void bottomNavigationTabClicked(String tab) =>
+      _sampledTrack('Bottom Navigation Tab Clicked', 0.10, properties: {'tab': tab});
 
   void deviceConnected() => track('Device Connected', properties: {..._preferences.btDevice.toJson()});
 
