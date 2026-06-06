@@ -170,6 +170,8 @@ class PureSocket implements IPureSocket {
         return 'going_away_os_or_background';
       case 1006:
         return 'abnormal_closure';
+      case 1008:
+        return 'policy_violation_auth_failure';
       case 1011:
         return 'server_error';
       default:

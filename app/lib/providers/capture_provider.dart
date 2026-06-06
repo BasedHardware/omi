@@ -81,6 +81,10 @@ class CaptureProvider extends ChangeNotifier
   TranscriptSegmentSocketService? _socket;
   Timer? _keepAliveTimer;
   DateTime? _keepAliveLastExecutedAt;
+  int _wsReconnectAttempts = 0;
+  int? _lastCloseCode;
+  static const int _wsMaxAuthRetries = 10;
+  static const List<int> _wsBackoffSeconds = [15, 30, 60, 120, 300];
   Timer? _inProgressConversationRefreshTimer;
   int _inProgressConversationRefreshAttempts = 0;
   bool _isRefreshingInProgressConversation = false;
@@ -458,6 +462,8 @@ class CaptureProvider extends ChangeNotifier
     _conversation = null;
     taggingSegmentIds = [];
     _sessionStartSeconds = 0;
+    _wsReconnectAttempts = 0;
+    _lastCloseCode = null;
     notifyListeners();
   }
 
@@ -1231,6 +1237,7 @@ class CaptureProvider extends ChangeNotifier
   void onClosed([int? closeCode]) {
     _transcriptionServiceStatuses = [];
     _transcriptServiceReady = false;
+    _lastCloseCode = closeCode;
 
     if (closeCode == 4002) {
       usageProvider?.markAsOutOfCreditsAndRefresh();
@@ -1255,16 +1262,42 @@ class CaptureProvider extends ChangeNotifier
 
   void _startKeepAliveServices() {
     _keepAliveTimer?.cancel();
-    _keepAliveTimer = Timer.periodic(const Duration(seconds: 15), (t) async {
-      Logger.debug("[Provider] keep alive");
-      // rate 1/15s
-      if (_keepAliveLastExecutedAt != null &&
-          DateTime.now().subtract(const Duration(seconds: 15)).isBefore(_keepAliveLastExecutedAt!)) {
-        Logger.debug("[Provider] keep alive - hitting rate limits 1/15s");
-        return;
-      }
 
-      _keepAliveLastExecutedAt = DateTime.now();
+    final isAuthFailure = _lastCloseCode == 1008;
+    if (isAuthFailure) {
+      _wsReconnectAttempts++;
+    }
+    if (isAuthFailure && _wsReconnectAttempts >= _wsMaxAuthRetries) {
+      Logger.warning("[Provider] $_wsMaxAuthRetries consecutive auth failures, signing out");
+      _keepAliveTimer?.cancel();
+      final ctx = globalNavigatorKey.currentContext;
+      if (ctx != null) {
+        AppSnackbar.showSnackbar(
+          ctx.l10n.sessionExpiredPleaseSignIn,
+          duration: const Duration(seconds: 5),
+        );
+      }
+      AuthService.instance.signOut();
+      return;
+    }
+
+    final backoffIndex =
+        (_wsReconnectAttempts > 0 && _wsReconnectAttempts <= _wsBackoffSeconds.length)
+            ? _wsReconnectAttempts - 1
+            : (_wsReconnectAttempts == 0
+                ? 0
+                : _wsBackoffSeconds.length - 1);
+    final baseDelay = _wsBackoffSeconds[backoffIndex];
+    final jitter = DateTime.now().millisecondsSinceEpoch % 1000;
+    final delaySeconds = baseDelay + (jitter / 1000);
+
+    Logger.debug(
+      "[Provider] keep alive — retry #$_wsReconnectAttempts"
+      " in ${delaySeconds.toStringAsFixed(1)}s (code=$_lastCloseCode)",
+    );
+
+    _keepAliveTimer =
+        Timer.periodic(Duration(milliseconds: (delaySeconds * 1000).round()), (t) async {
       if (!recordingDeviceServiceReady || _socket?.state == SocketServiceState.connected) {
         t.cancel();
         return;
@@ -1275,6 +1308,13 @@ class CaptureProvider extends ChangeNotifier
         t.cancel();
         return;
       }
+
+      if (_keepAliveLastExecutedAt != null &&
+          DateTime.now().subtract(Duration(seconds: baseDelay)).isBefore(_keepAliveLastExecutedAt!)) {
+        return;
+      }
+
+      _keepAliveLastExecutedAt = DateTime.now();
 
       if (_recordingDevice != null) {
         BleAudioCodec codec = await _getAudioCodec(_recordingDevice!.id);
@@ -1304,6 +1344,8 @@ class CaptureProvider extends ChangeNotifier
   @override
   void onConnected() {
     _transcriptServiceReady = true;
+    _wsReconnectAttempts = 0;
+    _lastCloseCode = null;
     // Restart mic on reconnect if interrupted (skip during active call).
     if (recordingState == RecordingState.interrupted && !_callActive) {
       if (_activeSource is PhoneMicSource) {
