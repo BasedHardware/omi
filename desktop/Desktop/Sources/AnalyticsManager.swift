@@ -17,6 +17,25 @@ class AnalyticsManager {
 
   private init() {}
 
+  // MARK: - Sampling
+
+  /// Sample an event probabilistically (0.0 = drop all, 1.0 = keep all).
+  /// Used to thin out high-volume UI events (tab clicks, screenshot views,
+  /// list-item taps) that have dashboard value at trend resolution but flood
+  /// PostHog as a firehose. Trend math stays valid as long as the sample rate
+  /// is recorded — we set `sample_rate` on the surviving event so SQL can
+  /// scale counts back up when needed.
+  private func sampledTrack(_ event: String, rate: Double, properties: [String: Any] = [:])
+  {
+    guard !Self.isDevBuild else { return }
+    // Drand48 is fine here — we don't need cryptographic randomness, just
+    // independent per-call sampling. Seeded once per process by the runtime.
+    if Double.random(in: 0..<1) >= rate { return }
+    var props = properties
+    props["sample_rate"] = rate
+    PostHogManager.shared.track(event, properties: props)
+  }
+
   // MARK: - Initialization
 
   func initialize() {
@@ -182,9 +201,18 @@ class AnalyticsManager {
     PostHogManager.shared.track("Bluetooth State Changed", properties: properties)
   }
 
-  /// Track when ScreenCaptureKit broken state is detected (TCC granted but capture failing)
+  /// Report when ScreenCaptureKit broken state is detected (TCC granted but capture failing).
+  /// Routed to Sentry (already in stack) so we get the same release-health signal without
+  /// paying PostHog ingestion for what is effectively an error/diagnostic event.
   func screenCaptureBrokenDetected() {
-    PostHogManager.shared.screenCaptureBrokenDetected()
+    guard !Self.isDevBuild else { return }
+    let breadcrumb = Breadcrumb(level: .warning, category: "screen_capture")
+    breadcrumb.message = "Screen Capture Broken Detected"
+    SentrySDK.addBreadcrumb(breadcrumb)
+    SentrySDK.capture(message: "Screen Capture Broken Detected") { scope in
+      scope.setLevel(.warning)
+      scope.setTag(value: "screen_capture_broken", key: "diagnostic")
+    }
   }
 
   /// Track when user clicks reset button or notification to reset screen capture
@@ -242,10 +270,17 @@ class AnalyticsManager {
     if hadPreviousSession && !lastCleanExit {
       log("Analytics: Previous session did not exit cleanly — reporting crash")
       let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "unknown"
-      PostHogManager.shared.track("App Crash Detected", properties: [
-        "app_version": version,
-        "os_version": ProcessInfo.processInfo.operatingSystemVersionString,
-      ])
+      // Crash signal belongs in Sentry, not PostHog — Sentry already groups by
+      // release/OS and powers release-health, so a parallel PostHog event was
+      // pure ingestion cost.
+      SentrySDK.capture(message: "App Crash Detected") { scope in
+        scope.setLevel(.warning)
+        scope.setTag(value: "app_crash_detected", key: "diagnostic")
+        scope.setContext(value: [
+          "app_version": version,
+          "os_version": ProcessInfo.processInfo.operatingSystemVersionString,
+        ], key: "crash")
+      }
     }
   }
 
@@ -435,7 +470,9 @@ class AnalyticsManager {
   // MARK: - Navigation Events
 
   func tabChanged(tabName: String) {
-    PostHogManager.shared.tabChanged(tabName: tabName)
+    // Navigation noise — sampled at 10%. We only need it for retention/funnel
+    // shape, not exact per-click counts.
+    sampledTrack("Tab Changed", rate: 0.10, properties: ["tab_name": tabName])
   }
 
   func conversationDetailOpened(conversationId: String) {
@@ -568,7 +605,11 @@ class AnalyticsManager {
   }
 
   func rewindScreenshotViewed(timestamp: Date) {
-    PostHogManager.shared.rewindScreenshotViewed(timestamp: timestamp)
+    // High-frequency scrubbing event — sample at 10%. Trend math stays valid
+    // via the `sample_rate` property on each surviving event.
+    sampledTrack("Rewind Screenshot Viewed", rate: 0.10, properties: [
+      "timestamp": ISO8601DateFormatter().string(from: timestamp)
+    ])
   }
 
   func rewindTimelineNavigated(direction: String) {
@@ -686,32 +727,20 @@ class AnalyticsManager {
 
   // MARK: - All Settings State (Comprehensive daily report)
 
-  private let lastAllSettingsReportKey = "lastAllSettingsReportDate"
-
-  /// Report comprehensive settings state on app launch, throttled to once per calendar day.
-  /// Sends all ~45 user settings as a single analytics event for unified visibility.
-  func reportAllSettingsIfNeeded() {
-    guard !Self.isDevBuild else { return }
-
-    let defaults = UserDefaults.standard
-    let lastReport = defaults.object(forKey: lastAllSettingsReportKey) as? Date ?? .distantPast
-    guard !Calendar.current.isDateInToday(lastReport) else {
-      log("Analytics: All settings already reported today, skipping")
-      return
-    }
-
-    defaults.set(Date(), forKey: lastAllSettingsReportKey)
-
-    let properties = collectAllSettings()
-
-    PostHogManager.shared.allSettingsStateTracked(properties: properties)
-
-    log("Analytics: All settings state reported (\(properties.count) properties)")
-  }
+  /// No-op. Previously fired a daily "All Settings State" event per user with ~45
+  /// settings snapshotted as properties. We get the same observability by
+  /// registering each setting as a user/person property on change at the
+  /// callsite that owns it, instead of paying for a per-DAU daily event. Kept
+  /// as a function (rather than deleted) so existing callers continue to
+  /// compile without touching every callsite in this PR.
+  func reportAllSettingsIfNeeded() {}
 
   /// Collect all user settings into a flat dictionary for analytics reporting.
   /// For string settings (custom prompts), reports has_custom + length instead of full text.
   /// For array settings (excluded apps, keywords), reports count instead of contents.
+  ///
+  /// Kept for potential future use (e.g. lower-cadence opt-in reports) — currently
+  /// no callers within the app emit this dictionary.
   private func collectAllSettings() -> [String: Any] {
     var props: [String: Any] = [:]
 
