@@ -1023,6 +1023,105 @@ class ParakeetStreamingSocket(STTSocket):
         return out
 
 
+class ParakeetWebSocketSocket(STTSocket):
+    """True streaming via Parakeet /v3/stream WebSocket with server-side VAD + diarization."""
+
+    def __init__(self, stream_transcript, ws_url: str, sample_rate: int):
+        self._stream_transcript = stream_transcript
+        self._ws_url = ws_url
+        self._sample_rate = sample_rate
+        self._send_queue: asyncio.Queue = asyncio.Queue(maxsize=1000)
+        self._closed = False
+        self._dead = False
+        self._dead_reason: Optional[str] = None
+        self._ws = None
+        self._sender_task: Optional[asyncio.Task] = None
+        self._receiver_task: Optional[asyncio.Task] = None
+
+    def start(self):
+        self._sender_task = create_named_task(self._run(), name="parakeet_ws_stream")
+
+    def send(self, data: bytes) -> None:
+        if self._closed or not data:
+            return
+        try:
+            self._send_queue.put_nowait(data)
+        except asyncio.QueueFull:
+            pass
+
+    def finish(self) -> None:
+        self._closed = True
+
+    def finalize(self) -> None:
+        pass
+
+    @property
+    def is_connection_dead(self) -> bool:
+        return self._dead
+
+    @property
+    def death_reason(self) -> Optional[str]:
+        return self._dead_reason
+
+    async def drain_and_close(self):
+        self._closed = True
+        if self._ws:
+            try:
+                await self._ws.close()
+            except Exception:
+                pass
+        for task in [self._sender_task, self._receiver_task]:
+            if task and not task.done():
+                try:
+                    await asyncio.wait_for(task, timeout=5)
+                except (asyncio.TimeoutError, asyncio.CancelledError):
+                    task.cancel()
+
+    async def _run(self):
+        import websockets as _ws_lib
+
+        secret = os.getenv('ENCRYPTION_SECRET', '')
+        url = f"{self._ws_url}?authorization={secret}&sample_rate={self._sample_rate}"
+
+        try:
+            async with _ws_lib.connect(url, max_size=10 * 1024 * 1024) as ws:
+                self._ws = ws
+                self._receiver_task = create_named_task(self._receive_loop(ws), name="parakeet_ws_recv")
+
+                while not self._closed:
+                    try:
+                        data = await asyncio.wait_for(self._send_queue.get(), timeout=0.1)
+                        await ws.send(data)
+                    except asyncio.TimeoutError:
+                        continue
+                    except Exception as e:
+                        logger.error(f"Parakeet WS send error: {e}")
+                        break
+
+        except Exception as e:
+            logger.error(f"Parakeet WS connection error: {e}")
+            self._dead = True
+            self._dead_reason = f"parakeet ws failed: {e}"
+
+    async def _receive_loop(self, ws):
+        import json as _json
+
+        try:
+            async for msg in ws:
+                if isinstance(msg, str):
+                    try:
+                        seg = _json.loads(msg)
+                        if isinstance(seg, dict) and seg.get("text"):
+                            self._stream_transcript([seg])
+                    except _json.JSONDecodeError:
+                        pass
+        except Exception as e:
+            if not self._closed:
+                logger.error(f"Parakeet WS recv error: {e}")
+                self._dead = True
+                self._dead_reason = f"parakeet ws recv: {e}"
+
+
 async def process_audio_parakeet(
     stream_transcript,
     language: str,
@@ -1032,15 +1131,25 @@ async def process_audio_parakeet(
     keywords: List[str] = [],
     is_active: Optional[Callable[[], bool]] = None,
 ):
-    """Opt-in STT path backed by the self-hosted Parakeet service (shaped like process_audio_dg).
+    """STT path backed by the self-hosted Parakeet service.
 
-    Returns a ParakeetStreamingSocket, or None if HOSTED_PARAKEET_API_URL is not configured.
+    Uses /v3/stream WebSocket (VAD + diarization built-in) if available,
+    falls back to /v1/transcribe HTTP (batch-per-window) otherwise.
     """
     api_url = os.getenv('HOSTED_PARAKEET_API_URL')
     if not api_url:
         logger.error('process_audio_parakeet: HOSTED_PARAKEET_API_URL not set')
         return None
-    logger.info(f'process_audio_parakeet {language} {sample_rate} {channels} -> {api_url}')
+
+    use_ws = os.getenv('PARAKEET_USE_STREAM_WS', '1') == '1'
+    if use_ws:
+        ws_url = api_url.replace('http://', 'ws://').replace('https://', 'wss://').rstrip('/') + '/v3/stream'
+        logger.info(f'process_audio_parakeet WS {language} {sample_rate} -> {ws_url}')
+        socket = ParakeetWebSocketSocket(stream_transcript, ws_url, sample_rate)
+        socket.start()
+        return socket
+
+    logger.info(f'process_audio_parakeet HTTP {language} {sample_rate} -> {api_url}')
     socket = ParakeetStreamingSocket(stream_transcript, api_url, sample_rate)
     socket.start()
     return socket
