@@ -138,10 +138,16 @@ async fn gemini_proxy(
         }
 
         // Non-BYOK path: use server key with Vertex AI / AI Studio routing
-        return gemini_proxy_server_key(
+        let response = gemini_proxy_server_key(
             &state, &user, &effective_path, action, model, &sanitized_body,
         )
-        .await;
+        .await?;
+        tracing::info!(
+            "gemini_proxy: forwarded uid={} path={}",
+            user.uid,
+            effective_path
+        );
+        return Ok(response);
     }
 
     // BYOK path: always use AI Studio with the user's API key.
@@ -357,7 +363,21 @@ async fn gemini_stream_proxy(
         }
 
         // Non-BYOK: server key with Vertex AI / AI Studio routing
-        return gemini_stream_server_key(&state, &effective_path, action, model, sanitized_body, &query).await;
+        let response = gemini_stream_server_key(
+            &state,
+            &effective_path,
+            action,
+            model,
+            sanitized_body,
+            &query,
+        )
+        .await?;
+        tracing::info!(
+            "gemini_stream_proxy: forwarded uid={} path={}",
+            user.uid,
+            effective_path
+        );
+        return Ok(response);
     }
 
     // BYOK path: always use AI Studio with user's key, skip Vertex AI.
