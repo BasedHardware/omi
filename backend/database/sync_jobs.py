@@ -70,13 +70,22 @@ def get_sync_job(job_id: str) -> Optional[dict]:
         return None
     job = json.loads(data)
 
-    # Stale-job detection: if processing for too long, mark failed
-    if job['status'] in ('queued', 'processing'):
+    # Stale-job detection: only jobs picked up by a worker can time out here.
+    # Queued jobs may simply be waiting behind saturated worker pools; leave
+    # them queued so clients do not treat backend capacity as content failure.
+    if job['status'] == 'processing':
         updated_at = job.get('updated_at') or job.get('created_at', 0)
-        if time.time() - updated_at > STALE_THRESHOLD_SECONDS:
+        now = time.time()
+        if now - updated_at > STALE_THRESHOLD_SECONDS:
+            logger.warning(
+                "sync_job_stale_processing job_id=%s uid=%s age_seconds=%.0f",
+                job_id,
+                job.get('uid'),
+                now - updated_at,
+            )
             job['status'] = 'failed'
             job['error'] = 'Job timed out (background worker likely died)'
-            job['completed_at'] = time.time()
+            job['completed_at'] = now
             # Persist the failure status
             r.set(key, json.dumps(job, default=str), ex=JOB_TTL_SECONDS)
 
