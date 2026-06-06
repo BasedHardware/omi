@@ -34,8 +34,9 @@ logger = logging.getLogger(__name__)
 
 SPEECH_THRESHOLD = float(os.getenv("PARAKEET_VAD_THRESHOLD", "0.5"))
 MIN_SPEECH_DURATION_S = float(os.getenv("PARAKEET_MIN_SPEECH_S", "0.5"))
-MAX_SPEECH_WINDOW_S = float(os.getenv("PARAKEET_MAX_WINDOW_S", "5.0"))
 HANGOVER_S = float(os.getenv("PARAKEET_HANGOVER_S", "0.8"))
+CHUNK_SECONDS = float(os.getenv("PARAKEET_CHUNK_S", "2.0"))
+LEFT_CONTEXT_SECONDS = float(os.getenv("PARAKEET_LEFT_CONTEXT_S", "10.0"))
 SPEAKER_MATCH_THRESHOLD = float(os.getenv("PARAKEET_SPEAKER_THRESHOLD", "0.45"))
 SPEAKER_EMBEDDING_URL = os.getenv("HOSTED_SPEAKER_EMBEDDING_API_URL", "")
 MIN_EMBEDDING_AUDIO_S = 0.5
@@ -105,20 +106,31 @@ def _get_vad_model():
 
 
 class StreamSession:
+    """RNNT chunked streaming with left context and VAD-based endpointing.
+
+    Audio flows continuously through 2s chunks with 10s left context.
+    The full context window (left + current chunk) is transcribed each tick,
+    but only the new text from the current chunk is emitted. VAD detects
+    speech boundaries for endpointing (when to finalize and emit segments).
+    """
 
     def __init__(self, sample_rate: int = 16000):
         self._sr = sample_rate
-        self._bytes_per_sample = 2  # PCM16
-        self._chunk_samples = 512  # Silero VAD window (512 for 16kHz)
-        self._chunk_bytes = self._chunk_samples * self._bytes_per_sample
+        self._bytes_per_sample = 2
+        self._vad_chunk_samples = 512
+        self._vad_chunk_bytes = self._vad_chunk_samples * self._bytes_per_sample
 
         self._pcm_buf = bytearray()
-        self._speech_buf = bytearray()
+        self._audio_buf = bytearray()
         self._stream_offset_s = 0.0
+        self._is_speaking = False
         self._speech_start_s = None
         self._silence_count = 0
-        self._hangover_chunks = int(HANGOVER_S * self._sr / self._chunk_samples)
-        self._max_speech_bytes = int(MAX_SPEECH_WINDOW_S * self._sr * self._bytes_per_sample)
+        self._hangover_chunks = int(HANGOVER_S * self._sr / self._vad_chunk_samples)
+        self._chunk_bytes = int(CHUNK_SECONDS * self._sr * self._bytes_per_sample)
+        self._left_context_bytes = int(LEFT_CONTEXT_SECONDS * self._sr * self._bytes_per_sample)
+        self._pending_audio = bytearray()
+        self._prev_text = ""
 
         self._spk_centroids = []
         self._spk_counts = []
@@ -130,51 +142,59 @@ class StreamSession:
         self._pcm_buf.extend(data)
         segments = []
 
-        while len(self._pcm_buf) >= self._chunk_bytes:
-            chunk = bytes(self._pcm_buf[: self._chunk_bytes])
-            del self._pcm_buf[: self._chunk_bytes]
+        while len(self._pcm_buf) >= self._vad_chunk_bytes:
+            vad_chunk = bytes(self._pcm_buf[: self._vad_chunk_bytes])
+            del self._pcm_buf[: self._vad_chunk_bytes]
 
-            is_speech = self._run_vad(chunk)
-            chunk_dur = self._chunk_samples / self._sr
+            is_speech = self._run_vad(vad_chunk)
+            chunk_dur = self._vad_chunk_samples / self._sr
 
             if is_speech:
                 self._silence_count = 0
-                if self._speech_start_s is None:
+                if not self._is_speaking:
+                    self._is_speaking = True
                     self._speech_start_s = self._stream_offset_s
-                self._speech_buf.extend(chunk)
-
-                if len(self._speech_buf) >= self._max_speech_bytes:
-                    result = await self._transcribe_and_diarize()
-                    segments.extend(result)
+                    self._prev_text = ""
+                self._pending_audio.extend(vad_chunk)
             else:
-                if self._speech_start_s is not None:
+                if self._is_speaking:
                     self._silence_count += 1
-                    self._speech_buf.extend(chunk)
+                    self._pending_audio.extend(vad_chunk)
 
                     if self._silence_count >= self._hangover_chunks:
-                        speech_dur = len(self._speech_buf) / (self._sr * self._bytes_per_sample)
+                        speech_dur = len(self._pending_audio) / (self._sr * self._bytes_per_sample)
                         if speech_dur >= MIN_SPEECH_DURATION_S:
-                            result = await self._transcribe_and_diarize()
+                            result = await self._transcribe_utterance()
                             segments.extend(result)
-                        else:
-                            self._speech_buf.clear()
-                            self._speech_start_s = None
+                        self._pending_audio.clear()
+                        self._is_speaking = False
+                        self._speech_start_s = None
+                        self._prev_text = ""
+
+            if self._is_speaking and len(self._pending_audio) >= self._chunk_bytes:
+                result = await self._transcribe_chunk()
+                segments.extend(result)
 
             self._stream_offset_s += chunk_dur
+            self._audio_buf.extend(vad_chunk)
+            if len(self._audio_buf) > self._left_context_bytes * 2:
+                excess = len(self._audio_buf) - self._left_context_bytes
+                del self._audio_buf[:excess]
 
         return segments
 
     async def flush(self):
-        if not self._speech_buf or self._speech_start_s is None:
+        if not self._pending_audio or self._speech_start_s is None:
             return []
-        speech_dur = len(self._speech_buf) / (self._sr * self._bytes_per_sample)
+        speech_dur = len(self._pending_audio) / (self._sr * self._bytes_per_sample)
         if speech_dur < MIN_SPEECH_DURATION_S:
             return []
-        return await self._transcribe_and_diarize()
+        return await self._transcribe_utterance()
 
     def cleanup(self):
         self._pcm_buf.clear()
-        self._speech_buf.clear()
+        self._audio_buf.clear()
+        self._pending_audio.clear()
         self._spk_centroids.clear()
         self._spk_counts.clear()
 
@@ -188,12 +208,37 @@ class StreamSession:
         except Exception:
             return True
 
-    async def _transcribe_and_diarize(self):
-        speech_pcm = bytes(self._speech_buf)
-        speech_start = self._speech_start_s
-        self._speech_buf.clear()
-        self._speech_start_s = None
-        self._silence_count = 0
+    async def _transcribe_chunk(self):
+        left_ctx = bytes(self._audio_buf[-self._left_context_bytes :]) if len(self._audio_buf) > 0 else b''
+        full_audio = left_ctx + bytes(self._pending_audio)
+
+        loop = asyncio.get_running_loop()
+        result = await loop.run_in_executor(_asr_executor, self._transcribe_pcm, full_audio)
+
+        new_text = result.get("text", "")
+        if self._prev_text and new_text.startswith(self._prev_text):
+            new_text = new_text[len(self._prev_text) :].strip()
+        elif self._prev_text:
+            prev_words = self._prev_text.split()
+            new_words = new_text.split()
+            overlap = 0
+            for i in range(min(len(prev_words), len(new_words))):
+                if prev_words[-(i + 1) :] == new_words[: i + 1]:
+                    overlap = i + 1
+            new_text = " ".join(new_words[overlap:]) if overlap > 0 else new_text
+
+        self._prev_text = result.get("text", "")
+
+        if not new_text.strip():
+            return []
+
+        chunk_start = self._speech_start_s or self._stream_offset_s
+        chunk_dur = len(self._pending_audio) / (self._sr * self._bytes_per_sample)
+        return self._build_segments(new_text, chunk_start, chunk_dur, bytes(self._pending_audio))
+
+    async def _transcribe_utterance(self):
+        speech_pcm = bytes(self._pending_audio)
+        speech_start = self._speech_start_s or self._stream_offset_s
 
         loop = asyncio.get_running_loop()
         result = await loop.run_in_executor(_asr_executor, self._transcribe_pcm, speech_pcm)
@@ -239,6 +284,28 @@ class StreamSession:
             )
 
         return output
+
+    def _build_segments(self, text, start_s, dur_s, pcm):
+        if not text.strip():
+            return []
+        detected_lang = "en"
+        if len(text.strip()) >= 10:
+            try:
+                detected_lang = langdetect_detect(text)
+            except LangDetectException:
+                pass
+        speaker = self._assign_speaker(pcm, 0, dur_s)
+        return [
+            {
+                "text": text.strip(),
+                "start": round(start_s, 2),
+                "end": round(start_s + dur_s, 2),
+                "speaker": speaker,
+                "is_user": False,
+                "person_id": None,
+                "detected_language": detected_lang,
+            }
+        ]
 
     def _transcribe_pcm(self, pcm_bytes: bytes):
         if _INFERENCE_MODE == "nim" or _asr_model is None:
