@@ -1115,7 +1115,7 @@ class ParakeetWebSocketSocket(STTSocket):
                         seg = json.loads(msg)
                         if isinstance(seg, dict) and seg.get("text"):
                             self._stream_transcript([seg])
-                    except _json.JSONDecodeError:
+                    except json.JSONDecodeError:
                         pass
         except Exception as e:
             if not self._closed:
