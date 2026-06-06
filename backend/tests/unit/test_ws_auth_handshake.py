@@ -15,7 +15,7 @@ from unittest.mock import patch, MagicMock
 
 from fastapi import FastAPI, WebSocket, WebSocketException, Depends
 from fastapi.testclient import TestClient
-from firebase_admin.auth import InvalidIdTokenError
+from firebase_admin.auth import CertificateFetchError, InvalidIdTokenError
 from starlette.websockets import WebSocketDisconnect
 
 database_users_stub = types.ModuleType('database.users')
@@ -84,6 +84,17 @@ class TestWebSocketAuthListen(WebSocketAuthTestCase):
         """Certificate/key failures -> 4001 so clients can force-refresh the token."""
         with self.assertRaises(WebSocketDisconnect) as ctx:
             with self.client.websocket_connect("/ws-listen", headers={"Authorization": "Bearer stale_key_token"}):
+                self.fail("Expected WebSocket to be closed by server")
+        self.assertEqual(ctx.exception.code, 4001)
+
+    @patch(
+        'utils.other.endpoints.verify_token',
+        side_effect=CertificateFetchError('Certificate fetch failed', RuntimeError('network unavailable')),
+    )
+    def test_certificate_fetch_error_sends_close_4001(self, mock_verify):
+        """Real Firebase cert fetch failures -> 4001 so clients can refresh their token."""
+        with self.assertRaises(WebSocketDisconnect) as ctx:
+            with self.client.websocket_connect("/ws-listen", headers={"Authorization": "Bearer cert_fetch_token"}):
                 self.fail("Expected WebSocket to be closed by server")
         self.assertEqual(ctx.exception.code, 4001)
 
