@@ -8,5 +8,6 @@ numpy==2.4.0
 soundfile==0.13.1
 httpx==0.28.1
 scipy>=1.11.0
+langdetect>=1.0.9
 # NVIDIA NeMo ASR (Parakeet TDT). Pulls torch/torchaudio transitively; pin after a GPU build.
 nemo_toolkit[asr]>=2.2.0

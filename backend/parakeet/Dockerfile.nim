@@ -38,7 +38,8 @@ RUN python -m venv /opt/venv && \
     python-multipart==0.0.18 \
     httpx==0.28.1 \
     numpy==2.4.0 \
-    scipy>=1.11.0
+    scipy>=1.11.0 \
+    langdetect>=1.0.9
 
 COPY backend/parakeet/main.py .
 COPY backend/parakeet/transcribe.py .
