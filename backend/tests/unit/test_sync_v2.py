@@ -329,9 +329,13 @@ class TestSyncJobsRedis:
         }
         mock_redis.get.return_value = json.dumps(stale_job).encode()
 
-        result = mod.get_sync_job('queued-stale-1')
+        with patch.object(mod.logger, 'warning') as mock_warning:
+            result = mod.get_sync_job('queued-stale-1')
+
         assert result['status'] == 'queued'
         assert result['error'] is None
+        mock_warning.assert_called_once()
+        assert mock_warning.call_args[0][0] == "sync_job_stale_queued job_id=%s uid=%s age_seconds=%.0f"
         mock_redis.set.assert_not_called()
 
     def test_get_sync_job_does_not_mark_fresh_as_stale(self):
