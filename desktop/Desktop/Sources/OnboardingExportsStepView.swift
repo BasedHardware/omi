@@ -45,10 +45,8 @@ struct OnboardingExportsStepView: View {
     }
   }
 
-  // Onboarding seeds memory via copy/paste packs; MCP-only clients (Claude Code,
-  // Codex) are wired later from the Apps page, so keep them out of first-run.
   private var onboardingDestinations: [MemoryExportDestination] {
-    MemoryExportDestination.allCases.filter { $0.supportsMemoryPack }
+    MemoryExportDestination.allCases.filter { $0.supportsMemoryPack || $0.supportsAgentSetup }
   }
 
   private var destinationsList: some View {
@@ -136,6 +134,9 @@ struct OnboardingExportsStepView: View {
     if destination == .notion {
       return "Copy-ready page"
     }
+    if destination.supportsAgentSetup {
+      return status.isConfigured ? "Setup prompt ready" : "Optional setup"
+    }
     return "Prompt + memory pack"
   }
 }
@@ -178,21 +179,30 @@ private struct OnboardingInlineExportPanel: View {
           "Omi copies the prompt and memory pack together, saves a Markdown backup, and opens \(destination.title)."
         )
 
+      case .agents:
+        inlineInfoCard(
+          "Omi copies one setup prompt for any MCP-capable agent. It includes a private connection key and a guide the agent should save for later."
+        )
+
       case .claudeCode, .codex:
         inlineInfoCard(
-          "Connect \(destination.title) over MCP from Settings → Apps after onboarding.")
+          "Connect \(destination.title) over MCP from Apps after onboarding.")
       }
 
       HStack(spacing: 12) {
         Button(model.isRunning ? runningLabel : idleLabel) {
           Task {
-            if let updatedStatus = await model.run(destination: destination) {
+            if destination.supportsAgentSetup,
+              let updatedStatus = await model.copyAgentSetupPrompt()
+            {
+              statuses[destination] = updatedStatus
+            } else if let updatedStatus = await model.run(destination: destination) {
               statuses[destination] = updatedStatus
             }
           }
         }
         .buttonStyle(OnboardingCardButtonStyle(isPrimary: true))
-        .disabled(model.isRunning)
+        .disabled(model.isRunning || model.isLoadingMCPKey)
 
         Button("Cancel") {
           onClose()
@@ -232,7 +242,7 @@ private struct OnboardingInlineExportPanel: View {
     switch destination {
     case .notion: return "Preparing…"
     case .obsidian: return "Exporting…"
-    case .chatgpt, .claude, .gemini, .claudeCode, .codex: return "Preparing…"
+    case .chatgpt, .claude, .gemini, .agents, .claudeCode, .codex: return "Preparing…"
     }
   }
 
@@ -242,6 +252,8 @@ private struct OnboardingInlineExportPanel: View {
       return "Copy & open"
     case .obsidian:
       return model.obsidianVaultPath.isEmpty ? "Choose vault" : "Export"
+    case .agents:
+      return "Copy setup prompt"
     case .chatgpt, .claude, .gemini, .claudeCode, .codex:
       return "Copy & open"
     }

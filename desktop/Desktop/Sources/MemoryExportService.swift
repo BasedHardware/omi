@@ -7,10 +7,15 @@ enum MemoryExportDestination: String, CaseIterable, Identifiable, Sendable {
   case chatgpt
   case claude
   case gemini
+  case agents
   case claudeCode
   case codex
 
   var id: String { rawValue }
+
+  static var allCases: [MemoryExportDestination] {
+    [.notion, .obsidian, .chatgpt, .claude, .gemini, .agents]
+  }
 
   /// Base of the hosted Omi API for this build — stable channel hits prod
   /// (api.omi.me), beta hits dev (api.omiapi.com). Always ends with "/".
@@ -32,6 +37,7 @@ enum MemoryExportDestination: String, CaseIterable, Identifiable, Sendable {
     case .chatgpt: return "ChatGPT"
     case .claude: return "Claude"
     case .gemini: return "Gemini"
+    case .agents: return "AI Agents"
     case .claudeCode: return "Claude Code"
     case .codex: return "Codex"
     }
@@ -44,6 +50,7 @@ enum MemoryExportDestination: String, CaseIterable, Identifiable, Sendable {
     case .chatgpt: return "Live MCP or memory pack"
     case .claude: return "Live MCP or memory pack"
     case .gemini: return "Prompt + memory pack"
+    case .agents: return "MCP setup prompt"
     case .claudeCode: return "Connect via MCP"
     case .codex: return "Connect via MCP"
     }
@@ -56,6 +63,7 @@ enum MemoryExportDestination: String, CaseIterable, Identifiable, Sendable {
     case .chatgpt: return "Connect over MCP so ChatGPT reads your memories live, or copy a memory pack."
     case .claude: return "Connect over MCP so Claude reads your memories live, or copy a memory pack."
     case .gemini: return "Copy the prompt and memory pack, then open Gemini."
+    case .agents: return "Copy one setup prompt for any MCP-capable agent."
     case .claudeCode: return "Add Omi as an MCP server so Claude Code always reads your memories."
     case .codex: return "Add Omi as an MCP server so Codex always reads your memories."
     }
@@ -68,6 +76,7 @@ enum MemoryExportDestination: String, CaseIterable, Identifiable, Sendable {
     case .chatgpt: return .chatgpt
     case .claude: return .claude
     case .gemini: return .gemini
+    case .agents: return .agents
     case .claudeCode: return .claudeCode
     case .codex: return .codex
     }
@@ -77,7 +86,7 @@ enum MemoryExportDestination: String, CaseIterable, Identifiable, Sendable {
     switch self {
     case .obsidian:
       return true
-    case .notion, .chatgpt, .claude, .gemini, .claudeCode, .codex:
+    case .notion, .chatgpt, .claude, .gemini, .agents, .claudeCode, .codex:
       return false
     }
   }
@@ -87,7 +96,7 @@ enum MemoryExportDestination: String, CaseIterable, Identifiable, Sendable {
     switch self {
     case .chatgpt, .claude, .claudeCode, .codex:
       return true
-    case .notion, .obsidian, .gemini:
+    case .notion, .obsidian, .gemini, .agents:
       return false
     }
   }
@@ -102,8 +111,12 @@ enum MemoryExportDestination: String, CaseIterable, Identifiable, Sendable {
   var mcpExecuteKind: MCPExecuteKind {
     switch self {
     case .chatgpt, .claude, .claudeCode, .codex: return .autonomous
-    case .notion, .obsidian, .gemini: return .assisted
+    case .notion, .obsidian, .gemini, .agents: return .assisted
     }
+  }
+
+  var supportsAgentSetup: Bool {
+    self == .agents
   }
 
   /// Whether this destination offers the classic copy/paste memory-pack export.
@@ -111,7 +124,7 @@ enum MemoryExportDestination: String, CaseIterable, Identifiable, Sendable {
     switch self {
     case .notion, .obsidian, .chatgpt, .claude, .gemini:
       return true
-    case .claudeCode, .codex:
+    case .agents, .claudeCode, .codex:
       return false
     }
   }
@@ -128,14 +141,14 @@ enum MemoryExportDestination: String, CaseIterable, Identifiable, Sendable {
       return URL(string: "https://claude.ai/new")
     case .gemini:
       return URL(string: "https://gemini.google.com/app")
-    case .claudeCode, .codex:
+    case .agents, .claudeCode, .codex:
       return nil
     }
   }
 
   var manualPrompt: String {
     switch self {
-    case .notion, .claudeCode, .codex:
+    case .notion, .agents, .claudeCode, .codex:
       return ""
     case .chatgpt:
       return """
@@ -156,7 +169,7 @@ enum MemoryExportDestination: String, CaseIterable, Identifiable, Sendable {
 
   func clipboardText(for markdown: String) -> String {
     switch self {
-    case .notion, .obsidian, .claudeCode, .codex:
+    case .notion, .obsidian, .agents, .claudeCode, .codex:
       return markdown
     case .chatgpt, .claude, .gemini:
       return """
@@ -233,7 +246,7 @@ enum MemoryExportDestination: String, CaseIterable, Identifiable, Sendable {
         openURL: nil,
         openTitle: nil
       )
-    case .notion, .obsidian, .gemini:
+    case .notion, .obsidian, .gemini, .agents:
       return nil
     }
   }
@@ -343,7 +356,7 @@ actor MemoryExportService {
     switch destination {
     case .obsidian:
       isConfigured = !(defaults.string(forKey: destination.obsidianVaultPathKey) ?? "").isEmpty
-    case .claudeCode, .codex:
+    case .agents, .claudeCode, .codex:
       isConfigured = hasStoredMCPKey
     case .notion, .chatgpt, .claude, .gemini:
       isConfigured = exportedCount > 0
@@ -396,6 +409,82 @@ actor MemoryExportService {
     let key = try await APIClient.shared.createMCPKey(name: "Omi Desktop")
     defaults.set(key, forKey: mcpKeyDefaultsKey)
     return key
+  }
+
+  static var omiAgentSkillText: String {
+    """
+    ---
+    name: omi
+    description: Use Omi memories, conversations, and same-host desktop context through MCP and local Omi tools.
+    ---
+
+    # Omi Agent Skill
+
+    Use this skill when the user asks about their Omi memories, conversations, Rewind screen history, local transcriptions, tasks, or wants an agent to personalize work from Omi context.
+
+    ## Tool Routing
+
+    - Read `get_user_profile` first when available for durable user context.
+    - Use `search_memories` or `get_memories` for facts, preferences, habits, relationships, projects, and goals.
+    - Use `search_conversations` for events, incidents, meetings, and "when did this happen?" questions.
+    - If running on the same host as Omi Desktop, prefer local desktop tools for Rewind screenshots, screen semantic search, local transcriptions, local SQL, daily recaps, staged tasks, and indexed files. Use hosted MCP when local Omi is unavailable or the question is only about synced memories/conversations.
+    - Use local `execute_sql` for counts, filters, exact task lookup, local transcriptions, action items, and database questions. Use local `semantic_search` for fuzzy screen-history recall.
+
+    ## Hosted vs Local Routing
+
+    - Durable user facts: hosted MCP first (`get_user_profile`, `search_memories`, `get_memories`), then local memory SQL only if hosted tools are unavailable.
+    - Meetings, calls, and remembered events: hosted `search_conversations` first; use local transcription tables when the question is about same-device recent audio or unsynced local history.
+    - Rewind, screenshots, OCR, app/window history, indexed files, and daily recaps: same-host Omi Desktop tools first. Hosted MCP does not expose raw local screenshots or local-only Rewind data.
+    - Tasks and staged actions: local `execute_sql` plus task tools when available, because task state may be same-host and operational.
+    - Memory writes/deletes: hosted MCP only, and only after explicit user intent.
+
+    ## Write Discipline
+
+    - Do not create, edit, or delete Omi memories unless the user clearly asked for that change.
+    - Prefer proposing the memory change first when intent is ambiguous.
+    - Never treat transient screen activity as a durable memory without user intent or strong evidence.
+
+    ## Setup
+
+    Hosted MCP endpoint: \(MemoryExportDestination.mcpServerURL)
+    Authorization header: Bearer <omi_mcp_key>
+    """
+  }
+
+  static var omiSkillInstallCommand: String {
+    """
+    : "${OMI_SKILL_DIR:?Set OMI_SKILL_DIR to this agent's skill folder before running this command.}"
+    mkdir -p "$OMI_SKILL_DIR"
+    cat > "$OMI_SKILL_DIR/SKILL.md" <<'OMI_SKILL'
+    \(omiAgentSkillText)
+    OMI_SKILL
+    printf 'Installed Omi guide at %s\\n' "$OMI_SKILL_DIR/SKILL.md"
+    """
+  }
+
+  static func omiAgentSetupPrompt(key: String) -> String {
+    """
+    Set up Omi for this agent.
+
+    Add Omi as an MCP server using these details:
+
+    Server URL:
+    \(MemoryExportDestination.mcpServerURL)
+
+    Authorization header:
+    Authorization: Bearer \(key)
+
+    Transport:
+    Streamable HTTP / MCP over HTTP
+
+    Then install the Omi guide as persistent instructions for this agent. If this agent supports skills, save the guide as a skill named `omi`. If it does not support skills, save the guide wherever this agent keeps durable user or project instructions.
+
+    You can install the guide by running this shell command after setting OMI_SKILL_DIR to this agent's skill folder:
+
+    \(omiSkillInstallCommand)
+
+    After setup, test the connection by listing Omi tools and calling `get_user_profile`. If available, also try `search_memories` with a simple query.
+    """
   }
 
   func exportToNotion(token: String, parentPageID: String) async throws -> MemoryExportResult {

@@ -46,13 +46,16 @@ private struct MemoryExportRow: View {
   @State private var isHovering = false
 
   private var actionTitle: String {
+    if destination.supportsAgentSetup {
+      return status.isConfigured ? "Manage" : "Connect"
+    }
     if destination.supportsMCP {
       return status.isConfigured ? "Manage" : "Connect"
     }
     switch destination {
     case .obsidian:
       return status.isConfigured ? "Sync" : "Connect"
-    case .notion, .chatgpt, .claude, .gemini, .claudeCode, .codex:
+    case .notion, .chatgpt, .claude, .gemini, .agents, .claudeCode, .codex:
       return "Open"
     }
   }
@@ -121,6 +124,25 @@ final class MemoryExportDestinationSheetModel: ObservableObject {
     NSPasteboard.general.clearContents()
     NSPasteboard.general.setString(text, forType: .string)
     statusMessage = "\(label) copied."
+  }
+
+  func copyAgentSetupPrompt() async -> MemoryExportStatus? {
+    errorMessage = nil
+    statusMessage = nil
+    isLoadingMCPKey = true
+    defer { isLoadingMCPKey = false }
+
+    do {
+      let key = try await MemoryExportService.shared.ensureMCPKey()
+      mcpKey = key
+      copyToPasteboard(MemoryExportService.omiAgentSetupPrompt(key: key), label: "Agent setup prompt")
+      statusMessage =
+        "Setup prompt copied. It includes a private Omi key, so treat it like a password."
+      return await MemoryExportService.shared.status(for: .agents)
+    } catch {
+      errorMessage = "Couldn't create setup prompt: \(error.localizedDescription)"
+      return nil
+    }
   }
 
   func open(_ url: URL) {
@@ -197,7 +219,7 @@ final class MemoryExportDestinationSheetModel: ObservableObject {
         }
         statusMessage = "Memory pack ready for \(destination.title). Prompt and export copied."
 
-      case .claudeCode, .codex:
+      case .agents, .claudeCode, .codex:
         // MCP-only destinations have no memory-pack run step.
         return nil
       }
@@ -344,7 +366,9 @@ struct MemoryExportDestinationSheet: View {
   @ViewBuilder
   private var content: some View {
     VStack(alignment: .leading, spacing: 18) {
-      if destination.supportsMCP {
+      if destination.supportsAgentSetup {
+        agentSetupSection
+      } else if destination.supportsMCP {
         executeBlock
         Divider()
           .background(OmiColors.backgroundTertiary)
@@ -376,6 +400,48 @@ struct MemoryExportDestinationSheet: View {
         packSection
         packActionButton
       }
+    }
+  }
+
+  private var agentSetupSection: some View {
+    VStack(alignment: .leading, spacing: 14) {
+      methodHeader(
+        icon: "point.3.connected.trianglepath.dotted",
+        title: "Agent setup prompt",
+        tag: "MCP",
+        tagColor: OmiColors.purplePrimary,
+        subtitle:
+          "Copy one prompt into any MCP-capable agent. Omi includes the server details, a private connection key, and the guide the agent should save for later."
+      )
+
+      VStack(alignment: .leading, spacing: 8) {
+        agentSetupBullet("Omi creates the connection key before copying the prompt.")
+        agentSetupBullet("The agent chooses its own skill or instruction folder.")
+        agentSetupBullet("The prompt asks the agent to connect, install the guide, and test Omi tools.")
+      }
+
+      Button(model.isLoadingMCPKey ? "Preparing…" : "Copy setup prompt") {
+        Task {
+          if let updatedStatus = await model.copyAgentSetupPrompt() {
+            statuses[destination] = updatedStatus
+          }
+        }
+      }
+      .buttonStyle(OnboardingCardButtonStyle(isPrimary: true))
+      .disabled(model.isLoadingMCPKey)
+    }
+  }
+
+  private func agentSetupBullet(_ text: String) -> some View {
+    HStack(alignment: .top, spacing: 8) {
+      Image(systemName: "checkmark.circle.fill")
+        .scaledFont(size: 12)
+        .foregroundColor(OmiColors.purplePrimary)
+        .padding(.top, 1)
+      Text(text)
+        .scaledFont(size: 12)
+        .foregroundColor(OmiColors.textTertiary)
+        .fixedSize(horizontal: false, vertical: true)
     }
   }
 
@@ -616,7 +682,7 @@ struct MemoryExportDestinationSheet: View {
           )
       }
 
-    case .claudeCode, .codex:
+    case .agents, .claudeCode, .codex:
       EmptyView()
     }
   }
@@ -641,7 +707,7 @@ struct MemoryExportDestinationSheet: View {
       return (model.obsidianVaultPath.isEmpty ? "Choose vault" : "Export", "Exporting…")
     case .chatgpt, .claude, .gemini:
       return ("Copy & open", "Preparing…")
-    case .claudeCode, .codex:
+    case .agents, .claudeCode, .codex:
       return ("Copy", "…")
     }
   }

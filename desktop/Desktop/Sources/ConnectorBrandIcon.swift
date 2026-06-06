@@ -11,6 +11,7 @@ enum ConnectorBrand: String, Sendable {
   case chatgpt
   case claude
   case gemini
+  case agents
   case claudeCode
   case codex
   case x
@@ -31,7 +32,7 @@ enum ConnectorBrand: String, Sendable {
     case .codex:
       // Codex is OpenAI's CLI — reuse the ChatGPT app icon as the brand mark.
       return "/Applications/ChatGPT.app"
-    case .calendar, .gmail, .localFiles, .gemini, .x:
+    case .calendar, .gmail, .localFiles, .gemini, .agents, .x:
       return nil
     }
   }
@@ -78,6 +79,8 @@ enum ConnectorBrand: String, Sendable {
       return "sparkles"
     case .gemini:
       return "sparkles.rectangle.stack"
+    case .agents:
+      return "point.3.connected.trianglepath.dotted"
     case .claudeCode:
       return "terminal.fill"
     case .codex:
