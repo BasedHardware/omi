@@ -32,7 +32,7 @@ except ImportError:
 
 logger = logging.getLogger(__name__)
 
-SPEECH_THRESHOLD = float(os.getenv("PARAKEET_VAD_THRESHOLD", "0.5"))
+SPEECH_THRESHOLD = float(os.getenv("PARAKEET_VAD_THRESHOLD", "0.3"))
 MIN_SPEECH_DURATION_S = float(os.getenv("PARAKEET_MIN_SPEECH_S", "0.5"))
 HANGOVER_S = float(os.getenv("PARAKEET_HANGOVER_S", "0.8"))
 CHUNK_SECONDS = float(os.getenv("PARAKEET_CHUNK_S", "2.0"))
