@@ -12,11 +12,16 @@ import asyncio
 import io
 import logging
 import os
-import struct
 import tempfile
+import threading
 import wave as _wave
+from concurrent.futures import ThreadPoolExecutor
 
+import httpx
 import numpy as np
+from langdetect import detect as langdetect_detect
+from langdetect.lang_detect_exception import LangDetectException
+from scipy.spatial.distance import cdist
 
 logger = logging.getLogger(__name__)
 
@@ -28,22 +33,35 @@ SPEAKER_MATCH_THRESHOLD = float(os.getenv("PARAKEET_SPEAKER_THRESHOLD", "0.45"))
 SPEAKER_EMBEDDING_URL = os.getenv("HOSTED_SPEAKER_EMBEDDING_API_URL", "")
 
 _vad_model = None
+_vad_lock = threading.Lock()
+_asr_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="parakeet_asr")
+
+try:
+    import torch
+
+    _torch = torch
+except ImportError:
+    _torch = None
 
 
 def _get_vad_model():
     global _vad_model
     if _vad_model is not None:
         return _vad_model
-    try:
-        import torch
-
-        model, utils = torch.hub.load(repo_or_dir='snakers4/silero-vad', model='silero_vad', trust_repo=True)
-        _vad_model = model
-        logger.info("Silero VAD model loaded")
-        return _vad_model
-    except Exception as e:
-        logger.warning(f"Could not load Silero VAD: {e}")
-        return None
+    with _vad_lock:
+        if _vad_model is not None:
+            return _vad_model
+        if _torch is None:
+            logger.warning("torch not available, VAD disabled")
+            return None
+        try:
+            model, _ = _torch.hub.load(repo_or_dir='snakers4/silero-vad', model='silero_vad', trust_repo=True)
+            _vad_model = model
+            logger.info("Silero VAD model loaded")
+            return _vad_model
+        except Exception as e:
+            logger.warning(f"Could not load Silero VAD: {e}")
+            return None
 
 
 class StreamSession:
@@ -121,12 +139,10 @@ class StreamSession:
         self._spk_counts.clear()
 
     def _run_vad(self, chunk: bytes) -> bool:
-        if self._vad is None:
+        if self._vad is None or _torch is None:
             return True
         try:
-            import torch
-
-            audio = torch.frombuffer(chunk, dtype=torch.int16).float() / 32768.0
+            audio = _torch.frombuffer(chunk, dtype=_torch.int16).float() / 32768.0
             prob = self._vad(audio, self._sr).item()
             return prob >= SPEECH_THRESHOLD
         except Exception:
@@ -142,7 +158,7 @@ class StreamSession:
         wav_bytes = self._pcm_to_wav(speech_pcm)
 
         loop = asyncio.get_running_loop()
-        result = await loop.run_in_executor(None, self._transcribe_wav, wav_bytes)
+        result = await loop.run_in_executor(_asr_executor, self._transcribe_wav, wav_bytes)
 
         text = result.get("text", "")
         raw_segments = result.get("segments", [])
@@ -150,9 +166,6 @@ class StreamSession:
         if not raw_segments and text:
             dur = len(speech_pcm) / (self._sr * self._bytes_per_sample)
             raw_segments = [{"text": text, "start": 0.0, "end": dur}]
-
-        from langdetect import detect as langdetect_detect
-        from langdetect.lang_detect_exception import LangDetectException
 
         detected_lang = "en"
         if text and len(text.strip()) >= 10:
@@ -172,7 +185,8 @@ class StreamSession:
             abs_start = speech_start + rel_start
             abs_end = speech_start + rel_end
 
-            speaker = self._assign_speaker(speech_pcm, rel_start, rel_end)
+            loop2 = asyncio.get_running_loop()
+            speaker = await loop2.run_in_executor(None, self._assign_speaker, speech_pcm, rel_start, rel_end)
 
             output.append(
                 {
@@ -216,8 +230,6 @@ class StreamSession:
             if emb is None:
                 return f"SPEAKER_{self._last_speaker}"
 
-            from scipy.spatial.distance import cdist
-
             best_i, best_dist = -1, 1e9
             for i, c in enumerate(self._spk_centroids):
                 d = float(cdist(emb, c, metric="cosine")[0, 0])
@@ -241,8 +253,6 @@ class StreamSession:
             return f"SPEAKER_{self._last_speaker}"
 
     def _get_embedding(self, wav_bytes: bytes):
-        import httpx
-
         try:
             with httpx.Client(timeout=httpx.Timeout(connect=5.0, read=30.0, write=10.0, pool=5.0)) as client:
                 resp = client.post(

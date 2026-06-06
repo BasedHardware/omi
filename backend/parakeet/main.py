@@ -1,3 +1,4 @@
+import asyncio
 import os
 import uuid
 import logging
@@ -66,13 +67,16 @@ def transcribe_v2(
             pass
 
 
+_WS_RECEIVE_TIMEOUT = 30.0
+
+
 @app.websocket("/v3/stream")
 async def stream_transcribe(
     websocket: WebSocket,
-    authorization: str = Query(None),
     sample_rate: int = Query(16000),
 ):
-    if _AUTH_TOKEN and authorization != _AUTH_TOKEN:
+    auth = websocket.headers.get("authorization", websocket.query_params.get("authorization", ""))
+    if _AUTH_TOKEN and auth != _AUTH_TOKEN:
         await websocket.close(code=1008, reason="unauthorized")
         return
 
@@ -81,21 +85,32 @@ async def stream_transcribe(
 
     try:
         while True:
-            data = await websocket.receive_bytes()
-            segments = await session.feed(data)
-            for seg in segments:
-                await websocket.send_json(seg)
+            try:
+                msg = await asyncio.wait_for(websocket.receive(), timeout=_WS_RECEIVE_TIMEOUT)
+            except asyncio.TimeoutError:
+                continue
+
+            if "bytes" in msg:
+                segments = await session.feed(msg["bytes"])
+                for seg in segments:
+                    await websocket.send_json(seg)
+            elif "text" in msg:
+                if msg["text"] == "finalize":
+                    break
     except WebSocketDisconnect:
         pass
     except Exception as e:
         logger.error(f"v3/stream error: {e}")
     finally:
-        final_segments = await session.flush()
-        for seg in final_segments:
-            try:
-                await websocket.send_json(seg)
-            except Exception:
-                break
+        try:
+            final_segments = await session.flush()
+            for seg in final_segments:
+                try:
+                    await websocket.send_json(seg)
+                except Exception:
+                    break
+        except Exception as e:
+            logger.error(f"v3/stream flush error: {e}")
         session.cleanup()
 
 

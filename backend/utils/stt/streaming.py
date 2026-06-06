@@ -1067,6 +1067,11 @@ class ParakeetWebSocketSocket(STTSocket):
         self._closed = True
         if self._ws:
             try:
+                await self._ws.send("finalize")
+                await asyncio.sleep(2)
+            except Exception:
+                pass
+            try:
                 await self._ws.close()
             except Exception:
                 pass
@@ -1081,10 +1086,11 @@ class ParakeetWebSocketSocket(STTSocket):
         import websockets as _ws_lib
 
         secret = os.getenv('ENCRYPTION_SECRET', '')
-        url = f"{self._ws_url}?authorization={secret}&sample_rate={self._sample_rate}"
+        url = f"{self._ws_url}?sample_rate={self._sample_rate}"
+        headers = {"authorization": secret} if secret else {}
 
         try:
-            async with _ws_lib.connect(url, max_size=10 * 1024 * 1024) as ws:
+            async with _ws_lib.connect(url, additional_headers=headers, max_size=10 * 1024 * 1024) as ws:
                 self._ws = ws
                 self._receiver_task = create_named_task(self._receive_loop(ws), name="parakeet_ws_recv")
 
