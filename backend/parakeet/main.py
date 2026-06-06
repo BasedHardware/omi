@@ -74,6 +74,8 @@ _WS_RECEIVE_TIMEOUT = 30.0
 async def stream_transcribe(
     websocket: WebSocket,
     sample_rate: int = Query(16000),
+    vad_threshold: float = Query(None),
+    hangover_s: float = Query(None),
 ):
     await websocket.accept()
 
@@ -81,7 +83,7 @@ async def stream_transcribe(
     if _AUTH_TOKEN and auth != _AUTH_TOKEN:
         await websocket.close(code=1008, reason="unauthorized")
         return
-    session = StreamSession(sample_rate=sample_rate)
+    session = StreamSession(sample_rate=sample_rate, vad_threshold=vad_threshold, hangover_s=hangover_s)
 
     try:
         while True:

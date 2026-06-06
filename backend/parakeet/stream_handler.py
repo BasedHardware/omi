@@ -114,11 +114,13 @@ class StreamSession:
     speech boundaries for endpointing (when to finalize and emit segments).
     """
 
-    def __init__(self, sample_rate: int = 16000):
+    def __init__(self, sample_rate: int = 16000, vad_threshold: float = None, hangover_s: float = None):
         self._sr = sample_rate
         self._bytes_per_sample = 2
         self._vad_chunk_samples = 512
         self._vad_chunk_bytes = self._vad_chunk_samples * self._bytes_per_sample
+        self._speech_threshold = vad_threshold if vad_threshold is not None else SPEECH_THRESHOLD
+        self._hangover_s = hangover_s if hangover_s is not None else HANGOVER_S
 
         self._pcm_buf = bytearray()
         self._audio_buf = bytearray()
@@ -126,7 +128,7 @@ class StreamSession:
         self._is_speaking = False
         self._speech_start_s = None
         self._silence_count = 0
-        self._hangover_chunks = int(HANGOVER_S * self._sr / self._vad_chunk_samples)
+        self._hangover_chunks = int(self._hangover_s * self._sr / self._vad_chunk_samples)
         self._chunk_bytes = int(CHUNK_SECONDS * self._sr * self._bytes_per_sample)
         self._left_context_bytes = int(LEFT_CONTEXT_SECONDS * self._sr * self._bytes_per_sample)
         self._pending_audio = bytearray()
@@ -195,7 +197,7 @@ class StreamSession:
         try:
             audio = _torch.frombuffer(chunk, dtype=_torch.int16).float() / 32768.0
             prob = self._vad(audio, self._sr).item()
-            return prob >= SPEECH_THRESHOLD
+            return prob >= self._speech_threshold
         except Exception:
             return True
 
