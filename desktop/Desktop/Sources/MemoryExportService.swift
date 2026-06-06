@@ -310,6 +310,15 @@ struct MemoryExportResult: Sendable {
   let clipboardText: String?
 }
 
+struct AgentConnectionTestResult: Sendable {
+  let hostedMemoryCount: Int
+  let localToolCount: Int
+
+  var summary: String {
+    "Hosted MCP returned \(hostedMemoryCount) memories. Local Desktop MCP returned \(localToolCount) tools."
+  }
+}
+
 enum MemoryExportError: LocalizedError {
   case noMemories
   case invalidNotionConfiguration
@@ -406,9 +415,109 @@ actor MemoryExportService {
     if let existing = storedMCPKey() {
       return existing
     }
+    return try await createNewMCPKey()
+  }
+
+  /// Mint a fresh hosted MCP key and make future setup prompts use it.
+  func createNewMCPKey() async throws -> String {
     let key = try await APIClient.shared.createMCPKey(name: "Omi Desktop")
     defaults.set(key, forKey: mcpKeyDefaultsKey)
     return key
+  }
+
+  func testAgentConnections(hostedKey: String, localToken: String) async throws -> AgentConnectionTestResult {
+    async let hostedCount = testHostedMCPMemoryCount(key: hostedKey)
+    async let localCount = testLocalMCPToolCount(token: localToken)
+    return try await AgentConnectionTestResult(
+      hostedMemoryCount: hostedCount,
+      localToolCount: localCount
+    )
+  }
+
+  private func testHostedMCPMemoryCount(key: String) async throws -> Int {
+    guard let url = URL(string: MemoryExportDestination.mcpServerURL) else {
+      throw MemoryExportError.requestFailed("Hosted MCP URL is invalid.")
+    }
+
+    let requestBody: [String: Any] = [
+      "jsonrpc": "2.0",
+      "id": 1,
+      "method": "tools/call",
+      "params": [
+        "name": "get_memories",
+        "arguments": ["limit": 5],
+      ],
+    ]
+
+    var request = URLRequest(url: url)
+    request.httpMethod = "POST"
+    request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+    request.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization")
+    request.httpBody = try JSONSerialization.data(withJSONObject: requestBody)
+
+    let (data, response) = try await URLSession.shared.data(for: request)
+    guard let httpResponse = response as? HTTPURLResponse else {
+      throw MemoryExportError.requestFailed("Hosted MCP returned an invalid response.")
+    }
+    guard (200...299).contains(httpResponse.statusCode) else {
+      throw MemoryExportError.requestFailed("Hosted MCP returned HTTP \(httpResponse.statusCode).")
+    }
+
+    let rpc = try JSONSerialization.jsonObject(with: data) as? [String: Any]
+    if let error = rpc?["error"] as? [String: Any],
+      let message = error["message"] as? String
+    {
+      throw MemoryExportError.requestFailed("Hosted MCP failed: \(message)")
+    }
+    guard
+      let result = rpc?["result"] as? [String: Any],
+      let content = result["content"] as? [[String: Any]],
+      let text = content.first?["text"] as? String,
+      let textData = text.data(using: .utf8),
+      let payload = try JSONSerialization.jsonObject(with: textData) as? [String: Any],
+      let memories = payload["memories"] as? [Any]
+    else {
+      throw MemoryExportError.requestFailed("Hosted MCP did not return memory data.")
+    }
+
+    return memories.count
+  }
+
+  private func testLocalMCPToolCount(token: String) async throws -> Int {
+    guard let url = URL(string: LocalAgentMCPSettings.serverURL) else {
+      throw MemoryExportError.requestFailed("Local MCP URL is invalid.")
+    }
+
+    let requestBody: [String: Any] = [
+      "jsonrpc": "2.0",
+      "id": 1,
+      "method": "tools/list",
+      "params": [:],
+    ]
+
+    var request = URLRequest(url: url)
+    request.httpMethod = "POST"
+    request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+    request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+    request.httpBody = try JSONSerialization.data(withJSONObject: requestBody)
+
+    let (data, response) = try await URLSession.shared.data(for: request)
+    guard let httpResponse = response as? HTTPURLResponse else {
+      throw MemoryExportError.requestFailed("Local MCP returned an invalid response.")
+    }
+    guard (200...299).contains(httpResponse.statusCode) else {
+      throw MemoryExportError.requestFailed("Local MCP returned HTTP \(httpResponse.statusCode).")
+    }
+
+    guard
+      let rpc = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+      let result = rpc["result"] as? [String: Any],
+      let tools = result["tools"] as? [Any]
+    else {
+      throw MemoryExportError.requestFailed("Local MCP did not return tools.")
+    }
+
+    return tools.count
   }
 
   static var omiAgentSkillText: String {
