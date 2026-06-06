@@ -69,11 +69,9 @@ def _init_nemo():
 
     _batch_model = _load_nemo_model(BATCH_MODEL_NAME)
 
-    if STREAM_MODEL_NAME:
-        _stream_model = _load_nemo_model(STREAM_MODEL_NAME)
-    else:
-        logger.warning("PARAKEET_STREAM_MODEL not set — streaming will use batch model as temporary fallback")
-        _stream_model = _batch_model
+    if not STREAM_MODEL_NAME:
+        raise RuntimeError("PARAKEET_STREAM_MODEL env var is required")
+    _stream_model = _load_nemo_model(STREAM_MODEL_NAME)
 
 
 def _init_nim():
