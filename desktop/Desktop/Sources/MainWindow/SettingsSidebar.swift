@@ -285,6 +285,24 @@ struct SettingsSearchItem: Identifiable {
       keywords: ["sounds", "audio feedback", "ptt sounds"], section: .shortcuts, icon: "keyboard",
       settingId: "floatingbar.pttsounds"),
     SettingsSearchItem(
+      name: "Agents",
+      subtitle: "Connect external agents to Omi over MCP and install the Omi skill",
+      keywords: [
+        "agents", "mcp", "hermes", "claude", "cursor", "codex", "skill", "connection key",
+        "memories", "conversations",
+      ], section: .agents, icon: "point.3.connected.trianglepath.dotted",
+      settingId: "agents.overview"),
+    SettingsSearchItem(
+      name: "Omi Agent Skill",
+      subtitle: "Copy tool-routing guidance for agents that use Omi",
+      keywords: ["skill", "install", "agent instructions", "tool routing", "rewind", "desktop tools"],
+      section: .agents, icon: "book.pages", settingId: "agents.skill"),
+    SettingsSearchItem(
+      name: "MCP Connection Key",
+      subtitle: "Create and verify the key agents use to connect to Omi",
+      keywords: ["mcp key", "api key", "verify endpoint", "connection", "authorization"],
+      section: .agents, icon: "key", settingId: "agents.mcp"),
+    SettingsSearchItem(
       name: "Multiple Chat Sessions", subtitle: "Create separate chat threads",
       keywords: ["multi chat", "threads"], section: .advanced, icon: "slider.horizontal.3",
       settingId: "advanced.preferences.multichat"),
@@ -326,6 +344,7 @@ struct SettingsSidebar: View {
     .planUsage,
     .floatingBar,
     .shortcuts,
+    .agents,
     .advanced,
     .about,
   ]
@@ -511,6 +530,7 @@ struct SettingsSidebarItem: View {
     case .aiChat: return "cpu"
     case .floatingBar: return "sparkles"
     case .shortcuts: return "keyboard"
+    case .agents: return "point.3.connected.trianglepath.dotted"
     case .advanced: return "chart.bar"
     case .about: return "info.circle"
     }

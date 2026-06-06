@@ -311,6 +311,7 @@ struct SettingsContentView: View {
     case aiChat = "AI Chat"
     case floatingBar = "Floating Bar"
     case shortcuts = "Shortcuts"
+    case agents = "Agents"
     case advanced = "Advanced"
     case about = "About"
   }
@@ -383,10 +384,12 @@ struct SettingsContentView: View {
   @State private var byokKeyStatuses: [BYOKProvider: BYOKValidator.Status] = [:]
   @State private var byokActivationError: String?
 
-  // MCP key creation state (Settings → Advanced → MCP)
+  // MCP key creation state (Settings → Agents)
   @State private var mcpCreatedKey: String?
   @State private var mcpIsCreatingKey: Bool = false
+  @State private var mcpIsVerifying: Bool = false
   @State private var mcpError: String?
+  @State private var mcpVerificationMessage: String?
 
   init(
     appState: AppState,
@@ -472,6 +475,8 @@ struct SettingsContentView: View {
           floatingBarSection
         case .shortcuts:
           shortcutsSection
+        case .agents:
+          agentsSection
         case .advanced:
           advancedSection
         case .about:
@@ -3293,134 +3298,529 @@ struct SettingsContentView: View {
       advancedCategoryHeader(title: "Developer API Keys", icon: "key")
       developerKeysSubsection
 
-      advancedCategoryHeader(title: "MCP", icon: "antenna.radiowaves.left.and.right")
-      mcpSubsection
-
       advancedCategoryHeader(title: "Dev Tools", icon: "hammer")
       devToolsSubsection
     }
   }
 
-  // MARK: - MCP Subsection
+  // MARK: - Agents Section
 
-  private var mcpSubsection: some View {
+  private var agentsSection: some View {
     VStack(spacing: 20) {
-      // Server URL — channel-aware (beta hits dev backend, stable hits prod).
-      settingsCard(settingId: "advanced.mcp.serverurl") {
-        VStack(alignment: .leading, spacing: 8) {
-          HStack(spacing: 10) {
-            Image(systemName: "link")
-              .scaledFont(size: 14)
-              .foregroundColor(OmiColors.textSecondary)
-            Text("Server URL")
-              .scaledFont(size: 14, weight: .semibold)
+      agentsOverviewCard
+      agentsMCPConnectionCard
+      agentSkillCard
+      agentInstallTargetsCard
+    }
+  }
+
+  private var agentsOverviewCard: some View {
+    settingsCard(settingId: "agents.overview") {
+      VStack(alignment: .leading, spacing: 14) {
+        HStack(alignment: .top, spacing: 14) {
+          Image(systemName: "point.3.connected.trianglepath.dotted")
+            .scaledFont(size: 18)
+            .foregroundColor(OmiColors.purplePrimary)
+            .frame(width: 28, height: 28)
+
+          VStack(alignment: .leading, spacing: 5) {
+            Text("Connect agents to Omi")
+              .scaledFont(size: 16, weight: .semibold)
               .foregroundColor(OmiColors.textPrimary)
-            Spacer()
-            Button {
-              NSPasteboard.general.clearContents()
-              NSPasteboard.general.setString(MemoryExportDestination.mcpServerURL, forType: .string)
-            } label: {
-              HStack(spacing: 6) {
-                Image(systemName: "doc.on.doc")
-                Text("Copy")
-              }
-              .scaledFont(size: 12, weight: .medium)
-              .foregroundColor(OmiColors.textPrimary)
-              .padding(.horizontal, 10)
-              .padding(.vertical, 6)
-              .background(
-                RoundedRectangle(cornerRadius: 8).fill(OmiColors.backgroundQuaternary.opacity(0.6)))
-            }
-            .buttonStyle(.plain)
+            Text(
+              "Give agents live access to your Omi memories and conversations over MCP, plus a skill that teaches them when to use memories, conversations, or local desktop context."
+            )
+            .scaledFont(size: 13)
+            .foregroundColor(OmiColors.textTertiary)
+            .fixedSize(horizontal: false, vertical: true)
           }
-          Text(MemoryExportDestination.mcpServerURL)
-            .scaledFont(size: 12, weight: .medium)
-            .foregroundColor(OmiColors.textSecondary)
-            .textSelection(.enabled)
-          Text(
-            AppBuild.currentUpdateChannel == "beta"
-              ? "Beta channel — points at the dev backend."
-              : "Stable channel — points at production."
-          )
-          .scaledFont(size: 11)
-          .foregroundColor(OmiColors.textTertiary)
+        }
+
+        HStack(spacing: 10) {
+          agentCapabilityPill("Hosted MCP", detail: "Memories + conversations")
+          agentCapabilityPill("Omi skill", detail: "Routing instructions")
+          agentCapabilityPill("Desktop tools", detail: "Local Rewind context")
         }
       }
+    }
+  }
 
-      // Create an MCP key — shown once after creation; user copies + pastes into Claude/ChatGPT/etc.
-      settingsCard(settingId: "advanced.mcp.createkey") {
-        VStack(alignment: .leading, spacing: 12) {
-          HStack(spacing: 10) {
-            Image(systemName: "key.fill")
-              .scaledFont(size: 14)
-              .foregroundColor(OmiColors.textSecondary)
-            VStack(alignment: .leading, spacing: 2) {
-              Text("MCP API Key")
-                .scaledFont(size: 14, weight: .semibold)
-                .foregroundColor(OmiColors.textPrimary)
-              Text("Use this key as the OAuth Client Secret in Claude/ChatGPT/your agent.")
-                .scaledFont(size: 11)
-                .foregroundColor(OmiColors.textTertiary)
-            }
-            Spacer()
-            Button {
-              Task { await createMCPKeyFromSettings() }
-            } label: {
-              Text(mcpIsCreatingKey ? "Creating…" : "Create Key")
-                .scaledFont(size: 12, weight: .medium)
-                .foregroundColor(.black)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 6)
-                .background(RoundedRectangle(cornerRadius: 8).fill(Color.white))
-            }
-            .buttonStyle(.plain)
-            .disabled(mcpIsCreatingKey)
+  private var agentsMCPConnectionCard: some View {
+    settingsCard(settingId: "agents.mcp") {
+      VStack(alignment: .leading, spacing: 16) {
+        HStack(alignment: .top, spacing: 12) {
+          Image(systemName: "antenna.radiowaves.left.and.right")
+            .scaledFont(size: 16)
+            .foregroundColor(OmiColors.purplePrimary)
+            .frame(width: 24, height: 24)
+
+          VStack(alignment: .leading, spacing: 4) {
+            Text("Omi MCP")
+              .scaledFont(size: 16, weight: .semibold)
+              .foregroundColor(OmiColors.textPrimary)
+            Text(
+              AppBuild.currentUpdateChannel == "beta"
+                ? "Beta channel uses the dev backend. Agents connect with an MCP key."
+                : "Stable channel uses production. Agents connect with an MCP key."
+            )
+            .scaledFont(size: 12)
+            .foregroundColor(OmiColors.textTertiary)
           }
 
-          if let key = mcpCreatedKey {
-            VStack(alignment: .leading, spacing: 8) {
-              Text("Copy this now — it's only shown once.")
-                .scaledFont(size: 11)
-                .foregroundColor(OmiColors.warning)
-              HStack(spacing: 8) {
-                Text(key)
-                  .scaledFont(size: 12, weight: .medium)
-                  .foregroundColor(OmiColors.textPrimary)
-                  .textSelection(.enabled)
-                  .lineLimit(1)
-                  .truncationMode(.middle)
-                  .frame(maxWidth: .infinity, alignment: .leading)
-                Button {
-                  NSPasteboard.general.clearContents()
-                  NSPasteboard.general.setString(key, forType: .string)
-                } label: {
-                  Image(systemName: "doc.on.doc")
-                    .scaledFont(size: 12)
-                    .foregroundColor(OmiColors.textPrimary)
-                    .padding(6)
-                    .background(
-                      RoundedRectangle(cornerRadius: 6)
-                        .fill(OmiColors.backgroundQuaternary.opacity(0.6)))
-                }
-                .buttonStyle(.plain)
-              }
-              .padding(10)
-              .background(
-                RoundedRectangle(cornerRadius: 8)
-                  .fill(OmiColors.backgroundSecondary.opacity(0.6)))
-            }
+          Spacer()
+
+          Button {
+            copyToPasteboard(MemoryExportDestination.mcpServerURL)
+          } label: {
+            iconTextButtonLabel(icon: "doc.on.doc", text: "Copy URL")
+          }
+          .buttonStyle(.plain)
+        }
+
+        Text(MemoryExportDestination.mcpServerURL)
+          .scaledFont(size: 12, weight: .medium)
+          .foregroundColor(OmiColors.textSecondary)
+          .textSelection(.enabled)
+
+        HStack(spacing: 10) {
+          Button {
+            Task { await createMCPKeyFromSettings() }
+          } label: {
+            Text(mcpIsCreatingKey ? "Creating…" : "Create Connection Key")
+              .scaledFont(size: 12, weight: .medium)
+              .foregroundColor(.black)
+              .padding(.horizontal, 12)
+              .padding(.vertical, 7)
+              .background(RoundedRectangle(cornerRadius: 8).fill(Color.white))
+          }
+          .buttonStyle(.plain)
+          .disabled(mcpIsCreatingKey)
+
+          Button {
+            Task { await verifyMCPConnectionFromSettings() }
+          } label: {
+            iconTextButtonLabel(
+              icon: "checkmark.seal", text: mcpIsVerifying ? "Verifying…" : "Verify Omi Endpoint")
+          }
+          .buttonStyle(.plain)
+          .disabled(mcpIsVerifying || mcpCreatedKey == nil)
+
+          if mcpCreatedKey == nil {
+            Text("Create a key first to verify the endpoint.")
+              .scaledFont(size: 11)
+              .foregroundColor(OmiColors.textTertiary)
           }
 
-          if let err = mcpError {
+          Spacer()
+        }
+
+        if let key = mcpCreatedKey {
+          VStack(alignment: .leading, spacing: 8) {
+            Text("Copy this now — it's only shown once.")
+              .scaledFont(size: 11)
+              .foregroundColor(OmiColors.warning)
             HStack(spacing: 8) {
-              Image(systemName: "exclamationmark.triangle.fill")
-                .foregroundColor(OmiColors.warning)
-              Text(err)
-                .scaledFont(size: 11)
-                .foregroundColor(OmiColors.warning)
+              Text(key)
+                .scaledFont(size: 12, weight: .medium)
+                .foregroundColor(OmiColors.textPrimary)
+                .textSelection(.enabled)
+                .lineLimit(1)
+                .truncationMode(.middle)
+                .frame(maxWidth: .infinity, alignment: .leading)
+              Button {
+                copyToPasteboard(key)
+              } label: {
+                Image(systemName: "doc.on.doc")
+                  .scaledFont(size: 12)
+                  .foregroundColor(OmiColors.textPrimary)
+                  .padding(6)
+                  .background(
+                    RoundedRectangle(cornerRadius: 6)
+                      .fill(OmiColors.backgroundQuaternary.opacity(0.6)))
+              }
+              .buttonStyle(.plain)
             }
+            .padding(10)
+            .background(
+              RoundedRectangle(cornerRadius: 8)
+                .fill(OmiColors.backgroundSecondary.opacity(0.6)))
           }
         }
+
+        if let message = mcpVerificationMessage {
+          agentStatusRow(message)
+        }
+
+        if let err = mcpError {
+          agentStatusRow(err, warning: true)
+        }
+      }
+    }
+  }
+
+  private var agentSkillCard: some View {
+    settingsCard(settingId: "agents.skill") {
+      VStack(alignment: .leading, spacing: 14) {
+        HStack(alignment: .top, spacing: 12) {
+          Image(systemName: "book.pages")
+            .scaledFont(size: 16)
+            .foregroundColor(OmiColors.purplePrimary)
+            .frame(width: 24, height: 24)
+
+          VStack(alignment: .leading, spacing: 4) {
+            Text("Omi Agent Skill")
+              .scaledFont(size: 16, weight: .semibold)
+              .foregroundColor(OmiColors.textPrimary)
+            Text(
+              "MCP tells an agent what tools exist. This skill tells it how to choose between hosted memories, conversations, and same-host desktop context."
+            )
+            .scaledFont(size: 12)
+            .foregroundColor(OmiColors.textTertiary)
+            .fixedSize(horizontal: false, vertical: true)
+          }
+
+          Spacer()
+
+          Button {
+            copyToPasteboard(omiAgentSkillText)
+          } label: {
+            iconTextButtonLabel(icon: "doc.on.doc", text: "Copy Skill")
+          }
+          .buttonStyle(.plain)
+        }
+
+        VStack(alignment: .leading, spacing: 8) {
+          agentSkillBullet("Read profile first, then memories for facts and conversations for events.")
+          agentSkillBullet("Use desktop-local tools for Rewind screenshots, local SQL, transcriptions, and screen search.")
+          agentSkillBullet("Treat memory writes/deletes as intentional user actions, not silent side effects.")
+        }
+      }
+    }
+  }
+
+  private var agentInstallTargetsCard: some View {
+    settingsCard(settingId: "agents.install") {
+      VStack(alignment: .leading, spacing: 14) {
+        VStack(alignment: .leading, spacing: 4) {
+          Text("Install Guides")
+            .scaledFont(size: 16, weight: .semibold)
+            .foregroundColor(OmiColors.textPrimary)
+          Text("Copy setup for a known agent, or use the custom MCP details for anything else.")
+            .scaledFont(size: 12)
+            .foregroundColor(OmiColors.textTertiary)
+        }
+
+        VStack(spacing: 10) {
+          ForEach(AgentInstallTarget.allCases) { target in
+            agentInstallTargetRow(target)
+          }
+        }
+      }
+    }
+  }
+
+  private func agentInstallTargetRow(_ target: AgentInstallTarget) -> some View {
+    HStack(alignment: .center, spacing: 12) {
+      ZStack {
+        RoundedRectangle(cornerRadius: 10, style: .continuous)
+          .fill(OmiColors.backgroundSecondary)
+          .overlay(
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+              .stroke(Color.white.opacity(0.06), lineWidth: 1))
+        Image(systemName: target.icon)
+          .scaledFont(size: 15, weight: .semibold)
+          .foregroundColor(OmiColors.textSecondary)
+      }
+      .frame(width: 36, height: 36)
+
+      VStack(alignment: .leading, spacing: 3) {
+        Text(target.title)
+          .scaledFont(size: 14, weight: .semibold)
+          .foregroundColor(OmiColors.textPrimary)
+        Text(target.subtitle)
+          .scaledFont(size: 12)
+          .foregroundColor(OmiColors.textTertiary)
+          .fixedSize(horizontal: false, vertical: true)
+      }
+
+      Spacer()
+
+      Button {
+        copyToPasteboard(target.setupText(key: agentSetupKey))
+      } label: {
+        iconTextButtonLabel(icon: "doc.on.doc", text: target.copyLabel)
+      }
+      .buttonStyle(.plain)
+    }
+    .padding(12)
+    .background(
+      RoundedRectangle(cornerRadius: 10)
+        .fill(OmiColors.backgroundSecondary.opacity(0.45))
+    )
+  }
+
+  private func agentCapabilityPill(_ title: String, detail: String) -> some View {
+    VStack(alignment: .leading, spacing: 2) {
+      Text(title)
+        .scaledFont(size: 12, weight: .semibold)
+        .foregroundColor(OmiColors.textPrimary)
+      Text(detail)
+        .scaledFont(size: 11)
+        .foregroundColor(OmiColors.textTertiary)
+    }
+    .frame(maxWidth: .infinity, alignment: .leading)
+    .padding(.horizontal, 10)
+    .padding(.vertical, 8)
+    .background(RoundedRectangle(cornerRadius: 8).fill(OmiColors.backgroundSecondary.opacity(0.6)))
+  }
+
+  private func agentSkillBullet(_ text: String) -> some View {
+    HStack(alignment: .top, spacing: 8) {
+      Image(systemName: "checkmark.circle.fill")
+        .scaledFont(size: 12)
+        .foregroundColor(OmiColors.purplePrimary)
+        .padding(.top, 1)
+      Text(text)
+        .scaledFont(size: 12)
+        .foregroundColor(OmiColors.textTertiary)
+        .fixedSize(horizontal: false, vertical: true)
+    }
+  }
+
+  private func agentStatusRow(_ text: String, warning: Bool = false) -> some View {
+    HStack(spacing: 8) {
+      Image(systemName: warning ? "exclamationmark.triangle.fill" : "checkmark.circle.fill")
+        .foregroundColor(warning ? OmiColors.warning : OmiColors.purplePrimary)
+      Text(text)
+        .scaledFont(size: 11)
+        .foregroundColor(warning ? OmiColors.warning : OmiColors.textTertiary)
+        .fixedSize(horizontal: false, vertical: true)
+    }
+  }
+
+  private func iconTextButtonLabel(icon: String, text: String) -> some View {
+    HStack(spacing: 6) {
+      Image(systemName: icon)
+      Text(text)
+    }
+    .scaledFont(size: 12, weight: .medium)
+    .foregroundColor(OmiColors.textPrimary)
+    .padding(.horizontal, 10)
+    .padding(.vertical, 6)
+    .background(RoundedRectangle(cornerRadius: 8).fill(OmiColors.backgroundQuaternary.opacity(0.6)))
+  }
+
+  private var agentSetupKey: String {
+    mcpCreatedKey ?? "omi_mcp_YOUR_KEY_HERE"
+  }
+
+  private var omiAgentSkillText: String {
+    """
+    ---
+    name: omi
+    description: Use Omi memories, conversations, and same-host desktop context through MCP and local Omi tools.
+    ---
+
+    # Omi Agent Skill
+
+    Use this skill when the user asks about their Omi memories, conversations, Rewind screen history, local transcriptions, tasks, or wants an agent to personalize work from Omi context.
+
+    ## Tool Routing
+
+    - Read `get_user_profile` first when available for durable user context.
+    - Use `search_memories` or `get_memories` for facts, preferences, habits, relationships, projects, and goals.
+    - Use `search_conversations` for events, incidents, meetings, and "when did this happen?" questions.
+    - If running on the same host as Omi Desktop, prefer local desktop tools for Rewind screenshots, screen semantic search, local transcriptions, local SQL, daily recaps, staged tasks, and indexed files.
+    - Use structured SQL only for counts, filters, exact task lookup, and local database questions. Use semantic search for fuzzy recall.
+
+    ## Write Discipline
+
+    - Do not create, edit, or delete Omi memories unless the user clearly asked for that change.
+    - Prefer proposing the memory change first when intent is ambiguous.
+    - Never treat transient screen activity as a durable memory without user intent or strong evidence.
+
+    ## Setup
+
+    Hosted MCP endpoint: \(MemoryExportDestination.mcpServerURL)
+    Authorization header: Bearer <omi_mcp_key>
+    """
+  }
+
+  private func copyToPasteboard(_ value: String) {
+    NSPasteboard.general.clearContents()
+    NSPasteboard.general.setString(value, forType: .string)
+  }
+
+  @MainActor
+  private func verifyMCPConnectionFromSettings() async {
+    mcpError = nil
+    mcpVerificationMessage = nil
+    guard let key = mcpCreatedKey else {
+      mcpError = "Create a connection key first."
+      return
+    }
+
+    guard let url = URL(string: MemoryExportDestination.mcpServerURL) else {
+      mcpError = "Invalid MCP server URL."
+      return
+    }
+
+    mcpIsVerifying = true
+    defer { mcpIsVerifying = false }
+
+    do {
+      var request = URLRequest(url: url)
+      request.httpMethod = "POST"
+      request.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization")
+      request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+      request.setValue("application/json", forHTTPHeaderField: "Accept")
+      request.httpBody = try JSONSerialization.data(withJSONObject: [
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "initialize",
+        "params": [
+          "protocolVersion": "2025-03-26",
+          "capabilities": [:],
+          "clientInfo": [
+            "name": "Omi Desktop Settings",
+            "version": Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "dev",
+          ],
+        ],
+      ])
+
+      let (data, response) = try await URLSession.shared.data(for: request)
+      guard let http = response as? HTTPURLResponse else {
+        mcpError = "MCP server returned an unexpected response."
+        return
+      }
+
+      guard (200..<300).contains(http.statusCode) else {
+        let body = String(data: data, encoding: .utf8) ?? "No response body"
+        mcpError = "MCP verify failed (\(http.statusCode)): \(body.prefix(160))"
+        return
+      }
+
+      guard
+        let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+        json["result"] != nil
+      else {
+        mcpError = "MCP server responded, but tool initialization was not recognized."
+        return
+      }
+
+      mcpVerificationMessage =
+        "Omi MCP endpoint is reachable with this key. Run the agent-side test after installing."
+    } catch {
+      mcpError = "MCP verify failed: \(error.localizedDescription)"
+    }
+  }
+
+  private enum AgentInstallTarget: String, CaseIterable, Identifiable {
+    case hermes
+    case claudeDesktop
+    case cursor
+    case codex
+    case custom
+
+    var id: String { rawValue }
+
+    var title: String {
+      switch self {
+      case .hermes: return "Hermes"
+      case .claudeDesktop: return "Claude Desktop"
+      case .cursor: return "Cursor"
+      case .codex: return "Codex"
+      case .custom: return "Custom Agent"
+      }
+    }
+
+    var subtitle: String {
+      switch self {
+      case .hermes: return "Add Omi as a header-auth MCP server, then install the Omi skill."
+      case .claudeDesktop: return "Add hosted MCP config to Claude Desktop."
+      case .cursor: return "Add Omi to a workspace MCP config and pair it with the skill guidance."
+      case .codex: return "Add an MCP config block and install the Omi skill folder."
+      case .custom: return "Use the endpoint, Authorization header, and copied Omi skill."
+      }
+    }
+
+    var icon: String {
+      switch self {
+      case .hermes: return "bolt.horizontal.circle"
+      case .claudeDesktop: return "sparkles"
+      case .cursor: return "cursorarrow.click"
+      case .codex: return "chevron.left.forwardslash.chevron.right"
+      case .custom: return "terminal"
+      }
+    }
+
+    var copyLabel: String {
+      switch self {
+      case .hermes, .codex: return "Copy Setup"
+      case .claudeDesktop, .cursor, .custom: return "Copy Config"
+      }
+    }
+
+    func setupText(key: String) -> String {
+      let url = MemoryExportDestination.mcpServerURL
+      switch self {
+      case .hermes:
+        return """
+          hermes mcp add omi-memory --url \(url) --auth header
+
+          Header:
+          Authorization: Bearer \(key)
+
+          After setup:
+          hermes mcp test omi-memory
+
+          Install or paste the Omi Agent Skill so Hermes knows when to use memories, conversations, and same-host desktop tools.
+          """
+      case .claudeDesktop:
+        return """
+          {
+            "mcpServers": {
+              "omi-memory": {
+                "url": "\(url)",
+                "headers": {
+                  "Authorization": "Bearer \(key)"
+                }
+              }
+            }
+          }
+          """
+      case .cursor:
+        return """
+          {
+            "mcpServers": {
+              "omi-memory": {
+                "url": "\(url)",
+                "headers": {
+                  "Authorization": "Bearer \(key)"
+                }
+              }
+            }
+          }
+
+          Also add the Omi Agent Skill to the workspace agent instructions so Cursor knows Omi's memory/conversation/local-desktop routing rules.
+          """
+      case .codex:
+        return """
+          [mcp_servers.omi-memory]
+          command = "npx"
+          args = ["-y", "mcp-remote", "\(url)", "--header", "Authorization: Bearer \(key)"]
+
+          Install the Omi Agent Skill into $CODEX_HOME/skills/omi so Codex knows when to use hosted MCP vs same-host desktop context.
+          """
+      case .custom:
+        return """
+          Server URL: \(url)
+          Transport: Streamable HTTP (MCP 2025-03-26)
+          Header: Authorization: Bearer \(key)
+
+          Start with JSON-RPC initialize, then tools/list.
+          Install or paste the Omi Agent Skill so the agent has routing and write-discipline guidance beyond MCP schemas.
+          """
       }
     }
   }
@@ -3428,6 +3828,7 @@ struct SettingsContentView: View {
   @MainActor
   private func createMCPKeyFromSettings() async {
     mcpError = nil
+    mcpVerificationMessage = nil
     mcpIsCreatingKey = true
     defer { mcpIsCreatingKey = false }
     do {
