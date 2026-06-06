@@ -2,19 +2,43 @@ import logging
 import math
 import os
 from datetime import datetime
+from threading import Lock
 from typing import Dict, List
 
 import typesense
 
 logger = logging.getLogger(__name__)
 
-client = typesense.Client(
-    {
-        'nodes': [{'host': os.getenv('TYPESENSE_HOST'), 'port': os.getenv('TYPESENSE_HOST_PORT'), 'protocol': 'https'}],
-        'api_key': os.getenv('TYPESENSE_API_KEY'),
-        'connection_timeout_seconds': 2,
-    }
-)
+_typesense_client = None
+_typesense_client_lock = Lock()
+
+
+def _get_required_env_var(name: str) -> str:
+    value = os.getenv(name)
+    if not value:
+        raise RuntimeError(f"{name} is required to search conversations")
+    return value
+
+
+def _get_typesense_client():
+    global _typesense_client
+    if _typesense_client is None:
+        with _typesense_client_lock:
+            if _typesense_client is None:
+                _typesense_client = typesense.Client(
+                    {
+                        'nodes': [
+                            {
+                                'host': _get_required_env_var('TYPESENSE_HOST'),
+                                'port': _get_required_env_var('TYPESENSE_HOST_PORT'),
+                                'protocol': 'https',
+                            }
+                        ],
+                        'api_key': _get_required_env_var('TYPESENSE_API_KEY'),
+                        'connection_timeout_seconds': 2,
+                    }
+                )
+    return _typesense_client
 
 
 def search_conversations(
@@ -26,8 +50,9 @@ def search_conversations(
     start_date: int = None,
     end_date: int = None,
 ) -> Dict:
-    try:
+    client = _get_typesense_client()
 
+    try:
         filter_by = f'userId:={uid}'
         if not include_discarded:
             filter_by = filter_by + ' && discarded:=false'
