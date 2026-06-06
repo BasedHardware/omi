@@ -142,11 +142,13 @@ async fn gemini_proxy(
             &state, &user, &effective_path, action, model, &sanitized_body,
         )
         .await?;
-        tracing::info!(
-            "gemini_proxy: forwarded uid={} path={}",
-            user.uid,
-            effective_path
-        );
+        if response.status().is_success() {
+            tracing::info!(
+                "gemini_proxy: forwarded uid={} path={}",
+                user.uid,
+                effective_path
+            );
+        }
         return Ok(response);
     }
 
@@ -372,11 +374,13 @@ async fn gemini_stream_proxy(
             &query,
         )
         .await?;
-        tracing::info!(
-            "gemini_stream_proxy: forwarded uid={} path={}",
-            user.uid,
-            effective_path
-        );
+        if response.status().is_success() {
+            tracing::info!(
+                "gemini_stream_proxy: forwarded uid={} path={}",
+                user.uid,
+                effective_path
+            );
+        }
         return Ok(response);
     }
 
