@@ -24,6 +24,12 @@ from langdetect.lang_detect_exception import LangDetectException
 from scipy.spatial.distance import cdist
 from transcribe import transcribe_file, _model as _asr_model, INFERENCE_MODE as _INFERENCE_MODE
 
+try:
+    from pyannote.audio import Model as _PyannoteModel, Inference as _PyannoteInference
+except ImportError:
+    _PyannoteModel = None
+    _PyannoteInference = None
+
 logger = logging.getLogger(__name__)
 
 SPEECH_THRESHOLD = float(os.getenv("PARAKEET_VAD_THRESHOLD", "0.5"))
@@ -32,6 +38,37 @@ MAX_SPEECH_WINDOW_S = float(os.getenv("PARAKEET_MAX_WINDOW_S", "5.0"))
 HANGOVER_S = float(os.getenv("PARAKEET_HANGOVER_S", "0.8"))
 SPEAKER_MATCH_THRESHOLD = float(os.getenv("PARAKEET_SPEAKER_THRESHOLD", "0.45"))
 SPEAKER_EMBEDDING_URL = os.getenv("HOSTED_SPEAKER_EMBEDDING_API_URL", "")
+MIN_EMBEDDING_AUDIO_S = 0.5
+
+_embedding_model = None
+_embedding_lock = threading.Lock()
+
+
+def _get_builtin_embedding_model():
+    global _embedding_model
+    if _embedding_model is not None:
+        return _embedding_model
+    with _embedding_lock:
+        if _embedding_model is not None:
+            return _embedding_model
+        try:
+            if _PyannoteModel is None or _PyannoteInference is None:
+                logger.warning("pyannote.audio not installed, built-in embedding unavailable")
+                return None
+            model = _PyannoteModel.from_pretrained(
+                "pyannote/wespeaker-voxceleb-resnet34-LM", token=os.getenv("HUGGINGFACE_TOKEN")
+            )
+            inference = _PyannoteInference(model, window="whole")
+            if _torch is not None:
+                device = _torch.device("cuda" if _torch.cuda.is_available() else "cpu")
+                inference.to(device)
+            _embedding_model = inference
+            logger.info("Built-in speaker embedding model loaded (wespeaker-voxceleb-resnet34-LM)")
+            return _embedding_model
+        except Exception as e:
+            logger.warning(f"Could not load built-in embedding model: {e}")
+            return None
+
 
 _vad_model = None
 _vad_lock = threading.Lock()
@@ -39,10 +76,12 @@ _asr_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="parakeet_a
 
 try:
     import torch
+    import torchaudio
 
     _torch = torch
 except ImportError:
     _torch = None
+    torchaudio = None
 
 
 def _get_vad_model():
@@ -239,7 +278,7 @@ class StreamSession:
             os.unlink(tmp.name)
 
     def _assign_speaker(self, pcm: bytes, start: float, end: float) -> str:
-        if end - start < 0.6 or not SPEAKER_EMBEDDING_URL:
+        if end - start < 0.6:
             return f"SPEAKER_{self._last_speaker}"
 
         try:
@@ -278,6 +317,30 @@ class StreamSession:
             return f"SPEAKER_{self._last_speaker}"
 
     def _get_embedding(self, wav_bytes: bytes):
+        model = _get_builtin_embedding_model()
+        if model is not None:
+            return self._get_embedding_builtin(wav_bytes, model)
+        if SPEAKER_EMBEDDING_URL:
+            return self._get_embedding_http(wav_bytes)
+        return None
+
+    def _get_embedding_builtin(self, wav_bytes: bytes, model):
+        try:
+            buf = io.BytesIO(wav_bytes)
+            waveform, sample_rate = torchaudio.load(buf)
+            dur = waveform.shape[1] / sample_rate
+            if dur < MIN_EMBEDDING_AUDIO_S:
+                return None
+            emb = model({"waveform": waveform, "sample_rate": sample_rate})
+            emb = np.array(emb, dtype=np.float32)
+            if emb.ndim == 1:
+                emb = emb.reshape(1, -1)
+            return emb
+        except Exception as e:
+            logger.warning(f"Built-in embedding failed: {e}")
+            return None
+
+    def _get_embedding_http(self, wav_bytes: bytes):
         try:
             with httpx.Client(timeout=httpx.Timeout(connect=5.0, read=30.0, write=10.0, pool=5.0)) as client:
                 resp = client.post(
@@ -294,7 +357,7 @@ class StreamSession:
                 emb = emb.reshape(1, -1)
             return emb
         except Exception as e:
-            logger.warning(f"Embedding extraction failed: {e}")
+            logger.warning(f"HTTP embedding failed: {e}")
             return None
 
     def _pcm_to_wav(self, pcm: bytes) -> bytes:
