@@ -424,11 +424,11 @@ actor MemoryExportService {
 
     ## Tool Routing
 
-    - Read `get_user_profile` first when available for durable user context.
-    - Use `search_memories` or `get_memories` for facts, preferences, habits, relationships, projects, and goals.
-    - Use `search_conversations` for events, incidents, meetings, and "when did this happen?" questions.
-    - If running on the same host as Omi Desktop, prefer local desktop tools for Rewind screenshots, screen semantic search, local transcriptions, local SQL, daily recaps, staged tasks, and indexed files. Use hosted MCP when local Omi is unavailable or the question is only about synced memories/conversations.
-    - Use local `execute_sql` for counts, filters, exact task lookup, local transcriptions, action items, and database questions. Use local `semantic_search` for fuzzy screen-history recall.
+    - Read hosted `get_user_profile` first when available for durable user context.
+    - Use hosted `search_memories` or `get_memories` for facts, preferences, habits, relationships, projects, and goals.
+    - Use hosted `search_conversations` for synced conversations, meetings, and "when did this happen?" questions.
+    - Use local Omi Desktop tools for Rewind, screenshots, screen semantic search, local transcriptions, local SQL, daily recaps, staged tasks, indexed files, and same-device history.
+    - Use local `execute_sql` for counts, filters, exact task lookup, local transcriptions, action items, and database questions. Use local `semantic_search` for fuzzy screen-history recall. Use local `get_daily_recap` for "what did I do today/yesterday/this week?"
 
     ## Hosted vs Local Routing
 
@@ -448,20 +448,37 @@ actor MemoryExportService {
 
     Hosted MCP endpoint: \(MemoryExportDestination.mcpServerURL)
     Authorization header: Bearer <omi_mcp_key>
+
+    Local Omi Desktop MCP endpoint: http://127.0.0.1:47778/mcp
+    Authorization header: Bearer <omi_local_key>
     """
   }
 
-  static func omiAgentSetupPrompt(key: String) -> String {
+  static func omiAgentSetupPrompt(
+    hostedKey: String,
+    localURL: String,
+    localToken: String
+  ) -> String {
     """
     Set up Omi for this agent.
 
-    Add Omi as an MCP server using these details:
+    Add both Omi MCP servers.
 
-    Server URL:
+    Hosted Omi MCP gives this agent synced memories, conversations, and profile context from your Omi account.
+
+    Hosted server URL:
     \(MemoryExportDestination.mcpServerURL)
 
-    Authorization header:
-    Authorization: Bearer \(key)
+    Hosted authorization header:
+    Authorization: Bearer \(hostedKey)
+
+    Local Omi Desktop MCP gives this agent same-Mac Rewind, screen history, local transcriptions, daily recaps, indexed files, and local task context while Omi Desktop is running.
+
+    Local server URL:
+    \(localURL)
+
+    Local authorization header:
+    Authorization: Bearer \(localToken)
 
     Transport:
     Streamable HTTP / MCP over HTTP
@@ -470,7 +487,7 @@ actor MemoryExportService {
 
     \(omiAgentSkillText)
 
-    After setup, test the connection by listing Omi tools and calling `get_user_profile`. If available, also try `search_memories` with a simple query.
+    After setup, test both connections. On hosted Omi, list tools and call `get_user_profile`. On local Omi Desktop, list tools and call `get_daily_recap` with `days_ago: 0`.
     """
   }
 
