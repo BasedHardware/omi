@@ -9,6 +9,7 @@ Each StreamSession manages one WebSocket connection's lifecycle:
 """
 
 import asyncio
+import copy
 import io
 import logging
 import os
@@ -37,6 +38,7 @@ MIN_SPEECH_DURATION_S = float(os.getenv("PARAKEET_MIN_SPEECH_S", "0.5"))
 HANGOVER_S = float(os.getenv("PARAKEET_HANGOVER_S", "0.8"))
 CHUNK_SECONDS = float(os.getenv("PARAKEET_CHUNK_S", "2.0"))
 LEFT_CONTEXT_SECONDS = float(os.getenv("PARAKEET_LEFT_CONTEXT_S", "10.0"))
+RIGHT_CONTEXT_SECONDS = float(os.getenv("PARAKEET_RIGHT_CONTEXT_S", "2.0"))
 SPEAKER_MATCH_THRESHOLD = float(os.getenv("PARAKEET_SPEAKER_THRESHOLD", "0.45"))
 SPEAKER_EMBEDDING_URL = os.getenv("HOSTED_SPEAKER_EMBEDDING_API_URL", "")
 MIN_EMBEDDING_AUDIO_S = 0.5
@@ -74,6 +76,7 @@ def _get_builtin_embedding_model():
 _vad_model = None
 _vad_lock = threading.Lock()
 _asr_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="parakeet_asr")
+_streaming_import_error_logged = False
 
 try:
     import torch
@@ -83,6 +86,219 @@ try:
 except ImportError:
     _torch = None
     torchaudio = None
+
+
+def _make_divisible_by(num, factor: int) -> int:
+    return (num // factor) * factor
+
+
+def _cfg_get(cfg, path: str, default=None):
+    cur = cfg
+    for part in path.split("."):
+        if cur is None:
+            return default
+        if isinstance(cur, dict):
+            cur = cur.get(part, default)
+        else:
+            cur = getattr(cur, part, default)
+    return cur
+
+
+def _cfg_set(cfg, path: str, value):
+    cur = cfg
+    parts = path.split(".")
+    for part in parts[:-1]:
+        cur = cur[part] if isinstance(cur, dict) else getattr(cur, part)
+    if isinstance(cur, dict):
+        cur[parts[-1]] = value
+    else:
+        setattr(cur, parts[-1], value)
+
+
+class _NemoRNNTStreamingDecoder:
+    """NeMo RNNT chunked decoder for one live stream.
+
+    This mirrors NeMo's `speech_to_text_streaming_infer_rnnt.py` pattern:
+    `StreamingBatchedAudioBuffer` manages left/chunk/right audio context, while
+    `prev_batched_state` is fed back into the RNNT decoding computer.
+    """
+
+    def __init__(
+        self,
+        model,
+        sample_rate: int,
+        chunk_seconds: float,
+        left_context_seconds: float,
+        right_context_seconds: float,
+    ):
+        self._model = model
+        self._sr = sample_rate
+        self._chunk_seconds = chunk_seconds
+        self._left_context_seconds = left_context_seconds
+        self._right_context_seconds = right_context_seconds
+        self._initialized = False
+        self._started = False
+        self._state = None
+        self._current_batched_hyps = None
+        self._text = ""
+
+    def _ensure_initialized(self):
+        global _streaming_import_error_logged
+
+        if self._initialized:
+            return
+
+        if _torch is None:
+            raise RuntimeError("torch is required for NeMo RNNT streaming")
+
+        try:
+            from omegaconf import open_dict
+
+            from nemo.collections.asr.parts.submodules.rnnt_decoding import RNNTDecodingConfig
+            from nemo.collections.asr.parts.utils.rnnt_utils import batched_hyps_to_hypotheses
+            from nemo.collections.asr.parts.utils.streaming_utils import ContextSize, StreamingBatchedAudioBuffer
+        except Exception as e:
+            if not _streaming_import_error_logged:
+                logger.warning(f"NeMo RNNT streaming utilities unavailable, using batch fallback: {e}")
+                _streaming_import_error_logged = True
+            raise
+
+        self._batched_hyps_to_hypotheses = batched_hyps_to_hypotheses
+        self._ContextSize = ContextSize
+        self._StreamingBatchedAudioBuffer = StreamingBatchedAudioBuffer
+
+        model = self._model
+        model.freeze() if hasattr(model, "freeze") else None
+        model.eval()
+
+        decoding_cfg = copy.deepcopy(_cfg_get(getattr(model, "cfg", None), "decoding", None))
+        if decoding_cfg is None:
+            decoding_cfg = RNNTDecodingConfig()
+
+        with open_dict(decoding_cfg):
+            _cfg_set(decoding_cfg, "strategy", "greedy_batch")
+            _cfg_set(decoding_cfg, "greedy.loop_labels", True)
+            _cfg_set(decoding_cfg, "greedy.preserve_alignments", False)
+            _cfg_set(decoding_cfg, "fused_batch_size", -1)
+            _cfg_set(decoding_cfg, "beam.return_best_hypothesis", True)
+
+        if hasattr(model, "change_decoding_strategy"):
+            model.change_decoding_strategy(decoding_cfg)
+
+        if hasattr(model.preprocessor, "featurizer"):
+            model.preprocessor.featurizer.dither = 0.0
+            model.preprocessor.featurizer.pad_to = 0
+
+        model_cfg = getattr(model, "_cfg", getattr(model, "cfg", None))
+        model_sr = int(_cfg_get(model_cfg, "preprocessor.sample_rate", self._sr))
+        if model_sr != self._sr:
+            raise RuntimeError(f"Parakeet streaming expects {model_sr} Hz audio, got {self._sr} Hz")
+
+        feature_stride_sec = float(_cfg_get(model_cfg, "preprocessor.window_stride", 0.01))
+        features_per_sec = 1.0 / feature_stride_sec
+        encoder_subsampling_factor = int(getattr(model.encoder, "subsampling_factor", 1))
+        features_frame2audio_samples = _make_divisible_by(
+            int(self._sr * feature_stride_sec), factor=encoder_subsampling_factor
+        )
+        self._encoder_frame2audio_samples = features_frame2audio_samples * encoder_subsampling_factor
+
+        context_encoder_frames = ContextSize(
+            left=int(self._left_context_seconds * features_per_sec / encoder_subsampling_factor),
+            chunk=int(self._chunk_seconds * features_per_sec / encoder_subsampling_factor),
+            right=int(self._right_context_seconds * features_per_sec / encoder_subsampling_factor),
+        )
+        self._context_samples = ContextSize(
+            left=context_encoder_frames.left * encoder_subsampling_factor * features_frame2audio_samples,
+            chunk=context_encoder_frames.chunk * encoder_subsampling_factor * features_frame2audio_samples,
+            right=context_encoder_frames.right * encoder_subsampling_factor * features_frame2audio_samples,
+        )
+
+        if _cfg_get(model_cfg, "encoder.att_context_style") == "chunked_limited_with_rc" and hasattr(
+            model.encoder, "set_default_att_context_size"
+        ):
+            model.encoder.set_default_att_context_size(
+                att_context_size=[
+                    context_encoder_frames.left,
+                    context_encoder_frames.chunk,
+                    context_encoder_frames.right,
+                ]
+            )
+
+        self._device = getattr(model, "device", None)
+        if self._device is None:
+            self._device = next(model.parameters()).device
+        self._buffer = StreamingBatchedAudioBuffer(
+            batch_size=1,
+            context_samples=self._context_samples,
+            dtype=_torch.float32,
+            device=self._device,
+        )
+        self._decoding_computer = model.decoding.decoding.decoding_computer
+        self._initialized = True
+
+        logger.info(
+            "Parakeet RNNT streaming contexts: left=%.2fs chunk=%.2fs right=%.2fs",
+            self._context_samples.left / self._sr,
+            self._context_samples.chunk / self._sr,
+            self._context_samples.right / self._sr,
+        )
+
+    def next_input_bytes(self, bytes_per_sample: int) -> int:
+        self._ensure_initialized()
+        if not self._started:
+            samples = self._context_samples.chunk + self._context_samples.right
+        else:
+            samples = self._context_samples.chunk
+        return samples * bytes_per_sample
+
+    def decode_pcm(self, pcm_bytes: bytes, is_last_chunk: bool = False) -> str:
+        self._ensure_initialized()
+        if not pcm_bytes:
+            return self._text
+
+        audio_np = np.frombuffer(pcm_bytes, dtype=np.int16).astype(np.float32) / 32768.0
+        audio_batch = _torch.from_numpy(audio_np).unsqueeze(0).to(device=self._device)
+        audio_lengths = _torch.tensor([audio_np.shape[0]], dtype=_torch.long, device=self._device)
+        is_last_chunk_batch = _torch.tensor([is_last_chunk], dtype=_torch.bool, device=self._device)
+
+        with _torch.no_grad(), _torch.inference_mode():
+            self._buffer.add_audio_batch_(
+                audio_batch,
+                audio_lengths=audio_lengths,
+                is_last_chunk=is_last_chunk,
+                is_last_chunk_batch=is_last_chunk_batch,
+            )
+
+            encoder_output, encoder_output_len = self._model(
+                input_signal=self._buffer.samples,
+                input_signal_length=self._buffer.context_size_batch.total(),
+            )
+            encoder_output = encoder_output.transpose(1, 2)
+            encoder_context = self._buffer.context_size.subsample(factor=self._encoder_frame2audio_samples)
+            encoder_context_batch = self._buffer.context_size_batch.subsample(factor=self._encoder_frame2audio_samples)
+            encoder_output = encoder_output[:, encoder_context.left :]
+            out_len = _torch.where(
+                is_last_chunk_batch,
+                encoder_output_len - encoder_context_batch.left,
+                encoder_context_batch.chunk,
+            )
+
+            chunk_batched_hyps, self._state = self._decoding_computer(
+                x=encoder_output,
+                out_len=out_len,
+                prev_batched_state=self._state,
+                multi_biasing_ids=None,
+            )
+
+            if self._current_batched_hyps is None:
+                self._current_batched_hyps = chunk_batched_hyps
+            else:
+                self._current_batched_hyps.merge_(chunk_batched_hyps)
+
+            hyp = self._batched_hyps_to_hypotheses(self._current_batched_hyps, batch_size=1)[0]
+            self._text = self._model.tokenizer.ids_to_text(hyp.y_sequence.tolist())
+            self._started = True
+            return self._text
 
 
 def _get_vad_model():
@@ -106,12 +322,11 @@ def _get_vad_model():
 
 
 class StreamSession:
-    """RNNT chunked streaming with left context and VAD-based endpointing.
+    """RNNT chunked streaming with context and VAD-based endpointing.
 
-    Audio flows continuously through 2s chunks with 10s left context.
-    The full context window (left + current chunk) is transcribed each tick,
-    but only the new text from the current chunk is emitted. VAD detects
-    speech boundaries for endpointing (when to finalize and emit segments).
+    Audio flows continuously through left/chunk/right context windows. RNNT
+    decoder state is preserved across chunks; VAD only decides when to emit
+    the latest decoded text delta as a segment.
     """
 
     def __init__(self, sample_rate: int = 16000, vad_threshold: float = None, hangover_s: float = None):
@@ -132,8 +347,11 @@ class StreamSession:
         self._chunk_bytes = int(CHUNK_SECONDS * self._sr * self._bytes_per_sample)
         self._left_context_bytes = int(LEFT_CONTEXT_SECONDS * self._sr * self._bytes_per_sample)
         self._pending_audio = bytearray()
-        self._prev_text = ""
-        self._last_chunk_offset = 0
+        self._asr_audio_buf = bytearray()
+        self._streaming_decoder = None
+        self._streaming_failed = False
+        self._streaming_text = ""
+        self._last_emitted_text = ""
 
         self._spk_centroids = []
         self._spk_counts = []
@@ -152,31 +370,51 @@ class StreamSession:
             is_speech = self._run_vad(vad_chunk)
             chunk_dur = self._vad_chunk_samples / self._sr
 
-            self._pending_audio.extend(vad_chunk)
+            self._asr_audio_buf.extend(vad_chunk)
 
             if is_speech:
                 self._silence_count = 0
                 if self._speech_start_s is None:
                     self._speech_start_s = self._stream_offset_s
                 self._is_speaking = True
+                self._pending_audio.extend(vad_chunk)
             else:
+                if self._is_speaking or self._speech_start_s is not None:
+                    self._pending_audio.extend(vad_chunk)
                 if self._is_speaking:
                     self._silence_count += 1
                     if self._silence_count >= self._hangover_chunks:
                         speech_dur = len(self._pending_audio) / (self._sr * self._bytes_per_sample)
+                        result = []
                         if speech_dur >= MIN_SPEECH_DURATION_S:
                             result = await self._transcribe_utterance()
                             segments.extend(result)
-                        self._pending_audio.clear()
                         self._is_speaking = False
-                        self._speech_start_s = None
+                        if result or not self._streaming_enabled():
+                            self._pending_audio.clear()
+                            self._speech_start_s = None
                         self._silence_count = 0
 
             self._stream_offset_s += chunk_dur
 
+        await self._drain_streaming_asr(force=False)
+        if (
+            self._streaming_enabled()
+            and not self._is_speaking
+            and self._pending_audio
+            and self._speech_start_s is not None
+        ):
+            result = await self._transcribe_utterance()
+            if result:
+                segments.extend(result)
+                self._pending_audio.clear()
+                self._speech_start_s = None
+
         return segments
 
     async def flush(self):
+        if self._streaming_enabled():
+            await self._drain_streaming_asr(force=True)
         if not self._pending_audio or self._speech_start_s is None:
             return []
         speech_dur = len(self._pending_audio) / (self._sr * self._bytes_per_sample)
@@ -188,6 +426,7 @@ class StreamSession:
         self._pcm_buf.clear()
         self._audio_buf.clear()
         self._pending_audio.clear()
+        self._asr_audio_buf.clear()
         self._spk_centroids.clear()
         self._spk_counts.clear()
 
@@ -201,37 +440,76 @@ class StreamSession:
         except Exception:
             return True
 
-    async def _transcribe_chunk(self):
-        left_ctx = bytes(self._audio_buf[-self._left_context_bytes :]) if len(self._audio_buf) > 0 else b''
-        full_audio = left_ctx + bytes(self._pending_audio)
+    def _streaming_enabled(self) -> bool:
+        return not self._streaming_failed and _INFERENCE_MODE != "nim" and _asr_model is not None and _torch is not None
 
+    def _get_streaming_decoder(self):
+        if self._streaming_decoder is None:
+            self._streaming_decoder = _NemoRNNTStreamingDecoder(
+                model=_asr_model,
+                sample_rate=self._sr,
+                chunk_seconds=CHUNK_SECONDS,
+                left_context_seconds=LEFT_CONTEXT_SECONDS,
+                right_context_seconds=RIGHT_CONTEXT_SECONDS,
+            )
+        return self._streaming_decoder
+
+    async def _drain_streaming_asr(self, force: bool):
+        if not self._streaming_enabled():
+            return
         loop = asyncio.get_running_loop()
-        result = await loop.run_in_executor(_asr_executor, self._transcribe_pcm, full_audio)
+        try:
+            await loop.run_in_executor(_asr_executor, self._drain_streaming_asr_sync, force)
+        except Exception as e:
+            logger.warning(f"RNNT streaming decode failed, falling back to VAD utterance transcribe: {e}")
+            self._streaming_decoder = None
+            self._streaming_failed = True
+            self._streaming_text = ""
 
-        new_text = result.get("text", "")
-        if self._prev_text and new_text.startswith(self._prev_text):
-            new_text = new_text[len(self._prev_text) :].strip()
-        elif self._prev_text:
-            prev_words = self._prev_text.split()
-            new_words = new_text.split()
-            overlap = 0
-            for i in range(min(len(prev_words), len(new_words))):
-                if prev_words[-(i + 1) :] == new_words[: i + 1]:
-                    overlap = i + 1
-            new_text = " ".join(new_words[overlap:]) if overlap > 0 else new_text
+    def _drain_streaming_asr_sync(self, force: bool):
+        decoder = self._get_streaming_decoder()
+        while True:
+            required_bytes = decoder.next_input_bytes(self._bytes_per_sample)
+            if len(self._asr_audio_buf) < required_bytes:
+                break
+            chunk = bytes(self._asr_audio_buf[:required_bytes])
+            del self._asr_audio_buf[:required_bytes]
+            self._streaming_text = decoder.decode_pcm(chunk, is_last_chunk=False)
 
-        self._prev_text = result.get("text", "")
+        if force and self._asr_audio_buf:
+            chunk = bytes(self._asr_audio_buf)
+            self._asr_audio_buf.clear()
+            self._streaming_text = decoder.decode_pcm(chunk, is_last_chunk=True)
 
-        if not new_text.strip():
-            return []
+    def _new_streaming_text_since_last_emit(self) -> str:
+        text = (self._streaming_text or "").strip()
+        emitted = (self._last_emitted_text or "").strip()
+        if not text:
+            return ""
+        if not emitted:
+            return text
+        if text.startswith(emitted):
+            return text[len(emitted) :].strip()
 
-        chunk_start = self._speech_start_s or self._stream_offset_s
-        chunk_dur = len(self._pending_audio) / (self._sr * self._bytes_per_sample)
-        return self._build_segments(new_text, chunk_start, chunk_dur, bytes(self._pending_audio))
+        prev_words = emitted.split()
+        new_words = text.split()
+        overlap = 0
+        for i in range(min(len(prev_words), len(new_words))):
+            if prev_words[-(i + 1) :] == new_words[: i + 1]:
+                overlap = i + 1
+        return " ".join(new_words[overlap:]).strip() if overlap > 0 else text
 
     async def _transcribe_utterance(self):
         speech_pcm = bytes(self._pending_audio)
         speech_start = self._speech_start_s or self._stream_offset_s
+
+        if self._streaming_enabled():
+            text = self._new_streaming_text_since_last_emit()
+            if not text:
+                return []
+            self._last_emitted_text = self._streaming_text.strip()
+            dur = len(speech_pcm) / (self._sr * self._bytes_per_sample)
+            return self._build_segments(text, speech_start, dur, speech_pcm)
 
         loop = asyncio.get_running_loop()
         result = await loop.run_in_executor(_asr_executor, self._transcribe_pcm, speech_pcm)
