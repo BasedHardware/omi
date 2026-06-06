@@ -15,9 +15,37 @@ def _init_nemo():
     import nemo.collections.asr as nemo_asr
 
     logger.info(f"Loading NeMo model: {MODEL_NAME}")
-    _model = nemo_asr.models.ASRModel.from_pretrained(model_name=MODEL_NAME)
-    _model.eval()
-    logger.info("NeMo model loaded")
+
+    model_classes = [
+        nemo_asr.models.ASRModel,
+    ]
+    try:
+        model_classes.insert(0, nemo_asr.models.EncDecRNNTBPEModel)
+    except AttributeError:
+        pass
+    try:
+        model_classes.insert(0, nemo_asr.models.EncDecCTCModelBPE)
+    except AttributeError:
+        pass
+    try:
+        model_classes.insert(0, nemo_asr.models.EncDecMultiTaskModel)
+    except AttributeError:
+        pass
+
+    last_err = None
+    for cls in model_classes:
+        try:
+            logger.info(f"Trying {cls.__name__}.from_pretrained({MODEL_NAME})")
+            _model = cls.from_pretrained(model_name=MODEL_NAME)
+            _model.eval()
+            logger.info(f"NeMo model loaded via {cls.__name__}")
+            return
+        except (TypeError, Exception) as e:
+            last_err = e
+            logger.warning(f"{cls.__name__} failed: {e}")
+            continue
+
+    raise RuntimeError(f"Could not load model {MODEL_NAME} with any NeMo class: {last_err}")
 
 
 def _init_nim():
