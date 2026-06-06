@@ -161,7 +161,7 @@ Agents can and should self-test the running app — don't stop at a successful c
 4. **Read logs to confirm behavior:**
    - App + chat bridge: `/private/tmp/omi-dev.log` (dev builds) or `/private/tmp/omi.log`.
    - Local Rust backend: stdout of the `./run.sh` process.
-   - Per-user issues: `./scripts/sentry-logs.sh <email>` (crashes), `./scripts/posthog_query.py <email>` (events).
+   - Per-user issues: check Sentry dashboard for crashes, PostHog for events.
 5. **Verify the actual behavior**, not just that the app launched — exercise the feature and check the logs/UI reflect the change.
 
 #### Verifying UI Changes (agent-swift)
@@ -192,14 +192,12 @@ For controlling the Mac GUI, use the right tool for each job:
 | Task | Tool | Example |
 |------|------|---------|
 | Click at coordinates | `cliclick` | `cliclick c:X,Y` |
-| Screenshots/OCR | `codriver` | `mcp__codriver__desktop_screenshot` (scale: 0.5) |
+| Mac desktop screenshots | `screencapture` | `screencapture -x /tmp/screen.png` |
 | Native macOS app testing | `agent-swift` | See Desktop section above |
 | Browser automation | `playwright` MCP | Headless, most reliable |
-| Existing browser tabs | `claude-in-chrome` | Only when extension connected |
 
 Rules:
 - NEVER try 3+ different click tools for the same action — pick one and commit.
-- `codriver` at `scale: 0.5` → multiply coordinates by 2 before clicking.
 - Prefer `cliclick` over `automac`/`mac-use-mcp` (coordinate bugs on multi-monitor).
 
 ## Formatting
@@ -218,7 +216,7 @@ Files ending in `.gen.dart` or `.g.dart` are auto-generated — don't format man
 
 - **Before your first commit**, verify the pre-commit hook is installed (see Setup).
 - Before starting work, run `git fetch origin && git pull --ff-only` on `main` — don't branch off stale local state.
-- Always commit to the current branch — never switch branches mid-task. Always work in a git worktree for code changes (`EnterWorktree`).
+- Always commit to the current branch — never switch branches mid-task. Always work in a git worktree for code changes (`git worktree add`).
 - Never push directly to `main`. Land changes through PRs only. Never squash-merge — use a regular merge.
 - Make individual commits per file, not bulk commits.
 - If push fails (remote ahead): `git pull --rebase && git push`.
@@ -238,9 +236,8 @@ Full RELEASE flow + `gh workflow run gcp_backend.yml -f environment=prod -f bran
 
 ## CI/CD & Logs
 
-- Deploy triggers and checks: `docs/runbooks/deploy.md`.
-- Log commands: `docs/runbooks/logging.md`.
-- Desktop release pipeline: merging `desktop/**` to `main` auto-increments the version, tags `v*-macos`, and triggers Codemagic (build, sign, notarize, publish GitHub release, deploy Rust backend). Promote channels with `desktop/scripts/promote_release.sh <tag>` (staging → beta → stable).
+- Desktop release pipeline: merging `desktop/**` to `main` auto-increments the version, tags `v*-macos`, and triggers Codemagic (build, sign, notarize, publish GitHub release, deploy Rust backend).
+- Backend deploy: `gh workflow run gcp_backend.yml -f environment=prod -f branch=main`.
 
 ## Documentation Maintenance
 
