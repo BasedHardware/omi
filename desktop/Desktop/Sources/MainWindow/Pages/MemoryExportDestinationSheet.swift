@@ -134,10 +134,16 @@ final class MemoryExportDestinationSheetModel: ObservableObject {
 
     do {
       let key = try await MemoryExportService.shared.ensureMCPKey()
+      let localToken = LocalAgentMCPSettings.enable()
       mcpKey = key
-      copyToPasteboard(MemoryExportService.omiAgentSetupPrompt(key: key), label: "Agent setup prompt")
+      copyToPasteboard(
+        MemoryExportService.omiAgentSetupPrompt(
+          hostedKey: key,
+          localURL: LocalAgentMCPSettings.serverURL,
+          localToken: localToken),
+        label: "Agent setup prompt")
       statusMessage =
-        "Setup prompt copied. It includes a private Omi key, so treat it like a password."
+        "Setup prompt copied. It includes private Omi keys for hosted and local access."
       return await MemoryExportService.shared.status(for: .agents)
     } catch {
       errorMessage = "Couldn't create setup prompt: \(error.localizedDescription)"
@@ -411,13 +417,14 @@ struct MemoryExportDestinationSheet: View {
         tag: "MCP",
         tagColor: OmiColors.purplePrimary,
         subtitle:
-          "Copy one prompt into any MCP-capable agent. Omi includes the server details, a private connection key, and the guide the agent should save for later."
+          "Copy one prompt into any MCP-capable agent. Omi includes hosted memory access, local Desktop access, and the guide the agent should save for later."
       )
 
       VStack(alignment: .leading, spacing: 8) {
-        agentSetupBullet("Omi creates the connection key before copying the prompt.")
+        agentSetupBullet("Omi creates hosted and local connection keys before copying the prompt.")
+        agentSetupBullet("Local access lets same-Mac agents use Rewind, SQL, daily recaps, and screen search.")
         agentSetupBullet("The agent saves the Omi guide if it supports skills or durable instructions.")
-        agentSetupBullet("The prompt asks the agent to connect to Omi and test the MCP tools.")
+        agentSetupBullet("The prompt asks the agent to connect to both Omi MCP servers and test them.")
       }
 
       Button(model.isLoadingMCPKey ? "Preparing…" : "Copy setup prompt") {
