@@ -133,6 +133,16 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\test-preflight.ps1 -Python
 The preflight checks Python, pytest, formatter availability, key backend imports, optional integration environment
 variables, Redis CLI connectivity, and whether every test referenced by `test.sh` exists.
 
+After the preflight passes, run the Windows test wrapper:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\test.ps1
+```
+
+`test.ps1` reads the pytest commands from `test.sh`, sets `PYTHONUTF8=1` for Windows source reads, and skips the
+fair-use integration tests when `redis-cli` is not available. To preview the pytest commands without running them, add
+`-List`.
+
 ## Additional Resources
 
 - [Full Backend Setup Documentation](https://docs.omi.me/developer/backend/Backend_Setup)
