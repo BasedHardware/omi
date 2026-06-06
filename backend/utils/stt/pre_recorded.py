@@ -23,6 +23,34 @@ logger = logging.getLogger(__name__)
 
 stt_prerecorded_model = os.getenv('STT_PRERECORDED_MODEL', 'dg-nova-3')
 
+_parakeet_languages = {
+    'multi',
+    'en',
+    'es',
+    'fr',
+    'de',
+    'it',
+    'pt',
+    'nl',
+    'pl',
+    'ro',
+    'sv',
+    'da',
+    'no',
+    'fi',
+    'cs',
+    'sk',
+    'hu',
+    'bg',
+    'hr',
+    'sl',
+    'sr',
+    'uk',
+    'ca',
+    'et',
+    'lt',
+}
+
 
 # ---------------------------------------------------------------------------
 # Provider-agnostic ABC — mirrors STTSocket for streaming
@@ -79,7 +107,8 @@ def get_prerecorded_service(language: str = 'en') -> Tuple[str, str, str]:
         return PrerecordedSTTService.MODULATE, base_lang, 'velma-2'
     if m == 'parakeet':
         base_lang = language.split('-')[0].split('_')[0].lower() if language else 'en'
-        return PrerecordedSTTService.PARAKEET, base_lang, 'parakeet'
+        if base_lang in _parakeet_languages:
+            return PrerecordedSTTService.PARAKEET, base_lang, 'parakeet'
     return PrerecordedSTTService.DEEPGRAM, language, 'nova-3'
 
 
