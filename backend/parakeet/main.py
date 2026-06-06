@@ -75,7 +75,7 @@ async def stream_transcribe(
     websocket: WebSocket,
     sample_rate: int = Query(16000),
 ):
-    auth = websocket.headers.get("authorization", websocket.query_params.get("authorization", ""))
+    auth = websocket.headers.get("authorization", "")
     if _AUTH_TOKEN and auth != _AUTH_TOKEN:
         await websocket.close(code=1008, reason="unauthorized")
         return
