@@ -81,8 +81,13 @@ final class LocalAgentMCPServer {
         log("LocalAgentMCPServer: invalid port \(LocalAgentMCPSettings.port)")
         return
       }
+      guard let loopback = IPv4Address("127.0.0.1") else {
+        log("LocalAgentMCPServer: failed to resolve loopback address")
+        return
+      }
+      parameters.requiredLocalEndpoint = .hostPort(host: .ipv4(loopback), port: port)
 
-      let listener = try NWListener(using: parameters, on: port)
+      let listener = try NWListener(using: parameters)
       listener.newConnectionHandler = { [weak self] connection in
         self?.handleConnection(connection)
       }
@@ -222,9 +227,12 @@ final class LocalAgentMCPServer {
       guard let toolName = params["name"] as? String else {
         return rpcError(id: id, code: -32602, message: "Missing tool name")
       }
-      let arguments = params["arguments"] as? [String: Any] ?? [:]
+      var arguments = params["arguments"] as? [String: Any] ?? [:]
       guard Self.tools.contains(where: { $0.name == toolName }) else {
         return rpcError(id: id, code: -32601, message: "Unknown tool: \(toolName)")
+      }
+      if toolName == "execute_sql" {
+        arguments["read_only"] = true
       }
       let result = await ChatToolExecutor.execute(
         ToolCall(name: toolName, arguments: arguments, thoughtSignature: nil))
@@ -252,7 +260,7 @@ final class LocalAgentMCPServer {
     LocalMCPTool(
       name: "execute_sql",
       description:
-        "Run SQL on the local Omi Desktop SQLite database. Use for structured questions about screenshots, transcriptions, tasks, memories, indexed files, goals, and activity. SELECT is safest; destructive schema statements are blocked.",
+        "Run read-only SQL on the local Omi Desktop SQLite database. Use SELECT or WITH queries for structured questions about screenshots, transcriptions, tasks, memories, indexed files, goals, and activity.",
       properties: ["query": ["type": "string", "description": "SQL query to execute against the local Omi database"]],
       required: ["query"]
     ),

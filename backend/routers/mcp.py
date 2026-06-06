@@ -23,6 +23,13 @@ from utils.retrieval.hybrid import rrf_rerank
 from dependencies import get_uid_from_mcp_api_key, get_current_user_id
 from utils.other.endpoints import with_rate_limit
 from utils.log_sanitizer import sanitize_pii
+from utils.mcp_memories import (
+    collect_filtered_memories,
+    parse_mcp_bool,
+    parse_mcp_datetime,
+    parse_mcp_int,
+    parse_optional_mcp_bool,
+)
 import database.mcp_api_key as mcp_api_key_db
 from models.mcp_api_key import McpApiKey, McpApiKeyCreate, McpApiKeyCreated
 import logging
@@ -105,7 +112,7 @@ class UserProfile(BaseModel):
 
 @router.get("/v1/mcp/profile", tags=["mcp"], response_model=UserProfile)
 def get_user_profile(uid: str = Depends(get_uid_from_mcp_api_key)):
-    """The user's consolidated, always-current profile. Read this first for facts about the user."""
+    """Omi's cached high-level user profile, if one has been generated."""
     profile = users_db.get_ai_user_profile(uid) or {}
     generated_at = profile.get("generated_at")
     return UserProfile(
@@ -182,14 +189,49 @@ def get_memories(
     limit: int = 25,
     offset: int = 0,
     categories: Optional[str] = None,
+    sort: str = "scoring_desc",
+    reviewed: Optional[bool] = None,
+    manually_added: Optional[bool] = None,
+    updated_after: Optional[str] = None,
+    include_activity: bool = False,
+    include_sensitive: bool = True,
 ):
+    try:
+        limit = parse_mcp_int(limit, "limit", default=25, minimum=1, maximum=500)
+        offset = parse_mcp_int(offset, "offset", default=0, minimum=0, maximum=100000)
+        reviewed = parse_optional_mcp_bool(reviewed, "reviewed")
+        manually_added = parse_optional_mcp_bool(manually_added, "manually_added")
+        include_activity = parse_mcp_bool(include_activity, "include_activity", default=False)
+        include_sensitive = parse_mcp_bool(include_sensitive, "include_sensitive", default=True)
+        parsed_updated_after = parse_mcp_datetime(updated_after, "updated_after")
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    if sort not in {"scoring_desc", "created_desc", "updated_desc", "manual_first"}:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid sort. Expected one of: scoring_desc, created_desc, updated_desc, manual_first.",
+        )
+
     category_list = []
     if categories:
         try:
             category_list = [MemoryCategory(c.strip()) for c in categories.split(",") if c.strip()]
         except ValueError as e:
             raise HTTPException(status_code=400, detail=f"Invalid category {str(e)}")
-    memories = memories_db.get_memories(uid, limit, offset, [c.value for c in category_list])
+    result = collect_filtered_memories(
+        lambda batch_offset, batch_limit: memories_db.get_memories(
+            uid, batch_limit, batch_offset, [c.value for c in category_list]
+        ),
+        limit=limit,
+        offset=offset,
+        reviewed=reviewed,
+        manually_added=manually_added,
+        include_activity=include_activity,
+        include_sensitive=include_sensitive,
+        updated_after=parsed_updated_after,
+        sort=sort,
+    )
+    memories = result["memories"]
     for memory in memories:
         if memory.get('is_locked', False):
             content = memory.get('content', '')

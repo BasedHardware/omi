@@ -365,7 +365,9 @@ actor MemoryExportService {
     switch destination {
     case .obsidian:
       isConfigured = !(defaults.string(forKey: destination.obsidianVaultPathKey) ?? "").isEmpty
-    case .agents, .claudeCode, .codex:
+    case .agents:
+      isConfigured = hasStoredMCPKey && LocalAgentMCPSettings.isEnabled && LocalAgentMCPSettings.storedToken() != nil
+    case .claudeCode, .codex:
       isConfigured = hasStoredMCPKey
     case .notion, .chatgpt, .claude, .gemini:
       isConfigured = exportedCount > 0
@@ -533,7 +535,7 @@ actor MemoryExportService {
 
     ## Tool Routing
 
-    - Read hosted `get_user_profile` first when available for durable user context.
+    - Read hosted `get_user_profile` first when available for a cached high-level user summary.
     - Use hosted `search_memories` or `get_memories` for facts, preferences, habits, relationships, projects, and goals.
     - Use hosted `search_conversations` for synced conversations, meetings, and "when did this happen?" questions.
     - Use local Omi Desktop tools for Rewind, screenshots, screen semantic search, local transcriptions, local SQL, daily recaps, staged tasks, indexed files, and same-device history.
@@ -541,7 +543,7 @@ actor MemoryExportService {
 
     ## Hosted vs Local Routing
 
-    - Durable user facts: hosted MCP first (`get_user_profile`, `search_memories`, `get_memories`), then local memory SQL only if hosted tools are unavailable.
+    - Durable user facts: start with hosted `get_user_profile` when available, then use `search_memories` or `get_memories` for task-specific evidence.
     - Meetings, calls, and remembered events: hosted `search_conversations` first; use local transcription tables when the question is about same-device recent audio or unsynced local history.
     - Rewind, screenshots, OCR, app/window history, indexed files, and daily recaps: same-host Omi Desktop tools first. Hosted MCP does not expose raw local screenshots or local-only Rewind data.
     - Tasks and staged actions: local `execute_sql` plus task tools when available, because task state may be same-host and operational.
@@ -596,7 +598,7 @@ actor MemoryExportService {
 
     \(omiAgentSkillText)
 
-    After setup, test both connections. On hosted Omi, list tools and call `get_user_profile`. On local Omi Desktop, list tools and call `get_daily_recap` with `days_ago: 0`.
+    After setup, test both connections. On hosted Omi, list tools and call `get_user_profile` if available; otherwise call `get_memories` with `limit: 5`. On local Omi Desktop, list tools and call `get_daily_recap` with `days_ago: 0`.
     """
   }
 

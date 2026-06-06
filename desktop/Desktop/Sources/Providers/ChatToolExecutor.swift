@@ -194,6 +194,7 @@ class ChatToolExecutor {
 
     let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
     let upper = trimmed.uppercased()
+    let readOnly = (args["read_only"] as? Bool) == true
 
     // Block dangerous keywords
     for keyword in blockedKeywords {
@@ -216,6 +217,9 @@ class ChatToolExecutor {
     let isInsert = upper.hasPrefix("INSERT")
     let isUpdate = upper.hasPrefix("UPDATE")
     let isDelete = upper.hasPrefix("DELETE")
+    if readOnly && !isSelect {
+      return "Error: this SQL surface is read-only. Use SELECT or WITH queries."
+    }
 
     // Block UPDATE/DELETE without WHERE
     if (isUpdate || isDelete) && !upper.contains("WHERE") {
