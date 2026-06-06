@@ -39,6 +39,14 @@ enum LocalAgentMCPSettings {
     return token
   }
 
+  static func createNewToken() -> String {
+    let token = "omi_local_\(UUID().uuidString.replacingOccurrences(of: "-", with: "").lowercased())"
+    UserDefaults.standard.set(token, forKey: tokenKey)
+    isEnabled = true
+    LocalAgentMCPServer.shared.startIfNeeded()
+    return token
+  }
+
   static func enable() -> String {
     let token = ensureToken()
     isEnabled = true
