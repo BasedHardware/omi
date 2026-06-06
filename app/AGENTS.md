@@ -1,6 +1,6 @@
 # App (Flutter) — Operational Playbook
 
-Inherits all rules from the root `../AGENTS.md`. This file adds app-specific operational guidance.
+Inherits all rules from the root [`../AGENTS.md`](../AGENTS.md). This file adds app-specific operational guidance.
 
 ## Build Bootstrap
 
