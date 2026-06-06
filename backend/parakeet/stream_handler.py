@@ -131,6 +131,7 @@ class StreamSession:
         self._left_context_bytes = int(LEFT_CONTEXT_SECONDS * self._sr * self._bytes_per_sample)
         self._pending_audio = bytearray()
         self._prev_text = ""
+        self._last_chunk_offset = 0
 
         self._spk_centroids = []
         self._spk_counts = []
@@ -155,6 +156,7 @@ class StreamSession:
                     self._is_speaking = True
                     self._speech_start_s = self._stream_offset_s
                     self._prev_text = ""
+                    self._last_chunk_offset = 0
                 self._pending_audio.extend(vad_chunk)
             else:
                 if self._is_speaking:
@@ -170,10 +172,13 @@ class StreamSession:
                         self._is_speaking = False
                         self._speech_start_s = None
                         self._prev_text = ""
+                        self._last_chunk_offset = 0
 
-            if self._is_speaking and len(self._pending_audio) >= self._chunk_bytes:
+            pending_since_last = len(self._pending_audio) - self._last_chunk_offset
+            if self._is_speaking and pending_since_last >= self._chunk_bytes:
                 result = await self._transcribe_chunk()
                 segments.extend(result)
+                self._last_chunk_offset = len(self._pending_audio)
 
             self._stream_offset_s += chunk_dur
             self._audio_buf.extend(vad_chunk)
