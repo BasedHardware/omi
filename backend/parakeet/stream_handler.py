@@ -441,7 +441,11 @@ class StreamSession:
             return True
 
     def _streaming_enabled(self) -> bool:
-        return not self._streaming_failed and _INFERENCE_MODE != "nim" and _asr_model is not None and _torch is not None
+        if self._streaming_failed or _INFERENCE_MODE == "nim" or _asr_model is None or _torch is None:
+            return False
+        return hasattr(_asr_model, 'decoding') and hasattr(
+            getattr(_asr_model.decoding, 'decoding', None), 'decoding_computer'
+        )
 
     def _get_streaming_decoder(self):
         if self._streaming_decoder is None:
