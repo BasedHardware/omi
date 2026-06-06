@@ -133,6 +133,14 @@ class TestWebSocketAuthListen(WebSocketAuthTestCase):
                 self.fail("Expected WebSocket to be closed by server")
         self.assertEqual(ctx.exception.code, 4001)
 
+    @patch('utils.other.endpoints.verify_token', side_effect=InvalidIdTokenError('API key invalid'))
+    def test_non_certificate_key_error_sends_close_1008(self, mock_verify):
+        """Generic key errors should not be treated as token-refresh certificate failures."""
+        with self.assertRaises(WebSocketDisconnect) as ctx:
+            with self.client.websocket_connect("/ws-listen", headers={"Authorization": "Bearer invalid_key_token"}):
+                self.fail("Expected WebSocket to be closed by server")
+        self.assertEqual(ctx.exception.code, 1008)
+
     @patch('utils.other.endpoints.verify_token', side_effect=InvalidIdTokenError('Token revoked'))
     def test_revoked_token_sends_close_4004(self, mock_verify):
         """Revoked token -> WebSocketDisconnect with code 4004 so clients can re-login."""
