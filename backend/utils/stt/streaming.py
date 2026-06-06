@@ -1088,7 +1088,7 @@ class ParakeetWebSocketSocket(STTSocket):
         headers = {"authorization": secret} if secret else {}
 
         try:
-            async with websockets.connect(url, additional_headers=headers, max_size=10 * 1024 * 1024) as ws:
+            async with websockets.connect(url, extra_headers=headers, max_size=10 * 1024 * 1024) as ws:
                 self._ws = ws
                 self._receiver_task = create_named_task(self._receive_loop(ws), name="parakeet_ws_recv")
 
