@@ -289,19 +289,9 @@ struct SettingsSearchItem: Identifiable {
       subtitle: "Let other AI tools use your Omi memories when you ask them to",
       keywords: [
         "agents", "mcp", "hermes", "claude", "cursor", "codex", "skill", "connection key",
-        "memories", "conversations",
+        "setup prompt", "install command", "agent instructions", "memories", "conversations", "rewind",
       ], section: .agents, icon: "point.3.connected.trianglepath.dotted",
       settingId: "agents.overview"),
-    SettingsSearchItem(
-      name: "Omi Guide for Agents",
-      subtitle: "Copy instructions that help agents use Omi context responsibly",
-      keywords: ["skill", "install", "agent instructions", "tool routing", "rewind", "desktop tools"],
-      section: .agents, icon: "book.pages", settingId: "agents.skill"),
-    SettingsSearchItem(
-      name: "MCP Connection Key",
-      subtitle: "Create and check the private key an agent uses to connect",
-      keywords: ["mcp key", "api key", "verify endpoint", "connection", "authorization"],
-      section: .agents, icon: "key", settingId: "agents.mcp"),
     SettingsSearchItem(
       name: "Multiple Chat Sessions", subtitle: "Create separate chat threads",
       keywords: ["multi chat", "threads"], section: .advanced, icon: "slider.horizontal.3",

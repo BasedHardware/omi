@@ -390,6 +390,7 @@ struct SettingsContentView: View {
   @State private var mcpIsVerifying: Bool = false
   @State private var mcpError: String?
   @State private var mcpVerificationMessage: String?
+  @State private var mcpSetupCopyMessage: String?
 
   init(
     appState: AppState,
@@ -3307,9 +3308,6 @@ struct SettingsContentView: View {
 
   private var agentsSection: some View {
     VStack(spacing: 20) {
-      agentsOverviewCard
-      agentsMCPConnectionCard
-      agentSkillCard
       agentSetupCard
     }
   }
@@ -3499,20 +3497,20 @@ struct SettingsContentView: View {
   }
 
   private var agentSetupCard: some View {
-    settingsCard(settingId: "agents.install") {
-      VStack(alignment: .leading, spacing: 14) {
+    settingsCard(settingId: "agents.overview") {
+      VStack(alignment: .leading, spacing: 16) {
         HStack(alignment: .top, spacing: 12) {
-          Image(systemName: "terminal")
+          Image(systemName: "point.3.connected.trianglepath.dotted")
             .scaledFont(size: 16)
             .foregroundColor(OmiColors.purplePrimary)
             .frame(width: 24, height: 24)
 
           VStack(alignment: .leading, spacing: 4) {
-            Text("Set up any agent")
+            Text("Connect an agent to Omi")
               .scaledFont(size: 16, weight: .semibold)
               .foregroundColor(OmiColors.textPrimary)
             Text(
-              "Copy one setup prompt into your agent. It should know how to add MCP tools for itself; Omi only provides the server details and guide."
+              "Copy one prompt into any agent that supports MCP. Omi will include a private connection key, the server details, and the guide the agent should save for later."
             )
             .scaledFont(size: 12)
             .foregroundColor(OmiColors.textTertiary)
@@ -3523,34 +3521,34 @@ struct SettingsContentView: View {
         }
 
         VStack(alignment: .leading, spacing: 8) {
-          agentSkillBullet("Paste the setup prompt into the agent you want to connect.")
-          agentSkillBullet("The agent must choose its own skill folder, then use the install command to write the Omi guide there.")
-          agentSkillBullet("If the agent does not support skills, it can save the guide as persistent instructions.")
+          agentSkillBullet("Omi creates the connection key for you before copying the prompt.")
+          agentSkillBullet("The agent chooses its own skill or instruction folder; Omi does not guess one.")
+          agentSkillBullet("The prompt asks the agent to connect, install the guide, and test Omi tools.")
         }
 
         HStack(spacing: 10) {
           Button {
-            copyToPasteboard(omiAgentSetupPrompt)
+            Task { await copyAgentSetupPromptFromSettings() }
           } label: {
-            iconTextButtonLabel(icon: "doc.on.doc", text: "Copy Setup Prompt")
+            Text(mcpIsCreatingKey ? "Preparing…" : "Copy Agent Setup Prompt")
+              .scaledFont(size: 12, weight: .medium)
+              .foregroundColor(.black)
+              .padding(.horizontal, 12)
+              .padding(.vertical, 7)
+              .background(RoundedRectangle(cornerRadius: 8).fill(Color.white))
           }
           .buttonStyle(.plain)
-
-          Button {
-            copyToPasteboard(omiSkillInstallCommand)
-          } label: {
-            iconTextButtonLabel(icon: "terminal", text: "Copy Install Command")
-          }
-          .buttonStyle(.plain)
-
-          Button {
-            copyToPasteboard(omiMCPDetailsText)
-          } label: {
-            iconTextButtonLabel(icon: "link", text: "Copy MCP Details")
-          }
-          .buttonStyle(.plain)
+          .disabled(mcpIsCreatingKey)
 
           Spacer()
+        }
+
+        if let message = mcpSetupCopyMessage {
+          agentStatusRow(message)
+        }
+
+        if let err = mcpError {
+          agentStatusRow(err, warning: true)
         }
       }
     }
@@ -3664,7 +3662,7 @@ struct SettingsContentView: View {
     """
   }
 
-  private var omiAgentSetupPrompt: String {
+  private func omiAgentSetupPrompt(key: String) -> String {
     """
     Set up Omi for this agent.
 
@@ -3674,7 +3672,7 @@ struct SettingsContentView: View {
     \(MemoryExportDestination.mcpServerURL)
 
     Authorization header:
-    Authorization: Bearer \(agentSetupKey)
+    Authorization: Bearer \(key)
 
     Transport:
     Streamable HTTP / MCP over HTTP
@@ -3703,6 +3701,30 @@ struct SettingsContentView: View {
   private func copyToPasteboard(_ value: String) {
     NSPasteboard.general.clearContents()
     NSPasteboard.general.setString(value, forType: .string)
+  }
+
+  @MainActor
+  private func copyAgentSetupPromptFromSettings() async {
+    mcpError = nil
+    mcpSetupCopyMessage = nil
+    mcpVerificationMessage = nil
+    mcpIsCreatingKey = true
+    defer { mcpIsCreatingKey = false }
+
+    do {
+      let key: String
+      if let existingKey = mcpCreatedKey {
+        key = existingKey
+      } else {
+        key = try await APIClient.shared.createMCPKey(name: "Desktop")
+        mcpCreatedKey = key
+      }
+      copyToPasteboard(omiAgentSetupPrompt(key: key))
+      mcpSetupCopyMessage =
+        "Setup prompt copied. It includes a private Omi key, so treat it like a password."
+    } catch {
+      mcpError = "Couldn't create setup prompt: \(error.localizedDescription)"
+    }
   }
 
   @MainActor
