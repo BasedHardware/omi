@@ -184,12 +184,23 @@ if ($redisCli) {
 
     $redisArgs = @("-h", $redisHost, "-p", $redisPort)
     $redisPassword = Get-EnvValue "REDIS_DB_PASSWORD"
-    if ($redisPassword) {
-        $redisArgs += @("-a", $redisPassword)
-    }
     $redisArgs += "ping"
 
-    & $redisCli.Source @redisArgs *> $null
+    $previousRedisCliAuth = [Environment]::GetEnvironmentVariable("REDISCLI_AUTH")
+    if ($redisPassword) {
+        $env:REDISCLI_AUTH = $redisPassword
+    }
+
+    try {
+        & $redisCli.Source @redisArgs *> $null
+    } finally {
+        if ($null -eq $previousRedisCliAuth) {
+            Remove-Item Env:REDISCLI_AUTH -ErrorAction SilentlyContinue
+        } else {
+            $env:REDISCLI_AUTH = $previousRedisCliAuth
+        }
+    }
+
     if ($LASTEXITCODE -eq 0) {
         Write-Ok "Redis ($redisHost`:$redisPort) connected"
     } else {
