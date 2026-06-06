@@ -19,15 +19,7 @@ Check errors in the latest (or specific) release using the **sentry-release skil
 See `.claude/skills/sentry-release/SKILL.md` for full documentation.
 
 ### User Issue Investigation
-When debugging issues for a specific user (crashes, errors, behavior), use the **user-logs skill**:
-```bash
-# Sentry (crashes, errors, breadcrumbs)
-./scripts/sentry-logs.sh <email>
-
-# PostHog (events, feature usage, app version)
-./scripts/posthog_query.py <email>
-```
-See `.claude/skills/user-logs/SKILL.md` for full documentation and API queries.
+When debugging issues for a specific user, check Sentry dashboard for crashes and PostHog for events.
 
 ## Repository
 - This is the `desktop/` subfolder of the **OMI monorepo** (`BasedHardware/omi`)
@@ -51,7 +43,7 @@ Merging `desktop/**` changes to `main` triggers a fully automated release:
 - App ID: `66c95e6ec76853c447b8bcbb`
 - List builds: `curl -s -H "x-auth-token: $CODEMAGIC_API_TOKEN" "https://api.codemagic.io/builds?appId=66c95e6ec76853c447b8bcbb" | python3 -c "import json,sys; [print(f\"{b.get('status','?'):12} tag={b.get('tag','-'):30} start={(b.get('startedAt') or '-')[:19]}\") for b in json.load(sys.stdin).get('builds',[])[:5]]"`
 
-To promote: `./scripts/promote_release.sh <tag>` (staging → beta → stable).
+Promotion between channels (staging → beta → stable) is handled via the Codemagic API.
 
 ## Firebase Connection
 Use `/firebase` command or see `.claude/skills/firebase/SKILL.md`
