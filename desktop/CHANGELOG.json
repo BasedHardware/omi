@@ -1,5 +1,7 @@
 {
-  "unreleased": [],
+  "unreleased": [
+    "Premium trial no longer starts automatically \u2014 opt in from the welcome popup or Settings \u2192 Plan & Usage"
+  ],
   "releases": [
     {
       "version": "0.11.451",
