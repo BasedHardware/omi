@@ -160,6 +160,8 @@ env:
       secretKeyRef:
         name: dev-omi-backend-secrets
         key: STT_PRERECORDED_MODEL
+  - name: HOSTED_PARAKEET_API_URL
+    value: "http://dev-omi-parakeet.dev-omi-backend.svc.cluster.local:8080"
   - name: NO_SOCKET_TIMEOUT
     value: "true"
   - name: HOSTED_PUSHER_API_URL
