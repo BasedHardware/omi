@@ -220,8 +220,8 @@ class ChatToolExecutor {
     let isInsert = upper.hasPrefix("INSERT")
     let isUpdate = upper.hasPrefix("UPDATE")
     let isDelete = upper.hasPrefix("DELETE")
-    if readOnly && !isSelect {
-      return "Error: this SQL surface is read-only. Use SELECT or WITH queries."
+    if readOnly && !isReadOnlySQLStatement(trimmed) {
+      return "Error: this SQL surface is read-only. Use SELECT or read-only WITH queries."
     }
 
     // Block UPDATE/DELETE without WHERE
@@ -246,6 +246,90 @@ class ChatToolExecutor {
       logError("Tool execute_sql failed", error: error)
       return "SQL Error: \(error.localizedDescription)\nFailed query: \(trimmed)"
     }
+  }
+
+  nonisolated static func isReadOnlySQLStatement(_ query: String) -> Bool {
+    let keywordSQL = sqlForKeywordScan(query)
+    let upper = keywordSQL.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+    guard upper.hasPrefix("SELECT") || upper.hasPrefix("WITH") else {
+      return false
+    }
+    for keyword in ["INSERT", "UPDATE", "DELETE", "REPLACE"] {
+      if upper.range(of: "\\b\(keyword)\\b", options: .regularExpression) != nil {
+        return false
+      }
+    }
+    return true
+  }
+
+  private nonisolated static func sqlForKeywordScan(_ query: String) -> String {
+    var result = ""
+    var index = query.startIndex
+
+    while index < query.endIndex {
+      let character = query[index]
+      let next = query.index(after: index)
+      let nextCharacter = next < query.endIndex ? query[next] : nil
+
+      if character == "-", nextCharacter == "-" {
+        index = next
+        while index < query.endIndex, query[index] != "\n" {
+          index = query.index(after: index)
+        }
+        result.append(" ")
+        continue
+      }
+
+      if character == "/", nextCharacter == "*" {
+        index = query.index(after: next)
+        while index < query.endIndex {
+          let after = query.index(after: index)
+          if query[index] == "*", after < query.endIndex, query[after] == "/" {
+            index = query.index(after: after)
+            break
+          }
+          index = after
+        }
+        result.append(" ")
+        continue
+      }
+
+      if character == "'" || character == "\"" || character == "`" {
+        index = skipQuotedSQLToken(in: query, from: index, closing: character)
+        result.append(" ")
+        continue
+      }
+
+      if character == "[" {
+        index = skipQuotedSQLToken(in: query, from: index, closing: "]")
+        result.append(" ")
+        continue
+      }
+
+      result.append(character)
+      index = next
+    }
+
+    return result
+  }
+
+  private nonisolated static func skipQuotedSQLToken(in query: String, from start: String.Index, closing: Character)
+    -> String.Index
+  {
+    var index = query.index(after: start)
+    while index < query.endIndex {
+      let character = query[index]
+      let next = query.index(after: index)
+      if character == closing {
+        if next < query.endIndex, query[next] == closing {
+          index = query.index(after: next)
+          continue
+        }
+        return next
+      }
+      index = next
+    }
+    return query.endIndex
   }
 
   /// Execute a SELECT query and format results as text
