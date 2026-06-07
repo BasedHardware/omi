@@ -71,26 +71,45 @@ def read_pcm_from_wav(wav_path: Path) -> bytes:
     return data
 
 
-async def stream_to_deepgram(audio_pcm: bytes, language: str) -> dict:
+async def stream_to_provider(audio_pcm: bytes, language: str, provider: str) -> dict:
+    """Stream audio and receive transcripts in parallel, tracking per-segment timing."""
+    segment_log = []  # [(wall_time, audio_sent_ms, segment_text, segment_count)]
     segments_received = []
-    first_segment_time = [None]
-    connect_start = time.monotonic()
+    stream_start = [None]
 
     def stream_transcript(segments):
-        if first_segment_time[0] is None:
-            first_segment_time[0] = time.monotonic()
-        segments_received.extend(segments)
+        now = time.monotonic()
+        for seg in segments:
+            segments_received.append(seg)
+            elapsed = (now - stream_start[0]) if stream_start[0] else 0
+            segment_log.append(
+                {
+                    'wall_s': round(elapsed, 3),
+                    'seg_num': len(segments_received),
+                    'text': seg.get('text', '')[:60],
+                }
+            )
 
+    connect_start = time.monotonic()
     try:
-        socket = await asyncio.wait_for(
-            process_audio_dg(stream_transcript, language, 16000, 1, model='nova-3'),
-            timeout=15,
-        )
+        if provider == 'deepgram':
+            socket = await asyncio.wait_for(
+                process_audio_dg(stream_transcript, language, 16000, 1, model='nova-3'),
+                timeout=15,
+            )
+        else:
+            socket = await asyncio.wait_for(
+                process_audio_modulate(stream_transcript, 16000, language),
+                timeout=15,
+            )
     except Exception as e:
         return {'error': str(e), 'connect_time': -1}
 
     connect_time = time.monotonic() - connect_start
-    stream_start = time.monotonic()
+    stream_start[0] = time.monotonic()
+
+    audio_duration_s = len(audio_pcm) / (16000 * 2)
+    segs_before_finish = 0
 
     offset = 0
     while offset < len(audio_pcm):
@@ -99,67 +118,35 @@ async def stream_to_deepgram(audio_pcm: bytes, language: str) -> dict:
         offset += CHUNK_SIZE
         await asyncio.sleep(CHUNK_INTERVAL)
 
-    socket.finish()
-    await asyncio.sleep(3)
+    segs_before_finish = len(segments_received)
+    audio_sent_time = time.monotonic() - stream_start[0]
 
-    total_time = time.monotonic() - stream_start
+    if provider == 'modulate':
+        try:
+            await asyncio.wait_for(socket.drain_and_close(), timeout=30)
+        except (asyncio.TimeoutError, Exception):
+            pass
+    else:
+        socket.finish()
+        await asyncio.sleep(3)
+
+    total_time = time.monotonic() - stream_start[0]
     text = ' '.join(s.get('text', '') for s in segments_received).strip()
-    first_seg_latency = (first_segment_time[0] - stream_start) if first_segment_time[0] else -1
+    first_seg_latency = segment_log[0]['wall_s'] if segment_log else -1
+    segs_after_finish = len(segments_received) - segs_before_finish
 
     return {
         'connect_time': connect_time,
         'first_segment_latency': first_seg_latency,
         'total_time': total_time,
+        'audio_duration_s': round(audio_duration_s, 2),
+        'audio_sent_time': round(audio_sent_time, 2),
         'segments': len(segments_received),
+        'segs_during_stream': segs_before_finish,
+        'segs_after_finish': segs_after_finish,
         'text': text,
         'words': len(text.split()) if text else 0,
-    }
-
-
-async def stream_to_modulate(audio_pcm: bytes, language: str) -> dict:
-    segments_received = []
-    first_segment_time = [None]
-    connect_start = time.monotonic()
-
-    def stream_transcript(segments):
-        if first_segment_time[0] is None:
-            first_segment_time[0] = time.monotonic()
-        segments_received.extend(segments)
-
-    try:
-        socket = await asyncio.wait_for(
-            process_audio_modulate(stream_transcript, 16000, language),
-            timeout=15,
-        )
-    except Exception as e:
-        return {'error': str(e), 'connect_time': -1}
-
-    connect_time = time.monotonic() - connect_start
-    stream_start = time.monotonic()
-
-    offset = 0
-    while offset < len(audio_pcm):
-        chunk = audio_pcm[offset : offset + CHUNK_SIZE]
-        socket.send(chunk)
-        offset += CHUNK_SIZE
-        await asyncio.sleep(CHUNK_INTERVAL)
-
-    try:
-        await asyncio.wait_for(socket.drain_and_close(), timeout=30)
-    except (asyncio.TimeoutError, Exception):
-        pass
-
-    total_time = time.monotonic() - stream_start
-    text = ' '.join(s.get('text', '') for s in segments_received).strip()
-    first_seg_latency = (first_segment_time[0] - stream_start) if first_segment_time[0] else -1
-
-    return {
-        'connect_time': connect_time,
-        'first_segment_latency': first_seg_latency,
-        'total_time': total_time,
-        'segments': len(segments_received),
-        'text': text,
-        'words': len(text.split()) if text else 0,
+        'segment_log': segment_log,
     }
 
 
@@ -200,87 +187,57 @@ async def run_benchmark():
 
         print(f"  [{case['id']}] {case['description']} (speaker {case['speaker']})")
 
-        try:
-            dg_result = await stream_to_deepgram(audio_pcm, lang)
-            if 'error' in dg_result:
-                raise RuntimeError(dg_result['error'])
-            dg_wer = compute_wer(ref_norm, normalize_for_wer(dg_result['text'])) if dg_result['text'] else 1.0
-            dg_punct = count_punctuation(dg_result['text']) if dg_result['text'] else {'total': 0, 'detail': {}}
-            row.update(
-                {
-                    'dg_connect': dg_result['connect_time'],
-                    'dg_first_seg': dg_result['first_segment_latency'],
-                    'dg_total': dg_result['total_time'],
-                    'dg_segments': dg_result['segments'],
-                    'dg_words': dg_result['words'],
-                    'dg_wer': dg_wer,
-                    'dg_text': dg_result['text'],
-                    'dg_punct': dg_punct['total'],
-                    'dg_punct_detail': dg_punct['detail'],
-                }
-            )
-            print(
-                f"    Deepgram:  connect={dg_result['connect_time']:.2f}s  "
-                f"first_seg={dg_result['first_segment_latency']:.2f}s  "
-                f"total={dg_result['total_time']:.2f}s  "
-                f"segs={dg_result['segments']}  WER={dg_wer:.2%}  punct={dg_punct['total']}"
-            )
-        except Exception as e:
-            print(f"    Deepgram:  ERROR - {e}")
-            row.update(
-                {
-                    'dg_connect': -1,
-                    'dg_first_seg': -1,
-                    'dg_total': -1,
-                    'dg_segments': 0,
-                    'dg_words': 0,
-                    'dg_wer': 1.0,
-                    'dg_text': f'ERROR: {e}',
-                    'dg_punct': 0,
-                    'dg_punct_detail': {},
-                }
-            )
-
-        try:
-            mod_result = await stream_to_modulate(audio_pcm, lang)
-            if 'error' in mod_result:
-                raise RuntimeError(mod_result['error'])
-            mod_wer = compute_wer(ref_norm, normalize_for_wer(mod_result['text'])) if mod_result['text'] else 1.0
-            mod_punct = count_punctuation(mod_result['text']) if mod_result['text'] else {'total': 0, 'detail': {}}
-            row.update(
-                {
-                    'mod_connect': mod_result['connect_time'],
-                    'mod_first_seg': mod_result['first_segment_latency'],
-                    'mod_total': mod_result['total_time'],
-                    'mod_segments': mod_result['segments'],
-                    'mod_words': mod_result['words'],
-                    'mod_wer': mod_wer,
-                    'mod_text': mod_result['text'],
-                    'mod_punct': mod_punct['total'],
-                    'mod_punct_detail': mod_punct['detail'],
-                }
-            )
-            print(
-                f"    Modulate:  connect={mod_result['connect_time']:.2f}s  "
-                f"first_seg={mod_result['first_segment_latency']:.2f}s  "
-                f"total={mod_result['total_time']:.2f}s  "
-                f"segs={mod_result['segments']}  WER={mod_wer:.2%}  punct={mod_punct['total']}"
-            )
-        except Exception as e:
-            print(f"    Modulate:  ERROR - {e}")
-            row.update(
-                {
-                    'mod_connect': -1,
-                    'mod_first_seg': -1,
-                    'mod_total': -1,
-                    'mod_segments': 0,
-                    'mod_words': 0,
-                    'mod_wer': 1.0,
-                    'mod_text': f'ERROR: {e}',
-                    'mod_punct': 0,
-                    'mod_punct_detail': {},
-                }
-            )
+        for provider, prefix in [('deepgram', 'dg'), ('modulate', 'mod')]:
+            try:
+                result = await stream_to_provider(audio_pcm, lang, provider)
+                if 'error' in result:
+                    raise RuntimeError(result['error'])
+                wer_val = compute_wer(ref_norm, normalize_for_wer(result['text'])) if result['text'] else 1.0
+                punct = count_punctuation(result['text']) if result['text'] else {'total': 0, 'detail': {}}
+                row.update(
+                    {
+                        f'{prefix}_connect': result['connect_time'],
+                        f'{prefix}_first_seg': result['first_segment_latency'],
+                        f'{prefix}_total': result['total_time'],
+                        f'{prefix}_segments': result['segments'],
+                        f'{prefix}_segs_during': result['segs_during_stream'],
+                        f'{prefix}_segs_after': result['segs_after_finish'],
+                        f'{prefix}_words': result['words'],
+                        f'{prefix}_wer': wer_val,
+                        f'{prefix}_text': result['text'],
+                        f'{prefix}_punct': punct['total'],
+                        f'{prefix}_punct_detail': punct['detail'],
+                        f'{prefix}_segment_log': result['segment_log'],
+                    }
+                )
+                during = result['segs_during_stream']
+                after = result['segs_after_finish']
+                total_segs = result['segments']
+                parallel_pct = (during / total_segs * 100) if total_segs > 0 else 0
+                print(
+                    f"    {provider.capitalize():10s}  connect={result['connect_time']:.2f}s  "
+                    f"1st_seg={result['first_segment_latency']:.2f}s  "
+                    f"total={result['total_time']:.2f}s  "
+                    f"segs={total_segs} (during={during} after={after} parallel={parallel_pct:.0f}%)  "
+                    f"WER={wer_val:.2%}"
+                )
+            except Exception as e:
+                print(f"    {provider.capitalize():10s}  ERROR - {e}")
+                row.update(
+                    {
+                        f'{prefix}_connect': -1,
+                        f'{prefix}_first_seg': -1,
+                        f'{prefix}_total': -1,
+                        f'{prefix}_segments': 0,
+                        f'{prefix}_segs_during': 0,
+                        f'{prefix}_segs_after': 0,
+                        f'{prefix}_words': 0,
+                        f'{prefix}_wer': 1.0,
+                        f'{prefix}_text': f'ERROR: {e}',
+                        f'{prefix}_punct': 0,
+                        f'{prefix}_punct_detail': {},
+                    }
+                )
 
         results.append(row)
 
@@ -293,6 +250,10 @@ async def run_benchmark():
 
     table_data = []
     for r in results:
+        dg_during = r.get('dg_segs_during', 0)
+        dg_total_s = r.get('dg_segments', 0)
+        mod_during = r.get('mod_segs_during', 0)
+        mod_total_s = r.get('mod_segments', 0)
         table_data.append(
             [
                 r['id'],
@@ -300,16 +261,12 @@ async def run_benchmark():
                 f"{r['duration_s']:.1f}s",
                 fmt_time(r.get('dg_connect', -1)),
                 fmt_time(r.get('dg_first_seg', -1)),
-                fmt_time(r.get('dg_total', -1)),
-                r.get('dg_segments', 0),
+                f"{dg_during}/{dg_total_s}",
                 f"{r.get('dg_wer', 1):.0%}",
-                r.get('dg_punct', 0),
                 fmt_time(r.get('mod_connect', -1)),
                 fmt_time(r.get('mod_first_seg', -1)),
-                fmt_time(r.get('mod_total', -1)),
-                r.get('mod_segments', 0),
+                f"{mod_during}/{mod_total_s}",
                 f"{r.get('mod_wer', 1):.0%}",
-                r.get('mod_punct', 0),
             ]
         )
 
@@ -319,23 +276,22 @@ async def run_benchmark():
             headers=[
                 'Case',
                 'Words',
-                'Duration',
+                'Dur',
                 'DG Conn',
-                'DG 1st Seg',
-                'DG Total',
-                'DG Segs',
+                'DG 1st',
+                'DG Dur/Tot',
                 'DG WER',
-                'DG Punct',
                 'Mod Conn',
-                'Mod 1st Seg',
-                'Mod Total',
-                'Mod Segs',
+                'Mod 1st',
+                'Mod Dur/Tot',
                 'Mod WER',
-                'Mod Punct',
             ],
             tablefmt='grid',
         )
     )
+
+    print('\n  Dur/Tot = segments received during streaming / total segments')
+    print('  Higher during-stream ratio = better real-time parallel delivery')
 
     valid_dg = [r for r in results if r.get('dg_total', -1) >= 0]
     valid_mod = [r for r in results if r.get('mod_total', -1) >= 0]
