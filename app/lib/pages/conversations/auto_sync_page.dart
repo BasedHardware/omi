@@ -12,6 +12,7 @@ import 'package:omi/services/wals.dart';
 import 'package:omi/ui/molecules/omi_confirm_dialog.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
+import 'package:omi/utils/sync_confirmation.dart';
 import 'synced_conversations_page.dart';
 import 'wal_item_detail/wal_item_detail_page.dart';
 
@@ -169,10 +170,14 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
     } else if (attention > 0) {
       title = l.syncCardNeedsAttention(attention);
       titleColor = Colors.orangeAccent;
-      action = _statusActionPill(l.sync, Colors.deepPurpleAccent, () => p.syncWals());
+      action = _statusActionPill(l.sync, Colors.deepPurpleAccent, () async {
+        if (await confirmSyncForCustomStt(context)) p.syncWals();
+      });
     } else if (readyToBackUp > 0) {
       title = l.syncCardReadyCount(readyToBackUp);
-      action = _statusActionPill(l.sync, Colors.deepPurpleAccent, () => p.syncWals());
+      action = _statusActionPill(l.sync, Colors.deepPurpleAccent, () async {
+        if (await confirmSyncForCustomStt(context)) p.syncWals();
+      });
     } else if (hasAnyRecording) {
       title = l.syncCardAllBackedUp;
       titleColor = Colors.grey.shade400;
