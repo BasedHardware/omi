@@ -183,8 +183,6 @@ class AnalyticsManager {
   }
 
   /// Report when ScreenCaptureKit broken state is detected (TCC granted but capture failing).
-  /// Routed to Sentry (already in stack) so we get the same release-health signal without
-  /// paying PostHog ingestion for what is effectively an error/diagnostic event.
   func screenCaptureBrokenDetected() {
     guard !Self.isDevBuild else { return }
     let breadcrumb = Breadcrumb(level: .warning, category: "screen_capture")
@@ -251,9 +249,6 @@ class AnalyticsManager {
     if hadPreviousSession && !lastCleanExit {
       log("Analytics: Previous session did not exit cleanly — reporting crash")
       let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "unknown"
-      // Crash signal belongs in Sentry, not PostHog — Sentry already groups by
-      // release/OS and powers release-health, so a parallel PostHog event was
-      // pure ingestion cost.
       SentrySDK.capture(message: "App Crash Detected") { scope in
         scope.setLevel(.warning)
         scope.setTag(value: "app_crash_detected", key: "diagnostic")
@@ -702,20 +697,9 @@ class AnalyticsManager {
 
   // MARK: - All Settings State (Comprehensive daily report)
 
-  /// No-op. Previously fired a daily "All Settings State" event per user with ~45
-  /// settings snapshotted as properties. We get the same observability by
-  /// registering each setting as a user/person property on change at the
-  /// callsite that owns it, instead of paying for a per-DAU daily event. Kept
-  /// as a function (rather than deleted) so existing callers continue to
-  /// compile without touching every callsite in this PR.
+  /// No-op. Replaced by on-change person-property updates at the owning callsites.
   func reportAllSettingsIfNeeded() {}
 
-  /// Collect all user settings into a flat dictionary for analytics reporting.
-  /// For string settings (custom prompts), reports has_custom + length instead of full text.
-  /// For array settings (excluded apps, keywords), reports count instead of contents.
-  ///
-  /// Kept for potential future use (e.g. lower-cadence opt-in reports) — currently
-  /// no callers within the app emit this dictionary.
   private func collectAllSettings() -> [String: Any] {
     var props: [String: Any] = [:]
 

@@ -6,13 +6,7 @@ class PostHogAnalyticsAdapter implements AnalyticsAdapter {
   PostHogAnalyticsAdapter({
     required this.apiKey,
     this.host = 'https://us.i.posthog.com',
-    // PostHog's built-in lifecycle capture fires `Application Opened`,
-    // `Application Backgrounded`, `Application Installed`, `Application Updated`
-    // (and on iOS the active/resigned-active pair) on every state change.
-    // For our usage that's pure event-volume noise — we already track the
-    // meaningful boundary (sign-in/launch) via explicit events — and it was the
-    // single biggest contributor to monthly PostHog spend. Keep this default
-    // off; opt back in explicitly if a future flow needs the raw cadence.
+    // SDK default is `true`; we track lifecycle ourselves at meaningful boundaries.
     this.captureLifecycleEvents = false,
     this.debug = false,
   });
