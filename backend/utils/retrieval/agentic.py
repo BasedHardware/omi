@@ -48,7 +48,7 @@ from utils.retrieval.tools import (
 )
 from utils.retrieval.tools.app_tools import load_app_tools, get_tool_status_message
 from utils.retrieval.safety import AgentSafetyGuard, SafetyGuardError
-from utils.llm.clients import anthropic_client, ANTHROPIC_AGENT_MODEL
+from utils.llm.clients import anthropic_client, get_model
 from utils.llm.chat import _get_agentic_qa_prompt
 from utils.other.endpoints import timeit
 from utils.observability.langsmith import is_langsmith_enabled
@@ -384,7 +384,7 @@ async def _run_anthropic_agent_stream(
 
         try:
             async with anthropic_client.messages.stream(
-                model=ANTHROPIC_AGENT_MODEL,
+                model=get_model('chat_agent'),
                 system=system_blocks,
                 messages=messages,
                 tools=tool_schemas,
