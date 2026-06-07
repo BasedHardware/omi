@@ -5,6 +5,14 @@ Uses real human speech from LibriSpeech test-clean dataset (12 samples,
 12 speakers, 2-27s duration, 4-62 words). Ground truth transcripts for
 accurate WER measurement. Streams at real-time pace (3200 bytes/100ms).
 
+Note on parallel delivery metrics:
+    Modulate shows 0% parallel and late first-segment because our
+    SafeModulateSocket only forwards final `utterance` messages to the
+    callback, not `partial_utterance` previews. Modulate DOES send live
+    partials during streaming (first at ~1s), but they are buffered and
+    not surfaced. This benchmark measures our implementation's behavior,
+    not Modulate's raw streaming capability.
+
 Setup:
     1. Download LibriSpeech test-clean:
        curl -L -o /tmp/test-clean.tar.gz https://www.openslr.org/resources/12/test-clean.tar.gz
