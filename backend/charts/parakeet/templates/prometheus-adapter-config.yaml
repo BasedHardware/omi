@@ -1,0 +1,64 @@
+{{- if and .Values.metrics.enabled .Values.metrics.prometheusAdapter.enabled }}
+# Prometheus-adapter rules for Parakeet custom metrics.
+# Merge into your cluster's prometheus-adapter config (e.g. via the
+# prometheus-adapter Helm chart's `rules.custom` or `rules.external` values).
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "parakeet.fullname" . }}-adapter-rules
+  labels:
+    {{- include "parakeet.labels" . | nindent 4 }}
+data:
+  config.yaml: |
+    # -- Custom metrics (Pods type in HPA — one value per pod) --
+    rules:
+      # Active streaming connections per pod — primary autoscaling metric.
+      - seriesQuery: 'parakeet_active_streams{namespace!="",pod!=""}'
+        resources:
+          overrides:
+            namespace: {resource: "namespace"}
+            pod: {resource: "pod"}
+        name:
+          as: "parakeet_active_streams"
+        metricsQuery: 'sum(parakeet_active_streams{<<.LabelMatchers>>}) by (<<.GroupBy>>)'
+
+      # Active batch requests per pod.
+      - seriesQuery: 'parakeet_active_batch_requests{namespace!="",pod!=""}'
+        resources:
+          overrides:
+            namespace: {resource: "namespace"}
+            pod: {resource: "pod"}
+        name:
+          as: "parakeet_active_batch_requests"
+        metricsQuery: 'sum(parakeet_active_batch_requests{<<.LabelMatchers>>}) by (<<.GroupBy>>)'
+
+      # Total active requests per pod (streams + batch).
+      - seriesQuery: 'parakeet_active_streams{namespace!="",pod!=""}'
+        resources:
+          overrides:
+            namespace: {resource: "namespace"}
+            pod: {resource: "pod"}
+        name:
+          as: "parakeet_active_requests_total"
+        metricsQuery: '(sum(parakeet_active_streams{<<.LabelMatchers>>}) by (<<.GroupBy>>) + sum(parakeet_active_batch_requests{<<.LabelMatchers>>}) by (<<.GroupBy>>))'
+
+    # -- External metrics (global, not per-pod) --
+    externalRules:
+      # Request latency p99 (global across all pods).
+      - seriesQuery: 'parakeet_request_duration_seconds_bucket{namespace!=""}'
+        resources:
+          overrides:
+            namespace: {resource: "namespace"}
+        name:
+          as: "parakeet_request_latency_p99"
+        metricsQuery: 'histogram_quantile(0.99, sum(rate(parakeet_request_duration_seconds_bucket{<<.LabelMatchers>>}[2m])) by (le))'
+
+      # GPU utilization (from DCGM exporter, global).
+      - seriesQuery: 'DCGM_FI_DEV_GPU_UTIL{namespace!=""}'
+        resources:
+          overrides:
+            namespace: {resource: "namespace"}
+        name:
+          as: "parakeet_gpu_utilization"
+        metricsQuery: 'avg(avg_over_time(DCGM_FI_DEV_GPU_UTIL{<<.LabelMatchers>>}[1m]))'
+{{- end }}

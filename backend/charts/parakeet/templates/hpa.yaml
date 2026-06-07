@@ -33,6 +33,33 @@ spec:
           type: Utilization
           averageUtilization: {{ .Values.autoscaling.targetMemoryUtilizationPercentage }}
     {{- end }}
+    {{- if .Values.autoscaling.streamsPerPod }}
+    - type: Pods
+      pods:
+        metric:
+          name: parakeet_active_streams
+        target:
+          type: AverageValue
+          averageValue: "{{ .Values.autoscaling.streamsPerPod }}"
+    {{- end }}
+    {{- if .Values.autoscaling.requestsPerPod }}
+    - type: Pods
+      pods:
+        metric:
+          name: parakeet_active_requests_total
+        target:
+          type: AverageValue
+          averageValue: "{{ .Values.autoscaling.requestsPerPod }}"
+    {{- end }}
+    {{- if .Values.autoscaling.targetGPUUtilization }}
+    - type: External
+      external:
+        metric:
+          name: parakeet_gpu_utilization
+        target:
+          type: Value
+          value: "{{ .Values.autoscaling.targetGPUUtilization }}"
+    {{- end }}
     {{- if .Values.autoscaling.requestLatencyP99 }}
     - type: External
       external:
@@ -40,6 +67,6 @@ spec:
           name: parakeet_request_latency_p99
         target:
           type: Value
-          value: {{ .Values.autoscaling.requestLatencyP99 }}
+          value: "{{ .Values.autoscaling.requestLatencyP99 }}"
     {{- end }}
 {{- end }}

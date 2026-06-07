@@ -69,6 +69,10 @@ ingress:
       paths:
         - path: /v1/transcribe
           pathType: Prefix
+        - path: /v2/transcribe
+          pathType: Prefix
+        - path: /v3/stream
+          pathType: Prefix
         - path: /health
           pathType: Prefix
 
@@ -130,6 +134,17 @@ startupProbe:
   failureThreshold: 60
   periodSeconds: 10
 
+metrics:
+  enabled: true
+  port: 9091
+  serviceMonitor:
+    enabled: true
+    interval: "15s"
+    labels:
+      release: dev-kube-prometheus-stack
+  prometheusAdapter:
+    enabled: true
+
 # This section is for setting up autoscaling more information can be found here: https://kubernetes.io/docs/concepts/workloads/autoscaling/
 autoscaling:
   enabled: true
@@ -156,9 +171,7 @@ autoscaling:
         value: 1
         periodSeconds: 15
       selectPolicy: Max
-  # targetCPUUtilizationPercentage: 70
-  # targetMemoryUtilizationPercentage: 70
-  requestLatencyP99: 300   # milliseconds
+  streamsPerPod: 30
 
 # Additional volumes on the output Deployment definition.
 volumes: []
