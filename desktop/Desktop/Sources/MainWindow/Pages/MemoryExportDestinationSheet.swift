@@ -48,18 +48,19 @@ private struct AgentSetupActionButtonStyle: ButtonStyle {
 
   func makeBody(configuration: Configuration) -> some View {
     configuration.label
-      .font(.system(size: kind == .primary ? 14 : 13, weight: .semibold))
+      .font(.system(size: 13, weight: .semibold))
       .foregroundColor(kind == .primary ? .black : OmiColors.textPrimary)
       .lineLimit(1)
       .labelStyle(.titleAndIcon)
-      .padding(.horizontal, kind == .primary ? 16 : 12)
-      .padding(.vertical, kind == .primary ? 11 : 9)
+      .padding(.horizontal, kind == .primary ? 14 : 12)
+      .padding(.vertical, 8)
+      .frame(minHeight: 36)
       .background(
-        RoundedRectangle(cornerRadius: 12, style: .continuous)
+        RoundedRectangle(cornerRadius: 10, style: .continuous)
           .fill(kind == .primary ? Color.white : OmiColors.backgroundTertiary)
       )
       .overlay(
-        RoundedRectangle(cornerRadius: 12, style: .continuous)
+        RoundedRectangle(cornerRadius: 10, style: .continuous)
           .stroke(Color.white.opacity(kind == .primary ? 0 : 0.08), lineWidth: 1)
       )
       .opacity(configuration.isPressed ? 0.9 : 1)
@@ -529,7 +530,6 @@ struct MemoryExportDestinationSheet: View {
   private var agentSetupHeader: some View {
     VStack(alignment: .leading, spacing: 6) {
       HStack(spacing: 9) {
-        ConnectorBrandIcon(brand: .agents, size: 22, cornerRadius: 6)
         Text("Let your agent do it")
           .scaledFont(size: 15, weight: .semibold)
           .foregroundColor(OmiColors.textPrimary)

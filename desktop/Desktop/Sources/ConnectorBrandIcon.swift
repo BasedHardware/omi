@@ -182,10 +182,7 @@ struct ConnectorBrandIcon: View {
             .stroke(Color.white.opacity(0.06), lineWidth: 1)
         )
 
-      if brand == .agents {
-        Text("🤖")
-          .font(.system(size: size * 0.46))
-      } else if brand == .x {
+      if brand == .x {
         // X's wordmark glyph — no SF Symbol or app icon exists for it.
         Text("𝕏")
           .font(.system(size: size * 0.5, weight: .bold))
