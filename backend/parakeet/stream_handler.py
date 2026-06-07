@@ -459,7 +459,7 @@ class StreamSession:
             if self._is_speaking:
                 speech_dur = len(self._pending_audio) / (self._sr * self._bytes_per_sample)
                 if speech_dur >= MAX_SPEECH_DURATION_S:
-                    result = await self._transcribe_utterance()
+                    result = await self._transcribe_utterance(trim_trailing_word=True)
                     segments.extend(result)
                     self._pending_audio.clear()
                     self._is_speaking = False
@@ -576,7 +576,7 @@ class StreamSession:
                 overlap = i + 1
         return " ".join(new_words[overlap:]).strip() if overlap > 0 else text
 
-    async def _transcribe_utterance(self):
+    async def _transcribe_utterance(self, trim_trailing_word: bool = False):
         speech_pcm = bytes(self._pending_audio)
         speech_start = self._speech_start_s or self._stream_offset_s
 
@@ -584,7 +584,15 @@ class StreamSession:
             text = self._new_streaming_text_since_last_emit()
             if not text:
                 return []
-            self._last_emitted_text = self._streaming_text.strip()
+            if trim_trailing_word:
+                words = text.split()
+                if len(words) > 1:
+                    text = " ".join(words[:-1])
+                    self._last_emitted_text = (self._last_emitted_text or "").strip() + " " + text
+                else:
+                    return []
+            else:
+                self._last_emitted_text = self._streaming_text.strip()
             dur = len(speech_pcm) / (self._sr * self._bytes_per_sample)
             return self._build_segments(text, speech_start, dur, speech_pcm)
 
