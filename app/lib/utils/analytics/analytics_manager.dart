@@ -81,6 +81,9 @@ class AnalyticsManager {
       PlatformService.executeIfSupported(PlatformService.isAnalyticsSupported, () {
         final adapter = _adapter;
         if (adapter == null) return;
+        // If the SDK silently drops the identify call we must not cache it as
+        // sent — that would suppress every retry once the SDK is ready.
+        if (!adapter.isInitialized) return;
         final uid = _preferences.uid;
         if (uid.isEmpty) return;
         final coerced = <String, Object>{};
@@ -90,16 +93,20 @@ class AnalyticsManager {
         });
         if (coerced.isEmpty) return;
         final fresh = <String, Object>{};
+        final pending = <String, String>{};
         coerced.forEach((k, v) {
           final cacheKey = '$uid:$k';
           final serialized = _serializePersonPropertyValue(v);
           if (_lastSentPersonProperty[cacheKey] == serialized) return;
           fresh[k] = v;
-          _lastSentPersonProperty[cacheKey] = serialized;
-          _persistPersonPropertyCacheEntry(cacheKey, serialized);
+          pending[cacheKey] = serialized;
         });
         if (fresh.isEmpty) return;
         adapter.identify(userId: uid, userProperties: fresh);
+        pending.forEach((cacheKey, serialized) {
+          _lastSentPersonProperty[cacheKey] = serialized;
+          _persistPersonPropertyCacheEntry(cacheKey, serialized);
+        });
       });
 
   static const String _personPropertyCachePrefix = '_ph_lastset_';
