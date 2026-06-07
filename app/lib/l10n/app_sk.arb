@@ -3051,5 +3051,7 @@
     "recapRegeneratedSnackbar": "Zhrnutie znovu vygenerované",
     "recapRegenerateFailed": "Zhrnutie sa nepodarilo znovu vygenerovať. Skúste neskôr.",
     "recapRegenerateCooldown": "Pred opätovným generovaním prosím počkajte niekoľko sekúnd.",
-    "recapRegenerateNoConversations": "Pre tento deň nie sú žiadne konverzácie na zhrnutie."
+    "recapRegenerateNoConversations": "Pre tento deň nie sú žiadne konverzácie na zhrnutie.",
+    "syncCustomSttWarningTitle": "Synchronizácia používa prepis Omi",
+    "syncCustomSttWarningMessage": "Používate vlastného poskytovateľa prepisu. Synchronizácia týchto nahrávok ich prepíše na serveroch Omi a započítajú sa do limitu prepisu vášho plánu."
 }

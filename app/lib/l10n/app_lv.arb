@@ -3046,5 +3046,7 @@
     "recapRegeneratedSnackbar": "Kopsavilkums atjaunots",
     "recapRegenerateFailed": "Kopsavilkumu neizdevās atjaunot. Mēģiniet vēlāk vēlreiz.",
     "recapRegenerateCooldown": "Lūdzu, pagaidiet dažas sekundes pirms atkārtotas ģenerēšanas.",
-    "recapRegenerateNoConversations": "Šajā dienā nav sarunu, ko apkopot."
+    "recapRegenerateNoConversations": "Šajā dienā nav sarunu, ko apkopot.",
+    "syncCustomSttWarningTitle": "Sinhronizācija izmanto Omi transkripciju",
+    "syncCustomSttWarningMessage": "Jūs izmantojat savu transkripcijas pakalpojumu. Šo ierakstu sinhronizēšana tos transkribē Omi serveros, un tie tiek ieskaitīti jūsu plāna transkripcijas limitā."
 }

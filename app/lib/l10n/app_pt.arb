@@ -3082,5 +3082,7 @@
     "recapRegeneratedSnackbar": "Resumo regenerado",
     "recapRegenerateFailed": "Não foi possível regenerar o resumo. Tente novamente mais tarde.",
     "recapRegenerateCooldown": "Aguarde alguns segundos antes de regenerar novamente.",
-    "recapRegenerateNoConversations": "Nenhuma conversa para resumir neste dia."
+    "recapRegenerateNoConversations": "Nenhuma conversa para resumir neste dia.",
+    "syncCustomSttWarningTitle": "A sincronização usa a transcrição da Omi",
+    "syncCustomSttWarningMessage": "Você usa seu próprio provedor de transcrição. Sincronizar estas gravações as transcreve nos servidores da Omi e elas contam para o limite de transcrição do seu plano."
 }

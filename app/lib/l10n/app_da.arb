@@ -3055,5 +3055,7 @@
     "recapRegeneratedSnackbar": "Resumé genereret igen",
     "recapRegenerateFailed": "Kunne ikke generere resuméet igen. Prøv igen senere.",
     "recapRegenerateCooldown": "Vent et par sekunder, før du genererer igen.",
-    "recapRegenerateNoConversations": "Ingen samtaler at opsummere for denne dag."
+    "recapRegenerateNoConversations": "Ingen samtaler at opsummere for denne dag.",
+    "syncCustomSttWarningTitle": "Synkronisering bruger Omi-transskription",
+    "syncCustomSttWarningMessage": "Du bruger din egen transskriptionsudbyder. Synkronisering af disse optagelser transskriberer dem på Omis servere i stedet, og de tæller med i din plans transskriptionsgrænse."
 }

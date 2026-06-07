@@ -3081,5 +3081,7 @@
     "recapRegeneratedSnackbar": "Podsumowanie wygenerowane ponownie",
     "recapRegenerateFailed": "Nie udało się ponownie wygenerować podsumowania. Spróbuj później.",
     "recapRegenerateCooldown": "Poczekaj kilka sekund przed ponownym wygenerowaniem.",
-    "recapRegenerateNoConversations": "Brak rozmów do podsumowania w tym dniu."
+    "recapRegenerateNoConversations": "Brak rozmów do podsumowania w tym dniu.",
+    "syncCustomSttWarningTitle": "Synchronizacja korzysta z transkrypcji Omi",
+    "syncCustomSttWarningMessage": "Używasz własnego dostawcy transkrypcji. Synchronizacja tych nagrań transkrybuje je na serwerach Omi i są wliczane do limitu transkrypcji w Twoim planie."
 }

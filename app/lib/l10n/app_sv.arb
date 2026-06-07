@@ -3046,5 +3046,7 @@
     "recapRegeneratedSnackbar": "Sammanfattningen återskapad",
     "recapRegenerateFailed": "Det gick inte att återskapa sammanfattningen. Försök igen senare.",
     "recapRegenerateCooldown": "Vänta några sekunder innan du genererar igen.",
-    "recapRegenerateNoConversations": "Inga samtal att sammanfatta för den här dagen."
+    "recapRegenerateNoConversations": "Inga samtal att sammanfatta för den här dagen.",
+    "syncCustomSttWarningTitle": "Synkronisering använder Omi-transkription",
+    "syncCustomSttWarningMessage": "Du använder din egen transkriberingsleverantör. Att synkronisera dessa inspelningar transkriberar dem på Omis servrar i stället, och de räknas mot din plans transkriberingsgräns."
 }

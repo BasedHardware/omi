@@ -10624,5 +10624,7 @@
     "recapRegeneratedSnackbar": "הסיכום נוצר מחדש",
     "recapRegenerateFailed": "לא ניתן ליצור מחדש את הסיכום. נסה שוב מאוחר יותר.",
     "recapRegenerateCooldown": "אנא המתן מספר שניות לפני יצירה מחודשת.",
-    "recapRegenerateNoConversations": "אין שיחות לסיכום עבור היום הזה."
+    "recapRegenerateNoConversations": "אין שיחות לסיכום עבור היום הזה.",
+    "syncCustomSttWarningTitle": "הסנכרון משתמש בתמלול של Omi",
+    "syncCustomSttWarningMessage": "אתה משתמש בספק תמלול משלך. סנכרון ההקלטות האלה יתמלל אותן בשרתי Omi והן ייכללו במגבלת התמלול של התוכנית שלך."
 }

@@ -3046,5 +3046,7 @@
     "recapRegeneratedSnackbar": "สร้างสรุปใหม่แล้ว",
     "recapRegenerateFailed": "ไม่สามารถสร้างสรุปใหม่ได้ ลองอีกครั้งในภายหลัง",
     "recapRegenerateCooldown": "โปรดรอสักครู่ก่อนสร้างใหม่อีกครั้ง",
-    "recapRegenerateNoConversations": "ไม่มีการสนทนาที่จะสรุปสำหรับวันนี้"
+    "recapRegenerateNoConversations": "ไม่มีการสนทนาที่จะสรุปสำหรับวันนี้",
+    "syncCustomSttWarningTitle": "การซิงค์ใช้การถอดเสียงของ Omi",
+    "syncCustomSttWarningMessage": "คุณใช้ผู้ให้บริการถอดเสียงของคุณเอง การซิงค์การบันทึกเหล่านี้จะถอดเสียงบนเซิร์ฟเวอร์ของ Omi และจะนับรวมในขีดจำกัดการถอดเสียงของแพ็กเกจของคุณ"
 }

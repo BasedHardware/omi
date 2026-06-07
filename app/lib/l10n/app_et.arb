@@ -3046,5 +3046,7 @@
     "recapRegeneratedSnackbar": "Kokkuvõte loodi uuesti",
     "recapRegenerateFailed": "Kokkuvõtet ei õnnestunud uuesti luua. Proovi hiljem uuesti.",
     "recapRegenerateCooldown": "Palun oota mõni sekund enne uuesti loomist.",
-    "recapRegenerateNoConversations": "Selle päeva jaoks pole vestlusi, mida kokku võtta."
+    "recapRegenerateNoConversations": "Selle päeva jaoks pole vestlusi, mida kokku võtta.",
+    "syncCustomSttWarningTitle": "Sünkroonimine kasutab Omi transkriptsiooni",
+    "syncCustomSttWarningMessage": "Kasutate oma transkriptsiooniteenust. Nende salvestiste sünkroonimine transkribeerib need Omi serverites ja need arvestatakse teie paketi transkriptsioonilimiidi sisse."
 }

@@ -3046,5 +3046,7 @@
     "recapRegeneratedSnackbar": "Ringkasan dijana semula",
     "recapRegenerateFailed": "Tidak dapat menjana semula ringkasan. Cuba sebentar lagi.",
     "recapRegenerateCooldown": "Sila tunggu beberapa saat sebelum menjana semula.",
-    "recapRegenerateNoConversations": "Tiada perbualan untuk diringkaskan untuk hari ini."
+    "recapRegenerateNoConversations": "Tiada perbualan untuk diringkaskan untuk hari ini.",
+    "syncCustomSttWarningTitle": "Penyegerakan menggunakan transkripsi Omi",
+    "syncCustomSttWarningMessage": "Anda menggunakan penyedia transkripsi sendiri. Menyegerakkan rakaman ini akan mentranskripsikannya di pelayan Omi dan dikira dalam had transkripsi pelan anda."
 }

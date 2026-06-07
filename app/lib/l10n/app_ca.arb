@@ -3015,5 +3015,7 @@
     "recapRegeneratedSnackbar": "Resum regenerat",
     "recapRegenerateFailed": "No s'ha pogut regenerar el resum. Torna-ho a provar més tard.",
     "recapRegenerateCooldown": "Espera uns segons abans de tornar a regenerar.",
-    "recapRegenerateNoConversations": "No hi ha converses per resumir d'aquest dia."
+    "recapRegenerateNoConversations": "No hi ha converses per resumir d'aquest dia.",
+    "syncCustomSttWarningTitle": "La sincronització utilitza la transcripció d'Omi",
+    "syncCustomSttWarningMessage": "Utilitzes el teu propi proveïdor de transcripció. Sincronitzar aquests enregistraments els transcriu als servidors d'Omi i compten per al límit de transcripció del teu pla."
 }

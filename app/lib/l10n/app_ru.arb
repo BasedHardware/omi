@@ -3081,5 +3081,7 @@
     "recapRegeneratedSnackbar": "Резюме создано заново",
     "recapRegenerateFailed": "Не удалось создать резюме заново. Попробуйте позже.",
     "recapRegenerateCooldown": "Подождите несколько секунд перед повторным созданием.",
-    "recapRegenerateNoConversations": "Нет разговоров для резюмирования за этот день."
+    "recapRegenerateNoConversations": "Нет разговоров для резюмирования за этот день.",
+    "syncCustomSttWarningTitle": "Синхронизация использует транскрипцию Omi",
+    "syncCustomSttWarningMessage": "Вы используете собственный сервис транскрипции. Синхронизация этих записей расшифрует их на серверах Omi, и они будут засчитаны в лимит транскрипции вашего тарифа."
 }

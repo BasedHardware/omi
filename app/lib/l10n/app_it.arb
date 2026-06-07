@@ -3046,5 +3046,7 @@
     "recapRegeneratedSnackbar": "Riepilogo rigenerato",
     "recapRegenerateFailed": "Impossibile rigenerare il riepilogo. Riprova più tardi.",
     "recapRegenerateCooldown": "Attendi qualche secondo prima di rigenerare.",
-    "recapRegenerateNoConversations": "Nessuna conversazione da riepilogare per questo giorno."
+    "recapRegenerateNoConversations": "Nessuna conversazione da riepilogare per questo giorno.",
+    "syncCustomSttWarningTitle": "La sincronizzazione usa la trascrizione di Omi",
+    "syncCustomSttWarningMessage": "Usi un tuo fornitore di trascrizione. Sincronizzare queste registrazioni le trascrive sui server di Omi e contano per il limite di trascrizione del tuo piano."
 }

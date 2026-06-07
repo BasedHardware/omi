@@ -3046,5 +3046,7 @@
     "recapRegeneratedSnackbar": "Samenvatting opnieuw gegenereerd",
     "recapRegenerateFailed": "Kon de samenvatting niet opnieuw genereren. Probeer het later opnieuw.",
     "recapRegenerateCooldown": "Wacht een paar seconden voordat je opnieuw genereert.",
-    "recapRegenerateNoConversations": "Geen gesprekken om voor deze dag samen te vatten."
+    "recapRegenerateNoConversations": "Geen gesprekken om voor deze dag samen te vatten.",
+    "syncCustomSttWarningTitle": "Synchroniseren gebruikt Omi-transcriptie",
+    "syncCustomSttWarningMessage": "Je gebruikt je eigen transcriptieprovider. Door deze opnames te synchroniseren worden ze op de servers van Omi getranscribeerd en tellen ze mee voor de transcriptielimiet van je abonnement."
 }

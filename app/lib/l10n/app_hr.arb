@@ -10624,5 +10624,7 @@
     "recapRegeneratedSnackbar": "Sažetak je ponovno generiran",
     "recapRegenerateFailed": "Nije bilo moguće ponovno generirati sažetak. Pokušajte kasnije.",
     "recapRegenerateCooldown": "Pričekajte nekoliko sekundi prije ponovnog generiranja.",
-    "recapRegenerateNoConversations": "Nema razgovora za sažimanje za ovaj dan."
+    "recapRegenerateNoConversations": "Nema razgovora za sažimanje za ovaj dan.",
+    "syncCustomSttWarningTitle": "Sinkronizacija koristi Omi transkripciju",
+    "syncCustomSttWarningMessage": "Koristite vlastiti pružatelj transkripcije. Sinkronizacija ovih snimaka transkribira ih na Omijevim poslužiteljima i broje se u ograničenje transkripcije vašeg plana."
 }
