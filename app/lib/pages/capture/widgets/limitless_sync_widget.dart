@@ -56,7 +56,7 @@ class LimitlessSyncCardWidget extends StatelessWidget {
                   if (!isSyncing)
                     ElevatedButton(
                       onPressed: () async {
-                        if (await confirmSyncForCustomStt(context)) syncProvider.syncWals();
+                        if (await confirmSyncForCustomStt(context) && context.mounted) syncProvider.syncWals();
                       },
                       style: ElevatedButton.styleFrom(
                         backgroundColor: Colors.deepPurple,
