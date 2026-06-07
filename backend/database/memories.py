@@ -86,14 +86,12 @@ def get_memories(
     if end_date:
         memories_ref = memories_ref.where(filter=FieldFilter('created_at', '<=', end_date))
 
-    if sort == 'created_desc':
-        memories_ref = memories_ref.order_by('created_at', direction=firestore.Query.DESCENDING)
-    elif sort == 'updated_desc':
-        memories_ref = memories_ref.order_by('updated_at', direction=firestore.Query.DESCENDING)
-    else:
-        memories_ref = memories_ref.order_by('scoring', direction=firestore.Query.DESCENDING).order_by(
-            'created_at', direction=firestore.Query.DESCENDING
-        )
+    # Keep the Firestore query on the existing indexed order. MCP-specific sort
+    # modes are applied after batch collection to avoid requiring extra
+    # composite indexes for category-filtered reads.
+    memories_ref = memories_ref.order_by('scoring', direction=firestore.Query.DESCENDING).order_by(
+        'created_at', direction=firestore.Query.DESCENDING
+    )
 
     memories_ref = memories_ref.limit(limit).offset(offset)
 

@@ -13,10 +13,6 @@ enum MemoryExportDestination: String, CaseIterable, Identifiable, Sendable {
 
   var id: String { rawValue }
 
-  static var allCases: [MemoryExportDestination] {
-    [.notion, .obsidian, .chatgpt, .claude, .gemini, .agents, .claudeCode, .codex]
-  }
-
   /// Base of the hosted Omi API for this build — stable channel hits prod
   /// (api.omi.me), beta hits dev (api.omiapi.com). Always ends with "/".
   static var mcpBaseURL: String {

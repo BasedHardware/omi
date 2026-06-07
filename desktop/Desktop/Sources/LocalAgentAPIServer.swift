@@ -5,6 +5,10 @@ enum LocalAgentAPISettings {
   static let defaultPort: UInt16 = 47778
 
   private static let enabledKey = "localAgentAPIEnabled"
+  // Local-agent tokens currently live in app preferences so setup prompts can
+  // be generated without a Keychain prompt. The API is loopback-only, but the
+  // token is still readable by same-user processes; use Keychain if this scope
+  // expands beyond local desktop automation.
   private static let tokenKey = "localAgentAPIToken"
   private static let portKey = "localAgentAPIPort"
 

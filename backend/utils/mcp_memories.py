@@ -105,6 +105,7 @@ def filter_and_sort_memories(
     sort: str = 'scoring_desc',
 ) -> list[dict]:
     filtered = []
+    updated_after_ts = _datetime_timestamp(updated_after) if updated_after else None
     for memory in memories:
         if reviewed is not None and bool(memory.get('reviewed')) != reviewed:
             continue
@@ -114,10 +115,9 @@ def filter_and_sort_memories(
             continue
         if not include_sensitive and is_sensitive_memory(memory):
             continue
-        if updated_after:
+        if updated_after_ts is not None:
             updated_at = _datetime_timestamp(memory.get('updated_at'))
-            updated_after_ts = _datetime_timestamp(updated_after)
-            if updated_at is None or updated_after_ts is None or updated_at < updated_after_ts:
+            if updated_at is None or updated_at < updated_after_ts:
                 continue
         filtered.append(memory)
 
@@ -153,7 +153,7 @@ def collect_filtered_memories(
     max_scan: int = 5000,
 ) -> dict:
     target_count = offset + limit + 1
-    requires_global_sort = sort == 'manual_first'
+    requires_global_sort = sort in {'created_desc', 'updated_desc', 'manual_first'}
     requires_sparse_scan = (
         requires_global_sort
         or reviewed is not None

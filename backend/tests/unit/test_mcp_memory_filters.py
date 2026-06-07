@@ -90,3 +90,20 @@ def test_collect_filtered_memories_continues_batches_until_page_is_full():
 
     assert [memory["id"] for memory in result["memories"]] == ["durable-1", "durable-2"]
     assert result["has_more"] is False
+
+
+def test_collect_filtered_memories_global_sorts_created_desc_across_batches():
+    now = datetime.now(timezone.utc)
+    rows = [
+        {"id": "older-high-score", "created_at": now - timedelta(days=3)},
+        {"id": "oldest-high-score", "created_at": now - timedelta(days=5)},
+        {"id": "newest-low-score", "created_at": now},
+    ]
+
+    def fetch_batch(offset, limit):
+        return rows[offset : offset + limit]
+
+    result = collect_filtered_memories(fetch_batch, limit=1, offset=0, sort="created_desc")
+
+    assert [memory["id"] for memory in result["memories"]] == ["newest-low-score"]
+    assert result["has_more"] is True
