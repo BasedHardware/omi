@@ -153,7 +153,7 @@ MCP_TOOLS = [
                     "type": "string",
                     "enum": ["scoring_desc", "created_desc", "updated_desc", "manual_first"],
                     "description": "Ordering for returned memories",
-                    "default": "scoring_desc",
+                    "default": "created_desc",
                 },
                 "reviewed": {"type": "boolean", "description": "Filter by reviewed state"},
                 "manually_added": {"type": "boolean", "description": "Filter by manually-added state"},
@@ -385,7 +385,7 @@ def execute_tool(user_id: str, tool_name: str, arguments: dict) -> dict:
             updated_after = parse_mcp_datetime(arguments.get("updated_after"), "updated_after")
         except ValueError as e:
             raise ToolExecutionError(str(e), code=-32602)
-        sort = arguments.get("sort", "scoring_desc")
+        sort = arguments.get("sort", "created_desc")
         if sort not in {"scoring_desc", "created_desc", "updated_desc", "manual_first"}:
             raise ToolExecutionError(
                 "Invalid sort. Expected one of: scoring_desc, created_desc, updated_desc, manual_first.",
@@ -402,7 +402,7 @@ def execute_tool(user_id: str, tool_name: str, arguments: dict) -> dict:
 
         result = collect_filtered_memories(
             lambda batch_offset, batch_limit: memories_db.get_memories(
-                user_id, batch_limit, batch_offset, valid_categories
+                user_id, batch_limit, batch_offset, valid_categories, sort=sort
             ),
             limit=limit,
             offset=offset,

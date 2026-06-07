@@ -72,8 +72,9 @@ def get_memories(
     start_date: Optional[datetime] = None,
     end_date: Optional[datetime] = None,
     include_invalidated: bool = False,
+    sort: str = 'scoring_desc',
 ):
-    logger.info(f'get_memories db {uid} {limit} {offset} {categories} {start_date} {end_date}')
+    logger.info(f'get_memories db {uid} {limit} {offset} {categories} {start_date} {end_date} {sort}')
     memories_ref = db.collection(users_collection).document(uid).collection(memories_collection)
 
     if categories:
@@ -85,12 +86,16 @@ def get_memories(
     if end_date:
         memories_ref = memories_ref.where(filter=FieldFilter('created_at', '<=', end_date))
 
-    memories_ref = (
-        memories_ref.order_by('scoring', direction=firestore.Query.DESCENDING)
-        .order_by('created_at', direction=firestore.Query.DESCENDING)
-        .limit(limit)
-        .offset(offset)
-    )
+    if sort == 'created_desc':
+        memories_ref = memories_ref.order_by('created_at', direction=firestore.Query.DESCENDING)
+    elif sort == 'updated_desc':
+        memories_ref = memories_ref.order_by('updated_at', direction=firestore.Query.DESCENDING)
+    else:
+        memories_ref = memories_ref.order_by('scoring', direction=firestore.Query.DESCENDING).order_by(
+            'created_at', direction=firestore.Query.DESCENDING
+        )
+
+    memories_ref = memories_ref.limit(limit).offset(offset)
 
     # TODO: put user review to firestore query
     memories = [doc.to_dict() for doc in memories_ref.stream()]

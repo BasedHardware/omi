@@ -189,7 +189,7 @@ def get_memories(
     limit: int = 25,
     offset: int = 0,
     categories: Optional[str] = None,
-    sort: str = "scoring_desc",
+    sort: str = "created_desc",
     reviewed: Optional[bool] = None,
     manually_added: Optional[bool] = None,
     updated_after: Optional[str] = None,
@@ -220,7 +220,7 @@ def get_memories(
             raise HTTPException(status_code=400, detail=f"Invalid category {str(e)}")
     result = collect_filtered_memories(
         lambda batch_offset, batch_limit: memories_db.get_memories(
-            uid, batch_limit, batch_offset, [c.value for c in category_list]
+            uid, batch_limit, batch_offset, [c.value for c in category_list], sort=sort
         ),
         limit=limit,
         offset=offset,

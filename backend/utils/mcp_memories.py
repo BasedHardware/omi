@@ -153,7 +153,7 @@ def collect_filtered_memories(
     max_scan: int = 5000,
 ) -> dict:
     target_count = offset + limit + 1
-    requires_global_sort = sort != 'scoring_desc'
+    requires_global_sort = sort == 'manual_first'
     requires_sparse_scan = (
         requires_global_sort
         or reviewed is not None
