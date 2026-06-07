@@ -449,7 +449,7 @@ class TranscriptSocketServiceFactory {
     if (params.isEmpty) return baseUrl;
     final uri = Uri.tryParse(baseUrl);
     if (uri == null) {
-      Logger.debug('[STTFactory] Invalid URL, cannot append params: $baseUrl');
+      Logger.warning('[STTFactory] Invalid URL, cannot append params: $baseUrl');
       return baseUrl;
     }
     return uri.replace(queryParameters: {...uri.queryParameters, ...params}).toString();
