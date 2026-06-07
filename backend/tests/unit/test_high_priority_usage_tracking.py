@@ -11,6 +11,8 @@ Verifies that track_usage context managers are properly placed around LLM calls 
 import os
 import sys
 import types
+import json
+from datetime import timezone
 from pathlib import Path
 from unittest.mock import MagicMock, AsyncMock
 import asyncio
@@ -26,6 +28,55 @@ def _stub_module(name: str) -> types.ModuleType:
         mod = types.ModuleType(name)
         sys.modules[name] = mod
     return sys.modules[name]
+
+
+# --- Stub minimal LangChain modules needed by usage_tracker ---
+langchain_core_mod = _stub_module("langchain_core")
+if not hasattr(langchain_core_mod, '__path__'):
+    langchain_core_mod.__path__ = []
+
+callbacks_mod = _stub_module("langchain_core.callbacks")
+outputs_mod = _stub_module("langchain_core.outputs")
+output_parsers_mod = _stub_module("langchain_core.output_parsers")
+prompts_mod = _stub_module("langchain_core.prompts")
+
+
+class BaseCallbackHandler:
+    pass
+
+
+class LLMResult:
+    pass
+
+
+class PydanticOutputParser:
+    def __init__(self, pydantic_object):
+        self.pydantic_object = pydantic_object
+
+    def get_format_instructions(self):
+        return ""
+
+    def parse(self, text):
+        return self.pydantic_object(**json.loads(text))
+
+
+class ChatPromptTemplate:
+    @classmethod
+    def from_messages(cls, _messages):
+        return cls()
+
+    def __or__(self, other):
+        return other
+
+
+callbacks_mod.BaseCallbackHandler = BaseCallbackHandler
+outputs_mod.LLMResult = LLMResult
+output_parsers_mod.PydanticOutputParser = PydanticOutputParser
+prompts_mod.ChatPromptTemplate = ChatPromptTemplate
+
+pytz_mod = _stub_module("pytz")
+pytz_mod.UTC = timezone.utc
+pytz_mod.timezone = MagicMock(return_value=timezone.utc)
 
 
 # --- Stub database package and submodules ---
@@ -73,6 +124,7 @@ sys.modules["database.knowledge_graph"].upsert_knowledge_node = MagicMock(return
 sys.modules["database.knowledge_graph"].upsert_knowledge_edge = MagicMock(return_value={'id': 'e1'})
 sys.modules["database.knowledge_graph"].delete_knowledge_graph = MagicMock()
 sys.modules["database.users"].get_user_profile = MagicMock(return_value={'time_zone': 'UTC'})
+sys.modules["database.users"].get_user_language_preference = MagicMock(return_value='en')
 sys.modules["database.users"].get_people_by_ids = MagicMock(return_value=[])
 sys.modules["database.action_items"].get_action_items = MagicMock(return_value=[])
 sys.modules["database.daily_summaries"].create_daily_summary = MagicMock(return_value="summary-1")
@@ -123,13 +175,26 @@ clients_mod.llm_medium_experiment = mock_llm_medium_experiment
 clients_mod.parser = mock_parser
 
 
+def _get_llm_stub(name, **_kwargs):
+    if name in {'goals', 'knowledge_graph', 'daily_summary_simple'}:
+        return mock_llm_mini
+    if name in {'goals_advice', 'notifications'}:
+        return mock_llm_medium
+    if name == 'daily_summary':
+        return mock_llm_medium_experiment
+    return mock_llm_mini
+
+
+clients_mod.get_llm = _get_llm_stub
+
+
 # ── Source-level tests: verify track_usage wraps every LLM call ──
 
 
 def _read_source(relative_path: str) -> str:
     """Read a source file relative to the backend directory."""
     backend_dir = Path(__file__).resolve().parent.parent.parent
-    return (backend_dir / relative_path).read_text()
+    return (backend_dir / relative_path).read_text(encoding="utf-8")
 
 
 class TestGoalsTracking:
