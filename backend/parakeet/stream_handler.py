@@ -448,7 +448,8 @@ class StreamSession:
                         speech_dur = len(self._pending_audio) / (self._sr * self._bytes_per_sample)
                         result = []
                         if speech_dur >= MIN_SPEECH_DURATION_S:
-                            result = await self._transcribe_utterance()
+                            await self._drain_streaming_asr(pad_partial=True)
+                            result = await self._transcribe_utterance(trim_trailing_word=True)
                             segments.extend(result)
                         self._is_speaking = False
                         if result or not self._streaming_enabled():
@@ -476,7 +477,8 @@ class StreamSession:
             and self._pending_audio
             and self._speech_start_s is not None
         ):
-            result = await self._transcribe_utterance()
+            await self._drain_streaming_asr(pad_partial=True)
+            result = await self._transcribe_utterance(trim_trailing_word=True)
             if result:
                 segments.extend(result)
                 self._pending_audio.clear()
