@@ -1046,12 +1046,15 @@ class ParakeetWebSocketSocket(STTSocket):
         try:
             await asyncio.wait_for(self._startup_event.wait(), timeout=PARAKEET_WS_CONNECT_TIMEOUT)
         except asyncio.TimeoutError:
+            logger.error(f'Parakeet WS connect timeout after {PARAKEET_WS_CONNECT_TIMEOUT}s')
             self._mark_dead(f'parakeet ws connect timeout after {PARAKEET_WS_CONNECT_TIMEOUT}s')
             self._closed = True
             self._cancel_task(self._sender_task)
             raise
         if not self._connected_event.is_set():
+            logger.error(f'Parakeet WS failed before connection: {self._dead_reason}')
             raise RuntimeError(self._dead_reason or 'parakeet ws failed before connection')
+        logger.info('Parakeet WS connected successfully')
 
     def send(self, data: bytes) -> None:
         if self._closed or not data:

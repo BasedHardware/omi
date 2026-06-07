@@ -118,6 +118,38 @@ def _cfg_set(cfg, path: str, value):
         setattr(cur, parts[-1], value)
 
 
+def warmup_rnnt_decoder(sample_rate: int = 16000):
+    """Run a dummy chunk through the RNNT decoder to pre-compile CUDA kernels.
+
+    Call once at service startup to eliminate 15-20s cold-start latency
+    on the first real WebSocket connection.
+    """
+    if _asr_model is None or _INFERENCE_MODE == "nim":
+        logger.info("RNNT warmup skipped (no stream model or NIM mode)")
+        return
+
+    if not hasattr(_asr_model, 'decoding') or not hasattr(
+        getattr(_asr_model.decoding, 'decoding', None), 'decoding_computer'
+    ):
+        logger.info("RNNT warmup skipped (model does not support RNNT streaming)")
+        return
+
+    logger.info("RNNT warmup: running dummy chunk to pre-compile CUDA kernels...")
+    try:
+        decoder = _NemoRNNTStreamingDecoder(
+            model=_asr_model,
+            sample_rate=sample_rate,
+            chunk_seconds=CHUNK_SECONDS,
+            left_context_seconds=LEFT_CONTEXT_SECONDS,
+            right_context_seconds=RIGHT_CONTEXT_SECONDS,
+        )
+        dummy_pcm = b'\x00' * int(sample_rate * 2 * 3)
+        decoder.decode_pcm(dummy_pcm, is_last_chunk=True)
+        logger.info("RNNT warmup complete")
+    except Exception as e:
+        logger.warning(f"RNNT warmup failed (non-fatal): {e}")
+
+
 class _NemoRNNTStreamingDecoder:
     """NeMo RNNT chunked decoder for one live stream.
 

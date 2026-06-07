@@ -6,7 +6,7 @@ import logging
 from fastapi import FastAPI, Form, UploadFile, File, Header, HTTPException, WebSocket, WebSocketDisconnect, Query
 
 from transcribe import transcribe_file, transcribe_file_v2
-from stream_handler import StreamSession
+from stream_handler import StreamSession, warmup_rnnt_decoder
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -14,6 +14,12 @@ logger = logging.getLogger(__name__)
 app = FastAPI()
 
 os.makedirs("_temp", exist_ok=True)
+
+
+@app.on_event("startup")
+async def startup_warmup():
+    warmup_rnnt_decoder()
+
 
 # Shared-secret auth so the (publicly-reachable) endpoint isn't open to abuse. The backend sends
 # Authorization: Bearer <ENCRYPTION_SECRET>, the same secret both services already have. When unset
