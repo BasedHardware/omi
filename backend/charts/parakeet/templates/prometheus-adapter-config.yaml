@@ -1,0 +1,61 @@
+{{- if and .Values.metrics.enabled .Values.metrics.prometheusAdapter.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "parakeet.fullname" . }}-adapter-config
+  labels:
+    {{- include "parakeet.labels" . | nindent 4 }}
+data:
+  config.yaml: |
+    rules:
+      # Active streaming connections — primary autoscaling metric.
+      # HPA scales when avg streams per pod exceeds threshold.
+      - seriesQuery: 'parakeet_active_streams{namespace!="",pod!=""}'
+        resources:
+          overrides:
+            namespace: {resource: "namespace"}
+            pod: {resource: "pod"}
+        name:
+          as: "parakeet_active_streams"
+        metricsQuery: 'avg(parakeet_active_streams{<<.LabelMatchers>>})'
+
+      # Active batch requests — secondary scaling signal.
+      - seriesQuery: 'parakeet_active_batch_requests{namespace!="",pod!=""}'
+        resources:
+          overrides:
+            namespace: {resource: "namespace"}
+            pod: {resource: "pod"}
+        name:
+          as: "parakeet_active_batch_requests"
+        metricsQuery: 'avg(parakeet_active_batch_requests{<<.LabelMatchers>>})'
+
+      # Total active requests (streams + batch) — combined scaling metric.
+      - seriesQuery: 'parakeet_active_streams{namespace!="",pod!=""}'
+        resources:
+          overrides:
+            namespace: {resource: "namespace"}
+            pod: {resource: "pod"}
+        name:
+          as: "parakeet_active_requests_total"
+        metricsQuery: 'avg(parakeet_active_streams{<<.LabelMatchers>>}) + avg(parakeet_active_batch_requests{<<.LabelMatchers>>})'
+
+      # Request latency p99 — scale on tail latency.
+      - seriesQuery: 'parakeet_request_duration_seconds_bucket{namespace!="",pod!=""}'
+        resources:
+          overrides:
+            namespace: {resource: "namespace"}
+            pod: {resource: "pod"}
+        name:
+          as: "parakeet_request_latency_p99"
+        metricsQuery: 'histogram_quantile(0.99, sum(rate(parakeet_request_duration_seconds_bucket{<<.LabelMatchers>>}[2m])) by (le, namespace, pod))'
+
+      # GPU utilization — from DCGM exporter (if GPU operator installed).
+      - seriesQuery: 'DCGM_FI_DEV_GPU_UTIL{namespace!="",pod!=""}'
+        resources:
+          overrides:
+            namespace: {resource: "namespace"}
+            pod: {resource: "pod"}
+        name:
+          as: "parakeet_gpu_utilization"
+        metricsQuery: 'avg(avg_over_time(DCGM_FI_DEV_GPU_UTIL{<<.LabelMatchers>>}[1m]))'
+{{- end }}
