@@ -2753,7 +2753,7 @@ async def _stream_handler(
                 raise exc
 
         if not data_process_task.done():
-            if stt_socket and hasattr(stt_socket, 'drain_and_close'):
+            if stt_socket:
                 try:
                     stt_socket.finish()
                     drain_target = stt_socket

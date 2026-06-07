@@ -852,7 +852,7 @@ class ParakeetStreamingSocket(STTSocket):
 
     # --- STTSocket interface the listen pipeline / VAD gate call (all sync) ---
     def send(self, data: bytes) -> None:
-        if self._closed or not data:
+        if self._closed or getattr(self, '_finalized', False) or not data:
             return
         with self._lock:
             self._buf.extend(data)
@@ -1065,9 +1065,11 @@ class ParakeetWebSocketSocket(STTSocket):
             pass
 
     def finish(self) -> None:
+        self._finalized = True
         self._queue_finalize_nowait()
 
     def finalize(self) -> None:
+        self._finalized = True
         self._queue_finalize_nowait()
 
     @property

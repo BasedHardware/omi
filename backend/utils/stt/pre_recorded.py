@@ -829,7 +829,7 @@ def parakeet_prerecorded_from_bytes(
         logger.error(f'Parakeet prerecorded error: {e}')
         if attempts < 1:
             return parakeet_prerecorded_from_bytes(
-                audio_bytes, sample_rate, diarize, attempts + 1, encoding, channels, language, return_language
+                audio_bytes, sample_rate, diarize, attempts + 1, None, channels, language, return_language
             )
         raise RuntimeError(f'Parakeet transcription failed after {attempts + 1} attempts: {e}')
 
@@ -977,13 +977,16 @@ class ParakeetPrerecordedProvider(PrerecordedSTTProvider):
         )
 
 
-def get_prerecorded_provider() -> PrerecordedSTTProvider:
-    """Factory: return the active provider based on STT_PRERECORDED_MODEL."""
+def get_prerecorded_provider(language: str = 'en') -> PrerecordedSTTProvider:
+    """Factory: return the active provider based on STT_PRERECORDED_MODEL with language fallback."""
     m = stt_prerecorded_model.strip()
     if m == 'modulate-velma-2':
         return ModulatePrerecordedProvider()
     if m == 'parakeet':
-        return ParakeetPrerecordedProvider()
+        base_lang = language.split('-')[0].split('_')[0].lower() if language else 'en'
+        if base_lang in _parakeet_languages:
+            return ParakeetPrerecordedProvider()
+        return DeepgramPrerecordedProvider(model='nova-3')
     model = m.replace('dg-', '', 1) if m.startswith('dg-') else 'nova-3'
     return DeepgramPrerecordedProvider(model=model)
 

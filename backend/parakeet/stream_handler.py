@@ -482,7 +482,8 @@ class StreamSession:
             audio = _torch.frombuffer(chunk, dtype=_torch.int16).float() / 32768.0
             prob = self._vad(audio, self._sr).item()
             return prob >= self._speech_threshold
-        except Exception:
+        except Exception as e:
+            logger.debug(f"VAD inference error: {e}")
             return True
 
     def _streaming_enabled(self) -> bool:
@@ -514,6 +515,7 @@ class StreamSession:
             self._streaming_decoder = None
             self._streaming_failed = True
             self._streaming_text = ""
+            self._asr_audio_buf.clear()
 
     def _drain_streaming_asr_sync(self, force: bool):
         decoder = self._get_streaming_decoder()
