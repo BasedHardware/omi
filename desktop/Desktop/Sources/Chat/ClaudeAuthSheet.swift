@@ -1,7 +1,13 @@
 import SwiftUI
 
-/// Sheet shown when chat access requires a paid upgrade.
+enum ClaudeAuthMode {
+    case claudeLogin
+    case omiProUpgrade
+}
+
+/// Sheet shown when chat access requires authentication or a paid upgrade.
 struct ClaudeAuthSheet: View {
+    let mode: ClaudeAuthMode
     let onConnect: () -> Void
     let onCancel: () -> Void
 
@@ -11,7 +17,7 @@ struct ClaudeAuthSheet: View {
         VStack(spacing: 0) {
             // Header
             HStack {
-                Text("Upgrade to Omi Pro")
+                Text(mode == .claudeLogin ? "Connect Claude Account" : "Upgrade to Omi Pro")
                     .scaledFont(size: 18, weight: .semibold)
                     .foregroundColor(OmiColors.textPrimary)
 
@@ -37,19 +43,19 @@ struct ClaudeAuthSheet: View {
             // Content
             VStack(spacing: 20) {
                 // Icon
-                Image(systemName: "crown")
+                Image(systemName: mode == .claudeLogin ? "key.fill" : "crown")
                     .scaledFont(size: 40)
                     .foregroundColor(OmiColors.textSecondary)
                     .padding(.top, 8)
 
                 // Description
                 VStack(spacing: 8) {
-                    Text("Unlock Omi Pro for $199/month")
+                    Text(mode == .claudeLogin ? "Access your own Claude subscription" : "Unlock Omi Pro for $199/month")
                         .scaledFont(size: 15, weight: .medium)
                         .foregroundColor(OmiColors.textPrimary)
                         .multilineTextAlignment(.center)
 
-                    Text("Your browser will open to the Omi Pro checkout. After subscribing, return to omi.")
+                    Text(mode == .claudeLogin ? "Omi needs authorization to access your Claude account. A browser window will open to authenticate." : "Your browser will open to the Omi Pro checkout. After subscribing, return to omi.")
                         .scaledFont(size: 13)
                         .foregroundColor(OmiColors.textTertiary)
                         .multilineTextAlignment(.center)
@@ -85,7 +91,7 @@ struct ClaudeAuthSheet: View {
                             ProgressView()
                                 .controlSize(.mini)
                         }
-                        Text(isConnecting ? "Opening checkout..." : "Upgrade to Omi Pro")
+                        Text(isConnecting ? (mode == .claudeLogin ? "Opening browser..." : "Opening checkout...") : (mode == .claudeLogin ? "Connect Claude Account" : "Upgrade to Omi Pro"))
                             .scaledFont(size: 14, weight: .semibold)
                     }
                     .frame(maxWidth: .infinity)
