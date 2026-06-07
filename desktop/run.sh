@@ -46,6 +46,14 @@ fi
 # ─── YOLO mode: use prod backend, zero local setup ───────────────────
 # WARNING: Temporary shortcut while desktop dev setup is being cleaned up.
 # Will be removed once all desktop slop is fixed.
+apply_yolo_env() {
+    export OMI_SKIP_BACKEND=1
+    export OMI_SKIP_TUNNEL=1
+    export OMI_DESKTOP_API_URL="https://desktop-backend-hhibjajaja-uc.a.run.app"
+    export OMI_PYTHON_API_URL="https://api.omi.me"
+    export FIREBASE_API_KEY="AIzaSyD9dzBdglc7IO9pPDIOvqnCoTis_xKkkC8"
+}
+
 if [ "$1" = "--yolo" ]; then
     echo ""
     echo "=========================================="
@@ -60,11 +68,7 @@ if [ "$1" = "--yolo" ]; then
     echo "=========================================="
     echo ""
 
-    export OMI_SKIP_BACKEND=1
-    export OMI_SKIP_TUNNEL=1
-    export OMI_DESKTOP_API_URL="https://desktop-backend-hhibjajaja-uc.a.run.app"
-    export OMI_PYTHON_API_URL="https://api.omi.me"
-    export FIREBASE_API_KEY="AIzaSyD9dzBdglc7IO9pPDIOvqnCoTis_xKkkC8"
+    apply_yolo_env
 fi
 
 # Clear system OPENAI_API_KEY so .env takes precedence
@@ -279,6 +283,9 @@ fi
 # Read environment from .env (skip if missing — yolo mode doesn't need it)
 if [ -f "$BACKEND_DIR/.env" ]; then
     set -a; source "$BACKEND_DIR/.env"; set +a
+fi
+if [ "$1" = "--yolo" ]; then
+    apply_yolo_env
 fi
 
 # Read backend PORT from env (default: 10201, never use 8080)
@@ -508,20 +515,23 @@ if ! grep -q "^FIREBASE_API_KEY=" "$APP_BUNDLE/Contents/Resources/.env"; then
         substep "Bootstrapped FIREBASE_API_KEY"
     fi
 fi
-# Bootstrap OMI_PYTHON_API_URL — main Omi Python backend (auth, subscriptions, payments, transcription)
-# Do NOT fall back to OMI_DESKTOP_API_URL — that's the Rust desktop-backend which doesn't serve these routes
-if ! grep -q "^OMI_PYTHON_API_URL=" "$APP_BUNDLE/Contents/Resources/.env"; then
-    PYTHON_API_URL="${OMI_PYTHON_API_URL:-}"
-    if [ -z "$PYTHON_API_URL" ] && [ -f "$BACKEND_DIR/.env" ]; then
-        PYTHON_API_URL=$(grep "^OMI_PYTHON_API_URL=" "$BACKEND_DIR/.env" | head -1 | cut -d= -f2-)
-    fi
-    if [ -z "$PYTHON_API_URL" ]; then
-        PYTHON_API_URL="https://api.omi.me"
-        substep "OMI_PYTHON_API_URL not set — defaulting to production: $PYTHON_API_URL"
-    fi
-    echo "OMI_PYTHON_API_URL=$PYTHON_API_URL" >> "$APP_BUNDLE/Contents/Resources/.env"
-    substep "Set OMI_PYTHON_API_URL=$PYTHON_API_URL"
+# Bootstrap OMI_PYTHON_API_URL — main Omi Python backend (auth, subscriptions, payments, transcription).
+# Do NOT fall back to OMI_DESKTOP_API_URL — that's the Rust desktop-backend which doesn't serve these routes.
+# If the caller set OMI_PYTHON_API_URL (for example --yolo), it must override copied .env values.
+PYTHON_API_URL="${OMI_PYTHON_API_URL:-}"
+if [ -z "$PYTHON_API_URL" ] && [ -f "$BACKEND_DIR/.env" ]; then
+    PYTHON_API_URL=$(grep "^OMI_PYTHON_API_URL=" "$BACKEND_DIR/.env" | head -1 | cut -d= -f2-)
 fi
+if [ -z "$PYTHON_API_URL" ]; then
+    PYTHON_API_URL="https://api.omi.me"
+    substep "OMI_PYTHON_API_URL not set — defaulting to production: $PYTHON_API_URL"
+fi
+if grep -q "^OMI_PYTHON_API_URL=" "$APP_BUNDLE/Contents/Resources/.env"; then
+    sed -i '' "s|^OMI_PYTHON_API_URL=.*|OMI_PYTHON_API_URL=$PYTHON_API_URL|" "$APP_BUNDLE/Contents/Resources/.env"
+else
+    echo "OMI_PYTHON_API_URL=$PYTHON_API_URL" >> "$APP_BUNDLE/Contents/Resources/.env"
+fi
+substep "Set OMI_PYTHON_API_URL=$PYTHON_API_URL"
 
 substep "Copying app icon"
 cp -f omi_icon.icns "$APP_BUNDLE/Contents/Resources/OmiIcon.icns" 2>/dev/null || true
