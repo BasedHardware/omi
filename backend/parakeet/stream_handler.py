@@ -79,6 +79,7 @@ _vad_model = None
 _vad_lock = threading.Lock()
 _asr_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="parakeet_asr")
 _streaming_import_error_logged = False
+_rnnt_model_initialized = False
 
 try:
     import torch
@@ -180,7 +181,7 @@ class _NemoRNNTStreamingDecoder:
         self._text = ""
 
     def _ensure_initialized(self):
-        global _streaming_import_error_logged
+        global _streaming_import_error_logged, _rnnt_model_initialized
 
         if self._initialized:
             return
@@ -205,30 +206,34 @@ class _NemoRNNTStreamingDecoder:
         self._StreamingBatchedAudioBuffer = StreamingBatchedAudioBuffer
 
         model = self._model
-        model.freeze() if hasattr(model, "freeze") else None
-        model.eval()
 
-        decoding_cfg = copy.deepcopy(_cfg_get(getattr(model, "cfg", None), "decoding", None))
-        if decoding_cfg is None:
-            decoding_cfg = RNNTDecodingConfig()
+        if not _rnnt_model_initialized:
+            model.freeze() if hasattr(model, "freeze") else None
+            model.eval()
 
-        with open_dict(decoding_cfg):
-            _cfg_set(decoding_cfg, "strategy", "greedy_batch")
-            _cfg_set(decoding_cfg, "greedy.loop_labels", True)
-            _cfg_set(decoding_cfg, "greedy.preserve_alignments", False)
-            _cfg_set(decoding_cfg, "fused_batch_size", -1)
-            _cfg_set(decoding_cfg, "beam.return_best_hypothesis", True)
-            try:
-                _cfg_set(decoding_cfg, "greedy.use_cuda_graph_decoder", False)
-            except Exception:
-                pass
+            decoding_cfg = copy.deepcopy(_cfg_get(getattr(model, "cfg", None), "decoding", None))
+            if decoding_cfg is None:
+                decoding_cfg = RNNTDecodingConfig()
 
-        if hasattr(model, "change_decoding_strategy"):
-            model.change_decoding_strategy(decoding_cfg)
+            with open_dict(decoding_cfg):
+                _cfg_set(decoding_cfg, "strategy", "greedy_batch")
+                _cfg_set(decoding_cfg, "greedy.loop_labels", True)
+                _cfg_set(decoding_cfg, "greedy.preserve_alignments", False)
+                _cfg_set(decoding_cfg, "fused_batch_size", -1)
+                _cfg_set(decoding_cfg, "beam.return_best_hypothesis", True)
+                try:
+                    _cfg_set(decoding_cfg, "greedy.use_cuda_graph_decoder", False)
+                except Exception:
+                    pass
 
-        if hasattr(model.preprocessor, "featurizer"):
-            model.preprocessor.featurizer.dither = 0.0
-            model.preprocessor.featurizer.pad_to = 0
+            if hasattr(model, "change_decoding_strategy"):
+                model.change_decoding_strategy(decoding_cfg)
+
+            if hasattr(model.preprocessor, "featurizer"):
+                model.preprocessor.featurizer.dither = 0.0
+                model.preprocessor.featurizer.pad_to = 0
+
+            _rnnt_model_initialized = True
 
         model_cfg = getattr(model, "_cfg", getattr(model, "cfg", None))
         model_sr = int(_cfg_get(model_cfg, "preprocessor.sample_rate", self._sr))
