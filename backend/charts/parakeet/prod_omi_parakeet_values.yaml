@@ -91,7 +91,7 @@ env:
   - name: PARAKEET_MODEL
     value: "nvidia/parakeet-tdt-0.6b-v3"
   - name: PARAKEET_STREAM_MODEL
-    value: "nvidia/parakeet-tdt-0.6b-v3"
+    value: "nvidia/parakeet-rnnt-1.1b"
   - name: PARAKEET_INFERENCE_MODE
     value: "nemo"
   - name: HOSTED_SPEAKER_EMBEDDING_API_URL
