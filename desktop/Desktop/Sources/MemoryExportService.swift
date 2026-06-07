@@ -14,7 +14,7 @@ enum MemoryExportDestination: String, CaseIterable, Identifiable, Sendable {
   var id: String { rawValue }
 
   static var allCases: [MemoryExportDestination] {
-    [.notion, .obsidian, .chatgpt, .claude, .gemini, .agents]
+    [.notion, .obsidian, .chatgpt, .claude, .gemini, .agents, .claudeCode, .codex]
   }
 
   /// Base of the hosted Omi API for this build — stable channel hits prod
@@ -528,7 +528,7 @@ actor MemoryExportService {
     - Start with hosted `get_user_profile` when it is available for a high-level user summary. Some deployments do not expose it.
     - Use hosted `search_memories` or `get_memories` for facts, preferences, habits, relationships, projects, and goals.
     - Use hosted `search_conversations` for synced conversations, meetings, and "when did this happen?" questions.
-    - Run `omi --json local tools` to see what local Desktop access can do, and run `omi --json local status` before using this Mac's local context. Status tells you whether local screen history exists and whether screenshots are indexed.
+    - Run `omi --json local tools` to list local Desktop tools. Run `omi --json local status` before local-context work. Status reports screen-history and screenshot-index availability.
     - Use `omi --json local search-screen` for fuzzy questions about Rewind/OCR screen history. Use `omi --json local screenshot` only after a search or SQL result returns a screenshot ID.
     - Use `omi --json local sql` for read-only counts, filters, exact task lookup, local transcriptions, action items, indexed files, goals, and database questions. Use `omi --json local recap` for "what did I do today/yesterday/this week?"
     - Use `omi --json local task search`, `omi --json local task complete`, and `omi --json local task delete --yes` for same-Mac task work.
@@ -565,11 +565,9 @@ actor MemoryExportService {
     localToken: String
   ) -> String {
     """
-    Set up Omi for yourself.
+    Set up Omi access for this agent.
 
-    Connect to Omi's hosted memory tools through MCP, then set up the local Omi CLI for this Mac.
-
-    Hosted Omi gives you synced memories, conversations, and profile context from this Omi account.
+    1. Configure hosted Omi MCP for synced memories, conversations, and profile context.
 
     Hosted server URL:
     \(MemoryExportDestination.mcpServerURL)
@@ -577,7 +575,7 @@ actor MemoryExportService {
     Hosted authorization header:
     Authorization: Bearer \(hostedKey)
 
-    For this Mac, use the `omi` CLI to reach Omi Desktop. It lets you search screen history, fetch screenshots, read local transcriptions, run read-only SQL, get daily recaps, inspect indexed files and goals, review app/window activity, and search, complete, or delete local tasks while Omi Desktop is running.
+    2. Configure the local Omi CLI for this Mac. Local access includes screen history, screenshot retrieval, local transcriptions, read-only SQL, daily recaps, indexed files, goals, app/window activity, and task search/complete/delete while Omi Desktop is running.
 
     Local Omi Desktop URL:
     \(localURL)
@@ -585,17 +583,17 @@ actor MemoryExportService {
     Local Omi Desktop token:
     \(localToken)
 
-    Configure the local CLI:
-    1. If `omi` is not installed, install or update it from the existing public Omi CLI package: `pipx install omi-cli` or `pipx upgrade omi-cli`.
-    2. Run: `omi local configure --url \(localURL) --token \(localToken)`
-    3. Test it with: `omi --json local status`
-    4. Discover local-only commands with: `omi --json local tools`
+    CLI setup:
+    - If `omi` is not installed, install or update it with `pipx install omi-cli` or `pipx upgrade omi-cli`.
+    - Run: `omi local configure --url \(localURL) --token \(localToken)`
+    - Verify: `omi --json local status`
+    - Discover local tools: `omi --json local tools`
 
-    Then save the guide below for later. If this agent supports skills, add it as a skill named `omi`; otherwise save it wherever this agent keeps durable user or project instructions.
+    3. Save the Omi guide below. If this agent supports skills, install it as a skill named `omi`; otherwise save it in durable agent or project instructions.
 
     \(omiAgentSkillText)
 
-    After setup, test hosted Omi by listing MCP tools and calling `get_user_profile` if available; otherwise call `get_memories` with `limit: 5`. Test local Omi with `omi --json local status` and `omi --json local tools`.
+    4. Verify hosted Omi by listing MCP tools and calling `get_user_profile` if available; otherwise call `get_memories` with `limit: 5`. Verify local Omi with `omi --json local status` and `omi --json local tools`.
     """
   }
 
