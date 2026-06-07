@@ -34,10 +34,20 @@ struct ModelQoS {
 
     struct Claude {
         /// Main chat session model (user-facing conversations)
-        static var chat: String { "claude-sonnet-4-6" }
+        static var chat: String {
+            switch activeTier {
+            case .premium: return "claude-haiku-4-5-20251001"
+            case .max:     return "claude-sonnet-4-6"
+            }
+        }
 
         /// Floating bar responses
-        static var floatingBar: String { "claude-sonnet-4-6" }
+        static var floatingBar: String {
+            switch activeTier {
+            case .premium: return "claude-haiku-4-5-20251001"
+            case .max:     return "claude-sonnet-4-6"
+            }
+        }
 
         /// Synthesis extraction tasks (calendar, gmail, notes, memory import)
         static var synthesis: String { "claude-haiku-4-5-20251001" }
@@ -50,11 +60,19 @@ struct ModelQoS {
 
         /// Available models shown in the UI picker
         static var availableModels: [(id: String, label: String)] {
-            [("claude-sonnet-4-6", "Sonnet")]
+            switch activeTier {
+            case .premium: return [("claude-haiku-4-5-20251001", "Haiku (cost-saving)")]
+            case .max:     return [("claude-sonnet-4-6", "Sonnet")]
+            }
         }
 
         /// Default model for user selection (floating bar / shortcut picker)
-        static var defaultSelection: String { "claude-sonnet-4-6" }
+        static var defaultSelection: String {
+            switch activeTier {
+            case .premium: return "claude-haiku-4-5-20251001"
+            case .max:     return "claude-sonnet-4-6"
+            }
+        }
 
         /// Sanitize a persisted model ID against the current tier's allowed list.
         /// Returns the saved model if it's still available, otherwise falls back to defaultSelection.
