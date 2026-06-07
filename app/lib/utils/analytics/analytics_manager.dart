@@ -6,6 +6,7 @@ import 'package:omi/utils/analytics/adapters/posthog_adapter.dart';
 import 'package:omi/utils/analytics/analytics_adapter.dart';
 import 'package:omi/utils/analytics/intercom.dart';
 import 'package:omi/utils/platform/platform_service.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class AnalyticsManager {
   static final AnalyticsManager _instance = AnalyticsManager._internal();
@@ -32,6 +33,7 @@ class AnalyticsManager {
     final adapter = _adapter;
     if (adapter == null) return;
     await PlatformService.executeIfSupportedAsync(PlatformService.isAnalyticsSupported, adapter.init);
+    await _loadPersonPropertyCache();
   }
 
   factory AnalyticsManager() {
@@ -79,6 +81,9 @@ class AnalyticsManager {
       PlatformService.executeIfSupported(PlatformService.isAnalyticsSupported, () {
         final adapter = _adapter;
         if (adapter == null) return;
+        // If the SDK silently drops the identify call we must not cache it as
+        // sent — that would suppress every retry once the SDK is ready.
+        if (!adapter.isInitialized) return;
         final uid = _preferences.uid;
         if (uid.isEmpty) return;
         final coerced = <String, Object>{};
@@ -87,8 +92,67 @@ class AnalyticsManager {
           if (c != null) coerced[k] = c;
         });
         if (coerced.isEmpty) return;
-        adapter.identify(userId: uid, userProperties: coerced);
+        final fresh = <String, Object>{};
+        final pending = <String, String>{};
+        coerced.forEach((k, v) {
+          final cacheKey = '$uid:$k';
+          final serialized = _serializePersonPropertyValue(v);
+          if (_lastSentPersonProperty[cacheKey] == serialized) return;
+          fresh[k] = v;
+          pending[cacheKey] = serialized;
+        });
+        if (fresh.isEmpty) return;
+        adapter.identify(userId: uid, userProperties: fresh);
+        pending.forEach((cacheKey, serialized) {
+          _lastSentPersonProperty[cacheKey] = serialized;
+          _persistPersonPropertyCacheEntry(cacheKey, serialized);
+        });
       });
+
+  static const String _personPropertyCachePrefix = '_ph_lastset_';
+  static final Map<String, String> _lastSentPersonProperty = {};
+  static bool _personPropertyCacheLoaded = false;
+
+  static Future<void> _loadPersonPropertyCache() async {
+    if (_personPropertyCacheLoaded) return;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      for (final key in prefs.getKeys()) {
+        if (!key.startsWith(_personPropertyCachePrefix)) continue;
+        final v = prefs.getString(key);
+        if (v == null) continue;
+        _lastSentPersonProperty[key.substring(_personPropertyCachePrefix.length)] = v;
+      }
+    } catch (_) {}
+    _personPropertyCacheLoaded = true;
+  }
+
+  static Future<void> _persistPersonPropertyCacheEntry(String cacheKey, String value) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('$_personPropertyCachePrefix$cacheKey', value);
+    } catch (_) {}
+  }
+
+  // Tagged so the bool `true` doesn't collide with the string `"true"`.
+  static String _serializePersonPropertyValue(Object value) {
+    if (value is bool) return 'b:$value';
+    if (value is num) return 'n:$value';
+    if (value is String) return 's:$value';
+    return 'x:${value.runtimeType}:$value';
+  }
+
+  static Future<void> _clearPersonPropertyCache() async {
+    _lastSentPersonProperty.clear();
+    _personPropertyCacheLoaded = false;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final keys = prefs.getKeys().where((k) => k.startsWith(_personPropertyCachePrefix)).toList();
+      for (final k in keys) {
+        await prefs.remove(k);
+      }
+    } catch (_) {}
+  }
 
   void optInTracking() {
     PlatformService.executeIfSupported(PlatformService.isAnalyticsSupported, () {
@@ -105,6 +169,7 @@ class AnalyticsManager {
       if (adapter == null) return;
       adapter.disable();
       adapter.reset();
+      _clearPersonPropertyCache();
     });
   }
 
@@ -124,6 +189,7 @@ class AnalyticsManager {
     PlatformService.executeIfSupported(PlatformService.isAnalyticsSupported, () {
       final adapter = _adapter;
       if (adapter == null) return;
+      _clearPersonPropertyCache();
       adapter.alias(newUserId: newUid);
       adapter.identify(userId: newUid);
       setNameAndEmail();

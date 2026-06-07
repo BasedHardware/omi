@@ -330,13 +330,13 @@ class TestNotificationSettingsWireCompat:
         assert result['enabled'] is False
         assert result['frequency'] == 2
 
-    def test_defaults_frequency_to_3_when_unset(self):
-        """Frequency defaults to 3 when the user doc has no notification_frequency."""
+    def test_defaults_frequency_to_off_when_unset(self):
+        """Frequency defaults to 0 (Off) when the user doc has no notification_frequency."""
         snap = self._mock_user_doc({})
         mock_db.collection.return_value.document.return_value.get.return_value = snap
         result = users_db.get_notification_settings('test-uid')
 
-        assert result['frequency'] == 3
+        assert result['frequency'] == 0
         assert result['enabled'] is True
 
     def test_defaults_when_doc_missing(self):
@@ -345,7 +345,7 @@ class TestNotificationSettingsWireCompat:
         mock_db.collection.return_value.document.return_value.get.return_value = snap
         result = users_db.get_notification_settings('test-uid')
 
-        assert result == {'enabled': True, 'frequency': 3}
+        assert result == {'enabled': True, 'frequency': 0}
 
 
 class TestAssistantSettingsWireCompat:
