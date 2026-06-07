@@ -90,6 +90,7 @@ pytest tests/unit/test_async_tasks.py -v
 pytest tests/unit/test_lock_bypass_fixes.py -v
 pytest tests/unit/test_dev_api_lock_bypass.py -v
 pytest tests/unit/test_dev_api_folder_filters.py -v
+pytest tests/unit/test_dev_api_memories_pagination.py -v
 pytest tests/unit/test_rate_limiting.py -v
 pytest tests/unit/test_memories_batch.py -v
 pytest tests/unit/test_memories_create.py -v

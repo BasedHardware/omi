@@ -6,7 +6,7 @@ from enum import Enum
 from typing import List, Optional
 
 from fastapi import APIRouter, HTTPException, Depends, Query
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ValidationError
 
 import database.folders as folders_db
 import database.memories as memories_db
@@ -171,11 +171,24 @@ def get_memories(
         except ValueError as e:
             raise HTTPException(status_code=400, detail=f"Invalid category {str(e)}")
     memories = memories_db.get_memories(uid, limit, offset, [c.value for c in category_list])
+    # Validate each record individually so a single malformed/legacy doc (e.g. missing a required
+    # field or an out-of-enum category) doesn't fail the whole page with a 500. Mirrors the
+    # hardening already applied to GET /v3/memories.
+    valid_memories = []
     for memory in memories:
         if memory.get('is_locked', False):
             content = memory.get('content', '')
             memory['content'] = (content[:70] + '...') if len(content) > 70 else content
-    return memories
+        try:
+            valid_memories.append(CleanerMemory.model_validate(memory))
+        except ValidationError as e:
+            missing_fields = [err['loc'][0] for err in e.errors() if err.get('loc')]
+            logger.warning(
+                f"Skipping invalid memory doc {memory.get('id', 'unknown')} for uid {uid}: "
+                f"missing/invalid fields {missing_fields}"
+            )
+            continue
+    return valid_memories
 
 
 @router.post("/v1/dev/user/memories", response_model=MemoryResponse, tags=["developer"])
