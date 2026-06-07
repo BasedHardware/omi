@@ -1062,7 +1062,7 @@ class ParakeetWebSocketSocket(STTSocket):
             pass
 
     def finish(self) -> None:
-        self._closed = True
+        self._queue_finalize_nowait()
 
     def finalize(self) -> None:
         self._queue_finalize_nowait()
@@ -1124,9 +1124,8 @@ class ParakeetWebSocketSocket(STTSocket):
                         data = await asyncio.wait_for(self._send_queue.get(), timeout=0.1)
                         if data is None:
                             await ws.send("finalize")
-                            if self._closed:
-                                break
-                            continue
+                            await asyncio.sleep(5)
+                            break
                         await ws.send(data)
                     except asyncio.TimeoutError:
                         if self._closed:
