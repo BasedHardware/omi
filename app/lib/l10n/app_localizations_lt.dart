@@ -9326,4 +9326,11 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get recapRegenerateNoConversations => 'Šiai dienai nėra pokalbių, kuriuos būtų galima apibendrinti.';
+
+  @override
+  String get syncCustomSttWarningTitle => 'Sinchronizavimas naudoja Omi transkripciją';
+
+  @override
+  String get syncCustomSttWarningMessage =>
+      'Naudojate savo transkripcijos paslaugą. Sinchronizuojant šiuos įrašus jie transkribuojami Omi serveriuose ir įskaičiuojami į jūsų plano transkripcijos limitą.';
 }

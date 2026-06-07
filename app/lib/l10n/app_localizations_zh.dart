@@ -9148,4 +9148,10 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get recapRegenerateNoConversations => '这一天没有可以总结的对话。';
+
+  @override
+  String get syncCustomSttWarningTitle => '同步会使用 Omi 转录';
+
+  @override
+  String get syncCustomSttWarningMessage => '您使用的是自己的转录服务。同步这些录音会改为在 Omi 的服务器上转录，并计入您套餐的转录额度。';
 }

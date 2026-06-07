@@ -9336,4 +9336,11 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get recapRegenerateNoConversations => 'Tiada perbualan untuk diringkaskan untuk hari ini.';
+
+  @override
+  String get syncCustomSttWarningTitle => 'Penyegerakan menggunakan transkripsi Omi';
+
+  @override
+  String get syncCustomSttWarningMessage =>
+      'Anda menggunakan penyedia transkripsi sendiri. Menyegerakkan rakaman ini akan mentranskripsikannya di pelayan Omi dan dikira dalam had transkripsi pelan anda.';
 }

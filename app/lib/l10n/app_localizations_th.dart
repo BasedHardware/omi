@@ -9263,4 +9263,11 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get recapRegenerateNoConversations => 'ไม่มีการสนทนาที่จะสรุปสำหรับวันนี้';
+
+  @override
+  String get syncCustomSttWarningTitle => 'การซิงค์ใช้การถอดเสียงของ Omi';
+
+  @override
+  String get syncCustomSttWarningMessage =>
+      'คุณใช้ผู้ให้บริการถอดเสียงของคุณเอง การซิงค์การบันทึกเหล่านี้จะถอดเสียงบนเซิร์ฟเวอร์ของ Omi และจะนับรวมในขีดจำกัดการถอดเสียงของแพ็กเกจของคุณ';
 }

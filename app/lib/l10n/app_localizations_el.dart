@@ -9379,4 +9379,11 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get recapRegenerateNoConversations => 'Δεν υπάρχουν συνομιλίες για ανακεφαλαίωση αυτής της ημέρας.';
+
+  @override
+  String get syncCustomSttWarningTitle => 'Ο συγχρονισμός χρησιμοποιεί τη μεταγραφή του Omi';
+
+  @override
+  String get syncCustomSttWarningMessage =>
+      'Χρησιμοποιείτε δικό σας πάροχο μεταγραφής. Ο συγχρονισμός αυτών των ηχογραφήσεων τις μεταγράφει στους διακομιστές του Omi και προσμετρώνται στο όριο μεταγραφής του προγράμματός σας.';
 }

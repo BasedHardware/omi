@@ -9366,4 +9366,11 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get recapRegenerateNoConversations => 'No hi ha converses per resumir d\'aquest dia.';
+
+  @override
+  String get syncCustomSttWarningTitle => 'La sincronització utilitza la transcripció d\'Omi';
+
+  @override
+  String get syncCustomSttWarningMessage =>
+      'Utilitzes el teu propi proveïdor de transcripció. Sincronitzar aquests enregistraments els transcriu als servidors d\'Omi i compten per al límit de transcripció del teu pla.';
 }

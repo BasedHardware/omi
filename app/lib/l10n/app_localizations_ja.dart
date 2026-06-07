@@ -9162,4 +9162,11 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get recapRegenerateNoConversations => 'この日の要約対象となる会話はありません。';
+
+  @override
+  String get syncCustomSttWarningTitle => '同期では Omi の文字起こしを使用します';
+
+  @override
+  String get syncCustomSttWarningMessage =>
+      'ご自身の文字起こしプロバイダーを使用しています。これらの録音を同期すると Omi のサーバーで文字起こしされ、プランの文字起こし上限にカウントされます。';
 }

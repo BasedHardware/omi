@@ -9344,4 +9344,11 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get recapRegenerateNoConversations => 'ಈ ದಿನಕ್ಕೆ ಸಂಗ್ರಹಿಸಲು ಯಾವುದೇ ಸಂಭಾಷಣೆಗಳಿಲ್ಲ.';
+
+  @override
+  String get syncCustomSttWarningTitle => 'ಸಿಂಕ್ Omi ಪ್ರತಿಲೇಖನವನ್ನು ಬಳಸುತ್ತದೆ';
+
+  @override
+  String get syncCustomSttWarningMessage =>
+      'ನೀವು ನಿಮ್ಮ ಸ್ವಂತ ಪ್ರತಿಲೇಖನ ಪೂರೈಕೆದಾರರನ್ನು ಬಳಸುತ್ತೀರಿ. ಈ ಧ್ವನಿಮುದ್ರಣಗಳನ್ನು ಸಿಂಕ್ ಮಾಡಿದರೆ ಅವು Omi ಸರ್ವರ್‌ಗಳಲ್ಲಿ ಪ್ರತಿಲೇಖನಗೊಳ್ಳುತ್ತವೆ ಮತ್ತು ನಿಮ್ಮ ಯೋಜನೆಯ ಪ್ರತಿಲೇಖನ ಮಿತಿಗೆ ಎಣಿಸಲಾಗುತ್ತದೆ.';
 }

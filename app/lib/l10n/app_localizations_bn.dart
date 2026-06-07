@@ -9320,4 +9320,11 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String get recapRegenerateNoConversations => 'এই দিনের জন্য সংক্ষেপ করার কোনো কথোপকথন নেই।';
+
+  @override
+  String get syncCustomSttWarningTitle => 'সিঙ্ক Omi-এর ট্রান্সক্রিপশন ব্যবহার করে';
+
+  @override
+  String get syncCustomSttWarningMessage =>
+      'আপনি নিজের ট্রান্সক্রিপশন প্রদানকারী ব্যবহার করেন। এই রেকর্ডিংগুলি সিঙ্ক করলে সেগুলি Omi-এর সার্ভারে ট্রান্সক্রাইব হবে এবং আপনার প্ল্যানের ট্রান্সক্রিপশন সীমার মধ্যে গণনা হবে।';
 }
