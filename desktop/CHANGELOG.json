@@ -1,5 +1,7 @@
 {
-  "unreleased": [],
+  "unreleased": [
+    "Proactive notifications are now off by default \u2014 turn them on anytime in Settings"
+  ],
   "releases": [
     {
       "version": "0.11.451",

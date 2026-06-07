@@ -71,14 +71,19 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
     static let screenCaptureResetShownKey = "screenCaptureResetNotificationShown"
 
     /// UserDefaults key mirroring the user's `notification_frequency` setting from the backend.
-    /// 0=Off, 1=Minimal, 2=Low, 3=Balanced (default), 4=High, 5=Maximum.
+    /// 0=Off (default), 1=Minimal, 2=Low, 3=Balanced, 4=High, 5=Maximum.
     /// The Settings page writes this on load and on slider change; `sendNotification`
     /// reads it synchronously to throttle proactive notifications.
     static let frequencyDefaultsKey = "notification_frequency"
 
+    /// One-time migration flag: when set, the notifications-off-by-default migration
+    /// has already run for this install, so we never re-disable a user who opted back in.
+    static let offByDefaultMigrationKey = "notificationsOffByDefaultMigrationDone"
+
     /// Default level used when the key has never been written (e.g. first run before
     /// the Settings page has hydrated from the backend). Mirrors the backend default.
-    private static let defaultFrequencyLevel = 3
+    /// Proactive notifications are OFF by default — users opt in via the Settings slider.
+    private static let defaultFrequencyLevel = 0
 
     /// Stores metadata for sent notifications so we can retrieve it in delegate callbacks
     /// Key: notification identifier, Value: (title, assistantId)
@@ -364,6 +369,28 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
     }
 
     // MARK: - Frequency throttle
+
+    /// One-time migration to make proactive notifications OFF by default for ALL users.
+    /// Runs once per install (guarded by `offByDefaultMigrationKey`): sets the local
+    /// frequency to Off and persists it to the backend so the choice sticks across
+    /// devices and is reflected in Settings. Because it is guarded by the flag, a user
+    /// who later turns notifications back on is never re-disabled on subsequent launches.
+    /// Call early at launch, before any proactive assistant can fire.
+    static func migrateToOffByDefaultIfNeeded() {
+        guard !UserDefaults.standard.bool(forKey: Self.offByDefaultMigrationKey) else { return }
+        UserDefaults.standard.set(0, forKey: Self.frequencyDefaultsKey)
+        UserDefaults.standard.set(true, forKey: Self.offByDefaultMigrationKey)
+        log("NotificationService: applied notifications-off-by-default migration (frequency=0)")
+        guard AuthService.shared.isSignedIn else { return }
+        Task {
+            do {
+                _ = try await APIClient.shared.updateNotificationSettings(enabled: nil, frequency: 0)
+            } catch {
+                logError(
+                    "NotificationService: off-by-default migration backend push failed", error: error)
+            }
+        }
+    }
 
     /// Current frequency level from UserDefaults, clamped to [0, 5]. Falls back to
     /// `defaultFrequencyLevel` when the key is absent (first run before sync).
