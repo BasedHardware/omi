@@ -1,8 +1,6 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
-import 'package:flutter/material.dart';
-
 import 'package:http/http.dart' as http;
 
 import 'package:omi/models/stt_response_schema.dart';
@@ -74,14 +72,14 @@ class SttFileUploadConfig {
   }
 
   Map<String, dynamic> toJson() => {
-    'file_upload_url': fileUploadUrl,
-    'file_upload_headers': fileUploadHeaders,
-    'file_upload_body': fileUploadBody,
-    'upload_url_path': uploadUrlPath,
-    'file_url_path': fileUrlPath,
-    'upload_content_type': uploadContentType,
-    'upload_method': uploadMethod,
-  };
+        'file_upload_url': fileUploadUrl,
+        'file_upload_headers': fileUploadHeaders,
+        'file_upload_body': fileUploadBody,
+        'upload_url_path': uploadUrlPath,
+        'file_url_path': fileUrlPath,
+        'upload_content_type': uploadContentType,
+        'upload_method': uploadMethod,
+      };
 }
 
 class SchemaBasedSttProvider implements ISttProvider {
@@ -105,8 +103,8 @@ class SchemaBasedSttProvider implements ISttProvider {
     String? requestType, // String version for unified config
     this.jsonBodyBuilder,
     this.fileUploadConfig,
-  }) : requestBodyType = requestBodyType ?? SttRequestBodyType.fromString(requestType),
-       _client = http.Client();
+  })  : requestBodyType = requestBodyType ?? SttRequestBodyType.fromString(requestType),
+        _client = http.Client();
 
   factory SchemaBasedSttProvider.openAI({required String apiKey, String model = 'whisper-1', String language = 'en'}) {
     return SchemaBasedSttProvider(
@@ -176,8 +174,7 @@ class SchemaBasedSttProvider implements ISttProvider {
                 'inline_data': {'mime_type': 'audio/wav', 'data': base64Audio},
               },
               {
-                'text':
-                    'Transcribe this audio to text in $language language. '
+                'text': 'Transcribe this audio to text in $language language. '
                     'Return only the transcription text, no explanations or formatting.',
               },
             ],
@@ -295,9 +292,8 @@ class SchemaBasedSttProvider implements ISttProvider {
 
       switch (requestBodyType) {
         case SttRequestBodyType.rawBinary:
-          response = await _client
-              .post(uri, headers: defaultHeaders, body: audioBytes)
-              .timeout(const Duration(seconds: 60));
+          response =
+              await _client.post(uri, headers: defaultHeaders, body: audioBytes).timeout(const Duration(seconds: 60));
           break;
 
         case SttRequestBodyType.jsonBase64:

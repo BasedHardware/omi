@@ -81,9 +81,6 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
   List<GlobalKey> _matchKeys = [];
   int _previousSearchResultIndex = -1;
 
-  // Toggle to show/hide speaker names globally
-  bool _showSpeakerNames = false;
-
   Color _getSpeakerBubbleColor(bool isUser, int speakerId, Person? person) {
     if (isUser) {
       return const Color(0xFF8B5CF6).withValues(alpha: 0.8);
@@ -437,12 +434,6 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
         },
       ),
     );
-  }
-
-  void _toggleShowSpeakerNames() {
-    setState(() {
-      _showSpeakerNames = !_showSpeakerNames;
-    });
   }
 
   Widget _buildSegmentItem(int segmentIdx) {

@@ -244,6 +244,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     // Refresh the "Auto" realtime-voice model pick from Artificial Analysis (daily, cached).
     AutoModelSelector.shared.refreshIfStale()
 
+    // Proactive notifications are now OFF by default for everyone. Run the one-time
+    // migration before any assistant can fire, so existing users are flipped to Off
+    // once (they can re-enable in Settings).
+    NotificationService.migrateToOffByDefaultIfNeeded()
+
     // Force macOS to use the correct app icon (bypasses icon cache).
     // Apply squircle mask with proper margins because NSApp.applicationIconImage
     // renders the raw image without macOS auto-masking.

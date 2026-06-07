@@ -1255,14 +1255,16 @@ def get_notification_settings(uid: str) -> dict:
     the user doc.  The Swift ``NotificationSettingsResponse`` decodes
     ``enabled`` / ``frequency``, so we map to the wire names here.
     """
+    # Proactive desktop notifications are OFF by default (frequency 0). Users opt in
+    # via the Settings frequency slider; an explicit stored value always wins.
     user_ref = db.collection('users').document(uid)
     doc = user_ref.get()
     if not doc.exists:
-        return {'enabled': True, 'frequency': 3}
+        return {'enabled': True, 'frequency': 0}
     data = doc.to_dict()
     return {
         'enabled': data.get('notifications_enabled', True),
-        'frequency': data.get('notification_frequency', 3),
+        'frequency': data.get('notification_frequency', 0),
     }
 
 
