@@ -13,10 +13,11 @@ a regression that removes the behavior.
 
 import asyncio
 import json
+import re
 import struct
 import time
 from pathlib import Path
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 
 # ---------------------------------------------------------------------------
 # Mirror of the real helpers in create_pusher_task_handler (transcribe.py)
@@ -43,8 +44,19 @@ def _buffer_speaker_sample_request(pending: dict, person_id: str, conv_id: str, 
     }
 
 
-async def _send_speaker_sample_request(pending, person_id, conv_id, segment_ids, pusher_ws, pusher_connected):
-    """Mirrors send_speaker_sample_request(): buffer when disconnected/failed, True only on send."""
+class _ConnectionClosed(Exception):
+    """Stand-in for websockets.exceptions.ConnectionClosed, to exercise that distinct branch."""
+
+
+async def _send_speaker_sample_request(
+    pending, person_id, conv_id, segment_ids, pusher_ws, pusher_connected, mark_disconnected=None
+):
+    """Mirrors send_speaker_sample_request(): buffer when disconnected/failed, True only on send.
+
+    Models the two distinct failure branches: ConnectionClosed re-buffers AND signals disconnect
+    (mark_disconnected, which in the real code starts the reconnect loop), while a generic
+    exception only re-buffers.
+    """
     if not pusher_connected or not pusher_ws:
         _buffer_speaker_sample_request(pending, person_id, conv_id, segment_ids)
         return False
@@ -56,19 +68,30 @@ async def _send_speaker_sample_request(pending, person_id, conv_id, segment_ids,
         )
         await pusher_ws.send(data)
         return True
+    except _ConnectionClosed:
+        _buffer_speaker_sample_request(pending, person_id, conv_id, segment_ids)
+        if mark_disconnected is not None:
+            mark_disconnected()
+        return False
     except Exception:
         _buffer_speaker_sample_request(pending, person_id, conv_id, segment_ids)
         return False
 
 
-async def _replay_speaker_samples(pending, pusher_ws, pusher_connected):
+async def _replay_speaker_samples(pending, pusher_ws, pusher_connected, mark_disconnected=None):
     """Mirrors the _connect() replay: remove an entry only after a confirmed send."""
     for key in list(pending.keys()):
         req = pending.get(key)
         if not req:
             continue
         if await _send_speaker_sample_request(
-            pending, req['person_id'], req['conv_id'], req['segment_ids'], pusher_ws, pusher_connected
+            pending,
+            req['person_id'],
+            req['conv_id'],
+            req['segment_ids'],
+            pusher_ws,
+            pusher_connected,
+            mark_disconnected,
         ):
             pending.pop(key, None)
 
@@ -105,13 +128,26 @@ def test_replay_drains_buffer_on_reconnect():
     assert ws.send.await_count == 2
 
 
-def test_replay_retains_entry_when_send_fails():
+def test_replay_retains_entry_on_generic_failure_without_marking_disconnected():
     pending = {}
     asyncio.run(_send_speaker_sample_request(pending, "p1", "c1", ["s1"], None, False))
     ws = AsyncMock()
-    ws.send.side_effect = RuntimeError("connection closed")
-    asyncio.run(_replay_speaker_samples(pending, ws, True))
+    ws.send.side_effect = RuntimeError("boom")
+    mark = MagicMock()
+    asyncio.run(_replay_speaker_samples(pending, ws, True, mark))
     assert "p1:c1" in pending  # not dropped — preserved for the next reconnect
+    mark.assert_not_called()  # a generic send error does not flag the connection as down
+
+
+def test_connection_closed_rebuffers_and_marks_disconnected():
+    pending = {}
+    asyncio.run(_send_speaker_sample_request(pending, "p1", "c1", ["s1"], None, False))
+    ws = AsyncMock()
+    ws.send.side_effect = _ConnectionClosed()
+    mark = MagicMock()
+    asyncio.run(_replay_speaker_samples(pending, ws, True, mark))
+    assert "p1:c1" in pending  # retained for the next reconnect
+    mark.assert_called_once()  # ConnectionClosed flags disconnect so the reconnect loop drains it
 
 
 def test_cap_drops_oldest():
@@ -141,6 +177,15 @@ def _transcribe_source():
     return (Path(__file__).resolve().parent.parent.parent / "routers" / "transcribe.py").read_text(encoding="utf-8")
 
 
+def _send_function_source():
+    """Slice just send_speaker_sample_request() out of transcribe.py (up to the next sibling def)."""
+    src = _transcribe_source()
+    start = src.index("async def send_speaker_sample_request")
+    rest = src[start + 1 :]
+    m = re.search(r"\n        (?:async def|def) ", rest)
+    return rest[: m.start()] if m else rest
+
+
 def test_real_code_buffers_and_replays_speaker_samples():
     src = _transcribe_source()
     assert "pending_speaker_sample_requests" in src
@@ -150,3 +195,13 @@ def test_real_code_buffers_and_replays_speaker_samples():
     # replayed on reconnect, removed only after a confirmed send
     assert "pending speaker sample requests" in src
     assert "pending_speaker_sample_requests.pop(" in src
+
+
+def test_real_code_has_distinct_connection_closed_branch():
+    # Greptile #6060: the ConnectionClosed branch must stay distinct from the generic handler so it
+    # keeps calling _mark_disconnected(); merging them would silently drop the reconnect trigger.
+    body = _send_function_source()
+    assert "except ConnectionClosed:" in body
+    assert "_mark_disconnected()" in body  # only present in the ConnectionClosed branch
+    assert "except Exception" in body  # the generic branch still exists and is separate
+    assert body.count("_buffer_speaker_sample_request(") >= 2  # both failure branches re-buffer
