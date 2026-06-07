@@ -127,6 +127,7 @@ class FlashPageWalSyncImpl implements FlashPageWalSync {
       int timerStart = DateTime.now().millisecondsSinceEpoch ~/ 1000 - estimatedSeconds;
 
       var connection = await ServiceManager.instance().device.ensureConnection(deviceId);
+      if (connection == null) return [];
       var pd = await device.getDeviceInfo(connection);
       String deviceModel = pd.modelNumber.isNotEmpty ? pd.modelNumber : "Limitless";
 
