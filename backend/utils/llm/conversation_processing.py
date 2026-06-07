@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 from typing import List, Optional, Tuple
 
 from langchain_core.output_parsers import PydanticOutputParser
@@ -510,19 +511,19 @@ def extract_action_items(
     • Order by: due date → urgency → alphabetical
 
     DUE DATE EXTRACTION:
-    All due_at values MUST be future UTC timestamps with 'Z' suffix. NEVER produce a past date.
+    Resolve each due date in the user's LOCAL time. NEVER produce a past date.
 
-    REFERENCE_TIME: If {started_at} is >7 days before {current_time}, use {current_time} (historical reprocessing). Otherwise use {started_at}.
+    REFERENCE_TIME (user's local time): If {started_at_local} is >7 days before {current_time_local}, use {current_time_local} (historical reprocessing). Otherwise use {started_at_local}.
 
     Date resolution: "today" → REFERENCE_TIME date, "tomorrow" → next day, weekday names → next occurrence, "next week" → +7 days.
     Time resolution: "morning" → 9AM, "afternoon" → 2PM, "evening" → 6PM, "noon" → 12PM, "end of day"/"midnight" → 11:59PM, no time → 11:59PM. "urgent"/"ASAP" → 2h from REFERENCE_TIME.
-    Process: resolve date + time in user's timezone ({tz}), convert to UTC with 'Z' suffix, verify it's future relative to {current_time}. If past, omit due_at.
+    Output the resolved value as the user's LOCAL wall-clock time in ISO 8601 with NO timezone suffix or offset (no 'Z', no '+05:30') — the server converts it to UTC. Verify it is in the future relative to REFERENCE_TIME; if past, omit due_at.
 
-    Example: REFERENCE_TIME "2025-10-03T13:25:00Z", tz "Asia/Kolkata": "tomorrow before 10am" → Oct 4 10:00 IST → "2025-10-04T04:30:00Z"
-    Format: UTC with 'Z' suffix only (e.g., "2025-10-04T04:30:00Z"). No timezone offsets like "+05:30".
+    Example: REFERENCE_TIME "2025-10-03T13:25:00", "tomorrow before 10am" → "2025-10-04T10:00:00"
+    Format: naive local ISO 8601, no suffix (e.g., "2025-10-04T10:00:00").
 
-    Conversation started at: {started_at}
-    Current time: {current_time}
+    Conversation started at (local): {started_at_local}
+    Current time (local): {current_time_local}
     User timezone: {tz}
 
     {format_instructions}'''.replace(
@@ -538,6 +539,20 @@ def extract_action_items(
 
     current_time = datetime.now(timezone.utc)
 
+    # Resolve the user's timezone once; fall back to UTC on an invalid/missing tz (and log it).
+    # The LLM emits naive LOCAL wall-clock due dates (see prompt); we convert them to UTC here
+    # deterministically instead of trusting the model to do the timezone math (the cause of #7059).
+    try:
+        user_tz = ZoneInfo(tz) if tz else timezone.utc
+    except Exception:
+        logger.warning(f'Invalid timezone {tz!r} for action item extraction; falling back to UTC')
+        user_tz = timezone.utc
+
+    started_at_local = (started_at if started_at.tzinfo else started_at.replace(tzinfo=timezone.utc)).astimezone(
+        user_tz
+    )
+    current_time_local = current_time.astimezone(user_tz)
+
     try:
         response = chain.invoke(
             {
@@ -545,8 +560,8 @@ def extract_action_items(
                 'format_instructions': action_items_parser.get_format_instructions(),
                 'language_code': language_code,
                 'response_language': response_language,
-                'started_at': started_at.isoformat(),
-                'current_time': current_time.isoformat(),
+                'started_at_local': started_at_local.replace(tzinfo=None).isoformat(),
+                'current_time_local': current_time_local.replace(tzinfo=None).isoformat(),
                 'tz': tz,
                 'existing_items_context': existing_items_context,
             }
@@ -557,12 +572,14 @@ def extract_action_items(
         for action_item in response.action_items or []:
             if action_item.created_at is None:
                 action_item.created_at = now
-            # Post-extraction validation: clear due dates more than 1 day in the past
+            # The LLM returns naive LOCAL time; convert to UTC deterministically (and normalize any
+            # tz-aware value), then clear due dates more than 1 day in the past.
             if action_item.due_at is not None:
-                due_utc = (
-                    action_item.due_at if action_item.due_at.tzinfo else action_item.due_at.replace(tzinfo=timezone.utc)
-                )
-                if due_utc < now - timedelta(days=1):
+                if action_item.due_at.tzinfo is None:
+                    action_item.due_at = action_item.due_at.replace(tzinfo=user_tz).astimezone(timezone.utc)
+                else:
+                    action_item.due_at = action_item.due_at.astimezone(timezone.utc)
+                if action_item.due_at < now - timedelta(days=1):
                     logger.warning(
                         f'Clearing past due_at {action_item.due_at.isoformat()} for action item: {action_item.description}'
                     )
