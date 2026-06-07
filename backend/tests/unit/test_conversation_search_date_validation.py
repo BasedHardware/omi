@@ -9,7 +9,7 @@ The handler now catches it and returns HTTP 400. These tests mount the conversat
 import os
 import sys
 from types import ModuleType
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 os.environ.setdefault('OPENAI_API_KEY', 'sk-test-not-real')
 os.environ.setdefault(
@@ -113,11 +113,11 @@ def test_bad_end_date_returns_400_not_500():
 
 
 def test_valid_date_is_accepted_and_calls_search():
-    conv.search_conversations = MagicMock(return_value={'conversations': []})
-    client = _client()
-    resp = client.post(
-        '/v1/conversations/search',
-        json={'query': 'hi', 'start_date': '2026-01-01T00:00:00', 'end_date': '2026-02-01T00:00:00'},
-    )
-    assert resp.status_code == 200
-    assert conv.search_conversations.called
+    with patch.object(conv, 'search_conversations', return_value={'conversations': []}) as mock_search:
+        client = _client()
+        resp = client.post(
+            '/v1/conversations/search',
+            json={'query': 'hi', 'start_date': '2026-01-01T00:00:00', 'end_date': '2026-02-01T00:00:00'},
+        )
+        assert resp.status_code == 200
+        assert mock_search.called
