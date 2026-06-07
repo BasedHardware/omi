@@ -34,8 +34,8 @@ spec:
           averageUtilization: {{ .Values.autoscaling.targetMemoryUtilizationPercentage }}
     {{- end }}
     {{- if .Values.autoscaling.streamsPerPod }}
-    - type: External
-      external:
+    - type: Pods
+      pods:
         metric:
           name: parakeet_active_streams
         target:
@@ -43,8 +43,8 @@ spec:
           averageValue: "{{ .Values.autoscaling.streamsPerPod }}"
     {{- end }}
     {{- if .Values.autoscaling.requestsPerPod }}
-    - type: External
-      external:
+    - type: Pods
+      pods:
         metric:
           name: parakeet_active_requests_total
         target:
@@ -67,6 +67,6 @@ spec:
           name: parakeet_request_latency_p99
         target:
           type: Value
-          value: {{ .Values.autoscaling.requestLatencyP99 }}m
+          value: "{{ .Values.autoscaling.requestLatencyP99 }}"
     {{- end }}
 {{- end }}
