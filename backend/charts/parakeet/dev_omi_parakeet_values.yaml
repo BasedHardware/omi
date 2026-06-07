@@ -98,6 +98,8 @@ env:
     value: "nvidia/parakeet-rnnt-1.1b"
   - name: PARAKEET_INFERENCE_MODE
     value: "nemo"
+  - name: PARAKEET_MAX_SPEECH_S
+    value: "5"
   - name: HOSTED_SPEAKER_EMBEDDING_API_URL
     value: "http://dev-omi-diarizer.dev-omi-backend.svc.cluster.local:8080"
 

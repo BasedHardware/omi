@@ -35,6 +35,8 @@ logger = logging.getLogger(__name__)
 
 SPEECH_THRESHOLD = float(os.getenv("PARAKEET_VAD_THRESHOLD", "0.5"))
 MIN_SPEECH_DURATION_S = float(os.getenv("PARAKEET_MIN_SPEECH_S", "0.5"))
+MAX_SPEECH_DURATION_S = float(os.getenv("PARAKEET_MAX_SPEECH_S", "30.0"))
+AGC_TARGET_PEAK = float(os.getenv("PARAKEET_AGC_TARGET", "0.8"))
 HANGOVER_S = float(os.getenv("PARAKEET_HANGOVER_S", "0.8"))
 CHUNK_SECONDS = float(os.getenv("PARAKEET_CHUNK_S", "2.0"))
 LEFT_CONTEXT_SECONDS = float(os.getenv("PARAKEET_LEFT_CONTEXT_S", "10.0"))
@@ -404,6 +406,18 @@ class StreamSession:
 
         self._vad = _get_vad_model()
 
+    @staticmethod
+    def _normalize_pcm16(pcm: bytes) -> bytes:
+        samples = np.frombuffer(pcm, dtype=np.int16).astype(np.float32)
+        peak = np.max(np.abs(samples))
+        if peak < 1.0:
+            return pcm
+        gain = (32767.0 * AGC_TARGET_PEAK) / peak
+        if gain <= 1.0:
+            return pcm
+        normalized = np.clip(samples * gain, -32768, 32767).astype(np.int16)
+        return normalized.tobytes()
+
     async def feed(self, data: bytes):
         self._pcm_buf.extend(data)
         segments = []
@@ -411,6 +425,8 @@ class StreamSession:
         while len(self._pcm_buf) >= self._vad_chunk_bytes:
             vad_chunk = bytes(self._pcm_buf[: self._vad_chunk_bytes])
             del self._pcm_buf[: self._vad_chunk_bytes]
+
+            vad_chunk = self._normalize_pcm16(vad_chunk)
 
             is_speech = self._run_vad(vad_chunk)
             chunk_dur = self._vad_chunk_samples / self._sr
@@ -439,6 +455,16 @@ class StreamSession:
                             self._pending_audio.clear()
                             self._speech_start_s = None
                         self._silence_count = 0
+
+            if self._is_speaking:
+                speech_dur = len(self._pending_audio) / (self._sr * self._bytes_per_sample)
+                if speech_dur >= MAX_SPEECH_DURATION_S:
+                    result = await self._transcribe_utterance()
+                    segments.extend(result)
+                    self._pending_audio.clear()
+                    self._is_speaking = False
+                    self._speech_start_s = None
+                    self._silence_count = 0
 
             self._stream_offset_s += chunk_dur
 
