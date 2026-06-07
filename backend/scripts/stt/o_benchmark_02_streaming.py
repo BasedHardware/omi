@@ -143,7 +143,7 @@ async def stream_to_provider(audio_pcm: bytes, language: str, provider: str) -> 
         'audio_duration_s': round(audio_duration_s, 2),
         'audio_sent_time': round(audio_sent_time, 2),
         'segments_raw': len(segments_received),
-        'segments_deduped': len(final_segments),
+        'segments_deduped': len(segments_received),
         'segs_during_stream': segs_before_finish,
         'segs_after_finish': segs_after_finish,
         'text': text,
