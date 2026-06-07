@@ -83,7 +83,7 @@ omi --json local task delete task_123 --yes
 ```
 
 `omi local screenshot SCREENSHOT_ID --output PATH` writes the screenshot to
-disk and still emits JSON to stdout, preserving the agent contract.
+disk and still prints JSON to stdout for scripts.
 
 ## Worked example: Python agent loop
 

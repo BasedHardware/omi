@@ -685,12 +685,12 @@ class ChatToolExecutor {
       let stats = try await RewindDatabase.shared.getStats()
       if stats.total == 0 {
         return """
-          No screen history is available yet. Omi Desktop has not captured any local Rewind screenshots in this database, so search_screen_history cannot return results for "\(query)".
+          No screen history is available yet. Omi Desktop has not captured screenshots on this Mac, so there are no results for "\(query)".
           """
       }
       if stats.indexed == 0 {
         return """
-          Screen history exists (\(stats.total) screenshot(s)), but none are indexed for semantic search yet. Keep Omi Desktop running and try again after OCR/indexing catches up, or use execute_sql for exact database checks.
+          Omi has \(stats.total) screenshot(s), but they are not ready to search yet. Keep Omi Desktop running and try again in a bit, or use SQL for exact local checks.
           """
       }
       let appText = appFilter.map { " with app filter \"\($0)\"" } ?? ""

@@ -135,7 +135,7 @@ struct OnboardingExportsStepView: View {
       return "Copy-ready page"
     }
     if destination.supportsAgentSetup {
-      return status.isConfigured ? "Agent prompt ready" : "Connect agents through MCP"
+      return status.isConfigured ? "Agent prompt ready" : "Connect an agent"
     }
     return "Prompt + memory pack"
   }
@@ -181,7 +181,7 @@ private struct OnboardingInlineExportPanel: View {
 
       case .agents:
         inlineInfoCard(
-          "Omi copies one prompt for any MCP-capable agent. It includes private connection keys and a short guide the agent can save for later."
+          "Omi copies one setup prompt for your agent. It includes the connection keys and a short guide the agent can save for later."
         )
 
       case .claudeCode, .codex:

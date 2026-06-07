@@ -50,7 +50,7 @@ enum MemoryExportDestination: String, CaseIterable, Identifiable, Sendable {
     case .chatgpt: return "Live MCP or memory pack"
     case .claude: return "Live MCP or memory pack"
     case .gemini: return "Prompt + memory pack"
-    case .agents: return "Hosted MCP + local CLI"
+    case .agents: return "One prompt for your agent"
     case .claudeCode: return "Connect via MCP"
     case .codex: return "Connect via MCP"
     }
@@ -63,7 +63,7 @@ enum MemoryExportDestination: String, CaseIterable, Identifiable, Sendable {
     case .chatgpt: return "Connect over MCP so ChatGPT reads your memories live, or copy a memory pack."
     case .claude: return "Connect over MCP so Claude reads your memories live, or copy a memory pack."
     case .gemini: return "Copy the prompt and memory pack, then open Gemini."
-    case .agents: return "Connect your favorite agents to Omi with MCP and the local CLI."
+    case .agents: return "Give your agent one prompt that connects Omi memories and this Mac."
     case .claudeCode: return "Add Omi as an MCP server so Claude Code always reads your memories."
     case .codex: return "Add Omi as an MCP server so Codex always reads your memories."
     }
@@ -315,7 +315,7 @@ struct AgentConnectionTestResult: Sendable {
   let localToolCount: Int
 
   var summary: String {
-    "Omi is reachable: hosted memories returned \(hostedMemoryCount), and local Desktop exposes \(localToolCount) local CLI tools."
+    "Connection looks good: Omi returned \(hostedMemoryCount) hosted memories, and Desktop shared \(localToolCount) local tools."
   }
 }
 
@@ -528,11 +528,11 @@ actor MemoryExportService {
     - Start with hosted `get_user_profile` when it is available for a high-level user summary. Some deployments do not expose it.
     - Use hosted `search_memories` or `get_memories` for facts, preferences, habits, relationships, projects, and goals.
     - Use hosted `search_conversations` for synced conversations, meetings, and "when did this happen?" questions.
-    - Run `omi --json local tools` to discover every local Desktop affordance and `omi --json local status` before same-Mac context work. Status tells you whether local screen history exists and whether screenshots are indexed.
+    - Run `omi --json local tools` to see what local Desktop access can do, and run `omi --json local status` before using this Mac's local context. Status tells you whether local screen history exists and whether screenshots are indexed.
     - Use `omi --json local search-screen` for fuzzy questions about Rewind/OCR screen history. Use `omi --json local screenshot` only after a search or SQL result returns a screenshot ID.
     - Use `omi --json local sql` for read-only counts, filters, exact task lookup, local transcriptions, action items, indexed files, goals, and database questions. Use `omi --json local recap` for "what did I do today/yesterday/this week?"
     - Use `omi --json local task search`, `omi --json local task complete`, and `omi --json local task delete --yes` for same-Mac task work.
-    - Use `omi --json local call <tool> --args-json '{...}'` only when a local affordance is not covered by a friendly command.
+    - Use `omi --json local call <tool> --args-json '{...}'` only when a local capability is not covered by a friendly command.
 
     ## Hosted vs Local Routing
 
@@ -565,11 +565,11 @@ actor MemoryExportService {
     localToken: String
   ) -> String {
     """
-    Set up Omi for this agent.
+    Set up Omi for yourself.
 
-    Connect hosted Omi through MCP, then configure the Omi local CLI for same-Mac context.
+    Connect to Omi's hosted memory tools through MCP, then set up the local Omi CLI for this Mac.
 
-    Hosted Omi MCP gives this agent synced memories, conversations, and profile context from your Omi account.
+    Hosted Omi gives you synced memories, conversations, and profile context from this Omi account.
 
     Hosted server URL:
     \(MemoryExportDestination.mcpServerURL)
@@ -577,7 +577,7 @@ actor MemoryExportService {
     Hosted authorization header:
     Authorization: Bearer \(hostedKey)
 
-    Local Omi Desktop access uses the `omi` CLI. It gives this agent same-Mac screen history, screenshot image retrieval, local transcriptions, read-only SQL, daily recaps, indexed files, goals, app/window activity, and task search/complete/delete while Omi Desktop is running.
+    For this Mac, use the `omi` CLI to reach Omi Desktop. It lets you search screen history, fetch screenshots, read local transcriptions, run read-only SQL, get daily recaps, inspect indexed files and goals, review app/window activity, and search, complete, or delete local tasks while Omi Desktop is running.
 
     Local Omi Desktop URL:
     \(localURL)

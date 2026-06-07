@@ -209,7 +209,7 @@ final class MemoryExportDestinationSheetModel: ObservableObject {
           localToken: localToken),
         label: "Agent prompt")
       statusMessage =
-        "Prompt copied. It includes private Omi keys for hosted and local access."
+        "Prompt copied. Only share it with an agent you trust; it includes Omi access keys."
       return await MemoryExportService.shared.status(for: .agents)
     } catch {
       errorMessage = "Couldn't create the prompt: \(error.localizedDescription)"
@@ -480,12 +480,12 @@ struct MemoryExportDestinationSheet: View {
       agentSetupHeader
 
       VStack(alignment: .leading, spacing: 8) {
-        agentSetupBullet("Omi creates private hosted and local keys before copying the prompt.")
+        agentSetupBullet("Omi creates fresh connection keys for this prompt.")
         agentSetupBullet(
-          "Hosted MCP covers memories and conversations. The local CLI adds screen history, screenshots, SQL, daily recaps, indexed files, and tasks."
+          "Your agent can read synced memories and conversations, then use this Mac for screen history, screenshots, recaps, files, and tasks."
         )
         agentSetupBullet(
-          "The prompt includes the Omi guide, so your agent knows what to install, configure, and test."
+          "The included Omi guide helps your agent choose the right context and ask before changing memories."
         )
       }
 
@@ -541,7 +541,7 @@ struct MemoryExportDestinationSheet: View {
           .background(Capsule().fill(OmiColors.purplePrimary.opacity(0.15)))
       }
       Text(
-        "Copy one prompt into your agent. It connects hosted Omi through MCP, configures local Omi through the CLI, saves the guide, and checks access."
+        "Copy one setup prompt for your agent. It connects Omi memories through MCP, turns on local Desktop access through the Omi CLI, and includes a short Omi guide the agent can keep."
       )
       .scaledFont(size: 12)
       .foregroundColor(OmiColors.textTertiary)

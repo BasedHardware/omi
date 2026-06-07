@@ -82,7 +82,7 @@ def status(typer_ctx: typer.Context) -> None:
     ctx.renderer.emit(payload, title="local status")
 
 
-@app.command("tools", help="List local Omi Desktop affordances exposed to the CLI.")
+@app.command("tools", help="List local Omi Desktop tools available to the CLI.")
 def tools(typer_ctx: typer.Context) -> None:
     ctx = _ctx(typer_ctx)
     with ctx.make_local_client() as client:
