@@ -37,26 +37,25 @@ def _ensure_package(name, path):
     return module
 
 
-_ensure_package("database", BACKEND_DIR / "database")
+database_package = _ensure_package("database", BACKEND_DIR / "database")
 _ensure_package("utils", BACKEND_DIR / "utils")
 _ensure_package("utils.other", BACKEND_DIR / "utils" / "other")
 
 firebase_admin_stub = sys.modules.setdefault("firebase_admin", types.ModuleType("firebase_admin"))
 firebase_auth_stub = sys.modules.setdefault("firebase_admin.auth", types.ModuleType("firebase_admin.auth"))
 firebase_admin_stub.auth = firebase_auth_stub
-invalid_token_error = getattr(firebase_auth_stub, "InvalidIdTokenError", None)
-if not isinstance(invalid_token_error, type) or not issubclass(invalid_token_error, Exception):
-    firebase_auth_stub.InvalidIdTokenError = type("InvalidIdTokenError", (Exception,), {})
-certificate_fetch_error = getattr(firebase_auth_stub, "CertificateFetchError", None)
-if not isinstance(certificate_fetch_error, type) or not issubclass(certificate_fetch_error, Exception):
-    firebase_auth_stub.CertificateFetchError = type("CertificateFetchError", (Exception,), {})
+for error_name in (
+    "CertificateFetchError",
+    "ExpiredIdTokenError",
+    "InvalidIdTokenError",
+    "RevokedIdTokenError",
+):
+    auth_error = getattr(firebase_auth_stub, error_name, None)
+    if not isinstance(auth_error, type) or not issubclass(auth_error, Exception):
+        setattr(firebase_auth_stub, error_name, type(error_name, (Exception,), {}))
 firebase_auth_stub.verify_id_token = MagicMock(side_effect=firebase_auth_stub.InvalidIdTokenError("Invalid token"))
 if not hasattr(firebase_auth_stub, "get_user"):
     firebase_auth_stub.get_user = MagicMock()
-
-redis_db_stub = sys.modules.setdefault("database.redis_db", types.ModuleType("database.redis_db"))
-redis_db_stub.check_rate_limit = MagicMock(return_value=True)
-redis_db_stub.try_acquire_listen_lock = MagicMock(return_value=True)
 
 from firebase_admin.auth import CertificateFetchError, InvalidIdTokenError
 
@@ -67,10 +66,32 @@ if existing_endpoints is not None and not hasattr(existing_endpoints, 'get_curre
     if utils_other is not None and getattr(utils_other, 'endpoints', None) is existing_endpoints:
         delattr(utils_other, 'endpoints')
 
+database_client_stub = types.ModuleType('database._client')
+database_client_stub.db = MagicMock()
+database_client_stub.document_id_from_seed = MagicMock(return_value='doc-id')
+original_database_client = sys.modules.get('database._client')
+original_database_client_attr = getattr(database_package, '_client', None)
+original_database_client_attr_missing = not hasattr(database_package, '_client')
+sys.modules['database._client'] = database_client_stub
+database_package._client = database_client_stub
+
+database_redis_stub = types.ModuleType('database.redis_db')
+database_redis_stub.check_rate_limit = MagicMock(return_value=True)
+database_redis_stub.try_acquire_listen_lock = MagicMock(return_value=True)
+database_redis_stub.try_acquire_user_platform_write_lock = MagicMock(return_value=True)
+original_database_redis = sys.modules.get('database.redis_db')
+original_database_redis_attr = getattr(database_package, 'redis_db', None)
+original_database_redis_attr_missing = not hasattr(database_package, 'redis_db')
+sys.modules['database.redis_db'] = database_redis_stub
+database_package.redis_db = database_redis_stub
+
 database_users_stub = types.ModuleType('database.users')
 database_users_stub.record_user_platform = MagicMock()
 original_database_users = sys.modules.get('database.users')
+original_database_users_attr = getattr(database_package, 'users', None)
+original_database_users_attr_missing = not hasattr(database_package, 'users')
 sys.modules['database.users'] = database_users_stub
+database_package.users = database_users_stub
 
 try:
     endpoints = importlib.import_module('utils.other.endpoints')
@@ -79,10 +100,30 @@ try:
     get_current_user_uid_ws = endpoints.get_current_user_uid_ws
     get_current_user_uid = endpoints.get_current_user_uid
 finally:
+    if original_database_client is None:
+        sys.modules.pop('database._client', None)
+    else:
+        sys.modules['database._client'] = original_database_client
+    if original_database_client_attr_missing:
+        delattr(database_package, '_client')
+    else:
+        database_package._client = original_database_client_attr
+    if original_database_redis is None:
+        sys.modules.pop('database.redis_db', None)
+    else:
+        sys.modules['database.redis_db'] = original_database_redis
+    if original_database_redis_attr_missing:
+        delattr(database_package, 'redis_db')
+    else:
+        database_package.redis_db = original_database_redis_attr
     if original_database_users is None:
         sys.modules.pop('database.users', None)
     else:
         sys.modules['database.users'] = original_database_users
+    if original_database_users_attr_missing:
+        delattr(database_package, 'users')
+    else:
+        database_package.users = original_database_users_attr
 
 
 class WebSocketAuthTestCase(unittest.TestCase):
