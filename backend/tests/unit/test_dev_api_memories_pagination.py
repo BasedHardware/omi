@@ -9,7 +9,7 @@ failed). The handler now validates each record and skips+logs invalid ones, mirr
 import os
 import sys
 from types import ModuleType
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 os.environ.setdefault('OPENAI_API_KEY', 'sk-test-not-real')
 os.environ.setdefault(
@@ -144,18 +144,18 @@ def _build():
 
 
 def test_invalid_record_is_skipped_not_500():
-    memories_db.get_memories = MagicMock(
-        return_value=[_valid_memory('good1'), _invalid_memory('bad1'), _valid_memory('good2')]
-    )
-    client = _build()
-    resp = client.get('/v1/dev/user/memories')
+    page = [_valid_memory('good1'), _invalid_memory('bad1'), _valid_memory('good2')]
+    with patch.object(memories_db, 'get_memories', return_value=page):
+        client = _build()
+        resp = client.get('/v1/dev/user/memories')
     assert resp.status_code == 200
     assert [m['id'] for m in resp.json()] == ['good1', 'good2']
 
 
 def test_all_valid_records_returned():
-    memories_db.get_memories = MagicMock(return_value=[_valid_memory('a'), _valid_memory('b')])
-    client = _build()
-    resp = client.get('/v1/dev/user/memories')
+    page = [_valid_memory('a'), _valid_memory('b')]
+    with patch.object(memories_db, 'get_memories', return_value=page):
+        client = _build()
+        resp = client.get('/v1/dev/user/memories')
     assert resp.status_code == 200
     assert len(resp.json()) == 2
