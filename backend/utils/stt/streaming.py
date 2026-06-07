@@ -708,20 +708,19 @@ class SafeModulateSocket(STTSocket):
         self._prev_partial_start_ms = start_ms
         self._prev_partial_word_count = len(text.split())
 
+    def _flush_partial(self):
+        text = self._prev_partial_text
+        start_ms = self._prev_partial_start_ms
+        self._prev_partial_text = ''
+        self._prev_partial_word_count = 0
+        if not text:
+            return
         start = start_ms / 1000.0
         if self._preseconds and start < self._preseconds:
             return
-
-        raw_speaker = msg.get('speaker')
-        if isinstance(raw_speaker, int) and raw_speaker >= 1:
-            speaker_idx = raw_speaker - 1
-        else:
-            speaker_idx = 0
-        speaker = f'SPEAKER_{speaker_idx:02d}'
-
         segments = [
             {
-                'speaker': speaker,
+                'speaker': 'SPEAKER_00',
                 'start': start,
                 'end': start,
                 'text': text,
@@ -730,10 +729,6 @@ class SafeModulateSocket(STTSocket):
             }
         ]
         self._stream_transcript(segments)
-
-    def _flush_partial(self):
-        self._prev_partial_text = ''
-        self._prev_partial_word_count = 0
 
     def _handle_utterance(self, msg: dict):
         text = msg.get('text', '').strip()

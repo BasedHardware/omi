@@ -134,14 +134,7 @@ async def stream_to_provider(audio_pcm: bytes, language: str, provider: str) -> 
     first_seg_latency = segment_log[0]['wall_s'] if segment_log else -1
     segs_after_finish = len(segments_received) - segs_before_finish
 
-    # Deduplicate for WER: partials at the same start time are cumulative,
-    # keep only the last version at each start time (the most complete text).
-    deduped = {}
-    for seg in segments_received:
-        key = seg.get('start', 0)
-        deduped[key] = seg
-    final_segments = sorted(deduped.values(), key=lambda s: s.get('start', 0))
-    text = ' '.join(s.get('text', '') for s in final_segments).strip()
+    text = ' '.join(s.get('text', '') for s in segments_received).strip()
 
     return {
         'connect_time': connect_time,
