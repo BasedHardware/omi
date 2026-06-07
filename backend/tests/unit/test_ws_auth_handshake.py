@@ -18,6 +18,19 @@ from fastapi.testclient import TestClient
 from firebase_admin.auth import CertificateFetchError, InvalidIdTokenError
 from starlette.websockets import WebSocketDisconnect
 
+database_client_stub = types.ModuleType('database._client')
+database_client_stub.db = MagicMock()
+database_client_stub.document_id_from_seed = MagicMock(return_value='doc-id')
+original_database_client = sys.modules.get('database._client')
+sys.modules['database._client'] = database_client_stub
+
+database_redis_stub = types.ModuleType('database.redis_db')
+database_redis_stub.check_rate_limit = MagicMock(return_value=True)
+database_redis_stub.try_acquire_listen_lock = MagicMock(return_value=True)
+database_redis_stub.try_acquire_user_platform_write_lock = MagicMock(return_value=True)
+original_database_redis = sys.modules.get('database.redis_db')
+sys.modules['database.redis_db'] = database_redis_stub
+
 database_users_stub = types.ModuleType('database.users')
 database_users_stub.record_user_platform = MagicMock()
 original_database_users = sys.modules.get('database.users')
@@ -30,6 +43,14 @@ try:
     get_current_user_uid_ws = endpoints.get_current_user_uid_ws
     get_current_user_uid = endpoints.get_current_user_uid
 finally:
+    if original_database_client is None:
+        sys.modules.pop('database._client', None)
+    else:
+        sys.modules['database._client'] = original_database_client
+    if original_database_redis is None:
+        sys.modules.pop('database.redis_db', None)
+    else:
+        sys.modules['database.redis_db'] = original_database_redis
     if original_database_users is None:
         sys.modules.pop('database.users', None)
     else:
