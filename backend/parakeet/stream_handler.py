@@ -459,6 +459,7 @@ class StreamSession:
             if self._is_speaking:
                 speech_dur = len(self._pending_audio) / (self._sr * self._bytes_per_sample)
                 if speech_dur >= MAX_SPEECH_DURATION_S:
+                    await self._drain_streaming_asr(pad_partial=True)
                     result = await self._transcribe_utterance(trim_trailing_word=True)
                     segments.extend(result)
                     self._pending_audio.clear()
@@ -530,12 +531,12 @@ class StreamSession:
             )
         return self._streaming_decoder
 
-    async def _drain_streaming_asr(self, force: bool):
+    async def _drain_streaming_asr(self, force: bool = False, pad_partial: bool = False):
         if not self._streaming_enabled():
             return
         loop = asyncio.get_running_loop()
         try:
-            await loop.run_in_executor(_asr_executor, self._drain_streaming_asr_sync, force)
+            await loop.run_in_executor(_asr_executor, self._drain_streaming_asr_sync, force, pad_partial)
         except Exception as e:
             logger.warning(f"RNNT streaming decode failed, falling back to VAD utterance transcribe: {e}")
             self._streaming_decoder = None
@@ -543,7 +544,7 @@ class StreamSession:
             self._streaming_text = ""
             self._asr_audio_buf.clear()
 
-    def _drain_streaming_asr_sync(self, force: bool):
+    def _drain_streaming_asr_sync(self, force: bool, pad_partial: bool = False):
         decoder = self._get_streaming_decoder()
         while True:
             required_bytes = decoder.next_input_bytes(self._bytes_per_sample)
@@ -553,10 +554,16 @@ class StreamSession:
             del self._asr_audio_buf[:required_bytes]
             self._streaming_text = decoder.decode_pcm(chunk, is_last_chunk=False)
 
-        if force and self._asr_audio_buf:
-            chunk = bytes(self._asr_audio_buf)
-            self._asr_audio_buf.clear()
-            self._streaming_text = decoder.decode_pcm(chunk, is_last_chunk=True)
+        if self._asr_audio_buf:
+            if force:
+                chunk = bytes(self._asr_audio_buf)
+                self._asr_audio_buf.clear()
+                self._streaming_text = decoder.decode_pcm(chunk, is_last_chunk=True)
+            elif pad_partial:
+                required_bytes = decoder.next_input_bytes(self._bytes_per_sample)
+                chunk = bytes(self._asr_audio_buf) + b'\x00' * (required_bytes - len(self._asr_audio_buf))
+                self._asr_audio_buf.clear()
+                self._streaming_text = decoder.decode_pcm(chunk, is_last_chunk=False)
 
     def _new_streaming_text_since_last_emit(self) -> str:
         text = (self._streaming_text or "").strip()
