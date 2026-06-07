@@ -9,7 +9,7 @@ spec:
   type: ClusterIP
   ports:
     - port: {{ .Values.metrics.port }}
-      targetPort: {{ .Values.metrics.port }}
+      targetPort: {{ .Values.service.port }}
       protocol: TCP
       name: metrics
   selector:
