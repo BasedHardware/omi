@@ -46,6 +46,7 @@ pytest tests/unit/test_log_sanitizer.py -v
 pytest tests/unit/test_auth_redirect_uri.py -v
 pytest tests/unit/test_pusher_heartbeat.py -v
 pytest tests/unit/test_pusher_conversation_retry.py -v
+pytest tests/unit/test_speaker_sample_reconnect.py -v
 pytest tests/unit/test_listen_fallback_removal.py -v
 pytest tests/unit/test_desktop_updates.py -v
 pytest tests/unit/test_translation_optimization.py -v
