@@ -1,8 +1,13 @@
 {
-  "unreleased": [
-    "Proactive notifications are now off by default \u2014 turn them on anytime in Settings"
-  ],
+  "unreleased": [],
   "releases": [
+    {
+      "version": "0.11.452",
+      "date": "2026-06-07",
+      "changes": [
+        "Proactive notifications are now off by default \u2014 turn them on anytime in Settings"
+      ]
+    },
     {
       "version": "0.11.451",
       "date": "2026-06-06",
