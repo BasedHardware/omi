@@ -167,6 +167,19 @@ def delete_account(
             except Exception as e:
                 logger.info(f'delete_account feedback store failed: {sanitize(str(e))}')
 
+        # 1.5 Cancel any active paid Stripe subscription before wiping the account, so the user
+        #     isn't billed after deletion (they lose all access and can't self-serve a cancel).
+        #     Read the subscription while the user doc still exists. Best-effort: a Stripe hiccup
+        #     must never block account deletion, but log loudly so support can clean up manually.
+        try:
+            sub = users_db.get_user_subscription(uid)
+            if sub and sub.stripe_subscription_id:
+                canceled = stripe_utils.cancel_subscription(sub.stripe_subscription_id)
+                if not canceled:
+                    logger.error(f'delete_account stripe cancel returned None for {uid}')
+        except Exception as e:
+            logger.error(f'delete_account stripe cancel failed for {uid}: {sanitize(str(e))}')
+
         # 2. Revoke Firebase auth immediately so tokens are useless and the
         #    account cannot be logged back into while the data wipe runs.
         try:
