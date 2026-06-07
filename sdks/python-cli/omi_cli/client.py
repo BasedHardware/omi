@@ -295,6 +295,9 @@ def _extract_detail(response: httpx.Response) -> Optional[str]:
         msg = body.get("message")
         if isinstance(msg, str):
             return msg
+        error = body.get("error")
+        if isinstance(error, str):
+            return error
     return None
 
 

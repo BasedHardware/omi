@@ -1,12 +1,12 @@
 import Foundation
 import Network
 
-enum LocalAgentMCPSettings {
+enum LocalAgentAPISettings {
   static let defaultPort: UInt16 = 47778
 
-  private static let enabledKey = "localAgentMCPEnabled"
-  private static let tokenKey = "localAgentMCPToken"
-  private static let portKey = "localAgentMCPPort"
+  private static let enabledKey = "localAgentAPIEnabled"
+  private static let tokenKey = "localAgentAPIToken"
+  private static let portKey = "localAgentAPIPort"
 
   static var isEnabled: Bool {
     get { UserDefaults.standard.bool(forKey: enabledKey) }
@@ -22,7 +22,11 @@ enum LocalAgentMCPSettings {
   }
 
   static var serverURL: String {
-    "http://127.0.0.1:\(port)/mcp"
+    "http://127.0.0.1:\(port)"
+  }
+
+  static var toolURL: String {
+    "\(serverURL)/v1/local/tool"
   }
 
   static func storedToken() -> String? {
@@ -43,46 +47,47 @@ enum LocalAgentMCPSettings {
     let token = "omi_local_\(UUID().uuidString.replacingOccurrences(of: "-", with: "").lowercased())"
     UserDefaults.standard.set(token, forKey: tokenKey)
     isEnabled = true
-    LocalAgentMCPServer.shared.startIfNeeded()
+    LocalAgentAPIServer.shared.startIfNeeded()
     return token
   }
 
   static func enable() -> String {
     let token = ensureToken()
     isEnabled = true
-    LocalAgentMCPServer.shared.startIfNeeded()
+    LocalAgentAPIServer.shared.startIfNeeded()
     return token
   }
 }
 
-private struct LocalMCPTool {
+private struct LocalAgentTool {
   let name: String
   let description: String
   let properties: [String: Any]
   let required: [String]
 }
 
-final class LocalAgentMCPServer {
-  static let shared = LocalAgentMCPServer()
+final class LocalAgentAPIServer {
+  static let shared = LocalAgentAPIServer()
+  private static let maxRequestBytes = 1024 * 1024
 
-  private let queue = DispatchQueue(label: "com.omi.desktop.local-agent-mcp")
+  private let queue = DispatchQueue(label: "com.omi.desktop.local-agent-api")
   private var listener: NWListener?
 
   private init() {}
 
   func startIfNeeded() {
-    guard LocalAgentMCPSettings.isEnabled else { return }
+    guard LocalAgentAPISettings.isEnabled else { return }
     guard listener == nil else { return }
 
     do {
       let parameters = NWParameters.tcp
       parameters.allowLocalEndpointReuse = true
-      guard let port = NWEndpoint.Port(rawValue: LocalAgentMCPSettings.port) else {
-        log("LocalAgentMCPServer: invalid port \(LocalAgentMCPSettings.port)")
+      guard let port = NWEndpoint.Port(rawValue: LocalAgentAPISettings.port) else {
+        log("LocalAgentAPIServer: invalid port \(LocalAgentAPISettings.port)")
         return
       }
       guard let loopback = IPv4Address("127.0.0.1") else {
-        log("LocalAgentMCPServer: failed to resolve loopback address")
+        log("LocalAgentAPIServer: failed to resolve loopback address")
         return
       }
       parameters.requiredLocalEndpoint = .hostPort(host: .ipv4(loopback), port: port)
@@ -92,13 +97,13 @@ final class LocalAgentMCPServer {
         self?.handleConnection(connection)
       }
       listener.stateUpdateHandler = { state in
-        log("LocalAgentMCPServer: listener state changed to \(String(describing: state))")
+        log("LocalAgentAPIServer: listener state changed to \(String(describing: state))")
       }
       listener.start(queue: queue)
       self.listener = listener
-      log("LocalAgentMCPServer: listening on \(LocalAgentMCPSettings.serverURL)")
+      log("LocalAgentAPIServer: listening on \(LocalAgentAPISettings.serverURL)")
     } catch {
-      logError("LocalAgentMCPServer: failed to start listener", error: error)
+      logError("LocalAgentAPIServer: failed to start listener", error: error)
     }
   }
 
@@ -120,6 +125,11 @@ final class LocalAgentMCPServer {
       var accumulated = buffer
       if let data {
         accumulated.append(data)
+      }
+
+      if accumulated.count > Self.maxRequestBytes {
+        self.send(self.errorResponse("request_too_large", statusCode: 413), on: connection)
+        return
       }
 
       if let request = self.parseRequest(from: accumulated) {
@@ -164,6 +174,9 @@ final class LocalAgentMCPServer {
       headers[key] = value
       if key == "content-length" {
         contentLength = Int(value) ?? 0
+        if contentLength > Self.maxRequestBytes {
+          return nil
+        }
       }
     }
 
@@ -187,11 +200,25 @@ final class LocalAgentMCPServer {
       return jsonResponse([
         "ok": true,
         "name": "omi-desktop-local",
-        "mcp": LocalAgentMCPSettings.serverURL,
+        "api_version": 1,
+        "min_cli_version": "0.3.0",
+        "bundle_id": Bundle.main.bundleIdentifier ?? "unknown",
+        "local_api": LocalAgentAPISettings.serverURL,
+        "tool_endpoint": LocalAgentAPISettings.toolURL,
       ])
     }
 
-    guard request.method == "POST", request.path == "/mcp" || request.path == "/" else {
+    if request.method == "GET", request.path == "/v1/local/tools" {
+      guard authenticate(request.headers["authorization"]) else {
+        return errorResponse("invalid_or_missing_local_token", statusCode: 401)
+      }
+      return jsonResponse([
+        "ok": true,
+        "tools": Self.tools.map(toolJSON),
+      ])
+    }
+
+    guard request.method == "POST", request.path == "/v1/local/tool" else {
       return errorResponse("unsupported_route", statusCode: 404)
     }
 
@@ -201,92 +228,69 @@ final class LocalAgentMCPServer {
 
     guard
       let json = try? JSONSerialization.jsonObject(with: request.body) as? [String: Any],
-      let method = json["method"] as? String
+      let toolName = json["name"] as? String
     else {
-      return rpcError(id: nil, code: -32700, message: "Parse error")
+      return errorResponse("invalid_json_body", statusCode: 400)
     }
 
-    let id = json["id"]
-    let params = json["params"] as? [String: Any] ?? [:]
-
-    switch method {
-    case "initialize":
-      return rpcResult(id: id, result: [
-        "protocolVersion": "2025-03-26",
-        "capabilities": ["tools": [:]],
-        "serverInfo": ["name": "omi-desktop-local", "version": "1.0.0"],
-      ])
-
-    case "notifications/initialized":
-      return emptyResponse()
-
-    case "tools/list":
-      return rpcResult(id: id, result: ["tools": Self.tools.map(toolJSON)])
-
-    case "tools/call":
-      guard let toolName = params["name"] as? String else {
-        return rpcError(id: id, code: -32602, message: "Missing tool name")
-      }
-      var arguments = params["arguments"] as? [String: Any] ?? [:]
-      guard Self.tools.contains(where: { $0.name == toolName }) else {
-        return rpcError(id: id, code: -32601, message: "Unknown tool: \(toolName)")
-      }
-      if toolName == "get_screenshot" {
-        return await screenshotToolResponse(id: id, arguments: arguments)
-      }
-      if toolName == "execute_sql" {
-        arguments["read_only"] = true
-      }
-      let executorToolName = toolName == "search_screen_history" ? "semantic_search" : toolName
-      let result = await ChatToolExecutor.execute(
-        ToolCall(name: executorToolName, arguments: arguments, thoughtSignature: nil))
-      return rpcResult(id: id, result: ["content": [["type": "text", "text": result]]])
-
-    default:
-      return rpcError(id: id, code: -32601, message: "Method not found: \(method)")
+    var arguments = json["arguments"] as? [String: Any] ?? [:]
+    guard Self.tools.contains(where: { $0.name == toolName }) else {
+      return errorResponse("unknown_tool: \(toolName)", statusCode: 404)
     }
+    if toolName == "get_screenshot" {
+      return await screenshotToolResponse(toolName: toolName, arguments: arguments)
+    }
+    if toolName == "execute_sql" {
+      arguments["read_only"] = true
+    }
+    let executorToolName = toolName == "search_screen_history" ? "semantic_search" : toolName
+    let result = await ChatToolExecutor.execute(
+      ToolCall(name: executorToolName, arguments: arguments, thoughtSignature: nil))
+    return toolResponse(name: toolName, result: result)
   }
 
   private func authenticate(_ authorization: String?) -> Bool {
-    guard let token = LocalAgentMCPSettings.storedToken(), let authorization else {
+    guard let token = LocalAgentAPISettings.storedToken(), let authorization else {
       return false
     }
-    if authorization == token {
-      return true
-    }
-    if authorization == "Bearer \(token)" {
-      return true
-    }
-    return false
+    let supplied = authorization.hasPrefix("Bearer ") ? String(authorization.dropFirst(7)) : authorization
+    return constantTimeEquals(supplied, token)
   }
 
-  private func screenshotToolResponse(id: Any?, arguments: [String: Any]) async -> LocalHTTPResponse {
+  private func constantTimeEquals(_ lhs: String, _ rhs: String) -> Bool {
+    let left = Array(lhs.utf8)
+    let right = Array(rhs.utf8)
+    var diff = left.count ^ right.count
+    for index in 0..<max(left.count, right.count) {
+      let a = index < left.count ? left[index] : 0
+      let b = index < right.count ? right[index] : 0
+      diff |= Int(a ^ b)
+    }
+    return diff == 0
+  }
+
+  private func screenshotToolResponse(toolName: String, arguments: [String: Any]) async -> LocalHTTPResponse {
     guard let screenshotID = parseInt64(arguments["screenshot_id"] ?? arguments["id"]) else {
-      return rpcError(id: id, code: -32602, message: "screenshot_id is required")
+      return errorResponse("screenshot_id is required", statusCode: 400)
     }
 
     do {
       guard let screenshot = try await RewindDatabase.shared.getScreenshot(id: screenshotID) else {
-        return rpcError(id: id, code: -32602, message: "Screenshot not found: \(screenshotID)")
+        return errorResponse("screenshot_not_found: \(screenshotID)", statusCode: 404)
       }
 
       let imageData = try await loadScreenshotDataEnsuringStorage(for: screenshot)
-      let text = screenshotMetadataText(screenshot, imageByteCount: imageData.count)
-      return rpcResult(
-        id: id,
-        result: [
-          "content": [
-            ["type": "text", "text": text],
-            [
-              "type": "image",
-              "data": imageData.base64EncodedString(),
-              "mimeType": "image/jpeg",
-            ],
-          ]
-        ])
+      let metadata = screenshotMetadata(screenshot, imageByteCount: imageData.count)
+      return jsonResponse([
+        "ok": true,
+        "name": toolName,
+        "content_type": "image/jpeg",
+        "metadata": metadata,
+        "image_base64": imageData.base64EncodedString(),
+      ])
     } catch {
-      logError("LocalAgentMCPServer: get_screenshot failed", error: error)
-      return rpcError(id: id, code: -32603, message: "Failed to load screenshot: \(error.localizedDescription)")
+      logError("LocalAgentAPIServer: get_screenshot failed", error: error)
+      return errorResponse("failed_to_load_screenshot: \(error.localizedDescription)", statusCode: 500)
     }
   }
 
@@ -307,9 +311,9 @@ final class LocalAgentMCPServer {
     return nil
   }
 
-  private func screenshotMetadataText(_ screenshot: Screenshot, imageByteCount: Int) -> String {
+  private func screenshotMetadata(_ screenshot: Screenshot, imageByteCount: Int) -> [String: Any] {
     let formatter = ISO8601DateFormatter()
-    let metadata: [String: Any] = [
+    return [
       "screenshot_id": screenshot.id ?? NSNull(),
       "timestamp": formatter.string(from: screenshot.timestamp),
       "app_name": screenshot.appName,
@@ -320,32 +324,24 @@ final class LocalAgentMCPServer {
       "image_bytes": imageByteCount,
       "ocr_preview": String((screenshot.ocrText ?? "").prefix(600)),
     ]
-
-    guard
-      let data = try? JSONSerialization.data(withJSONObject: metadata, options: [.prettyPrinted, .sortedKeys]),
-      let json = String(data: data, encoding: .utf8)
-    else {
-      return "Screenshot \(screenshot.id ?? -1) from \(screenshot.appName)"
-    }
-    return json
   }
 
-  private static let tools: [LocalMCPTool] = [
-    LocalMCPTool(
+  private static let tools: [LocalAgentTool] = [
+    LocalAgentTool(
       name: "get_local_status",
       description:
         "Report whether local Omi Desktop context is available, including screen-history counts, indexed screenshot counts, and latest capture time. Call this before local screen-history or SQL work.",
       properties: [:],
       required: []
     ),
-    LocalMCPTool(
+    LocalAgentTool(
       name: "execute_sql",
       description:
         "Run read-only SQL on the local Omi Desktop SQLite database. Use SELECT or WITH queries for structured questions about screenshots, transcriptions, tasks, memories, indexed files, goals, and activity.",
       properties: ["query": ["type": "string", "description": "SQL query to execute against the local Omi database"]],
       required: ["query"]
     ),
-    LocalMCPTool(
+    LocalAgentTool(
       name: "search_screen_history",
       description:
         "Search local Rewind screen history using OCR and semantic similarity. Use for fuzzy questions about what the user saw or worked on. Results include screenshot IDs that can be opened with get_screenshot.",
@@ -356,7 +352,7 @@ final class LocalAgentMCPServer {
       ],
       required: ["query"]
     ),
-    LocalMCPTool(
+    LocalAgentTool(
       name: "semantic_search",
       description:
         "Compatibility alias for search_screen_history.",
@@ -367,7 +363,7 @@ final class LocalAgentMCPServer {
       ],
       required: ["query"]
     ),
-    LocalMCPTool(
+    LocalAgentTool(
       name: "get_screenshot",
       description:
         "Fetch a local Rewind screenshot image by screenshot_id. Use screenshot IDs returned by search_screen_history or execute_sql.",
@@ -376,13 +372,13 @@ final class LocalAgentMCPServer {
       ],
       required: ["screenshot_id"]
     ),
-    LocalMCPTool(
+    LocalAgentTool(
       name: "get_daily_recap",
       description: "Get a formatted local activity recap for today, yesterday, or a recent range.",
       properties: ["days_ago": ["type": "number", "description": "0=today, 1=yesterday, 7=past week"]],
       required: []
     ),
-    LocalMCPTool(
+    LocalAgentTool(
       name: "search_tasks",
       description: "Semantic search over local Omi tasks and staged tasks.",
       properties: [
@@ -391,13 +387,13 @@ final class LocalAgentMCPServer {
       ],
       required: ["query"]
     ),
-    LocalMCPTool(
+    LocalAgentTool(
       name: "complete_task",
-      description: "Toggle a task completion state. Find the task id first with execute_sql or search_tasks.",
+      description: "Mark a task complete. This is idempotent; already-completed tasks stay completed. Find the task id first with execute_sql or search_tasks.",
       properties: ["task_id": ["type": "string", "description": "Task backendId"]],
       required: ["task_id"]
     ),
-    LocalMCPTool(
+    LocalAgentTool(
       name: "delete_task",
       description: "Delete a task. Find the task id first with execute_sql or search_tasks.",
       properties: ["task_id": ["type": "string", "description": "Task backendId"]],
@@ -405,7 +401,7 @@ final class LocalAgentMCPServer {
     ),
   ]
 
-  private func toolJSON(_ tool: LocalMCPTool) -> [String: Any] {
+  private func toolJSON(_ tool: LocalAgentTool) -> [String: Any] {
     [
       "name": tool.name,
       "description": tool.description,
@@ -422,20 +418,16 @@ final class LocalAgentMCPServer {
     ]
   }
 
-  private func rpcResult(id: Any?, result: Any) -> LocalHTTPResponse {
-    jsonResponse(["jsonrpc": "2.0", "id": id ?? NSNull(), "result": result])
-  }
-
-  private func rpcError(id: Any?, code: Int, message: String) -> LocalHTTPResponse {
-    jsonResponse([
-      "jsonrpc": "2.0",
-      "id": id ?? NSNull(),
-      "error": ["code": code, "message": message],
+  private func toolResponse(name: String, result: String) -> LocalHTTPResponse {
+    if result.trimmingCharacters(in: .whitespacesAndNewlines).hasPrefix("Error:") {
+      return errorResponse(result, statusCode: 400)
+    }
+    return jsonResponse([
+      "ok": true,
+      "name": name,
+      "content_type": "text/plain",
+      "result": result,
     ])
-  }
-
-  private func emptyResponse() -> LocalHTTPResponse {
-    LocalHTTPResponse(statusCode: 202, headers: ["Content-Type": "application/json"], body: Data())
   }
 
   private func jsonResponse(_ payload: Any, statusCode: Int = 200) -> LocalHTTPResponse {
@@ -464,6 +456,7 @@ final class LocalAgentMCPServer {
     case 400: statusText = "Bad Request"
     case 401: statusText = "Unauthorized"
     case 404: statusText = "Not Found"
+    case 413: statusText = "Payload Too Large"
     default: statusText = "Internal Server Error"
     }
 

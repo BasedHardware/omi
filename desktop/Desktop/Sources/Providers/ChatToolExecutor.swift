@@ -346,6 +346,7 @@ class ChatToolExecutor {
           "mode": "local_omi_desktop",
           "database_available": false,
           "screen_history_available": false,
+          "local_affordances": \(localAffordancesJSON()),
           "message": "Omi Desktop is running, but the local database is not available yet."
         }
         """
@@ -363,6 +364,7 @@ class ChatToolExecutor {
         "indexed_screenshot_count": stats.indexed,
         "oldest_capture_at": stats.oldestDate.map { formatter.string(from: $0) } ?? NSNull(),
         "latest_capture_at": stats.newestDate.map { formatter.string(from: $0) } ?? NSNull(),
+        "local_affordances": localAffordances,
         "recommended_first_tools": [
           "search_screen_history for fuzzy Rewind/OCR questions",
           "get_screenshot after a search result returns a screenshot_id",
@@ -385,10 +387,32 @@ class ChatToolExecutor {
           "mode": "local_omi_desktop",
           "database_available": false,
           "screen_history_available": false,
+          "local_affordances": \(localAffordancesJSON()),
           "message": "Failed to read local Omi status: \(error.localizedDescription)"
         }
         """
     }
+  }
+
+  private static let localAffordances = [
+    "Rewind screen history and OCR search",
+    "raw screenshot image retrieval by screenshot_id",
+    "local transcription and conversation tables",
+    "read-only SQL over the local Omi Desktop database",
+    "daily activity recaps",
+    "indexed files and app/window activity",
+    "local goals and progress data",
+    "local task search, completion, and deletion",
+  ]
+
+  private static func localAffordancesJSON() -> String {
+    guard
+      let data = try? JSONSerialization.data(withJSONObject: localAffordances, options: [.sortedKeys]),
+      let json = String(data: data, encoding: .utf8)
+    else {
+      return "[]"
+    }
+    return json
   }
 
   // MARK: - Daily Recap
@@ -764,7 +788,7 @@ class ChatToolExecutor {
 
   // MARK: - Task Tools
 
-  /// Toggle a task's completion status via TasksStore (handles local + API sync)
+  /// Mark a task completed via TasksStore (handles local + API sync)
   private static func executeCompleteTask(_ args: [String: Any]) async -> String {
     guard let taskId = args["task_id"] as? String, !taskId.isEmpty else {
       return "Error: task_id is required"
@@ -780,12 +804,15 @@ class ChatToolExecutor {
         return "Error: task '\(task.description)' has been deleted"
       }
 
-      let wasCompleted = task.completed
+      if task.completed {
+        log("Tool complete_task: '\(task.description)' was already completed")
+        return "OK: task '\(task.description)' is already completed"
+      }
+
       await TasksStore.shared.toggleTask(task)
 
-      let newState = wasCompleted ? "incomplete" : "completed"
-      log("Tool complete_task: toggled '\(task.description)' to \(newState)")
-      return "OK: task '\(task.description)' marked as \(newState)"
+      log("Tool complete_task: marked '\(task.description)' as completed")
+      return "OK: task '\(task.description)' marked as completed"
     } catch {
       logError("Tool complete_task failed", error: error)
       return "Error: \(error.localizedDescription)"

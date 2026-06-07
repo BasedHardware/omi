@@ -50,7 +50,7 @@ enum MemoryExportDestination: String, CaseIterable, Identifiable, Sendable {
     case .chatgpt: return "Live MCP or memory pack"
     case .claude: return "Live MCP or memory pack"
     case .gemini: return "Prompt + memory pack"
-    case .agents: return "Connect through MCP"
+    case .agents: return "Hosted MCP + local CLI"
     case .claudeCode: return "Connect via MCP"
     case .codex: return "Connect via MCP"
     }
@@ -63,7 +63,7 @@ enum MemoryExportDestination: String, CaseIterable, Identifiable, Sendable {
     case .chatgpt: return "Connect over MCP so ChatGPT reads your memories live, or copy a memory pack."
     case .claude: return "Connect over MCP so Claude reads your memories live, or copy a memory pack."
     case .gemini: return "Copy the prompt and memory pack, then open Gemini."
-    case .agents: return "Connect your favorite agents to Omi through MCP."
+    case .agents: return "Connect your favorite agents to Omi with MCP and the local CLI."
     case .claudeCode: return "Add Omi as an MCP server so Claude Code always reads your memories."
     case .codex: return "Add Omi as an MCP server so Codex always reads your memories."
     }
@@ -315,7 +315,7 @@ struct AgentConnectionTestResult: Sendable {
   let localToolCount: Int
 
   var summary: String {
-    "Omi is reachable: hosted memories returned \(hostedMemoryCount), and local Desktop returned \(localToolCount) tools."
+    "Omi is reachable: hosted memories returned \(hostedMemoryCount), and local Desktop exposes \(localToolCount) local CLI tools."
   }
 }
 
@@ -366,7 +366,7 @@ actor MemoryExportService {
     case .obsidian:
       isConfigured = !(defaults.string(forKey: destination.obsidianVaultPathKey) ?? "").isEmpty
     case .agents:
-      isConfigured = hasStoredMCPKey && LocalAgentMCPSettings.isEnabled && LocalAgentMCPSettings.storedToken() != nil
+      isConfigured = hasStoredMCPKey && LocalAgentAPISettings.isEnabled && LocalAgentAPISettings.storedToken() != nil
     case .claudeCode, .codex:
       isConfigured = hasStoredMCPKey
     case .notion, .chatgpt, .claude, .gemini:
@@ -429,7 +429,7 @@ actor MemoryExportService {
 
   func testAgentConnections(hostedKey: String, localToken: String) async throws -> AgentConnectionTestResult {
     async let hostedCount = testHostedMCPMemoryCount(key: hostedKey)
-    async let localCount = testLocalMCPToolCount(token: localToken)
+    async let localCount = testLocalAgentToolCount(token: localToken)
     return try await AgentConnectionTestResult(
       hostedMemoryCount: hostedCount,
       localToolCount: localCount
@@ -485,38 +485,28 @@ actor MemoryExportService {
     return memories.count
   }
 
-  private func testLocalMCPToolCount(token: String) async throws -> Int {
-    guard let url = URL(string: LocalAgentMCPSettings.serverURL) else {
-      throw MemoryExportError.requestFailed("Local MCP URL is invalid.")
+  private func testLocalAgentToolCount(token: String) async throws -> Int {
+    guard let url = URL(string: "\(LocalAgentAPISettings.serverURL)/v1/local/tools") else {
+      throw MemoryExportError.requestFailed("Local Omi Desktop URL is invalid.")
     }
 
-    let requestBody: [String: Any] = [
-      "jsonrpc": "2.0",
-      "id": 1,
-      "method": "tools/list",
-      "params": [:],
-    ]
-
     var request = URLRequest(url: url)
-    request.httpMethod = "POST"
-    request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+    request.httpMethod = "GET"
     request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-    request.httpBody = try JSONSerialization.data(withJSONObject: requestBody)
 
     let (data, response) = try await URLSession.shared.data(for: request)
     guard let httpResponse = response as? HTTPURLResponse else {
-      throw MemoryExportError.requestFailed("Local MCP returned an invalid response.")
+      throw MemoryExportError.requestFailed("Local Omi Desktop returned an invalid response.")
     }
     guard (200...299).contains(httpResponse.statusCode) else {
-      throw MemoryExportError.requestFailed("Local MCP returned HTTP \(httpResponse.statusCode).")
+      throw MemoryExportError.requestFailed("Local Omi Desktop returned HTTP \(httpResponse.statusCode).")
     }
 
     guard
-      let rpc = try JSONSerialization.jsonObject(with: data) as? [String: Any],
-      let result = rpc["result"] as? [String: Any],
-      let tools = result["tools"] as? [Any]
+      let payload = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+      let tools = payload["tools"] as? [Any]
     else {
-      throw MemoryExportError.requestFailed("Local MCP did not return tools.")
+      throw MemoryExportError.requestFailed("Local Omi Desktop did not return tools.")
     }
 
     return tools.count
@@ -526,7 +516,7 @@ actor MemoryExportService {
     """
     ---
     name: omi
-    description: Use Omi memories, conversations, and same-Mac context through hosted and local MCP.
+    description: Use Omi memories, conversations, and same-Mac context through hosted MCP and the Omi local CLI.
     ---
 
     # Omi Agent Skill
@@ -538,16 +528,18 @@ actor MemoryExportService {
     - Start with hosted `get_user_profile` when it is available for a high-level user summary. Some deployments do not expose it.
     - Use hosted `search_memories` or `get_memories` for facts, preferences, habits, relationships, projects, and goals.
     - Use hosted `search_conversations` for synced conversations, meetings, and "when did this happen?" questions.
-    - Call local `get_local_status` before same-Mac context work. It tells you whether local screen history exists and whether screenshots are indexed.
-    - Use local `search_screen_history` for fuzzy questions about Rewind/OCR screen history. Use `get_screenshot` only after a search or SQL result returns a screenshot ID.
-    - Use local `execute_sql` for read-only counts, filters, exact task lookup, local transcriptions, action items, and database questions. Use local `get_daily_recap` for "what did I do today/yesterday/this week?"
+    - Run `omi --json local tools` to discover every local Desktop affordance and `omi --json local status` before same-Mac context work. Status tells you whether local screen history exists and whether screenshots are indexed.
+    - Use `omi --json local search-screen` for fuzzy questions about Rewind/OCR screen history. Use `omi --json local screenshot` only after a search or SQL result returns a screenshot ID.
+    - Use `omi --json local sql` for read-only counts, filters, exact task lookup, local transcriptions, action items, indexed files, goals, and database questions. Use `omi --json local recap` for "what did I do today/yesterday/this week?"
+    - Use `omi --json local task search`, `omi --json local task complete`, and `omi --json local task delete --yes` for same-Mac task work.
+    - Use `omi --json local call <tool> --args-json '{...}'` only when a local affordance is not covered by a friendly command.
 
     ## Hosted vs Local Routing
 
     - Durable user facts: start with hosted `get_user_profile` when available, then use `search_memories` or `get_memories` for task-specific evidence.
     - Meetings, calls, and remembered events: hosted `search_conversations` first; use local transcription tables when the question is about recent same-Mac audio or unsynced local history.
-    - Rewind, screenshots, OCR, app/window history, indexed files, and daily recaps: same-Mac Omi Desktop tools first. Hosted MCP does not expose raw local screenshots or local-only screen history.
-    - Tasks and staged actions: local `execute_sql` plus task tools when available, because task state may be same-Mac and operational.
+    - Rewind, screenshots, OCR, app/window history, indexed files, and daily recaps: same-Mac Omi CLI first. Hosted MCP does not expose raw local screenshots or local-only screen history.
+    - Tasks and staged actions: local CLI first, because task state may be same-Mac and operational.
     - Memory writes/deletes: hosted MCP only, and only after explicit user intent.
 
     ## Write Discipline
@@ -561,8 +553,9 @@ actor MemoryExportService {
     Hosted MCP endpoint: \(MemoryExportDestination.mcpServerURL)
     Authorization header: Bearer <omi_mcp_key>
 
-    Local Omi Desktop MCP endpoint: http://127.0.0.1:47778/mcp
-    Authorization header: Bearer <omi_local_key>
+    Local Omi Desktop CLI:
+    - Install or update `omi-cli`.
+    - Configure local access with `omi local configure --url <local_api_url> --token <omi_local_key>`.
     """
   }
 
@@ -574,7 +567,7 @@ actor MemoryExportService {
     """
     Set up Omi for this agent.
 
-    Add both Omi MCP servers.
+    Connect hosted Omi through MCP, then configure the Omi local CLI for same-Mac context.
 
     Hosted Omi MCP gives this agent synced memories, conversations, and profile context from your Omi account.
 
@@ -584,22 +577,25 @@ actor MemoryExportService {
     Hosted authorization header:
     Authorization: Bearer \(hostedKey)
 
-    Local Omi Desktop MCP gives this agent same-Mac screen history, screenshots, transcriptions, daily recaps, indexed files, and task context while Omi Desktop is running.
+    Local Omi Desktop access uses the `omi` CLI. It gives this agent same-Mac screen history, screenshot image retrieval, local transcriptions, read-only SQL, daily recaps, indexed files, goals, app/window activity, and task search/complete/delete while Omi Desktop is running.
 
-    Local server URL:
+    Local Omi Desktop URL:
     \(localURL)
 
-    Local authorization header:
-    Authorization: Bearer \(localToken)
+    Local Omi Desktop token:
+    \(localToken)
 
-    Transport:
-    Streamable HTTP / MCP over HTTP
+    Configure the local CLI:
+    1. If `omi` is not installed, install or update it from the existing public Omi CLI package: `pipx install omi-cli` or `pipx upgrade omi-cli`.
+    2. Run: `omi local configure --url \(localURL) --token \(localToken)`
+    3. Test it with: `omi --json local status`
+    4. Discover local-only commands with: `omi --json local tools`
 
     Then save the guide below for later. If this agent supports skills, add it as a skill named `omi`; otherwise save it wherever this agent keeps durable user or project instructions.
 
     \(omiAgentSkillText)
 
-    After setup, test both connections. On hosted Omi, list tools and call `get_user_profile` if available; otherwise call `get_memories` with `limit: 5`. On local Omi Desktop, list tools and call `get_local_status`.
+    After setup, test hosted Omi by listing MCP tools and calling `get_user_profile` if available; otherwise call `get_memories` with `limit: 5`. Test local Omi with `omi --json local status` and `omi --json local tools`.
     """
   }
 

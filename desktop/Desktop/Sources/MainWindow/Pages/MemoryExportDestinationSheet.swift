@@ -159,7 +159,7 @@ final class MemoryExportDestinationSheetModel: ObservableObject {
 
     do {
       let key = try await MemoryExportService.shared.createNewMCPKey()
-      _ = LocalAgentMCPSettings.createNewToken()
+      _ = LocalAgentAPISettings.createNewToken()
       mcpKey = key
       statusMessage = "New key created. Copy the prompt again when you're ready."
     } catch {
@@ -175,7 +175,7 @@ final class MemoryExportDestinationSheetModel: ObservableObject {
 
     do {
       let key = try await MemoryExportService.shared.ensureMCPKey()
-      let localToken = LocalAgentMCPSettings.enable()
+      let localToken = LocalAgentAPISettings.enable()
       mcpKey = key
       let result = try await MemoryExportService.shared.testAgentConnections(
         hostedKey: key,
@@ -200,12 +200,12 @@ final class MemoryExportDestinationSheetModel: ObservableObject {
 
     do {
       let key = try await MemoryExportService.shared.ensureMCPKey()
-      let localToken = LocalAgentMCPSettings.enable()
+      let localToken = LocalAgentAPISettings.enable()
       mcpKey = key
       copyToPasteboard(
         MemoryExportService.omiAgentSetupPrompt(
           hostedKey: key,
-          localURL: LocalAgentMCPSettings.serverURL,
+          localURL: LocalAgentAPISettings.serverURL,
           localToken: localToken),
         label: "Agent prompt")
       statusMessage =
@@ -482,10 +482,10 @@ struct MemoryExportDestinationSheet: View {
       VStack(alignment: .leading, spacing: 8) {
         agentSetupBullet("Omi creates private hosted and local keys before copying the prompt.")
         agentSetupBullet(
-          "Hosted access covers memories and conversations. Local access adds same-Mac screen history, screenshots, SQL, and daily recaps."
+          "Hosted MCP covers memories and conversations. The local CLI adds screen history, screenshots, SQL, daily recaps, indexed files, and tasks."
         )
         agentSetupBullet(
-          "The prompt includes the Omi guide, so your agent knows what to use and what to test."
+          "The prompt includes the Omi guide, so your agent knows what to install, configure, and test."
         )
       }
 
@@ -533,7 +533,7 @@ struct MemoryExportDestinationSheet: View {
         Text("Let your agent do it")
           .scaledFont(size: 15, weight: .semibold)
           .foregroundColor(OmiColors.textPrimary)
-        Text("MCP")
+        Text("MCP + CLI")
           .scaledFont(size: 9, weight: .bold)
           .foregroundColor(OmiColors.purplePrimary)
           .padding(.horizontal, 7)
@@ -541,7 +541,7 @@ struct MemoryExportDestinationSheet: View {
           .background(Capsule().fill(OmiColors.purplePrimary.opacity(0.15)))
       }
       Text(
-        "Copy one prompt into any MCP-capable agent. It connects Omi, saves the guide, and checks access."
+        "Copy one prompt into your agent. It connects hosted Omi through MCP, configures local Omi through the CLI, saves the guide, and checks access."
       )
       .scaledFont(size: 12)
       .foregroundColor(OmiColors.textTertiary)
