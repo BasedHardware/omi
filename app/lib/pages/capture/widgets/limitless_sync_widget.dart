@@ -7,6 +7,7 @@ import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/sync_provider.dart';
 import 'package:omi/services/wals.dart';
 import 'package:omi/utils/l10n_extensions.dart';
+import 'package:omi/utils/sync_confirmation.dart';
 
 class LimitlessSyncCardWidget extends StatelessWidget {
   const LimitlessSyncCardWidget({super.key});
@@ -22,9 +23,8 @@ class LimitlessSyncCardWidget extends StatelessWidget {
         }
 
         // Check if there are pending flash pages
-        final pendingFlashPages = syncProvider.allWals
-            .where((w) => w.storage == WalStorage.flashPage && w.status == WalStatus.miss)
-            .toList();
+        final pendingFlashPages =
+            syncProvider.allWals.where((w) => w.storage == WalStorage.flashPage && w.status == WalStatus.miss).toList();
 
         if (pendingFlashPages.isEmpty && !syncProvider.isSyncing) {
           return const SizedBox();
@@ -55,7 +55,9 @@ class LimitlessSyncCardWidget extends StatelessWidget {
                   ),
                   if (!isSyncing)
                     ElevatedButton(
-                      onPressed: () => syncProvider.syncWals(),
+                      onPressed: () async {
+                        if (await confirmSyncForCustomStt(context)) syncProvider.syncWals();
+                      },
                       style: ElevatedButton.styleFrom(
                         backgroundColor: Colors.deepPurple,
                         foregroundColor: Colors.white,
