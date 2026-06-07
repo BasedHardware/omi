@@ -6,7 +6,7 @@ from enum import Enum
 from typing import List, Optional
 
 from fastapi import APIRouter, HTTPException, Depends, Query
-from pydantic import BaseModel, Field, ValidationError
+from pydantic import BaseModel, Field, ValidationError, field_validator
 
 import database.folders as folders_db
 import database.memories as memories_db
@@ -107,17 +107,89 @@ def delete_key(key_id: str, uid: str = Depends(get_current_user_id)):
 class CleanerMemory(BaseModel):
     # Core fields (aligned with MemoryResponse)
     id: str
-    content: str
-    category: MemoryCategory
+    content: str = ''
+    category: MemoryCategory = MemoryCategory.interesting
     visibility: Optional[str] = 'private'
-    tags: List[str] = []
-    created_at: datetime
-    updated_at: datetime
-    manually_added: bool
+    tags: List[str] = Field(default_factory=list)
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+    manually_added: bool = False
     scoring: Optional[str] = None
-    reviewed: bool
+    reviewed: bool = False
     user_review: Optional[bool] = None
-    edited: bool
+    edited: bool = False
+
+    @field_validator('id', mode='before')
+    def coerce_id(cls, value):
+        if value is None:
+            return ''
+        return str(value)
+
+    @field_validator('content', mode='before')
+    def coerce_content(cls, value):
+        if value is None:
+            return ''
+        return str(value)
+
+    @field_validator('category', mode='before')
+    def coerce_category(cls, value):
+        if isinstance(value, MemoryCategory):
+            return value
+        try:
+            return MemoryCategory(value)
+        except (TypeError, ValueError):
+            return MemoryCategory.interesting
+
+    @field_validator('visibility', mode='before')
+    def coerce_visibility(cls, value):
+        return value if value in ['public', 'private'] else 'private'
+
+    @field_validator('tags', mode='before')
+    def coerce_tags(cls, value):
+        if not isinstance(value, list):
+            return []
+        return [str(tag) for tag in value if tag is not None]
+
+    @field_validator('scoring', mode='before')
+    def coerce_scoring(cls, value):
+        if value is None:
+            return None
+        return str(value)
+
+    @field_validator('created_at', 'updated_at', mode='before')
+    def coerce_datetime(cls, value):
+        if value in [None, '']:
+            return None
+        if isinstance(value, datetime):
+            return value
+        if isinstance(value, str):
+            try:
+                return datetime.fromisoformat(value.replace('Z', '+00:00'))
+            except ValueError:
+                return None
+        if isinstance(value, (int, float)) and not isinstance(value, bool):
+            return value
+        return None
+
+    @field_validator('user_review', mode='before')
+    def coerce_user_review(cls, value):
+        if isinstance(value, bool):
+            return value
+        if value in [None, '']:
+            return None
+        if isinstance(value, str):
+            return value.lower() in ['true', '1', 'yes']
+        return bool(value)
+
+    @field_validator('manually_added', 'reviewed', 'edited', mode='before')
+    def coerce_bool(cls, value):
+        if isinstance(value, bool):
+            return value
+        if value in [None, '']:
+            return False
+        if isinstance(value, str):
+            return value.lower() in ['true', '1', 'yes']
+        return bool(value)
 
 
 class CreateMemoryRequest(BaseModel):
@@ -176,8 +248,11 @@ def get_memories(
     # hardening already applied to GET /v3/memories.
     valid_memories = []
     for memory in memories:
+        if not isinstance(memory, dict) or not memory.get('id'):
+            logger.warning('Skipping malformed memory in Developer API memory list')
+            continue
         if memory.get('is_locked', False):
-            content = memory.get('content', '')
+            content = str(memory.get('content') or '')
             memory['content'] = (content[:70] + '...') if len(content) > 70 else content
         try:
             valid_memories.append(CleanerMemory.model_validate(memory))
