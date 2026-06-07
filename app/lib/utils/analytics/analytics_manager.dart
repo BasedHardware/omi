@@ -33,8 +33,6 @@ class AnalyticsManager {
     final adapter = _adapter;
     if (adapter == null) return;
     await PlatformService.executeIfSupportedAsync(PlatformService.isAnalyticsSupported, adapter.init);
-    // Hydrate the person-property dedup cache so the first $set call after
-    // launch can skip when the value hasn't changed across sessions.
     await _loadPersonPropertyCache();
   }
 
@@ -91,13 +89,6 @@ class AnalyticsManager {
           if (c != null) coerced[k] = c;
         });
         if (coerced.isEmpty) return;
-        // Dedup against the last value we sent for this user — every entry in
-        // `properties` would otherwise become a billable `$set` event on the
-        // PostHog side. The high-volume callsites (subscription tier refresh
-        // on every recording, language change, app enable/disable count) fire
-        // these on every state touch even when the value hasn't actually
-        // changed; for those the SDK was sending the same `$set` over and
-        // over for no analytic benefit.
         final fresh = <String, Object>{};
         coerced.forEach((k, v) {
           final cacheKey = '$uid:$k';
@@ -105,23 +96,11 @@ class AnalyticsManager {
           if (_lastSentPersonProperty[cacheKey] == serialized) return;
           fresh[k] = v;
           _lastSentPersonProperty[cacheKey] = serialized;
-          // Fire-and-forget persistence so dedup survives cold launch. A
-          // failure here just means we re-send the property once on next
-          // launch, which is harmless.
           _persistPersonPropertyCacheEntry(cacheKey, serialized);
         });
         if (fresh.isEmpty) return;
         adapter.identify(userId: uid, userProperties: fresh);
       });
-
-  // ---- $set dedup cache ----
-  //
-  // PostHog charges per ingested event, and the `$set` event the SDK fires for
-  // every `identify(userId, userProperties)` call is a billable event. We
-  // store the last value we sent for every `<uid>:<property>` pair so a
-  // subsequent call with the same value is a no-op (no SDK call, no event).
-  // The cache is hydrated from SharedPreferences at init() so dedup survives
-  // app restart; writes back are fire-and-forget.
 
   static const String _personPropertyCachePrefix = '_ph_lastset_';
   static final Map<String, String> _lastSentPersonProperty = {};
@@ -137,9 +116,7 @@ class AnalyticsManager {
         if (v == null) continue;
         _lastSentPersonProperty[key.substring(_personPropertyCachePrefix.length)] = v;
       }
-    } catch (_) {
-      // Best-effort hydration.
-    }
+    } catch (_) {}
     _personPropertyCacheLoaded = true;
   }
 
@@ -147,14 +124,10 @@ class AnalyticsManager {
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString('$_personPropertyCachePrefix$cacheKey', value);
-    } catch (_) {
-      // Persistence is best-effort.
-    }
+    } catch (_) {}
   }
 
-  // Type-tagged serialization so dedup distinguishes `true` from `"true"`,
-  // `1` from `"1"`, etc. — protects against the SDK round-tripping booleans
-  // through string properties on some paths.
+  // Tagged so the bool `true` doesn't collide with the string `"true"`.
   static String _serializePersonPropertyValue(Object value) {
     if (value is bool) return 'b:$value';
     if (value is num) return 'n:$value';
@@ -162,9 +135,6 @@ class AnalyticsManager {
     return 'x:${value.runtimeType}:$value';
   }
 
-  /// Forget the dedup cache so the next call to [_setUserPropertiesBatch]
-  /// re-sends everything. Called on sign-out and user migration where the
-  /// downstream identity changes.
   static Future<void> _clearPersonPropertyCache() async {
     _lastSentPersonProperty.clear();
     _personPropertyCacheLoaded = false;
@@ -192,9 +162,6 @@ class AnalyticsManager {
       if (adapter == null) return;
       adapter.disable();
       adapter.reset();
-      // After reset the SDK forgets its distinct_id, so any cached
-      // last-sent values are stale — wipe them so the next user gets a
-      // fresh full identify on sign-in.
       _clearPersonPropertyCache();
     });
   }
@@ -215,8 +182,6 @@ class AnalyticsManager {
     PlatformService.executeIfSupported(PlatformService.isAnalyticsSupported, () {
       final adapter = _adapter;
       if (adapter == null) return;
-      // Distinct_id is changing — drop the dedup cache so the new uid starts
-      // with a clean slate and gets the full property set on next identify.
       _clearPersonPropertyCache();
       adapter.alias(newUserId: newUid);
       adapter.identify(userId: newUid);
