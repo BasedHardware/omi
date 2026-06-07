@@ -562,7 +562,7 @@ def extract_action_items(
                 'response_language': response_language,
                 'started_at_local': started_at_local.replace(tzinfo=None).isoformat(),
                 'current_time_local': current_time_local.replace(tzinfo=None).isoformat(),
-                'tz': tz,
+                'tz': tz or 'UTC',
                 'existing_items_context': existing_items_context,
             }
         )
