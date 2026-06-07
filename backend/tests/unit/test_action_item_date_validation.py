@@ -629,3 +629,20 @@ class TestActionItemTimezoneConversion:
         assert 'started_at_local' in invoke_args and 'current_time_local' in invoke_args
         ct = invoke_args['current_time_local']
         assert 'Z' not in ct and '+' not in ct  # naive local string, no offset/suffix
+
+    def test_aware_datetime_is_normalized_to_utc(self):
+        # Regression guard for the else-branch: if the LLM ignores the prompt and emits a tz-aware
+        # value, it must be normalized to UTC (not shifted again, not trusted at a non-UTC offset).
+        base = datetime.now(timezone.utc) + timedelta(days=1)
+        # (a) already-UTC aware value stays UTC unchanged
+        aware_utc = base.replace(hour=4, minute=30, second=0, microsecond=0)
+        r1, _ = self._run(aware_utc, tz="Asia/Kolkata")
+        d1 = r1[0].due_at
+        assert d1 is not None and d1.utcoffset() == timedelta(0)
+        assert (d1.hour, d1.minute) == (4, 30)
+        # (b) aware +05:30 value is converted to UTC, not trusted as-is
+        aware_ist = base.replace(hour=10, minute=0, second=0, microsecond=0, tzinfo=ZoneInfo("Asia/Kolkata"))
+        r2, _ = self._run(aware_ist, tz="UTC")
+        d2 = r2[0].due_at
+        assert d2 is not None and d2.utcoffset() == timedelta(0)
+        assert (d2.hour, d2.minute) == (4, 30)  # 10:00 IST -> 04:30 UTC
