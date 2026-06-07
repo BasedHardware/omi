@@ -1101,6 +1101,9 @@ async def _stream_handler(
         MAX_RETRIES_PER_REQUEST = 3
         pending_conversation_requests: Dict[str, dict] = {}
         pending_request_event = asyncio.Event()
+        # Speaker sample (type-105) requests buffered while pusher is disconnected and replayed on
+        # reconnect — mirrors pending_conversation_requests so samples aren't silently dropped (#6060).
+        pending_speaker_sample_requests: Dict[str, dict] = {}
 
         def transcript_send(segments):
             nonlocal segment_buffers
@@ -1498,6 +1501,18 @@ async def _stream_handler(
                     for cid in list(pending_conversation_requests.keys()):
                         pending_conversation_requests[cid]['sent_at'] = time.time()
                         await request_conversation_processing(cid)
+                # Re-send any pending speaker sample requests after reconnect (#6060). Remove each
+                # entry only after a confirmed send; on failure send_speaker_sample_request re-buffers.
+                if pending_speaker_sample_requests:
+                    logger.info(
+                        f"Reconnected to pusher, re-sending {len(pending_speaker_sample_requests)} pending speaker sample requests {uid} {session_id}"
+                    )
+                    for key in list(pending_speaker_sample_requests.keys()):
+                        req = pending_speaker_sample_requests.get(key)
+                        if not req:
+                            continue
+                        if await send_speaker_sample_request(req['person_id'], req['conv_id'], req['segment_ids']):
+                            pending_speaker_sample_requests.pop(key, None)
             except PusherCircuitBreakerOpen:
                 raise  # Let caller handle circuit breaker
             except Exception as e:
@@ -1520,15 +1535,52 @@ async def _stream_handler(
         def is_degraded():
             return reconnect_state in (PusherReconnectState.DEGRADED, PusherReconnectState.HALF_OPEN_PROBE)
 
+        def _buffer_speaker_sample_request(person_id: str, conv_id: str, segment_ids: List[str]):
+            """Buffer a type-105 request so it survives a pusher reconnect (#6060).
+
+            Keyed by person:conversation. On a duplicate key the segment_ids are merged (order
+            preserved, de-duplicated) so an outage window with multiple assignments does not discard
+            segments. Capped at MAX_PENDING_REQUESTS, dropping the oldest by sent_at.
+            """
+            key = f"{person_id}:{conv_id}"
+            existing = pending_speaker_sample_requests.get(key)
+            if existing:
+                existing['segment_ids'] = list(dict.fromkeys([*existing['segment_ids'], *segment_ids]))
+                existing['sent_at'] = time.time()
+                return
+            if len(pending_speaker_sample_requests) >= MAX_PENDING_REQUESTS:
+                oldest = min(
+                    pending_speaker_sample_requests,
+                    key=lambda k: pending_speaker_sample_requests[k]['sent_at'],
+                )
+                logger.info(
+                    f"Too many pending speaker sample requests, dropping {oldest} to add {key} {uid} {session_id}"
+                )
+                del pending_speaker_sample_requests[oldest]
+            pending_speaker_sample_requests[key] = {
+                'person_id': person_id,
+                'conv_id': conv_id,
+                'segment_ids': list(segment_ids),
+                'sent_at': time.time(),
+            }
+
         async def send_speaker_sample_request(
             person_id: str,
             conv_id: str,
             segment_ids: List[str],
-        ):
-            """Send speaker sample extraction request to pusher with segment IDs."""
+        ) -> bool:
+            """Send a speaker sample extraction request (type 105) to pusher with segment IDs.
+
+            Returns True only if the frame was sent. When pusher is disconnected, or the send fails,
+            the request is buffered and replayed on reconnect instead of being silently dropped (#6060).
+            """
             nonlocal pusher_ws, pusher_connected
             if not pusher_connected or not pusher_ws:
-                return
+                logger.warning(
+                    f"Pusher not connected, buffering speaker sample request person={person_id} {uid} {session_id}"
+                )
+                _buffer_speaker_sample_request(person_id, conv_id, segment_ids)
+                return False
             try:
                 data = bytearray()
                 data.extend(struct.pack("I", 105))
@@ -1548,8 +1600,18 @@ async def _stream_handler(
                 logger.info(
                     f"Sent speaker sample request to pusher: person={person_id}, {len(segment_ids)} segments {uid} {session_id}"
                 )
+                return True
+            except ConnectionClosed:
+                logger.warning(
+                    f"Pusher connection closed sending speaker sample, buffering person={person_id} {uid} {session_id}"
+                )
+                _buffer_speaker_sample_request(person_id, conv_id, segment_ids)
+                _mark_disconnected()
+                return False
             except Exception as e:
                 logger.error(f"Failed to send speaker sample request: {e} {uid} {session_id}")
+                _buffer_speaker_sample_request(person_id, conv_id, segment_ids)
+                return False
 
         def is_connected():
             return pusher_connected
