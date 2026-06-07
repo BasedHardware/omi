@@ -115,7 +115,7 @@ class TestModelQosProfiles:
         assert premium['app_integration'] == ('gemini-2.5-flash-lite', 'gemini')
         assert premium['trends'] == ('gemini-2.5-flash-lite', 'gemini')
         # Anthropic & Perplexity with explicit provider
-        assert premium['chat_agent'] == ('claude-sonnet-4-6', 'anthropic')
+        assert premium['chat_agent'] == ('claude-haiku-4-5', 'anthropic')
         assert premium['web_search'] == ('sonar-pro', 'perplexity')
         # Persona uses direct OpenAI API
         assert premium['persona_chat'] == ('gpt-4.1-nano', 'openai')
