@@ -574,7 +574,7 @@ class TestPhase4ConsumerMigration:
         import ast
         import pathlib
 
-        source = pathlib.Path('utils/llm/trends.py').read_text()
+        source = pathlib.Path('utils/llm/trends.py').read_text(encoding='utf-8')
         tree = ast.parse(source)
         for node in ast.walk(tree):
             if isinstance(node, ast.FunctionDef) and node.name == 'trends_extractor':
@@ -588,7 +588,7 @@ class TestPhase4ConsumerMigration:
         import ast
         import pathlib
 
-        source = pathlib.Path('utils/llm/chat.py').read_text()
+        source = pathlib.Path('utils/llm/chat.py').read_text(encoding='utf-8')
         tree = ast.parse(source)
         for node in ast.walk(tree):
             if isinstance(node, ast.FunctionDef) and node.name == 'retrieve_memory_context_params':
@@ -602,7 +602,7 @@ class TestPhase4ConsumerMigration:
         import ast
         import pathlib
 
-        source = pathlib.Path('utils/llm/chat.py').read_text()
+        source = pathlib.Path('utils/llm/chat.py').read_text(encoding='utf-8')
         tree = ast.parse(source)
         for node in ast.walk(tree):
             if isinstance(node, ast.FunctionDef) and node.name == 'obtain_emotional_message':
@@ -622,7 +622,7 @@ class TestPhase4ConsumerMigration:
             'routers/chat.py',
             'utils/chat.py',
         ]:
-            source = pathlib.Path(file_path).read_text()
+            source = pathlib.Path(file_path).read_text(encoding='utf-8')
             assert (
                 'from models.conversation import' not in source
             ), f'{file_path} still imports from models.conversation'
@@ -631,7 +631,7 @@ class TestPhase4ConsumerMigration:
         """Files using TYPE_CHECKING should not have runtime Conversation import."""
         import pathlib
 
-        source = pathlib.Path('utils/retrieval/graph.py').read_text()
+        source = pathlib.Path('utils/retrieval/graph.py').read_text(encoding='utf-8')
         assert 'TYPE_CHECKING' in source, 'graph.py should use TYPE_CHECKING'
         assert 'from __future__ import annotations' in source
 
@@ -700,7 +700,7 @@ class TestPhase4RuntimeBehavior:
         import pathlib
 
         for file_path in ['routers/chat.py', 'utils/chat.py']:
-            source = pathlib.Path(file_path).read_text()
+            source = pathlib.Path(file_path).read_text(encoding='utf-8')
             assert 'extract_memory_ids' in source, f'{file_path} should use extract_memory_ids'
             assert 'from utils.conversation_helpers import extract_memory_ids' in source
 
