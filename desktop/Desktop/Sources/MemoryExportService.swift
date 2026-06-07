@@ -50,7 +50,7 @@ enum MemoryExportDestination: String, CaseIterable, Identifiable, Sendable {
     case .chatgpt: return "Live MCP or memory pack"
     case .claude: return "Live MCP or memory pack"
     case .gemini: return "Prompt + memory pack"
-    case .agents: return "MCP setup prompt"
+    case .agents: return "Let your agent do it"
     case .claudeCode: return "Connect via MCP"
     case .codex: return "Connect via MCP"
     }
@@ -63,7 +63,7 @@ enum MemoryExportDestination: String, CaseIterable, Identifiable, Sendable {
     case .chatgpt: return "Connect over MCP so ChatGPT reads your memories live, or copy a memory pack."
     case .claude: return "Connect over MCP so Claude reads your memories live, or copy a memory pack."
     case .gemini: return "Copy the prompt and memory pack, then open Gemini."
-    case .agents: return "Copy one setup prompt for any MCP-capable agent."
+    case .agents: return "Give your agent one prompt. It connects Omi, saves the guide, and tests access."
     case .claudeCode: return "Add Omi as an MCP server so Claude Code always reads your memories."
     case .codex: return "Add Omi as an MCP server so Codex always reads your memories."
     }

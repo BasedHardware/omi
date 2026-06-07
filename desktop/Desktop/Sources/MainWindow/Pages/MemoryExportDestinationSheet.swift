@@ -38,6 +38,36 @@ struct ExportsSection: View {
   }
 }
 
+private struct AgentSetupActionButtonStyle: ButtonStyle {
+  enum Kind {
+    case primary
+    case secondary
+  }
+
+  let kind: Kind
+
+  func makeBody(configuration: Configuration) -> some View {
+    configuration.label
+      .font(.system(size: kind == .primary ? 14 : 13, weight: .semibold))
+      .foregroundColor(kind == .primary ? .black : OmiColors.textPrimary)
+      .lineLimit(1)
+      .labelStyle(.titleAndIcon)
+      .padding(.horizontal, kind == .primary ? 16 : 12)
+      .padding(.vertical, kind == .primary ? 11 : 9)
+      .background(
+        RoundedRectangle(cornerRadius: 12, style: .continuous)
+          .fill(kind == .primary ? Color.white : OmiColors.backgroundTertiary)
+      )
+      .overlay(
+        RoundedRectangle(cornerRadius: 12, style: .continuous)
+          .stroke(Color.white.opacity(kind == .primary ? 0 : 0.08), lineWidth: 1)
+      )
+      .opacity(configuration.isPressed ? 0.9 : 1)
+      .scaleEffect(configuration.isPressed ? 0.985 : 1)
+      .animation(.easeOut(duration: 0.12), value: configuration.isPressed)
+  }
+}
+
 private struct MemoryExportRow: View {
   let destination: MemoryExportDestination
   let status: MemoryExportStatus
@@ -446,49 +476,76 @@ struct MemoryExportDestinationSheet: View {
   }
 
   private var agentSetupSection: some View {
-    VStack(alignment: .leading, spacing: 14) {
-      methodHeader(
-        icon: "point.3.connected.trianglepath.dotted",
-        title: "Agent setup prompt",
-        tag: "MCP",
-        tagColor: OmiColors.purplePrimary,
-        subtitle:
-          "Copy one prompt into any MCP-capable agent. Omi includes hosted memory access, local Desktop access, and the guide the agent should save for later."
-      )
+    VStack(alignment: .leading, spacing: 16) {
+      agentSetupHeader
 
       VStack(alignment: .leading, spacing: 8) {
-        agentSetupBullet("Omi creates hosted and local connection keys before copying the prompt.")
-        agentSetupBullet("Local access lets same-Mac agents use Rewind, SQL, daily recaps, and screen search.")
-        agentSetupBullet("The agent saves the Omi guide if it supports skills or durable instructions.")
-        agentSetupBullet("The prompt asks the agent to connect to both Omi MCP servers and test them.")
+        agentSetupBullet("Omi creates private hosted and local keys before it copies anything.")
+        agentSetupBullet(
+          "Hosted access covers memories and conversations; local access adds same-Mac Rewind, SQL, daily recaps, and screen search."
+        )
+        agentSetupBullet(
+          "Your agent gets the Omi guide too, so it knows when to use each source and how to test the setup."
+        )
       }
-
-      Button(model.isLoadingMCPKey ? "Preparing…" : "Copy setup prompt") {
-        Task {
-          if let updatedStatus = await model.copyAgentSetupPrompt() {
-            statuses[destination] = updatedStatus
-          }
-        }
-      }
-      .buttonStyle(OnboardingCardButtonStyle(isPrimary: true))
-      .disabled(model.isLoadingMCPKey)
 
       HStack(spacing: 10) {
-        Button("Test connection") {
-          Task { await model.testAgentConnection() }
+        Button {
+          Task {
+            if let updatedStatus = await model.copyAgentSetupPrompt() {
+              statuses[destination] = updatedStatus
+            }
+          }
+        } label: {
+          Label(model.isLoadingMCPKey ? "Preparing…" : "Copy setup prompt", systemImage: "sparkles")
         }
-        .buttonStyle(OnboardingCardButtonStyle(isPrimary: false))
-        .disabled(model.isLoadingMCPKey || model.isTestingAgentConnection)
+        .buttonStyle(AgentSetupActionButtonStyle(kind: .primary))
+        .disabled(model.isLoadingMCPKey)
 
-        Button("Create new connection key") {
+        Button {
+          Task { await model.testAgentConnection() }
+        } label: {
+          Label(model.isTestingAgentConnection ? "Testing…" : "Test", systemImage: "checkmark.seal")
+        }
+        .buttonStyle(AgentSetupActionButtonStyle(kind: .secondary))
+        .disabled(model.isLoadingMCPKey || model.isTestingAgentConnection)
+        .help("Test hosted and local Omi access")
+
+        Button {
           Task {
             await model.createNewAgentConnectionKey()
             statuses[destination] = await MemoryExportService.shared.status(for: destination)
           }
+        } label: {
+          Label("New key", systemImage: "key")
         }
-        .buttonStyle(OnboardingCardButtonStyle(isPrimary: false))
+        .buttonStyle(AgentSetupActionButtonStyle(kind: .secondary))
         .disabled(model.isLoadingMCPKey || model.isTestingAgentConnection)
+        .help("Create fresh hosted and local connection keys")
       }
+    }
+  }
+
+  private var agentSetupHeader: some View {
+    VStack(alignment: .leading, spacing: 6) {
+      HStack(spacing: 9) {
+        ConnectorBrandIcon(brand: .agents, size: 22, cornerRadius: 6)
+        Text("Agent setup prompt")
+          .scaledFont(size: 15, weight: .semibold)
+          .foregroundColor(OmiColors.textPrimary)
+        Text("MCP")
+          .scaledFont(size: 9, weight: .bold)
+          .foregroundColor(OmiColors.purplePrimary)
+          .padding(.horizontal, 7)
+          .padding(.vertical, 2)
+          .background(Capsule().fill(OmiColors.purplePrimary.opacity(0.15)))
+      }
+      Text(
+        "Copy one prompt into your agent. It will add Omi, save the guide, and check hosted plus local access."
+      )
+      .scaledFont(size: 12)
+      .foregroundColor(OmiColors.textTertiary)
+      .fixedSize(horizontal: false, vertical: true)
     }
   }
 
