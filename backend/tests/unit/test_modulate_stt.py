@@ -585,8 +585,8 @@ class TestDrainAndClosePartialFlush(unittest.TestCase):
     def tearDown(self):
         self.loop.close()
 
-    def test_drain_flushes_partial_when_done_never_arrives(self):
-        """drain_and_close must flush pending partial text when done_event times out."""
+    def test_drain_clears_partial_state_when_done_never_arrives(self):
+        """drain_and_close clears partial state on timeout (partials already streamed live)."""
         ws = AsyncMock()
         ws.close = AsyncMock()
 
@@ -602,20 +602,16 @@ class TestDrainAndClosePartialFlush(unittest.TestCase):
             sock._prev_partial_text = 'trailing speech'
             sock._prev_partial_start_ms = 5000
             sock._prev_partial_word_count = 2
-            # Patch done_event.wait to always time out
-            original_wait = sock._done_event.wait
 
             async def timeout_wait():
                 raise asyncio.TimeoutError()
 
             sock._done_event.wait = timeout_wait
             await sock.drain_and_close()
+            self.assertEqual(sock._prev_partial_text, '')
             return sock
 
         self.loop.run_until_complete(run())
-        self.assertEqual(len(self.segments), 1)
-        self.assertEqual(self.segments[0]['text'], 'trailing speech')
-        self.assertAlmostEqual(self.segments[0]['start'], 5.0)
 
     def test_drain_no_flush_when_no_pending_partial(self):
         """drain_and_close should not produce segments when no partial is pending."""
@@ -975,7 +971,8 @@ class TestUtteranceResults(unittest.TestCase):
         self._run_recv(msgs)
         self.assertEqual(self.segments, [])
 
-    def test_partial_superseded_by_utterance(self):
+    def test_partial_streamed_then_utterance_also_streamed(self):
+        """Partials are streamed live, then the final utterance is also delivered."""
         msgs = [
             json.dumps(
                 {
@@ -991,10 +988,12 @@ class TestUtteranceResults(unittest.TestCase):
             ),
         ]
         self._run_recv(msgs)
-        self.assertEqual(len(self.segments), 1)
-        self.assertEqual(self.segments[0]['text'], 'final utterance')
+        self.assertEqual(len(self.segments), 2)
+        self.assertEqual(self.segments[0]['text'], 'partial text here')
+        self.assertEqual(self.segments[1]['text'], 'final utterance')
 
-    def test_partial_flush_at_done(self):
+    def test_partials_streamed_live(self):
+        """Each partial is streamed to the callback immediately."""
         msgs = [
             json.dumps({'type': 'partial_utterance', 'partial_utterance': {'text': 'one', 'start_ms': 0}}),
             json.dumps({'type': 'partial_utterance', 'partial_utterance': {'text': 'one two', 'start_ms': 0}}),
@@ -1003,19 +1002,21 @@ class TestUtteranceResults(unittest.TestCase):
             json.dumps({'type': 'done', 'duration_ms': 6000}),
         ]
         self._run_recv(msgs)
-        self.assertEqual(len(self.segments), 1)
-        self.assertEqual(self.segments[0]['text'], 'new start')
-        self.assertEqual(self.segments[0]['start'], 5.0)
+        self.assertEqual(len(self.segments), 4)
+        self.assertEqual(self.segments[0]['text'], 'one')
+        self.assertEqual(self.segments[3]['text'], 'new start')
+        self.assertEqual(self.segments[3]['start'], 5.0)
 
-    def test_partial_word_count_drop_is_revision_not_flush(self):
+    def test_partial_revisions_all_streamed(self):
+        """Word count drops (revisions) are still streamed — caller handles dedup."""
         msgs = [
             json.dumps({'type': 'partial_utterance', 'partial_utterance': {'text': 'a b c d e', 'start_ms': 0}}),
             json.dumps({'type': 'partial_utterance', 'partial_utterance': {'text': 'x y z', 'start_ms': 0}}),
             json.dumps({'type': 'done', 'duration_ms': 3000}),
         ]
         self._run_recv(msgs)
-        self.assertEqual(len(self.segments), 1)
-        self.assertEqual(self.segments[0]['text'], 'x y z')
+        self.assertEqual(len(self.segments), 2)
+        self.assertEqual(self.segments[1]['text'], 'x y z')
 
     def test_utterance_preseconds_filter(self):
         async def create():
