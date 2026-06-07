@@ -2753,6 +2753,17 @@ async def _stream_handler(
                 raise exc
 
         if not data_process_task.done():
+            if stt_socket and hasattr(stt_socket, 'drain_and_close'):
+                try:
+                    stt_socket.finish()
+                    drain_target = stt_socket
+                    if isinstance(stt_socket, GatedSTTSocket):
+                        drain_target = stt_socket._conn
+                    if drain_target and hasattr(drain_target, 'drain_and_close'):
+                        await drain_target.drain_and_close()
+                except Exception as e:
+                    logger.error(f"Error draining STT on supervisor exit: {e} {uid} {session_id}")
+                await asyncio.sleep(2)
             websocket_active = False
             data_process_task.cancel()
             try:
