@@ -133,8 +133,6 @@ async def stream_transcribe(
     except Exception as e:
         logger.error(f"v3/stream error: {e}")
     finally:
-        ACTIVE_STREAMS.dec()
-        STREAM_DURATION.observe(time.monotonic() - t0)
         try:
             final_segments = await session.flush()
             for seg in final_segments:
@@ -144,6 +142,8 @@ async def stream_transcribe(
                     break
         except Exception as e:
             logger.error(f"v3/stream flush error: {e}")
+        ACTIVE_STREAMS.dec()
+        STREAM_DURATION.observe(time.monotonic() - t0)
         session.cleanup()
 
 
