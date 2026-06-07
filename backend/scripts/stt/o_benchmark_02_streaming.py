@@ -131,9 +131,17 @@ async def stream_to_provider(audio_pcm: bytes, language: str, provider: str) -> 
         await asyncio.sleep(3)
 
     total_time = time.monotonic() - stream_start[0]
-    text = ' '.join(s.get('text', '') for s in segments_received).strip()
     first_seg_latency = segment_log[0]['wall_s'] if segment_log else -1
     segs_after_finish = len(segments_received) - segs_before_finish
+
+    # Deduplicate for WER: partials at the same start time are cumulative,
+    # keep only the last version at each start time (the most complete text).
+    deduped = {}
+    for seg in segments_received:
+        key = seg.get('start', 0)
+        deduped[key] = seg
+    final_segments = sorted(deduped.values(), key=lambda s: s.get('start', 0))
+    text = ' '.join(s.get('text', '') for s in final_segments).strip()
 
     return {
         'connect_time': connect_time,
@@ -141,7 +149,8 @@ async def stream_to_provider(audio_pcm: bytes, language: str, provider: str) -> 
         'total_time': total_time,
         'audio_duration_s': round(audio_duration_s, 2),
         'audio_sent_time': round(audio_sent_time, 2),
-        'segments': len(segments_received),
+        'segments_raw': len(segments_received),
+        'segments_deduped': len(final_segments),
         'segs_during_stream': segs_before_finish,
         'segs_after_finish': segs_after_finish,
         'text': text,
@@ -199,7 +208,8 @@ async def run_benchmark():
                         f'{prefix}_connect': result['connect_time'],
                         f'{prefix}_first_seg': result['first_segment_latency'],
                         f'{prefix}_total': result['total_time'],
-                        f'{prefix}_segments': result['segments'],
+                        f'{prefix}_segments_raw': result['segments_raw'],
+                        f'{prefix}_segments_deduped': result['segments_deduped'],
                         f'{prefix}_segs_during': result['segs_during_stream'],
                         f'{prefix}_segs_after': result['segs_after_finish'],
                         f'{prefix}_words': result['words'],
@@ -212,13 +222,14 @@ async def run_benchmark():
                 )
                 during = result['segs_during_stream']
                 after = result['segs_after_finish']
-                total_segs = result['segments']
-                parallel_pct = (during / total_segs * 100) if total_segs > 0 else 0
+                total_raw = result['segments_raw']
+                total_deduped = result['segments_deduped']
+                parallel_pct = (during / total_raw * 100) if total_raw > 0 else 0
                 print(
                     f"    {provider.capitalize():10s}  connect={result['connect_time']:.2f}s  "
                     f"1st_seg={result['first_segment_latency']:.2f}s  "
                     f"total={result['total_time']:.2f}s  "
-                    f"segs={total_segs} (during={during} after={after} parallel={parallel_pct:.0f}%)  "
+                    f"segs={total_raw} (during={during} parallel={parallel_pct:.0f}% deduped={total_deduped})  "
                     f"WER={wer_val:.2%}"
                 )
             except Exception as e:
