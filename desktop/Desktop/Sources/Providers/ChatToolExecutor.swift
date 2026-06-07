@@ -41,10 +41,13 @@ class ChatToolExecutor {
     log("Executing tool: \(toolCall.name) with args: \(toolCall.arguments)")
 
     switch toolCall.name {
+    case "get_local_status":
+      return await executeLocalStatus()
+
     case "execute_sql":
       return await executeSQL(toolCall.arguments)
 
-    case "semantic_search":
+    case "semantic_search", "search_screen_history":
       return await executeSemanticSearch(toolCall.arguments)
 
     case "get_daily_recap":
@@ -333,6 +336,61 @@ class ChatToolExecutor {
     return "OK: \(changes) row(s) affected"
   }
 
+  // MARK: - Local Status
+
+  private static func executeLocalStatus() async -> String {
+    guard await RewindDatabase.shared.getDatabaseQueue() != nil else {
+      return """
+        {
+          "ok": false,
+          "mode": "local_omi_desktop",
+          "database_available": false,
+          "screen_history_available": false,
+          "message": "Omi Desktop is running, but the local database is not available yet."
+        }
+        """
+    }
+
+    do {
+      let stats = try await RewindDatabase.shared.getStats()
+      let formatter = ISO8601DateFormatter()
+      let payload: [String: Any] = [
+        "ok": true,
+        "mode": "local_omi_desktop",
+        "database_available": true,
+        "screen_history_available": stats.total > 0,
+        "screenshot_count": stats.total,
+        "indexed_screenshot_count": stats.indexed,
+        "oldest_capture_at": stats.oldestDate.map { formatter.string(from: $0) } ?? NSNull(),
+        "latest_capture_at": stats.newestDate.map { formatter.string(from: $0) } ?? NSNull(),
+        "recommended_first_tools": [
+          "search_screen_history for fuzzy Rewind/OCR questions",
+          "get_screenshot after a search result returns a screenshot_id",
+          "get_daily_recap for today/yesterday/this week",
+          "execute_sql for exact read-only local database questions",
+        ],
+      ]
+      guard
+        let data = try? JSONSerialization.data(withJSONObject: payload, options: [.prettyPrinted, .sortedKeys]),
+        let json = String(data: data, encoding: .utf8)
+      else {
+        return "Local Omi Desktop is available. Screenshots: \(stats.total), indexed: \(stats.indexed)."
+      }
+      return json
+    } catch {
+      logError("Tool get_local_status failed", error: error)
+      return """
+        {
+          "ok": false,
+          "mode": "local_omi_desktop",
+          "database_available": false,
+          "screen_history_available": false,
+          "message": "Failed to read local Omi status: \(error.localizedDescription)"
+        }
+        """
+    }
+  }
+
   // MARK: - Daily Recap
 
   /// Get a pre-formatted daily activity recap
@@ -531,7 +589,7 @@ class ChatToolExecutor {
       return "Error: query is required"
     }
 
-    let days = (args["days"] as? Int) ?? 7
+    let days = max(1, intArgument(args["days"]) ?? 7)
     let appFilter = args["app_filter"] as? String
 
     let calendar = Calendar.current
@@ -584,7 +642,7 @@ class ChatToolExecutor {
       }
 
       if lines.isEmpty {
-        return "No screenshots found matching \"\(query)\" in the last \(days) day(s)."
+        return await emptySemanticSearchMessage(query: query, days: days, appFilter: appFilter)
       }
 
       lines.insert("Found \(count) screenshot(s) matching \"\(query)\":", at: 0)
@@ -596,6 +654,35 @@ class ChatToolExecutor {
       logError("Tool semantic_search failed", error: error)
       return "Failed to search: \(error.localizedDescription)"
     }
+  }
+
+  private static func emptySemanticSearchMessage(query: String, days: Int, appFilter: String?) async -> String {
+    do {
+      let stats = try await RewindDatabase.shared.getStats()
+      if stats.total == 0 {
+        return """
+          No screen history is available yet. Omi Desktop has not captured any local Rewind screenshots in this database, so search_screen_history cannot return results for "\(query)".
+          """
+      }
+      if stats.indexed == 0 {
+        return """
+          Screen history exists (\(stats.total) screenshot(s)), but none are indexed for semantic search yet. Keep Omi Desktop running and try again after OCR/indexing catches up, or use execute_sql for exact database checks.
+          """
+      }
+      let appText = appFilter.map { " with app filter \"\($0)\"" } ?? ""
+      return """
+        No matching screen-history results for "\(query)" in the last \(days) day(s)\(appText). Local history exists (\(stats.total) screenshot(s), \(stats.indexed) indexed), so try a broader query, a wider days window, or use execute_sql for exact app/window/OCR filters.
+        """
+    } catch {
+      return "No screenshots found matching \"\(query)\" in the last \(days) day(s). Local status could not be read: \(error.localizedDescription)"
+    }
+  }
+
+  private static func intArgument(_ value: Any?) -> Int? {
+    if let value = value as? Int { return value }
+    if let value = value as? Double { return Int(value) }
+    if let value = value as? String { return Int(value.trimmingCharacters(in: .whitespacesAndNewlines)) }
+    return nil
   }
 
   // MARK: - Task Search

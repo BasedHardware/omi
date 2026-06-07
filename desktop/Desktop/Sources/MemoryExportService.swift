@@ -531,21 +531,22 @@ actor MemoryExportService {
 
     # Omi Agent Skill
 
-    Use this skill when the user asks about their Omi memories, conversations, Rewind screen history, local transcriptions, tasks, or wants an agent to personalize work from Omi context.
+    Use this skill when the user asks about their Omi memories, conversations, local screen history, transcriptions, tasks, or wants an agent to use Omi context while helping.
 
     ## Tool Routing
 
-    - Read hosted `get_user_profile` first when available for a cached high-level user summary.
+    - Read hosted `get_user_profile` first when available for a cached high-level user summary. Some deployments do not expose it.
     - Use hosted `search_memories` or `get_memories` for facts, preferences, habits, relationships, projects, and goals.
     - Use hosted `search_conversations` for synced conversations, meetings, and "when did this happen?" questions.
-    - Use local Omi Desktop tools for Rewind, screenshots, screen semantic search, local transcriptions, local SQL, daily recaps, staged tasks, indexed files, and same-device history.
-    - Use local `execute_sql` for counts, filters, exact task lookup, local transcriptions, action items, and database questions. Use local `semantic_search` for fuzzy screen-history recall. Use local `get_daily_recap` for "what did I do today/yesterday/this week?"
+    - Use local `get_local_status` first before same-Mac context work. It tells you whether local screen history exists and whether screenshots are indexed.
+    - Use local `search_screen_history` for fuzzy questions about Rewind/OCR screen history. Use `get_screenshot` only after a search or SQL result returns a screenshot ID.
+    - Use local `execute_sql` for read-only counts, filters, exact task lookup, local transcriptions, action items, and database questions. Use local `get_daily_recap` for "what did I do today/yesterday/this week?"
 
     ## Hosted vs Local Routing
 
     - Durable user facts: start with hosted `get_user_profile` when available, then use `search_memories` or `get_memories` for task-specific evidence.
     - Meetings, calls, and remembered events: hosted `search_conversations` first; use local transcription tables when the question is about same-device recent audio or unsynced local history.
-    - Rewind, screenshots, OCR, app/window history, indexed files, and daily recaps: same-host Omi Desktop tools first. Hosted MCP does not expose raw local screenshots or local-only Rewind data.
+    - Rewind, screenshots, OCR, app/window history, indexed files, and daily recaps: same-host Omi Desktop tools first. Hosted MCP does not expose raw local screenshots or local-only screen history.
     - Tasks and staged actions: local `execute_sql` plus task tools when available, because task state may be same-host and operational.
     - Memory writes/deletes: hosted MCP only, and only after explicit user intent.
 
@@ -583,7 +584,7 @@ actor MemoryExportService {
     Hosted authorization header:
     Authorization: Bearer \(hostedKey)
 
-    Local Omi Desktop MCP gives this agent same-Mac Rewind, screen history, local transcriptions, daily recaps, indexed files, and local task context while Omi Desktop is running.
+    Local Omi Desktop MCP gives this agent same-Mac screen history, screenshots, local transcriptions, daily recaps, indexed files, and local task context while Omi Desktop is running.
 
     Local server URL:
     \(localURL)
@@ -598,7 +599,7 @@ actor MemoryExportService {
 
     \(omiAgentSkillText)
 
-    After setup, test both connections. On hosted Omi, list tools and call `get_user_profile` if available; otherwise call `get_memories` with `limit: 5`. On local Omi Desktop, list tools and call `get_daily_recap` with `days_ago: 0`.
+    After setup, test both connections. On hosted Omi, list tools and call `get_user_profile` if available; otherwise call `get_memories` with `limit: 5`. On local Omi Desktop, list tools and call `get_local_status`.
     """
   }
 

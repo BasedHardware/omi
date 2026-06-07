@@ -231,11 +231,15 @@ final class LocalAgentMCPServer {
       guard Self.tools.contains(where: { $0.name == toolName }) else {
         return rpcError(id: id, code: -32601, message: "Unknown tool: \(toolName)")
       }
+      if toolName == "get_screenshot" {
+        return await screenshotToolResponse(id: id, arguments: arguments)
+      }
       if toolName == "execute_sql" {
         arguments["read_only"] = true
       }
+      let executorToolName = toolName == "search_screen_history" ? "semantic_search" : toolName
       let result = await ChatToolExecutor.execute(
-        ToolCall(name: toolName, arguments: arguments, thoughtSignature: nil))
+        ToolCall(name: executorToolName, arguments: arguments, thoughtSignature: nil))
       return rpcResult(id: id, result: ["content": [["type": "text", "text": result]]])
 
     default:
@@ -256,7 +260,84 @@ final class LocalAgentMCPServer {
     return false
   }
 
+  private func screenshotToolResponse(id: Any?, arguments: [String: Any]) async -> LocalHTTPResponse {
+    guard let screenshotID = parseInt64(arguments["screenshot_id"] ?? arguments["id"]) else {
+      return rpcError(id: id, code: -32602, message: "screenshot_id is required")
+    }
+
+    do {
+      guard let screenshot = try await RewindDatabase.shared.getScreenshot(id: screenshotID) else {
+        return rpcError(id: id, code: -32602, message: "Screenshot not found: \(screenshotID)")
+      }
+
+      let imageData = try await loadScreenshotDataEnsuringStorage(for: screenshot)
+      let text = screenshotMetadataText(screenshot, imageByteCount: imageData.count)
+      return rpcResult(
+        id: id,
+        result: [
+          "content": [
+            ["type": "text", "text": text],
+            [
+              "type": "image",
+              "data": imageData.base64EncodedString(),
+              "mimeType": "image/jpeg",
+            ],
+          ]
+        ])
+    } catch {
+      logError("LocalAgentMCPServer: get_screenshot failed", error: error)
+      return rpcError(id: id, code: -32603, message: "Failed to load screenshot: \(error.localizedDescription)")
+    }
+  }
+
+  private func loadScreenshotDataEnsuringStorage(for screenshot: Screenshot) async throws -> Data {
+    do {
+      return try await RewindStorage.shared.loadScreenshotData(for: screenshot)
+    } catch {
+      try await RewindStorage.shared.initialize()
+      return try await RewindStorage.shared.loadScreenshotData(for: screenshot)
+    }
+  }
+
+  private func parseInt64(_ value: Any?) -> Int64? {
+    if let value = value as? Int64 { return value }
+    if let value = value as? Int { return Int64(value) }
+    if let value = value as? Double { return Int64(value) }
+    if let value = value as? String { return Int64(value.trimmingCharacters(in: .whitespacesAndNewlines)) }
+    return nil
+  }
+
+  private func screenshotMetadataText(_ screenshot: Screenshot, imageByteCount: Int) -> String {
+    let formatter = ISO8601DateFormatter()
+    let metadata: [String: Any] = [
+      "screenshot_id": screenshot.id ?? NSNull(),
+      "timestamp": formatter.string(from: screenshot.timestamp),
+      "app_name": screenshot.appName,
+      "window_title": screenshot.windowTitle ?? NSNull(),
+      "has_ocr": !(screenshot.ocrText ?? "").isEmpty,
+      "is_indexed": screenshot.isIndexed,
+      "image_mime_type": "image/jpeg",
+      "image_bytes": imageByteCount,
+      "ocr_preview": String((screenshot.ocrText ?? "").prefix(600)),
+    ]
+
+    guard
+      let data = try? JSONSerialization.data(withJSONObject: metadata, options: [.prettyPrinted, .sortedKeys]),
+      let json = String(data: data, encoding: .utf8)
+    else {
+      return "Screenshot \(screenshot.id ?? -1) from \(screenshot.appName)"
+    }
+    return json
+  }
+
   private static let tools: [LocalMCPTool] = [
+    LocalMCPTool(
+      name: "get_local_status",
+      description:
+        "Report whether local Omi Desktop context is available, including screen-history counts, indexed screenshot counts, and latest capture time. Call this before local screen-history or SQL work.",
+      properties: [:],
+      required: []
+    ),
     LocalMCPTool(
       name: "execute_sql",
       description:
@@ -265,15 +346,35 @@ final class LocalAgentMCPServer {
       required: ["query"]
     ),
     LocalMCPTool(
-      name: "semantic_search",
+      name: "search_screen_history",
       description:
-        "Vector similarity search over local Rewind screen history. Use for fuzzy questions about what the user saw or worked on.",
+        "Search local Rewind screen history using OCR and semantic similarity. Use for fuzzy questions about what the user saw or worked on. Results include screenshot IDs that can be opened with get_screenshot.",
       properties: [
         "query": ["type": "string", "description": "Natural language query"],
         "days": ["type": "number", "description": "Days to search back; default 7"],
         "app_filter": ["type": "string", "description": "Optional app name filter"],
       ],
       required: ["query"]
+    ),
+    LocalMCPTool(
+      name: "semantic_search",
+      description:
+        "Compatibility alias for search_screen_history.",
+      properties: [
+        "query": ["type": "string", "description": "Natural language query"],
+        "days": ["type": "number", "description": "Days to search back; default 7"],
+        "app_filter": ["type": "string", "description": "Optional app name filter"],
+      ],
+      required: ["query"]
+    ),
+    LocalMCPTool(
+      name: "get_screenshot",
+      description:
+        "Fetch a local Rewind screenshot image by screenshot_id. Use screenshot IDs returned by search_screen_history or execute_sql.",
+      properties: [
+        "screenshot_id": ["type": "number", "description": "Screenshot ID from search_screen_history or the screenshots table"]
+      ],
+      required: ["screenshot_id"]
     ),
     LocalMCPTool(
       name: "get_daily_recap",
