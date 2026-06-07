@@ -78,6 +78,11 @@ omi --json local search-screen "pricing page" --days 7 --app Safari
 omi --json local screenshot 123 --output /tmp/omi-shot.jpg
 omi --json local sql "SELECT COUNT(*) AS screenshots FROM screenshots"
 omi --json local task search "taxes" --include-completed
+```
+
+Only complete or delete tasks when the user clearly asks:
+
+```bash
 omi --json local task complete task_123
 omi --json local task delete task_123 --yes
 ```

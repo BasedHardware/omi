@@ -535,7 +535,8 @@ actor MemoryExportService {
     - Use `search_conversations` for synced meetings, calls, and remembered events. Use local transcription tables only for recent same-Mac or unsynced local history.
     - Use `omi --json local search-screen` for fuzzy Rewind/OCR questions. Use `omi --json local screenshot` only after a result returns a screenshot ID and the screenshot tool is present.
     - Use `omi --json local sql` for read-only counts, exact filters, local transcriptions, action items, indexed files, goals, and database questions.
-    - Use `omi --json local task search`, `omi --json local task complete`, and `omi --json local task delete --yes` only if task tools are listed. If task tools are absent, do not mutate tasks.
+    - Use `omi --json local task search` only if task tools are listed.
+    - Use `omi --json local task complete` or `omi --json local task delete --yes` only when the user clearly asked you to complete or delete that task. If task tools are absent, do not mutate tasks.
     - Use `omi --json local call <tool> --args-json '{...}'` only when a listed local tool is not covered by a friendly command.
     - Create, edit, or delete hosted memories only after explicit user intent.
 
@@ -549,8 +550,8 @@ actor MemoryExportService {
 
     ## Write Discipline
 
-    - Do not create, edit, or delete Omi memories unless the user clearly asked for that change.
-    - Prefer proposing the memory change first when intent is ambiguous.
+    - Do not create, edit, complete, or delete Omi memories or local tasks unless the user clearly asked for that change.
+    - Prefer proposing the memory or task change first when intent is ambiguous.
     - Never treat transient screen activity as a durable memory without explicit user intent or strong evidence.
 
     ## Setup

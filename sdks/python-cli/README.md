@@ -139,6 +139,11 @@ omi --json local screenshot 123 --output /tmp/omi-shot.jpg
 omi --json local recap --days-ago 1
 omi --json local sql "SELECT appName, COUNT(*) FROM screenshots GROUP BY appName"
 omi --json local task search "taxes" --include-completed
+```
+
+Task writes should only run after the user clearly asks for that change:
+
+```bash
 omi --json local task complete task_123
 omi --json local task delete task_123 --yes
 ```
