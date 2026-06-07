@@ -178,7 +178,9 @@ def delete_account(
                 if not canceled:
                     logger.error(f'delete_account stripe cancel returned None for {uid}')
         except Exception as e:
-            logger.error(f'delete_account stripe cancel failed for {uid}: {sanitize(str(e))}')
+            # cancel_subscription swallows its own Stripe errors (returns None), so this only
+            # fires on the subscription lookup (e.g. a Firestore read error).
+            logger.error(f'delete_account subscription lookup failed for {uid}: {sanitize(str(e))}')
 
         # 2. Revoke Firebase auth immediately so tokens are useless and the
         #    account cannot be logged back into while the data wipe runs.

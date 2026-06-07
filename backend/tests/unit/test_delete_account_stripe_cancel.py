@@ -58,23 +58,27 @@ def _should_stub(name: str) -> bool:
 
 
 class _StubFinder(importlib.abc.MetaPathFinder, importlib.abc.Loader):
+    def __init__(self):
+        self.created = set()
+
     def find_spec(self, name, path=None, target=None):
         if _should_stub(name):
             return importlib.machinery.ModuleSpec(name, self, is_package=True)
         return None
 
     def create_module(self, spec):
+        self.created.add(spec.name)
         return _AutoMockModule(spec.name)
 
     def exec_module(self, module):
         pass
 
 
-sys.meta_path.insert(0, _StubFinder())
-
-import firebase_admin.auth as _fa_auth  # stubbed
-
-_fa_auth.InvalidIdTokenError = type('InvalidIdTokenError', (Exception,), {})
+# Install the stub finder only for the duration of importing routers.users, then remove it AND
+# the stub modules it created. This keeps the finder/stubs from leaking into other tests when the
+# whole suite runs in one process (pytest tests/unit/); routers.users keeps its own references.
+_finder = _StubFinder()
+sys.meta_path.insert(0, _finder)
 
 # Real shim for the auth dependency module (used in route signatures + as auth.delete_account).
 _endpoints = types.ModuleType('utils.other.endpoints')
@@ -84,7 +88,16 @@ _endpoints.delete_account = MagicMock()
 _endpoints.get_user = MagicMock()
 sys.modules['utils.other.endpoints'] = _endpoints
 
-from routers import users as users_router  # noqa: E402  (heavy import; deps stubbed above)
+try:
+    import firebase_admin.auth as _fa_auth  # stubbed
+
+    _fa_auth.InvalidIdTokenError = type('InvalidIdTokenError', (Exception,), {})
+    from routers import users as users_router  # noqa: E402  (heavy import; deps stubbed above)
+finally:
+    if _finder in sys.meta_path:
+        sys.meta_path.remove(_finder)
+    for _name in list(_finder.created) + ['utils.other.endpoints']:
+        sys.modules.pop(_name, None)
 
 
 def _sub(stripe_subscription_id):
