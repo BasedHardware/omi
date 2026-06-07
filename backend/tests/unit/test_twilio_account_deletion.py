@@ -3,11 +3,14 @@ import sys
 import types
 from unittest.mock import patch
 
+from tests.unit.twilio_stub import install_twilio_stub
+
 os.environ.setdefault('TWILIO_ACCOUNT_SID', 'ACtest123')
 os.environ.setdefault('TWILIO_AUTH_TOKEN', 'test_auth_token')
 os.environ.setdefault('TWILIO_API_KEY_SID', 'SKtest123')
 os.environ.setdefault('TWILIO_API_KEY_SECRET', 'test_api_secret')
 os.environ.setdefault('TWILIO_TWIML_APP_SID', 'APtest123')
+install_twilio_stub()
 
 
 # Stub `database.phone_calls` before twilio_service tries to import it so we can
