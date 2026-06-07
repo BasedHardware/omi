@@ -135,7 +135,7 @@ struct OnboardingExportsStepView: View {
       return "Copy-ready page"
     }
     if destination.supportsAgentSetup {
-      return status.isConfigured ? "Setup prompt ready" : "Optional setup"
+      return status.isConfigured ? "Agent prompt ready" : "Connect agents through MCP"
     }
     return "Prompt + memory pack"
   }
@@ -181,7 +181,7 @@ private struct OnboardingInlineExportPanel: View {
 
       case .agents:
         inlineInfoCard(
-          "Omi copies one setup prompt for any MCP-capable agent. It includes a private connection key and a guide the agent should save for later."
+          "Omi copies one prompt for any MCP-capable agent. It includes private connection keys and a short guide the agent can save for later."
         )
 
       case .claudeCode, .codex:
@@ -253,7 +253,7 @@ private struct OnboardingInlineExportPanel: View {
     case .obsidian:
       return model.obsidianVaultPath.isEmpty ? "Choose vault" : "Export"
     case .agents:
-      return "Copy setup prompt"
+      return "Copy prompt"
     case .chatgpt, .claude, .gemini, .claudeCode, .codex:
       return "Copy & open"
     }

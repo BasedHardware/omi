@@ -161,7 +161,7 @@ final class MemoryExportDestinationSheetModel: ObservableObject {
       let key = try await MemoryExportService.shared.createNewMCPKey()
       _ = LocalAgentMCPSettings.createNewToken()
       mcpKey = key
-      statusMessage = "Created a new connection key. Copy setup again to use it."
+      statusMessage = "New key created. Copy the prompt again when you're ready."
     } catch {
       errorMessage = "Couldn't create a new connection key: \(error.localizedDescription)"
     }
@@ -182,7 +182,7 @@ final class MemoryExportDestinationSheetModel: ObservableObject {
         localToken: localToken)
       statusMessage = result.summary
     } catch {
-      errorMessage = "Connection test failed: \(error.localizedDescription)"
+      errorMessage = "Omi couldn't test the connection: \(error.localizedDescription)"
     }
   }
 
@@ -207,12 +207,12 @@ final class MemoryExportDestinationSheetModel: ObservableObject {
           hostedKey: key,
           localURL: LocalAgentMCPSettings.serverURL,
           localToken: localToken),
-        label: "Agent setup prompt")
+        label: "Agent prompt")
       statusMessage =
-        "Setup prompt copied. It includes private Omi keys for hosted and local access."
+        "Prompt copied. It includes private Omi keys for hosted and local access."
       return await MemoryExportService.shared.status(for: .agents)
     } catch {
-      errorMessage = "Couldn't create setup prompt: \(error.localizedDescription)"
+      errorMessage = "Couldn't create the prompt: \(error.localizedDescription)"
       return nil
     }
   }
@@ -480,12 +480,12 @@ struct MemoryExportDestinationSheet: View {
       agentSetupHeader
 
       VStack(alignment: .leading, spacing: 8) {
-        agentSetupBullet("Omi creates private hosted and local keys before it copies anything.")
+        agentSetupBullet("Omi creates private hosted and local keys before copying the prompt.")
         agentSetupBullet(
-          "Hosted access covers memories and conversations; local access adds same-Mac Rewind, SQL, daily recaps, and screen search."
+          "Hosted access covers memories and conversations. Local access adds same-Mac screen history, screenshots, SQL, and daily recaps."
         )
         agentSetupBullet(
-          "Your agent gets the Omi guide too, so it knows when to use each source and how to test the setup."
+          "The prompt includes the Omi guide, so your agent knows what to use and what to test."
         )
       }
 
@@ -497,7 +497,7 @@ struct MemoryExportDestinationSheet: View {
             }
           }
         } label: {
-          Label(model.isLoadingMCPKey ? "Preparing…" : "Copy setup prompt", systemImage: "sparkles")
+          Label(model.isLoadingMCPKey ? "Preparing…" : "Copy prompt", systemImage: "sparkles")
         }
         .buttonStyle(AgentSetupActionButtonStyle(kind: .primary))
         .disabled(model.isLoadingMCPKey)
@@ -530,7 +530,7 @@ struct MemoryExportDestinationSheet: View {
     VStack(alignment: .leading, spacing: 6) {
       HStack(spacing: 9) {
         ConnectorBrandIcon(brand: .agents, size: 22, cornerRadius: 6)
-        Text("Agent setup prompt")
+        Text("Let your agent do it")
           .scaledFont(size: 15, weight: .semibold)
           .foregroundColor(OmiColors.textPrimary)
         Text("MCP")
@@ -541,7 +541,7 @@ struct MemoryExportDestinationSheet: View {
           .background(Capsule().fill(OmiColors.purplePrimary.opacity(0.15)))
       }
       Text(
-        "Copy one prompt into your agent. It will add Omi, save the guide, and check hosted plus local access."
+        "Copy one prompt into any MCP-capable agent. It connects Omi, saves the guide, and checks access."
       )
       .scaledFont(size: 12)
       .foregroundColor(OmiColors.textTertiary)
