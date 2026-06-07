@@ -95,11 +95,25 @@ resources: {}
 #     path: /
 #     port: http
 
+# Prometheus metrics for autoscaling and observability.
+metrics:
+  enabled: false
+  port: 9091
+  serviceMonitor:
+    enabled: false
+    interval: "15s"
+    labels: {}
+  prometheusAdapter:
+    enabled: false
+
 # This section is for setting up autoscaling more information can be found here: https://kubernetes.io/docs/concepts/workloads/autoscaling/
 autoscaling:
   enabled: false
   minReplicas: 1
   maxReplicas: 100
+  # streamsPerPod: 30          # scale on active streaming connections
+  # requestsPerPod: 40         # scale on total active requests (streams + batch)
+  # targetGPUUtilization: 70   # scale on GPU utilization (requires DCGM)
   # targetCPUUtilizationPercentage: 80
   # targetMemoryUtilizationPercentage: 80
 
