@@ -506,7 +506,7 @@ class TestProfileSelectionAtImportTime:
 
         result = subprocess.run(
             [
-                'python3',
+                sys.executable,
                 '-c',
                 (
                     "import sys; from unittest.mock import MagicMock; "
@@ -533,7 +533,7 @@ class TestProfileSelectionAtImportTime:
 
         result = subprocess.run(
             [
-                'python3',
+                sys.executable,
                 '-c',
                 (
                     "import sys; from unittest.mock import MagicMock; "
@@ -865,7 +865,7 @@ class TestBYOKProfileFixed:
 
         result = subprocess.run(
             [
-                'python3',
+                sys.executable,
                 '-c',
                 (
                     "import sys; from unittest.mock import MagicMock; "
