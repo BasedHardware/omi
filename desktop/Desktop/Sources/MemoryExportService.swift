@@ -523,30 +523,35 @@ actor MemoryExportService {
 
     Use this skill when the user asks about their Omi memories, conversations, screen history, transcriptions, tasks, or wants you to use Omi context while helping.
 
-    ## Tool Routing
+    ## Discovery
 
-    - Start with hosted `get_user_profile` when it is available for a high-level user summary. Some deployments do not expose it.
-    - Use hosted `search_memories` or `get_memories` for facts, preferences, habits, relationships, projects, and goals.
-    - Use hosted `search_conversations` for synced conversations, meetings, and "when did this happen?" questions.
-    - Run `omi --json local tools` to list local Desktop tools. Run `omi --json local status` before local-context work. Status reports screen-history and screenshot-index availability.
-    - Use `omi --json local search-screen` for fuzzy questions about Rewind/OCR screen history. Use `omi --json local screenshot` only after a search or SQL result returns a screenshot ID.
-    - Use `omi --json local sql` for read-only counts, filters, exact task lookup, local transcriptions, action items, indexed files, goals, and database questions. Use `omi --json local recap` for "what did I do today/yesterday/this week?"
-    - Use `omi --json local task search`, `omi --json local task complete`, and `omi --json local task delete --yes` for same-Mac task work.
-    - Use `omi --json local call <tool> --args-json '{...}'` only when a local capability is not covered by a friendly command.
+    - Hosted MCP: list available tools before use. If `get_user_profile` exists, use it for a high-level summary. If it is absent, use `get_memories(limit=5)` and `search_memories`.
+    - Local Omi CLI: run `omi --json local status` and `omi --json local tools` before local work. If status fails, Omi Desktop, the local URL, or the local token is not ready.
 
-    ## Hosted vs Local Routing
+    ## Routing
 
-    - Durable user facts: start with hosted `get_user_profile` when available, then use `search_memories` or `get_memories` for task-specific evidence.
-    - Meetings, calls, and remembered events: hosted `search_conversations` first; use local transcription tables when the question is about recent same-Mac audio or unsynced local history.
-    - Rewind, screenshots, OCR, app/window history, indexed files, and daily recaps: same-Mac Omi CLI first. Hosted MCP does not expose raw local screenshots or local-only screen history.
-    - Tasks and staged actions: local CLI first, because task state may be same-Mac and operational.
-    - Memory writes/deletes: hosted MCP only, and only after explicit user intent.
+    - Hosted MCP: durable memories, synced conversations, preferences, relationships, projects, goals, and profile-like context.
+    - Local CLI: this Mac's screen history, screenshots, app/window activity, local transcriptions, read-only SQL, daily recaps, indexed files, local goals, and tasks.
+    - Use `search_conversations` for synced meetings, calls, and remembered events. Use local transcription tables only for recent same-Mac or unsynced local history.
+    - Use `omi --json local search-screen` for fuzzy Rewind/OCR questions. Use `omi --json local screenshot` only after a result returns a screenshot ID and the screenshot tool is present.
+    - Use `omi --json local sql` for read-only counts, exact filters, local transcriptions, action items, indexed files, goals, and database questions.
+    - Use `omi --json local task search`, `omi --json local task complete`, and `omi --json local task delete --yes` only if task tools are listed. If task tools are absent, do not mutate tasks.
+    - Use `omi --json local call <tool> --args-json '{...}'` only when a listed local tool is not covered by a friendly command.
+    - Create, edit, or delete hosted memories only after explicit user intent.
+
+    ## Verification Checklist
+
+    - Hosted MCP tools are listed.
+    - Hosted memory query succeeds with `get_memories(limit=5)` or equivalent.
+    - Local status succeeds with `omi --json local status`.
+    - Local tools are listed with `omi --json local tools`.
+    - Route only to tools that were discovered.
 
     ## Write Discipline
 
     - Do not create, edit, or delete Omi memories unless the user clearly asked for that change.
     - Prefer proposing the memory change first when intent is ambiguous.
-    - Never treat transient screen activity as a durable memory without user intent or strong evidence.
+    - Never treat transient screen activity as a durable memory without explicit user intent or strong evidence.
 
     ## Setup
 
@@ -593,7 +598,12 @@ actor MemoryExportService {
 
     \(omiAgentSkillText)
 
-    4. Verify hosted Omi by listing MCP tools and calling `get_user_profile` if available; otherwise call `get_memories` with `limit: 5`. Verify local Omi with `omi --json local status` and `omi --json local tools`.
+    4. Verify setup:
+    - List hosted MCP tools.
+    - If hosted `get_user_profile` exists, call it. Otherwise call `get_memories` with `limit: 5`.
+    - Run `omi --json local status`.
+    - Run `omi --json local tools`.
+    - Use only hosted and local tools that were discovered.
     """
   }
 
