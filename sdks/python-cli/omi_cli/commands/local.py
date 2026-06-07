@@ -6,6 +6,7 @@ import base64
 import binascii
 import json
 import os
+import re
 import shutil
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Mapping, Optional
@@ -112,12 +113,19 @@ def search_screen(
     query: str = typer.Argument(..., help="Natural-language screen-history query."),
     days: int = typer.Option(7, "--days", min=1, max=365),
     app_filter: Optional[str] = typer.Option(None, "--app", help="Restrict results to one app name."),
+    limit: int = typer.Option(15, "--limit", min=1, max=50, help="Maximum results to return."),
 ) -> None:
     ctx = _ctx(typer_ctx)
-    args: dict[str, Any] = {"query": query, "days": days}
+    args: dict[str, Any] = {"query": query, "days": days, "limit": limit}
     if app_filter:
         args["app_filter"] = app_filter
-    _emit_tool(ctx, "search_screen_history", args)
+    with ctx.make_local_client() as client:
+        result = client.call_tool("search_screen_history", args)
+        if ctx.renderer.json_mode:
+            result = _normalize_screen_search(result, args)
+            if isinstance(result, Mapping) and not result.get("results"):
+                result = _add_exact_screen_fallback(client, result, query=query, app_filter=app_filter, limit=limit)
+    ctx.renderer.emit(result, title="search_screen_history")
 
 
 @app.command("screenshot", help="Fetch a screenshot by ID.")
@@ -134,8 +142,20 @@ def screenshot(
         return
 
     written = _write_screenshot_result(result, output)
+    raw_metadata = result.get("metadata") if isinstance(result, Mapping) else None
+    metadata: Mapping[str, Any] = raw_metadata if isinstance(raw_metadata, Mapping) else {}
     ctx.renderer.success(f"Wrote screenshot to [bold]{written}[/bold].")
-    ctx.renderer.emit({"output": str(written), "result": _redact_screenshot_payload(result)}, title="screenshot")
+    ctx.renderer.emit(
+        {
+            "path": str(written),
+            "screenshot_id": metadata.get("screenshot_id")
+            or (result.get("screenshot_id") if isinstance(result, Mapping) else screenshot_id),
+            "bytes": written.stat().st_size,
+            "metadata": metadata,
+            "result": _redact_screenshot_payload(result),
+        },
+        title="screenshot",
+    )
 
 
 @app.command("recap", help="Get a pre-formatted daily local activity recap.")
@@ -153,7 +173,7 @@ def sql(
     query: str = typer.Argument(..., help="SQL query to execute."),
 ) -> None:
     ctx = _ctx(typer_ctx)
-    _emit_tool(ctx, "execute_sql", {"query": query})
+    _emit_tool(ctx, "execute_sql", {"query": query}, transform=_normalize_sql_result)
 
 
 @task_app.command("search", help="Semantic search over local Omi tasks.")
@@ -193,9 +213,12 @@ def _emit_tool(
     arguments: Mapping[str, Any],
     *,
     success: Optional[str] = None,
+    transform: Optional[Any] = None,
 ) -> None:
     with ctx.make_local_client() as client:
         result = client.call_tool(tool_name, arguments)
+    if transform is not None and ctx.renderer.json_mode:
+        result = transform(result)
     if success:
         ctx.renderer.success(success)
     ctx.renderer.emit(result, title=tool_name)
@@ -244,6 +267,150 @@ def _redact_screenshot_payload(result: Any) -> Any:
         redacted["image_base64_redacted"] = True
         redacted["image_base64_chars"] = len(str(image_payload))
     return redacted
+
+
+def _normalize_sql_result(result: Any) -> Any:
+    if not isinstance(result, str):
+        return result
+
+    lines = [line.rstrip() for line in result.splitlines()]
+    non_empty = [line for line in lines if line.strip()]
+    if not non_empty:
+        return {"rows": [], "columns": [], "row_count": 0, "text": result}
+
+    if result == "No results":
+        return {"rows": [], "columns": [], "row_count": 0}
+    if result.startswith("Error:") or result.startswith("SQL Error:"):
+        return {"error": result}
+    if result.startswith("OK:"):
+        return {"ok": True, "message": result}
+
+    footer = non_empty[-1]
+    row_count_match = re.match(r"^(\d+) row\(s\)$", footer)
+    header = non_empty[0]
+    separator_index = 1 if len(non_empty) > 1 and set(non_empty[1]) <= {"-", " "} else None
+    if separator_index is None or not row_count_match:
+        return {"text": result}
+
+    columns = [part.strip() for part in header.split("|")] if "|" in header else [header.strip()]
+    rows = []
+    for line in non_empty[2:-1]:
+        values = [part.strip() for part in line.split("|")] if "|" in line else [line.strip()]
+        rows.append({column: values[index] if index < len(values) else "" for index, column in enumerate(columns)})
+
+    return {
+        "columns": columns,
+        "rows": rows,
+        "row_count": int(row_count_match.group(1)),
+    }
+
+
+def _normalize_screen_search(result: Any, arguments: Mapping[str, Any]) -> Any:
+    if not isinstance(result, str):
+        return result
+
+    query = str(arguments.get("query") or "")
+    days = int(arguments.get("days") or 7)
+    app_filter = arguments.get("app_filter")
+    limit = int(arguments.get("limit") or 15)
+
+    if result.startswith("No matching screen-history results") or result.startswith("No screen history is available"):
+        suggestions = [
+            "Try a broader query",
+            "Increase --days",
+            "Use `omi --json local sql` for exact app/window/OCR filters",
+        ]
+        if app_filter is None:
+            suggestions.insert(0, f"Try `omi --json local search-screen {json.dumps(query)} --app <AppName>`")
+        return {
+            "results": [],
+            "query": query,
+            "days": days,
+            "app_filter": app_filter,
+            "limit": limit,
+            "reason": result.strip(),
+            "suggestions": suggestions,
+        }
+
+    results: list[dict[str, Any]] = []
+    current: Optional[dict[str, Any]] = None
+    result_line = re.compile(
+        r"^\s*(\d+)\. \[(.*?)\] (.*?)(?: - (.*?))? \(screenshot_id: (\d+), similarity: ([0-9.]+)\)$"
+    )
+    for line in result.splitlines():
+        match = result_line.match(line)
+        if match:
+            current = {
+                "rank": int(match.group(1)),
+                "timestamp": match.group(2),
+                "app_name": match.group(3),
+                "window_title": match.group(4) or None,
+                "screenshot_id": int(match.group(5)),
+                "similarity": float(match.group(6)),
+            }
+            results.append(current)
+            continue
+        if current is not None and line.strip().startswith("Content:"):
+            current["ocr_preview"] = line.split("Content:", 1)[1].strip()
+
+    if not results:
+        return {"text": result, "query": query, "days": days, "app_filter": app_filter, "limit": limit}
+
+    return {
+        "results": results,
+        "query": query,
+        "days": days,
+        "app_filter": app_filter,
+        "limit": limit,
+        "result_count": len(results),
+    }
+
+
+def _add_exact_screen_fallback(
+    client: Any,
+    payload: Mapping[str, Any],
+    *,
+    query: str,
+    app_filter: Optional[str],
+    limit: int,
+) -> dict[str, Any]:
+    next_payload = dict(payload)
+    escaped_query = _sql_like_literal(query)
+    query_clauses = [
+        f"appName LIKE '%{escaped_query}%'",
+        f"windowTitle LIKE '%{escaped_query}%'",
+        f"ocrText LIKE '%{escaped_query}%'",
+    ]
+    if app_filter:
+        escaped_app = _sql_like_literal(app_filter)
+        where_clause = f"(appName LIKE '%{escaped_app}%') AND ({' OR '.join(query_clauses)})"
+    else:
+        where_clause = " OR ".join(query_clauses)
+
+    sql = (
+        "SELECT id AS screenshot_id, timestamp, appName AS app_name, isIndexed AS is_indexed "
+        "FROM screenshots "
+        f"WHERE {where_clause} "
+        "ORDER BY timestamp DESC "
+        f"LIMIT {limit}"
+    )
+    fallback = _normalize_sql_result(client.call_tool("execute_sql", {"query": sql}))
+    next_payload["exact_fallback"] = {
+        "query": sql,
+        "source": "app_window_ocr_sql",
+        "result": fallback,
+    }
+    if isinstance(fallback, Mapping):
+        rows = fallback.get("rows")
+        if isinstance(rows, list) and rows:
+            next_payload["suggested_screenshot_ids"] = [
+                row.get("screenshot_id") for row in rows if isinstance(row, Mapping) and row.get("screenshot_id")
+            ]
+    return next_payload
+
+
+def _sql_like_literal(value: str) -> str:
+    return value.replace("'", "''")
 
 
 def _first_string(mapping: Mapping[str, Any], keys: tuple[str, ...]) -> Optional[str]:

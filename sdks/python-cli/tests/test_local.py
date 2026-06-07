@@ -143,9 +143,89 @@ def test_search_screen_routes_to_screen_history_tool(config_path: Path, cli_runn
     body = json.loads(route.calls[0].request.content)
     assert body == {
         "name": "search_screen_history",
-        "arguments": {"query": "pricing page", "days": 14, "app_filter": "Safari"},
+        "arguments": {"query": "pricing page", "days": 14, "limit": 15, "app_filter": "Safari"},
     }
     assert json.loads(result.stdout) == [{"id": 7}]
+
+
+def test_search_screen_supports_limit_and_structures_text_results(config_path: Path, cli_runner) -> None:
+    _configure_local_profile(config_path)
+    response = """
+Found 1 screenshot(s) matching "Discord":
+
+1. [Jun 7, 2026 at 12:34 PM] Discord - #general (screenshot_id: 42, similarity: 0.87)
+   Content: Status update preview
+""".strip()
+    with respx.mock(base_url=FAKE_LOCAL_URL, assert_all_called=True) as router:
+        route = router.post("/v1/local/tool").mock(return_value=httpx.Response(200, json=_tool_response(response)))
+        result = cli_runner.invoke(app, ["--json", "local", "search-screen", "Discord", "--days", "30", "--limit", "3"])
+
+    assert result.exit_code == 0, result.output
+    assert json.loads(route.calls[0].request.content) == {
+        "name": "search_screen_history",
+        "arguments": {"query": "Discord", "days": 30, "limit": 3},
+    }
+    payload = json.loads(result.stdout)
+    assert payload["result_count"] == 1
+    assert payload["results"][0]["screenshot_id"] == 42
+    assert payload["results"][0]["ocr_preview"] == "Status update preview"
+
+
+def test_search_screen_no_results_is_structured_in_json(config_path: Path, cli_runner) -> None:
+    _configure_local_profile(config_path)
+    response = (
+        'No matching screen-history results for "Discord" in the last 1 day(s). Local history exists '
+        "(10 screenshot(s), 10 indexed), so try a broader query."
+    )
+    with respx.mock(base_url=FAKE_LOCAL_URL, assert_all_called=True) as router:
+        route = router.post("/v1/local/tool").mock(
+            side_effect=[
+                httpx.Response(200, json=_tool_response(response)),
+                httpx.Response(
+                    200,
+                    json=_tool_response(
+                        "screenshot_id | timestamp | app_name | is_indexed\n"
+                        "--------------------------------------------------------------------------------\n"
+                        "42 | 2026-06-07T12:34:00Z | Discord | 1\n\n"
+                        "1 row(s)"
+                    ),
+                ),
+            ]
+        )
+        result = cli_runner.invoke(app, ["--json", "local", "search-screen", "Discord", "--days", "1"])
+
+    assert result.exit_code == 0, result.output
+    bodies = [json.loads(call.request.content) for call in route.calls]
+    assert bodies[0] == {
+        "name": "search_screen_history",
+        "arguments": {"query": "Discord", "days": 1, "limit": 15},
+    }
+    assert bodies[1]["name"] == "execute_sql"
+    assert "appName LIKE '%Discord%'" in bodies[1]["arguments"]["query"]
+    payload = json.loads(result.stdout)
+    assert payload["results"] == []
+    assert payload["query"] == "Discord"
+    assert payload["days"] == 1
+    assert payload["suggestions"]
+    assert payload["exact_fallback"]["result"]["rows"][0]["screenshot_id"] == "42"
+    assert payload["suggested_screenshot_ids"] == ["42"]
+
+
+def test_search_screen_exact_fallback_constrains_app_filter(config_path: Path, cli_runner) -> None:
+    _configure_local_profile(config_path)
+    response = 'No matching screen-history results for "Discord" in the last 1 day(s) with app filter "Discord".'
+    with respx.mock(base_url=FAKE_LOCAL_URL, assert_all_called=True) as router:
+        route = router.post("/v1/local/tool").mock(
+            side_effect=[
+                httpx.Response(200, json=_tool_response(response)),
+                httpx.Response(200, json=_tool_response("No results")),
+            ]
+        )
+        result = cli_runner.invoke(app, ["--json", "local", "search-screen", "Discord", "--app", "Discord"])
+
+    assert result.exit_code == 0, result.output
+    fallback_query = json.loads(route.calls[1].request.content)["arguments"]["query"]
+    assert "WHERE (appName LIKE '%Discord%') AND" in fallback_query
 
 
 def test_sql_routes_to_execute_sql_with_env_overrides(config_path: Path, cli_runner, monkeypatch) -> None:
@@ -161,6 +241,38 @@ def test_sql_routes_to_execute_sql_with_env_overrides(config_path: Path, cli_run
     assert route.calls[0].request.headers["Authorization"] == "Bearer env_local_token"
     body = json.loads(route.calls[0].request.content)
     assert body == {"name": "execute_sql", "arguments": {"query": "SELECT 1"}}
+
+
+def test_sql_json_structures_table_text(config_path: Path, cli_runner) -> None:
+    _configure_local_profile(config_path)
+    sql_text = "screenshots | appName\n----------------------------------------\n12 | Discord\n\n1 row(s)"
+    with respx.mock(base_url=FAKE_LOCAL_URL, assert_all_called=True) as router:
+        router.post("/v1/local/tool").mock(return_value=httpx.Response(200, json=_tool_response(sql_text)))
+        result = cli_runner.invoke(app, ["--json", "local", "sql", "SELECT 1"])
+
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.stdout)
+    assert payload == {
+        "columns": ["screenshots", "appName"],
+        "rows": [{"screenshots": "12", "appName": "Discord"}],
+        "row_count": 1,
+    }
+
+
+def test_sql_json_structures_single_column_table_text(config_path: Path, cli_runner) -> None:
+    _configure_local_profile(config_path)
+    sql_text = "screenshots\n--------------------\n12\n\n1 row(s)"
+    with respx.mock(base_url=FAKE_LOCAL_URL, assert_all_called=True) as router:
+        router.post("/v1/local/tool").mock(return_value=httpx.Response(200, json=_tool_response(sql_text)))
+        result = cli_runner.invoke(app, ["--json", "local", "sql", "SELECT COUNT(*) AS screenshots FROM screenshots"])
+
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.stdout)
+    assert payload == {
+        "columns": ["screenshots"],
+        "rows": [{"screenshots": "12"}],
+        "row_count": 1,
+    }
 
 
 def test_task_commands_route_to_local_tools(config_path: Path, cli_runner) -> None:
@@ -215,6 +327,8 @@ def test_screenshot_writes_base64_output_and_keeps_json_stdout(config_path: Path
         "arguments": {"screenshot_id": "9"},
     }
     payload = json.loads(result.stdout)
-    assert payload["output"] == str(output)
+    assert payload["path"] == str(output)
+    assert payload["bytes"] == len(image_bytes)
+    assert payload["screenshot_id"] == "9"
     assert "image_base64" not in payload["result"]
     assert payload["result"]["image_base64_redacted"] is True

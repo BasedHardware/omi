@@ -615,6 +615,7 @@ class ChatToolExecutor {
 
     let days = max(1, intArgument(args["days"]) ?? 7)
     let appFilter = args["app_filter"] as? String
+    let limit = min(max(1, intArgument(args["limit"]) ?? 15), 50)
 
     let calendar = Calendar.current
     let endDate = Date()
@@ -626,7 +627,7 @@ class ChatToolExecutor {
         startDate: startDate,
         endDate: endDate,
         appFilter: appFilter,
-        topK: 20
+        topK: max(limit * 2, 20)
       )
 
       log("Tool semantic_search: vector returned \(vectorResults.count) results")
@@ -651,7 +652,7 @@ class ChatToolExecutor {
         let windowTitle = screenshot.windowTitle ?? ""
         let titlePart = windowTitle.isEmpty ? "" : " - \(windowTitle)"
         lines.append(
-          "\n\(count). [\(dateStr)] \(screenshot.appName)\(titlePart) (similarity: \(String(format: "%.2f", result.similarity)))"
+          "\n\(count). [\(dateStr)] \(screenshot.appName)\(titlePart) (screenshot_id: \(result.screenshotId), similarity: \(String(format: "%.2f", result.similarity)))"
         )
 
         // Include OCR text preview (truncated)
@@ -662,7 +663,7 @@ class ChatToolExecutor {
           lines.append("   Content: \(preview)")
         }
 
-        if count >= 15 { break }
+        if count >= limit { break }
       }
 
       if lines.isEmpty {
