@@ -361,8 +361,20 @@ async def _run_anthropic_agent_stream(
     while loop that calls Anthropic's messages API, executes any tool calls,
     and feeds results back until the model stops requesting tools.
     """
-    # System prompt with cache_control for Anthropic prompt caching
-    system_blocks = [{"type": "text", "text": system_prompt, "cache_control": {"type": "ephemeral"}}]
+    # System prompt with cache_control for Anthropic prompt caching.
+    # Split the system prompt into a static part and a dynamic part at <assistant_role>
+    # so that the large static part (instructions, style, rules) can be cached by Anthropic.
+    split_marker = "<assistant_role>"
+    if split_marker in system_prompt:
+        parts = system_prompt.split(split_marker, 1)
+        static_part = parts[0].strip()
+        dynamic_part = (split_marker + parts[1]).strip()
+        system_blocks = [
+            {"type": "text", "text": static_part, "cache_control": {"type": "ephemeral"}},
+            {"type": "text", "text": dynamic_part},
+        ]
+    else:
+        system_blocks = [{"type": "text", "text": system_prompt, "cache_control": {"type": "ephemeral"}}]
 
     loop_iteration = 0
 
