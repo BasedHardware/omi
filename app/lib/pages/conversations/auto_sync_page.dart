@@ -171,12 +171,12 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
       title = l.syncCardNeedsAttention(attention);
       titleColor = Colors.orangeAccent;
       action = _statusActionPill(l.sync, Colors.deepPurpleAccent, () async {
-        if (await confirmSyncForCustomStt(context)) p.syncWals();
+        if (await confirmSyncForCustomStt(context) && context.mounted) p.syncWals();
       });
     } else if (readyToBackUp > 0) {
       title = l.syncCardReadyCount(readyToBackUp);
       action = _statusActionPill(l.sync, Colors.deepPurpleAccent, () async {
-        if (await confirmSyncForCustomStt(context)) p.syncWals();
+        if (await confirmSyncForCustomStt(context) && context.mounted) p.syncWals();
       });
     } else if (hasAnyRecording) {
       title = l.syncCardAllBackedUp;
