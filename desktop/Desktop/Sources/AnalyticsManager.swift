@@ -17,25 +17,6 @@ class AnalyticsManager {
 
   private init() {}
 
-  // MARK: - Sampling
-
-  /// Sample an event probabilistically (0.0 = drop all, 1.0 = keep all).
-  /// Used to thin out high-volume UI events (tab clicks, screenshot views,
-  /// list-item taps) that have dashboard value at trend resolution but flood
-  /// PostHog as a firehose. Trend math stays valid as long as the sample rate
-  /// is recorded — we set `sample_rate` on the surviving event so SQL can
-  /// scale counts back up when needed.
-  private func sampledTrack(_ event: String, rate: Double, properties: [String: Any] = [:])
-  {
-    guard !Self.isDevBuild else { return }
-    // Drand48 is fine here — we don't need cryptographic randomness, just
-    // independent per-call sampling. Seeded once per process by the runtime.
-    if Double.random(in: 0..<1) >= rate { return }
-    var props = properties
-    props["sample_rate"] = rate
-    PostHogManager.shared.track(event, properties: props)
-  }
-
   // MARK: - Initialization
 
   func initialize() {
@@ -470,9 +451,7 @@ class AnalyticsManager {
   // MARK: - Navigation Events
 
   func tabChanged(tabName: String) {
-    // Navigation noise — sampled at 10%. We only need it for retention/funnel
-    // shape, not exact per-click counts.
-    sampledTrack("Tab Changed", rate: 0.10, properties: ["tab_name": tabName])
+    PostHogManager.shared.tabChanged(tabName: tabName)
   }
 
   func conversationDetailOpened(conversationId: String) {
@@ -605,11 +584,7 @@ class AnalyticsManager {
   }
 
   func rewindScreenshotViewed(timestamp: Date) {
-    // High-frequency scrubbing event — sample at 10%. Trend math stays valid
-    // via the `sample_rate` property on each surviving event.
-    sampledTrack("Rewind Screenshot Viewed", rate: 0.10, properties: [
-      "timestamp": ISO8601DateFormatter().string(from: timestamp)
-    ])
+    PostHogManager.shared.rewindScreenshotViewed(timestamp: timestamp)
   }
 
   func rewindTimelineNavigated(direction: String) {
