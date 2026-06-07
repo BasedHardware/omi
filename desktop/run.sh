@@ -363,20 +363,8 @@ if [ -n "$SWIFTPM_PID" ]; then
     done
 fi
 
-step "Building agent (npm install + tsc)..."
-AGENT_DIR="$(dirname "$0")/agent"
-if [ -d "$AGENT_DIR" ]; then
-    cd "$AGENT_DIR"
-    if [ ! -d "node_modules" ] || [ "package.json" -nt "node_modules/.package-lock.json" ]; then
-        substep "Installing npm dependencies"
-        npm install --no-fund --no-audit 2>&1 | tail -1
-    fi
-    substep "Compiling TypeScript and copying assets"
-    npm run build --silent
-    cd - > /dev/null
-else
-    echo "Warning: agent directory not found at $AGENT_DIR"
-fi
+step "Preparing agent runtime..."
+"$(dirname "$0")/scripts/prepare-agent-runtime.sh" --local-node
 
 step "Checking schema docs..."
 if [ -f scripts/check_schema_docs.sh ]; then

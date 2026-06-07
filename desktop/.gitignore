@@ -45,6 +45,8 @@ xcuserdata/
 # Local scripts and data (untracked)
 local/
 scripts/
+!scripts/
+!scripts/prepare-agent-runtime.sh
 
 # Swift compiler diagnostics cache
 *.dia
