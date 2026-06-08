@@ -3,7 +3,8 @@ import hashlib
 import json
 import math
 import uuid
-from typing import List
+from datetime import datetime
+from typing import List, Optional, Union
 from firebase_admin import messaging, auth
 import database.notifications as notification_db
 from utils.executors import db_executor, run_blocking
@@ -509,7 +510,13 @@ def send_action_item_deletion_message(user_id: str, action_item_id: str):
     _send_to_user(user_id, tag, data=data, is_background=True, priority='high')
 
 
-def sync_action_item_reminder(user_id: str, action_item_id: str, description: str, completed: bool, due_at):
+def sync_action_item_reminder(
+    user_id: str,
+    action_item_id: str,
+    description: str,
+    completed: bool,
+    due_at: Optional[Union[datetime, str]],
+):
     """Reconcile the client-scheduled reminder after an action item is created or updated (#5085).
 
     The mobile client schedules a local reminder from the action-item update/data message and
