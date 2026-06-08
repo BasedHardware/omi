@@ -509,6 +509,24 @@ def send_action_item_deletion_message(user_id: str, action_item_id: str):
     _send_to_user(user_id, tag, data=data, is_background=True, priority='high')
 
 
+def sync_action_item_reminder(user_id: str, action_item_id: str, description: str, completed: bool, due_at):
+    """Reconcile the client-scheduled reminder after an action item is created or updated (#5085).
+
+    The mobile client schedules a local reminder from the action-item update/data message and
+    cancels it on the 'action_item_delete' message. The reminder must be cancelled when the task is
+    completed or no longer has a due date, and (re)scheduled only for an open task that still has a
+    due date. Reusing send_action_item_deletion_message is intentional: the client treats it as
+    "cancel the scheduled local notification by id", not as a task deletion.
+    """
+    if completed or not due_at:
+        send_action_item_deletion_message(user_id=user_id, action_item_id=action_item_id)
+        return
+    due_iso = due_at.isoformat() if hasattr(due_at, 'isoformat') else due_at
+    send_action_item_update_message(
+        user_id=user_id, action_item_id=action_item_id, description=description or '', due_at=due_iso
+    )
+
+
 def send_action_items_batch_deletion_message(user_id: str, action_item_ids: List[str]):
     """
     Bulk equivalent of send_action_item_deletion_message — one FCM data
