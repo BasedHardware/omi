@@ -144,8 +144,11 @@ metrics:
     interval: "15s"
     labels:
       release: prod-omi-kube-prometheus-stack
-  prometheusAdapter:
-    enabled: true
+
+prometheus-adapter:
+  enabled: true
+  prometheus:
+    url: http://prod-omi-kube-prometheus-s-prometheus.prod-omi-monitoring.svc
 
 # This section is for setting up autoscaling more information can be found here: https://kubernetes.io/docs/concepts/workloads/autoscaling/
 autoscaling:
