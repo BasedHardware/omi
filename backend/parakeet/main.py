@@ -1,5 +1,6 @@
 import asyncio
 import os
+import threading
 import time
 import uuid
 import logging
@@ -9,6 +10,8 @@ from prometheus_client import Gauge, Histogram, make_asgi_app
 
 from transcribe import transcribe_file, transcribe_file_v2
 from stream_handler import StreamSession, warmup_rnnt_decoder
+
+_GPU_SEMAPHORE = threading.Semaphore(int(os.getenv("PARAKEET_MAX_CONCURRENT", "1")))
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -48,7 +51,8 @@ def transcribe(file: UploadFile = File(...)):
     try:
         with open(file_path, "wb") as f:
             f.write(file.file.read())
-        return transcribe_file(file_path)
+        with _GPU_SEMAPHORE:
+            return transcribe_file(file_path)
     finally:
         REQUEST_DURATION.labels(endpoint="v1_transcribe").observe(time.monotonic() - t0)
         ACTIVE_BATCH.dec()
@@ -70,7 +74,8 @@ def transcribe_v2(
     try:
         with open(file_path, "wb") as f:
             f.write(file.file.read())
-        return transcribe_file_v2(file_path, diarize=diarize)
+        with _GPU_SEMAPHORE:
+            return transcribe_file_v2(file_path, diarize=diarize)
     finally:
         REQUEST_DURATION.labels(endpoint="v2_transcribe").observe(time.monotonic() - t0)
         ACTIVE_BATCH.dec()
