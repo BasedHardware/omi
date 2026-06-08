@@ -164,6 +164,19 @@ class FlashPageWalSyncImpl implements FlashPageWalSync {
   }
 
   @override
+  Future<void> refreshWalsFromDevice() async {
+    // Re-enumerate from the device's current flash-page pointers. ACKs sent
+    // during a previous sync advance oldest_flash_page, so this re-reads the
+    // remaining range. Without it, a second in-session Sync tap would reuse the
+    // stale cached WAL (possibly already marked synced) and report "no data" —
+    // forcing the user to relaunch the app to resume. Skip while a download is
+    // in flight so we never swap the list out from under an active sync.
+    if (_isSyncing) return;
+    _wals = await _getMissingWals();
+    listener.onWalUpdated();
+  }
+
+  @override
   Future stop() async {
     _wals = [];
     await _pageStream?.cancel();
@@ -392,8 +405,17 @@ class FlashPageWalSyncImpl implements FlashPageWalSync {
           }
         }
 
-        if (emptyExtractions >= maxEmptyExtractions) {
-          Logger.debug("FlashPageSync: No more data from device");
+        // Authoritative completion is reaching the newest page that existed at
+        // enumeration — driven off the device's page pointer, not a transfer
+        // lull. A gap in the BLE frame stream (backpressure or a device-side
+        // pause between sessions) no longer counts as "fully drained".
+        if (lastProcessedIndex != null && lastProcessedIndex >= endPage) {
+          Logger.debug("FlashPageSync: Reached newest page $endPage, download complete");
+          syncComplete = true;
+        } else if (emptyExtractions >= maxEmptyExtractions) {
+          Logger.debug(
+            "FlashPageSync: Stream stalled at page ${lastProcessedIndex ?? startPage} before end $endPage; pausing for resume",
+          );
           syncComplete = true;
         }
 
@@ -493,10 +515,33 @@ class FlashPageWalSyncImpl implements FlashPageWalSync {
 
       await limitlessConnection.enableRealTimeMode();
 
-      Logger.debug("FlashPageSync: Download complete. $filesSaved files saved and registered with LocalWalSync");
-      DebugLogManager.logEvent('flash_page_download_completed', {'filesSaved': filesSaved});
-      progress?.onWalSyncedProgress(1.0);
-      return true; // Completed successfully
+      final bool reachedEnd = lastProcessedIndex != null && lastProcessedIndex >= endPage;
+      if (reachedEnd) {
+        Logger.debug("FlashPageSync: Download complete. $filesSaved files saved and registered with LocalWalSync");
+        DebugLogManager.logEvent('flash_page_download_completed', {'filesSaved': filesSaved});
+        progress?.onWalSyncedProgress(1.0);
+        return true; // Fully drained — safe for the caller to mark this WAL synced
+      }
+
+      // Stalled before the newest page. Advance the WAL to the first page we
+      // have NOT pulled and leave it 'miss' (mirrors the cancel path above), so
+      // the next sync resumes from here instead of marking the whole range
+      // synced after only a partial download. refreshWalsFromDevice() re-reads
+      // the device's advanced pointer on the next Sync.
+      if (lastProcessedIndex != null) {
+        wal.storageOffset = lastProcessedIndex + 1;
+        final remainingPages = endPage - lastProcessedIndex;
+        wal.seconds = (remainingPages * secondsPerFlashPage).round();
+        Logger.debug(
+          "FlashPageSync: Partial download — resume start page ${wal.storageOffset}, $remainingPages pages remaining",
+        );
+      }
+      DebugLogManager.logEvent('flash_page_download_partial', {
+        'filesSaved': filesSaved,
+        'lastProcessedIndex': lastProcessedIndex ?? 0,
+        'endPage': endPage,
+      });
+      return false; // Not fully drained — WAL stays 'miss' for the next sync
     } catch (e) {
       Logger.debug("FlashPageSync: Error: $e");
       DebugLogManager.logError(e, null, 'Flash page download error');
