@@ -13,6 +13,14 @@ logger = logging.getLogger(__name__)
 action_items_collection = 'action_items'
 
 
+def get_action_item_ids(uid: str) -> List[str]:
+    """Return all action item document IDs for a user (IDs-only projection, no field reads).
+
+    Used for bulk operations like account deletion (e.g. to purge derived Pinecone vectors)."""
+    coll = db.collection('users').document(uid).collection(action_items_collection)
+    return [doc.id for doc in coll.select([]).stream()]
+
+
 def _prepare_action_item_for_write(action_item_data: dict) -> dict:
     """Prepare action item data for writing to database"""
     # Ensure timestamps are properly formatted
