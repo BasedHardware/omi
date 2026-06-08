@@ -135,6 +135,8 @@
     "systemDefault": "Systeemstandaard",
     "planAndUsage": "Abonnement en gebruik",
     "offlineSync": "Offline synchronisatie",
+    "autoSync": "Automatisch synchroniseren",
+    "autoSyncDescription": "Synchroniseer offline-opnamen automatisch wanneer je apparaat verbinding maakt",
     "deviceSettings": "Apparaatinstellingen",
     "integrations": "Integraties",
     "feedbackBug": "Feedback / Fout",

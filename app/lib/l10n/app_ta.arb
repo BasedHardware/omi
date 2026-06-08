@@ -554,6 +554,8 @@
         "description": "Plan and usage menu item"
     },
     "offlineSync": "ஆப்லைன் ஒத்திசை",
+    "autoSync": "தானியங்கி ஒத்திசைவு",
+    "autoSyncDescription": "உங்கள் சாதனம் இணைக்கப்படும்போது ஆஃப்லைன் பதிவுகளைத் தானாகவே ஒத்திசைக்கவும்",
     "@offlineSync": {
         "description": "Page title for offline sync"
     },

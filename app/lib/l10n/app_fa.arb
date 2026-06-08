@@ -554,6 +554,8 @@
         "description": "Plan and usage menu item"
     },
     "offlineSync": "همگام‌سازی آفلاین",
+    "autoSync": "همگام‌سازی خودکار",
+    "autoSyncDescription": "هنگام اتصال دستگاه، ضبط‌های آفلاین به‌طور خودکار همگام‌سازی شوند",
     "@offlineSync": {
         "description": "Page title for offline sync"
     },

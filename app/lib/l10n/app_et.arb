@@ -135,6 +135,8 @@
     "systemDefault": "Süsteemi vaikimisi",
     "planAndUsage": "Plaan ja kasutus",
     "offlineSync": "Võrguühenduseta sünkroonimine",
+    "autoSync": "Automaatne sünkroonimine",
+    "autoSyncDescription": "Sünkrooni võrguühenduseta salvestised automaatselt, kui seade ühendatakse",
     "deviceSettings": "Seadme seaded",
     "integrations": "Integratsioonid",
     "feedbackBug": "Tagasiside / viga",

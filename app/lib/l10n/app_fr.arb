@@ -135,6 +135,8 @@
     "systemDefault": "Par défaut du système",
     "planAndUsage": "Forfait et utilisation",
     "offlineSync": "Synchronisation hors ligne",
+    "autoSync": "Synchronisation automatique",
+    "autoSyncDescription": "Synchroniser automatiquement les enregistrements hors ligne lorsque votre appareil se connecte",
     "deviceSettings": "Paramètres de l'appareil",
     "integrations": "Intégrations",
     "feedbackBug": "Retour / Bug",

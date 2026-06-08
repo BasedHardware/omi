@@ -135,6 +135,8 @@
     "systemDefault": "Systemstandard",
     "planAndUsage": "Abonnement og forbruk",
     "offlineSync": "Offline-synkronisering",
+    "autoSync": "Automatisk synkronisering",
+    "autoSyncDescription": "Synkroniser frakoblede opptak automatisk når enheten din kobles til",
     "deviceSettings": "Enhetsinnstillinger",
     "integrations": "Integrasjoner",
     "feedbackBug": "Tilbakemelding / Feil",

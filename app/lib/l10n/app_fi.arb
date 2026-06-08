@@ -135,6 +135,8 @@
     "systemDefault": "Järjestelmän oletus",
     "planAndUsage": "Paketti ja käyttö",
     "offlineSync": "Offline-synkronointi",
+    "autoSync": "Automaattinen synkronointi",
+    "autoSyncDescription": "Synkronoi offline-tallenteet automaattisesti, kun laitteesi yhdistetään",
     "deviceSettings": "Laitteen asetukset",
     "integrations": "Integraatiot",
     "feedbackBug": "Palaute / Virhe",

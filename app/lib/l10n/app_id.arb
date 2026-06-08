@@ -135,6 +135,8 @@
     "systemDefault": "Bawaan Sistem",
     "planAndUsage": "Paket & Penggunaan",
     "offlineSync": "Sinkronisasi luring",
+    "autoSync": "Sinkronisasi otomatis",
+    "autoSyncDescription": "Sinkronkan rekaman offline secara otomatis saat perangkat Anda terhubung",
     "deviceSettings": "Pengaturan Perangkat",
     "integrations": "Integrasi",
     "feedbackBug": "Masukan / Bug",

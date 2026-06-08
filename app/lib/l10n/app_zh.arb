@@ -135,6 +135,8 @@
     "systemDefault": "系统默认",
     "planAndUsage": "套餐与用量",
     "offlineSync": "离线同步",
+    "autoSync": "自动同步",
+    "autoSyncDescription": "设备连接时自动同步离线录音",
     "deviceSettings": "设备设置",
     "integrations": "集成",
     "feedbackBug": "反馈 / Bug",

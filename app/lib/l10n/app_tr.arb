@@ -135,6 +135,8 @@
     "systemDefault": "Sistem Varsayılanı",
     "planAndUsage": "Plan ve Kullanım",
     "offlineSync": "Çevrimdışı Senkronizasyon",
+    "autoSync": "Otomatik eşitleme",
+    "autoSyncDescription": "Cihazınız bağlandığında çevrimdışı kayıtları otomatik olarak eşitleyin",
     "deviceSettings": "Cihaz Ayarları",
     "integrations": "Entegrasyonlar",
     "feedbackBug": "Geri Bildirim / Hata",

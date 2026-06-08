@@ -135,6 +135,8 @@
     "systemDefault": "Implicit sistem",
     "planAndUsage": "Plan și utilizare",
     "offlineSync": "Sincronizare offline",
+    "autoSync": "Sincronizare automată",
+    "autoSyncDescription": "Sincronizează automat înregistrările offline când dispozitivul tău se conectează",
     "deviceSettings": "Setări dispozitiv",
     "integrations": "Integrări",
     "feedbackBug": "Feedback / Eroare",

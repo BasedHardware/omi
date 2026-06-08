@@ -135,6 +135,8 @@
     "systemDefault": "Rendszer alapértelmezett",
     "planAndUsage": "Előfizetés és használat",
     "offlineSync": "Offline szinkronizálás",
+    "autoSync": "Automatikus szinkronizálás",
+    "autoSyncDescription": "Offline felvételek automatikus szinkronizálása az eszköz csatlakozásakor",
     "deviceSettings": "Eszköz beállításai",
     "integrations": "Integrációk",
     "feedbackBug": "Visszajelzés / hiba",

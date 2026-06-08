@@ -135,6 +135,8 @@
     "systemDefault": "Predefinito del Sistema",
     "planAndUsage": "Piano e Utilizzo",
     "offlineSync": "Sincronizzazione offline",
+    "autoSync": "Sincronizzazione automatica",
+    "autoSyncDescription": "Sincronizza automaticamente le registrazioni offline quando il dispositivo si connette",
     "deviceSettings": "Impostazioni Dispositivo",
     "integrations": "Integrazioni",
     "feedbackBug": "Feedback / Bug",

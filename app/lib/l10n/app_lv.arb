@@ -135,6 +135,8 @@
     "systemDefault": "Sistēmas noklusējuma",
     "planAndUsage": "Plāns un lietojums",
     "offlineSync": "Bezsaistes sinhronizācija",
+    "autoSync": "Automātiska sinhronizācija",
+    "autoSyncDescription": "Automātiski sinhronizēt bezsaistes ierakstus, kad ierīce tiek savienota",
     "deviceSettings": "Ierīces iestatījumi",
     "integrations": "Integrācijas",
     "feedbackBug": "Atsauksmes / Kļūda",
