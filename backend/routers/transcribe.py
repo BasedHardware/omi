@@ -999,18 +999,6 @@ async def _stream_handler(
             return await process_audio_modulate(callback, sr, lang)
         return await process_audio_dg(callback, lang, sr, 1, model=model, keywords=kw, is_active=active_check)
 
-    _debug_wav_writer = None
-    _debug_wav_file = None
-    if os.getenv('PARAKEET_DEBUG_CAPTURE', ''):
-        import wave as _dbg_wave
-
-        _debug_wav_file = open(f'/tmp/omi-capture-{session_id[:8]}.wav', 'wb')
-        _debug_wav_writer = _dbg_wave.open(_debug_wav_file, 'wb')
-        _debug_wav_writer.setnchannels(1)
-        _debug_wav_writer.setsampwidth(2)
-        _debug_wav_writer.setframerate(sample_rate)
-        logger.info(f"DEBUG: capturing PCM to /tmp/omi-capture-{session_id[:8]}.wav {uid}")
-
     async def _process_stt():
         nonlocal websocket_close_code
         nonlocal stt_socket
@@ -2420,9 +2408,6 @@ async def _stream_handler(
                 )
                 stt_socket = None
 
-            if _debug_wav_writer is not None:
-                _debug_wav_writer.writeframes(chunk)
-
             if stt_socket is not None:
                 # DG budget gate: skip sending if daily budget is exhausted (#5746, #6083).
                 if fair_use_dg_budget_exhausted:
@@ -2666,13 +2651,6 @@ async def _stream_handler(
                         await drain_target.drain_and_close()
             except Exception as e:
                 logger.error(f"Error draining STT EOS: {e} {uid} {session_id}")
-            if _debug_wav_writer is not None:
-                try:
-                    _debug_wav_writer.close()
-                    _debug_wav_file.close()
-                    logger.info(f"DEBUG: PCM capture saved {uid}")
-                except Exception:
-                    pass
             websocket_active = False
 
     # Start
