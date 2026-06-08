@@ -117,6 +117,27 @@ def _src(rel):
     return (BACKEND_DIR / rel).read_text(encoding="utf-8")
 
 
+_HELPER = "sync_action_item_reminder"
+
+
+def _live_call_lines(rel):
+    """Lines that actually call the helper, excluding comments — so a commented-out or dead-text
+    occurrence can't satisfy the wire guard."""
+    return [ln for ln in _src(rel).splitlines() if f"{_HELPER}(" in ln and not ln.lstrip().startswith("#")]
+
+
+def _is_imported(rel):
+    """True if the helper is imported (single-line `from x import a, helper` or a parenthesized
+    multi-line member line `    helper,`)."""
+    for ln in _src(rel).splitlines():
+        s = ln.strip()
+        if s in (f"{_HELPER},", _HELPER):  # member of a parenthesized import block
+            return True
+        if s.startswith(("from ", "import ")) and _HELPER in s:  # single-line import
+            return True
+    return False
+
+
 def test_helper_cancels_on_completed_or_no_due():
     n = _src("utils/notifications.py")
     assert "def sync_action_item_reminder" in n
@@ -126,8 +147,9 @@ def test_helper_cancels_on_completed_or_no_due():
 
 def test_router_wires_helper_and_no_longer_blindly_rearms():
     ai = _src("routers/action_items.py")
-    # toggle-completion AND update both reconcile through the helper
-    assert ai.count("sync_action_item_reminder(") >= 2
+    assert _is_imported("routers/action_items.py")
+    # toggle-completion AND update both reconcile through the helper (real calls, not comments)
+    assert len(_live_call_lines("routers/action_items.py")) >= 2
     # the old unconditional "re-arm whenever due_at present" block is gone
     assert "if 'due_at' in update_data and update_data['due_at']:" not in ai
     # creating an already-completed item must not arm a reminder
@@ -140,4 +162,5 @@ def test_agentic_and_developer_paths_wired():
         "utils/retrieval/tool_services/action_items.py",
         "routers/developer.py",
     ]:
-        assert "sync_action_item_reminder(" in _src(rel), rel
+        assert _is_imported(rel), f"{rel} does not import {_HELPER}"
+        assert _live_call_lines(rel), f"{rel} has no live (non-comment) {_HELPER} call"
