@@ -107,7 +107,7 @@ Rules:
 - Write it like a sharp friend texting, not a corporate advisor
 - NEVER start with: Confirm, Ensure, Clarify, Consider, Prioritize, Remember, Review, Align, Make sure, Don't forget
 - Under 100 characters
-- The notification must contain information {user_name} does NOT already have, or a connection they can't see
+- The notification must contain information {user_name} does NOT already have, or a connection they can't see{language_instruction}
 
 == {user_name}'S FACTS ==
 {user_facts}
@@ -167,7 +167,26 @@ REJECT if ANY of these are true:
 APPROVE only if ALL of these are true:
 - The notification contains specific information {user_name} genuinely does not have right now
 - A smart friend would say this exact thing in person and {user_name} would thank them
-- NOT seeing this notification could lead to a missed opportunity or avoidable mistake"""
+- NOT seeing this notification could lead to a missed opportunity or avoidable mistake{language_instruction}"""
+
+
+def _language_instruction(output_language: str, *, for_critic: bool = False) -> str:
+    """Instruction telling the model to write (or, for the critic, expect) the notification in the
+    user's language (#5214).
+
+    Returns "" for English or an unset language: the model already defaults to English, so we add no
+    instruction — and we never tell it to "avoid English" for English-family locale codes (en-US...).
+    """
+    lang = (output_language or 'en').strip()
+    if not lang or lang.lower().startswith('en'):
+        return ""
+    if for_critic:
+        return (
+            f"\n\nLANGUAGE: this notification is expected to be written in the user's language "
+            f"(code: {lang}). Do NOT reject it merely for not being in English; DO reject if it is "
+            f"written in English instead of {lang}."
+        )
+    return f"\n- Write the notification entirely in the user's language (language/locale code: {lang})"
 
 
 # ---------------------------------------------------------------------------
@@ -321,6 +340,7 @@ def generate_notification(
     recent_notifications: list,
     frequency: int,
     gate_reasoning: str,
+    output_language: str = 'en',
 ) -> NotificationDraft:
     """Generate the actual notification text, only called when gate passes."""
     goals_text = _format_goals(goals)
@@ -339,6 +359,7 @@ def generate_notification(
         recent_notifications=notifications_text,
         frequency_guidance=guidance,
         gate_reasoning=gate_reasoning,
+        language_instruction=_language_instruction(output_language),
     )
 
     with_parser = get_llm('proactive_notification').with_structured_output(NotificationDraft)
@@ -357,6 +378,7 @@ def validate_notification(
     draft_reasoning: str,
     current_messages: list,
     goals: list,
+    output_language: str = 'en',
 ) -> ValidationResult:
     """Final human-perspective check: would you actually want this on your phone?"""
     current_conversation = _format_current_conversation(current_messages, user_name)
@@ -368,6 +390,7 @@ def validate_notification(
         draft_reasoning=draft_reasoning,
         current_conversation=current_conversation,
         goals_text=goals_text,
+        language_instruction=_language_instruction(output_language, for_critic=True),
     )
 
     with_parser = get_llm('proactive_notification').with_structured_output(ValidationResult)
