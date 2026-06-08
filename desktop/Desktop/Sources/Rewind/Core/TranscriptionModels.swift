@@ -157,6 +157,19 @@ struct TranscriptionSessionRecord: Codable, FetchableRecord, PersistableRecord, 
         retryCount < 5
     }
 
+    /// True once the local session has been associated with a backend conversation.
+    var hasSyncedBackendIdentity: Bool {
+        backendSynced || !(backendId?.isEmpty ?? true)
+    }
+
+    /// Whether a completion event can attach this backend conversation ID.
+    func canAcceptCompletion(backendId incomingBackendId: String) -> Bool {
+        guard let existingBackendId = backendId, !existingBackendId.isEmpty else {
+            return true
+        }
+        return existingBackendId == incomingBackendId
+    }
+
     /// Calculate backoff delay in seconds based on retry count
     var retryBackoffSeconds: TimeInterval {
         // Exponential backoff: 2^retryCount minutes

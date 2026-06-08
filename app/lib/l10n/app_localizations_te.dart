@@ -9362,4 +9362,11 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get recapRegenerateNoConversations => 'ఈ రోజుకి సారాంశీకరించడానికి సంభాషణలు లేవు.';
+
+  @override
+  String get syncCustomSttWarningTitle => 'సింక్ Omi ట్రాన్స్‌క్రిప్షన్‌ను ఉపయోగిస్తుంది';
+
+  @override
+  String get syncCustomSttWarningMessage =>
+      'మీరు మీ సొంత ట్రాన్స్‌క్రిప్షన్ ప్రొవైడర్‌ను ఉపయోగిస్తున్నారు. ఈ రికార్డింగ్‌లను సింక్ చేస్తే అవి Omi సర్వర్‌లలో ట్రాన్స్‌క్రైబ్ చేయబడతాయి మరియు మీ ప్లాన్ ట్రాన్స్‌క్రిప్షన్ పరిమితిలో లెక్కించబడతాయి.';
 }

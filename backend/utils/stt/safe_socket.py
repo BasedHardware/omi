@@ -4,7 +4,7 @@ This module is intentionally lightweight (no heavy imports) so that unit tests
 can import SafeDeepgramSocket without pulling in GCP/storage dependencies.
 
 Architecture: SafeDeepgramSocket is the SOLE keepalive owner for a DG connection.
-No other layer (GatedDeepgramSocket, transcribe.py) should call keep_alive() directly.
+No other layer (GatedSTTSocket, transcribe.py) should call keep_alive() directly.
 A background daemon thread sends keepalive when idle > keepalive_interval_sec.
 """
 
@@ -13,6 +13,8 @@ import threading
 import time
 from dataclasses import dataclass
 from typing import Callable, Optional
+
+from utils.stt.socket import STTSocket
 
 logger = logging.getLogger(__name__)
 
@@ -37,7 +39,7 @@ class KeepaliveConfig:
             raise ValueError(f'check_period_sec must be > 0, got {self.check_period_sec}')
 
 
-class SafeDeepgramSocket:
+class SafeDeepgramSocket(STTSocket):
     """Wraps a raw Deepgram LiveConnection with auto-keepalive and dead-connection detection.
 
     Auto-keepalive: A background daemon thread sends keepalive when the connection
@@ -48,11 +50,9 @@ class SafeDeepgramSocket:
     Dead detection: Monitors send() and keep_alive() return values. When either
     returns False or raises, marks connection as permanently dead (one-way latch).
 
-    This is the SOLE keepalive owner — GatedDeepgramSocket and orchestrator code
+    This is the SOLE keepalive owner — GatedSTTSocket and orchestrator code
     must NOT call keep_alive() directly.
     """
-
-    _is_safe_dg_socket = True  # Marker for duck-type checks (avoids circular import)
 
     def __init__(
         self,

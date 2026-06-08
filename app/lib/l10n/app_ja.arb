@@ -3047,5 +3047,7 @@
     "recapRegeneratedSnackbar": "要約を再生成しました",
     "recapRegenerateFailed": "要約を再生成できませんでした。後でもう一度お試しください。",
     "recapRegenerateCooldown": "再生成する前に数秒お待ちください。",
-    "recapRegenerateNoConversations": "この日の要約対象となる会話はありません。"
+    "recapRegenerateNoConversations": "この日の要約対象となる会話はありません。",
+    "syncCustomSttWarningTitle": "同期では Omi の文字起こしを使用します",
+    "syncCustomSttWarningMessage": "ご自身の文字起こしプロバイダーを使用しています。これらの録音を同期すると Omi のサーバーで文字起こしされ、プランの文字起こし上限にカウントされます。"
 }

@@ -91,6 +91,7 @@ from utils.subscription import (
 from database import user_usage as user_usage_db
 from utils import stripe as stripe_utils
 from utils.log_sanitizer import sanitize
+from utils.twilio_service import delete_user_caller_ids
 from utils.llm.followup import followup_question_prompt
 from utils.notifications import send_notification, send_training_data_submitted_notification
 from utils.llm.external_integrations import generate_comprehensive_daily_summary
@@ -142,6 +143,11 @@ class DeleteAccountRequest(BaseModel):
 
 def _background_wipe_user_data(uid: str):
     try:
+        # Twilio caller IDs first, while the phone_numbers subcollection still
+        # carries the twilio_sid metadata. delete_user_caller_ids is best-effort
+        # — Twilio errors are logged inside and never propagate, so a momentary
+        # Twilio outage cannot leave the user half-deleted in Firestore.
+        delete_user_caller_ids(uid)
         delete_user_data(uid)
         logger.info(f'delete_account background wipe complete for {uid}')
     except Exception as e:
@@ -160,6 +166,21 @@ def delete_account(
                 users_db.set_user_deletion_feedback(uid, request.reason, request.reason_details)
             except Exception as e:
                 logger.info(f'delete_account feedback store failed: {sanitize(str(e))}')
+
+        # 1.5 Cancel any active paid Stripe subscription before wiping the account, so the user
+        #     isn't billed after deletion (they lose all access and can't self-serve a cancel).
+        #     Read the subscription while the user doc still exists. Best-effort: a Stripe hiccup
+        #     must never block account deletion, but log loudly so support can clean up manually.
+        try:
+            sub = users_db.get_user_subscription(uid)
+            if sub and sub.stripe_subscription_id:
+                canceled = stripe_utils.cancel_subscription(sub.stripe_subscription_id)
+                if not canceled:
+                    logger.error(f'delete_account stripe cancel returned None for {uid}')
+        except Exception as e:
+            # cancel_subscription swallows its own Stripe errors (returns None), so this only
+            # fires on the subscription lookup (e.g. a Firestore read error).
+            logger.error(f'delete_account subscription lookup failed for {uid}: {sanitize(str(e))}')
 
         # 2. Revoke Firebase auth immediately so tokens are useless and the
         #    account cannot be logged back into while the data wipe runs.

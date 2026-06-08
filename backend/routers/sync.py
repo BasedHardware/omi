@@ -62,7 +62,7 @@ from utils import encryption
 from utils.byok import get_byok_keys, set_byok_keys
 from utils.http_client import _get_semaphore
 from utils.log_sanitizer import sanitize
-from utils.stt.pre_recorded import deepgram_prerecorded, get_deepgram_model_for_language, postprocess_words
+from utils.stt.pre_recorded import postprocess_words, prerecorded
 from utils.stt.vad import vad_is_empty
 from utils.fair_use import (
     record_speech_ms,
@@ -977,21 +977,17 @@ def process_segment(
         user_language = prefs.get('language', '') or ''
         single_language_mode = prefs.get('single_language_mode', False)
 
-        if single_language_mode and user_language:
-            dg_language, dg_model = get_deepgram_model_for_language(user_language)
-        else:
-            dg_language, dg_model = get_deepgram_model_for_language('multi')
+        req_language = user_language if (single_language_mode and user_language) else 'multi'
 
         # When single-language mode is active, trust the user's language choice
         # rather than Deepgram's detection (avoids overriding explicit selection).
         use_return_language = not (single_language_mode and user_language)
-        words, detected_language = deepgram_prerecorded(
+        words, detected_language = prerecorded(
             url,
             speakers_count=3,
             attempts=0,
             return_language=True,
-            language=dg_language,
-            model=dg_model,
+            language=req_language,
             keywords=vocabulary if vocabulary else None,
         )
         language = user_language if (single_language_mode and user_language) else detected_language

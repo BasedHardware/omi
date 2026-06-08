@@ -9310,4 +9310,11 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get recapRegenerateNoConversations => 'Selle päeva jaoks pole vestlusi, mida kokku võtta.';
+
+  @override
+  String get syncCustomSttWarningTitle => 'Sünkroonimine kasutab Omi transkriptsiooni';
+
+  @override
+  String get syncCustomSttWarningMessage =>
+      'Kasutate oma transkriptsiooniteenust. Nende salvestiste sünkroonimine transkribeerib need Omi serverites ja need arvestatakse teie paketi transkriptsioonilimiidi sisse.';
 }

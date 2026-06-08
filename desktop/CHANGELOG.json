@@ -1,11 +1,47 @@
 {
   "unreleased": [
-    "Fixed drag handle on Tasks page not appearing when hovering over a row",
-    "Fixed drag-to-reorder on Tasks page not persisting when date filters are active",
-    "Fixed drag-to-reorder on Tasks page \u2014 dragged row now visually dims while in flight",
     "Added a System Audio setting (Always / Only during meetings / Never); 'Only during meetings' records mic + system audio only while you're in a call"
   ],
   "releases": [
+    {
+      "version": "0.11.453",
+      "date": "2026-06-07",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.452",
+      "date": "2026-06-07",
+      "changes": [
+        "Proactive notifications are now off by default \u2014 turn them on anytime in Settings"
+      ]
+    },
+    {
+      "version": "0.11.451",
+      "date": "2026-06-06",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.450",
+      "date": "2026-06-06",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.449",
+      "date": "2026-06-05",
+      "changes": [
+        "Fixed drag handle on Tasks page not appearing when hovering over a row",
+        "Fixed drag-to-reorder on Tasks page not persisting when date filters are active",
+        "Fixed drag-to-reorder on Tasks page \u2014 dragged row now visually dims while in flight",
+        "Fixed manual tasks producing duplicate rows on every backend sync \u2014 orphan adoption now matches by description only, since the backend does not preserve the client-side source value",
+        "Fixed Floating Bar positioning so the input field is no longer hidden behind the macOS Dock"
+      ]
+    },
     {
       "version": "0.11.446",
       "date": "2026-06-03",

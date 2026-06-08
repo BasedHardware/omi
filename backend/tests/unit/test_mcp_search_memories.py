@@ -275,6 +275,47 @@ class TestSearchMemoriesUserReview:
         assert result == []
 
 
+class TestSearchMemoriesInvalidated:
+    """search_memories must not surface superseded/invalidated memories — the brain
+    only returns facts that are currently true."""
+
+    @patch('routers.mcp.memories_db')
+    @patch('routers.mcp.vector_db')
+    def test_invalidated_memory_excluded(self, mock_vector_db, mock_memories_db):
+        mock_vector_db.find_similar_memories.return_value = [
+            {'memory_id': 'mem-old', 'score': 0.95},
+            {'memory_id': 'mem-new', 'score': 0.80},
+        ]
+        mock_memories_db.get_memories_by_ids.return_value = [
+            # superseded "loves ice cream" — higher vector score but invalidated
+            {
+                'id': 'mem-old',
+                'content': 'loves ice cream',
+                'category': 'system',
+                'is_locked': False,
+                'invalid_at': '2026-06-01T00:00:00+00:00',
+                'superseded_by': 'mem-new',
+            },
+            {'id': 'mem-new', 'content': 'hates ice cream', 'category': 'system', 'is_locked': False},
+        ]
+        result = search_memories(query="ice cream", limit=10, uid="user-1")
+        assert len(result) == 1
+        assert result[0]['id'] == 'mem-new'
+
+    @patch('routers.mcp.memories_db')
+    @patch('routers.mcp.vector_db')
+    def test_active_memory_with_null_invalid_at_included(self, mock_vector_db, mock_memories_db):
+        mock_vector_db.find_similar_memories.return_value = [
+            {'memory_id': 'mem-1', 'score': 0.9},
+        ]
+        mock_memories_db.get_memories_by_ids.return_value = [
+            {'id': 'mem-1', 'content': 'active', 'category': 'system', 'is_locked': False, 'invalid_at': None},
+        ]
+        result = search_memories(query="test", limit=10, uid="user-1")
+        assert len(result) == 1
+        assert result[0]['id'] == 'mem-1'
+
+
 class TestEditMemoryVectorSync:
     """edit_memory must re-embed the new content so search finds the edited text."""
 

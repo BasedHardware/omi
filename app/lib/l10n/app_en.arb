@@ -11006,5 +11006,13 @@
     "recapRegeneratedSnackbar": "Recap regenerated",
     "recapRegenerateFailed": "Couldn't regenerate the recap. Try again later.",
     "recapRegenerateCooldown": "Please wait a few seconds before regenerating again.",
-    "recapRegenerateNoConversations": "No conversations to summarize for this day."
+    "recapRegenerateNoConversations": "No conversations to summarize for this day.",
+    "syncCustomSttWarningTitle": "Sync uses Omi transcription",
+    "@syncCustomSttWarningTitle": {
+        "description": "Title of the dialog shown when a third-party (custom) STT user manually syncs offline recordings"
+    },
+    "syncCustomSttWarningMessage": "You use your own transcription provider. Syncing these recordings transcribes them on Omi's servers instead, and they count toward your plan's transcription limit.",
+    "@syncCustomSttWarningMessage": {
+        "description": "Body warning that syncing transcribes on Omi servers and counts toward the plan limit"
+    }
 }

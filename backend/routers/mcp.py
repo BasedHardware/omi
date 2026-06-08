@@ -8,6 +8,7 @@ from pydantic import BaseModel
 
 import database.memories as memories_db
 import database.conversations as conversations_db
+import database.users as users_db
 
 # from database.redis_db import get_filter_category_items
 # from database.vector_db import query_vectors_by_metadata
@@ -18,6 +19,7 @@ from models.conversation_enums import CategoryEnum
 from utils.conversations.render import populate_speaker_names, redact_conversations_for_list
 from utils.apps import update_personas_async
 from utils.llm.memories import identify_category_for_memory
+from utils.retrieval.hybrid import rrf_rerank
 from dependencies import get_uid_from_mcp_api_key, get_current_user_id
 from utils.other.endpoints import with_rate_limit
 from utils.log_sanitizer import sanitize_pii
@@ -95,6 +97,24 @@ def edit_memory(memory_id: str, value: str, uid: str = Depends(get_uid_from_mcp_
     return {"status": "ok"}
 
 
+class UserProfile(BaseModel):
+    profile_text: Optional[str] = None
+    generated_at: Optional[str] = None
+    data_sources_used: Optional[int] = None
+
+
+@router.get("/v1/mcp/profile", tags=["mcp"], response_model=UserProfile)
+def get_user_profile(uid: str = Depends(get_uid_from_mcp_api_key)):
+    """The user's consolidated, always-current profile. Read this first for facts about the user."""
+    profile = users_db.get_ai_user_profile(uid) or {}
+    generated_at = profile.get("generated_at")
+    return UserProfile(
+        profile_text=profile.get("profile_text"),
+        generated_at=str(generated_at) if generated_at is not None else None,
+        data_sources_used=profile.get("data_sources_used"),
+    )
+
+
 class CleanerMemory(BaseModel):
     id: str
     content: str
@@ -121,23 +141,39 @@ def search_memories(
     scores = {m.get("memory_id"): m.get("score", 0) for m in matches}
     if not memory_ids:
         return []
-    memories_data = memories_db.get_memories_by_ids(uid, memory_ids)
-    results = []
-    for m in memories_data:
-        if m.get('user_review') is False:
+    docs = {m.get("id"): m for m in memories_db.get_memories_by_ids(uid, memory_ids)}
+
+    # Build candidates in vector-relevance order, excluding rejected / locked / superseded
+    # memories so the brain never returns a fact that is no longer true.
+    candidates = []
+    for mid in memory_ids:
+        m = docs.get(mid)
+        if not m:
             continue
-        if m.get('is_locked', False):
+        if m.get('user_review') is False or m.get('is_locked', False) or m.get('invalid_at') is not None:
             continue
-        results.append(
+        candidates.append(
             {
                 "id": m.get("id", ""),
                 "content": m.get("content", ""),
                 "category": m.get("category", "other"),
-                "relevance_score": round(scores.get(m.get("id"), 0), 4),
+                "vector_score": scores.get(mid, 0),
             }
         )
-    results.sort(key=lambda x: x["relevance_score"], reverse=True)
-    return results[:limit]
+
+    # Order by semantic score first (RRF uses this as the vector rank), then fuse with
+    # keyword (BM25) ranking so exact-keyword lookups surface reliably.
+    candidates.sort(key=lambda c: c.get("vector_score", 0), reverse=True)
+    reranked = rrf_rerank(query, candidates, limit)
+    return [
+        {
+            "id": c["id"],
+            "content": c["content"],
+            "category": c["category"],
+            "relevance_score": round(c.get("vector_score", 0), 4),
+        }
+        for c in reranked
+    ]
 
 
 @router.get("/v1/mcp/memories", tags=["mcp"], response_model=List[CleanerMemory])

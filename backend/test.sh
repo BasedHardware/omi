@@ -17,8 +17,13 @@ pytest tests/unit/test_voice_message_language.py -v
 pytest tests/unit/test_speaker_assignment.py -v
 pytest tests/unit/test_speaker_id_pipeline.py -v
 pytest tests/unit/test_user_speaker_embedding.py -v
+pytest tests/unit/test_parakeet_diarization.py -v
+pytest tests/unit/test_parakeet_prerecorded.py -v
+pytest tests/unit/test_parakeet_nim.py -v
+pytest tests/unit/test_parakeet_stream_session.py -v
 pytest tests/unit/test_memory_leak_buffers.py -v
 pytest tests/unit/test_mcp_search_memories.py -v
+pytest tests/unit/test_memory_temporal_brain.py -v
 pytest tests/unit/test_llm_usage_tracker.py -v
 pytest tests/unit/test_process_conversation_usage_context.py -v
 pytest tests/unit/test_llm_usage_db.py -v
@@ -61,6 +66,7 @@ pytest tests/unit/test_firestore_read_ops_cache.py -v
 pytest tests/unit/test_ws_auth_handshake.py -v
 pytest tests/unit/test_streaming_deepgram_backoff.py -v
 pytest tests/unit/test_executors.py -v
+pytest tests/unit/test_modulate_stt.py -v
 pytest tests/unit/test_batch_upload_storage.py -v
 pytest tests/unit/test_action_item_date_validation.py -v
 pytest tests/unit/test_action_item_dedup.py -v
@@ -126,6 +132,9 @@ pytest tests/unit/test_vertex_ai_system_role.py -v
 pytest tests/unit/test_tts.py -v
 pytest tests/unit/test_webhook_auto_disable.py -v
 pytest tests/unit/test_merge_validation.py -v
+pytest tests/unit/test_twilio_account_deletion.py -v
+pytest tests/unit/test_conversation_search_date_validation.py -v
+pytest tests/unit/test_delete_account_stripe_cancel.py -v
 
 # Fair-use integration tests (require Redis; skip gracefully if unavailable)
 if redis-cli ping >/dev/null 2>&1; then

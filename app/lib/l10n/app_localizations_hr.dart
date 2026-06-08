@@ -9345,4 +9345,11 @@ class AppLocalizationsHr extends AppLocalizations {
 
   @override
   String get recapRegenerateNoConversations => 'Nema razgovora za sažimanje za ovaj dan.';
+
+  @override
+  String get syncCustomSttWarningTitle => 'Sinkronizacija koristi Omi transkripciju';
+
+  @override
+  String get syncCustomSttWarningMessage =>
+      'Koristite vlastiti pružatelj transkripcije. Sinkronizacija ovih snimaka transkribira ih na Omijevim poslužiteljima i broje se u ograničenje transkripcije vašeg plana.';
 }

@@ -34,7 +34,7 @@ These rules apply to every AI agent working in this repository. This file is the
 - **No in-function imports** — all imports at module top level.
 - **Import hierarchy** (low → high): `database/` → `utils/` → `routers/` → `main.py`. Never import upward.
 - **Memory management** — `del` byte arrays after processing, `.clear()` dicts/lists holding data.
-- **Async I/O** — never `requests.*` in async (use `httpx.AsyncClient` pools from `utils/http_client.py`), never `Thread().start().join()` (use `critical_executor`/`storage_executor`), never `time.sleep()` in async (use `asyncio.sleep()`). Run `python scripts/scan_async_blockers.py` before committing.
+- **Async I/O** — never `requests.*` in async (use `httpx.AsyncClient` pools from `utils/http_client.py`), never `Thread().start().join()` (use `critical_executor`/`storage_executor`), never `time.sleep()` in async (use `asyncio.sleep()`). Run `python scripts/scan_async_blockers.py` from `backend/` before committing.
 - **`async def` vs `def` endpoints** — use `def` for endpoints that only call sync code (Firestore, Redis, file I/O); FastAPI runs `def` in a threadpool automatically. Only use `async def` when the endpoint genuinely `await`s something (httpx, file.read(), WebSocket, asyncio.sleep) or uses asyncio APIs directly. Never call sync DB/storage/file functions directly inside `async def` — wrap with `await run_blocking(executor, func, args)`.
 - **Blocking calls in async** — these block the event loop: `database.*` functions (Firestore sync SDK), `open()`/`shutil.*` (file I/O), `upload_*`/`delete_*` from storage (GCS SDK), `creds.refresh()` (Google auth HTTP). In `async def`, always offload via `await run_blocking(executor, func, args)` from `utils.executors`. Pool assignment: `critical_executor` for auth/rate-limits, `db_executor` for Firestore/Redis CRUD, `llm_executor` for LLM calls, `storage_executor` for GCS/file I/O, `postprocess_executor` for coordinators, `sync_executor` for STT/VAD. See `backend/CLAUDE.md` for full rules. Never use bare `asyncio.to_thread()`.
 
@@ -117,11 +117,11 @@ The desktop app is a **Swift Package Manager** project (no Xcode project, no `.x
 
 #### Building & Running
 
-- `./run.sh` — full local dev (build Swift app + Rust backend + Cloudflare tunnel + launch).
-- `./run.sh --yolo` — quick start against the prod backend, no local services.
+- `cd desktop && ./run.sh` — full local dev (build Swift app + Rust backend + Cloudflare tunnel + launch).
+- `cd desktop && ./run.sh --yolo` — quick start against the prod backend, no local services.
 - `OMI_SKIP_BACKEND=1` — app only, use remote backend via `OMI_DESKTOP_API_URL`. `OMI_SKIP_TUNNEL=1` — no Cloudflare tunnel.
-- Compile-only check: `xcrun swift build -c debug --package-path Desktop` (the `xcrun` prefix is required to match the SDK).
-- **DO NOT** use bare `swift build`, `xcodebuild`, or launch from `build/` directly. Always launch via `./run.sh` (installs to `/Applications/` and registers with LaunchServices, required for permission "Quit & Reopen").
+- Compile-only check: `cd desktop && xcrun swift build -c debug --package-path Desktop` (the `xcrun` prefix is required to match the SDK).
+- **DO NOT** use bare `swift build`, `xcodebuild`, or launch from `build/` directly. Always launch via `cd desktop && ./run.sh` (installs to `/Applications/` and registers with LaunchServices, required for permission "Quit & Reopen").
 - Release builds are handled entirely by Codemagic CI (no local release script).
 - For PRs that change function signatures or cross-file types, run a clean release build before merge: `cd desktop && rm -rf .build && xcrun swift build -c release --triple arm64-apple-macosx` — incremental debug builds miss stale-cache type errors that Codemagic's clean release build catches later.
 
@@ -129,7 +129,7 @@ The desktop app is a **Swift Package Manager** project (no Xcode project, no `.x
 
 When testing a feature or fix, **always create a separate named bundle** so it runs side-by-side with dev/prod:
 ```bash
-OMI_APP_NAME="omi-fix-rewind" ./run.sh
+cd desktop && OMI_APP_NAME="omi-fix-rewind" ./run.sh
 ```
 This installs `/Applications/omi-fix-rewind.app` with bundle id `com.omi.omi-fix-rewind`, with its own permissions, database, and auth state.
 
@@ -145,7 +145,7 @@ Rules:
 
 Agents can and should self-test the running app — don't stop at a successful compile. The fast path skips the slow parts (web login, sidebar click-through):
 
-1. **Build + launch a named bundle:** `OMI_APP_NAME="omi-<feature>" ./run.sh` (add `OMI_SKIP_TUNNEL=1` for a local backend without a tunnel; `OMI_SKIP_BACKEND=1 OMI_DESKTOP_API_URL=…` to point at a remote backend).
+1. **Build + launch a named bundle:** `cd desktop && OMI_APP_NAME="omi-<feature>" ./run.sh` (add `OMI_SKIP_TUNNEL=1` for a local backend without a tunnel; `OMI_SKIP_BACKEND=1 OMI_DESKTOP_API_URL=…` to point at a remote backend).
 2. **Boot signed-in (no browser):** sign into "Omi Dev" once, then clone the session into the named bundle **before launch** (UserDefaults is read at startup):
    ```bash
    cd desktop && ./scripts/omi-auth-dump.sh                  # capture the Omi Dev session
@@ -161,7 +161,7 @@ Agents can and should self-test the running app — don't stop at a successful c
 4. **Read logs to confirm behavior:**
    - App + chat bridge: `/private/tmp/omi-dev.log` (dev builds) or `/private/tmp/omi.log`.
    - Local Rust backend: stdout of the `./run.sh` process.
-   - Per-user issues: `./scripts/sentry-logs.sh <email>` (crashes), `./scripts/posthog_query.py <email>` (events).
+   - Per-user issues: check Sentry dashboard for crashes, PostHog for events.
 5. **Verify the actual behavior**, not just that the app launched — exercise the feature and check the logs/UI reflect the change.
 
 #### Verifying UI Changes (agent-swift)
@@ -192,14 +192,12 @@ For controlling the Mac GUI, use the right tool for each job:
 | Task | Tool | Example |
 |------|------|---------|
 | Click at coordinates | `cliclick` | `cliclick c:X,Y` |
-| Screenshots/OCR | `codriver` | `mcp__codriver__desktop_screenshot` (scale: 0.5) |
+| Mac desktop screenshots | `screencapture` | `screencapture -x /tmp/screen.png` |
 | Native macOS app testing | `agent-swift` | See Desktop section above |
 | Browser automation | `playwright` MCP | Headless, most reliable |
-| Existing browser tabs | `claude-in-chrome` | Only when extension connected |
 
 Rules:
 - NEVER try 3+ different click tools for the same action — pick one and commit.
-- `codriver` at `scale: 0.5` → multiply coordinates by 2 before clicking.
 - Prefer `cliclick` over `automac`/`mac-use-mcp` (coordinate bugs on multi-monitor).
 
 ## Formatting
@@ -218,7 +216,7 @@ Files ending in `.gen.dart` or `.g.dart` are auto-generated — don't format man
 
 - **Before your first commit**, verify the pre-commit hook is installed (see Setup).
 - Before starting work, run `git fetch origin && git pull --ff-only` on `main` — don't branch off stale local state.
-- Always commit to the current branch — never switch branches mid-task. Always work in a git worktree for code changes (`EnterWorktree`).
+- Always commit to the current branch — never switch branches mid-task. Always work in a git worktree for code changes (`git worktree add`).
 - Never push directly to `main`. Land changes through PRs only. Never squash-merge — use a regular merge.
 - Make individual commits per file, not bulk commits.
 - If push fails (remote ahead): `git pull --rebase && git push`.
@@ -238,9 +236,8 @@ Full RELEASE flow + `gh workflow run gcp_backend.yml -f environment=prod -f bran
 
 ## CI/CD & Logs
 
-- Deploy triggers and checks: `docs/runbooks/deploy.md`.
-- Log commands: `docs/runbooks/logging.md`.
-- Desktop release pipeline: merging `desktop/**` to `main` auto-increments the version, tags `v*-macos`, and triggers Codemagic (build, sign, notarize, publish GitHub release, deploy Rust backend). Promote channels with `desktop/scripts/promote_release.sh <tag>` (staging → beta → stable).
+- Desktop release pipeline: merging `desktop/**` to `main` auto-increments the version, tags `v*-macos`, and triggers Codemagic (build, sign, notarize, publish GitHub release, deploy Rust backend).
+- Backend deploy: `gh workflow run gcp_backend.yml -f environment=prod -f branch=main`.
 
 ## Documentation Maintenance
 

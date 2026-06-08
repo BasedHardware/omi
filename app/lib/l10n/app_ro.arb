@@ -3046,5 +3046,7 @@
     "recapRegeneratedSnackbar": "Rezumat regenerat",
     "recapRegenerateFailed": "Rezumatul nu a putut fi regenerat. Încercați din nou mai târziu.",
     "recapRegenerateCooldown": "Vă rugăm să așteptați câteva secunde înainte de a regenera.",
-    "recapRegenerateNoConversations": "Nu există conversații de rezumat pentru această zi."
+    "recapRegenerateNoConversations": "Nu există conversații de rezumat pentru această zi.",
+    "syncCustomSttWarningTitle": "Sincronizarea folosește transcrierea Omi",
+    "syncCustomSttWarningMessage": "Folosești propriul furnizor de transcriere. Sincronizarea acestor înregistrări le transcrie pe serverele Omi și se iau în calcul pentru limita de transcriere a planului tău."
 }

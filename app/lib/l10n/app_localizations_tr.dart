@@ -9324,4 +9324,11 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get recapRegenerateNoConversations => 'Bu gün için özetlenecek konuşma bulunamadı.';
+
+  @override
+  String get syncCustomSttWarningTitle => 'Eşitleme, Omi transkripsiyonunu kullanır';
+
+  @override
+  String get syncCustomSttWarningMessage =>
+      'Kendi transkripsiyon sağlayıcınızı kullanıyorsunuz. Bu kayıtları eşitlemek onları Omi sunucularında yazıya döker ve planınızın transkripsiyon sınırına sayılır.';
 }

@@ -9313,4 +9313,11 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get recapRegenerateNoConversations => 'Pro tento den nejsou žádné konverzace k shrnutí.';
+
+  @override
+  String get syncCustomSttWarningTitle => 'Synchronizace používá přepis Omi';
+
+  @override
+  String get syncCustomSttWarningMessage =>
+      'Používáte vlastního poskytovatele přepisu. Synchronizace těchto nahrávek je přepíše na serverech Omi a započítají se do limitu přepisu vašeho tarifu.';
 }

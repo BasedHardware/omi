@@ -470,17 +470,27 @@ def _extract_memories_inner(uid: str, conversation: Conversation):
 
     is_locked = conversation.is_locked
     parsed_memories = []
-    memories_to_delete = []
+    # (old_memory_id, new_memory_id) pairs to invalidate after the new memories are saved.
+    invalidations = []
+    # Cheap exact-duplicate guard within this batch (avoids redundant conflict LLM calls).
+    seen_norm = set()
 
     for memory in new_memories:
-        # Find similar existing memories
-        similar_matches = find_similar_memories(uid, memory.content, threshold=0.7, limit=3)
+        norm = ' '.join((memory.content or '').lower().split())
+        if not norm or norm in seen_norm:
+            continue
+        seen_norm.add(norm)
 
-        # Fetch content for each similar memory
+        # Wider net (lower threshold, more candidates) than before so cross-phrasing
+        # contradictions are caught — "loves ice cream" vs "hates ice cream",
+        # "lives in NYC" vs "lives in LA" — then let the LLM decide what's outdated.
+        similar_matches = find_similar_memories(uid, memory.content, threshold=0.6, limit=8)
+
+        # Only compare against currently-active memories (never resurface superseded ones).
         similar_memories = []
         for match in similar_matches:
             memory_data = memories_db.get_memory(uid, match['memory_id'])
-            if memory_data:
+            if memory_data and memory_data.get('invalid_at') is None:
                 similar_memories.append(
                     {
                         'memory_id': match['memory_id'],
@@ -490,28 +500,30 @@ def _extract_memories_inner(uid: str, conversation: Conversation):
                     }
                 )
 
+        supersede_ids = []
         if similar_memories:
             resolution = resolve_memory_conflict(memory.content, similar_memories, language=language)
 
-            if resolution.action == 'keep_existing':
+            if resolution.action == 'skip':
                 continue
 
-            elif resolution.action == 'merge':
-                # Replace existing memory with merged version
-                if resolution.merged_content:
-                    memories_to_delete.append(similar_memories[0]['memory_id'])
-                    memory.content = resolution.merged_content
+            if resolution.action == 'merge' and resolution.merged_content:
+                memory.content = resolution.merged_content
 
-            elif resolution.action == 'keep_both':
-                pass
+            if resolution.action in ('update', 'merge'):
+                for idx in resolution.supersedes or []:
+                    if isinstance(idx, int) and 1 <= idx <= len(similar_memories):
+                        supersede_ids.append(similar_memories[idx - 1]['memory_id'])
 
         memory_db_obj = MemoryDB.from_memory(memory, uid, conversation.id, False)
         memory_db_obj.is_locked = is_locked
         parsed_memories.append(memory_db_obj)
 
-    for memory_id in memories_to_delete:
-        delete_memory_vector(uid, memory_id)
-        memories_db.delete_memory(uid, memory_id)
+        for old_id in supersede_ids:
+            # Guard against superseding the very memory we're about to (re)write — the
+            # merged content can hash to an existing id.
+            if old_id and old_id != memory_db_obj.id:
+                invalidations.append((old_id, memory_db_obj.id))
 
     if len(parsed_memories) == 0:
         logger.info(f"No memories extracted for conversation {conversation.id}")
@@ -522,6 +534,16 @@ def _extract_memories_inner(uid: str, conversation: Conversation):
 
     for memory_db_obj in parsed_memories:
         upsert_memory_vector(uid, memory_db_obj.id, memory_db_obj.content, memory_db_obj.category.value)
+
+    # Invalidate (not delete) superseded memories: keep them as history but drop them from
+    # every retrieval path. Removing the vector also pulls them out of semantic search.
+    for old_id, new_id in invalidations:
+        try:
+            memories_db.invalidate_memory(uid, old_id, superseded_by=new_id)
+            delete_memory_vector(uid, old_id)
+            logger.info(f"Invalidated superseded memory {old_id} -> {new_id}")
+        except Exception:
+            logger.exception(f"Failed to invalidate superseded memory {old_id}")
 
     if len(parsed_memories) > 0:
         record_usage(uid, memories_created=len(parsed_memories))

@@ -809,10 +809,16 @@ def search_conversations_endpoint(
     end_timestamp = None
 
     if search_request.start_date:
-        start_timestamp = int(datetime.fromisoformat(search_request.start_date).timestamp())
+        try:
+            start_timestamp = int(datetime.fromisoformat(search_request.start_date).timestamp())
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid start_date; expected an ISO 8601 datetime string")
 
     if search_request.end_date:
-        end_timestamp = int(datetime.fromisoformat(search_request.end_date).timestamp())
+        try:
+            end_timestamp = int(datetime.fromisoformat(search_request.end_date).timestamp())
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid end_date; expected an ISO 8601 datetime string")
 
     return search_conversations(
         query=search_request.query,

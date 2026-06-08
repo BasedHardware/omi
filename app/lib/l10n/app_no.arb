@@ -3046,5 +3046,7 @@
     "recapRegeneratedSnackbar": "Sammendrag generert på nytt",
     "recapRegenerateFailed": "Kunne ikke generere sammendraget på nytt. Prøv igjen senere.",
     "recapRegenerateCooldown": "Vent noen sekunder før du genererer på nytt.",
-    "recapRegenerateNoConversations": "Ingen samtaler å oppsummere for denne dagen."
+    "recapRegenerateNoConversations": "Ingen samtaler å oppsummere for denne dagen.",
+    "syncCustomSttWarningTitle": "Synkronisering bruker Omi-transkripsjon",
+    "syncCustomSttWarningMessage": "Du bruker din egen transkripsjonsleverandør. Synkronisering av disse opptakene transkriberer dem på Omis servere, og de teller mot transkripsjonsgrensen i abonnementet ditt."
 }

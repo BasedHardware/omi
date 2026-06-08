@@ -9348,4 +9348,11 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get recapRegenerateNoConversations => 'Няма разговори за обобщаване за този ден.';
+
+  @override
+  String get syncCustomSttWarningTitle => 'Синхронизирането използва транскрипция на Omi';
+
+  @override
+  String get syncCustomSttWarningMessage =>
+      'Използвате собствен доставчик за транскрипция. Синхронизирането на тези записи ги транскрибира на сървърите на Omi и те се отчитат към лимита за транскрипция на вашия план.';
 }

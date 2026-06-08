@@ -1,6 +1,6 @@
 # App (Flutter) — Operational Playbook
 
-Inherits all rules from the root `../AGENTS.md`. This file adds app-specific operational guidance.
+Inherits all rules from the root [`../AGENTS.md`](../AGENTS.md). This file adds app-specific operational guidance.
 
 ## Build Bootstrap
 
@@ -81,11 +81,11 @@ flutter test test/unit/  # specific directory
 ## Localization (l10n)
 
 - All user-facing strings must use `context.l10n.keyName`
-- 34 locales: English (template) + 33 translations in `lib/l10n/`
+- 49 locales: English (template) + 48 translations in `lib/l10n/`. Don't trust this count from memory — enumerate with `ls lib/l10n/app_*.arb`.
 - Template: `lib/l10n/app_en.arb`
 - Add keys via `jq` (never read full ARB — they're large). Use skill `add-a-new-localization-key-l10n-arb`
 - Translate all locales — use skill `omi-add-missing-language-keys-l10n` for real translations
-- Regenerate after changes: `flutter gen-l10n`
+- Regenerate after changes: `flutter gen-l10n`. Task is only complete when this command emits zero "untranslated message(s)" warnings. To get the exact missing-key list, temporarily add `untranslated-messages-file: /tmp/untranslated.json` to `l10n.yaml` and re-run.
 
 ## Auth & Security
 
@@ -119,5 +119,5 @@ All API requests include: X-Request-Start-Time, X-App-Platform, X-Device-Id-Hash
 
 - See `e2e/SKILL.md` for navigation architecture, screen map, widget patterns, and 34 reference flows
 - See `e2e/flows/*.yaml` for individual flow definitions
-- agent-flutter (Marionette) for programmatic UI interaction — see root CLAUDE.md for setup
+- agent-flutter (Marionette) for programmatic UI interaction — see root AGENTS.md for setup
 

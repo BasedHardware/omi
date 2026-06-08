@@ -9338,4 +9338,11 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get recapRegenerateNoConversations => 'Brak rozmów do podsumowania w tym dniu.';
+
+  @override
+  String get syncCustomSttWarningTitle => 'Synchronizacja korzysta z transkrypcji Omi';
+
+  @override
+  String get syncCustomSttWarningMessage =>
+      'Używasz własnego dostawcy transkrypcji. Synchronizacja tych nagrań transkrybuje je na serwerach Omi i są wliczane do limitu transkrypcji w Twoim planie.';
 }

@@ -14,6 +14,7 @@ from utils.stt.vad_gate import (
     DgWallMapper,
     GateState,
     GatedDeepgramSocket,
+    GatedSTTSocket,
     VAD_GATE_KEEPALIVE_SEC,
     VADStreamingGate,
     is_gate_enabled,
@@ -1057,7 +1058,7 @@ class TestActivateMode:
         assert gate._pre_roll_total_ms == 0.0
 
     def test_activate_syncs_mapper_cursor(self):
-        """activate() should advance DgWallMapper cursor to match shadow phase audio."""
+        """activate() should advance WallTimeMapper cursor to match shadow phase audio."""
         gate = self._make_gate(mode='shadow')
         t = 1000.0
 
@@ -1070,8 +1071,8 @@ class TestActivateMode:
 
         gate.activate()
 
-        # Mapper DG cursor should be 0.3s (not 0.0)
-        assert gate.dg_wall_mapper._dg_cursor_sec == pytest.approx(0.3, abs=0.01)
+        # Mapper provider cursor should be 0.3s (not 0.0)
+        assert gate.dg_wall_mapper._provider_cursor_sec == pytest.approx(0.3, abs=0.01)
 
     def test_shadow_active_remap_continuous(self):
         """After shadow→active, remapped timestamps should be continuous, not over-shifted."""
@@ -2063,3 +2064,70 @@ class TestDG1011KeepaliveGap:
             )
         finally:
             safe.finish()
+
+
+class TestGatedSTTSocketPassthroughMode:
+    """Verify passthrough_audio=True forwards raw audio regardless of VAD gate decision."""
+
+    SAMPLE_RATE = 16000
+    FRAME_SIZE = SAMPLE_RATE * 2
+
+    def _make_gate(self):
+        gate = MagicMock(spec=VADStreamingGate)
+        gate.uid = 'test-uid'
+        gate.session_id = 'test-session'
+        gate_output = MagicMock()
+        gate_output.audio_to_send = None
+        gate_output.should_finalize = False
+        gate.process_audio.return_value = gate_output
+        return gate, gate_output
+
+    def test_passthrough_sends_raw_audio_even_when_gate_suppresses(self):
+        mock_conn = MagicMock()
+        mock_conn.is_connection_dead = False
+        gate, gate_output = self._make_gate()
+        gate_output.audio_to_send = None
+
+        gated = GatedSTTSocket(mock_conn, gate=gate, passthrough_audio=True)
+        audio = b'\x01' * self.FRAME_SIZE
+        gated.send(audio)
+
+        mock_conn.send.assert_called_once_with(audio)
+
+    def test_non_passthrough_does_not_send_when_gate_suppresses(self):
+        mock_conn = MagicMock()
+        mock_conn.is_connection_dead = False
+        gate, gate_output = self._make_gate()
+        gate_output.audio_to_send = None
+
+        gated = GatedSTTSocket(mock_conn, gate=gate, passthrough_audio=False)
+        audio = b'\x01' * self.FRAME_SIZE
+        gated.send(audio)
+
+        mock_conn.send.assert_not_called()
+
+    def test_passthrough_still_processes_vad_for_metrics(self):
+        mock_conn = MagicMock()
+        mock_conn.is_connection_dead = False
+        gate, gate_output = self._make_gate()
+        gate_output.audio_to_send = None
+
+        gated = GatedSTTSocket(mock_conn, gate=gate, passthrough_audio=True)
+        audio = b'\x01' * self.FRAME_SIZE
+        gated.send(audio)
+
+        gate.process_audio.assert_called_once()
+
+    def test_passthrough_finalize_still_triggers(self):
+        mock_conn = MagicMock()
+        mock_conn.is_connection_dead = False
+        gate, gate_output = self._make_gate()
+        gate_output.audio_to_send = None
+        gate_output.should_finalize = True
+
+        gated = GatedSTTSocket(mock_conn, gate=gate, passthrough_audio=True)
+        audio = b'\x01' * self.FRAME_SIZE
+        gated.send(audio)
+
+        mock_conn.send.assert_called_once_with(audio)
+        mock_conn.finalize.assert_called_once()

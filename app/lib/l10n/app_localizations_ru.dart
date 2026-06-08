@@ -9346,4 +9346,11 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get recapRegenerateNoConversations => 'Нет разговоров для резюмирования за этот день.';
+
+  @override
+  String get syncCustomSttWarningTitle => 'Синхронизация использует транскрипцию Omi';
+
+  @override
+  String get syncCustomSttWarningMessage =>
+      'Вы используете собственный сервис транскрипции. Синхронизация этих записей расшифрует их на серверах Omi, и они будут засчитаны в лимит транскрипции вашего тарифа.';
 }

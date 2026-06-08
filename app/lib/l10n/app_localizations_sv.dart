@@ -9318,4 +9318,11 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get recapRegenerateNoConversations => 'Inga samtal att sammanfatta för den här dagen.';
+
+  @override
+  String get syncCustomSttWarningTitle => 'Synkronisering använder Omi-transkription';
+
+  @override
+  String get syncCustomSttWarningMessage =>
+      'Du använder din egen transkriberingsleverantör. Att synkronisera dessa inspelningar transkriberar dem på Omis servrar i stället, och de räknas mot din plans transkriberingsgräns.';
 }

@@ -32,6 +32,58 @@ enum FinishConversationResult {
   case error(String)
 }
 
+enum DesktopConversationMatchPolicy {
+  /// Backend and local clocks can differ slightly around WebSocket close/reconnect.
+  static let startedAtTolerance: TimeInterval = 10
+
+  static func matchesDesktopConversation(
+    startedAt conversationStartedAt: Date?,
+    source: ConversationSource?,
+    sessionStartedAt: Date
+  ) -> Bool {
+    guard let conversationStartedAt else { return false }
+    guard source == .desktop else { return false }
+    return abs(conversationStartedAt.timeIntervalSince(sessionStartedAt)) < startedAtTolerance
+  }
+
+  static func memoryEventMatchesFinishedSession(
+    _ memory: [String: Any]?,
+    sessionStartedAt: Date
+  ) -> Bool {
+    guard let memory else { return false }
+
+    // Older backend lifecycle events may omit source; accept missing source for
+    // compatibility, but reject an explicit non-desktop source.
+    if let source = memory["source"] as? String, source != "desktop" {
+      return false
+    }
+
+    guard let memoryStartedAt = parseMemoryEventDate(memory["started_at"] ?? memory["startedAt"]) else {
+      return false
+    }
+
+    return abs(memoryStartedAt.timeIntervalSince(sessionStartedAt)) < startedAtTolerance
+  }
+
+  static func parseMemoryEventDate(_ value: Any?) -> Date? {
+    if let date = value as? Date {
+      return date
+    }
+    guard let string = value as? String else {
+      return nil
+    }
+
+    let fractionalFormatter = ISO8601DateFormatter()
+    fractionalFormatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+    if let date = fractionalFormatter.date(from: string) {
+      return date
+    }
+
+    let formatter = ISO8601DateFormatter()
+    return formatter.date(from: string)
+  }
+}
+
 @MainActor
 class AppState: ObservableObject {
   /// Weak reference to the current AppState instance, set on init.
@@ -2025,9 +2077,10 @@ class AppState: ObservableObject {
         if let conversation = try await APIClient.shared.forceProcessConversation() {
           // Validate the returned conversation matches the session we just stopped
           if let sessionId = capturedSessionId, let startTime = capturedStartTime,
-             let convStarted = conversation.startedAt,
-             abs(convStarted.timeIntervalSince(startTime)) < 10,
-             conversation.source == .desktop {
+             DesktopConversationMatchPolicy.matchesDesktopConversation(
+              startedAt: conversation.startedAt,
+              source: conversation.source,
+              sessionStartedAt: startTime) {
             try? await TranscriptionStorage.shared.markSessionCompleted(
               id: sessionId, backendId: conversation.id)
             log("Transcription: Force-processed conversation \(conversation.id), session \(sessionId) completed")
@@ -2063,10 +2116,10 @@ class AppState: ObservableObject {
         endDate: Date().addingTimeInterval(5)
       )
       if let match = conversations.first(where: { conv in
-        guard let convStarted = conv.startedAt else { return false }
-        // Must be a desktop conversation with matching start time
-        guard conv.source == .desktop else { return false }
-        return abs(convStarted.timeIntervalSince(startTime)) < 10
+        DesktopConversationMatchPolicy.matchesDesktopConversation(
+          startedAt: conv.startedAt,
+          source: conv.source,
+          sessionStartedAt: startTime)
       }) {
         try await TranscriptionStorage.shared.markSessionCompleted(
           id: sessionId, backendId: match.id)
@@ -2962,12 +3015,19 @@ class AppState: ObservableObject {
       isSavingConversation = false
 
       // Mark DB session as completed so TranscriptionRetryService won't re-upload.
-      // Use finishedSessionId (captured before session rotation) to avoid race with finishConversation().
-      let targetSessionId = finishedSessionId ?? currentSessionId
-      let targetStartTime = finishedRecordingStartTime ?? recordingStartTime
-      if let sessionId = targetSessionId, memoryId != "?" {
+      // Only bind the session captured before rotation; live events may arrive while
+      // the next recording is already active.
+      let targetSessionId = finishedSessionId
+      let targetStartTime = finishedRecordingStartTime
+      let didBindLocalSession: Bool
+      if let sessionId = targetSessionId,
+         let startTime = targetStartTime,
+         memoryId != "?",
+         DesktopConversationMatchPolicy.memoryEventMatchesFinishedSession(
+          memory, sessionStartedAt: startTime) {
         finishedSessionId = nil  // Consume once
         finishedRecordingStartTime = nil
+        didBindLocalSession = true
         Task {
           do {
             try await TranscriptionStorage.shared.markSessionCompleted(
@@ -2978,10 +3038,26 @@ class AppState: ObservableObject {
               "Transcription: Failed to mark DB session \(sessionId) completed", error: error)
           }
         }
+      } else {
+        didBindLocalSession = false
+        if memoryId != "?" {
+          if targetSessionId == nil || targetStartTime == nil {
+            log("Transcription: Ignoring memory_created \(memoryId); no finished local session is awaiting backend binding")
+          } else if let sessionId = targetSessionId, let startTime = targetStartTime {
+            if let memoryStartedAt = DesktopConversationMatchPolicy.parseMemoryEventDate(
+              memory?["started_at"] ?? memory?["startedAt"]) {
+              let delta = abs(memoryStartedAt.timeIntervalSince(startTime))
+              if delta >= DesktopConversationMatchPolicy.startedAtTolerance {
+                log("Transcription: Ignoring memory_created event; started_at delta \(String(format: "%.1f", delta))s exceeds session match tolerance")
+              }
+            }
+            log("Transcription: Waiting for API reconciliation before binding memory_created \(memoryId) to local session \(sessionId)")
+          }
+        }
       }
 
       // Track conversation creation — use captured start time for accurate duration after session rotation
-      if let startTime = targetStartTime {
+      if didBindLocalSession, let startTime = targetStartTime {
         let durationSeconds = Int(Date().timeIntervalSince(startTime))
         AnalyticsManager.shared.conversationCreated(
           conversationId: memoryId,

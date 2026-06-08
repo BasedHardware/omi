@@ -3046,5 +3046,7 @@
     "recapRegeneratedSnackbar": "Yhteenveto luotu uudelleen",
     "recapRegenerateFailed": "Yhteenvedon uudelleenluonti epäonnistui. Yritä myöhemmin uudelleen.",
     "recapRegenerateCooldown": "Odota muutama sekunti ennen uudelleen luomista.",
-    "recapRegenerateNoConversations": "Tänä päivänä ei ole keskusteluja yhteenvedettäväksi."
+    "recapRegenerateNoConversations": "Tänä päivänä ei ole keskusteluja yhteenvedettäväksi.",
+    "syncCustomSttWarningTitle": "Synkronointi käyttää Omin litterointia",
+    "syncCustomSttWarningMessage": "Käytät omaa litterointipalveluasi. Näiden tallenteiden synkronointi litteroi ne Omin palvelimilla, ja ne lasketaan tilauksesi litterointirajaan."
 }

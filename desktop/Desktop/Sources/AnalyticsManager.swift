@@ -182,9 +182,16 @@ class AnalyticsManager {
     PostHogManager.shared.track("Bluetooth State Changed", properties: properties)
   }
 
-  /// Track when ScreenCaptureKit broken state is detected (TCC granted but capture failing)
+  /// Report when ScreenCaptureKit broken state is detected (TCC granted but capture failing).
   func screenCaptureBrokenDetected() {
-    PostHogManager.shared.screenCaptureBrokenDetected()
+    guard !Self.isDevBuild else { return }
+    let breadcrumb = Breadcrumb(level: .warning, category: "screen_capture")
+    breadcrumb.message = "Screen Capture Broken Detected"
+    SentrySDK.addBreadcrumb(breadcrumb)
+    SentrySDK.capture(message: "Screen Capture Broken Detected") { scope in
+      scope.setLevel(.warning)
+      scope.setTag(value: "screen_capture_broken", key: "diagnostic")
+    }
   }
 
   /// Track when user clicks reset button or notification to reset screen capture
@@ -242,10 +249,14 @@ class AnalyticsManager {
     if hadPreviousSession && !lastCleanExit {
       log("Analytics: Previous session did not exit cleanly — reporting crash")
       let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "unknown"
-      PostHogManager.shared.track("App Crash Detected", properties: [
-        "app_version": version,
-        "os_version": ProcessInfo.processInfo.operatingSystemVersionString,
-      ])
+      SentrySDK.capture(message: "App Crash Detected") { scope in
+        scope.setLevel(.warning)
+        scope.setTag(value: "app_crash_detected", key: "diagnostic")
+        scope.setContext(value: [
+          "app_version": version,
+          "os_version": ProcessInfo.processInfo.operatingSystemVersionString,
+        ], key: "crash")
+      }
     }
   }
 
@@ -686,32 +697,9 @@ class AnalyticsManager {
 
   // MARK: - All Settings State (Comprehensive daily report)
 
-  private let lastAllSettingsReportKey = "lastAllSettingsReportDate"
+  /// No-op. Replaced by on-change person-property updates at the owning callsites.
+  func reportAllSettingsIfNeeded() {}
 
-  /// Report comprehensive settings state on app launch, throttled to once per calendar day.
-  /// Sends all ~45 user settings as a single analytics event for unified visibility.
-  func reportAllSettingsIfNeeded() {
-    guard !Self.isDevBuild else { return }
-
-    let defaults = UserDefaults.standard
-    let lastReport = defaults.object(forKey: lastAllSettingsReportKey) as? Date ?? .distantPast
-    guard !Calendar.current.isDateInToday(lastReport) else {
-      log("Analytics: All settings already reported today, skipping")
-      return
-    }
-
-    defaults.set(Date(), forKey: lastAllSettingsReportKey)
-
-    let properties = collectAllSettings()
-
-    PostHogManager.shared.allSettingsStateTracked(properties: properties)
-
-    log("Analytics: All settings state reported (\(properties.count) properties)")
-  }
-
-  /// Collect all user settings into a flat dictionary for analytics reporting.
-  /// For string settings (custom prompts), reports has_custom + length instead of full text.
-  /// For array settings (excluded apps, keywords), reports count instead of contents.
   private func collectAllSettings() -> [String: Any] {
     var props: [String: Any] = [:]
 

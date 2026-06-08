@@ -3088,5 +3088,7 @@
     "recapRegeneratedSnackbar": "Ringkasan dibuat ulang",
     "recapRegenerateFailed": "Tidak dapat membuat ulang ringkasan. Coba lagi nanti.",
     "recapRegenerateCooldown": "Mohon tunggu beberapa detik sebelum membuat ulang.",
-    "recapRegenerateNoConversations": "Tidak ada percakapan untuk diringkas pada hari ini."
+    "recapRegenerateNoConversations": "Tidak ada percakapan untuk diringkas pada hari ini.",
+    "syncCustomSttWarningTitle": "Sinkronisasi memakai transkripsi Omi",
+    "syncCustomSttWarningMessage": "Anda memakai penyedia transkripsi sendiri. Menyinkronkan rekaman ini akan mentranskripsikannya di server Omi dan dihitung dalam batas transkripsi paket Anda."
 }

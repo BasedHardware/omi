@@ -3013,5 +3013,7 @@
     "recapRegeneratedSnackbar": "تمت إعادة إنشاء الملخص",
     "recapRegenerateFailed": "تعذرت إعادة إنشاء الملخص. حاول مرة أخرى لاحقًا.",
     "recapRegenerateCooldown": "يرجى الانتظار بضع ثوانٍ قبل إعادة الإنشاء مرة أخرى.",
-    "recapRegenerateNoConversations": "لا توجد محادثات لتلخيصها في هذا اليوم."
+    "recapRegenerateNoConversations": "لا توجد محادثات لتلخيصها في هذا اليوم.",
+    "syncCustomSttWarningTitle": "المزامنة تستخدم خدمة النسخ في Omi",
+    "syncCustomSttWarningMessage": "أنت تستخدم مزوّد النسخ الخاص بك. مزامنة هذه التسجيلات تنسخها على خوادم Omi بدلاً من ذلك، وتُحتسب ضمن حد النسخ في باقتك."
 }

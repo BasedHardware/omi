@@ -3142,5 +3142,7 @@
     "recapRegeneratedSnackbar": "Összegzés újragenerálva",
     "recapRegenerateFailed": "Nem sikerült újragenerálni az összegzést. Próbáld újra később.",
     "recapRegenerateCooldown": "Kérlek, várj néhány másodpercet az újragenerálás előtt.",
-    "recapRegenerateNoConversations": "Erre a napra nincsenek összegezhető beszélgetések."
+    "recapRegenerateNoConversations": "Erre a napra nincsenek összegezhető beszélgetések.",
+    "syncCustomSttWarningTitle": "A szinkronizálás az Omi átiratát használja",
+    "syncCustomSttWarningMessage": "Saját átírási szolgáltatót használsz. Ezek a felvételek szinkronizáláskor az Omi szerverein kerülnek átírásra, és beleszámítanak a csomagod átírási keretébe."
 }
