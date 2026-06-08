@@ -69,6 +69,10 @@ ingress:
       paths:
         - path: /v1/transcribe
           pathType: Prefix
+        - path: /v2/transcribe
+          pathType: Prefix
+        - path: /v3/stream
+          pathType: Prefix
         - path: /health
           pathType: Prefix
 
@@ -88,6 +92,16 @@ env:
       secretKeyRef:
         name: prod-omi-backend-secrets
         key: ENCRYPTION_SECRET
+  - name: PARAKEET_MODEL
+    value: "nvidia/parakeet-tdt-0.6b-v3"
+  - name: PARAKEET_STREAM_MODEL
+    value: "nvidia/parakeet-rnnt-1.1b"
+  - name: PARAKEET_INFERENCE_MODE
+    value: "nemo"
+  - name: PARAKEET_MAX_SPEECH_S
+    value: "5"
+  - name: HOSTED_SPEAKER_EMBEDDING_API_URL
+    value: "http://prod-omi-diarizer.prod-omi-backend.svc.cluster.local:8080"
 
 resources:
   # We usually recommend not to specify default resources and to leave this as a conscious
@@ -96,11 +110,11 @@ resources:
   # lines, adjust them as necessary, and remove the curly braces after 'resources:'.
   requests:
     cpu: 2
-    memory: 6Gi
+    memory: 8Gi
     nvidia.com/gpu: 1
   limits:
     cpu: 3
-    memory: 12Gi
+    memory: 20Gi
     nvidia.com/gpu: 1
 
 # This is to setup the liveness and readiness probes more information can be found here: https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/
@@ -119,8 +133,19 @@ readinessProbe:
 startupProbe:
   tcpSocket:
     port: 8080
-  failureThreshold: 30
+  failureThreshold: 60
   periodSeconds: 10
+
+metrics:
+  enabled: true
+  port: 9091
+  serviceMonitor:
+    enabled: true
+    interval: "15s"
+    labels:
+      release: prod-omi-kube-prometheus-stack
+  prometheusAdapter:
+    enabled: true
 
 # This section is for setting up autoscaling more information can be found here: https://kubernetes.io/docs/concepts/workloads/autoscaling/
 autoscaling:
@@ -139,18 +164,14 @@ autoscaling:
         periodSeconds: 120
       selectPolicy: Min
     scaleUp:
-      stabilizationWindowSeconds: 300
+      stabilizationWindowSeconds: 60
       policies:
-      - type: Percent
-        value: 20
-        periodSeconds: 15
       - type: Pods
-        value: 1
-        periodSeconds: 15
+        value: 2
+        periodSeconds: 60
       selectPolicy: Max
-  # targetCPUUtilizationPercentage: 70
-  # targetMemoryUtilizationPercentage: 70
-  requestLatencyP99: 300   # milliseconds
+  streamsPerPod: 60
+  targetGPUUtilization: 70
 
 # Additional volumes on the output Deployment definition.
 volumes: []

@@ -223,6 +223,35 @@ modulate_languages = {
     'cy',
 }
 
+parakeet_languages = {
+    'multi',
+    'bg',
+    'hr',
+    'cs',
+    'da',
+    'nl',
+    'en',
+    'et',
+    'fi',
+    'fr',
+    'de',
+    'el',
+    'hu',
+    'it',
+    'lt',
+    'lv',
+    'mt',
+    'pl',
+    'pt',
+    'ro',
+    'ru',
+    'sk',
+    'sl',
+    'es',
+    'sv',
+    'uk',
+}
+
 stt_service_models = os.getenv('STT_SERVICE_MODELS', 'dg-nova-3').split(',')
 
 
@@ -246,6 +275,10 @@ def get_stt_service_for_language(language: str, multi_lang_enabled: bool = True)
         if m == 'modulate-velma-2':
             if base_lang in modulate_languages:
                 return STTService.modulate, base_lang, 'velma-2'
+        if m == 'parakeet' and os.getenv('HOSTED_PARAKEET_API_URL'):
+            if base_lang in parakeet_languages:
+                return STTService.parakeet, base_lang or 'en', 'parakeet'
+            continue
 
     # Fallback to deepgram nova-3 with English
     return STTService.deepgram, 'en', 'nova-3'
@@ -765,6 +798,7 @@ async def process_audio_modulate(
 
 # --- Parakeet (self-hosted, opt-in) ---------------------------------------------------------------
 PARAKEET_WINDOW_SECONDS = float(os.getenv('PARAKEET_WINDOW_SECONDS', '6.0'))
+PARAKEET_WS_CONNECT_TIMEOUT = float(os.getenv('PARAKEET_WS_CONNECT_TIMEOUT', '10.0'))
 
 
 def _pcm16_to_wav_bytes(pcm: bytes, sample_rate: int) -> bytes:
@@ -818,7 +852,7 @@ class ParakeetStreamingSocket(STTSocket):
 
     # --- STTSocket interface the listen pipeline / VAD gate call (all sync) ---
     def send(self, data: bytes) -> None:
-        if self._closed or not data:
+        if self._closed or getattr(self, '_finalized', False) or not data:
             return
         with self._lock:
             self._buf.extend(data)
@@ -944,13 +978,10 @@ class ParakeetStreamingSocket(STTSocket):
 
     async def _transcribe_chunk(self, pcm: bytes, start: float, dur: float) -> List[dict]:
         wav = _pcm16_to_wav_bytes(pcm, self._sample_rate)
-        # Shared-secret auth for the (publicly-reachable) Parakeet endpoint.
-        secret = os.getenv('ENCRYPTION_SECRET')
-        headers = {'Authorization': f'Bearer {secret}'} if secret else None
         try:
             client = get_stt_client()
             async with get_stt_semaphore():
-                resp = await client.post(self._url, files={'file': ('audio.wav', wav, 'audio/wav')}, headers=headers)
+                resp = await client.post(self._url, files={'file': ('audio.wav', wav, 'audio/wav')})
             resp.raise_for_status()
             data = resp.json()
         except Exception as e:
@@ -990,6 +1021,153 @@ class ParakeetStreamingSocket(STTSocket):
         return out
 
 
+class ParakeetWebSocketSocket(STTSocket):
+    """True streaming via Parakeet /v3/stream WebSocket with server-side VAD + diarization."""
+
+    def __init__(self, stream_transcript, ws_url: str, sample_rate: int):
+        self._stream_transcript = stream_transcript
+        self._ws_url = ws_url
+        self._sample_rate = sample_rate
+        self._send_queue: asyncio.Queue[Optional[bytes]] = asyncio.Queue(maxsize=1000)
+        self._closed = False
+        self._dead = False
+        self._dead_reason: Optional[str] = None
+        self._ws = None
+        self._sender_task: Optional[asyncio.Task] = None
+        self._receiver_task: Optional[asyncio.Task] = None
+        self._connected_event = asyncio.Event()
+        self._startup_event = asyncio.Event()
+
+    async def start(self):
+        self._sender_task = create_named_task(self._run(), name="parakeet_ws_stream")
+        try:
+            await asyncio.wait_for(self._startup_event.wait(), timeout=PARAKEET_WS_CONNECT_TIMEOUT)
+        except asyncio.TimeoutError:
+            logger.error(f'Parakeet WS connect timeout after {PARAKEET_WS_CONNECT_TIMEOUT}s')
+            self._mark_dead(f'parakeet ws connect timeout after {PARAKEET_WS_CONNECT_TIMEOUT}s')
+            self._closed = True
+            self._cancel_task(self._sender_task)
+            raise
+        if not self._connected_event.is_set():
+            logger.error(f'Parakeet WS failed before connection: {self._dead_reason}')
+            raise RuntimeError(self._dead_reason or 'parakeet ws failed before connection')
+        logger.info('Parakeet WS connected successfully')
+
+    def send(self, data: bytes) -> None:
+        if self._closed or not data:
+            return
+        try:
+            self._send_queue.put_nowait(data)
+        except asyncio.QueueFull:
+            pass
+
+    def finish(self) -> None:
+        self._finalized = True
+        self._queue_finalize_nowait()
+
+    def finalize(self) -> None:
+        self._finalized = True
+        self._queue_finalize_nowait()
+
+    @property
+    def is_connection_dead(self) -> bool:
+        return self._dead
+
+    @property
+    def death_reason(self) -> Optional[str]:
+        return self._dead_reason
+
+    async def drain_and_close(self):
+        if self._connected_event.is_set():
+            await self._send_queue.put(None)
+        self._closed = True
+        if self._sender_task and not self._sender_task.done():
+            try:
+                await asyncio.wait_for(self._sender_task, timeout=10)
+            except (asyncio.TimeoutError, asyncio.CancelledError):
+                self._cancel_task(self._sender_task)
+        if self._receiver_task and not self._receiver_task.done():
+            try:
+                await asyncio.wait_for(self._receiver_task, timeout=10)
+            except (asyncio.TimeoutError, asyncio.CancelledError):
+                self._cancel_task(self._receiver_task)
+
+    def _mark_dead(self, reason: str):
+        self._dead = True
+        self._dead_reason = reason
+
+    def _cancel_task(self, task: Optional[asyncio.Task]):
+        if task and not task.done():
+            task.cancel()
+
+    def _queue_finalize_nowait(self):
+        if self._closed:
+            return
+        try:
+            self._send_queue.put_nowait(None)
+        except asyncio.QueueFull:
+            self._mark_dead('parakeet ws send queue full while finalizing')
+
+    async def _run(self):
+        url = f"{self._ws_url}?sample_rate={self._sample_rate}"
+
+        try:
+            async with websockets.connect(url, max_size=10 * 1024 * 1024) as ws:
+                self._ws = ws
+                self._receiver_task = create_named_task(self._receive_loop(ws), name="parakeet_ws_recv")
+                self._connected_event.set()
+                self._startup_event.set()
+
+                while True:
+                    try:
+                        data = await asyncio.wait_for(self._send_queue.get(), timeout=0.1)
+                        if data is None:
+                            await ws.send("finalize")
+                            await asyncio.sleep(5)
+                            break
+                        await ws.send(data)
+                    except asyncio.TimeoutError:
+                        if self._closed:
+                            break
+                        continue
+                    except Exception as e:
+                        logger.error(f"Parakeet WS send error: {e}")
+                        self._mark_dead(f"parakeet ws send: {e}")
+                        break
+                if self._closed and self._receiver_task and not self._receiver_task.done():
+                    try:
+                        await asyncio.wait_for(self._receiver_task, timeout=10)
+                    except (asyncio.TimeoutError, asyncio.CancelledError):
+                        self._cancel_task(self._receiver_task)
+
+        except Exception as e:
+            logger.error(f"Parakeet WS connection error: {e}")
+            self._mark_dead(f"parakeet ws failed: {e}")
+        finally:
+            self._startup_event.set()
+            self._closed = True
+            if self._ws:
+                try:
+                    await self._ws.close()
+                except Exception:
+                    pass
+
+    async def _receive_loop(self, ws):
+        try:
+            async for msg in ws:
+                if isinstance(msg, str):
+                    try:
+                        seg = json.loads(msg)
+                        if isinstance(seg, dict) and seg.get("text"):
+                            self._stream_transcript([seg])
+                    except json.JSONDecodeError:
+                        pass
+        except Exception as e:
+            if not self._closed:
+                logger.error(f"Parakeet WS recv error: {e}")
+                self._mark_dead(f"parakeet ws recv: {e}")
+
+
 async def process_audio_parakeet(
     stream_transcript,
     language: str,
@@ -999,17 +1177,20 @@ async def process_audio_parakeet(
     keywords: List[str] = [],
     is_active: Optional[Callable[[], bool]] = None,
 ):
-    """Opt-in STT path backed by the self-hosted Parakeet service (shaped like process_audio_dg).
+    """STT path backed by the self-hosted Parakeet /v3/stream WebSocket.
 
-    Returns a ParakeetStreamingSocket, or None if HOSTED_PARAKEET_API_URL is not configured.
+    Server-side VAD + diarization — the backend just relays PCM chunks
+    and receives speaker-labeled segments.
     """
     api_url = os.getenv('HOSTED_PARAKEET_API_URL')
     if not api_url:
         logger.error('process_audio_parakeet: HOSTED_PARAKEET_API_URL not set')
         return None
-    logger.info(f'process_audio_parakeet {language} {sample_rate} {channels} -> {api_url}')
-    socket = ParakeetStreamingSocket(stream_transcript, api_url, sample_rate)
-    socket.start()
+
+    ws_url = api_url.replace('http://', 'ws://').replace('https://', 'wss://').rstrip('/') + '/v3/stream'
+    logger.info(f'process_audio_parakeet {language} {sample_rate} -> {ws_url}')
+    socket = ParakeetWebSocketSocket(stream_transcript, ws_url, sample_rate)
+    await socket.start()
     return socket
 
 
