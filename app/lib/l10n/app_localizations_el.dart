@@ -432,6 +432,12 @@ class AppLocalizationsEl extends AppLocalizations {
   String get offlineSync => 'Συγχρονισμός εκτός σύνδεσης';
 
   @override
+  String get autoSync => 'Αυτόματος συγχρονισμός';
+
+  @override
+  String get autoSyncDescription => 'Αυτόματος συγχρονισμός των εκτός σύνδεσης εγγραφών όταν συνδέεται η συσκευή σας';
+
+  @override
   String get deviceSettings => 'Ρυθμίσεις Συσκευής';
 
   @override

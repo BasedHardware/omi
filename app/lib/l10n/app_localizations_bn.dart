@@ -428,6 +428,12 @@ class AppLocalizationsBn extends AppLocalizations {
   String get offlineSync => 'অফলাইন সিঙ্ক';
 
   @override
+  String get autoSync => 'স্বয়ংক্রিয় সিঙ্ক';
+
+  @override
+  String get autoSyncDescription => 'আপনার ডিভাইস সংযুক্ত হলে অফলাইন রেকর্ডিংগুলি স্বয়ংক্রিয়ভাবে সিঙ্ক করুন';
+
+  @override
   String get deviceSettings => 'ডিভাইস সেটিংস';
 
   @override

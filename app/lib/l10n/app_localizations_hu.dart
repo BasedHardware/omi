@@ -431,6 +431,12 @@ class AppLocalizationsHu extends AppLocalizations {
   String get offlineSync => 'Offline szinkronizálás';
 
   @override
+  String get autoSync => 'Automatikus szinkronizálás';
+
+  @override
+  String get autoSyncDescription => 'Offline felvételek automatikus szinkronizálása az eszköz csatlakozásakor';
+
+  @override
   String get deviceSettings => 'Eszköz beállításai';
 
   @override

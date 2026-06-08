@@ -430,6 +430,12 @@ class AppLocalizationsLv extends AppLocalizations {
   String get offlineSync => 'Bezsaistes sinhronizācija';
 
   @override
+  String get autoSync => 'Automātiska sinhronizācija';
+
+  @override
+  String get autoSyncDescription => 'Automātiski sinhronizēt bezsaistes ierakstus, kad ierīce tiek savienota';
+
+  @override
   String get deviceSettings => 'Ierīces iestatījumi';
 
   @override

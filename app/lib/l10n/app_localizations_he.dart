@@ -426,6 +426,12 @@ class AppLocalizationsHe extends AppLocalizations {
   String get offlineSync => 'סינכרון במצב לא מחובר';
 
   @override
+  String get autoSync => 'סנכרון אוטומטי';
+
+  @override
+  String get autoSyncDescription => 'סנכרן אוטומטית הקלטות לא מקוונות כשהמכשיר שלך מתחבר';
+
+  @override
   String get deviceSettings => 'הגדרות המכשיר';
 
   @override

@@ -999,6 +999,18 @@ abstract class AppLocalizations {
   /// **'Offline Sync'**
   String get offlineSync;
 
+  /// Title of the toggle in device settings that controls automatic syncing of offline recordings
+  ///
+  /// In en, this message translates to:
+  /// **'Auto-Sync'**
+  String get autoSync;
+
+  /// Subtitle explaining the Auto-Sync toggle in device settings
+  ///
+  /// In en, this message translates to:
+  /// **'Automatically sync offline recordings when your device connects'**
+  String get autoSyncDescription;
+
   /// Device settings menu item
   ///
   /// In en, this message translates to:

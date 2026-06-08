@@ -430,6 +430,12 @@ class AppLocalizationsTl extends AppLocalizations {
   String get offlineSync => 'Offline Sync';
 
   @override
+  String get autoSync => 'Awtomatikong pag-sync';
+
+  @override
+  String get autoSyncDescription => 'Awtomatikong i-sync ang mga offline na recording kapag nakakonekta ang iyong device';
+
+  @override
   String get deviceSettings => 'Mga Device Setting';
 
   @override

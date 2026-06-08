@@ -431,6 +431,12 @@ class AppLocalizationsMk extends AppLocalizations {
   String get offlineSync => 'Синхронизирање без интернет';
 
   @override
+  String get autoSync => 'Автоматска синхронизација';
+
+  @override
+  String get autoSyncDescription => 'Автоматски синхронизирај офлајн снимки кога ќе се поврзе уредот';
+
+  @override
   String get deviceSettings => 'Поставки на уред';
 
   @override

@@ -433,6 +433,12 @@ class AppLocalizationsDe extends AppLocalizations {
   String get offlineSync => 'Offline-Synchronisierung';
 
   @override
+  String get autoSync => 'Automatische Synchronisierung';
+
+  @override
+  String get autoSyncDescription => 'Offline-Aufnahmen automatisch synchronisieren, wenn dein Gerät verbunden wird';
+
+  @override
   String get deviceSettings => 'Geräteeinstellungen';
 
   @override

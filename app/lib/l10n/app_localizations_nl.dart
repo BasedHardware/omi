@@ -430,6 +430,12 @@ class AppLocalizationsNl extends AppLocalizations {
   String get offlineSync => 'Offline synchronisatie';
 
   @override
+  String get autoSync => 'Automatisch synchroniseren';
+
+  @override
+  String get autoSyncDescription => 'Synchroniseer offline-opnamen automatisch wanneer je apparaat verbinding maakt';
+
+  @override
   String get deviceSettings => 'Apparaatinstellingen';
 
   @override

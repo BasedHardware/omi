@@ -429,6 +429,12 @@ class AppLocalizationsSv extends AppLocalizations {
   String get offlineSync => 'Offlinesynkronisering';
 
   @override
+  String get autoSync => 'Automatisk synkronisering';
+
+  @override
+  String get autoSyncDescription => 'Synkronisera offlineinspelningar automatiskt när din enhet ansluter';
+
+  @override
   String get deviceSettings => 'Enhetsinställningar';
 
   @override

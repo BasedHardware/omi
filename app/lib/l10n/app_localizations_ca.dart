@@ -430,6 +430,12 @@ class AppLocalizationsCa extends AppLocalizations {
   String get offlineSync => 'Sincronització fora de línia';
 
   @override
+  String get autoSync => 'Sincronització automàtica';
+
+  @override
+  String get autoSyncDescription => 'Sincronitza automàticament els enregistraments fora de línia quan el dispositiu es connecti';
+
+  @override
   String get deviceSettings => 'Configuració del dispositiu';
 
   @override

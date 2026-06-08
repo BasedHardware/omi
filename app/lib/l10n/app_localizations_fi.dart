@@ -427,6 +427,12 @@ class AppLocalizationsFi extends AppLocalizations {
   String get offlineSync => 'Offline-synkronointi';
 
   @override
+  String get autoSync => 'Automaattinen synkronointi';
+
+  @override
+  String get autoSyncDescription => 'Synkronoi offline-tallenteet automaattisesti, kun laitteesi yhdistetään';
+
+  @override
   String get deviceSettings => 'Laitteen asetukset';
 
   @override
