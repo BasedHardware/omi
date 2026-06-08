@@ -1,9 +1,12 @@
+import logging
 import math
 import os
 from datetime import datetime
 from typing import Dict
 
 import typesense
+
+logger = logging.getLogger(__name__)
 
 client = typesense.Client(
     {
@@ -51,9 +54,21 @@ def search_conversations(
             # Exclude locked conversations entirely to prevent inference leaks
             if doc.get('is_locked', False):
                 continue
-            doc['created_at'] = datetime.utcfromtimestamp(doc['created_at']).isoformat()
-            doc['started_at'] = datetime.utcfromtimestamp(doc['started_at']).isoformat()
-            doc['finished_at'] = datetime.utcfromtimestamp(doc['finished_at']).isoformat()
+            try:
+                # Convert all three into locals first, then assign, so a hit that fails partway is
+                # never left half-converted.
+                created_at = datetime.utcfromtimestamp(doc['created_at']).isoformat()
+                started_at = datetime.utcfromtimestamp(doc['started_at']).isoformat()
+                finished_at = datetime.utcfromtimestamp(doc['finished_at']).isoformat()
+            except (KeyError, TypeError, ValueError, OverflowError, OSError) as e:
+                # One malformed/legacy indexed doc (missing, null, or out-of-range timestamp) must not
+                # 500 the whole search page; skip just this hit (mirrors the per-record tolerance in
+                # routers/memories.py get_memories).
+                logger.warning(f"search_conversations skipping malformed hit uid={uid} id={doc.get('id')}: {e}")
+                continue
+            doc['created_at'] = created_at
+            doc['started_at'] = started_at
+            doc['finished_at'] = finished_at
             memories.append(doc)
         # Derive total_pages only from visible (unlocked) items to prevent inference leaks.
         # is_locked is not a Typesense filter field, so exact global count is unavailable.
