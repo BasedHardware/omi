@@ -245,10 +245,14 @@ def update_action_item_text(
     try:
         action_items_db.update_action_item(uid, action_item_id, update_data)
 
+        # Re-fetch the authoritative post-write state so reminder reconciliation can't act on a stale
+        # pre-update value (matches the update_action_item_tool path).
+        updated_item = action_items_db.get_action_item(uid, action_item_id) or existing
+
         # Send notification if completed
         if completed is True:
             try:
-                send_action_item_completed_notification(uid, existing.get('description', 'Task'))
+                send_action_item_completed_notification(uid, updated_item.get('description', 'Task'))
             except Exception as notif_error:
                 logger.error(f"Failed to send completion notification: {notif_error}")
 
@@ -259,9 +263,9 @@ def update_action_item_text(
                 sync_action_item_reminder(
                     uid,
                     action_item_id,
-                    update_data.get('description', existing.get('description', '')),
-                    bool(update_data.get('completed', existing.get('completed'))),
-                    update_data.get('due_at', existing.get('due_at')),
+                    updated_item.get('description', ''),
+                    bool(updated_item.get('completed')),
+                    updated_item.get('due_at'),
                 )
             except Exception as notif_error:
                 logger.error(f"Failed to sync action item reminder: {notif_error}")
