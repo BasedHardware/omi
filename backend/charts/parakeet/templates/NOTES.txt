@@ -20,3 +20,16 @@
   echo "Visit http://127.0.0.1:8080 to use your application"
   kubectl --namespace {{ .Release.Namespace }} port-forward $POD_NAME 8080:$CONTAINER_PORT
 {{- end }}
+
+{{- if .Values.metrics.enabled }}
+
+PROMETHEUS ADAPTER SETUP (required for HPA autoscaling):
+
+The Parakeet HPA uses custom metrics (parakeet_active_streams, etc.) that
+require prometheus-adapter rules. These rules must be merged into the
+EXISTING cluster prometheus-adapter — do NOT deploy a second adapter.
+
+Full rule definitions: backend/charts/parakeet/values.yaml → prometheus-adapter.rules
+
+Then: helm upgrade <adapter-release> prometheus-community/prometheus-adapter -f <merged-values>
+{{- end }}

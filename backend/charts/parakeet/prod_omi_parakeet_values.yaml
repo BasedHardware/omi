@@ -145,10 +145,11 @@ metrics:
     labels:
       release: prod-omi-kube-prometheus-stack
 
+# prometheus-adapter rules are defined in values.yaml but must be merged
+# into the existing cluster adapter (not deployed as a separate instance).
+# See NOTES.txt for the merge command.
 prometheus-adapter:
-  enabled: true
-  prometheus:
-    url: http://prod-omi-kube-prometheus-s-prometheus.prod-omi-monitoring.svc
+  enabled: false
 
 # This section is for setting up autoscaling more information can be found here: https://kubernetes.io/docs/concepts/workloads/autoscaling/
 autoscaling:
