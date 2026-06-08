@@ -8,7 +8,7 @@ import httpx
 import numpy as np
 from langdetect import detect as langdetect_detect
 from langdetect.lang_detect_exception import LangDetectException
-from scipy.spatial.distance import cdist
+from speaker_math import cosine_distance
 
 logger = logging.getLogger(__name__)
 
@@ -289,7 +289,7 @@ def _diarize_segments(file_path: str, base: dict) -> dict:
 
             best_i, best_dist = -1, 1e9
             for i, c in enumerate(centroids):
-                d = float(cdist(emb, c, metric="cosine")[0, 0])
+                d = cosine_distance(emb, c)
                 if d < best_dist:
                     best_i, best_dist = i, d
 
