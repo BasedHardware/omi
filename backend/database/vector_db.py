@@ -592,3 +592,33 @@ def delete_action_item_vectors_batch(uid: str, action_item_ids: List[str]):
     vector_ids = [f'{uid}-ai-{aid}' for aid in action_item_ids]
     index.delete(ids=vector_ids, namespace=ACTION_ITEMS_NAMESPACE)
     logger.info(f'delete_action_item_vectors_batch count={len(vector_ids)}')
+
+
+def delete_conversation_vectors_batch(uid: str, conversation_ids: List[str]):
+    """Delete a user's conversation vectors (ns1) in one batched, chunked call.
+
+    Chunked so a single failure can't abandon the rest (and to stay under Pinecone's per-delete id
+    limit). Used by account deletion to purge all of a user's conversation vectors.
+    """
+    if index is None:
+        logger.warning('Pinecone index not initialized, skipping conversation vector batch delete')
+        return
+    if not conversation_ids:
+        return
+    vector_ids = [f'{uid}-{cid}' for cid in conversation_ids]
+    for i in range(0, len(vector_ids), 1000):
+        index.delete(ids=vector_ids[i : i + 1000], namespace="ns1")
+    logger.info(f'delete_conversation_vectors_batch count={len(vector_ids)}')
+
+
+def delete_memory_vectors_batch(uid: str, memory_ids: List[str]):
+    """Delete a user's memory vectors (ns2) in one batched, chunked call."""
+    if index is None:
+        logger.warning('Pinecone index not initialized, skipping memory vector batch delete')
+        return
+    if not memory_ids:
+        return
+    vector_ids = [f'{uid}-{mid}' for mid in memory_ids]
+    for i in range(0, len(vector_ids), 1000):
+        index.delete(ids=vector_ids[i : i + 1000], namespace=MEMORIES_NAMESPACE)
+    logger.info(f'delete_memory_vectors_batch count={len(vector_ids)}')
