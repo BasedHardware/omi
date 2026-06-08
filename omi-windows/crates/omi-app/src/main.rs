@@ -6,6 +6,7 @@ mod auth;
 mod capture;
 mod components;
 mod config;
+mod google_calendar;
 mod hooks;
 mod hotkey;
 mod llm;
@@ -46,6 +47,11 @@ fn main() {
     eprintln!("Logging to: {}", log_path.display());
 
     tracing::info!("Starting Omi Windows");
+
+    match omi_audio::mic::list_input_devices() {
+        Ok(devices) => tracing::info!("[AUDIO] Available input devices: {:?}", devices),
+        Err(e) => tracing::warn!("[AUDIO] Failed to list input devices: {e}"),
+    }
 
     // ── Global hotkeys (Ctrl+Shift+Space / Ctrl+Shift+R) ──────────────────────
     let _hotkey_manager = match hotkey::init() {

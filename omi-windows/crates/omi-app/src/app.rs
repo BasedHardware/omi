@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use dioxus::prelude::*;
 
-use crate::agent_runtime::AgentRuntime; // AgentStatus used via runtime.status()
+use crate::agent_runtime::{AgentRuntime, AgentEvent}; // AgentStatus used via runtime.status()
 use crate::auth::AuthStatus;
 use crate::components::sidebar::Sidebar;
 use crate::components::floating_bar::FloatingBar;
@@ -105,6 +105,40 @@ pub fn App() -> Element {
     // Prompt pre-filled from tapped suggestion pill (consumed by AgentPage)
     let suggestion_prompt: Signal<Option<String>> = use_signal(|| None);
 
+    let continuous_voice_mode = use_signal(|| false);
+    let voice_history = use_signal(Vec::<(String, String)>::new);
+
+    let start_rec = {
+        let mut stop_h = stop_handle.clone();
+        let rec_status = recording_status.clone();
+        let live_t = live_transcript.clone();
+        let cfg_hk = config.clone();
+        let db_hk = db.clone();
+        let proactive_hk = proactive_engine_signal.clone();
+        
+        move || {
+            if matches!(*rec_status.peek(), RecordingStatus::Recording { .. }) {
+                return;
+            }
+            let api_key = cfg_hk.read().deepgram_api_key.clone();
+            let diarize = cfg_hk.read().diarize_speakers;
+            let cfg = cfg_hk.read().clone();
+            let db_val = db_hk.read().clone();
+            let mut status = rec_status.clone();
+            let mut transcript = live_t.clone();
+            let (stop_tx, stop_rx) = tokio::sync::oneshot::channel::<()>();
+            stop_h.set(Some(StopRecording::new(stop_tx)));
+            let pe = Some(proactive_hk.peek().clone());
+            spawn(async move {
+                crate::recording::start_recording_with_proactive(
+                    api_key, diarize, db_val, cfg,
+                    stop_rx, &mut status, &mut transcript, pe,
+                )
+                .await;
+            });
+        }
+    };
+
     // Provide all as global context
     use_context_provider(|| config);
     use_context_provider(|| auth_status);
@@ -128,6 +162,7 @@ pub fn App() -> Element {
         let cfg_hk = config.clone();
         let db_hk = db.clone();
         let proactive_hk = proactive_engine.clone();
+        let mut cvm = continuous_voice_mode.clone();
 
         use_hook(move || {
             let (hk_tx, mut hk_rx) = tokio::sync::broadcast::channel::<HotkeyAction>(8);
@@ -144,12 +179,9 @@ pub fn App() -> Element {
                             let cur = *fbar.peek();
                             fbar.set(!cur);
                         }
-                        Ok(HotkeyAction::ToggleRecord) => {
-                            if matches!(*rec_status.peek(), RecordingStatus::Recording { .. }) {
-                                if let Some(handle) = stop_h.write().take() {
-                                    handle.stop();
-                                }
-                            } else {
+                        Ok(HotkeyAction::StartRecord) => {
+                            if !matches!(*rec_status.peek(), RecordingStatus::Recording { .. }) {
+                                cvm.set(false); // Make sure continuous mode is false for PTT
                                 let api_key = cfg_hk.read().deepgram_api_key.clone();
                                 let diarize = cfg_hk.read().diarize_speakers;
                                 let cfg = cfg_hk.read().clone();
@@ -166,6 +198,13 @@ pub fn App() -> Element {
                                     )
                                     .await;
                                 });
+                            }
+                        }
+                        Ok(HotkeyAction::StopRecord) => {
+                            if matches!(*rec_status.peek(), RecordingStatus::Recording { .. }) {
+                                if let Some(handle) = stop_h.write().take() {
+                                    handle.stop();
+                                }
                             }
                         }
                         Err(_) => break,
@@ -276,41 +315,282 @@ pub fn App() -> Element {
         }
     });
 
+    // ── Create thread-safe channels for secondary window synchronization ──────
+    let (
+        recording_status_tx,
+        suggestions_tx,
+        config_tx,
+        _agent_event_tx,
+        props_for_character
+    ) = use_hook(|| {
+        let (recording_status_tx, recording_status_rx) = tokio::sync::watch::channel(RecordingStatus::Idle);
+        let (suggestions_tx, suggestions_rx) = tokio::sync::watch::channel(Vec::<crate::proactive::Suggestion>::new());
+        let (config_tx, config_rx) = tokio::sync::watch::channel(AppConfig::load());
+        let (agent_event_tx, _agent_event_rx) = tokio::sync::broadcast::channel(256);
+        let (character_action_tx, mut character_action_rx) = tokio::sync::mpsc::unbounded_channel::<crate::components::character_window::CharacterAction>();
+
+        // Forward agent_runtime events -> character window agent_event_tx
+        let rt = runtime.clone();
+        let agent_event_tx_clone = agent_event_tx.clone();
+        let mut vh_agent = voice_history.clone();
+        spawn(async move {
+            let mut rx = rt.read().subscribe();
+            loop {
+                match rx.recv().await {
+                    Ok(event) => {
+                        if let AgentEvent::Result { ref text, .. } = event {
+                            let mut h = vh_agent.read().clone();
+                            h.push(("assistant".into(), text.clone()));
+                            vh_agent.set(h);
+                        }
+                        let _ = agent_event_tx_clone.send(event);
+                    }
+                    Err(_) => {
+                        tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+                        rx = rt.read().subscribe();
+                    }
+                }
+            }
+        });
+
+        // Listen for actions from character window and mutate main state
+        let mut stop_h_action = stop_handle.clone();
+        let mut cvm_action = continuous_voice_mode.clone();
+        let mut vh_action = voice_history.clone();
+        let mut start_rec_action = start_rec.clone();
+        let mut sp = suggestion_prompt.clone();
+        
+        let mut last_toggle = std::time::Instant::now() - std::time::Duration::from_secs(5);
+        spawn(async move {
+            while let Some(action) = character_action_rx.recv().await {
+                match action {
+                    crate::components::character_window::CharacterAction::ToggleRecord => {
+                        let now = std::time::Instant::now();
+                        if now.duration_since(last_toggle) < std::time::Duration::from_millis(1500) {
+                            tracing::warn!("[APP] Ignoring rapid record toggle click");
+                            continue;
+                        }
+                        last_toggle = now;
+
+                        if *cvm_action.read() {
+                            cvm_action.set(false);
+                            let _ = dioxus::prelude::document::eval("if (window.cancelSpeech) window.cancelSpeech();");
+                            if let Some(handle) = stop_h_action.write().take() {
+                                handle.stop();
+                            }
+                        } else {
+                            cvm_action.set(true);
+                            vh_action.set(Vec::new());
+                            start_rec_action();
+                        }
+                    }
+                    crate::components::character_window::CharacterAction::SuggestionAction(prompt_text) => {
+                        sp.set(Some(prompt_text));
+                    }
+                    crate::components::character_window::CharacterAction::SpeechFinished => {
+                        if *cvm_action.read() {
+                            tracing::info!("[APP] Continuous voice mode: speech finished. Restarting recording.");
+                            start_rec_action();
+                        }
+                    }
+                }
+            }
+        });
+
+        let props = crate::components::character_window::CharacterOverlayProps {
+            recording_status_rx,
+            suggestions_rx,
+            config_rx,
+            agent_event_tx: agent_event_tx.clone(),
+            character_action_tx,
+        };
+
+        (
+            recording_status_tx,
+            suggestions_tx,
+            config_tx,
+            agent_event_tx,
+            props
+        )
+    });
+
+    // Keep channels synchronized with signals using local effects
+    let recording_status_tx_clone = recording_status_tx.clone();
+    use_effect(move || {
+        let status = recording_status.read().clone();
+        let _ = recording_status_tx_clone.send(status);
+    });
+
+    let suggestions_tx_clone = suggestions_tx.clone();
+    use_effect(move || {
+        let list = suggestions.read().clone();
+        let _ = suggestions_tx_clone.send(list);
+    });
+
+    let config_tx_clone = config_tx.clone();
+    use_effect(move || {
+        let cfg = config.read().clone();
+        let _ = config_tx_clone.send(cfg);
+    });
+
     // ── Spawn character overlay window once on mount ──────────────────────────
     let has_spawned_character = use_signal(|| false);
+    let props_for_spawn = props_for_character.clone();
     use_effect(move || {
         if !*has_spawned_character.read() {
             has_spawned_character.clone().set(true);
 
             let desktop = dioxus::desktop::window();
-
+            
             // Build secondary window config
-            let character_cfg = dioxus::desktop::Config::new()
-                .with_window(
-                    dioxus::desktop::tao::window::WindowBuilder::new()
-                        .with_title("Omi Character")
-                        .with_decorations(false)     // borderless
-                        .with_transparent(true)      // transparent background
-                        .with_always_on_top(true)    // always-on-top overlay
-                        .with_resizable(false)
-                        .with_inner_size(dioxus::desktop::tao::dpi::LogicalSize::new(180.0, 180.0))
-                );
+            let mut builder = dioxus::desktop::tao::window::WindowBuilder::new()
+                .with_title("Omi Character")
+                .with_decorations(false)     // borderless
+                .with_transparent(true)      // transparent background
+                .with_always_on_top(true)    // always-on-top overlay
+                .with_resizable(false)
+                .with_inner_size(dioxus::desktop::tao::dpi::LogicalSize::new(180.0, 180.0));
 
-            let props = crate::components::character_window::CharacterOverlayProps {
-                suggestions: suggestions.clone(),
-                recording_status: recording_status.clone(),
-                live_transcript: live_transcript.clone(),
-                db: db.clone(),
-                runtime: runtime.clone(),
-                config: config.clone(),
-                suggestion_prompt: suggestion_prompt.clone(),
-            };
+            // Position in the bottom-right corner of the primary monitor
+            if let Some(monitor) = desktop.primary_monitor() {
+                let size = monitor.size();
+                let scale = monitor.scale_factor();
+                let win_width = (180.0 * scale) as u32;
+                let win_height = (180.0 * scale) as u32;
+                
+                // Bottom-right corner offset
+                let x = size.width.saturating_sub(win_width).saturating_sub((20.0 * scale) as u32);
+                let y = size.height.saturating_sub(win_height).saturating_sub((60.0 * scale) as u32);
+                
+                builder = builder.with_position(dioxus::desktop::tao::dpi::PhysicalPosition::new(x as i32, y as i32));
+            }
+
+            let character_cfg = dioxus::desktop::Config::new()
+                .with_background_color((0, 0, 0, 0))
+                .with_window(builder);
 
             desktop.new_window(
-                VirtualDom::new_with_props(crate::components::character_window::CharacterOverlay, props),
+                VirtualDom::new_with_props(crate::components::character_window::CharacterOverlay, props_for_spawn.clone()),
                 character_cfg
             );
             tracing::info!("[APP] Spawned proactive character overlay window.");
+        }
+    });
+
+    // Silence detection: watch live_transcript for changes
+    let live_t = live_transcript.clone();
+    let stop_h_silence = stop_handle.clone();
+    let cvm_silence = continuous_voice_mode.clone();
+    use_effect(move || {
+        if !*cvm_silence.read() {
+            return;
+        }
+        let segments = live_t.read().segments.clone();
+        if let Some(last_seg) = segments.last() {
+            if last_seg.is_final {
+                let last_text = last_seg.text.clone();
+                let last_start = last_seg.start;
+                let mut stop_h = stop_h_silence.clone();
+                let live_t = live_t.clone();
+                let cvm = cvm_silence.clone();
+                
+                spawn(async move {
+                    tokio::time::sleep(tokio::time::Duration::from_millis(1800)).await;
+                    
+                    if !*cvm.read() {
+                        return;
+                    }
+                    
+                    let current_segments = live_t.read().segments.clone();
+                    if let Some(curr_last) = current_segments.last() {
+                        if curr_last.text == last_text && curr_last.start == last_start {
+                            tracing::info!("[SILENCE] Silence detected. Stopping recording.");
+                            if let Some(handle) = stop_h.write().take() {
+                                handle.stop();
+                            }
+                        }
+                    }
+                });
+            }
+        }
+    });
+
+    // Handle recording transition -> query Agent
+    let rec_status = recording_status.clone();
+    let live_t_agent = live_transcript.clone();
+    let cvm_agent = continuous_voice_mode.clone();
+    let mut vh_agent = voice_history.clone();
+    let rt_agent = runtime.clone();
+    let cfg_agent = config.clone();
+    let db_agent = db.clone();
+    let start_rec_agent = start_rec.clone();
+    let mut prev_was_recording = use_signal(|| false);
+
+    use_effect(move || {
+        let status = rec_status.read().clone();
+        let was_rec = *prev_was_recording.peek();
+        let is_rec = matches!(status, RecordingStatus::Recording { .. });
+        prev_was_recording.set(is_rec);
+
+        if was_rec && !is_rec && *cvm_agent.read() {
+            let user_text: String = live_t_agent.read().segments.iter()
+                .filter(|s| s.is_final)
+                .map(|s| s.text.as_str())
+                .collect::<Vec<_>>()
+                .join(" ");
+
+            let user_text = user_text.trim().to_string();
+            if user_text.is_empty() {
+                tracing::info!("[APP] Continuous mode: user text empty. Auto-restarting recording.");
+                let cvm_clone = cvm_agent.clone();
+                let mut start_rec_clone = start_rec_agent.clone();
+                spawn(async move {
+                    tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+                    if *cvm_clone.read() {
+                        start_rec_clone();
+                    }
+                });
+                return;
+            }
+
+            tracing::info!("[APP] Continuous mode: user said \"{}\". Triggering Agent query.", user_text);
+
+            let mut h = vh_agent.read().clone();
+            h.push(("user".into(), user_text));
+            vh_agent.set(h.clone());
+
+            let rt_clone = rt_agent.read().clone();
+            let cfg_val = cfg_agent.read().clone();
+            let db_snap = db_agent.read().clone();
+
+            spawn(async move {
+                let mut ctx = String::new();
+                if let Some(Db(ref d)) = db_snap {
+                    let memories = d.get_memories_text(10).unwrap_or_default();
+                    let recent = d.get_recent_context(3).unwrap_or_default();
+                    if !recent.is_empty() {
+                        ctx.push_str("## Recent Conversations\n");
+                        for (ts, title, text) in &recent {
+                            ctx.push_str(&format!("[{ts}] {title}: {text}\n"));
+                        }
+                    }
+                    if !memories.is_empty() {
+                        ctx.push_str("## Long-term Memories\n");
+                        ctx.push_str(&memories);
+                    }
+                }
+
+                let system = format!(
+                    "You are Omi, a proactive AI assistant running on the user's Windows computer.\n\
+                    Be concise, precise, and helpful. Use context below when relevant.\n\
+                    When listing items use plain text, not markdown (the UI renders plain text).\n\n\
+                    {ctx}"
+                );
+
+                if let Err(e) = rt_clone.query_native(h, &system, &cfg_val).await {
+                    tracing::error!("[APP] Continuous mode agent query failed: {e}");
+                }
+            });
         }
     });
 

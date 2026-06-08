@@ -11,6 +11,9 @@ pub fn SettingsPage() -> Element {
     let mut config: Signal<AppConfig> = use_context();
     let mut auth_status: Signal<AuthStatus> = use_context();
     let runtime: Signal<AgentRuntime> = use_context();
+    let input_devices = use_signal(|| {
+        omi_audio::mic::list_input_devices().unwrap_or_default()
+    });
 
     let backend_display = match &*backend_status.read() {
         BackendStatus::Starting => "Starting...".to_string(),
@@ -266,6 +269,21 @@ pub fn SettingsPage() -> Element {
                             },
                         }
                         span { class: "toggle-slider" }
+                    }
+                }
+                div { class: "settings-row",
+                    label { class: "settings-label", "Mic Device" }
+                    select {
+                        class: "settings-input",
+                        value: "{config.read().mic_device_name}",
+                        onchange: move |e| {
+                            config.write().mic_device_name = e.value();
+                            let _ = config.read().save();
+                        },
+                        option { value: "", "Default System Microphone" }
+                        for dev in input_devices.read().iter() {
+                            option { value: "{dev}", "{dev}" }
+                        }
                     }
                 }
                 div { class: "settings-row",

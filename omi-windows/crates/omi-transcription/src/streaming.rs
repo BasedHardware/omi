@@ -132,7 +132,7 @@ pub async fn run_deepgram_stream(
     // Task: send audio data to Deepgram
     let send_task = tokio::spawn(async move {
         let mut chunk_count: u64 = 0;
-        let total_bytes: u64 = 0;
+        let mut total_bytes: u64 = 0;
         tracing::info!("[TRANSCRIPTION] Audio send task started, waiting for audio chunks...");
         loop {
             match audio_rx.recv().await {
@@ -144,6 +144,18 @@ pub async fn run_deepgram_stream(
                         .iter()
                         .flat_map(|s| s.to_le_bytes())
                         .collect();
+                    let byte_len = bytes.len() as u64;
+                    total_bytes += byte_len;
+                    let mut max_amp = 0i16;
+                    for &s in &chunk.samples {
+                        let abs = s.abs();
+                        if abs > max_amp {
+                            max_amp = abs;
+                        }
+                    }
+                    if chunk_count % 100 == 0 {
+                        tracing::debug!("[TRANSCRIPTION] Sent chunk #{} ({} bytes, max amp {}, total {} KB)", chunk_count, byte_len, max_amp, total_bytes / 1024);
+                    }
                     if let Err(e) = ws_tx.send(Message::Binary(bytes)).await {
                         tracing::error!("[TRANSCRIPTION] WS send error after {} chunks: {e}", chunk_count);
                         break;

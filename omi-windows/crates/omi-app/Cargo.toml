@@ -10,6 +10,10 @@ path = "src/main.rs"
 [dependencies]
 dioxus = { version = "0.6", features = ["desktop", "router"] }
 dioxus-free-icons = { version = "0.9", features = ["lucide"] }
+aes-gcm = "0.10"
+sha1 = "0.10"
+rusqlite = { version = "0.31", features = ["bundled"] }
+
 
 # Workspace deps
 tokio = { workspace = true }

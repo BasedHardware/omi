@@ -3,12 +3,16 @@ use dioxus::prelude::document::eval;
 use std::time::Duration;
 use crate::proactive::Suggestion;
 use crate::recording::RecordingStatus;
-use crate::agent_runtime::{AgentEvent, AgentRuntime};
+use crate::agent_runtime::AgentEvent;
 use crate::config::AppConfig;
 
 pub const CHARACTER_CSS: &str = r#"
-body {
+html, body {
     background: transparent !important;
+    background-color: transparent !important;
+}
+
+body {
     overflow: hidden;
     margin: 0;
     padding: 0;
@@ -58,22 +62,20 @@ body {
     50% { transform: scaleY(3.0); }
 }
 
-.animated-head {
-    animation: bounce 3s ease-in-out infinite;
-    transform-origin: bottom center;
-}
-
-.antenna-bulb {
-    animation: glow-antenna 1.5s ease-in-out infinite;
-}
-
 .eye-left, .eye-right {
+    transform-origin: center;
+}
+
+.mouth {
+    display: none;
     transform-origin: center;
 }
 
 .pixel-avatar {
     width: 100px;
     height: 100px;
+    animation: bounce 3s ease-in-out infinite;
+    transform-origin: bottom center;
 }
 
 .pixel-avatar.state-idle .eye-left, 
@@ -87,33 +89,21 @@ body {
     animation: eye-pulse 0.6s ease-in-out infinite;
 }
 
-.pixel-avatar.state-listening .antenna-bulb {
-    fill: #00cec9;
-}
-
 .pixel-avatar.state-thinking .eye-left, 
 .pixel-avatar.state-thinking .eye-right {
     fill: #fdcb6e !important;
     animation: eye-pulse 0.3s ease-in-out infinite;
 }
 
-.pixel-avatar.state-thinking .antenna-bulb {
-    fill: #fdcb6e;
-}
-
 .pixel-avatar.state-speaking .eye-left, 
 .pixel-avatar.state-speaking .eye-right {
-    fill: #e84393 !important;
+    fill: #ffffff !important;
 }
 
 .pixel-avatar.state-speaking .mouth {
+    display: block;
     animation: mouth-speak 0.12s ease-in-out infinite;
-    transform-origin: 15px 16px;
-    stroke: #e84393 !important;
-}
-
-.pixel-avatar.state-speaking .antenna-bulb {
-    fill: #e84393;
+    fill: #ffffff !important;
 }
 
 /* Speech bubble styling */
@@ -198,15 +188,26 @@ body {
 }
 "#;
 
-#[derive(Props, Clone, PartialEq)]
+#[derive(Clone, Debug)]
+pub enum CharacterAction {
+    ToggleRecord,
+    SuggestionAction(String),
+    SpeechFinished,
+}
+
+#[derive(Clone)]
 pub struct CharacterOverlayProps {
-    pub suggestions: Signal<Vec<Suggestion>>,
-    pub recording_status: Signal<RecordingStatus>,
-    pub live_transcript: Signal<crate::recording::LiveTranscript>,
-    pub db: Signal<Option<crate::app::Db>>,
-    pub runtime: Signal<AgentRuntime>,
-    pub config: Signal<AppConfig>,
-    pub suggestion_prompt: Signal<Option<String>>,
+    pub suggestions_rx: tokio::sync::watch::Receiver<Vec<Suggestion>>,
+    pub recording_status_rx: tokio::sync::watch::Receiver<RecordingStatus>,
+    pub config_rx: tokio::sync::watch::Receiver<AppConfig>,
+    pub agent_event_tx: tokio::sync::broadcast::Sender<AgentEvent>,
+    pub character_action_tx: tokio::sync::mpsc::UnboundedSender<CharacterAction>,
+}
+
+impl PartialEq for CharacterOverlayProps {
+    fn eq(&self, _other: &Self) -> bool {
+        true
+    }
 }
 
 #[component]
@@ -214,11 +215,57 @@ pub fn CharacterOverlay(props: CharacterOverlayProps) -> Element {
     let mut avatar_state = use_signal(|| "state-idle".to_string());
     let mut active_suggestion: Signal<Option<Suggestion>> = use_signal(|| None);
     let mut dismiss_trigger = use_signal(|| 0);
-    let mut stop_handle: Signal<Option<crate::recording::StopRecording>> = use_context();
+
+    // Local signals to store state received from channels
+    let recording_status = use_signal(|| RecordingStatus::Idle);
+    let suggestions = use_signal(Vec::<Suggestion>::new);
+    let config = use_signal(|| AppConfig::load());
+
+    // 1. Synchronize recording_status from watch channel
+    use_hook(move || {
+        let mut rx = props.recording_status_rx.clone();
+        let mut sig = recording_status.clone();
+        spawn(async move {
+            let val = rx.borrow().clone();
+            sig.set(val);
+            while rx.changed().await.is_ok() {
+                let val = rx.borrow().clone();
+                sig.set(val);
+            }
+        });
+    });
+
+    // 2. Synchronize suggestions from watch channel
+    use_hook(move || {
+        let mut rx = props.suggestions_rx.clone();
+        let mut sig = suggestions.clone();
+        spawn(async move {
+            let val = rx.borrow().clone();
+            sig.set(val);
+            while rx.changed().await.is_ok() {
+                let val = rx.borrow().clone();
+                sig.set(val);
+            }
+        });
+    });
+
+    // 3. Synchronize config from watch channel
+    use_hook(move || {
+        let mut rx = props.config_rx.clone();
+        let mut sig = config.clone();
+        spawn(async move {
+            let val = rx.borrow().clone();
+            sig.set(val);
+            while rx.changed().await.is_ok() {
+                let val = rx.borrow().clone();
+                sig.set(val);
+            }
+        });
+    });
 
     // Subscribe to recording status signals to change character visual state
     use_effect(move || {
-        let rec = props.recording_status.read();
+        let rec = recording_status.read();
         match *rec {
             RecordingStatus::Recording { .. } => {
                 avatar_state.set("state-listening".to_string());
@@ -229,14 +276,18 @@ pub fn CharacterOverlay(props: CharacterOverlayProps) -> Element {
         }
     });
 
+    let agent_event_tx_for_hook = props.agent_event_tx.clone();
+    let character_action_tx_for_hook = props.character_action_tx.clone();
+
     // Subscribe to LLM agent events for thinking and speaking states
     use_hook(move || {
-        let rt = props.runtime.clone();
-        let cfg = props.config.clone();
+        let agent_event_tx = agent_event_tx_for_hook.clone();
+        let action_tx_inner = character_action_tx_for_hook.clone();
+        let cfg = config.clone();
         let mut av_state = avatar_state.clone();
         
         spawn(async move {
-            let mut rx = rt.read().subscribe();
+            let mut rx = agent_event_tx.subscribe();
             loop {
                 match rx.recv().await {
                     Ok(AgentEvent::Init { .. }) => {
@@ -251,12 +302,24 @@ pub fn CharacterOverlay(props: CharacterOverlayProps) -> Element {
                         
                         if !text.is_empty() && !token.is_empty() {
                             let js_speak = format!(r#"
-                                if (window.speak) {{
-                                    window.speak({:?}, {:?}, {:?});
-                                }}
+                                (async () => {{
+                                    if (window.speak) {{
+                                        await window.speak({:?}, {:?}, {:?});
+                                    }}
+                                    dioxus.send("speech_ended");
+                                }})();
                             "#, text, url, token);
                             
-                            eval(&js_speak);
+                            let mut eval_handle = eval(&js_speak);
+                            let action_tx = action_tx_inner.clone();
+                            spawn(async move {
+                                while let Ok(msg) = eval_handle.recv::<serde_json::Value>().await {
+                                    if msg.as_str() == Some("speech_ended") {
+                                        let _ = action_tx.send(CharacterAction::SpeechFinished);
+                                        break;
+                                    }
+                                }
+                            });
                         }
                     }
                     Ok(AgentEvent::Error { .. }) => {
@@ -264,7 +327,7 @@ pub fn CharacterOverlay(props: CharacterOverlayProps) -> Element {
                     }
                     Err(_) => {
                         tokio::time::sleep(Duration::from_millis(200)).await;
-                        rx = rt.read().subscribe();
+                        rx = agent_event_tx.subscribe();
                     }
                     _ => {}
                 }
@@ -274,7 +337,7 @@ pub fn CharacterOverlay(props: CharacterOverlayProps) -> Element {
 
     // Handle suggestion notification display with a 10-second timeout
     use_effect(move || {
-        let list = props.suggestions.read();
+        let list = suggestions.read();
         if let Some(sug) = list.first() {
             active_suggestion.set(Some(sug.clone()));
             
@@ -284,7 +347,7 @@ pub fn CharacterOverlay(props: CharacterOverlayProps) -> Element {
             
             // Set 10-second timeout to auto-dismiss suggestion bubble
             let mut active_sig = active_suggestion.clone();
-            let mut sug_list = props.suggestions.clone();
+            let mut sug_list = suggestions.clone();
             let target_sug_id = sug.id.clone();
             
             spawn(async move {
@@ -305,38 +368,59 @@ pub fn CharacterOverlay(props: CharacterOverlayProps) -> Element {
     // Injected JavaScript code to implement speak() and voice control
     use_effect(move || {
         let js_init = r#"
-            window.speak = async function(text, backendUrl, token) {
-                const avatar = document.getElementById("robot-avatar");
-                if (avatar) avatar.setAttribute("class", "pixel-avatar state-thinking");
-                
-                try {
-                    const response = await fetch(`${backendUrl}/v2/tts/synthesize`, {
-                        method: 'POST',
-                        headers: {
-                            'Authorization': `Bearer ${token}`,
-                            'Content-Type': 'application/json'
-                        },
-                        body: JSON.stringify({
-                            voice_id: "21m00Tcm4TlvDq8ikWAM",
-                            text: text
-                        })
-                    });
-                    if (!response.ok) throw new Error("TTS failed");
-                    const blob = await response.blob();
-                    const url = URL.createObjectURL(blob);
-                    const audio = new Audio(url);
-                    
-                    if (avatar) avatar.setAttribute("class", "pixel-avatar state-speaking");
-                    
-                    audio.onended = () => {
-                        if (avatar) avatar.setAttribute("class", "pixel-avatar state-idle");
-                    };
-                    
-                    await audio.play();
-                } catch (e) {
-                    console.error("Speech synthesis failed", e);
-                    if (avatar) avatar.setAttribute("class", "pixel-avatar state-idle");
+            window.cancelSpeech = function() {
+                if (window.current_audio) {
+                    window.current_audio.pause();
+                    window.current_audio = null;
                 }
+                const avatar = document.getElementById("robot-avatar");
+                if (avatar) avatar.setAttribute("class", "pixel-avatar state-idle");
+            };
+            window.speak = function(text, backendUrl, token) {
+                return new Promise(async (resolve) => {
+                    window.cancelSpeech();
+                    const avatar = document.getElementById("robot-avatar");
+                    if (avatar) avatar.setAttribute("class", "pixel-avatar state-thinking");
+                    
+                    try {
+                        const response = await fetch(`${backendUrl}/v2/tts/synthesize`, {
+                            method: 'POST',
+                            headers: {
+                                'Authorization': `Bearer ${token}`,
+                                'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify({
+                                voice_id: "21m00Tcm4TlvDq8ikWAM",
+                                text: text
+                            })
+                        });
+                        if (!response.ok) throw new Error("TTS failed");
+                        const blob = await response.blob();
+                        const url = URL.createObjectURL(blob);
+                        const audio = new Audio(url);
+                        window.current_audio = audio;
+                        
+                        if (avatar) avatar.setAttribute("class", "pixel-avatar state-speaking");
+                        
+                        audio.onended = () => {
+                            window.current_audio = null;
+                            if (avatar) avatar.setAttribute("class", "pixel-avatar state-idle");
+                            resolve();
+                        };
+                        audio.onerror = () => {
+                            window.current_audio = null;
+                            if (avatar) avatar.setAttribute("class", "pixel-avatar state-idle");
+                            resolve();
+                        };
+                        
+                        await audio.play();
+                    } catch (e) {
+                        console.error("Speech synthesis failed", e);
+                        window.current_audio = null;
+                        if (avatar) avatar.setAttribute("class", "pixel-avatar state-idle");
+                        resolve();
+                    }
+                });
             };
         "#;
         eval(js_init);
@@ -353,12 +437,12 @@ pub fn CharacterOverlay(props: CharacterOverlayProps) -> Element {
                     let sug_text = sug.text.clone();
                     let sug_action = sug.action_label.clone();
                     let sug_prompt = sug.agent_prompt.clone();
-                    let mut sug_list = props.suggestions.clone();
-                    let mut sp = props.suggestion_prompt.clone();
+                    let mut sug_list = suggestions.clone();
                     let mut active_sig = active_suggestion.clone();
                     
                     let sug_id_action = sug_id.clone();
                     let sug_id_dismiss = sug_id.clone();
+                    let tx = props.character_action_tx.clone();
                     
                     rsx! {
                         div { class: "speech-bubble character-non-drag",
@@ -369,7 +453,7 @@ pub fn CharacterOverlay(props: CharacterOverlayProps) -> Element {
                                         class: "action-btn",
                                         onclick: move |_| {
                                             if let Some(ref p) = sug_prompt {
-                                                sp.set(Some(p.clone()));
+                                                let _ = tx.send(CharacterAction::SuggestionAction(p.clone()));
                                             }
                                             // Clear suggestion on action click
                                             active_sig.set(None);
@@ -401,34 +485,7 @@ pub fn CharacterOverlay(props: CharacterOverlayProps) -> Element {
                 class: "character-non-drag",
                 // Toggle recording on click
                 onclick: move |_| {
-                    let is_recording = matches!(*props.recording_status.peek(), RecordingStatus::Recording { .. });
-                    if is_recording {
-                        if let Some(handle) = stop_handle.write().take() {
-                            handle.stop();
-                        }
-                    } else {
-                        let api_key = props.config.read().deepgram_api_key.clone();
-                        let diarize = props.config.read().diarize_speakers;
-                        let cfg = props.config.read().clone();
-                        let db_val = props.db.read().clone();
-                        let mut status = props.recording_status.clone();
-                        let mut transcript = props.live_transcript.clone();
-                        let mut stop_h = stop_handle.clone();
-                        let (stop_tx, stop_rx) = tokio::sync::oneshot::channel::<()>();
-                        stop_h.set(Some(crate::recording::StopRecording::new(stop_tx)));
-                        spawn(async move {
-                            crate::recording::start_recording(
-                                api_key,
-                                diarize,
-                                db_val,
-                                cfg,
-                                stop_rx,
-                                &mut status,
-                                &mut transcript,
-                            )
-                            .await;
-                        });
-                    }
+                    let _ = props.character_action_tx.send(CharacterAction::ToggleRecord);
                 },
                 
                 svg {
@@ -436,22 +493,25 @@ pub fn CharacterOverlay(props: CharacterOverlayProps) -> Element {
                     class: "pixel-avatar {avatar_state}",
                     view_box: "0 0 30 30",
                     
-                    // Head Outline & Body
-                    rect { x: "5", y: "5", width: "20", height: "20", fill: "#1e1e2e", stroke: "#6c5ce7", stroke_width: "1.5", rx: "2" }
+                    // Invader Orange Body
+                    rect { x: "7", y: "10", width: "16", height: "9", fill: "#e06c53" }
                     
-                    // Face plate screen
-                    rect { x: "7", y: "7", width: "16", height: "11", fill: "#11111b", rx: "1" }
+                    // Side arms/ears
+                    rect { x: "2", y: "13", width: "5", height: "2", fill: "#e06c53" }
+                    rect { x: "23", y: "13", width: "5", height: "2", fill: "#e06c53" }
                     
-                    // Antenna
-                    rect { x: "14", y: "2", width: "2", height: "3", fill: "#6c5ce7" }
-                    circle { class: "antenna-bulb", cx: "15", cy: "1", r: "1.5", fill: "#6c5ce7" }
-
-                    // Eyes
-                    rect { class: "eye-left", x: "9", y: "10", width: "3", height: "3", fill: "#a6e3a1" }
-                    rect { class: "eye-right", x: "18", y: "10", width: "3", height: "3", fill: "#a6e3a1" }
+                    // Legs (four vertical feet)
+                    rect { x: "9", y: "19", width: "1.5", height: "4", fill: "#e06c53" }
+                    rect { x: "12", y: "19", width: "1.5", height: "4", fill: "#e06c53" }
+                    rect { x: "16.5", y: "19", width: "1.5", height: "4", fill: "#e06c53" }
+                    rect { x: "19.5", y: "19", width: "1.5", height: "4", fill: "#e06c53" }
                     
-                    // Mouth
-                    line { class: "mouth", x1: "11", y1: "15", x2: "19", y2: "15", stroke: "#a6e3a1", stroke_width: "1.5" }
+                    // Eyes (vertical slits)
+                    rect { class: "eye-left", x: "10.5", y: "12", width: "2", height: "4", fill: "#ffffff" }
+                    rect { class: "eye-right", x: "17.5", y: "12", width: "2", height: "4", fill: "#ffffff" }
+                    
+                    // Mouth (appears only when speaking)
+                    rect { class: "mouth", x: "13", y: "16", width: "4", height: "1.5", fill: "#ffffff" }
                 }
             }
         }

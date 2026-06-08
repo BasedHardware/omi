@@ -34,7 +34,8 @@ pub fn toggle_record_id() -> Option<u32> {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum HotkeyAction {
     ToggleBar,
-    ToggleRecord,
+    StartRecord,
+    StopRecord,
 }
 
 // ── Manager (kept alive by caller) ────────────────────────────────────────────
@@ -85,11 +86,15 @@ pub fn start_listener(tx: broadcast::Sender<HotkeyAction>) {
             .await;
 
             match result {
-                Ok(Ok(event)) if event.state == HotKeyState::Pressed => {
-                    let action = if Some(event.id) == toggle_bar_id() {
+                Ok(Ok(event)) => {
+                    let action = if Some(event.id) == toggle_bar_id() && event.state == HotKeyState::Pressed {
                         Some(HotkeyAction::ToggleBar)
                     } else if Some(event.id) == toggle_record_id() {
-                        Some(HotkeyAction::ToggleRecord)
+                        if event.state == HotKeyState::Pressed {
+                            Some(HotkeyAction::StartRecord)
+                        } else {
+                            Some(HotkeyAction::StopRecord)
+                        }
                     } else {
                         None
                     };
@@ -107,7 +112,6 @@ pub fn start_listener(tx: broadcast::Sender<HotkeyAction>) {
                     tracing::error!("[HOTKEY] spawn_blocking panicked: {e}");
                     break;
                 }
-                _ => {}
             }
         }
         tracing::warn!("[HOTKEY] Listener task exited");

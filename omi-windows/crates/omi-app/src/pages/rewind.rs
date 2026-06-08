@@ -127,6 +127,7 @@ pub fn RewindPage() -> Element {
     let mut screenshots: Signal<Vec<Screenshot>> = use_signal(Vec::new);
     let mut search_query = use_signal(String::new);
     let mut selected: Signal<Option<Screenshot>> = use_signal(|| None);
+    let mut scrubber_idx = use_signal(|| 0);
 
     let capture_enabled = config.read().screen_capture_enabled;
 
@@ -150,6 +151,26 @@ pub fn RewindPage() -> Element {
                 tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
             }
         });
+    });
+
+    // Synchronize selected and scrubber_idx
+    use_effect(move || {
+        let shots = screenshots.read();
+        if !shots.is_empty() {
+            if selected.read().is_none() {
+                selected.set(Some(shots[0].clone()));
+                scrubber_idx.set(0);
+            } else if let Some(ref sel) = *selected.read() {
+                if let Some(idx) = shots.iter().position(|s| s.id == sel.id) {
+                    if *scrubber_idx.peek() != idx {
+                        scrubber_idx.set(idx);
+                    }
+                }
+            }
+        } else {
+            selected.set(None);
+            scrubber_idx.set(0);
+        }
     });
 
     // Search handler — called from button click and Enter key
@@ -196,6 +217,66 @@ pub fn RewindPage() -> Element {
                         class: "btn btn-secondary",
                         onclick: move |_| do_search(),
                         "Search"
+                    }
+                }
+
+                // Interactive Timeline & Filmstrip Scrubber
+                if !screenshots.read().is_empty() {
+                    {
+                        let shots = screenshots.read();
+                        let max_idx = shots.len().saturating_sub(1);
+                        let current_time = if let Some(ref s) = *selected.read() {
+                            s.captured_at.format("%H:%M:%S").to_string()
+                        } else {
+                            "00:00:00".to_string()
+                        };
+
+                        rsx! {
+                            div { class: "rewind-timeline-container",
+                                div { class: "timeline-scrubber-row",
+                                    input {
+                                        class: "timeline-slider",
+                                        r#type: "range",
+                                        min: "0",
+                                        max: "{max_idx}",
+                                        value: "{scrubber_idx}",
+                                        oninput: move |e| {
+                                            let idx: usize = e.value().parse().unwrap_or(0);
+                                            scrubber_idx.set(idx);
+                                            if let Some(shot) = screenshots.read().get(idx) {
+                                                selected.set(Some(shot.clone()));
+                                            }
+                                        }
+                                    }
+                                    span { class: "timeline-time", "{current_time}" }
+                                }
+
+                                div { class: "rewind-filmstrip",
+                                    for (i, shot) in shots.iter().enumerate() {
+                                        {
+                                            let is_selected = Some(&shot.id) == selected.read().as_ref().map(|s| &s.id);
+                                            let shot_clone = shot.clone();
+                                            let time_label = shot.captured_at.format("%H:%M").to_string();
+                                            rsx! {
+                                                div {
+                                                    class: if is_selected { "filmstrip-thumb selected" } else { "filmstrip-thumb" },
+                                                    onclick: move |_| {
+                                                        selected.set(Some(shot_clone.clone()));
+                                                        scrubber_idx.set(i);
+                                                    },
+                                                    if let Some(ref p) = shot.thumbnail_path {
+                                                        img { class: "filmstrip-img", src: "{p}" }
+                                                    } else {
+                                                        div { class: "rewind-thumb-placeholder", "📷" }
+                                                    }
+                                                    span { class: "filmstrip-time", "{time_label}" }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
 

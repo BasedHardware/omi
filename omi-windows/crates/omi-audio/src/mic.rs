@@ -19,17 +19,42 @@ pub fn list_input_devices() -> Result<Vec<String>> {
     Ok(devices)
 }
 
-/// Start capturing audio from the default microphone.
+/// Start capturing audio from the default or preferred microphone.
 ///
 /// Uses the device's preferred config and resamples to 16kHz mono internally.
 /// Returns a handle that keeps the stream alive. Drop it to stop capture.
 pub fn start_mic_capture(
     tx: broadcast::Sender<AudioChunk>,
+    preferred_device: Option<&str>,
 ) -> Result<MicStream> {
     let host = cpal::default_host();
-    let device = host
-        .default_input_device()
-        .context("No default input device available")?;
+    let device = if let Some(name) = preferred_device {
+        if name.is_empty() {
+            host.default_input_device()
+                .context("No default input device available")?
+        } else {
+            let mut found = None;
+            if let Ok(devices) = host.input_devices() {
+                for d in devices {
+                    if let Ok(n) = d.name() {
+                        if n == name {
+                            found = Some(d);
+                            break;
+                        }
+                    }
+                }
+            }
+            if let Some(d) = found {
+                d
+            } else {
+                tracing::warn!("[MIC] Preferred input device '{}' not found, falling back to default", name);
+                host.default_input_device().context("No default input device available")?
+            }
+        }
+    } else {
+        host.default_input_device()
+            .context("No default input device available")?
+    };
 
     let device_name = device.name().unwrap_or_else(|_| "unknown".into());
     tracing::info!("Using input device: {device_name}");
@@ -59,7 +84,29 @@ pub fn start_mic_capture(
             device.build_input_stream(
                 &config,
                 move |data: &[f32], _: &cpal::InputCallbackInfo| {
+                    let mut max_input = 0.0f32;
+                    for &s in data {
+                        let abs = s.abs();
+                        if abs > max_input {
+                            max_input = abs;
+                        }
+                    }
+                    if max_input > 0.00001 {
+                        tracing::debug!("[MIC] Raw callback max float: {}", max_input);
+                    }
+
                     let mono = downmix_to_mono_f32(data, device_channels);
+                    let mut max_mono = 0.0f32;
+                    for &s in &mono {
+                        let abs = s.abs();
+                        if abs > max_mono {
+                            max_mono = abs;
+                        }
+                    }
+                    if max_mono > 0.00001 {
+                        tracing::debug!("[MIC] Mono max float: {}", max_mono);
+                    }
+
                     let resampled = resample_f32(&mono, device_rate, SAMPLE_RATE);
                     let samples: Vec<i16> = resampled
                         .iter()
@@ -118,13 +165,14 @@ pub fn start_mic_capture(
     })
 }
 
-/// Downmix multi-channel f32 audio to mono by averaging channels.
+/// Downmix multi-channel f32 audio to mono by taking the first channel.
+/// This avoids phase cancellation issues common when averaging stereo arrays.
 fn downmix_to_mono_f32(data: &[f32], channels: usize) -> Vec<f32> {
     if channels == 1 {
         return data.to_vec();
     }
     data.chunks(channels)
-        .map(|frame| frame.iter().sum::<f32>() / channels as f32)
+        .map(|frame| frame[0])
         .collect()
 }
 

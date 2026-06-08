@@ -142,6 +142,10 @@ pub struct AppConfig {
     #[serde(default = "default_proactive_tick_mins")]
     pub proactive_tick_mins: u64,
 
+    /// Selected microphone device name. If empty, uses the default system microphone.
+    #[serde(default)]
+    pub mic_device_name: String,
+
     // ── Persona ───────────────────────────────────────────────────────────────
 
     /// Display name for the AI assistant (default: "Omi")
@@ -218,6 +222,7 @@ impl Default for AppConfig {
             screenshot_auto_save_action_items: false,
             system_audio_enabled: false,
             mic_enabled: true,
+            mic_device_name: String::new(),
             diarize_speakers: false,
             firebase_id_token: String::new(),
             firebase_refresh_token: String::new(),

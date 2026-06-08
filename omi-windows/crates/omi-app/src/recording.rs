@@ -72,7 +72,12 @@ pub async fn start_recording_with_proactive(
 
     // Start mic capture
     tracing::info!("[RECORDING] Attempting to start mic capture...");
-    let mic = match omi_audio::mic::start_mic_capture(audio_tx.clone()) {
+    let preferred = if cfg.mic_device_name.is_empty() {
+        None
+    } else {
+        Some(cfg.mic_device_name.as_str())
+    };
+    let mic = match omi_audio::mic::start_mic_capture(audio_tx.clone(), preferred) {
         Ok(m) => {
             tracing::info!("[RECORDING] Mic capture started on device: {}", m.device_name());
             status.set(RecordingStatus::Recording {
@@ -86,6 +91,20 @@ pub async fn start_recording_with_proactive(
             return;
         }
     };
+
+    let mut loopback = None;
+    if cfg.system_audio_enabled {
+        tracing::info!("[RECORDING] Attempting to start WASAPI loopback capture...");
+        match omi_audio::loopback::start_loopback_capture(audio_tx.clone()) {
+            Ok(stream) => {
+                tracing::info!("[RECORDING] WASAPI loopback capture started: {}", stream.device_name());
+                loopback = Some(stream);
+            }
+            Err(e) => {
+                tracing::error!("[RECORDING] WASAPI loopback capture failed: {e}");
+            }
+        }
+    }
 
     tracing::info!("[RECORDING] Recording started on '{}', preparing Deepgram config...", mic.device_name());
 
@@ -140,8 +159,9 @@ pub async fn start_recording_with_proactive(
     });
     tracing::info!("[RECORDING] Deepgram task spawned, entering poll loop...");
 
-    // Poll transcript + stop signal on Dioxus task (keeps mic handle alive)
+    // Poll transcript + stop signal on Dioxus task (keeps stream handles alive)
     let _mic_handle = mic;
+    let _loopback_handle = loopback;
     let mut segment_count: u32 = 0;
     tracing::info!("[RECORDING] Entering poll loop (stop_rx + transcript_rx + err_rx)");
     loop {
