@@ -91,6 +91,12 @@ class SharedPreferencesUtil {
 
   bool get useCustomStt => customSttConfig.isEnabled;
 
+  // Whether offline recordings auto-sync to Omi when the device connects.
+  // Defaults to true (auto-sync on) — the feature is opt-out from introduction.
+  bool get autoSyncOfflineRecordings => getBool('autoSyncOfflineRecordings', defaultValue: true);
+
+  set autoSyncOfflineRecordings(bool value) => saveBool('autoSyncOfflineRecordings', value);
+
   // Per-provider config storage
   CustomSttConfig? getConfigForProvider(SttProvider provider) {
     final json = getString('sttConfig_${provider.name}');
