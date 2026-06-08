@@ -190,7 +190,7 @@ class TestTranscribeBytes:
 
         assert lang == 'en'
 
-    def test_auth_header_sent(self):
+    def test_no_auth_header_sent(self):
         wav = _make_wav()
         mock_resp = _mock_parakeet_response()
 
@@ -205,7 +205,7 @@ class TestTranscribeBytes:
 
         call_kwargs = mock_client.post.call_args
         headers = call_kwargs.kwargs.get('headers') or call_kwargs[1].get('headers')
-        assert headers.get('Authorization') == 'Bearer test-secret'
+        assert headers is None
 
     def test_retry_on_failure(self):
         wav = _make_wav()

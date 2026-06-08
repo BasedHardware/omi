@@ -978,13 +978,10 @@ class ParakeetStreamingSocket(STTSocket):
 
     async def _transcribe_chunk(self, pcm: bytes, start: float, dur: float) -> List[dict]:
         wav = _pcm16_to_wav_bytes(pcm, self._sample_rate)
-        # Shared-secret auth for the (publicly-reachable) Parakeet endpoint.
-        secret = os.getenv('ENCRYPTION_SECRET')
-        headers = {'Authorization': f'Bearer {secret}'} if secret else None
         try:
             client = get_stt_client()
             async with get_stt_semaphore():
-                resp = await client.post(self._url, files={'file': ('audio.wav', wav, 'audio/wav')}, headers=headers)
+                resp = await client.post(self._url, files={'file': ('audio.wav', wav, 'audio/wav')})
             resp.raise_for_status()
             data = resp.json()
         except Exception as e:
@@ -1112,13 +1109,10 @@ class ParakeetWebSocketSocket(STTSocket):
             self._mark_dead('parakeet ws send queue full while finalizing')
 
     async def _run(self):
-        secret = os.getenv('ENCRYPTION_SECRET', '')
         url = f"{self._ws_url}?sample_rate={self._sample_rate}"
-        headers = {"authorization": secret} if secret else {}
 
         try:
-            hdr_kwarg = "extra_headers" if int(websockets.__version__.split(".")[0]) < 14 else "additional_headers"
-            async with websockets.connect(url, **{hdr_kwarg: headers}, max_size=10 * 1024 * 1024) as ws:
+            async with websockets.connect(url, max_size=10 * 1024 * 1024) as ws:
                 self._ws = ws
                 self._receiver_task = create_named_task(self._receive_loop(ws), name="parakeet_ws_recv")
                 self._connected_event.set()

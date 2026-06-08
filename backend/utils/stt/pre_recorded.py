@@ -761,8 +761,6 @@ def parakeet_prerecorded_from_bytes(
         if encoding:
             audio_bytes = _wrap_pcm_as_wav(audio_bytes, sample_rate, channels)
 
-        secret = os.getenv('ENCRYPTION_SECRET')
-        headers = {'Authorization': f'Bearer {secret}'} if secret else {}
         files = {'file': ('audio.wav', BytesIO(audio_bytes), 'audio/wav')}
 
         use_v2 = diarize and os.getenv('PARAKEET_USE_V2', '1') == '1'
@@ -774,12 +772,10 @@ def parakeet_prerecorded_from_bytes(
             data = {}
 
         with httpx.Client(timeout=_PARAKEET_TIMEOUT) as client:
-            response = client.post(url, headers=headers, files=files, data=data if data else None)
+            response = client.post(url, files=files, data=data if data else None)
             if response.status_code == 404 and use_v2:
                 url = api_url.rstrip('/') + '/v1/transcribe'
-                response = client.post(
-                    url, headers=headers, files={'file': ('audio.wav', BytesIO(audio_bytes), 'audio/wav')}
-                )
+                response = client.post(url, files={'file': ('audio.wav', BytesIO(audio_bytes), 'audio/wav')})
                 use_v2 = False
         response.raise_for_status()
         result = response.json()

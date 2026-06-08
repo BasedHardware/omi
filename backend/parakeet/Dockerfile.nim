@@ -1,19 +1,19 @@
 # NVIDIA NIM-based Parakeet deployment — auth gateway.
 #
-# This Dockerfile builds a lightweight FastAPI auth gateway that proxies
+# This Dockerfile builds a lightweight FastAPI gateway that proxies
 # transcription requests to an NVIDIA NIM ASR sidecar container.
 #
 # The NIM container (nvcr.io/nim/nvidia/parakeet-1-1b-rnnt-multilingual)
 # provides /v1/audio/transcriptions with TensorRT-optimized inference
-# (~238x real-time on L4 GPU). This gateway adds ENCRYPTION_SECRET auth
-# and the /health endpoint for load balancer checks.
+# (~238x real-time on L4 GPU). This gateway adds the /health endpoint
+# for load balancer checks. No auth needed — runs behind internal LB.
 #
 # Build:
 #   docker build -f backend/parakeet/Dockerfile.nim -t parakeet-nim-gateway .
 #
 # Deployment (sidecar pattern in Kubernetes):
 #   Pod has 2 containers:
-#   1. This gateway (port 8080, no GPU) — handles auth + proxies to NIM
+#   1. This gateway (port 8080, no GPU) — proxies to NIM
 #   2. NIM container (port 9000, GPU) — actual ASR inference
 #
 #   Helm changes needed for NIM mode:
@@ -43,6 +43,7 @@ RUN python -m venv /opt/venv && \
 
 COPY backend/parakeet/main.py .
 COPY backend/parakeet/transcribe.py .
+COPY backend/parakeet/stream_handler.py .
 
 ENV PARAKEET_INFERENCE_MODE=nim
 ENV NIM_INFERENCE_URL=http://localhost:9000

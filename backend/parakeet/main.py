@@ -4,7 +4,7 @@ import time
 import uuid
 import logging
 
-from fastapi import FastAPI, Form, UploadFile, File, Header, HTTPException, WebSocket, WebSocketDisconnect, Query
+from fastapi import FastAPI, Form, UploadFile, File, WebSocket, WebSocketDisconnect, Query
 from prometheus_client import Gauge, Histogram, make_asgi_app
 
 from transcribe import transcribe_file, transcribe_file_v2
@@ -38,20 +38,8 @@ async def startup_warmup():
     warmup_rnnt_decoder()
 
 
-# Shared-secret auth so the (publicly-reachable) endpoint isn't open to abuse. The backend sends
-# Authorization: Bearer <ENCRYPTION_SECRET>, the same secret both services already have. When unset
-# (e.g. local dev) auth is skipped. /health stays open for load-balancer health checks.
-_AUTH_TOKEN = os.getenv("ENCRYPTION_SECRET")
-
-
-def _require_auth(authorization):
-    if _AUTH_TOKEN and authorization != f"Bearer {_AUTH_TOKEN}":
-        raise HTTPException(status_code=401, detail="unauthorized")
-
-
 @app.post("/v1/transcribe")
-def transcribe(file: UploadFile = File(...), authorization: str = Header(None)):
-    _require_auth(authorization)
+def transcribe(file: UploadFile = File(...)):
     """Batch-transcribe an audio chunk (16 kHz mono) with on-GPU Parakeet."""
     upload_id = str(uuid.uuid4())
     file_path = f"_temp/{upload_id}_{file.filename}"
@@ -74,9 +62,7 @@ def transcribe(file: UploadFile = File(...), authorization: str = Header(None)):
 def transcribe_v2(
     file: UploadFile = File(...),
     diarize: bool = Form(True),
-    authorization: str = Header(None),
 ):
-    _require_auth(authorization)
     upload_id = str(uuid.uuid4())
     file_path = f"_temp/{upload_id}_{file.filename}"
     ACTIVE_BATCH.inc()
@@ -105,11 +91,6 @@ async def stream_transcribe(
     hangover_s: float = Query(None),
 ):
     await websocket.accept()
-
-    auth = websocket.headers.get("authorization", "")
-    if _AUTH_TOKEN and auth != _AUTH_TOKEN:
-        await websocket.close(code=1008, reason="unauthorized")
-        return
     session = StreamSession(sample_rate=sample_rate, vad_threshold=vad_threshold, hangover_s=hangover_s)
 
     ACTIVE_STREAMS.inc()
