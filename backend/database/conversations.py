@@ -26,6 +26,16 @@ logger = logging.getLogger(__name__)
 conversations_collection = 'conversations'
 
 
+def get_conversation_ids(uid: str) -> List[str]:
+    """Return all conversation document IDs for a user without decrypting any fields.
+
+    IDs-only projection (``select([])``) — used for bulk operations like account deletion where
+    only the IDs are needed (e.g. to purge derived Pinecone vectors).
+    """
+    coll = db.collection('users').document(uid).collection(conversations_collection)
+    return [doc.id for doc in coll.select([]).stream()]
+
+
 def _ensure_timezone_aware(dt: datetime) -> datetime:
     """
     Ensure a datetime object is timezone-aware.
