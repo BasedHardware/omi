@@ -73,12 +73,26 @@ _torch.hub = MagicMock()
 _torch.hub.load.side_effect = RuntimeError("torch hub unavailable in unit tests")
 sys.modules.setdefault('torch', _torch)
 
+import speaker_math
 import stream_handler as sh
 
 
 def _make_pcm(duration_s=1.0, sr=16000):
     samples = int(sr * duration_s)
     return (np.sin(np.linspace(0, 440 * 2 * np.pi * duration_s, samples)) * 16000).astype(np.int16).tobytes()
+
+
+class TestCosineDistance:
+
+    def test_cosine_distance_matches_expected_values(self):
+        assert speaker_math.cosine_distance(np.array([1.0, 0.0]), np.array([1.0, 0.0])) == pytest.approx(0.0)
+        assert speaker_math.cosine_distance(np.array([1.0, 0.0]), np.array([0.0, 1.0])) == pytest.approx(1.0)
+
+    def test_cosine_distance_handles_zero_vector(self):
+        assert speaker_math.cosine_distance(np.array([0.0, 0.0]), np.array([1.0, 0.0])) == pytest.approx(1.0)
+
+    def test_stream_handler_uses_shared_cosine_distance(self):
+        assert sh.cosine_distance is speaker_math.cosine_distance
 
 
 class TestStreamSessionFeed:
@@ -92,17 +106,16 @@ class TestStreamSessionFeed:
 
     def test_speech_then_silence_produces_segments(self):
         session = sh.StreamSession(sample_rate=16000)
-        session._vad = MagicMock(return_value=MagicMock(item=MagicMock(return_value=0.9)))
 
         with patch.object(session, '_transcribe_utterance', new_callable=AsyncMock) as mock_trans:
             mock_trans.return_value = [{"text": "hello", "start": 0.0, "end": 1.0, "speaker": "SPEAKER_0"}]
 
-            pcm = _make_pcm(1.0)
-            asyncio.run(session.feed(pcm))
+            with patch.object(session, '_run_vad', side_effect=[True] * 32 + [False] * 64):
+                pcm = _make_pcm(1.0)
+                asyncio.run(session.feed(pcm))
 
-            session._vad.return_value = MagicMock(item=MagicMock(return_value=0.1))
-            silence = b'\x00' * (16000 * 2 * 2)
-            result = asyncio.run(session.feed(silence))
+                silence = b'\x00' * (16000 * 2 * 2)
+                result = asyncio.run(session.feed(silence))
 
             assert mock_trans.called or len(result) > 0
 
