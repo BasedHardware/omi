@@ -52,35 +52,35 @@ def _mock_parakeet_response(text="Hello world", segments=None):
 class TestFactoryRouting:
 
     def test_parakeet_routing_in_get_prerecorded_service(self):
-        with patch.object(pr, 'stt_prerecorded_model', 'parakeet'):
+        with patch.object(pr, 'stt_prerecorded_models', ['parakeet']):
             service, lang, model = pr.get_prerecorded_service('en')
             assert service == pr.PrerecordedSTTService.PARAKEET
             assert model == 'parakeet'
 
     def test_parakeet_routing_with_supported_language(self):
-        with patch.object(pr, 'stt_prerecorded_model', 'parakeet'):
+        with patch.object(pr, 'stt_prerecorded_models', ['parakeet']):
             service, lang, model = pr.get_prerecorded_service('fr')
             assert service == pr.PrerecordedSTTService.PARAKEET
             assert lang == 'fr'
 
     def test_parakeet_fallback_to_deepgram_for_unsupported_language(self):
-        with patch.object(pr, 'stt_prerecorded_model', 'parakeet'):
+        with patch.object(pr, 'stt_prerecorded_models', ['parakeet']):
             service, lang, model = pr.get_prerecorded_service('zh-CN')
             assert service == pr.PrerecordedSTTService.DEEPGRAM
 
     def test_parakeet_fallback_for_cjk(self):
-        with patch.object(pr, 'stt_prerecorded_model', 'parakeet'):
+        with patch.object(pr, 'stt_prerecorded_models', ['parakeet']):
             for unsupported in ['ja', 'zh', 'ko', 'hi', 'vi']:
                 service, lang, model = pr.get_prerecorded_service(unsupported)
                 assert service == pr.PrerecordedSTTService.DEEPGRAM, f'{unsupported} should fall back to Deepgram'
 
     def test_get_prerecorded_provider_returns_parakeet(self):
-        with patch.object(pr, 'stt_prerecorded_model', 'parakeet'):
+        with patch.object(pr, 'stt_prerecorded_models', ['parakeet']):
             provider = pr.get_prerecorded_provider()
             assert isinstance(provider, pr.ParakeetPrerecordedProvider)
 
     def test_unknown_model_falls_back_to_deepgram(self):
-        with patch.object(pr, 'stt_prerecorded_model', 'unknown-model'):
+        with patch.object(pr, 'stt_prerecorded_models', ['unknown-model']):
             provider = pr.get_prerecorded_provider()
             assert isinstance(provider, pr.DeepgramPrerecordedProvider)
 

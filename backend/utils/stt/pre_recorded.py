@@ -21,7 +21,7 @@ _MODULATE_TIMEOUT = httpx.Timeout(connect=10.0, read=300.0, write=30.0, pool=10.
 
 logger = logging.getLogger(__name__)
 
-stt_prerecorded_model = os.getenv('STT_PRERECORDED_MODEL', 'dg-nova-3')
+stt_prerecorded_models = os.getenv('STT_PRERECORDED_MODEL', 'dg-nova-3').split(',')
 
 _parakeet_languages = {
     'multi',
@@ -96,20 +96,24 @@ class PrerecordedSTTService:
 def get_prerecorded_service(language: str = 'en') -> Tuple[str, str, str]:
     """Route pre-recorded STT based on STT_PRERECORDED_MODEL env var.
 
-    Returns (service, language, model) tuple, same pattern as streaming router.
+    Iterates comma-separated models (same pattern as STT_SERVICE_MODELS for streaming).
+    First model that supports the language wins; falls back to Deepgram nova-3.
     """
-    m = stt_prerecorded_model.strip()
-    if m.startswith('dg-'):
-        dg_model = m.replace('dg-', '', 1)
-        lang = language if (language is None or language in _deepgram_nova3_languages) else 'multi'
-        return PrerecordedSTTService.DEEPGRAM, lang, dg_model
-    if m == 'modulate-velma-2':
-        base_lang = language.split('-')[0].split('_')[0].lower() if language else 'en'
-        return PrerecordedSTTService.MODULATE, base_lang, 'velma-2'
-    if m == 'parakeet':
-        base_lang = language.split('-')[0].split('_')[0].lower() if language else 'en'
-        if base_lang in _parakeet_languages:
-            return PrerecordedSTTService.PARAKEET, base_lang, 'parakeet'
+    base_lang = language.split('-')[0].split('_')[0].lower() if language else 'en'
+    for m in stt_prerecorded_models:
+        m = m.strip()
+        if m.startswith('dg-'):
+            dg_model = m.replace('dg-', '', 1)
+            lang = language if (language is None or language in _deepgram_nova3_languages) else 'multi'
+            return PrerecordedSTTService.DEEPGRAM, lang, dg_model
+        if m == 'modulate-velma-2':
+            if base_lang in {'en', 'es', 'fr', 'de', 'it', 'pt', 'nl', 'ja', 'ko', 'zh'}:
+                return PrerecordedSTTService.MODULATE, base_lang, 'velma-2'
+            continue
+        if m == 'parakeet':
+            if base_lang in _parakeet_languages:
+                return PrerecordedSTTService.PARAKEET, base_lang, 'parakeet'
+            continue
     return PrerecordedSTTService.DEEPGRAM, language, 'nova-3'
 
 
@@ -975,16 +979,18 @@ class ParakeetPrerecordedProvider(PrerecordedSTTProvider):
 
 def get_prerecorded_provider(language: str = 'en') -> PrerecordedSTTProvider:
     """Factory: return the active provider based on STT_PRERECORDED_MODEL with language fallback."""
-    m = stt_prerecorded_model.strip()
-    if m == 'modulate-velma-2':
-        return ModulatePrerecordedProvider()
-    if m == 'parakeet':
-        base_lang = language.split('-')[0].split('_')[0].lower() if language else 'en'
-        if base_lang in _parakeet_languages:
-            return ParakeetPrerecordedProvider()
-        return DeepgramPrerecordedProvider(model='nova-3')
-    model = m.replace('dg-', '', 1) if m.startswith('dg-') else 'nova-3'
-    return DeepgramPrerecordedProvider(model=model)
+    base_lang = language.split('-')[0].split('_')[0].lower() if language else 'en'
+    for m in stt_prerecorded_models:
+        m = m.strip()
+        if m == 'modulate-velma-2':
+            return ModulatePrerecordedProvider()
+        if m == 'parakeet':
+            if base_lang in _parakeet_languages:
+                return ParakeetPrerecordedProvider()
+            continue
+        if m.startswith('dg-'):
+            return DeepgramPrerecordedProvider(model=m.replace('dg-', '', 1))
+    return DeepgramPrerecordedProvider(model='nova-3')
 
 
 # ---------------------------------------------------------------------------
