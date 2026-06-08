@@ -111,8 +111,8 @@ def _purge_patches(**overrides):
     for name, ids in enumerators.items():
         patchers[name] = patch.object(users_router, name, create=True, **(overrides.get(name) or {'return_value': ids}))
     for name in (
-        'delete_vector',
-        'delete_memory_vector',
+        'delete_conversation_vectors_batch',
+        'delete_memory_vectors_batch',
         'delete_action_item_vectors_batch',
         'delete_screen_activity_vectors',
         'delete_all_conversation_recordings',
@@ -136,11 +136,9 @@ def test_purge_runs_all_backends_before_firestore_wipe():
     finally:
         _stop(patchers)
 
-    # Pinecone: per-id loops for conversations/memories, batch for action-items/screen-activity
-    assert m['delete_vector'].call_count == 2
-    m['delete_vector'].assert_any_call('uid1', 'c1')
-    m['delete_vector'].assert_any_call('uid1', 'c2')
-    m['delete_memory_vector'].assert_called_once_with('uid1', 'm1')
+    # Pinecone: one batched call per namespace (no per-item loop to abandon on a transient failure)
+    m['delete_conversation_vectors_batch'].assert_called_once_with('uid1', ['c1', 'c2'])
+    m['delete_memory_vectors_batch'].assert_called_once_with('uid1', ['m1'])
     m['delete_action_item_vectors_batch'].assert_called_once_with('uid1', ['a1', 'a2'])
     m['delete_screen_activity_vectors'].assert_called_once_with('uid1', ['s1'])
     # GCS + Firestore
@@ -163,13 +161,13 @@ def test_id_enumeration_happens_before_firestore_wipe():
 
 
 def test_pinecone_failure_does_not_block_recordings_or_firestore_wipe():
-    patchers, m = _purge_patches(delete_vector={'side_effect': Exception('pinecone down')})
+    patchers, m = _purge_patches(delete_conversation_vectors_batch={'side_effect': Exception('pinecone down')})
     try:
         users_router._background_wipe_user_data('uid1')
     finally:
         _stop(patchers)
     # one backend failing must not stop the rest or the Firestore wipe
-    m['delete_memory_vector'].assert_called_once()
+    m['delete_memory_vectors_batch'].assert_called_once()
     m['delete_all_conversation_recordings'].assert_called_once_with('uid1')
     m['delete_user_data'].assert_called_once_with('uid1')
 
@@ -191,6 +189,6 @@ def test_enumeration_failure_is_isolated():
     finally:
         _stop(patchers)
     # conversation enumeration blew up, but the other backends + the wipe still run
-    m['delete_memory_vector'].assert_called_once_with('uid1', 'm1')
+    m['delete_memory_vectors_batch'].assert_called_once_with('uid1', ['m1'])
     m['delete_all_conversation_recordings'].assert_called_once_with('uid1')
     m['delete_user_data'].assert_called_once_with('uid1')
