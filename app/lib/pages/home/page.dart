@@ -473,6 +473,11 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
           Logger.debug('HomePage: Auto-sync skipped, custom STT provider enabled');
           return;
         }
+        // Omi users can disable auto-sync from device settings. Defaults to on.
+        if (!SharedPreferencesUtil().autoSyncOfflineRecordings) {
+          Logger.debug('HomePage: Auto-sync skipped, disabled by user');
+          return;
+        }
         if (!syncProvider.isSyncing) {
           Logger.debug('HomePage: Auto-sync triggered ($fileCount files, $totalBytes bytes)');
           syncProvider.syncWals();
