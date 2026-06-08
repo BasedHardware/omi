@@ -11,6 +11,7 @@ from utils.notifications import (
     send_action_item_completed_notification,
     send_action_item_created_notification,
     send_action_item_data_message,
+    sync_action_item_reminder,
 )
 from utils.retrieval.tool_services.conversations import parse_iso_date
 import logging
@@ -250,6 +251,20 @@ def update_action_item_text(
                 send_action_item_completed_notification(uid, existing.get('description', 'Task'))
             except Exception as notif_error:
                 logger.error(f"Failed to send completion notification: {notif_error}")
+
+        # Reconcile the scheduled reminder to match the new state — cancel on completion, (re)schedule
+        # only for an open task with a due date (#5085).
+        if 'completed' in update_data or 'due_at' in update_data:
+            try:
+                sync_action_item_reminder(
+                    uid,
+                    action_item_id,
+                    update_data.get('description', existing.get('description', '')),
+                    bool(update_data.get('completed', existing.get('completed'))),
+                    update_data.get('due_at', existing.get('due_at')),
+                )
+            except Exception as notif_error:
+                logger.error(f"Failed to sync action item reminder: {notif_error}")
 
         task_desc = update_data.get('description', existing.get('description', 'Task'))
         return f"✅ Updated '{task_desc}': {', '.join(changes)}"
