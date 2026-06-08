@@ -335,6 +335,8 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
     if (_isDisposed) return;
     // Custom STT users sync manually (with confirmation) — never auto-upload.
     if (SharedPreferencesUtil().useCustomStt) return;
+    // Respect the user's auto-sync opt-out (device settings). Defaults to on.
+    if (!SharedPreferencesUtil().autoSyncOfflineRecordings) return;
     if (_syncState.isProcessing) return;
     if (_walService.getSyncs().isStorageSyncing || _walService.getSyncs().isSdCardSyncing) return;
     final phoneWals = _allWals
