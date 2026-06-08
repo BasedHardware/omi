@@ -139,6 +139,9 @@ def delete_vector(uid: str, conversation_id: str):
 
     Note: Vectors are stored with ID format '{uid}-{conversation_id}'
     """
+    if index is None:
+        logger.warning('Pinecone index not initialized, skipping conversation vector delete')
+        return
     vector_id = f'{uid}-{conversation_id}'
     result = index.delete(ids=[vector_id], namespace="ns1")
     logger.info(f'delete_vector {vector_id} {result}')
