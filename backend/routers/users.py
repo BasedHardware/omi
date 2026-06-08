@@ -108,8 +108,8 @@ from database.memories import get_memory_ids
 from database.action_items import get_action_item_ids
 from database.screen_activity import get_screen_activity_ids
 from database.vector_db import (
-    delete_vector,
-    delete_memory_vector,
+    delete_conversation_vectors_batch,
+    delete_memory_vectors_batch,
     delete_action_item_vectors_batch,
     delete_screen_activity_vectors,
 )
@@ -165,14 +165,16 @@ def _purge_derived_user_data(uid: str):
     externally-indexed Typesense collection.
     """
     try:
-        for conversation_id in get_conversation_ids(uid):
-            delete_vector(uid, conversation_id)
+        conversation_ids = get_conversation_ids(uid)
+        if conversation_ids:
+            delete_conversation_vectors_batch(uid, conversation_ids)
     except Exception as e:
         logger.error(f'delete_account purge conversation vectors failed for {uid}: {sanitize(str(e))}')
 
     try:
-        for memory_id in get_memory_ids(uid):
-            delete_memory_vector(uid, memory_id)
+        memory_ids = get_memory_ids(uid)
+        if memory_ids:
+            delete_memory_vectors_batch(uid, memory_ids)
     except Exception as e:
         logger.error(f'delete_account purge memory vectors failed for {uid}: {sanitize(str(e))}')
 
