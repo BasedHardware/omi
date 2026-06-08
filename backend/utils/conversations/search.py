@@ -64,7 +64,7 @@ def search_conversations(
                 # One malformed/legacy indexed doc (missing, null, or out-of-range timestamp) must not
                 # 500 the whole search page; skip just this hit (mirrors the per-record tolerance in
                 # routers/memories.py get_memories).
-                logger.warning(f"search_conversations skipping malformed hit uid={uid} id={doc.get('id')}: {e}")
+                logger.warning("search_conversations skipping malformed hit uid=%s id=%s: %s", uid, doc.get('id'), e)
                 continue
             doc['created_at'] = created_at
             doc['started_at'] = started_at
