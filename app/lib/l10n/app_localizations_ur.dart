@@ -9327,4 +9327,11 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get recapRegenerateNoConversations => 'اس دن کے لیے خلاصہ کرنے کے لیے کوئی گفتگو نہیں ہے۔';
+
+  @override
+  String get syncCustomSttWarningTitle => 'سنک Omi کی ٹرانسکرپشن استعمال کرتا ہے';
+
+  @override
+  String get syncCustomSttWarningMessage =>
+      'آپ اپنا ذاتی ٹرانسکرپشن فراہم کنندہ استعمال کرتے ہیں۔ ان ریکارڈنگز کو سنک کرنے پر یہ Omi کے سرورز پر ٹرانسکرائب ہوں گی اور آپ کے پلان کی ٹرانسکرپشن حد میں شمار ہوں گی۔';
 }

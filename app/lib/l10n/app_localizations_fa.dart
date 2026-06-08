@@ -9315,4 +9315,11 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get recapRegenerateNoConversations => 'هیچ مکالمه‌ای برای خلاصه‌سازی این روز وجود ندارد.';
+
+  @override
+  String get syncCustomSttWarningTitle => 'همگام‌سازی از رونویسی Omi استفاده می‌کند';
+
+  @override
+  String get syncCustomSttWarningMessage =>
+      'شما از سرویس رونویسی خودتان استفاده می‌کنید. همگام‌سازی این ضبط‌ها آن‌ها را روی سرورهای Omi رونویسی می‌کند و در سقف رونویسی پلن شما محاسبه می‌شوند.';
 }

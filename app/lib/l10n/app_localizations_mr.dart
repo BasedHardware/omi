@@ -9323,4 +9323,11 @@ class AppLocalizationsMr extends AppLocalizations {
 
   @override
   String get recapRegenerateNoConversations => 'या दिवसासाठी सारांश करण्यासाठी कोणतेही संभाषण नाही.';
+
+  @override
+  String get syncCustomSttWarningTitle => 'सिंक Omi ट्रान्सक्रिप्शन वापरते';
+
+  @override
+  String get syncCustomSttWarningMessage =>
+      'तुम्ही तुमचा स्वतःचा ट्रान्सक्रिप्शन प्रदाता वापरता. ही रेकॉर्डिंग सिंक केल्यास ती Omi च्या सर्व्हरवर ट्रान्सक्राइब होतील आणि तुमच्या प्लॅनच्या ट्रान्सक्रिप्शन मर्यादेत मोजली जातील.';
 }

@@ -3081,5 +3081,7 @@
     "recapRegeneratedSnackbar": "Özet yeniden oluşturuldu",
     "recapRegenerateFailed": "Özet yeniden oluşturulamadı. Lütfen daha sonra tekrar deneyin.",
     "recapRegenerateCooldown": "Yeniden oluşturmadan önce lütfen birkaç saniye bekleyin.",
-    "recapRegenerateNoConversations": "Bu gün için özetlenecek konuşma bulunamadı."
+    "recapRegenerateNoConversations": "Bu gün için özetlenecek konuşma bulunamadı.",
+    "syncCustomSttWarningTitle": "Eşitleme, Omi transkripsiyonunu kullanır",
+    "syncCustomSttWarningMessage": "Kendi transkripsiyon sağlayıcınızı kullanıyorsunuz. Bu kayıtları eşitlemek onları Omi sunucularında yazıya döker ve planınızın transkripsiyon sınırına sayılır."
 }

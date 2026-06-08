@@ -9243,4 +9243,11 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get recapRegenerateNoConversations => 'אין שיחות לסיכום עבור היום הזה.';
+
+  @override
+  String get syncCustomSttWarningTitle => 'הסנכרון משתמש בתמלול של Omi';
+
+  @override
+  String get syncCustomSttWarningMessage =>
+      'אתה משתמש בספק תמלול משלך. סנכרון ההקלטות האלה יתמלל אותן בשרתי Omi והן ייכללו במגבלת התמלול של התוכנית שלך.';
 }

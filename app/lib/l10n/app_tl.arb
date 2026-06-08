@@ -10624,5 +10624,7 @@
     "recapRegeneratedSnackbar": "Nabuo muli ang buod",
     "recapRegenerateFailed": "Hindi nagawang muling buuin ang buod. Subukang muli mamaya.",
     "recapRegenerateCooldown": "Mangyaring maghintay ng ilang segundo bago bumuo muli.",
-    "recapRegenerateNoConversations": "Walang mga pag-uusap na ibubuod para sa araw na ito."
+    "recapRegenerateNoConversations": "Walang mga pag-uusap na ibubuod para sa araw na ito.",
+    "syncCustomSttWarningTitle": "Gumagamit ang pag-sync ng transcription ng Omi",
+    "syncCustomSttWarningMessage": "Gumagamit ka ng sarili mong transcription provider. Kapag in-sync ang mga recording na ito, ita-transcribe ang mga ito sa mga server ng Omi at mabibilang sa limitasyon ng transcription ng iyong plan."
 }

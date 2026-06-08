@@ -9310,4 +9310,11 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get recapRegenerateNoConversations => 'Ingen samtaler å oppsummere for denne dagen.';
+
+  @override
+  String get syncCustomSttWarningTitle => 'Synkronisering bruker Omi-transkripsjon';
+
+  @override
+  String get syncCustomSttWarningMessage =>
+      'Du bruker din egen transkripsjonsleverandør. Synkronisering av disse opptakene transkriberer dem på Omis servere, og de teller mot transkripsjonsgrensen i abonnementet ditt.';
 }

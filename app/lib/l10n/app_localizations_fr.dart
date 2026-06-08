@@ -9396,4 +9396,11 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get recapRegenerateNoConversations => 'Aucune conversation à résumer pour cette journée.';
+
+  @override
+  String get syncCustomSttWarningTitle => 'La synchronisation utilise la transcription d\'Omi';
+
+  @override
+  String get syncCustomSttWarningMessage =>
+      'Vous utilisez votre propre fournisseur de transcription. Synchroniser ces enregistrements les transcrit sur les serveurs d\'Omi et ils comptent dans la limite de transcription de votre forfait.';
 }

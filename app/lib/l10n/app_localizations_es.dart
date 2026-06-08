@@ -9333,4 +9333,11 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get recapRegenerateNoConversations => 'No hay conversaciones para resumir en este día.';
+
+  @override
+  String get syncCustomSttWarningTitle => 'La sincronización usa la transcripción de Omi';
+
+  @override
+  String get syncCustomSttWarningMessage =>
+      'Usas tu propio proveedor de transcripción. Sincronizar estas grabaciones las transcribe en los servidores de Omi y cuentan para el límite de transcripción de tu plan.';
 }

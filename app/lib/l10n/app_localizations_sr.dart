@@ -9325,4 +9325,11 @@ class AppLocalizationsSr extends AppLocalizations {
 
   @override
   String get recapRegenerateNoConversations => 'Нема разговора за сумирање за овај дан.';
+
+  @override
+  String get syncCustomSttWarningTitle => 'Синхронизација користи Omi транскрипцију';
+
+  @override
+  String get syncCustomSttWarningMessage =>
+      'Користите сопственог пружаоца транскрипције. Синхронизација ових снимака их транскрибује на Omi серверима и рачунају се у лимит транскрипције вашег плана.';
 }

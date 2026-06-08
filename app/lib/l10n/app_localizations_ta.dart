@@ -9379,4 +9379,11 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get recapRegenerateNoConversations => 'இந்த நாளுக்கு சுருக்கமாக மாற்ற உரையாடல்கள் இல்லை.';
+
+  @override
+  String get syncCustomSttWarningTitle => 'ஒத்திசைவு Omi படியெடுப்பைப் பயன்படுத்துகிறது';
+
+  @override
+  String get syncCustomSttWarningMessage =>
+      'நீங்கள் உங்கள் சொந்த படியெடுப்பு வழங்குநரைப் பயன்படுத்துகிறீர்கள். இந்தப் பதிவுகளை ஒத்திசைத்தால் அவை Omi சேவையகங்களில் படியெடுக்கப்படும், மேலும் உங்கள் திட்டத்தின் படியெடுப்பு வரம்பில் கணக்கிடப்படும்.';
 }

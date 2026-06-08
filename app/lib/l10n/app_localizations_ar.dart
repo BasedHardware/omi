@@ -9258,4 +9258,11 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get recapRegenerateNoConversations => 'لا توجد محادثات لتلخيصها في هذا اليوم.';
+
+  @override
+  String get syncCustomSttWarningTitle => 'المزامنة تستخدم خدمة النسخ في Omi';
+
+  @override
+  String get syncCustomSttWarningMessage =>
+      'أنت تستخدم مزوّد النسخ الخاص بك. مزامنة هذه التسجيلات تنسخها على خوادم Omi بدلاً من ذلك، وتُحتسب ضمن حد النسخ في باقتك.';
 }

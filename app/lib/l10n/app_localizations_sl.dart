@@ -9340,4 +9340,11 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String get recapRegenerateNoConversations => 'Za ta dan ni pogovorov za povzemanje.';
+
+  @override
+  String get syncCustomSttWarningTitle => 'Sinhronizacija uporablja prepis Omi';
+
+  @override
+  String get syncCustomSttWarningMessage =>
+      'Uporabljate svojega ponudnika prepisa. Sinhronizacija teh posnetkov jih prepiše na strežnikih Omi in se štejejo v omejitev prepisa vašega paketa.';
 }

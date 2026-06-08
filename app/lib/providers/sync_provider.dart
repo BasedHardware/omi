@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 
+import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/services/wals.dart';
@@ -332,6 +333,8 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
 
   void _autoUploadPendingPhoneFiles() async {
     if (_isDisposed) return;
+    // Custom STT users sync manually (with confirmation) — never auto-upload.
+    if (SharedPreferencesUtil().useCustomStt) return;
     if (_syncState.isProcessing) return;
     if (_walService.getSyncs().isStorageSyncing || _walService.getSyncs().isSdCardSyncing) return;
     final phoneWals = _allWals

@@ -9358,4 +9358,11 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get recapRegenerateNoConversations => 'Nu există conversații de rezumat pentru această zi.';
+
+  @override
+  String get syncCustomSttWarningTitle => 'Sincronizarea folosește transcrierea Omi';
+
+  @override
+  String get syncCustomSttWarningMessage =>
+      'Folosești propriul furnizor de transcriere. Sincronizarea acestor înregistrări le transcrie pe serverele Omi și se iau în calcul pentru limita de transcriere a planului tău.';
 }

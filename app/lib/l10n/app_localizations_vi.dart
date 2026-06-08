@@ -9311,4 +9311,11 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get recapRegenerateNoConversations => 'Không có cuộc trò chuyện nào để tóm tắt cho ngày này.';
+
+  @override
+  String get syncCustomSttWarningTitle => 'Đồng bộ sử dụng phiên âm của Omi';
+
+  @override
+  String get syncCustomSttWarningMessage =>
+      'Bạn đang dùng nhà cung cấp phiên âm riêng. Đồng bộ các bản ghi này sẽ phiên âm chúng trên máy chủ của Omi và được tính vào giới hạn phiên âm của gói của bạn.';
 }
