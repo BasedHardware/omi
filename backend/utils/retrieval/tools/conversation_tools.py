@@ -11,6 +11,7 @@ from langchain_core.runnables import RunnableConfig
 from langchain_core.tools import tool
 
 import database.conversations as conversations_db
+import database.notifications as notification_db
 import database.users as users_db
 import database.vector_db as vector_db
 from models.conversation import Conversation
@@ -253,9 +254,13 @@ def get_conversations_tool(
             f"📚 get_conversations_tool - Added {len(conversations)} conversations to collection (total: {len(conversations_collected)})"
         )
 
-        # Return formatted string
+        # Return formatted string (timestamps rendered in the user's timezone for correct chat answers)
         result = conversations_to_string(
-            conversations, use_transcript=include_transcript, include_timestamps=include_timestamps, people=people
+            conversations,
+            use_transcript=include_transcript,
+            include_timestamps=include_timestamps,
+            people=people,
+            tz=notification_db.get_user_time_zone(uid),
         )
         logger.info(f"🔍 get_conversations_tool - Generated result string, length: {len(result)}")
         return result
@@ -477,7 +482,11 @@ def search_conversations_tool(
         # Return formatted string
         result = f"Found {len(conversations)} conversations semantically matching '{query}':\n\n"
         result += conversations_to_string(
-            conversations, use_transcript=include_transcript, include_timestamps=include_timestamps, people=people
+            conversations,
+            use_transcript=include_transcript,
+            include_timestamps=include_timestamps,
+            people=people,
+            tz=notification_db.get_user_time_zone(uid),
         )
 
         logger.info(f"🔍 search_conversations_tool - Generated result string, length: {len(result)}")
