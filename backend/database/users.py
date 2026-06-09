@@ -1199,9 +1199,17 @@ def get_user_transcription_preferences(uid: str) -> dict:
             'single_language_mode': prefs.get('single_language_mode', False),
             'vocabulary': prefs.get('vocabulary', []),
             'language': user_data.get('language', ''),
+            'uses_custom_stt': prefs.get('uses_custom_stt', False),
+            'custom_stt_since': prefs.get('custom_stt_since'),
         }
 
-    return {'single_language_mode': False, 'vocabulary': [], 'language': ''}
+    return {
+        'single_language_mode': False,
+        'vocabulary': [],
+        'language': '',
+        'uses_custom_stt': False,
+        'custom_stt_since': None,
+    }
 
 
 def get_agent_vm(uid: str) -> Optional[dict]:
@@ -1241,6 +1249,26 @@ def set_user_transcription_preferences(uid: str, single_language_mode: bool = No
 
     if update_data:
         user_ref.update(update_data)
+
+
+def set_user_custom_stt_usage(uid: str, uses_custom_stt: bool) -> None:
+    """Persist whether the user is using a custom (third-party) mobile STT provider.
+
+    There is no other record that a user is on custom STT — the app only sends a
+    per-session `custom_stt=enabled` WS param. This stamps it onto the user doc so
+    custom-STT users are queryable/meterable (see #7690).
+
+    - `transcription_preferences.uses_custom_stt`: current state (bool).
+    - `transcription_preferences.custom_stt_since`: when the current custom-STT
+      streak began (set on the off->on transition; cleared when turned off).
+
+    Callers should only invoke this when the value actually changes, so the
+    `_since` timestamp is not overwritten on every session and writes stay rare.
+    """
+    user_ref = db.collection('users').document(uid)
+    update_data = {'transcription_preferences.uses_custom_stt': uses_custom_stt}
+    update_data['transcription_preferences.custom_stt_since'] = datetime.now(timezone.utc) if uses_custom_stt else None
+    user_ref.update(update_data)
 
 
 # ============================================================================
