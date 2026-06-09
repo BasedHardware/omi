@@ -6,5 +6,12 @@ uvicorn[standard]==0.34.0
 python-multipart==0.0.18
 numpy==2.4.0
 soundfile==0.13.1
+httpx==0.28.1
+scipy>=1.11.0
+langdetect>=1.0.9
 # NVIDIA NeMo ASR (Parakeet TDT). Pulls torch/torchaudio transitively; pin after a GPU build.
 nemo_toolkit[asr]>=2.2.0
+# Built-in speaker embedding for streaming diarization (no external service dependency).
+pyannote.audio>=3.1.0
+# Prometheus metrics for autoscaling (active streams, request latency, GPU memory).
+prometheus-client>=0.21.0

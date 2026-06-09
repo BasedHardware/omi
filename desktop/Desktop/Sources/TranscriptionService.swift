@@ -301,6 +301,13 @@ class TranscriptionService {
     // MARK: - Private Methods (Connection)
 
     private func connect() {
+        // Test hook: simulate the cloud WS being unreachable (reconnects exhausted) to exercise
+        // the on-device fallback. Toggle with `defaults write <bundle> forceCloudReconnectFail -bool true`.
+        if UserDefaults.standard.bool(forKey: "forceCloudReconnectFail") {
+            log("TranscriptionService: forceCloudReconnectFail set — simulating max reconnects reached")
+            onError?(TranscriptionError.webSocketError("Max reconnect attempts reached"))
+            return
+        }
         // Always use Firebase auth for Python backend
         Task { [weak self] in
             guard let self = self else { return }

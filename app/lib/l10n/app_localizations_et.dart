@@ -430,6 +430,12 @@ class AppLocalizationsEt extends AppLocalizations {
   String get offlineSync => 'Võrguühenduseta sünkroonimine';
 
   @override
+  String get autoSync => 'Automaatne sünkroonimine';
+
+  @override
+  String get autoSyncDescription => 'Sünkrooni võrguühenduseta salvestised automaatselt, kui seade ühendatakse';
+
+  @override
   String get deviceSettings => 'Seadme seaded';
 
   @override
@@ -9310,4 +9316,11 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get recapRegenerateNoConversations => 'Selle päeva jaoks pole vestlusi, mida kokku võtta.';
+
+  @override
+  String get syncCustomSttWarningTitle => 'Sünkroonimine kasutab Omi transkriptsiooni';
+
+  @override
+  String get syncCustomSttWarningMessage =>
+      'Kasutate oma transkriptsiooniteenust. Nende salvestiste sünkroonimine transkribeerib need Omi serverites ja need arvestatakse teie paketi transkriptsioonilimiidi sisse.';
 }

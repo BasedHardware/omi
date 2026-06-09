@@ -2037,12 +2037,9 @@ workflows:
             "$HOME/Library/MobileDevice/Provisioning Profiles/$PROFILE_UUID.provisionprofile"
           echo "PROFILE_UUID=$PROFILE_UUID" >> $CM_ENV
 
-      - name: Build agent (TypeScript → JavaScript)
+      - name: Prepare agent runtime
         script: |
-          cd agent
-          npm install --no-fund --no-audit
-          npm run build
-          cd ..
+          scripts/prepare-agent-runtime.sh --universal-node
 
       - name: Test pi-mono-extension denylist classifier
         script: |
@@ -2087,33 +2084,6 @@ workflows:
             rm -rf "$TEMP_DIR"
           fi
           echo "ffmpeg: $(file "$FFMPEG_RESOURCE" | sed 's/.*: //')"
-
-      - name: Prepare universal Node.js (arm64 + x86_64)
-        script: |
-          NODE_RESOURCE="Desktop/Sources/Resources/node"
-          NODE_VERSION="v22.14.0"
-          if file "$NODE_RESOURCE" 2>/dev/null | grep -q "universal binary"; then
-            echo "Node.js already universal, skipping download"
-          else
-            echo "Creating universal Node.js $NODE_VERSION..."
-            TEMP_DIR="/tmp/node-universal-$$"
-            mkdir -p "$TEMP_DIR"
-            curl -L -o "$TEMP_DIR/arm64.tar.gz" \
-              "https://nodejs.org/dist/$NODE_VERSION/node-$NODE_VERSION-darwin-arm64.tar.gz"
-            tar -xzf "$TEMP_DIR/arm64.tar.gz" -C "$TEMP_DIR"
-            ARM64=$(find "$TEMP_DIR" -name "node" -type f | head -1)
-            mv "$ARM64" "$TEMP_DIR/node-arm64"
-            curl -L -o "$TEMP_DIR/x86_64.tar.gz" \
-              "https://nodejs.org/dist/$NODE_VERSION/node-$NODE_VERSION-darwin-x64.tar.gz"
-            tar -xzf "$TEMP_DIR/x86_64.tar.gz" -C "$TEMP_DIR"
-            X86=$(find "$TEMP_DIR" -name "node" -type f ! -name "node-arm64" | head -1)
-            lipo -create "$TEMP_DIR/node-arm64" "$X86" -output "$NODE_RESOURCE"
-            chmod +x "$NODE_RESOURCE"
-            xattr -cr "$NODE_RESOURCE"
-            codesign -f -s - "$NODE_RESOURCE"
-            rm -rf "$TEMP_DIR"
-          fi
-          echo "node: $(file "$NODE_RESOURCE" | sed 's/.*: //')"
 
       - name: Prepare universal libwebp (arm64 + x86_64)
         script: |

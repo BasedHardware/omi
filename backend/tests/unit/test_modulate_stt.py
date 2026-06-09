@@ -602,8 +602,6 @@ class TestDrainAndClosePartialFlush(unittest.TestCase):
             sock._prev_partial_text = 'trailing speech'
             sock._prev_partial_start_ms = 5000
             sock._prev_partial_word_count = 2
-            # Patch done_event.wait to always time out
-            original_wait = sock._done_event.wait
 
             async def timeout_wait():
                 raise asyncio.TimeoutError()
@@ -728,6 +726,87 @@ class TestProcessAudioModulate(unittest.TestCase):
             sock = loop.run_until_complete(run())
             uri = mock_ws_module.connect.call_args[0][0]
             self.assertNotIn('language=', uri)
+        finally:
+            loop.close()
+
+
+class _FakeParakeetConnect:
+    def __init__(self, ws, enter_started: asyncio.Event, allow_enter: asyncio.Event):
+        self._ws = ws
+        self._enter_started = enter_started
+        self._allow_enter = allow_enter
+
+    async def __aenter__(self):
+        self._enter_started.set()
+        await self._allow_enter.wait()
+        return self._ws
+
+    async def __aexit__(self, exc_type, exc, tb):
+        await self._ws.close()
+        return False
+
+
+class _FakeParakeetWebSocket:
+    def __init__(self):
+        self.sent = []
+        self._messages = asyncio.Queue()
+
+    async def send(self, data):
+        self.sent.append(data)
+        if data == 'finalize':
+            await self._messages.put(json.dumps({'text': 'hello', 'speaker': 'SPEAKER_00', 'start': 0, 'end': 1}))
+            await self._messages.put(None)
+
+    async def close(self):
+        await self._messages.put(None)
+
+    def __aiter__(self):
+        return self
+
+    async def __anext__(self):
+        msg = await self._messages.get()
+        if msg is None:
+            raise StopAsyncIteration
+        return msg
+
+
+class TestProcessAudioParakeet(unittest.TestCase):
+    @patch.dict('os.environ', {'HOSTED_PARAKEET_API_URL': 'http://parakeet.local', 'ENCRYPTION_SECRET': 'secret'})
+    @patch('utils.stt.streaming.websockets')
+    def test_process_audio_parakeet_waits_for_websocket_connection(self, mock_ws_module):
+        from utils.stt.streaming import process_audio_parakeet
+
+        loop = asyncio.new_event_loop()
+        try:
+
+            async def run():
+                ws = _FakeParakeetWebSocket()
+                enter_started = asyncio.Event()
+                allow_enter = asyncio.Event()
+                segments = []
+                mock_ws_module.__version__ = '12.0'
+                mock_ws_module.connect.side_effect = lambda *args, **kwargs: _FakeParakeetConnect(
+                    ws, enter_started, allow_enter
+                )
+
+                socket_task = asyncio.create_task(process_audio_parakeet(segments.extend, 'en', 16000, 1))
+                await asyncio.wait_for(enter_started.wait(), timeout=1)
+                await asyncio.sleep(0)
+                self.assertFalse(socket_task.done())
+
+                allow_enter.set()
+                sock = await asyncio.wait_for(socket_task, timeout=1)
+                sock.send(b'pcm')
+                await sock.drain_and_close()
+
+                self.assertEqual(ws.sent, [b'pcm', 'finalize'])
+                self.assertEqual(segments, [{'text': 'hello', 'speaker': 'SPEAKER_00', 'start': 0, 'end': 1}])
+                return mock_ws_module.connect.call_args
+
+            call_args = loop.run_until_complete(run())
+            uri = call_args[0][0]
+            self.assertEqual(uri, 'ws://parakeet.local/v3/stream?sample_rate=16000')
+            self.assertEqual(call_args.kwargs['extra_headers'], {'authorization': 'secret'})
         finally:
             loop.close()
 
@@ -895,6 +974,7 @@ class TestUtteranceResults(unittest.TestCase):
         self.assertEqual(self.segments, [])
 
     def test_partial_superseded_by_utterance(self):
+        """Only the final utterance is streamed — partials are buffered for preview only."""
         msgs = [
             json.dumps(
                 {
@@ -914,19 +994,19 @@ class TestUtteranceResults(unittest.TestCase):
         self.assertEqual(self.segments[0]['text'], 'final utterance')
 
     def test_partial_flush_at_done(self):
+        """If done arrives without a final utterance, flush the last partial."""
         msgs = [
             json.dumps({'type': 'partial_utterance', 'partial_utterance': {'text': 'one', 'start_ms': 0}}),
             json.dumps({'type': 'partial_utterance', 'partial_utterance': {'text': 'one two', 'start_ms': 0}}),
             json.dumps({'type': 'partial_utterance', 'partial_utterance': {'text': 'one two three', 'start_ms': 0}}),
-            json.dumps({'type': 'partial_utterance', 'partial_utterance': {'text': 'new start', 'start_ms': 5000}}),
             json.dumps({'type': 'done', 'duration_ms': 6000}),
         ]
         self._run_recv(msgs)
         self.assertEqual(len(self.segments), 1)
-        self.assertEqual(self.segments[0]['text'], 'new start')
-        self.assertEqual(self.segments[0]['start'], 5.0)
+        self.assertEqual(self.segments[0]['text'], 'one two three')
 
     def test_partial_word_count_drop_is_revision_not_flush(self):
+        """Word count drops are revisions — only the last partial is flushed at done."""
         msgs = [
             json.dumps({'type': 'partial_utterance', 'partial_utterance': {'text': 'a b c d e', 'start_ms': 0}}),
             json.dumps({'type': 'partial_utterance', 'partial_utterance': {'text': 'x y z', 'start_ms': 0}}),

@@ -10,6 +10,7 @@ use axum::{
     Json, Router,
 };
 use serde::{Deserialize, Serialize};
+use std::time::Duration;
 
 use crate::auth::{AuthUser, PaywalledAuthUser};
 use crate::byok;
@@ -18,6 +19,15 @@ use crate::AppState;
 const OPENAI_TTS_MODEL_ID: &str = "gpt-4o-mini-tts";
 const OPENAI_SPEECH_URL: &str = "https://api.openai.com/v1/audio/speech";
 const MAX_TTS_CHARS: usize = 4096;
+
+/// Max attempts for the OpenAI TTS request (1 try + 2 retries on transient errors).
+const TTS_MAX_ATTEMPTS: usize = 3;
+
+/// Transient upstream statuses worth retrying (overload/availability). Caller/auth
+/// errors (400/401/etc.) are returned immediately.
+fn is_transient_tts_status(status: u16) -> bool {
+    matches!(status, 408 | 425 | 429 | 500 | 502 | 503 | 504 | 529)
+}
 const SERVER_TTS_BURST_PER_MINUTE: i64 = 20;
 const SERVER_TTS_DAILY_CHARS: i64 = 50_000;
 const TTS_BURST_WINDOW_SECS: u64 = 60;
@@ -126,13 +136,55 @@ async fn tts_synthesize(
         response_format: "mp3",
     };
 
-    let upstream = reqwest::Client::new()
-        .post(OPENAI_SPEECH_URL)
-        .bearer_auth(api_key)
-        .json(&payload)
-        .send()
-        .await
-        .map_err(|error| TtsProxyError::BadGateway(error.to_string()))?;
+    let client = reqwest::Client::builder()
+        .connect_timeout(Duration::from_secs(10))
+        .timeout(Duration::from_secs(30))
+        .build()
+        .unwrap_or_default();
+
+    // Retry the request on transient OpenAI failures (network/429/5xx) so a brief blip
+    // doesn't drop the voice reply. The client additionally falls back to the macOS
+    // system voice if this ultimately fails.
+    let mut upstream = None;
+    for attempt in 1..=TTS_MAX_ATTEMPTS {
+        match client
+            .post(OPENAI_SPEECH_URL)
+            .bearer_auth(api_key)
+            .json(&payload)
+            .send()
+            .await
+        {
+            Ok(resp) => {
+                let s = resp.status().as_u16();
+                if is_transient_tts_status(s) && attempt < TTS_MAX_ATTEMPTS {
+                    tracing::warn!(
+                        "tts_synthesize: OpenAI {} (attempt {}/{}), retrying",
+                        s,
+                        attempt,
+                        TTS_MAX_ATTEMPTS
+                    );
+                    tokio::time::sleep(Duration::from_millis(300 * attempt as u64)).await;
+                    continue;
+                }
+                upstream = Some(resp);
+                break;
+            }
+            Err(error) => {
+                if attempt < TTS_MAX_ATTEMPTS {
+                    tracing::warn!(
+                        "tts_synthesize: OpenAI request error (attempt {}/{}): {}",
+                        attempt,
+                        TTS_MAX_ATTEMPTS,
+                        error
+                    );
+                    tokio::time::sleep(Duration::from_millis(300 * attempt as u64)).await;
+                    continue;
+                }
+                return Err(TtsProxyError::BadGateway(error.to_string()));
+            }
+        }
+    }
+    let upstream = upstream.ok_or_else(|| TtsProxyError::BadGateway("tts: no upstream response".to_string()))?;
 
     let status =
         StatusCode::from_u16(upstream.status().as_u16()).unwrap_or(StatusCode::BAD_GATEWAY);

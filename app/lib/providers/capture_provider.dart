@@ -1598,6 +1598,19 @@ class CaptureProvider extends ChangeNotifier
   }
 
   Future<void> _autoSyncSessionWals(int sessionStartSeconds, String conversationId) async {
+    // Third-party STT users opt out of auto-sync: offline files can only be
+    // transcribed on Omi's servers (counting toward their limit), not on their
+    // own provider. They sync manually with an explicit confirmation instead.
+    if (SharedPreferencesUtil().useCustomStt) {
+      Logger.debug('Auto-sync skipped: custom STT provider enabled');
+      return;
+    }
+    // Omi users can opt out of auto-sync from device settings; they back up
+    // manually instead. Defaults to on.
+    if (!SharedPreferencesUtil().autoSyncOfflineRecordings) {
+      Logger.debug('Auto-sync skipped: disabled by user');
+      return;
+    }
     // Wait for finalize+stamp to complete so tail buffer WALs are on disk before querying.
     if (_pendingFinalizeAndStamp != null) {
       await _pendingFinalizeAndStamp;
@@ -1687,6 +1700,17 @@ class CaptureProvider extends ChangeNotifier
   /// Finds WALs with conversationId set but status still miss, and syncs them.
   /// Skips recovery if offline — retryCount is not incremented for transient failures.
   Future<void> recoverOrphanedWals() async {
+    // Custom STT users never auto-sync (offline files would use Omi STT + count
+    // toward their limit). They back up manually with explicit confirmation.
+    if (SharedPreferencesUtil().useCustomStt) {
+      Logger.debug('Orphan WAL recovery skipped: custom STT provider enabled');
+      return;
+    }
+    // Honor the user's auto-sync opt-out (device settings). Defaults to on.
+    if (!SharedPreferencesUtil().autoSyncOfflineRecordings) {
+      Logger.debug('Orphan WAL recovery skipped: auto-sync disabled by user');
+      return;
+    }
     if (!_isConnected) {
       Logger.debug('Startup recovery: offline, skipping orphan WAL sync');
       _orphanRecoveryDone = false; // Allow retry on next updateProviderInstances

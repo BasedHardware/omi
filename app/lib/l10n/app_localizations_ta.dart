@@ -430,6 +430,12 @@ class AppLocalizationsTa extends AppLocalizations {
   String get offlineSync => 'ஆப்லைன் ஒத்திசை';
 
   @override
+  String get autoSync => 'தானியங்கி ஒத்திசைவு';
+
+  @override
+  String get autoSyncDescription => 'உங்கள் சாதனம் இணைக்கப்படும்போது ஆஃப்லைன் பதிவுகளைத் தானாகவே ஒத்திசைக்கவும்';
+
+  @override
   String get deviceSettings => 'சாதன அமைப்புகள்';
 
   @override
@@ -9379,4 +9385,11 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get recapRegenerateNoConversations => 'இந்த நாளுக்கு சுருக்கமாக மாற்ற உரையாடல்கள் இல்லை.';
+
+  @override
+  String get syncCustomSttWarningTitle => 'ஒத்திசைவு Omi படியெடுப்பைப் பயன்படுத்துகிறது';
+
+  @override
+  String get syncCustomSttWarningMessage =>
+      'நீங்கள் உங்கள் சொந்த படியெடுப்பு வழங்குநரைப் பயன்படுத்துகிறீர்கள். இந்தப் பதிவுகளை ஒத்திசைத்தால் அவை Omi சேவையகங்களில் படியெடுக்கப்படும், மேலும் உங்கள் திட்டத்தின் படியெடுப்பு வரம்பில் கணக்கிடப்படும்.';
 }

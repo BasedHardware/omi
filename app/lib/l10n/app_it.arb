@@ -135,6 +135,8 @@
     "systemDefault": "Predefinito del Sistema",
     "planAndUsage": "Piano e Utilizzo",
     "offlineSync": "Sincronizzazione offline",
+    "autoSync": "Sincronizzazione automatica",
+    "autoSyncDescription": "Sincronizza automaticamente le registrazioni offline quando il dispositivo si connette",
     "deviceSettings": "Impostazioni Dispositivo",
     "integrations": "Integrazioni",
     "feedbackBug": "Feedback / Bug",
@@ -3046,5 +3048,7 @@
     "recapRegeneratedSnackbar": "Riepilogo rigenerato",
     "recapRegenerateFailed": "Impossibile rigenerare il riepilogo. Riprova più tardi.",
     "recapRegenerateCooldown": "Attendi qualche secondo prima di rigenerare.",
-    "recapRegenerateNoConversations": "Nessuna conversazione da riepilogare per questo giorno."
+    "recapRegenerateNoConversations": "Nessuna conversazione da riepilogare per questo giorno.",
+    "syncCustomSttWarningTitle": "La sincronizzazione usa la trascrizione di Omi",
+    "syncCustomSttWarningMessage": "Usi un tuo fornitore di trascrizione. Sincronizzare queste registrazioni le trascrive sui server di Omi e contano per il limite di trascrizione del tuo piano."
 }

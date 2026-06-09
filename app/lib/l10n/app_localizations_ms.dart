@@ -429,6 +429,12 @@ class AppLocalizationsMs extends AppLocalizations {
   String get offlineSync => 'Segerak Luar Talian';
 
   @override
+  String get autoSync => 'Penyegerakan automatik';
+
+  @override
+  String get autoSyncDescription => 'Segerakkan rakaman luar talian secara automatik apabila peranti anda disambungkan';
+
+  @override
   String get deviceSettings => 'Tetapan Peranti';
 
   @override
@@ -9336,4 +9342,11 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get recapRegenerateNoConversations => 'Tiada perbualan untuk diringkaskan untuk hari ini.';
+
+  @override
+  String get syncCustomSttWarningTitle => 'Penyegerakan menggunakan transkripsi Omi';
+
+  @override
+  String get syncCustomSttWarningMessage =>
+      'Anda menggunakan penyedia transkripsi sendiri. Menyegerakkan rakaman ini akan mentranskripsikannya di pelayan Omi dan dikira dalam had transkripsi pelan anda.';
 }

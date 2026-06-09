@@ -429,6 +429,12 @@ class AppLocalizationsDa extends AppLocalizations {
   String get offlineSync => 'Offline-synkronisering';
 
   @override
+  String get autoSync => 'Automatisk synkronisering';
+
+  @override
+  String get autoSyncDescription => 'Synkroniser offline-optagelser automatisk, når din enhed opretter forbindelse';
+
+  @override
   String get deviceSettings => 'Enhedsindstillinger';
 
   @override
@@ -9298,4 +9304,11 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get recapRegenerateNoConversations => 'Ingen samtaler at opsummere for denne dag.';
+
+  @override
+  String get syncCustomSttWarningTitle => 'Synkronisering bruger Omi-transskription';
+
+  @override
+  String get syncCustomSttWarningMessage =>
+      'Du bruger din egen transskriptionsudbyder. Synkronisering af disse optagelser transskriberer dem på Omis servere i stedet, og de tæller med i din plans transskriptionsgrænse.';
 }

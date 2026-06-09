@@ -429,6 +429,12 @@ class AppLocalizationsVi extends AppLocalizations {
   String get offlineSync => 'Đồng bộ Ngoại tuyến';
 
   @override
+  String get autoSync => 'Tự động đồng bộ';
+
+  @override
+  String get autoSyncDescription => 'Tự động đồng bộ các bản ghi ngoại tuyến khi thiết bị của bạn kết nối';
+
+  @override
   String get deviceSettings => 'Cài đặt thiết bị';
 
   @override
@@ -9311,4 +9317,11 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get recapRegenerateNoConversations => 'Không có cuộc trò chuyện nào để tóm tắt cho ngày này.';
+
+  @override
+  String get syncCustomSttWarningTitle => 'Đồng bộ sử dụng phiên âm của Omi';
+
+  @override
+  String get syncCustomSttWarningMessage =>
+      'Bạn đang dùng nhà cung cấp phiên âm riêng. Đồng bộ các bản ghi này sẽ phiên âm chúng trên máy chủ của Omi và được tính vào giới hạn phiên âm của gói của bạn.';
 }

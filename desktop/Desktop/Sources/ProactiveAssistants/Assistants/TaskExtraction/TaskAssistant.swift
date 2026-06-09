@@ -162,7 +162,7 @@ actor TaskAssistant: ProactiveAssistant {
     // MARK: - Initialization
 
     init(apiKey: String? = nil) throws {
-        self.geminiClient = try GeminiClient(apiKey: apiKey, model: ModelQoS.Gemini.taskExtraction)
+        self.geminiClient = try GeminiClient(apiKey: apiKey, model: ModelQoS.Gemini.taskExtraction, fallbackModel: "gemini-2.5-flash")
 
         let (stream, continuation) = AsyncStream.makeStream(of: TriggerEvent.self, bufferingPolicy: .bufferingNewest(1))
         self.triggerStream = stream

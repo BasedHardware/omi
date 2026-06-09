@@ -429,6 +429,12 @@ class AppLocalizationsId extends AppLocalizations {
   String get offlineSync => 'Sinkronisasi luring';
 
   @override
+  String get autoSync => 'Sinkronisasi otomatis';
+
+  @override
+  String get autoSyncDescription => 'Sinkronkan rekaman offline secara otomatis saat perangkat Anda terhubung';
+
+  @override
   String get deviceSettings => 'Pengaturan Perangkat';
 
   @override
@@ -9321,4 +9327,11 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get recapRegenerateNoConversations => 'Tidak ada percakapan untuk diringkas pada hari ini.';
+
+  @override
+  String get syncCustomSttWarningTitle => 'Sinkronisasi memakai transkripsi Omi';
+
+  @override
+  String get syncCustomSttWarningMessage =>
+      'Anda memakai penyedia transkripsi sendiri. Menyinkronkan rekaman ini akan mentranskripsikannya di server Omi dan dihitung dalam batas transkripsi paket Anda.';
 }

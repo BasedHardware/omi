@@ -429,6 +429,12 @@ class AppLocalizationsFa extends AppLocalizations {
   String get offlineSync => 'همگام‌سازی آفلاین';
 
   @override
+  String get autoSync => 'همگام‌سازی خودکار';
+
+  @override
+  String get autoSyncDescription => 'هنگام اتصال دستگاه، ضبط‌های آفلاین به‌طور خودکار همگام‌سازی شوند';
+
+  @override
   String get deviceSettings => 'تنظیمات دستگاه';
 
   @override
@@ -9315,4 +9321,11 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get recapRegenerateNoConversations => 'هیچ مکالمه‌ای برای خلاصه‌سازی این روز وجود ندارد.';
+
+  @override
+  String get syncCustomSttWarningTitle => 'همگام‌سازی از رونویسی Omi استفاده می‌کند';
+
+  @override
+  String get syncCustomSttWarningMessage =>
+      'شما از سرویس رونویسی خودتان استفاده می‌کنید. همگام‌سازی این ضبط‌ها آن‌ها را روی سرورهای Omi رونویسی می‌کند و در سقف رونویسی پلن شما محاسبه می‌شوند.';
 }

@@ -429,6 +429,12 @@ class AppLocalizationsEs extends AppLocalizations {
   String get offlineSync => 'Sincronización sin conexión';
 
   @override
+  String get autoSync => 'Sincronización automática';
+
+  @override
+  String get autoSyncDescription => 'Sincroniza automáticamente las grabaciones sin conexión cuando se conecta tu dispositivo';
+
+  @override
   String get deviceSettings => 'Ajustes del dispositivo';
 
   @override
@@ -9333,4 +9339,11 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get recapRegenerateNoConversations => 'No hay conversaciones para resumir en este día.';
+
+  @override
+  String get syncCustomSttWarningTitle => 'La sincronización usa la transcripción de Omi';
+
+  @override
+  String get syncCustomSttWarningMessage =>
+      'Usas tu propio proveedor de transcripción. Sincronizar estas grabaciones las transcribe en los servidores de Omi y cuentan para el límite de transcripción de tu plan.';
 }

@@ -60,6 +60,36 @@ omi action-item list --json --open
 omi action-item complete --json a1b2c3d4
 ```
 
+## Local Desktop API
+
+When Omi Desktop exposes its local API, agents can query on-device screen
+history, recaps, SQL, and tasks without using the cloud dev API:
+
+```bash
+omi local configure --url http://127.0.0.1:47778 --token ...
+# or, for ephemeral sessions:
+export OMI_LOCAL_API_URL=http://127.0.0.1:47778
+export OMI_LOCAL_TOKEN=...
+
+omi --json local status
+omi --json local tools
+omi --json local call search_screen_history --args-json '{"query":"pricing page","days":7}'
+omi --json local search-screen "pricing page" --days 7 --app Safari
+omi --json local screenshot 123 --output /tmp/omi-shot.jpg
+omi --json local sql "SELECT COUNT(*) AS screenshots FROM screenshots"
+omi --json local task search "taxes" --include-completed
+```
+
+Only complete or delete tasks when the user clearly asks:
+
+```bash
+omi --json local task complete task_123
+omi --json local task delete task_123 --yes
+```
+
+`omi local screenshot SCREENSHOT_ID --output PATH` writes the screenshot to
+disk and still prints JSON to stdout for scripts.
+
 ## Worked example: Python agent loop
 
 ```python
@@ -113,6 +143,8 @@ if result.returncode == 4:                             # rate limited
 * Use `--profile <name>` if your agent juggles multiple Omi accounts. Each
   profile has its own credential and API base.
 * Use `--api-base http://localhost:8080` for local backend testing.
+* Use `OMI_LOCAL_API_URL` and `OMI_LOCAL_TOKEN` to override profile-local
+  Desktop API settings for one run.
 * Use `--verbose` for debugging — it logs `METHOD path → status (Ns)` to stderr
   without affecting stdout, so JSON mode stays valid.
 * For piping content into a conversation, use `--text -`:

@@ -422,6 +422,12 @@ class AppLocalizationsZh extends AppLocalizations {
   String get offlineSync => '离线同步';
 
   @override
+  String get autoSync => '自动同步';
+
+  @override
+  String get autoSyncDescription => '设备连接时自动同步离线录音';
+
+  @override
   String get deviceSettings => '设备设置';
 
   @override
@@ -9148,4 +9154,10 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get recapRegenerateNoConversations => '这一天没有可以总结的对话。';
+
+  @override
+  String get syncCustomSttWarningTitle => '同步会使用 Omi 转录';
+
+  @override
+  String get syncCustomSttWarningMessage => '您使用的是自己的转录服务。同步这些录音会改为在 Omi 的服务器上转录，并计入您套餐的转录额度。';
 }

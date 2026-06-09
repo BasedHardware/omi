@@ -431,6 +431,12 @@ class AppLocalizationsMk extends AppLocalizations {
   String get offlineSync => 'Синхронизирање без интернет';
 
   @override
+  String get autoSync => 'Автоматска синхронизација';
+
+  @override
+  String get autoSyncDescription => 'Автоматски синхронизирај офлајн снимки кога ќе се поврзе уредот';
+
+  @override
   String get deviceSettings => 'Поставки на уред';
 
   @override
@@ -9362,4 +9368,11 @@ class AppLocalizationsMk extends AppLocalizations {
 
   @override
   String get recapRegenerateNoConversations => 'Нема разговори за сумирање за овој ден.';
+
+  @override
+  String get syncCustomSttWarningTitle => 'Синхронизацијата користи транскрипција од Omi';
+
+  @override
+  String get syncCustomSttWarningMessage =>
+      'Користите сопствен провајдер за транскрипција. Синхронизирањето на овие снимки ги транскрибира на серверите на Omi и се сметаат во лимитот за транскрипција на вашиот план.';
 }

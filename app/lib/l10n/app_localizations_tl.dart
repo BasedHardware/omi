@@ -430,6 +430,12 @@ class AppLocalizationsTl extends AppLocalizations {
   String get offlineSync => 'Offline Sync';
 
   @override
+  String get autoSync => 'Awtomatikong pag-sync';
+
+  @override
+  String get autoSyncDescription => 'Awtomatikong i-sync ang mga offline na recording kapag nakakonekta ang iyong device';
+
+  @override
   String get deviceSettings => 'Mga Device Setting';
 
   @override
@@ -9397,4 +9403,11 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get recapRegenerateNoConversations => 'Walang mga pag-uusap na ibubuod para sa araw na ito.';
+
+  @override
+  String get syncCustomSttWarningTitle => 'Gumagamit ang pag-sync ng transcription ng Omi';
+
+  @override
+  String get syncCustomSttWarningMessage =>
+      'Gumagamit ka ng sarili mong transcription provider. Kapag in-sync ang mga recording na ito, ita-transcribe ang mga ito sa mga server ng Omi at mabibilang sa limitasyon ng transcription ng iyong plan.';
 }

@@ -999,6 +999,18 @@ abstract class AppLocalizations {
   /// **'Offline Sync'**
   String get offlineSync;
 
+  /// Title of the toggle in device settings that controls automatic syncing of offline recordings
+  ///
+  /// In en, this message translates to:
+  /// **'Auto-Sync'**
+  String get autoSync;
+
+  /// Subtitle explaining the Auto-Sync toggle in device settings
+  ///
+  /// In en, this message translates to:
+  /// **'Automatically sync offline recordings when your device connects'**
+  String get autoSyncDescription;
+
   /// Device settings menu item
   ///
   /// In en, this message translates to:
@@ -17357,6 +17369,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'No conversations to summarize for this day.'**
   String get recapRegenerateNoConversations;
+
+  /// Title of the dialog shown when a third-party (custom) STT user manually syncs offline recordings
+  ///
+  /// In en, this message translates to:
+  /// **'Sync uses Omi transcription'**
+  String get syncCustomSttWarningTitle;
+
+  /// Body warning that syncing transcribes on Omi servers and counts toward the plan limit
+  ///
+  /// In en, this message translates to:
+  /// **'You use your own transcription provider. Syncing these recordings transcribes them on Omi\'s servers instead, and they count toward your plan\'s transcription limit.'**
+  String get syncCustomSttWarningMessage;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

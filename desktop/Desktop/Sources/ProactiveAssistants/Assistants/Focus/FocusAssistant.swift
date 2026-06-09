@@ -76,7 +76,7 @@ actor FocusAssistant: ProactiveAssistant {
         onRefocus: (() -> Void)? = nil,
         onDistraction: (() -> Void)? = nil
     ) throws {
-        self.geminiClient = try GeminiClient(apiKey: apiKey)
+        self.geminiClient = try GeminiClient(apiKey: apiKey, fallbackModel: "gemini-2.5-flash")
         self.onAlert = onAlert
         self.onStatusChange = onStatusChange
         self.onRefocus = onRefocus

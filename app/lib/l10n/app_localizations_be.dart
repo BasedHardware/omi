@@ -428,6 +428,12 @@ class AppLocalizationsBe extends AppLocalizations {
   String get offlineSync => 'Аўтаномная сінхранізацыя';
 
   @override
+  String get autoSync => 'Аўтасінхранізацыя';
+
+  @override
+  String get autoSyncDescription => 'Аўтаматычна сінхранізаваць офлайн-запісы пры падключэнні прылады';
+
+  @override
   String get deviceSettings => 'Параметры прылады';
 
   @override
@@ -9341,4 +9347,11 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String get recapRegenerateNoConversations => 'Няма размоў для рэзюмавання гэтага дня.';
+
+  @override
+  String get syncCustomSttWarningTitle => 'Сінхранізацыя выкарыстоўвае транскрыпцыю Omi';
+
+  @override
+  String get syncCustomSttWarningMessage =>
+      'Вы карыстаецеся ўласным сэрвісам транскрыпцыі. Сінхранізацыя гэтых запісаў транскрыбуе іх на серверах Omi, і яны залічацца ў ліміт транскрыпцыі вашага тарыфу.';
 }

@@ -2562,7 +2562,9 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
 
         // Ensure bridge is running
         guard await ensureBridgeStarted() else {
-            errorMessage = "AI not available"
+            if errorMessage?.isEmpty ?? true {
+                errorMessage = "AI not available"
+            }
             return
         }
 

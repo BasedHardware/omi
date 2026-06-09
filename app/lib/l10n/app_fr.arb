@@ -135,6 +135,8 @@
     "systemDefault": "Par défaut du système",
     "planAndUsage": "Forfait et utilisation",
     "offlineSync": "Synchronisation hors ligne",
+    "autoSync": "Synchronisation automatique",
+    "autoSyncDescription": "Synchroniser automatiquement les enregistrements hors ligne lorsque votre appareil se connecte",
     "deviceSettings": "Paramètres de l'appareil",
     "integrations": "Intégrations",
     "feedbackBug": "Retour / Bug",
@@ -3081,5 +3083,7 @@
     "recapRegeneratedSnackbar": "Récapitulatif régénéré",
     "recapRegenerateFailed": "Impossible de régénérer le récapitulatif. Réessayez plus tard.",
     "recapRegenerateCooldown": "Veuillez patienter quelques secondes avant de régénérer.",
-    "recapRegenerateNoConversations": "Aucune conversation à résumer pour cette journée."
+    "recapRegenerateNoConversations": "Aucune conversation à résumer pour cette journée.",
+    "syncCustomSttWarningTitle": "La synchronisation utilise la transcription d'Omi",
+    "syncCustomSttWarningMessage": "Vous utilisez votre propre fournisseur de transcription. Synchroniser ces enregistrements les transcrit sur les serveurs d'Omi et ils comptent dans la limite de transcription de votre forfait."
 }

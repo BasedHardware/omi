@@ -429,6 +429,12 @@ class AppLocalizationsHr extends AppLocalizations {
   String get offlineSync => 'Offline sinkronizacija';
 
   @override
+  String get autoSync => 'Automatska sinkronizacija';
+
+  @override
+  String get autoSyncDescription => 'Automatski sinkroniziraj izvanmrežne snimke kada se uređaj poveže';
+
+  @override
   String get deviceSettings => 'Postavke uređaja';
 
   @override
@@ -9345,4 +9351,11 @@ class AppLocalizationsHr extends AppLocalizations {
 
   @override
   String get recapRegenerateNoConversations => 'Nema razgovora za sažimanje za ovaj dan.';
+
+  @override
+  String get syncCustomSttWarningTitle => 'Sinkronizacija koristi Omi transkripciju';
+
+  @override
+  String get syncCustomSttWarningMessage =>
+      'Koristite vlastiti pružatelj transkripcije. Sinkronizacija ovih snimaka transkribira ih na Omijevim poslužiteljima i broje se u ograničenje transkripcije vašeg plana.';
 }

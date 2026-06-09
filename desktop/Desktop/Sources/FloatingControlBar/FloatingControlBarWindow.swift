@@ -1162,6 +1162,14 @@ class FloatingControlBarManager {
     /// Used when browser tools activate so the bar stays visible above Chrome.
     func showTemporarily() {
         guard window != nil else { return }
+        if !isEnabled {
+            // The user has explicitly disabled the floating bar. Honor that even when
+            // a background browser tool would otherwise surface it — unlike the
+            // notification path, there is no follow-up that re-hides it, so showing
+            // here leaves the bar visible "forever" despite the toggle being off.
+            log("FloatingControlBarManager: showTemporarily() suppressed because bar is disabled")
+            return
+        }
         if isSnoozed {
             log("FloatingControlBarManager: showTemporarily() suppressed because bar is snoozed")
             return

@@ -422,6 +422,12 @@ class AppLocalizationsJa extends AppLocalizations {
   String get offlineSync => 'オフライン同期';
 
   @override
+  String get autoSync => '自動同期';
+
+  @override
+  String get autoSyncDescription => 'デバイスの接続時にオフライン録音を自動的に同期します';
+
+  @override
   String get deviceSettings => 'デバイス設定';
 
   @override
@@ -9162,4 +9168,11 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get recapRegenerateNoConversations => 'この日の要約対象となる会話はありません。';
+
+  @override
+  String get syncCustomSttWarningTitle => '同期では Omi の文字起こしを使用します';
+
+  @override
+  String get syncCustomSttWarningMessage =>
+      'ご自身の文字起こしプロバイダーを使用しています。これらの録音を同期すると Omi のサーバーで文字起こしされ、プランの文字起こし上限にカウントされます。';
 }

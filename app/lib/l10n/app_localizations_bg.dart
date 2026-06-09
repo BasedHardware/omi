@@ -430,6 +430,12 @@ class AppLocalizationsBg extends AppLocalizations {
   String get offlineSync => 'Офлайн синхронизация';
 
   @override
+  String get autoSync => 'Автоматична синхронизация';
+
+  @override
+  String get autoSyncDescription => 'Автоматично синхронизиране на офлайн записите при свързване на устройството ви';
+
+  @override
   String get deviceSettings => 'Настройки на устройството';
 
   @override
@@ -9348,4 +9354,11 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get recapRegenerateNoConversations => 'Няма разговори за обобщаване за този ден.';
+
+  @override
+  String get syncCustomSttWarningTitle => 'Синхронизирането използва транскрипция на Omi';
+
+  @override
+  String get syncCustomSttWarningMessage =>
+      'Използвате собствен доставчик за транскрипция. Синхронизирането на тези записи ги транскрибира на сървърите на Omi и те се отчитат към лимита за транскрипция на вашия план.';
 }

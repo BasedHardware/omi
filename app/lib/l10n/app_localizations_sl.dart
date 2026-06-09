@@ -428,6 +428,12 @@ class AppLocalizationsSl extends AppLocalizations {
   String get offlineSync => 'Sinhroniziranje brez povezave';
 
   @override
+  String get autoSync => 'Samodejna sinhronizacija';
+
+  @override
+  String get autoSyncDescription => 'Samodejno sinhroniziraj posnetke brez povezave, ko se naprava poveže';
+
+  @override
   String get deviceSettings => 'Nastavitve naprave';
 
   @override
@@ -9340,4 +9346,11 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String get recapRegenerateNoConversations => 'Za ta dan ni pogovorov za povzemanje.';
+
+  @override
+  String get syncCustomSttWarningTitle => 'Sinhronizacija uporablja prepis Omi';
+
+  @override
+  String get syncCustomSttWarningMessage =>
+      'Uporabljate svojega ponudnika prepisa. Sinhronizacija teh posnetkov jih prepiše na strežnikih Omi in se štejejo v omejitev prepisa vašega paketa.';
 }

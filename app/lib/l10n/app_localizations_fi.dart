@@ -427,6 +427,12 @@ class AppLocalizationsFi extends AppLocalizations {
   String get offlineSync => 'Offline-synkronointi';
 
   @override
+  String get autoSync => 'Automaattinen synkronointi';
+
+  @override
+  String get autoSyncDescription => 'Synkronoi offline-tallenteet automaattisesti, kun laitteesi yhdistetään';
+
+  @override
   String get deviceSettings => 'Laitteen asetukset';
 
   @override
@@ -9313,4 +9319,11 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get recapRegenerateNoConversations => 'Tänä päivänä ei ole keskusteluja yhteenvedettäväksi.';
+
+  @override
+  String get syncCustomSttWarningTitle => 'Synkronointi käyttää Omin litterointia';
+
+  @override
+  String get syncCustomSttWarningMessage =>
+      'Käytät omaa litterointipalveluasi. Näiden tallenteiden synkronointi litteroi ne Omin palvelimilla, ja ne lasketaan tilauksesi litterointirajaan.';
 }

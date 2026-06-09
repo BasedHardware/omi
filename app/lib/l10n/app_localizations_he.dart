@@ -426,6 +426,12 @@ class AppLocalizationsHe extends AppLocalizations {
   String get offlineSync => 'סינכרון במצב לא מחובר';
 
   @override
+  String get autoSync => 'סנכרון אוטומטי';
+
+  @override
+  String get autoSyncDescription => 'סנכרן אוטומטית הקלטות לא מקוונות כשהמכשיר שלך מתחבר';
+
+  @override
   String get deviceSettings => 'הגדרות המכשיר';
 
   @override
@@ -9243,4 +9249,11 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get recapRegenerateNoConversations => 'אין שיחות לסיכום עבור היום הזה.';
+
+  @override
+  String get syncCustomSttWarningTitle => 'הסנכרון משתמש בתמלול של Omi';
+
+  @override
+  String get syncCustomSttWarningMessage =>
+      'אתה משתמש בספק תמלול משלך. סנכרון ההקלטות האלה יתמלל אותן בשרתי Omi והן ייכללו במגבלת התמלול של התוכנית שלך.';
 }

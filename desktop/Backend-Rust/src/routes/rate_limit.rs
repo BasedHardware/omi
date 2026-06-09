@@ -26,8 +26,15 @@ use crate::services::RedisService;
 // Daily soft/hard limits are tier-aware — see crate::llm::model_qos.
 use crate::llm::model_qos;
 
-/// Burst cap — max requests per rolling 60-second window.
+/// Default Gemini burst cap — max requests per rolling 60-second window.
 const BURST_PER_MINUTE: usize = 30;
+
+/// Chat burst cap. Chat is human-typed, so this only exists as a runaway-client
+/// guard — a person never approaches it. It is deliberately high (and chat has NO
+/// daily cap) so a normal user's chat is never rate-limited. The chat path used to
+/// share the Gemini limiter's 30/min budget, so a burst of proactive/vision Gemini
+/// calls would 429 the user's chat as collateral (issue: "chat down" on beta).
+const CHAT_BURST_PER_MINUTE: usize = 120;
 
 /// Rolling window duration for burst detection (60 seconds).
 const BURST_WINDOW_SECS: u64 = 60;
@@ -54,12 +61,16 @@ struct RateSnapshot {
 }
 
 impl RateSnapshot {
-    fn to_decision(&self) -> RateDecision {
-        if self.burst_count > BURST_PER_MINUTE {
+    /// Decide Allow/Degrade/Reject for this snapshot.
+    /// `burst_cap` is the per-limiter burst ceiling. `enforce_daily` enables the
+    /// Gemini daily soft (degrade-to-flash) / hard (reject) tiers; chat sets it to
+    /// false so it only ever rejects on a pathological per-minute burst.
+    fn to_decision(&self, burst_cap: usize, enforce_daily: bool) -> RateDecision {
+        if self.burst_count > burst_cap {
             RateDecision::Reject
-        } else if self.daily_count >= model_qos::daily_hard_limit() {
+        } else if enforce_daily && self.daily_count >= model_qos::daily_hard_limit() {
             RateDecision::Reject
-        } else if self.daily_count >= model_qos::daily_soft_limit() {
+        } else if enforce_daily && self.daily_count >= model_qos::daily_soft_limit() {
             RateDecision::DegradeToFlash
         } else {
             RateDecision::Allow
@@ -77,18 +88,40 @@ struct CachedEntry {
     local_burst: VecDeque<Instant>,
 }
 
-/// Gemini rate limiter: Redis source of truth, local cache to reduce Redis calls.
+/// Per-user burst/daily rate limiter: Redis source of truth, local cache to reduce
+/// Redis calls. Reused for both the Gemini proxy and chat, each with its own Redis
+/// namespace and burst cap so the two budgets are fully independent.
 pub struct GeminiRateLimiter {
     /// Per-user cache of recent Redis decisions + local burst tracking.
     cache: Mutex<HashMap<String, CachedEntry>>,
+    /// Burst ceiling (requests per rolling 60s window) for this limiter.
+    burst_per_minute: usize,
+    /// Redis key namespace (e.g. "gemini_rl" or "chat_rl") — isolates counters.
+    redis_ns: &'static str,
+    /// Whether to apply the Gemini daily soft/hard tiers (false for chat).
+    enforce_daily: bool,
 }
 
 pub type SharedRateLimiter = Arc<GeminiRateLimiter>;
 
 impl GeminiRateLimiter {
+    /// Gemini proxy limiter: 30/min burst + daily soft/hard tiers, "gemini_rl" keys.
     pub fn new() -> SharedRateLimiter {
+        Self::with_config(BURST_PER_MINUTE, "gemini_rl", true)
+    }
+
+    /// Chat limiter: high burst cap, no daily cap, isolated "chat_rl" keys, so a
+    /// human's chat is never rejected and Gemini bursts can't starve it.
+    pub fn for_chat() -> SharedRateLimiter {
+        Self::with_config(CHAT_BURST_PER_MINUTE, "chat_rl", false)
+    }
+
+    pub fn with_config(burst_per_minute: usize, redis_ns: &'static str, enforce_daily: bool) -> SharedRateLimiter {
         Arc::new(Self {
             cache: Mutex::new(HashMap::new()),
+            burst_per_minute,
+            redis_ns,
+            enforce_daily,
         })
     }
 
@@ -105,7 +138,7 @@ impl GeminiRateLimiter {
     ) -> RateDecision {
         // Phase 1: No Redis → unmetered (skip cache entirely)
         let Some(redis) = redis else {
-            tracing::warn!("gemini rate limit: Redis not configured, request unmetered");
+            tracing::warn!("{} rate limit: Redis not configured, request unmetered", self.redis_ns);
             return RateDecision::Allow;
         };
 
@@ -122,7 +155,7 @@ impl GeminiRateLimiter {
                 }
 
                 // Fast reject on local burst (this instance alone has seen >= cap)
-                if entry.local_burst.len() >= BURST_PER_MINUTE {
+                if entry.local_burst.len() >= self.burst_per_minute {
                     return RateDecision::Reject;
                 }
 
@@ -135,19 +168,22 @@ impl GeminiRateLimiter {
         }
 
         // Phase 3: Call Redis (source of truth — records the request)
-        match redis.check_gemini_rate_limit(uid, BURST_PER_MINUTE, BURST_WINDOW_SECS).await {
+        match redis
+            .check_rate_limit(self.redis_ns, uid, self.burst_per_minute, BURST_WINDOW_SECS)
+            .await
+        {
             Ok((daily_count, burst_count)) => {
                 let snapshot = RateSnapshot {
                     daily_count: daily_count as u32,
                     burst_count: burst_count as usize,
                 };
-                let decision = snapshot.to_decision();
+                let decision = snapshot.to_decision(self.burst_per_minute, self.enforce_daily);
 
                 let mut cache = self.cache.lock().await;
                 let entry = cache.entry(uid.to_string()).or_insert_with(|| CachedEntry {
                     decision: RateDecision::Allow,
                     expires_at: now,
-                    local_burst: VecDeque::with_capacity(BURST_PER_MINUTE + 1),
+                    local_burst: VecDeque::with_capacity(self.burst_per_minute + 1),
                 });
 
                 // Only cache Reject decisions (Allow/Degrade always go to Redis)
@@ -168,7 +204,7 @@ impl GeminiRateLimiter {
                 decision
             }
             Err(e) => {
-                tracing::error!("gemini rate limit: Redis error, request unmetered: {}", e);
+                tracing::error!("{} rate limit: Redis error, request unmetered: {}", self.redis_ns, e);
                 RateDecision::Allow
             }
         }
@@ -227,34 +263,34 @@ mod tests {
     #[test]
     fn snapshot_allow() {
         let s = RateSnapshot { daily_count: 10, burst_count: 5 };
-        assert_eq!(s.to_decision(), RateDecision::Allow);
+        assert_eq!(s.to_decision(BURST_PER_MINUTE, true), RateDecision::Allow);
     }
 
     #[test]
     fn snapshot_degrade_at_soft_limit() {
         let soft = model_qos::daily_soft_limit();
         let s = RateSnapshot { daily_count: soft, burst_count: 5 };
-        assert_eq!(s.to_decision(), RateDecision::DegradeToFlash);
+        assert_eq!(s.to_decision(BURST_PER_MINUTE, true), RateDecision::DegradeToFlash);
     }
 
     #[test]
     fn snapshot_reject_at_hard_limit() {
         let hard = model_qos::daily_hard_limit();
         let s = RateSnapshot { daily_count: hard, burst_count: 5 };
-        assert_eq!(s.to_decision(), RateDecision::Reject);
+        assert_eq!(s.to_decision(BURST_PER_MINUTE, true), RateDecision::Reject);
     }
 
     #[test]
     fn snapshot_reject_burst() {
         let s = RateSnapshot { daily_count: 10, burst_count: 31 };
-        assert_eq!(s.to_decision(), RateDecision::Reject);
+        assert_eq!(s.to_decision(BURST_PER_MINUTE, true), RateDecision::Reject);
     }
 
     #[test]
     fn snapshot_burst_at_exact_limit() {
         // burst_count == BURST_PER_MINUTE is not over (it's the count AFTER add)
         let s = RateSnapshot { daily_count: 10, burst_count: 30 };
-        assert_eq!(s.to_decision(), RateDecision::Allow);
+        assert_eq!(s.to_decision(BURST_PER_MINUTE, true), RateDecision::Allow);
     }
 
     // --- Boundary: just below thresholds ---
@@ -263,14 +299,42 @@ mod tests {
     fn snapshot_allow_just_below_soft_limit() {
         let soft = model_qos::daily_soft_limit();
         let s = RateSnapshot { daily_count: soft - 1, burst_count: 5 };
-        assert_eq!(s.to_decision(), RateDecision::Allow);
+        assert_eq!(s.to_decision(BURST_PER_MINUTE, true), RateDecision::Allow);
     }
 
     #[test]
     fn snapshot_degrade_just_below_hard_limit() {
         let hard = model_qos::daily_hard_limit();
         let s = RateSnapshot { daily_count: hard - 1, burst_count: 5 };
-        assert_eq!(s.to_decision(), RateDecision::DegradeToFlash);
+        assert_eq!(s.to_decision(BURST_PER_MINUTE, true), RateDecision::DegradeToFlash);
+    }
+
+    // --- Chat limiter: high burst cap, NO daily tiers (enforce_daily=false) ---
+
+    #[test]
+    fn chat_never_rejects_or_degrades_on_daily() {
+        // Far past Gemini's daily hard limit, chat still allows — chat has no daily cap.
+        let s = RateSnapshot { daily_count: model_qos::daily_hard_limit() + 1000, burst_count: 10 };
+        assert_eq!(s.to_decision(CHAT_BURST_PER_MINUTE, false), RateDecision::Allow);
+    }
+
+    #[test]
+    fn chat_allows_burst_that_would_reject_gemini() {
+        // A burst of 100/min rejects Gemini (>30) but is fine for chat (<=120).
+        let s = RateSnapshot { daily_count: 5, burst_count: 100 };
+        assert_eq!(s.to_decision(BURST_PER_MINUTE, true), RateDecision::Reject);
+        assert_eq!(s.to_decision(CHAT_BURST_PER_MINUTE, false), RateDecision::Allow);
+    }
+
+    #[test]
+    fn chat_rejects_only_on_pathological_burst() {
+        let s = RateSnapshot { daily_count: 5, burst_count: CHAT_BURST_PER_MINUTE + 1 };
+        assert_eq!(s.to_decision(CHAT_BURST_PER_MINUTE, false), RateDecision::Reject);
+    }
+
+    #[test]
+    fn for_chat_constructs() {
+        let _ = GeminiRateLimiter::for_chat();
     }
 
     // --- No Redis → unmetered (cache bypassed entirely) ---

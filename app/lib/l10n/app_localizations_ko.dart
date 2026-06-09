@@ -422,6 +422,12 @@ class AppLocalizationsKo extends AppLocalizations {
   String get offlineSync => '오프라인 동기화';
 
   @override
+  String get autoSync => '자동 동기화';
+
+  @override
+  String get autoSyncDescription => '기기가 연결되면 오프라인 녹음을 자동으로 동기화합니다';
+
+  @override
   String get deviceSettings => '기기 설정';
 
   @override
@@ -9164,4 +9170,10 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get recapRegenerateNoConversations => '이 날짜에 요약할 대화가 없습니다.';
+
+  @override
+  String get syncCustomSttWarningTitle => '동기화는 Omi 전사를 사용합니다';
+
+  @override
+  String get syncCustomSttWarningMessage => '직접 설정한 전사 제공자를 사용 중입니다. 이 녹음을 동기화하면 Omi 서버에서 전사되며 요금제의 전사 한도에 포함됩니다.';
 }

@@ -430,6 +430,12 @@ class AppLocalizationsKn extends AppLocalizations {
   String get offlineSync => 'ಆಫ್‌ಲೈನ್ ಸಿಂಕ್';
 
   @override
+  String get autoSync => 'ಸ್ವಯಂಚಾಲಿತ ಸಿಂಕ್';
+
+  @override
+  String get autoSyncDescription => 'ನಿಮ್ಮ ಸಾಧನ ಸಂಪರ್ಕಗೊಂಡಾಗ ಆಫ್‌ಲೈನ್ ರೆಕಾರ್ಡಿಂಗ್‌ಗಳನ್ನು ಸ್ವಯಂಚಾಲಿತವಾಗಿ ಸಿಂಕ್ ಮಾಡಿ';
+
+  @override
   String get deviceSettings => 'ಸಾಧನ ಸೆಟ್ಟಿಂಗ್‌ಗಳು';
 
   @override
@@ -9344,4 +9350,11 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get recapRegenerateNoConversations => 'ಈ ದಿನಕ್ಕೆ ಸಂಗ್ರಹಿಸಲು ಯಾವುದೇ ಸಂಭಾಷಣೆಗಳಿಲ್ಲ.';
+
+  @override
+  String get syncCustomSttWarningTitle => 'ಸಿಂಕ್ Omi ಪ್ರತಿಲೇಖನವನ್ನು ಬಳಸುತ್ತದೆ';
+
+  @override
+  String get syncCustomSttWarningMessage =>
+      'ನೀವು ನಿಮ್ಮ ಸ್ವಂತ ಪ್ರತಿಲೇಖನ ಪೂರೈಕೆದಾರರನ್ನು ಬಳಸುತ್ತೀರಿ. ಈ ಧ್ವನಿಮುದ್ರಣಗಳನ್ನು ಸಿಂಕ್ ಮಾಡಿದರೆ ಅವು Omi ಸರ್ವರ್‌ಗಳಲ್ಲಿ ಪ್ರತಿಲೇಖನಗೊಳ್ಳುತ್ತವೆ ಮತ್ತು ನಿಮ್ಮ ಯೋಜನೆಯ ಪ್ರತಿಲೇಖನ ಮಿತಿಗೆ ಎಣಿಸಲಾಗುತ್ತದೆ.';
 }

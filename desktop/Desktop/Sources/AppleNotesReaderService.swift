@@ -133,7 +133,15 @@ actor AppleNotesReaderService {
       - Do not invent details not supported by the notes
       """
 
+    // Retry the synthesis (bridge/LLM call) on transient failure instead of silently
+    // dropping the whole import. Each attempt uses a fresh bridge.
+    let maxAttempts = 2
+    for attempt in 1...maxAttempts {
     do {
+      if ProcessInfo.processInfo.environment["OMI_FORCE_SYNTHESIS_FAIL"] == "1"
+        || UserDefaults.standard.bool(forKey: "forceSynthesisFail") {
+        throw NSError(domain: "Synthesis", code: -1, userInfo: [NSLocalizedDescriptionKey: "forced synthesis failure"])
+      }
       let bridge = AgentBridge(harnessMode: "piMono")
       try await bridge.start()
       defer { Task { await bridge.stop() } }
@@ -181,9 +189,16 @@ actor AppleNotesReaderService {
 
       return (memoriesSaved, profileSummary)
     } catch {
-      log("AppleNotesReaderService: Synthesis failed: \(error)")
+      if attempt < maxAttempts {
+        log("AppleNotesReaderService: Synthesis attempt \(attempt) failed, retrying: \(error)")
+        try? await Task.sleep(nanoseconds: 800_000_000)
+        continue
+      }
+      log("AppleNotesReaderService: Synthesis failed after \(attempt) attempts: \(error)")
       return (0, "")
     }
+    }
+    return (0, "")
   }
 
   func saveAsMemories(notes: [AppleNoteRecord], limit: Int? = nil) async -> (saved: Int, failed: Int) {
