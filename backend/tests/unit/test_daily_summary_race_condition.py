@@ -281,6 +281,33 @@ class TestSendSummaryNotificationLockIntegration:
         send_mock.assert_not_called()
 
     @patch('utils.other.notifications.try_acquire_daily_summary_lock', return_value=True)
+    def test_summary_lookup_error_propagates_no_duplicate(self, mock_lock):
+        """#4608: a transient Firestore error during the by-date lookup must propagate (skip this
+        tick, retry next) rather than being swallowed into a duplicate-creating path."""
+        daily_db = sys.modules["database.daily_summaries"]
+        daily_db.get_daily_summary_by_date = MagicMock(side_effect=Exception("Firestore unavailable"))
+        daily_db.create_daily_summary = MagicMock()
+
+        convos_db = sys.modules["database.conversations"]
+        convos_db.get_conversations = MagicMock()
+        convos_db.get_conversations.reset_mock()
+
+        gen_mock = sys.modules["utils.llm.external_integrations"].generate_comprehensive_daily_summary
+        gen_mock.reset_mock()
+
+        user_data = ('uid1', ['token1'], 'America/New_York')
+        try:
+            _send_summary_notification(user_data)
+            assert False, "Expected the Firestore error to propagate"
+        except Exception as e:
+            assert "Firestore unavailable" in str(e)
+
+        # Error surfaced (logged + retried next tick by the outer gather), no duplicate created.
+        daily_db.create_daily_summary.assert_not_called()
+        gen_mock.assert_not_called()
+        convos_db.get_conversations.assert_not_called()
+
+    @patch('utils.other.notifications.try_acquire_daily_summary_lock', return_value=True)
     def test_no_conversations_skips_llm(self, mock_lock):
         convos_db = sys.modules["database.conversations"]
         convos_db.get_conversations = MagicMock(return_value=[])
