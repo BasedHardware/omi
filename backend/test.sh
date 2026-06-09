@@ -135,6 +135,7 @@ pytest tests/unit/test_merge_validation.py -v
 pytest tests/unit/test_twilio_account_deletion.py -v
 pytest tests/unit/test_conversation_search_date_validation.py -v
 pytest tests/unit/test_delete_account_stripe_cancel.py -v
+pytest tests/unit/test_apps_review_reply_validation.py -v
 
 # Fair-use integration tests (require Redis; skip gracefully if unavailable)
 if redis-cli ping >/dev/null 2>&1; then
