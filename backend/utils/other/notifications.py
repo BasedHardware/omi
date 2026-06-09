@@ -138,6 +138,18 @@ def _send_summary_notification(user_data: tuple):
     if not try_acquire_daily_summary_lock(uid, date_str):
         return
 
+    # Durable idempotency guard (#4608): the Redis lock above is best-effort (2h TTL, evictable, lost on
+    # failover), and create_daily_summary writes a fresh-uuid doc with no by-date check, so a later cron
+    # tick can persist a SECOND summary for the same date. If one already exists, skip before spending
+    # any LLM tokens or resending the notification. The regenerate flow stays in-place via update_daily_summary.
+    existing_summary = daily_summaries_db.get_daily_summary_by_date(uid, date_str)
+    if existing_summary:
+        logger.info(
+            f"Daily summary already exists for uid={uid} date={date_str} "
+            f"id={existing_summary.get('id')}; skipping duplicate generation"
+        )
+        return
+
     conversations_data = conversations_db.get_conversations(uid, start_date=start_date_utc, end_date=end_date_utc)
     if not conversations_data or len(conversations_data) == 0:
         return
