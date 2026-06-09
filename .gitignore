@@ -8,6 +8,7 @@ libraries/
 myenv/
 venv/
 .DS_Store
+.memory_pipeline_runs/
 dump/
 /scripts/
 *.zip
