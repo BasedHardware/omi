@@ -41,10 +41,13 @@ class ChatToolExecutor {
     log("Executing tool: \(toolCall.name) with args: \(toolCall.arguments)")
 
     switch toolCall.name {
+    case "get_local_status":
+      return await executeLocalStatus()
+
     case "execute_sql":
       return await executeSQL(toolCall.arguments)
 
-    case "semantic_search":
+    case "semantic_search", "search_screen_history":
       return await executeSemanticSearch(toolCall.arguments)
 
     case "get_daily_recap":
@@ -194,6 +197,7 @@ class ChatToolExecutor {
 
     let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
     let upper = trimmed.uppercased()
+    let readOnly = (args["read_only"] as? Bool) == true
 
     // Block dangerous keywords
     for keyword in blockedKeywords {
@@ -216,6 +220,9 @@ class ChatToolExecutor {
     let isInsert = upper.hasPrefix("INSERT")
     let isUpdate = upper.hasPrefix("UPDATE")
     let isDelete = upper.hasPrefix("DELETE")
+    if readOnly && !isReadOnlySQLStatement(trimmed) {
+      return "Error: this SQL surface is read-only. Use SELECT or read-only WITH queries."
+    }
 
     // Block UPDATE/DELETE without WHERE
     if (isUpdate || isDelete) && !upper.contains("WHERE") {
@@ -239,6 +246,90 @@ class ChatToolExecutor {
       logError("Tool execute_sql failed", error: error)
       return "SQL Error: \(error.localizedDescription)\nFailed query: \(trimmed)"
     }
+  }
+
+  nonisolated static func isReadOnlySQLStatement(_ query: String) -> Bool {
+    let keywordSQL = sqlForKeywordScan(query)
+    let upper = keywordSQL.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+    guard upper.hasPrefix("SELECT") || upper.hasPrefix("WITH") else {
+      return false
+    }
+    for keyword in ["INSERT", "UPDATE", "DELETE", "REPLACE"] {
+      if upper.range(of: "\\b\(keyword)\\b", options: .regularExpression) != nil {
+        return false
+      }
+    }
+    return true
+  }
+
+  private nonisolated static func sqlForKeywordScan(_ query: String) -> String {
+    var result = ""
+    var index = query.startIndex
+
+    while index < query.endIndex {
+      let character = query[index]
+      let next = query.index(after: index)
+      let nextCharacter = next < query.endIndex ? query[next] : nil
+
+      if character == "-", nextCharacter == "-" {
+        index = next
+        while index < query.endIndex, query[index] != "\n" {
+          index = query.index(after: index)
+        }
+        result.append(" ")
+        continue
+      }
+
+      if character == "/", nextCharacter == "*" {
+        index = query.index(after: next)
+        while index < query.endIndex {
+          let after = query.index(after: index)
+          if query[index] == "*", after < query.endIndex, query[after] == "/" {
+            index = query.index(after: after)
+            break
+          }
+          index = after
+        }
+        result.append(" ")
+        continue
+      }
+
+      if character == "'" || character == "\"" || character == "`" {
+        index = skipQuotedSQLToken(in: query, from: index, closing: character)
+        result.append(" ")
+        continue
+      }
+
+      if character == "[" {
+        index = skipQuotedSQLToken(in: query, from: index, closing: "]")
+        result.append(" ")
+        continue
+      }
+
+      result.append(character)
+      index = next
+    }
+
+    return result
+  }
+
+  private nonisolated static func skipQuotedSQLToken(in query: String, from start: String.Index, closing: Character)
+    -> String.Index
+  {
+    var index = query.index(after: start)
+    while index < query.endIndex {
+      let character = query[index]
+      let next = query.index(after: index)
+      if character == closing {
+        if next < query.endIndex, query[next] == closing {
+          index = query.index(after: next)
+          continue
+        }
+        return next
+      }
+      index = next
+    }
+    return query.endIndex
   }
 
   /// Execute a SELECT query and format results as text
@@ -327,6 +418,85 @@ class ChatToolExecutor {
     }
 
     return "OK: \(changes) row(s) affected"
+  }
+
+  // MARK: - Local Status
+
+  private static func executeLocalStatus() async -> String {
+    guard await RewindDatabase.shared.getDatabaseQueue() != nil else {
+      return """
+        {
+          "ok": false,
+          "mode": "local_omi_desktop",
+          "database_available": false,
+          "screen_history_available": false,
+          "local_affordances": \(localAffordancesJSON()),
+          "message": "Omi Desktop is running, but the local database is not available yet."
+        }
+        """
+    }
+
+    do {
+      let stats = try await RewindDatabase.shared.getStats()
+      let formatter = ISO8601DateFormatter()
+      let payload: [String: Any] = [
+        "ok": true,
+        "mode": "local_omi_desktop",
+        "database_available": true,
+        "screen_history_available": stats.total > 0,
+        "screenshot_count": stats.total,
+        "indexed_screenshot_count": stats.indexed,
+        "oldest_capture_at": stats.oldestDate.map { formatter.string(from: $0) } ?? NSNull(),
+        "latest_capture_at": stats.newestDate.map { formatter.string(from: $0) } ?? NSNull(),
+        "local_affordances": localAffordances,
+        "recommended_first_tools": [
+          "search_screen_history for fuzzy Rewind/OCR questions",
+          "get_screenshot after a search result returns a screenshot_id",
+          "get_daily_recap for today/yesterday/this week",
+          "execute_sql for exact read-only local database questions",
+        ],
+      ]
+      guard
+        let data = try? JSONSerialization.data(withJSONObject: payload, options: [.prettyPrinted, .sortedKeys]),
+        let json = String(data: data, encoding: .utf8)
+      else {
+        return "Local Omi Desktop is available. Screenshots: \(stats.total), indexed: \(stats.indexed)."
+      }
+      return json
+    } catch {
+      logError("Tool get_local_status failed", error: error)
+      return """
+        {
+          "ok": false,
+          "mode": "local_omi_desktop",
+          "database_available": false,
+          "screen_history_available": false,
+          "local_affordances": \(localAffordancesJSON()),
+          "message": "Failed to read local Omi status: \(error.localizedDescription)"
+        }
+        """
+    }
+  }
+
+  private static let localAffordances = [
+    "Rewind screen history and OCR search",
+    "raw screenshot image retrieval by screenshot_id",
+    "local transcription and conversation tables",
+    "read-only SQL over the local Omi Desktop database",
+    "daily activity recaps",
+    "indexed files and app/window activity",
+    "local goals and progress data",
+    "local task search, completion, and deletion",
+  ]
+
+  private static func localAffordancesJSON() -> String {
+    guard
+      let data = try? JSONSerialization.data(withJSONObject: localAffordances, options: [.sortedKeys]),
+      let json = String(data: data, encoding: .utf8)
+    else {
+      return "[]"
+    }
+    return json
   }
 
   // MARK: - Daily Recap
@@ -527,8 +697,9 @@ class ChatToolExecutor {
       return "Error: query is required"
     }
 
-    let days = (args["days"] as? Int) ?? 7
+    let days = max(1, intArgument(args["days"]) ?? 7)
     let appFilter = args["app_filter"] as? String
+    let limit = min(max(1, intArgument(args["limit"]) ?? 15), 50)
 
     let calendar = Calendar.current
     let endDate = Date()
@@ -540,7 +711,7 @@ class ChatToolExecutor {
         startDate: startDate,
         endDate: endDate,
         appFilter: appFilter,
-        topK: 20
+        topK: max(limit * 2, 20)
       )
 
       log("Tool semantic_search: vector returned \(vectorResults.count) results")
@@ -565,7 +736,7 @@ class ChatToolExecutor {
         let windowTitle = screenshot.windowTitle ?? ""
         let titlePart = windowTitle.isEmpty ? "" : " - \(windowTitle)"
         lines.append(
-          "\n\(count). [\(dateStr)] \(screenshot.appName)\(titlePart) (similarity: \(String(format: "%.2f", result.similarity)))"
+          "\n\(count). [\(dateStr)] \(screenshot.appName)\(titlePart) (screenshot_id: \(result.screenshotId), similarity: \(String(format: "%.2f", result.similarity)))"
         )
 
         // Include OCR text preview (truncated)
@@ -576,11 +747,11 @@ class ChatToolExecutor {
           lines.append("   Content: \(preview)")
         }
 
-        if count >= 15 { break }
+        if count >= limit { break }
       }
 
       if lines.isEmpty {
-        return "No screenshots found matching \"\(query)\" in the last \(days) day(s)."
+        return await emptySemanticSearchMessage(query: query, days: days, appFilter: appFilter)
       }
 
       lines.insert("Found \(count) screenshot(s) matching \"\(query)\":", at: 0)
@@ -592,6 +763,35 @@ class ChatToolExecutor {
       logError("Tool semantic_search failed", error: error)
       return "Failed to search: \(error.localizedDescription)"
     }
+  }
+
+  private static func emptySemanticSearchMessage(query: String, days: Int, appFilter: String?) async -> String {
+    do {
+      let stats = try await RewindDatabase.shared.getStats()
+      if stats.total == 0 {
+        return """
+          No screen history is available yet. Omi Desktop has not captured screenshots on this Mac, so there are no results for "\(query)".
+          """
+      }
+      if stats.indexed == 0 {
+        return """
+          Omi has \(stats.total) screenshot(s), but they are not ready to search yet. Keep Omi Desktop running and try again in a bit, or use SQL for exact local checks.
+          """
+      }
+      let appText = appFilter.map { " with app filter \"\($0)\"" } ?? ""
+      return """
+        No matching screen-history results for "\(query)" in the last \(days) day(s)\(appText). Local history exists (\(stats.total) screenshot(s), \(stats.indexed) indexed), so try a broader query, a wider days window, or use execute_sql for exact app/window/OCR filters.
+        """
+    } catch {
+      return "No screenshots found matching \"\(query)\" in the last \(days) day(s). Local status could not be read: \(error.localizedDescription)"
+    }
+  }
+
+  private static func intArgument(_ value: Any?) -> Int? {
+    if let value = value as? Int { return value }
+    if let value = value as? Double { return Int(value) }
+    if let value = value as? String { return Int(value.trimmingCharacters(in: .whitespacesAndNewlines)) }
+    return nil
   }
 
   // MARK: - Task Search
@@ -673,7 +873,7 @@ class ChatToolExecutor {
 
   // MARK: - Task Tools
 
-  /// Toggle a task's completion status via TasksStore (handles local + API sync)
+  /// Mark a task completed via TasksStore (handles local + API sync)
   private static func executeCompleteTask(_ args: [String: Any]) async -> String {
     guard let taskId = args["task_id"] as? String, !taskId.isEmpty else {
       return "Error: task_id is required"
@@ -689,12 +889,15 @@ class ChatToolExecutor {
         return "Error: task '\(task.description)' has been deleted"
       }
 
-      let wasCompleted = task.completed
+      if task.completed {
+        log("Tool complete_task: '\(task.description)' was already completed")
+        return "OK: task '\(task.description)' is already completed"
+      }
+
       await TasksStore.shared.toggleTask(task)
 
-      let newState = wasCompleted ? "incomplete" : "completed"
-      log("Tool complete_task: toggled '\(task.description)' to \(newState)")
-      return "OK: task '\(task.description)' marked as \(newState)"
+      log("Tool complete_task: marked '\(task.description)' as completed")
+      return "OK: task '\(task.description)' marked as completed"
     } catch {
       logError("Tool complete_task failed", error: error)
       return "Error: \(error.localizedDescription)"

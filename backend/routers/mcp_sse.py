@@ -29,6 +29,13 @@ from models.memories import MemoryDB, Memory, MemoryCategory
 from utils.conversations.render import redact_conversation_for_list
 from models.conversation_enums import CategoryEnum
 from utils.llm.memories import identify_category_for_memory
+from utils.mcp_memories import (
+    collect_filtered_memories,
+    parse_mcp_bool,
+    parse_mcp_datetime,
+    parse_mcp_int,
+    parse_optional_mcp_bool,
+)
 
 router = APIRouter()
 
@@ -119,10 +126,8 @@ MCP_TOOLS = [
     {
         "name": "get_user_profile",
         "description": (
-            "Get the user's profile — a single consolidated, always-current summary of who the user is "
-            "(identity, contacts, work, projects, tools, preferences, and current goals). This is the most "
-            "complete and authoritative source of facts about the user. ALWAYS call this first when you need "
-            "any context about the user, before searching individual memories or conversations."
+            "Get Omi's cached high-level summary of the user, if one has been generated. Use this as a "
+            "lightweight starting point, then search memories or conversations for task-specific evidence."
         ),
         "annotations": READ_ONLY_ANNOTATIONS,
         "securitySchemes": MEMORIES_READ_SECURITY,
@@ -144,6 +149,28 @@ MCP_TOOLS = [
                 },
                 "limit": {"type": "integer", "description": "Number of memories to retrieve", "default": 100},
                 "offset": {"type": "integer", "description": "Offset for pagination", "default": 0},
+                "sort": {
+                    "type": "string",
+                    "enum": ["scoring_desc", "created_desc", "updated_desc", "manual_first"],
+                    "description": "Ordering for returned memories",
+                    "default": "created_desc",
+                },
+                "reviewed": {"type": "boolean", "description": "Filter by reviewed state"},
+                "manually_added": {"type": "boolean", "description": "Filter by manually-added state"},
+                "updated_after": {
+                    "type": "string",
+                    "description": "Only return memories updated after this ISO 8601 timestamp",
+                },
+                "include_activity": {
+                    "type": "boolean",
+                    "description": "Include obvious focus/screen/activity memories. Durable memory reads exclude these by default.",
+                    "default": False,
+                },
+                "include_sensitive": {
+                    "type": "boolean",
+                    "description": "Include memories marked above standard data protection. Defaults to true for backward compatibility.",
+                    "default": True,
+                },
             },
         },
     },
@@ -348,8 +375,22 @@ def execute_tool(user_id: str, tool_name: str, arguments: dict) -> dict:
 
     elif tool_name == "get_memories":
         categories = arguments.get("categories", [])
-        limit = arguments.get("limit", 100)
-        offset = arguments.get("offset", 0)
+        try:
+            limit = parse_mcp_int(arguments.get("limit"), "limit", default=100, minimum=1, maximum=500)
+            offset = parse_mcp_int(arguments.get("offset"), "offset", default=0, minimum=0, maximum=100000)
+            reviewed = parse_optional_mcp_bool(arguments.get("reviewed"), "reviewed")
+            manually_added = parse_optional_mcp_bool(arguments.get("manually_added"), "manually_added")
+            include_activity = parse_mcp_bool(arguments.get("include_activity"), "include_activity", default=False)
+            include_sensitive = parse_mcp_bool(arguments.get("include_sensitive"), "include_sensitive", default=True)
+            updated_after = parse_mcp_datetime(arguments.get("updated_after"), "updated_after")
+        except ValueError as e:
+            raise ToolExecutionError(str(e), code=-32602)
+        sort = arguments.get("sort", "created_desc")
+        if sort not in {"scoring_desc", "created_desc", "updated_desc", "manual_first"}:
+            raise ToolExecutionError(
+                "Invalid sort. Expected one of: scoring_desc, created_desc, updated_desc, manual_first.",
+                code=-32602,
+            )
 
         # Validate categories
         valid_categories = []
@@ -359,14 +400,26 @@ def execute_tool(user_id: str, tool_name: str, arguments: dict) -> dict:
             except ValueError:
                 raise ToolExecutionError(f"Invalid memory category: '{cat}'", code=-32602)
 
-        memories = memories_db.get_memories(user_id, limit, offset, valid_categories)
+        result = collect_filtered_memories(
+            lambda batch_offset, batch_limit: memories_db.get_memories(
+                user_id, batch_limit, batch_offset, valid_categories, sort=sort
+            ),
+            limit=limit,
+            offset=offset,
+            reviewed=reviewed,
+            manually_added=manually_added,
+            include_activity=include_activity,
+            include_sensitive=include_sensitive,
+            updated_after=updated_after,
+            sort=sort,
+        )
         # Apply locked content truncation
-        for memory in memories:
+        for memory in result["memories"]:
             if memory.get('is_locked', False):
                 content = memory.get('content', '')
                 memory['content'] = (content[:70] + '...') if len(content) > 70 else content
 
-        return {"memories": memories}
+        return result
 
     elif tool_name == "create_memory":
         content = arguments.get("content")
@@ -641,10 +694,9 @@ def handle_mcp_message(
                     "serverInfo": {"name": "omi-mcp-server", "version": "1.0.0"},
                     "instructions": (
                         "This server exposes the user's Omi memory (their personal AI memory bank). "
-                        "A consolidated, always-current user profile is available via the `get_user_profile` "
-                        "tool — consult it FIRST for any question about who the user is (identity, contacts, "
-                        "work, projects, preferences, goals) before falling back to `search_memories` or "
-                        "`get_memories` for finer-grained or historical details."
+                        "`get_user_profile` returns a cached high-level profile when available. Use it as a "
+                        "starting point, then call `search_memories`, `get_memories`, or conversation tools for "
+                        "task-specific evidence."
                     ),
                 },
             ),

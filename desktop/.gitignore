@@ -26,6 +26,8 @@ DerivedData/
 # Swift Package Manager
 .swiftpm/
 Package.resolved
+Desktop/.build-agent-*/
+Desktop/.build-hybrid-llm-check/
 
 # Xcode
 *.pbxuser
@@ -43,6 +45,8 @@ xcuserdata/
 # Local scripts and data (untracked)
 local/
 scripts/
+!scripts/
+!scripts/prepare-agent-runtime.sh
 
 # Swift compiler diagnostics cache
 *.dia
@@ -54,6 +58,12 @@ scripts/
 **/python_reference/
 Desktop/Sources/Resources/ffmpeg
 Desktop/Sources/Resources/node
+
+# Local Rust helper build output
+codex-proxy/target/
+local-asr-helper/target/
+local-asr-helper/Cargo.lock
+local-backend/target/
 
 # Generated browser snapshots (contain PII)
 *-snapshot.md
