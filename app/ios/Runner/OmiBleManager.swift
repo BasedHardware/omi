@@ -173,14 +173,13 @@ final class OmiBleManager: NSObject {
         for (uuid, peripheral) in peripherals {
             guard everConnected.contains(uuid) else { continue }
             if manuallyDisconnected.contains(uuid) { continue }
-            switch peripheral.state {
-            case .connected, .connecting:
-                continue
-            default:
-                NSLog("[OmiBle] Re-issuing connect on foreground for \(uuid), state=\(peripheral.state.rawValue)")
-                peripheral.delegate = self
-                centralManager.connect(peripheral, options: nil)
-            }
+            // Only skip if already connected. For peripherals in .connecting state,
+            // re-issue connect() to kick CoreBluetooth — the pending attempt may be
+            // silently waiting in congested RF. connect() is idempotent on iOS.
+            if peripheral.state == .connected { continue }
+            NSLog("[OmiBle] Re-issuing connect on foreground for \(uuid), state=\(peripheral.state.rawValue)")
+            peripheral.delegate = self
+            centralManager.connect(peripheral, options: nil)
         }
     }
 
