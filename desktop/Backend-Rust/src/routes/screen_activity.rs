@@ -61,8 +61,38 @@ async fn sync_screen_activity(
         let config = state.config.clone();
         let uid = user.uid.clone();
         tokio::spawn(async move {
-            if let Err(e) = upsert_pinecone_vectors(&config, &uid, &rows_with_embeddings).await {
-                tracing::error!("Screen activity Pinecone upsert failed: {}", e);
+            // Retry transient Pinecone failures so embeddings don't silently go missing
+            // from the search index (the Firestore metadata is already written). Log
+            // loudly if it ultimately fails so the gap is observable rather than silent.
+            let vector_count = rows_with_embeddings.len();
+            let mut last_err = None;
+            for attempt in 1..=3u32 {
+                match upsert_pinecone_vectors(&config, &uid, &rows_with_embeddings).await {
+                    Ok(()) => {
+                        last_err = None;
+                        break;
+                    }
+                    Err(e) => {
+                        tracing::warn!(
+                            "Screen activity Pinecone upsert attempt {}/3 failed for uid={}: {}",
+                            attempt,
+                            uid,
+                            e
+                        );
+                        last_err = Some(e);
+                        if attempt < 3 {
+                            tokio::time::sleep(std::time::Duration::from_millis(500 * attempt as u64)).await;
+                        }
+                    }
+                }
+            }
+            if let Some(e) = last_err {
+                tracing::error!(
+                    "Screen activity Pinecone upsert FAILED after 3 attempts for uid={} ({} vectors missing from search index): {}",
+                    uid,
+                    vector_count,
+                    e
+                );
             }
         });
     }
