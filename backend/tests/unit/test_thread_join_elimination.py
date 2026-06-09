@@ -5,17 +5,23 @@ where ThreadPoolExecutor or asyncio.gather can be used instead.
 """
 
 import ast
+import importlib
 import importlib.util
 import os
 import re
 import sys
 import tempfile
 import textwrap
+import types
 from pathlib import Path
 
 import pytest
 
 BACKEND_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+
+def _read_source(filepath: str) -> str:
+    return Path(filepath).read_text(encoding='utf-8')
 
 
 def _load_lint_module():
@@ -29,8 +35,7 @@ def _load_lint_module():
 
 def _count_thread_join_patterns(filepath: str) -> list:
     """Find Thread+join patterns: list-comp joins and direct .join() on thread variables."""
-    with open(filepath) as f:
-        source = f.read()
+    source = _read_source(filepath)
 
     patterns = []
     # Match list-comprehension join patterns like: [t.join() for t in threads]
@@ -79,27 +84,23 @@ class TestThreadPoolExecutorUsed:
 
     def test_rag_uses_shared_executor(self):
         filepath = os.path.join(BACKEND_DIR, 'utils', 'retrieval', 'rag.py')
-        with open(filepath) as f:
-            source = f.read()
-        assert 'critical_executor' in source
+        source = _read_source(filepath)
+        assert 'db_executor' in source
 
     def test_sync_uses_shared_executor_or_gather(self):
         filepath = os.path.join(BACKEND_DIR, 'routers', 'sync.py')
-        with open(filepath) as f:
-            source = f.read()
+        source = _read_source(filepath)
         assert 'critical_executor' in source or 'storage_executor' in source or 'asyncio.gather' in source
 
     def test_app_integrations_uses_threadpool_or_gather(self):
         filepath = os.path.join(BACKEND_DIR, 'utils', 'app_integrations.py')
-        with open(filepath) as f:
-            source = f.read()
+        source = _read_source(filepath)
         assert 'ThreadPoolExecutor' in source or 'asyncio.gather' in source
 
     def test_apps_utils_no_sync_update_antipattern(self):
         """sync_update_persona_prompt antipattern (per-thread event loop) should be gone."""
         filepath = os.path.join(BACKEND_DIR, 'utils', 'apps.py')
-        with open(filepath) as f:
-            source = f.read()
+        source = _read_source(filepath)
         assert 'sync_update_persona_prompt' not in source, (
             "sync_update_persona_prompt antipattern still present — "
             "use asyncio.gather with update_persona_prompt directly"
@@ -112,8 +113,7 @@ class TestAsyncGatherInBackgroundThread:
     def test_apps_update_personas_async_uses_batch_wrapper(self):
         """apps.py update_personas_async must use async _batch() wrapper for gather."""
         filepath = os.path.join(BACKEND_DIR, 'utils', 'apps.py')
-        with open(filepath) as f:
-            source = f.read()
+        source = _read_source(filepath)
         assert 'async def _batch()' in source, "update_personas_async must wrap asyncio.gather in async _batch() helper"
         assert (
             'set_event_loop' in source
@@ -122,8 +122,7 @@ class TestAsyncGatherInBackgroundThread:
     def test_process_conversation_uses_batch_wrapper(self):
         """process_conversation.py _update_personas_async must use async _batch() wrapper."""
         filepath = os.path.join(BACKEND_DIR, 'utils', 'conversations', 'process_conversation.py')
-        with open(filepath) as f:
-            source = f.read()
+        source = _read_source(filepath)
         assert (
             'async def _batch()' in source
         ), "_update_personas_async must wrap asyncio.gather in async _batch() helper"
@@ -169,47 +168,51 @@ class TestAsyncSTTVariants:
 
     def test_async_extract_embedding_exists(self):
         filepath = os.path.join(BACKEND_DIR, 'utils', 'stt', 'speaker_embedding.py')
-        with open(filepath) as f:
-            source = f.read()
+        source = _read_source(filepath)
         assert 'async def async_extract_embedding(' in source
         assert 'async def async_extract_embedding_from_bytes(' in source
 
     def test_async_vad_exists(self):
         filepath = os.path.join(BACKEND_DIR, 'utils', 'stt', 'vad.py')
-        with open(filepath) as f:
-            source = f.read()
+        source = _read_source(filepath)
         assert 'async def async_vad_is_empty(' in source
 
     def test_async_speech_profile_exists(self):
         filepath = os.path.join(BACKEND_DIR, 'utils', 'stt', 'speech_profile.py')
-        with open(filepath) as f:
-            source = f.read()
+        source = _read_source(filepath)
         assert 'async def async_get_speech_profile_matching_predictions(' in source
 
     def test_stt_async_uses_httpx_client(self):
         """Async STT variants should use shared httpx client, not create per-call clients."""
         for filename in ['speaker_embedding.py', 'vad.py', 'speech_profile.py']:
             filepath = os.path.join(BACKEND_DIR, 'utils', 'stt', filename)
-            with open(filepath) as f:
-                source = f.read()
+            source = _read_source(filepath)
             assert 'get_stt_client' in source, f"{filename} should use shared get_stt_client()"
 
     def test_stt_async_offloads_file_io(self):
-        """Async STT variants should offload file reads via run_in_executor."""
+        """Async STT variants should offload file reads via run_blocking."""
         for filename in ['speaker_embedding.py', 'vad.py', 'speech_profile.py']:
             filepath = os.path.join(BACKEND_DIR, 'utils', 'stt', filename)
-            with open(filepath) as f:
-                source = f.read()
-            assert 'run_in_executor' in source, f"{filename} should offload file I/O via run_in_executor"
+            source = _read_source(filepath)
+            assert 'run_blocking(storage_executor' in source, f"{filename} should offload file I/O via storage_executor"
 
 
 class TestAsyncSTTBehavior:
     """Runtime behavior tests for async STT variants."""
 
     @pytest.mark.asyncio
-    async def test_async_extract_embedding_from_bytes_short_audio_rejected(self):
+    async def test_async_extract_embedding_from_bytes_short_audio_rejected(self, monkeypatch):
         """Short audio should raise ValueError before any HTTP call."""
-        from unittest.mock import patch, AsyncMock
+        distance_mod = types.ModuleType('scipy.spatial.distance')
+        distance_mod.cdist = lambda *args, **kwargs: [[0.0]]
+        spatial_mod = types.ModuleType('scipy.spatial')
+        spatial_mod.distance = distance_mod
+        scipy_mod = types.ModuleType('scipy')
+        scipy_mod.spatial = spatial_mod
+        monkeypatch.setitem(sys.modules, 'scipy', scipy_mod)
+        monkeypatch.setitem(sys.modules, 'scipy.spatial', spatial_mod)
+        monkeypatch.setitem(sys.modules, 'scipy.spatial.distance', distance_mod)
+        monkeypatch.delitem(sys.modules, 'utils.stt.speaker_embedding', raising=False)
 
         # 44-byte WAV header with 0 data frames = 0s duration
         short_wav = (
@@ -219,25 +222,39 @@ class TestAsyncSTTBehavior:
         )
 
         with pytest.raises(ValueError, match="Audio too short"):
-            # Import here to avoid module-level side effects
-            import importlib
-
             mod = importlib.import_module('utils.stt.speaker_embedding')
             await mod.async_extract_embedding_from_bytes(short_wav)
 
     @pytest.mark.asyncio
-    async def test_async_vad_local_fallback(self):
+    async def test_async_vad_local_fallback(self, monkeypatch):
         """When hosted VAD URL is unset, async_vad_is_empty should fall back to local VAD."""
         from unittest.mock import patch
+
+        ort_mod = types.ModuleType('onnxruntime')
+
+        class SessionOptions:
+            pass
+
+        class InferenceSession:
+            pass
+
+        class ExecutionMode:
+            ORT_SEQUENTIAL = object()
+
+        ort_mod.SessionOptions = SessionOptions
+        ort_mod.InferenceSession = InferenceSession
+        ort_mod.ExecutionMode = ExecutionMode
+        pydub_mod = types.ModuleType('pydub')
+        pydub_mod.AudioSegment = type('AudioSegment', (), {})
+        monkeypatch.setitem(sys.modules, 'onnxruntime', ort_mod)
+        monkeypatch.setitem(sys.modules, 'pydub', pydub_mod)
+        monkeypatch.delitem(sys.modules, 'utils.stt.vad', raising=False)
 
         with patch.dict(os.environ, {}, clear=False):
             # Ensure HOSTED_VAD_API_URL is not set
             os.environ.pop('HOSTED_VAD_API_URL', None)
-            import importlib
-
             mod = importlib.import_module('utils.stt.vad')
-            # _local_vad should be called via run_in_executor(critical_executor, ...)
-            with patch.object(mod, '_local_vad', return_value=[]) as mock_local:
+            with patch.object(mod, '_run_file_vad', return_value=[]) as mock_local:
                 result = await mod.async_vad_is_empty('/tmp/nonexistent.wav')
                 mock_local.assert_called_once_with('/tmp/nonexistent.wav')
                 assert result is True  # empty segments = True
@@ -252,8 +269,7 @@ class TestLintScript:
 
     def test_lint_script_parses(self):
         filepath = os.path.join(BACKEND_DIR, 'scripts', 'lint_async_blockers.py')
-        with open(filepath) as f:
-            source = f.read()
+        source = _read_source(filepath)
         # Should parse without errors
         ast.parse(source)
 
