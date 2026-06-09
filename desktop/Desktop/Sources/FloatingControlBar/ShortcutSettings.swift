@@ -320,6 +320,13 @@ class ShortcutSettings: ObservableObject {
         didSet { UserDefaults.standard.set(pttSoundsEnabled, forKey: "shortcut_pttSoundsEnabled") }
     }
 
+    /// When true, holding push-to-talk mutes any audio playing on the default output
+    /// device (e.g. music) for the duration of dictation, then restores it on release —
+    /// like Wispr Flow. The track keeps playing silently rather than being paused.
+    @Published var pttMuteSystemAudio: Bool {
+        didSet { UserDefaults.standard.set(pttMuteSystemAudio, forKey: "shortcut_pttMuteSystemAudio") }
+    }
+
     /// Selected AI model for Ask Omi.
     @Published var selectedModel: String {
         didSet { UserDefaults.standard.set(selectedModel, forKey: "shortcut_selectedModel") }
@@ -530,6 +537,7 @@ class ShortcutSettings: ObservableObject {
         self.doubleTapForLock = UserDefaults.standard.object(forKey: "shortcut_doubleTapForLock") as? Bool ?? true
         self.solidBackground = UserDefaults.standard.object(forKey: "shortcut_solidBackground") as? Bool ?? false
         self.pttSoundsEnabled = UserDefaults.standard.object(forKey: "shortcut_pttSoundsEnabled") as? Bool ?? true
+        self.pttMuteSystemAudio = UserDefaults.standard.object(forKey: "shortcut_pttMuteSystemAudio") as? Bool ?? true
         self.selectedModel = ModelQoS.Claude.sanitizedSelection(
             UserDefaults.standard.string(forKey: "shortcut_selectedModel")
         )
