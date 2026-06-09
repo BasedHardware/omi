@@ -1,5 +1,6 @@
 {
   "unreleased": [
+    "More reliable AI: memory imports retry on failure, voice replies fall back to the system voice, and transcription/assistants fail over instead of dropping",
     "Push-to-talk now mutes music and other audio while you talk and restores it on release, instead of leaving it playing"
   ],
   "releases": [
