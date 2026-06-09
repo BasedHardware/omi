@@ -576,7 +576,7 @@ def extract_action_items(
         return []
 
 
-def _local_started_at_iso(started_at: datetime, tz: str) -> str:
+def _local_started_at_iso(started_at: datetime, tz: Optional[str]) -> str:
     """Render the capture time as the user's local wall-clock for prompt date context (#4773).
 
     The LLM is unreliable at converting UTC to the user's timezone, which mislabels the time of day
