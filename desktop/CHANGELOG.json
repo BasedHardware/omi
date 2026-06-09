@@ -1,6 +1,7 @@
 {
   "unreleased": [
-    "Improved chat and voice reliability \u2014 the backend now retries transient AI provider errors instead of failing the request"
+    "Improved chat and voice reliability \u2014 the backend now retries transient AI provider errors instead of failing the request",
+    "Push-to-talk now mutes music and other audio while you talk and restores it on release, instead of leaving it playing"
   ],
   "releases": [
     {
