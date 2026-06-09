@@ -1,8 +1,13 @@
 {
-  "unreleased": [
-    "More reliable AI: memory imports retry on failure, voice replies fall back to the system voice, and transcription/assistants fail over instead of dropping"
-  ],
+  "unreleased": [],
   "releases": [
+    {
+      "version": "0.11.458",
+      "date": "2026-06-09",
+      "changes": [
+        "More reliable AI: memory imports retry on failure, voice replies fall back to the system voice, and transcription/assistants fail over instead of dropping"
+      ]
+    },
     {
       "version": "0.11.457",
       "date": "2026-06-09",
