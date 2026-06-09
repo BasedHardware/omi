@@ -30,6 +30,7 @@ from database.webhook_health import (
 from database.chat import add_app_message, get_app_messages
 from database.goals import get_user_goals
 from database.notifications import get_mentor_notification_frequency
+from database.users import get_user_language_preference
 from utils.subscription import is_trial_paywalled
 from database.redis_db import (
     get_generic_cache,
@@ -428,6 +429,14 @@ def _process_mentor_proactive_notification(uid: str, conversation_messages: list
     except Exception as e:
         logger.error(f"mentor_proactive past_conversations_failed uid={uid} error={e}")
 
+    # Resolve the user's output language once so the notification is generated in it, not English
+    # (the daily summary already respects this setting) (#5214).
+    try:
+        output_language = get_user_language_preference(uid) or 'en'
+    except Exception as e:
+        logger.error(f"mentor_proactive language_lookup_failed uid={uid} error={e}")
+        output_language = 'en'
+
     # ── Step 2: Generate ─────────────────────────────────────────────────
     try:
         with track_usage(uid, Features.PROACTIVE_NOTIFICATION):
@@ -440,6 +449,7 @@ def _process_mentor_proactive_notification(uid: str, conversation_messages: list
                 recent_notifications=recent_notifications,
                 frequency=frequency,
                 gate_reasoning=relevance.reasoning,
+                output_language=output_language,
             )
     except Exception as e:
         logger.error(f"mentor_proactive generate_failed uid={uid} error={e}")
@@ -466,6 +476,7 @@ def _process_mentor_proactive_notification(uid: str, conversation_messages: list
                 draft_reasoning=draft.reasoning,
                 current_messages=conversation_messages,
                 goals=goals,
+                output_language=output_language,
             )
     except Exception as e:
         logger.error(f"mentor_proactive critic_failed uid={uid} error={e}")
