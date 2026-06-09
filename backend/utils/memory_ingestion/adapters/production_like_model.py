@@ -1,9 +1,14 @@
 from __future__ import annotations
 
 from collections import defaultdict
+import os
 from typing import Iterable
 
+from langchain_core.output_parsers import PydanticOutputParser
+from langchain_openai import ChatOpenAI
 from models.transcript_segment import TranscriptSegment
+from pydantic import BaseModel, Field
+from utils.prompts import extract_memories_prompt
 from utils.memory_ingestion.ids import StableIdFactory
 from utils.memory_ingestion.models import (
     ActorDescriptor,
@@ -20,12 +25,24 @@ from utils.memory_ingestion.models import (
 from utils.memory_ingestion.pipeline import MemoryModelClient
 
 
+class ProductionLikeMemory(BaseModel):
+    content: str
+    category: str = "system"
+    tags: list[str] = Field(default_factory=list)
+    visibility: str = "private"
+    headline: str | None = None
+
+
+class ProductionLikeMemories(BaseModel):
+    facts: list[ProductionLikeMemory] = Field(default_factory=list)
+
+
 class ProductionLikeMemoryModelClient(MemoryModelClient):
     """Runs Omi's current production memory extractor, then maps results into frames.
 
     This intentionally keeps durable application out of the core pipeline. It reuses the
-    current production prompt/model path (`new_memories_extractor`) with caller-provided
-    user state instead of fetching Firestore state.
+    current production prompt/model with caller-provided user state instead of fetching
+    Firestore state or writing usage telemetry.
     """
 
     def __init__(self, *, max_events_per_call: int = 250):
@@ -45,10 +62,7 @@ class ProductionLikeMemoryModelClient(MemoryModelClient):
         for conversation_id, grouped_events in _events_by_conversation(events).items():
             for chunk_index, event_chunk in enumerate(_chunks(grouped_events, self.max_events_per_call)):
                 segments = [_to_transcript_segment(event, index) for index, event in enumerate(event_chunk)]
-                from utils.llm.memories import new_memories_extractor
-
-                memories = new_memories_extractor(
-                    uid=pipeline_input.actor.user_id if pipeline_input.actor else "offline",
+                memories = _extract_memories_with_production_prompt(
                     segments=segments,
                     user_name=user_name,
                     memories_str=memories_str,
@@ -83,7 +97,7 @@ class ProductionLikeMemoryModelClient(MemoryModelClient):
                             level="none",
                             categories=(
                                 ["ordinary_personal_fact"]
-                                if memory.category == MemoryCategory.system
+                                if _category_value(memory.category) == "system"
                                 else ["ordinary_work_fact"]
                             ),
                             auto_store_allowed=True,
@@ -133,6 +147,41 @@ def _memories_str(user_name: str, pipeline_input: MemoryPipelineInput) -> str:
     if not lines:
         return f"you do not yet know durable facts about {user_name}.\n"
     return f"you already know the following facts about {user_name}:\n" + "\n".join(lines) + "\n"
+
+
+def _extract_memories_with_production_prompt(
+    *,
+    segments: list[TranscriptSegment],
+    user_name: str,
+    memories_str: str,
+    language: str | None,
+) -> list[ProductionLikeMemory]:
+    content = TranscriptSegment.segments_as_string(segments, user_name=user_name, people=[])
+    if not content or len(content) < 25:
+        return []
+    parser = PydanticOutputParser(pydantic_object=ProductionLikeMemories)
+    chain = extract_memories_prompt | _memory_llm() | parser
+    response: ProductionLikeMemories = chain.invoke(
+        {
+            "user_name": user_name,
+            "conversation": content,
+            "memories_str": memories_str,
+            "language_instruction": _language_instruction(language),
+            "format_instructions": parser.get_format_instructions(),
+        }
+    )
+    return response.facts
+
+
+def _memory_llm():
+    model = os.environ.get("OMI_MEMORY_PIPELINE_MODEL", "gpt-4.1-mini")
+    return ChatOpenAI(model=model, request_timeout=120, max_retries=1)
+
+
+def _language_instruction(language: str | None) -> str:
+    if language and language != "en":
+        return f"Write all extracted memories/learnings in {language}. Do not write them in English."
+    return "Write all extracted memories/learnings in English."
 
 
 def _events_by_conversation(events: list[RawContextEvent]) -> dict[str, list[RawContextEvent]]:
