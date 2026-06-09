@@ -135,6 +135,8 @@
     "systemDefault": "Domyślny systemowy",
     "planAndUsage": "Plan i wykorzystanie",
     "offlineSync": "Synchronizacja offline",
+    "autoSync": "Automatyczna synchronizacja",
+    "autoSyncDescription": "Automatycznie synchronizuj nagrania offline po połączeniu urządzenia",
     "deviceSettings": "Ustawienia urządzenia",
     "integrations": "Integracje",
     "feedbackBug": "Opinia / Błąd",

@@ -135,6 +135,8 @@
     "systemDefault": "Per defecte del sistema",
     "planAndUsage": "Pla i ús",
     "offlineSync": "Sincronització fora de línia",
+    "autoSync": "Sincronització automàtica",
+    "autoSyncDescription": "Sincronitza automàticament els enregistraments fora de línia quan el dispositiu es connecti",
     "deviceSettings": "Configuració del dispositiu",
     "integrations": "Integracions",
     "feedbackBug": "Comentaris / Error",

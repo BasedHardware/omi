@@ -430,6 +430,12 @@ class AppLocalizationsTa extends AppLocalizations {
   String get offlineSync => 'ஆப்லைன் ஒத்திசை';
 
   @override
+  String get autoSync => 'தானியங்கி ஒத்திசைவு';
+
+  @override
+  String get autoSyncDescription => 'உங்கள் சாதனம் இணைக்கப்படும்போது ஆஃப்லைன் பதிவுகளைத் தானாகவே ஒத்திசைக்கவும்';
+
+  @override
   String get deviceSettings => 'சாதன அமைப்புகள்';
 
   @override

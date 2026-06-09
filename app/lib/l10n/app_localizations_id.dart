@@ -429,6 +429,12 @@ class AppLocalizationsId extends AppLocalizations {
   String get offlineSync => 'Sinkronisasi luring';
 
   @override
+  String get autoSync => 'Sinkronisasi otomatis';
+
+  @override
+  String get autoSyncDescription => 'Sinkronkan rekaman offline secara otomatis saat perangkat Anda terhubung';
+
+  @override
   String get deviceSettings => 'Pengaturan Perangkat';
 
   @override

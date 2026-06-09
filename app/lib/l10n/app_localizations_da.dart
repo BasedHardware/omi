@@ -429,6 +429,12 @@ class AppLocalizationsDa extends AppLocalizations {
   String get offlineSync => 'Offline-synkronisering';
 
   @override
+  String get autoSync => 'Automatisk synkronisering';
+
+  @override
+  String get autoSyncDescription => 'Synkroniser offline-optagelser automatisk, når din enhed opretter forbindelse';
+
+  @override
   String get deviceSettings => 'Enhedsindstillinger';
 
   @override

@@ -1402,6 +1402,8 @@
     "off": "Išj.",
     "offline": "Neprisijungęs",
     "offlineSync": "Sinchronizavimas neprisijungus",
+    "autoSync": "Automatinis sinchronizavimas",
+    "autoSyncDescription": "Automatiškai sinchronizuoti neprisijungus įrašytus įrašus, kai prijungiamas įrenginys",
     "ok": "Gerai",
     "olderDeviceDetected": "Aptiktas senesnis įrenginys",
     "omiApiKeys": "Omi API raktai",

@@ -135,6 +135,8 @@
     "systemDefault": "सिस्टम डिफ़ॉल्ट",
     "planAndUsage": "योजना और उपयोग",
     "offlineSync": "ऑफलाइन सिंक",
+    "autoSync": "स्वतः सिंक",
+    "autoSyncDescription": "जब आपका डिवाइस कनेक्ट हो, तो ऑफ़लाइन रिकॉर्डिंग अपने आप सिंक करें",
     "deviceSettings": "डिवाइस सेटिंग्स",
     "integrations": "एकीकरण",
     "feedbackBug": "प्रतिक्रिया / बग",

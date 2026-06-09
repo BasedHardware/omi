@@ -554,6 +554,8 @@
         "description": "Plan and usage menu item"
     },
     "offlineSync": "Sinhroniziranje brez povezave",
+    "autoSync": "Samodejna sinhronizacija",
+    "autoSyncDescription": "Samodejno sinhroniziraj posnetke brez povezave, ko se naprava poveže",
     "@offlineSync": {
         "description": "Page title for offline sync"
     },

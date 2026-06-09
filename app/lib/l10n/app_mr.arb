@@ -554,6 +554,8 @@
         "description": "Plan and usage menu item"
     },
     "offlineSync": "ऑफलाइन सिंक करा",
+    "autoSync": "स्वयंचलित सिंक",
+    "autoSyncDescription": "तुमचे डिव्हाइस कनेक्ट झाल्यावर ऑफलाइन रेकॉर्डिंग आपोआप सिंक करा",
     "@offlineSync": {
         "description": "Page title for offline sync"
     },

@@ -554,6 +554,8 @@
         "description": "Plan and usage menu item"
     },
     "offlineSync": "Offline Sync",
+    "autoSync": "Awtomatikong pag-sync",
+    "autoSyncDescription": "Awtomatikong i-sync ang mga offline na recording kapag nakakonekta ang iyong device",
     "@offlineSync": {
         "description": "Page title for offline sync"
     },

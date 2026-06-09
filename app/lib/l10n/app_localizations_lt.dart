@@ -429,6 +429,12 @@ class AppLocalizationsLt extends AppLocalizations {
   String get offlineSync => 'Sinchronizavimas neprisijungus';
 
   @override
+  String get autoSync => 'Automatinis sinchronizavimas';
+
+  @override
+  String get autoSyncDescription => 'Automatiškai sinchronizuoti neprisijungus įrašytus įrašus, kai prijungiamas įrenginys';
+
+  @override
   String get deviceSettings => 'Įrenginio nustatymai';
 
   @override

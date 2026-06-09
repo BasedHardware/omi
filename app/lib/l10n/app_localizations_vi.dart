@@ -429,6 +429,12 @@ class AppLocalizationsVi extends AppLocalizations {
   String get offlineSync => 'Đồng bộ Ngoại tuyến';
 
   @override
+  String get autoSync => 'Tự động đồng bộ';
+
+  @override
+  String get autoSyncDescription => 'Tự động đồng bộ các bản ghi ngoại tuyến khi thiết bị của bạn kết nối';
+
+  @override
   String get deviceSettings => 'Cài đặt thiết bị';
 
   @override

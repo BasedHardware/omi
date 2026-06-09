@@ -422,6 +422,12 @@ class AppLocalizationsZh extends AppLocalizations {
   String get offlineSync => '离线同步';
 
   @override
+  String get autoSync => '自动同步';
+
+  @override
+  String get autoSyncDescription => '设备连接时自动同步离线录音';
+
+  @override
   String get deviceSettings => '设备设置';
 
   @override

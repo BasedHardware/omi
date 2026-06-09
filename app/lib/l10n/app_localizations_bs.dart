@@ -429,6 +429,12 @@ class AppLocalizationsBs extends AppLocalizations {
   String get offlineSync => 'Offline sinhronizovanje';
 
   @override
+  String get autoSync => 'Automatska sinkronizacija';
+
+  @override
+  String get autoSyncDescription => 'Automatski sinkronizuj offline snimke kada se vaš uređaj poveže';
+
+  @override
   String get deviceSettings => 'Postavke uređaja';
 
   @override

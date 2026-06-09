@@ -135,6 +135,8 @@
     "systemDefault": "Systemstandard",
     "planAndUsage": "Plan och användning",
     "offlineSync": "Offlinesynkronisering",
+    "autoSync": "Automatisk synkronisering",
+    "autoSyncDescription": "Synkronisera offlineinspelningar automatiskt när din enhet ansluter",
     "deviceSettings": "Enhetsinställningar",
     "integrations": "Integrationer",
     "feedbackBug": "Återkoppling / Bugg",

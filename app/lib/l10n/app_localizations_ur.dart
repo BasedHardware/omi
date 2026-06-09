@@ -428,6 +428,12 @@ class AppLocalizationsUr extends AppLocalizations {
   String get offlineSync => 'آفلائن ہم وقت';
 
   @override
+  String get autoSync => 'خودکار مطابقت';
+
+  @override
+  String get autoSyncDescription => 'جب آپ کا آلہ منسلک ہو تو آف لائن ریکارڈنگز کو خودکار طور پر سنک کریں';
+
+  @override
   String get deviceSettings => 'ڈیوائس کی ترتیبات';
 
   @override

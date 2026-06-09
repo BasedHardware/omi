@@ -700,6 +700,19 @@ class SafeModulateSocket(STTSocket):
             self._mark_dead(f'ws recv error: {e}')
 
     def _handle_partial_utterance(self, msg: dict):
+        # Modulate sends cumulative partial_utterance messages during streaming
+        # (e.g., "He", "He could", "He could hardly"...) but these are preview-only.
+        # We buffer them here and only forward the final `utterance` via _handle_utterance.
+        #
+        # Limitation: the user sees no live text until the utterance finalizes
+        # (after the speech segment completes). For continuous speech, this can be
+        # the entire clip duration. Modulate has no endpointing config to control this.
+        # Deepgram uses endpointing=300ms to deliver finalized chunks mid-stream.
+        #
+        # To add live preview from partials, implement delta extraction (Option C-lite):
+        # track committed words, emit only new stable words as incremental segments.
+        # This would require careful handling of Modulate's occasional mid-partial
+        # text revisions and start_ms shifts.
         text = msg.get('text', '').strip()
         if not text:
             return

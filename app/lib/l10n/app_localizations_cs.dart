@@ -429,6 +429,12 @@ class AppLocalizationsCs extends AppLocalizations {
   String get offlineSync => 'Offline synchronizace';
 
   @override
+  String get autoSync => 'Automatická synchronizace';
+
+  @override
+  String get autoSyncDescription => 'Automaticky synchronizovat offline nahrávky při připojení zařízení';
+
+  @override
   String get deviceSettings => 'Nastavení zařízení';
 
   @override

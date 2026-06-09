@@ -429,6 +429,12 @@ class AppLocalizationsFa extends AppLocalizations {
   String get offlineSync => 'همگام‌سازی آفلاین';
 
   @override
+  String get autoSync => 'همگام‌سازی خودکار';
+
+  @override
+  String get autoSyncDescription => 'هنگام اتصال دستگاه، ضبط‌های آفلاین به‌طور خودکار همگام‌سازی شوند';
+
+  @override
   String get deviceSettings => 'تنظیمات دستگاه';
 
   @override

@@ -428,6 +428,12 @@ class AppLocalizationsPl extends AppLocalizations {
   String get offlineSync => 'Synchronizacja offline';
 
   @override
+  String get autoSync => 'Automatyczna synchronizacja';
+
+  @override
+  String get autoSyncDescription => 'Automatycznie synchronizuj nagrania offline po połączeniu urządzenia';
+
+  @override
   String get deviceSettings => 'Ustawienia urządzenia';
 
   @override

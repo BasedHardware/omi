@@ -218,11 +218,13 @@ impl RedisService {
     // Issue #6098 L2
     // ============================================================================
 
-    /// Check and record a Gemini API request for rate limiting.
+    /// Check and record an API request for rate limiting under the given key
+    /// namespace (e.g. "gemini_rl" or "chat_rl"), keeping each budget isolated.
     /// Uses a Lua script for atomic burst (sorted set) + daily (counter) in one round-trip.
     /// Returns (daily_count, burst_count) so the caller can decide Allow/Degrade/Reject.
-    pub async fn check_gemini_rate_limit(
+    pub async fn check_rate_limit(
         &self,
+        key_prefix: &str,
         uid: &str,
         _burst_limit: usize,
         burst_window_secs: u64,
@@ -233,8 +235,8 @@ impl RedisService {
         let day_ordinal = (now_ms / 86_400_000).to_string();
         let cutoff_ms = now_ms - (burst_window_secs as i64 * 1000);
 
-        let burst_key = format!("gemini_rl:{}:burst", uid);
-        let daily_key = format!("gemini_rl:{}:daily:{}", uid, day_ordinal);
+        let burst_key = format!("{}:{}:burst", key_prefix, uid);
+        let daily_key = format!("{}:{}:daily:{}", key_prefix, uid, day_ordinal);
 
         // Lua script: increment daily first (for unique member), prune burst, add, count.
         // KEYS[1] = burst_key, KEYS[2] = daily_key

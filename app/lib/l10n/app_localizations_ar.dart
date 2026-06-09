@@ -425,6 +425,12 @@ class AppLocalizationsAr extends AppLocalizations {
   String get offlineSync => 'المزامنة دون اتصال';
 
   @override
+  String get autoSync => 'المزامنة التلقائية';
+
+  @override
+  String get autoSyncDescription => 'مزامنة التسجيلات دون اتصال تلقائيًا عند توصيل جهازك';
+
+  @override
   String get deviceSettings => 'إعدادات الجهاز';
 
   @override

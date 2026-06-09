@@ -422,6 +422,12 @@ class AppLocalizationsJa extends AppLocalizations {
   String get offlineSync => 'オフライン同期';
 
   @override
+  String get autoSync => '自動同期';
+
+  @override
+  String get autoSyncDescription => 'デバイスの接続時にオフライン録音を自動的に同期します';
+
+  @override
   String get deviceSettings => 'デバイス設定';
 
   @override
