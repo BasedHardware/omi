@@ -247,7 +247,11 @@ actor GeminiClient {
     }
   }
 
-  init(apiKey: String? = nil, model: String = ModelQoS.Gemini.proactive) throws {
+  /// Optional model to retry with if the primary model keeps failing transiently
+  /// (e.g. Pro overloaded → fall back to Flash). Nil or equal-to-primary = no fallback.
+  private let fallbackModel: String?
+
+  init(apiKey: String? = nil, model: String = ModelQoS.Gemini.proactive, fallbackModel: String? = nil) throws {
     // BREAKING CHANGE (issue #5861): apiKey parameter is ignored.
     // All Gemini requests now route through the backend proxy which supplies
     // the key server-side. Defaults to production when OMI_DESKTOP_API_URL is absent
@@ -256,6 +260,7 @@ actor GeminiClient {
       throw GeminiClientError.missingAPIKey
     }
     self.model = model
+    self.fallbackModel = fallbackModel
   }
 
   /// Get Firebase auth header for proxy requests
@@ -264,9 +269,10 @@ actor GeminiClient {
     return try await authService.getAuthHeader()
   }
 
-  /// Build proxy URL for a Gemini model action
-  private func proxyURL(action: String) -> URL {
-    URL(string: "\(Self.proxyBaseURL)v1/proxy/gemini/models/\(model):\(action)")!
+  /// Build proxy URL for a Gemini model action. Pass `modelOverride` to use a model
+  /// other than the instance default (e.g. the fallback model).
+  private func proxyURL(action: String, modelOverride: String? = nil) -> URL {
+    URL(string: "\(Self.proxyBaseURL)v1/proxy/gemini/models/\(modelOverride ?? model):\(action)")!
   }
 
 
@@ -795,9 +801,16 @@ extension GeminiClient {
     forceToolCall: Bool = false,
     thinkingBudget: Int = 0
   ) async throws -> ToolChatResult {
+    // Try the primary model first; if it keeps failing transiently, fall back to the
+    // secondary model (e.g. Pro overloaded → Flash) before giving up.
+    let models: [String] = {
+      if let fb = fallbackModel, fb != model { return [model, fb] }
+      return [model]
+    }()
     let maxRetries = 2
     var lastError: Error?
 
+    for (modelIndex, activeModel) in models.enumerated() {
     for attempt in 0...maxRetries {
       do {
         // Wrap JSON serialization in autoreleasepool (contents may include
@@ -815,7 +828,7 @@ extension GeminiClient {
               parts: [.init(text: systemPrompt)]
             ),
             generationConfig: GeminiImageToolRequest.GenerationConfig(
-              thinkingConfig: ThinkingConfig(thinkingBudget: max(thinkingBudget, ThinkingConfig.minimumBudget(for: model)))
+              thinkingConfig: ThinkingConfig(thinkingBudget: max(thinkingBudget, ThinkingConfig.minimumBudget(for: activeModel)))
             ),
             tools: tools,
             toolConfig: toolConfig
@@ -824,7 +837,7 @@ extension GeminiClient {
           return try JSONEncoder().encode(request)
         }
 
-        let url = proxyURL(action: "generateContent")
+        let url = proxyURL(action: "generateContent", modelOverride: activeModel)
         var urlRequest = URLRequest(url: url)
         urlRequest.httpMethod = "POST"
         urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
@@ -873,10 +886,17 @@ extension GeminiClient {
       } catch {
         lastError = error
         guard attempt < maxRetries && isTransientError(error) else {
+          // Primary model's retries exhausted — fall back to the next model (e.g. Pro→Flash)
+          // if the failure is transient and a fallback model remains.
+          if modelIndex < models.count - 1 && isTransientError(error) {
+            log("GeminiClient: model \(activeModel) failing transiently, falling back to \(models[modelIndex + 1])")
+            break
+          }
           throw error
         }
         await retryBackoff(attempt: attempt, error: error)
       }
+    }
     }
 
     throw lastError!
