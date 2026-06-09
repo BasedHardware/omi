@@ -12,7 +12,7 @@ import pytest
 
 def _read_transcribe_source():
     path = os.path.join(os.path.dirname(__file__), '..', '..', 'routers', 'transcribe.py')
-    with open(path, 'r') as f:
+    with open(path, 'r', encoding='utf-8') as f:
         return f.read()
 
 
@@ -76,11 +76,13 @@ class TestDgUsageBatchingBehavior:
             'database.user_usage',
             'database.conversations',
             'firebase_admin',
+            'firebase_admin.auth',
             'firebase_admin.messaging',
         ]:
             if mod_name not in sys.modules:
                 sys.modules[mod_name] = ModuleType(mod_name)
 
+        sys.modules['firebase_admin'].auth = sys.modules['firebase_admin.auth']
         sys.modules['database._client'].db = MagicMock()
         sys.modules['database.redis_db'].r = MagicMock()
 
