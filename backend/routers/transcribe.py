@@ -375,7 +375,7 @@ async def _stream_handler(
         translation_language = None
     elif stt_language == 'multi':
         if language == "multi":
-            user_language_preference = user_db.get_user_language_preference(uid)
+            user_language_preference = await run_blocking(db_executor, user_db.get_user_language_preference, uid)
             if user_language_preference:
                 translation_language = user_language_preference
         else:
@@ -550,7 +550,9 @@ async def _stream_handler(
                 words_transcribed_since_last_record = 0  # reset
 
                 if transcription_seconds > 0 or words_to_record > 0 or speech_seconds_delta > 0:
-                    record_usage(
+                    await run_blocking(
+                        db_executor,
+                        record_usage,
                         uid,
                         transcription_seconds=transcription_seconds,
                         words_transcribed=words_to_record,
@@ -618,7 +620,9 @@ async def _stream_handler(
                 )
             )
             if needs_refresh:
-                remaining_seconds_cache = get_remaining_transcription_seconds(uid, source=source)
+                remaining_seconds_cache = await run_blocking(
+                    db_executor, get_remaining_transcription_seconds, uid, source=source
+                )
                 remaining_seconds_cache_ts = now
                 remaining_seconds_cache_initialized = True
             elif remaining_seconds_cache is not None and transcription_seconds > 0:
@@ -660,7 +664,7 @@ async def _stream_handler(
                     freemium_threshold_sent = False
 
             # Silence notification logic for basic plan users
-            user_subscription = user_db.get_user_valid_subscription(uid)
+            user_subscription = await run_blocking(db_executor, user_db.get_user_valid_subscription, uid)
             if not user_subscription or user_subscription.plan == PlanType.basic:
                 time_of_last_words = last_transcript_time or first_audio_byte_timestamp
                 if (
@@ -746,13 +750,13 @@ async def _stream_handler(
     )
 
     # Validate user
-    if not user_db.is_exists_user(uid):
+    if not await run_blocking(db_executor, user_db.is_exists_user, uid):
         websocket_active = False
         await websocket.close(code=1008, reason="Bad user")
         return
 
     # Create or get conversation ID early for audio chunk storage
-    private_cloud_sync_enabled = user_db.get_user_private_cloud_sync_enabled(uid)
+    private_cloud_sync_enabled = await run_blocking(db_executor, user_db.get_user_private_cloud_sync_enabled, uid)
 
     # Enable speaker identification when user has speech profile or private cloud sync
     has_speech_profile = False
@@ -2822,7 +2826,9 @@ async def _stream_handler(
                 dg_usage_ms_pending = 0
 
             if transcription_seconds > 0 or words_to_record > 0 or speech_seconds_delta > 0:
-                record_usage(
+                await run_blocking(
+                    db_executor,
+                    record_usage,
                     uid,
                     transcription_seconds=transcription_seconds,
                     words_transcribed=words_to_record,
