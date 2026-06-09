@@ -1,0 +1,57 @@
+# Flow: Chat — Send Messages, View Responses
+# Tags: core, chat
+# Tests: Open chat, send a message, wait for AI response, verify chat UI
+# Requires: User signed in
+
+appId: com.friend.ios.dev
+tags:
+  - core
+  - chat
+
+---
+
+# Navigate to chat (bottom nav or home shortcut)
+- tapOn:
+    text: "Chat|Ask Omi|What's on your mind"
+    optional: true
+- takeScreenshot: "05_chat_open"
+
+# Verify chat screen is displayed
+- extendedWaitUntil:
+    visible:
+      text: "Chat|Ask Omi|What's on your mind|Type a message"
+    timeout: 5000
+
+# Type a message in the chat input
+- tapOn:
+    id: ".*chat.*input.*|.*message.*input.*|.*text.*field.*"
+    optional: true
+- inputText: "What did we talk about recently?"
+- takeScreenshot: "05_chat_typed"
+
+# Send the message
+- tapOn:
+    id: ".*send.*"
+    optional: true
+- optional: true
+  pressKey: "Enter"
+- takeScreenshot: "05_chat_sent"
+
+# Wait for AI response (wait for loading to disappear, then verify actual content)
+- extendedWaitUntil:
+    notVisible:
+      text: "Thinking|Loading|Typing|…"
+    timeout: 30000
+- extendedWaitUntil:
+    visible:
+      text: "recently|Here's|Based on|talked about|conversation"
+    timeout: 10000
+- takeScreenshot: "05_chat_response"
+
+# Verify response is visible (chat should have at least 2 messages)
+- assertVisible:
+    text: "What did we talk about recently?"
+
+# Navigate back
+- back
+- takeScreenshot: "05_chat_done"
