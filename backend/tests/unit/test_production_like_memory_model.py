@@ -119,3 +119,14 @@ def test_prodlike_unknown_speaker_user_memory_can_auto_accept(monkeypatch):
     assert output.event_frames[0].sensitivity.review_required is False
     assert output.event_frames[0].uncertainty_reasons == ["speaker_uncertain"]
     assert output.decisions[0].action == "create_memory"
+
+
+def test_prodlike_speculative_memory_routes_to_review(monkeypatch):
+    _patch_extractor(monkeypatch, "User might switch to Assembly for transcription.")
+
+    output = _run(_input(_event("I might switch to Assembly for transcription.")))
+
+    assert output.event_frames[0].confidence == "medium"
+    assert output.event_frames[0].uncertainty_reasons == ["inferred_not_stated"]
+    assert output.event_frames[0].sensitivity.review_required is True
+    assert output.decisions[0].action == "route_to_review"
