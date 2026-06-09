@@ -105,64 +105,26 @@ enum ConferencingApps {
         return false
     }
 
-    /// Whether a conferencing call is currently active.
-    ///
-    /// - **Native call apps** (Zoom, Teams, FaceTime, Webex, …): detected by **active microphone
-    ///   use** — i.e. actually *in a call*, not merely open. Uses the macOS 14.4+ CoreAudio process
-    ///   API and needs no Screen Recording permission. A backgrounded-but-idle call app is not
-    ///   using the mic, so it does not count as a meeting.
-    /// - **Browser-based calls** (Google Meet, Teams web): detected by the browser's call **window
-    ///   title**, which requires Screen Recording permission (without it, browser calls aren't
-    ///   detected; native calls still are).
-    static func isMeetingActiveNow() -> Bool {
-        meetingSignal().inCall
-    }
-
-    /// A snapshot of conferencing-related audio activity, consumed by `MeetingDetector` (including its
-    /// "sticky" logic that keeps a *muted* browser call alive via continued browser audio output).
-    struct MeetingSignal {
-        /// High-confidence "you're in a call": a native call app on the mic, a browser on the mic,
-        /// or a browser call window title (the latter needs Screen Recording permission).
-        var inCall: Bool
-        /// The current signal involves a browser — so it's eligible for sticky keep-alive.
-        var browserInvolved: Bool
-        /// A browser is currently playing audio output (used to keep a muted browser call alive).
-        var browserAudioOutput: Bool
-
-        static let none = MeetingSignal(
-            inCall: false, browserInvolved: false, browserAudioOutput: false)
-    }
-
-    /// Compute the current `MeetingSignal` from audio-process activity (macOS 14.4+) plus browser
-    /// call windows. Native call apps keep the mic open even when muted; a browser drops mic input
-    /// when muted, which is why `browserAudioOutput` is exposed for the detector's sticky logic.
-    static func meetingSignal() -> MeetingSignal {
-        var nativeMic = false
-        var browserMic = false
-        var browserOutput = false
-        if #available(macOS 14.4, *) {
-            for process in audioProcessObjects() {
-                let input = processIsRunningInput(process)
-                let output = processIsRunningOutput(process)
-                guard input || output, let bundleID = processBundleID(process) else { continue }
-                if isNativeCallApp(bundleID: bundleID) {
-                    if input { nativeMic = true }
-                } else if isBrowserBundleID(bundleID) {
-                    if input { browserMic = true }
-                    if output { browserOutput = true }
-                }
+    /// True if a known conferencing app — a native call app OR a web browser — is currently using
+    /// the microphone, i.e. *in a call* (not merely open). Uses the macOS 14.4+ CoreAudio process
+    /// API; needs no Screen Recording permission. Native call apps keep the mic open even when
+    /// muted; a browser drops mic input when muted, so a muted browser call is detected only via the
+    /// window-title fallback (`browserCallWindowPresent()`, which needs Screen Recording permission).
+    @available(macOS 14.4, *)
+    static func callAppIsUsingMicrophone() -> Bool {
+        for process in audioProcessObjects() where processIsRunningInput(process) {
+            guard let bundleID = processBundleID(process) else { continue }
+            if isNativeCallApp(bundleID: bundleID) || isBrowserBundleID(bundleID) {
+                return true
             }
         }
-        let windowCall = browserCallWindowPresent()
-        return MeetingSignal(
-            inCall: nativeMic || browserMic || windowCall,
-            browserInvolved: browserMic || windowCall,
-            browserAudioOutput: browserOutput)
+        return false
     }
 
     /// True if an on-screen browser window's title indicates a call. Window titles require Screen
     /// Recording permission; without it this returns false (native-app calls are still detected).
-    private static func browserCallWindowPresent() -> Bool {
+    /// This is the fallback that catches a *muted* browser call (where mic input has dropped).
+    static func browserCallWindowPresent() -> Bool {
         guard
             let windows = CGWindowListCopyWindowInfo(
                 [.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID) as? [[String: Any]]
@@ -208,11 +170,6 @@ enum ConferencingApps {
     @available(macOS 14.4, *)
     private static func processIsRunningInput(_ process: AudioObjectID) -> Bool {
         processBoolProperty(process, kAudioProcessPropertyIsRunningInput)
-    }
-
-    @available(macOS 14.4, *)
-    private static func processIsRunningOutput(_ process: AudioObjectID) -> Bool {
-        processBoolProperty(process, kAudioProcessPropertyIsRunningOutput)
     }
 
     @available(macOS 14.4, *)
