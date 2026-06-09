@@ -24,6 +24,7 @@ pytest tests/unit/test_parakeet_stream_session.py -v
 pytest tests/unit/test_memory_leak_buffers.py -v
 pytest tests/unit/test_mcp_search_memories.py -v
 pytest tests/unit/test_memory_temporal_brain.py -v
+pytest tests/unit/test_memory_ingestion_pipeline.py -v
 pytest tests/unit/test_llm_usage_tracker.py -v
 pytest tests/unit/test_process_conversation_usage_context.py -v
 pytest tests/unit/test_llm_usage_db.py -v
