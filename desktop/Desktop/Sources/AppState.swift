@@ -392,6 +392,11 @@ class AppState: ObservableObject {
   /// Sticky for the app run: once on-device Parakeet fails to load, force cloud STT for subsequent
   /// recordings too (a broken/undownloaded model won't fix itself mid-run; cloud beats blank).
   private var forceCloudSTTForSession = false
+  /// Reverse fallback: once the cloud WS is unreachable (reconnects exhausted), keep recording by
+  /// forcing on-device Parakeet. Tried at most once per session, and never if we're on cloud
+  /// *because* Parakeet already failed (forceCloudSTTForSession).
+  private var forceLocalSTTForSession = false
+  private var sttCloudFallbackTried = false
 
   /// True on Apple Silicon (M-series), where on-device Parakeet runs on the Neural Engine.
   /// Desktop transcribes with Parakeet here by default; Intel Macs fall back to cloud STT.
@@ -1510,9 +1515,10 @@ class AppState: ObservableObject {
       // Desktop transcribes on-device with Parakeet by default on Apple Silicon — no Deepgram.
       // Intel Macs (no Neural Engine) fall back to the cloud path. Force cloud for debugging with
       // OMI_FORCE_CLOUD_STT=1 or `defaults write <bundle> forceCloudSTT -bool true`.
-      let forceCloudSTT = ProcessInfo.processInfo.environment["OMI_FORCE_CLOUD_STT"] == "1"
-        || UserDefaults.standard.bool(forKey: "forceCloudSTT")
-        || forceCloudSTTForSession  // set after an on-device Parakeet model-load failure
+      let forceCloudSTT = !forceLocalSTTForSession  // reverse fallback overrides toward on-device
+        && (ProcessInfo.processInfo.environment["OMI_FORCE_CLOUD_STT"] == "1"
+          || UserDefaults.standard.bool(forKey: "forceCloudSTT")
+          || forceCloudSTTForSession)  // set after an on-device Parakeet model-load failure
       useLocalSTT = !forceCloudSTT && Self.isAppleSilicon
       if useLocalSTT {
         log("Transcription: ON-DEVICE Parakeet mode (OMI_LOCAL_STT) — no cloud STT")
@@ -1596,7 +1602,9 @@ class AppState: ObservableObject {
           Task { @MainActor in
             logError("Transcription error", error: error)
             AnalyticsManager.shared.recordingError(error: error.localizedDescription)
-            self?.stopTranscription()
+            // Cloud WS gave up (reconnects exhausted) → try to keep recording on-device
+            // instead of dropping it. Falls through to stopTranscription if not possible.
+            self?.handleCloudSTTReconnectFailure()
           }
         },
         onConnected: { [weak self] in
@@ -1975,6 +1983,36 @@ class AppState: ObservableObject {
     stopTranscription()
     // Restart in cloud mode once stop has settled (isTranscribing flips false inside the stop's
     // async teardown). Bounded wait avoids racing the `!isTranscribing` guard in startTranscription.
+    Task { @MainActor [weak self] in
+      guard let self else { return }
+      for _ in 0..<20 {
+        if !self.isTranscribing { break }
+        try? await Task.sleep(nanoseconds: 100_000_000)
+      }
+      self.startTranscription(source: source)
+      self.sttFallbackInProgress = false
+    }
+  }
+
+  /// Cloud STT websocket gave up (reconnects exhausted). On Apple Silicon, keep the recording
+  /// alive by switching to on-device Parakeet (which works offline) instead of stopping. Skipped
+  /// — and falls back to a normal stop — if we're only on cloud because Parakeet already failed,
+  /// or we've already tried this once this session.
+  @MainActor
+  private func handleCloudSTTReconnectFailure() {
+    guard isTranscribing, !useLocalSTT, Self.isAppleSilicon,
+      !forceCloudSTTForSession, !sttCloudFallbackTried, !sttFallbackInProgress
+    else {
+      stopTranscription()
+      return
+    }
+    sttCloudFallbackTried = true
+    sttFallbackInProgress = true
+    forceLocalSTTForSession = true
+    log("Transcription: cloud STT unreachable (reconnects exhausted) — falling back to on-device Parakeet")
+    AnalyticsManager.shared.recordingError(error: "cloud_stt_reconnect_failed_fallback_local")
+    let source = audioSource
+    stopTranscription()
     Task { @MainActor [weak self] in
       guard let self else { return }
       for _ in 0..<20 {
