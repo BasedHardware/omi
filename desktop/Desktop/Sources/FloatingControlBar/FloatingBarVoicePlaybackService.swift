@@ -40,7 +40,9 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate {
   private var streamedText = ""
   private var bufferedText = ""
   private var synthesisQueue: [String] = []
-  private var audioQueue: [Data] = []
+  // Carries each chunk's source text alongside its synthesized audio so playback can fall
+  // back to the system voice (speaking the text) if AVAudioPlayer can't play the audio.
+  private var audioQueue: [(audio: Data, text: String)] = []
   private var isSynthesizing = false
   private var hasStartedRealPlayback = false
   private var hasEmittedFirstChunk = false
@@ -203,7 +205,7 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate {
         await MainActor.run {
           guard let self else { return }
           self.isSynthesizing = false
-          self.audioQueue.append(audioData)
+          self.audioQueue.append((audio: audioData, text: text))
           self.startPlaybackIfNeeded()
           self.startSynthesisIfNeeded(mode: mode)
         }
@@ -298,7 +300,7 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate {
           let audio = try await Self.synthesizeOpenAISpeech(
             text: trimmed, voiceID: voiceID, instructions: instructions)
           await MainActor.run {
-            self?.startPlayback(audio)
+            self?.startPlayback(audio, fallbackText: trimmed)
           }
         } catch {
           await MainActor.run {
@@ -324,11 +326,15 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate {
   private func startPlaybackIfNeeded() {
     guard audioPlayer == nil else { return }
     guard !audioQueue.isEmpty else { return }
-    startPlayback(audioQueue.removeFirst())
+    let next = audioQueue.removeFirst()
+    startPlayback(next.audio, fallbackText: next.text)
   }
 
-  private func startPlayback(_ data: Data) {
+  private func startPlayback(_ data: Data, fallbackText: String = "") {
     do {
+      if UserDefaults.standard.bool(forKey: "forceTTSPlaybackFail") {
+        throw NSError(domain: "TTSPlayback", code: -1, userInfo: [NSLocalizedDescriptionKey: "forced playback failure"])
+      }
       let player = try AVAudioPlayer(data: data)
       player.delegate = self
       player.enableRate = true
@@ -337,9 +343,11 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate {
       player.play()
       audioPlayer = player
     } catch {
+      // Don't drop the reply silently — speak this chunk with the system voice instead.
       log(
-        "FloatingBarVoicePlaybackService: could not start audio playback: \(error.localizedDescription)"
+        "FloatingBarVoicePlaybackService: audio playback failed, falling back to system voice: \(error.localizedDescription)"
       )
+      enqueueSystemSpeech(fallbackText)
     }
   }
 

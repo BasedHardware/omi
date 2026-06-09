@@ -1,5 +1,7 @@
 {
-  "unreleased": [],
+  "unreleased": [
+    "More reliable AI: memory imports retry on failure, voice replies fall back to the system voice, and transcription/assistants fail over instead of dropping"
+  ],
   "releases": [
     {
       "version": "0.11.457",
