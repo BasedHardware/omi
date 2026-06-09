@@ -470,10 +470,13 @@ async fn chat_completions(
     let byok_anthropic_key = byok::get_byok_key_if_active(&headers, byok::HEADER_ANTHROPIC, byok_stripped);
     let is_byok = byok_anthropic_key.is_some();
 
-    // Rate limiting — skip when using BYOK key
+    // Rate limiting — uses the dedicated CHAT limiter (NOT the Gemini one), so a
+    // burst of proactive/vision Gemini calls can never 429 a user's chat. The chat
+    // limiter only trips on a pathological per-minute burst (runaway client), which
+    // a human typing never reaches. Skipped entirely when using a BYOK key.
     if !is_byok {
         let decision = state
-            .gemini_rate_limiter
+            .chat_rate_limiter
             .check_and_record(&user.uid, state.redis.as_ref())
             .await;
         if decision == RateDecision::Reject {

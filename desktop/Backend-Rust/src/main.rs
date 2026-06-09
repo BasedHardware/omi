@@ -56,6 +56,9 @@ pub struct AppState {
     pub config: Arc<Config>,
     pub crisp_session_cache: routes::crisp::SessionCache,
     pub gemini_rate_limiter: routes::rate_limit::SharedRateLimiter,
+    /// Separate limiter for chat so a burst of Gemini proxy calls can never
+    /// rate-limit a user's chat (high burst cap, no daily cap, isolated keys).
+    pub chat_rate_limiter: routes::rate_limit::SharedRateLimiter,
     /// Vertex AI auth provider (present when USE_VERTEX_AI=true)
     pub vertex_auth: Option<vertex::VertexAuth>,
 }
@@ -222,14 +225,19 @@ async fn main() {
 
     // Create app state
     let gemini_rate_limiter = routes::rate_limit::GeminiRateLimiter::new();
+    // Chat gets its own limiter (isolated Redis namespace, high burst cap, no daily
+    // cap) so Gemini proxy bursts can't 429 a user's chat.
+    let chat_rate_limiter = routes::rate_limit::GeminiRateLimiter::for_chat();
 
     // Spawn background task to evict stale rate limit entries every hour
     {
-        let limiter = gemini_rate_limiter.clone();
+        let gemini_limiter = gemini_rate_limiter.clone();
+        let chat_limiter = chat_rate_limiter.clone();
         tokio::spawn(async move {
             loop {
                 tokio::time::sleep(std::time::Duration::from_secs(3600)).await;
-                limiter.evict_stale().await;
+                gemini_limiter.evict_stale().await;
+                chat_limiter.evict_stale().await;
             }
         });
     }
@@ -251,6 +259,7 @@ async fn main() {
         config: Arc::new(config.clone()),
         crisp_session_cache: routes::crisp::new_session_cache(),
         gemini_rate_limiter,
+        chat_rate_limiter,
         vertex_auth,
     };
 
