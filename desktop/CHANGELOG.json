@@ -1,8 +1,13 @@
 {
-  "unreleased": [
-    "Fixed the floating bar reappearing after you turned off “Show floating bar” — it now stays hidden even while a background browser action runs"
-  ],
+  "unreleased": [],
   "releases": [
+    {
+      "version": "0.11.456",
+      "date": "2026-06-09",
+      "changes": [
+        "Fixed the floating bar reappearing after you turned off \u201cShow floating bar\u201d \u2014 it now stays hidden even while a background browser action runs"
+      ]
+    },
     {
       "version": "0.11.455",
       "date": "2026-06-09",
