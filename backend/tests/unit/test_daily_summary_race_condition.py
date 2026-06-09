@@ -113,6 +113,14 @@ models_notif.NotificationMessage = mock_notification_message
 models_convo = sys.modules["models.conversation"]
 models_convo.Conversation = MagicMock()
 
+# utils.executors / utils.subscription are imported by notifications.py and pull firebase_admin
+# transitively; stub them (neither is used by _send_summary_notification).
+exec_mod = _stub_module("utils.executors")
+exec_mod.postprocess_executor = MagicMock()
+exec_mod.run_blocking = MagicMock()
+sub_mod = _stub_module("utils.subscription")
+sub_mod.is_trial_paywalled = MagicMock(return_value=False)
+
 # Now we can safely import
 from utils.other.notifications import _send_summary_notification
 
@@ -229,6 +237,7 @@ class TestSendSummaryNotificationLockIntegration:
         gen_mock.return_value = {'day_emoji': '!', 'headline': 'Test', 'overview': 'Summary'}
 
         daily_db = sys.modules["database.daily_summaries"]
+        daily_db.get_daily_summary_by_date = MagicMock(return_value=None)
         daily_db.create_daily_summary = MagicMock(return_value='summary-123')
 
         send_mock = sys.modules["utils.notifications"].send_notification
@@ -243,9 +252,40 @@ class TestSendSummaryNotificationLockIntegration:
         send_mock.assert_called_once()
 
     @patch('utils.other.notifications.try_acquire_daily_summary_lock', return_value=True)
+    def test_skips_when_summary_already_exists(self, mock_lock):
+        """#4608: if a summary already exists for the date (lock lost on a later tick), skip before
+        spending LLM tokens or sending — do not create a duplicate doc."""
+        convos_db = sys.modules["database.conversations"]
+        convos_db.get_conversations = MagicMock()
+        convos_db.get_conversations.reset_mock()
+
+        gen_mock = sys.modules["utils.llm.external_integrations"].generate_comprehensive_daily_summary
+        gen_mock.reset_mock()
+
+        daily_db = sys.modules["database.daily_summaries"]
+        daily_db.get_daily_summary_by_date = MagicMock(return_value={'id': 'existing-1'})
+        daily_db.create_daily_summary = MagicMock()
+
+        send_mock = sys.modules["utils.notifications"].send_notification
+        send_mock.reset_mock()
+
+        user_data = ('uid1', ['token1'], 'America/New_York')
+        _send_summary_notification(user_data)
+
+        mock_lock.assert_called_once()
+        daily_db.get_daily_summary_by_date.assert_called_once()
+        # An existing summary short-circuits everything: no fetch, no LLM, no create, no send.
+        convos_db.get_conversations.assert_not_called()
+        gen_mock.assert_not_called()
+        daily_db.create_daily_summary.assert_not_called()
+        send_mock.assert_not_called()
+
+    @patch('utils.other.notifications.try_acquire_daily_summary_lock', return_value=True)
     def test_no_conversations_skips_llm(self, mock_lock):
         convos_db = sys.modules["database.conversations"]
         convos_db.get_conversations = MagicMock(return_value=[])
+        daily_db = sys.modules["database.daily_summaries"]
+        daily_db.get_daily_summary_by_date = MagicMock(return_value=None)
 
         gen_mock = sys.modules["utils.llm.external_integrations"].generate_comprehensive_daily_summary
         gen_mock.reset_mock()
