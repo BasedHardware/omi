@@ -14,7 +14,8 @@
 #
 # Setup:
 #   1. Copy .personal_configs.example/ to .personal_configs/ at the repo root.
-#   2. Populate .personal_configs/.dev.env with your API keys and backend URL.
+#   2. cp .personal_configs/.dev.env.template .personal_configs/.dev.env
+#      then fill in your API keys and backend URL.
 #   3. Add your GoogleService-Info.plist and firebase_options_dev.dart.
 #   4. Run this script from anywhere inside the repo.
 #
@@ -34,7 +35,8 @@ if [ ! -d "$CONFIG_DIR" ]; then
   echo "" >&2
   echo "To set up:" >&2
   echo "  cp -r ${REPO_ROOT}/.personal_configs.example ${CONFIG_DIR}" >&2
-  echo "  # then populate the files inside .personal_configs/" >&2
+  echo "  cp ${CONFIG_DIR}/.dev.env.template ${CONFIG_DIR}/.dev.env" >&2
+  echo "  # then fill in .dev.env and add your Firebase credential files" >&2
   exit 1
 fi
 
@@ -65,6 +67,7 @@ echo "✓ Copied firebase_options_dev.dart → lib/"
 DEV_ENV="${CONFIG_DIR}/.dev.env"
 if [ ! -f "$DEV_ENV" ]; then
   echo "Error: ${DEV_ENV} not found" >&2
+  echo "  cp ${CONFIG_DIR}/.dev.env.template ${DEV_ENV} and fill it in" >&2
   exit 1
 fi
 
