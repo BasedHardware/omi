@@ -597,6 +597,8 @@ class TranscriptionPreferencesResponse(BaseModel):
     single_language_mode: bool = False
     vocabulary: List[str] = []
     language: str = ''
+    uses_custom_stt: bool = False
+    custom_stt_since: Optional[datetime] = None
 
 
 class TranscriptionPreferencesUpdate(BaseModel):
