@@ -15,6 +15,7 @@ use axum::{
 };
 use futures::StreamExt;
 use serde_json::json;
+use std::time::Duration;
 
 use crate::auth::{AuthUser, PaywalledAuthUser};
 use crate::byok;
@@ -515,7 +516,13 @@ async fn chat_completions(
         StatusCode::BAD_REQUEST
     })?;
 
-    let client = reqwest::Client::new();
+    // Bound connection establishment so a network blip can't hang the request; the
+    // total-response timeout is applied per-call (non-streaming only) inside the retry
+    // helper so it never aborts a long streaming reply.
+    let client = reqwest::Client::builder()
+        .connect_timeout(Duration::from_secs(10))
+        .build()
+        .unwrap_or_default();
 
     if req.stream {
         handle_streaming(
@@ -542,6 +549,77 @@ async fn chat_completions(
     }
 }
 
+/// Max attempts for the INITIAL Anthropic request (1 try + 2 retries).
+const ANTHROPIC_MAX_ATTEMPTS: usize = 3;
+
+/// Upstream HTTP statuses worth retrying — transient overload/availability blips.
+/// Note: 4xx like 400/401/402 are caller/auth errors and must NOT be retried.
+fn is_transient_status(status: u16) -> bool {
+    matches!(status, 408 | 425 | 429 | 500 | 502 | 503 | 504 | 529)
+}
+
+/// Backoff before a retry (attempt is the 1-based number that just failed).
+fn retry_backoff(attempt: usize) -> Duration {
+    // 250ms, 500ms — chat is latency-sensitive, so keep retries short and few.
+    Duration::from_millis(250u64 * (1u64 << attempt.saturating_sub(1).min(3)))
+}
+
+/// Send the Anthropic request, retrying the INITIAL response on transient failures
+/// (network errors + 429/5xx/529). This is the chat fallback: a single Anthropic blip
+/// no longer fails the request. Safe to retry because no output has been produced yet
+/// (for streaming we retry before consuming the body). A transient status on the final
+/// attempt is returned as-is so the caller passes the upstream error through.
+async fn send_anthropic_with_retry(
+    client: &reqwest::Client,
+    api_key: &str,
+    anthropic_req: &AnthropicRequest,
+    streaming: bool,
+) -> Result<reqwest::Response, StatusCode> {
+    for attempt in 1..=ANTHROPIC_MAX_ATTEMPTS {
+        let mut builder = client
+            .post(ANTHROPIC_API_URL)
+            .header("x-api-key", api_key)
+            .header("anthropic-version", ANTHROPIC_API_VERSION)
+            .header("content-type", "application/json")
+            .json(anthropic_req);
+        // Bound non-streaming calls; a streaming response must NOT have a total-response
+        // timeout (it would abort long replies), only the client-level connect timeout.
+        if !streaming {
+            builder = builder.timeout(Duration::from_secs(120));
+        }
+        match builder.send().await {
+            Ok(resp) => {
+                let s = resp.status().as_u16();
+                if is_transient_status(s) && attempt < ANTHROPIC_MAX_ATTEMPTS {
+                    tracing::warn!(
+                        "chat_completions: Anthropic {} (attempt {}/{}), retrying",
+                        s,
+                        attempt,
+                        ANTHROPIC_MAX_ATTEMPTS
+                    );
+                    tokio::time::sleep(retry_backoff(attempt)).await;
+                    continue;
+                }
+                return Ok(resp);
+            }
+            Err(e) => {
+                tracing::warn!(
+                    "chat_completions: Anthropic request error (attempt {}/{}): {}",
+                    attempt,
+                    ANTHROPIC_MAX_ATTEMPTS,
+                    e
+                );
+                if attempt < ANTHROPIC_MAX_ATTEMPTS {
+                    tokio::time::sleep(retry_backoff(attempt)).await;
+                    continue;
+                }
+                return Err(StatusCode::BAD_GATEWAY);
+            }
+        }
+    }
+    Err(StatusCode::BAD_GATEWAY)
+}
+
 async fn handle_non_streaming(
     client: &reqwest::Client,
     api_key: &str,
@@ -551,18 +629,7 @@ async fn handle_non_streaming(
     state: &AppState,
     is_byok: bool,
 ) -> Result<Response, StatusCode> {
-    let upstream_resp = client
-        .post(ANTHROPIC_API_URL)
-        .header("x-api-key", api_key)
-        .header("anthropic-version", ANTHROPIC_API_VERSION)
-        .header("content-type", "application/json")
-        .json(anthropic_req)
-        .send()
-        .await
-        .map_err(|e| {
-            tracing::error!("chat_completions: upstream request failed: {}", e);
-            StatusCode::BAD_GATEWAY
-        })?;
+    let upstream_resp = send_anthropic_with_retry(client, api_key, anthropic_req, false).await?;
 
     let status = upstream_resp.status();
     if !status.is_success() {
@@ -606,18 +673,7 @@ async fn handle_streaming(
     state: &AppState,
     is_byok: bool,
 ) -> Result<Response, StatusCode> {
-    let upstream_resp = client
-        .post(ANTHROPIC_API_URL)
-        .header("x-api-key", api_key)
-        .header("anthropic-version", ANTHROPIC_API_VERSION)
-        .header("content-type", "application/json")
-        .json(anthropic_req)
-        .send()
-        .await
-        .map_err(|e| {
-            tracing::error!("chat_completions: upstream stream request failed: {}", e);
-            StatusCode::BAD_GATEWAY
-        })?;
+    let upstream_resp = send_anthropic_with_retry(client, api_key, anthropic_req, true).await?;
 
     let status = upstream_resp.status();
     if !status.is_success() {
@@ -945,6 +1001,31 @@ pub fn chat_completions_routes() -> Router<AppState> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn transient_statuses_retry() {
+        for s in [408, 425, 429, 500, 502, 503, 504, 529] {
+            assert!(is_transient_status(s), "{} should be transient", s);
+        }
+    }
+
+    #[test]
+    fn non_transient_statuses_dont_retry() {
+        // 2xx success and caller/auth errors must never be retried.
+        for s in [200, 201, 400, 401, 402, 403, 404, 422] {
+            assert!(!is_transient_status(s), "{} should NOT be transient", s);
+        }
+    }
+
+    #[test]
+    fn backoff_is_short_and_increasing() {
+        let b1 = retry_backoff(1);
+        let b2 = retry_backoff(2);
+        assert_eq!(b1, Duration::from_millis(250));
+        assert_eq!(b2, Duration::from_millis(500));
+        // Stays bounded (latency-sensitive path).
+        assert!(retry_backoff(10) <= Duration::from_millis(2000));
+    }
 
     #[test]
     fn test_resolve_model_sonnet() {
