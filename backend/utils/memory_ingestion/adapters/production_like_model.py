@@ -12,6 +12,7 @@ from utils.prompts import extract_memories_prompt
 from utils.memory_ingestion.ids import StableIdFactory
 from utils.memory_ingestion.models import (
     ActorDescriptor,
+    EntityRef,
     EvidenceSpan,
     ExtractionMetadata,
     FrameObject,
@@ -70,6 +71,7 @@ class ProductionLikeMemoryModelClient(MemoryModelClient):
                 )
                 for memory_index, memory in enumerate(memories):
                     source_events = [event.event_id for event in event_chunk]
+                    calibration = _calibration(memory, event_chunk)
                     evidence = [
                         EvidenceSpan(
                             evidence_id=id_factory.new_id(
@@ -88,27 +90,23 @@ class ProductionLikeMemoryModelClient(MemoryModelClient):
                         frame_type=_frame_type(memory.category),
                         subject=_actor_subject(pipeline_input.actor),
                         predicate=_predicate(memory.category),
-                        object=FrameObject(object_type="literal", value=memory.content, confidence="high"),
+                        object=FrameObject(
+                            object_type="literal",
+                            value=memory.content,
+                            confidence=calibration["confidence"],
+                        ),
                         canonical_text=memory.content,
                         original_text=None,
                         temporal=TemporalScope(kind="unknown"),
                         durability="long_term",
-                        sensitivity=SensitivityClassification(
-                            level="none",
-                            categories=(
-                                ["ordinary_personal_fact"]
-                                if _category_value(memory.category) == "system"
-                                else ["ordinary_work_fact"]
-                            ),
-                            auto_store_allowed=True,
-                            review_required=False,
-                        ),
+                        sensitivity=calibration["sensitivity"],
                         scope="conversation",
                         scope_ref=event_chunk[0].source_ref if event_chunk else None,
                         importance="high",
                         evidence=evidence,
                         source_event_ids=source_events,
-                        confidence="high",
+                        confidence=calibration["confidence"],
+                        uncertainty_reasons=calibration["uncertainty_reasons"],
                         extraction=ExtractionMetadata(
                             extractor="omi_production_memory_extractor",
                             model="memories",
@@ -184,6 +182,84 @@ def _language_instruction(language: str | None) -> str:
     return "Write all extracted memories/learnings in English."
 
 
+def _calibration(memory: ProductionLikeMemory, events: list[RawContextEvent]) -> dict:
+    text = memory.content.casefold()
+    confidence = "high"
+    uncertainty_reasons: list[str] = []
+    categories = ["ordinary_personal_fact"] if _category_value(memory.category) == "system" else ["ordinary_work_fact"]
+    sensitivity_level = "none"
+    review_required = False
+
+    if _has_ocr_uncertainty(events):
+        confidence = "medium"
+        uncertainty_reasons.append("low_quality_transcript")
+
+    third_party = _has_third_party_signal(text, events)
+    if third_party:
+        confidence = "medium"
+        categories = ["third_party_private_fact"]
+        sensitivity_level = "medium"
+        review_required = True
+        if _has_non_actor_speaker(events):
+            uncertainty_reasons.append("speaker_uncertain")
+
+    if _has_health_signal(text):
+        categories = ["health", "third_party_private_fact"] if third_party else ["health"]
+        sensitivity_level = "high"
+        review_required = True
+
+    return {
+        "confidence": confidence,
+        "uncertainty_reasons": sorted(set(uncertainty_reasons)),
+        "sensitivity": SensitivityClassification(
+            level=sensitivity_level,
+            categories=categories,
+            auto_store_allowed=not review_required,
+            review_required=review_required,
+        ),
+    }
+
+
+def _has_ocr_uncertainty(events: list[RawContextEvent]) -> bool:
+    return any(event.event_type == "screen_ocr" or "ocr_noisy" in event.quality.quality_flags for event in events)
+
+
+def _has_non_actor_speaker(events: list[RawContextEvent]) -> bool:
+    return any(event.speaker and event.speaker.is_actor_user is not True for event in events)
+
+
+def _has_third_party_signal(text: str, events: list[RawContextEvent]) -> bool:
+    terms = (
+        "father",
+        "mother",
+        "friend",
+        "girlfriend",
+        "boyfriend",
+        "acquaintance",
+        "peer",
+        "coworker",
+        "john",
+        "rudi",
+        "saru",
+        "kristina",
+    )
+    return _has_non_actor_speaker(events) or any(term in text for term in terms)
+
+
+def _has_health_signal(text: str) -> bool:
+    terms = (
+        "cancer",
+        "antibiotic",
+        "illness",
+        "sick",
+        "lab test",
+        "medical",
+        "health",
+        "treatment",
+    )
+    return any(term in text for term in terms)
+
+
 def _events_by_conversation(events: list[RawContextEvent]) -> dict[str, list[RawContextEvent]]:
     grouped = defaultdict(list)
     for event in events:
@@ -225,8 +301,6 @@ def _to_transcript_segment(event: RawContextEvent, index: int) -> TranscriptSegm
 
 
 def _actor_subject(actor: ActorDescriptor | None):
-    from utils.memory_ingestion.models import EntityRef
-
     return EntityRef(
         entity_id=(actor.user_id or actor.synthetic_user_id) if actor else None,
         entity_type="user",
