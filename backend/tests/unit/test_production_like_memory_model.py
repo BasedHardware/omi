@@ -99,3 +99,23 @@ def test_prodlike_third_party_uncertain_speaker_memories_route_to_review(monkeyp
     assert output.event_frames[0].sensitivity.categories == ["third_party_private_fact"]
     assert output.event_frames[0].uncertainty_reasons == ["speaker_uncertain"]
     assert output.decisions[0].action == "route_to_review"
+
+
+def test_prodlike_unknown_speaker_user_memory_can_auto_accept(monkeypatch):
+    _patch_extractor(monkeypatch, "User prefers using the main Chrome instance for daily workflows.")
+
+    output = _run(
+        _input(
+            _event(
+                "I prefer using the main Chrome instance for my daily workflows.",
+                speaker=SpeakerRef(speaker_id="speaker-2", label="Speaker 2", is_actor_user=None),
+            )
+        )
+    )
+
+    assert output.event_frames[0].confidence == "medium"
+    assert output.event_frames[0].sensitivity.level == "none"
+    assert output.event_frames[0].sensitivity.categories == ["ordinary_personal_fact"]
+    assert output.event_frames[0].sensitivity.review_required is False
+    assert output.event_frames[0].uncertainty_reasons == ["speaker_uncertain"]
+    assert output.decisions[0].action == "create_memory"

@@ -194,6 +194,11 @@ def _calibration(memory: ProductionLikeMemory, events: list[RawContextEvent]) ->
         confidence = "medium"
         uncertainty_reasons.append("low_quality_transcript")
 
+    unknown_speaker = _has_unknown_speaker(events)
+    if unknown_speaker:
+        confidence = "medium"
+        uncertainty_reasons.append("speaker_uncertain")
+
     third_party = _has_third_party_signal(text, events)
     if third_party:
         confidence = "medium"
@@ -224,8 +229,12 @@ def _has_ocr_uncertainty(events: list[RawContextEvent]) -> bool:
     return any(event.event_type == "screen_ocr" or "ocr_noisy" in event.quality.quality_flags for event in events)
 
 
+def _has_unknown_speaker(events: list[RawContextEvent]) -> bool:
+    return any(event.speaker and event.speaker.is_actor_user is None for event in events)
+
+
 def _has_non_actor_speaker(events: list[RawContextEvent]) -> bool:
-    return any(event.speaker and event.speaker.is_actor_user is not True for event in events)
+    return any(event.speaker and event.speaker.is_actor_user is False for event in events)
 
 
 def _has_third_party_signal(text: str, events: list[RawContextEvent]) -> bool:
