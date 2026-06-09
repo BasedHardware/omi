@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 from typing import List, Optional, Tuple
 
 from langchain_core.output_parsers import PydanticOutputParser
@@ -575,6 +576,21 @@ def extract_action_items(
         return []
 
 
+def _local_started_at_iso(started_at: datetime, tz: str) -> str:
+    """Render the capture time as the user's local wall-clock for prompt date context (#4773).
+
+    The LLM is unreliable at converting UTC to the user's timezone, which mislabels the time of day
+    in titles and overviews. Convert deterministically here instead. Naive datetimes are treated as
+    UTC; a missing or invalid timezone falls back to UTC.
+    """
+    try:
+        user_tz = ZoneInfo(tz) if tz else timezone.utc
+    except Exception:  # noqa: BLE001 - any unknown/invalid tz falls back to UTC
+        user_tz = timezone.utc
+    aware = started_at if started_at.tzinfo is not None else started_at.replace(tzinfo=timezone.utc)
+    return aware.astimezone(user_tz).replace(tzinfo=None).isoformat()
+
+
 def get_transcript_structure(
     transcript: str,
     started_at: datetime,
@@ -636,7 +652,7 @@ def get_transcript_structure(
     • Vague suggestions ("let's grab coffee soon")
     • Hypothetical scenarios ("if we meet Tuesday...")
 
-    For date context, this content was captured on {started_at}. {tz} is the user's timezone; respond in user local timezone.
+    For date context, this content was captured at {started_at}, which is already the user's local time ({tz}). Interpret it as-is and describe times of day in the title and overview accordingly; do not re-interpret this timestamp as UTC.
 
     {format_instructions}'''.replace(
         '    ', ''
@@ -653,8 +669,8 @@ def get_transcript_structure(
             'format_instructions': parser.get_format_instructions(),
             'language_code': language_code,
             'response_language': response_language,
-            'started_at': started_at.isoformat(),
-            'tz': tz,
+            'started_at': _local_started_at_iso(started_at, tz),
+            'tz': tz or 'UTC',
         }
     )
 
@@ -719,7 +735,7 @@ def get_reprocess_transcript_structure(
     • Vague suggestions ("let's grab coffee soon")
     • Hypothetical scenarios ("if we meet Tuesday...")
     
-    For date context, this content was captured on {started_at}. {tz} is the user's timezone; respond in user local timezone.
+    For date context, this content was captured at {started_at}, which is already the user's local time ({tz}). Interpret it as-is and describe times of day in the title and overview accordingly; do not re-interpret this timestamp as UTC.
 
     Content:
     {full_context}
@@ -738,8 +754,8 @@ def get_reprocess_transcript_structure(
             'format_instructions': parser.get_format_instructions(),
             'language_code': language_code,
             'response_language': response_language,
-            'started_at': started_at.isoformat(),
-            'tz': tz,
+            'started_at': _local_started_at_iso(started_at, tz),
+            'tz': tz or 'UTC',
         }
     )
 
