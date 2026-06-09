@@ -1,11 +1,7 @@
 {
   "unreleased": [
-<<<<<<< HEAD
-    "Improved chat and voice reliability \u2014 the backend now retries transient AI provider errors instead of failing the request",
+    "Fixed the floating bar reappearing after you turned off \u201cShow floating bar\u201d \u2014 it now stays hidden even while a background browser action runs",
     "Recording no longer goes blank if on-device transcription fails to load \u2014 it automatically falls back to cloud transcription"
-=======
-    "Fixed the floating bar reappearing after you turned off “Show floating bar” — it now stays hidden even while a background browser action runs"
->>>>>>> origin/main
   ],
   "releases": [
     {
