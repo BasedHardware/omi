@@ -1,5 +1,7 @@
 {
-  "unreleased": [],
+  "unreleased": [
+    "Improved chat and voice reliability \u2014 the backend now retries transient AI provider errors instead of failing the request"
+  ],
   "releases": [
     {
       "version": "0.11.454",
