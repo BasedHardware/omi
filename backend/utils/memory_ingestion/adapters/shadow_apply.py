@@ -1,0 +1,4 @@
+from utils.memory_ingestion.adapters.noop_apply import NoopMemoryPipelineApplier
+
+
+ShadowMemoryPipelineApplier = NoopMemoryPipelineApplier
