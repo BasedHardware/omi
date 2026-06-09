@@ -1,6 +1,7 @@
 {
   "unreleased": [
-    "Fixed Ask Omi chat occasionally failing with a rate-limit error when on-screen assistants were active"
+    "Fixed Ask Omi chat occasionally failing with a rate-limit error when on-screen assistants were active",
+    "Improved chat and voice reliability \u2014 the backend now retries transient AI provider errors instead of failing the request"
   ],
   "releases": [
     {
