@@ -154,3 +154,25 @@ def test_get_memories_skips_malformed_record():
 
     assert len(result['memories']) == 1
     assert result['memories'][0].id == 'good'
+
+
+def _call_memories():
+    return integ.get_memories_via_integration(
+        request=MagicMock(),
+        app_id='app-1',
+        uid='test-uid',
+        limit=100,
+        offset=0,
+        authorization='Bearer test-key',
+    )
+
+
+def test_get_memories_all_malformed_returns_empty():
+    integ.memory_db.get_memories = MagicMock(return_value=[{'id': 'b1'}, {'id': 'b2'}])
+    _setup_gates()
+
+    with patch.object(integ, 'verify_api_key', return_value=True), patch.object(integ, 'apps_utils') as au:
+        au.app_can_read_memories.return_value = True
+        result = _call_memories()
+
+    assert result['memories'] == []
