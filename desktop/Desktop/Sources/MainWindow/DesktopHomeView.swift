@@ -724,7 +724,10 @@ struct DesktopHomeView: View {
       }
     }
     .onReceive(NotificationCenter.default.publisher(for: .navigateToDeviceSettings)) { _ in
-      // Set the section directly and navigate to settings
+      // Set the section directly and navigate to settings. Without this the
+      // settings pane opens on whatever section was last selected (General),
+      // leaving no path to reach Device pairing from the device widget (#5917).
+      selectedSettingsSection = .device
       withAnimation(.easeInOut(duration: 0.2)) {
         selectedIndex = SidebarNavItem.settings.rawValue
       }
