@@ -54,7 +54,11 @@ def _load_module_from_file(module_name, file_path):
     spec = importlib.util.spec_from_file_location(module_name, str(file_path))
     mod = importlib.util.module_from_spec(spec)
     sys.modules[module_name] = mod
-    spec.loader.exec_module(mod)
+    try:
+        spec.loader.exec_module(mod)
+    except Exception:
+        sys.modules.pop(module_name, None)
+        raise
     return mod
 
 
@@ -82,6 +86,7 @@ for mod_name in [
 ]:
     if mod_name not in sys.modules:
         _stub_module(mod_name)
+sys.modules["database.auth"].get_user_name = MagicMock(return_value="Test User")
 
 # Stub database.action_items
 action_items_db = _stub_module("database.action_items")
