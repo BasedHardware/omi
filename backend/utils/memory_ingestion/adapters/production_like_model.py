@@ -204,6 +204,11 @@ def _calibration(memory: ProductionLikeMemory, events: list[RawContextEvent]) ->
         uncertainty_reasons.append("inferred_not_stated")
         review_required = True
 
+    if _has_future_plan_signal(text):
+        confidence = "medium"
+        uncertainty_reasons.append("temporal_scope_unclear")
+        review_required = True
+
     third_party = _has_third_party_signal(text, events)
     if third_party:
         confidence = "medium"
@@ -275,6 +280,27 @@ def _has_speculative_signal(text: str) -> bool:
     )
     padded = f" {text} "
     return any(term in padded for term in terms)
+
+
+def _has_future_plan_signal(text: str) -> bool:
+    padded = f" {text} "
+    plan_terms = (
+        " plan to ",
+        " plans to ",
+        " planning to ",
+        " scheduled to ",
+        " going to ",
+    )
+    time_terms = (
+        " today",
+        " tomorrow",
+        " tonight",
+        " this week",
+        " next week",
+        " at ",
+        " by ",
+    )
+    return any(term in padded for term in plan_terms) and any(term in padded for term in time_terms)
 
 
 def _has_health_signal(text: str) -> bool:
