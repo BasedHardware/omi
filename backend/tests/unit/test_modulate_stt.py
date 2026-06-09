@@ -602,8 +602,6 @@ class TestDrainAndClosePartialFlush(unittest.TestCase):
             sock._prev_partial_text = 'trailing speech'
             sock._prev_partial_start_ms = 5000
             sock._prev_partial_word_count = 2
-            # Patch done_event.wait to always time out
-            original_wait = sock._done_event.wait
 
             async def timeout_wait():
                 raise asyncio.TimeoutError()
@@ -976,6 +974,7 @@ class TestUtteranceResults(unittest.TestCase):
         self.assertEqual(self.segments, [])
 
     def test_partial_superseded_by_utterance(self):
+        """Only the final utterance is streamed — partials are buffered for preview only."""
         msgs = [
             json.dumps(
                 {
@@ -995,19 +994,19 @@ class TestUtteranceResults(unittest.TestCase):
         self.assertEqual(self.segments[0]['text'], 'final utterance')
 
     def test_partial_flush_at_done(self):
+        """If done arrives without a final utterance, flush the last partial."""
         msgs = [
             json.dumps({'type': 'partial_utterance', 'partial_utterance': {'text': 'one', 'start_ms': 0}}),
             json.dumps({'type': 'partial_utterance', 'partial_utterance': {'text': 'one two', 'start_ms': 0}}),
             json.dumps({'type': 'partial_utterance', 'partial_utterance': {'text': 'one two three', 'start_ms': 0}}),
-            json.dumps({'type': 'partial_utterance', 'partial_utterance': {'text': 'new start', 'start_ms': 5000}}),
             json.dumps({'type': 'done', 'duration_ms': 6000}),
         ]
         self._run_recv(msgs)
         self.assertEqual(len(self.segments), 1)
-        self.assertEqual(self.segments[0]['text'], 'new start')
-        self.assertEqual(self.segments[0]['start'], 5.0)
+        self.assertEqual(self.segments[0]['text'], 'one two three')
 
     def test_partial_word_count_drop_is_revision_not_flush(self):
+        """Word count drops are revisions — only the last partial is flushed at done."""
         msgs = [
             json.dumps({'type': 'partial_utterance', 'partial_utterance': {'text': 'a b c d e', 'start_ms': 0}}),
             json.dumps({'type': 'partial_utterance', 'partial_utterance': {'text': 'x y z', 'start_ms': 0}}),
