@@ -289,6 +289,68 @@ class TestSearchRedaction:
         # total_pages uses page-level signal, not global found count
         assert result['total_pages'] == 1
 
+    def test_search_skips_malformed_timestamp_hit(self):
+        """A single hit with a missing/null timestamp must be skipped, not 500 the whole page."""
+        mock_client = MagicMock()
+        mock_client.collections.__getitem__.return_value.documents.search.return_value = {
+            'hits': [
+                {
+                    'document': {
+                        **_make_conversation(locked=False, conversation_id='good'),
+                        'created_at': 1704067200,
+                        'started_at': 1704067200,
+                        'finished_at': 1704070800,
+                    }
+                },
+                {
+                    'document': {
+                        # null started_at -> utcfromtimestamp(None) raises; finished_at missing entirely
+                        **_make_conversation(locked=False, conversation_id='bad'),
+                        'created_at': 1704067200,
+                        'started_at': None,
+                    }
+                },
+            ],
+            'found': 2,
+        }
+
+        with patch('utils.conversations.search.client', mock_client):
+            from utils.conversations.search import search_conversations
+
+            result = search_conversations(uid='test-uid', query='test')
+
+        # Does not raise; only the well-formed hit survives, with ISO-string timestamps.
+        assert len(result['items']) == 1
+        kept = result['items'][0]
+        assert isinstance(kept['created_at'], str) and 'T' in kept['created_at']
+        assert isinstance(kept['started_at'], str)
+
+    def test_search_all_malformed_returns_empty_page_not_500(self):
+        """If every hit is malformed, return an empty page instead of 500ing the whole request."""
+        mock_client = MagicMock()
+        mock_client.collections.__getitem__.return_value.documents.search.return_value = {
+            'hits': [
+                {'document': {**_make_conversation(locked=False, conversation_id='bad1'), 'created_at': None}},
+                {
+                    'document': {
+                        **_make_conversation(locked=False, conversation_id='bad2'),
+                        'created_at': 1704067200,
+                        'started_at': None,
+                    }
+                },
+            ],
+            'found': 2,
+        }
+
+        with patch('utils.conversations.search.client', mock_client):
+            from utils.conversations.search import search_conversations
+
+            result = search_conversations(uid='test-uid', query='test', page=2)
+
+        assert result['items'] == []
+        assert result['total_pages'] == 2  # falls back to the page param, not inflated
+        assert result['current_page'] == 2
+
     def test_search_total_pages_does_not_leak_locked_count(self):
         """total_pages must not inflate from locked docs on other pages."""
         mock_client = MagicMock()
