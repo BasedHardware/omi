@@ -72,6 +72,22 @@ class TestParseDesktopVersion:
         result = _parse_desktop_version("1.0.0+100-macos")
         assert result is not None
 
+    def test_two_component_version_macos(self):
+        # Newer release tags omit the patch component (e.g. v11.0+11000-macos).
+        result = _parse_desktop_version("v11.0+11000-macos")
+        assert result is not None
+        assert result["major"] == "11"
+        assert result["minor"] == "0"
+        assert result["patch"] == "0"
+        assert result["build"] == "11000"
+        assert result["version"] == "11.0.0+11000"
+
+    def test_two_component_version_desktop_cm(self):
+        result = _parse_desktop_version("v11.3+11003-desktop-cm")
+        assert result is not None
+        assert result["version"] == "11.3.0+11003"
+        assert result["build"] == "11003"
+
 
 # --- _parse_changelog_to_changes ---
 
