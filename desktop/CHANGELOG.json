@@ -1,6 +1,7 @@
 {
   "unreleased": [
-    "Improved chat and voice reliability \u2014 the backend now retries transient AI provider errors instead of failing the request"
+    "Improved chat and voice reliability \u2014 the backend now retries transient AI provider errors instead of failing the request",
+    "Recording no longer goes blank if on-device transcription fails to load \u2014 it automatically falls back to cloud transcription"
   ],
   "releases": [
     {
