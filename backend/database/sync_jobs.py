@@ -70,10 +70,21 @@ def get_sync_job(job_id: str) -> Optional[dict]:
         return None
     job = json.loads(data)
 
-    # Stale-job detection: if processing for too long, mark failed
-    if job['status'] in ('queued', 'processing'):
+    # Stale-job detection: only a job that was actually picked up by a worker
+    # (status='processing') and then went quiet is a real failure. A job still
+    # 'queued' has never been picked up — usually because the worker pools are
+    # saturated — so it is NOT a failure; leave it queued and let the 24h TTL
+    # clean it up. (Flipping queued jobs to 'failed' here caused the client to
+    # surface spurious "Couldn't process — retrying" loops; see issue #7469.)
+    if job['status'] == 'processing':
         updated_at = job.get('updated_at') or job.get('created_at', 0)
         if time.time() - updated_at > STALE_THRESHOLD_SECONDS:
+            logger.warning(
+                "sync_job %s (uid=%s) stale after %.0fs in 'processing' — marking failed",
+                job_id,
+                job.get('uid'),
+                time.time() - updated_at,
+            )
             job['status'] = 'failed'
             job['error'] = 'Job timed out (background worker likely died)'
             job['completed_at'] = time.time()

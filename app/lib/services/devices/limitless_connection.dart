@@ -6,6 +6,7 @@ import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/services/devices.dart';
 import 'package:omi/services/devices/device_connection.dart';
 import 'package:omi/services/devices/models.dart';
+import 'package:omi/services/devices/transports/device_transport.dart';
 import 'package:omi/utils/debug_log_manager.dart';
 import 'package:omi/utils/logger.dart';
 
@@ -26,7 +27,10 @@ class LimitlessDeviceConnection extends DeviceConnection {
   final List<Map<String, dynamic>> _completedFlashPages = [];
 
   StreamSubscription? _rxSubscription;
+  StreamSubscription? _transportReconnectSubscription;
   bool _isInitialized = false;
+  bool _isReinitializing = false;
+  bool _pendingReinit = false;
   bool _isBatchMode = false;
 
   int _highestReceivedIndex = -1;
@@ -45,23 +49,61 @@ class LimitlessDeviceConnection extends DeviceConnection {
 
     await Future.delayed(const Duration(seconds: 1));
 
-    _rxSubscription = transport
-        .getCharacteristicStream(limitlessServiceUuid, limitlessRxCharUuid)
-        .listen(_handleNotification);
+    _attachRxSubscription();
 
     await Future.delayed(const Duration(seconds: 1));
 
     await _initialize();
+
+    _transportReconnectSubscription = transport.connectionStateStream
+        .where((s) => s == DeviceTransportState.connected)
+        .listen((_) => _handleTransportReconnected());
   }
 
   @override
   Future<void> disconnect() async {
+    await _transportReconnectSubscription?.cancel();
+    _transportReconnectSubscription = null;
     await _rxSubscription?.cancel();
     await _audioController.close();
     await _flashPageController.close();
     await _buttonController.close();
     _isBatchMode = false;
     await super.disconnect();
+  }
+
+  void _attachRxSubscription() {
+    _rxSubscription?.cancel();
+    _rxSubscription = transport
+        .getCharacteristicStream(limitlessServiceUuid, limitlessRxCharUuid)
+        .listen(_handleNotification);
+  }
+
+  Future<void> _handleTransportReconnected() async {
+    if (_isReinitializing) {
+      _pendingReinit = true;
+      return;
+    }
+    _isReinitializing = true;
+    try {
+      do {
+        _pendingReinit = false;
+        _attachRxSubscription();
+        await _reinitializeAfterReconnect();
+      } while (_pendingReinit);
+    } finally {
+      _isReinitializing = false;
+    }
+  }
+
+  Future<void> _reinitializeAfterReconnect() async {
+    try {
+      final dataStreamCmd = _encodeEnableDataStream();
+      await transport.writeCharacteristic(limitlessServiceUuid, limitlessTxCharUuid, dataStreamCmd);
+      DebugLogManager.logInfo('Limitless device re-initialized after reconnect');
+    } catch (e) {
+      Logger.debug('Limitless: Re-initialization after reconnect failed: $e');
+    }
   }
 
   @override

@@ -331,6 +331,24 @@ class TestSyncJobsRedis:
         result = mod.get_sync_job('fresh-1')
         assert result['status'] == 'processing'
 
+    def test_get_sync_job_does_not_fail_stale_queued(self):
+        """A stale 'queued' job was never picked up (pool saturation) — it is
+        NOT a worker failure and must stay 'queued' (see issue #7469)."""
+        mod, mock_redis = self._load_sync_jobs_module()
+        stale_queued = {
+            'job_id': 'queued-1',
+            'uid': 'uid',
+            'status': 'queued',
+            'updated_at': time.time() - 700,  # 700s ago > 600s threshold
+            'created_at': time.time() - 800,
+        }
+        mock_redis.get.return_value = json.dumps(stale_queued).encode()
+
+        result = mod.get_sync_job('queued-1')
+        assert result['status'] == 'queued'
+        assert result.get('error') is None
+        mock_redis.set.assert_not_called()
+
     def test_mark_job_completed_sets_status(self):
         """mark_job_completed must set correct terminal status."""
         mod, mock_redis = self._load_sync_jobs_module()
