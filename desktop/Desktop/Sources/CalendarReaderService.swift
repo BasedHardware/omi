@@ -182,7 +182,14 @@ actor CalendarReaderService {
       - Do NOT include sensitive medical or financial details
       """
 
+    // Retry the synthesis on transient failure instead of silently dropping the import.
+    let maxAttempts = 2
+    for attempt in 1...maxAttempts {
     do {
+      if ProcessInfo.processInfo.environment["OMI_FORCE_SYNTHESIS_FAIL"] == "1"
+        || UserDefaults.standard.bool(forKey: "forceSynthesisFail") {
+        throw NSError(domain: "Synthesis", code: -1, userInfo: [NSLocalizedDescriptionKey: "forced synthesis failure"])
+      }
       let bridge = AgentBridge(harnessMode: "piMono")
       try await bridge.start()
       defer { Task { await bridge.stop() } }
@@ -275,9 +282,16 @@ actor CalendarReaderService {
       return (memoriesSaved, tasksSaved, profileSummary)
 
     } catch {
-      log("CalendarReaderService: Synthesis failed: \(error)")
+      if attempt < maxAttempts {
+        log("CalendarReaderService: Synthesis attempt \(attempt) failed, retrying: \(error)")
+        try? await Task.sleep(nanoseconds: 800_000_000)
+        continue
+      }
+      log("CalendarReaderService: Synthesis failed after \(attempt) attempts: \(error)")
       return (0, 0, "")
     }
+    }
+    return (0, 0, "")
   }
 
   func saveAsMemories(events: [CalendarEvent], limit: Int? = nil) async -> (saved: Int, failed: Int)
