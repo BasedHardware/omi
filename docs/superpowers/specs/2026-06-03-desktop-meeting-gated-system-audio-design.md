@@ -432,3 +432,17 @@ Known behavior (acceptable for v1): the conversation/session is created when rec
 spans the armed period, receiving audio only during calls (silence gaps between meetings); the
 backend's silence-based segmentation handles splitting. Per-meeting conversation boundaries are a
 possible future refinement. Call start/end detection has up to ~`pollInterval` (4s) latency.
+
+### 11.4 Greptile review follow-up
+
+- A briefly-considered "sticky" keep-alive (keep a browser call active while the browser keeps
+  playing audio, to survive mute) was **removed**: browser audio output can't be attributed to the
+  call vs. other tabs, so it latched on unrelated audio (e.g. YouTube after a call ended) and kept
+  recording indefinitely — defeating the "only during meetings" intent. A **muted browser call**
+  now relies on the window-title fallback (`browserCallWindowPresent()`, Screen Recording
+  permission). Native calls keep the mic open when muted, so they're unaffected.
+- Removed the unused `ConferencingApps.isMeetingActiveNow()`; `MeetingDetector` probes
+  `callAppIsUsingMicrophone()` (macOS 14.4+) / `browserCallWindowPresent()` directly.
+- The "missing `@MainActor`" review note was a false positive — `AppState` is declared `@MainActor`
+  at the class level, so `reconcileCapture` / `startMicCaptureIfNeeded` / `startSystemAudioCaptureIfNeeded`
+  are already main-actor-isolated.
