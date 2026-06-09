@@ -18,7 +18,7 @@ final class MeetingDetector {
 
     private let pollInterval: TimeInterval
     private let offGracePeriod: TimeInterval
-    private let probeSignal: () -> ConferencingApps.MeetingSignal
+    private let isMeetingNow: () -> Bool
     private let now: () -> Date
     private let onChange: (Bool) -> Void
 
@@ -27,27 +27,28 @@ final class MeetingDetector {
     /// When the call first goes undetected, the time at which we will actually flip to inactive.
     /// `nil` whenever a meeting is detected or no pending-off is in progress.
     private var pendingOffDeadline: Date?
-    /// True once the active session was identified as a *browser* call — enables "sticky" keep-alive
-    /// (a muted browser drops mic input, but we keep recording while it still plays call audio).
-    private var stickyBrowserCall = false
     private var started = false
 
     /// - Parameters:
     ///   - pollInterval: how often to re-probe (browser tab-title changes only surface via the poll).
     ///   - offGracePeriod: sustained "no meeting" time required before flipping off.
-    ///   - signalProbe: conferencing-audio probe (injectable for tests).
+    ///   - isMeetingNow: conferencing-call probe (injectable for tests). Default: a native or browser
+    ///     app using the mic (macOS 14.4+), or a browser call window (window-title fallback).
     ///   - now: clock (injectable for tests).
     ///   - onChange: called on the main actor whenever `isMeetingActive` flips.
     init(
         pollInterval: TimeInterval = 4.0,
         offGracePeriod: TimeInterval = 8.0,
-        signalProbe: @escaping () -> ConferencingApps.MeetingSignal = { ConferencingApps.meetingSignal() },
+        isMeetingNow: @escaping () -> Bool = {
+            if #available(macOS 14.4, *), ConferencingApps.callAppIsUsingMicrophone() { return true }
+            return ConferencingApps.browserCallWindowPresent()
+        },
         now: @escaping () -> Date = { Date() },
         onChange: @escaping (Bool) -> Void
     ) {
         self.pollInterval = pollInterval
         self.offGracePeriod = offGracePeriod
-        self.probeSignal = signalProbe
+        self.isMeetingNow = isMeetingNow
         self.now = now
         self.onChange = onChange
     }
@@ -102,31 +103,15 @@ final class MeetingDetector {
     /// Probe for an active call off the main actor — the CoreAudio process scan / CGWindowList query
     /// can block (notably right after wake) — then apply the result back on the main actor.
     private func tick() {
-        let probe = probeSignal
+        let probe = isMeetingNow
         Task.detached(priority: .utility) { [weak self] in
-            let signal = probe()
-            await MainActor.run { self?.applySignal(signal) }
-        }
-    }
-
-    /// Resolve a `MeetingSignal` into an active/inactive decision, applying the sticky browser-call
-    /// keep-alive, then run it through the off-hysteresis. Exposed for tests.
-    func applySignal(_ signal: ConferencingApps.MeetingSignal) {
-        // Sticky: once we're in a browser call, keep it alive while the browser still plays call
-        // audio, even if mic input drops (the user muted). Native calls keep the mic open when muted
-        // so they don't need this.
-        let effective = signal.inCall || (stickyBrowserCall && signal.browserAudioOutput)
-        if effective, signal.browserInvolved {
-            stickyBrowserCall = true
-        }
-        applyDetected(effective)
-        if !isMeetingActive {
-            stickyBrowserCall = false
+            let detected = probe()
+            await MainActor.run { self?.applyDetected(detected) }
         }
     }
 
     /// Apply a boolean detection result, honoring the off-hysteresis. Exposed for tests; normally
-    /// driven by the poll timer and workspace notifications via `tick()` → `applySignal(_:)`.
+    /// driven by the poll timer and workspace notifications via `tick()`.
     func applyDetected(_ detected: Bool) {
         if detected {
             // Meeting present: cancel any pending-off and ensure we're active.
