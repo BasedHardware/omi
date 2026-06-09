@@ -62,6 +62,8 @@ class ProductionLikeMemoryModelClient(MemoryModelClient):
         memories_str = _memories_str(user_name, pipeline_input)
         for conversation_id, grouped_events in _events_by_conversation(events).items():
             for chunk_index, event_chunk in enumerate(_chunks(grouped_events, self.max_events_per_call)):
+                if _is_passive_media_monologue(event_chunk):
+                    continue
                 segments = [_to_transcript_segment(event, index) for index, event in enumerate(event_chunk)]
                 memories = _extract_memories_with_production_prompt(
                     segments=segments,
@@ -245,6 +247,30 @@ def _has_unknown_speaker(events: list[RawContextEvent]) -> bool:
 
 def _has_non_actor_speaker(events: list[RawContextEvent]) -> bool:
     return any(event.speaker and event.speaker.is_actor_user is False for event in events)
+
+
+def _is_passive_media_monologue(events: list[RawContextEvent]) -> bool:
+    if not events:
+        return False
+    if any(event.speaker and event.speaker.is_actor_user is True for event in events):
+        return False
+    text = " ".join(event.text or "" for event in events).casefold()
+    if not text:
+        return False
+    media_markers = (
+        " this video ",
+        " in this video ",
+        " our sources in the description ",
+        " sources in the description ",
+        " link in the description ",
+        " links in the description ",
+        " like and subscribe ",
+        " welcome back to ",
+        " today's episode ",
+        " this episode ",
+    )
+    padded = f" {text} "
+    return any(marker in padded for marker in media_markers)
 
 
 def _has_third_party_signal(text: str, events: list[RawContextEvent]) -> bool:
