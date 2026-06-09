@@ -331,6 +331,12 @@ async def _stream_handler(
     single_language_mode = transcription_prefs.get('single_language_mode', False)
     vocabulary = transcription_prefs.get('vocabulary', [])
 
+    # Stamp mobile custom-STT usage onto the user doc so these users are queryable
+    # and meterable (#7690) — the app otherwise only signals it per-session via the
+    # custom_stt WS param. Write only on change to keep this off the hot path.
+    if use_custom_stt != transcription_prefs.get('uses_custom_stt', False):
+        await run_blocking(db_executor, user_db.set_user_custom_stt_usage, uid, use_custom_stt)
+
     # Onboarding mode: force single language for better accuracy
     if onboarding_mode:
         single_language_mode = True
