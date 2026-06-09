@@ -121,6 +121,33 @@ def test_prodlike_unknown_speaker_user_memory_can_auto_accept(monkeypatch):
     assert output.decisions[0].action == "create_memory"
 
 
+def test_prodlike_passive_media_monologue_does_not_create_user_memories(monkeypatch):
+    def fail_if_called(**_kwargs):
+        raise AssertionError("passive media transcripts should be filtered before extraction")
+
+    monkeypatch.setattr(
+        production_like_model,
+        "_extract_memories_with_production_prompt",
+        fail_if_called,
+    )
+
+    output = _run(
+        _input(
+            _event(
+                "This video is largely based on the book Zodiac. "
+                "As always, you'll find the link and all our sources in the description. "
+                "The newsroom of the San Francisco Chronicle is buzzing with life.",
+                speaker=SpeakerRef(speaker_id="speaker-0", label="Speaker 0", is_actor_user=None),
+            )
+        )
+    )
+
+    assert output.status == "ok"
+    assert output.event_frames == []
+    assert output.mutation_plan.creates == []
+    assert output.review_items == []
+
+
 def test_prodlike_speculative_memory_routes_to_review(monkeypatch):
     _patch_extractor(monkeypatch, "User might switch to Assembly for transcription.")
 
