@@ -479,12 +479,14 @@ async def _websocket_util_trigger(
                     res = json.loads(bytes(data[4:]).decode("utf-8"))
                     segments = res.get('segments')
                     memory_id = res.get('memory_id')
-                    # Update conversation_id from transcript if provided
-                    if memory_id:
-                        current_conversation_id = memory_id
+                    # A transcript's memory_id must NOT overwrite the session's authoritative
+                    # current_conversation_id (which is set only by header 103). Doing so let a stale
+                    # lifecycle event carrying an older conversation's memory_id rebind a newer recording
+                    # session, mis-associating subsequent private-cloud audio (see issue #6952).
                     if len(transcript_queue) >= TRANSCRIPT_QUEUE_WARN_SIZE:
                         logger.warning(f"Warning: transcript_queue size {len(transcript_queue)} {uid}")
-                    # Use memory_id if available, otherwise use current_conversation_id for conversations
+                    # Route this transcript by its own memory_id when present, falling back to the
+                    # session's conversation id. This does not mutate session-scoped state.
                     conversation_or_memory_id = memory_id or current_conversation_id
                     transcript_queue.append({'segments': segments, 'memory_id': conversation_or_memory_id})
                     continue

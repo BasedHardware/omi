@@ -6,7 +6,7 @@ from enum import Enum
 from typing import List, Optional
 
 from fastapi import APIRouter, HTTPException, Depends, Query
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ValidationError
 
 import database.folders as folders_db
 import database.memories as memories_db
@@ -43,7 +43,7 @@ from utils.other.endpoints import with_rate_limit, get_current_user_uid
 from models.dev_api_key import DevApiKey, DevApiKeyCreate, DevApiKeyCreated
 from utils.scopes import AVAILABLE_SCOPES, validate_scopes
 from utils.apps import update_personas_async
-from utils.notifications import send_action_item_data_message
+from utils.notifications import send_action_item_data_message, sync_action_item_reminder
 from utils.conversations.process_conversation import process_conversation
 from utils.conversations.location import get_google_maps_location
 from utils.llm.memories import identify_category_for_memory
@@ -171,11 +171,24 @@ def get_memories(
         except ValueError as e:
             raise HTTPException(status_code=400, detail=f"Invalid category {str(e)}")
     memories = memories_db.get_memories(uid, limit, offset, [c.value for c in category_list])
+    # Validate each record individually so a single malformed/legacy doc (e.g. missing a required
+    # field or an out-of-enum category) doesn't fail the whole page with a 500. Mirrors the
+    # hardening already applied to GET /v3/memories.
+    valid_memories = []
     for memory in memories:
         if memory.get('is_locked', False):
             content = memory.get('content', '')
             memory['content'] = (content[:70] + '...') if len(content) > 70 else content
-    return memories
+        try:
+            valid_memories.append(CleanerMemory.model_validate(memory))
+        except ValidationError as e:
+            missing_fields = [err['loc'][0] for err in e.errors() if err.get('loc')]
+            logger.warning(
+                f"Skipping invalid memory doc {memory.get('id', 'unknown')} for uid {uid}: "
+                f"missing/invalid fields {missing_fields}"
+            )
+            continue
+    return valid_memories
 
 
 @router.post("/v1/dev/user/memories", response_model=MemoryResponse, tags=["developer"])
@@ -607,14 +620,17 @@ def update_action_item(
     if not action_items_db.update_action_item(uid, action_item_id, update_data):
         raise HTTPException(status_code=500, detail="Failed to update action item")
 
-    # Send FCM notification if due_at was updated
-    if request.due_at is not None:
+    # Reconcile the client-scheduled reminder when completion or due date changed, using the final
+    # state: cancel if completed or no due date, (re)schedule only for an open task with a due date
+    # (#5085).
+    if 'completed' in update_data or 'due_at' in update_data:
         description = request.description.strip() if request.description else action_item.get('description', '')
-        send_action_item_data_message(
+        sync_action_item_reminder(
             user_id=uid,
             action_item_id=action_item_id,
             description=description,
-            due_at=request.due_at.isoformat(),
+            completed=bool(update_data.get('completed', action_item.get('completed'))),
+            due_at=update_data.get('due_at', action_item.get('due_at')),
         )
 
     return action_items_db.get_action_item(uid, action_item_id)

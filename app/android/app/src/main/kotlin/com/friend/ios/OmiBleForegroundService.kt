@@ -91,8 +91,11 @@ class OmiBleForegroundService : Service() {
 
             val inst = instance
             if (inst != null) {
-                Log.d(TAG, "startService($caller): service already running, managing $deviceAddress directly")
-                inst.manageDevice(deviceAddress, requiresBond)
+                // Service already running — any startService call is effectively a
+                // "please (re)connect this device" signal. Always force a fresh attempt
+                // so a stuck autoConnect=true passive scan doesn't silently swallow it.
+                Log.d(TAG, "startService($caller): service running, forcing reconnect for $deviceAddress")
+                inst.forceReconnect(deviceAddress, requiresBond, caller)
                 return
             }
 
@@ -404,6 +407,37 @@ class OmiBleForegroundService : Service() {
         managed.pendingReconnect?.let { handler.removeCallbacks(it) }
         managed.pendingReconnect = null
         managed.retryCount = 0
+        connectToDevice(addr, source)
+    }
+
+    /**
+     * Called from startService() when CompanionDeviceManager fires EVENT_BLE_APPEARED.
+     * The OS has confirmed the device is in range right now, so abandon any stuck
+     * autoConnect=true passive scan and force a fresh connection attempt.
+     */
+    fun forceReconnect(address: String, requiresBond: Boolean, source: String) {
+        val addr = address.uppercase()
+        if (bleManager.isPeripheralConnected(addr)) return
+
+        synchronized(syncLock) {
+            val managed = managedDevices[addr] ?: run {
+                // No managed state yet — fall through to normal manage flow
+                managedDevices[addr] = ManagedDevice(address = addr, requiresBond = requiresBond)
+                null
+            }
+            if (managed != null) {
+                if (requiresBond && !managed.requiresBond) managed.requiresBond = true
+                // Cancel any pending retry so it doesn't race with the fresh attempt
+                managed.pendingReconnect?.let { handler.removeCallbacks(it) }
+                managed.pendingReconnect = null
+                managed.retryCount = 0
+                // Close the stuck GATT so connectToDevice opens a fresh one
+                if (bleManager.connectedGatts.containsKey(addr)) {
+                    bleManager.closeGatt(addr)
+                }
+                managed.currentGattHash = null
+            }
+        }
         connectToDevice(addr, source)
     }
 

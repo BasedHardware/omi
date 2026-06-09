@@ -53,6 +53,9 @@ final class LocalTranscriptionService: @unchecked Sendable {
 
     private var asrManager: AsrManager?
     private var onSegments: SegmentsHandler?
+    /// Fired (on the main actor) if the Parakeet model fails to download/load. Lets AppState
+    /// fall back to cloud STT instead of silently producing a blank transcript.
+    private var onModelLoadFailed: (@MainActor () -> Void)?
 
     // 16 kHz mono Float32 sample buffer, guarded by `lock`.
     private let lock = NSLock()
@@ -76,12 +79,23 @@ final class LocalTranscriptionService: @unchecked Sendable {
     }
 
     /// Begin loading the model (async) and start the periodic flush loop.
-    func start(onSegments: @escaping SegmentsHandler) {
+    /// `onModelLoadFailed` fires once if the model can't load, so the caller can fall back
+    /// to cloud transcription instead of recording into a void.
+    func start(onSegments: @escaping SegmentsHandler, onModelLoadFailed: (@MainActor () -> Void)? = nil) {
         self.onSegments = onSegments
+        self.onModelLoadFailed = onModelLoadFailed
 
         Task { [weak self] in
             guard let self else { return }
             do {
+                // Test hook: force a model-load failure to exercise the cloud fallback path.
+                // Toggle with env OMI_FORCE_PARAKEET_FAIL=1 or `defaults write <bundle> forceParakeetFail -bool true`.
+                if ProcessInfo.processInfo.environment["OMI_FORCE_PARAKEET_FAIL"] == "1"
+                    || UserDefaults.standard.bool(forKey: "forceParakeetFail") {
+                    throw NSError(
+                        domain: "LocalTranscriptionService", code: -1,
+                        userInfo: [NSLocalizedDescriptionKey: "forced model-load failure (OMI_FORCE_PARAKEET_FAIL)"])
+                }
                 // v2 = English-only (better recall); v3 = 25 European languages.
                 let version: AsrModelVersion = self.language.hasPrefix("en") ? .v2 : .v3
                 let started = Date()
@@ -95,6 +109,9 @@ final class LocalTranscriptionService: @unchecked Sendable {
                 log("LocalTranscriptionService: Parakeet \(version) ready in \(String(format: "%.1f", Date().timeIntervalSince(started)))s")
             } catch {
                 logError("LocalTranscriptionService: model load failed", error: error)
+                if let onFailed = self.onModelLoadFailed {
+                    await MainActor.run { onFailed() }
+                }
             }
         }
 

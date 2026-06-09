@@ -1,9 +1,25 @@
 {
   "unreleased": [
-    "Improved chat and voice reliability \u2014 the backend now retries transient AI provider errors instead of failing the request",
     "Push-to-talk now mutes music and other audio while you talk and restores it on release, instead of leaving it playing"
   ],
   "releases": [
+    {
+      "version": "0.11.457",
+      "date": "2026-06-09",
+      "changes": [
+        "Fixed the floating bar reappearing after you turned off \u201cShow floating bar\u201d \u2014 it now stays hidden even while a background browser action runs",
+        "Fixed Ask Omi chat occasionally failing with a rate-limit error when on-screen assistants were active",
+        "Restored the Device settings page so you can pair and manage a Bluetooth device from Settings",
+        "Recording no longer goes blank if on-device transcription fails to load \u2014 it automatically falls back to cloud transcription"
+      ]
+    },
+    {
+      "version": "0.11.455",
+      "date": "2026-06-09",
+      "changes": [
+        "Improved chat and voice reliability \u2014 the backend now retries transient AI provider errors instead of failing the request"
+      ]
+    },
     {
       "version": "0.11.454",
       "date": "2026-06-09",

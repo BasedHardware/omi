@@ -8,6 +8,7 @@ from datetime import datetime, timezone
 from typing import List, Optional
 
 import database.conversations as conversations_db
+import database.notifications as notification_db
 import database.users as users_db
 import database.vector_db as vector_db
 from models.conversation import Conversation
@@ -128,7 +129,11 @@ def get_conversations_text(
             continue
 
     return conversations_to_string(
-        conversations, use_transcript=include_transcript, include_timestamps=include_timestamps, people=people
+        conversations,
+        use_transcript=include_transcript,
+        include_timestamps=include_timestamps,
+        people=people,
+        tz=notification_db.get_user_time_zone(uid),
     )
 
 
@@ -224,7 +229,11 @@ def search_conversations_text(
 
         result = f"Found {len(conversations)} conversations semantically matching '{query}':\n\n"
         result += conversations_to_string(
-            conversations, use_transcript=include_transcript, include_timestamps=include_timestamps, people=people
+            conversations,
+            use_transcript=include_transcript,
+            include_timestamps=include_timestamps,
+            people=people,
+            tz=notification_db.get_user_time_zone(uid),
         )
         return result
 
