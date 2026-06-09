@@ -22,6 +22,7 @@ struct ShortcutsSettingsSection: View {
       pttKeyCard
       doubleTapCard
       pttSoundsCard
+      muteAudioCard
     }
     .onDisappear {
       stopShortcutCapture()
@@ -203,6 +204,33 @@ struct ShortcutsSettingsSection: View {
     .modifier(
       SettingHighlightModifier(
         settingId: "floatingbar.pttsounds", highlightedSettingId: $highlightedSettingId))
+  }
+
+  private var muteAudioCard: some View {
+    HStack(spacing: 16) {
+      VStack(alignment: .leading, spacing: 4) {
+        Text("Mute Audio While Talking")
+          .scaledFont(size: 16, weight: .semibold)
+          .foregroundColor(OmiColors.textPrimary)
+        Text("Silence music and other playback while holding push-to-talk, then restore it on release.")
+          .scaledFont(size: 13)
+          .foregroundColor(OmiColors.textSecondary)
+      }
+      Spacer()
+      Toggle("", isOn: $settings.pttMuteSystemAudio)
+        .toggleStyle(.switch)
+        .tint(OmiColors.purplePrimary)
+    }
+    .padding(20)
+    .background(
+      RoundedRectangle(cornerRadius: 12)
+        .fill(OmiColors.backgroundTertiary.opacity(0.5))
+    )
+    .opacity(settings.pttEnabled ? 1 : 0.55)
+    .disabled(!settings.pttEnabled)
+    .modifier(
+      SettingHighlightModifier(
+        settingId: "floatingbar.muteaudio", highlightedSettingId: $highlightedSettingId))
   }
 
   private var referenceCard: some View {
