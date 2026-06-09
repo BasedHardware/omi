@@ -233,9 +233,13 @@ class NativeBleTransport extends DeviceTransport {
 
   void _handleConnectionState(bool connected, String? error) {
     if (!connected) {
-      // Remember active subscriptions before closing streams
-      _activeSubscriptionKeys.clear();
-      _activeSubscriptionKeys.addAll(_streamControllers.keys);
+      // Guard against double-fire (didDisconnect + didFailToConnect both invoke this).
+      // On the 2nd call _streamControllers is already empty; overwriting _activeSubscriptionKeys
+      // with {} would prevent re-subscription on the next reconnect.
+      if (_streamControllers.isNotEmpty) {
+        _activeSubscriptionKeys.clear();
+        _activeSubscriptionKeys.addAll(_streamControllers.keys);
+      }
 
       _closeAllStreams();
       _services = [];
