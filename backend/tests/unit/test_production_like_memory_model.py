@@ -130,3 +130,14 @@ def test_prodlike_speculative_memory_routes_to_review(monkeypatch):
     assert output.event_frames[0].uncertainty_reasons == ["inferred_not_stated"]
     assert output.event_frames[0].sensitivity.review_required is True
     assert output.decisions[0].action == "route_to_review"
+
+
+def test_prodlike_future_plans_route_to_review(monkeypatch):
+    _patch_extractor(monkeypatch, "User plans to meet at the coworking space at 5pm today.")
+
+    output = _run(_input(_event("I plan to meet at the coworking space at 5pm today.")))
+
+    assert output.event_frames[0].confidence == "medium"
+    assert output.event_frames[0].uncertainty_reasons == ["temporal_scope_unclear"]
+    assert output.event_frames[0].sensitivity.review_required is True
+    assert output.decisions[0].action == "route_to_review"
