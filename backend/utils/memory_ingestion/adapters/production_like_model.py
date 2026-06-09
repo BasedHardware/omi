@@ -199,6 +199,11 @@ def _calibration(memory: ProductionLikeMemory, events: list[RawContextEvent]) ->
         confidence = "medium"
         uncertainty_reasons.append("speaker_uncertain")
 
+    if _has_speculative_signal(text):
+        confidence = "medium"
+        uncertainty_reasons.append("inferred_not_stated")
+        review_required = True
+
     third_party = _has_third_party_signal(text, events)
     if third_party:
         confidence = "medium"
@@ -253,6 +258,23 @@ def _has_third_party_signal(text: str, events: list[RawContextEvent]) -> bool:
         "kristina",
     )
     return _has_non_actor_speaker(events) or any(term in text for term in terms)
+
+
+def _has_speculative_signal(text: str) -> bool:
+    terms = (
+        " might ",
+        " maybe ",
+        " may ",
+        " considering ",
+        " consider ",
+        " thinking of ",
+        " thinking about ",
+        " possibly ",
+        " probably ",
+        " could ",
+    )
+    padded = f" {text} "
+    return any(term in padded for term in terms)
 
 
 def _has_health_signal(text: str) -> bool:
