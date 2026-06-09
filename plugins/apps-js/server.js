@@ -16,10 +16,12 @@ const {
 } = require('./email/src/config/constants');
 
 // Import services
-const { checkSupabaseConnection } = require('./email/src/services/authService');
+const { checkSupabaseConnection, getAuthenticatedUser } = require('./email/src/services/authService');
 const { initializeDatabase } = require('./email/src/utils/dbUtils');
 const { closeRedisConnection } = require('./email/src/utils/redisUtils');
+const { draftEmail: sendEmailWithGmail } = require('./email/src/utils/emailUtils');
 // Import routes
+const authRouter = require('./email/src/routes/auth');
 const emailRouter = require('./email/src/routes/email');
 const deckRouter = require('./deck/src/routes/deck');
 
@@ -47,6 +49,10 @@ app.use(cookieParser());
 
 // Serve static files from the 'public' directory
 app.use(express.static(path.join(__dirname, 'public')));
+
+// Shared services used by route modules.
+app.locals.getAuthenticatedUser = getAuthenticatedUser;
+app.locals.sendEmail = sendEmailWithGmail;
 
 // Rate limiting middleware
 const requestCounts = new Map();
@@ -95,6 +101,7 @@ app.use((req, res, next) => {
 
 
 // Routes
+app.use('/api/auth', authRouter);
 app.use('/api/email', emailRouter);
 app.use('/api/deck', deckRouter);
 
