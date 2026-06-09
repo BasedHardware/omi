@@ -43,7 +43,7 @@ from utils.other.endpoints import with_rate_limit, get_current_user_uid
 from models.dev_api_key import DevApiKey, DevApiKeyCreate, DevApiKeyCreated
 from utils.scopes import AVAILABLE_SCOPES, validate_scopes
 from utils.apps import update_personas_async
-from utils.notifications import send_action_item_data_message
+from utils.notifications import send_action_item_data_message, sync_action_item_reminder
 from utils.conversations.process_conversation import process_conversation
 from utils.conversations.location import get_google_maps_location
 from utils.llm.memories import identify_category_for_memory
@@ -607,14 +607,17 @@ def update_action_item(
     if not action_items_db.update_action_item(uid, action_item_id, update_data):
         raise HTTPException(status_code=500, detail="Failed to update action item")
 
-    # Send FCM notification if due_at was updated
-    if request.due_at is not None:
+    # Reconcile the client-scheduled reminder when completion or due date changed, using the final
+    # state: cancel if completed or no due date, (re)schedule only for an open task with a due date
+    # (#5085).
+    if 'completed' in update_data or 'due_at' in update_data:
         description = request.description.strip() if request.description else action_item.get('description', '')
-        send_action_item_data_message(
+        sync_action_item_reminder(
             user_id=uid,
             action_item_id=action_item_id,
             description=description,
-            due_at=request.due_at.isoformat(),
+            completed=bool(update_data.get('completed', action_item.get('completed'))),
+            due_at=update_data.get('due_at', action_item.get('due_at')),
         )
 
     return action_items_db.get_action_item(uid, action_item_id)
