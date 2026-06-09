@@ -253,7 +253,7 @@ def get_memories_via_integration(
     for fact in memories:
         try:
             memory_items.append(integration_models.MemoryItem(**fact))
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - intentional broad catch: skip any malformed record
             # One malformed/legacy record must not 500 the whole page; skip it (mirrors the
             # conversation conversion guard in get_conversations_via_integration).
             logger.error(f"Error parsing memory {fact.get('id')}: {str(e)}")
@@ -692,7 +692,7 @@ def get_tasks_via_integration(
             task_data['description'] = (description[:70] + '...') if len(description) > 70 else description
         try:
             task_items.append(integration_models.TaskItem(**task_data))
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - intentional broad catch: skip any malformed record
             # One malformed/legacy record must not 500 the whole page; skip it (mirrors the
             # conversation conversion guard in get_conversations_via_integration).
             logger.error(f"Error parsing task {task_data.get('id')}: {str(e)}")
