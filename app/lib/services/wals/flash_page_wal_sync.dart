@@ -46,10 +46,8 @@ class FlashPageWalSyncImpl implements FlashPageWalSync {
 
   @override
   void cancelSync() {
-    if (_isSyncing) {
-      Logger.debug("FlashPageSync: Cancel requested");
-      _cancelRequested = true;
-    }
+    Logger.debug("FlashPageSync: Cancel requested");
+    _cancelRequested = true;
   }
 
   Future<Map<String, int>?> _getStorageStatus(String deviceId) async {
@@ -184,38 +182,72 @@ class FlashPageWalSyncImpl implements FlashPageWalSync {
 
   @override
   Future<SyncLocalFilesResponse?> syncAll({IWalSyncProgressListener? progress}) async {
-    var wals = _wals.where((w) => w.status == WalStatus.miss && w.storage == WalStorage.flashPage).toList();
-    if (wals.isEmpty) {
-      Logger.debug("FlashPageSync: All downloaded!");
-      return null;
-    }
+    _cancelRequested = false;
 
-    for (var i = wals.length - 1; i >= 0; i--) {
-      var wal = wals[i];
+    int? globalStartPage;
+    int globalEndPage = 0;
+    bool drained = false;
 
-      wal.isSyncing = true;
-      wal.syncStartedAt = DateTime.now();
-      wal.syncMethod = SyncMethod.ble;
-      listener.onWalUpdated();
-
-      final completed = await _syncWal(wal, progress);
-
-      if (completed) {
-        wal.status = WalStatus.synced;
-      }
-      // If cancelled, status remains 'miss' so user can resume later
-
-      wal.isSyncing = false;
-      wal.syncStartedAt = null;
-      wal.syncEtaSeconds = null;
-      wal.syncSpeedKBps = null;
-      listener.onWalUpdated();
-
-      // If cancelled, stop processing remaining WALs
-      if (!completed && _cancelRequested) {
-        Logger.debug("FlashPageSync: Stopping syncAll due to cancellation");
+    while (!_cancelRequested) {
+      final wals = _wals.where((w) => w.status == WalStatus.miss && w.storage == WalStorage.flashPage).toList();
+      if (wals.isEmpty) {
+        Logger.debug("FlashPageSync: All downloaded!");
+        drained = globalStartPage != null;
         break;
       }
+
+      final int passStartPage = wals.map((w) => w.storageOffset).reduce((a, b) => a < b ? a : b);
+      globalStartPage ??= passStartPage;
+      for (final w in wals) {
+        if (w.storageTotalBytes > globalEndPage) globalEndPage = w.storageTotalBytes;
+      }
+
+      for (var i = wals.length - 1; i >= 0; i--) {
+        var wal = wals[i];
+
+        wal.isSyncing = true;
+        wal.syncStartedAt = DateTime.now();
+        wal.syncMethod = SyncMethod.ble;
+        listener.onWalUpdated();
+
+        final completed = await _syncWal(wal, progress, globalStartPage: globalStartPage, globalEndPage: globalEndPage);
+
+        if (completed) {
+          wal.status = WalStatus.synced;
+        }
+
+        wal.isSyncing = false;
+        wal.syncStartedAt = null;
+        wal.syncEtaSeconds = null;
+        wal.syncSpeedKBps = null;
+        listener.onWalUpdated();
+
+        if (!completed && _cancelRequested) {
+          Logger.debug("FlashPageSync: Stopping syncAll due to cancellation");
+          break;
+        }
+      }
+
+      if (_cancelRequested) break;
+
+      await refreshWalsFromDevice();
+      final resumeWals = _wals.where((w) => w.status == WalStatus.miss && w.storage == WalStorage.flashPage).toList();
+      if (resumeWals.isEmpty) {
+        drained = true;
+        break;
+      }
+
+      final int resumeStartPage = resumeWals.map((w) => w.storageOffset).reduce((a, b) => a < b ? a : b);
+      if (resumeStartPage <= passStartPage) {
+        Logger.debug("FlashPageSync: No forward progress past page $passStartPage; stopping auto-resume");
+        DebugLogManager.logWarning('Flash page auto-resume halted: no forward progress', {'startPage': passStartPage});
+        break;
+      }
+      Logger.debug("FlashPageSync: Auto-resuming flash-page sync from page $resumeStartPage");
+    }
+
+    if (drained && !_cancelRequested) {
+      progress?.onWalSyncedProgress(1.0);
     }
 
     return null;
@@ -223,6 +255,7 @@ class FlashPageWalSyncImpl implements FlashPageWalSync {
 
   @override
   Future<SyncLocalFilesResponse?> syncWal({required Wal wal, IWalSyncProgressListener? progress}) async {
+    _cancelRequested = false;
     var walToSync = _wals.where((w) => w == wal).toList().first;
 
     walToSync.isSyncing = true;
@@ -247,12 +280,11 @@ class FlashPageWalSyncImpl implements FlashPageWalSync {
 
   /// Downloads flash page data from device and registers chunks with LocalWalSync.
   /// Returns true if sync completed successfully, false if cancelled or failed.
-  Future<bool> _syncWal(Wal wal, IWalSyncProgressListener? progress) async {
+  Future<bool> _syncWal(Wal wal, IWalSyncProgressListener? progress, {int? globalStartPage, int? globalEndPage}) async {
     if (_device == null) return false;
 
     String deviceId = _device!.id;
     _currentDeviceId = deviceId;
-    _cancelRequested = false;
 
     try {
       var connection = await ServiceManager.instance().device.ensureConnection(deviceId);
@@ -309,7 +341,11 @@ class FlashPageWalSyncImpl implements FlashPageWalSync {
             lastProcessedIndex = maxIndex;
 
             final pagesProcessed = lastProcessedIndex - startPage;
-            final progressPercent = totalPages > 0 ? pagesProcessed / totalPages : 0.0;
+
+            final int progStart = globalStartPage ?? startPage;
+            final int progEnd = globalEndPage ?? endPage;
+            final int progTotal = progEnd - progStart;
+            final progressPercent = progTotal > 0 ? (lastProcessedIndex - progStart) / progTotal : 0.0;
 
             // Calculate speed (pages per second) and ETA
             final elapsedSeconds = DateTime.now().difference(syncStartTime).inMilliseconds / 1000.0;
@@ -321,13 +357,14 @@ class FlashPageWalSyncImpl implements FlashPageWalSync {
             // Update WAL with sync progress info
             wal.syncedFrameOffset = pagesProcessed;
             if (pagesPerSecond > 0) {
-              final pagesRemaining = endPage - lastProcessedIndex;
+              final pagesRemaining = progEnd - lastProcessedIndex;
               wal.syncEtaSeconds = (pagesRemaining / pagesPerSecond).round();
               // Convert pages/sec to approx KB/s (each page ~160 bytes of opus data)
               wal.syncSpeedKBps = pagesPerSecond * 0.16;
             }
 
-            progress?.onWalSyncedProgress(progressPercent.clamp(0.0, 0.95), speedKBps: wal.syncSpeedKBps);
+            final double reportCap = globalStartPage != null ? 0.99 : 0.95;
+            progress?.onWalSyncedProgress(progressPercent.clamp(0.0, reportCap), speedKBps: wal.syncSpeedKBps);
             listener.onWalUpdated();
           }
 
@@ -457,7 +494,6 @@ class FlashPageWalSyncImpl implements FlashPageWalSync {
 
           // Switch back to real-time mode
           _isSyncing = false;
-          _cancelRequested = false;
           wal.syncEtaSeconds = null;
           wal.syncSpeedKBps = null;
           listener.onWalUpdated();
@@ -519,7 +555,9 @@ class FlashPageWalSyncImpl implements FlashPageWalSync {
       if (reachedEnd) {
         Logger.debug("FlashPageSync: Download complete. $filesSaved files saved and registered with LocalWalSync");
         DebugLogManager.logEvent('flash_page_download_completed', {'filesSaved': filesSaved});
-        progress?.onWalSyncedProgress(1.0);
+        if (globalStartPage == null) {
+          progress?.onWalSyncedProgress(1.0);
+        }
         return true; // Fully drained — safe for the caller to mark this WAL synced
       }
 
