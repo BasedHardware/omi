@@ -63,7 +63,7 @@ actor InsightAssistant: ProactiveAssistant {
     // MARK: - Initialization
 
     init(apiKey: String? = nil) throws {
-        self.geminiClient = try GeminiClient(apiKey: apiKey, model: ModelQoS.Gemini.insight)
+        self.geminiClient = try GeminiClient(apiKey: apiKey, model: ModelQoS.Gemini.insight, fallbackModel: "gemini-2.5-flash")
 
         let (stream, continuation) = AsyncStream.makeStream(of: Void.self, bufferingPolicy: .bufferingNewest(1))
         self.frameSignal = stream
