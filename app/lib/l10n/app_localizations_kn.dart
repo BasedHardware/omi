@@ -430,6 +430,12 @@ class AppLocalizationsKn extends AppLocalizations {
   String get offlineSync => 'ಆಫ್‌ಲೈನ್ ಸಿಂಕ್';
 
   @override
+  String get autoSync => 'ಸ್ವಯಂಚಾಲಿತ ಸಿಂಕ್';
+
+  @override
+  String get autoSyncDescription => 'ನಿಮ್ಮ ಸಾಧನ ಸಂಪರ್ಕಗೊಂಡಾಗ ಆಫ್‌ಲೈನ್ ರೆಕಾರ್ಡಿಂಗ್‌ಗಳನ್ನು ಸ್ವಯಂಚಾಲಿತವಾಗಿ ಸಿಂಕ್ ಮಾಡಿ';
+
+  @override
   String get deviceSettings => 'ಸಾಧನ ಸೆಟ್ಟಿಂಗ್‌ಗಳು';
 
   @override

@@ -554,6 +554,8 @@
         "description": "Plan and usage menu item"
     },
     "offlineSync": "סינכרון במצב לא מחובר",
+    "autoSync": "סנכרון אוטומטי",
+    "autoSyncDescription": "סנכרן אוטומטית הקלטות לא מקוונות כשהמכשיר שלך מתחבר",
     "@offlineSync": {
         "description": "Page title for offline sync"
     },

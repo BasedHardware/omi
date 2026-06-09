@@ -429,6 +429,12 @@ class AppLocalizationsMs extends AppLocalizations {
   String get offlineSync => 'Segerak Luar Talian';
 
   @override
+  String get autoSync => 'Penyegerakan automatik';
+
+  @override
+  String get autoSyncDescription => 'Segerakkan rakaman luar talian secara automatik apabila peranti anda disambungkan';
+
+  @override
   String get deviceSettings => 'Tetapan Peranti';
 
   @override

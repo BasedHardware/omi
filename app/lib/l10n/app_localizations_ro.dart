@@ -431,6 +431,12 @@ class AppLocalizationsRo extends AppLocalizations {
   String get offlineSync => 'Sincronizare offline';
 
   @override
+  String get autoSync => 'Sincronizare automată';
+
+  @override
+  String get autoSyncDescription => 'Sincronizează automat înregistrările offline când dispozitivul tău se conectează';
+
+  @override
   String get deviceSettings => 'Setări dispozitiv';
 
   @override

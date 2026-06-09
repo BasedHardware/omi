@@ -554,6 +554,8 @@
         "description": "Plan and usage menu item"
     },
     "offlineSync": "ఆఫ్‌లైన్ సమకాలీకరణ",
+    "autoSync": "ఆటో సింక్",
+    "autoSyncDescription": "మీ పరికరం కనెక్ట్ అయినప్పుడు ఆఫ్‌లైన్ రికార్డింగ్‌లను స్వయంచాలకంగా సింక్ చేయండి",
     "@offlineSync": {
         "description": "Page title for offline sync"
     },

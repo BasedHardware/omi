@@ -430,6 +430,12 @@ class AppLocalizationsEt extends AppLocalizations {
   String get offlineSync => 'Võrguühenduseta sünkroonimine';
 
   @override
+  String get autoSync => 'Automaatne sünkroonimine';
+
+  @override
+  String get autoSyncDescription => 'Sünkrooni võrguühenduseta salvestised automaatselt, kui seade ühendatakse';
+
+  @override
   String get deviceSettings => 'Seadme seaded';
 
   @override

@@ -1605,6 +1605,12 @@ class CaptureProvider extends ChangeNotifier
       Logger.debug('Auto-sync skipped: custom STT provider enabled');
       return;
     }
+    // Omi users can opt out of auto-sync from device settings; they back up
+    // manually instead. Defaults to on.
+    if (!SharedPreferencesUtil().autoSyncOfflineRecordings) {
+      Logger.debug('Auto-sync skipped: disabled by user');
+      return;
+    }
     // Wait for finalize+stamp to complete so tail buffer WALs are on disk before querying.
     if (_pendingFinalizeAndStamp != null) {
       await _pendingFinalizeAndStamp;
@@ -1698,6 +1704,11 @@ class CaptureProvider extends ChangeNotifier
     // toward their limit). They back up manually with explicit confirmation.
     if (SharedPreferencesUtil().useCustomStt) {
       Logger.debug('Orphan WAL recovery skipped: custom STT provider enabled');
+      return;
+    }
+    // Honor the user's auto-sync opt-out (device settings). Defaults to on.
+    if (!SharedPreferencesUtil().autoSyncOfflineRecordings) {
+      Logger.debug('Orphan WAL recovery skipped: auto-sync disabled by user');
       return;
     }
     if (!_isConnected) {

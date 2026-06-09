@@ -427,6 +427,12 @@ class AppLocalizationsTh extends AppLocalizations {
   String get offlineSync => 'ซิงค์ออฟไลน์';
 
   @override
+  String get autoSync => 'ซิงค์อัตโนมัติ';
+
+  @override
+  String get autoSyncDescription => 'ซิงค์การบันทึกแบบออฟไลน์โดยอัตโนมัติเมื่ออุปกรณ์ของคุณเชื่อมต่อ';
+
+  @override
   String get deviceSettings => 'การตั้งค่าอุปกรณ์';
 
   @override

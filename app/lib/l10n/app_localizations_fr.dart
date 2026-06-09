@@ -431,6 +431,12 @@ class AppLocalizationsFr extends AppLocalizations {
   String get offlineSync => 'Synchronisation hors ligne';
 
   @override
+  String get autoSync => 'Synchronisation automatique';
+
+  @override
+  String get autoSyncDescription => 'Synchroniser automatiquement les enregistrements hors ligne lorsque votre appareil se connecte';
+
+  @override
   String get deviceSettings => 'Paramètres de l\'appareil';
 
   @override

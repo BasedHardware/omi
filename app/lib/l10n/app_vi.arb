@@ -135,6 +135,8 @@
     "systemDefault": "Mặc định hệ thống",
     "planAndUsage": "Gói & Mức sử dụng",
     "offlineSync": "Đồng bộ Ngoại tuyến",
+    "autoSync": "Tự động đồng bộ",
+    "autoSyncDescription": "Tự động đồng bộ các bản ghi ngoại tuyến khi thiết bị của bạn kết nối",
     "deviceSettings": "Cài đặt thiết bị",
     "integrations": "Tích hợp",
     "feedbackBug": "Phản hồi / Báo lỗi",

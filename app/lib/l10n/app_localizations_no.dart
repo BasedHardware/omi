@@ -429,6 +429,12 @@ class AppLocalizationsNo extends AppLocalizations {
   String get offlineSync => 'Offline-synkronisering';
 
   @override
+  String get autoSync => 'Automatisk synkronisering';
+
+  @override
+  String get autoSyncDescription => 'Synkroniser frakoblede opptak automatisk når enheten din kobles til';
+
+  @override
   String get deviceSettings => 'Enhetsinnstillinger';
 
   @override

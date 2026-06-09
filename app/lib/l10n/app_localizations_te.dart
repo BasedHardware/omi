@@ -430,6 +430,12 @@ class AppLocalizationsTe extends AppLocalizations {
   String get offlineSync => 'ఆఫ్‌లైన్ సమకాలీకరణ';
 
   @override
+  String get autoSync => 'ఆటో సింక్';
+
+  @override
+  String get autoSyncDescription => 'మీ పరికరం కనెక్ట్ అయినప్పుడు ఆఫ్‌లైన్ రికార్డింగ్‌లను స్వయంచాలకంగా సింక్ చేయండి';
+
+  @override
   String get deviceSettings => 'ডివైస్ సెట్టింగ్‌లు';
 
   @override

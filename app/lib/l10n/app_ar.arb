@@ -135,6 +135,8 @@
     "systemDefault": "افتراضي النظام",
     "planAndUsage": "الخطة والاستخدام",
     "offlineSync": "المزامنة دون اتصال",
+    "autoSync": "المزامنة التلقائية",
+    "autoSyncDescription": "مزامنة التسجيلات دون اتصال تلقائيًا عند توصيل جهازك",
     "deviceSettings": "إعدادات الجهاز",
     "integrations": "التكاملات",
     "feedbackBug": "ملاحظات / خطأ",

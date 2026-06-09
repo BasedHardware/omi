@@ -135,6 +135,8 @@
     "systemDefault": "Systemstandard",
     "planAndUsage": "Abonnement & Nutzung",
     "offlineSync": "Offline-Synchronisierung",
+    "autoSync": "Automatische Synchronisierung",
+    "autoSyncDescription": "Offline-Aufnahmen automatisch synchronisieren, wenn dein Gerät verbunden wird",
     "deviceSettings": "Geräteeinstellungen",
     "integrations": "Integrationen",
     "feedbackBug": "Feedback / Fehler",

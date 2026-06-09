@@ -554,6 +554,8 @@
         "description": "Plan and usage menu item"
     },
     "offlineSync": "آفلائن ہم وقت",
+    "autoSync": "خودکار مطابقت",
+    "autoSyncDescription": "جب آپ کا آلہ منسلک ہو تو آف لائن ریکارڈنگز کو خودکار طور پر سنک کریں",
     "@offlineSync": {
         "description": "Page title for offline sync"
     },

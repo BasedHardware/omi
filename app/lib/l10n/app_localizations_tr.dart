@@ -430,6 +430,12 @@ class AppLocalizationsTr extends AppLocalizations {
   String get offlineSync => 'Çevrimdışı Senkronizasyon';
 
   @override
+  String get autoSync => 'Otomatik eşitleme';
+
+  @override
+  String get autoSyncDescription => 'Cihazınız bağlandığında çevrimdışı kayıtları otomatik olarak eşitleyin';
+
+  @override
   String get deviceSettings => 'Cihaz Ayarları';
 
   @override

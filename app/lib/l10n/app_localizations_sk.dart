@@ -430,6 +430,12 @@ class AppLocalizationsSk extends AppLocalizations {
   String get offlineSync => 'Offline synchronizácia';
 
   @override
+  String get autoSync => 'Automatická synchronizácia';
+
+  @override
+  String get autoSyncDescription => 'Automaticky synchronizovať offline nahrávky pri pripojení zariadenia';
+
+  @override
   String get deviceSettings => 'Nastavenia zariadenia';
 
   @override

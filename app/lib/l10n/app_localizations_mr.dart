@@ -429,6 +429,12 @@ class AppLocalizationsMr extends AppLocalizations {
   String get offlineSync => 'ऑफलाइन सिंक करा';
 
   @override
+  String get autoSync => 'स्वयंचलित सिंक';
+
+  @override
+  String get autoSyncDescription => 'तुमचे डिव्हाइस कनेक्ट झाल्यावर ऑफलाइन रेकॉर्डिंग आपोआप सिंक करा';
+
+  @override
   String get deviceSettings => 'डिव्हाइस सेटिंग्ज';
 
   @override

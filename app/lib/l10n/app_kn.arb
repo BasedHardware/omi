@@ -554,6 +554,8 @@
         "description": "Plan and usage menu item"
     },
     "offlineSync": "ಆಫ್‌ಲೈನ್ ಸಿಂಕ್",
+    "autoSync": "ಸ್ವಯಂಚಾಲಿತ ಸಿಂಕ್",
+    "autoSyncDescription": "ನಿಮ್ಮ ಸಾಧನ ಸಂಪರ್ಕಗೊಂಡಾಗ ಆಫ್‌ಲೈನ್ ರೆಕಾರ್ಡಿಂಗ್‌ಗಳನ್ನು ಸ್ವಯಂಚಾಲಿತವಾಗಿ ಸಿಂಕ್ ಮಾಡಿ",
     "@offlineSync": {
         "description": "Page title for offline sync"
     },

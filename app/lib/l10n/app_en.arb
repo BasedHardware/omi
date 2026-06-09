@@ -560,6 +560,14 @@
         "description": "Plan and usage menu item"
     },
     "offlineSync": "Offline Sync",
+    "autoSync": "Auto-Sync",
+    "@autoSync": {
+        "description": "Title of the toggle in device settings that controls automatic syncing of offline recordings"
+    },
+    "autoSyncDescription": "Automatically sync offline recordings when your device connects",
+    "@autoSyncDescription": {
+        "description": "Subtitle explaining the Auto-Sync toggle in device settings"
+    },
     "@offlineSync": {
         "description": "Page title for offline sync"
     },

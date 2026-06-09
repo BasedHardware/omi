@@ -430,6 +430,12 @@ class AppLocalizationsIt extends AppLocalizations {
   String get offlineSync => 'Sincronizzazione offline';
 
   @override
+  String get autoSync => 'Sincronizzazione automatica';
+
+  @override
+  String get autoSyncDescription => 'Sincronizza automaticamente le registrazioni offline quando il dispositivo si connette';
+
+  @override
   String get deviceSettings => 'Impostazioni Dispositivo';
 
   @override

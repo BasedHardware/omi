@@ -135,6 +135,8 @@
     "systemDefault": "Výchozí systém",
     "planAndUsage": "Plán a využití",
     "offlineSync": "Offline synchronizace",
+    "autoSync": "Automatická synchronizace",
+    "autoSyncDescription": "Automaticky synchronizovat offline nahrávky při připojení zařízení",
     "deviceSettings": "Nastavení zařízení",
     "integrations": "Integrace",
     "feedbackBug": "Zpětná vazba / Chyba",

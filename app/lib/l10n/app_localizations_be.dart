@@ -428,6 +428,12 @@ class AppLocalizationsBe extends AppLocalizations {
   String get offlineSync => 'Аўтаномная сінхранізацыя';
 
   @override
+  String get autoSync => 'Аўтасінхранізацыя';
+
+  @override
+  String get autoSyncDescription => 'Аўтаматычна сінхранізаваць офлайн-запісы пры падключэнні прылады';
+
+  @override
   String get deviceSettings => 'Параметры прылады';
 
   @override

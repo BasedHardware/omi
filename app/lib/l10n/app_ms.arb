@@ -135,6 +135,8 @@
     "systemDefault": "Lalai Sistem",
     "planAndUsage": "Pelan & Penggunaan",
     "offlineSync": "Segerak Luar Talian",
+    "autoSync": "Penyegerakan automatik",
+    "autoSyncDescription": "Segerakkan rakaman luar talian secara automatik apabila peranti anda disambungkan",
     "deviceSettings": "Tetapan Peranti",
     "integrations": "Integrasi",
     "feedbackBug": "Maklum Balas / Pepijat",

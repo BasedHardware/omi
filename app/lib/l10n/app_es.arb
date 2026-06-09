@@ -135,6 +135,8 @@
     "systemDefault": "Por defecto del sistema",
     "planAndUsage": "Plan y Uso",
     "offlineSync": "Sincronización sin conexión",
+    "autoSync": "Sincronización automática",
+    "autoSyncDescription": "Sincroniza automáticamente las grabaciones sin conexión cuando se conecta tu dispositivo",
     "deviceSettings": "Ajustes del dispositivo",
     "integrations": "Integraciones",
     "feedbackBug": "Feedback / Error",

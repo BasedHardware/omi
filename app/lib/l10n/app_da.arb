@@ -135,6 +135,8 @@
     "systemDefault": "Systemstandard",
     "planAndUsage": "Plan og forbrug",
     "offlineSync": "Offline-synkronisering",
+    "autoSync": "Automatisk synkronisering",
+    "autoSyncDescription": "Synkroniser offline-optagelser automatisk, når din enhed opretter forbindelse",
     "deviceSettings": "Enhedsindstillinger",
     "integrations": "Integrationer",
     "feedbackBug": "Feedback / Fejl",
