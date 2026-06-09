@@ -258,7 +258,14 @@ actor GmailReaderService {
       - Output ONLY the JSON object, nothing else
       """
 
+    // Retry the synthesis on transient failure instead of silently dropping the import.
+    let maxAttempts = 2
+    for attempt in 1...maxAttempts {
     do {
+      if ProcessInfo.processInfo.environment["OMI_FORCE_SYNTHESIS_FAIL"] == "1"
+        || UserDefaults.standard.bool(forKey: "forceSynthesisFail") {
+        throw NSError(domain: "Synthesis", code: -1, userInfo: [NSLocalizedDescriptionKey: "forced synthesis failure"])
+      }
       let bridge = AgentBridge(harnessMode: "piMono")
       try await bridge.start()
       defer { Task { await bridge.stop() } }
@@ -341,9 +348,16 @@ actor GmailReaderService {
       return (memoriesSaved, tasksSaved, profileSummary)
 
     } catch {
-      log("GmailReaderService: Synthesis failed: \(error)")
+      if attempt < maxAttempts {
+        log("GmailReaderService: Synthesis attempt \(attempt) failed, retrying: \(error)")
+        try? await Task.sleep(nanoseconds: 800_000_000)
+        continue
+      }
+      log("GmailReaderService: Synthesis failed after \(attempt) attempts: \(error)")
       return (0, 0, "")
     }
+    }
+    return (0, 0, "")
   }
 
   /// Save fetched emails as memories via the OMI backend API.
