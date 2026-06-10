@@ -94,6 +94,78 @@ def test_valid_time_query_can_return_superseded_fact_for_past_window():
     assert 'm1' not in current_head
 
 
+def test_retract_payload_tombstones_historical_checkout():
+    june_1 = datetime(2026, 6, 1, tzinfo=timezone.utc)
+    june_2 = datetime(2026, 6, 2, tzinfo=timezone.utc)
+    first = memory_ledger.build_commit(None, [memory_ledger.add_fact(_fact('m1', 'Lives in NYC'))], commit_time=june_1)
+    second = memory_ledger.build_commit(
+        first['commit_id'],
+        [memory_ledger.retract_fact('m1', reason='source_tombstoned')],
+        commit_time=june_2,
+    )
+
+    facts = {}
+    for commit in [first, second]:
+        for mutation in commit['mutations']:
+            memory_ledger._apply_mutation(facts, mutation, commit['commit_time'])
+
+    assert facts['m1']['content'] is None
+    assert facts['m1']['arguments'] == {}
+    assert facts['m1']['redaction_status'] == 'payload_tombstoned'
+
+
+def test_tombstone_evidence_marks_evidence_without_removing_it():
+    june_1 = datetime(2026, 6, 1, tzinfo=timezone.utc)
+    june_2 = datetime(2026, 6, 2, tzinfo=timezone.utc)
+    fact = _fact('m1', 'Lives in NYC')
+    fact['evidence'] = [{'evidence_id': 'ev1', 'source_id': 'conv1'}]
+    first = memory_ledger.build_commit(None, [memory_ledger.add_fact(fact)], commit_time=june_1)
+    second = memory_ledger.build_commit(
+        first['commit_id'],
+        [memory_ledger.tombstone_evidence('m1', 'ev1', june_2)],
+        commit_time=june_2,
+    )
+
+    head = memory_ledger.fold_commits([first, second])
+
+    assert head['m1']['evidence'][0]['evidence_id'] == 'ev1'
+    assert head['m1']['evidence'][0]['redaction_status'] == 'tombstoned'
+
+
+def test_tombstone_evidence_recomputes_replayed_veracity_from_active_evidence():
+    june_1 = datetime(2026, 6, 1, tzinfo=timezone.utc)
+    june_2 = datetime(2026, 6, 2, tzinfo=timezone.utc)
+    fact = _fact('m1', 'Lives in NYC')
+    fact['capture_confidence'] = 0.8
+    fact['veracity'] = 0.67
+    fact['evidence'] = [
+        {
+            'evidence_id': 'ev-conv',
+            'source_id': 'conv1',
+            'independence_group': 'conv1',
+            'capture_confidence': 0.65,
+        },
+        {
+            'evidence_id': 'ev-calendar',
+            'source_id': 'calendar1',
+            'independence_group': 'calendar1',
+            'capture_confidence': 0.8,
+        },
+    ]
+    first = memory_ledger.build_commit(None, [memory_ledger.add_fact(fact)], commit_time=june_1)
+    second = memory_ledger.build_commit(
+        first['commit_id'],
+        [memory_ledger.tombstone_evidence('m1', 'ev-conv', june_2)],
+        commit_time=june_2,
+    )
+
+    head = memory_ledger.fold_commits([first, second])
+
+    assert head['m1']['evidence'][0]['redaction_status'] == 'tombstoned'
+    assert head['m1']['veracity'] == 0.45
+    assert head['m1']['uncertainty_reasons'] == ['single_source']
+
+
 def test_diff_returns_typed_mutations_between_parent_child():
     first = memory_ledger.build_commit(
         None,

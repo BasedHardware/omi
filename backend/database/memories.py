@@ -7,7 +7,9 @@ from typing import List, Optional, Dict, Any
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter, transactional
 
+from config.memory_confidence import SOURCE_SIGNAL_CAPTURE_PRIORS
 from database import memory_ledger
+from database import short_term_memories as short_term_db
 from ._client import db
 from database import users as users_db
 from models.memories import confidence_fields_for_evidence, merge_evidence_sets
@@ -564,6 +566,161 @@ def delete_all_memories(uid: str):
     batch.commit()
 
 
+def ripple_source_deletion(uid: str, source_id: str) -> Dict[str, Any]:
+    user_ref = db.collection(users_collection).document(uid)
+    memories_ref = user_ref.collection(memories_collection)
+    now = datetime.now(timezone.utc)
+    affected = []
+
+    for doc in memories_ref.stream():
+        raw_memory = doc.to_dict() or {}
+        memory = _prepare_memory_for_read(raw_memory, uid) or raw_memory
+        evidence = _evidence_for_source_ripple(memory, source_id, doc.id)
+        if not _evidence_has_source(evidence, source_id):
+            continue
+        tombstoned_evidence = tombstone_evidence_for_source(evidence, source_id, now)
+        active_evidence = active_evidence_items(tombstoned_evidence)
+        affected.append(
+            {
+                'ref': doc.reference,
+                'id': doc.id,
+                'memory': memory,
+                'evidence': tombstoned_evidence,
+                'active_evidence': active_evidence,
+            }
+        )
+
+    if not affected:
+        short_term_ids = short_term_db.tombstone_source(uid, source_id)
+        return {
+            'updated_memory_ids': [],
+            'retracted_memory_ids': [],
+            'tombstoned_evidence_ids': [],
+            'vector_delete_ids': [],
+            'short_term_tombstoned_ids': short_term_ids,
+            'commit': None,
+        }
+
+    retracted_ids = [item['id'] for item in affected if not item['active_evidence']]
+    updated_ids = [item['id'] for item in affected if item['active_evidence']]
+    tombstoned_evidence_ids = [
+        evidence.get('evidence_id')
+        for item in affected
+        for evidence in item['evidence']
+        if isinstance(evidence, dict) and evidence.get('source_id') == source_id and evidence.get('evidence_id')
+    ]
+
+    def write_projection(transaction):
+        for item in affected:
+            if item['active_evidence']:
+                update_payload = _source_survival_update(item['memory'], item['evidence'], item['active_evidence'], now)
+            else:
+                update_payload = _payload_tombstone_update(item['evidence'], now)
+            transaction.update(
+                item['ref'],
+                _prepare_data_for_write(update_payload, uid, item['memory'].get('data_protection_level', 'standard')),
+            )
+
+    mutations = []
+    for item in affected:
+        for evidence in item['evidence']:
+            if isinstance(evidence, dict) and evidence.get('source_id') == source_id and evidence.get('evidence_id'):
+                mutations.append(memory_ledger.tombstone_evidence(item['id'], evidence['evidence_id'], now))
+        if not item['active_evidence']:
+            mutations.append(memory_ledger.retract_fact(item['id'], reason='source_tombstoned'))
+
+    commit_result = memory_ledger.append_commit(
+        uid,
+        None,
+        mutations,
+        commit_time=now,
+        projection_writer=write_projection,
+        use_current_head=True,
+    )
+    short_term_ids = short_term_db.tombstone_source(uid, source_id)
+    return {
+        'updated_memory_ids': updated_ids,
+        'retracted_memory_ids': retracted_ids,
+        'tombstoned_evidence_ids': tombstoned_evidence_ids,
+        'vector_delete_ids': retracted_ids,
+        'short_term_tombstoned_ids': short_term_ids,
+        'commit': (commit_result or {}).get('commit'),
+    }
+
+
+def tombstone_evidence_for_source(evidence: List[dict], source_id: str, tombstoned_at: datetime) -> List[dict]:
+    tombstoned = []
+    for item in evidence or []:
+        if not isinstance(item, dict):
+            tombstoned.append(item)
+            continue
+        next_item = copy.deepcopy(item)
+        if next_item.get('source_id') == source_id:
+            next_item['redaction_status'] = 'tombstoned'
+            next_item['tombstoned_at'] = tombstoned_at
+        tombstoned.append(next_item)
+    return tombstoned
+
+
+def active_evidence_items(evidence: List[dict]) -> List[dict]:
+    return [
+        item
+        for item in evidence or []
+        if isinstance(item, dict) and item.get('redaction_status', 'active') != 'tombstoned'
+    ]
+
+
+def _source_survival_update(
+    memory: Dict[str, Any], tombstoned_evidence: List[dict], active_evidence: List[dict], updated_at: datetime
+) -> Dict[str, Any]:
+    update_payload: Dict[str, Any] = {
+        'evidence': tombstoned_evidence,
+        'updated_at': updated_at,
+        'redaction_status': 'active',
+    }
+    update_payload.update(
+        confidence_fields_for_evidence(
+            active_evidence,
+            memory.get('subject_attribution', 'unknown'),
+            existing_capture_confidence=memory.get('capture_confidence'),
+        )
+    )
+    return update_payload
+
+
+def _payload_tombstone_update(tombstoned_evidence: List[dict], updated_at: datetime) -> Dict[str, Any]:
+    return {
+        'content': None,
+        'headline': None,
+        'arguments': {},
+        'evidence': tombstoned_evidence,
+        'invalid_at': updated_at,
+        'redaction_status': 'payload_tombstoned',
+        'updated_at': updated_at,
+    }
+
+
+def _evidence_has_source(evidence: List[dict], source_id: str) -> bool:
+    return any(isinstance(item, dict) and item.get('source_id') == source_id for item in evidence or [])
+
+
+def _evidence_for_source_ripple(memory: Dict[str, Any], source_id: str, memory_id: str) -> List[dict]:
+    evidence = memory.get('evidence') or []
+    if evidence or memory.get('memory_id') != source_id:
+        return evidence
+    return [
+        {
+            'evidence_id': f'legacy:{source_id}:{memory_id}',
+            'source_id': source_id,
+            'source_type': 'conversation',
+            'source_signal': 'legacy',
+            'independence_group': source_id,
+            'capture_confidence': SOURCE_SIGNAL_CAPTURE_PRIORS['legacy'],
+            'redaction_status': 'active',
+        }
+    ]
+
+
 def get_memory_ids_for_conversation(uid: str, conversation_id: str) -> List[str]:
     """Get all memory IDs associated with a conversation."""
     user_ref = db.collection(users_collection).document(uid)
@@ -575,17 +732,9 @@ def get_memory_ids_for_conversation(uid: str, conversation_id: str) -> List[str]
 
 
 def delete_memories_for_conversation(uid: str, memory_id: str):
-    batch = db.batch()
-    user_ref = db.collection(users_collection).document(uid)
-    memories_ref = user_ref.collection(memories_collection)
-    query = memories_ref.where(filter=FieldFilter('memory_id', '==', memory_id))
-
-    removed_ids = []
-    for doc in query.stream():
-        batch.delete(doc.reference)
-        removed_ids.append(doc.id)
-    batch.commit()
-    logger.info(f'delete_memories_for_conversation {memory_id} {len(removed_ids)}')
+    result = ripple_source_deletion(uid, memory_id)
+    logger.info(f"delete_memories_for_conversation {memory_id} {len(result['retracted_memory_ids'])}")
+    return result
 
 
 def unlock_all_memories(uid: str):

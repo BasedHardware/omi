@@ -392,7 +392,11 @@ def _model_or_dict_to_dict(item: Any) -> Any:
 def compute_veracity(
     evidence_set: List[dict], subject_attribution: SubjectAttribution | str = SubjectAttribution.unknown
 ) -> float:
-    evidence_items = [_model_or_dict_to_dict(item) for item in evidence_set or [] if item]
+    evidence_items = [
+        _model_or_dict_to_dict(item)
+        for item in evidence_set or []
+        if item and _model_or_dict_to_dict(item).get('redaction_status', 'active') != 'tombstoned'
+    ]
     groups = {
         item.get('independence_group') or item.get('source_id') for item in evidence_items if isinstance(item, dict)
     }
@@ -427,7 +431,11 @@ def uncertainty_reasons_for(
     evidence_set: List[dict], subject_attribution: SubjectAttribution | str = SubjectAttribution.unknown
 ) -> List[str]:
     reasons = []
-    evidence_items = [_model_or_dict_to_dict(item) for item in evidence_set or [] if item]
+    evidence_items = [
+        _model_or_dict_to_dict(item)
+        for item in evidence_set or []
+        if item and _model_or_dict_to_dict(item).get('redaction_status', 'active') != 'tombstoned'
+    ]
     groups = {
         item.get('independence_group') or item.get('source_id') for item in evidence_items if isinstance(item, dict)
     }

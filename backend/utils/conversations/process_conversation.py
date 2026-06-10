@@ -455,10 +455,9 @@ def _extract_memories(uid: str, conversation: Conversation):
 def _extract_memories_inner(uid: str, conversation: Conversation):
     # Delete old memories for this conversation (if reprocessing)
     # Also get the IDs to delete from Pinecone
-    existing_memory_ids = memories_db.get_memory_ids_for_conversation(uid, conversation.id)
-    for memory_id in existing_memory_ids:
+    deletion_result = memories_db.delete_memories_for_conversation(uid, conversation.id)
+    for memory_id in deletion_result.get('vector_delete_ids', []):
         delete_memory_vector(uid, memory_id)
-    memories_db.delete_memories_for_conversation(uid, conversation.id)
 
     language = users_db.get_user_language_preference(uid)
     new_memories: List[Memory] = []

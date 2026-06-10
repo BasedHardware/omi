@@ -139,3 +139,74 @@ def test_merge_memory_for_write_keeps_capture_fixed_and_recomputes_veracity():
     assert merged['capture_confidence'] == 0.65
     assert merged['veracity'] > existing['veracity']
     assert merged['uncertainty_reasons'] == ['low_capture_signal']
+
+
+def test_source_tombstone_preserves_fact_with_independent_evidence():
+    tombstoned_at = datetime(2026, 6, 1, tzinfo=timezone.utc)
+    memory = _memory(
+        [
+            {
+                'evidence_id': 'ev-conv',
+                'source_id': 'conv1',
+                'independence_group': 'conv1',
+                'capture_confidence': 0.65,
+            },
+            {
+                'evidence_id': 'ev-calendar',
+                'source_id': 'calendar1',
+                'independence_group': 'calendar1',
+                'capture_confidence': 0.8,
+            },
+        ],
+        content='Lives in SF',
+    )
+
+    tombstoned = memories_db.tombstone_evidence_for_source(memory['evidence'], 'conv1', tombstoned_at)
+    active = memories_db.active_evidence_items(tombstoned)
+    update = memories_db._source_survival_update(memory, tombstoned, active, tombstoned_at)
+
+    assert tombstoned[0]['redaction_status'] == 'tombstoned'
+    assert tombstoned[1].get('redaction_status', 'active') == 'active'
+    assert update['redaction_status'] == 'active'
+    assert 'invalid_at' not in update
+    assert update['veracity'] >= 0.45
+
+
+def test_source_tombstone_redacts_payload_with_no_active_evidence():
+    tombstoned_at = datetime(2026, 6, 1, tzinfo=timezone.utc)
+    evidence = [
+        {
+            'evidence_id': 'ev-conv',
+            'source_id': 'conv1',
+            'independence_group': 'conv1',
+            'capture_confidence': 0.65,
+        }
+    ]
+
+    tombstoned = memories_db.tombstone_evidence_for_source(evidence, 'conv1', tombstoned_at)
+    update = memories_db._payload_tombstone_update(tombstoned, tombstoned_at)
+
+    assert memories_db.active_evidence_items(tombstoned) == []
+    assert update['content'] is None
+    assert update['arguments'] == {}
+    assert update['invalid_at'] == tombstoned_at
+    assert update['redaction_status'] == 'payload_tombstoned'
+
+
+def test_legacy_memory_id_source_gets_synthetic_evidence_for_ripple():
+    memory = _memory([], content='Legacy memory')
+    memory['memory_id'] = 'conv1'
+
+    evidence = memories_db._evidence_for_source_ripple(memory, 'conv1', 'mem1')
+
+    assert evidence == [
+        {
+            'evidence_id': 'legacy:conv1:mem1',
+            'source_id': 'conv1',
+            'source_type': 'conversation',
+            'source_signal': 'legacy',
+            'independence_group': 'conv1',
+            'capture_confidence': 0.6,
+            'redaction_status': 'active',
+        }
+    ]

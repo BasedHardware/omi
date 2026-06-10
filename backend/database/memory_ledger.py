@@ -6,6 +6,7 @@ from typing import Any, Callable, Dict, List, Optional
 
 from google.cloud.firestore_v1 import transactional
 
+from models.memories import confidence_fields_for_evidence
 from ._client import db
 
 users_collection = 'users'
@@ -62,6 +63,21 @@ def add_evidence(fact_id: str, evidence: Dict[str, Any]) -> Dict[str, Any]:
 
 def remove_evidence(fact_id: str, evidence_id: str) -> Dict[str, Any]:
     return mutation('remove_evidence', fact_id=fact_id, evidence_id=evidence_id)
+
+
+def tombstone_evidence(
+    fact_id: str,
+    evidence_id: str,
+    tombstoned_at: Optional[datetime] = None,
+    reason: str = 'source_tombstoned',
+) -> Dict[str, Any]:
+    return mutation(
+        'tombstone_evidence',
+        fact_id=fact_id,
+        evidence_id=evidence_id,
+        tombstoned_at=tombstoned_at,
+        reason=reason,
+    )
 
 
 def merge_entities(
@@ -328,6 +344,9 @@ def _apply_mutation(facts: Dict[str, Dict[str, Any]], item: Dict[str, Any], comm
     if mutation_type == 'retract_fact':
         facts[fact_id]['invalid_at'] = commit_time
         facts[fact_id]['retraction_reason'] = item.get('reason')
+        facts[fact_id]['redaction_status'] = 'payload_tombstoned'
+        facts[fact_id]['content'] = None
+        facts[fact_id]['arguments'] = {}
         return
 
     if mutation_type == 'refine_fact':
@@ -348,6 +367,27 @@ def _apply_mutation(facts: Dict[str, Dict[str, Any]], item: Dict[str, Any], comm
             for evidence in facts[fact_id].get('evidence', [])
             if not isinstance(evidence, dict) or evidence.get('evidence_id') != evidence_id
         ]
+        return
+
+    if mutation_type == 'tombstone_evidence':
+        evidence_id = item.get('evidence_id')
+        for evidence in facts[fact_id].get('evidence', []):
+            if isinstance(evidence, dict) and evidence.get('evidence_id') == evidence_id:
+                evidence['redaction_status'] = 'tombstoned'
+                evidence['tombstoned_at'] = item.get('tombstoned_at') or commit_time
+                evidence['tombstone_reason'] = item.get('reason')
+        active_evidence = [
+            evidence
+            for evidence in facts[fact_id].get('evidence', [])
+            if isinstance(evidence, dict) and evidence.get('redaction_status', 'active') != 'tombstoned'
+        ]
+        facts[fact_id].update(
+            confidence_fields_for_evidence(
+                active_evidence,
+                facts[fact_id].get('subject_attribution', 'unknown'),
+                existing_capture_confidence=facts[fact_id].get('capture_confidence'),
+            )
+        )
         return
 
     if mutation_type == 'reassign_fact_subject':

@@ -395,10 +395,9 @@ def delete_conversation(
         # Delete audio files
         background_tasks.add_task(delete_conversation_audio_files, uid, conversation_id)
 
-        # Delete associated memories and their vectors
-        memory_ids = memories_db.get_memory_ids_for_conversation(uid, conversation_id)
-        memories_db.delete_memories_for_conversation(uid, conversation_id)
-        for memory_id in memory_ids:
+        # Tombstone associated memory evidence and remove vectors for payloads with no remaining active support.
+        deletion_result = memories_db.delete_memories_for_conversation(uid, conversation_id)
+        for memory_id in deletion_result.get('vector_delete_ids', []):
             background_tasks.add_task(delete_memory_vector, uid, memory_id)
 
         # Delete associated action items

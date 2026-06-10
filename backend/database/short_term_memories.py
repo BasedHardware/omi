@@ -62,6 +62,45 @@ def mark_pending_review(uid: str, short_term_id: str, review_conflict: Dict):
     )
 
 
+def tombstone_source(uid: str, source_id: str) -> List[str]:
+    collection_ref = db.collection(users_collection).document(uid).collection(short_term_collection)
+    now = datetime.now(timezone.utc)
+    tombstoned_ids = []
+    for doc in collection_ref.stream():
+        memory = doc.to_dict() or {}
+        evidence = memory.get('evidence') or []
+        if not any(isinstance(item, dict) and item.get('source_id') == source_id for item in evidence):
+            continue
+        tombstoned_evidence = []
+        for item in evidence:
+            if not isinstance(item, dict):
+                tombstoned_evidence.append(item)
+                continue
+            next_item = dict(item)
+            if next_item.get('source_id') == source_id:
+                next_item['redaction_status'] = 'tombstoned'
+                next_item['tombstoned_at'] = now
+            tombstoned_evidence.append(next_item)
+        active_evidence = [
+            item
+            for item in tombstoned_evidence
+            if isinstance(item, dict) and item.get('redaction_status', 'active') != 'tombstoned'
+        ]
+        update_payload = {'evidence': tombstoned_evidence, 'updated_at': now}
+        if not active_evidence:
+            update_payload.update(
+                {
+                    'status': 'source_tombstoned',
+                    'soft_pruned_at': now,
+                    'content': None,
+                    'redaction_status': 'payload_tombstoned',
+                }
+            )
+        doc.reference.update(update_payload)
+        tombstoned_ids.append(doc.id)
+    return tombstoned_ids
+
+
 def to_retrieval_record(memory: Dict) -> Dict:
     return {
         'id': memory.get('id'),
