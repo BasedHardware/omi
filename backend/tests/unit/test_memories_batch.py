@@ -75,12 +75,22 @@ class TestUpsertMemoryVectorsBatch:
         monkeypatch.setattr(vector_db, 'embeddings', fake_embeddings)
         return fake_index, fake_embeddings
 
+    def test_single_upsert_includes_subject_metadata(self, monkeypatch):
+        fake_index, fake_embeddings = self._setup_mocks(monkeypatch)
+        fake_embeddings.embed_query = MagicMock(return_value=[0.1, 0.2])
+
+        vector_db.upsert_memory_vector('uid-abc', 'm1', 'hello', 'system', subject_entity_id='user')
+
+        fake_index.upsert.assert_called_once()
+        vector = fake_index.upsert.call_args.kwargs['vectors'][0]
+        assert vector['metadata']['subject_entity_id'] == 'user'
+
     def test_batch_upsert_uses_single_embed_and_single_upsert(self, monkeypatch):
         """The whole point of the helper: one embed call + one upsert call."""
         fake_index, fake_embeddings = self._setup_mocks(monkeypatch)
 
         items = [
-            {'memory_id': 'm1', 'content': 'apple', 'category': 'manual'},
+            {'memory_id': 'm1', 'content': 'apple', 'category': 'manual', 'subject_entity_id': 'user'},
             {'memory_id': 'm2', 'content': 'banana', 'category': 'manual'},
             {'memory_id': 'm3', 'content': 'cherry', 'category': 'interesting'},
         ]
@@ -99,6 +109,8 @@ class TestUpsertMemoryVectorsBatch:
         assert [v['metadata']['memory_id'] for v in vectors] == ['m1', 'm2', 'm3']
         assert [v['metadata']['category'] for v in vectors] == ['manual', 'manual', 'interesting']
         assert all(v['metadata']['uid'] == 'uid-abc' for v in vectors)
+        assert vectors[0]['metadata']['subject_entity_id'] == 'user'
+        assert 'subject_entity_id' not in vectors[1]['metadata']
 
     def test_batch_upsert_empty_list_is_noop(self, monkeypatch):
         fake_index, fake_embeddings = self._setup_mocks(monkeypatch)
@@ -120,6 +132,18 @@ class TestUpsertMemoryVectorsBatch:
 
         assert written == 0
         fake_embeddings.embed_documents.assert_not_called()
+
+    def test_find_similar_memories_filters_by_subject_when_known(self, monkeypatch):
+        fake_index, _ = self._setup_mocks(monkeypatch)
+        fake_index.query = MagicMock(return_value={'matches': []})
+        fake_embeddings = MagicMock()
+        fake_embeddings.embed_query = MagicMock(return_value=[0.1, 0.2])
+        monkeypatch.setattr(vector_db, 'embeddings', fake_embeddings)
+
+        vector_db.find_similar_memories('uid-abc', 'hello', subject_entity_id='user')
+
+        fake_index.query.assert_called_once()
+        assert fake_index.query.call_args.kwargs['filter'] == {'uid': 'uid-abc', 'subject_entity_id': 'user'}
 
 
 class TestBatchMemoriesRateLimitPolicy:

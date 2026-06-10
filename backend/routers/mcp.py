@@ -72,7 +72,13 @@ def create_memory(memory: Memory, uid: str = Depends(with_rate_limit(get_uid_fro
     memory_db = MemoryDB.from_memory(memory, uid, None, True)
     memories_db.create_memory(uid, memory_db.model_dump())
     try:
-        upsert_memory_vector(uid, memory_db.id, memory_db.content, memory_db.category.value)
+        upsert_memory_vector(
+            uid,
+            memory_db.id,
+            memory_db.content,
+            memory_db.category.value,
+            subject_entity_id=memory_db.subject_entity_id,
+        )
     except Exception:
         logger.exception("Vector upsert failed uid=%s memory_id=%s (memory saved, vector missing)", uid, memory_db.id)
     postprocess_executor.submit(update_personas_async, uid)
@@ -104,7 +110,9 @@ def edit_memory(memory_id: str, value: str, uid: str = Depends(get_uid_from_mcp_
     memory = _validate_mcp_memory(uid, memory_id)
     memories_db.edit_memory(uid, memory_id, value)
     try:
-        upsert_memory_vector(uid, memory_id, value, memory.get('category', 'other'))
+        upsert_memory_vector(
+            uid, memory_id, value, memory.get('category', 'other'), subject_entity_id=memory.get('subject_entity_id')
+        )
     except Exception:
         logger.exception("Vector upsert failed uid=%s memory_id=%s (memory edited, vector stale)", uid, memory_id)
     return {"status": "ok"}

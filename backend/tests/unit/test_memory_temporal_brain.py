@@ -65,6 +65,7 @@ from models.memories import (  # noqa: E402
     Memory,
     MemoryDB,
     MemoryCategory,
+    SubjectAttribution,
     merge_evidence_sets,
     render_memory,
     structurally_conflicts,
@@ -233,7 +234,22 @@ class TestMemoryLifecycle:
         assert db.predicate == 'resides_in'
         assert db.arguments == {'location': 'NYC'}
         assert db.subject_entity_id == 'user'
+        assert db.subject_attribution == SubjectAttribution.user
         assert db.render() == 'Lives in NYC'
+
+    def test_from_memory_accepts_third_party_subject_context(self):
+        mem = Memory(content='Lives in NYC', category=MemoryCategory.system)
+        db = MemoryDB.from_memory(
+            mem,
+            uid='u',
+            conversation_id='conv1',
+            manually_added=False,
+            subject_entity_id='person:p1',
+            subject_attribution=SubjectAttribution.third_party,
+        )
+
+        assert db.subject_entity_id == 'person:p1'
+        assert db.subject_attribution == SubjectAttribution.third_party
 
     def test_from_memory_preserves_extractor_structured_proposition(self):
         mem = Memory(

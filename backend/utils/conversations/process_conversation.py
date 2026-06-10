@@ -44,6 +44,7 @@ from models.conversation import (
 )
 from models.conversation_enums import ConversationSource, ConversationStatus, ExternalIntegrationConversationSource
 from utils.conversations.factory import deserialize_conversation
+from utils.conversations.subjects import infer_subject_from_segments
 from utils.subscription import is_trial_paywalled
 from models.other import Person
 from models.structured import Structured
@@ -477,6 +478,7 @@ def _extract_memories_inner(uid: str, conversation: Conversation):
     invalidations = []
     # Cheap exact-duplicate guard within this batch (avoids redundant conflict LLM calls).
     seen_norm = set()
+    subject_entity_id, subject_attribution = infer_subject_from_segments(conversation.transcript_segments)
 
     for memory in new_memories:
         norm = ' '.join((memory.content or '').lower().split())
@@ -487,13 +489,18 @@ def _extract_memories_inner(uid: str, conversation: Conversation):
         # Wider net (lower threshold, more candidates) than before so cross-phrasing
         # contradictions are caught — "loves ice cream" vs "hates ice cream",
         # "lives in NYC" vs "lives in LA" — then let the LLM decide what's outdated.
-        similar_matches = find_similar_memories(uid, memory.content, threshold=0.6, limit=8)
+        similar_matches = find_similar_memories(
+            uid, memory.content, threshold=0.6, limit=8, subject_entity_id=subject_entity_id
+        )
 
         # Only compare against currently-active memories (never resurface superseded ones).
         similar_memories = []
         for match in similar_matches:
             memory_data = memories_db.get_memory(uid, match['memory_id'])
             if memory_data and memory_data.get('invalid_at') is None:
+                existing_subject = memory_data.get('subject_entity_id')
+                if subject_entity_id and existing_subject and subject_entity_id != existing_subject:
+                    continue
                 similar_memories.append(
                     {
                         'memory_id': match['memory_id'],
@@ -537,6 +544,8 @@ def _extract_memories_inner(uid: str, conversation: Conversation):
             source_signal="transcription",
             artifact_ref=_transcript_artifact_ref(conversation),
             extractor_id="new_memories_extractor",
+            subject_entity_id=subject_entity_id,
+            subject_attribution=subject_attribution,
         )
         memory_db_obj.is_locked = is_locked
         parsed_memories.append(memory_db_obj)
@@ -555,7 +564,13 @@ def _extract_memories_inner(uid: str, conversation: Conversation):
     memories_db.save_memories(uid, [fact.dict() for fact in parsed_memories])
 
     for memory_db_obj in parsed_memories:
-        upsert_memory_vector(uid, memory_db_obj.id, memory_db_obj.content, memory_db_obj.category.value)
+        upsert_memory_vector(
+            uid,
+            memory_db_obj.id,
+            memory_db_obj.content,
+            memory_db_obj.category.value,
+            subject_entity_id=memory_db_obj.subject_entity_id,
+        )
 
     # Invalidate (not delete) superseded memories: keep them as history but drop them from
     # every retrieval path. Removing the vector also pulls them out of semantic search.

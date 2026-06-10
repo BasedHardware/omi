@@ -155,7 +155,7 @@ def delete_vector(uid: str, conversation_id: str):
 MEMORIES_NAMESPACE = "ns2"
 
 
-def upsert_memory_vector(uid: str, memory_id: str, content: str, category: str):
+def upsert_memory_vector(uid: str, memory_id: str, content: str, category: str, subject_entity_id: str | None = None):
     """
     Upsert a memory embedding to Pinecone.
     """
@@ -174,6 +174,8 @@ def upsert_memory_vector(uid: str, memory_id: str, content: str, category: str):
             "created_at": int(datetime.now(timezone.utc).timestamp()),
         },
     }
+    if subject_entity_id:
+        data["metadata"]["subject_entity_id"] = subject_entity_id
     res = index.upsert(vectors=[data], namespace=MEMORIES_NAMESPACE)
     logger.info(f'upsert_memory_vector {memory_id} {res}')
     return vector
@@ -199,25 +201,31 @@ def upsert_memory_vectors_batch(uid: str, items: List[dict]) -> int:
     vectors = embeddings.embed_documents(contents)
 
     now_ts = int(datetime.now(timezone.utc).timestamp())
-    payload = [
-        {
-            "id": f"{uid}-{item['memory_id']}",
-            "values": vectors[i],
-            "metadata": {
-                "uid": uid,
-                "memory_id": item['memory_id'],
-                "category": item['category'],
-                "created_at": now_ts,
-            },
+    payload = []
+    for i, item in enumerate(items):
+        metadata = {
+            "uid": uid,
+            "memory_id": item['memory_id'],
+            "category": item['category'],
+            "created_at": now_ts,
         }
-        for i, item in enumerate(items)
-    ]
+        if item.get('subject_entity_id'):
+            metadata['subject_entity_id'] = item['subject_entity_id']
+        payload.append(
+            {
+                "id": f"{uid}-{item['memory_id']}",
+                "values": vectors[i],
+                "metadata": metadata,
+            },
+        )
     res = index.upsert(vectors=payload, namespace=MEMORIES_NAMESPACE)
     logger.info(f'upsert_memory_vectors_batch count={len(payload)} {res}')
     return len(payload)
 
 
-def find_similar_memories(uid: str, content: str, threshold: float = 0.85, limit: int = 5) -> List[dict]:
+def find_similar_memories(
+    uid: str, content: str, threshold: float = 0.85, limit: int = 5, subject_entity_id: str | None = None
+) -> List[dict]:
     """
     Find memories similar to the given content.
     Returns list of matches with similarity scores.
@@ -229,6 +237,8 @@ def find_similar_memories(uid: str, content: str, threshold: float = 0.85, limit
 
     vector = embeddings.embed_query(content)
     filter_data = {'uid': uid}
+    if subject_entity_id:
+        filter_data['subject_entity_id'] = subject_entity_id
 
     xc = index.query(
         vector=vector, top_k=limit, include_metadata=True, filter=filter_data, namespace=MEMORIES_NAMESPACE

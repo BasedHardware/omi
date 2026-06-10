@@ -75,7 +75,13 @@ async def create_memory(
 
     try:
         await run_blocking(
-            postprocess_executor, upsert_memory_vector, uid, memory_db.id, memory_db.content, memory_db.category.value
+            postprocess_executor,
+            upsert_memory_vector,
+            uid,
+            memory_db.id,
+            memory_db.content,
+            memory_db.category.value,
+            memory_db.subject_entity_id,
         )
     except Exception:
         logger.exception("Vector upsert failed uid=%s memory_id=%s (memory saved, vector missing)", uid, memory_db.id)
@@ -133,6 +139,7 @@ async def create_memories_batch(
                     "memory_id": m.id,
                     "content": m.content,
                     "category": m.category.value,
+                    "subject_entity_id": m.subject_entity_id,
                 }
                 for m in memory_dbs
             ],
@@ -233,7 +240,9 @@ def edit_memory(
     # vector keeps matching the OLD text — a silent staleness bug that breaks the
     # "constantly updated brain" (search would still surface the pre-edit fact).
     try:
-        upsert_memory_vector(uid, memory_id, value, memory.get('category', 'system'))
+        upsert_memory_vector(
+            uid, memory_id, value, memory.get('category', 'system'), subject_entity_id=memory.get('subject_entity_id')
+        )
     except Exception:
         logger.exception("Vector upsert failed uid=%s memory_id=%s (memory edited, vector stale)", uid, memory_id)
     return {'status': 'ok'}

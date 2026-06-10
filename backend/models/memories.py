@@ -29,6 +29,13 @@ class MemoryCategory(str, Enum):
     auto = "auto"
 
 
+class SubjectAttribution(str, Enum):
+    user = "user"
+    third_party = "third_party"
+    unknown = "unknown"
+    legacy_assumed = "legacy_assumed"
+
+
 # Only define boosts for the primary categories
 CATEGORY_BOOSTS = {
     MemoryCategory.interesting.value: 1,
@@ -63,6 +70,9 @@ class Memory(BaseModel):
     )
     subject_entity_id: Optional[str] = Field(
         description="Stable entity id for who/what the fact is about", default=None
+    )
+    subject_attribution: SubjectAttribution = Field(
+        description="How the memory subject was attributed", default=SubjectAttribution.unknown
     )
     object_entity_ids: List[str] = Field(
         description="Stable entity ids referenced by the fact arguments", default_factory=list
@@ -204,6 +214,7 @@ def _coerce_proposition(memory: Any) -> Dict[str, Any]:
         predicate = memory.get('predicate')
         arguments = memory.get('arguments') or {}
         subject_entity_id = memory.get('subject_entity_id')
+        subject_attribution = memory.get('subject_attribution', SubjectAttribution.unknown)
         object_entity_ids = memory.get('object_entity_ids') or []
         qualifiers = memory.get('qualifiers') or {}
     else:
@@ -212,6 +223,7 @@ def _coerce_proposition(memory: Any) -> Dict[str, Any]:
         predicate = getattr(memory, 'predicate', None)
         arguments = getattr(memory, 'arguments', {}) or {}
         subject_entity_id = getattr(memory, 'subject_entity_id', None)
+        subject_attribution = getattr(memory, 'subject_attribution', SubjectAttribution.unknown)
         object_entity_ids = getattr(memory, 'object_entity_ids', []) or []
         qualifiers = getattr(memory, 'qualifiers', {}) or {}
 
@@ -220,10 +232,13 @@ def _coerce_proposition(memory: Any) -> Dict[str, Any]:
             'predicate': predicate,
             'arguments': arguments,
             'subject_entity_id': subject_entity_id,
+            'subject_attribution': subject_attribution,
             'object_entity_ids': object_entity_ids,
             'qualifiers': qualifiers,
         }
-    return propositionize(content, category)
+    proposition = propositionize(content, category)
+    proposition['subject_attribution'] = subject_attribution
+    return proposition
 
 
 def render_memory(memory: Any) -> str:
@@ -412,9 +427,17 @@ class MemoryDB(Memory):
         extractor_version: str = "v1",
         capture_confidence: Optional[float] = None,
         independence_group: Optional[str] = None,
+        subject_entity_id: Optional[str] = None,
+        subject_attribution: Optional[SubjectAttribution] = None,
     ) -> 'MemoryDB':
         now = datetime.now(timezone.utc)
         proposition = _coerce_proposition(memory)
+        resolved_subject = subject_entity_id or proposition.get('subject_entity_id')
+        resolved_attribution = (
+            subject_attribution or proposition.get('subject_attribution') or memory.subject_attribution
+        )
+        if resolved_subject == 'user' and resolved_attribution == SubjectAttribution.unknown:
+            resolved_attribution = SubjectAttribution.user
         evidence_source_id = source_id if source_id is not None else conversation_id
         evidence_source_type = source_type or ("conversation" if conversation_id else "developer_api")
         evidence_source_signal = source_signal or ("manual" if manually_added else "transcription")
@@ -445,7 +468,8 @@ class MemoryDB(Memory):
             visibility=memory.visibility,
             predicate=proposition.get('predicate'),
             arguments=proposition.get('arguments') or {},
-            subject_entity_id=proposition.get('subject_entity_id'),
+            subject_entity_id=resolved_subject,
+            subject_attribution=resolved_attribution,
             object_entity_ids=proposition.get('object_entity_ids') or [],
             qualifiers=proposition.get('qualifiers') or {},
             evidence=[evidence],

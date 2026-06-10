@@ -64,6 +64,29 @@ def remove_evidence(fact_id: str, evidence_id: str) -> Dict[str, Any]:
     return mutation('remove_evidence', fact_id=fact_id, evidence_id=evidence_id)
 
 
+def merge_entities(
+    entity_a: str,
+    entity_b: str,
+    evidence: Optional[Dict[str, Any]] = None,
+    confidence: float = 0.5,
+) -> Dict[str, Any]:
+    return mutation(
+        'merge_entities',
+        entity_a=entity_a,
+        entity_b=entity_b,
+        evidence=copy.deepcopy(evidence or {}),
+        confidence=confidence,
+    )
+
+
+def split_entity(entity_id: str, into: List[Dict[str, Any]], reason: str = '') -> Dict[str, Any]:
+    return mutation('split_entity', entity_id=entity_id, into=copy.deepcopy(into), reason=reason)
+
+
+def reassign_fact_subject(fact_id: str, old: Optional[str], new: Optional[str]) -> Dict[str, Any]:
+    return mutation('reassign_fact_subject', fact_id=fact_id, old=old, new=new)
+
+
 def _json_default(value: Any):
     if isinstance(value, datetime):
         return value.astimezone(timezone.utc).isoformat()
@@ -325,6 +348,10 @@ def _apply_mutation(facts: Dict[str, Dict[str, Any]], item: Dict[str, Any], comm
             for evidence in facts[fact_id].get('evidence', [])
             if not isinstance(evidence, dict) or evidence.get('evidence_id') != evidence_id
         ]
+        return
+
+    if mutation_type == 'reassign_fact_subject':
+        facts[fact_id]['subject_entity_id'] = item.get('new')
 
 
 def _apply_arg_changes(fact: Dict[str, Any], arg_changes: Dict[str, Any]):

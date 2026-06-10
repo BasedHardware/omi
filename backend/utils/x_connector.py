@@ -348,7 +348,15 @@ def _extract_and_index(uid: str, posts: List[Dict]) -> int:
         memories_db.save_memories(uid, [m.dict() for m in memory_dbs])
         upsert_memory_vectors_batch(
             uid,
-            [{'memory_id': m.id, 'content': m.content, 'category': m.category.value} for m in memory_dbs],
+            [
+                {
+                    'memory_id': m.id,
+                    'content': m.content,
+                    'category': m.category.value,
+                    'subject_entity_id': m.subject_entity_id,
+                }
+                for m in memory_dbs
+            ],
         )
         total += len(memory_dbs)
     return total

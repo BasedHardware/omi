@@ -296,6 +296,7 @@ def create_memories_batch(
                 "memory_id": mem.id,
                 "content": mem.content,
                 "category": mem.category.value,
+                "subject_entity_id": mem.subject_entity_id,
             }
             for mem in memory_dbs
         ],
