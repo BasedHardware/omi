@@ -1,4 +1,5 @@
 import asyncio
+import contextlib
 import io
 import logging
 import os
@@ -35,12 +36,19 @@ from database import conversations as conversations_db
 from database import users as users_db
 from database.conversations import get_closest_conversation_to_timestamps, update_conversation_segments
 from database.sync_jobs import (
+    TERMINAL_STATUSES,
     create_sync_job,
     get_sync_job,
     update_sync_job,
     mark_job_processing,
     mark_job_completed,
     mark_job_failed,
+    mark_job_queued_for_retry,
+    try_acquire_job_run_lock,
+    release_job_run_lock,
+    add_processed_segment,
+    get_processed_segments,
+    try_mark_once,
 )
 from models.conversation import Conversation, CreateConversation
 from models.conversation_enums import ConversationSource
@@ -52,6 +60,8 @@ from utils.other import endpoints as auth
 from utils.other.storage import (
     get_syncing_file_temporal_signed_url,
     delete_syncing_temporal_file,
+    upload_syncing_temporal_file,
+    download_syncing_temporal_file,
     download_audio_chunks_and_merge,
     get_or_create_merged_audio,
     get_merged_audio_signed_url,
@@ -59,7 +69,13 @@ from utils.other.storage import (
 )
 
 from utils import encryption
-from utils.byok import get_byok_keys, set_byok_keys
+from utils.byok import get_byok_keys, set_byok_keys, has_byok_keys
+from utils.cloud_tasks import (
+    enqueue_sync_job,
+    get_sync_tasks_max_attempts,
+    is_cloud_tasks_dispatch_enabled,
+    verify_cloud_tasks_oidc,
+)
 from utils.http_client import _get_semaphore
 from utils.log_sanitizer import sanitize
 from utils.stt.pre_recorded import postprocess_words, prerecorded
@@ -995,11 +1011,11 @@ def process_segment(
             # DG processed audio successfully but found no speech (silence/noise).
             # Real DG failures now raise RuntimeError and are caught by the except block.
             logger.info(f'No transcript words for segment {path} (silence or noise-only audio)')
-            return
+            return True
         transcript_segments: List[TranscriptSegment] = postprocess_words(words, 0)
         if not transcript_segments:
             logger.warning(f'Postprocessing returned empty for segment {path} (words present but no segments)')
-            return
+            return True
 
         # Speaker identification: voice embedding matching + text-based detection
         audio_bytes = _download_audio_bytes(url) if person_embeddings_cache else None
@@ -1064,7 +1080,7 @@ def process_segment(
                 logger.info(f'All segments already exist in conversation {closest_memory["id"]}, skipping merge')
                 with lock:
                     response['updated_memories'].add(closest_memory['id'])
-                return
+                return True
 
             # merge and sort segments by start timestamp
             segments = closest_memory['transcript_segments'] + deduped_segments
@@ -1104,11 +1120,13 @@ def process_segment(
                 reason = 'discarded' if closest_memory.get('discarded', False) else 'auto-sync'
                 logger.info(f'Conversation {closest_memory["id"]} reprocessing ({reason}) after segment merge')
                 _reprocess_conversation_after_update(uid, closest_memory['id'], language)
+        return True
     except Exception as e:
         error_msg = f'Failed to process segment {path}: {e}'
         logger.error(error_msg)
         with lock:
             errors.append(error_msg)
+        return False
 
 
 def _cleanup_files(file_paths):
@@ -1382,14 +1400,26 @@ async def _run_full_pipeline_background_async(
     should_lock: bool,
     job_dir: str,
     target_conversation_id: str = None,
+    task_mode: bool = False,
 ):
     """Async coordinator for the full sync pipeline (decode → VAD → fair-use → STT → LLM).
 
-    Runs as an asyncio task on the event loop. All blocking work is offloaded to
-    thread pools via run_blocking(). The coordinator itself holds zero thread pool
-    slots — only leaf operations use threads, and only for their actual duration.
+    Inline dispatch (task_mode=False): runs as a fire-and-forget asyncio task,
+    bounded by the per-instance pipeline semaphore; unexpected errors mark the
+    job failed (no retry exists).
+
+    Cloud Tasks dispatch (task_mode=True): runs inside the /v2/sync-jobs/run
+    request — Cloud Run's containerConcurrency is the concurrency bound, so no
+    semaphore; unexpected errors re-raise so the handler can reset the job for
+    a queue retry; segments that completed in a prior attempt are skipped via
+    the processed-segment ledger.
+
+    All blocking work is offloaded to thread pools via run_blocking(). The
+    coordinator itself holds zero thread pool slots — only leaf operations use
+    threads, and only for their actual duration.
     """
-    async with _get_sync_pipeline_semaphore():
+    concurrency_gate = contextlib.nullcontext() if task_mode else _get_sync_pipeline_semaphore()
+    async with concurrency_gate:
         segmented_paths = set()
         wav_paths = []
         stage_timings = {}
@@ -1488,7 +1518,9 @@ async def _run_full_pipeline_background_async(
                 return
 
             if FAIR_USE_ENABLED and total_speech_ms > 0:
-                await run_blocking(db_executor, record_speech_ms, uid, total_speech_ms, source='sync')
+                # Once-guard: a Cloud Tasks retry must not count the same audio twice
+                if await run_blocking(db_executor, try_mark_once, job_id, 'speech_ms'):
+                    await run_blocking(db_executor, record_speech_ms, uid, total_speech_ms, source='sync')
                 speech_totals = await run_blocking(db_executor, get_rolling_speech_ms, uid)
                 triggered_caps = await run_blocking(db_executor, check_soft_caps, uid, speech_totals=speech_totals)
                 if triggered_caps:
@@ -1534,8 +1566,20 @@ async def _run_full_pipeline_background_async(
             segment_errors = []
             segment_lock = threading.Lock()
 
+            # Segments that fully landed in a prior Cloud Tasks attempt are skipped
+            already_processed = set()
+            if task_mode:
+                already_processed = await run_blocking(db_executor, get_processed_segments, job_id)
+                if already_processed:
+                    logger.info(
+                        f'sync_v2 bg: job={job_id} skipping {len(already_processed)} '
+                        f'segment(s) processed in a prior attempt'
+                    )
+
             def _process_one_segment(path):
-                process_segment(
+                if path in already_processed:
+                    return
+                ok = process_segment(
                     path,
                     uid,
                     response,
@@ -1547,6 +1591,8 @@ async def _run_full_pipeline_background_async(
                     person_embeddings_cache,
                     target_conversation_id,
                 )
+                if ok and task_mode:
+                    add_processed_segment(job_id, path)
 
             chunk_size = 5
             segment_list = list(segmented_paths)
@@ -1579,7 +1625,7 @@ async def _run_full_pipeline_background_async(
             if fair_use_restrict_dg:
                 try:
                     dg_ms = int(total_speech_seconds * 1000)
-                    if dg_ms > 0:
+                    if dg_ms > 0 and await run_blocking(db_executor, try_mark_once, job_id, 'dg_ms'):
                         await run_blocking(db_executor, record_dg_usage_ms, uid, dg_ms)
                 except Exception as e:
                     logger.error(f'sync_v2 bg: DG usage record error for {uid}: {e}')
@@ -1599,7 +1645,7 @@ async def _run_full_pipeline_background_async(
             if successful_segments > 0:
                 try:
                     usage_seconds = int(total_speech_seconds)
-                    if usage_seconds > 0:
+                    if usage_seconds > 0 and await run_blocking(db_executor, try_mark_once, job_id, 'usage'):
                         await run_blocking(
                             db_executor,
                             record_usage,
@@ -1632,6 +1678,10 @@ async def _run_full_pipeline_background_async(
             )
         except Exception as e:
             logger.error(f'sync_v2 bg failed job={job_id} uid={uid}: {e}')
+            if task_mode:
+                # Let the handler decide: queued-reset + Cloud Tasks retry, or
+                # final-attempt consume. Marking failed here would be terminal.
+                raise
             try:
                 await run_blocking(db_executor, mark_job_failed, job_id, str(e))
             except Exception:
@@ -1645,6 +1695,32 @@ async def _run_full_pipeline_background_async(
                     await run_blocking(storage_executor, shutil.rmtree, job_dir, True)
             except Exception as e:
                 logger.error(f'sync_v2 bg: failed to cleanup job dir {job_dir}: {e}')
+
+
+def _stage_files_to_gcs(paths: list):
+    """Upload raw .bin files to the syncing bucket (blob name = local path)."""
+    for p in paths:
+        upload_syncing_temporal_file(p)
+
+
+def _delete_staged_blobs(blob_paths: list):
+    for p in blob_paths:
+        try:
+            delete_syncing_temporal_file(p)
+        except Exception as e:
+            logger.warning(f'Failed to delete staged blob {p}: {e}')
+
+
+async def _delete_staged_blobs_async(blob_paths: list):
+    await run_blocking(storage_executor, _delete_staged_blobs, blob_paths)
+
+
+def _download_staged_files(blob_paths: list) -> bool:
+    """Download staged blobs back to their local paths. False if any is gone."""
+    for p in blob_paths:
+        if not download_syncing_temporal_file(p):
+            return False
+    return True
 
 
 @router.post("/v2/sync-local-files")
@@ -1692,20 +1768,52 @@ async def sync_local_files_v2(
         owned_paths = list(paths)
         paths = []  # Prevent finally cleanup of files now owned by bg task
 
-        # Async coordinator: runs on event loop, offloads blocking work to pools.
-        # No thread pool slot held for the full pipeline duration (fixes #7361).
-        start_background_task(
-            _run_full_pipeline_background_async(
-                job_id,
-                uid,
-                owned_paths,
-                source,
-                should_lock,
-                job_dir,
-                conversation_id,
-            ),
-            name=f'sync_pipeline:{job_id}',
-        )
+        dispatched = False
+        # BYOK keys live only in this request's context and cannot follow a
+        # Cloud Task, so BYOK requests always run inline.
+        if is_cloud_tasks_dispatch_enabled() and not has_byok_keys():
+            try:
+                # sync_executor, NOT storage_executor — same reasoning as the
+                # file save above (#7372): a saturated storage pool would queue
+                # the staging upload and delay the 202.
+                await run_blocking(sync_executor, _stage_files_to_gcs, owned_paths)
+                await run_blocking(
+                    db_executor,
+                    enqueue_sync_job,
+                    {
+                        'schema_version': 1,
+                        'job_id': job_id,
+                        'uid': uid,
+                        'raw_blob_paths': owned_paths,
+                        'source': source.value,
+                        'should_lock': should_lock,
+                        'conversation_id': conversation_id,
+                        'enqueued_at': time.time(),
+                    },
+                )
+                dispatched = True
+                # The handler instance downloads from GCS; local copies are done
+                await run_blocking(sync_executor, _cleanup_files, owned_paths)
+                await run_blocking(sync_executor, shutil.rmtree, job_dir, True)
+            except Exception as e:
+                logger.error(f'sync_v2: Cloud Tasks dispatch failed job={job_id}, falling back inline: {e}')
+                start_background_task(_delete_staged_blobs_async(owned_paths), name=f'sync_unstage:{job_id}')
+
+        if not dispatched:
+            # Async coordinator: runs on event loop, offloads blocking work to pools.
+            # No thread pool slot held for the full pipeline duration (fixes #7361).
+            start_background_task(
+                _run_full_pipeline_background_async(
+                    job_id,
+                    uid,
+                    owned_paths,
+                    source,
+                    should_lock,
+                    job_dir,
+                    conversation_id,
+                ),
+                name=f'sync_pipeline:{job_id}',
+            )
 
         return JSONResponse(
             status_code=202,
@@ -1752,3 +1860,89 @@ def get_sync_job_status(job_id: str, uid: str = Depends(auth.get_current_user_ui
             resp['error'] = job['error']
 
     return resp
+
+
+@router.post("/v2/sync-jobs/run", include_in_schema=False)
+async def run_sync_job(request: Request, task_retry_count: int = Depends(verify_cloud_tasks_oidc)):
+    """Cloud Tasks handler: runs one sync job inside the request.
+
+    Auth is the Cloud Tasks OIDC token (verify_cloud_tasks_oidc), not Firebase.
+    Response semantics drive the queue: 2xx consumes the task, 409 while the
+    run-lock is held retries later, 500 retries with backoff.
+
+    Idempotency: a per-job Redis run-lock serializes concurrent deliveries;
+    terminal jobs are acked without re-running; segments completed by a prior
+    attempt are skipped via the processed-segment ledger inside the pipeline.
+    """
+    try:
+        payload = await request.json()
+        job_id = payload['job_id']
+        uid = payload['uid']
+        blob_paths = list(payload['raw_blob_paths'])
+        source = ConversationSource(payload.get('source') or 'omi')
+        should_lock = bool(payload.get('should_lock', False))
+        conversation_id = payload.get('conversation_id')
+    except Exception as e:
+        # A malformed payload will not fix itself on retry — consume it.
+        logger.error(f'sync job handler: invalid payload, dropping task: {e}')
+        return JSONResponse(status_code=200, content={'status': 'dropped', 'reason': 'invalid_payload'})
+
+    # Fail-closed lock: Redis errors propagate → 500 → Cloud Tasks retries later.
+    lock_token = await run_blocking(db_executor, try_acquire_job_run_lock, job_id)
+    if not lock_token:
+        logger.warning(f'sync job {job_id}: run-lock held by another attempt, deferring')
+        return JSONResponse(status_code=409, content={'status': 'locked'})
+
+    try:
+        job = await run_blocking(db_executor, get_sync_job, job_id)
+        if not job:
+            # Job TTL (24h) expired before dispatch — staged blobs are gone or
+            # about to be (1-day lifecycle); the app re-uploads on 404.
+            logger.warning(f'sync job {job_id}: job expired before dispatch, dropping task')
+            await _delete_staged_blobs_async(blob_paths)
+            return JSONResponse(status_code=200, content={'status': 'dropped', 'reason': 'job_expired'})
+
+        if job['status'] in TERMINAL_STATUSES:
+            # Duplicate delivery, stale-detector-failed job, or a prior attempt
+            # that finished. Never re-run terminal jobs — the app may already be
+            # re-uploading these files as a new job.
+            await _delete_staged_blobs_async(blob_paths)
+            return JSONResponse(status_code=200, content={'status': 'acked', 'job_status': job['status']})
+
+        if not await run_blocking(storage_executor, _download_staged_files, blob_paths):
+            # Blobs deleted by the bucket's 1-day lifecycle (deep queue backlog).
+            await run_blocking(db_executor, mark_job_failed, job_id, 'Staged audio expired before processing')
+            await _delete_staged_blobs_async(blob_paths)
+            return JSONResponse(status_code=200, content={'status': 'dropped', 'reason': 'staged_audio_expired'})
+
+        job_dir = f'syncing/{uid}/{job_id}'
+        try:
+            await _run_full_pipeline_background_async(
+                job_id,
+                uid,
+                blob_paths,
+                source,
+                should_lock,
+                job_dir,
+                conversation_id,
+                task_mode=True,
+            )
+        except Exception as e:
+            max_attempts = get_sync_tasks_max_attempts()
+            if task_retry_count >= max_attempts - 1:
+                logger.error(f'sync job {job_id}: final attempt {task_retry_count + 1} failed, consuming: {e}')
+                await run_blocking(db_executor, mark_job_failed, job_id, f'Failed after {max_attempts} attempts: {e}')
+                await _delete_staged_blobs_async(blob_paths)
+                return JSONResponse(status_code=200, content={'status': 'failed_final'})
+            # Reset to 'queued' so the stale detector cannot terminally fail the
+            # job while the Cloud Tasks retry backoff elapses. Blobs are kept.
+            logger.warning(f'sync job {job_id}: attempt {task_retry_count + 1} failed, will retry: {e}')
+            await run_blocking(db_executor, mark_job_queued_for_retry, job_id, task_retry_count + 1, str(e))
+            return JSONResponse(status_code=500, content={'status': 'retry'})
+
+        # Pipeline returned normally: completed, or it marked the job failed
+        # itself (decode/VAD/DG-budget) — terminal either way, staging is done.
+        await _delete_staged_blobs_async(blob_paths)
+        return JSONResponse(status_code=200, content={'status': 'done'})
+    finally:
+        await run_blocking(db_executor, release_job_run_lock, job_id, lock_token)
