@@ -133,7 +133,7 @@ bash test-preflight.sh
 
 Windows PowerShell:
 ```powershell
-.\test-preflight.ps1
+powershell -NoProfile -ExecutionPolicy Bypass -File .\test-preflight.ps1
 ```
 
 The preflight script does not replace `test.sh`; it only catches setup issues before running the tests.
