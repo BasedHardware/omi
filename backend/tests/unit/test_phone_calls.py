@@ -1,5 +1,6 @@
 import os
 import sys
+from types import ModuleType, SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 os.environ.setdefault("ENCRYPTION_SECRET", "omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv")
@@ -9,6 +10,80 @@ _mock_firebase = MagicMock()
 sys.modules.setdefault("database._client", MagicMock())
 sys.modules.setdefault("firebase_admin", _mock_firebase)
 sys.modules.setdefault("firebase_admin.auth", _mock_firebase.auth)
+
+
+class _TwilioRestException(Exception):
+    def __init__(self, status=None, uri=None, msg='', code=None, method=None, details=None):
+        super().__init__(msg)
+        self.status = status
+        self.uri = uri
+        self.msg = msg
+        self.code = code
+        self.method = method
+        self.details = details
+
+
+class _VoiceResponse:
+    def __init__(self):
+        self._children = []
+
+    def say(self, message):
+        self._children.append(f'<Say>{message}</Say>')
+
+    def append(self, child):
+        self._children.append(str(child))
+
+    def __str__(self):
+        return '<Response>' + ''.join(self._children) + '</Response>'
+
+
+class _Dial:
+    def __init__(self, caller_id=None, time_limit=None, **_kwargs):
+        self._caller_id = caller_id
+        self._time_limit = time_limit
+        self._numbers = []
+
+    def number(self, number):
+        self._numbers.append(number)
+
+    def __str__(self):
+        attrs = []
+        if self._caller_id is not None:
+            attrs.append(f'callerId="{self._caller_id}"')
+        if self._time_limit is not None:
+            attrs.append(f'timeLimit="{self._time_limit}"')
+        attrs_text = (' ' + ' '.join(attrs)) if attrs else ''
+        numbers = ''.join(f'<Number>{number}</Number>' for number in self._numbers)
+        return f'<Dial{attrs_text}>{numbers}</Dial>'
+
+
+_twilio = ModuleType('twilio')
+_twilio_base = ModuleType('twilio.base')
+_twilio_base_exceptions = ModuleType('twilio.base.exceptions')
+_twilio_base_exceptions.TwilioRestException = _TwilioRestException
+_twilio_twiml = ModuleType('twilio.twiml')
+_twilio_twiml_voice_response = ModuleType('twilio.twiml.voice_response')
+_twilio_twiml_voice_response.VoiceResponse = _VoiceResponse
+_twilio_twiml_voice_response.Dial = _Dial
+_twilio_rest = ModuleType('twilio.rest')
+_twilio_rest.Client = MagicMock
+_twilio_jwt = ModuleType('twilio.jwt')
+_twilio_jwt_access_token = ModuleType('twilio.jwt.access_token')
+_twilio_jwt_access_token.AccessToken = MagicMock
+_twilio_jwt_access_token_grants = ModuleType('twilio.jwt.access_token.grants')
+_twilio_jwt_access_token_grants.VoiceGrant = MagicMock
+_twilio_request_validator = ModuleType('twilio.request_validator')
+_twilio_request_validator.RequestValidator = MagicMock
+sys.modules.setdefault('twilio', _twilio)
+sys.modules.setdefault('twilio.base', _twilio_base)
+sys.modules.setdefault('twilio.base.exceptions', _twilio_base_exceptions)
+sys.modules.setdefault('twilio.twiml', _twilio_twiml)
+sys.modules.setdefault('twilio.twiml.voice_response', _twilio_twiml_voice_response)
+sys.modules.setdefault('twilio.rest', _twilio_rest)
+sys.modules.setdefault('twilio.jwt', _twilio_jwt)
+sys.modules.setdefault('twilio.jwt.access_token', _twilio_jwt_access_token)
+sys.modules.setdefault('twilio.jwt.access_token.grants', _twilio_jwt_access_token_grants)
+sys.modules.setdefault('twilio.request_validator', _twilio_request_validator)
 
 import pytest
 from fastapi import FastAPI
@@ -22,6 +97,16 @@ from routers.phone_calls import router, _redact_phone, E164_PATTERN
 
 TEST_UID = 'test-uid-123'
 TEST_UID_OTHER = 'test-uid-other'
+
+
+@pytest.fixture(autouse=True)
+def _stub_phone_call_plan_guards(monkeypatch):
+    monkeypatch.setattr('routers.phone_calls.check_call_access', MagicMock())
+    monkeypatch.setattr(
+        'routers.phone_calls.get_quota_snapshot',
+        MagicMock(return_value=SimpleNamespace(has_access=True, is_paid=True, max_duration_seconds=None)),
+    )
+    monkeypatch.setattr('routers.phone_calls.check_destination_allowed', MagicMock())
 
 
 def _make_app():
