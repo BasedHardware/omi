@@ -8,7 +8,7 @@ from unittest.mock import patch, MagicMock
 import os
 import pytest
 import sys
-from datetime import timezone
+from datetime import datetime, timedelta, timezone, tzinfo
 from types import ModuleType
 from zoneinfo import ZoneInfo
 
@@ -40,10 +40,53 @@ class _ToolWrapper:
         return self.fn(*args, **kwargs)
 
     def invoke(self, args=None, config=None):
+        if args is not None and not isinstance(args, dict):
+            if config is not None:
+                return self.fn(args, config=config)
+            return self.fn(args)
+
         kwargs = dict(args or {})
         if config is not None:
             kwargs['config'] = config
         return self.fn(**kwargs)
+
+
+class _PytzZoneInfo(tzinfo):
+    """Minimal pytz timezone stand-in with `.localize(...)` for summary tests."""
+
+    def __init__(self, key):
+        try:
+            self._zone = ZoneInfo(key)
+        except Exception:
+            if key == 'UTC':
+                self._zone = timezone.utc
+            elif key == 'Asia/Kolkata':
+                self._zone = timezone(timedelta(hours=5, minutes=30), key)
+            else:
+                raise
+
+    def localize(self, value):
+        if value.tzinfo is not None:
+            return value.astimezone(self)
+        return value.replace(tzinfo=self)
+
+    def _delegate_value(self, value):
+        if value is not None and value.tzinfo is self:
+            return value.replace(tzinfo=self._zone)
+        return value
+
+    def utcoffset(self, value):
+        return self._zone.utcoffset(self._delegate_value(value))
+
+    def dst(self, value):
+        return self._zone.dst(self._delegate_value(value))
+
+    def tzname(self, value):
+        return self._zone.tzname(self._delegate_value(value))
+
+    def fromutc(self, value):
+        localized = value.replace(tzinfo=timezone.utc).astimezone(self._zone)
+        return localized.replace(tzinfo=self)
 
 
 def _tool(func=None, *args, **kwargs):
@@ -144,7 +187,7 @@ sys.modules['langchain_core.callbacks'].BaseCallbackHandler = object
 sys.modules['langchain_core.outputs'].LLMResult = object
 sys.modules['langchain_core.runnables'].RunnableConfig = dict
 sys.modules['langchain_core.tools'].tool = _tool
-sys.modules['pytz'].timezone = ZoneInfo
+sys.modules['pytz'].timezone = _PytzZoneInfo
 sys.modules['pytz'].utc = timezone.utc
 
 # Override specific attributes that need concrete values
@@ -153,6 +196,28 @@ sys.modules['firebase_admin.auth'].ExpiredIdTokenError = type('ExpiredIdTokenErr
 sys.modules['firebase_admin.auth'].RevokedIdTokenError = type('RevokedIdTokenError', (Exception,), {})
 sys.modules['firebase_admin.auth'].CertificateFetchError = type('CertificateFetchError', (Exception,), {})
 sys.modules['firebase_admin.auth'].UserNotFoundError = type('UserNotFoundError', (Exception,), {})
+
+
+class TestLightweightStubHelpers:
+    """Keep lightweight dependency stubs aligned with the real interfaces tests rely on."""
+
+    def test_tool_wrapper_invoke_accepts_string_input(self):
+        def echo(value):
+            return value
+
+        wrapped = _tool(echo)
+
+        assert wrapped.invoke('hello') == 'hello'
+
+    def test_pytz_stub_supports_localize_and_datetime_now(self):
+        import pytz
+
+        user_tz = pytz.timezone('UTC')
+        localized = user_tz.localize(datetime(2026, 6, 10, 12, 0, 0))
+
+        assert localized.tzinfo is user_tz
+        assert localized.astimezone(pytz.utc).hour == 12
+        assert datetime.now(user_tz).tzinfo is user_tz
 
 
 def _make_conversation(locked=False, conversation_id='conv-1'):
