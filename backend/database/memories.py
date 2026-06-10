@@ -1,12 +1,14 @@
 import copy
+import json
 from datetime import datetime, timezone
 from typing import List, Optional, Dict, Any
 
 from google.cloud import firestore
-from google.cloud.firestore_v1 import FieldFilter
+from google.cloud.firestore_v1 import FieldFilter, transactional
 
 from ._client import db
 from database import users as users_db
+from models.memories import merge_evidence_sets
 from utils import encryption
 from .helpers import set_data_protection_level, prepare_for_write, prepare_for_read
 import logging
@@ -35,6 +37,8 @@ def _encrypt_memory_data(memory_data: Dict[str, Any], uid: str) -> Dict[str, Any
 
     if 'content' in data and isinstance(data['content'], str):
         data['content'] = encryption.encrypt(data['content'], uid)
+    if 'evidence' in data and isinstance(data['evidence'], list):
+        data['evidence'] = encryption.encrypt(json.dumps(data['evidence'], default=str), uid)
     return data
 
 
@@ -44,6 +48,12 @@ def _decrypt_memory_data(memory_data: Dict[str, Any], uid: str) -> Dict[str, Any
     if 'content' in data and isinstance(data['content'], str):
         try:
             data['content'] = encryption.decrypt(data['content'], uid)
+        except Exception:
+            pass
+    if 'evidence' in data and isinstance(data['evidence'], str):
+        try:
+            decrypted = encryption.decrypt(data['evidence'], uid)
+            data['evidence'] = json.loads(decrypted)
         except Exception:
             pass
     return data
@@ -152,7 +162,8 @@ def create_memory(uid: str, data: dict):
     user_ref = db.collection(users_collection).document(uid)
     memories_ref = user_ref.collection(memories_collection)
     memory_ref = memories_ref.document(data['id'])
-    memory_ref.set(data)
+    transaction = db.transaction()
+    _set_memory_transaction(transaction, uid, memory_ref, data)
 
 
 @set_data_protection_level(data_arg_name='data')
@@ -161,13 +172,65 @@ def save_memories(uid: str, data: List[dict]):
     if not data:
         return
 
-    batch = db.batch()
     user_ref = db.collection(users_collection).document(uid)
     memories_ref = user_ref.collection(memories_collection)
-    for memory in data:
-        memory_ref = memories_ref.document(memory['id'])
-        batch.set(memory_ref, memory)
-    batch.commit()
+    coalesced_data = _coalesce_memory_writes(uid, data)
+    refs_and_data = [(memories_ref.document(memory['id']), memory) for memory in coalesced_data]
+    transaction = db.transaction()
+    _set_memories_transaction(transaction, uid, refs_and_data)
+
+
+@transactional
+def _set_memory_transaction(transaction, uid: str, memory_ref, memory: dict):
+    snapshot = memory_ref.get(transaction=transaction)
+    existing_data = snapshot.to_dict() if snapshot.exists else None
+    transaction.set(memory_ref, _merge_memory_for_write(uid, existing_data, memory))
+
+
+@transactional
+def _set_memories_transaction(transaction, uid: str, refs_and_data: List[tuple]):
+    snapshots = []
+    for memory_ref, _ in refs_and_data:
+        snapshots.append(memory_ref.get(transaction=transaction))
+
+    for (memory_ref, memory), snapshot in zip(refs_and_data, snapshots):
+        existing_data = snapshot.to_dict() if snapshot.exists else None
+        transaction.set(memory_ref, _merge_memory_for_write(uid, existing_data, memory))
+
+
+def _merge_memory_for_write(uid: str, existing_data: Optional[dict], incoming_data: dict) -> dict:
+    """Merge additive provenance when a deterministic memory id already exists."""
+    if not existing_data:
+        return incoming_data
+
+    incoming_plain = _prepare_memory_for_read(incoming_data, uid) or incoming_data
+    existing_plain = _prepare_memory_for_read(existing_data, uid) or existing_data
+    existing_evidence = existing_plain.get('evidence') or []
+    incoming_evidence = incoming_plain.get('evidence') or []
+    if not incoming_evidence:
+        return incoming_data
+
+    merged_plain = {**existing_plain, **incoming_plain}
+    merged_plain['created_at'] = existing_plain.get('created_at', incoming_plain.get('created_at'))
+    merged_plain['evidence'] = merge_evidence_sets(existing_evidence, incoming_evidence)
+    return _prepare_data_for_write(merged_plain, uid, merged_plain.get('data_protection_level', 'standard'))
+
+
+def _coalesce_memory_writes(uid: str, memories: List[dict]) -> List[dict]:
+    merged_by_id = {}
+    order = []
+    for memory in memories:
+        memory_id = memory['id']
+        if memory_id not in merged_by_id:
+            merged_by_id[memory_id] = memory
+            order.append(memory_id)
+            continue
+        merged_by_id[memory_id] = _merge_memory_for_write(uid, merged_by_id[memory_id], memory)
+    return [merged_by_id[memory_id] for memory_id in order]
+
+
+def _merge_evidence(existing: List[dict], incoming: List[dict]) -> List[dict]:
+    return merge_evidence_sets(existing, incoming)
 
 
 def delete_memories(uid: str):
@@ -247,6 +310,36 @@ def update_memory_fields(uid: str, memory_id: str, data: dict):
     update_payload = data.copy()
     update_payload['updated_at'] = datetime.now(timezone.utc)
     memory_ref.update(update_payload)
+
+
+def add_evidence(uid: str, memory_id: str, evidence: dict):
+    """Append one provenance Evidence row to a memory if it is not already present."""
+    user_ref = db.collection(users_collection).document(uid)
+    memories_ref = user_ref.collection(memories_collection)
+    memory_ref = memories_ref.document(memory_id)
+
+    doc_snapshot = memory_ref.get()
+    if not doc_snapshot.exists:
+        return
+
+    memory_data = _prepare_memory_for_read(doc_snapshot.to_dict(), uid) or {}
+    existing = memory_data.get('evidence') or []
+    evidence_id = evidence.get('evidence_id')
+    if evidence_id and any(item.get('evidence_id') == evidence_id for item in existing if isinstance(item, dict)):
+        return
+
+    updated_evidence = existing + [evidence]
+    update_payload = {'evidence': updated_evidence, 'updated_at': datetime.now(timezone.utc)}
+    doc_level = memory_data.get('data_protection_level', 'standard')
+    if doc_level == 'enhanced':
+        update_payload = _encrypt_memory_data(update_payload, uid)
+    memory_ref.update(update_payload)
+
+
+def recompute_evidence(uid: str, memory_id: str):
+    """Placeholder hook for later veracity/tombstone recomputation tickets."""
+    memory = get_memory(uid, memory_id)
+    return (memory or {}).get('evidence', [])
 
 
 def edit_memory(uid: str, memory_id: str, value: str):

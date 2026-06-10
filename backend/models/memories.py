@@ -1,7 +1,7 @@
 from collections import defaultdict
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Optional, List
+from typing import Optional, List, Dict, Any
 
 from pydantic import BaseModel, Field, validator
 
@@ -104,6 +104,78 @@ class Memory(BaseModel):
         return result
 
 
+class Evidence(BaseModel):
+    evidence_id: str
+    source_id: Optional[str] = None
+    source_type: str = "unknown"
+    artifact_ref: Dict[str, Any] = Field(default_factory=dict)
+    source_signal: str = "unknown"
+    extractor_id: str = "unknown"
+    extractor_version: str = "unknown"
+    capture_confidence: float = 0.5
+    independence_group: str
+    redaction_status: str = "active"
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+    @staticmethod
+    def from_source(
+        *,
+        source_id: Optional[str],
+        source_type: str,
+        source_signal: str,
+        extractor_id: str,
+        extractor_version: str,
+        artifact_ref: Optional[Dict[str, Any]] = None,
+        capture_confidence: Optional[float] = None,
+        independence_group: Optional[str] = None,
+        created_at: Optional[datetime] = None,
+    ) -> 'Evidence':
+        now = created_at or datetime.now(timezone.utc)
+        group = independence_group or source_id or f"{source_type}:unknown"
+        ref = artifact_ref or {}
+        return Evidence(
+            evidence_id=document_id_from_seed(
+                "|".join(
+                    [
+                        "evidence",
+                        source_id or "",
+                        source_type,
+                        source_signal,
+                        extractor_id,
+                        extractor_version,
+                        str(sorted(ref.items())),
+                    ]
+                )
+            ),
+            source_id=source_id,
+            source_type=source_type,
+            artifact_ref=ref,
+            source_signal=source_signal,
+            extractor_id=extractor_id,
+            extractor_version=extractor_version,
+            capture_confidence=capture_confidence if capture_confidence is not None else 0.5,
+            independence_group=group,
+            created_at=now,
+        )
+
+
+def merge_evidence_sets(existing: List[dict], incoming: List[dict]) -> List[dict]:
+    merged = []
+    seen = set()
+    for item in list(existing) + list(incoming):
+        if hasattr(item, 'dict'):
+            item = item.dict()
+        if not isinstance(item, dict):
+            continue
+        evidence_id = item.get('evidence_id')
+        if evidence_id and evidence_id in seen:
+            continue
+        if evidence_id:
+            seen.add(evidence_id)
+        merged.append(item)
+    return merged
+
+
 class MemoryDB(Memory):
     id: str
     uid: str
@@ -126,6 +198,7 @@ class MemoryDB(Memory):
     data_protection_level: Optional[str] = None
     is_locked: bool = False
     kg_extracted: bool = False
+    evidence: List[Evidence] = Field(default_factory=list)
 
     # Temporal lifecycle — the "constantly updated brain". All optional, so existing
     # docs (which lack these fields) read back as active with no migration.
@@ -158,8 +231,36 @@ class MemoryDB(Memory):
         return "{:02d}_{:02d}_{:010d}".format(user_manual_added_boost, cat_boost, int(memory.created_at.timestamp()))
 
     @staticmethod
-    def from_memory(memory: Memory, uid: str, conversation_id: str, manually_added: bool) -> 'MemoryDB':
+    def from_memory(
+        memory: Memory,
+        uid: str,
+        conversation_id: Optional[str],
+        manually_added: bool,
+        *,
+        source_id: Optional[str] = None,
+        source_type: Optional[str] = None,
+        source_signal: Optional[str] = None,
+        artifact_ref: Optional[Dict[str, Any]] = None,
+        extractor_id: str = "memory_extractor",
+        extractor_version: str = "v1",
+        capture_confidence: Optional[float] = None,
+        independence_group: Optional[str] = None,
+    ) -> 'MemoryDB':
         now = datetime.now(timezone.utc)
+        evidence_source_id = source_id if source_id is not None else conversation_id
+        evidence_source_type = source_type or ("conversation" if conversation_id else "developer_api")
+        evidence_source_signal = source_signal or ("manual" if manually_added else "transcription")
+        evidence = Evidence.from_source(
+            source_id=evidence_source_id,
+            source_type=evidence_source_type,
+            source_signal=evidence_source_signal,
+            extractor_id=extractor_id,
+            extractor_version=extractor_version,
+            artifact_ref=artifact_ref,
+            capture_confidence=capture_confidence,
+            independence_group=independence_group,
+            created_at=now,
+        )
         memory_db = MemoryDB(
             id=document_id_from_seed(memory.content),
             uid=uid,
@@ -174,6 +275,7 @@ class MemoryDB(Memory):
             user_review=True if manually_added else None,
             reviewed=True,
             visibility=memory.visibility,
+            evidence=[evidence],
         )
         memory_db.scoring = MemoryDB.calculate_score(memory_db)
         return memory_db

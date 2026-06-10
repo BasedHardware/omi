@@ -305,27 +305,41 @@ def _extract_and_index(uid: str, posts: List[Dict]) -> int:
     if not posts:
         return 0
 
-    chunks: List[str] = []
+    chunks: List[Tuple[str, List[str]]] = []
     buf: List[str] = []
+    buf_ids: List[str] = []
     size = 0
     for p in posts:
         line = f"{p.get('text', '')} (Posted: {p.get('created_at', '')})"
         if size + len(line) > MEMORY_BATCH_CHARS and buf:
-            chunks.append('\n'.join(buf))
-            buf, size = [], 0
+            chunks.append(('\n'.join(buf), buf_ids))
+            buf, buf_ids, size = [], [], 0
         buf.append(line)
+        if p.get('id'):
+            buf_ids.append(str(p['id']))
         size += len(line)
     if buf:
-        chunks.append('\n'.join(buf))
+        chunks.append(('\n'.join(buf), buf_ids))
 
     total = 0
-    for chunk in chunks:
+    for chunk, post_ids in chunks:
         extracted = extract_memories_from_text(uid, chunk, 'twitter_tweets')
         if not extracted:
             continue
+        source_id = f"{INTEGRATION_KEY}:{hashlib.sha256('|'.join(post_ids).encode('utf-8')).hexdigest()[:24]}"
         memory_dbs: List[MemoryDB] = []
         for m in extracted:
-            mdb = MemoryDB.from_memory(m, uid, None, False)
+            mdb = MemoryDB.from_memory(
+                m,
+                uid,
+                None,
+                False,
+                source_id=source_id,
+                source_type="integration:x",
+                source_signal="integration",
+                artifact_ref={"kind": "integration_text", "text_source": "twitter_tweets", "post_ids": post_ids},
+                extractor_id="extract_memories_from_text",
+            )
             mdb.manually_added = False
             # Tag with the connector key so X-derived memories are identifiable
             # (and cleanly removable on disconnect / re-import).
@@ -405,9 +419,7 @@ async def sync_x_for_user(uid: str) -> Dict:
     # Vector-index the raw posts so agents can semantically search the actual
     # tweets (not just the extracted memories) via the MCP search_x_posts tool.
     # Chunk to stay within Pinecone's per-upsert vector limit (~100).
-    items_to_index = [
-        {'post_id': p['id'], 'content': p.get('text', ''), 'kind': p.get('kind', 'tweet')} for p in fresh
-    ]
+    items_to_index = [{'post_id': p['id'], 'content': p.get('text', ''), 'kind': p.get('kind', 'tweet')} for p in fresh]
     for i in range(0, len(items_to_index), 100):
         try:
             upsert_x_post_vectors_batch(uid, items_to_index[i : i + 100])

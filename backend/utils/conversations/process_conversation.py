@@ -518,7 +518,17 @@ def _extract_memories_inner(uid: str, conversation: Conversation):
                     if isinstance(idx, int) and 1 <= idx <= len(similar_memories):
                         supersede_ids.append(similar_memories[idx - 1]['memory_id'])
 
-        memory_db_obj = MemoryDB.from_memory(memory, uid, conversation.id, False)
+        memory_db_obj = MemoryDB.from_memory(
+            memory,
+            uid,
+            conversation.id,
+            False,
+            source_id=conversation.id,
+            source_type="conversation",
+            source_signal="transcription",
+            artifact_ref=_transcript_artifact_ref(conversation),
+            extractor_id="new_memories_extractor",
+        )
         memory_db_obj.is_locked = is_locked
         parsed_memories.append(memory_db_obj)
 
@@ -569,6 +579,17 @@ def _extract_memories_inner(uid: str, conversation: Conversation):
                     logging.exception(f"Error extracting knowledge graph from memory_id: {memory_db_obj.id}")
         except Exception:
             logging.exception("Error extracting knowledge graph from memory.")
+
+
+def _transcript_artifact_ref(conversation: Conversation) -> dict:
+    segments = conversation.transcript_segments or []
+    return {
+        "kind": "transcript_segments",
+        "conversation_id": conversation.id,
+        "segment_ids": [segment.id for segment in segments if segment.id],
+        "start": min((segment.start for segment in segments), default=None),
+        "end": max((segment.end for segment in segments), default=None),
+    }
 
 
 def send_new_memories_notification(user_id: str, memories: [MemoryDB]):
