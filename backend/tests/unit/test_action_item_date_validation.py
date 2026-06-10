@@ -16,7 +16,7 @@ import sys
 import types
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from zoneinfo import ZoneInfo
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -66,7 +66,7 @@ def _load_module_from_file(module_name, file_path):
 def _zoneinfo_for_test(key):
     try:
         return ZoneInfo(key)
-    except Exception:
+    except (ZoneInfoNotFoundError, KeyError):
         if key == "UTC":
             return timezone.utc
         if key == "Asia/Kolkata":
