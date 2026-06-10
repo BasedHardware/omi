@@ -74,8 +74,9 @@ class TimeoutMiddleware(BaseHTTPMiddleware):
             except (ValueError, TypeError):
                 pass
 
-        timeout = self.paths_timeout.get(request.url.path) or self.methods_timeout.get(
-            request.method, self.default_timeout
+        path_timeout = self.paths_timeout.get(request.url.path)
+        timeout = (
+            path_timeout if path_timeout is not None else self.methods_timeout.get(request.method, self.default_timeout)
         )
         try:
             return await asyncio.wait_for(call_next(request), timeout=timeout)
