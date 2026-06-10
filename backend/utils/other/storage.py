@@ -351,6 +351,30 @@ def delete_syncing_temporal_file(file_path: str):
         pass
 
 
+def upload_syncing_temporal_file(file_path: str):
+    """Stage a local file in the syncing bucket (blob name = local relative path)."""
+    bucket = storage_client.bucket(syncing_local_bucket)
+    bucket.blob(file_path).upload_from_filename(file_path)
+
+
+def download_syncing_temporal_file(file_path: str) -> bool:
+    """Download a staged blob back to its local relative path.
+
+    Returns False when the blob no longer exists (e.g. deleted by the
+    bucket's 1-day lifecycle rule before a deeply delayed task ran).
+    """
+    bucket = storage_client.bucket(syncing_local_bucket)
+    blob = bucket.blob(file_path)
+    directory = os.path.dirname(file_path)
+    if directory:
+        os.makedirs(directory, exist_ok=True)
+    try:
+        blob.download_to_filename(file_path)
+        return True
+    except BlobNotFound:
+        return False
+
+
 # ************************************************
 # *********** PRIVATE CLOUD SYNC *****************
 # ************************************************
