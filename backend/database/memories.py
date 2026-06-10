@@ -17,6 +17,14 @@ memories_collection = 'memories'
 users_collection = 'users'
 
 
+def get_memory_ids(uid: str) -> List[str]:
+    """Return all memory document IDs for a user without decrypting any fields (IDs-only projection).
+
+    Used for bulk operations like account deletion (e.g. to purge derived Pinecone vectors)."""
+    coll = db.collection(users_collection).document(uid).collection(memories_collection)
+    return [doc.id for doc in coll.select([]).stream()]
+
+
 # *********************************
 # ******* ENCRYPTION HELPERS ******
 # *********************************

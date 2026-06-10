@@ -319,7 +319,8 @@ def delete_all_conversation_recordings(uid: str):
     if not uid:
         return
     bucket = storage_client.bucket(memories_recordings_bucket)
-    blobs = bucket.list_blobs(prefix=uid)
+    # Trailing slash so a uid is not a prefix of another uid's folder (e.g. "abc" matching "abcd/").
+    blobs = bucket.list_blobs(prefix=f"{uid}/")
     for blob in blobs:
         blob.delete()
 
