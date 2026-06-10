@@ -3,7 +3,9 @@ Shared service functions for conversation retrieval.
 Used by both LangChain tools (mobile chat) and REST router (desktop/web).
 """
 
+import logging
 import re
+from collections import Counter
 from datetime import datetime, timezone
 from typing import List, Optional
 
@@ -15,9 +17,10 @@ from models.conversation import Conversation
 from models.other import Person
 from utils.conversations.factory import deserialize_conversation
 from utils.conversations.render import conversations_to_string
-import logging
 
 logger = logging.getLogger(__name__)
+
+LEXICAL_FALLBACK_CANDIDATE_LIMIT = 200
 
 
 def parse_iso_date(date_str: str, param_name: str) -> datetime:
@@ -31,6 +34,100 @@ def parse_iso_date(date_str: str, param_name: str) -> datetime:
             f"(e.g., '2024-01-19T15:00:00-08:00'): {date_str}"
         )
     return dt
+
+
+def _tokenize_for_lexical_search(text: str) -> List[str]:
+    """Tokenize text for lightweight exact-term retrieval."""
+    if not text:
+        return []
+    return re.findall(r"[a-z0-9]+", text.lower())
+
+
+def _conversation_structured_text(conv_data: dict) -> tuple[str, str]:
+    """Return title and overview text from dict-shaped structured data."""
+    structured = conv_data.get('structured') or {}
+    if not isinstance(structured, dict):
+        return '', ''
+    return structured.get('title') or '', structured.get('overview') or ''
+
+
+def _conversation_transcript_text(conv_data: dict) -> str:
+    """Return transcript text from transcript segment dictionaries."""
+    segments = conv_data.get('transcript_segments') or []
+    texts = []
+    for segment in segments:
+        if isinstance(segment, dict):
+            text = segment.get('text') or ''
+            if text:
+                texts.append(text)
+    return ' '.join(texts)
+
+
+def _score_conversation_lexically(query: str, conv_data: dict) -> float:
+    """Score one conversation using a small BM25-inspired exact-token heuristic.
+
+    This intentionally avoids dependencies. It is meant as a fallback for
+    names, acronyms, products, tools, and other exact strings that vector search
+    can miss.
+    """
+    query_tokens = _tokenize_for_lexical_search(query)
+    if not query_tokens:
+        return 0.0
+
+    title, overview = _conversation_structured_text(conv_data)
+    transcript = _conversation_transcript_text(conv_data)
+
+    title_tokens = Counter(_tokenize_for_lexical_search(title))
+    overview_tokens = Counter(_tokenize_for_lexical_search(overview))
+    transcript_tokens = Counter(_tokenize_for_lexical_search(transcript))
+
+    score = 0.0
+    for token in query_tokens:
+        score += title_tokens[token] * 6.0
+        score += overview_tokens[token] * 4.0
+        score += transcript_tokens[token] * 1.5
+
+    query_lc = query.lower().strip()
+    title_lc = title.lower()
+    overview_lc = overview.lower()
+    transcript_lc = transcript.lower()
+
+    # Phrase matches are especially useful for names like "IIM Ranchi" or
+    # products like "ERPNext CRM".
+    if query_lc:
+        if query_lc in title_lc:
+            score += 12.0
+        if query_lc in overview_lc:
+            score += 8.0
+        if query_lc in transcript_lc:
+            score += 4.0
+
+    # Reward covering more unique query terms so one repeated token does not win.
+    unique_query_tokens = set(query_tokens)
+    all_tokens = set(title_tokens) | set(overview_tokens) | set(transcript_tokens)
+    covered = len(unique_query_tokens & all_tokens)
+    score += covered * 2.0
+
+    return score
+
+
+def _rank_conversations_lexically(query: str, conversations_data: List[dict], limit: int) -> List[str]:
+    """Return conversation IDs ranked by lexical score."""
+    scored = []
+    for conv_data in conversations_data:
+        if conv_data.get('is_locked', False):
+            continue
+
+        conv_id = conv_data.get('id')
+        if not conv_id:
+            continue
+
+        score = _score_conversation_lexically(query, conv_data)
+        if score > 0:
+            scored.append((score, conv_id))
+
+    scored.sort(key=lambda item: item[0], reverse=True)
+    return [conv_id for _, conv_id in scored[:limit]]
 
 
 def get_conversations_text(
@@ -147,7 +244,7 @@ def search_conversations_text(
     include_transcript: bool = True,
     include_timestamps: bool = False,
 ) -> str:
-    """Semantic vector search for conversations, formatted as LLM-ready text."""
+    """Hybrid conversation search with vector retrieval and lexical fallback."""
     logger.info(f"search_conversations_text - uid: {uid}, query: {query}, limit: {limit}")
 
     # Cap limits
@@ -158,16 +255,18 @@ def search_conversations_text(
     # Parse date filters to timestamps
     starts_at = None
     ends_at = None
+    start_dt = None
+    end_dt = None
     if start_date:
         try:
-            dt = parse_iso_date(start_date, 'start_date')
-            starts_at = int(dt.timestamp())
+            start_dt = parse_iso_date(start_date, 'start_date')
+            starts_at = int(start_dt.timestamp())
         except ValueError as e:
             return f"Error: Invalid start_date format: {e}"
     if end_date:
         try:
-            dt = parse_iso_date(end_date, 'end_date')
-            ends_at = int(dt.timestamp())
+            end_dt = parse_iso_date(end_date, 'end_date')
+            ends_at = int(end_dt.timestamp())
         except ValueError as e:
             return f"Error: Invalid end_date format: {e}"
 
@@ -179,7 +278,38 @@ def search_conversations_text(
         starts_at = 0  # epoch
 
     try:
+        # Existing vector-only implementation:
+        # conversation_ids = vector_db.query_vectors(query=query, uid=uid, starts_at=starts_at, ends_at=ends_at, k=limit)
+        #
+        # if not conversation_ids:
+        #     date_info = ""
+        #     if starts_at and ends_at:
+        #         date_info = " in the specified date range"
+        #     elif starts_at:
+        #         date_info = " after the specified start date"
+        #     elif ends_at:
+        #         date_info = " before the specified end date"
+        #     return f"No conversations found matching '{query}'{date_info}."
+        #
+        # conversations_data = conversations_db.get_conversations_by_id(uid, conversation_ids)
+
         conversation_ids = vector_db.query_vectors(query=query, uid=uid, starts_at=starts_at, ends_at=ends_at, k=limit)
+
+        retrieval_mode = "semantic"
+        if not conversation_ids:
+            logger.info("search_conversations_text - vector search returned no results, trying lexical fallback")
+
+            candidate_conversations = conversations_db.get_conversations(
+                uid,
+                limit=LEXICAL_FALLBACK_CANDIDATE_LIMIT,
+                offset=0,
+                start_date=start_dt,
+                end_date=end_dt,
+                include_discarded=False,
+                statuses=["processing", "completed"],
+            )
+            conversation_ids = _rank_conversations_lexically(query, candidate_conversations, limit)
+            retrieval_mode = "lexical"
 
         if not conversation_ids:
             date_info = ""
@@ -199,6 +329,10 @@ def search_conversations_text(
         conversations_data = [c for c in conversations_data if not c.get('is_locked', False)]
         if not conversations_data:
             return f"No conversations found matching query: '{query}'"
+
+        # Preserve retrieval ranking after Firestore fetch.
+        order = {conversation_id: idx for idx, conversation_id in enumerate(conversation_ids)}
+        conversations_data.sort(key=lambda c: order.get(c.get('id'), len(order)))
 
         # Load people
         people = []
@@ -227,7 +361,7 @@ def search_conversations_text(
                 logger.error(f"Error parsing conversation {conv_data.get('id')}: {e}")
                 continue
 
-        result = f"Found {len(conversations)} conversations semantically matching '{query}':\n\n"
+        result = f"Found {len(conversations)} conversations matching '{query}' via {retrieval_mode} retrieval:\n\n"
         result += conversations_to_string(
             conversations,
             use_transcript=include_transcript,
