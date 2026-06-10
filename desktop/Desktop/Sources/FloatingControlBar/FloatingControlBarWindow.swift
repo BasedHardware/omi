@@ -398,8 +398,10 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
             FloatingControlBarManager.shared.flushQueuedNotificationsIfPossible()
 
             // If the user has the bar disabled, hide it completely after closing the
-            // AI conversation instead of leaving the compact pill visible.
-            if !FloatingControlBarManager.shared.isEnabled {
+            // AI conversation instead of leaving the compact pill visible — unless a
+            // queued notification was just flushed; hiding now would swallow it, and
+            // its dismissal re-hides the bar anyway.
+            if !FloatingControlBarManager.shared.isEnabled && self?.state.currentNotification == nil {
                 self?.orderOut(nil)
             }
         }
@@ -1451,10 +1453,15 @@ class FloatingControlBarManager {
         // notification is presented the window is already visible from the
         // temp-show, so resetting it here would skip the re-hide in
         // dismissNotificationAndAdvanceQueue and leave the bar on screen
-        // forever with "Show floating bar" off (#6972).
-        if !window.isVisible {
+        // forever with "Show floating bar" off (#6972). The bar can also be
+        // visible while disabled (e.g. a notification flushed right as an AI
+        // conversation closes), so any presentation with the bar disabled
+        // must arm the re-hide.
+        if !window.isVisible || !isEnabled {
             notificationWasTemporarilyShown = true
-            window.orderFrontRegardless()
+            if !window.isVisible {
+                window.orderFrontRegardless()
+            }
         }
 
         window.showNotification(notification)
