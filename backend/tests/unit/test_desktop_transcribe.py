@@ -113,7 +113,12 @@ _gcs.Client = MagicMock
 os.environ.setdefault('OPENAI_API_KEY', 'sk-fake-for-test')
 os.environ.setdefault('DEEPGRAM_API_KEY', 'fake-for-test')
 os.environ.setdefault('ENCRYPTION_SECRET', 'omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv')
-os.makedirs('/tmp', exist_ok=True)
+
+
+@pytest.fixture(autouse=True)
+def _ensure_tmp_dir():
+    os.makedirs('/tmp', exist_ok=True)
+
 
 # Stub transitive imports for utils.chat (avoid pulling in all of utils.llm etc.)
 # Do NOT stub utils.other.endpoints — it contains the @timeit decorator that must
