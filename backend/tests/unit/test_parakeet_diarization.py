@@ -51,7 +51,7 @@ def _cosine_distance(a, b):
 
 
 _speaker_embedding.compare_embeddings = _cosine_distance
-sys.modules['utils.stt.speaker_embedding'] = _speaker_embedding
+sys.modules.setdefault('utils.stt.speaker_embedding', _speaker_embedding)
 
 import utils.stt.streaming as st  # noqa: E402
 

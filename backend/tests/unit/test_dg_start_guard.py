@@ -53,7 +53,7 @@ _speaker_embedding = ModuleType('utils.stt.speaker_embedding')
 _speaker_embedding.SPEAKER_MATCH_THRESHOLD = 0.45
 _speaker_embedding.async_extract_embedding_from_bytes = AsyncMock(return_value=None)
 _speaker_embedding.compare_embeddings = MagicMock(return_value=0.0)
-sys.modules['utils.stt.speaker_embedding'] = _speaker_embedding
+sys.modules.setdefault('utils.stt.speaker_embedding', _speaker_embedding)
 
 # Now import the real streaming module
 from utils.stt.streaming import connect_to_deepgram
