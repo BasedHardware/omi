@@ -45,9 +45,35 @@ def _stub_package(name):
     return mod
 
 
+def _remove_module_tree(prefix):
+    for name in list(sys.modules):
+        if name == prefix or name.startswith(prefix + "."):
+            sys.modules.pop(name, None)
+
+
+def _ensure_package_path(name, path):
+    mod = sys.modules.get(name)
+    if not isinstance(mod, types.ModuleType):
+        mod = types.ModuleType(name)
+        sys.modules[name] = mod
+    mod.__path__ = [str(path)]
+    return mod
+
+
 # ---------------------------------------------------------------------------
 # Stub heavy dependencies before any production imports
 # ---------------------------------------------------------------------------
+for module_prefix in [
+    "database",
+    "models",
+    "utils",
+    "routers.chat_sessions",
+    "routers.focus_sessions",
+    "routers.advice",
+    "routers.staged_tasks",
+]:
+    _remove_module_tree(module_prefix)
+
 for mod_name in [
     "firebase_admin",
     "firebase_admin.firestore",
@@ -90,13 +116,7 @@ redis_stub.try_acquire_user_platform_write_lock = MagicMock(return_value=True)
 sys.path.insert(0, str(BACKEND_DIR))
 
 # Stub database package and _client
-if "database" not in sys.modules:
-    db_pkg = _stub_package("database")
-    db_pkg.__path__ = [str(BACKEND_DIR / "database")]
-else:
-    db_mod = sys.modules["database"]
-    if not hasattr(db_mod, '__path__'):
-        db_mod.__path__ = [str(BACKEND_DIR / "database")]
+_ensure_package_path("database", BACKEND_DIR / "database")
 
 client_stub = _stub_module("database._client")
 mock_db = MagicMock()
@@ -150,6 +170,10 @@ from routers.chat_sessions import SaveMessageRequest, RateMessageRequest  # noqa
 from routers.focus_sessions import CreateFocusSessionRequest  # noqa: E402
 from routers.advice import CreateAdviceRequest  # noqa: E402
 from routers.staged_tasks import BatchUpdateScoresRequest, BatchScoreEntry  # noqa: E402
+
+_ensure_package_path("models", BACKEND_DIR / "models")
+_ensure_package_path("utils", BACKEND_DIR / "utils")
+_ensure_package_path("utils.other", BACKEND_DIR / "utils" / "other")
 
 # Cannot import routers.users directly — it pulls in database.conversations → utils.other.hume
 # which has heavy deps. Mirror the models here and verify parity via AST test below.
