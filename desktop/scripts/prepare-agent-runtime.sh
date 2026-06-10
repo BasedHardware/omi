@@ -130,7 +130,7 @@ stage_local_node() {
   # Copy the dylib alongside the binary so it resolves at both validation and runtime.
   local libnode_name
   libnode_name=$(otool -L "$node_bin" 2>/dev/null \
-    | awk '/@rpath\/libnode\.[0-9]+\.dylib/ {gsub(/@rpath\//, ""); gsub(/ \(.*/, ""); print; exit}')
+    | awk 'match($0, /libnode\.[0-9]+\.dylib/) {print substr($0, RSTART, RLENGTH); exit}')
   if [ -n "$libnode_name" ]; then
     local libnode_src=""
     local node_bin_dir
