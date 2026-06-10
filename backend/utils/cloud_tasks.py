@@ -120,7 +120,9 @@ def verify_cloud_tasks_oidc(request: Request) -> int:
 
     try:
         claims = id_token.verify_oauth2_token(auth_header[len('Bearer ') :], _get_auth_request(), audience=audience)
-    except Exception:
+    except Exception as e:
+        # Distinguishes bad tokens from transient JWKS-fetch failures in logs
+        logger.warning('OIDC token verification failed: %s', e)
         raise HTTPException(status_code=403, detail='Invalid OIDC token')
 
     if claims.get('email') != invoker_sa or not claims.get('email_verified'):
