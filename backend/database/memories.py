@@ -1,4 +1,5 @@
 import copy
+import hashlib
 import json
 from datetime import datetime, timezone
 from typing import List, Optional, Dict, Any
@@ -6,6 +7,7 @@ from typing import List, Optional, Dict, Any
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter, transactional
 
+from database import memory_ledger
 from ._client import db
 from database import users as users_db
 from models.memories import merge_evidence_sets
@@ -162,8 +164,18 @@ def create_memory(uid: str, data: dict):
     user_ref = db.collection(users_collection).document(uid)
     memories_ref = user_ref.collection(memories_collection)
     memory_ref = memories_ref.document(data['id'])
-    transaction = db.transaction()
-    _set_memory_transaction(transaction, uid, memory_ref, data)
+
+    def build_commit(transaction):
+        snapshot = memory_ref.get(transaction=transaction)
+        existing_data = snapshot.to_dict() if snapshot.exists else None
+        merged_data = _merge_memory_for_write(uid, existing_data, data)
+
+        def write_projection(write_transaction):
+            write_transaction.set(memory_ref, merged_data)
+
+        return {'mutations': [memory_ledger.add_fact(merged_data)], 'projection_writer': write_projection}
+
+    return memory_ledger.append_commit_with_builder(uid, None, build_commit, use_current_head=True)
 
 
 @set_data_protection_level(data_arg_name='data')
@@ -176,8 +188,27 @@ def save_memories(uid: str, data: List[dict]):
     memories_ref = user_ref.collection(memories_collection)
     coalesced_data = _coalesce_memory_writes(uid, data)
     refs_and_data = [(memories_ref.document(memory['id']), memory) for memory in coalesced_data]
-    transaction = db.transaction()
-    _set_memories_transaction(transaction, uid, refs_and_data)
+
+    def build_commit(transaction):
+        snapshots = []
+        for memory_ref, _ in refs_and_data:
+            snapshots.append(memory_ref.get(transaction=transaction))
+
+        merged_data = []
+        for (memory_ref, memory), snapshot in zip(refs_and_data, snapshots):
+            existing_data = snapshot.to_dict() if snapshot.exists else None
+            merged_data.append((memory_ref, _merge_memory_for_write(uid, existing_data, memory)))
+
+        def write_projection(write_transaction):
+            for memory_ref, memory in merged_data:
+                write_transaction.set(memory_ref, memory)
+
+        return {
+            'mutations': [memory_ledger.add_fact(memory) for _, memory in merged_data],
+            'projection_writer': write_projection,
+        }
+
+    return memory_ledger.append_commit_with_builder(uid, None, build_commit, use_current_head=True)
 
 
 @transactional
@@ -356,7 +387,26 @@ def edit_memory(uid: str, memory_id: str, value: str):
     if doc_level == 'enhanced':
         content = encryption.encrypt(content, uid)
 
-    memory_ref.update({'content': content, 'edited': True, 'updated_at': datetime.now(timezone.utc)})
+    update_time = datetime.now(timezone.utc)
+    value_for_commit = content if doc_level == 'enhanced' else value
+    content_change = {'to': value_for_commit}
+    if doc_level == 'enhanced':
+        content_change['to_sha256'] = hashlib.sha256(value.encode('utf-8')).hexdigest()
+
+    def write_projection(transaction):
+        snapshot = memory_ref.get(transaction=transaction)
+        if not snapshot.exists:
+            return
+        transaction.update(memory_ref, {'content': content, 'edited': True, 'updated_at': update_time})
+
+    return memory_ledger.append_commit(
+        uid,
+        None,
+        [memory_ledger.refine_fact(memory_id, {'content': content_change, 'edited': {'to': True}})],
+        commit_time=update_time,
+        projection_writer=write_projection,
+        use_current_head=True,
+    )
 
 
 def invalidate_memory(
@@ -377,7 +427,28 @@ def invalidate_memory(
     update_payload = {'invalid_at': invalid_at, 'updated_at': datetime.now(timezone.utc)}
     if superseded_by is not None:
         update_payload['superseded_by'] = superseded_by
-    memory_ref.update(update_payload)
+
+    if superseded_by is not None:
+        ledger_mutation = memory_ledger.supersede_fact(
+            memory_id,
+            by=superseded_by,
+            kind='contradict',
+            valid_interval={'valid_to': invalid_at},
+        )
+    else:
+        ledger_mutation = memory_ledger.retract_fact(memory_id, reason='invalidated')
+
+    def write_projection(transaction):
+        transaction.update(memory_ref, update_payload)
+
+    return memory_ledger.append_commit(
+        uid,
+        None,
+        [ledger_mutation],
+        commit_time=invalid_at,
+        projection_writer=write_projection,
+        use_current_head=True,
+    )
 
 
 def delete_memory(uid: str, memory_id: str):
