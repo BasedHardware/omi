@@ -122,6 +122,22 @@ This README provides a quick setup guide for the Omi backend. For a comprehensiv
     deactivate
     ```
 
+## Running Backend Test Preflight
+
+Before running the full backend test suite, use the preflight script for your shell. It checks the Python test runner, key packages, optional service environment variables, Redis reachability, and `test.sh` file references.
+
+macOS/Linux:
+```bash
+bash test-preflight.sh
+```
+
+Windows PowerShell:
+```powershell
+.\test-preflight.ps1
+```
+
+The preflight script does not replace `test.sh`; it only catches setup issues before running the tests.
+
 ## Additional Resources
 
 - [Full Backend Setup Documentation](https://docs.omi.me/developer/backend/Backend_Setup)
