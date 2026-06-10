@@ -2,6 +2,7 @@ from dataclasses import dataclass, field
 from typing import Dict, List, Optional
 
 from database import memories as memories_db
+from database import review_queue
 from database import memory_ledger
 from database import short_term_memories as short_term_db
 from database.vector_db import find_similar_memories
@@ -89,10 +90,22 @@ def consolidate_pending_window(
         return result
 
     for conflict in result.review_conflicts:
+        conflict_fact = conflict['fact']
+        existing_fact = conflict.get('conflict_fact') or {}
+        if not review_queue.should_escalate_conflict(conflict_fact, existing_fact):
+            continue
+        conflict_with = (conflict_fact.get('review_conflict') or {}).get('supersedes') or []
         short_term_db.mark_pending_review(
             uid,
             conflict['short_term_id'],
-            conflict['fact'].get('review_conflict') or {},
+            conflict_fact.get('review_conflict') or {},
+        )
+        review_queue.create_review_conflict(
+            uid,
+            fact=conflict_fact,
+            conflict_with=conflict_with,
+            source_short_term_id=conflict['short_term_id'],
+            impact=review_queue.impact_score(conflict_fact, existing_fact),
         )
 
     resolution_by_short_term = _typed_resolutions(uid, pending, candidates_by_short_term)
@@ -192,10 +205,15 @@ def resolve_window_mutations(
         fact = fact_from_short_term(uid, short_term, extractor_id='rolling_consolidation_shadow')
         resolution = resolve_typed_relationship(fact, candidates)
         if resolution.review_required:
+            conflict_fact = next(
+                (candidate for candidate in candidates if candidate.get('id') == resolution.candidate_id),
+                {},
+            )
             review_conflicts.append(
                 {
                     'short_term_id': short_term.get('id'),
                     'resolution': resolution.model_dump(),
+                    'conflict_fact': conflict_fact,
                     'fact': pending_review_fact(fact, resolution),
                 }
             )

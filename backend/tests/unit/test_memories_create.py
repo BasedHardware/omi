@@ -98,8 +98,9 @@ class TestMemoriesRateLimitWiring:
     def test_all_write_endpoints_rate_limited(self):
         """Every write endpoint in memories.py must use with_rate_limit."""
         matches = _grep_router(r"with_rate_limit.*memories:")
-        # create, batch, delete, delete_all, modify(review), modify(edit), modify(visibility) = 7
-        assert len(matches) == 7, f"Expected 7 rate-limited endpoints, got {len(matches)}: {matches}"
+        # create, batch, review queue list/resolve, delete, delete_all,
+        # modify(review), modify(edit), modify(visibility) = 9
+        assert len(matches) == 9, f"Expected 9 rate-limited endpoints, got {len(matches)}: {matches}"
 
 
 # ---------------------------------------------------------------------------

@@ -1,0 +1,299 @@
+import copy
+from datetime import datetime, timedelta, timezone
+from typing import Any, Dict, List, Optional
+
+from config.memory_confidence import CONFIDENCE_BANDS
+from database import memories as memories_db
+from database import memory_ledger
+from database import short_term_memories as short_term_db
+from ._client import db
+
+users_collection = 'users'
+review_queue_collection = 'memory_review_queue'
+corrections_collection = 'memory_corrections'
+memories_collection = 'memories'
+
+ACTION_POLICY = {
+    'accepted': {'answers', 'actions'},
+    'pending': {'answers_with_disclaimer'},
+    'pending_review': {'answers_with_disclaimer'},
+    'contradicted': {'uncertainty_history'},
+    'rejected': {'audit_debug'},
+    'dropped': set(),
+    'tombstoned': set(),
+    'source_tombstoned': set(),
+}
+
+
+def permitted_uses(status: str) -> set[str]:
+    return ACTION_POLICY.get(status or 'accepted', ACTION_POLICY['accepted'])
+
+
+def can_use_for_action(status: str, action_kind: str) -> bool:
+    if action_kind == 'irreversible':
+        return 'actions' in permitted_uses(status)
+    return bool(permitted_uses(status))
+
+
+def impact_score(new_fact: Dict[str, Any], conflict_fact: Dict[str, Any]) -> float:
+    importance = (new_fact.get('qualifiers') or {}).get('importance', new_fact.get('importance', 0.5))
+    new_veracity = new_fact.get('veracity') or 0.0
+    conflict_veracity = conflict_fact.get('veracity') or 0.0
+    return float(importance) * abs(conflict_veracity - new_veracity)
+
+
+def should_escalate_conflict(new_fact: Dict[str, Any], conflict_fact: Dict[str, Any]) -> bool:
+    new_veracity = new_fact.get('veracity') or 0.0
+    conflict_veracity = conflict_fact.get('veracity') or 0.0
+    ambiguous = new_veracity < CONFIDENCE_BANDS['medium'] and conflict_veracity >= CONFIDENCE_BANDS['high']
+    return ambiguous and impact_score(new_fact, conflict_fact) >= 0.1
+
+
+def create_review_conflict(
+    uid: str,
+    *,
+    fact: Dict[str, Any],
+    conflict_with: List[str],
+    source_commit_id: Optional[str] = None,
+    source_short_term_id: Optional[str] = None,
+    impact: Optional[float] = None,
+    ttl_hours: int = 72,
+) -> Dict[str, Any]:
+    now = datetime.now(timezone.utc)
+    review_id = f"review:{fact.get('id')}:{','.join(conflict_with)}"
+    item = {
+        'review_id': review_id,
+        'fact_id': fact.get('id'),
+        'candidate': fact,
+        'conflict_with': conflict_with,
+        'veracity': fact.get('veracity'),
+        'impact': impact if impact is not None else fact.get('importance', 0.5),
+        'status': 'pending',
+        'source_commit_id': source_commit_id,
+        'source_short_term_id': source_short_term_id,
+        'created_at': now,
+        'updated_at': now,
+        'expires_at': now + timedelta(hours=ttl_hours),
+        'permitted_uses': sorted(permitted_uses('pending_review')),
+    }
+    db.collection(users_collection).document(uid).collection(review_queue_collection).document(review_id).set(item)
+    return item
+
+
+def list_review_conflicts(uid: str, status: str = 'pending', limit: int = 100) -> List[Dict[str, Any]]:
+    queue_ref = db.collection(users_collection).document(uid).collection(review_queue_collection)
+    items = []
+    for doc in queue_ref.stream():
+        item = doc.to_dict() or {}
+        if status and item.get('status') != status:
+            continue
+        item.setdefault('review_id', doc.id)
+        items.append(item)
+    items.sort(key=lambda item: (item.get('impact') or 0.0, item.get('created_at') or datetime.min), reverse=True)
+    return items[:limit]
+
+
+def get_review_conflict(uid: str, review_id: str) -> Optional[Dict[str, Any]]:
+    doc = db.collection(users_collection).document(uid).collection(review_queue_collection).document(review_id).get()
+    if not doc.exists:
+        return None
+    item = doc.to_dict() or {}
+    item.setdefault('review_id', review_id)
+    return item
+
+
+def timeout_decision(item: Dict[str, Any], current_veracity: float) -> str:
+    if current_veracity >= CONFIDENCE_BANDS['high']:
+        return 'accept'
+    return 'drop'
+
+
+def accepted_fact(candidate: Dict[str, Any]) -> Dict[str, Any]:
+    fact = copy.deepcopy(candidate)
+    fact['status'] = 'accepted'
+    fact.pop('review_conflict', None)
+    qualifiers = fact.setdefault('qualifiers', {})
+    qualifiers['status'] = 'accepted'
+    qualifiers['epistemic_status'] = 'accepted'
+    return fact
+
+
+def resolution_mutations(
+    item: Dict[str, Any], decision: str, correction: Optional[Dict[str, Any]] = None
+) -> List[Dict]:
+    fact_id = item.get('fact_id')
+    candidate = item.get('candidate') or {}
+    conflict_with = item.get('conflict_with') or []
+    if decision == 'accept':
+        return [memory_ledger.add_fact(accepted_fact(candidate))] + [
+            memory_ledger.supersede_fact(existing_id, by=fact_id, kind='contradict') for existing_id in conflict_with
+        ]
+    if decision == 'reject':
+        return [memory_ledger.retract_fact(fact_id, reason='review_rejected')]
+    if decision == 'correct':
+        target_id = (correction or {}).get('target_fact_id') or fact_id
+        return [memory_ledger.refine_fact(target_id, (correction or {}).get('arg_changes') or {})]
+    return []
+
+
+def record_correction(
+    uid: str,
+    *,
+    item: Dict[str, Any],
+    decision: str,
+    prior_head_diff: List[Dict],
+    final_correction: Optional[Dict[str, Any]] = None,
+    reason: str = '',
+) -> Dict[str, Any]:
+    now = datetime.now(timezone.utc)
+    correction_id = f"correction:{item.get('review_id')}:{decision}"
+    record = {
+        'correction_id': correction_id,
+        'review_id': item.get('review_id'),
+        'candidate': item.get('candidate'),
+        'evidence_set': (item.get('candidate') or {}).get('evidence', []),
+        'prior_head_state': prior_head_diff,
+        'final_correction': final_correction or {},
+        'decision': decision,
+        'reason': reason,
+        'created_at': now,
+    }
+    db.collection(users_collection).document(uid).collection(corrections_collection).document(correction_id).set(record)
+    return record
+
+
+def resolve_review_conflict(
+    uid: str,
+    review_id: str,
+    decision: str,
+    *,
+    correction: Optional[Dict[str, Any]] = None,
+    reason: str = '',
+    current_veracity: Optional[float] = None,
+) -> Dict[str, Any]:
+    item = get_review_conflict(uid, review_id)
+    if item is None:
+        return {'status': 'not_found', 'commit': None, 'correction': None}
+    if item.get('status') not in ('pending', 'pending_review'):
+        return {'status': 'already_resolved', 'commit': None, 'correction': None, 'item': item}
+
+    effective_decision = decision
+    if decision == 'timeout':
+        effective_decision = timeout_decision(
+            item, current_veracity if current_veracity is not None else item.get('veracity') or 0.0
+        )
+
+    mutations = [] if effective_decision == 'drop' else resolution_mutations(item, effective_decision, correction)
+    commit_result = append_resolution_commit(uid, item, effective_decision, correction, mutations)
+
+    now = datetime.now(timezone.utc)
+    status_by_decision = {
+        'accept': 'accepted',
+        'reject': 'rejected',
+        'correct': 'accepted',
+        'drop': 'dropped',
+    }
+    update = {
+        'status': status_by_decision.get(effective_decision, effective_decision),
+        'decision': effective_decision,
+        'reason': reason,
+        'resolved_at': now,
+        'updated_at': now,
+        'resolution_commit_id': ((commit_result or {}).get('commit') or {}).get('commit_id'),
+    }
+    db.collection(users_collection).document(uid).collection(review_queue_collection).document(review_id).update(update)
+    if item.get('source_short_term_id'):
+        short_term_db.mark_consolidated(uid, item['source_short_term_id'], update.get('resolution_commit_id'))
+
+    correction_record = None
+    if effective_decision in ('accept', 'reject', 'correct'):
+        correction_record = record_correction(
+            uid,
+            item=item,
+            decision=effective_decision,
+            prior_head_diff=mutations,
+            final_correction=correction,
+            reason=reason,
+        )
+
+    return {
+        'status': 'resolved',
+        'decision': effective_decision,
+        'commit': (commit_result or {}).get('commit'),
+        'correction': correction_record,
+        'item': {**item, **update},
+    }
+
+
+def append_resolution_commit(
+    uid: str,
+    item: Dict[str, Any],
+    decision: str,
+    correction: Optional[Dict[str, Any]],
+    mutations: List[Dict],
+) -> Optional[Dict[str, Any]]:
+    if decision == 'drop' or not mutations:
+        return None
+    if decision == 'accept':
+        return memories_db.merge_contradict_memory(
+            uid,
+            accepted_fact(item.get('candidate') or {}),
+            item.get('conflict_with') or [],
+        )
+    if decision == 'correct':
+        target_id = (correction or {}).get('target_fact_id') or item.get('fact_id')
+        return memories_db.refine_memory(uid, target_id, (correction or {}).get('arg_changes') or {})
+    if decision == 'reject':
+        now = datetime.now(timezone.utc)
+        fact_id = item.get('fact_id')
+        memory_ref = db.collection(users_collection).document(uid).collection(memories_collection).document(fact_id)
+
+        def write_projection(transaction):
+            snapshot = memory_ref.get(transaction=transaction)
+            if snapshot.exists:
+                transaction.update(memory_ref, {'invalid_at': now, 'updated_at': now, 'review_status': 'rejected'})
+
+        return memory_ledger.append_commit(
+            uid,
+            None,
+            mutations,
+            run_id=f"review_queue:{item.get('review_id')}",
+            commit_time=now,
+            projection_writer=write_projection,
+            use_current_head=True,
+        )
+    return memory_ledger.append_commit(
+        uid,
+        None,
+        mutations,
+        run_id=f"review_queue:{item.get('review_id')}",
+        use_current_head=True,
+    )
+
+
+def resolve_expired_review_conflicts(
+    uid: str,
+    *,
+    now: Optional[datetime] = None,
+    current_veracity_by_fact: Optional[Dict[str, float]] = None,
+    limit: int = 100,
+) -> List[Dict[str, Any]]:
+    now = now or datetime.now(timezone.utc)
+    current_veracity_by_fact = current_veracity_by_fact or {}
+    resolved = []
+    for item in list_review_conflicts(uid, status='pending', limit=limit):
+        expires_at = item.get('expires_at')
+        if expires_at and expires_at > now:
+            continue
+        fact_id = item.get('fact_id')
+        current_veracity = current_veracity_by_fact.get(fact_id, item.get('veracity') or 0.0)
+        resolved.append(
+            resolve_review_conflict(
+                uid,
+                item.get('review_id'),
+                'timeout',
+                current_veracity=current_veracity,
+                reason='review_timeout',
+            )
+        )
+    return resolved

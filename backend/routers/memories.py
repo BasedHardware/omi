@@ -1,5 +1,5 @@
 import logging
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 
 from utils.executors import db_executor, postprocess_executor, run_blocking, submit_with_context
 
@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field, ValidationError
 
 import database.memories as memories_db
+from database import review_queue
 from database.vector_db import (
     delete_memory_vector,
     delete_memory_vectors_batch,
@@ -36,6 +37,13 @@ class BatchMemoriesRequest(BaseModel):
 class BatchMemoriesResponse(BaseModel):
     memories: List[MemoryDB]
     created_count: int
+
+
+class ReviewResolutionRequest(BaseModel):
+    decision: str = Field(description="accept, reject, correct, or timeout")
+    correction: Optional[Dict[str, Any]] = None
+    reason: str = ''
+    current_veracity: Optional[float] = None
 
 
 def _validate_memory(uid: str, memory_id: str) -> dict:
@@ -175,6 +183,36 @@ def get_memories(limit: int = 100, offset: int = 0, uid: str = Depends(auth.get_
             )
             continue
     return valid_memories
+
+
+@router.get('/v3/memories/review-queue', tags=['memories'])
+def list_memory_review_queue(
+    status: str = Query('pending'),
+    limit: int = Query(100, ge=1, le=500),
+    uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "memories:review")),
+):
+    return review_queue.list_review_conflicts(uid, status=status, limit=limit)
+
+
+@router.post('/v3/memories/review-queue/{review_id}/resolve', tags=['memories'])
+def resolve_memory_review_item(
+    review_id: str,
+    request: ReviewResolutionRequest,
+    uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "memories:review")),
+):
+    if request.decision not in ('accept', 'reject', 'correct', 'timeout'):
+        raise HTTPException(status_code=400, detail='Invalid review decision')
+    result = review_queue.resolve_review_conflict(
+        uid,
+        review_id,
+        request.decision,
+        correction=request.correction,
+        reason=request.reason,
+        current_veracity=request.current_veracity,
+    )
+    if result.get('status') == 'not_found':
+        raise HTTPException(status_code=404, detail='Review item not found')
+    return result
 
 
 @router.delete('/v3/memories/{memory_id}', tags=['memories'])
