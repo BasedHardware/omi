@@ -12,10 +12,14 @@ import os
 import sys
 import types
 import json
+import importlib
+import importlib.util
 from datetime import timezone
 from pathlib import Path
 from unittest.mock import MagicMock, AsyncMock
 import asyncio
+
+import pytest
 
 os.environ.setdefault(
     "ENCRYPTION_SECRET",
@@ -30,15 +34,32 @@ def _stub_module(name: str) -> types.ModuleType:
     return sys.modules[name]
 
 
+def _optional_stub_module(name: str) -> tuple[types.ModuleType, bool]:
+    if name in sys.modules:
+        return sys.modules[name], False
+
+    try:
+        spec = importlib.util.find_spec(name)
+    except (ImportError, ValueError):
+        spec = None
+
+    if spec is not None:
+        return importlib.import_module(name), False
+
+    mod = types.ModuleType(name)
+    sys.modules[name] = mod
+    return mod, True
+
+
 # --- Stub minimal LangChain modules needed by usage_tracker ---
-langchain_core_mod = _stub_module("langchain_core")
-if not hasattr(langchain_core_mod, '__path__'):
+langchain_core_mod, langchain_core_stubbed = _optional_stub_module("langchain_core")
+if langchain_core_stubbed and not hasattr(langchain_core_mod, '__path__'):
     langchain_core_mod.__path__ = []
 
-callbacks_mod = _stub_module("langchain_core.callbacks")
-outputs_mod = _stub_module("langchain_core.outputs")
-output_parsers_mod = _stub_module("langchain_core.output_parsers")
-prompts_mod = _stub_module("langchain_core.prompts")
+callbacks_mod, callbacks_stubbed = _optional_stub_module("langchain_core.callbacks")
+outputs_mod, outputs_stubbed = _optional_stub_module("langchain_core.outputs")
+output_parsers_mod, output_parsers_stubbed = _optional_stub_module("langchain_core.output_parsers")
+prompts_mod, prompts_stubbed = _optional_stub_module("langchain_core.prompts")
 
 
 class BaseCallbackHandler:
@@ -69,14 +90,19 @@ class ChatPromptTemplate:
         return other
 
 
-callbacks_mod.BaseCallbackHandler = BaseCallbackHandler
-outputs_mod.LLMResult = LLMResult
-output_parsers_mod.PydanticOutputParser = PydanticOutputParser
-prompts_mod.ChatPromptTemplate = ChatPromptTemplate
+if callbacks_stubbed:
+    callbacks_mod.BaseCallbackHandler = BaseCallbackHandler
+if outputs_stubbed:
+    outputs_mod.LLMResult = LLMResult
+if output_parsers_stubbed:
+    output_parsers_mod.PydanticOutputParser = PydanticOutputParser
+if prompts_stubbed:
+    prompts_mod.ChatPromptTemplate = ChatPromptTemplate
 
-pytz_mod = _stub_module("pytz")
-pytz_mod.UTC = timezone.utc
-pytz_mod.timezone = MagicMock(return_value=timezone.utc)
+pytz_mod, pytz_stubbed = _optional_stub_module("pytz")
+if pytz_stubbed:
+    pytz_mod.UTC = timezone.utc
+    pytz_mod.timezone = MagicMock(return_value=timezone.utc)
 
 
 # --- Stub database package and submodules ---
@@ -182,10 +208,29 @@ def _get_llm_stub(name, **_kwargs):
         return mock_llm_medium
     if name == 'daily_summary':
         return mock_llm_medium_experiment
-    return mock_llm_mini
+    raise ValueError(f"Unexpected get_llm feature in usage tracking test: {name}")
 
 
 clients_mod.get_llm = _get_llm_stub
+
+
+def test_get_llm_stub_rejects_unknown_features():
+    with pytest.raises(ValueError, match="Unexpected get_llm feature"):
+        _get_llm_stub("new-feature")
+
+
+def test_optional_stub_module_keeps_loaded_modules():
+    module_name = "test_loaded_optional_langchain_module"
+    loaded_module = types.ModuleType(module_name)
+    loaded_module.Sentinel = object
+    sys.modules[module_name] = loaded_module
+    try:
+        module, stubbed = _optional_stub_module(module_name)
+        assert module is loaded_module
+        assert stubbed is False
+        assert module.Sentinel is object
+    finally:
+        sys.modules.pop(module_name, None)
 
 
 # ── Source-level tests: verify track_usage wraps every LLM call ──
