@@ -20,6 +20,13 @@ enum HardSecretDetector {
       )
     ),
     Pattern(
+      category: "private_key",
+      regex: try! NSRegularExpression(
+        pattern: #"-----BEGIN [A-Z ]*PRIVATE KEY-----"#,
+        options: []
+      )
+    ),
+    Pattern(
       category: "database_url",
       regex: try! NSRegularExpression(
         pattern: #"\b[a-z][a-z0-9+.-]*://[^/\s:@]+:[^@\s]+@[^/\s]+[^\s]*"#,
@@ -29,8 +36,15 @@ enum HardSecretDetector {
     Pattern(
       category: "api_key",
       regex: try! NSRegularExpression(
-        pattern: #"\b(?:sk-[A-Za-z0-9_-]{20,}|ghp_[A-Za-z0-9_]{20,}|AKIA[0-9A-Z]{16})\b"#,
+        pattern: #"\b(?:sk[-_][A-Za-z0-9_-]{16,}|ghp_[A-Za-z0-9_]{20,}|AKIA[0-9A-Z]{16})\b"#,
         options: []
+      )
+    ),
+    Pattern(
+      category: "one_time_code",
+      regex: try! NSRegularExpression(
+        pattern: #"\b(?:one[- ]?time code|verification code|2fa code|mfa code|otp)\s+(?:is\s+)?['"]?([0-9]{4,8})\b"#,
+        options: [.caseInsensitive]
       )
     ),
     Pattern(

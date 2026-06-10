@@ -233,19 +233,11 @@ def benchmark_rows_from_pipeline_outputs(
         example_id = output.get("example_id") or example_id_by_run_id.get(run_id)
         if not example_id:
             raise ValueError(f"pipeline output {run_id or '<unknown>'} is missing example_id")
-        rows.append(
-            {
-                "example_id": example_id,
-                "run_id": run_id,
-                "input_fingerprint": output.get("input_fingerprint"),
-                "entities": output.get("entity_ops") or [],
-                "event_frames": output.get("event_frames") or [],
-                "derived_triples": output.get("derived_triples") or [],
-                "decisions": output.get("decisions") or [],
-                "review_items": output.get("review_items") or [],
-                "rejected_items": output.get("rejected_items") or [],
-            }
-        )
+        row = copy.deepcopy(output)
+        row["example_id"] = example_id
+        if "entities" not in row and "entity_ops" in row:
+            row["entities"] = row.get("entity_ops") or []
+        rows.append(row)
     return rows
 
 

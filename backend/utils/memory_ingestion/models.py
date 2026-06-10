@@ -305,7 +305,7 @@ class SensitivityClassification(StrictBaseModel):
             "ordinary_work_fact",
             "none",
         ]
-    ] = Field(default_factory=lambda: ["none"])
+    ] = Field(default_factory=list)
     auto_store_allowed: bool = True
     review_required: bool = False
 
@@ -352,6 +352,7 @@ class MemoryEventFrame(StrictBaseModel):
         "skill",
         "interest",
         "life_event",
+        "task",
         "task_candidate",
         "sensitive_candidate",
         "non_memory",
@@ -604,7 +605,16 @@ class RejectedItem(StrictBaseModel):
 class RedactionRecord(StrictBaseModel):
     redaction_id: str
     source_event_id: str
-    category: Literal["api_key", "password", "private_key", "token", "cookie", "database_url", "unknown_secret"]
+    category: Literal[
+        "api_key",
+        "password",
+        "private_key",
+        "token",
+        "cookie",
+        "database_url",
+        "one_time_code",
+        "unknown_secret",
+    ]
     placeholder: str
     char_start: int | None = None
     char_end: int | None = None
@@ -616,7 +626,18 @@ class DroppedArtifactRecord(StrictBaseModel):
     dropped_id: str
     source_event_id: str
     reason: Literal["secret"]
-    categories: list[Literal["api_key", "password", "private_key", "token", "cookie", "database_url", "unknown_secret"]]
+    categories: list[
+        Literal[
+            "api_key",
+            "password",
+            "private_key",
+            "token",
+            "cookie",
+            "database_url",
+            "one_time_code",
+            "unknown_secret",
+        ]
+    ]
     artifact_dropped: bool = True
     source_type: str | None = None
     source_id: str | None = None

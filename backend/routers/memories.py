@@ -136,11 +136,12 @@ async def create_memories_batch(
         if memory.visibility == 'public':
             has_public = True
 
-    # Firestore batch write + Pinecone batch upsert run on a worker thread so a
-    # slow embeddings/Pinecone call can't starve the FastAPI sync threadpool.
-    def _persist():
-        memories_db.save_memories(uid, [m.dict() for m in memory_dbs])
-        upsert_memory_vectors_batch(
+    await run_blocking(db_executor, memories_db.save_memories, uid, [m.dict() for m in memory_dbs])
+
+    try:
+        await run_blocking(
+            postprocess_executor,
+            upsert_memory_vectors_batch,
             uid,
             [
                 {
@@ -152,8 +153,10 @@ async def create_memories_batch(
                 for m in memory_dbs
             ],
         )
-
-    await run_blocking(db_executor, _persist)
+    except Exception:
+        logger.exception(
+            "Batch vector upsert failed uid=%s count=%s (memories saved, vectors missing)", uid, len(memory_dbs)
+        )
 
     if has_public:
         submit_with_context(postprocess_executor, update_personas_async, uid)

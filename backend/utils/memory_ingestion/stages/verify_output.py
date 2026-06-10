@@ -83,7 +83,9 @@ def verify_output(output: MemoryPipelineOutput) -> list[LintResult]:
                     mutation.mutation_id,
                 )
             )
-        if frame and (frame.sensitivity.level == "blocked" or frame.frame_type in ("non_memory", "task_candidate")):
+        if frame and (
+            frame.sensitivity.level == "blocked" or frame.frame_type in ("non_memory", "task", "task_candidate")
+        ):
             lints.append(
                 _lint(
                     "error",

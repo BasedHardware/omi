@@ -22,6 +22,11 @@ SECRET_PATTERNS = [
         regex=re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----.*?-----END [A-Z ]*PRIVATE KEY-----", re.DOTALL),
     ),
     SecretPattern(
+        category="private_key",
+        placeholder="[REDACTED_PRIVATE_KEY]",
+        regex=re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----"),
+    ),
+    SecretPattern(
         category="database_url",
         placeholder="[REDACTED_DATABASE_URL]",
         regex=re.compile(r"\b[a-z][a-z0-9+.-]*://[^/\s:@]+:[^@\s]+@[^/\s]+[^\s]*", re.IGNORECASE),
@@ -29,7 +34,15 @@ SECRET_PATTERNS = [
     SecretPattern(
         category="api_key",
         placeholder="[REDACTED_API_KEY]",
-        regex=re.compile(r"\b(?:sk-[A-Za-z0-9_-]{20,}|ghp_[A-Za-z0-9_]{20,}|AKIA[0-9A-Z]{16})\b"),
+        regex=re.compile(r"\b(?:sk[-_][A-Za-z0-9_-]{16,}|ghp_[A-Za-z0-9_]{20,}|AKIA[0-9A-Z]{16})\b"),
+    ),
+    SecretPattern(
+        category="one_time_code",
+        placeholder="[REDACTED_ONE_TIME_CODE]",
+        regex=re.compile(
+            r"\b(?:one[- ]?time code|verification code|2fa code|mfa code|otp)\s+(?:is\s+)?['\"]?([0-9]{4,8})\b",
+            re.IGNORECASE,
+        ),
     ),
     SecretPattern(
         category="token",

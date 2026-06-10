@@ -166,7 +166,11 @@ class CoreMemoryPipeline:
             )
         )
 
-        redaction_frames, redaction_decisions, redaction_resolutions, redaction_rejections = [], [], [], []
+        redaction_frames, redaction_decisions, redaction_resolutions, redaction_rejections = _positive_secret_signals(
+            redactions,
+            pipeline_input,
+            id_factory,
+        )
         try:
             extracted_frames = await self.model_client.extract_frames(
                 pipeline_input=redacted_input,
@@ -439,9 +443,8 @@ def _heuristic_frames_from_text(event: RawContextEvent, actor: ActorDescriptor |
         (r"\bremember that (?:i|the user) (?:like|likes|love|loves) (?P<object>[^.?!]+)", "preference", "likes"),
         (r"\b(?:i|the user) (?:like|likes|love|loves) (?P<object>[^.?!]+)", "preference", "likes"),
         (r"\b(?:i|the user) (?:prefer|prefers) (?P<object>[^.?!]+)", "preference", "prefers"),
-        (r"\b(?:i|the user) (?:work|works) on (?P<object>[^.?!]+)", "project_fact", "works_on"),
-        (r"\b(?:i|the user) (?:use|uses) (?P<object>[^.?!]+)", "project_fact", "uses"),
-        (r"\b(?:i|the user) (?:need|needs) to (?P<object>[^.?!]+)", "task_candidate", "needs"),
+        (r"\b(?:i|the user) (?:work|works) on (?P<object>[^.?!]+)", "personal_fact", "works_on"),
+        (r"\b(?:i|the user) (?:use|uses) (?P<object>[^.?!]+)", "personal_fact", "uses_tool"),
     ]
     frames: list[MemoryEventFrame] = []
     for index, (pattern, frame_type, predicate) in enumerate(patterns):
@@ -461,7 +464,7 @@ def _heuristic_frames_from_text(event: RawContextEvent, actor: ActorDescriptor |
                 object=FrameObject(object_type="literal", value=object_value, confidence=confidence),
                 canonical_text=_canonical_text(predicate, object_value),
                 original_text=text,
-                durability="short_term" if frame_type == "task_candidate" else "medium_term",
+                durability="short_term" if frame_type in {"task", "task_candidate"} else "medium_term",
                 evidence=[_evidence_for_event(event, index, quote=match.group(0))],
                 source_event_ids=[event.event_id],
                 confidence=confidence,  # type: ignore[arg-type]
@@ -667,7 +670,7 @@ def _decision_for_frame(
     if frame.frame_type == "sensitive_candidate" or frame.sensitivity.level == "blocked":
         action = "reject_secret"
         rationale = "Credential or secret material is blocked."
-    elif frame.frame_type == "task_candidate":
+    elif frame.frame_type in {"task", "task_candidate"}:
         action = "route_to_task" if routing.route_tasks else "reject_low_value"
         rationale = "Task-like frame belongs to action-item routing, not memory storage."
     elif frame.frame_type == "non_memory":
@@ -808,6 +811,7 @@ def _compile_triples(
         if decision.action.startswith("reject_") and not include_diagnostic_rejections:
             continue
         if decision.action == "route_to_task" or frame.frame_type in (
+            "task",
             "task_candidate",
             "non_memory",
             "sensitive_candidate",

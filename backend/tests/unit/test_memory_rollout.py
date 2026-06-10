@@ -145,6 +145,8 @@ def test_benchmark_rows_require_example_id_map_for_pipeline_outputs():
         "decisions": [],
         "review_items": [],
         "rejected_items": [],
+        "audit": {"redactions": [{"category": "api_key"}]},
+        "private_input_fingerprint": "pifp_test",
     }
 
     with pytest.raises(ValueError):
@@ -155,12 +157,15 @@ def test_benchmark_rows_require_example_id_map_for_pipeline_outputs():
             "example_id": "ex-1",
             "run_id": "run-1",
             "input_fingerprint": "ifp",
+            "entity_ops": [],
             "entities": [],
             "event_frames": [{"frame_id": "frame-1"}],
             "derived_triples": [],
             "decisions": [],
             "review_items": [],
             "rejected_items": [],
+            "audit": {"redactions": [{"category": "api_key"}]},
+            "private_input_fingerprint": "pifp_test",
         }
     ]
 

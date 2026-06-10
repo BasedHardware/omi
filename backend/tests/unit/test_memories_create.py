@@ -147,6 +147,16 @@ class TestCreateMemoryErrorHandling:
         source = _read_router()
         assert 'Vector upsert failed' in source, "Vector upsert failure must be logged"
 
+    def test_batch_vector_upsert_has_error_handling(self):
+        """Batch vector upsert failure must be caught after Firestore commit."""
+        source = _read_router()
+        match = re.search(r'(async def create_memories_batch\(.+?)(?=\n@router\.)', source, re.DOTALL)
+        assert match, "create_memories_batch function not found"
+        fn_body = match.group(1)
+        assert 'memories_db.save_memories' in fn_body
+        assert 'Batch vector upsert failed' in fn_body
+        assert fn_body.find('memories_db.save_memories') < fn_body.find('upsert_memory_vectors_batch')
+
     def test_vector_delete_has_error_handling(self):
         """Vector delete in delete_memory must be caught (not 500)."""
         source = _read_router()

@@ -162,6 +162,14 @@ def _read_export(zip_path: str, export_root: str) -> ExportDataset:
 
 
 def _build_user_state(memories: list[dict[str, Any]], limit: int) -> UserStateSnapshot:
+    if limit <= 0:
+        return UserStateSnapshot(
+            snapshot_id="empty-export-memory-snapshot",
+            snapshot_at=datetime.now(timezone.utc),
+            active_memories=[],
+            rejected_memories=[],
+        )
+
     active: list[ExistingMemorySnapshot] = []
     rejected: list[ExistingMemorySnapshot] = []
     for memory in memories:
@@ -414,7 +422,7 @@ def main() -> None:
     parser.add_argument("--actor-id", default="export-bigbeeme33")
     parser.add_argument("--actor-name", default="User")
     parser.add_argument("--max-events-per-call", type=int, default=80)
-    parser.add_argument("--memory-snapshot-limit", type=int, default=1000)
+    parser.add_argument("--memory-snapshot-limit", type=int, default=0)
     parser.add_argument("--limit", type=int)
     parser.add_argument("--session-id")
     parser.add_argument("--retry-ok", action="store_true")
