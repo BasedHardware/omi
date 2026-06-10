@@ -85,7 +85,7 @@ _deepgram.DeepgramClientOptions = MagicMock
 
 _opuslib = ModuleType('opuslib')
 _opuslib.Decoder = MagicMock
-sys.modules['opuslib'] = _opuslib
+sys.modules.setdefault('opuslib', _opuslib)
 
 _pydub = ModuleType('pydub')
 _pydub.AudioSegment = MagicMock
@@ -111,6 +111,8 @@ sys.modules['utils.speaker_identification'] = _speaker_identification
 
 
 def _compare_embeddings(embedding1: np.ndarray, embedding2: np.ndarray) -> float:
+    embedding1 = np.atleast_2d(embedding1)
+    embedding2 = np.atleast_2d(embedding2)
     if embedding1.shape[1] != embedding2.shape[1]:
         return 2.0
     norm_product = np.linalg.norm(embedding1) * np.linalg.norm(embedding2)
@@ -136,6 +138,12 @@ _gcs.Client = MagicMock
 os.environ.setdefault('OPENAI_API_KEY', 'sk-fake-for-test')
 os.environ.setdefault('DEEPGRAM_API_KEY', 'fake-for-test')
 os.environ.setdefault('ENCRYPTION_SECRET', 'omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv')
+
+
+def test_compare_embeddings_accepts_1d_vectors():
+    """Speaker embedding stub should match production's 1D vector tolerance."""
+    assert _compare_embeddings(np.array([1.0, 0.0]), np.array([1.0, 0.0])) == pytest.approx(0.0)
+    assert _compare_embeddings(np.array([1.0, 0.0]), np.array([1.0])) == 2.0
 
 
 # ---------------------------------------------------------------------------
