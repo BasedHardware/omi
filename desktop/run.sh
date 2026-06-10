@@ -591,11 +591,12 @@ if [ -n "$SIGN_IDENTITY" ]; then
     NODE_BIN="$NODE_BUNDLE_DIR/node"
     if [ -f "$NODE_BIN" ]; then
         # Sign any libnode dylib staged alongside the binary (Homebrew dynamic builds).
-        # libnode contains V8 JIT code, so it needs the same entitlements as the node binary.
+        # Dylibs don't carry entitlements at runtime (macOS reads them from the main executable only);
+        # sign with --options runtime alone, no --entitlements.
         for libnode_dylib in "$NODE_BUNDLE_DIR"/libnode.*.dylib; do
             [ -f "$libnode_dylib" ] || continue
             substep "Signing $(basename "$libnode_dylib")"
-            codesign --force --options runtime --entitlements Desktop/Node.entitlements --sign "$SIGN_IDENTITY" "$libnode_dylib"
+            codesign --force --options runtime --sign "$SIGN_IDENTITY" "$libnode_dylib"
         done
         substep "Signing bundled node binary"
         codesign --force --options runtime --entitlements Desktop/Node.entitlements --sign "$SIGN_IDENTITY" "$NODE_BIN"

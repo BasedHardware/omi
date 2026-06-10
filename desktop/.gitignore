@@ -58,6 +58,7 @@ scripts/
 **/python_reference/
 Desktop/Sources/Resources/ffmpeg
 Desktop/Sources/Resources/node
+Desktop/Sources/Resources/libnode.*.dylib
 
 # Local Rust helper build output
 codex-proxy/target/

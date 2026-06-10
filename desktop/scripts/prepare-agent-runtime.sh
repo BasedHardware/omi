@@ -149,6 +149,7 @@ stage_local_node() {
       exit 1
     fi
     cp -f "$libnode_src" "$(dirname "$NODE_RESOURCE")/$libnode_name"
+    chmod u+w "$(dirname "$NODE_RESOURCE")/$libnode_name"
     xattr -cr "$(dirname "$NODE_RESOURCE")/$libnode_name" 2>/dev/null || true
     log "Staged $libnode_name alongside node (Homebrew dynamic build)"
   fi
