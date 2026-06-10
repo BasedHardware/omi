@@ -3,7 +3,7 @@ param()
 $ErrorActionPreference = "Continue"
 
 $RootDir = Split-Path -Parent $MyInvocation.MyCommand.Path
-Set-Location $RootDir
+Push-Location $RootDir
 
 $PassCount = 0
 $WarnCount = 0
@@ -36,6 +36,8 @@ function Invoke-SelectedPython {
         & $Script:PythonLauncher @Arguments
     }
 }
+
+try {
 
 Write-Host "Tools:"
 
@@ -194,3 +196,7 @@ if ($WarnCount -gt 0) {
 
 Write-Host "  All clear - ready to run test.sh" -ForegroundColor Green
 exit 0
+
+} finally {
+    Pop-Location
+}
