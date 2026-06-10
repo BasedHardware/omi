@@ -66,6 +66,8 @@ from models.memories import (  # noqa: E402
     MemoryDB,
     MemoryCategory,
     SubjectAttribution,
+    confidence_band,
+    compute_veracity,
     merge_evidence_sets,
     render_memory,
     structurally_conflicts,
@@ -164,7 +166,7 @@ class TestMemoryLifecycle:
         assert evidence.source_id is None
         assert evidence.source_type == 'developer_api'
         assert evidence.source_signal == 'manual'
-        assert evidence.capture_confidence == 0.5
+        assert evidence.capture_confidence == 0.95
 
     def test_from_memory_accepts_integration_evidence_context(self):
         mem = Memory(content='Uses Linear for issue tracking', category=MemoryCategory.system)
@@ -226,6 +228,19 @@ class TestMemoryLifecycle:
         merged = merge_evidence_sets(existing, incoming)
 
         assert [item['evidence_id'] for item in merged] == ['ev1', 'ev2', 'ev3']
+
+    def test_veracity_counts_independent_groups_not_raw_rows(self):
+        one_group = [
+            {'evidence_id': 'ev1', 'independence_group': 'conv1', 'capture_confidence': 0.8},
+            {'evidence_id': 'ev2', 'independence_group': 'conv1', 'capture_confidence': 0.8},
+        ]
+        two_groups = one_group + [{'evidence_id': 'ev3', 'independence_group': 'ocr1', 'capture_confidence': 0.45}]
+
+        assert compute_veracity(two_groups) > compute_veracity(one_group)
+        assert compute_veracity(one_group) == compute_veracity(one_group[:1])
+
+    def test_confidence_band_uses_configured_thresholds(self):
+        assert confidence_band(0.91) == 'certain'
 
     def test_from_memory_propositionizes_common_prose_fact(self):
         mem = Memory(content='Lives in NYC', category=MemoryCategory.system)

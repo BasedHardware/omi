@@ -6,6 +6,13 @@ from typing import Optional, List, Dict, Any
 
 from pydantic import BaseModel, Field, validator
 
+from config.memory_confidence import (
+    CONFIDENCE_BANDS,
+    HIGH_CAPTURE_THRESHOLD,
+    LOW_CAPTURE_THRESHOLD,
+    SOURCE_SIGNAL_CAPTURE_PRIORS,
+    VERACITY_PRIORS,
+)
 from database._client import document_id_from_seed
 
 
@@ -34,6 +41,14 @@ class SubjectAttribution(str, Enum):
     third_party = "third_party"
     unknown = "unknown"
     legacy_assumed = "legacy_assumed"
+
+
+class UncertaintyReason(str, Enum):
+    single_source = "single_source"
+    low_capture_signal = "low_capture_signal"
+    contradicted_by = "contradicted_by"
+    stale = "stale"
+    third_party_subject = "third_party_subject"
 
 
 # Only define boosts for the primary categories
@@ -81,6 +96,14 @@ class Memory(BaseModel):
         description="Optional proposition qualifiers such as scope, valid_time, or epistemic_status",
         default_factory=dict,
     )
+    capture_confidence: Optional[float] = Field(
+        description="Fixed confidence that the source was captured correctly", default=None
+    )
+    veracity: Optional[float] = Field(description="Current belief that the fact is true", default=None)
+    uncertainty_reasons: List[str] = Field(
+        description="Reasons this fact needs caution or review", default_factory=list
+    )
+    durability: Optional[str] = Field(description="Expected durability horizon for the fact", default=None)
 
     @validator('category', pre=True)
     def map_legacy_categories(cls, v):
@@ -315,6 +338,11 @@ class Evidence(BaseModel):
         now = created_at or datetime.now(timezone.utc)
         group = independence_group or source_id or f"{source_type}:unknown"
         ref = artifact_ref or {}
+        resolved_capture = (
+            capture_confidence
+            if capture_confidence is not None
+            else capture_confidence_for_source_signal(source_signal)
+        )
         return Evidence(
             evidence_id=document_id_from_seed(
                 "|".join(
@@ -335,18 +363,116 @@ class Evidence(BaseModel):
             source_signal=source_signal,
             extractor_id=extractor_id,
             extractor_version=extractor_version,
-            capture_confidence=capture_confidence if capture_confidence is not None else 0.5,
+            capture_confidence=resolved_capture,
             independence_group=group,
             created_at=now,
         )
+
+
+def capture_confidence_for_source_signal(source_signal: str) -> float:
+    return SOURCE_SIGNAL_CAPTURE_PRIORS.get(source_signal, SOURCE_SIGNAL_CAPTURE_PRIORS['unknown'])
+
+
+def confidence_band(value: float) -> str:
+    band = 'low'
+    for name, threshold in sorted(CONFIDENCE_BANDS.items(), key=lambda item: item[1]):
+        if value >= threshold:
+            band = name
+    return band
+
+
+def _model_or_dict_to_dict(item: Any) -> Any:
+    if hasattr(item, 'model_dump'):
+        return item.model_dump()
+    if hasattr(item, 'dict'):
+        return item.dict()
+    return item
+
+
+def compute_veracity(
+    evidence_set: List[dict], subject_attribution: SubjectAttribution | str = SubjectAttribution.unknown
+) -> float:
+    evidence_items = [_model_or_dict_to_dict(item) for item in evidence_set or [] if item]
+    groups = {
+        item.get('independence_group') or item.get('source_id') for item in evidence_items if isinstance(item, dict)
+    }
+    groups = {group for group in groups if group}
+    if not groups:
+        return VERACITY_PRIORS['base']
+
+    score = VERACITY_PRIORS['single_independent_group']
+    if len(groups) > 1:
+        score += (len(groups) - 1) * VERACITY_PRIORS['additional_independent_group']
+
+    capture_values = [
+        item.get('capture_confidence')
+        for item in evidence_items
+        if isinstance(item, dict) and item.get('capture_confidence') is not None
+    ]
+    max_capture = max(capture_values) if capture_values else SOURCE_SIGNAL_CAPTURE_PRIORS['unknown']
+    if max_capture >= HIGH_CAPTURE_THRESHOLD:
+        score += VERACITY_PRIORS['high_capture_bonus']
+    if max_capture < LOW_CAPTURE_THRESHOLD:
+        score -= VERACITY_PRIORS['low_capture_penalty']
+    if (
+        subject_attribution == SubjectAttribution.third_party
+        or subject_attribution == SubjectAttribution.third_party.value
+    ):
+        score -= VERACITY_PRIORS['third_party_penalty']
+
+    return max(0.0, min(VERACITY_PRIORS['maximum'], score))
+
+
+def uncertainty_reasons_for(
+    evidence_set: List[dict], subject_attribution: SubjectAttribution | str = SubjectAttribution.unknown
+) -> List[str]:
+    reasons = []
+    evidence_items = [_model_or_dict_to_dict(item) for item in evidence_set or [] if item]
+    groups = {
+        item.get('independence_group') or item.get('source_id') for item in evidence_items if isinstance(item, dict)
+    }
+    groups = {group for group in groups if group}
+    if len(groups) <= 1:
+        reasons.append(UncertaintyReason.single_source.value)
+    if any(
+        isinstance(item, dict)
+        and item.get('capture_confidence') is not None
+        and item.get('capture_confidence') < LOW_CAPTURE_THRESHOLD
+        for item in evidence_items
+    ):
+        reasons.append(UncertaintyReason.low_capture_signal.value)
+    if (
+        subject_attribution == SubjectAttribution.third_party
+        or subject_attribution == SubjectAttribution.third_party.value
+    ):
+        reasons.append(UncertaintyReason.third_party_subject.value)
+    return reasons
+
+
+def confidence_fields_for_evidence(
+    evidence_set: List[dict],
+    subject_attribution: SubjectAttribution | str = SubjectAttribution.unknown,
+    existing_capture_confidence: Optional[float] = None,
+) -> Dict[str, Any]:
+    evidence_items = [_model_or_dict_to_dict(item) for item in evidence_set or [] if item]
+    capture = existing_capture_confidence
+    if capture is None and evidence_items:
+        first = evidence_items[0]
+        capture = first.get('capture_confidence') if isinstance(first, dict) else None
+    if capture is None:
+        capture = SOURCE_SIGNAL_CAPTURE_PRIORS['unknown']
+    return {
+        'capture_confidence': capture,
+        'veracity': compute_veracity(evidence_items, subject_attribution),
+        'uncertainty_reasons': uncertainty_reasons_for(evidence_items, subject_attribution),
+    }
 
 
 def merge_evidence_sets(existing: List[dict], incoming: List[dict]) -> List[dict]:
     merged = []
     seen = set()
     for item in list(existing) + list(incoming):
-        if hasattr(item, 'dict'):
-            item = item.dict()
+        item = _model_or_dict_to_dict(item)
         if not isinstance(item, dict):
             continue
         evidence_id = item.get('evidence_id')
@@ -452,6 +578,7 @@ class MemoryDB(Memory):
             independence_group=independence_group,
             created_at=now,
         )
+        confidence_fields = confidence_fields_for_evidence([evidence], resolved_attribution)
         memory_db = MemoryDB(
             id=document_id_from_seed(memory.content),
             uid=uid,
@@ -473,6 +600,10 @@ class MemoryDB(Memory):
             object_entity_ids=proposition.get('object_entity_ids') or [],
             qualifiers=proposition.get('qualifiers') or {},
             evidence=[evidence],
+            capture_confidence=confidence_fields['capture_confidence'],
+            veracity=confidence_fields['veracity'],
+            uncertainty_reasons=confidence_fields['uncertainty_reasons'],
+            durability=memory.durability,
         )
         memory_db.scoring = MemoryDB.calculate_score(memory_db)
         return memory_db

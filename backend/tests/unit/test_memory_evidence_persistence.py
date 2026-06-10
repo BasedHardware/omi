@@ -120,3 +120,22 @@ def test_coalesce_memory_writes_preserves_same_batch_evidence():
     assert len(coalesced) == 1
     assert coalesced[0]['content'] == 'new'
     assert [item['evidence_id'] for item in coalesced[0]['evidence']] == ['ev1', 'ev2']
+
+
+def test_merge_memory_for_write_keeps_capture_fixed_and_recomputes_veracity():
+    existing = _memory(
+        [{'evidence_id': 'ev1', 'source_id': 'conv1', 'independence_group': 'conv1', 'capture_confidence': 0.65}],
+        content='old',
+    )
+    existing['capture_confidence'] = 0.65
+    existing['veracity'] = 0.45
+    incoming = _memory(
+        [{'evidence_id': 'ev2', 'source_id': 'ocr1', 'independence_group': 'ocr1', 'capture_confidence': 0.45}],
+        content='new',
+    )
+
+    merged = memories_db._merge_memory_for_write('uid-1', existing, incoming)
+
+    assert merged['capture_confidence'] == 0.65
+    assert merged['veracity'] > existing['veracity']
+    assert merged['uncertainty_reasons'] == ['low_capture_signal']

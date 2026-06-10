@@ -10,7 +10,7 @@ from google.cloud.firestore_v1 import FieldFilter, transactional
 from database import memory_ledger
 from ._client import db
 from database import users as users_db
-from models.memories import merge_evidence_sets
+from models.memories import confidence_fields_for_evidence, merge_evidence_sets
 from utils import encryption
 from .helpers import set_data_protection_level, prepare_for_write, prepare_for_read
 import logging
@@ -244,6 +244,13 @@ def _merge_memory_for_write(uid: str, existing_data: Optional[dict], incoming_da
     merged_plain = {**existing_plain, **incoming_plain}
     merged_plain['created_at'] = existing_plain.get('created_at', incoming_plain.get('created_at'))
     merged_plain['evidence'] = merge_evidence_sets(existing_evidence, incoming_evidence)
+    merged_plain.update(
+        confidence_fields_for_evidence(
+            merged_plain['evidence'],
+            merged_plain.get('subject_attribution', 'unknown'),
+            existing_capture_confidence=existing_plain.get('capture_confidence'),
+        )
+    )
     return _prepare_data_for_write(merged_plain, uid, merged_plain.get('data_protection_level', 'standard'))
 
 
