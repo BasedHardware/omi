@@ -192,6 +192,7 @@ def _import_router_helper():
         _ensure_module(mod_name)
 
     sys.modules['utils.executors'].critical_executor = MagicMock()
+    sys.modules['utils.executors'].db_executor = MagicMock()
     sys.modules['utils.users'].get_user_display_name = lambda *a, **k: ''
     sys.modules['utils.other.endpoints'].get_current_user_uid = lambda: ''
     sys.modules['utils.other'].endpoints = sys.modules['utils.other.endpoints']
@@ -199,6 +200,8 @@ def _import_router_helper():
     sys.modules['utils.notifications'].send_action_item_data_message = lambda *a, **k: None
     sys.modules['utils.notifications'].send_action_item_update_message = lambda *a, **k: None
     sys.modules['utils.notifications'].send_action_item_deletion_message = lambda *a, **k: None
+    sys.modules['utils.notifications'].send_action_items_batch_deletion_message = lambda *a, **k: None
+    sys.modules['utils.notifications'].sync_action_item_reminder = lambda *a, **k: None
     sys.modules['utils.task_sync'].auto_sync_action_item = lambda *a, **k: None
     sys.modules['database.vector_db'].upsert_action_item_vector = lambda *a, **k: None
     sys.modules['database.vector_db'].upsert_action_item_vectors_batch = lambda *a, **k: None
