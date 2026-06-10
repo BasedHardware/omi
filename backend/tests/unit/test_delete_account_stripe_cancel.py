@@ -47,6 +47,7 @@ _STUB_PREFIXES = (
     'pusher',
     'modal',
     'ulid',
+    'pytz',
     'twilio',
 )
 
@@ -55,6 +56,16 @@ def _should_stub(name: str) -> bool:
     if name == 'utils.other.endpoints':  # provided as a real shim below
         return False
     return any(name == p or name.startswith(p + '.') for p in _STUB_PREFIXES)
+
+
+def _remove_module_tree(prefix: str) -> None:
+    for name in list(sys.modules):
+        if name == prefix or name.startswith(prefix + '.'):
+            sys.modules.pop(name, None)
+
+
+for _prefix in _STUB_PREFIXES:
+    _remove_module_tree(_prefix)
 
 
 class _StubFinder(importlib.abc.MetaPathFinder, importlib.abc.Loader):
