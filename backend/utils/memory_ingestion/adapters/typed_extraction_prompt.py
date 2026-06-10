@@ -67,7 +67,7 @@ FOR EVERY FACT, FILL THE TYPED FIELDS:
 
 4. subject_attribution — "user" if the fact is about {user_name}; "third_party" if about someone else; "assistant_suggested" if an assistant/AI proposed it and {user_name} did not confirm.
 
-5. uncertainty_reasons — zero or more of: speaker_uncertain, inferred_not_stated, temporal_scope_unclear, low_quality_transcript, ambiguous_subject, conflicts_with_existing_memory, possible_duplicate. Use them honestly; an uncertain fact WITH reasons is better than a dropped fact or a confidently wrong one.
+5. uncertainty_reasons — zero or more of: speaker_uncertain, inferred_not_stated, temporal_scope_unclear, low_quality_transcript, subject_ambiguous, conflicts_with_existing_memory, duplicate_near_match. Use them honestly; an uncertain fact WITH reasons is better than a dropped fact or a confidently wrong one.
 
 6. category — "interesting" only for external wisdom from others with attribution; otherwise "system".
 

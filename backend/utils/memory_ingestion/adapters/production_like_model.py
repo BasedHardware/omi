@@ -262,9 +262,14 @@ _KNOWN_UNCERTAINTY_REASONS = {
     "inferred_not_stated",
     "temporal_scope_unclear",
     "low_quality_transcript",
-    "ambiguous_subject",
+    "subject_ambiguous",
     "conflicts_with_existing_memory",
-    "possible_duplicate",
+    "duplicate_near_match",
+}
+
+_UNCERTAINTY_REASON_ALIASES = {
+    "ambiguous_subject": "subject_ambiguous",
+    "possible_duplicate": "duplicate_near_match",
 }
 
 
@@ -275,7 +280,12 @@ def _validated_predicate(memory: ProductionLikeMemory) -> str | None:
 
 
 def _model_uncertainty_reasons(memory: ProductionLikeMemory) -> list[str]:
-    return [reason for reason in memory.uncertainty_reasons or [] if reason in _KNOWN_UNCERTAINTY_REASONS]
+    reasons = []
+    for reason in memory.uncertainty_reasons or []:
+        normalized = _UNCERTAINTY_REASON_ALIASES.get(reason, reason)
+        if normalized in _KNOWN_UNCERTAINTY_REASONS:
+            reasons.append(normalized)
+    return reasons
 
 
 def _frame_arguments(arguments: dict[str, object], confidence: str) -> dict[str, FrameObject]:
