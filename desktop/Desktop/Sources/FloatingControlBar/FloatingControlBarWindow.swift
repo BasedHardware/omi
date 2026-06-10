@@ -1447,11 +1447,14 @@ class FloatingControlBarManager {
     private func presentNotification(_ notification: FloatingBarNotification, in window: FloatingControlBarWindow) {
         persistNotificationMessageIfNeeded(notification)
 
+        // The flag must survive the whole notification chain: when a queued
+        // notification is presented the window is already visible from the
+        // temp-show, so resetting it here would skip the re-hide in
+        // dismissNotificationAndAdvanceQueue and leave the bar on screen
+        // forever with "Show floating bar" off (#6972).
         if !window.isVisible {
             notificationWasTemporarilyShown = true
             window.orderFrontRegardless()
-        } else {
-            notificationWasTemporarilyShown = false
         }
 
         window.showNotification(notification)
