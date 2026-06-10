@@ -34,7 +34,7 @@ from database.apps import record_app_usage, get_omi_personas_by_uid_db, get_app_
 from database.vector_db import upsert_vector2, update_vector_metadata, upsert_transcript_chunk_vectors
 from utils.conversations.transcript_chunks import build_transcript_chunks
 from models.app import App, UsageHistoryType
-from models.memories import MemoryDB, Memory
+from models.memories import MemoryDB, Memory, render_memory
 from models.calendar_context import CalendarMeetingContext
 from models.conversation import (
     AppResult,
@@ -510,8 +510,17 @@ def _extract_memories_inner(uid: str, conversation: Conversation):
             if resolution.action == 'skip':
                 continue
 
-            if resolution.action == 'merge' and resolution.merged_content:
-                memory.content = resolution.merged_content
+            if resolution.action == 'merge':
+                if resolution.merged_predicate:
+                    memory.predicate = resolution.merged_predicate
+                if resolution.merged_arguments:
+                    memory.arguments = resolution.merged_arguments
+                if resolution.merged_qualifiers:
+                    memory.qualifiers = {**memory.qualifiers, **resolution.merged_qualifiers}
+                if resolution.merged_content:
+                    memory.content = resolution.merged_content
+                elif resolution.merged_predicate or resolution.merged_arguments:
+                    memory.content = render_memory(memory)
 
             if resolution.action in ('update', 'merge'):
                 for idx in resolution.supersedes or []:

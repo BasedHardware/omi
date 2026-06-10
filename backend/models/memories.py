@@ -1,6 +1,7 @@
 from collections import defaultdict
 from datetime import datetime, timezone
 from enum import Enum
+import re
 from typing import Optional, List, Dict, Any
 
 from pydantic import BaseModel, Field, validator
@@ -54,6 +55,22 @@ class Memory(BaseModel):
     visibility: str = Field(description="The visibility of the memory", default='private')
     tags: List[str] = Field(description="The tags of the memory and learning", default=[])
     headline: Optional[str] = Field(description="Short headline for notification preview (max 5 words)", default=None)
+    predicate: Optional[str] = Field(
+        description="Canonical relation for the fact, e.g. resides_in, works_at, prefers", default=None
+    )
+    arguments: Dict[str, Any] = Field(
+        description="Canonical proposition arguments keyed by semantic slot", default_factory=dict
+    )
+    subject_entity_id: Optional[str] = Field(
+        description="Stable entity id for who/what the fact is about", default=None
+    )
+    object_entity_ids: List[str] = Field(
+        description="Stable entity ids referenced by the fact arguments", default_factory=list
+    )
+    qualifiers: Dict[str, Any] = Field(
+        description="Optional proposition qualifiers such as scope, valid_time, or epistemic_status",
+        default_factory=dict,
+    )
 
     @validator('category', pre=True)
     def map_legacy_categories(cls, v):
@@ -102,6 +119,156 @@ class Memory(BaseModel):
                 result += f"- {f.content}\n"
 
         return result
+
+    def render(self) -> str:
+        return render_memory(self)
+
+
+def _clean_argument(value: str) -> str:
+    return value.strip().strip('.').strip()
+
+
+def _default_subject(category: Optional[MemoryCategory]) -> Optional[str]:
+    if isinstance(category, str):
+        category = MemoryCategory(category) if category in MemoryCategory._value2member_map_ else None
+    if category in [MemoryCategory.system, MemoryCategory.manual, MemoryCategory.workflow]:
+        return 'user'
+    return None
+
+
+def propositionize(content: str, category: Optional[MemoryCategory] = None) -> Dict[str, Any]:
+    text = _clean_argument(content)
+    lower = text.lower()
+    subject = _default_subject(category)
+
+    patterns = [
+        (
+            r"^(?:the user |user |they |he |she |i )?(?:currently )?(?:lives|live|resides|reside) in (?P<location>.+)$",
+            'resides_in',
+            'location',
+        ),
+        (
+            r"^(?:the user |user |they |he |she |i )?(?:moved|relocated) to (?P<location>.+)$",
+            'resides_in',
+            'location',
+        ),
+        (
+            r"^(?:the user |user |they |he |she |i )?(?:works|work) at (?P<organization>.+)$",
+            'works_at',
+            'organization',
+        ),
+        (
+            r"^(?:the user |user |they |he |she |i )?(?:likes|like|loves|love|enjoys|enjoy|prefers|prefer) (?P<thing>.+)$",
+            'prefers',
+            'thing',
+        ),
+        (
+            r"^(?:the user |user |they |he |she |i )?(?:has|have|owns|own) (?P<object>.+)$",
+            'has',
+            'object',
+        ),
+        (
+            r"^(?:the user |user |they |he |she |i )?(?:is|am|are) (?P<years>\d{1,3}) years old$",
+            'age_years',
+            'years',
+        ),
+    ]
+
+    for pattern, predicate, slot in patterns:
+        match = re.match(pattern, lower, flags=re.IGNORECASE)
+        if not match:
+            continue
+        raw_value = match.group(slot)
+        value: Any = int(raw_value) if slot == 'years' else _clean_argument(text[match.start(slot) : match.end(slot)])
+        return {
+            'predicate': predicate,
+            'arguments': {slot: value},
+            'subject_entity_id': subject,
+            'object_entity_ids': [],
+            'qualifiers': {},
+        }
+
+    return {
+        'predicate': None,
+        'arguments': {},
+        'subject_entity_id': subject,
+        'object_entity_ids': [],
+        'qualifiers': {},
+    }
+
+
+def _coerce_proposition(memory: Any) -> Dict[str, Any]:
+    if isinstance(memory, dict):
+        content = memory.get('content', '')
+        category = memory.get('category')
+        predicate = memory.get('predicate')
+        arguments = memory.get('arguments') or {}
+        subject_entity_id = memory.get('subject_entity_id')
+        object_entity_ids = memory.get('object_entity_ids') or []
+        qualifiers = memory.get('qualifiers') or {}
+    else:
+        content = getattr(memory, 'content', '')
+        category = getattr(memory, 'category', None)
+        predicate = getattr(memory, 'predicate', None)
+        arguments = getattr(memory, 'arguments', {}) or {}
+        subject_entity_id = getattr(memory, 'subject_entity_id', None)
+        object_entity_ids = getattr(memory, 'object_entity_ids', []) or []
+        qualifiers = getattr(memory, 'qualifiers', {}) or {}
+
+    if predicate:
+        return {
+            'predicate': predicate,
+            'arguments': arguments,
+            'subject_entity_id': subject_entity_id,
+            'object_entity_ids': object_entity_ids,
+            'qualifiers': qualifiers,
+        }
+    return propositionize(content, category)
+
+
+def render_memory(memory: Any) -> str:
+    content = memory.get('content', '') if isinstance(memory, dict) else getattr(memory, 'content', '')
+    proposition = _coerce_proposition(memory)
+    predicate = proposition.get('predicate')
+    arguments = proposition.get('arguments') or {}
+    if not predicate:
+        return content
+
+    if predicate == 'resides_in' and arguments.get('location'):
+        return f"Lives in {arguments['location']}"
+    if predicate == 'works_at' and arguments.get('organization'):
+        role = arguments.get('role')
+        if role:
+            return f"Works at {arguments['organization']} as {role}"
+        return f"Works at {arguments['organization']}"
+    if predicate == 'prefers' and arguments.get('thing'):
+        return f"Prefers {arguments['thing']}"
+    if predicate == 'has' and arguments.get('object'):
+        return f"Has {arguments['object']}"
+    if predicate == 'age_years' and arguments.get('years') is not None:
+        return f"Is {arguments['years']} years old"
+
+    rendered_args = ", ".join(f"{slot}: {value}" for slot, value in arguments.items())
+    return f"{predicate.replace('_', ' ')} {rendered_args}".strip() or content
+
+
+def structurally_conflicts(left: Any, right: Any) -> bool:
+    left_prop = _coerce_proposition(left)
+    right_prop = _coerce_proposition(right)
+    if not left_prop.get('predicate') or left_prop.get('predicate') != right_prop.get('predicate'):
+        return False
+
+    left_subject = left_prop.get('subject_entity_id')
+    right_subject = right_prop.get('subject_entity_id')
+    if left_subject and right_subject and left_subject != right_subject:
+        return False
+
+    left_args = left_prop.get('arguments') or {}
+    right_args = right_prop.get('arguments') or {}
+    for slot in set(left_args).intersection(right_args):
+        if left_args[slot] != right_args[slot]:
+            return True
+    return False
 
 
 class Evidence(BaseModel):
@@ -247,6 +414,7 @@ class MemoryDB(Memory):
         independence_group: Optional[str] = None,
     ) -> 'MemoryDB':
         now = datetime.now(timezone.utc)
+        proposition = _coerce_proposition(memory)
         evidence_source_id = source_id if source_id is not None else conversation_id
         evidence_source_type = source_type or ("conversation" if conversation_id else "developer_api")
         evidence_source_signal = source_signal or ("manual" if manually_added else "transcription")
@@ -275,6 +443,11 @@ class MemoryDB(Memory):
             user_review=True if manually_added else None,
             reviewed=True,
             visibility=memory.visibility,
+            predicate=proposition.get('predicate'),
+            arguments=proposition.get('arguments') or {},
+            subject_entity_id=proposition.get('subject_entity_id'),
+            object_entity_ids=proposition.get('object_entity_ids') or [],
+            qualifiers=proposition.get('qualifiers') or {},
             evidence=[evidence],
         )
         memory_db.scoring = MemoryDB.calculate_score(memory_db)

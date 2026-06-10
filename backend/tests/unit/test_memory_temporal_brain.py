@@ -60,7 +60,15 @@ _client_stub.document_id_from_seed = lambda seed: 'id-' + str(abs(hash(seed)) % 
 sys.modules['database._client'] = _client_stub
 
 from utils.retrieval.hybrid import bm25_scores, rrf_rerank  # noqa: E402
-from models.memories import Evidence, Memory, MemoryDB, MemoryCategory, merge_evidence_sets  # noqa: E402
+from models.memories import (  # noqa: E402
+    Evidence,
+    Memory,
+    MemoryDB,
+    MemoryCategory,
+    merge_evidence_sets,
+    render_memory,
+    structurally_conflicts,
+)
 
 
 class TestBM25:
@@ -217,3 +225,38 @@ class TestMemoryLifecycle:
         merged = merge_evidence_sets(existing, incoming)
 
         assert [item['evidence_id'] for item in merged] == ['ev1', 'ev2', 'ev3']
+
+    def test_from_memory_propositionizes_common_prose_fact(self):
+        mem = Memory(content='Lives in NYC', category=MemoryCategory.system)
+        db = MemoryDB.from_memory(mem, uid='u', conversation_id='conv1', manually_added=False)
+
+        assert db.predicate == 'resides_in'
+        assert db.arguments == {'location': 'NYC'}
+        assert db.subject_entity_id == 'user'
+        assert db.render() == 'Lives in NYC'
+
+    def test_from_memory_preserves_extractor_structured_proposition(self):
+        mem = Memory(
+            content='Works at OpenAI as engineer',
+            category=MemoryCategory.system,
+            predicate='works_at',
+            arguments={'organization': 'OpenAI', 'role': 'engineer'},
+            subject_entity_id='user',
+        )
+        db = MemoryDB.from_memory(mem, uid='u', conversation_id='conv1', manually_added=False)
+
+        assert db.predicate == 'works_at'
+        assert db.arguments == {'organization': 'OpenAI', 'role': 'engineer'}
+        assert render_memory(db) == 'Works at OpenAI as engineer'
+
+    def test_structural_conflict_detects_same_subject_predicate_different_arg(self):
+        nyc = Memory(content='Lives in NYC', category=MemoryCategory.system)
+        sf = Memory(content='Lives in SF', category=MemoryCategory.system)
+
+        assert structurally_conflicts(nyc, sf) is True
+
+    def test_structural_conflict_ignores_distinct_predicates(self):
+        location = Memory(content='Lives in NYC', category=MemoryCategory.system)
+        preference = Memory(content='Likes tennis', category=MemoryCategory.system)
+
+        assert structurally_conflicts(location, preference) is False

@@ -1,4 +1,4 @@
-from typing import List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 from langchain_core.output_parsers import PydanticOutputParser
 from pydantic import BaseModel, Field
@@ -259,6 +259,15 @@ class MemoryResolution(BaseModel):
     merged_content: Optional[str] = Field(
         default=None, description="If action is 'merge', the combined/refined memory content. Keep under 12 words."
     )
+    merged_predicate: Optional[str] = Field(
+        default=None, description="If action is 'merge', the canonical predicate for the merged fact."
+    )
+    merged_arguments: Optional[Dict[str, Any]] = Field(
+        default=None, description="If action is 'merge', argument-level slots for the merged fact."
+    )
+    merged_qualifiers: Optional[Dict[str, Any]] = Field(
+        default=None, description="If action is 'merge', qualifier-level slots for the merged fact."
+    )
     reasoning: str = Field(default="", description="Brief explanation of why this action was chosen")
 
 
@@ -308,7 +317,7 @@ Choose ONE action:
 - "add": the new fact is genuinely new and does not change any existing fact. Store it.
 - "skip": the new fact is already captured by an existing fact (a duplicate / no new info). Do not store it.
 - "update": the new fact makes one or more existing facts OUTDATED or FALSE (the same attribute now has a different value). Store the new fact AND put the indices of every outdated fact in "supersedes".
-- "merge": the new fact and an existing one should become a SINGLE richer fact. Provide "merged_content" AND put the replaced indices in "supersedes".
+- "merge": the new fact and an existing one should become a SINGLE richer fact. Provide "merged_content" and, when possible, merged_predicate / merged_arguments / merged_qualifiers. Put the replaced indices in "supersedes".
 - "keep_both": the new fact and the existing ones are all still TRUE at the same time. Store the new fact, supersede nothing.
 
 CRITICAL — only put a fact in "supersedes" if it is now genuinely FALSE or OUTDATED. Two preferences that can both be true at once must NEVER supersede each other.{language_note}
