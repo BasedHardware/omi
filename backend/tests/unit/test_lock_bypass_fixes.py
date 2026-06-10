@@ -669,6 +669,7 @@ class TestMcpSseLockRedaction:
 
         vector_db.find_similar_memories = MagicMock(
             return_value=[
+                {'score': 1.0},
                 {'memory_id': 'locked', 'score': 0.99},
                 {'memory_id': 'rejected', 'score': 0.98},
                 {'memory_id': 'invalidated', 'score': 0.97},
@@ -705,6 +706,16 @@ class TestMcpSseLockRedaction:
         assert 'REJECTED_MEMORY' not in str(result)
         assert 'INVALIDATED_MEMORY' not in str(result)
         vector_db.find_similar_memories.assert_called_once_with('test-uid', 'memory', threshold=0.0, limit=6)
+
+    def test_mcp_sse_search_memories_schema_documents_limit_bounds(self):
+        """MCP clients should see the same limit bounds enforced by execute_tool."""
+        from routers.mcp_sse import MCP_TOOLS
+
+        search_memories = next(tool for tool in MCP_TOOLS if tool['name'] == 'search_memories')
+        limit_schema = search_memories['inputSchema']['properties']['limit']
+
+        assert limit_schema['minimum'] == 1
+        assert limit_schema['maximum'] == 20
 
 
 # =============================================================================

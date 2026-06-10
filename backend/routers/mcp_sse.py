@@ -260,7 +260,13 @@ MCP_TOOLS = [
             "type": "object",
             "properties": {
                 "query": {"type": "string", "description": "Natural language search query"},
-                "limit": {"type": "integer", "description": "Maximum number of results to return", "default": 10},
+                "limit": {
+                    "type": "integer",
+                    "description": "Maximum number of results to return",
+                    "default": 10,
+                    "minimum": 1,
+                    "maximum": 20,
+                },
             },
             "required": ["query"],
         },
@@ -557,7 +563,7 @@ def execute_tool(user_id: str, tool_name: str, arguments: dict) -> dict:
 
         # Mirror the REST MCP path so SSE search never surfaces rejected, locked,
         # or superseded facts, while fetching extra candidates before filtering.
-        score_map = {m.get('memory_id'): m.get('score', 0) for m in matches}
+        score_map = {m.get('memory_id'): m.get('score', 0) for m in matches if m.get('memory_id')}
         results = []
         for mem in memories:
             if mem.get('user_review') is False or mem.get('is_locked', False) or mem.get('invalid_at') is not None:
