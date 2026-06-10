@@ -83,6 +83,9 @@ field_filter_stub.FieldFilter = MagicMock()
 sys.modules["google.cloud.firestore_v1"].FieldFilter = field_filter_stub.FieldFilter
 sys.modules["google.cloud.firestore_v1"].transactional = lambda f: f
 
+redis_stub = sys.modules["database.redis_db"]
+redis_stub.try_acquire_user_platform_write_lock = MagicMock(return_value=True)
+
 # Add backend dir to sys.path
 sys.path.insert(0, str(BACKEND_DIR))
 
@@ -1358,7 +1361,7 @@ class TestModelParity:
         """Inline UpdateNotificationSettingsRequest matches routers/users.py definition."""
         import ast
 
-        source = (BACKEND_DIR / 'routers' / 'users.py').read_text()
+        source = (BACKEND_DIR / 'routers' / 'users.py').read_text(encoding='utf-8')
         tree = ast.parse(source)
         for node in ast.walk(tree):
             if isinstance(node, ast.ClassDef) and node.name == 'UpdateNotificationSettingsRequest':
@@ -1377,7 +1380,7 @@ class TestModelParity:
         """Inline RecordLlmUsageBucketRequest matches routers/users.py definition."""
         import ast
 
-        source = (BACKEND_DIR / 'routers' / 'users.py').read_text()
+        source = (BACKEND_DIR / 'routers' / 'users.py').read_text(encoding='utf-8')
         tree = ast.parse(source)
         for node in ast.walk(tree):
             if isinstance(node, ast.ClassDef) and node.name == 'RecordLlmUsageBucketRequest':
@@ -1694,10 +1697,14 @@ class TestGenerateTitleEndpoint:
             session_id='s1',
             messages=[TitleMessageInput(text='hi', sender='human'), TitleMessageInput(text='hello', sender='ai')],
         )
-        with patch.dict('sys.modules', {'utils.llm.clients': MagicMock(llm_mini=mock_llm)}):
+        mock_get_llm = MagicMock(return_value=mock_llm)
+        llm_clients_stub = types.ModuleType('utils.llm.clients')
+        llm_clients_stub.get_llm = mock_get_llm
+        with patch.dict('sys.modules', {'utils.llm.clients': llm_clients_stub}):
             result = generate_session_title(request, uid='u1')
 
         assert result == {'title': 'Project Discussion'}
+        mock_get_llm.assert_called_once_with('session_titles')
         mock_update.assert_called_once_with('u1', 's1', title='Project Discussion')
 
     @patch('database.chat.update_chat_session')
@@ -1713,10 +1720,14 @@ class TestGenerateTitleEndpoint:
             session_id='s1',
             messages=[TitleMessageInput(text='hi', sender='human')],
         )
-        with patch.dict('sys.modules', {'utils.llm.clients': MagicMock(llm_mini=mock_llm)}):
+        mock_get_llm = MagicMock(return_value=mock_llm)
+        llm_clients_stub = types.ModuleType('utils.llm.clients')
+        llm_clients_stub.get_llm = mock_get_llm
+        with patch.dict('sys.modules', {'utils.llm.clients': llm_clients_stub}):
             result = generate_session_title(request, uid='u1')
 
         assert result == {'title': 'New Chat'}
+        mock_get_llm.assert_called_once_with('session_titles')
 
 
 class TestChatMessageCount:
