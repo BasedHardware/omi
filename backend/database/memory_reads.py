@@ -10,5 +10,7 @@ def get_retrievable_memories(uid: str, *, limit: int = 100, include_short_term: 
     if not include_short_term:
         return long_term_records
 
-    short_term = short_term_db.get_short_term_memories(uid, status='pending_consolidation', limit=limit)
+    short_term = []
+    for status in ('pending_consolidation', 'pending_review'):
+        short_term.extend(short_term_db.get_short_term_memories(uid, status=status, limit=limit))
     return long_term_records + [short_term_db.to_retrieval_record(memory) for memory in short_term]

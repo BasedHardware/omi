@@ -416,6 +416,96 @@ def edit_memory(uid: str, memory_id: str, value: str):
     )
 
 
+def refine_memory(uid: str, memory_id: str, arg_changes: Dict[str, Any]):
+    user_ref = db.collection(users_collection).document(uid)
+    memories_ref = user_ref.collection(memories_collection)
+    memory_ref = memories_ref.document(memory_id)
+    update_time = datetime.now(timezone.utc)
+
+    def write_projection(transaction):
+        snapshot = memory_ref.get(transaction=transaction)
+        if not snapshot.exists:
+            return
+        update_payload = projection_update_for_refine(snapshot.to_dict() or {}, arg_changes, update_time)
+        transaction.update(memory_ref, update_payload)
+
+    return memory_ledger.append_commit(
+        uid,
+        None,
+        [memory_ledger.refine_fact(memory_id, arg_changes)],
+        commit_time=update_time,
+        projection_writer=write_projection,
+        use_current_head=True,
+    )
+
+
+@set_data_protection_level(data_arg_name='new_memory')
+@prepare_for_write(data_arg_name='new_memory', prepare_func=_prepare_data_for_write)
+def merge_contradict_memory(
+    uid: str,
+    new_memory: Dict[str, Any],
+    superseded_ids: List[str],
+    valid_interval: Optional[Dict[str, Any]] = None,
+):
+    user_ref = db.collection(users_collection).document(uid)
+    memories_ref = user_ref.collection(memories_collection)
+    new_ref = memories_ref.document(new_memory['id'])
+    superseded_refs = [memories_ref.document(memory_id) for memory_id in superseded_ids]
+    update_time = datetime.now(timezone.utc)
+    valid_interval = valid_interval or {}
+    invalid_at = valid_interval.get('valid_to') or update_time
+
+    def build_commit(transaction):
+        new_snapshot = new_ref.get(transaction=transaction)
+        existing_new = new_snapshot.to_dict() if new_snapshot.exists else None
+        merged_new = _merge_memory_for_write(uid, existing_new, new_memory)
+
+        def write_projection(write_transaction):
+            write_transaction.set(new_ref, merged_new)
+            for memory_ref in superseded_refs:
+                write_transaction.update(
+                    memory_ref,
+                    {
+                        'invalid_at': invalid_at,
+                        'superseded_by': merged_new['id'],
+                        'updated_at': update_time,
+                    },
+                )
+
+        return {
+            'mutations': [memory_ledger.add_fact(merged_new)]
+            + [
+                memory_ledger.supersede_fact(
+                    memory_id,
+                    by=merged_new['id'],
+                    kind='contradict',
+                    valid_interval=valid_interval,
+                )
+                for memory_id in superseded_ids
+            ],
+            'projection_writer': write_projection,
+        }
+
+    return memory_ledger.append_commit_with_builder(uid, None, build_commit, use_current_head=True)
+
+
+def projection_update_for_refine(
+    memory_data: Dict[str, Any], arg_changes: Dict[str, Any], updated_at: datetime
+) -> Dict[str, Any]:
+    update_payload: Dict[str, Any] = {'updated_at': updated_at}
+    arguments = copy.deepcopy(memory_data.get('arguments') or {})
+    for key, change in arg_changes.items():
+        value = change.get('to') if isinstance(change, dict) and 'to' in change else change
+        if key == 'content':
+            update_payload['content'] = value
+        elif key == 'edited':
+            update_payload['edited'] = value
+        else:
+            arguments[key] = value
+    update_payload['arguments'] = arguments
+    return update_payload
+
+
 def invalidate_memory(
     uid: str, memory_id: str, superseded_by: Optional[str] = None, invalid_at: Optional[datetime] = None
 ):

@@ -1,4 +1,4 @@
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Literal, Optional, Tuple
 
 from langchain_core.output_parsers import PydanticOutputParser
 from pydantic import BaseModel, Field
@@ -282,6 +282,27 @@ class MemoryResolution(BaseModel):
 
 # Backwards-compatible action aliases (older callers/tests used these names).
 _LEGACY_ACTION_ALIASES = {'keep_new': 'add', 'keep_existing': 'skip'}
+
+
+class TypedMemoryResolution(BaseModel):
+    relationship: Literal['contradict', 'refine', 'extend', 'coexist', 'duplicate', 'review_conflict'] = Field(
+        description=(
+            "Typed relationship between the new fact and candidates. Use contradict only when an existing fact "
+            "is false/outdated, refine for argument-level narrowing, extend for unrelated additions, coexist for "
+            "related facts that remain true together, duplicate when already captured, and review_conflict when "
+            "a low-veracity new contradiction should not auto-merge."
+        )
+    )
+    candidate_id: Optional[str] = Field(default=None, description="Existing fact id this decision targets, if any")
+    supersedes: List[str] = Field(default_factory=list, description="Existing fact ids superseded by this decision")
+    arg_changes: Dict[str, Any] = Field(
+        default_factory=dict, description="Argument/content changes for refine_fact mutations"
+    )
+    valid_interval: Dict[str, Any] = Field(
+        default_factory=dict, description="Valid-time interval for supersession, distinct from commit time"
+    )
+    review_required: bool = Field(default=False, description="Whether this relationship must be routed to review")
+    reasoning: str = Field(default="", description="Brief evidence-weighted justification")
 
 
 def resolve_memory_conflict(

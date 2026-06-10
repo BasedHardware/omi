@@ -36,7 +36,7 @@ def get_short_term_memories(
     return [row for row in rows if row.get('soft_pruned_at') is None]
 
 
-def mark_consolidated(uid: str, short_term_id: str, commit_id: str):
+def mark_consolidated(uid: str, short_term_id: str, commit_id: Optional[str]):
     doc_ref = db.collection(users_collection).document(uid).collection(short_term_collection).document(short_term_id)
     now = datetime.now(timezone.utc)
     doc_ref.update(
@@ -45,6 +45,18 @@ def mark_consolidated(uid: str, short_term_id: str, commit_id: str):
             'consolidated_at': now,
             'consolidated_commit_id': commit_id,
             'soft_pruned_at': now,
+            'updated_at': now,
+        }
+    )
+
+
+def mark_pending_review(uid: str, short_term_id: str, review_conflict: Dict):
+    doc_ref = db.collection(users_collection).document(uid).collection(short_term_collection).document(short_term_id)
+    now = datetime.now(timezone.utc)
+    doc_ref.update(
+        {
+            'status': 'pending_review',
+            'review_conflict': review_conflict,
             'updated_at': now,
         }
     )

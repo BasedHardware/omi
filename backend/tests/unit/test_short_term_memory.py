@@ -58,6 +58,11 @@ llms_memory_stub.get_prompt_memories = MagicMock(return_value=('User', ''))
 from database import memory_reads, short_term_memories  # noqa: E402
 from models.memories import Memory, MemoryCategory, ShortTermMemory  # noqa: E402
 from utils.consolidation import worker  # noqa: E402
+from utils.consolidation.typed_resolver import (  # noqa: E402
+    mutations_for_typed_resolution,
+    pending_review_fact,
+    resolve_typed_relationship,
+)
 from utils.llm.memories import HighRecallMemories, Memories  # noqa: E402
 
 
@@ -89,15 +94,34 @@ def test_retrievable_memories_unions_long_and_short_term(monkeypatch):
     monkeypatch.setattr(
         memory_reads.short_term_db,
         'get_short_term_memories',
-        lambda uid, status, limit: [
-            {'id': 'st1', 'content': 'same day fact', 'evidence': [], 'allowed_uses': ['retrieval']}
-        ],
+        lambda uid, status, limit: (
+            [{'id': 'st1', 'content': 'same day fact', 'evidence': [], 'allowed_uses': ['retrieval']}]
+            if status == 'pending_consolidation'
+            else []
+        ),
     )
 
     records = memory_reads.get_retrievable_memories('uid-1')
 
     assert [record['source'] for record in records] == ['long_term', 'short_term']
     assert records[1]['status'] == 'pending_consolidation'
+
+
+def test_retrievable_memories_includes_pending_review_short_term(monkeypatch):
+    monkeypatch.setattr(memory_reads.memories_db, 'get_memories', lambda uid, limit, offset: [])
+    monkeypatch.setattr(
+        memory_reads.short_term_db,
+        'get_short_term_memories',
+        lambda uid, status, limit: (
+            [{'id': 'review1', 'content': 'needs review', 'status': status, 'evidence': []}]
+            if status == 'pending_review'
+            else []
+        ),
+    )
+
+    records = memory_reads.get_retrievable_memories('uid-1')
+
+    assert [record['status'] for record in records] == ['pending_review']
 
 
 def test_candidate_retrieval_metric_reports_miss():
@@ -175,9 +199,10 @@ def test_window_resolver_supersedes_considering_with_decided():
         },
     ]
 
-    mutations = worker.resolve_window_mutations('uid-1', pending)
+    mutations, review_conflicts = worker.resolve_window_mutations('uid-1', pending)
 
     assert any(item['type'] == 'supersede_fact' for item in mutations)
+    assert review_conflicts == []
     assert [item['id'] for item in worker._active_short_terms_after_window_resolution(pending)] == ['st2']
 
 
@@ -224,3 +249,250 @@ def test_apply_mode_marks_superseded_short_term_records_before_rerun(monkeypatch
     assert second.committed == 0
     assert marked == {'st1', 'st2'}
     assert [[memory['content'] for memory in batch] for batch in saved_batches] == [['Decided AssemblyAI']]
+
+
+def test_typed_resolver_contradict_emits_add_and_supersede():
+    new_fact = _fact('new-sf', 'Lives in San Francisco', predicate='resides_in', arguments={'location': 'SF'})
+    old_fact = _fact('old-nyc', 'Lives in New York City', predicate='resides_in', arguments={'location': 'NYC'})
+
+    resolution = resolve_typed_relationship(new_fact, [old_fact])
+    mutations = mutations_for_typed_resolution(new_fact, resolution)
+
+    assert resolution.relationship == 'contradict'
+    assert [mutation['type'] for mutation in mutations] == ['add_fact', 'supersede_fact']
+    assert mutations[1]['kind'] == 'contradict'
+    assert mutations[1]['fact_id'] == 'old-nyc'
+    assert mutations[1]['by'] == 'new-sf'
+
+
+def test_typed_resolver_refine_emits_argument_changes():
+    old_fact = _fact(
+        'old-sf',
+        'Lives in San Francisco',
+        predicate='resides_in',
+        arguments={'city': 'San Francisco'},
+    )
+    new_fact = _fact(
+        'new-mission',
+        'Lives in the Mission in San Francisco',
+        predicate='resides_in',
+        arguments={'city': 'San Francisco', 'neighborhood': 'Mission'},
+    )
+
+    resolution = resolve_typed_relationship(new_fact, [old_fact])
+    mutations = mutations_for_typed_resolution(new_fact, resolution)
+
+    assert resolution.relationship == 'refine'
+    assert mutations == [
+        {
+            'type': 'refine_fact',
+            'fact_id': 'old-sf',
+            'arg_changes': {
+                'neighborhood': {'to': 'Mission'},
+                'content': {'to': 'Lives in the Mission in San Francisco'},
+            },
+        }
+    ]
+
+
+def test_typed_resolver_extend_and_coexist_add_without_supersession():
+    extend_fact = _fact('hobby', 'Likes tennis', predicate='likes', arguments={'activity': 'tennis'})
+    coexist_fact = _fact('visited', 'Visited San Francisco', predicate='visited', arguments={'location': 'SF'})
+    old_fact = _fact('lives', 'Lives in New York City', predicate='resides_in', arguments={'location': 'NYC'})
+
+    extend_resolution = resolve_typed_relationship(extend_fact, [])
+    coexist_resolution = resolve_typed_relationship(coexist_fact, [old_fact])
+
+    assert extend_resolution.relationship == 'extend'
+    assert coexist_resolution.relationship == 'coexist'
+    assert [item['type'] for item in mutations_for_typed_resolution(extend_fact, extend_resolution)] == ['add_fact']
+    assert [item['type'] for item in mutations_for_typed_resolution(coexist_fact, coexist_resolution)] == ['add_fact']
+
+
+def test_low_veracity_contradiction_routes_to_pending_review():
+    old_fact = _fact(
+        'old-nyc',
+        'Lives in New York City',
+        predicate='resides_in',
+        arguments={'location': 'NYC'},
+        veracity=0.9,
+    )
+    noisy_new = _fact(
+        'new-sf',
+        'Lives in San Francisco',
+        predicate='resides_in',
+        arguments={'location': 'SF'},
+        veracity=0.4,
+    )
+
+    resolution = resolve_typed_relationship(noisy_new, [old_fact])
+    pending = pending_review_fact(noisy_new, resolution)
+    record = short_term_memories.to_retrieval_record(pending)
+
+    assert resolution.relationship == 'review_conflict'
+    assert resolution.review_required is True
+    assert mutations_for_typed_resolution(noisy_new, resolution) == []
+    assert pending['status'] == 'pending_review'
+    assert record['status'] == 'pending_review'
+
+
+def test_apply_mode_routes_low_veracity_contradiction_to_review(monkeypatch):
+    pending = [
+        _fact(
+            'st-new-sf',
+            'Lives in San Francisco',
+            predicate='resides_in',
+            arguments={'location': 'SF'},
+            veracity=0.4,
+        )
+    ]
+    pending[0]['evidence'] = []
+    old_fact = _fact(
+        'old-nyc',
+        'Lives in New York City',
+        predicate='resides_in',
+        arguments={'location': 'NYC'},
+        veracity=0.9,
+    )
+    saved = MagicMock()
+    pending_review = []
+
+    monkeypatch.setattr(worker.short_term_db, 'get_short_term_memories', lambda uid, status, limit: pending)
+    monkeypatch.setattr(worker, 'retrieve_candidates', lambda uid, short_term: [old_fact])
+    monkeypatch.setattr(worker.memories_db, 'save_memories', saved)
+    monkeypatch.setattr(
+        worker.short_term_db,
+        'mark_pending_review',
+        lambda uid, short_term_id, conflict: pending_review.append((short_term_id, conflict)),
+    )
+
+    result = worker.consolidate_pending_window('uid-1', apply_to_head=True)
+
+    saved.assert_not_called()
+    assert result.committed == 0
+    assert result.review_conflicts[0]['short_term_id'] == 'st-new-sf'
+    assert pending_review[0][0] == 'st-new-sf'
+
+
+def test_projection_update_for_refine_changes_arguments_and_content():
+    updated_at = datetime(2026, 6, 2, tzinfo=timezone.utc)
+
+    update = worker.memories_db.projection_update_for_refine(
+        {'content': 'Lives in San Francisco', 'arguments': {'city': 'San Francisco'}},
+        {'neighborhood': {'to': 'Mission'}, 'content': {'to': 'Lives in the Mission'}},
+        updated_at,
+    )
+
+    assert update == {
+        'updated_at': updated_at,
+        'content': 'Lives in the Mission',
+        'arguments': {'city': 'San Francisco', 'neighborhood': 'Mission'},
+    }
+
+
+def test_apply_mode_refine_uses_projection_safe_database_helper(monkeypatch):
+    pending = [
+        _fact(
+            'st-mission',
+            'Lives in the Mission in San Francisco',
+            predicate='resides_in',
+            arguments={'city': 'San Francisco', 'neighborhood': 'Mission'},
+        )
+    ]
+    pending[0]['evidence'] = []
+    old_fact = _fact(
+        'old-sf',
+        'Lives in San Francisco',
+        predicate='resides_in',
+        arguments={'city': 'San Francisco'},
+    )
+    saved = MagicMock()
+    refined = []
+
+    monkeypatch.setattr(worker.short_term_db, 'get_short_term_memories', lambda uid, status, limit: pending)
+    monkeypatch.setattr(worker, 'retrieve_candidates', lambda uid, short_term: [old_fact])
+    monkeypatch.setattr(worker.memories_db, 'save_memories', saved)
+    monkeypatch.setattr(
+        worker.memories_db,
+        'refine_memory',
+        lambda uid, memory_id, arg_changes: refined.append((memory_id, arg_changes))
+        or {'commit': {'commit_id': 'commit-refine'}},
+    )
+    monkeypatch.setattr(worker.short_term_db, 'mark_consolidated', lambda uid, short_term_id, commit_id: None)
+
+    result = worker.consolidate_pending_window('uid-1', apply_to_head=True)
+
+    saved.assert_not_called()
+    assert result.commit_ids == ['commit-refine']
+    assert refined[0][0] == 'old-sf'
+    assert refined[0][1]['neighborhood'] == {'to': 'Mission'}
+
+
+def test_apply_mode_contradict_uses_atomic_merge_helper(monkeypatch):
+    pending = [
+        _fact(
+            'st-new-sf',
+            'Lives in San Francisco',
+            predicate='resides_in',
+            arguments={'location': 'SF'},
+            veracity=0.9,
+        )
+    ]
+    pending[0]['evidence'] = []
+    old_fact = _fact(
+        'old-nyc',
+        'Lives in New York City',
+        predicate='resides_in',
+        arguments={'location': 'NYC'},
+        veracity=0.8,
+    )
+    saved = MagicMock()
+    merged = []
+    marked = []
+
+    monkeypatch.setattr(worker.short_term_db, 'get_short_term_memories', lambda uid, status, limit: pending)
+    monkeypatch.setattr(worker, 'retrieve_candidates', lambda uid, short_term: [old_fact])
+    monkeypatch.setattr(worker.memories_db, 'save_memories', saved)
+    monkeypatch.setattr(
+        worker.memories_db,
+        'merge_contradict_memory',
+        lambda uid, new_memory, superseded_ids, valid_interval=None: merged.append(
+            (new_memory['id'], superseded_ids, valid_interval)
+        )
+        or {'commit': {'commit_id': 'commit-contradict'}},
+    )
+    monkeypatch.setattr(
+        worker.short_term_db,
+        'mark_consolidated',
+        lambda uid, short_term_id, commit_id: marked.append((short_term_id, commit_id)),
+    )
+
+    result = worker.consolidate_pending_window('uid-1', apply_to_head=True)
+
+    saved.assert_not_called()
+    assert result.commit_ids == ['commit-contradict']
+    assert result.committed == 1
+    assert merged[0][1] == ['old-nyc']
+    assert 'valid_to' in merged[0][2]
+    assert marked == [('st-new-sf', 'commit-contradict')]
+
+
+def _fact(
+    fact_id,
+    content,
+    *,
+    predicate='resides_in',
+    arguments=None,
+    subject_entity_id='user',
+    veracity=0.8,
+):
+    return {
+        'id': fact_id,
+        'content': content,
+        'predicate': predicate,
+        'arguments': arguments or {},
+        'subject_entity_id': subject_entity_id,
+        'category': 'system',
+        'veracity': veracity,
+        'qualifiers': {},
+    }
