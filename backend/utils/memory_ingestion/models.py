@@ -612,6 +612,18 @@ class RedactionRecord(StrictBaseModel):
     value_hash: str | None = None
 
 
+class DroppedArtifactRecord(StrictBaseModel):
+    dropped_id: str
+    source_event_id: str
+    reason: Literal["secret"]
+    categories: list[Literal["api_key", "password", "private_key", "token", "cookie", "database_url", "unknown_secret"]]
+    artifact_dropped: bool = True
+    source_type: str | None = None
+    source_id: str | None = None
+    app_id: str | None = None
+    timestamp: datetime | None = None
+
+
 class StageTrace(StrictBaseModel):
     stage_name: str
     status: Literal["ok", "partial", "failed"]
@@ -646,6 +658,7 @@ class AuditTrace(StrictBaseModel):
     run_id: str
     stage_traces: list[StageTrace]
     redactions: list[RedactionRecord]
+    dropped_artifacts: list[DroppedArtifactRecord] = Field(default_factory=list)
     prompt_call_refs: list[PromptCallRef]
     lint_results: list[LintResult]
 
@@ -653,6 +666,7 @@ class AuditTrace(StrictBaseModel):
 class PipelineStats(StrictBaseModel):
     raw_event_count: int = 0
     redaction_count: int = 0
+    dropped_artifact_count: int = 0
     event_frame_count: int = 0
     decision_count: int = 0
     derived_triple_count: int = 0

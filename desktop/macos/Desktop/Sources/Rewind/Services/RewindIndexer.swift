@@ -157,21 +157,27 @@ actor RewindIndexer {
                 return
             }
 
-            // Add frame to video encoder
-            let encodedFrame = try await VideoChunkEncoder.shared.addFrame(
-                image: cgImage,
-                timestamp: frame.captureTime
-            )
-
-            // Frame was dropped by encoder (e.g. aspect ratio debounce) — skip DB insert
-            // since there's no video chunk to load later
-            guard let encodedFrame = encodedFrame else { return }
-
             // OCR gating: throttle frequency, deduplicate, then check battery
             var ocrText: String?
             var ocrDataJson: String?
             var isIndexed = false
             var skippedForBattery = false
+
+            let secretScanResult: OCRResult
+            do {
+                guard let result = try await scanJPEGForHardSecret(
+                    data: frame.jpegData,
+                    appName: frame.appName,
+                    windowTitle: frame.windowTitle,
+                    timestamp: frame.captureTime
+                ) else {
+                    return
+                }
+                secretScanResult = result
+            } catch {
+                await dropUnscannedOCRArtifact(appName: frame.appName, windowTitle: frame.windowTitle, timestamp: frame.captureTime, error: error)
+                return
+            }
 
             framesSinceLastOCR += 1
             if framesSinceLastOCR < ocrEveryNthFrame {
@@ -187,19 +193,23 @@ actor RewindIndexer {
             } else {
                 framesSinceLastOCR = 0
                 recordOCROutcome(.ran)
-                do {
-                    let ocrResult = try await Task(priority: .utility) {
-                        try await RewindOCRService.shared.extractTextWithBounds(from: frame.jpegData)
-                    }.value
-                    ocrText = ocrResult.fullText
-                    if let data = try? JSONEncoder().encode(ocrResult) {
-                        ocrDataJson = String(data: data, encoding: .utf8)
-                    }
-                    isIndexed = true
-                } catch {
-                    logError("RewindIndexer: OCR failed for frame: \(error)")
+                ocrText = secretScanResult.fullText
+                if let data = try? JSONEncoder().encode(secretScanResult) {
+                    ocrDataJson = String(data: data, encoding: .utf8)
                 }
+                isIndexed = true
             }
+
+            // Add frame to video encoder after OCR secret gating so secret-bearing frames
+            // are tombstoned before raw frame storage.
+            let encodedFrame = try await VideoChunkEncoder.shared.addFrame(
+                image: cgImage,
+                timestamp: frame.captureTime
+            )
+
+            // Frame was dropped by encoder (e.g. aspect ratio debounce) — skip DB insert
+            // since there's no video chunk to load later
+            guard let encodedFrame = encodedFrame else { return }
 
             // Create database record with video reference and OCR results
             let screenshot = Screenshot(
@@ -240,20 +250,27 @@ actor RewindIndexer {
         guard await ensureInitialized() else { return }
 
         do {
-            // Add frame to video encoder (CGImage directly, no decode needed)
-            let encodedFrame = try await VideoChunkEncoder.shared.addFrame(
-                image: cgImage,
-                timestamp: captureTime
-            )
-
-            // Frame was dropped by encoder (e.g. aspect ratio debounce) — skip DB insert
-            guard let encodedFrame = encodedFrame else { return }
-
             // OCR gating: throttle frequency, deduplicate, then check battery
             var ocrText: String?
             var ocrDataJson: String?
             var isIndexed = false
             var skippedForBattery = false
+
+            let secretScanResult: OCRResult
+            do {
+                guard let result = try await scanCGImageForHardSecret(
+                    cgImage,
+                    appName: appName,
+                    windowTitle: windowTitle,
+                    timestamp: captureTime
+                ) else {
+                    return
+                }
+                secretScanResult = result
+            } catch {
+                await dropUnscannedOCRArtifact(appName: appName, windowTitle: windowTitle, timestamp: captureTime, error: error)
+                return
+            }
 
             framesSinceLastOCR += 1
             if framesSinceLastOCR < ocrEveryNthFrame {
@@ -269,19 +286,22 @@ actor RewindIndexer {
             } else {
                 framesSinceLastOCR = 0
                 recordOCROutcome(.ran)
-                do {
-                    let ocrResult = try await Task(priority: .utility) {
-                        try await RewindOCRService.shared.extractTextWithBounds(from: cgImage)
-                    }.value
-                    ocrText = ocrResult.fullText
-                    if let data = try? JSONEncoder().encode(ocrResult) {
-                        ocrDataJson = String(data: data, encoding: .utf8)
-                    }
-                    isIndexed = true
-                } catch {
-                    logError("RewindIndexer: OCR failed for CGImage frame: \(error)")
+                ocrText = secretScanResult.fullText
+                if let data = try? JSONEncoder().encode(secretScanResult) {
+                    ocrDataJson = String(data: data, encoding: .utf8)
                 }
+                isIndexed = true
             }
+
+            // Add frame to video encoder after OCR secret gating so secret-bearing frames
+            // are tombstoned before raw frame storage.
+            let encodedFrame = try await VideoChunkEncoder.shared.addFrame(
+                image: cgImage,
+                timestamp: captureTime
+            )
+
+            // Frame was dropped by encoder (e.g. aspect ratio debounce) — skip DB insert
+            guard let encodedFrame = encodedFrame else { return }
 
             let screenshot = Screenshot(
                 timestamp: captureTime,
@@ -333,20 +353,27 @@ actor RewindIndexer {
                 return
             }
 
-            // Add frame to video encoder
-            let encodedFrame = try await VideoChunkEncoder.shared.addFrame(
-                image: cgImage,
-                timestamp: frame.captureTime
-            )
-
-            // Frame was dropped by encoder (e.g. aspect ratio debounce) — skip DB insert
-            guard let encodedFrame = encodedFrame else { return }
-
             // OCR gating: throttle frequency, deduplicate, then check battery
             var ocrText: String?
             var ocrDataJson: String?
             var isIndexed = false
             var skippedForBattery = false
+
+            let secretScanResult: OCRResult
+            do {
+                guard let result = try await scanJPEGForHardSecret(
+                    data: frame.jpegData,
+                    appName: frame.appName,
+                    windowTitle: frame.windowTitle,
+                    timestamp: frame.captureTime
+                ) else {
+                    return
+                }
+                secretScanResult = result
+            } catch {
+                await dropUnscannedOCRArtifact(appName: frame.appName, windowTitle: frame.windowTitle, timestamp: frame.captureTime, error: error)
+                return
+            }
 
             framesSinceLastOCR += 1
             if framesSinceLastOCR < ocrEveryNthFrame {
@@ -362,18 +389,11 @@ actor RewindIndexer {
             } else {
                 framesSinceLastOCR = 0
                 recordOCROutcome(.ran)
-                do {
-                    let ocrResult = try await Task(priority: .utility) {
-                        try await RewindOCRService.shared.extractTextWithBounds(from: frame.jpegData)
-                    }.value
-                    ocrText = ocrResult.fullText
-                    if let data = try? JSONEncoder().encode(ocrResult) {
-                        ocrDataJson = String(data: data, encoding: .utf8)
-                    }
-                    isIndexed = true
-                } catch {
-                    logError("RewindIndexer: OCR failed for frame with metadata: \(error)")
+                ocrText = secretScanResult.fullText
+                if let data = try? JSONEncoder().encode(secretScanResult) {
+                    ocrDataJson = String(data: data, encoding: .utf8)
                 }
+                isIndexed = true
             }
 
             // Encode tasks and insight as JSON
@@ -384,6 +404,16 @@ actor RewindIndexer {
             }
 
             let adviceJson: String? = insight
+
+            // Add frame to video encoder after OCR secret gating so secret-bearing frames
+            // are tombstoned before raw frame storage.
+            let encodedFrame = try await VideoChunkEncoder.shared.addFrame(
+                image: cgImage,
+                timestamp: frame.captureTime
+            )
+
+            // Frame was dropped by encoder (e.g. aspect ratio debounce) — skip DB insert
+            guard let encodedFrame = encodedFrame else { return }
 
             let screenshot = Screenshot(
                 timestamp: frame.captureTime,
@@ -418,6 +448,88 @@ actor RewindIndexer {
         } catch {
             logError("RewindIndexer: Failed to process frame with metadata: \(error)")
             await RewindDatabase.shared.reportQueryError(error)
+        }
+    }
+
+    private func dropOCRArtifactIfSecret(
+        text: String,
+        appName: String?,
+        windowTitle: String?,
+        timestamp: Date
+    ) async -> Bool {
+        let categories = HardSecretDetector.categories(in: text)
+        guard !categories.isEmpty else { return false }
+
+        await recordDroppedOCRArtifact(
+            reason: "secret",
+            appName: appName,
+            windowTitle: windowTitle,
+            categories: categories,
+            timestamp: timestamp
+        )
+        return true
+    }
+
+    private func scanJPEGForHardSecret(
+        data: Data,
+        appName: String?,
+        windowTitle: String?,
+        timestamp: Date
+    ) async throws -> OCRResult? {
+        let ocrResult = try await Task(priority: .utility) {
+            try await RewindOCRService.shared.extractTextWithBounds(from: data)
+        }.value
+        if await dropOCRArtifactIfSecret(text: ocrResult.fullText, appName: appName, windowTitle: windowTitle, timestamp: timestamp) {
+            return nil
+        }
+        return ocrResult
+    }
+
+    private func scanCGImageForHardSecret(
+        _ cgImage: CGImage,
+        appName: String?,
+        windowTitle: String?,
+        timestamp: Date
+    ) async throws -> OCRResult? {
+        let ocrResult = try await Task(priority: .utility) {
+            try await RewindOCRService.shared.extractTextWithBounds(from: cgImage)
+        }.value
+        if await dropOCRArtifactIfSecret(text: ocrResult.fullText, appName: appName, windowTitle: windowTitle, timestamp: timestamp) {
+            return nil
+        }
+        return ocrResult
+    }
+
+    private func dropUnscannedOCRArtifact(appName: String?, windowTitle: String?, timestamp: Date, error: Error) async {
+        await recordDroppedOCRArtifact(
+            reason: "secret_scan_failed",
+            appName: appName,
+            windowTitle: windowTitle,
+            categories: [],
+            timestamp: timestamp
+        )
+        logError("RewindIndexer: Dropped unscanned OCR artifact before raw storage", error: error)
+    }
+
+    private func recordDroppedOCRArtifact(
+        reason: String,
+        appName: String?,
+        windowTitle: String?,
+        categories: [String],
+        timestamp: Date
+    ) async {
+        do {
+            try await RewindDatabase.shared.insertDroppedArtifact(
+                reason: reason,
+                sourceType: "screen_ocr",
+                appName: appName,
+                windowTitle: windowTitle,
+                categories: categories,
+                timestamp: timestamp
+            )
+            log("RewindIndexer: Dropped OCR artifact reason=\(reason) categories=\(categories.joined(separator: ","))")
+        } catch {
+            logError("RewindIndexer: Failed to record dropped OCR artifact", error: error)
         }
     }
 
@@ -517,6 +629,16 @@ actor RewindIndexer {
                         let ocrResult = try await Task(priority: .utility) {
                             try await RewindOCRService.shared.extractTextWithBounds(from: cgImage)
                         }.value
+
+                        if await dropOCRArtifactIfSecret(
+                            text: ocrResult.fullText,
+                            appName: screenshot.appName,
+                            windowTitle: screenshot.windowTitle,
+                            timestamp: screenshot.timestamp
+                        ) {
+                            try? await RewindDatabase.shared.clearSkippedForBattery(id: id)
+                            continue
+                        }
 
                         try await RewindDatabase.shared.updateOCRResult(id: id, ocrResult: ocrResult)
                         totalProcessed += 1

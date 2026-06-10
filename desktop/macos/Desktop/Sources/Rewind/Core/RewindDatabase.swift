@@ -2156,6 +2156,20 @@ actor RewindDatabase {
             }
         }
 
+        migrator.registerMigration("createDroppedArtifacts") { db in
+            try db.create(table: "dropped_artifacts") { t in
+                t.autoIncrementedPrimaryKey("id")
+                t.column("reason", .text).notNull()
+                t.column("sourceType", .text).notNull()
+                t.column("appName", .text)
+                t.column("windowTitle", .text)
+                t.column("categoriesJson", .text).notNull()
+                t.column("timestamp", .datetime).notNull()
+                t.column("createdAt", .datetime).notNull()
+            }
+            try db.create(index: "idx_dropped_artifacts_timestamp", on: "dropped_artifacts", columns: ["timestamp"])
+        }
+
         try migrator.migrate(queue)
     }
 
@@ -2348,6 +2362,33 @@ actor RewindDatabase {
             try db.execute(
                 sql: "UPDATE screenshots SET ocrText = ?, ocrDataJson = ?, isIndexed = 1, skippedForBattery = 0 WHERE id = ?",
                 arguments: [ocrResult.fullText, ocrDataJson, id]
+            )
+        }
+    }
+
+    func insertDroppedArtifact(
+        reason: String,
+        sourceType: String,
+        appName: String?,
+        windowTitle: String?,
+        categories: [String],
+        timestamp: Date
+    ) throws {
+        guard let dbQueue = dbQueue else {
+            throw RewindError.databaseNotInitialized
+        }
+
+        let data = try JSONEncoder().encode(categories)
+        let categoriesJson = String(data: data, encoding: .utf8) ?? "[]"
+        let createdAt = Date()
+        try dbQueue.write { db in
+            try db.execute(
+                sql: """
+                    INSERT INTO dropped_artifacts
+                    (reason, sourceType, appName, windowTitle, categoriesJson, timestamp, createdAt)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                    """,
+                arguments: [reason, sourceType, appName, windowTitle, categoriesJson, timestamp, createdAt]
             )
         }
     }

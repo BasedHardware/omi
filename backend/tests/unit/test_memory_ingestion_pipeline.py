@@ -95,7 +95,7 @@ def test_fingerprint_and_ids_are_stable_across_offline_shadow_backfill_modes():
     assert offline_output.decisions[0].decision_id == shadow_output.decisions[0].decision_id
 
 
-def test_secrets_are_redacted_before_output_and_emit_positive_rejection_signal():
+def test_hard_secret_event_is_dropped_before_output_and_extraction():
     pipeline_input = _input(
         text="Remember that my API key is sk-1234567890abcdefghijklmnop",
         payload={"nested": {"token": "token=abcdefghijklmnopqrstuvwxyz123456"}},
@@ -106,11 +106,28 @@ def test_secrets_are_redacted_before_output_and_emit_positive_rejection_signal()
 
     assert output.private_input_fingerprint.startswith("pifp_")
     assert output.stats.redaction_count == 2
+    assert output.stats.dropped_artifact_count == 1
+    assert output.event_frames == []
+    assert output.mutation_plan.creates == []
+    assert output.vector_plan.upserts == []
+    assert output.audit.dropped_artifacts[0].artifact_dropped is True
+    assert output.audit.dropped_artifacts[0].reason == "secret"
+    assert output.audit.dropped_artifacts[0].categories == ["api_key", "token"]
+    assert "client_secret_scrub_miss: 1 artifact(s) dropped by backend" in output.audit.stage_traces[0].notes
     assert "sk-1234567890abcdefghijklmnop" not in dumped
     assert "abcdefghijklmnopqrstuvwxyz123456" not in dumped
     assert "[REDACTED_API_KEY]" in dumped
-    assert "reject_secret" in {decision.action for decision in output.decisions}
-    assert "secret_or_credential" in {item.reason for item in output.rejected_items}
+    assert "reject_secret" not in {decision.action for decision in output.decisions}
+    assert "secret_or_credential" not in {item.reason for item in output.rejected_items}
+
+
+def test_email_pii_is_not_whole_dropped_by_secret_gate():
+    output = _run(_input(text="Reach me at user@example.com.", payload={"memory_frames": [_frame_payload()]}))
+
+    assert output.stats.redaction_count == 0
+    assert output.stats.dropped_artifact_count == 0
+    assert len(output.event_frames) == 1
+    assert len(output.mutation_plan.creates) == 1
 
 
 def test_rejected_memory_prevents_recreation():

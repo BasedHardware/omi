@@ -14,6 +14,7 @@ from utils.memory_ingestion.models import (
     AuditTrace,
     CreateMemoryMutation,
     DerivedTriple,
+    DroppedArtifactRecord,
     EntityOperation,
     EntityRef,
     EvidenceLinkMutation,
@@ -143,12 +144,16 @@ class CoreMemoryPipeline:
             )
             return _failed_output(pipeline_input, errors, stage_traces, self.model_client.manifest(pipeline_input), now)
 
-        redacted_input, redactions = self._redact_input(pipeline_input, bootstrap_id_factory)
+        redacted_input, redactions, dropped_artifacts = self._redact_input(pipeline_input, bootstrap_id_factory)
         input_fingerprint = _input_fingerprint(redacted_input)
         id_factory = StableIdFactory(input_fingerprint)
         private_fingerprint = None
         if redacted_input.config.output.include_private_input_fingerprint and self.private_fingerprint_key:
             private_fingerprint = f"pifp_{stable_hmac(self.private_fingerprint_key, input_fingerprint, length=40)}"
+
+        redact_notes = ["hard-secret artifacts dropped before fingerprinting and extraction"]
+        if dropped_artifacts:
+            redact_notes.append(f"client_secret_scrub_miss: {len(dropped_artifacts)} artifact(s) dropped by backend")
 
         stage_traces.append(
             _stage_trace(
@@ -156,16 +161,12 @@ class CoreMemoryPipeline:
                 self.clock.now(),
                 self.clock.now(),
                 input_count=len(pipeline_input.raw_events),
-                output_count=len(redactions),
-                notes=["redacted before fingerprinting and extraction"],
+                output_count=len(redactions) + len(dropped_artifacts),
+                notes=redact_notes,
             )
         )
 
-        redaction_frames, redaction_decisions, redaction_resolutions, redaction_rejections = _positive_secret_signals(
-            redactions,
-            redacted_input,
-            id_factory,
-        )
+        redaction_frames, redaction_decisions, redaction_resolutions, redaction_rejections = [], [], [], []
         try:
             extracted_frames = await self.model_client.extract_frames(
                 pipeline_input=redacted_input,
@@ -244,12 +245,14 @@ class CoreMemoryPipeline:
                 run_id=redacted_input.run_id,
                 stage_traces=stage_traces,
                 redactions=redactions,
+                dropped_artifacts=dropped_artifacts,
                 prompt_call_refs=[],
                 lint_results=[],
             ),
             stats=PipelineStats(
-                raw_event_count=len(redacted_input.raw_events),
+                raw_event_count=len(pipeline_input.raw_events),
                 redaction_count=len(redactions),
+                dropped_artifact_count=len(dropped_artifacts),
                 event_frame_count=len(frames),
                 decision_count=len(decisions),
                 derived_triple_count=len(triples),
@@ -285,10 +288,13 @@ class CoreMemoryPipeline:
         self,
         pipeline_input: MemoryPipelineInput,
         id_factory: StableIdFactory,
-    ) -> tuple[MemoryPipelineInput, list[RedactionRecord]]:
+    ) -> tuple[MemoryPipelineInput, list[RedactionRecord], list[DroppedArtifactRecord]]:
         input_copy = copy.deepcopy(pipeline_input)
         redactions: list[RedactionRecord] = []
+        dropped_artifacts: list[DroppedArtifactRecord] = []
+        kept_events: list[RawContextEvent] = []
         for event in input_copy.raw_events:
+            event_redactions: list[RedactionRecord] = []
             if event.text:
                 event.text, text_redactions = redact_text(
                     event.text,
@@ -296,15 +302,32 @@ class CoreMemoryPipeline:
                     id_factory=id_factory,
                     hmac_key=self.private_fingerprint_key,
                 )
-                redactions.extend(text_redactions)
+                event_redactions.extend(text_redactions)
             event.structured_payload, payload_redactions = redact_payload(
                 event.structured_payload,
                 source_event_id=event.event_id,
                 id_factory=id_factory,
                 hmac_key=self.private_fingerprint_key,
             )
-            redactions.extend(payload_redactions)
-        return input_copy, redactions
+            event_redactions.extend(payload_redactions)
+            if event_redactions:
+                redactions.extend(event_redactions)
+                dropped_artifacts.append(
+                    DroppedArtifactRecord(
+                        dropped_id=id_factory.new_id("dropped", event.event_id, "secret"),
+                        source_event_id=event.event_id,
+                        reason="secret",
+                        categories=sorted({redaction.category for redaction in event_redactions}),
+                        source_type=input_copy.source.source_type,
+                        source_id=input_copy.source.source_id,
+                        app_id=event.source_ref.app_id,
+                        timestamp=event.start_at or input_copy.source.captured_at,
+                    )
+                )
+                continue
+            kept_events.append(event)
+        input_copy.raw_events = kept_events
+        return input_copy, redactions, dropped_artifacts
 
 
 def _validate_input(pipeline_input: MemoryPipelineInput) -> None:
@@ -355,6 +378,7 @@ def _failed_output(
             run_id=pipeline_input.run_id,
             stage_traces=stage_traces,
             redactions=[],
+            dropped_artifacts=[],
             prompt_call_refs=[],
             lint_results=[],
         ),
