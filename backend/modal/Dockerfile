@@ -1,4 +1,4 @@
-FROM gcr.io/based-hardware-dev/python:3.11-slim-forky AS builder
+FROM python:3.11-slim-bookworm AS builder
 
 ENV PATH="/opt/venv/bin:$PATH"
 RUN python -m venv /opt/venv
@@ -12,8 +12,8 @@ COPY backend/requirements.txt /tmp/reqs/requirements.txt
 COPY backend/modal/requirements.txt /tmp/reqs/modal/requirements.txt
 RUN pip install --no-cache-dir -r /tmp/reqs/modal/requirements.txt
 
-FROM gcr.io/based-hardware-dev/python:3.11-slim-forky
-# Python 3.11 on Debian 14 (Forky)
+FROM python:3.11-slim-bookworm
+# Python 3.11 on Debian 12 (Bookworm)
 
 WORKDIR /app
 ENV PATH="/usr/local/nvidia/bin:/usr/local/cuda/bin:/opt/venv/bin:$PATH"

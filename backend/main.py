@@ -50,6 +50,7 @@ from routers import (
     oauth,
     auth,
     action_items,
+    action_items_cleanup,
     account_cutover,
     candidates,
     chat_first,
@@ -186,6 +187,7 @@ app.include_router(auto_model.router)
 app.include_router(conversations.router)
 app.include_router(public_shared_conversation_chat.router)
 app.include_router(action_items.router)
+app.include_router(action_items_cleanup.router)
 app.include_router(account_cutover.router)
 app.include_router(candidates.router)
 app.include_router(chat_first.router)
