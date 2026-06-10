@@ -125,6 +125,34 @@ stage_local_node() {
   cp -f "$node_bin" "$NODE_RESOURCE"
   chmod +x "$NODE_RESOURCE"
   xattr -cr "$NODE_RESOURCE" 2>/dev/null || true
+
+  # Homebrew node is a small stub that dlopen()s libnode.X.dylib via @loader_path.
+  # Copy the dylib alongside the binary so it resolves at both validation and runtime.
+  local libnode_name
+  libnode_name=$(otool -L "$node_bin" 2>/dev/null \
+    | awk '/@rpath\/libnode\.[0-9]+\.dylib/ {gsub(/@rpath\//, ""); gsub(/ \(.*/, ""); print; exit}')
+  if [ -n "$libnode_name" ]; then
+    local libnode_src=""
+    local node_bin_dir
+    node_bin_dir="$(dirname "$(realpath "$node_bin")")"
+    for candidate in \
+        "$node_bin_dir/../lib/$libnode_name" \
+        "$node_bin_dir/$libnode_name" \
+        "$(brew --prefix 2>/dev/null)/lib/$libnode_name"; do
+      if [ -f "$candidate" ]; then
+        libnode_src="$(realpath "$candidate")"
+        break
+      fi
+    done
+    if [ -z "$libnode_src" ]; then
+      echo "ERROR: node requires $libnode_name but it was not found near $node_bin or in Homebrew lib." >&2
+      exit 1
+    fi
+    cp -f "$libnode_src" "$(dirname "$NODE_RESOURCE")/$libnode_name"
+    xattr -cr "$(dirname "$NODE_RESOURCE")/$libnode_name" 2>/dev/null || true
+    log "Staged $libnode_name alongside node (Homebrew dynamic build)"
+  fi
+
   log "Staged local Node $("$NODE_RESOURCE" --version) from $node_bin"
 }
 
