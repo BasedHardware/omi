@@ -159,6 +159,38 @@ pub struct AppConfig {
     /// User's own name — helps the AI personalize responses
     #[serde(default)]
     pub user_name: String,
+
+    // ── TTS ───────────────────────────────────────────────────────────────────
+
+    /// OpenAI TTS voice name (alloy, echo, fable, onyx, nova, shimmer)
+    #[serde(default = "default_tts_voice")]
+    pub openai_tts_voice: String,
+
+    // ── Google MCP Bridge ─────────────────────────────────────────────────────
+
+    /// Whether the Google MCP backend (Gmail, Calendar, Drive) is enabled.
+    #[serde(default)]
+    pub mcp_enabled: bool,
+
+    /// Path to the mcp/backend directory (empty = auto-detect).
+    #[serde(default)]
+    pub mcp_backend_path: String,
+
+    // ── Context Watcher ───────────────────────────────────────────────────────
+
+    /// Whether the context watcher (screen intelligence) is enabled.
+    #[serde(default = "default_true")]
+    pub context_watcher_enabled: bool,
+
+    /// How often (in seconds) the context watcher analyzes the screen.
+    #[serde(default = "default_context_watcher_interval")]
+    pub context_watcher_interval_secs: u64,
+
+    // ── Notifications ─────────────────────────────────────────────────────────
+
+    /// Whether to send Windows Toast notifications for proactive suggestions.
+    #[serde(default = "default_true")]
+    pub proactive_toast_notifications: bool,
 }
 
 fn default_backend_url() -> String {
@@ -195,6 +227,14 @@ fn default_auto() -> String { "auto".to_string() }
 
 fn default_persona_name() -> String {
     "Omi".to_string()
+}
+
+fn default_tts_voice() -> String {
+    "alloy".to_string()
+}
+
+fn default_context_watcher_interval() -> u64 {
+    15
 }
 
 impl Default for AppConfig {
@@ -236,6 +276,12 @@ impl Default for AppConfig {
             persona_name: default_persona_name(),
             persona_instructions: String::new(),
             user_name: String::new(),
+            openai_tts_voice: default_tts_voice(),
+            mcp_enabled: false,
+            mcp_backend_path: String::new(),
+            context_watcher_enabled: true,
+            context_watcher_interval_secs: default_context_watcher_interval(),
+            proactive_toast_notifications: true,
         }
     }
 }

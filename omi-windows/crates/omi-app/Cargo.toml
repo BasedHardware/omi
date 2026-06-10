@@ -37,6 +37,15 @@ uuid = { version = "1", features = ["v4"] }
 global-hotkey = "0.6"
 tray-icon = "0.19"
 
+# Audio playback for TTS
+rodio = { version = "0.20", default-features = false, features = ["mp3"] }
+
+# Windows Toast notifications
+winrt-notification = "0.5"
+
+# Temporary files for TTS audio
+tempfile = "3"
+
 # Sibling crates
 omi-capture = { path = "../omi-capture" }
 omi-audio = { path = "../omi-audio" }

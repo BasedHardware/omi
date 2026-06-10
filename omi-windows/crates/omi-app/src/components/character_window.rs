@@ -218,7 +218,7 @@ pub fn CharacterOverlay(props: CharacterOverlayProps) -> Element {
 
     // Local signals to store state received from channels
     let recording_status = use_signal(|| RecordingStatus::Idle);
-    let suggestions = use_signal(Vec::<Suggestion>::new);
+    let mut suggestions = use_signal(Vec::<Suggestion>::new);
     let config = use_signal(|| AppConfig::load());
 
     // 1. Synchronize recording_status from watch channel
@@ -295,12 +295,33 @@ pub fn CharacterOverlay(props: CharacterOverlayProps) -> Element {
                     }
                     Ok(AgentEvent::Result { text, .. }) => {
                         av_state.set("state-idle".to_string());
-                        
-                        // Speak response via JavaScript fetch + Audio API
-                        let url = cfg.read().python_backend_url.clone();
-                        let token = cfg.read().firebase_id_token.clone();
-                        
-                        if !text.is_empty() && !token.is_empty() {
+
+                        if text.is_empty() {
+                            continue;
+                        }
+
+                        let current_cfg = cfg.read().clone();
+                        let text_for_tts = text.clone();
+                        let action_tx = action_tx_inner.clone();
+
+                        // ── Tier 1: OpenAI TTS (no Firebase required) ────────────────
+                        if crate::tts_engine::is_available(&current_cfg) {
+                            av_state.set("state-speaking".to_string());
+                            let cfg_tts = current_cfg.clone();
+                            let mut av_clone = av_state.clone();
+                            let action_tx2 = action_tx.clone();
+                            spawn(async move {
+                                let result = crate::tts_engine::speak_text(&text_for_tts, &cfg_tts).await;
+                                av_clone.set("state-idle".to_string());
+                                if result.is_err() {
+                                    tracing::warn!("[TTS] OpenAI TTS failed: {:?}", result);
+                                }
+                                let _ = action_tx2.send(CharacterAction::SpeechFinished);
+                            });
+                        // ── Tier 2: Firebase-gated ElevenLabs JS path ────────────────
+                        } else if !current_cfg.firebase_id_token.is_empty() {
+                            let url = current_cfg.python_backend_url.clone();
+                            let token = current_cfg.firebase_id_token.clone();
                             let js_speak = format!(r#"
                                 (async () => {{
                                     if (window.speak) {{
@@ -309,9 +330,8 @@ pub fn CharacterOverlay(props: CharacterOverlayProps) -> Element {
                                     dioxus.send("speech_ended");
                                 }})();
                             "#, text, url, token);
-                            
+
                             let mut eval_handle = eval(&js_speak);
-                            let action_tx = action_tx_inner.clone();
                             spawn(async move {
                                 while let Ok(msg) = eval_handle.recv::<serde_json::Value>().await {
                                     if msg.as_str() == Some("speech_ended") {
@@ -320,8 +340,45 @@ pub fn CharacterOverlay(props: CharacterOverlayProps) -> Element {
                                     }
                                 }
                             });
+                        // ── Tier 3: No TTS available — show text bubble only ─────────
+                        } else {
+                            // Show reply as a suggestion bubble (silent mode)
+                            let short_text = if text.len() > 120 {
+                                format!("{}…", &text[..117])
+                            } else {
+                                text.clone()
+                            };
+                            let reply_sug = Suggestion {
+                                id: uuid::Uuid::new_v4().to_string(),
+                                text: short_text,
+                                action_label: "Read".to_string(),
+                                agent_prompt: None,
+                                priority: 90,
+                                created_at: std::time::Instant::now(),
+                                ttl: std::time::Duration::from_secs(20),
+                            };
+                            let mut list = suggestions.read().clone();
+                            list.insert(0, reply_sug);
+                            suggestions.set(list);
+                            let _ = action_tx.send(CharacterAction::SpeechFinished);
                         }
                     }
+                    Ok(AgentEvent::HitlRequest { thread_id, message }) => {
+                        av_state.set("state-idle".to_string());
+                        let hitl_sug = Suggestion {
+                            id: uuid::Uuid::new_v4().to_string(),
+                            text: message.clone(),
+                            action_label: "Confirm".to_string(),
+                            agent_prompt: Some(format!("HITL_CONFIRM:{}", thread_id)),
+                            priority: 100, // Highest priority
+                            created_at: std::time::Instant::now(),
+                            ttl: std::time::Duration::from_secs(60), // Wait longer for user
+                        };
+                        let mut list = suggestions.read().clone();
+                        list.insert(0, hitl_sug);
+                        suggestions.set(list);
+                    }
+
                     Ok(AgentEvent::Error { .. }) => {
                         av_state.set("state-idle".to_string());
                     }
@@ -442,7 +499,12 @@ pub fn CharacterOverlay(props: CharacterOverlayProps) -> Element {
                     
                     let sug_id_action = sug_id.clone();
                     let sug_id_dismiss = sug_id.clone();
-                    let tx = props.character_action_tx.clone();
+                    
+                    let tx_action = props.character_action_tx.clone();
+                    let tx_dismiss = props.character_action_tx.clone();
+                    
+                    let sug_prompt_action = sug_prompt.clone();
+                    let sug_prompt_dismiss = sug_prompt.clone();
                     
                     rsx! {
                         div { class: "speech-bubble character-non-drag",
@@ -452,8 +514,8 @@ pub fn CharacterOverlay(props: CharacterOverlayProps) -> Element {
                                     button {
                                         class: "action-btn",
                                         onclick: move |_| {
-                                            if let Some(ref p) = sug_prompt {
-                                                let _ = tx.send(CharacterAction::SuggestionAction(p.clone()));
+                                            if let Some(ref p) = sug_prompt_action {
+                                                let _ = tx_action.send(CharacterAction::SuggestionAction(p.clone()));
                                             }
                                             // Clear suggestion on action click
                                             active_sig.set(None);
@@ -466,6 +528,12 @@ pub fn CharacterOverlay(props: CharacterOverlayProps) -> Element {
                                     button {
                                         class: "dismiss-btn",
                                         onclick: move |_| {
+                                            if let Some(ref p) = sug_prompt_dismiss {
+                                                if p.starts_with("HITL_CONFIRM:") {
+                                                    let thread_id = p.replace("HITL_CONFIRM:", "");
+                                                    let _ = tx_dismiss.send(CharacterAction::SuggestionAction(format!("HITL_REJECT:{}", thread_id)));
+                                                }
+                                            }
                                             active_sig.set(None);
                                             let mut list = sug_list.read().clone();
                                             list.retain(|x| x.id != sug_id_dismiss);

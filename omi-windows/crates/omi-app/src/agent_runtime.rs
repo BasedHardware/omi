@@ -88,6 +88,11 @@ pub enum AgentEvent {
     AuthRequired {
         methods: Vec<serde_json::Value>,
     },
+    HitlRequest {
+        #[serde(rename = "threadId")]
+        thread_id: String,
+        message: String,
+    },
 }
 
 // ── Process state ─────────────────────────────────────────────────────────────
@@ -155,10 +160,36 @@ impl AgentRuntime {
         let session_id = uuid::Uuid::new_v4().to_string();
         let _ = self.inner.event_tx.send(AgentEvent::Init { session_id: session_id.clone() });
 
+        // ── MCP bridge: delegate Google-intent queries to the MCP backend ────────
+        let user_query = messages.last().map(|(_, c)| c.as_str()).unwrap_or("");
+        let mcp_context_text = if cfg.mcp_enabled && crate::mcp_bridge::is_google_query(user_query) {
+            tracing::info!("[AGENT] Detected Google intent — routing to MCP backend");
+            match crate::mcp_bridge::query_mcp(user_query, cfg).await {
+                Some(crate::mcp_bridge::McpResponse::HitlRequest { thread_id, message }) => {
+                    // It requires confirmation. Emit event and yield early.
+                    let _ = self.inner.event_tx.send(AgentEvent::HitlRequest { thread_id, message });
+                    return Ok(());
+                }
+                Some(crate::mcp_bridge::McpResponse::Text(text)) => Some(text),
+                None => None,
+            }
+        } else {
+            None
+        };
+
+        // Extend the system prompt with MCP result if available
+        let extended_system_prompt = if let Some(ref mcp_result) = mcp_context_text {
+            format!(
+                "{system_prompt}\n\n## Google Workspace Data (just retrieved)\n{mcp_result}\n\nUse the above data to answer the user's question naturally and concisely."
+            )
+        } else {
+            system_prompt.to_string()
+        };
+
         // Build message list: system prompt first, then conversation history
         let mut llm_messages = vec![crate::llm::LlmMessage {
             role: "system".into(),
-            content: system_prompt.to_string(),
+            content: extended_system_prompt,
         }];
         for (role, content) in &messages {
             llm_messages.push(crate::llm::LlmMessage { role: role.clone(), content: content.clone() });
@@ -186,6 +217,33 @@ impl AgentRuntime {
             output_tokens,
         });
 
+        Ok(())
+    }
+
+    /// Complete an ongoing HITL confirmation
+    pub async fn confirm_mcp_hitl(&self, thread_id: &str, user_response: &str, cfg: &crate::config::AppConfig) -> Result<()> {
+        let session_id = uuid::Uuid::new_v4().to_string();
+        let _ = self.inner.event_tx.send(AgentEvent::Init { session_id: session_id.clone() });
+
+        match crate::mcp_bridge::confirm_mcp(thread_id, user_response, cfg).await {
+            Some(crate::mcp_bridge::McpResponse::HitlRequest { thread_id, message }) => {
+                let _ = self.inner.event_tx.send(AgentEvent::HitlRequest { thread_id, message });
+            }
+            Some(crate::mcp_bridge::McpResponse::Text(text)) => {
+                // Return result to the UI
+                let _ = self.inner.event_tx.send(AgentEvent::Result {
+                    text,
+                    session_id,
+                    input_tokens: 0,
+                    output_tokens: 0,
+                });
+            }
+            None => {
+                let _ = self.inner.event_tx.send(AgentEvent::Error {
+                    message: "Failed to confirm action via MCP.".to_string(),
+                });
+            }
+        }
         Ok(())
     }
 

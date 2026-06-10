@@ -232,6 +232,7 @@ pub fn App() -> Element {
     }
 
     // ── Start agent runtime if enabled ───────────────────────────────────────────────
+    let proactive_engine_for_effect = proactive_engine.clone();
     use_hook(move || {
         let cfg = config.read().clone();
         // Initialize native Agent Runtime
@@ -263,10 +264,17 @@ pub fn App() -> Element {
         // Consume ProactiveEvent → update suggestions signal
         let mut sug_sig = suggestions.clone();
         let mut rx = proactive_rx;
+        let cfg_for_notif = config.clone();
         spawn(async move {
             loop {
                 match rx.recv().await {
                     Ok(ProactiveEvent::NewSuggestion(s)) => {
+                        // Send Windows Toast notification for every suggestion
+                        let notif_cfg = cfg_for_notif.read().clone();
+                        if notif_cfg.proactive_toast_notifications {
+                            crate::notifications::send_suggestion(&s.text, s.priority);
+                        }
+
                         let mut list = sug_sig.read().clone();
                         // Evict expired and keep max 5
                         list.retain(|x: &crate::proactive::Suggestion| !x.is_expired());
@@ -285,6 +293,7 @@ pub fn App() -> Element {
                 }
             }
         });
+
     });
 
     // Kick off the sidecar health poller once
@@ -296,13 +305,14 @@ pub fn App() -> Element {
 
     // Kick off periodic screen capture if enabled in config (runs once on mount)
     let capture_started = use_signal(|| false);
+    let ctx_watcher_started = use_signal(|| false);
     use_effect(move || {
         let cfg = config.read().clone();
         let db_snap = db.read().clone();
         tracing::info!("[APP] screen_capture_enabled={} capture_interval={}s",
             cfg.screen_capture_enabled, cfg.capture_interval_secs);
         if cfg.screen_capture_enabled && !*capture_started.read() {
-            if let Some(Db(d)) = db_snap {
+            if let Some(Db(d)) = db_snap.clone() {
                 let interval_secs = cfg.capture_interval_secs.max(1);
                 tracing::info!("[APP] Spawning screen capture task (every {interval_secs}s)");
                 capture_started.clone().set(true);
@@ -313,7 +323,27 @@ pub fn App() -> Element {
                 tracing::warn!("[APP] Screen capture enabled but DB not open");
             }
         }
+
+        // Spawn context watcher alongside capture (if not already started)
+        if !*ctx_watcher_started.read() {
+            if let Some(Db(d)) = db_snap {
+                ctx_watcher_started.clone().set(true);
+                let pe = proactive_engine_for_effect.clone();
+                let _cfg_for_watcher = config.read().clone();
+                let db_for_watcher = d.clone();
+                tracing::info!("[APP] Spawning context watcher task");
+                spawn(async move {
+                    crate::context_watcher::run_context_watcher(
+                        db_for_watcher,
+                        (*pe).clone(),
+                        move || crate::config::AppConfig::load(),
+                    )
+                    .await;
+                });
+            }
+        }
     });
+
 
     // ── Create thread-safe channels for secondary window synchronization ──────
     let (
@@ -359,6 +389,8 @@ pub fn App() -> Element {
         let mut vh_action = voice_history.clone();
         let mut start_rec_action = start_rec.clone();
         let mut sp = suggestion_prompt.clone();
+        let rt_action = runtime.clone();
+        let cfg_action = config.clone();
         
         let mut last_toggle = std::time::Instant::now() - std::time::Duration::from_secs(5);
         spawn(async move {
@@ -385,7 +417,23 @@ pub fn App() -> Element {
                         }
                     }
                     crate::components::character_window::CharacterAction::SuggestionAction(prompt_text) => {
-                        sp.set(Some(prompt_text));
+                        if prompt_text.starts_with("HITL_CONFIRM:") {
+                            let thread_id = prompt_text.replace("HITL_CONFIRM:", "");
+                            let rt = rt_action.clone();
+                            let current_cfg = cfg_action.read().clone();
+                            spawn(async move {
+                                let _ = rt.read().confirm_mcp_hitl(&thread_id, "confirm", &current_cfg).await;
+                            });
+                        } else if prompt_text.starts_with("HITL_REJECT:") {
+                            let thread_id = prompt_text.replace("HITL_REJECT:", "");
+                            let rt = rt_action.clone();
+                            let current_cfg = cfg_action.read().clone();
+                            spawn(async move {
+                                let _ = rt.read().confirm_mcp_hitl(&thread_id, "reject", &current_cfg).await;
+                            });
+                        } else {
+                            sp.set(Some(prompt_text));
+                        }
                     }
                     crate::components::character_window::CharacterAction::SpeechFinished => {
                         if *cvm_action.read() {

@@ -583,6 +583,146 @@ pub fn SettingsPage() -> Element {
                     }
                 }
             }
+
+            // ── Voice (TTS) section ────────────────────────────────────────────
+            section { class: "settings-section",
+                h2 { "🔊 Voice (TTS)" }
+                p { class: "settings-desc",
+                    "Omi speaks responses aloud using your OpenAI API key. No Firebase login required."
+                }
+                div { class: "settings-row",
+                    label { class: "settings-label", "TTS Voice" }
+                    select {
+                        class: "settings-input",
+                        value: "{config.read().openai_tts_voice}",
+                        onchange: move |e| {
+                            config.write().openai_tts_voice = e.value();
+                            let _ = config.read().save();
+                        },
+                        option { value: "alloy", "alloy (neutral)" }
+                        option { value: "echo", "echo (male)" }
+                        option { value: "fable", "fable (warm)" }
+                        option { value: "onyx", "onyx (deep)" }
+                        option { value: "nova", "nova (female)" }
+                        option { value: "shimmer", "shimmer (soft)" }
+                    }
+                }
+                div { class: "settings-row",
+                    span { class: "settings-label", "Status" }
+                    span { class: "settings-value",
+                        if config.read().openai_api_key.is_empty() {
+                            "⚠️ Set OpenAI API key above to enable TTS"
+                        } else {
+                            "✅ OpenAI TTS ready"
+                        }
+                    }
+                }
+            }
+
+            // ── Companion Intelligence section ─────────────────────────────────
+            section { class: "settings-section",
+                h2 { "🧠 Companion Intelligence" }
+                p { class: "settings-desc",
+                    "Omi watches your screen and proactively nudges you when it notices \
+                     tone issues in emails, bugs in code, or important context."
+                }
+                div { class: "settings-row",
+                    label { class: "settings-label", "Context Watcher" }
+                    label { class: "toggle",
+                        input {
+                            r#type: "checkbox",
+                            checked: config.read().context_watcher_enabled,
+                            onchange: move |e| {
+                                config.write().context_watcher_enabled = e.checked();
+                                let _ = config.read().save();
+                            },
+                        }
+                        span { class: "toggle-slider" }
+                    }
+                }
+                div { class: "settings-row",
+                    label { class: "settings-label", "Analysis Interval (sec)" }
+                    input {
+                        class: "settings-input settings-input-sm",
+                        r#type: "number",
+                        min: "10",
+                        max: "300",
+                        value: "{config.read().context_watcher_interval_secs}",
+                        onchange: move |e| {
+                            if let Ok(v) = e.value().parse::<u64>() {
+                                config.write().context_watcher_interval_secs = v.max(10).min(300);
+                                let _ = config.read().save();
+                            }
+                        },
+                    }
+                }
+                div { class: "settings-row",
+                    label { class: "settings-label", "Desktop Toast Notifications" }
+                    label { class: "toggle",
+                        input {
+                            r#type: "checkbox",
+                            checked: config.read().proactive_toast_notifications,
+                            onchange: move |e| {
+                                config.write().proactive_toast_notifications = e.checked();
+                                let _ = config.read().save();
+                            },
+                        }
+                        span { class: "toggle-slider" }
+                    }
+                }
+            }
+
+            // ── Google MCP Tools section ───────────────────────────────────────
+            section { class: "settings-section",
+                h2 { "🔗 Google MCP Tools" }
+                p { class: "settings-desc",
+                    "Connect Omi to Gmail, Google Calendar, and Drive. \
+                     Requires Python + mcp/backend dependencies installed."
+                }
+                div { class: "settings-row",
+                    label { class: "settings-label", "Enable Gmail / Calendar / Drive" }
+                    label { class: "toggle",
+                        input {
+                            r#type: "checkbox",
+                            checked: config.read().mcp_enabled,
+                            onchange: move |e| {
+                                config.write().mcp_enabled = e.checked();
+                                let _ = config.read().save();
+                            },
+                        }
+                        span { class: "toggle-slider" }
+                    }
+                }
+                div { class: "settings-row",
+                    label { class: "settings-label", "MCP Backend Path" }
+                    input {
+                        class: "settings-input",
+                        r#type: "text",
+                        placeholder: "Auto-detect (leave empty)",
+                        value: "{config.read().mcp_backend_path}",
+                        onchange: move |e| {
+                            config.write().mcp_backend_path = e.value();
+                            let _ = config.read().save();
+                        },
+                    }
+                }
+                div { class: "settings-row",
+                    span { class: "settings-label", "Status" }
+                    span { class: "settings-value",
+                        if !config.read().mcp_enabled {
+                            "Disabled"
+                        } else {
+                            "✅ Will start on first Google query"
+                        }
+                    }
+                }
+                div { class: "settings-row",
+                    span { class: "settings-label", "Setup" }
+                    span { class: "settings-value settings-hint",
+                        "Run: cd mcp/backend && pip install -r requirements.txt && python scripts/generate_tokens.py"
+                    }
+                }
+            }
         }
     }
 }

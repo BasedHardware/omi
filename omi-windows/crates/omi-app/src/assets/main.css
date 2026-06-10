@@ -1277,3 +1277,19 @@ body {
   padding: 1px 3px;
   border-radius: 3px;
 }
+
+/* ── Settings extras ─────────────────────────────────────────────── */
+.settings-desc {
+  color: var(--text-secondary);
+  font-size: 12px;
+  margin-bottom: 12px;
+  line-height: 1.5;
+}
+
+.settings-hint {
+  color: var(--text-muted);
+  font-size: 11px;
+  font-family: 'Cascadia Code', 'Consolas', monospace;
+  word-break: break-all;
+}
+

@@ -6,15 +6,20 @@ mod auth;
 mod capture;
 mod components;
 mod config;
+mod context_watcher;
 mod google_calendar;
 mod hooks;
 mod hotkey;
 mod llm;
+mod mcp_bridge;
+mod notifications;
 mod pages;
 mod proactive;
 mod recording;
 mod sidecar;
+mod tts_engine;
 mod tray;
+
 
 pub const MAIN_CSS: &str = include_str!("assets/main.css");
 
