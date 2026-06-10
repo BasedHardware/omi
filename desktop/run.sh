@@ -590,11 +590,12 @@ if [ -n "$SIGN_IDENTITY" ]; then
     NODE_BUNDLE_DIR="$APP_BUNDLE/Contents/Resources/Omi Computer_Omi Computer.bundle"
     NODE_BIN="$NODE_BUNDLE_DIR/node"
     if [ -f "$NODE_BIN" ]; then
-        # Sign any libnode dylib staged alongside the binary (Homebrew dynamic builds)
+        # Sign any libnode dylib staged alongside the binary (Homebrew dynamic builds).
+        # libnode contains V8 JIT code, so it needs the same entitlements as the node binary.
         for libnode_dylib in "$NODE_BUNDLE_DIR"/libnode.*.dylib; do
             [ -f "$libnode_dylib" ] || continue
             substep "Signing $(basename "$libnode_dylib")"
-            codesign --force --options runtime --sign "$SIGN_IDENTITY" "$libnode_dylib"
+            codesign --force --options runtime --entitlements Desktop/Node.entitlements --sign "$SIGN_IDENTITY" "$libnode_dylib"
         done
         substep "Signing bundled node binary"
         codesign --force --options runtime --entitlements Desktop/Node.entitlements --sign "$SIGN_IDENTITY" "$NODE_BIN"
