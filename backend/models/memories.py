@@ -607,3 +607,81 @@ class MemoryDB(Memory):
         )
         memory_db.scoring = MemoryDB.calculate_score(memory_db)
         return memory_db
+
+
+class ShortTermMemory(Memory):
+    id: str
+    uid: str
+    created_at: datetime
+    updated_at: datetime
+    evidence: List[Evidence] = Field(default_factory=list)
+    status: str = "pending_consolidation"
+    allowed_uses: List[str] = Field(default_factory=lambda: ["retrieval", "consolidation"])
+    scope: str = "global"
+    source_signal: str = "unknown"
+    consolidated_at: Optional[datetime] = None
+    consolidated_commit_id: Optional[str] = None
+    soft_pruned_at: Optional[datetime] = None
+
+    @staticmethod
+    def from_memory(
+        memory: Memory,
+        uid: str,
+        *,
+        source_id: Optional[str],
+        source_type: str,
+        source_signal: str,
+        artifact_ref: Optional[Dict[str, Any]] = None,
+        extractor_id: str = "short_term_extractor",
+        extractor_version: str = "v1",
+        subject_entity_id: Optional[str] = None,
+        subject_attribution: Optional[SubjectAttribution] = None,
+        scope: str = "global",
+        importance: Optional[float] = None,
+    ) -> 'ShortTermMemory':
+        now = datetime.now(timezone.utc)
+        proposition = _coerce_proposition(memory)
+        resolved_subject = subject_entity_id or proposition.get('subject_entity_id')
+        resolved_attribution = (
+            subject_attribution or proposition.get('subject_attribution') or memory.subject_attribution
+        )
+        evidence = Evidence.from_source(
+            source_id=source_id,
+            source_type=source_type,
+            source_signal=source_signal,
+            extractor_id=extractor_id,
+            extractor_version=extractor_version,
+            artifact_ref=artifact_ref,
+            independence_group=source_id,
+            created_at=now,
+        )
+        confidence_fields = confidence_fields_for_evidence([evidence], resolved_attribution)
+        qualifiers = proposition.get('qualifiers') or {}
+        qualifiers.setdefault('valid_from', now)
+        short_term = ShortTermMemory(
+            id=document_id_from_seed(f"short-term|{uid}|{source_id}|{memory.content}"),
+            uid=uid,
+            content=memory.content,
+            category=memory.category,
+            visibility=memory.visibility,
+            tags=memory.tags,
+            headline=memory.headline,
+            predicate=proposition.get('predicate'),
+            arguments=proposition.get('arguments') or {},
+            subject_entity_id=resolved_subject,
+            subject_attribution=resolved_attribution,
+            object_entity_ids=proposition.get('object_entity_ids') or [],
+            qualifiers=qualifiers,
+            capture_confidence=confidence_fields['capture_confidence'],
+            veracity=confidence_fields['veracity'],
+            uncertainty_reasons=confidence_fields['uncertainty_reasons'],
+            durability=memory.durability,
+            created_at=now,
+            updated_at=now,
+            evidence=[evidence],
+            source_signal=source_signal,
+            scope=scope,
+        )
+        if importance is not None:
+            short_term.qualifiers['importance'] = importance
+        return short_term

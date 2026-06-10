@@ -33,6 +33,14 @@ class Memories(BaseModel):
     )
 
 
+class HighRecallMemories(BaseModel):
+    facts: List[Memory] = Field(
+        min_items=0,
+        description="List of **new** memories. Include all memory-worthy facts from the conversation.",
+        default=[],
+    )
+
+
 class MemoriesByTexts(BaseModel):
     facts: List[Memory] = Field(
         description="List of **new** facts. If any",
@@ -63,6 +71,7 @@ def new_memories_extractor(
     user_name: Optional[str] = None,
     memories_str: Optional[str] = None,
     language: Optional[str] = None,
+    high_recall: bool = False,
 ) -> List[Memory]:
     # print('new_memories_extractor', uid, 'segments', len(segments), user_name, 'len(memories_str)', len(memories_str))
     if user_name is None or memories_str is None:
@@ -80,9 +89,9 @@ def new_memories_extractor(
     language_instruction = _get_language_instruction(uid, language)
 
     try:
-        parser = PydanticOutputParser(pydantic_object=Memories)
+        parser = PydanticOutputParser(pydantic_object=HighRecallMemories if high_recall else Memories)
         chain = extract_memories_prompt | get_llm('memories') | parser
-        response: Memories = chain.invoke(
+        response: Memories | HighRecallMemories = chain.invoke(
             {
                 'user_name': user_name,
                 'conversation': content,

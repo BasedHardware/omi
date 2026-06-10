@@ -13,6 +13,7 @@ from fastapi import HTTPException
 from database import redis_db
 from database.auth import get_user_name
 import database.memories as memories_db
+import database.short_term_memories as short_term_db
 import database.conversations as conversations_db
 import database.notifications as notification_db
 import database.users as users_db
@@ -34,7 +35,7 @@ from database.apps import record_app_usage, get_omi_personas_by_uid_db, get_app_
 from database.vector_db import upsert_vector2, update_vector_metadata, upsert_transcript_chunk_vectors
 from utils.conversations.transcript_chunks import build_transcript_chunks
 from models.app import App, UsageHistoryType
-from models.memories import MemoryDB, Memory, render_memory
+from models.memories import MemoryDB, Memory, ShortTermMemory, render_memory
 from models.calendar_context import CalendarMeetingContext
 from models.conversation import (
     AppResult,
@@ -461,6 +462,7 @@ def _extract_memories_inner(uid: str, conversation: Conversation):
 
     language = users_db.get_user_language_preference(uid)
     new_memories: List[Memory] = []
+    short_term_memories_to_save: List[Memory] = []
 
     # Extract memories based on conversation source
     if conversation.source == ConversationSource.external_integration:
@@ -468,9 +470,17 @@ def _extract_memories_inner(uid: str, conversation: Conversation):
         if text_content and len(text_content) > 0:
             text_source = conversation.external_data.get('text_source', 'other')
             new_memories = extract_memories_from_text(uid, text_content, text_source, language=language)
+            short_term_memories_to_save = new_memories
     else:
         # For regular conversations with transcript segments
         new_memories = new_memories_extractor(uid, conversation.transcript_segments, language=language)
+        if _short_term_shadow_enabled():
+            short_term_memories_to_save = new_memories_extractor(
+                uid,
+                conversation.transcript_segments,
+                language=language,
+                high_recall=True,
+            )
 
     is_locked = conversation.is_locked
     parsed_memories = []
@@ -479,6 +489,24 @@ def _extract_memories_inner(uid: str, conversation: Conversation):
     # Cheap exact-duplicate guard within this batch (avoids redundant conflict LLM calls).
     seen_norm = set()
     subject_entity_id, subject_attribution = infer_subject_from_segments(conversation.transcript_segments)
+    if _short_term_shadow_enabled():
+        short_term_db.save_short_term_memories(
+            uid,
+            [
+                ShortTermMemory.from_memory(
+                    memory,
+                    uid,
+                    source_id=conversation.id,
+                    source_type="conversation",
+                    source_signal="transcription",
+                    artifact_ref=_transcript_artifact_ref(conversation),
+                    extractor_id="new_memories_extractor",
+                    subject_entity_id=subject_entity_id,
+                    subject_attribution=subject_attribution,
+                ).model_dump()
+                for memory in short_term_memories_to_save
+            ],
+        )
 
     for memory in new_memories:
         norm = ' '.join((memory.content or '').lower().split())
@@ -614,6 +642,10 @@ def _transcript_artifact_ref(conversation: Conversation) -> dict:
         "start": min((segment.start for segment in segments), default=None),
         "end": max((segment.end for segment in segments), default=None),
     }
+
+
+def _short_term_shadow_enabled() -> bool:
+    return os.getenv('OMI_MEMORY_SHORT_TERM_SHADOW_ENABLED', '').lower() in ('1', 'true', 'yes')
 
 
 def send_new_memories_notification(user_id: str, memories: [MemoryDB]):
