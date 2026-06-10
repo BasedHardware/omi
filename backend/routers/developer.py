@@ -121,8 +121,8 @@ class CleanerMemory(BaseModel):
 
     @field_validator('id', mode='before')
     def coerce_id(cls, value):
-        if value is None:
-            return ''
+        if not value and value != 0:
+            raise ValueError('id is required')
         return str(value)
 
     @field_validator('content', mode='before')
@@ -168,7 +168,10 @@ class CleanerMemory(BaseModel):
             except ValueError:
                 return None
         if isinstance(value, (int, float)) and not isinstance(value, bool):
-            return value
+            try:
+                return datetime.fromtimestamp(value, tz=timezone.utc)
+            except (OSError, OverflowError, ValueError):
+                return None
         return None
 
     @field_validator('user_review', mode='before')
