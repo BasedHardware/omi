@@ -6,6 +6,7 @@ from typing import Any, Callable, Dict, List, Optional
 
 from google.cloud.firestore_v1 import transactional
 
+from database import projection_repair
 from models.memories import confidence_fields_for_evidence
 from ._client import db
 
@@ -174,7 +175,7 @@ def append_commit(
     use_current_head: bool = False,
 ) -> Dict[str, Any]:
     transaction = db.transaction()
-    return _append_commit_transaction(
+    result = _append_commit_transaction(
         transaction,
         uid,
         parent_commit_id,
@@ -184,6 +185,9 @@ def append_commit(
         projection_writer,
         use_current_head,
     )
+    if result.get('applied'):
+        projection_repair.enqueue_projection_repairs(uid, result.get('commit'))
+    return result
 
 
 def append_commit_with_builder(
@@ -196,7 +200,7 @@ def append_commit_with_builder(
     use_current_head: bool = False,
 ) -> Dict[str, Any]:
     transaction = db.transaction()
-    return _append_commit_with_builder_transaction(
+    result = _append_commit_with_builder_transaction(
         transaction,
         uid,
         parent_commit_id,
@@ -205,6 +209,9 @@ def append_commit_with_builder(
         commit_time,
         use_current_head,
     )
+    if result.get('applied'):
+        projection_repair.enqueue_projection_repairs(uid, result.get('commit'))
+    return result
 
 
 @transactional

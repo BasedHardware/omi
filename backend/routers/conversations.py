@@ -398,7 +398,7 @@ def delete_conversation(
         # Tombstone associated memory evidence and remove vectors for payloads with no remaining active support.
         deletion_result = memories_db.delete_memories_for_conversation(uid, conversation_id)
         for memory_id in deletion_result.get('vector_delete_ids', []):
-            background_tasks.add_task(delete_memory_vector, uid, memory_id)
+            delete_memory_vector(uid, memory_id)
 
         # Delete associated action items
         action_items_db.delete_action_items_for_conversation(uid, conversation_id)

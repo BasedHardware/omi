@@ -17,7 +17,7 @@ if 'database._client' not in sys.modules:
 else:
     sys.modules['database._client'].db = getattr(sys.modules['database._client'], 'db', MagicMock())
 
-from database import memory_ledger  # noqa: E402
+from database import memory_ledger, projection_repair  # noqa: E402
 
 
 def _fact(fact_id, content, *, valid_from=None, valid_to=None):
@@ -219,3 +219,120 @@ def test_append_commit_to_history_rejects_sibling_heads():
         assert exc.current_head == first['commit']['commit_id']
     else:
         raise AssertionError('Expected same-parent sibling append to fail')
+
+
+def test_projection_repair_extracts_affected_fact_ids_and_metadata():
+    mutations = [
+        memory_ledger.add_fact({'id': 'm1', 'subject_entity_id': 'user', 'object_entity_ids': ['project']}),
+        memory_ledger.supersede_fact('m2', by='m1'),
+    ]
+
+    assert projection_repair.affected_fact_ids(mutations) == ['m1', 'm2']
+    assert projection_repair.projection_metadata_for_fact(
+        {
+            'id': 'm1',
+            'subject_entity_id': 'user',
+            'object_entity_ids': ['project'],
+            'qualifiers': {'scope': 'work', 'valid_from': '2026-06-01'},
+            'status': 'pending_review',
+            'redaction_status': 'active',
+        },
+        source_commit_id='commit1',
+    ) == {
+        'fact_id': 'm1',
+        'memory_id': 'm1',
+        'source_commit_id': 'commit1',
+        'projection_version': projection_repair.PROJECTION_VERSION,
+        'entity_ids': ['user', 'project'],
+        'valid_time': '2026-06-01',
+        'scope': 'work',
+        'epistemic_status': 'pending_review',
+        'source_tombstone_state': 'active',
+    }
+
+
+def test_reconcile_projection_detects_and_repairs_drift_to_zero():
+    facts = [
+        {'id': 'active', 'content': 'Active'},
+        {'id': 'retracted', 'content': None, 'invalid_at': datetime(2026, 6, 1, tzinfo=timezone.utc)},
+    ]
+
+    drift = projection_repair.reconcile_memory_projection('uid-1', facts, ['retracted'])
+    repaired = projection_repair.reconcile_memory_projection('uid-1', facts, ['active'])
+
+    assert drift['missing_upserts'] == ['active']
+    assert drift['stale_deletes'] == ['retracted']
+    assert drift['projection_fail_count'] == 2
+    assert repaired['drift_count'] == 0
+    assert repaired['projection_fail_count'] == 0
+
+
+def test_append_commit_enqueues_projection_repairs(monkeypatch):
+    queued = []
+    commit = memory_ledger.build_commit(None, [memory_ledger.add_fact({'id': 'm1'})])
+
+    monkeypatch.setattr(
+        memory_ledger,
+        '_append_commit_transaction',
+        lambda *args, **kwargs: {'commit': commit, 'applied': True},
+    )
+    monkeypatch.setattr(
+        memory_ledger.projection_repair,
+        'enqueue_projection_repairs',
+        lambda uid, item: queued.append((uid, item)) or ['repair'],
+    )
+
+    result = memory_ledger.append_commit('uid-1', None, commit['mutations'])
+
+    assert result['applied'] is True
+    assert queued == [('uid-1', commit)]
+
+
+def test_process_projection_repairs_applies_queued_vector_repairs(monkeypatch):
+    updates = []
+
+    class FakeDoc:
+        id = 'repair1'
+
+        @property
+        def reference(self):
+            return self
+
+        def to_dict(self):
+            return {'repair_id': 'repair1', 'fact_id': 'm1', 'status': 'queued'}
+
+        def update(self, payload):
+            updates.append(payload)
+
+    class FakeQuery:
+        def limit(self, value):
+            return self
+
+        def stream(self):
+            return [FakeDoc()]
+
+    class FakeCollection:
+        def document(self, value):
+            return self
+
+        def collection(self, value):
+            return self
+
+        def where(self, *args):
+            return FakeQuery()
+
+    class FakeDB:
+        def collection(self, value):
+            return FakeCollection()
+
+    monkeypatch.setattr(projection_repair, 'db', FakeDB())
+
+    result = projection_repair.process_projection_repairs(
+        'uid-1',
+        fact_loader=lambda fact_id: {'id': fact_id, 'invalid_at': datetime(2026, 6, 1, tzinfo=timezone.utc)},
+        repair_func=lambda uid, fact: 'delete' if fact and fact.get('invalid_at') else 'upsert',
+    )
+
+    assert result == {'repaired': ['repair1'], 'failed': [], 'processed': 1}
+    assert updates[0]['status'] == 'repaired'
+    assert updates[0]['repair_action'] == 'delete'

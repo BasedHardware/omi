@@ -6,6 +6,7 @@ from typing import List
 
 from pinecone import Pinecone
 
+from database import projection_repair
 from utils.llm.clients import embeddings
 import logging
 
@@ -155,7 +156,14 @@ def delete_vector(uid: str, conversation_id: str):
 MEMORIES_NAMESPACE = "ns2"
 
 
-def upsert_memory_vector(uid: str, memory_id: str, content: str, category: str, subject_entity_id: str | None = None):
+def upsert_memory_vector(
+    uid: str,
+    memory_id: str,
+    content: str,
+    category: str,
+    subject_entity_id: str | None = None,
+    projection_metadata: dict | None = None,
+):
     """
     Upsert a memory embedding to Pinecone.
     """
@@ -174,6 +182,12 @@ def upsert_memory_vector(uid: str, memory_id: str, content: str, category: str, 
             "created_at": int(datetime.now(timezone.utc).timestamp()),
         },
     }
+    data["metadata"].update(
+        projection_metadata
+        or memory_projection_metadata(
+            {'id': memory_id, 'category': category, 'subject_entity_id': subject_entity_id, 'status': 'accepted'}
+        )
+    )
     if subject_entity_id:
         data["metadata"]["subject_entity_id"] = subject_entity_id
     res = index.upsert(vectors=[data], namespace=MEMORIES_NAMESPACE)
@@ -209,6 +223,17 @@ def upsert_memory_vectors_batch(uid: str, items: List[dict]) -> int:
             "category": item['category'],
             "created_at": now_ts,
         }
+        metadata.update(
+            item.get('projection_metadata')
+            or memory_projection_metadata(
+                {
+                    'id': item['memory_id'],
+                    'category': item['category'],
+                    'subject_entity_id': item.get('subject_entity_id'),
+                    'status': item.get('status', 'accepted'),
+                }
+            )
+        )
         if item.get('subject_entity_id'):
             metadata['subject_entity_id'] = item['subject_entity_id']
         payload.append(
@@ -300,6 +325,51 @@ def delete_memory_vector(uid: str, memory_id: str):
     vector_id = f'{uid}-{memory_id}'
     result = index.delete(ids=[vector_id], namespace=MEMORIES_NAMESPACE)
     logger.info(f'delete_memory_vector {vector_id} {result}')
+
+
+def enqueue_projection_repair(uid: str, fact_id: str, reason: str, source_commit_id: str | None = None):
+    return projection_repair.enqueue_projection_repairs(
+        uid,
+        {
+            'commit_id': source_commit_id or 'manual',
+            'mutations': [{'type': reason, 'fact_id': fact_id}],
+        },
+    )
+
+
+def memory_projection_metadata(memory: dict, source_commit_id: str | None = None) -> dict:
+    return projection_repair.projection_metadata_for_fact(memory, source_commit_id=source_commit_id)
+
+
+def repair_memory_projection(uid: str, memory: dict | None) -> str:
+    if not memory or projection_repair.projection_action_for_fact(memory) == 'delete':
+        memory_id = (memory or {}).get('id')
+        if memory_id:
+            delete_memory_vector(uid, memory_id)
+        return 'delete'
+
+    upsert_memory_vector(
+        uid,
+        memory['id'],
+        memory.get('content', ''),
+        memory.get('category', 'system'),
+        subject_entity_id=memory.get('subject_entity_id'),
+        projection_metadata=memory_projection_metadata(memory),
+    )
+    return projection_repair.projection_action_for_fact(memory)
+
+
+def reconcile_projections(uid: str, facts: List[dict], vector_fact_ids: List[str]) -> dict:
+    return projection_repair.reconcile_memory_projection(uid, facts, vector_fact_ids)
+
+
+def process_projection_repair_queue(uid: str, fact_loader, limit: int = 100) -> dict:
+    return projection_repair.process_projection_repairs(
+        uid,
+        fact_loader=fact_loader,
+        repair_func=repair_memory_projection,
+        limit=limit,
+    )
 
 
 # ==========================================
