@@ -3,6 +3,11 @@ import sys
 from unittest.mock import MagicMock, patch
 
 os.environ.setdefault("ENCRYPTION_SECRET", "omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv")
+os.environ.setdefault('TWILIO_ACCOUNT_SID', 'ACtest123')
+os.environ.setdefault('TWILIO_AUTH_TOKEN', 'test_auth_token')
+os.environ.setdefault('TWILIO_API_KEY_SID', 'SKtest123')
+os.environ.setdefault('TWILIO_API_KEY_SECRET', 'test_api_secret')
+os.environ.setdefault('TWILIO_TWIML_APP_SID', 'APtest123')
 
 # Mock modules that initialize GCP/Firebase clients at import time
 _mock_firebase = MagicMock()
@@ -14,6 +19,11 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from tests.unit.twilio_stub import install_twilio_stub
+
+install_twilio_stub()
+
+import routers.phone_calls as phone_calls_router
 from routers.phone_calls import router, _redact_phone, E164_PATTERN
 
 # ---------------------------------------------------------------------------
@@ -22,6 +32,26 @@ from routers.phone_calls import router, _redact_phone, E164_PATTERN
 
 TEST_UID = 'test-uid-123'
 TEST_UID_OTHER = 'test-uid-other'
+
+
+def _make_quota_snapshot():
+    snapshot = MagicMock()
+    snapshot.has_access = True
+    snapshot.is_paid = True
+    snapshot.max_duration_seconds = None
+    snapshot.allowed_countries = []
+    return snapshot
+
+
+@pytest.fixture(autouse=True)
+def isolate_phone_call_quota(monkeypatch):
+    snapshot = _make_quota_snapshot()
+    usage_db = MagicMock()
+    monkeypatch.setattr(phone_calls_router, 'check_call_access', MagicMock(return_value=snapshot))
+    monkeypatch.setattr(phone_calls_router, 'get_quota_snapshot', MagicMock(return_value=snapshot))
+    monkeypatch.setattr(phone_calls_router, 'check_destination_allowed', MagicMock(return_value=None))
+    monkeypatch.setattr(phone_calls_router, 'phone_call_usage_db', usage_db)
+    return snapshot, usage_db
 
 
 def _make_app():
@@ -260,3 +290,17 @@ def test_twiml_success(mock_db, mock_check, mock_sig, client):
     body = resp.text
     assert '<Dial callerId="+15551234567">' in body
     assert '+15559876543' in body
+
+
+@patch('routers.phone_calls.validate_twilio_signature', return_value=True)
+@patch('routers.phone_calls.check_caller_id_verified', return_value=True)
+@patch('routers.phone_calls.phone_calls_db')
+def test_twiml_free_tier_counts_usage(mock_db, mock_check, mock_sig, client, isolate_phone_call_quota):
+    snapshot, usage_db = isolate_phone_call_quota
+    snapshot.is_paid = False
+    mock_db.get_primary_phone_number.return_value = {'phone_number': '+15551234567'}
+
+    resp = client.post('/v1/phone/twiml', data={'To': '+15559876543', 'From': f'client:{TEST_UID}', 'CallId': 'C1'})
+
+    assert resp.status_code == 200
+    usage_db.increment_current_month.assert_called_once_with(TEST_UID)
