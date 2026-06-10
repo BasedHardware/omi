@@ -7,6 +7,9 @@ Verifies that:
 """
 
 import asyncio
+import importlib
+import sys
+import types
 import unittest
 from unittest.mock import patch, MagicMock
 
@@ -15,13 +18,34 @@ from fastapi.testclient import TestClient
 from firebase_admin.auth import InvalidIdTokenError
 from starlette.websockets import WebSocketDisconnect
 
-from utils.other.endpoints import get_current_user_uid_ws_listen, get_current_user_uid_ws, get_current_user_uid
+database_users_stub = types.ModuleType('database.users')
+database_users_stub.record_user_platform = MagicMock()
+original_database_users = sys.modules.get('database.users')
+sys.modules['database.users'] = database_users_stub
+
+try:
+    endpoints = importlib.import_module('utils.other.endpoints')
+    endpoints.record_user_platform = database_users_stub.record_user_platform
+    get_current_user_uid_ws_listen = endpoints.get_current_user_uid_ws_listen
+    get_current_user_uid_ws = endpoints.get_current_user_uid_ws
+    get_current_user_uid = endpoints.get_current_user_uid
+finally:
+    if original_database_users is None:
+        sys.modules.pop('database.users', None)
+    else:
+        sys.modules['database.users'] = original_database_users
 
 
-class TestWebSocketAuthListen(unittest.TestCase):
+class WebSocketAuthTestCase(unittest.TestCase):
+    def setUp(self):
+        database_users_stub.record_user_platform.reset_mock()
+
+
+class TestWebSocketAuthListen(WebSocketAuthTestCase):
     """Test get_current_user_uid_ws_listen — auth-only, no rate limiter (used by /v4/listen)."""
 
     def setUp(self):
+        super().setUp()
         self.app = FastAPI()
 
         @self.app.websocket("/ws-listen")
@@ -87,10 +111,11 @@ class TestWebSocketAuthListen(unittest.TestCase):
         mock_lock.assert_not_called()
 
 
-class TestWebSocketAuthWithRateLimit(unittest.TestCase):
+class TestWebSocketAuthWithRateLimit(WebSocketAuthTestCase):
     """Test get_current_user_uid_ws — auth + rate limiting."""
 
     def setUp(self):
+        super().setUp()
         self.app = FastAPI()
 
         @self.app.websocket("/ws-ratelimited")
@@ -168,7 +193,7 @@ class TestWebSocketAuthWithRateLimit(unittest.TestCase):
         mock_lock.assert_not_called()
 
 
-class TestWebSocketCloseFrameBehavior(unittest.TestCase):
+class TestWebSocketCloseFrameBehavior(WebSocketAuthTestCase):
     """Test that WebSocketException actually sends ASGI close message (vs HTTPException which doesn't)."""
 
     def test_ws_exception_sends_close_message(self):
@@ -275,14 +300,14 @@ class TestWebSocketCloseFrameBehavior(unittest.TestCase):
         self.assertEqual(len(close_messages), 0, f"HTTPException should not send close frame, got: {sent_messages}")
 
 
-class TestListenEndpointNotAffectWebListen(unittest.TestCase):
+class TestListenEndpointNotAffectWebListen(WebSocketAuthTestCase):
     """Verify /v4/listen uses WS auth (no rate limiter) and /v4/web/listen is unchanged (source-level check)."""
 
     def _read_transcribe_source(self):
         import os
 
         path = os.path.join(os.path.dirname(__file__), '..', '..', 'routers', 'transcribe.py')
-        with open(path) as f:
+        with open(path, encoding='utf-8') as f:
             return f.read()
 
     def test_listen_handler_uses_ws_listen_auth(self):

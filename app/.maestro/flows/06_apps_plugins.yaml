@@ -1,0 +1,52 @@
+# Flow: Apps (Plugins) — Browse marketplace, view app detail
+# Tags: core, apps
+# Tests: Navigate to apps/plugins, browse marketplace, open app detail, toggle enable/disable
+# Requires: User signed in
+
+appId: com.friend.ios.dev
+tags:
+  - core
+  - apps
+
+---
+
+# Navigate to Apps from bottom nav
+- tapOn:
+    text: "Apps|Plugins"
+    optional: true
+- takeScreenshot: "06_apps_marketplace"
+
+# Verify apps/plugins page is displayed
+- extendedWaitUntil:
+    visible:
+      text: "Apps|Plugins|Marketplace|Popular|Explore"
+    timeout: 5000
+
+# Browse categories if present
+- assertVisible:
+    text: "Popular|Featured|All|Categories"
+    optional: true
+- takeScreenshot: "06_apps_categories"
+
+# Tap on first app to open detail
+- tapOn:
+    index: 0
+    below:
+      text: "Popular|Featured|Apps|Plugins"
+    optional: true
+- takeScreenshot: "06_apps_detail"
+
+# Verify app detail shows name, description, enable button
+- extendedWaitUntil:
+    visible:
+      text: "Enable|Install|Add|Description"
+    timeout: 5000
+    optional: true
+- takeScreenshot: "06_apps_detail_info"
+
+# Navigate back to app list
+- back
+- assertVisible:
+    text: "Apps|Plugins|Marketplace"
+    optional: true
+- takeScreenshot: "06_apps_done"

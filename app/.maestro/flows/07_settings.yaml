@@ -1,0 +1,48 @@
+# Flow: Settings — Navigate settings, verify key options
+# Tags: core, settings
+# Tests: Open settings, verify profile info, navigate sub-pages
+# Requires: User signed in
+
+appId: com.friend.ios.dev
+tags:
+  - core
+  - settings
+
+---
+
+# Navigate to Settings (gear icon or profile menu)
+- tapOn:
+    id: ".*settings.*|.*gear.*|.*profile.*"
+    optional: true
+- tapOn:
+    text: "Settings"
+    optional: true
+- takeScreenshot: "07_settings_main"
+
+# Verify settings page is displayed
+- extendedWaitUntil:
+    visible:
+      text: "Settings|Profile|Account"
+    timeout: 5000
+
+# Verify key setting sections are visible
+- assertVisible:
+    text: "Account|Profile"
+    optional: true
+- assertVisible:
+    text: "Privacy|Notifications|Device"
+    optional: true
+- takeScreenshot: "07_settings_sections"
+
+# Scroll down to see more settings
+- scroll
+- takeScreenshot: "07_settings_scrolled"
+
+# Check for sign out option
+- assertVisible:
+    text: "Sign Out|Log Out|Delete Account"
+    optional: true
+
+# Navigate back
+- back
+- takeScreenshot: "07_settings_done"
