@@ -73,6 +73,8 @@ async def run_export(args: argparse.Namespace) -> None:
             "started_at": manifest.get("started_at") or _now_iso(),
             "updated_at": _now_iso(),
             "model_client": "production-like",
+            "high_recall": args.high_recall,
+            "typed": args.typed,
             "max_events_per_call": args.max_events_per_call,
             "memory_snapshot_limit": args.memory_snapshot_limit,
             "session_count": len(session_items),
@@ -82,7 +84,11 @@ async def run_export(args: argparse.Namespace) -> None:
     _write_json(run_dir / "manifest.json", manifest)
 
     pipeline = CoreMemoryPipeline(
-        model_client=ProductionLikeMemoryModelClient(max_events_per_call=args.max_events_per_call)
+        model_client=ProductionLikeMemoryModelClient(
+            max_events_per_call=args.max_events_per_call,
+            high_recall=args.high_recall,
+            typed=args.typed,
+        )
     )
     completed = 0
     failed = 0
@@ -422,6 +428,16 @@ def main() -> None:
     parser.add_argument("--actor-id", default="export-bigbeeme33")
     parser.add_argument("--actor-name", default="User")
     parser.add_argument("--max-events-per-call", type=int, default=80)
+    parser.add_argument(
+        "--high-recall",
+        action="store_true",
+        help="Use the benchmark/high-recall extraction schema instead of the capped production memory schema.",
+    )
+    parser.add_argument(
+        "--typed",
+        action="store_true",
+        help="Use the typed extraction prompt (predicate + argument slots) so layer-2 consolidation can merge.",
+    )
     parser.add_argument("--memory-snapshot-limit", type=int, default=0)
     parser.add_argument("--limit", type=int)
     parser.add_argument("--session-id")

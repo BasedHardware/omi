@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections import defaultdict
+import json
 import os
 from typing import Iterable
 
@@ -9,6 +10,10 @@ from langchain_openai import ChatOpenAI
 from models.transcript_segment import TranscriptSegment
 from pydantic import BaseModel, Field
 from utils.prompts import extract_memories_prompt
+from utils.memory_ingestion.adapters.typed_extraction_prompt import (
+    TYPED_PREDICATES,
+    typed_extract_memories_prompt,
+)
 from utils.memory_ingestion.ids import StableIdFactory
 from utils.memory_ingestion.models import (
     ActorDescriptor,
@@ -32,10 +37,55 @@ class ProductionLikeMemory(BaseModel):
     tags: list[str] = Field(default_factory=list)
     visibility: str = "private"
     headline: str | None = None
+    predicate: str | None = None
+    arguments: dict[str, object] = Field(default_factory=dict)
+    subject_entity_id: str | None = None
+    subject_attribution: str | None = None
+    object_entity_ids: list[str] = Field(default_factory=list)
+    qualifiers: dict[str, object] = Field(default_factory=dict)
+    capture_confidence: float | None = None
+    veracity: float | None = None
+    uncertainty_reasons: list[str] = Field(default_factory=list)
+    durability: str | None = None
 
 
 class ProductionLikeMemories(BaseModel):
-    facts: list[ProductionLikeMemory] = Field(default_factory=list)
+    facts: list[ProductionLikeMemory] = Field(default_factory=list, max_items=2)
+
+
+class HighRecallProductionLikeMemories(BaseModel):
+    facts: list[ProductionLikeMemory] = Field(
+        default_factory=list,
+        description="List of all memory-worthy facts from the conversation.",
+    )
+
+
+class TypedProductionLikeMemory(ProductionLikeMemory):
+    """Typed proposition variant; field descriptions steer the structured output."""
+
+    predicate: str | None = Field(
+        default=None,
+        description="Exactly one predicate from the fixed vocabulary in the prompt.",
+    )
+    arguments: dict[str, object] = Field(
+        default_factory=dict,
+        description="Named argument slots for the predicate, short literal strings.",
+    )
+    subject_attribution: str | None = Field(
+        default=None,
+        description="user | third_party | assistant_suggested",
+    )
+    uncertainty_reasons: list[str] = Field(
+        default_factory=list,
+        description="Uncertainty vocabulary from the prompt; empty when confident.",
+    )
+
+
+class TypedProductionLikeMemories(BaseModel):
+    facts: list[TypedProductionLikeMemory] = Field(
+        default_factory=list,
+        description="All memory-worthy facts from the conversation, as typed propositions.",
+    )
 
 
 class ProductionLikeMemoryModelClient(MemoryModelClient):
@@ -46,8 +96,10 @@ class ProductionLikeMemoryModelClient(MemoryModelClient):
     Firestore state or writing usage telemetry.
     """
 
-    def __init__(self, *, max_events_per_call: int = 250):
+    def __init__(self, *, max_events_per_call: int = 250, high_recall: bool = False, typed: bool = False):
         self.max_events_per_call = max_events_per_call
+        self.high_recall = high_recall
+        self.typed = typed
 
     async def extract_frames(
         self,
@@ -70,6 +122,8 @@ class ProductionLikeMemoryModelClient(MemoryModelClient):
                     user_name=user_name,
                     memories_str=memories_str,
                     language=pipeline_input.source.language,
+                    high_recall=self.high_recall,
+                    typed=self.typed,
                 )
                 for memory_index, memory in enumerate(memories):
                     source_events = [event.event_id for event in event_chunk]
@@ -91,12 +145,13 @@ class ProductionLikeMemoryModelClient(MemoryModelClient):
                     frame = MemoryEventFrame(
                         frame_type=_frame_type(memory.category),
                         subject=_actor_subject(pipeline_input.actor),
-                        predicate=_predicate(memory.category),
+                        predicate=_validated_predicate(memory) or _predicate(memory.category),
                         object=FrameObject(
                             object_type="literal",
                             value=memory.content,
                             confidence=calibration["confidence"],
                         ),
+                        arguments=_frame_arguments(memory.arguments, calibration["confidence"]),
                         canonical_text=memory.content,
                         original_text=None,
                         temporal=TemporalScope(kind="unknown"),
@@ -108,12 +163,15 @@ class ProductionLikeMemoryModelClient(MemoryModelClient):
                         evidence=evidence,
                         source_event_ids=source_events,
                         confidence=calibration["confidence"],
-                        uncertainty_reasons=calibration["uncertainty_reasons"],
+                        uncertainty_reasons=sorted(
+                            set(calibration["uncertainty_reasons"]) | set(_model_uncertainty_reasons(memory))
+                        ),
                         extraction=ExtractionMetadata(
                             extractor="omi_production_memory_extractor",
                             model="memories",
-                            prompt_version="utils.prompts.extract_memories_prompt",
+                            prompt_version=self._prompt_version(),
                             source_block_id=f"{conversation_id}:{chunk_index}",
+                            notes=self._extraction_notes(),
                         ),
                     )
                     frames.append(frame)
@@ -128,11 +186,28 @@ class ProductionLikeMemoryModelClient(MemoryModelClient):
         return frames
 
     def manifest(self, pipeline_input: MemoryPipelineInput) -> ModelManifest:
+        if self.typed:
+            version = "production_like_typed_high_recall.v1" if self.high_recall else "production_like_typed.v1"
+        else:
+            version = "production_like_high_recall.v1" if self.high_recall else "production_like.v1"
         return ModelManifest(
             extractor_model=pipeline_input.config.models.extractor_model or "memories",
-            provider_versions={"memory_ingestion": "production_like.v1"},
-            prompt_versions={"frame_extraction": "utils.prompts.extract_memories_prompt"},
+            provider_versions={"memory_ingestion": version},
+            prompt_versions={"frame_extraction": self._prompt_version()},
         )
+
+    def _prompt_version(self) -> str:
+        if self.typed:
+            return "utils.memory_ingestion.adapters.typed_extraction_prompt"
+        return "utils.prompts.extract_memories_prompt"
+
+    def _extraction_notes(self) -> list[str]:
+        notes = []
+        if self.high_recall:
+            notes.append("high_recall")
+        if self.typed:
+            notes.append("typed")
+        return notes
 
 
 def _user_name(actor: ActorDescriptor | None) -> str:
@@ -155,12 +230,21 @@ def _extract_memories_with_production_prompt(
     user_name: str,
     memories_str: str,
     language: str | None,
+    high_recall: bool,
+    typed: bool = False,
 ) -> list[ProductionLikeMemory]:
     content = TranscriptSegment.segments_as_string(segments, user_name=user_name, people=[])
     if not content or len(content) < 25:
         return []
-    parser = PydanticOutputParser(pydantic_object=ProductionLikeMemories)
-    chain = extract_memories_prompt | _memory_llm() | parser
+    if typed:
+        parser = PydanticOutputParser(pydantic_object=TypedProductionLikeMemories)
+        prompt = typed_extract_memories_prompt
+    else:
+        parser = PydanticOutputParser(
+            pydantic_object=HighRecallProductionLikeMemories if high_recall else ProductionLikeMemories
+        )
+        prompt = extract_memories_prompt
+    chain = prompt | _memory_llm() | parser
     response: ProductionLikeMemories = chain.invoke(
         {
             "user_name": user_name,
@@ -171,6 +255,45 @@ def _extract_memories_with_production_prompt(
         }
     )
     return response.facts
+
+
+_KNOWN_UNCERTAINTY_REASONS = {
+    "speaker_uncertain",
+    "inferred_not_stated",
+    "temporal_scope_unclear",
+    "low_quality_transcript",
+    "ambiguous_subject",
+    "conflicts_with_existing_memory",
+    "possible_duplicate",
+}
+
+
+def _validated_predicate(memory: ProductionLikeMemory) -> str | None:
+    if memory.predicate and memory.predicate in TYPED_PREDICATES:
+        return memory.predicate
+    return None
+
+
+def _model_uncertainty_reasons(memory: ProductionLikeMemory) -> list[str]:
+    return [reason for reason in memory.uncertainty_reasons or [] if reason in _KNOWN_UNCERTAINTY_REASONS]
+
+
+def _frame_arguments(arguments: dict[str, object], confidence: str) -> dict[str, FrameObject]:
+    return {
+        str(key): FrameObject(object_type="literal", value=_frame_argument_value(value), confidence=confidence)
+        for key, value in (arguments or {}).items()
+        if value is not None and value != ""
+    }
+
+
+def _frame_argument_value(value: object) -> object:
+    if isinstance(value, list):
+        return ", ".join(str(item) for item in value)
+    if isinstance(value, tuple):
+        return ", ".join(str(item) for item in value)
+    if isinstance(value, (str, int, float, bool, dict)) or value is None:
+        return value
+    return json.dumps(value, sort_keys=True, default=str)
 
 
 def _memory_llm():
@@ -211,7 +334,7 @@ def _calibration(memory: ProductionLikeMemory, events: list[RawContextEvent]) ->
         uncertainty_reasons.append("temporal_scope_unclear")
         review_required = True
 
-    third_party = _has_third_party_signal(text, events)
+    third_party = memory.subject_attribution == "third_party" or _has_third_party_signal(text, events)
     if third_party:
         confidence = "medium"
         categories = ["third_party_private_fact"]
