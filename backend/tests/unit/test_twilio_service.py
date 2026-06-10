@@ -40,6 +40,25 @@ def test_generate_access_token(mock_jwt):
     assert result['ttl'] == 600
 
 
+def test_twilio_stub_dial_appends_multiple_numbers():
+    from twilio.twiml.voice_response import Dial, VoiceResponse
+
+    dial = Dial(caller_id='+15550000000')
+    first_number = dial.number('+15551111111')
+    second_number = dial.number('+15552222222')
+
+    assert str(first_number) == '<Number>+15551111111</Number>'
+    assert str(second_number) == '<Number>+15552222222</Number>'
+
+    response = VoiceResponse()
+    response.append(dial)
+
+    assert (
+        str(response) == '<?xml version="1.0" encoding="utf-8"?><Response><Dial callerId="+15550000000">'
+        '<Number>+15551111111</Number><Number>+15552222222</Number></Dial></Response>'
+    )
+
+
 def test_validate_twilio_signature_valid():
     mock_validator = MagicMock()
     mock_validator.validate.return_value = True
