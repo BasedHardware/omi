@@ -540,33 +540,35 @@ def execute_tool(user_id: str, tool_name: str, arguments: dict) -> dict:
         if not query:
             raise ToolExecutionError("query is required")
 
-        limit = arguments.get("limit", 10)
+        try:
+            limit = parse_mcp_int(arguments.get("limit"), "limit", default=10, minimum=1, maximum=20)
+        except ValueError as e:
+            raise ToolExecutionError(str(e), code=-32602)
+        fetch_limit = min(limit * 3, 60)
 
-        matches = vector_db.find_similar_memories(user_id, query, threshold=0.0, limit=limit)
+        matches = vector_db.find_similar_memories(user_id, query, threshold=0.0, limit=fetch_limit)
         if not matches:
             return {"memories": []}
 
-        memory_ids = [m['memory_id'] for m in matches]
+        memory_ids = [m.get('memory_id') for m in matches if m.get('memory_id')]
+        if not memory_ids:
+            return {"memories": []}
         memories = memories_db.get_memories_by_ids(user_id, memory_ids)
 
-        # Build score lookup and filter out memories the user rejected or that were
-        # superseded/invalidated, then truncate locked content. Mirrors the REST MCP
-        # path (routers/mcp.py) so the SSE tool never surfaces stale/rejected facts.
-        score_map = {m['memory_id']: m.get('score', 0) for m in matches}
+        # Mirror the REST MCP path so SSE search never surfaces rejected, locked,
+        # or superseded facts, while fetching extra candidates before filtering.
+        score_map = {m.get('memory_id'): m.get('score', 0) for m in matches}
         results = []
         for mem in memories:
-            if mem.get('user_review') is False or mem.get('invalid_at') is not None:
+            if mem.get('user_review') is False or mem.get('is_locked', False) or mem.get('invalid_at') is not None:
                 continue
-            if mem.get('is_locked', False):
-                content = mem.get('content', '')
-                mem['content'] = (content[:70] + '...') if len(content) > 70 else content
             mem['relevance_score'] = round(score_map.get(mem.get('id'), 0), 4)
             results.append(mem)
 
         # Sort by relevance
         results.sort(key=lambda x: x.get('relevance_score', 0), reverse=True)
 
-        return {"memories": results}
+        return {"memories": results[:limit]}
 
     elif tool_name == "search_conversations":
         query = arguments.get("query")
