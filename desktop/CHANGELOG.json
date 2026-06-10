@@ -1,5 +1,7 @@
 {
-  "unreleased": [],
+  "unreleased": [
+    "Fixed the floating bar staying visible after notifications when \"Show floating bar\" is turned off"
+  ],
   "releases": [
     {
       "version": "0.11.459",
