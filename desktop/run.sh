@@ -587,8 +587,15 @@ if [ -n "$SIGN_IDENTITY" ]; then
     fi
     # Sign the bundled node binary with developer identity + Node.entitlements
     # (macOS requires executables inside app bundles to be properly signed)
-    NODE_BIN="$APP_BUNDLE/Contents/Resources/Omi Computer_Omi Computer.bundle/node"
+    NODE_BUNDLE_DIR="$APP_BUNDLE/Contents/Resources/Omi Computer_Omi Computer.bundle"
+    NODE_BIN="$NODE_BUNDLE_DIR/node"
     if [ -f "$NODE_BIN" ]; then
+        # Sign any libnode dylib staged alongside the binary (Homebrew dynamic builds)
+        for libnode_dylib in "$NODE_BUNDLE_DIR"/libnode.*.dylib; do
+            [ -f "$libnode_dylib" ] || continue
+            substep "Signing $(basename "$libnode_dylib")"
+            codesign --force --options runtime --sign "$SIGN_IDENTITY" "$libnode_dylib"
+        done
         substep "Signing bundled node binary"
         codesign --force --options runtime --entitlements Desktop/Node.entitlements --sign "$SIGN_IDENTITY" "$NODE_BIN"
     fi
