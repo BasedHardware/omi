@@ -8,7 +8,9 @@ from unittest.mock import patch, MagicMock
 import os
 import pytest
 import sys
+from datetime import timezone
 from types import ModuleType
+from zoneinfo import ZoneInfo
 
 os.environ.setdefault('OPENAI_API_KEY', 'sk-test-not-real')
 os.environ.setdefault('ENCRYPTION_SECRET', 'omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv')
@@ -27,8 +29,37 @@ class _AutoMockModule(ModuleType):
         return mock
 
 
+class _ToolWrapper:
+    """Tiny LangChain tool stand-in for tests that call `.invoke(...)`."""
+
+    def __init__(self, fn):
+        self.fn = fn
+        self.name = fn.__name__
+
+    def __call__(self, *args, **kwargs):
+        return self.fn(*args, **kwargs)
+
+    def invoke(self, args=None, config=None):
+        kwargs = dict(args or {})
+        if config is not None:
+            kwargs['config'] = config
+        return self.fn(**kwargs)
+
+
+def _tool(func=None, *args, **kwargs):
+    def decorator(fn):
+        return _ToolWrapper(fn)
+
+    if callable(func):
+        return decorator(func)
+    return decorator
+
+
 _stubs = [
+    'anthropic',
+    'av',
     'database._client',
+    'database.cache',
     'database.redis_db',
     'database.conversations',
     'database.memories',
@@ -46,13 +77,44 @@ _stubs = [
     'database.daily_summaries',
     'database.fair_use',
     'database.auth',
+    'database.llm_usage',
+    'database.phone_calls',
+    'deepgram',
+    'deepgram.clients',
+    'deepgram.clients.live',
+    'deepgram.clients.live.v1',
     'firebase_admin',
     'firebase_admin.messaging',
     'firebase_admin.auth',
     'google.cloud.firestore',
     'google.cloud.firestore_v1',
     'google.cloud.firestore_v1.FieldFilter',
+    'langchain_core',
+    'langchain_core.callbacks',
+    'langchain_core.language_models',
+    'langchain_core.output_parsers',
+    'langchain_core.outputs',
+    'langchain_core.prompts',
+    'langchain_core.runnables',
+    'langchain_core.tools',
+    'langchain_google_genai',
+    'langchain_openai',
+    'openai',
+    'PIL',
+    'PIL.Image',
     'pinecone',
+    'pycountry',
+    'pytz',
+    'scipy',
+    'scipy.spatial',
+    'scipy.spatial.distance',
+    'tiktoken',
+    'twilio',
+    'twilio.jwt',
+    'twilio.jwt.access_token',
+    'twilio.jwt.access_token.grants',
+    'twilio.request_validator',
+    'twilio.rest',
     'typesense',
     'opuslib',
     'pydub',
@@ -67,12 +129,23 @@ _stubs = [
     'utils.conversations.process_conversation',
     'utils.notifications',
     'utils.apps',
+    'utils.llm.clients',
     'utils.llm.memories',
     'utils.llm.chat',
+    'utils.llm.usage_tracker',
+    'websockets',
 ]
 for mod_name in _stubs:
     if mod_name not in sys.modules:
         sys.modules[mod_name] = _AutoMockModule(mod_name)
+
+# Concrete attributes used by imported modules during lightweight tests.
+sys.modules['langchain_core.callbacks'].BaseCallbackHandler = object
+sys.modules['langchain_core.outputs'].LLMResult = object
+sys.modules['langchain_core.runnables'].RunnableConfig = dict
+sys.modules['langchain_core.tools'].tool = _tool
+sys.modules['pytz'].timezone = ZoneInfo
+sys.modules['pytz'].utc = timezone.utc
 
 # Override specific attributes that need concrete values
 sys.modules['firebase_admin.auth'].InvalidIdTokenError = type('InvalidIdTokenError', (Exception,), {})
@@ -808,16 +881,18 @@ class TestScheduledDailySummaryLockFilter:
         unlocked_conv = _make_conversation(locked=False, conversation_id='conv-2')
         conversations_db.get_conversations = MagicMock(return_value=[locked_conv, unlocked_conv])
 
-        with patch('utils.other.notifications.try_acquire_daily_summary_lock', return_value=True):
-            with patch(
-                'utils.other.notifications.generate_comprehensive_daily_summary',
-                return_value={'headline': 'Test', 'day_emoji': '📅', 'overview': 'ok'},
-            ) as mock_gen:
-                daily_summaries_db.create_daily_summary = MagicMock(return_value='summary-1')
-                with patch('utils.other.notifications.send_notification'):
-                    from utils.other.notifications import _send_summary_notification
+        with patch('utils.other.notifications.is_trial_paywalled', return_value=False):
+            with patch('utils.other.notifications.try_acquire_daily_summary_lock', return_value=True):
+                with patch(
+                    'utils.other.notifications.generate_comprehensive_daily_summary',
+                    return_value={'headline': 'Test', 'day_emoji': '📅', 'overview': 'ok'},
+                ) as mock_gen:
+                    daily_summaries_db.create_daily_summary = MagicMock(return_value='summary-1')
+                    daily_summaries_db.get_daily_summary_by_date = MagicMock(return_value=None)
+                    with patch('utils.other.notifications.send_notification'):
+                        from utils.other.notifications import _send_summary_notification
 
-                    _send_summary_notification(('test-uid', 'token', 'UTC'))
+                        _send_summary_notification(('test-uid', 'token', 'UTC'))
 
         # generate_comprehensive_daily_summary must be called only with unlocked conversations
         mock_gen.assert_called_once()
@@ -828,14 +903,17 @@ class TestScheduledDailySummaryLockFilter:
     def test_scheduled_summary_skips_when_all_locked(self):
         """_send_summary_notification returns early when all conversations are locked."""
         import database.conversations as conversations_db
+        import database.daily_summaries as daily_summaries_db
 
         conversations_db.get_conversations = MagicMock(return_value=[_make_conversation(locked=True)])
+        daily_summaries_db.get_daily_summary_by_date = MagicMock(return_value=None)
 
-        with patch('utils.other.notifications.try_acquire_daily_summary_lock', return_value=True):
-            with patch('utils.other.notifications.generate_comprehensive_daily_summary') as mock_gen:
-                from utils.other.notifications import _send_summary_notification
+        with patch('utils.other.notifications.is_trial_paywalled', return_value=False):
+            with patch('utils.other.notifications.try_acquire_daily_summary_lock', return_value=True):
+                with patch('utils.other.notifications.generate_comprehensive_daily_summary') as mock_gen:
+                    from utils.other.notifications import _send_summary_notification
 
-                _send_summary_notification(('test-uid', 'token', 'UTC'))
+                    _send_summary_notification(('test-uid', 'token', 'UTC'))
 
         # Should not call LLM when no unlocked conversations remain
         mock_gen.assert_not_called()
@@ -1326,8 +1404,10 @@ class TestSuggestGoalLockFilter:
         mock_track.__exit__ = MagicMock(return_value=False)
 
         with patch('utils.llm.goals.track_usage', return_value=mock_track):
-            with patch('utils.llm.goals.llm_mini') as mock_llm:
+            with patch('utils.llm.goals.get_llm') as mock_get_llm:
+                mock_llm = MagicMock()
                 mock_llm.invoke.return_value = mock_llm_response
+                mock_get_llm.return_value = mock_llm
 
                 from utils.llm.goals import suggest_goal
 
