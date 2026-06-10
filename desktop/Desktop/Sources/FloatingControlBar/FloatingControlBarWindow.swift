@@ -1456,7 +1456,7 @@ class FloatingControlBarManager {
         // forever with "Show floating bar" off (#6972). The bar can also be
         // visible while disabled (e.g. a notification flushed right as an AI
         // conversation closes), so any presentation with the bar disabled
-        // must arm the re-hide.
+        // must arm the re-hide; dismissNotificationAndAdvanceQueue owns the reset.
         if !window.isVisible || !isEnabled {
             notificationWasTemporarilyShown = true
             if !window.isVisible {
