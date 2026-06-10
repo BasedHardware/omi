@@ -11,6 +11,8 @@ from datetime import datetime, timezone
 from types import ModuleType
 from unittest.mock import MagicMock
 
+import pytest
+
 os.environ.setdefault('OPENAI_API_KEY', 'sk-test-not-real')
 os.environ.setdefault('ENCRYPTION_SECRET', 'omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv')
 
@@ -557,10 +559,10 @@ class TestDevApiMemoriesHttpLayer:
         from routers.developer import CleanerMemory
 
         memory = CleanerMemory(
-            id=None,
+            id='mem-edge',
             content=None,
             category=None,
-            created_at={'bad': 'date'},
+            created_at=1736935200,
             updated_at=[],
             manually_added='1',
             reviewed='true',
@@ -568,12 +570,24 @@ class TestDevApiMemoriesHttpLayer:
             edited='',
         )
 
-        assert memory.id == ''
+        assert memory.id == 'mem-edge'
         assert memory.content == ''
         assert memory.category == 'interesting'
-        assert memory.created_at is None
+        assert memory.created_at == datetime(2025, 1, 15, 10, 0, 0, tzinfo=timezone.utc)
         assert memory.updated_at is None
         assert memory.manually_added is True
         assert memory.reviewed is True
         assert memory.user_review is False
         assert memory.edited is False
+
+    def test_cleaner_memory_rejects_empty_id(self):
+        """CleanerMemory should not serialize malformed responses with an empty id."""
+        from pydantic import ValidationError
+        from routers.developer import CleanerMemory
+
+        with pytest.raises(ValidationError):
+            CleanerMemory(
+                id=None,
+                content='legacy memory',
+                category='manual',
+            )
