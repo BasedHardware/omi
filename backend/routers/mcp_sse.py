@@ -549,10 +549,14 @@ def execute_tool(user_id: str, tool_name: str, arguments: dict) -> dict:
         memory_ids = [m['memory_id'] for m in matches]
         memories = memories_db.get_memories_by_ids(user_id, memory_ids)
 
-        # Build score lookup and filter locked
+        # Build score lookup and filter out memories the user rejected or that were
+        # superseded/invalidated, then truncate locked content. Mirrors the REST MCP
+        # path (routers/mcp.py) so the SSE tool never surfaces stale/rejected facts.
         score_map = {m['memory_id']: m.get('score', 0) for m in matches}
         results = []
         for mem in memories:
+            if mem.get('user_review') is False or mem.get('invalid_at') is not None:
+                continue
             if mem.get('is_locked', False):
                 content = mem.get('content', '')
                 mem['content'] = (content[:70] + '...') if len(content) > 70 else content
