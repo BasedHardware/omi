@@ -70,6 +70,11 @@ class _Finder(importlib.abc.MetaPathFinder, importlib.abc.Loader):
         pass
 
 
+_preserved_stub_modules = {
+    _n: sys.modules[_n] for _n in list(sys.modules) if any(_n == p or _n.startswith(p + '.') for p in _STUB)
+}
+for _n in _preserved_stub_modules:
+    sys.modules.pop(_n, None)
 _finder = _Finder()
 _clear_stubbed_modules()
 sys.meta_path.insert(0, _finder)
@@ -78,6 +83,7 @@ try:
 finally:
     sys.meta_path.remove(_finder)
     _clear_stubbed_modules()
+    sys.modules.update(_preserved_stub_modules)
 
 from fastapi import HTTPException  # noqa: E402
 

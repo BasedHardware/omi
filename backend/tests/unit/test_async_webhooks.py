@@ -33,7 +33,14 @@ _db_redis.r = MagicMock()
 
 _backend_dir = os.path.join(os.path.dirname(__file__), '..', '..')
 
-for mod_name in ["database", "database.notifications", "database.users", "database.folders", "database.conversations"]:
+for mod_name in [
+    "database",
+    "database.notifications",
+    "database.users",
+    "database.folders",
+    "database.conversations",
+    "database.webhook_health",
+]:
     if mod_name not in sys.modules:
         sys.modules[mod_name] = types.ModuleType(mod_name)
         if mod_name == "database":
@@ -44,6 +51,9 @@ sys.modules["database.users"].get_user_profile = MagicMock(return_value={"name":
 sys.modules["database.users"].get_people_by_ids = MagicMock(return_value=[])
 sys.modules["database.folders"].get_folders = MagicMock(return_value=[])
 sys.modules["database.conversations"].get_conversations = MagicMock(return_value=[])
+sys.modules["database.webhook_health"].record_dev_webhook_failure = MagicMock(return_value=False)
+sys.modules["database.webhook_health"].record_dev_webhook_success = MagicMock()
+sys.modules["database.webhook_health"]._DEV_FAILURE_THRESHOLD = 100
 
 if "utils.notifications" not in sys.modules:
     sys.modules["utils.notifications"] = types.ModuleType("utils.notifications")

@@ -34,6 +34,11 @@ if "utils.http_client" not in sys.modules:
 from models.conversation import Geolocation
 from utils.conversations.location import async_get_google_maps_location
 
+if "utils" in sys.modules and "utils.conversations" in sys.modules:
+    sys.modules["utils"].conversations = sys.modules["utils.conversations"]
+if "utils.conversations" in sys.modules and "utils.conversations.location" in sys.modules:
+    sys.modules["utils.conversations"].location = sys.modules["utils.conversations.location"]
+
 
 class TestAsyncCacheHit:
     """When Redis has cached data, return without calling Google API."""

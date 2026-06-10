@@ -135,6 +135,13 @@ _endpoints_mod.get_current_user_uid_no_byok_validation = lambda: "test-user"
 
 # Ensure utils.other has endpoints attr for `from utils.other import endpoints`
 sys.modules["utils.other"].endpoints = _endpoints_mod
+sys.modules.pop("utils.subscription", None)
+_utils_pkg = sys.modules.get("utils")
+if _utils_pkg is not None and hasattr(_utils_pkg, "subscription"):
+    delattr(_utils_pkg, "subscription")
+for _name in list(sys.modules):
+    if _name == "google" or _name.startswith("google."):
+        sys.modules.pop(_name, None)
 
 # Stripe — use real module but we'll mock Price.retrieve per-test
 import stripe

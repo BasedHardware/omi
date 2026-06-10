@@ -9,10 +9,19 @@ Covers:
 """
 
 import asyncio
+import sys
 import time
 from unittest.mock import patch
 
 import pytest
+
+for _module_name in ("utils.http_client", "utils.executors"):
+    sys.modules.pop(_module_name, None)
+_utils_pkg = sys.modules.get("utils")
+if _utils_pkg is not None:
+    for _attr in ("http_client", "executors"):
+        if hasattr(_utils_pkg, _attr):
+            delattr(_utils_pkg, _attr)
 
 from utils.http_client import (
     WebhookCircuitBreaker,
@@ -521,7 +530,9 @@ class TestCircuitBreakerAccessTracking:
         _webhook_circuit_breakers.clear()
         cb = get_webhook_circuit_breaker('https://test.test/hook')
         old_access = cb._last_access_time
-        time.sleep(0.01)
+        deadline = time.monotonic() + 0.1
+        while time.monotonic() <= old_access and time.monotonic() < deadline:
+            time.sleep(0.001)
         cb.allow_request()
         assert cb._last_access_time > old_access
         _webhook_circuit_breakers.clear()

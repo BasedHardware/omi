@@ -63,6 +63,17 @@ def _load_module_from_file(module_name, file_path):
     return mod
 
 
+def _zoneinfo_for_test(key):
+    try:
+        return ZoneInfo(key)
+    except Exception:
+        if key == "UTC":
+            return timezone.utc
+        if key == "Asia/Kolkata":
+            return timezone(timedelta(hours=5, minutes=30), key)
+        raise
+
+
 # ---------------------------------------------------------------------------
 # Stub heavy dependencies
 # ---------------------------------------------------------------------------
@@ -101,13 +112,18 @@ action_items_db.get_action_item = MagicMock(
     }
 )
 action_items_db.update_action_item = MagicMock(return_value=True)
-_stub_package("database")
+database_pkg = _stub_package("database")
+database_pkg.__path__ = [str(BACKEND_DIR / "database")]
+database_pkg.action_items = action_items_db
 
 # Stub notifications
 notif_mod = _stub_module("utils.notifications")
 notif_mod.send_action_item_completed_notification = MagicMock()
 notif_mod.send_action_item_created_notification = MagicMock()
 notif_mod.send_action_item_data_message = MagicMock()
+notif_mod.send_app_review_reply_notification = MagicMock()
+notif_mod.send_new_app_review_notification = MagicMock()
+notif_mod.send_notification = MagicMock()
 notif_mod.sync_action_item_reminder = MagicMock()
 
 # Stub langchain
@@ -138,12 +154,17 @@ langchain_prompts.ChatPromptTemplate = MagicMock()
 # Stub pydantic (already installed, just need BaseModel/Field accessible)
 # pydantic is real, no stub needed
 
-# Stub utils packages
-_stub_package("utils")
-_stub_package("utils.retrieval")
-_stub_package("utils.retrieval.tools")
-_stub_package("utils.llm")
-_stub_package("utils.conversations")
+# Stub utils packages while preserving imports for unstubbed submodules in later tests.
+utils_pkg = _stub_package("utils")
+utils_pkg.__path__ = [str(BACKEND_DIR / "utils")]
+retrieval_pkg = _stub_package("utils.retrieval")
+retrieval_pkg.__path__ = [str(BACKEND_DIR / "utils" / "retrieval")]
+tools_pkg = _stub_package("utils.retrieval.tools")
+tools_pkg.__path__ = [str(BACKEND_DIR / "utils" / "retrieval" / "tools")]
+llm_pkg = _stub_package("utils.llm")
+llm_pkg.__path__ = [str(BACKEND_DIR / "utils" / "llm")]
+conversations_pkg = _stub_package("utils.conversations")
+conversations_pkg.__path__ = [str(BACKEND_DIR / "utils" / "conversations")]
 
 # Stub utils.retrieval.agentic
 import contextvars
@@ -162,6 +183,7 @@ llm_clients_stub.parser = MagicMock()
 llm_clients_stub.llm_high = MagicMock()
 llm_clients_stub.llm_medium_experiment = MagicMock()
 llm_clients_stub.get_llm = MagicMock(return_value=MagicMock())
+llm_clients_stub.embeddings = MagicMock()
 
 # Load models first
 _stub_package("models")
@@ -591,7 +613,7 @@ class TestActionItemTimezoneConversion:
         with patch.object(conv_proc, 'get_llm', return_value=mock_llm), patch.object(
             conv_proc, 'PydanticOutputParser'
         ) as mock_parser_cls, patch.object(conv_proc, 'ChatPromptTemplate') as mock_prompt_cls, patch.object(
-            conv_proc, 'ZoneInfo', side_effect=self._zone_info
+            conv_proc, 'ZoneInfo', side_effect=_zoneinfo_for_test
         ):
             mock_parser = MagicMock()
             mock_parser.get_format_instructions.return_value = "format"
@@ -609,9 +631,9 @@ class TestActionItemTimezoneConversion:
 
     def test_naive_local_due_converted_to_utc_for_ist(self):
         # LLM emits naive local 10:00 IST tomorrow -> server stores 04:30 UTC (the #7059 bug).
-        naive_local = (datetime.now(timezone.utc).astimezone(IST_TZ) + timedelta(days=1)).replace(
-            hour=10, minute=0, second=0, microsecond=0, tzinfo=None
-        )
+        naive_local = (
+            datetime.now(timezone.utc).astimezone(_zoneinfo_for_test("Asia/Kolkata")) + timedelta(days=1)
+        ).replace(hour=10, minute=0, second=0, microsecond=0, tzinfo=None)
         result, _ = self._run(naive_local, tz="Asia/Kolkata")
         assert len(result) == 1 and result[0].due_at is not None
         due = result[0].due_at
@@ -655,7 +677,7 @@ class TestActionItemTimezoneConversion:
         assert d1 is not None and d1.utcoffset() == timedelta(0)
         assert (d1.hour, d1.minute) == (4, 30)
         # (b) aware +05:30 value is converted to UTC, not trusted as-is
-        aware_ist = base.replace(hour=10, minute=0, second=0, microsecond=0, tzinfo=IST_TZ)
+        aware_ist = base.replace(hour=10, minute=0, second=0, microsecond=0, tzinfo=_zoneinfo_for_test("Asia/Kolkata"))
         r2, _ = self._run(aware_ist, tz="UTC")
         d2 = r2[0].due_at
         assert d2 is not None and d2.utcoffset() == timedelta(0)

@@ -7,6 +7,7 @@ use asyncio.gather + httpx instead of Thread+join + requests.
 import os
 import sys
 import types
+import functools
 from unittest.mock import MagicMock, AsyncMock, patch
 
 import pytest
@@ -152,6 +153,7 @@ if _http_mod is not None and not hasattr(_http_mod, '__file__'):
     _mock_cb.record_failure = MagicMock()
     _http_mod.get_webhook_circuit_breaker = MagicMock(return_value=_mock_cb)
     _http_mod.get_webhook_semaphore = MagicMock(return_value=_asyncio.Semaphore(64))
+    _http_mod.get_maps_semaphore = MagicMock(return_value=_asyncio.Semaphore(64))
     _http_mod.latest_wins_start = MagicMock(return_value=1)
     _http_mod.latest_wins_check = MagicMock(return_value=True)
 
@@ -159,21 +161,34 @@ if _http_mod is not None and not hasattr(_http_mod, '__file__'):
 # run_in_executor calls executor.submit() and wraps the returned Future.
 from concurrent.futures import ThreadPoolExecutor as _TPE
 
-_executors_mod = sys.modules.setdefault("utils.executors", types.ModuleType("utils.executors"))
-_executors_mod.critical_executor = _TPE(max_workers=2, thread_name_prefix="test-critical")
-_executors_mod.db_executor = _TPE(max_workers=2, thread_name_prefix="test-db")
-_executors_mod.storage_executor = _TPE(max_workers=2, thread_name_prefix="test-storage")
+
+def _make_test_executor(name):
+    return _TPE(max_workers=2, thread_name_prefix=f"test-{name}")
 
 
-async def _run_blocking(_executor, func, *args, **kwargs):
-    return func(*args, **kwargs)
+def _executor_call(fn, *args, **kwargs):
+    return functools.partial(fn, *args, **kwargs)
 
 
-_executors_mod.run_blocking = _run_blocking
+async def _run_blocking(_executor, fn, *args, **kwargs):
+    loop = _asyncio.get_running_loop()
+    return await loop.run_in_executor(_executor, _executor_call(fn, *args, **kwargs))
+
+
+def _install_executor_stubs():
+    executors_mod = sys.modules.setdefault("utils.executors", types.ModuleType("utils.executors"))
+    executors_mod.db_executor = _make_test_executor("db")
+    executors_mod.critical_executor = _make_test_executor("critical")
+    executors_mod.storage_executor = _make_test_executor("storage")
+    executors_mod.run_blocking = _run_blocking
+
+
+_install_executor_stubs()
 
 import importlib
 
 app_integrations = importlib.import_module("utils.app_integrations")
+sys.modules["utils"].mentor_notifications = sys.modules["utils.mentor_notifications"]
 
 
 def _make_app(app_id: str, webhook_url: str, triggers_realtime=False, triggers_audio=False, uid=None):

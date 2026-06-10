@@ -40,8 +40,23 @@ os.environ.setdefault("BASE_API_URL", "http://localhost:8080")
 # Pre-mock heavy deps before importing the module under test (Python 3.9 compat —
 # database.redis_db uses dict | None syntax that requires 3.10+).
 _mock = MagicMock()
-for mod in ['firebase_admin.auth', 'database.redis_db', 'utils.http_client', 'utils.log_sanitizer']:
-    sys.modules.setdefault(mod, _mock)
+_stub_modules = [
+    'firebase_admin.auth',
+    'database.redis_db',
+    'fastapi.templating',
+    'utils.http_client',
+    'utils.log_sanitizer',
+]
+_missing = object()
+_previous_modules = {mod: sys.modules.get(mod, _missing) for mod in _stub_modules}
+_previous_parent_attrs = {}
+for mod in _stub_modules:
+    parent_name, _, attr = mod.rpartition('.')
+    parent = sys.modules.get(parent_name)
+    if parent is not None:
+        _previous_parent_attrs[mod] = (parent, attr, getattr(parent, attr, _missing))
+        setattr(parent, attr, _mock)
+    sys.modules[mod] = _mock
 
 try:
     import jinja2  # noqa: F401
@@ -57,6 +72,20 @@ if _BACKEND_DIR not in sys.path:
     sys.path.insert(0, _BACKEND_DIR)
 
 from routers.auth import _validate_redirect_uri  # noqa: E402
+
+for mod, previous in _previous_modules.items():
+    if previous is _missing:
+        sys.modules.pop(mod, None)
+    else:
+        sys.modules[mod] = previous
+for parent, attr, previous in _previous_parent_attrs.values():
+    if previous is _missing:
+        try:
+            delattr(parent, attr)
+        except AttributeError:
+            pass
+    else:
+        setattr(parent, attr, previous)
 
 # ---------------------------------------------------------------------------
 # Acceptance — every shape an existing Omi client uses
@@ -294,15 +323,18 @@ class TestAuthCodeBinding:
 class TestCallbackTemplateRendering:
     """Test that the callback template receives and uses dynamic redirect_uri."""
 
-    def test_template_uses_dynamic_redirect_uri(self):
-        """Verify auth_callback.html renders with the session's redirect_uri, not hardcoded."""
-        pytest.importorskip("jinja2")
-        from jinja2 import Environment, FileSystemLoader
+    @staticmethod
+    def _load_template():
+        jinja2 = pytest.importorskip("jinja2")
         import pathlib
 
         templates_dir = pathlib.Path(__file__).parent.parent.parent / "templates"
-        env = Environment(loader=FileSystemLoader(str(templates_dir)), autoescape=True)
-        template = env.get_template("auth_callback.html")
+        env = jinja2.Environment(loader=jinja2.FileSystemLoader(str(templates_dir)), autoescape=True)
+        return env.get_template("auth_callback.html")
+
+    def test_template_uses_dynamic_redirect_uri(self):
+        """Verify auth_callback.html renders with the session's redirect_uri, not hardcoded."""
+        template = self._load_template()
 
         html = template.render(
             code="test-auth-code",
@@ -315,13 +347,7 @@ class TestCallbackTemplateRendering:
 
     def test_template_json_escapes_redirect_uri(self):
         """Verify redirect_uri is JSON-escaped in the template (XSS prevention)."""
-        pytest.importorskip("jinja2")
-        from jinja2 import Environment, FileSystemLoader
-        import pathlib
-
-        templates_dir = pathlib.Path(__file__).parent.parent.parent / "templates"
-        env = Environment(loader=FileSystemLoader(str(templates_dir)), autoescape=True)
-        template = env.get_template("auth_callback.html")
+        template = self._load_template()
 
         html = template.render(
             code='test</script><script>alert(1)',
@@ -333,13 +359,7 @@ class TestCallbackTemplateRendering:
 
     def test_template_defaults_when_redirect_uri_missing(self):
         """Verify template falls back to omi://auth/callback when redirect_uri not provided."""
-        pytest.importorskip("jinja2")
-        from jinja2 import Environment, FileSystemLoader
-        import pathlib
-
-        templates_dir = pathlib.Path(__file__).parent.parent.parent / "templates"
-        env = Environment(loader=FileSystemLoader(str(templates_dir)), autoescape=True)
-        template = env.get_template("auth_callback.html")
+        template = self._load_template()
 
         html = template.render(
             code="test-code",
