@@ -29,6 +29,50 @@ mock_transcribe._model = None
 mock_transcribe.INFERENCE_MODE = "nemo"
 sys.modules['transcribe'] = mock_transcribe
 
+_scipy = types.ModuleType('scipy')
+_scipy_spatial = types.ModuleType('scipy.spatial')
+_scipy_distance = types.ModuleType('scipy.spatial.distance')
+
+
+def _cosine_cdist(a, b, metric="cosine"):
+    if metric != "cosine":
+        raise ValueError(f"unsupported metric: {metric}")
+    a = np.asarray(a, dtype=np.float32)
+    b = np.asarray(b, dtype=np.float32)
+    a_norm = np.linalg.norm(a, axis=1, keepdims=True)
+    b_norm = np.linalg.norm(b, axis=1, keepdims=True).T
+    denom = a_norm * b_norm
+    similarity = np.divide(a @ b.T, denom, out=np.zeros((a.shape[0], b.shape[0]), dtype=np.float32), where=denom != 0)
+    return 1.0 - similarity
+
+
+_scipy_distance.cdist = _cosine_cdist
+_scipy_spatial.distance = _scipy_distance
+_scipy.spatial = _scipy_spatial
+sys.modules.setdefault('scipy', _scipy)
+sys.modules.setdefault('scipy.spatial', _scipy_spatial)
+sys.modules.setdefault('scipy.spatial.distance', _scipy_distance)
+
+_torch = types.ModuleType('torch')
+_torch.int16 = np.int16
+
+
+class _TorchArray:
+    def __init__(self, value):
+        self.value = np.asarray(value)
+
+    def float(self):
+        return self
+
+    def __truediv__(self, value):
+        return _TorchArray(self.value / value)
+
+
+_torch.frombuffer = lambda buffer, dtype: _TorchArray(np.frombuffer(buffer, dtype=dtype))
+_torch.hub = MagicMock()
+_torch.hub.load.side_effect = RuntimeError("torch hub unavailable in unit tests")
+sys.modules.setdefault('torch', _torch)
+
 import stream_handler as sh
 
 
