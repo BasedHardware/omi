@@ -345,3 +345,19 @@ def test_twiml_success(mock_db, mock_check, mock_sig, client):
     body = resp.text
     assert '<Dial callerId="+15551234567">' in body
     assert '+15559876543' in body
+
+
+@patch('routers.phone_calls.validate_twilio_signature', return_value=True)
+@patch('routers.phone_calls.check_caller_id_verified', return_value=True)
+@patch('routers.phone_calls.phone_call_usage_db')
+@patch('routers.phone_calls.phone_calls_db')
+def test_twiml_free_tier_counts_successful_call(mock_db, mock_usage_db, mock_check, mock_sig, client, monkeypatch):
+    mock_db.get_primary_phone_number.return_value = {'phone_number': '+15551234567'}
+    snapshot = SimpleNamespace(has_access=True, is_paid=False, max_duration_seconds=None)
+    monkeypatch.setattr('routers.phone_calls.get_quota_snapshot', MagicMock(return_value=snapshot))
+
+    resp = client.post('/v1/phone/twiml', data={'To': '+15559876543', 'From': f'client:{TEST_UID}', 'CallId': 'C1'})
+
+    assert resp.status_code == 200
+    mock_usage_db.increment_current_month.assert_called_once_with(TEST_UID)
+    assert '<Dial callerId="+15551234567">' in resp.text
