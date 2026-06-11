@@ -1,12 +1,4 @@
-import {
-  app,
-  shell,
-  BrowserWindow,
-  ipcMain,
-  session,
-  nativeImage,
-  desktopCapturer
-} from 'electron'
+import { app, shell, BrowserWindow, ipcMain, session, nativeImage, desktopCapturer } from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import iconPath from '../../resources/icon.png?asset'
@@ -40,6 +32,7 @@ import {
   stopAutomationTargetTracker
 } from './automation/foregroundTarget'
 import { registerScreenSynthHandlers } from './ipc/screenSynth'
+import { startRendererServer, rendererBaseUrl } from './rendererServer'
 import { startRewindCapture } from './rewind/captureService'
 import { startRewindOcr } from './rewind/ocrService'
 import { startRewindRetention } from './rewind/retentionRunner'
@@ -164,9 +157,14 @@ function createWindow(): BrowserWindow {
   })
 
   // HMR for renderer base on electron-vite cli.
-  // Load the remote URL for development or the local html file for production.
+  // Load the remote URL for development, or the loopback renderer server in
+  // production — a file:// origin would break Firebase sign-in (see
+  // rendererServer.ts). loadFile stays as a last resort so a server failure
+  // still produces a window (signed-out features only).
   if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
     mainWindow.loadURL(process.env['ELECTRON_RENDERER_URL'])
+  } else if (rendererBaseUrl()) {
+    mainWindow.loadURL(`${rendererBaseUrl()}/index.html`)
   } else {
     mainWindow.loadFile(join(__dirname, '../renderer/index.html'))
   }
@@ -176,8 +174,22 @@ function createWindow(): BrowserWindow {
 // This method will be called when Electron has finished
 // initialization and is ready to create browser windows.
 // Some APIs can only be used after this event occurs.
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
   perfMark('main:ready')
+
+  // Production only (dev uses the vite dev server): serve the packaged renderer
+  // over localhost so Firebase auth sees an authorized origin. Must be up before
+  // any window loads.
+  if (!(is.dev && process.env['ELECTRON_RENDERER_URL'])) {
+    try {
+      await startRendererServer(join(__dirname, '../renderer'))
+    } catch (e) {
+      console.error(
+        '[main] renderer server failed to start — falling back to file:// (sign-in will not work):',
+        e
+      )
+    }
+  }
   // Set app user model id for windows
   electronApp.setAppUserModelId('com.omiwindows.app')
 
@@ -192,10 +204,7 @@ app.whenReady().then(() => {
   // In Electron we control the network stack, so strip the Origin header on
   // outgoing requests and inject permissive CORS response headers. Scoped to
   // the specific upstreams — everything else flows normally.
-  const apiUrls = [
-    'https://api.omi.me/*',
-    'https://desktop-backend-hhibjajaja-uc.a.run.app/*'
-  ]
+  const apiUrls = ['https://api.omi.me/*', 'https://desktop-backend-hhibjajaja-uc.a.run.app/*']
   session.defaultSession.webRequest.onBeforeSendHeaders({ urls: apiUrls }, (details, cb) => {
     const headers = { ...details.requestHeaders }
     delete headers.Origin
