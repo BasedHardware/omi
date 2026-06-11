@@ -19,10 +19,12 @@ sys.path.insert(0, str(BACKEND_DIR))
 os.environ.setdefault("ENCRYPTION_SECRET", "omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv")
 
 # Stub the only heavy import so the real module loads (utils/ and utils/llm/ __init__ are empty).
-if "utils.llm.clients" not in sys.modules:
+_clients = sys.modules.get("utils.llm.clients")
+if _clients is None:
     _clients = types.ModuleType("utils.llm.clients")
-    _clients.get_llm = MagicMock()
     sys.modules["utils.llm.clients"] = _clients
+if not hasattr(_clients, "get_llm"):
+    _clients.get_llm = MagicMock()
 
 from utils.llm import proactive_notification as pn  # noqa: E402
 
