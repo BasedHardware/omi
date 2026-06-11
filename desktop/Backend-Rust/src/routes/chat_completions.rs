@@ -215,11 +215,30 @@ fn translate_request(
     );
     let anthropic_tool_choice = translate_tool_choice(&req.tool_choice)?;
 
+    let system_value = system_prompt.map(|prompt| {
+        if let Some(pos) = prompt.find("<assistant_role>") {
+            let (static_part, dynamic_part) = prompt.split_at(pos);
+            json!([
+                {
+                    "type": "text",
+                    "text": static_part.trim(),
+                    "cache_control": { "type": "ephemeral" }
+                },
+                {
+                    "type": "text",
+                    "text": dynamic_part.trim()
+                }
+            ])
+        } else {
+            json!(prompt)
+        }
+    });
+
     Ok(AnthropicRequest {
         model: upstream_model.to_string(),
         max_tokens,
         messages: anthropic_messages,
-        system: system_prompt,
+        system: system_value,
         temperature: req.temperature,
         stream: req.stream,
         tools: if is_tool_choice_none { None } else { anthropic_tools },
@@ -1175,7 +1194,7 @@ mod tests {
 
         let result = translate_request(&req, "claude-sonnet-4-6").unwrap();
         assert_eq!(result.model, "claude-sonnet-4-6");
-        assert_eq!(result.system, Some("You are helpful.".to_string()));
+        assert_eq!(result.system, Some(json!("You are helpful.")));
         assert_eq!(result.messages.len(), 1); // only user message, system extracted
         assert_eq!(result.messages[0].role, "user");
         assert_eq!(result.max_tokens, 1024);
@@ -1263,7 +1282,7 @@ mod tests {
         };
 
         let result = translate_request(&req, "claude-sonnet-4-6").unwrap();
-        assert_eq!(result.system, Some("You are terse.".to_string()));
+        assert_eq!(result.system, Some(json!("You are terse.")));
         assert_eq!(result.messages.len(), 1, "developer msg must be extracted, not forwarded");
         assert_eq!(result.messages[0].role, "user");
     }

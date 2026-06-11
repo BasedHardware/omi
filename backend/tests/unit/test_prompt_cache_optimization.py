@@ -221,3 +221,12 @@ def test_static_prefix_has_no_dynamic_refs():
     assert "{tz}" not in static_prefix, "Static prefix should not contain {tz}"
     assert "{current_datetime" not in static_prefix, "Static prefix should not contain {current_datetime}"
     assert "{goal_section}" not in static_prefix, "Static prefix should not contain {goal_section}"
+
+
+def test_anthropic_prompt_split_logic_in_agentic():
+    """Verify that _run_anthropic_agent_stream has split logic for <assistant_role>."""
+    source = _read_agentic_source()
+    assert 'split_marker = "<assistant_role>"' in source
+    assert "parts = system_prompt.split(split_marker, 1)" in source
+    assert '{"type": "text", "text": static_part, "cache_control": {"type": "ephemeral"}}' in source
+    assert '{"type": "text", "text": dynamic_part}' in source

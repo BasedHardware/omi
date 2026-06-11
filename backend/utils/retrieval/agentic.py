@@ -48,7 +48,7 @@ from utils.retrieval.tools import (
 )
 from utils.retrieval.tools.app_tools import load_app_tools, get_tool_status_message
 from utils.retrieval.safety import AgentSafetyGuard, SafetyGuardError
-from utils.llm.clients import anthropic_client, ANTHROPIC_AGENT_MODEL
+from utils.llm.clients import anthropic_client, get_model
 from utils.llm.chat import _get_agentic_qa_prompt
 from utils.other.endpoints import timeit
 from utils.observability.langsmith import is_langsmith_enabled
@@ -361,8 +361,20 @@ async def _run_anthropic_agent_stream(
     while loop that calls Anthropic's messages API, executes any tool calls,
     and feeds results back until the model stops requesting tools.
     """
-    # System prompt with cache_control for Anthropic prompt caching
-    system_blocks = [{"type": "text", "text": system_prompt, "cache_control": {"type": "ephemeral"}}]
+    # System prompt with cache_control for Anthropic prompt caching.
+    # Split the system prompt into a static part and a dynamic part at <assistant_role>
+    # so that the large static part (instructions, style, rules) can be cached by Anthropic.
+    split_marker = "<assistant_role>"
+    if split_marker in system_prompt:
+        parts = system_prompt.split(split_marker, 1)
+        static_part = parts[0].strip()
+        dynamic_part = (split_marker + parts[1]).strip()
+        system_blocks = [
+            {"type": "text", "text": static_part, "cache_control": {"type": "ephemeral"}},
+            {"type": "text", "text": dynamic_part},
+        ]
+    else:
+        system_blocks = [{"type": "text", "text": system_prompt, "cache_control": {"type": "ephemeral"}}]
 
     loop_iteration = 0
 
@@ -372,7 +384,7 @@ async def _run_anthropic_agent_stream(
 
         try:
             async with anthropic_client.messages.stream(
-                model=ANTHROPIC_AGENT_MODEL,
+                model=get_model('chat_agent'),
                 system=system_blocks,
                 messages=messages,
                 tools=tool_schemas,

@@ -105,6 +105,7 @@ struct DesktopHomeView: View {
             }
           mainContent
             .opacity(viewModelContainer.isInitialLoadComplete ? 1 : 0)
+            .background(GlobalChatSheetsView(chatProvider: viewModelContainer.chatProvider))
             .overlay {
               if appState.showUsageLimitPopup {
                 UsageLimitPopupView(

@@ -172,51 +172,6 @@ struct ChatPage: View {
       )
       .frame(minWidth: 500, minHeight: 500)
     }
-    .sheet(isPresented: $chatProvider.needsBrowserExtensionSetup) {
-      BrowserExtensionSetup(
-        onComplete: {
-          chatProvider.needsBrowserExtensionSetup = false
-        },
-        onDismiss: {
-          chatProvider.needsBrowserExtensionSetup = false
-        },
-        chatProvider: chatProvider
-      )
-      .fixedSize()
-    }
-    .sheet(isPresented: $chatProvider.isClaudeAuthRequired) {
-      ClaudeAuthSheet(
-        onConnect: {
-          if let url = URL(string: "https://omi.me/pricing") {
-            NSWorkspace.shared.open(url)
-          }
-          chatProvider.isClaudeAuthRequired = false
-          Task {
-            await chatProvider.switchBridgeMode(to: ChatProvider.BridgeMode.piMono)
-          }
-        },
-        onCancel: {
-          chatProvider.isClaudeAuthRequired = false
-          // Switch back to Omi AI (pi-mono) if auth cancelled
-          Task {
-            await chatProvider.switchBridgeMode(to: ChatProvider.BridgeMode.piMono)
-          }
-        }
-      )
-    }
-    .alert("Upgrade Required", isPresented: $chatProvider.showOmiThresholdAlert) {
-      Button("Upgrade to Omi Pro") {
-        chatProvider.showOmiThresholdAlert = false
-        if let url = URL(string: "https://omi.me/pricing") {
-          NSWorkspace.shared.open(url)
-        }
-      }
-      Button("Later", role: .cancel) {
-        chatProvider.showOmiThresholdAlert = false
-      }
-    } message: {
-      Text("Upgrade to Omi Pro for $199/month to continue chatting.")
-    }
     .overlay {
       // Loading overlay when fetching citation
       if isLoadingCitation {

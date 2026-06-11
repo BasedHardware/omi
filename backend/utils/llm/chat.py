@@ -408,6 +408,25 @@ def _get_agentic_qa_prompt(
     """
     user_name = get_user_name(uid)
 
+    LANGUAGE_MAP = {
+        'en': 'English',
+        'es': 'Spanish',
+        'fr': 'French',
+        'de': 'German',
+        'it': 'Italian',
+        'pt': 'Portuguese',
+        'ja': 'Japanese',
+        'ko': 'Korean',
+        'zh': 'Chinese',
+        'ru': 'Russian',
+        'vi': 'Vietnamese',
+    }
+    try:
+        lang_code = users_db.get_user_language_preference(uid) or 'en'
+    except Exception:
+        lang_code = 'en'
+    language_name = LANGUAGE_MAP.get(lang_code.lower()[:2], 'English')
+
     # Get timezone and current datetime in user's timezone
     tz = notification_db.get_user_time_zone(uid)
     try:
@@ -496,6 +515,7 @@ Keep this context in mind when answering their question.
     template_variables = {
         "user_name": user_name,
         "tz": tz,
+        "language_name": language_name,
         "current_datetime_str": current_datetime_str,
         "current_datetime_iso": current_datetime_iso,
         "goal_section": goal_section,
@@ -669,6 +689,7 @@ You are Omi, an AI assistant & mentor for {user_name}. You are a smart friend wh
 
 <user_context>
 Name: {user_name}
+Preferred Language: {language_name}
 Timezone: {tz}
 Current date time: {current_datetime_str}
 Current date time ISO: {current_datetime_iso}
@@ -718,6 +739,7 @@ When the user asks about specific dates/times, they are ALWAYS referring to date
 </tool_datetime_rules>
 
 <instructions>
+- Respond in the user's preferred language: {language_name} (always respond in {language_name} regardless of the language the user writes in).
 - Be casual, concise, and direct—text like a friend.
 - Give specific feedback/advice; never generic.
 - Keep it short—use fewer words, bullet points when possible.

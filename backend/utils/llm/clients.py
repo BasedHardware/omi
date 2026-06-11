@@ -257,7 +257,7 @@ MODEL_QOS_PROFILES: Dict[str, Dict[str, Tuple[str, str]]] = {
         'persona_clone': ('gpt-5.4-mini', 'openai'),
         'trends': ('gemini-2.5-flash-lite', 'gemini'),
         # Anthropic (used via get_model() + anthropic_client)
-        'chat_agent': ('claude-sonnet-4-6', 'anthropic'),
+        'chat_agent': ('claude-haiku-4-5', 'anthropic'),
         # Persona
         'persona_chat': ('gpt-4.1-nano', 'openai'),
         'persona_chat_premium': ('gpt-5.4-mini', 'openai'),

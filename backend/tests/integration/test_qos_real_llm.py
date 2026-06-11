@@ -205,7 +205,7 @@ class TestPremiumAnthropic:
     @pytest.mark.asyncio
     async def test_chat_agent_anthropic(self):
         model = get_model('chat_agent')
-        assert model == 'claude-sonnet-4-6', f"chat_agent should be claude-sonnet-4-6, got {model}"
+        assert model == 'claude-haiku-4-5', f"chat_agent should be claude-haiku-4-5, got {model}"
         assert model == ANTHROPIC_AGENT_MODEL
 
         response = await anthropic_client.messages.create(

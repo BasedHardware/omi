@@ -8,8 +8,8 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-def get_prompt_memories(uid: str) -> str:
-    user_name, user_made_memories, generated_memories = get_prompt_data(uid)
+def get_prompt_memories(uid: str, limit: int = 50) -> Tuple[str, str]:
+    user_name, user_made_memories, generated_memories = get_prompt_data(uid, limit=limit)
     memories_str = (
         f'you already know the following facts about {user_name}: \n{Memory.get_memories_as_str(generated_memories)}.'
     )
@@ -49,9 +49,9 @@ def safe_create_memory(memory_data):
         raise
 
 
-def get_prompt_data(uid: str) -> Tuple[str, List[Memory], List[Memory]]:
+def get_prompt_data(uid: str, limit: int = 50) -> Tuple[str, List[Memory], List[Memory]]:
     # TODO: cache this
-    existing_memories = [m for m in memories_db.get_memories(uid, limit=1000) if not m.get('is_locked')]
+    existing_memories = [m for m in memories_db.get_memories(uid, limit=limit) if not m.get('is_locked')]
 
     # Use a safer approach to create Memory objects from existing memories
     user_made = []
