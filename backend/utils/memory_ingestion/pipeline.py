@@ -704,6 +704,13 @@ def _decision_for_frame(
         elif frame.sensitivity.review_required or frame.sensitivity.level == "high":
             action = "route_to_review" if routing.review_sensitive else "reject_policy"
             rationale = "Sensitive memory requires review."
+        elif (
+            frame.uncertainty_reasons
+            and routing.review_uncertain
+            and not _is_unknown_speaker_only_ordinary_frame(frame)
+        ):
+            action = "route_to_review"
+            rationale = "Uncertain frame requires review by the rollout routing profile."
         elif frame.confidence == "high" and routing.auto_create_high_confidence:
             action = "create_memory"
             rationale = "High-confidence ordinary frame is eligible for active memory creation."

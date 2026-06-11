@@ -5,7 +5,6 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-
 ConfidenceLabel = Literal["high", "medium", "low"]
 UncertaintyReason = Literal[
     "low_quality_transcript",
@@ -59,6 +58,7 @@ class PolicyConfig(StrictBaseModel):
 class RoutingConfig(StrictBaseModel):
     auto_create_high_confidence: bool = True
     auto_create_medium_confidence: bool = False
+    review_uncertain: bool = False
     review_low_confidence: bool = True
     review_sensitive: bool = True
     allow_supersession: bool = True

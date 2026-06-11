@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import hashlib
 import json
 import os
 import re
@@ -18,13 +19,13 @@ from utils.memory_ingestion.models import (
     MemoryPipelineConfig,
     MemoryPipelineInput,
     ModelConfig,
+    RoutingConfig,
     RawContextEvent,
     SourceDescriptor,
     SourceRef,
     UserStateSnapshot,
 )
 from utils.memory_ingestion.pipeline import CoreMemoryPipeline
-
 
 DEFAULT_EXPORT_ROOT = "omi-export-bigbeeme33-30day-20260608-1611/"
 
@@ -64,10 +65,14 @@ async def run_export(args: argparse.Namespace) -> None:
     if args.limit:
         session_items = session_items[: args.limit]
 
+    run_config = _run_config(args)
     manifest = _load_manifest(run_dir)
+    _assert_resume_config_compatible(manifest, run_config, args.allow_legacy_resume)
     manifest.update(
         {
             "schema_version": "memory_export_run_manifest.v1",
+            "run_config": run_config,
+            "run_config_fingerprint": _fingerprint(run_config),
             "export_zip": str(Path(args.export_zip).resolve()),
             "run_dir": str(run_dir.resolve()),
             "started_at": manifest.get("started_at") or _now_iso(),
@@ -75,6 +80,7 @@ async def run_export(args: argparse.Namespace) -> None:
             "model_client": "production-like",
             "high_recall": args.high_recall,
             "typed": args.typed,
+            "routing_profile": args.routing_profile,
             "max_events_per_call": args.max_events_per_call,
             "memory_snapshot_limit": args.memory_snapshot_limit,
             "session_count": len(session_items),
@@ -111,12 +117,13 @@ async def run_export(args: argparse.Namespace) -> None:
             user_state=user_state,
             actor_id=args.actor_id,
             actor_name=args.actor_name,
+            routing_profile=args.routing_profile,
         )
         _write_json(input_path, pipeline_input.model_dump(mode="json"))
 
         try:
             output = await pipeline.run(pipeline_input)
-            output_path.write_text(output.model_dump_json(indent=2))
+            _write_json(output_path, output.model_dump(mode="json"))
             shard_summary = _output_summary(output.model_dump(mode="json"))
             shard_summary.update(
                 {
@@ -153,8 +160,11 @@ async def run_export(args: argparse.Namespace) -> None:
         _write_json(run_dir / "manifest.json", manifest)
 
     _combine_outputs(run_dir)
+    trace_report = _write_debug_trace(run_dir)
     summary = _summarize_manifest(manifest)
     summary.update({"completed_this_run": completed, "failed_this_run": failed, "skipped_this_run": skipped})
+    summary["debug_trace_jsonl"] = str((run_dir / "debug_trace.jsonl").resolve())
+    summary["debug_trace_report"] = trace_report
     _write_json(run_dir / "summary.json", summary)
     print(json.dumps(summary, indent=2, sort_keys=True))
 
@@ -229,6 +239,7 @@ def _build_pipeline_input(
     user_state: UserStateSnapshot,
     actor_id: str,
     actor_name: str,
+    routing_profile: str,
 ) -> MemoryPipelineInput:
     events: list[RawContextEvent] = []
     seen_event_ids: set[str] = set()
@@ -264,8 +275,65 @@ def _build_pipeline_input(
         actor=ActorDescriptor(synthetic_user_id=actor_id, display_name=actor_name),
         user_state=user_state,
         raw_events=events,
-        config=MemoryPipelineConfig(models=ModelConfig(extractor_model="omi-production-like")),
+        config=MemoryPipelineConfig(
+            models=ModelConfig(extractor_model="omi-production-like"),
+            routing=_routing_config(routing_profile),
+        ),
     )
+
+
+def _routing_config(profile: str) -> RoutingConfig:
+    if profile == "default":
+        return RoutingConfig()
+    if profile == "shadow-safe":
+        return RoutingConfig(
+            review_uncertain=True,
+            auto_create_medium_confidence=False,
+            review_low_confidence=True,
+            review_sensitive=True,
+            allow_supersession=False,
+            route_tasks=True,
+        )
+    raise ValueError(f"unknown routing profile: {profile}")
+
+
+def _run_config(args: argparse.Namespace) -> dict[str, Any]:
+    return {
+        "schema_version": "memory_export_run_config.v1",
+        "export_zip": str(Path(args.export_zip).resolve()),
+        "export_root": args.export_root,
+        "actor_id": args.actor_id,
+        "actor_name": args.actor_name,
+        "model_client": "production-like",
+        "high_recall": args.high_recall,
+        "typed": args.typed,
+        "routing_profile": args.routing_profile,
+        "max_events_per_call": args.max_events_per_call,
+        "memory_snapshot_limit": args.memory_snapshot_limit,
+        "session_id": args.session_id,
+        "limit": args.limit,
+    }
+
+
+def _assert_resume_config_compatible(
+    manifest: dict[str, Any], run_config: dict[str, Any], allow_legacy_resume: bool
+) -> None:
+    if not manifest or not manifest.get("shards"):
+        return
+    expected = manifest.get("run_config_fingerprint")
+    if not expected:
+        if allow_legacy_resume:
+            return
+        raise RuntimeError(
+            "Run directory contains shards without a run_config_fingerprint. "
+            "Use a fresh --run-dir, or pass --allow-legacy-resume if you have verified the config manually."
+        )
+    actual = _fingerprint(run_config)
+    if expected != actual:
+        raise RuntimeError(
+            "Run directory config does not match the requested export config. "
+            f"existing={expected} requested={actual}. Use a fresh --run-dir."
+        )
 
 
 def _output_summary(output: dict[str, Any]) -> dict[str, Any]:
@@ -303,10 +371,123 @@ def _combine_outputs(run_dir: Path) -> None:
     _write_json(combined_json, outputs)
 
 
+def _write_debug_trace(run_dir: Path) -> dict[str, Any]:
+    output_dir = run_dir / "outputs"
+    trace_path = run_dir / "debug_trace.jsonl"
+    counters: dict[str, int] = {
+        "rows": 0,
+        "frames": 0,
+        "creates": 0,
+        "reviews": 0,
+        "rejections": 0,
+        "task_routes": 0,
+        "evidence_links": 0,
+    }
+    with trace_path.open("w") as jsonl:
+        for output_path in sorted(output_dir.glob("*.json")):
+            output = json.loads(output_path.read_text())
+            counters["rows"] += 1
+            decisions = {decision.get("frame_id"): decision for decision in output.get("decisions") or []}
+            review_items = {item.get("frame_id"): item for item in output.get("review_items") or []}
+            for frame in output.get("event_frames") or []:
+                counters["frames"] += 1
+                decision = decisions.get(frame.get("frame_id")) or {}
+                action = str(decision.get("action") or "no_decision")
+                if action == "create_memory":
+                    counters["creates"] += 1
+                elif action == "route_to_review":
+                    counters["reviews"] += 1
+                elif action == "route_to_task":
+                    counters["task_routes"] += 1
+                elif action == "attach_evidence":
+                    counters["evidence_links"] += 1
+                elif action.startswith("reject_"):
+                    counters["rejections"] += 1
+                jsonl.write(
+                    json.dumps(
+                        _debug_trace_row(output, frame, decision, review_items.get(frame.get("frame_id"))),
+                        sort_keys=True,
+                        separators=(",", ":"),
+                    )
+                    + "\n"
+                )
+    return {"path": str(trace_path.resolve()), **counters}
+
+
+def _debug_trace_row(
+    output: dict[str, Any],
+    frame: dict[str, Any],
+    decision: dict[str, Any],
+    review_item: dict[str, Any] | None,
+) -> dict[str, Any]:
+    return {
+        "run_id": output.get("run_id"),
+        "mode": output.get("mode"),
+        "status": output.get("status"),
+        "source": {
+            "conversation_id": ((frame.get("evidence") or [{}])[0].get("source_ref") or {}).get("conversation_id"),
+            "event_ids": frame.get("source_event_ids") or [],
+        },
+        "frame": {
+            "frame_id": frame.get("frame_id"),
+            "frame_type": frame.get("frame_type"),
+            "predicate": frame.get("predicate"),
+            "canonical_text": frame.get("canonical_text"),
+            "subject": _entity_name(frame.get("subject")),
+            "arguments": _trace_arguments(frame.get("arguments") or {}),
+            "confidence": frame.get("confidence"),
+            "uncertainty_reasons": frame.get("uncertainty_reasons") or [],
+            "sensitivity": frame.get("sensitivity") or {},
+            "durability": frame.get("durability"),
+            "scope": frame.get("scope"),
+        },
+        "decision": {
+            "decision_id": decision.get("decision_id"),
+            "action": decision.get("action"),
+            "rationale": decision.get("rationale"),
+            "target_memory_ids": decision.get("target_memory_ids") or [],
+        },
+        "review": {
+            "review_id": (review_item or {}).get("review_id"),
+            "reason": (review_item or {}).get("reason"),
+        },
+        "evidence_refs": [
+            {
+                "source_event_id": evidence.get("source_event_id"),
+                "conversation_id": (evidence.get("source_ref") or {}).get("conversation_id"),
+                "transcript_segment_id": (evidence.get("source_ref") or {}).get("transcript_segment_id"),
+                "start_at": evidence.get("start_at"),
+                "end_at": evidence.get("end_at"),
+                "speaker_label": (evidence.get("speaker") or {}).get("label"),
+            }
+            for evidence in frame.get("evidence") or []
+        ],
+    }
+
+
+def _trace_arguments(arguments: dict[str, Any]) -> dict[str, Any]:
+    return {key: _object_value(value) for key, value in sorted(arguments.items())}
+
+
+def _object_value(value: Any) -> Any:
+    if isinstance(value, dict):
+        entity = value.get("entity") or {}
+        return value.get("value") or entity.get("canonical_name") or entity.get("entity_id")
+    return value
+
+
+def _entity_name(value: Any) -> str | None:
+    if isinstance(value, dict):
+        return value.get("canonical_name") or value.get("entity_id")
+    return None
+
+
 def _summarize_manifest(manifest: dict[str, Any]) -> dict[str, Any]:
     shards = list(manifest.get("shards", {}).values())
     ok = [shard for shard in shards if shard.get("status") == "ok"]
-    failed = [shard for shard in shards if shard.get("status") not in ("ok",)]
+    partial = [shard for shard in shards if shard.get("status") == "partial"]
+    runner_failed = [shard for shard in shards if shard.get("status") == "runner_failed"]
+    failed = [shard for shard in shards if shard.get("status") not in ("ok", "partial")]
     totals = {
         key: sum(int(shard.get(key, 0) or 0) for shard in ok)
         for key in [
@@ -334,6 +515,8 @@ def _summarize_manifest(manifest: dict[str, Any]) -> dict[str, Any]:
         "session_count": manifest["session_count"],
         "shards_recorded": len(shards),
         "ok_shards": len(ok),
+        "partial_shards": len(partial),
+        "runner_failed_shards": len(runner_failed),
         "failed_shards": len(failed),
         "totals": totals,
         "combined_jsonl": str(Path(manifest["run_dir"]) / "combined_outputs.jsonl"),
@@ -367,6 +550,11 @@ def _write_json(path: Path, value: Any) -> None:
     tmp_path = path.with_suffix(path.suffix + ".tmp")
     tmp_path.write_text(json.dumps(value, indent=2, sort_keys=True, default=str))
     tmp_path.replace(path)
+
+
+def _fingerprint(value: Any) -> str:
+    payload = json.dumps(value, sort_keys=True, separators=(",", ":"), default=str)
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
 def _print_progress(index: int, total: int, run_id: str, status: str, summary: dict[str, Any]) -> None:
@@ -438,11 +626,22 @@ def main() -> None:
         action="store_true",
         help="Use the typed extraction prompt (predicate + argument slots) so layer-2 consolidation can merge.",
     )
+    parser.add_argument(
+        "--routing-profile",
+        choices=["default", "shadow-safe"],
+        default="default",
+        help="Routing profile for rollout/benchmark runs. shadow-safe routes uncertain frames to review and avoids supersession.",
+    )
     parser.add_argument("--memory-snapshot-limit", type=int, default=0)
     parser.add_argument("--limit", type=int)
     parser.add_argument("--session-id")
     parser.add_argument("--retry-ok", action="store_true")
     parser.add_argument("--keep-going", action="store_true")
+    parser.add_argument(
+        "--allow-legacy-resume",
+        action="store_true",
+        help="Resume a pre-fingerprint run directory after manually verifying the requested config matches.",
+    )
     args = parser.parse_args()
     asyncio.run(run_export(args))
 

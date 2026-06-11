@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 import pytest
 from pydantic import ValidationError
 
+from utils.memory_ingestion import export_runner
 from utils.memory_ingestion.models import (
     ActorDescriptor,
     ExistingMemorySnapshot,
@@ -14,6 +15,7 @@ from utils.memory_ingestion.models import (
     MemoryPipelineInput,
     OutputConfig,
     RawContextEvent,
+    RoutingConfig,
     SourceDescriptor,
     SourceRef,
     UserStateSnapshot,
@@ -78,6 +80,18 @@ def test_structured_frames_create_memory_and_vector_plan():
     assert len(output.mutation_plan.creates) == 1
     assert len(output.vector_plan.upserts) == 1
     assert output.vector_plan.upserts[0].source_id == output.mutation_plan.creates[0].memory_id
+
+
+def test_review_uncertain_routing_profile_routes_uncertain_frames_to_review():
+    payload = {"memory_frames": [_frame_payload() | {"uncertainty_reasons": ["inferred_not_stated"]}]}
+    config = MemoryPipelineConfig(routing=RoutingConfig(review_uncertain=True))
+
+    output = _run(_input(payload=payload, config=config))
+
+    assert [decision.action for decision in output.decisions] == ["route_to_review"]
+    assert output.mutation_plan.creates == []
+    assert output.vector_plan.upserts == []
+    assert len(output.review_items) == 1
 
 
 def test_fingerprint_and_ids_are_stable_across_offline_shadow_backfill_modes():
@@ -231,6 +245,18 @@ def test_task_candidates_route_to_task_not_memory():
     assert [decision.action for decision in output.decisions] == ["route_to_task"]
     assert output.mutation_plan.creates == []
     assert len(output.mutation_plan.task_routes) == 1
+
+
+def test_export_runner_refuses_resume_with_mismatched_config():
+    config = {"schema_version": "memory_export_run_config.v1", "typed": True, "routing_profile": "default"}
+    manifest = {"shards": {"run-1": {"status": "ok"}}, "run_config_fingerprint": export_runner._fingerprint(config)}
+
+    with pytest.raises(RuntimeError, match="config does not match"):
+        export_runner._assert_resume_config_compatible(
+            manifest,
+            {"schema_version": "memory_export_run_config.v1", "typed": True, "routing_profile": "shadow-safe"},
+            allow_legacy_resume=False,
+        )
 
 
 def test_cli_reads_json_and_writes_pipeline_output(tmp_path):
