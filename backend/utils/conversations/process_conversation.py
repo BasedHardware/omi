@@ -31,7 +31,8 @@ from database.vector_db import (
 )
 from utils.llm.memories import resolve_memory_conflict
 from database.apps import record_app_usage, get_omi_personas_by_uid_db, get_app_by_id_db
-from database.vector_db import upsert_vector2, update_vector_metadata
+from database.vector_db import upsert_vector2, update_vector_metadata, upsert_transcript_chunk_vectors
+from utils.conversations.transcript_chunks import build_transcript_chunks
 from models.app import App, UsageHistoryType
 from models.memories import MemoryDB, Memory
 from models.calendar_context import CalendarMeetingContext
@@ -655,6 +656,18 @@ def _save_action_items(uid: str, conversation: Conversation):
         )
 
 
+# Verbatim transcript-chunk indexing (ns_tchunks). Off by default: enables semantic
+# retrieval over raw transcript text, which the summary-only conversation vectors miss.
+TRANSCRIPT_CHUNK_INDEXING_ENABLED = os.getenv('TRANSCRIPT_CHUNK_INDEXING_ENABLED', 'false').lower() == 'true'
+
+
+def save_transcript_chunk_vectors(uid: str, conversation: Conversation):
+    segments = [s.dict() if hasattr(s, 'dict') else s for s in (conversation.transcript_segments or [])]
+    chunks = build_transcript_chunks(segments, conversation.started_at or conversation.created_at)
+    if chunks:
+        upsert_transcript_chunk_vectors(uid, conversation.id, chunks)
+
+
 def save_structured_vector(uid: str, conversation: Conversation, update_only: bool = False):
     vector = generate_embedding(str(conversation.structured)) if not update_only else None
     tz = notification_db.get_user_time_zone(uid)
@@ -846,6 +859,8 @@ def process_conversation(
         )
         if not is_reprocess:
             submit_with_context(postprocess_executor, save_structured_vector, uid, conversation)
+            if TRANSCRIPT_CHUNK_INDEXING_ENABLED:
+                submit_with_context(postprocess_executor, save_transcript_chunk_vectors, uid, conversation)
         submit_with_context(postprocess_executor, _extract_memories, uid, conversation)
         submit_with_context(postprocess_executor, _extract_trends, uid, conversation)
         submit_with_context(postprocess_executor, _save_action_items, uid, conversation)

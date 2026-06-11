@@ -109,6 +109,7 @@ from database.action_items import get_action_item_ids
 from database.screen_activity import get_screen_activity_ids
 from database.vector_db import (
     delete_conversation_vectors_batch,
+    delete_transcript_chunk_vectors_batch,
     delete_memory_vectors_batch,
     delete_action_item_vectors_batch,
     delete_screen_activity_vectors,
@@ -159,7 +160,8 @@ def _purge_derived_user_data(uid: str):
     blocks the others or the subsequent Firestore deletion. IDs are read via lightweight IDs-only
     queries (no decryption).
 
-    Scope: conversation (ns1), memory (ns2), action-item (ns4) and screen-activity (ns3) vectors,
+    Scope: conversation (ns1), memory (ns2), action-item (ns4), screen-activity (ns3) and
+    transcript-chunk (ns_tchunks) vectors,
     plus conversation recordings. Known follow-ups NOT covered here: X-post vectors (no delete helper
     yet), speech-profile / person-sample / private-cloud-sync / chat-upload GCS blobs, and the
     externally-indexed Typesense collection.
@@ -170,6 +172,13 @@ def _purge_derived_user_data(uid: str):
             delete_conversation_vectors_batch(uid, conversation_ids)
     except Exception as e:
         logger.error(f'delete_account purge conversation vectors failed for {uid}: {sanitize(str(e))}')
+
+    try:
+        conversation_ids = get_conversation_ids(uid)
+        if conversation_ids:
+            delete_transcript_chunk_vectors_batch(uid, conversation_ids)
+    except Exception as e:
+        logger.error(f'delete_account purge transcript chunk vectors failed for {uid}: {sanitize(str(e))}')
 
     try:
         memory_ids = get_memory_ids(uid)
