@@ -152,7 +152,20 @@ function createWindow(): BrowserWindow {
         }
       }
     }
-    shell.openExternal(url)
+    // Hand only web/mail links to the OS. A prompt-injected chat reply could emit
+    // a file://, UNC, or custom-protocol URL; passing those to shell.openExternal
+    // enables NTLM-hash leak / protocol-handler abuse. Defense-in-depth alongside
+    // the renderer's Markdown scheme allow-list.
+    try {
+      const scheme = new URL(url).protocol
+      if (scheme === 'http:' || scheme === 'https:' || scheme === 'mailto:') {
+        shell.openExternal(url)
+      } else {
+        console.warn('[main] blocked external open of non-web URL scheme:', scheme)
+      }
+    } catch {
+      console.warn('[main] blocked external open of unparseable URL')
+    }
     return { action: 'deny' }
   })
 
