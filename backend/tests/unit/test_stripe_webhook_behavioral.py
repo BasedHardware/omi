@@ -23,7 +23,7 @@ from models.users import PlanType, SubscriptionStatus, Subscription
 def _get_build_subscription_fn():
     """Extract _build_subscription_from_stripe_object from payment.py source and
     compile it into an executable function with controlled dependencies."""
-    source = (Path(__file__).resolve().parents[2] / "routers" / "payment.py").read_text()
+    source = (Path(__file__).resolve().parents[2] / "routers" / "payment.py").read_text(encoding="utf-8")
     func_start = source.index('def _build_subscription_from_stripe_object')
     next_func = source.index('\ndef ', func_start + 1)
     func_source = source[func_start:next_func]
