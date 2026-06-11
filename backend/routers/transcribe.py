@@ -62,7 +62,7 @@ from models.message_event import (
 )
 from models.transcript_segment import Translation
 from models.users import PlanType
-from utils.analytics import record_usage
+from utils.analytics import billable_transcription_seconds, record_usage
 from utils.app_integrations import trigger_realtime_integrations
 from utils.apps import is_audio_bytes_app_enabled
 from utils.conversations.process_conversation import retrieve_in_progress_conversation
@@ -544,7 +544,11 @@ async def _stream_handler(
 
             if last_usage_record_timestamp:
                 current_time = time.time()
-                transcription_seconds = int(current_time - last_usage_record_timestamp)
+                # Clamped to the last audio actually received (#4700): keepalive
+                # pings keep the socket alive after the device stops streaming.
+                transcription_seconds = billable_transcription_seconds(
+                    last_usage_record_timestamp, last_audio_received_time, current_time
+                )
 
                 words_to_record = words_transcribed_since_last_record
                 words_transcribed_since_last_record = 0  # reset
@@ -2802,7 +2806,9 @@ async def _stream_handler(
         shutdown_event.set()
         BACKEND_LISTEN_ACTIVE_WS_CONNECTIONS.dec()
         if not use_custom_stt and last_usage_record_timestamp:
-            transcription_seconds = int(time.time() - last_usage_record_timestamp)
+            transcription_seconds = billable_transcription_seconds(
+                last_usage_record_timestamp, last_audio_received_time, time.time()
+            )
             words_to_record = words_transcribed_since_last_record
 
             # Flush any pending speech_ms delta to Redis (#5746 reviewer fix)
