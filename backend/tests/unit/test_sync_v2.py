@@ -1161,7 +1161,7 @@ class TestAsyncCoordinatorScenarios:
         """target_conversation_id must be passed through to _process_one_segment / process_segment."""
         body = self._get_bg_func_body()
         process_segment_section = body[body.index('def _process_one_segment') :]
-        process_segment_call = process_segment_section[:500]
+        process_segment_call = process_segment_section[:800]
         assert 'target_conversation_id' in process_segment_call
 
     # --- Cleanup on success and failure ---
@@ -1196,10 +1196,14 @@ class TestAsyncCoordinatorScenarios:
         assert 'job_dir' in after_finally
 
     def test_general_exception_marks_failed(self):
-        """General except Exception must mark job failed with error message."""
+        """Inline mode: general except Exception must mark job failed.
+        Task mode: it must re-raise instead, so the Cloud Tasks handler
+        controls retry vs final-attempt consume."""
         body = self._get_bg_func_body()
         main_except = body[body.index("except Exception as e:\n            logger.error(f'sync_v2 bg failed") :]
-        main_except_early = main_except[:200]
+        main_except_early = main_except[:600]
+        assert 'if task_mode:' in main_except_early
+        assert 'raise' in main_except_early
         assert 'mark_job_failed' in main_except_early
 
     def test_cleanup_order_byok_before_files(self):
@@ -1248,6 +1252,7 @@ class TestAsyncCoordinatorBehavioral:
             'utils',
             'utils.analytics',
             'utils.byok',
+            'utils.cloud_tasks',
             'utils.conversations',
             'utils.conversations.process_conversation',
             'utils.conversations.factory',
@@ -1688,6 +1693,7 @@ class TestV2EndpointExecution:
             'utils',
             'utils.analytics',
             'utils.byok',
+            'utils.cloud_tasks',
             'utils.conversations',
             'utils.conversations.process_conversation',
             'utils.conversations.factory',

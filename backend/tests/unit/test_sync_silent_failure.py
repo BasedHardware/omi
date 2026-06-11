@@ -617,6 +617,7 @@ _STUB_MODULES = [
     'utils.stt.speaker_embedding',
     'utils.fair_use',
     'utils.subscription',
+    'utils.cloud_tasks',
     'utils.conversations.process_conversation',
 ]
 
@@ -659,6 +660,12 @@ class TestProcessSegmentReal:
         sys.modules['utils.other.storage'].get_or_create_merged_audio = MagicMock()
         sys.modules['utils.other.storage'].get_merged_audio_signed_url = MagicMock()
         sys.modules['utils.other.storage']._PRECACHE_FILE_SEM = MagicMock()
+        sys.modules['utils.other.storage'].upload_syncing_temporal_file = MagicMock()
+        sys.modules['utils.other.storage'].download_syncing_temporal_file = MagicMock(return_value=True)
+        sys.modules['utils.cloud_tasks'].enqueue_sync_job = MagicMock()
+        sys.modules['utils.cloud_tasks'].get_sync_tasks_max_attempts = MagicMock(return_value=5)
+        sys.modules['utils.cloud_tasks'].is_cloud_tasks_dispatch_enabled = MagicMock(return_value=False)
+        sys.modules['utils.cloud_tasks'].verify_cloud_tasks_oidc = MagicMock()
         sys.modules['utils.log_sanitizer'].sanitize = lambda value: value
         sys.modules['utils.encryption'].encrypt = MagicMock()
         sys.modules['utils.stt.pre_recorded'].deepgram_prerecorded = MagicMock()
