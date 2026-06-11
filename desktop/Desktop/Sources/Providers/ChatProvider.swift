@@ -504,6 +504,24 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
     @Published var isClearing = false
     @Published var errorMessage: String?
 
+    // MARK: - ChatErrorState (structured replacement for the inline error banner)
+    //
+    // Structured error state for the chat surface. Drives the
+    // ChatErrorCard view. Coexists with the legacy `errorMessage`
+    // banner: mappable BridgeError cases set `currentError` and clear
+    // `errorMessage`; unmappable cases (encoding, quota, agent errors
+    // with free-form messages) keep falling back to the legacy banner.
+    //
+    // Paywall sheets (`isClaudeAuthRequired`, `needsBrowserExtensionSetup`,
+    // `showOmiThresholdAlert`) are deliberately NOT migrated — they're
+    // product flows, not error recovery surfaces.
+    @Published var currentError: ChatErrorState?
+
+    /// Captured at the start of each sendMessage so the .retry recovery
+    /// action can re-issue the user's last prompt. Cleared after a
+    /// successful re-send or on dismiss to avoid stale retries.
+    private var lastFailedPrompt: String?
+
     /// Monotonically-incremented id for each sendMessage / stopAgent cycle.
     /// Watchdog tasks capture their gen and only reset state if it still
     /// matches — so a watchdog fired by a stuck send #N won't cancel a
@@ -3102,11 +3120,30 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                 )
             }
 
-            // Show error to user (unless they intentionally stopped)
+            // Show error to user (unless they intentionally stopped).
+            //
+            // Prefer the structured ChatErrorState card when the error
+            // maps cleanly. Falls through to the legacy errorMessage
+            // banner for unmappable BridgeError cases (encodingError,
+            // quotaExceeded, .agentError with a free-form message).
+            // Both surfaces coexist — only one is active at a time per
+            // turn.
             if let bridgeError = error as? BridgeError, case .stopped = bridgeError {
-                // User stopped — no error to show
+                // User stopped — no error to show, but the card system
+                // still surfaces .interrupted so users can resume.
+                if let card = ChatErrorState.from(bridgeError) {
+                    currentError = card
+                    lastFailedPrompt = trimmedText
+                    errorMessage = nil
+                }
+            } else if let bridgeError = error as? BridgeError,
+                      let card = ChatErrorState.from(bridgeError) {
+                currentError = card
+                lastFailedPrompt = trimmedText
+                errorMessage = nil
             } else {
                 errorMessage = error.localizedDescription
+                currentError = nil  // ensure the card is dismissed if it was up
             }
         }
 
@@ -3404,6 +3441,59 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                 messages[index].rating = nil
             }
         }
+    }
+
+    // MARK: - ChatErrorState recovery dispatch
+
+    /// User tapped the primary CTA on a `ChatErrorCard`. Dispatches to
+    /// the matching recovery action and clears `currentError`.
+    ///
+    /// Every `ChatErrorRecoveryAction` case is wired to a concrete
+    /// handler. Implementations are deliberately minimal: each one
+    /// performs the smallest useful action that points the user at the
+    /// fix path.
+    ///
+    /// - `.retry`: re-issue the last failed prompt.
+    /// - `.dismiss`: clear without further action.
+    /// - `.signIn`: open `https://omi.me/` so the user can complete
+    ///   sign-in. Triggering native OAuth from a chat-error context
+    ///   needs more UI plumbing than fits in this scope — surfacing
+    ///   the URL is the honest minimum.
+    /// - `.installRuntime`: open `https://nodejs.org/` so the user can
+    ///   install Node before the bridge can spawn.
+    func recoverFromError() async {
+        guard let error = currentError else { return }
+        let action = error.primaryRecovery
+        let promptToRetry = lastFailedPrompt
+        currentError = nil
+        lastFailedPrompt = nil
+
+        switch action {
+        case .retry:
+            if let prompt = promptToRetry, !prompt.isEmpty {
+                await sendMessage(prompt)
+            }
+        case .dismiss:
+            break  // already cleared above
+        case .signIn:
+            log("ChatErrorCard: .signIn recovery — opening omi.me sign-in URL")
+            if let url = URL(string: "https://omi.me/") {
+                NSWorkspace.shared.open(url)
+            }
+        case .installRuntime:
+            log("ChatErrorCard: .installRuntime recovery — opening nodejs.org for runtime install")
+            if let url = URL(string: "https://nodejs.org/") {
+                NSWorkspace.shared.open(url)
+            }
+        }
+    }
+
+    /// User tapped the dismiss "x" on a `ChatErrorCard`. Clears the
+    /// card without firing any recovery action. Used when the user
+    /// wants to acknowledge the error and move on without retrying.
+    func dismissCurrentError() {
+        currentError = nil
+        lastFailedPrompt = nil
     }
 
     // MARK: - Clear Chat
