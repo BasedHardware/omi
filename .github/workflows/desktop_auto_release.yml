@@ -4,8 +4,8 @@ on:
   push:
     branches: ["main"]
     paths:
-      - 'desktop/**'
-      - '!desktop/CHANGELOG.json'
+      - 'desktop/macos/**'
+      - '!desktop/macos/CHANGELOG.json'
   workflow_dispatch:
 
 permissions:
@@ -47,13 +47,13 @@ jobs:
         uses: docker/setup-buildx-action@v3
 
       - name: Google Service Account
-        run: echo "${{ secrets.GCP_SERVICE_ACCOUNT }}" | base64 -d > ./desktop/Backend-Rust/google-credentials.json
+        run: echo "${{ secrets.GCP_SERVICE_ACCOUNT }}" | base64 -d > ./desktop/macos/Backend-Rust/google-credentials.json
 
       - name: Build and Push Desktop Backend Image
         uses: docker/build-push-action@v6
         with:
-          context: ./desktop/Backend-Rust
-          file: ./desktop/Backend-Rust/Dockerfile
+          context: ./desktop/macos/Backend-Rust
+          file: ./desktop/macos/Backend-Rust/Dockerfile
           push: true
           tags: |
             gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${{ github.sha }}
@@ -114,13 +114,13 @@ jobs:
         uses: docker/setup-buildx-action@v3
 
       - name: Google Service Account
-        run: echo "${{ secrets.GCP_SERVICE_ACCOUNT }}" | base64 -d > ./desktop/Backend-Rust/google-credentials.json
+        run: echo "${{ secrets.GCP_SERVICE_ACCOUNT }}" | base64 -d > ./desktop/macos/Backend-Rust/google-credentials.json
 
       - name: Build and Push Desktop Backend Image
         uses: docker/build-push-action@v6
         with:
-          context: ./desktop/Backend-Rust
-          file: ./desktop/Backend-Rust/Dockerfile
+          context: ./desktop/macos/Backend-Rust
+          file: ./desktop/macos/Backend-Rust/Dockerfile
           push: true
           tags: |
             gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${{ github.sha }}
@@ -243,7 +243,7 @@ jobs:
           python3 -c "
           import json, sys
 
-          with open('desktop/CHANGELOG.json', 'r') as f:
+          with open('desktop/macos/CHANGELOG.json', 'r') as f:
               data = json.load(f)
 
           unreleased = data.get('unreleased', [])
@@ -259,7 +259,7 @@ jobs:
           data.setdefault('releases', []).insert(0, new_release)
           data['unreleased'] = []
 
-          with open('desktop/CHANGELOG.json', 'w') as f:
+          with open('desktop/macos/CHANGELOG.json', 'w') as f:
               json.dump(data, f, indent=2)
               f.write('\n')
 
@@ -273,7 +273,7 @@ jobs:
 
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add desktop/CHANGELOG.json
+          git add desktop/macos/CHANGELOG.json
           git commit -m "chore: consolidate changelog for v${VERSION}" || echo "No changelog changes to commit"
 
           # Tag the changelog commit first; Codemagic uses this tag to trigger builds.
