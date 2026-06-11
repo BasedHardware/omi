@@ -11,6 +11,7 @@ from typing import Union, Tuple, List, Optional
 from fastapi import HTTPException
 
 from database import redis_db
+from database.auth import get_user_name
 import database.memories as memories_db
 import database.conversations as conversations_db
 import database.notifications as notification_db
@@ -192,7 +193,8 @@ def _get_structured(
             # not supported conversation source
             raise HTTPException(status_code=400, detail=f'Invalid conversation source: {conversation.text_source}')
 
-        transcript_text = conversation.get_transcript(False, people=people)
+        user_name = get_user_name(uid, use_default=False)
+        transcript_text = conversation.get_transcript(False, people=people, user_name=user_name)
 
         # For re-processing, we don't discard, just re-structure.
         if force_process:
@@ -550,7 +552,6 @@ def _extract_memories_inner(uid: str, conversation: Conversation):
 
         try:
             from utils.llm.knowledge_graph import extract_knowledge_from_memory
-            from database.auth import get_user_name
 
             user_name = get_user_name(uid)
 
