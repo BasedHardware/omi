@@ -203,13 +203,13 @@ class TestConversationAndSummaryWebhooksStructural:
     @staticmethod
     def _read_webhooks_source() -> str:
         webhooks_path = os.path.join(os.path.dirname(__file__), '..', '..', 'utils', 'webhooks.py')
-        with open(webhooks_path) as f:
+        with open(webhooks_path, encoding='utf-8') as f:
             return f.read()
 
     @staticmethod
     def _parse_webhooks_ast():
         webhooks_path = os.path.join(os.path.dirname(__file__), '..', '..', 'utils', 'webhooks.py')
-        with open(webhooks_path) as f:
+        with open(webhooks_path, encoding='utf-8') as f:
             return ast.parse(f.read())
 
     def test_conversation_created_webhook_is_async(self):
@@ -357,7 +357,7 @@ class TestSendSummaryNotificationWiresSummaryJson:
 
     def test_notifications_passes_summary_data_as_summary_json(self):
         path = os.path.join(os.path.dirname(__file__), '..', '..', 'utils', 'other', 'notifications.py')
-        with open(path) as f:
+        with open(path, encoding='utf-8') as f:
             src = f.read()
 
         assert 'day_summary_webhook(uid, str(summary_data), summary_data)' in src, (
