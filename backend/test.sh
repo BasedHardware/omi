@@ -142,6 +142,7 @@ pytest tests/unit/test_tts.py -v
 pytest tests/unit/test_webhook_auto_disable.py -v
 pytest tests/unit/test_merge_validation.py -v
 pytest tests/unit/test_twilio_account_deletion.py -v
+pytest tests/unit/test_trial_opt_in.py -v
 pytest tests/unit/test_conversation_search_date_validation.py -v
 pytest tests/unit/test_conversation_hybrid_search.py -v
 pytest tests/unit/test_delete_account_stripe_cancel.py -v

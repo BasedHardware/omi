@@ -802,6 +802,18 @@ def update_user_subscription(uid: str, subscription_data: dict):
     user_ref.update({'subscription': subscription_data_to_store})
 
 
+def set_subscription_trial_started_at(uid: str, started_at: int) -> None:
+    """Record the explicit moment a user opted into the desktop 3-day trial.
+
+    Dotted-path update so Stripe-managed fields (current_period_end,
+    stripe_subscription_id, plan, status, ...) sitting in the same
+    `subscription` map are not clobbered. `update_user_subscription` above
+    replaces the whole map and is unsafe for this single-field write.
+    """
+    user_ref = db.collection('users').document(uid)
+    user_ref.update({'subscription.trial_started_at': started_at})
+
+
 # **************************************
 # ********* Data Protection ************
 # **************************************

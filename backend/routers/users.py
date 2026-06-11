@@ -1,6 +1,7 @@
 import json
 import re
 import threading
+import time
 import uuid
 from typing import List, Dict, Any, Union, Optional
 import hashlib
@@ -1207,6 +1208,27 @@ def get_user_trial_status(uid: str = Depends(auth.get_current_user_uid)):
     Paid-plan and BYOK users get `trial_expired=False` with zeroed timing
     (trial is irrelevant to them — they have full access).
     """
+    return get_trial_metadata(uid)
+
+
+@router.post('/v1/users/me/trial/start', tags=['users'], response_model=TrialMetadata)
+def start_user_trial(uid: str = Depends(auth.get_current_user_uid)):
+    """Opt the user into the desktop 3-day premium trial.
+
+    Idempotent: if the user already started a trial (or got lazy-backfilled
+    by `get_trial_metadata`), this is a no-op and returns the existing
+    metadata. Otherwise writes `subscription.trial_started_at = now()` and
+    invalidates the paywall cache so the countdown UI flips on the next
+    poll.
+    """
+    raw_subscription = users_db.get_user_subscription(uid)
+    already_started = getattr(raw_subscription, 'trial_started_at', None) if raw_subscription else None
+    if already_started:
+        return get_trial_metadata(uid)
+
+    now_seconds = int(time.time())
+    users_db.set_subscription_trial_started_at(uid, now_seconds)
+    clear_trial_paywall_cache(uid)
     return get_trial_metadata(uid)
 
 
