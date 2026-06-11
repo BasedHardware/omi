@@ -6,6 +6,7 @@ from typing import Any, Dict, List, Optional, Tuple
 import anthropic
 import httpx
 from cachetools import TTLCache
+from langchain_core.callbacks import BaseCallbackHandler
 from langchain_core.language_models import BaseChatModel
 from langchain_core.output_parsers import PydanticOutputParser
 from langchain_google_genai import ChatGoogleGenerativeAI
@@ -14,11 +15,48 @@ import tiktoken
 
 from models.structured import Structured
 from utils.byok import get_byok_key
+from utils.llm.byok_errors import handle_llm_error
 from utils.llm.usage_tracker import get_usage_callback
 
 logger = logging.getLogger(__name__)
 
 _usage_callback = get_usage_callback()
+
+
+class _LLMErrorCallback(BaseCallbackHandler):
+    """LangChain callback that tags provider errors with platform/BYOK source."""
+
+    def __init__(self, provider: str, model: str = '', feature: str = ''):
+        self.provider = provider
+        self.model = model
+        self.feature = feature
+
+    def on_llm_error(self, error: BaseException, **kwargs) -> None:
+        if isinstance(error, Exception):
+            handle_llm_error(error, self.provider, feature=self.feature, model=self.model)
+
+
+_llm_error_callbacks: Dict[Tuple[str, str, str], _LLMErrorCallback] = {}
+
+
+def _get_llm_error_callback(provider: str, model: str = '', feature: str = '') -> _LLMErrorCallback:
+    key = (provider, model, feature)
+    if key not in _llm_error_callbacks:
+        _llm_error_callbacks[key] = _LLMErrorCallback(provider, model=model, feature=feature)
+    return _llm_error_callbacks[key]
+
+
+def _with_llm_callbacks(kwargs: Dict[str, Any], provider: str, model: str = '', feature: str = '') -> Dict[str, Any]:
+    result = dict(kwargs)
+    callbacks = list(result.get('callbacks') or [])
+    if _usage_callback not in callbacks:
+        callbacks.append(_usage_callback)
+    error_callback = _get_llm_error_callback(provider, model=model, feature=feature)
+    if error_callback not in callbacks:
+        callbacks.append(error_callback)
+    result['callbacks'] = callbacks
+    return result
+
 
 # ---------------------------------------------------------------------------
 # BYOK (Bring Your Own Key)
@@ -56,6 +94,7 @@ class _OpenAIEmbeddingsProxy:
     """Transparent proxy for OpenAIEmbeddings that uses BYOK OpenAI when set."""
 
     __slots__ = ('_model', '_default', '_ctor_kwargs')
+    _METHODS_TO_WRAP = {'embed_documents', 'aembed_documents', 'embed_query', 'aembed_query'}
 
     def __init__(self, model: str, default: OpenAIEmbeddings, ctor_kwargs: Dict[str, Any]):
         object.__setattr__(self, '_model', model)
@@ -115,7 +154,28 @@ class _OpenAIEmbeddingsProxy:
             raise
 
     def __getattr__(self, name: str):
-        return getattr(self._resolve(), name)
+        attr = getattr(self._resolve(), name)
+        if name not in self._METHODS_TO_WRAP or not callable(attr):
+            return attr
+        if name.startswith('a'):
+
+            async def _wrapped_async(*args, **kwargs):
+                try:
+                    return await attr(*args, **kwargs)
+                except Exception as e:
+                    handle_llm_error(e, 'openai', feature='embeddings', model=self._model, operation=name)
+                    raise
+
+            return _wrapped_async
+
+        def _wrapped(*args, **kwargs):
+            try:
+                return attr(*args, **kwargs)
+            except Exception as e:
+                handle_llm_error(e, 'openai', feature='embeddings', model=self._model, operation=name)
+                raise
+
+        return _wrapped
 
 
 _BYOK_CACHE_MAX_SIZE = 256
@@ -152,7 +212,10 @@ def _create_byok_client(
     model: str, provider: str, byok_key: str, streaming: bool = False, feature: str = ''
 ) -> Optional[ChatOpenAI]:
     """Create a ChatOpenAI using the user's BYOK key. Returns None if BYOK not supported for this provider."""
-    kwargs: Dict[str, Any] = {'callbacks': [_usage_callback], 'request_timeout': 120, 'max_retries': 1}
+    callback_provider = _effective_byok_provider(model, provider)
+    kwargs: Dict[str, Any] = _with_llm_callbacks(
+        {'request_timeout': 120, 'max_retries': 1}, callback_provider, model=model, feature=feature
+    )
     if model == 'gpt-5.1':
         kwargs['extra_body'] = {"prompt_cache_retention": "24h"}
     if streaming:
@@ -189,6 +252,7 @@ def get_anthropic_client() -> anthropic.AsyncAnthropic:
 
 def get_openai_chat(model: str, **kwargs) -> ChatOpenAI:
     """Explicit factory; equivalent to using the module-level proxies."""
+    kwargs = _with_llm_callbacks(kwargs, 'openai', model=model)
     byok = get_byok_key('openai')
     if byok:
         return _cached_openai_chat(model, byok, kwargs)
@@ -458,11 +522,9 @@ def _get_or_create_openai_llm(model_name: str, streaming: bool = False) -> ChatO
     """Get or create a cached ChatOpenAI for an OpenAI model."""
     key = (model_name, streaming, 'openai')
     if key not in _llm_cache:
-        kwargs: Dict[str, Any] = {
-            'callbacks': [_usage_callback],
-            'request_timeout': 120,
-            'max_retries': 1,
-        }
+        kwargs: Dict[str, Any] = _with_llm_callbacks(
+            {'request_timeout': 120, 'max_retries': 1}, 'openai', model=model_name
+        )
         if model_name == 'gpt-5.1':
             kwargs['extra_body'] = {"prompt_cache_retention": "24h"}
         if streaming:
@@ -488,10 +550,10 @@ def _get_or_create_openrouter_llm(
             'api_key': os.environ.get('OPENROUTER_API_KEY'),
             'base_url': "https://openrouter.ai/api/v1",
             'default_headers': {"X-Title": "Omi Chat"},
-            'callbacks': [_usage_callback],
             'request_timeout': 120,
             'max_retries': 1,
         }
+        kwargs = _with_llm_callbacks(kwargs, 'openrouter', model=api_model)
         if temperature is not None:
             kwargs['temperature'] = temperature
         if streaming:
@@ -527,7 +589,7 @@ def _get_or_create_gemini_llm(
         use_vertex = os.environ.get('USE_VERTEX_AI', '').lower() == 'true'
         gcp_project = os.environ.get('GOOGLE_CLOUD_PROJECT', '') if use_vertex else ''
         gemini_key = os.environ.get('GEMINI_API_KEY', '')
-        kwargs: Dict[str, Any] = {'callbacks': [_usage_callback], 'timeout': 120, 'max_retries': 1}
+        kwargs: Dict[str, Any] = _with_llm_callbacks({'timeout': 120, 'max_retries': 1}, 'gemini', model=model_name)
         if streaming:
             kwargs['streaming'] = True
         if thinking_budget is not None and model_name.startswith('gemini-2.5'):
@@ -678,7 +740,10 @@ ANTHROPIC_AGENT_COMPLEX_MODEL = get_model('chat_agent')
 # Legacy module-level alias (kept for test compatibility).
 # Production code should use get_llm(feature) exclusively.
 # ---------------------------------------------------------------------------
-llm_mini = ChatOpenAI(model='gpt-4.1-mini', callbacks=[_usage_callback], request_timeout=120, max_retries=1)
+llm_mini = ChatOpenAI(
+    model='gpt-4.1-mini',
+    **_with_llm_callbacks({'request_timeout': 120, 'max_retries': 1}, 'openai', model='gpt-4.1-mini'),
+)
 
 # ---------------------------------------------------------------------------
 # Embeddings, parser, utilities
@@ -721,6 +786,10 @@ def gemini_embed_query(text: str) -> List[float]:
         'taskType': 'RETRIEVAL_QUERY',
     }
     headers = {'x-goog-api-key': api_key, 'Content-Type': 'application/json'}
-    resp = httpx.post(url, json=payload, headers=headers, timeout=10)
-    resp.raise_for_status()
-    return resp.json()['embedding']['values']
+    try:
+        resp = httpx.post(url, json=payload, headers=headers, timeout=10)
+        resp.raise_for_status()
+        return resp.json()['embedding']['values']
+    except Exception as e:
+        handle_llm_error(e, 'gemini', feature='embeddings', model='embedding-001', operation='embed_query')
+        raise
