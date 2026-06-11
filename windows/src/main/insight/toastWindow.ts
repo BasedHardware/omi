@@ -7,6 +7,7 @@ import { BrowserWindow, screen } from 'electron'
 import { join } from 'path'
 import { is } from '@electron-toolkit/utils'
 import type { InsightPayload } from '../../shared/types'
+import { rendererBaseUrl } from '../rendererServer'
 
 const WIDTH = 360
 const HEIGHT = 168
@@ -58,8 +59,12 @@ function ensureWindow(): BrowserWindow {
   win.on('closed', () => {
     toastWindow = null
   })
+  // Same-origin as the main window (see overlay/window.ts) so the toast sees
+  // the signed-in auth state.
   if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
     win.loadURL(`${process.env['ELECTRON_RENDERER_URL']}#/insight-toast`)
+  } else if (rendererBaseUrl()) {
+    win.loadURL(`${rendererBaseUrl()}/index.html#/insight-toast`)
   } else {
     win.loadFile(join(__dirname, '../renderer/index.html'), { hash: 'insight-toast' })
   }
