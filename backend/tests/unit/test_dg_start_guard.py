@@ -7,7 +7,7 @@ returns False, preventing dead connections from being passed to callers.
 import os
 import sys
 from types import ModuleType
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -48,6 +48,12 @@ os.environ.setdefault('DEEPGRAM_API_KEY', 'fake-for-test')
 # NOTE: Do NOT set sys.modules['deepgram'].LiveTranscriptionEvents here.
 # MagicMock auto-generates attributes on access, and overwriting would pollute
 # shared pytest state for test_streaming_deepgram_backoff.py's close/error handler tests.
+
+_speaker_embedding = ModuleType('utils.stt.speaker_embedding')
+_speaker_embedding.SPEAKER_MATCH_THRESHOLD = 0.45
+_speaker_embedding.async_extract_embedding_from_bytes = AsyncMock(return_value=None)
+_speaker_embedding.compare_embeddings = MagicMock(return_value=0.0)
+sys.modules.setdefault('utils.stt.speaker_embedding', _speaker_embedding)
 
 # Now import the real streaming module
 from utils.stt.streaming import connect_to_deepgram
