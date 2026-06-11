@@ -634,3 +634,92 @@ def delete_memory_vectors_batch(uid: str, memory_ids: List[str]) -> int:
             logger.warning(f'delete_memory_vectors_batch chunk failed uid={uid} chunk={i // 1000}')
     logger.info(f'delete_memory_vectors_batch uid={uid} total_deleted={total_deleted}')
     return total_deleted
+
+
+# ---------------------------------------------------------------------------
+# Transcript chunks ("ns_tchunks"): verbatim retrieval over raw conversation
+# transcripts. Conversation vectors (ns1) embed only the structured SUMMARY, so
+# specific details (exact dates, names, numbers, one-off mentions) are not
+# findable semantically. These chunk vectors carry the raw transcript text in
+# metadata so retrieval returns the verbatim evidence with zero extra reads.
+TRANSCRIPT_CHUNKS_NAMESPACE = "ns_tchunks"
+
+
+def upsert_transcript_chunk_vectors(uid: str, conversation_id: str, chunks: List[dict]) -> int:
+    """chunks: [{'text': str, 'created_at': int unix ts, 'chunk_index': int}]"""
+    if index is None:
+        logger.warning('Pinecone index not initialized, skipping transcript chunk upsert')
+        return 0
+    chunks = [c for c in chunks if (c.get('text') or '').strip()]
+    if not chunks:
+        return 0
+
+    vectors = embeddings.embed_documents([c['text'] for c in chunks])
+    payload = []
+    for c, v in zip(chunks, vectors):
+        payload.append(
+            {
+                'id': f"{uid}-{conversation_id}-c{c['chunk_index']}",
+                'values': v,
+                'metadata': {
+                    'uid': uid,
+                    'conversation_id': conversation_id,
+                    'chunk_index': c['chunk_index'],
+                    'created_at': int(c['created_at']),
+                    # Pinecone metadata limit is 40KB/vector; transcripts chunks are ~<2KB.
+                    'text': c['text'][:8000],
+                },
+            }
+        )
+
+    upserted = 0
+    for i in range(0, len(payload), 100):
+        index.upsert(vectors=payload[i : i + 100], namespace=TRANSCRIPT_CHUNKS_NAMESPACE)
+        upserted += len(payload[i : i + 100])
+    logger.info(f'upsert_transcript_chunk_vectors uid={uid} conversation={conversation_id} count={upserted}')
+    return upserted
+
+
+def search_transcript_chunks(
+    uid: str, query: str, limit: int = 20, starts_at: int = None, ends_at: int = None
+) -> List[dict]:
+    """Semantic search over raw transcript chunks. Returns verbatim text + date, newest data
+    comes from metadata directly (no Firestore round-trip)."""
+    if index is None:
+        return []
+    vector = embeddings.embed_query(query)
+    filter_data = {'uid': uid}
+    if starts_at is not None and ends_at is not None:
+        filter_data['created_at'] = {'$gte': int(starts_at), '$lte': int(ends_at)}
+    xc = index.query(
+        vector=vector,
+        top_k=limit,
+        include_metadata=True,
+        filter=filter_data,
+        namespace=TRANSCRIPT_CHUNKS_NAMESPACE,
+    )
+    results = []
+    for m in xc.get('matches', []):
+        md = m.get('metadata') or {}
+        results.append(
+            {
+                'text': md.get('text', ''),
+                'created_at': int(md['created_at']) if md.get('created_at') is not None else None,
+                'conversation_id': md.get('conversation_id'),
+                'chunk_index': md.get('chunk_index'),
+                'score': m.get('score', 0),
+            }
+        )
+    return results
+
+
+def delete_transcript_chunk_vectors(uid: str, conversation_id: str, max_chunks: int = 512):
+    """Delete all chunk vectors for a conversation (ids are sequential by construction)."""
+    if index is None:
+        return
+    ids = [f'{uid}-{conversation_id}-c{i}' for i in range(max_chunks)]
+    try:
+        for i in range(0, len(ids), 100):
+            index.delete(ids=ids[i : i + 100], namespace=TRANSCRIPT_CHUNKS_NAMESPACE)
+    except Exception:
+        logger.warning(f'delete_transcript_chunk_vectors failed uid={uid} conversation={conversation_id}')
