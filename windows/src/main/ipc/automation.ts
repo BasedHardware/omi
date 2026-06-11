@@ -1,7 +1,7 @@
-import { ipcMain, dialog, BrowserWindow, type WebContents } from 'electron'
+import { ipcMain, dialog, BrowserWindow } from 'electron'
 import { automationBridge } from '../automation/bridge'
 import { getAutomationTargetHandle } from '../automation/foregroundTarget'
-import type { AutomationPlan, AutomationStep, PlanRunResult, UiSnapshot } from '../../shared/types'
+import type { AutomationPlan, AutomationStep, UiSnapshot } from '../../shared/types'
 
 // Result of the native-dialog confirm flow. `canceled` distinguishes a user
 // "Cancel" from an execution failure.
@@ -45,12 +45,11 @@ export function registerAutomationHandlers(): void {
     return getAutomationTargetHandle()
   })
 
-  ipcMain.handle('automation:run', async (e, plan: AutomationPlan): Promise<PlanRunResult> => {
-    const wc: WebContents = e.sender
-    return automationBridge.run(plan, (r) => {
-      if (!wc.isDestroyed()) wc.send('automation:step', r)
-    })
-  })
+  // The only run path is the consent-gated automation:confirmRun below. The
+  // former dialog-less 'automation:run' IPC was removed: it was exposed to the
+  // renderer but had no legitimate caller, and let web content drive Windows UI
+  // input with no approval. Per-step progress events aren't needed by the
+  // confirm flow (it resolves once on completion).
 
   // Consent gate as a NATIVE Windows dialog (works identically from the main
   // window and the floating overlay, since it lives here in main). Shows the plan
