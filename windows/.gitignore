@@ -1,0 +1,52 @@
+node_modules
+dist
+out
+.DS_Store
+.eslintcache
+*.log*
+
+# Secrets — never commit
+.env
+.env.local
+.env.*.local
+
+# Build / installer artifacts
+build/
+release/
+dist/
+*.exe
+*.msi
+*.dmg
+*.AppImage
+
+# Perf benchmark artifacts + tooling (dev-only; keep out of the public repo)
+.bench/
+scripts/bench/
+src/main/bench/
+
+# HuggingFace / model cache
+.cache/
+models/
+
+# OS
+Thumbs.db
+desktop.ini
+
+#Personal files
+.agents/
+.vscode/
+docs/
+skills-lock.json
+
+# Visual brainstorming companion
+.superpowers/
+
+# .NET build artifacts (win-ocr-helper)
+src/main/ocr/win-ocr-helper/bin/
+src/main/ocr/win-ocr-helper/obj/
+resources/win-ocr-helper/*.pdb
+
+# .NET build artifacts (win-automation-helper)
+src/main/automation/helper/bin/
+src/main/automation/helper/obj/
+resources/win-automation-helper/*.pdb
