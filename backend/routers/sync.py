@@ -9,6 +9,7 @@ import threading
 import time
 import uuid as _uuid
 import wave
+from concurrent.futures import TimeoutError as FuturesTimeoutError
 from datetime import datetime, timezone
 from typing import Dict, List, Optional, Tuple
 
@@ -89,6 +90,12 @@ logger = logging.getLogger(__name__)
 
 # Audio constants
 AUDIO_SAMPLE_RATE = 16000
+
+# Max time the /urls endpoint blocks on caching the first uncached file. Large
+# merges (hundreds of chunks, or GCS pushback) can take 60-115s+, exceeding the
+# 120s middleware timeout and client timeouts (#7325); past this budget the file
+# is reported as pending while the merge finishes in the background.
+FIRST_FILE_CACHE_WAIT_SECONDS = 15.0
 
 _V1_DEPRECATION_HEADERS = {'Deprecation': 'true', 'Link': '</v2/sync-local-files>; rel="successor-version"'}
 
@@ -276,10 +283,24 @@ def get_audio_signed_urls_endpoint(
                 }
             )
         else:
-            # First uncached file: cache synchronously for immediate playback
+            # First uncached file: cache synchronously for immediate playback,
+            # but bounded — a slow merge must not block the endpoint past
+            # client/middleware timeouts (#7325). On timeout the merge keeps
+            # running on sync_executor and lands in the cache for later calls;
+            # the file is reported as pending and clients fall back to the
+            # stream endpoint or re-fetch.
             if not first_uncached_handled:
                 first_uncached_handled = True
-                _precache_audio_file(uid, conversation_id, af, caller='sync_urls_first')
+                first_file_future = submit_with_context(
+                    sync_executor, _precache_audio_file, uid, conversation_id, af, caller='sync_urls_first'
+                )
+                try:
+                    first_file_future.result(timeout=FIRST_FILE_CACHE_WAIT_SECONDS)
+                except FuturesTimeoutError:
+                    logger.warning(
+                        f"sync_urls first-file cache exceeded {FIRST_FILE_CACHE_WAIT_SECONDS}s, returning pending "
+                        f"uid={uid} convo={conversation_id} file={audio_file_id}"
+                    )
                 # Get signed URL after caching
                 signed_url = get_merged_audio_signed_url(uid, conversation_id, audio_file_id)
                 if signed_url:
