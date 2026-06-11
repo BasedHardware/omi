@@ -168,7 +168,10 @@ export type OmiBridgeApi = {
   /** Load the local onboarding knowledge graph. */
   localGraphLoad: () => Promise<KnowledgeGraph>
   /** Upsert nodes/edges (idempotent by id); returns the full graph after write. */
-  localGraphUpsert: (nodes: OnboardingGraphNode[], edges: OnboardingGraphEdge[]) => Promise<KnowledgeGraph>
+  localGraphUpsert: (
+    nodes: OnboardingGraphNode[],
+    edges: OnboardingGraphEdge[]
+  ) => Promise<KnowledgeGraph>
   /** Clear the local onboarding graph (called once at first onboarding start). */
   localGraphClear: () => Promise<void>
   /** Aggregated local app-usage rows (foreground seconds per app). */
@@ -271,9 +274,10 @@ export type OmiBridgeApi = {
   automationEnabled: boolean
   automationSnapshot: (windowHandle?: string) => Promise<UiSnapshot>
   automationTargetWindow: () => Promise<string | null>
-  automationRun: (plan: AutomationPlan) => Promise<PlanRunResult>
   // Native-dialog consent gate: shows the plan in a Windows dialog and runs it
-  // only on approval. `canceled` = user declined; otherwise ok/message.
+  // only on approval. `canceled` = user declined; otherwise ok/message. This is
+  // the ONLY automation-run path exposed to the renderer (the consent-free
+  // `automation:run` handler was removed — it had no legitimate caller).
   automationConfirmRun: (
     plan: AutomationPlan
   ) => Promise<{ ok: boolean; canceled?: boolean; message?: string }>
@@ -561,7 +565,14 @@ export type FetchNewResult<T> = {
 
 // --- Windows OCR helper (win-ocr-helper) ---
 
-export type OcrLine = { text: string; x: number; y: number; w: number; h: number; confidence: number }
+export type OcrLine = {
+  text: string
+  x: number
+  y: number
+  w: number
+  h: number
+  confidence: number
+}
 export type OcrResult =
   | { ok: true; fullText: string; lines: OcrLine[] }
   | { ok: false; code: 'NO_LANGUAGE' | 'DECODE_FAILED' | 'HELPER_ERROR'; message?: string }
@@ -605,12 +616,7 @@ export type RewindSettings = {
 }
 
 // --- Proactive Insights (Rewind OCR → Gemini → acrylic toast) ---
-export type InsightCategory =
-  | 'productivity'
-  | 'communication'
-  | 'learning'
-  | 'health'
-  | 'other'
+export type InsightCategory = 'productivity' | 'communication' | 'learning' | 'health' | 'other'
 
 // One insight as shown in the toast (mirrors macOS ExtractedInsight).
 export type InsightPayload = {
