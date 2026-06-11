@@ -124,8 +124,7 @@ const omi: OmiBridgeApi = {
   },
   perfFirstPaint: () => ipcRenderer.send('perf:firstPaint'),
   perfMark: (name: string) => ipcRenderer.send('perf:mark', name),
-  perfAnimResult: (stats: Record<string, number>) =>
-    ipcRenderer.send('perf:animResult', stats),
+  perfAnimResult: (stats: Record<string, number>) => ipcRenderer.send('perf:animResult', stats),
   isAnimBench: process.env.OMI_ANIM_BENCH === '1',
   benchEcho: (x: number) => ipcRenderer.invoke('bench:echo', x),
   isBench: process.env.OMI_BENCH === '1',
@@ -135,7 +134,11 @@ const omi: OmiBridgeApi = {
   automationSnapshot: (windowHandle?: string) =>
     ipcRenderer.invoke('automation:snapshot', windowHandle),
   automationTargetWindow: () => ipcRenderer.invoke('automation:targetWindow'),
-  automationRun: (plan: AutomationPlan) => ipcRenderer.invoke('automation:run', plan),
+  // NOTE: the dialog-less `automationRun` is intentionally NOT exposed to the
+  // renderer. Every renderer-initiated plan must go through automationConfirmRun,
+  // which gates on a native approval dialog built in main from the real plan.
+  // Exposing a consent-free run primitive to web content would let any future
+  // renderer-side code (XSS, hostile navigation) silently drive Windows UI input.
   automationConfirmRun: (plan: AutomationPlan) => ipcRenderer.invoke('automation:confirmRun', plan),
   onAutomationStep: (cb: (r: StepResult) => void) => {
     const listener = (_e: unknown, r: StepResult): void => cb(r)
@@ -175,12 +178,15 @@ const omiOverlay: OmiOverlayApi = {
     ipcRenderer.on('overlay:summoned', listener)
     return () => ipcRenderer.removeListener('overlay:summoned', listener)
   },
-  setAccelerator: (accelerator: string) => ipcRenderer.invoke('overlay:setAccelerator', accelerator),
+  setAccelerator: (accelerator: string) =>
+    ipcRenderer.invoke('overlay:setAccelerator', accelerator),
   suspendShortcut: () => ipcRenderer.send('overlay:suspendShortcut'),
   resumeShortcut: () => ipcRenderer.invoke('overlay:resumeShortcut'),
   onVisibilityChange: (cb: (state: { open: boolean; active: boolean }) => void) => {
-    const listener = (_e: Electron.IpcRendererEvent, state: { open: boolean; active: boolean }): void =>
-      cb(state)
+    const listener = (
+      _e: Electron.IpcRendererEvent,
+      state: { open: boolean; active: boolean }
+    ): void => cb(state)
     ipcRenderer.on('overlay:visibility', listener)
     return () => ipcRenderer.removeListener('overlay:visibility', listener)
   },
