@@ -9,6 +9,7 @@ import threading
 import time
 import uuid as _uuid
 import wave
+from collections import deque
 from datetime import datetime, timezone
 from typing import Dict, List, Optional, Tuple
 
@@ -949,6 +950,41 @@ def identify_speakers_for_segments(
         )
 
 
+ORDERED_ASSIGNMENT_WAIT_SECONDS = 600
+
+
+class _OrderedTurnstile:
+    """Serializes conversation assignment across parallel segment threads in timestamp order.
+
+    Segments are transcribed concurrently, but each must wait its (chronological) turn
+    before looking up / creating a conversation. Without this, timestamp-adjacent chunks
+    race get_closest_conversation_to_timestamps() before any of them has persisted a
+    conversation, so every chunk becomes its own conversation (#6551, #5747).
+    """
+
+    def __init__(self, ordered_keys: List[str]):
+        self._pending = deque(ordered_keys)
+        self._done = set()
+        self._cond = threading.Condition()
+
+    def _advance(self):
+        while self._pending and self._pending[0] in self._done:
+            self._pending.popleft()
+
+    def wait_turn(self, key: str, timeout: float = ORDERED_ASSIGNMENT_WAIT_SECONDS) -> bool:
+        """Block until every earlier key has completed. Returns False on timeout (fail-open)."""
+        with self._cond:
+            return self._cond.wait_for(
+                lambda: self._advance() or not self._pending or self._pending[0] == key, timeout=timeout
+            )
+
+    def complete(self, key: str):
+        with self._cond:
+            self._done.add(key)
+            self._advance()
+            self._cond.notify_all()
+
+
 def process_segment(
     path: str,
     uid: str,
@@ -960,6 +996,7 @@ def process_segment(
     transcription_prefs: dict = None,
     person_embeddings_cache: dict = None,
     target_conversation_id: str = None,
+    turnstile: Optional[_OrderedTurnstile] = None,
 ):
     try:
         url = get_syncing_file_temporal_signed_url(path)
@@ -1010,6 +1047,13 @@ def process_segment(
         finally:
             if audio_bytes:
                 del audio_bytes
+
+        # Conversation assignment must happen chronologically across the batch: wait until
+        # every earlier-timestamped segment has created/merged its conversation, otherwise
+        # the closest-conversation lookup races and adjacent chunks split into separate
+        # conversations.
+        if turnstile and not turnstile.wait_turn(path):
+            logger.warning(f'sync: ordered assignment wait timed out for {path}, proceeding out of order')
 
         timestamp = get_timestamp_from_path(path)
         segment_end_timestamp = timestamp + transcript_segments[-1].end
@@ -1104,11 +1148,34 @@ def process_segment(
                 reason = 'discarded' if closest_memory.get('discarded', False) else 'auto-sync'
                 logger.info(f'Conversation {closest_memory["id"]} reprocessing ({reason}) after segment merge')
                 _reprocess_conversation_after_update(uid, closest_memory['id'], language)
+            else:
+                # Summary/structured data is now stale (it predates the merged segments).
+                # Record it so the caller reprocesses once per conversation at batch end,
+                # instead of once per merged segment.
+                with lock:
+                    response.setdefault('_merged', {})[closest_memory['id']] = language
     except Exception as e:
         error_msg = f'Failed to process segment {path}: {e}'
         logger.error(error_msg)
         with lock:
             errors.append(error_msg)
+    finally:
+        if turnstile:
+            turnstile.complete(path)
+
+
+def _reprocess_merged_conversations(uid: str, response: dict):
+    """Regenerate summary/structured data for conversations that gained segments this batch.
+
+    The merge path in process_segment only appends transcript segments; without this the
+    conversation keeps the summary generated from its first chunk only.
+    """
+    merged = response.pop('_merged', {})
+    for conversation_id, language in merged.items():
+        try:
+            _reprocess_conversation_after_update(uid, conversation_id, language)
+        except Exception as e:
+            logger.error(f'sync: failed to reprocess merged conversation {conversation_id}: {e}')
 
 
 def _cleanup_files(file_paths):
@@ -1247,6 +1314,11 @@ async def sync_local_files(
             logger.warning(f'sync: failed to load person embeddings, skipping speaker ID uid={uid}: {e}')
             person_embeddings_cache = {}
 
+        # Chronological order + turnstile: STT runs in parallel, but conversation
+        # assignment is serialized oldest-first so adjacent chunks merge instead of
+        # racing into separate conversations (#6551, #5747).
+        ordered_paths = sorted(segmented_paths, key=get_timestamp_from_path)
+        assignment_turnstile = _OrderedTurnstile(ordered_paths)
         await asyncio.gather(
             *[
                 run_blocking(
@@ -1262,10 +1334,13 @@ async def sync_local_files(
                     transcription_prefs,
                     person_embeddings_cache,
                     conversation_id,
+                    assignment_turnstile,
                 )
-                for path in segmented_paths
+                for path in ordered_paths
             ]
         )
+
+        await run_blocking(sync_executor, _reprocess_merged_conversations, uid, response)
 
         # Record DG usage after successful processing (not before, to avoid charging on retries)
         if fair_use_restrict_dg:
@@ -1534,6 +1609,12 @@ async def _run_full_pipeline_background_async(
             segment_errors = []
             segment_lock = threading.Lock()
 
+            # Chronological order + turnstile: STT runs in parallel (per chunk), but
+            # conversation assignment is serialized oldest-first so adjacent chunks merge
+            # instead of racing into separate conversations (#6551, #5747).
+            segment_list = sorted(segmented_paths, key=get_timestamp_from_path)
+            assignment_turnstile = _OrderedTurnstile(segment_list)
+
             def _process_one_segment(path):
                 process_segment(
                     path,
@@ -1546,15 +1627,17 @@ async def _run_full_pipeline_background_async(
                     transcription_prefs,
                     person_embeddings_cache,
                     target_conversation_id,
+                    assignment_turnstile,
                 )
 
             chunk_size = 5
-            segment_list = list(segmented_paths)
             for i in range(0, len(segment_list), chunk_size):
                 chunk = segment_list[i : i + chunk_size]
+                # Later segments in a chunk also wait their assignment turn, so widen
+                # their timeout by position to avoid spurious timeouts.
                 seg_tasks = [
-                    asyncio.wait_for(run_blocking(sync_executor, _process_one_segment, path), timeout=300)
-                    for path in chunk
+                    asyncio.wait_for(run_blocking(sync_executor, _process_one_segment, path), timeout=300 + 60 * j)
+                    for j, path in enumerate(chunk)
                 ]
                 seg_results = await asyncio.gather(*seg_tasks, return_exceptions=True)
                 for r in seg_results:
@@ -1572,6 +1655,8 @@ async def _run_full_pipeline_background_async(
                     )
                 except Exception:
                     pass
+
+            await run_blocking(sync_executor, _reprocess_merged_conversations, uid, response)
 
             stage_timings['stt_llm_ms'] = int((time.monotonic() - t0) * 1000)
 
