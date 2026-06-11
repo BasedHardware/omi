@@ -10,6 +10,7 @@ import { app, BrowserWindow, screen } from 'electron'
 import { join } from 'path'
 import { is } from '@electron-toolkit/utils'
 import { computeOverlayBounds, OVERLAY_WIDTH } from './bounds'
+import { rendererBaseUrl } from '../rendererServer'
 
 let overlayWindow: BrowserWindow | null = null
 
@@ -103,8 +104,13 @@ export function createOverlayWindow(): BrowserWindow {
     console.error('[overlay] did-fail-load', code, desc, url)
   )
 
+  // Must load from the same origin as the main window (dev server or the
+  // production loopback server) — auth/localStorage state is per-origin, so a
+  // file:// overlay would always look signed out.
   if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
     win.loadURL(`${process.env['ELECTRON_RENDERER_URL']}#/overlay`)
+  } else if (rendererBaseUrl()) {
+    win.loadURL(`${rendererBaseUrl()}/index.html#/overlay`)
   } else {
     win.loadFile(join(__dirname, '../renderer/index.html'), { hash: 'overlay' })
   }
