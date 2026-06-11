@@ -22,6 +22,7 @@ from database import (
     users as users_db,
 )
 from database.app_review_config import should_hide_subscription_ui
+from database.plan_caps_config import is_superwall_enabled
 from database.webhook_health import record_dev_webhook_success
 from database.conversations import get_in_progress_conversation, get_conversation
 from database.redis_db import (
@@ -63,6 +64,7 @@ from models.users import (
     Subscription,
     SubscriptionPlan,
     SubscriptionStatus,
+    SubscriptionSource,
     PlanType,
     PricingOption,
     PhoneCallQuota,
@@ -1095,6 +1097,15 @@ def get_user_subscription_endpoint(
             )
 
     show_subscription_ui = not should_hide_subscription_ui(uid, x_app_platform, x_app_version)
+    # Hide the desktop / web purchase UI for users who already hold a Superwall
+    # mobile sub — per Q4 there is no desktop purchase path; clients render a
+    # "Manage in iOS Settings / Play Store" message instead.
+    if show_subscription_ui and (x_app_platform or '').lower() not in ('ios', 'android'):
+        if subscription and subscription.source in (
+            SubscriptionSource.superwall_ios,
+            SubscriptionSource.superwall_android,
+        ):
+            show_subscription_ui = False
 
     # Phone-call feature access + monthly free-tier usage snapshot.
     phone_call_quota = PhoneCallQuota(**get_phone_call_quota_snapshot(uid).to_client_dict())
@@ -1122,6 +1133,7 @@ def get_user_subscription_endpoint(
         chat_quota_allowed=chat_allowed,
         chat_quota_reset_at=chat_snapshot['reset_at'],
         phone_call_quota=phone_call_quota,
+        superwall_enabled=is_superwall_enabled(uid),
         desktop_grandfather_until=neo_grandfather_until(subscription),
     )
 

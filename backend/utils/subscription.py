@@ -11,6 +11,7 @@ import database.users as users_db
 import database.user_usage as user_usage_db
 from database import redis_db
 from database.announcements import compare_versions
+from database.plan_caps_config import get_plan_limits_from_config
 from models.users import PlanType, SubscriptionStatus, Subscription, PlanLimits, TrialMetadata
 from utils.byok import get_byok_key, get_byok_keys
 from utils.log_sanitizer import sanitize
@@ -18,7 +19,16 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-PAID_PLAN_TYPES = {PlanType.unlimited, PlanType.architect, PlanType.operator}
+PAID_PLAN_TYPES = {
+    PlanType.unlimited,
+    PlanType.architect,
+    PlanType.operator,
+    # Mobile Superwall tiers — paid, but hard-cap at their limits since
+    # StoreKit / Play Billing can't do usage-based overage charges.
+    PlanType.lite,
+    PlanType.plus,
+    PlanType.unlimited_v2,
+}
 
 # Plans that unlock the desktop (macOS) app. Neo (unlimited) is a mobile/web
 # plan — it does NOT include desktop access, so on desktop a Neo subscriber is
@@ -521,6 +531,9 @@ PLAN_DISPLAY_NAMES = {
     PlanType.unlimited: 'Neo',
     PlanType.architect: 'Architect',
     PlanType.operator: 'Operator',
+    PlanType.lite: 'Lite',
+    PlanType.plus: 'Plus',
+    PlanType.unlimited_v2: 'Unlimited',
 }
 
 
@@ -647,12 +660,7 @@ def enforce_chat_quota(uid: str, platform: Optional[str] = None) -> None:
 
 def get_basic_plan_limits() -> PlanLimits:
     """Returns the PlanLimits object for the basic (Free) tier."""
-    return PlanLimits(
-        transcription_seconds=BASIC_TIER_MONTHLY_SECONDS_LIMIT,
-        words_transcribed=BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH,
-        insights_gained=BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH,
-        chat_questions_per_month=FREE_CHAT_QUESTIONS_PER_MONTH,
-    )
+    return get_plan_limits_from_config(PlanType.basic)
 
 
 def get_default_basic_subscription() -> Subscription:
@@ -663,34 +671,12 @@ def get_default_basic_subscription() -> Subscription:
 def get_plan_limits(plan: PlanType) -> PlanLimits:
     """Returns the PlanLimits object for the given plan.
 
-    Chat caps:
-      - Free: question count
-      - Operator: question count (OPERATOR_CHAT_QUESTIONS_PER_MONTH, default 500)
-      - Unlimited (legacy): question count (NEO_CHAT_QUESTIONS_PER_MONTH, default 200)
-      - Architect: dollar cap ($400/mo default)
+    Caps are sourced from the ``app_config/plan_caps`` Firestore doc with
+    env-var fallbacks (see ``database.plan_caps_config``). Behavior is
+    identical to the pre-refactor branch-per-plan implementation when the
+    Firestore doc is absent or empty.
     """
-    if plan == PlanType.operator:
-        return PlanLimits(
-            transcription_seconds=None,
-            words_transcribed=None,
-            insights_gained=None,
-            chat_questions_per_month=OPERATOR_CHAT_QUESTIONS_PER_MONTH,
-        )
-    if plan == PlanType.unlimited:
-        return PlanLimits(
-            transcription_seconds=None,
-            words_transcribed=None,
-            insights_gained=None,
-            chat_questions_per_month=NEO_CHAT_QUESTIONS_PER_MONTH,
-        )
-    if plan == PlanType.architect:
-        return PlanLimits(
-            transcription_seconds=None,
-            words_transcribed=None,
-            insights_gained=None,
-            chat_cost_usd_per_month=ARCHITECT_CHAT_COST_USD_PER_MONTH,
-        )
-    return get_basic_plan_limits()
+    return get_plan_limits_from_config(plan)
 
 
 def get_plan_features(plan: PlanType, simplified: bool = False) -> List[str]:

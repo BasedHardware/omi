@@ -14,13 +14,26 @@ class WebhookType(str, Enum):
 
 class PlanType(str, Enum):
     basic = 'basic'  # display "Free"
-    unlimited = 'unlimited'  # LEGACY — display "Unlimited (legacy)"; hidden from new users
+    unlimited = 'unlimited'  # LEGACY — display "Neo"; hidden from new mobile users
     architect = 'architect'  # display "Architect"
     operator = 'operator'  # display "Operator"
+    # Mobile-only paid tiers (Superwall-purchased via App Store / Play). The
+    # caps live in `app_config/plan_caps` Firestore doc; defaults match
+    # BasedHardware/omi-enterprise#23 (Lite: 100 msgs / 1500 mins, Plus: 300
+    # msgs / 4000 mins, Unlimited: no caps).
+    # Note: ``unlimited_v2`` is internally distinct from the legacy ``unlimited``
+    # (Neo) plan — the legacy keeps its enum value for backward-compat with
+    # live Stripe subscribers; the new mobile tier uses ``unlimited_v2`` to
+    # avoid colliding while still being displayed to users as "Unlimited".
+    lite = 'lite'
+    plus = 'plus'
+    unlimited_v2 = 'unlimited_v2'
 
     @classmethod
     def _missing_(cls, value):
-        # Backward compat: 'pro' was renamed to 'architect'
+        # Backward compat: 'pro' was renamed to 'architect' before the
+        # Lite/Plus/Max tiers were introduced. Five live user docs still
+        # store `plan='pro'` literally — keep them resolving to architect.
         if value == 'pro':
             return cls.architect
         return None
@@ -29,6 +42,16 @@ class PlanType(str, Enum):
 class SubscriptionStatus(str, Enum):
     active = 'active'
     inactive = 'inactive'
+
+
+class SubscriptionSource(str, Enum):
+    """Which billing rail created the subscription. ``stripe`` covers the
+    legacy book (web/desktop checkout); ``superwall_*`` covers new mobile
+    purchases routed through Superwall + App Store / Play Billing."""
+
+    stripe = 'stripe'
+    superwall_ios = 'superwall_ios'
+    superwall_android = 'superwall_android'
 
 
 class PlanLimits(BaseModel):
@@ -60,6 +83,10 @@ class ChatUsageQuota(BaseModel):
 class Subscription(BaseModel):
     plan: PlanType = PlanType.basic
     status: SubscriptionStatus = SubscriptionStatus.active
+    # Which billing rail owns this sub. Defaults to `stripe` so existing user
+    # docs (which don't carry the field) behave exactly as before. Set to
+    # `superwall_ios` / `superwall_android` by the Superwall webhook handler.
+    source: SubscriptionSource = SubscriptionSource.stripe
     current_period_end: Optional[int] = None
     # Period start is used by the Neo desktop-grandfather check. Populated by the
     # Stripe webhook on every subscription event going forward; existing subs
@@ -67,6 +94,9 @@ class Subscription(BaseModel):
     # and are treated as pre-cutoff (grandfathered) until then.
     current_period_start: Optional[int] = None
     stripe_subscription_id: Optional[str] = None
+    # Identifier from Superwall (their internal sub id) — populated only for
+    # mobile purchases. Lets the webhook handler dedupe events.
+    superwall_subscription_id: Optional[str] = None
     current_price_id: Optional[str] = None
     features: List[str] = []
     cancel_at_period_end: bool = False
@@ -128,6 +158,12 @@ class UserSubscriptionResponse(BaseModel):
     insights_gained_limit: int
     available_plans: List[SubscriptionPlan] = []
     show_subscription_ui: bool = True
+    # Whether the Superwall mobile paywall is active for this user. Computed
+    # server-side from `app_config/plan_caps.superwall_enabled` (global) and
+    # `superwall_test_uids` (per-uid override). When false, the client routes
+    # all upgrade triggers to the legacy PlansSheet and skips Superwall SDK
+    # configuration entirely.
+    superwall_enabled: bool = False
     # Chat quota usage — derived from llm_usage collection
     chat_quota_used: float = 0.0
     chat_quota_unit: Optional[ChatQuotaUnit] = None

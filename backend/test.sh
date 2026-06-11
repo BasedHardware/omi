@@ -117,6 +117,11 @@ pytest tests/unit/test_available_plans_resilience.py -v
 pytest tests/unit/test_subscription_restructure.py -v
 pytest tests/unit/test_chat_quota.py -v
 pytest tests/unit/test_subscription_plans.py -v
+pytest tests/unit/test_plan_caps_config.py -v
+pytest tests/unit/test_new_plans_enum.py -v
+pytest tests/unit/test_superwall_webhook.py -v
+pytest tests/unit/test_catalog_filter.py -v
+pytest tests/unit/test_superwall_e2e.py -v
 pytest tests/unit/test_payment_available_plans_source.py -v
 pytest tests/unit/test_payment_promotion_codes.py -v
 pytest tests/unit/test_stripe_webhook_none_guard.py -v

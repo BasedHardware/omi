@@ -18,7 +18,9 @@ import 'package:omi/models/subscription.dart';
 import 'package:omi/models/user_usage.dart';
 import 'package:omi/pages/settings/fair_use_page.dart';
 import 'package:omi/pages/settings/transcription_settings_page.dart';
-import 'package:omi/pages/settings/widgets/plans_sheet.dart';
+import 'package:omi/services/superwall_service.dart';
+import 'package:omi/utils/alerts/app_snackbar.dart';
+import 'package:omi/utils/paywall_router.dart';
 import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
@@ -35,6 +37,7 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
   final List<GlobalKey> _screenshotKeys = List.generate(4, (_) => GlobalKey());
   final List<bool> _isMetricVisible = [true, true, true, true];
   bool _isUpgrading = false;
+  bool _isRestoringPurchases = false;
   late AnimationController _waveController;
   late AnimationController _notesController;
   late AnimationController _arrowController;
@@ -311,8 +314,7 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
       ),
       body: Consumer<UsageProvider>(
         builder: (context, provider, child) {
-          final hasAnyData =
-              provider.todayUsage != null ||
+          final hasAnyData = provider.todayUsage != null ||
               provider.monthlyUsage != null ||
               provider.yearlyUsage != null ||
               provider.allTimeUsage != null;
@@ -417,7 +419,23 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
     }
 
     final plan = provider.subscription!.subscription.plan;
-    final isUnlimited = plan == PlanType.unlimited || plan == PlanType.operator || plan == PlanType.architect;
+    final isPaid = provider.isPaidPlan;
+    // Top tier = no further upgrade target. Lite/Plus still have caps and can
+    // upgrade to Unlimited, so they should keep the upgrade CTA visible.
+    final isTopTier = plan == PlanType.unlimited ||
+        plan == PlanType.unlimitedV2 ||
+        plan == PlanType.operator ||
+        plan == PlanType.architect;
+    final planLabel = switch (plan) {
+      PlanType.lite => context.l10n.litePlan,
+      PlanType.plus => context.l10n.plusPlan,
+      PlanType.unlimited ||
+      PlanType.unlimitedV2 ||
+      PlanType.operator ||
+      PlanType.architect =>
+        context.l10n.unlimitedPlan,
+      _ => context.l10n.basicPlan,
+    };
 
     return Container(
       margin: const EdgeInsets.fromLTRB(16, 24, 16, 0),
@@ -434,10 +452,10 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text(
-                isUnlimited ? context.l10n.unlimitedPlan : context.l10n.basicPlan,
+                planLabel,
                 style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
               ),
-              if (isUnlimited)
+              if (isPaid)
                 GestureDetector(
                   onTap: _isUpgrading ? null : _showPlansSheet,
                   child: Row(
@@ -450,9 +468,11 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
                 ),
             ],
           ),
-          if (!isUnlimited) ...[
-            const SizedBox(height: 4),
-            Text(context.l10n.basicPlanDescription, style: TextStyle(fontSize: 13, color: Colors.grey.shade500)),
+          if (!isTopTier) ...[
+            if (!isPaid) ...[
+              const SizedBox(height: 4),
+              Text(context.l10n.basicPlanDescription, style: TextStyle(fontSize: 13, color: Colors.grey.shade500)),
+            ],
             const SizedBox(height: 16),
             SizedBox(
               width: double.infinity,
@@ -474,39 +494,72 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
                     : Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          Text(context.l10n.upgrade, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
+                          Text(
+                            isPaid ? context.l10n.upgradeYourPlan : context.l10n.upgradeToUnlimited,
+                            style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+                          ),
                           const SizedBox(width: 8),
                           const Icon(Icons.arrow_forward, size: 18),
                         ],
                       ),
               ),
             ),
+            // Surface restore-purchases for users on a fresh install or new
+            // device. Mobile-only — Apple/Google manage receipts per Apple ID
+            // / Google account, so a previously purchased Superwall sub can
+            // be re-applied here without going through StoreKit again.
+            if (Platform.isIOS || Platform.isAndroid) ...[
+              const SizedBox(height: 8),
+              Center(
+                child: TextButton(
+                  onPressed: _isRestoringPurchases ? null : _restorePurchases,
+                  child: _isRestoringPurchases
+                      ? const SizedBox(
+                          height: 14,
+                          width: 14,
+                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white70),
+                        )
+                      : Text(
+                          context.l10n.restorePurchasesAction,
+                          style: TextStyle(color: Colors.grey.shade400, fontSize: 13),
+                        ),
+                ),
+              ),
+            ],
           ],
         ],
       ),
     );
   }
 
-  void _showPlansSheet() {
-    if (!context.read<UsageProvider>().showSubscriptionUI) {
-      return;
+  Future<void> _restorePurchases() async {
+    if (_isRestoringPurchases) return;
+    setState(() => _isRestoringPurchases = true);
+    try {
+      final result = await SuperwallService.instance.restorePurchases();
+      if (!mounted) return;
+      // Always re-pull subscription state from the backend — restore can
+      // change entitlement state via the webhook even when the SDK reports
+      // no local change.
+      await context.read<UsageProvider>().fetchSubscription();
+      if (!mounted) return;
+      final ok = result != null;
+      AppSnackbar.showSnackbar(
+        ok ? context.l10n.restorePurchasesSuccess : context.l10n.restorePurchasesFailed,
+      );
+    } finally {
+      if (mounted) setState(() => _isRestoringPurchases = false);
     }
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.black,
-      builder: (context) {
-        return StatefulBuilder(
-          builder: (BuildContext context, StateSetter setModalState) {
-            return PlansSheet(
-              waveController: _waveController,
-              notesController: _notesController,
-              arrowController: _arrowController,
-              arrowAnimation: _arrowAnimation,
-            );
-          },
-        );
-      },
+  }
+
+  void _showPlansSheet() {
+    showUpgradePaywall(
+      context,
+      placement: 'upgrade_settings',
+      waveController: _waveController,
+      notesController: _notesController,
+      arrowController: _arrowController,
+      arrowAnimation: _arrowAnimation,
     );
   }
 
@@ -1142,8 +1195,8 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
                 builder: (context) {
                   final minutesUsed = (subscription.transcriptionSecondsUsed / 60).round();
                   final minutesLimit = (subscription.transcriptionSecondsLimit / 60).round();
-                  final percentage = (subscription.transcriptionSecondsUsed / subscription.transcriptionSecondsLimit)
-                      .clamp(0.0, 1.0);
+                  final percentage =
+                      (subscription.transcriptionSecondsUsed / subscription.transcriptionSecondsLimit).clamp(0.0, 1.0);
                   return Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [

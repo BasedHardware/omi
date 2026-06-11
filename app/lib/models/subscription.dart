@@ -2,9 +2,38 @@ import 'package:json_annotation/json_annotation.dart';
 
 part 'subscription.g.dart';
 
-enum PlanType { basic, unlimited, architect, operator }
+// `lite`, `plus`, `unlimitedV2` are the new Superwall-purchased mobile tiers
+// (App Store / Play Billing). `basic`, `unlimited` (legacy Neo), `architect`,
+// `operator` are the existing Stripe-billed plans. The new "Unlimited" mobile
+// tier uses the internal id `unlimited_v2` to avoid colliding with the legacy
+// `unlimited` enum value (which already maps to a different display: "Neo").
+// See backend `models/users.py:PlanType`.
+enum PlanType {
+  basic,
+  unlimited,
+  architect,
+  operator,
+  lite,
+  plus,
+  @JsonValue('unlimited_v2')
+  unlimitedV2,
+}
 
 enum SubscriptionStatus { active, inactive }
+
+// Which billing rail created the subscription. `stripe` covers the legacy book
+// (web/desktop checkout); `superwall_ios` / `superwall_android` are the new
+// mobile IAP purchases routed through Superwall. See backend
+// `models/users.py:SubscriptionSource`. JsonValue annotations keep the wire
+// format snake_case to match the backend's enum values.
+enum SubscriptionSource {
+  @JsonValue('stripe')
+  stripe,
+  @JsonValue('superwall_ios')
+  superwallIos,
+  @JsonValue('superwall_android')
+  superwallAndroid,
+}
 
 @JsonSerializable(fieldRename: FieldRename.snake)
 class PlanLimits {
@@ -32,8 +61,14 @@ class Subscription {
   final PlanType plan;
   @JsonKey(unknownEnumValue: SubscriptionStatus.inactive)
   final SubscriptionStatus status;
+  // Defaults to `stripe` to match the backend default. Existing user docs
+  // that don't carry the field deserialize as Stripe-sourced, which is
+  // correct for the entire pre-Superwall book.
+  @JsonKey(defaultValue: SubscriptionSource.stripe, unknownEnumValue: SubscriptionSource.stripe)
+  final SubscriptionSource source;
   final int? currentPeriodEnd;
   final String? stripeSubscriptionId;
+  final String? superwallSubscriptionId;
   final String? currentPriceId;
   @JsonKey(defaultValue: [])
   final List<String> features;
@@ -47,8 +82,10 @@ class Subscription {
   Subscription({
     required this.plan,
     required this.status,
+    this.source = SubscriptionSource.stripe,
     this.currentPeriodEnd,
     this.stripeSubscriptionId,
+    this.superwallSubscriptionId,
     this.currentPriceId,
     this.features = const [],
     this.cancelAtPeriodEnd = false,
@@ -130,6 +167,12 @@ class UserSubscriptionResponse {
   final List<SubscriptionPlan> availablePlans;
   @JsonKey(defaultValue: true)
   final bool showSubscriptionUi;
+  // Server-driven gate for the Superwall mobile paywall. When false the
+  // client routes all upgrade triggers to the legacy PlansSheet and skips
+  // Superwall SDK configuration entirely. Default false matches the backend
+  // default so older builds / unconfigured Firestore docs hide the new path.
+  @JsonKey(defaultValue: false)
+  final bool superwallEnabled;
   // Chat quota fields — populated from subscription endpoint
   @JsonKey(defaultValue: 0.0)
   final double chatQuotaUsed;
@@ -151,6 +194,7 @@ class UserSubscriptionResponse {
     required this.insightsGainedLimit,
     this.availablePlans = const [],
     this.showSubscriptionUi = true,
+    this.superwallEnabled = false,
     this.chatQuotaUsed = 0.0,
     this.chatQuotaUnit,
     this.chatQuotaPercent = 0.0,

@@ -14,6 +14,12 @@ class UsageProvider with ChangeNotifier {
   /// Defaults to true when the subscription response hasn't loaded yet, so a
   /// network blip doesn't silently hide paid surfaces from real users.
   bool get showSubscriptionUI => _subscription?.showSubscriptionUi ?? true;
+
+  /// Whether the Superwall mobile paywall is enabled for this user. Computed
+  /// server-side from the global flag + the per-uid override list. Defaults to
+  /// false when the response hasn't loaded so the legacy PlansSheet remains
+  /// the safe fallback (matches backend default).
+  bool get superwallEnabled => _subscription?.superwallEnabled ?? false;
   UsageStats? _todayUsage;
   UsageStats? get todayUsage => _todayUsage;
 
@@ -60,20 +66,31 @@ class UsageProvider with ChangeNotifier {
   // straight to the existing unlimited behavior.
   PhoneCallQuota? get phoneCallQuota => _subscription?.phoneCallQuota;
 
-  bool get _isPaidPlan {
+  static const Set<PlanType> _paidPlans = {
+    // Legacy Stripe plans
+    PlanType.unlimited,
+    PlanType.operator,
+    PlanType.architect,
+    // Superwall mobile plans (App Store / Play Billing)
+    PlanType.lite,
+    PlanType.plus,
+    PlanType.unlimitedV2,
+  };
+
+  bool get isPaidPlan {
     final plan = _subscription?.subscription.plan;
-    return plan == PlanType.unlimited || plan == PlanType.operator || plan == PlanType.architect;
+    return plan != null && _paidPlans.contains(plan);
   }
 
   bool get canAccessPhoneCalls {
-    if (_isPaidPlan) return true;
+    if (isPaidPlan) return true;
     final quota = phoneCallQuota;
     if (quota == null) return false;
     return quota.hasAccess;
   }
 
   bool get shouldShowPhoneCallsEntry {
-    if (_isPaidPlan) return true;
+    if (isPaidPlan) return true;
     final quota = phoneCallQuota;
     final freeTierEnabled = quota != null && (quota.monthlyLimit ?? 0) > 0;
     if (freeTierEnabled) return true;
@@ -92,7 +109,7 @@ class UsageProvider with ChangeNotifier {
     if (_forceOutOfCredits) return true;
     if (_subscription == null) return false;
     final plan = _subscription!.subscription.plan;
-    if (plan == PlanType.unlimited || plan == PlanType.operator || plan == PlanType.architect) return false;
+    if (_paidPlans.contains(plan)) return false;
     // For basic plan, check if used is >= limit and limit is not 0 (unlimited).
     if (_subscription!.transcriptionSecondsLimit > 0 &&
         _subscription!.transcriptionSecondsUsed >= _subscription!.transcriptionSecondsLimit) {

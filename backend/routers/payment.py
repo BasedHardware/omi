@@ -16,10 +16,11 @@ from database import (
     memories as memories_db,
     action_items as action_items_db,
 )
+from database.plan_caps_config import is_superwall_enabled
 from database.redis_db import set_credits_invalidation_signal
 from utils.fair_use import clear_fair_use_on_upgrade
 from utils.notifications import send_notification, send_subscription_paid_personalized_notification
-from models.users import PlanType, Subscription, SubscriptionStatus, PlanLimits
+from models.users import PlanType, Subscription, SubscriptionSource, SubscriptionStatus, PlanLimits
 from utils.subscription import (
     get_basic_plan_limits,
     get_paid_plan_definitions,
@@ -53,6 +54,12 @@ from utils.overage import (
     build_explainer_text,
     get_user_overage,
     is_overage_plan,
+)
+from utils.superwall_catalog import (
+    build_mobile_plan_catalog,
+    has_active_legacy_stripe_sub,
+    has_active_superwall_sub,
+    is_mobile_platform,
 )
 from utils.executors import db_executor, stripe_executor, run_blocking
 from utils.log_sanitizer import sanitize
@@ -202,10 +209,52 @@ def get_available_plans_endpoint(
     x_app_platform: Optional[str] = Header(None, alias='X-App-Platform'),
     x_app_version: Optional[str] = Header(None, alias='X-App-Version'),
 ):
-    """Get available subscription plans with their price IDs and billing intervals."""
+    """Get available subscription plans with their price IDs and billing intervals.
+
+    Catalog policy (per BasedHardware/omi-enterprise#23, manager-locked):
+      - Superwall flag OFF (global default until launch) →
+        Every caller sees the legacy Stripe catalog. The flag gates the entire
+        new-plans surface so a build with the Superwall code can ship and
+        defer activation to a Firestore flip.
+      - Mobile (ios/android), flag ON, no sub OR active Superwall sub →
+        Lite / Plus / Unlimited display catalog. Actual purchase rendered by
+        the Superwall SDK; this list is just a fallback for legacy surfaces.
+      - Mobile, flag ON, active legacy Stripe sub →
+        Empty list. Legacy subscribers keep seeing their current plan +
+        Stripe portal Manage button (sourced from /v1/users/me/subscription
+        and /v1/payments/customer-portal). New mobile plans appear only
+        after they cancel.
+      - Desktop / web, flag ON, active Superwall sub →
+        Empty list. No new desktop purchase path (Q4-locked); Manage flows
+        to "Manage in iOS Settings / Play Store" on the client.
+      - Desktop / web, otherwise →
+        Existing legacy Stripe catalog (Neo / Operator / Architect),
+        version-gated as before.
+    """
     try:
         # Get user's current subscription to determine which plan is active
         current_subscription = users_db.get_user_subscription(uid)
+        superwall_on = is_superwall_enabled(uid)
+
+        # Mobile-specific routing only kicks in when Superwall is enabled. With
+        # the flag off, mobile users fall through to the legacy Stripe catalog
+        # below — same as desktop — so the build behaves like the
+        # pre-Superwall codebase regardless of platform.
+        if superwall_on and is_mobile_platform(x_app_platform):
+            if has_active_legacy_stripe_sub(current_subscription):
+                # Legacy Stripe subscriber on a phone: hide the new catalog
+                # so we don't tempt them to double-subscribe via Superwall.
+                return AvailablePlansResponse(plans=[])
+            # Either no sub, or already on Superwall — show the mobile catalog.
+            current_plan = current_subscription.plan if current_subscription else PlanType.basic
+            return AvailablePlansResponse(plans=[PricingOption(**d) for d in build_mobile_plan_catalog(current_plan)])
+
+        # Desktop / web with an active Superwall sub: no purchase UI at all.
+        # Only relevant when the flag is on — otherwise nobody has a Superwall
+        # sub so the predicate is trivially false anyway.
+        if superwall_on and has_active_superwall_sub(current_subscription):
+            return AvailablePlansResponse(plans=[])
+
         current_price_id = None
         scheduled_price_id = None
 
@@ -384,6 +433,18 @@ def get_overage_info_endpoint(uid: str = Depends(auth.get_current_user_uid_no_by
 
 @router.post('/v1/payments/checkout-session')
 def create_checkout_session_endpoint(request: CreateCheckoutRequest, uid: str = Depends(auth.get_current_user_uid)):
+    # Defense-in-depth: refuse to start a Stripe checkout for a user who
+    # already holds an active Superwall (App Store / Play) subscription.
+    # The mobile/desktop UIs hide the trigger in this state, but a stray
+    # call here would result in double-billing across two billing rails
+    # with no easy way to reconcile.
+    existing_sub = users_db.get_user_valid_subscription(uid)
+    if has_active_superwall_sub(existing_sub):
+        raise HTTPException(
+            status_code=422,
+            detail="You already have an active mobile subscription. Manage it in iOS Settings → Subscriptions or the Play Store.",
+        )
+
     # Check if user can make a new payment
     can_pay, reason = subscription_utils.can_user_make_payment(uid, request.price_id)
     if not can_pay:

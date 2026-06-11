@@ -186,7 +186,7 @@ abstract class AppLocalizations {
     Locale('uk'),
     Locale('ur'),
     Locale('vi'),
-    Locale('zh'),
+    Locale('zh')
   ];
 
   /// The app title displayed in various places
@@ -8929,10 +8929,7 @@ abstract class AppLocalizations {
   ///
   /// In en, this message translates to:
   /// **'{accessDescription} and is {triggerDescription}.'**
-  String accessesAndTriggeredBy(
-    String accessDescription,
-    String triggerDescription,
-  );
+  String accessesAndTriggeredBy(String accessDescription, String triggerDescription);
 
   /// Sentence starting with 'Is' for trigger description
   ///
@@ -17304,6 +17301,288 @@ abstract class AppLocalizations {
   /// **'Unable to determine current firmware version'**
   String get unableToDetermineFirmwareVersion;
 
+  /// No description provided for @memoriesUsedThisMonth.
+  ///
+  /// In en, this message translates to:
+  /// **'{used} of {limit} memories created this month'**
+  String memoriesUsedThisMonth(String used, String limit);
+
+  /// WiFi sync settings - wifiSyncSettings
+  ///
+  /// In en, this message translates to:
+  /// **'WiFi Sync Settings'**
+  String get wifiSyncSettings;
+
+  /// WiFi sync settings - enterHotspotCredentials
+  ///
+  /// In en, this message translates to:
+  /// **'Enter your phone\'s hotspot credentials'**
+  String get enterHotspotCredentials;
+
+  /// WiFi sync settings - wifiSyncUsesHotspot
+  ///
+  /// In en, this message translates to:
+  /// **'WiFi sync uses your phone as a hotspot. Find your hotspot name and password in Settings > Personal Hotspot.'**
+  String get wifiSyncUsesHotspot;
+
+  /// WiFi sync settings - hotspotNameSsid
+  ///
+  /// In en, this message translates to:
+  /// **'Hotspot Name (SSID)'**
+  String get hotspotNameSsid;
+
+  /// WiFi sync settings - exampleIphoneHotspot
+  ///
+  /// In en, this message translates to:
+  /// **'e.g. iPhone Hotspot'**
+  String get exampleIphoneHotspot;
+
+  /// WiFi sync settings - enterHotspotPassword
+  ///
+  /// In en, this message translates to:
+  /// **'Enter hotspot password'**
+  String get enterHotspotPassword;
+
+  /// WiFi sync settings - pleaseEnterHotspotName
+  ///
+  /// In en, this message translates to:
+  /// **'Please enter a hotspot name'**
+  String get pleaseEnterHotspotName;
+
+  /// WiFi sync settings - wifiCredentialsSaved
+  ///
+  /// In en, this message translates to:
+  /// **'WiFi credentials saved'**
+  String get wifiCredentialsSaved;
+
+  /// WiFi sync settings - wifiCredentialsCleared
+  ///
+  /// In en, this message translates to:
+  /// **'WiFi credentials cleared'**
+  String get wifiCredentialsCleared;
+
+  /// Name of the fast transfer method
+  ///
+  /// In en, this message translates to:
+  /// **'Fast Transfer'**
+  String get fastTransfer;
+
+  /// Page title for transfer method settings
+  ///
+  /// In en, this message translates to:
+  /// **'Transfer Method'**
+  String get transferMethod;
+
+  /// Label for fast WiFi transfer method
+  ///
+  /// In en, this message translates to:
+  /// **'Fast'**
+  String get fast;
+
+  /// Label for Bluetooth Low Energy transfer method
+  ///
+  /// In en, this message translates to:
+  /// **'BLE'**
+  String get ble;
+
+  /// Error message when WiFi fails to enable on device
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to enable WiFi on device. Please try again.'**
+  String get wifiEnableFailed;
+
+  /// Error message when device does not support fast transfer
+  ///
+  /// In en, this message translates to:
+  /// **'Your device does not support Fast Transfer. Use Bluetooth instead.'**
+  String get deviceNoFastTransfer;
+
+  /// Error message asking user to enable hotspot
+  ///
+  /// In en, this message translates to:
+  /// **'Please enable your phone\'s hotspot and try again.'**
+  String get enableHotspotMessage;
+
+  /// Error message when transfer fails to start
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to start transfer. Please try again.'**
+  String get transferStartFailed;
+
+  /// Error message for invalid WiFi credentials
+  ///
+  /// In en, this message translates to:
+  /// **'Invalid WiFi credentials. Check your hotspot settings.'**
+  String get invalidWifiCredentials;
+
+  /// Error message when WiFi connection fails
+  ///
+  /// In en, this message translates to:
+  /// **'WiFi connection failed. Please try again.'**
+  String get wifiConnectionFailed;
+
+  /// Error title when WiFi sync fails
+  ///
+  /// In en, this message translates to:
+  /// **'WiFi Sync Failed'**
+  String get wifiSyncFailed;
+
+  /// WiFi sync feature label
+  ///
+  /// In en, this message translates to:
+  /// **'WiFi Sync'**
+  String get wifiSync;
+
+  /// Title shown when WiFi connection to device fails
+  ///
+  /// In en, this message translates to:
+  /// **'Connection Failed'**
+  String get wifiConnectionFailedTitle;
+
+  /// Step text for enabling device WiFi
+  ///
+  /// In en, this message translates to:
+  /// **'Enable {deviceName}\'s WiFi'**
+  String enableDeviceWifi(String deviceName);
+
+  /// Snackbar message when switching to fast transfer mode
+  ///
+  /// In en, this message translates to:
+  /// **'Switched to Fast Transfer'**
+  String get switchedToFastTransfer;
+
+  /// Snackbar message when fast transfer is enabled
+  ///
+  /// In en, this message translates to:
+  /// **'Fast Transfer enabled'**
+  String get fastTransferEnabled;
+
+  /// Dialog title for enabling fast transfer
+  ///
+  /// In en, this message translates to:
+  /// **'Enable Fast Transfer'**
+  String get enableFastTransfer;
+
+  /// Description of fast transfer feature in dialog
+  ///
+  /// In en, this message translates to:
+  /// **'Fast Transfer uses WiFi for ~5x faster speeds. Your phone will temporarily connect to your Omi device\'s WiFi network during transfer.'**
+  String get fastTransferDescription;
+
+  /// Warning that internet is paused during transfer
+  ///
+  /// In en, this message translates to:
+  /// **'Internet access is paused during transfer'**
+  String get internetAccessPausedDuringTransfer;
+
+  /// Description text on transfer method page
+  ///
+  /// In en, this message translates to:
+  /// **'Choose how recordings are transferred from your Omi device to your phone.'**
+  String get chooseTransferMethodDescription;
+
+  /// Speed description for WiFi transfer
+  ///
+  /// In en, this message translates to:
+  /// **'~150 KB/s via WiFi'**
+  String get wifiSpeed;
+
+  /// Badge label for faster transfer method
+  ///
+  /// In en, this message translates to:
+  /// **'5X FASTER'**
+  String get fiveTimesFaster;
+
+  /// Description of fast transfer method card
+  ///
+  /// In en, this message translates to:
+  /// **'Creates a direct WiFi connection to your Omi device. Your phone temporarily disconnects from your regular WiFi during transfer.'**
+  String get fastTransferMethodDescription;
+
+  /// Title for dialog requesting location permission
+  ///
+  /// In en, this message translates to:
+  /// **'Location Permission Required'**
+  String get locationPermissionRequired;
+
+  /// Explanation text for location permission dialog
+  ///
+  /// In en, this message translates to:
+  /// **'Fast Transfer requires location permission to verify WiFi connection. Please grant location permission to continue.'**
+  String get locationPermissionContent;
+
+  /// Title for transfer method selection dialog
+  ///
+  /// In en, this message translates to:
+  /// **'Choose Transfer Method'**
+  String get chooseTransferMethod;
+
+  /// Speed description for fast transfer via WiFi
+  ///
+  /// In en, this message translates to:
+  /// **'~150 KB/s via WiFi'**
+  String get fastTransferSpeed;
+
+  /// Message shown when WiFi sync fails because device hardware does not support WiFi, automatically falling back to Bluetooth transfer
+  ///
+  /// In en, this message translates to:
+  /// **'Device does not support WiFi sync, switching to Bluetooth'**
+  String get deviceDoesNotSupportWifiSwitchingToBle;
+
+  /// Settings link to restore previously purchased mobile subscription via Superwall.
+  ///
+  /// In en, this message translates to:
+  /// **'Restore Purchases'**
+  String get restorePurchasesAction;
+
+  /// Snackbar after a successful restore-purchases run.
+  ///
+  /// In en, this message translates to:
+  /// **'Purchases restored.'**
+  String get restorePurchasesSuccess;
+
+  /// Snackbar shown when restore-purchases fails.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not restore purchases. Try again later.'**
+  String get restorePurchasesFailed;
+
+  /// Title of one-time dialog when a user purchases a Superwall sub while still holding an active Stripe sub.
+  ///
+  /// In en, this message translates to:
+  /// **'Two subscriptions active'**
+  String get dualSubscriptionDetectedTitle;
+
+  /// Body explaining the dual-billing-rail conflict and pointing to the Stripe portal.
+  ///
+  /// In en, this message translates to:
+  /// **'You also have an active web subscription. To avoid being charged twice, manage and cancel it from the web billing portal.'**
+  String get dualSubscriptionDetectedBody;
+
+  /// Dismiss button on the dual-subscription dialog.
+  ///
+  /// In en, this message translates to:
+  /// **'Later'**
+  String get dualSubscriptionDetectedDismiss;
+
+  /// Action button that opens the Stripe customer portal.
+  ///
+  /// In en, this message translates to:
+  /// **'Open billing portal'**
+  String get dualSubscriptionDetectedManage;
+
+  /// Lite plan name
+  ///
+  /// In en, this message translates to:
+  /// **'Lite Plan'**
+  String get litePlan;
+
+  /// Plus plan name
+  ///
+  /// In en, this message translates to:
+  /// **'Plus Plan'**
+  String get plusPlan;
+
   /// No description provided for @promoCode.
   ///
   /// In en, this message translates to:
@@ -17441,7 +17720,7 @@ class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> 
         'uk',
         'ur',
         'vi',
-        'zh',
+        'zh'
       ].contains(locale.languageCode);
 
   @override
@@ -17551,10 +17830,8 @@ AppLocalizations lookupAppLocalizations(Locale locale) {
       return AppLocalizationsZh();
   }
 
-  throw FlutterError(
-    'AppLocalizations.delegate failed to load unsupported locale "$locale". This is likely '
-    'an issue with the localizations generation tool. Please file an issue '
-    'on GitHub with a reproducible sample app and the gen-l10n configuration '
-    'that was used.',
-  );
+  throw FlutterError('AppLocalizations.delegate failed to load unsupported locale "$locale". This is likely '
+      'an issue with the localizations generation tool. Please file an issue '
+      'on GitHub with a reproducible sample app and the gen-l10n configuration '
+      'that was used.');
 }

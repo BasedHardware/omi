@@ -30,8 +30,12 @@ Subscription _$SubscriptionFromJson(Map<String, dynamic> json) => Subscription(
           unknownValue: PlanType.basic),
       status: $enumDecode(_$SubscriptionStatusEnumMap, json['status'],
           unknownValue: SubscriptionStatus.inactive),
+      source: $enumDecodeNullable(_$SubscriptionSourceEnumMap, json['source'],
+              unknownValue: SubscriptionSource.stripe) ??
+          SubscriptionSource.stripe,
       currentPeriodEnd: (json['current_period_end'] as num?)?.toInt(),
       stripeSubscriptionId: json['stripe_subscription_id'] as String?,
+      superwallSubscriptionId: json['superwall_subscription_id'] as String?,
       currentPriceId: json['current_price_id'] as String?,
       features: (json['features'] as List<dynamic>?)
               ?.map((e) => e as String)
@@ -49,8 +53,10 @@ Map<String, dynamic> _$SubscriptionToJson(Subscription instance) =>
     <String, dynamic>{
       'plan': _$PlanTypeEnumMap[instance.plan]!,
       'status': _$SubscriptionStatusEnumMap[instance.status]!,
+      'source': _$SubscriptionSourceEnumMap[instance.source]!,
       'current_period_end': instance.currentPeriodEnd,
       'stripe_subscription_id': instance.stripeSubscriptionId,
+      'superwall_subscription_id': instance.superwallSubscriptionId,
       'current_price_id': instance.currentPriceId,
       'features': instance.features,
       'cancel_at_period_end': instance.cancelAtPeriodEnd,
@@ -64,11 +70,20 @@ const _$PlanTypeEnumMap = {
   PlanType.unlimited: 'unlimited',
   PlanType.architect: 'architect',
   PlanType.operator: 'operator',
+  PlanType.lite: 'lite',
+  PlanType.plus: 'plus',
+  PlanType.unlimitedV2: 'unlimited_v2',
 };
 
 const _$SubscriptionStatusEnumMap = {
   SubscriptionStatus.active: 'active',
   SubscriptionStatus.inactive: 'inactive',
+};
+
+const _$SubscriptionSourceEnumMap = {
+  SubscriptionSource.stripe: 'stripe',
+  SubscriptionSource.superwallIos: 'superwall_ios',
+  SubscriptionSource.superwallAndroid: 'superwall_android',
 };
 
 PricingOption _$PricingOptionFromJson(Map<String, dynamic> json) =>
@@ -154,6 +169,7 @@ UserSubscriptionResponse _$UserSubscriptionResponseFromJson(
               .toList() ??
           [],
       showSubscriptionUi: json['show_subscription_ui'] as bool? ?? true,
+      superwallEnabled: json['superwall_enabled'] as bool? ?? false,
       chatQuotaUsed: (json['chat_quota_used'] as num?)?.toDouble() ?? 0.0,
       chatQuotaUnit: json['chat_quota_unit'] as String?,
       chatQuotaPercent: (json['chat_quota_percent'] as num?)?.toDouble() ?? 0.0,
@@ -177,6 +193,7 @@ Map<String, dynamic> _$UserSubscriptionResponseToJson(
       'insights_gained_limit': instance.insightsGainedLimit,
       'available_plans': instance.availablePlans,
       'show_subscription_ui': instance.showSubscriptionUi,
+      'superwall_enabled': instance.superwallEnabled,
       'chat_quota_used': instance.chatQuotaUsed,
       'chat_quota_unit': instance.chatQuotaUnit,
       'chat_quota_percent': instance.chatQuotaPercent,

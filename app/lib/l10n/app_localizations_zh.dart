@@ -4600,10 +4600,7 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String accessesAndTriggeredBy(
-    String accessDescription,
-    String triggerDescription,
-  ) {
+  String accessesAndTriggeredBy(String accessDescription, String triggerDescription) {
     return '$accessDescription，$triggerDescription。';
   }
 
@@ -9121,6 +9118,156 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get unableToDetermineFirmwareVersion => '无法确定当前固件版本';
+
+  @override
+  String memoriesUsedThisMonth(String used, String limit) {
+    return '$used of $limit memories created this month';
+  }
+
+  @override
+  String get wifiSyncSettings => 'WiFi Sync Settings';
+
+  @override
+  String get enterHotspotCredentials => 'Enter your phone\'s hotspot credentials';
+
+  @override
+  String get wifiSyncUsesHotspot =>
+      'WiFi sync uses your phone as a hotspot. Find your hotspot name and password in Settings > Personal Hotspot.';
+
+  @override
+  String get hotspotNameSsid => 'Hotspot Name (SSID)';
+
+  @override
+  String get exampleIphoneHotspot => 'e.g. iPhone Hotspot';
+
+  @override
+  String get enterHotspotPassword => 'Enter hotspot password';
+
+  @override
+  String get pleaseEnterHotspotName => 'Please enter a hotspot name';
+
+  @override
+  String get wifiCredentialsSaved => 'WiFi credentials saved';
+
+  @override
+  String get wifiCredentialsCleared => 'WiFi credentials cleared';
+
+  @override
+  String get fastTransfer => 'Fast Transfer';
+
+  @override
+  String get transferMethod => 'Transfer Method';
+
+  @override
+  String get fast => 'Fast';
+
+  @override
+  String get ble => 'BLE';
+
+  @override
+  String get wifiEnableFailed => 'Failed to enable WiFi on device. Please try again.';
+
+  @override
+  String get deviceNoFastTransfer => 'Your device does not support Fast Transfer. Use Bluetooth instead.';
+
+  @override
+  String get enableHotspotMessage => 'Please enable your phone\'s hotspot and try again.';
+
+  @override
+  String get transferStartFailed => 'Failed to start transfer. Please try again.';
+
+  @override
+  String get invalidWifiCredentials => 'Invalid WiFi credentials. Check your hotspot settings.';
+
+  @override
+  String get wifiConnectionFailed => 'WiFi connection failed. Please try again.';
+
+  @override
+  String get wifiSyncFailed => 'WiFi Sync Failed';
+
+  @override
+  String get wifiSync => 'WiFi Sync';
+
+  @override
+  String get wifiConnectionFailedTitle => 'Connection Failed';
+
+  @override
+  String enableDeviceWifi(String deviceName) {
+    return 'Enable $deviceName\'s WiFi';
+  }
+
+  @override
+  String get switchedToFastTransfer => 'Switched to Fast Transfer';
+
+  @override
+  String get fastTransferEnabled => 'Fast Transfer enabled';
+
+  @override
+  String get enableFastTransfer => 'Enable Fast Transfer';
+
+  @override
+  String get fastTransferDescription =>
+      'Fast Transfer uses WiFi for ~5x faster speeds. Your phone will temporarily connect to your Omi device\'s WiFi network during transfer.';
+
+  @override
+  String get internetAccessPausedDuringTransfer => 'Internet access is paused during transfer';
+
+  @override
+  String get chooseTransferMethodDescription =>
+      'Choose how recordings are transferred from your Omi device to your phone.';
+
+  @override
+  String get wifiSpeed => '~150 KB/s via WiFi';
+
+  @override
+  String get fiveTimesFaster => '5X FASTER';
+
+  @override
+  String get fastTransferMethodDescription =>
+      'Creates a direct WiFi connection to your Omi device. Your phone temporarily disconnects from your regular WiFi during transfer.';
+
+  @override
+  String get locationPermissionRequired => 'Location Permission Required';
+
+  @override
+  String get locationPermissionContent =>
+      'Fast Transfer requires location permission to verify WiFi connection. Please grant location permission to continue.';
+
+  @override
+  String get chooseTransferMethod => 'Choose Transfer Method';
+
+  @override
+  String get fastTransferSpeed => '~150 KB/s via WiFi';
+
+  @override
+  String get deviceDoesNotSupportWifiSwitchingToBle => 'Device does not support WiFi sync, switching to Bluetooth';
+
+  @override
+  String get restorePurchasesAction => '恢复购买';
+
+  @override
+  String get restorePurchasesSuccess => '已恢复购买。';
+
+  @override
+  String get restorePurchasesFailed => '无法恢复购买。请稍后重试。';
+
+  @override
+  String get dualSubscriptionDetectedTitle => '两个订阅同时有效';
+
+  @override
+  String get dualSubscriptionDetectedBody => '您还有一个有效的网页订阅。为避免重复扣费,请通过网页计费门户管理并取消该订阅。';
+
+  @override
+  String get dualSubscriptionDetectedDismiss => '稍后';
+
+  @override
+  String get dualSubscriptionDetectedManage => '打开计费门户';
+
+  @override
+  String get litePlan => 'Lite Plan';
+
+  @override
+  String get plusPlan => 'Plus Plan';
 
   @override
   String get promoCode => '促销代码';

@@ -192,6 +192,12 @@ Future _init() async {
     Logger.debug('main: restored ${peripheralUuids.length} BLE peripherals');
   };
 
+  // Superwall is initialized lazily on first paywall trigger via
+  // `SuperwallService.ensureConfigured()` in `utils/paywall_router.dart`.
+  // Skipping eager init means flag-off users never make a Superwall network
+  // call, and the SDK is configured only when the server-driven
+  // `superwall_enabled` flag (in UsageProvider) actually routes to it.
+
   await CrashlyticsManager.init();
   if (isAuth) {
     PlatformManager.instance.crashReporter.identifyUser(

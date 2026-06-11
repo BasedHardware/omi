@@ -58,6 +58,12 @@ abstract class Env {
     return 'wss://$host/v1/agent/ws';
   }
 
+  // Superwall public API keys, obfuscated like the other vendor secrets.
+  // Read by ``services/superwall_service.dart`` at SDK init.
+  static String? get superwallApiKeyIos => _instance.superwallApiKeyIos;
+
+  static String? get superwallApiKeyAndroid => _instance.superwallApiKeyAndroid;
+
   static String? get growthbookApiKey => _instance.growthbookApiKey;
 
   static String? get googleMapsApiKey => _instance.googleMapsApiKey;
@@ -83,6 +89,10 @@ abstract class EnvFields {
   String? get posthogApiKey;
 
   String? get apiBaseUrl;
+
+  String? get superwallApiKeyIos;
+
+  String? get superwallApiKeyAndroid;
 
   String? get growthbookApiKey;
 
