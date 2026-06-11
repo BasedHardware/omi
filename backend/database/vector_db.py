@@ -640,8 +640,12 @@ def delete_memory_vectors_batch(uid: str, memory_ids: List[str]) -> int:
 # Transcript chunks ("ns_tchunks"): verbatim retrieval over raw conversation
 # transcripts. Conversation vectors (ns1) embed only the structured SUMMARY, so
 # specific details (exact dates, names, numbers, one-off mentions) are not
-# findable semantically. These chunk vectors carry the raw transcript text in
-# metadata so retrieval returns the verbatim evidence with zero extra reads.
+# findable semantically. Chunk vectors make the raw transcript searchable.
+#
+# Privacy: chunk TEXT is embedded but never stored in Pinecone metadata —
+# transcripts are encrypted at rest in Firestore, and mirroring them as
+# plaintext metadata would bypass that. Readers re-hydrate the text from
+# Firestore via (conversation_id, chunk_index).
 TRANSCRIPT_CHUNKS_NAMESPACE = "ns_tchunks"
 
 
@@ -666,8 +670,6 @@ def upsert_transcript_chunk_vectors(uid: str, conversation_id: str, chunks: List
                     'conversation_id': conversation_id,
                     'chunk_index': c['chunk_index'],
                     'created_at': int(c['created_at']),
-                    # Pinecone metadata limit is 40KB/vector; transcripts chunks are ~<2KB.
-                    'text': c['text'][:8000],
                 },
             }
         )
@@ -683,8 +685,9 @@ def upsert_transcript_chunk_vectors(uid: str, conversation_id: str, chunks: List
 def search_transcript_chunks(
     uid: str, query: str, limit: int = 20, starts_at: int = None, ends_at: int = None
 ) -> List[dict]:
-    """Semantic search over raw transcript chunks. Returns verbatim text + date, newest data
-    comes from metadata directly (no Firestore round-trip)."""
+    """Semantic search over transcript chunks. Returns chunk references
+    [{conversation_id, chunk_index, created_at, score}] — hydrate text from
+    Firestore (utils.conversations.transcript_chunks.hydrate_chunk_texts)."""
     if index is None:
         return []
     vector = embeddings.embed_query(query)
@@ -703,23 +706,47 @@ def search_transcript_chunks(
         md = m.get('metadata') or {}
         results.append(
             {
-                'text': md.get('text', ''),
                 'created_at': int(md['created_at']) if md.get('created_at') is not None else None,
                 'conversation_id': md.get('conversation_id'),
-                'chunk_index': md.get('chunk_index'),
+                'chunk_index': int(md['chunk_index']) if md.get('chunk_index') is not None else None,
                 'score': m.get('score', 0),
             }
         )
     return results
 
 
-def delete_transcript_chunk_vectors(uid: str, conversation_id: str, max_chunks: int = 512):
-    """Delete all chunk vectors for a conversation (ids are sequential by construction)."""
+def delete_transcript_chunk_vectors(uid: str, conversation_id: str):
+    """Delete all chunk vectors for one conversation (id-prefix listing on serverless)."""
     if index is None:
         return
-    ids = [f'{uid}-{conversation_id}-c{i}' for i in range(max_chunks)]
+    prefix = f'{uid}-{conversation_id}-c'
     try:
-        for i in range(0, len(ids), 100):
-            index.delete(ids=ids[i : i + 100], namespace=TRANSCRIPT_CHUNKS_NAMESPACE)
+        ids = []
+        for page in index.list(prefix=prefix, namespace=TRANSCRIPT_CHUNKS_NAMESPACE):
+            ids.extend(page if isinstance(page, list) else [page])
+        for i in range(0, len(ids), 1000):
+            index.delete(ids=ids[i : i + 1000], namespace=TRANSCRIPT_CHUNKS_NAMESPACE)
+        if ids:
+            logger.info(f'delete_transcript_chunk_vectors uid={uid} conversation={conversation_id} count={len(ids)}')
     except Exception:
         logger.warning(f'delete_transcript_chunk_vectors failed uid={uid} conversation={conversation_id}')
+
+
+def delete_transcript_chunk_vectors_batch(uid: str, conversation_ids: List[str]) -> int:
+    """Account-deletion purge: drop all transcript-chunk vectors for the user's conversations."""
+    if index is None or not conversation_ids:
+        return 0
+    deleted = 0
+    for conversation_id in conversation_ids:
+        prefix = f'{uid}-{conversation_id}-c'
+        try:
+            ids = []
+            for page in index.list(prefix=prefix, namespace=TRANSCRIPT_CHUNKS_NAMESPACE):
+                ids.extend(page if isinstance(page, list) else [page])
+            for i in range(0, len(ids), 1000):
+                index.delete(ids=ids[i : i + 1000], namespace=TRANSCRIPT_CHUNKS_NAMESPACE)
+            deleted += len(ids)
+        except Exception:
+            logger.warning(f'delete_transcript_chunk_vectors_batch failed uid={uid} conversation={conversation_id}')
+    logger.info(f'delete_transcript_chunk_vectors_batch uid={uid} total_deleted={deleted}')
+    return deleted

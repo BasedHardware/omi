@@ -9,6 +9,8 @@ conversation date, so semantic search can land on the verbatim evidence.
 from datetime import datetime
 from typing import List, Optional
 
+import database.conversations as conversations_db
+
 # ~8 segments per chunk with 2-segment overlap keeps chunks small enough to embed
 # precisely while not splitting answers across a hard boundary.
 CHUNK_WINDOW = 8
@@ -69,3 +71,28 @@ def build_transcript_chunks(
         pos += stride
         idx += 1
     return chunks
+
+
+def hydrate_chunk_texts(uid: str, rows: List[dict]) -> List[dict]:
+    """Attach verbatim text to chunk references returned by vector search.
+
+    Re-reads the conversations from Firestore (decrypted by the db layer) and rebuilds
+    the deterministic chunking, so transcript text never has to live in Pinecone.
+    Rows whose conversation/chunk no longer exists are dropped.
+    """
+    conv_ids = list({r['conversation_id'] for r in rows if r.get('conversation_id')})
+    if not conv_ids:
+        return []
+    conversations = conversations_db.get_conversations_by_id(uid, conv_ids)
+    chunks_by_conv = {}
+    for c in conversations:
+        segs = c.get('transcript_segments') or []
+        started = c.get('started_at') or c.get('created_at')
+        chunks_by_conv[c['id']] = {ch['chunk_index']: ch['text'] for ch in build_transcript_chunks(segs, started)}
+
+    hydrated = []
+    for r in rows:
+        text = chunks_by_conv.get(r.get('conversation_id'), {}).get(r.get('chunk_index'))
+        if text:
+            hydrated.append({**r, 'text': text})
+    return hydrated
