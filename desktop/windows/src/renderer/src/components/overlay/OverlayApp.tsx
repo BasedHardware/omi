@@ -39,9 +39,7 @@ function OverlayPanel({ replayEnter }: { replayEnter: () => void }): React.JSX.E
     // Single send choke-point (typed Enter + voice commit) — tell onboarding the
     // user asked something in the bar.
     window.omiOverlay.notifyAsked()
-    sendChainRef.current = sendChainRef.current
-      .then(() => sendRef.current(text))
-      .catch(() => {})
+    sendChainRef.current = sendChainRef.current.then(() => sendRef.current(text)).catch(() => {})
   }, [])
 
   // Hold-Space-to-talk: a quick Space tap types a space; holding past the threshold
@@ -56,9 +54,12 @@ function OverlayPanel({ replayEnter }: { replayEnter: () => void }): React.JSX.E
     onCommit: (text) => {
       setDraft('')
       enqueueSend(text)
-      // Let the onboarding voice step know a hold-Space capture completed.
-      window.omiOverlay.notifyVoiceCaptured()
     },
+    // Fires on every completed hold-Space capture, even when transcription was
+    // unavailable (quota/1008) or silent. Drives the onboarding voice step so a
+    // no-quota account can finish onboarding instead of being stuck waiting for a
+    // transcript that will never arrive.
+    onCaptureEnd: () => window.omiOverlay.notifyVoiceCaptured(),
     restoreDraft: (snapshot) => setDraft(snapshot),
     getDraft: () => draftRef.current
   })

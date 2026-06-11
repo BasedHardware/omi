@@ -15,9 +15,11 @@ export type OmiListenCallbacks = {
    * Fires when the WS closes AFTER it had connected (any code — clean 1000,
    * quota 1008, or abnormal 1005/1006). The Omi socket is dead, so no more
    * transcripts will arrive; the caller should fall back to keep recording.
-   * Pre-connect closes come through `onError(_, fatal=true)` instead.
+   * `reason` is the backend's close text (e.g. `trial_expired`) — needed to tell
+   * a quota/entitlement close apart from a generic drop. Pre-connect closes come
+   * through `onError(_, fatal=true)` instead.
    */
-  onClosed: (code: number) => void
+  onClosed: (code: number, reason: string) => void
 }
 
 export type OmiListenHandle = {
@@ -90,8 +92,9 @@ export async function startOmiListen(
       if (stopped) return
       if (connected) {
         // Connected then dropped (clean, quota, or abnormal) → let the caller
-        // end the session and surface an error.
-        cb.onClosed(msg.code)
+        // end the session and surface an error. Pass the reason so a 1008
+        // entitlement/quota close can be reported as such, not a bare code.
+        cb.onClosed(msg.code, msg.reason)
       } else {
         // Never connected → an initial failure; surface as fatal so the caller
         // reports that transcription couldn't start.
@@ -109,10 +112,26 @@ export async function startOmiListen(
     })
   } catch (e) {
     unsub()
-    try { processor.disconnect() } catch { /* ignore */ }
-    try { node.disconnect() } catch { /* ignore */ }
-    try { stream.getTracks().forEach((t) => t.stop()) } catch { /* ignore */ }
-    try { void audioCtx.close() } catch { /* ignore */ }
+    try {
+      processor.disconnect()
+    } catch {
+      /* ignore */
+    }
+    try {
+      node.disconnect()
+    } catch {
+      /* ignore */
+    }
+    try {
+      stream.getTracks().forEach((t) => t.stop())
+    } catch {
+      /* ignore */
+    }
+    try {
+      void audioCtx.close()
+    } catch {
+      /* ignore */
+    }
     throw e
   }
 
@@ -133,10 +152,26 @@ export async function startOmiListen(
     stop: (): void => {
       stopped = true
       unsub()
-      try { processor.disconnect() } catch { /* ignore */ }
-      try { node.disconnect() } catch { /* ignore */ }
-      try { stream.getTracks().forEach((t) => t.stop()) } catch { /* ignore */ }
-      try { void audioCtx.close() } catch { /* ignore */ }
+      try {
+        processor.disconnect()
+      } catch {
+        /* ignore */
+      }
+      try {
+        node.disconnect()
+      } catch {
+        /* ignore */
+      }
+      try {
+        stream.getTracks().forEach((t) => t.stop())
+      } catch {
+        /* ignore */
+      }
+      try {
+        void audioCtx.close()
+      } catch {
+        /* ignore */
+      }
       void window.omi.listenStop(sessionId)
     }
   }
