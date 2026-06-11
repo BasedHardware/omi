@@ -125,7 +125,18 @@ stage_local_node() {
   cp -f "$node_bin" "$NODE_RESOURCE"
   chmod +x "$NODE_RESOURCE"
   xattr -cr "$NODE_RESOURCE" 2>/dev/null || true
-  log "Staged local Node $("$NODE_RESOURCE" --version) from $node_bin"
+
+  # Homebrew's node is a stub dynamically linked to libnode.dylib via @rpath,
+  # so the copied binary aborts at startup outside its install prefix. Fall back
+  # to the self-contained official build when the staged copy can't run alone.
+  local staged_version
+  if ! staged_version="$("$NODE_RESOURCE" --version 2>/dev/null)"; then
+    log "Local Node at $node_bin is not self-contained (dynamically linked, e.g. Homebrew); falling back to official Node $NODE_VERSION download"
+    rm -f "$NODE_RESOURCE"
+    stage_universal_node
+    return
+  fi
+  log "Staged local Node $staged_version from $node_bin"
 }
 
 download_node_archive() {

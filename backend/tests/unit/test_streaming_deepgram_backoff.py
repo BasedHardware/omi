@@ -8,6 +8,7 @@ Verifies:
 
 import asyncio
 import sys
+from types import ModuleType
 from unittest.mock import MagicMock, patch, AsyncMock
 
 import pytest
@@ -38,6 +39,19 @@ if 'deepgram' in _mock_modules:
     sys.modules['deepgram'].DeepgramClientOptions = MagicMock
     sys.modules['deepgram'].LiveTranscriptionEvents = MagicMock()
     sys.modules['deepgram.clients.live.v1'].LiveOptions = MagicMock
+
+_speaker_embedding = ModuleType('utils.stt.speaker_embedding')
+_speaker_embedding.SPEAKER_MATCH_THRESHOLD = 0.45
+_speaker_embedding.async_extract_embedding_from_bytes = AsyncMock(return_value=None)
+_speaker_embedding.compare_embeddings = MagicMock(return_value=0.0)
+sys.modules.setdefault('utils.stt.speaker_embedding', _speaker_embedding)
+
+_vad = ModuleType('utils.stt.vad')
+_vad._get_ort_session = MagicMock()
+_vad.make_fresh_state = MagicMock(return_value=(None, None))
+_vad.run_vad_window = MagicMock(return_value=0.0)
+_vad.VAD_WINDOW_SAMPLES = 512
+sys.modules.setdefault('utils.stt.vad', _vad)
 
 from utils.stt.streaming import connect_to_deepgram_with_backoff, process_audio_dg  # noqa: E402
 from utils.stt.streaming import deepgram_options, deepgram_cloud_options  # noqa: E402

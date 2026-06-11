@@ -1161,7 +1161,7 @@ class TestAsyncCoordinatorScenarios:
         """target_conversation_id must be passed through to _process_one_segment / process_segment."""
         body = self._get_bg_func_body()
         process_segment_section = body[body.index('def _process_one_segment') :]
-        process_segment_call = process_segment_section[:500]
+        process_segment_call = process_segment_section[:800]
         assert 'target_conversation_id' in process_segment_call
 
     # --- Cleanup on success and failure ---

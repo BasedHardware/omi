@@ -386,9 +386,9 @@ class TestExecutorConfiguration:
         """critical_executor documented as 8 workers for latency-sensitive work."""
         assert critical_executor._max_workers == 8
 
-    def test_storage_executor_has_96_workers(self):
-        """storage_executor sized for 96 workers to handle concurrent private cloud uploads (#7376)."""
-        assert storage_executor._max_workers == 96
+    def test_storage_executor_has_128_workers(self):
+        """storage_executor sized for 128 workers to handle concurrent private cloud uploads (#7376)."""
+        assert storage_executor._max_workers == 128
 
 
 class TestNotificationWebhookWiring:
@@ -402,7 +402,7 @@ class TestNotificationWebhookWiring:
 
         # Read source to verify pattern without triggering Firestore imports
         backend_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-        with open(os.path.join(backend_dir, 'utils', 'other', 'notifications.py')) as f:
+        with open(os.path.join(backend_dir, 'utils', 'other', 'notifications.py'), encoding='utf-8') as f:
             src = f.read()
 
         # Verify the exact wiring pattern (postprocess_executor, not storage_executor, #7387)
@@ -420,7 +420,7 @@ class TestPrivateCloudQueueCap:
         import os
 
         backend_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-        with open(os.path.join(backend_dir, 'routers', 'pusher.py')) as f:
+        with open(os.path.join(backend_dir, 'routers', 'pusher.py'), encoding='utf-8') as f:
             src = f.read()
 
         assert 'deque(maxlen=PRIVATE_CLOUD_QUEUE_MAX_SIZE)' in src
@@ -432,7 +432,7 @@ class TestPrivateCloudQueueCap:
         import os
 
         backend_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-        with open(os.path.join(backend_dir, 'routers', 'pusher.py')) as f:
+        with open(os.path.join(backend_dir, 'routers', 'pusher.py'), encoding='utf-8') as f:
             src = f.read()
 
         tree = ast.parse(src)
@@ -450,7 +450,7 @@ class TestPrivateCloudQueueCap:
         import os
 
         backend_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-        with open(os.path.join(backend_dir, 'routers', 'pusher.py')) as f:
+        with open(os.path.join(backend_dir, 'routers', 'pusher.py'), encoding='utf-8') as f:
             src = f.read()
 
         # Count occurrences of the overflow warning pattern

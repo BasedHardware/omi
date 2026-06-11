@@ -78,22 +78,31 @@ def install_twilio_stub():
             self.verbs.append(str(verb))
 
         def __str__(self):
-            return f'<Response>{"".join(self.verbs)}</Response>'
+            return f'<?xml version="1.0" encoding="utf-8"?><Response>{"".join(self.verbs)}</Response>'
+
+    class Number:
+        def __init__(self, phone_number):
+            self.phone_number = phone_number
+
+        def __str__(self):
+            return f'<Number>{escape(str(self.phone_number))}</Number>'
 
     class Dial:
         def __init__(self, caller_id=None, time_limit=None, **kwargs):
             self.caller_id = caller_id
             self.time_limit = time_limit
             self.kwargs = kwargs
-            self.number_value = None
+            self.number_verbs = []
 
         def number(self, phone_number):
-            self.number_value = phone_number
+            number_verb = Number(phone_number)
+            self.number_verbs.append(number_verb)
+            return number_verb
 
         def __str__(self):
             attrs = _xml_attrs({'callerId': self.caller_id, 'timeLimit': self.time_limit})
-            number = '' if self.number_value is None else escape(str(self.number_value))
-            return f'<Dial{attrs}>{number}</Dial>'
+            numbers = ''.join(str(number_verb) for number_verb in self.number_verbs)
+            return f'<Dial{attrs}>{numbers}</Dial>'
 
     rest_mod.Client = Client
     access_token_mod.AccessToken = AccessToken
@@ -102,6 +111,7 @@ def install_twilio_stub():
     exceptions_mod.TwilioRestException = TwilioRestException
     voice_response_mod.VoiceResponse = VoiceResponse
     voice_response_mod.Dial = Dial
+    voice_response_mod.Number = Number
 
     twilio_mod.rest = rest_mod
     twilio_mod.jwt = jwt_mod

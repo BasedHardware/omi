@@ -113,11 +113,16 @@ action_items_db.get_action_item = MagicMock(return_value=None)
 action_items_db.create_action_item = MagicMock(return_value="test-item-id")
 action_items_db.update_action_item = MagicMock(return_value=True)
 
+# Stub database.notifications
+notifications_db = _stub_module("database.notifications")
+notifications_db.get_user_time_zone = MagicMock(return_value="UTC")
+
 # Stub notifications
 notif_mod = _stub_module("utils.notifications")
 notif_mod.send_action_item_completed_notification = MagicMock()
 notif_mod.send_action_item_created_notification = MagicMock()
 notif_mod.send_action_item_data_message = MagicMock()
+notif_mod.sync_action_item_reminder = MagicMock()
 
 # Stub utils packages
 _stub_package("utils")
@@ -301,7 +306,7 @@ class TestParseIsoDate:
         )
         if not os.path.exists(swift_path):
             pytest.skip("APIClient.swift not found (backend-only test environment)")
-        with open(swift_path) as f:
+        with open(swift_path, encoding="utf-8") as f:
             source = f.read()
         assert 'func encodeQueryDate' in source, "encodeQueryDate helper must exist in APIClient.swift"
         # 8 call sites + 1 definition = at least 9 occurrences

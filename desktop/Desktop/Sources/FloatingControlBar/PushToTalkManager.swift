@@ -333,6 +333,42 @@ class PushToTalkManager: ObservableObject {
 
   private var finalizedMode: String = "hold"
 
+  /// Minimum total / voiced audio a PTT turn needs before we trust STT with it.
+  /// STT models hallucinate short phrases (often in random languages, e.g.
+  /// "¿Qué es el número de cuenta?") when given silence instead of returning
+  /// empty — so silent turns must be dropped before transcription, not after.
+  private static let minTurnAudioSeconds: Double = 0.35
+  private static let minVoicedSeconds: Double = 0.2
+  /// RMS threshold (int16 samples) above which a 20ms frame counts as voiced.
+  /// ~-41 dBFS: comfortably above quiet-room mic noise, far below soft speech.
+  private static let voicedRMSThreshold: Double = 300
+
+  /// Returns (totalSeconds, voicedSeconds) for raw PCM16 mono 16kHz audio,
+  /// where voiced = 20ms frames whose RMS exceeds `voicedRMSThreshold`.
+  static func voicedAudioSeconds(pcm16k data: Data) -> (total: Double, voiced: Double) {
+    let sampleCount = data.count / 2
+    guard sampleCount > 0 else { return (0, 0) }
+    let frameSamples = 320  // 20ms at 16kHz
+    var voicedFrames = 0
+    var totalFrames = 0
+    data.withUnsafeBytes { (raw: UnsafeRawBufferPointer) in
+      let samples = raw.bindMemory(to: Int16.self)
+      var i = 0
+      while i + frameSamples <= sampleCount {
+        var sumSquares: Double = 0
+        for j in i..<(i + frameSamples) {
+          let s = Double(samples[j])
+          sumSquares += s * s
+        }
+        let rms = (sumSquares / Double(frameSamples)).squareRoot()
+        if rms > voicedRMSThreshold { voicedFrames += 1 }
+        totalFrames += 1
+        i += frameSamples
+      }
+    }
+    return (Double(sampleCount) / 16000.0, Double(voicedFrames) * 0.02)
+  }
+
   private func finalize() {
     guard state == .listening || state == .lockedListening || state == .pendingLockDecision else { return }
 
@@ -347,6 +383,28 @@ class PushToTalkManager: ObservableObject {
 
     // Stop mic immediately — no more audio capture
     audioCaptureService?.stopCapture()
+
+    // Silence gate — an accidental tap (or a hold with nothing said) records
+    // near-silence. Drop the turn here instead of letting STT hallucinate a
+    // phrase from it. Applies to the omni and batch paths, which retain the
+    // raw turn audio; live-Deepgram streams without buffering and already
+    // returns empty on silence.
+    let isBatch = ShortcutSettings.shared.pttTranscriptionMode == .batch
+    if isOmniSTT || isBatch {
+      batchAudioLock.lock()
+      let turnAudio = batchAudioBuffer
+      batchAudioLock.unlock()
+      let (totalSec, voicedSec) = Self.voicedAudioSeconds(pcm16k: turnAudio)
+      if totalSec < Self.minTurnAudioSeconds || voicedSec < Self.minVoicedSeconds {
+        log(
+          "PushToTalkManager: discarding silent turn (audio \(String(format: "%.2f", totalSec))s, voiced \(String(format: "%.2f", voicedSec))s) — not transcribing"
+        )
+        AnalyticsManager.shared.floatingBarPTTEnded(
+          mode: finalizedMode, hadTranscript: false, transcriptLength: 0)
+        stopListening()
+        return
+      }
+    }
 
     // Play end-of-PTT sound
     if ShortcutSettings.shared.pttSoundsEnabled {

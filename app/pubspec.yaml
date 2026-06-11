@@ -133,7 +133,7 @@ dependencies:
   whisper_flutter_new:
     git:
       url: https://github.com/BasedHardware/whisper_flutter_new.git
-      ref: 684fb43710dd4de5538ac2da7d0b1fa405363212
+      ref: af6b457cca4cdd6c97cc2dfa8557333ee09c81f1
   disk_space_2: ^1.0.11
   pasteboard: ^0.4.0
   vector_math: ^2.2.0

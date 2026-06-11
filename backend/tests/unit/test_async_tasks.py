@@ -547,7 +547,7 @@ class TestStructuralUsage:
     def test_pusher_imports_async_tasks(self):
         import ast
 
-        with open(self.BACKEND_DIR / 'routers/pusher.py') as f:
+        with open(self.BACKEND_DIR / 'routers/pusher.py', encoding='utf-8') as f:
             tree = ast.parse(f.read())
 
         imports = []
@@ -562,7 +562,7 @@ class TestStructuralUsage:
     def test_transcribe_imports_async_tasks(self):
         import ast
 
-        with open(self.BACKEND_DIR / 'routers/transcribe.py') as f:
+        with open(self.BACKEND_DIR / 'routers/transcribe.py', encoding='utf-8') as f:
             tree = ast.parse(f.read())
 
         imports = []
@@ -577,7 +577,7 @@ class TestStructuralUsage:
     def test_no_raw_gather_in_ws_supervisor(self):
         """Verify that WS handlers don't use raw asyncio.gather for task supervision."""
         for filename in ['routers/pusher.py', 'routers/transcribe.py']:
-            with open(self.BACKEND_DIR / filename) as f:
+            with open(self.BACKEND_DIR / filename, encoding='utf-8') as f:
                 source = f.read()
             assert (
                 'asyncio.gather(*tasks)' not in source
@@ -591,7 +591,7 @@ class TestStructuralUsage:
         import re
 
         for filename in ['routers/pusher.py', 'routers/transcribe.py']:
-            with open(self.BACKEND_DIR / filename) as f:
+            with open(self.BACKEND_DIR / filename, encoding='utf-8') as f:
                 source = f.read()
             for match in re.finditer(r'label=f"[^"]*\{uid\}', source):
                 pytest.fail(f"{filename}: dynamic uid in metric label: {match.group()}")
@@ -601,7 +601,7 @@ class TestStructuralUsage:
     def test_app_integrations_uses_gather_safe(self):
         import ast
 
-        with open(self.BACKEND_DIR / 'utils/app_integrations.py') as f:
+        with open(self.BACKEND_DIR / 'utils/app_integrations.py', encoding='utf-8') as f:
             tree = ast.parse(f.read())
 
         imports = []

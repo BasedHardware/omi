@@ -229,13 +229,94 @@ patterns_to_check = []
 for lang_patterns in SPEAKER_IDENTIFICATION_PATTERNS.values():
     patterns_to_check.extend(lang_patterns)
 
+# Pronouns and filler words the introduction patterns can capture from run-on
+# transcripts (e.g. "I'm It was great", "I'm You know...") — never real names (#5223).
+SPEAKER_NAME_STOPWORDS = frozenset(
+    {
+        'it',
+        'you',
+        'they',
+        'them',
+        'he',
+        'she',
+        'we',
+        'us',
+        'me',
+        'him',
+        'her',
+        'his',
+        'hers',
+        'its',
+        'my',
+        'mine',
+        'your',
+        'yours',
+        'our',
+        'ours',
+        'their',
+        'theirs',
+        'this',
+        'that',
+        'these',
+        'those',
+        'here',
+        'there',
+        'what',
+        'who',
+        'when',
+        'where',
+        'why',
+        'how',
+        'which',
+        'the',
+        'and',
+        'but',
+        'not',
+        'yes',
+        'no',
+        'okay',
+        'ok',
+        'yeah',
+        'just',
+        'like',
+        'so',
+        'very',
+        'really',
+        'now',
+        'then',
+        'well',
+        'still',
+        'also',
+        'too',
+        'gonna',
+        'going',
+        'sure',
+        'sorry',
+        'good',
+        'fine',
+        'right',
+        'everyone',
+        'everybody',
+        'someone',
+        'somebody',
+        'nobody',
+        'anyone',
+        'anybody',
+        'something',
+        'nothing',
+        'one',
+        'all',
+        'some',
+    }
+)
+
 
 def detect_speaker_from_text(text: str) -> Optional[str]:
     for pattern in patterns_to_check:
         match = re.search(pattern, text)
         if match:
             name = match.groups()[-1]
-            if name and len(name) >= 2:
+            if name and len(name) >= 2 and name.lower() not in SPEAKER_NAME_STOPWORDS:
                 return name.capitalize()
     return None
 

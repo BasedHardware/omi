@@ -91,24 +91,15 @@ def upload_profile_audio(file_path: str, uid: str):
     return f'https://storage.googleapis.com/{speech_profiles_bucket}/{path}'
 
 
-def get_user_has_speech_profile(uid: str, max_age_days: int = None) -> bool:
+def get_user_has_speech_profile(uid: str) -> bool:
+    # No age cutoff: the listen pipeline (routers/transcribe.py) uses the profile
+    # regardless of age, so reporting an old profile as absent only causes the app
+    # to re-prompt users whose profile is still in active use (#5128).
     bucket = _get_speech_profiles_bucket()
     if bucket is None:
         return False
 
-    blob = bucket.blob(f'{uid}/speech_profile.wav')
-    if not blob.exists():
-        return False
-
-    # Check age if max_age_days is specified
-    if max_age_days is not None:
-        blob.reload()
-        if blob.time_created:
-            age = datetime.datetime.now(datetime.timezone.utc) - blob.time_created
-            if age.days > max_age_days:
-                return False
-
-    return True
+    return bucket.blob(f'{uid}/speech_profile.wav').exists()
 
 
 def get_profile_audio_if_exists(uid: str, download: bool = True) -> str:

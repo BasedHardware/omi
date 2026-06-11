@@ -53,11 +53,25 @@ class _Finder(importlib.abc.MetaPathFinder, importlib.abc.Loader):
         pass
 
 
+def _install_stub_module(name):
+    module = _AutoMock(name)
+    sys.modules[name] = module
+    parent_name, _, attr = name.rpartition(".")
+    parent = sys.modules.get(parent_name)
+    if parent is not None:
+        setattr(parent, attr, module)
+    return module
+
+
 def _load_real_notifications():
     sys.path.insert(0, str(BACKEND_DIR))
     finder = _Finder()
     sys.meta_path.insert(0, finder)
     try:
+        firebase_admin = _install_stub_module("firebase_admin")
+        firebase_admin.messaging = _install_stub_module("firebase_admin.messaging")
+        firebase_admin.auth = _install_stub_module("firebase_admin.auth")
+
         import utils.notifications as notif
 
         return notif

@@ -682,12 +682,13 @@ class _AppDetailPageState extends State<AppDetailPage> {
 
                               // Get the position of the share button for iOS
                               final RenderBox? box = context.findRenderObject() as RenderBox?;
-                              final Rect? sharePositionOrigin =
-                                  box != null ? box.localToGlobal(Offset.zero) & box.size : null;
+                              final Rect? sharePositionOrigin = box != null
+                                  ? box.localToGlobal(Offset.zero) & box.size
+                                  : null;
 
                               await Share.share(
                                 'https://h.omi.me/apps/${app.id}',
-                                subject: app.name,
+                                subject: app.name.isEmpty ? null : app.name,
                                 sharePositionOrigin: sharePositionOrigin,
                               );
                             },
@@ -697,32 +698,32 @@ class _AppDetailPageState extends State<AppDetailPage> {
                     ),
               appProvider.isAppOwner
                   ? (isLoading
-                      ? const SizedBox.shrink()
-                      : Container(
-                          width: 36,
-                          height: 36,
-                          margin: const EdgeInsets.only(right: 8),
-                          decoration: BoxDecoration(color: Colors.grey.withOpacity(0.3), shape: BoxShape.circle),
-                          child: IconButton(
-                            padding: EdgeInsets.zero,
-                            icon: const FaIcon(FontAwesomeIcons.edit, size: 16.0, color: Colors.white),
-                            onPressed: () async {
-                              HapticFeedback.mediumImpact();
-                              await showModalBottomSheet(
-                                context: context,
-                                shape: const RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.only(
-                                    topLeft: Radius.circular(16),
-                                    topRight: Radius.circular(16),
+                        ? const SizedBox.shrink()
+                        : Container(
+                            width: 36,
+                            height: 36,
+                            margin: const EdgeInsets.only(right: 8),
+                            decoration: BoxDecoration(color: Colors.grey.withOpacity(0.3), shape: BoxShape.circle),
+                            child: IconButton(
+                              padding: EdgeInsets.zero,
+                              icon: const FaIcon(FontAwesomeIcons.edit, size: 16.0, color: Colors.white),
+                              onPressed: () async {
+                                HapticFeedback.mediumImpact();
+                                await showModalBottomSheet(
+                                  context: context,
+                                  shape: const RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.only(
+                                      topLeft: Radius.circular(16),
+                                      topRight: Radius.circular(16),
+                                    ),
                                   ),
-                                ),
-                                builder: (context) {
-                                  return ShowAppOptionsSheet(app: app);
-                                },
-                              );
-                            },
-                          ),
-                        ))
+                                  builder: (context) {
+                                    return ShowAppOptionsSheet(app: app);
+                                  },
+                                );
+                              },
+                            ),
+                          ))
                   : const SizedBox(width: 8),
             ],
           ),
@@ -839,73 +840,73 @@ class _AppDetailPageState extends State<AppDetailPage> {
                                       color: const Color(0xFF35343B),
                                     )
                                   : app.enabled
-                                      ? AnimatedLoadingButton(
-                                          text: 'Disable',
-                                          width: 90,
-                                          height: 32,
-                                          onPressed: () => _toggleApp(app.id, false),
-                                          color: Colors.grey.shade700,
-                                        )
-                                      : (app.isPaid && !app.isUserPaid
-                                          ? AnimatedLoadingButton(
-                                              width: 100,
-                                              height: 32,
-                                              text: "Subscribe",
-                                              onPressed: () async {
-                                                // Track subscribe button clicked
-                                                PlatformManager.instance.analytics.appDetailSubscribeClicked(
-                                                  appId: app.id,
-                                                  appName: app.name,
-                                                );
+                                  ? AnimatedLoadingButton(
+                                      text: 'Disable',
+                                      width: 90,
+                                      height: 32,
+                                      onPressed: () => _toggleApp(app.id, false),
+                                      color: Colors.grey.shade700,
+                                    )
+                                  : (app.isPaid && !app.isUserPaid
+                                        ? AnimatedLoadingButton(
+                                            width: 100,
+                                            height: 32,
+                                            text: "Subscribe",
+                                            onPressed: () async {
+                                              // Track subscribe button clicked
+                                              PlatformManager.instance.analytics.appDetailSubscribeClicked(
+                                                appId: app.id,
+                                                appName: app.name,
+                                              );
 
-                                                if (app.paymentLink != null && app.paymentLink!.isNotEmpty) {
-                                                  final uri = Uri.tryParse(app.paymentLink!);
-                                                  if (uri == null) {
-                                                    ScaffoldMessenger.of(context).showSnackBar(
-                                                      SnackBar(content: Text(context.l10n.invalidPaymentUrl)),
-                                                    );
-                                                    return;
-                                                  }
-                                                  _checkPaymentStatus(app.id);
-                                                  await _launchUrlSafely(uri);
-                                                } else {
-                                                  await _toggleApp(app.id, true);
-                                                }
-                                              },
-                                              color: const Color(0xFF8B5CF6),
-                                            )
-                                          : AnimatedLoadingButton(
-                                              width: 75,
-                                              height: 32,
-                                              text: 'Enable',
-                                              onPressed: () async {
-                                                if (app.worksExternally()) {
-                                                  showDialog(
-                                                    context: context,
-                                                    builder: (ctx) {
-                                                      return StatefulBuilder(
-                                                        builder: (ctx, setState) {
-                                                          return ConfirmationDialog(
-                                                            title: context.l10n.dataAccessNotice,
-                                                            description: context.l10n.dataAccessNoticeDescription,
-                                                            onConfirm: () {
-                                                              _toggleApp(app.id, true);
-                                                              Navigator.pop(context);
-                                                            },
-                                                            onCancel: () {
-                                                              Navigator.pop(context);
-                                                            },
-                                                          );
-                                                        },
-                                                      );
-                                                    },
+                                              if (app.paymentLink != null && app.paymentLink!.isNotEmpty) {
+                                                final uri = Uri.tryParse(app.paymentLink!);
+                                                if (uri == null) {
+                                                  ScaffoldMessenger.of(context).showSnackBar(
+                                                    SnackBar(content: Text(context.l10n.invalidPaymentUrl)),
                                                   );
-                                                } else {
-                                                  _toggleApp(app.id, true);
+                                                  return;
                                                 }
-                                              },
-                                              color: const Color(0xFF8B5CF6),
-                                            )),
+                                                _checkPaymentStatus(app.id);
+                                                await _launchUrlSafely(uri);
+                                              } else {
+                                                await _toggleApp(app.id, true);
+                                              }
+                                            },
+                                            color: const Color(0xFF8B5CF6),
+                                          )
+                                        : AnimatedLoadingButton(
+                                            width: 75,
+                                            height: 32,
+                                            text: 'Enable',
+                                            onPressed: () async {
+                                              if (app.worksExternally()) {
+                                                showDialog(
+                                                  context: context,
+                                                  builder: (ctx) {
+                                                    return StatefulBuilder(
+                                                      builder: (ctx, setState) {
+                                                        return ConfirmationDialog(
+                                                          title: context.l10n.dataAccessNotice,
+                                                          description: context.l10n.dataAccessNoticeDescription,
+                                                          onConfirm: () {
+                                                            _toggleApp(app.id, true);
+                                                            Navigator.pop(context);
+                                                          },
+                                                          onCancel: () {
+                                                            Navigator.pop(context);
+                                                          },
+                                                        );
+                                                      },
+                                                    );
+                                                  },
+                                                );
+                                              } else {
+                                                _toggleApp(app.id, true);
+                                              }
+                                            },
+                                            color: const Color(0xFF8B5CF6),
+                                          )),
                             ],
                           ),
                         ),
@@ -1396,8 +1397,10 @@ class _AppDetailPageState extends State<AppDetailPage> {
                                     ),
                                     const SizedBox(height: 16),
                                     RecentReviewsSection(
-                                      reviews:
-                                          app.reviews.sorted((a, b) => b.ratedAt.compareTo(a.ratedAt)).take(3).toList(),
+                                      reviews: app.reviews
+                                          .sorted((a, b) => b.ratedAt.compareTo(a.ratedAt))
+                                          .take(3)
+                                          .toList(),
                                       userReview: app.userReview,
                                       app: app,
                                       onReviewUpdated: () {
@@ -1679,8 +1682,8 @@ class _RecentReviewsSectionState extends State<RecentReviewsSection> {
       final userName = widget.userReview?.username.isNotEmpty == true
           ? widget.userReview!.username
           : prefs.fullName.isNotEmpty
-              ? prefs.fullName
-              : prefs.givenName;
+          ? prefs.fullName
+          : prefs.givenName;
 
       final rev = AppReview(
         uid: prefs.uid,
@@ -1897,8 +1900,9 @@ class _RecentReviewsSectionState extends State<RecentReviewsSection> {
 
   Widget _buildReviewItem(BuildContext context, AppReview review, {bool isUserReview = false}) {
     final l10n = AppLocalizations.of(context)!;
-    final displayName =
-        isUserReview ? l10n.yourReview : (review.username.isNotEmpty ? review.username : l10n.anonymousUser);
+    final displayName = isUserReview
+        ? l10n.yourReview
+        : (review.username.isNotEmpty ? review.username : l10n.anonymousUser);
     final avatarSeed = review.uid.isNotEmpty ? review.uid : review.username;
 
     return Padding(

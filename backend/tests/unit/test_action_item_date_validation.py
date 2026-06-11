@@ -25,6 +25,7 @@ import pytest
 # Paths
 # ---------------------------------------------------------------------------
 BACKEND_DIR = Path(__file__).resolve().parent.parent.parent
+IST_TZ = timezone(timedelta(hours=5, minutes=30), "IST")
 
 os.environ.setdefault(
     "ENCRYPTION_SECRET",
@@ -107,6 +108,7 @@ notif_mod = _stub_module("utils.notifications")
 notif_mod.send_action_item_completed_notification = MagicMock()
 notif_mod.send_action_item_created_notification = MagicMock()
 notif_mod.send_action_item_data_message = MagicMock()
+notif_mod.sync_action_item_reminder = MagicMock()
 
 # Stub langchain
 langchain_core = _stub_package("langchain_core")
@@ -563,6 +565,11 @@ class TestExtractActionItemsPostValidation:
 class TestActionItemTimezoneConversion:
     """#7059: the LLM emits naive LOCAL due dates; the server must convert them to UTC in Python."""
 
+    def _zone_info(self, key):
+        if key == "Asia/Kolkata":
+            return IST_TZ
+        return ZoneInfo(key)
+
     def _run(self, due_at, tz):
         from models.structured import ActionItem, ActionItemsExtraction
 
@@ -583,7 +590,9 @@ class TestActionItemTimezoneConversion:
         mock_llm.__or__ = MagicMock(return_value=mock_chain)
         with patch.object(conv_proc, 'get_llm', return_value=mock_llm), patch.object(
             conv_proc, 'PydanticOutputParser'
-        ) as mock_parser_cls, patch.object(conv_proc, 'ChatPromptTemplate') as mock_prompt_cls:
+        ) as mock_parser_cls, patch.object(conv_proc, 'ChatPromptTemplate') as mock_prompt_cls, patch.object(
+            conv_proc, 'ZoneInfo', side_effect=self._zone_info
+        ):
             mock_parser = MagicMock()
             mock_parser.get_format_instructions.return_value = "format"
             mock_parser_cls.return_value = mock_parser
@@ -600,7 +609,7 @@ class TestActionItemTimezoneConversion:
 
     def test_naive_local_due_converted_to_utc_for_ist(self):
         # LLM emits naive local 10:00 IST tomorrow -> server stores 04:30 UTC (the #7059 bug).
-        naive_local = (datetime.now(timezone.utc).astimezone(ZoneInfo("Asia/Kolkata")) + timedelta(days=1)).replace(
+        naive_local = (datetime.now(timezone.utc).astimezone(IST_TZ) + timedelta(days=1)).replace(
             hour=10, minute=0, second=0, microsecond=0, tzinfo=None
         )
         result, _ = self._run(naive_local, tz="Asia/Kolkata")
@@ -646,7 +655,7 @@ class TestActionItemTimezoneConversion:
         assert d1 is not None and d1.utcoffset() == timedelta(0)
         assert (d1.hour, d1.minute) == (4, 30)
         # (b) aware +05:30 value is converted to UTC, not trusted as-is
-        aware_ist = base.replace(hour=10, minute=0, second=0, microsecond=0, tzinfo=ZoneInfo("Asia/Kolkata"))
+        aware_ist = base.replace(hour=10, minute=0, second=0, microsecond=0, tzinfo=IST_TZ)
         r2, _ = self._run(aware_ist, tz="UTC")
         d2 = r2[0].due_at
         assert d2 is not None and d2.utcoffset() == timedelta(0)
