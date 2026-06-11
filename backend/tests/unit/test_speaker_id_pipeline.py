@@ -243,6 +243,18 @@ class TestDetectSpeakerFromText:
         "I am",  # No name follows
     ]
 
+    # Run-on / garbled transcripts where the regex captures a pronoun or filler
+    # word instead of a name — these created phantom contacts "It", "You", "Them" (#5223).
+    STOPWORD_CASES = [
+        "And I am It was great",
+        "I'm You know, the guy",
+        "Yeah, I'm Them and the others",
+        "My name is It",
+        "I am Sorry about that",
+        "I'm Just saying",
+        "i am Gonna do it",
+    ]
+
     @pytest.mark.parametrize("lang,text,expected_name", POSITIVE_CASES)
     def test_positive_detection(self, lang, text, expected_name):
         """Detects speaker name from self-introduction in each language."""
@@ -261,6 +273,17 @@ class TestDetectSpeakerFromText:
         """Non-introduction text returns None."""
         result = detect_speaker_from_text(text)
         assert result is None, f"False positive on: {text!r}"
+
+    @pytest.mark.parametrize("text", STOPWORD_CASES)
+    def test_pronoun_stopwords_rejected(self, text):
+        """Pronouns/fillers captured by the intro patterns are not returned as names."""
+        result = detect_speaker_from_text(text)
+        assert result is None, f"Stopword leaked as speaker name: {text!r} -> {result}"
+
+    def test_real_name_after_stopword_guard(self):
+        """Genuine introductions still detect after the stopword guard."""
+        assert detect_speaker_from_text("I am John") == "John"
+        assert detect_speaker_from_text("My name is Alice") == "Alice"
 
     def test_empty_string_returns_none(self):
         """Empty string input returns None."""
