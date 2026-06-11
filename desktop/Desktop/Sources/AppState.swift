@@ -2731,6 +2731,16 @@ class AppState: ObservableObject {
     }
   }
 
+  /// Replace a conversation in local state with a freshly-fetched server
+  /// version. Used after reprocess so the row sees the new `status` and full
+  /// `structured` payload (not just title), which matters when reprocess
+  /// transitions a `.failed` conversation back to `.completed`.
+  func replaceConversation(_ refreshed: ServerConversation) {
+    if let index = conversations.firstIndex(where: { $0.id == refreshed.id }) {
+      conversations[index] = refreshed
+    }
+  }
+
   // MARK: - People (Speaker Profiles)
 
   /// Fetches all people from the OMI API

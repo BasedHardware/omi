@@ -27,6 +27,7 @@ struct ConversationRowView: View {
   @State private var isDeleting = false
   @State private var isUpdatingTitle = false
   @State private var isCopyingLink = false
+  @State private var isReprocessing = false
 
   /// The timestamp to display (prefer startedAt, fall back to createdAt)
   private var displayDate: Date {
@@ -81,6 +82,16 @@ struct ConversationRowView: View {
   private var folderName: String? {
     guard let folderId = conversation.folderId else { return nil }
     return folders.first(where: { $0.id == folderId })?.name
+  }
+
+  /// Title color — dim non-titled placeholders (Processing / Locked /
+  /// Untitled) so they visually read as secondary text, not as the real
+  /// title of the conversation.
+  private var titleColor: Color {
+    switch conversation.displayState {
+    case .titled: return OmiColors.textPrimary
+    default: return OmiColors.textTertiary
+    }
   }
 
   /// Label for the conversation source
@@ -185,6 +196,40 @@ struct ConversationRowView: View {
     isDeleting = false
   }
 
+  /// Re-runs LLM processing for this conversation. Used when a conversation
+  /// finished processing but ended up with no title — usually a transient
+  /// LLM failure that resolves on retry. Replaces the row with the refreshed
+  /// payload so the badge/CTA also update (a `.failed` conversation that
+  /// reprocesses successfully should flip to `.completed`, not just gain a
+  /// title — otherwise `displayState` keeps returning `.failed`).
+  private func reprocessConversation() async {
+    guard !isReprocessing else { return }
+    isReprocessing = true
+
+    AnalyticsManager.shared.conversationReprocessedDefault(conversationId: conversation.id)
+
+    do {
+      let refreshed = try await APIClient.shared.reprocessConversation(
+        conversationId: conversation.id)
+
+      // Sync to local SQLite cache so a reload doesn't revert the new title.
+      try? await TranscriptionStorage.shared.updateTitleByBackendId(
+        conversation.id, title: refreshed.structured.title)
+
+      await MainActor.run {
+        // Replace the whole conversation, not just the title — `status`,
+        // `structured.overview`, action items etc. all change on reprocess
+        // and the row's display state derives from `status` AND title.
+        appState.replaceConversation(refreshed)
+      }
+      log("Reprocessed conversation \(conversation.id) → \(refreshed.structured.title)")
+    } catch {
+      log("Failed to reprocess conversation \(conversation.id): \(error)")
+    }
+
+    isReprocessing = false
+  }
+
   private func updateTitle() async {
     guard !isUpdatingTitle, !editedTitle.isEmpty else { return }
     isUpdatingTitle = true
@@ -211,6 +256,22 @@ struct ConversationRowView: View {
 
   private var inlineActionButtons: some View {
     HStack(spacing: 4) {
+      // Reprocess (only when the LLM never produced a title for a non-empty
+      // transcript). Surface inline so the user can fix the bad row in one tap
+      // instead of digging into the context menu.
+      if conversation.canReprocess {
+        Button(action: { Task { await reprocessConversation() } }) {
+          Image(systemName: isReprocessing ? "arrow.triangle.2.circlepath" : "wand.and.stars")
+            .scaledFont(size: 11)
+            .foregroundColor(OmiColors.info)
+            .frame(width: 22, height: 22)
+            .background(Circle().fill(OmiColors.backgroundRaised))
+        }
+        .buttonStyle(.plain)
+        .disabled(isReprocessing)
+        .help(isReprocessing ? "Reprocessing…" : "Reprocess title & summary")
+      }
+
       // Edit title
       Button(action: {
         editedTitle = conversation.title
@@ -303,10 +364,12 @@ struct ConversationRowView: View {
       // Title + metadata below
       VStack(alignment: .leading, spacing: 3) {
         HStack(spacing: 8) {
-          Text(conversation.title)
+          Text(conversation.displayTitle)
             .scaledFont(size: 14, weight: .medium)
-            .foregroundColor(OmiColors.textPrimary)
+            .foregroundColor(titleColor)
             .lineLimit(1)
+
+          ConversationStatusBadge(state: conversation.displayState)
 
           if isNewlyCreated {
             NewBadge()
@@ -390,10 +453,12 @@ struct ConversationRowView: View {
       // Title + time/duration below
       VStack(alignment: .leading, spacing: 3) {
         HStack(spacing: 8) {
-          Text(conversation.title)
+          Text(conversation.displayTitle)
             .scaledFont(size: 15, weight: .medium)
-            .foregroundColor(OmiColors.textPrimary)
+            .foregroundColor(titleColor)
             .lineLimit(1)
+
+          ConversationStatusBadge(state: conversation.displayState)
 
           if isNewlyCreated {
             NewBadge()
@@ -499,6 +564,18 @@ struct ConversationRowView: View {
         showEditDialog = true
       }) {
         Label("Edit Title", systemImage: "pencil")
+      }
+
+      // Reprocess — surfaced in the menu (in addition to the inline hover
+      // button) so it's discoverable even without hovering. Only enabled when
+      // there's something to recover (canReprocess).
+      if conversation.canReprocess {
+        Button(action: { Task { await reprocessConversation() } }) {
+          Label(
+            isReprocessing ? "Reprocessing…" : "Reprocess Title & Summary",
+            systemImage: isReprocessing ? "arrow.triangle.2.circlepath" : "wand.and.stars")
+        }
+        .disabled(isReprocessing)
       }
 
       // Move to Folder submenu
