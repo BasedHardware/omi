@@ -384,6 +384,8 @@ class TaskChatState: ObservableObject {
         }
     }
 
+    // Mirrors ChatProvider.addToolActivity — kept in lockstep.
+    // TODO: DRY these two implementations into a shared helper.
     private func addToolActivity(messageId: String, toolName: String, status: ToolCallStatus, toolUseId: String? = nil, input: [String: Any]? = nil) {
         guard let index = messages.firstIndex(where: { $0.id == messageId }) else { return }
 
@@ -393,7 +395,7 @@ class TaskChatState: ObservableObject {
             if let toolUseId = toolUseId, toolInput != nil {
                 for i in stride(from: messages[index].contentBlocks.count - 1, through: 0, by: -1) {
                     if case .toolCall(let id, let name, let st, let existingTuid, _, let output) = messages[index].contentBlocks[i],
-                       (existingTuid == toolUseId || (existingTuid == nil && name == toolName && st == .running)) {
+                       (existingTuid == toolUseId || (existingTuid == nil && name == toolName && st.isInFlight)) {
                         messages[index].contentBlocks[i] = .toolCall(
                             id: id, name: name, status: st,
                             toolUseId: toolUseId, input: toolInput, output: output
@@ -408,7 +410,8 @@ class TaskChatState: ObservableObject {
             )
         } else {
             for i in stride(from: messages[index].contentBlocks.count - 1, through: 0, by: -1) {
-                if case .toolCall(let id, let name, .running, let existingTuid, let existingInput, let output) = messages[index].contentBlocks[i] {
+                if case .toolCall(let id, let name, let st, let existingTuid, let existingInput, let output) = messages[index].contentBlocks[i],
+                   st.isInFlight {
                     let matches = (toolUseId != nil && existingTuid == toolUseId) || (toolUseId == nil && name == toolName)
                     if matches {
                         messages[index].contentBlocks[i] = .toolCall(
@@ -452,10 +455,14 @@ class TaskChatState: ObservableObject {
         }
     }
 
+    /// Mirrors ChatProvider.completeRemainingToolCalls — matches any
+    /// in-flight state (`.running`, `.slow`, `.stalled`) so detector-
+    /// promoted blocks resolve when the turn ends.
     private func completeRemainingToolCalls(messageId: String) {
         guard let index = messages.firstIndex(where: { $0.id == messageId }) else { return }
         for i in messages[index].contentBlocks.indices {
-            if case .toolCall(let id, let name, .running, let toolUseId, let input, let output) = messages[index].contentBlocks[i] {
+            if case .toolCall(let id, let name, let status, let toolUseId, let input, let output) = messages[index].contentBlocks[i],
+               status.isInFlight {
                 messages[index].contentBlocks[i] = .toolCall(
                     id: id, name: name, status: .completed,
                     toolUseId: toolUseId, input: input, output: output

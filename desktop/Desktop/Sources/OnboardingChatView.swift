@@ -1986,7 +1986,10 @@ struct OnboardingToolIndicator: View {
   var body: some View {
     VStack(alignment: .leading, spacing: 8) {
       HStack(spacing: 6) {
-        if status == .running {
+        // Onboarding doesn't wire StallDetector in V1, so .slow / .stalled
+        // shouldn't arrive here. Match isInFlight defensively so a future
+        // code path doesn't silently render a stalled tool as done.
+        if status.isInFlight {
           ProgressView()
             .controlSize(.mini)
         } else {

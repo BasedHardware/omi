@@ -193,7 +193,29 @@ enum ChatContentBlock: Identifiable {
 
 enum ToolCallStatus {
     case running
+    /// Promoted by `StallDetector` after the per-tool / inter-event
+    /// timer crosses `StallThresholds.slowGapMs`. Still in flight —
+    /// UI swaps the spinner for a "still working" annotation.
+    case slow
+    /// Promoted past `StallThresholds.stalledGapMs`. Still in flight,
+    /// but the message-level Cancel banner appears.
+    case stalled
     case completed
+    /// Terminal failure (timeout, interrupt, bridge error). Visually
+    /// distinct from `.completed` so the user can tell something went
+    /// wrong without reading the message.
+    case failed
+
+    /// True for any state where the tool is still working. Pattern
+    /// matches that previously asked "is `.running`?" should ask
+    /// `isInFlight` so detector-promoted `.slow` / `.stalled` are
+    /// also treated as in-flight.
+    var isInFlight: Bool {
+        switch self {
+        case .running, .slow, .stalled: return true
+        case .completed, .failed: return false
+        }
+    }
 }
 
 // MARK: - Chat Message Model
@@ -2714,6 +2736,18 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
         var sqlRowsReturned = 0
         var sqlQueryCount = 0
 
+        // Stall detection.
+        // The detector observes every bridge event (text deltas, tool
+        // activity, etc.) and a 500ms periodic tick task surfaces stall
+        // promotions even during silent gaps. Transitions become
+        // ToolCallStatus updates on individual tool-call blocks; the
+        // banner appears via ToolCallsGroup's hasStalledTool check.
+        let turnStartMs = Int(Date().timeIntervalSince1970 * 1000)
+        let stallDetector = StallDetector(
+            thresholds: .v1Defaults,
+            startedAtMs: turnStartMs
+        )
+
         do {
             // Use the system prompt built at warmup. The agent bridge applies it only
             // at session/new; for the normal reused-session path it is ignored.
@@ -2764,10 +2798,15 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             }
 
             // Query the active bridge with streaming
-            // Callbacks for agent bridge
+            // Callbacks for agent bridge. Each event-observing handler
+            // also steps the stall detector and applies any resulting
+            // tool-status transitions to the message's content blocks.
             let textDeltaHandler: AgentBridge.TextDeltaHandler = { [weak self] delta in
+                let nowMs = Int(Date().timeIntervalSince1970 * 1000)
                 Task { @MainActor [weak self] in
                     self?.appendToMessage(id: aiMessageId, text: delta)
+                    let transitions = await stallDetector.step(kind: .other, atMs: nowMs)
+                    self?.applyStallTransitions(messageId: aiMessageId, transitions: transitions)
                 }
             }
             let toolCallHandler: AgentBridge.ToolCallHandler = { callId, name, input in
@@ -2786,6 +2825,13 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                 return result
             }
             let toolActivityHandler: AgentBridge.ToolActivityHandler = { [weak self] name, status, toolUseId, input in
+                let nowMs = Int(Date().timeIntervalSince1970 * 1000)
+                // Tools without a toolUseId still get tracked under a
+                // synthetic key so the detector's per-tool timer fires.
+                let trackedId = ChatProvider.stallTrackingId(toolUseId: toolUseId, name: name)
+                let detectorKind: StallDetector.EventKind = status == "started"
+                    ? .toolStarted(id: trackedId)
+                    : .toolCompleted(id: trackedId)
                 Task { @MainActor [weak self] in
                     self?.addToolActivity(
                         messageId: aiMessageId,
@@ -2825,18 +2871,43 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                         let durationMs = Int(Date().timeIntervalSince(startTime) * 1000)
                         AnalyticsManager.shared.chatToolCallCompleted(toolName: name, durationMs: durationMs)
                     }
+                    let transitions = await stallDetector.step(kind: detectorKind, atMs: nowMs)
+                    self?.applyStallTransitions(messageId: aiMessageId, transitions: transitions)
                 }
             }
             let thinkingDeltaHandler: AgentBridge.ThinkingDeltaHandler = { [weak self] text in
+                let nowMs = Int(Date().timeIntervalSince1970 * 1000)
                 Task { @MainActor [weak self] in
                     self?.appendThinking(messageId: aiMessageId, text: text)
+                    let transitions = await stallDetector.step(kind: .other, atMs: nowMs)
+                    self?.applyStallTransitions(messageId: aiMessageId, transitions: transitions)
                 }
             }
             let toolResultDisplayHandler: AgentBridge.ToolResultDisplayHandler = { [weak self] toolUseId, name, output in
+                let nowMs = Int(Date().timeIntervalSince1970 * 1000)
                 Task { @MainActor [weak self] in
                     self?.addToolResult(messageId: aiMessageId, toolUseId: toolUseId, name: name, output: output)
+                    let transitions = await stallDetector.step(kind: .other, atMs: nowMs)
+                    self?.applyStallTransitions(messageId: aiMessageId, transitions: transitions)
                 }
             }
+
+            // Periodic tick task surfaces stall promotions during silent
+            // gaps when no bridge events arrive. Cancelled via defer on
+            // scope exit (success or throw).
+            let stallTickTask = Task { [weak self] in
+                while !Task.isCancelled {
+                    try? await Task.sleep(nanoseconds: 500_000_000)  // 500ms
+                    if Task.isCancelled { break }
+                    let nowMs = Int(Date().timeIntervalSince1970 * 1000)
+                    let transitions = await stallDetector.tick(atMs: nowMs)
+                    if transitions.isEmpty { continue }
+                    await MainActor.run { [weak self] in
+                        self?.applyStallTransitions(messageId: aiMessageId, transitions: transitions)
+                    }
+                }
+            }
+            defer { stallTickTask.cancel() }
 
             let queryResult = try await agentBridge.query(
                 prompt: trimmedText,
@@ -3263,12 +3334,15 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
 
         let toolInput = input.flatMap { ChatContentBlock.toolInputSummary(for: toolName, input: $0) }
 
+        // Bridge callbacks only ever pass .running (started) or
+        // .completed (finished). Detector-promoted .slow / .stalled
+        // arrive through the stall status-update path, not here.
         if status == .running {
-            // If we have a toolUseId and input, try to update an existing running block (input arrived after start)
+            // If we have a toolUseId and input, try to update an existing in-flight block (input arrived after start)
             if let toolUseId = toolUseId, toolInput != nil {
                 for i in stride(from: messages[index].contentBlocks.count - 1, through: 0, by: -1) {
                     if case .toolCall(let id, let name, let st, let existingTuid, _, let output) = messages[index].contentBlocks[i],
-                       (existingTuid == toolUseId || (existingTuid == nil && name == toolName && st == .running)) {
+                       (existingTuid == toolUseId || (existingTuid == nil && name == toolName && st.isInFlight)) {
                         messages[index].contentBlocks[i] = .toolCall(
                             id: id, name: name, status: st,
                             toolUseId: toolUseId, input: toolInput, output: output
@@ -3283,9 +3357,12 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                           toolUseId: toolUseId, input: toolInput)
             )
         } else {
-            // Mark as completed — find by toolUseId first, fall back to name
+            // Mark as completed — find by toolUseId first, fall back to name.
+            // Match any in-flight state so detector-promoted .slow / .stalled
+            // also resolve cleanly when the tool actually finishes.
             for i in stride(from: messages[index].contentBlocks.count - 1, through: 0, by: -1) {
-                if case .toolCall(let id, let name, .running, let existingTuid, let existingInput, let output) = messages[index].contentBlocks[i] {
+                if case .toolCall(let id, let name, let st, let existingTuid, let existingInput, let output) = messages[index].contentBlocks[i],
+                   st.isInFlight {
                     let matches = (toolUseId != nil && existingTuid == toolUseId) || (toolUseId == nil && name == toolName)
                     if matches {
                         messages[index].contentBlocks[i] = .toolCall(
@@ -3332,16 +3409,70 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
         }
     }
 
-    /// Mark any remaining `.running` tool call blocks as `.completed` in a message.
+    /// Mark any remaining in-flight tool call blocks as `.completed` in a message.
     /// Called when a query finishes (success or interrupt) so spinners don't spin forever.
+    /// Matches `.running`, `.slow`, and `.stalled` (any state where `isInFlight` is true)
+    /// so detector-promoted blocks resolve when the turn ends.
     private func completeRemainingToolCalls(messageId: String) {
         guard let index = messages.firstIndex(where: { $0.id == messageId }) else { return }
         for i in messages[index].contentBlocks.indices {
-            if case .toolCall(let id, let name, .running, let toolUseId, let input, let output) = messages[index].contentBlocks[i] {
+            if case .toolCall(let id, let name, let status, let toolUseId, let input, let output) = messages[index].contentBlocks[i],
+               status.isInFlight {
                 messages[index].contentBlocks[i] = .toolCall(
                     id: id, name: name, status: .completed,
                     toolUseId: toolUseId, input: input, output: output
                 )
+            }
+        }
+    }
+
+    // MARK: - Stall detection
+
+    /// The key the `StallDetector` tracks a tool under. Tools that arrive
+    /// without a real `toolUseId` fall back to a name-derived synthetic
+    /// key so their per-tool timer still fires. Registration (in the tool
+    /// activity handler) and the transition match in `applyStallTransitions`
+    /// MUST derive the key identically — routing both through this single
+    /// helper keeps them from diverging (a mismatch silently drops every
+    /// stall transition for `toolUseId`-less tools).
+    nonisolated static func stallTrackingId(toolUseId: String?, name: String) -> String {
+        toolUseId ?? "untracked-\(name)"
+    }
+
+    /// Map a `StallDetector.State` to the matching `ToolCallStatus`.
+    /// The two enums are deliberately separate — the detector tracks a
+    /// 3-state lifecycle independent of UI/persistence concerns.
+    private func mapDetectorState(_ state: StallDetector.State) -> ToolCallStatus {
+        switch state {
+        case .running: return .running
+        case .slow: return .slow
+        case .stalled: return .stalled
+        }
+    }
+
+    /// Apply detector transitions to the message's tool-call blocks.
+    /// Only `.tool(id:from:to:)` transitions are surfaced in the UI;
+    /// `.interEvent` transitions are observed but not rendered here.
+    private func applyStallTransitions(
+        messageId: String,
+        transitions: [StallDetector.Transition]
+    ) {
+        guard !transitions.isEmpty,
+              let index = messages.firstIndex(where: { $0.id == messageId })
+        else { return }
+
+        for transition in transitions {
+            guard case .tool(let id, _, let to) = transition else { continue }
+            for i in messages[index].contentBlocks.indices {
+                if case .toolCall(let blockId, let name, let oldStatus, let tuid, let input, let output) = messages[index].contentBlocks[i],
+                   ChatProvider.stallTrackingId(toolUseId: tuid, name: name) == id,
+                   oldStatus.isInFlight {
+                    messages[index].contentBlocks[i] = .toolCall(
+                        id: blockId, name: name, status: mapDetectorState(to),
+                        toolUseId: tuid, input: input, output: output
+                    )
+                    break
+                }
             }
         }
     }

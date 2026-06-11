@@ -97,7 +97,7 @@ class TaskChatCoordinator: ObservableObject {
         }
 
         for block in lastAI.contentBlocks.reversed() {
-            if case .toolCall(_, let name, .running, _, _, _) = block {
+            if case .toolCall(_, let name, let status, _, _, _) = block, status.isInFlight {
                 return ChatContentBlock.displayName(for: name)
             }
             if case .thinking = block {
