@@ -60,7 +60,7 @@ from utils.other.storage import (
 )
 
 from utils import encryption
-from utils.byok import get_byok_keys, set_byok_keys
+from utils.byok import get_byok_keys, set_byok_keys, set_byok_uid
 from utils.http_client import _get_semaphore
 from utils.log_sanitizer import sanitize
 from utils.stt.pre_recorded import postprocess_words, prerecorded
@@ -1465,6 +1465,7 @@ async def _run_full_pipeline_background_async(
     slots — only leaf operations use threads, and only for their actual duration.
     """
     async with _get_sync_pipeline_semaphore():
+        set_byok_uid(uid if get_byok_keys() else None)
         segmented_paths = set()
         wav_paths = []
         stage_timings = {}
@@ -1723,6 +1724,7 @@ async def _run_full_pipeline_background_async(
                 pass
         finally:
             set_byok_keys({})
+            set_byok_uid(None)
             await run_blocking(storage_executor, _cleanup_files, list(segmented_paths))
             await run_blocking(storage_executor, _cleanup_files, wav_paths)
             try:
