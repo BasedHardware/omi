@@ -1,9 +1,9 @@
-"""Regression test for GET /v1/dev/user/memories resilience (issue #7492).
+"""Regression tests for GET /v1/dev/user/memories resilience (issue #7492).
 
 The endpoint declares response_model=List[CleanerMemory] and returned raw Firestore dicts, so a
-single malformed/legacy record (missing a required field or an out-of-enum category) made FastAPI
-raise ResponseValidationError -> HTTP 500 for the whole page (only the offsets containing that record
-failed). The handler now validates each record and skips+logs invalid ones, mirroring GET /v3/memories.
+single malformed/legacy record could make FastAPI raise ResponseValidationError -> HTTP 500 for the
+whole page. The handler now validates each record individually, skips records without required
+identity fields, and coerces legacy optional fields to safe defaults.
 """
 
 import os
@@ -80,6 +80,7 @@ for _mod_name in _stubs:
         sys.modules[_mod_name] = _AutoMockModule(_mod_name)
 
 sys.modules['firebase_admin.auth'].InvalidIdTokenError = type('InvalidIdTokenError', (Exception,), {})
+sys.modules['utils.apps'].update_personas_async = MagicMock()
 
 # utils.other.endpoints must expose real callables (used in route signatures); provide stand-ins.
 _endpoints = ModuleType('utils.other.endpoints')
@@ -129,9 +130,24 @@ def _valid_memory(mid):
     }
 
 
-def _invalid_memory(mid):
-    # Legacy/malformed record missing a required CleanerMemory field ('edited').
+def _missing_id_memory(mid):
+    # Malformed record missing the required identity field.
     m = _valid_memory(mid)
+    del m['id']
+    return m
+
+
+def _legacy_memory(mid):
+    # Legacy record with missing/invalid optional fields that should be coerced.
+    m = _valid_memory(mid)
+    m['category'] = 'old-category'
+    m['visibility'] = None
+    m['tags'] = None
+    m['created_at'] = 'not-a-date'
+    m['updated_at'] = {'bad': 'date'}
+    m['manually_added'] = ''
+    m['reviewed'] = None
+    m['user_review'] = 'yes'
     del m['edited']
     return m
 
@@ -144,12 +160,31 @@ def _build():
 
 
 def test_invalid_record_is_skipped_not_500():
-    page = [_valid_memory('good1'), _invalid_memory('bad1'), _valid_memory('good2')]
+    page = [_valid_memory('good1'), _missing_id_memory('bad1'), _valid_memory('good2')]
     with patch.object(memories_db, 'get_memories', return_value=page):
         client = _build()
         resp = client.get('/v1/dev/user/memories')
     assert resp.status_code == 200
     assert [m['id'] for m in resp.json()] == ['good1', 'good2']
+
+
+def test_legacy_optional_fields_are_defaulted_not_500():
+    page = [_legacy_memory('legacy1')]
+    with patch.object(memories_db, 'get_memories', return_value=page):
+        client = _build()
+        resp = client.get('/v1/dev/user/memories')
+    assert resp.status_code == 200
+    [memory] = resp.json()
+    assert memory['id'] == 'legacy1'
+    assert memory['category'] == 'interesting'
+    assert memory['visibility'] == 'private'
+    assert memory['tags'] == []
+    assert memory['created_at'] is None
+    assert memory['updated_at'] is None
+    assert memory['manually_added'] is False
+    assert memory['reviewed'] is False
+    assert memory['user_review'] is True
+    assert memory['edited'] is False
 
 
 def test_all_valid_records_returned():
