@@ -1686,12 +1686,15 @@ class FloatingControlBarManager {
         }
         FloatingBarVoicePlaybackService.shared.interruptCurrentResponse()
 
-        let screenshotData = await Task.detached { () -> Data? in
-            return ScreenCaptureManager.captureScreenData()
+        // Capture lightweight screen context via the 4-layer pipeline
+        let screenContext = await ScreenContextPipeline.shared.capture()
+        let contextSuffix = screenContext.map { ScreenContextPipeline.shared.toPromptContext($0) }
+        let thumbnailData = await Task.detached { () -> Data? in
+            return ScreenCaptureManager.captureThumbnail()
         }.value
         barWindow.orderFrontRegardless()
 
-        AnalyticsManager.shared.floatingBarQuerySent(messageLength: message.count, hasScreenshot: screenshotData != nil)
+        AnalyticsManager.shared.floatingBarQuerySent(messageLength: message.count, hasScreenshot: thumbnailData != nil)
 
         let shouldPlayVoice = ShortcutSettings.shared.shouldSpeakFloatingBarResponse(
             forVoiceQuery: barWindow.state.currentQueryFromVoice
@@ -1750,13 +1753,20 @@ class FloatingControlBarManager {
             ? ModelQoS.Claude.defaultSelection
             : ShortcutSettings.shared.selectedModel
         let notificationContextSuffix = notificationContextSuffixIfNeeded(for: message)
+        // Merge notification context and screen context into a single suffix
+        let mergedSuffix: String? = {
+            var parts: [String] = []
+            if let n = notificationContextSuffix, !n.isEmpty { parts.append(n) }
+            if let s = contextSuffix, !s.isEmpty { parts.append(s) }
+            return parts.isEmpty ? nil : parts.joined(separator: "\n\n")
+        }()
         await provider.sendMessage(
             message,
             model: floatingModel,
-            systemPromptSuffix: notificationContextSuffix,
+            systemPromptSuffix: mergedSuffix,
             systemPromptStyle: .floating,
             sessionKey: floatingSessionKey,
-            imageData: screenshotData
+            imageData: thumbnailData
         )
 
         if let followUp = pendingFollowUpQuery {

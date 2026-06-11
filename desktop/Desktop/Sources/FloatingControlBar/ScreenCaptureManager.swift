@@ -1,8 +1,8 @@
 import AppKit
-import CWebP
 
 class ScreenCaptureManager {
     /// Returns a CGImage for the screen under the mouse cursor.
+    /// Used by PushToTalkManager for context capture and ScreenContextPipeline.
     static func captureScreenImage() -> CGImage? {
         guard CGPreflightScreenCaptureAccess() else {
             log("ScreenCaptureManager: Screen recording permission not granted, skipping capture")
@@ -18,49 +18,48 @@ class ScreenCaptureManager {
         return image
     }
 
-    /// Returns WebP data for the screen under the mouse cursor at full Retina
-    /// resolution, compressed in memory via libwebp. No disk I/O.
-    static func captureScreenData() -> Data? {
+    /// Returns a lightweight JPEG thumbnail of the screen (max 512px, quality 0.4).
+    /// Used as a visual fallback for screen-aware queries. No WebP dependency.
+    static func captureThumbnail() -> Data? {
         guard let image = captureScreenImage() else { return nil }
+        return encodeJPEGThumbnail(image)
+    }
 
-        let width = image.width
-        let height = image.height
+    /// Encode a CGImage as a lightweight JPEG thumbnail (max 512px on longest side).
+    private static func encodeJPEGThumbnail(_ image: CGImage) -> Data? {
+        let maxDimension: CGFloat = 512
+        let width = CGFloat(image.width)
+        let height = CGFloat(image.height)
 
-        // Render CGImage into an RGBA bitmap context
-        guard let context = CGContext(
+        let scale = min(maxDimension / max(width, height), 1.0)
+        let newWidth = Int(width * scale)
+        let newHeight = Int(height * scale)
+
+        guard let ctx = CGContext(
             data: nil,
-            width: width,
-            height: height,
+            width: newWidth,
+            height: newHeight,
             bitsPerComponent: 8,
-            bytesPerRow: width * 4,
+            bytesPerRow: 0,
             space: CGColorSpaceCreateDeviceRGB(),
-            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue | CGBitmapInfo.byteOrder32Big.rawValue
-        ) else {
-            log("ScreenCaptureManager: Could not create bitmap context")
-            return nil
-        }
-        context.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height))
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        ) else { return nil }
 
-        guard let pixelData = context.data else {
-            log("ScreenCaptureManager: Could not get pixel data from context")
-            return nil
-        }
+        ctx.interpolationQuality = .high
+        ctx.draw(image, in: CGRect(x: 0, y: 0, width: newWidth, height: newHeight))
 
-        // Encode to WebP via libwebp at quality 70
-        let rgba = pixelData.assumingMemoryBound(to: UInt8.self)
-        var output: UnsafeMutablePointer<UInt8>?
-        let size = WebPEncodeRGBA(rgba, Int32(width), Int32(height), Int32(width * 4), 70.0, &output)
+        guard let resizedImage = ctx.makeImage() else { return nil }
 
-        guard size > 0, let webpPtr = output else {
-            log("ScreenCaptureManager: WebP encoding failed")
-            return nil
-        }
+        let data = NSMutableData()
+        guard let dest = CGImageDestinationCreateWithData(
+            data as CFMutableData, "public.jpeg" as CFString, 1, nil)
+        else { return nil }
 
-        let data = Data(bytes: webpPtr, count: size)
-        WebPFree(webpPtr)
+        let options: [CFString: Any] = [kCGImageDestinationLossyCompressionQuality: 0.4]
+        CGImageDestinationAddImage(dest, resizedImage, options as CFDictionary)
+        guard CGImageDestinationFinalize(dest) else { return nil }
 
-        log("ScreenCaptureManager: Screenshot captured \(width)x\(height), WebP \(data.count / 1024) KB")
-        return data
+        return data as Data
     }
 
     private static func displayIDUnderMouse() -> CGDirectDisplayID {
@@ -74,9 +73,9 @@ class ScreenCaptureManager {
         return CGMainDisplayID()
     }
 
-    /// Legacy file-based capture (kept for callers that need a URL).
+    /// Lightweight screen capture that writes a JPEG thumbnail to disk for tool executors.
     static func captureScreen() -> URL? {
-        guard let data = captureScreenData() else { return nil }
+        guard let data = captureThumbnail() else { return nil }
 
         let fileManager = FileManager.default
         guard let documentsDirectory = fileManager.urls(for: .documentDirectory, in: .userDomainMask).first else {
@@ -90,7 +89,7 @@ class ScreenCaptureManager {
         let formatter = DateFormatter()
         formatter.dateFormat = "yyyy-MM-dd_HH-mm-ss"
         let timestamp = formatter.string(from: Date())
-        let fileURL = screenshotsDirectory.appendingPathComponent("screenshot-\(timestamp).webp")
+        let fileURL = screenshotsDirectory.appendingPathComponent("screenshot-\(timestamp).jpg")
 
         do {
             try data.write(to: fileURL)

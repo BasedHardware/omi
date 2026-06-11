@@ -171,7 +171,7 @@ class ChatToolExecutor {
 
   // MARK: - Screen Capture
 
-  /// Capture the current screen and return the file path
+  /// Capture the current screen and return the file path (uses lightweight JPEG thumbnail).
   private static func executeCaptureScreen() async -> String {
     guard CGPreflightScreenCaptureAccess() else {
       return "Error: Screen recording permission not granted. Ask the user to enable it in System Settings > Privacy & Security > Screen & System Audio Recording."
