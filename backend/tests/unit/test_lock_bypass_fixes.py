@@ -662,6 +662,61 @@ class TestMcpSseLockRedaction:
         assert convs[0]['structured']['title'] == 'Test Conversation'
         assert len(convs[1]['structured']['action_items']) == 1
 
+    def test_mcp_sse_search_memories_filters_locked_and_backfills_limit(self):
+        """MCP SSE search_memories must match REST filtering before applying the requested limit."""
+        import database.memories as memories_db
+        import database.vector_db as vector_db
+
+        vector_db.find_similar_memories = MagicMock(
+            return_value=[
+                {'score': 1.0},
+                {'memory_id': 'locked', 'score': 0.99},
+                {'memory_id': 'rejected', 'score': 0.98},
+                {'memory_id': 'invalidated', 'score': 0.97},
+                {'memory_id': 'visible-1', 'score': 0.70},
+                {'memory_id': 'visible-2', 'score': 0.60},
+                {'memory_id': 'visible-3', 'score': 0.50},
+            ]
+        )
+        locked = _make_memory(locked=True, memory_id='locked')
+        locked['content'] = 'LOCKED_SECRET_MEMORY'
+        rejected = _make_memory(memory_id='rejected')
+        rejected['content'] = 'REJECTED_MEMORY'
+        rejected['user_review'] = False
+        invalidated = _make_memory(memory_id='invalidated')
+        invalidated['content'] = 'INVALIDATED_MEMORY'
+        invalidated['invalid_at'] = '2026-06-10T00:00:00+00:00'
+        memories_db.get_memories_by_ids = MagicMock(
+            return_value=[
+                locked,
+                rejected,
+                invalidated,
+                _make_memory(memory_id='visible-1'),
+                _make_memory(memory_id='visible-2'),
+                _make_memory(memory_id='visible-3'),
+            ]
+        )
+
+        from routers.mcp_sse import execute_tool
+
+        result = execute_tool('test-uid', 'search_memories', {'query': 'memory', 'limit': 2})
+
+        assert [memory['id'] for memory in result['memories']] == ['visible-1', 'visible-2']
+        assert 'LOCKED_SECRET_MEMORY' not in str(result)
+        assert 'REJECTED_MEMORY' not in str(result)
+        assert 'INVALIDATED_MEMORY' not in str(result)
+        vector_db.find_similar_memories.assert_called_once_with('test-uid', 'memory', threshold=0.0, limit=6)
+
+    def test_mcp_sse_search_memories_schema_documents_limit_bounds(self):
+        """MCP clients should see the same limit bounds enforced by execute_tool."""
+        from routers.mcp_sse import MCP_TOOLS
+
+        search_memories = next(tool for tool in MCP_TOOLS if tool['name'] == 'search_memories')
+        limit_schema = search_memories['inputSchema']['properties']['limit']
+
+        assert limit_schema['minimum'] == 1
+        assert limit_schema['maximum'] == 20
+
 
 # =============================================================================
 # Test users.py endpoints
