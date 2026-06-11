@@ -18,6 +18,7 @@ from models.conversation import Conversation
 from models.other import Person
 from utils.conversations.factory import deserialize_conversation
 from utils.conversations.render import conversations_to_string
+from utils.conversations.search import keyword_search_conversation_ids, merge_conversation_search_ids
 from utils.llm.clients import embeddings
 import logging
 
@@ -286,10 +287,12 @@ def search_conversations_tool(
     config: RunnableConfig = None,
 ) -> str:
     """
-    Search conversations using semantic vector search - USE THIS FOR EVENTS/INCIDENTS.
+    Search conversations using hybrid keyword + semantic vector search - USE THIS FOR EVENTS/INCIDENTS.
 
-    This tool uses AI embeddings to find conversations that are semantically similar to your query,
-    even if they don't contain the exact keywords. Perfect for finding when specific events happened.
+    This tool combines exact keyword matching on conversation titles/summaries (best for proper names
+    like people or places) with AI embeddings that find semantically similar conversations even if
+    they don't contain the exact keywords. Perfect for finding when specific events happened or
+    conversations with a specific person (e.g. "When did I talk to Steph?").
 
     **CRITICAL: Use this tool for EVENT/INCIDENT questions:**
     - "When did a dog bite me?" → USE THIS TOOL
@@ -394,10 +397,18 @@ def search_conversations_tool(
     limit = min(limit, 20)
 
     try:
-        # Perform vector search
-        conversation_ids = vector_db.query_vectors(query=query, uid=uid, starts_at=starts_at, ends_at=ends_at, k=limit)
+        # Hybrid search: keyword (Typesense, exact matches on title/overview — catches proper
+        # names that embeddings miss, see #5072) + semantic vector search, keyword hits first.
+        keyword_ids = keyword_search_conversation_ids(
+            uid=uid, query=query, limit=limit, start_date=starts_at, end_date=ends_at
+        )
+        vector_ids = vector_db.query_vectors(query=query, uid=uid, starts_at=starts_at, ends_at=ends_at, k=limit)
+        conversation_ids = merge_conversation_search_ids(keyword_ids, vector_ids)
 
-        logger.info(f"📊 search_conversations_tool - found {len(conversation_ids)} results for query: '{query}'")
+        logger.info(
+            f"📊 search_conversations_tool - found {len(conversation_ids)} results "
+            f"({len(keyword_ids)} keyword, {len(vector_ids)} vector) for query: '{query}'"
+        )
 
         if not conversation_ids:
             date_info = ""
