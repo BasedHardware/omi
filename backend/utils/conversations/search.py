@@ -2,7 +2,7 @@ import logging
 import math
 import os
 from datetime import datetime
-from typing import Dict
+from typing import Dict, List
 
 import typesense
 
@@ -81,3 +81,34 @@ def search_conversations(
         }
     except Exception as e:
         raise Exception(f"Failed to search conversations: {str(e)}")
+
+
+def keyword_search_conversation_ids(
+    uid: str,
+    query: str,
+    limit: int = 5,
+    start_date: int = None,
+    end_date: int = None,
+) -> List[str]:
+    """Typesense keyword search returning only conversation ids, for hybrid (keyword + vector) retrieval.
+
+    Fail-open: any search error returns [] so callers can fall back to vector-only results.
+    """
+    try:
+        results = search_conversations(
+            uid=uid,
+            query=query,
+            per_page=limit,
+            include_discarded=False,
+            start_date=start_date,
+            end_date=end_date,
+        )
+        return [item['id'] for item in results.get('items', []) if item.get('id')]
+    except Exception as e:
+        logger.warning("keyword_search_conversation_ids failed for uid=%s, falling back to vector-only: %s", uid, e)
+        return []
+
+
+def merge_conversation_search_ids(keyword_ids: List[str], vector_ids: List[str]) -> List[str]:
+    """Merge keyword and vector search results, keyword hits first (exact text matches), deduplicated."""
+    return list(keyword_ids) + [cid for cid in vector_ids if cid not in keyword_ids]
