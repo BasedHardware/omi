@@ -52,6 +52,15 @@ function isQuotaExhaustedEvent(ev: { type: string; raw: Record<string, unknown> 
 function isTrialExpiredError(err: Error): boolean {
   return /\(1008\)/.test(err.message) || /trial_expired/i.test(err.message)
 }
+// A connected-then-closed event that means the account isn't entitled to cloud
+// STT (free trial/quota used up): WS policy-violation 1008, or a backend reason
+// naming the quota. Distinguishes this from a generic network drop so the user
+// gets an actionable message instead of a bare "closed (1008)".
+function isQuotaClose(code: number, reason: string): boolean {
+  return code === 1008 || /trial_expired|freemium|quota/i.test(reason)
+}
+const QUOTA_MESSAGE =
+  'free Omi transcription quota is used up (1008) — add an Omi subscription or sign in with an entitled account to keep transcribing'
 
 /**
  * Start an Omi v4/listen session for one source. Resolves the handle once the
@@ -72,7 +81,11 @@ async function startWithOmi(
     const timeout = setTimeout(() => {
       if (outcome !== 'pending') return
       outcome = 'failed'
-      try { handle?.stop() } catch { /* ignore */ }
+      try {
+        handle?.stop()
+      } catch {
+        /* ignore */
+      }
       resolve(null)
     }, CONNECT_TIMEOUT_MS)
 
@@ -96,24 +109,37 @@ async function startWithOmi(
           // Never connected as the winner yet: treat as an initial failure.
           outcome = 'failed'
           clearTimeout(timeout)
-          try { handle?.stop() } catch { /* ignore */ }
+          try {
+            handle?.stop()
+          } catch {
+            /* ignore */
+          }
           resolve(null)
         } else if (outcome === 'omi') {
           // Already connected and committed: tell the caller the session is over.
           onLost('Omi free quota exhausted')
         }
       },
-      onClosed: (code) => {
+      onClosed: (code, reason) => {
         // The Omi socket dropped AFTER connecting (abnormal 1005/1006, clean
         // 1000, etc.). Omi will emit no more transcripts, so end the session.
         // (Pre-connect closes arrive via onError and drive the initial failure.)
-        if (outcome === 'omi') onLost(`Omi /v4/listen closed (${code})`)
+        if (outcome !== 'omi') return
+        onLost(
+          isQuotaClose(code, reason)
+            ? QUOTA_MESSAGE
+            : `Omi /v4/listen closed (${code})${reason ? ` ${reason}` : ''}`
+        )
       },
       onError: (err, fatal) => {
         if (outcome === 'pending' && fatal) {
           outcome = 'failed'
           clearTimeout(timeout)
-          try { handle?.stop() } catch { /* ignore */ }
+          try {
+            handle?.stop()
+          } catch {
+            /* ignore */
+          }
           console.warn(`[v4/listen ${source}] initial failure:`, err.message)
           resolve(null)
           return
@@ -123,7 +149,7 @@ async function startWithOmi(
           // Quota backstop: a 1008 'trial_expired' close (in case the typed
           // event didn't arrive first). End the session rather than erroring twice.
           if (isTrialExpiredError(err)) {
-            onLost('Omi trial_expired (1008)')
+            onLost(QUOTA_MESSAGE)
             return
           }
           cb.onError(err)
@@ -137,7 +163,11 @@ async function startWithOmi(
         // Only tear down if we've ALREADY failed; closing here on a still-pending
         // outcome aborts the handshake mid-connect (ws code 1006).
         if (outcome === 'failed') {
-          try { h.stop() } catch { /* ignore */ }
+          try {
+            h.stop()
+          } catch {
+            /* ignore */
+          }
         } else {
           handle = h
         }
@@ -182,7 +212,11 @@ export async function startTranscription(
 
   return {
     stop: (): void => {
-      try { active?.stop() } catch { /* ignore */ }
+      try {
+        active?.stop()
+      } catch {
+        /* ignore */
+      }
     }
   }
 }
