@@ -22,12 +22,12 @@ See `.claude/skills/sentry-release/SKILL.md` for full documentation.
 When debugging issues for a specific user, check Sentry dashboard for crashes and PostHog for events.
 
 ## Repository
-- This is the `desktop/` subfolder of the **OMI monorepo** (`BasedHardware/omi`)
+- This is the `desktop/macos/` subfolder of the **OMI monorepo** (`BasedHardware/omi`)
 - macOS Swift app + Rust backend live here
 
 ## Release Pipeline
 
-Merging `desktop/**` changes to `main` triggers a fully automated release:
+Merging `desktop/macos/**` changes to `main` triggers a fully automated release:
 
 1. **GitHub Actions** (`desktop_auto_release.yml`) — auto-increments version, pushes a `v*-macos` tag
 2. **Codemagic** (`codemagic.yaml`, workflow `omi-desktop-swift-release`) — triggered by the tag, runs on Mac mini M2:
@@ -168,7 +168,7 @@ agent-swift screenshot /tmp/evidence.png             # capture app window
 
 ### Changelog Entries
 
-After completing a desktop task with user-visible impact, append a one-liner to `unreleased` in `desktop/CHANGELOG.json`:
+After completing a desktop task with user-visible impact, append a one-liner to `unreleased` in `desktop/macos/CHANGELOG.json`:
 
 ```python
 python3 -c "

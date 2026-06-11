@@ -15,7 +15,7 @@ Two things make iterating on the desktop app slow: signing in (web OAuth) and cl
 ### 1. Skip the web login (seed auth once, reuse forever)
 Dev/named bundles store auth in UserDefaults (not Keychain), so a signed-in session can be cloned between bundles. Sign in **once** in "Omi Dev", then replay it into any test bundle:
 ```bash
-cd desktop
+cd desktop/macos
 ./scripts/omi-auth-dump.sh                                  # capture Omi Dev's session -> tmp/desktop-auth.json
 ./scripts/omi-auth-seed.sh com.omi.omi-myfeature           # replay into a named bundle (run BEFORE launch)
 ```
@@ -49,7 +49,7 @@ the resulting state snapshot.
 
 ### The full loop
 ```bash
-cd desktop
+cd desktop/macos
 OMI_APP_NAME="omi-myfeature" ./run.sh &                 # build + launch once
 ./scripts/omi-auth-seed.sh com.omi.omi-myfeature        # (first run, or after re-dump) — relaunch to apply
 ./scripts/omi-ctl wait-ready
@@ -65,7 +65,7 @@ You can interact with the running app via `agent-swift` — a CLI that clicks el
 
 ### Setup
 ```bash
-# App must be running via ./run.sh from desktop/
+# App must be running via ./run.sh from desktop/macos/
 agent-swift doctor                                   # check Accessibility permission
 agent-swift connect --bundle-id com.omi.desktop-dev  # connect to Omi Dev
 agent-swift snapshot -i --json                       # see what's on screen
@@ -151,7 +151,7 @@ System Tray Menu
 
 ## Known Flows
 
-Reference flows in `desktop/e2e/flows/*.yaml` describe the app's key user journeys. Read these to understand navigation paths, expected elements, and UI state at each step.
+Reference flows in `desktop/macos/e2e/flows/*.yaml` describe the app's key user journeys. Read these to understand navigation paths, expected elements, and UI state at each step.
 
 | Flow | Covers | Steps | Report |
 |------|--------|-------|--------|
@@ -171,7 +171,7 @@ Reference flows in `desktop/e2e/flows/*.yaml` describe the app's key user journe
 When you modify a Swift file, check if any flow's `covers:` includes it. That flow describes the user journey your change affects.
 
 ### Adding a New Flow
-Create `desktop/e2e/flows/<name>.yaml` in v2 format:
+Create `desktop/macos/e2e/flows/<name>.yaml` in v2 format:
 ```yaml
 version: 2
 name: my-flow

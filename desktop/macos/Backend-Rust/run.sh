@@ -28,9 +28,9 @@ sleep 1
 
 # Create .env if it doesn't exist (copy from Python backend or example)
 if [ ! -f "$SCRIPT_DIR/.env" ]; then
-    if [ -f "$SCRIPT_DIR/../backend/.env" ]; then
+    if [ -f "$SCRIPT_DIR/../../backend/.env" ]; then
         echo "Copying .env from Python backend..."
-        cp "$SCRIPT_DIR/../backend/.env" "$SCRIPT_DIR/.env"
+        cp "$SCRIPT_DIR/../../backend/.env" "$SCRIPT_DIR/.env"
     elif [ -f "$SCRIPT_DIR/.env.example" ]; then
         echo "Copying .env.example to .env..."
         cp "$SCRIPT_DIR/.env.example" "$SCRIPT_DIR/.env"
@@ -40,9 +40,9 @@ if [ ! -f "$SCRIPT_DIR/.env" ]; then
 fi
 
 # Symlink google-credentials.json if not present
-if [ ! -f "$SCRIPT_DIR/google-credentials.json" ] && [ -f "$SCRIPT_DIR/../backend/google-credentials.json" ]; then
+if [ ! -f "$SCRIPT_DIR/google-credentials.json" ] && [ -f "$SCRIPT_DIR/../../backend/google-credentials.json" ]; then
     echo "Symlinking google-credentials.json from Python backend..."
-    ln -sf "$SCRIPT_DIR/../backend/google-credentials.json" "$SCRIPT_DIR/google-credentials.json"
+    ln -sf "$SCRIPT_DIR/../../backend/google-credentials.json" "$SCRIPT_DIR/google-credentials.json"
 fi
 
 # Build the Rust backend

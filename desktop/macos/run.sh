@@ -195,8 +195,8 @@ CONFLICTING_APPS=(
     "$APP_PATH"
     "$APP_DESKTOP_PATH"
     "$APP_DOWNLOADS_PATH"
-    "$(dirname "$0")/../app/build/macos/Build/Products/Debug/Omi.app"
-    "$(dirname "$0")/../app/build/macos/Build/Products/Release/Omi.app"
+    "$(dirname "$0")/../../app/build/macos/Build/Products/Debug/Omi.app"
+    "$(dirname "$0")/../../app/build/macos/Build/Products/Release/Omi.app"
 )
 for app in "${CONFLICTING_APPS[@]}"; do
     if [ -d "$app" ]; then
@@ -205,7 +205,7 @@ for app in "${CONFLICTING_APPS[@]}"; do
     fi
 done
 # Also remove any stale dev app bundles nested inside Flutter builds.
-find "$(dirname "$0")/../app/build" -name "$APP_NAME.app" -type d -exec rm -rf {} + 2>/dev/null || true
+find "$(dirname "$0")/../../app/build" -name "$APP_NAME.app" -type d -exec rm -rf {} + 2>/dev/null || true
 # Kill stale app bundles from other repo clones (e.g. ~/omi-desktop/)
 # These confuse LaunchServices and get launched instead of the /Applications copy.
 find "$HOME" -maxdepth 4 -name "$APP_NAME.app" -type d -not -path "$APP_BUNDLE" -not -path "$APP_PATH" 2>/dev/null | while read stale; do
@@ -241,8 +241,8 @@ fi
 cd "$BACKEND_DIR"
 
 # Copy .env if not present — try sibling dirs, then scaffold from .env.example
-if [ ! -f ".env" ] && [ -f "../backend/.env" ]; then
-    cp "../backend/.env" ".env"
+if [ ! -f ".env" ] && [ -f "../../backend/.env" ]; then
+    cp "../../backend/.env" ".env"
 elif [ ! -f ".env" ] && [ -f "../Backend/.env" ]; then
     cp "../Backend/.env" ".env"
 fi
@@ -274,8 +274,8 @@ if [ ! -f ".env" ] && [ "$1" != "--yolo" ]; then
 fi
 
 # Symlink google-credentials.json if not present
-if [ ! -f "google-credentials.json" ] && [ -f "../backend/google-credentials.json" ]; then
-    ln -sf "../backend/google-credentials.json" "google-credentials.json"
+if [ ! -f "google-credentials.json" ] && [ -f "../../backend/google-credentials.json" ]; then
+    ln -sf "../../backend/google-credentials.json" "google-credentials.json"
 elif [ ! -f "google-credentials.json" ] && [ -f "../Backend/google-credentials.json" ]; then
     ln -sf "../Backend/google-credentials.json" "google-credentials.json"
 fi
