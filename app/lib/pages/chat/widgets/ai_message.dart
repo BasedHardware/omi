@@ -1210,6 +1210,7 @@ class _MessageActionBarState extends State<MessageActionBar> {
           _buildActionButton(
             icon: FontAwesomeIcons.share,
             onTap: () async {
+              if (widget.messageText.isEmpty) return;
               HapticFeedback.lightImpact();
               await Share.share(widget.messageText);
               PlatformManager.instance.analytics.track(
