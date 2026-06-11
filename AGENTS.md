@@ -25,6 +25,7 @@ These rules apply to every AI agent working in this repository. This file is the
 - Never push or create PRs unless explicitly asked — commit locally by default.
 - **Nothing lands on `main` until the user explicitly says so.** Do not commit, merge, push, or open a PR against `main` until the user gives an explicit go-ahead in that turn. Keep all work on feature branches; a prior approval never carries over to later changes.
 - **Exception — reverts merge right away.** When the user asks to revert a previously merged PR/commit, open the revert PR and merge it immediately without waiting for a separate merge go-ahead; the revert request itself is the approval.
+- **Exception — verified + peer-approved changes may auto-merge.** If you have actually tested the change (exercised the real user-facing path, not just compiled/lint-passed) **and** an independent agent review approved it, you may open the PR and merge it without waiting for a separate go-ahead — especially for bug fixes. Still require explicit user sign-off for risky, wide-blast-radius, or hard-to-reverse changes (migrations, release/CI pipeline, schema, access control, data deletion).
 - **Prefer testing locally first.** The user prefers to build and run the app locally to verify a change works before it goes to a PR or merge. Default to a local named-bundle build + run for desktop changes (and the equivalent local run for other components) before proposing to land anything.
 
 ## Coding Guidelines
