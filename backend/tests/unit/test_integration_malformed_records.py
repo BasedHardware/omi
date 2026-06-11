@@ -66,6 +66,9 @@ class _Finder(importlib.abc.MetaPathFinder, importlib.abc.Loader):
 
 
 _finder = _Finder()
+for _n in list(sys.modules):
+    if any(_n == p or _n.startswith(p + '.') for p in _STUB):
+        sys.modules.pop(_n, None)
 sys.meta_path.insert(0, _finder)
 try:
     from routers import integration as integ
