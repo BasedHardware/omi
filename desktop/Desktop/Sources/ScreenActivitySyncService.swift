@@ -80,7 +80,7 @@ actor ScreenActivitySyncService {
             // Query screenshots that have embeddings and are newer than our cursor
             let rows: [[String: Any]] = try await dbPool.read { [lastSyncedId, batchSize] db in
                 let sql = """
-                    SELECT id, timestamp, appName, windowTitle, ocrText, embedding
+                    SELECT id, timestamp, appName, windowTitle, ocrText, embedding, deviceName
                     FROM screenshots
                     WHERE id > ? AND embedding IS NOT NULL
                     ORDER BY id ASC
@@ -103,6 +103,9 @@ actor ScreenActivitySyncService {
                     dict["appName"] = (row["appName"] as? String) ?? ""
                     dict["windowTitle"] = (row["windowTitle"] as? String) ?? ""
                     dict["ocrText"] = (row["ocrText"] as? String) ?? ""
+                    if let deviceName = row["deviceName"] as? String {
+                        dict["deviceName"] = deviceName
+                    }
 
                     // Convert embedding BLOB to [Double] array
                     let blobValue = row["embedding"] as DatabaseValue
