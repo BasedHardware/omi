@@ -38,11 +38,16 @@ def _create_typesense_client():
 
 def _get_typesense_client():
     global _typesense_client
-    if _typesense_client is None:
-        with _typesense_client_lock:
-            if _typesense_client is None:
-                _typesense_client = _create_typesense_client()
-    return _typesense_client
+    client = _typesense_client
+    if client is not None:
+        return client
+
+    with _typesense_client_lock:
+        client = _typesense_client
+        if client is None:
+            client = _create_typesense_client()
+            _typesense_client = client
+        return client
 
 
 def search_conversations(
