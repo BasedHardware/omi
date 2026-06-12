@@ -1160,6 +1160,21 @@ def enqueue_conversation_audio_merge(uid: str, conversation_id: str, audio_files
             logger.error(f'audio_merge: enqueue failed conv={conversation_id} file={audio_file_id}: {e}')
 
 
+def download_legacy_merged_wav(uid: str, conversation_id: str, audio_file_id: str):
+    """Download a legacy merged WAV cache blob directly — never merges.
+
+    Used by the artifact-backed download path so a cached blob missing
+    expires_at metadata can't fall through get_or_create_merged_audio into
+    the inline merge pipeline (Greptile P1 on #7872).
+    """
+    bucket = storage_client.bucket(private_cloud_sync_bucket)
+    blob = bucket.blob(get_cached_merged_audio_path(uid, conversation_id, audio_file_id))
+    try:
+        return blob.download_as_bytes()
+    except BlobNotFound:
+        return None
+
+
 def precache_conversation_audio(
     uid: str, conversation_id: str, audio_files: list, fill_gaps: bool = True, sample_rate: int = 16000
 ) -> None:

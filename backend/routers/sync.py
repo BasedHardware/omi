@@ -67,6 +67,7 @@ from utils.other.storage import (
     download_audio_chunks_and_merge,
     get_or_create_merged_audio,
     get_merged_audio_signed_url,
+    download_legacy_merged_wav,
     get_playback_artifact_signed_url,
     download_playback_artifact,
     upload_playback_artifact,
@@ -483,18 +484,14 @@ def download_audio_file_endpoint(
                 content_type = "audio/mpeg"
                 extension = "mp3"
             else:
-                legacy_url = get_merged_audio_signed_url(uid, conversation_id, audio_file_id)
-                if legacy_url:
-                    audio_data, _ = get_or_create_merged_audio(
-                        uid=uid,
-                        conversation_id=conversation_id,
-                        audio_file_id=audio_file_id,
-                        timestamps=audio_file['chunk_timestamps'],
-                        pcm_to_wav_func=pcm_to_wav,
-                        fill_gaps=True,
-                        sample_rate=AUDIO_SAMPLE_RATE,
-                        caller='sync_download_legacy_cache',
-                    )
+                # Direct blob download — get_or_create_merged_audio would fall
+                # through to a full inline merge for cached blobs missing
+                # expires_at metadata, violating the no-merge guarantee.
+                legacy_data = None
+                if get_merged_audio_signed_url(uid, conversation_id, audio_file_id):
+                    legacy_data = download_legacy_merged_wav(uid, conversation_id, audio_file_id)
+                if legacy_data is not None:
+                    audio_data = legacy_data
                     content_type = "audio/wav"
                     extension = "wav"
                 else:
