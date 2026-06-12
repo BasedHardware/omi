@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections import defaultdict
 import json
 import os
+import re
 from typing import Iterable
 
 from langchain_core.output_parsers import PydanticOutputParser
@@ -127,6 +128,8 @@ class ProductionLikeMemoryModelClient(MemoryModelClient):
                     typed=self.typed,
                 )
                 for memory_index, memory in enumerate(memories):
+                    if not _has_sufficient_evidence(memory.content, event_chunk):
+                        continue
                     source_events = [event.event_id for event in event_chunk]
                     calibration = _calibration(memory, event_chunk)
                     supporting_events = _supporting_events(memory.content, event_chunk)
@@ -507,41 +510,81 @@ def _has_named_entities(text: str) -> bool:
     return len(entity_patterns) >= 1
 
 
+_EVIDENCE_STOPWORDS = {
+    "a",
+    "about",
+    "an",
+    "and",
+    "are",
+    "at",
+    "for",
+    "from",
+    "has",
+    "have",
+    "her",
+    "his",
+    "i",
+    "in",
+    "is",
+    "it",
+    "me",
+    "my",
+    "of",
+    "on",
+    "our",
+    "the",
+    "their",
+    "to",
+    "user",
+    "was",
+    "we",
+    "with",
+}
+
+
 def _find_supporting_quote(memory_content: str, events: list[RawContextEvent]) -> str | None:
     """Return the text of the event that best supports the memory content."""
     if not events:
         return None
-    memory_lower = memory_content.casefold()
-    best_event = max(
-        events,
-        key=lambda e: _word_overlap_count(memory_lower, (e.text or "").casefold()),
-    )
+    best_event = max(events, key=lambda e: _evidence_overlap_count(memory_content, e.text or ""))
     if best_event.text:
         return best_event.text
     return events[0].text or None
 
 
 def _supporting_events(memory_content: str, events: list[RawContextEvent]) -> list[RawContextEvent] | None:
-    """Return only events whose text overlaps with the memory content.
-    
-    Returns None (indicating fallback to first-event-only) when no events
-    have any keyword overlap with the memory content.
-    """
+    """Return only events whose text has meaningful overlap with the memory content."""
     if not events:
         return None
-    memory_lower = memory_content.casefold()
-    supporting = [
-        e for e in events
-        if _word_overlap_count(memory_lower, (e.text or "").casefold()) > 0
-    ]
+    supporting = [e for e in events if _evidence_overlap_count(memory_content, e.text or "") > 0]
     return supporting if supporting else None
 
 
-def _word_overlap_count(text_a: str, text_b: str) -> int:
-    """Count how many words from text_a appear in text_b."""
-    words_a = set(text_a.split())
-    words_b = set(text_b.split())
-    return len(words_a & words_b)
+def _has_sufficient_evidence(memory_content: str, events: list[RawContextEvent]) -> bool:
+    """Reject extracted memories with no grounded content words in the source chunk.
+
+    The production prompt often paraphrases first-person speech into third-person
+    memories, so exact containment is too strict.  But allowing evidence fallback
+    when only stopwords overlap lets unsupported memories leak into the benchmark.
+    Require at least one meaningful source token, and require two when the memory
+    itself contains several distinct factual tokens.
+    """
+    memory_words = _meaningful_words(memory_content)
+    if not memory_words:
+        return False
+    best_overlap = max((_evidence_overlap_count(memory_content, event.text or "") for event in events), default=0)
+    required_overlap = 2 if len(memory_words) >= 4 else 1
+    return best_overlap >= required_overlap
+
+
+def _evidence_overlap_count(text_a: str, text_b: str) -> int:
+    """Count meaningful words shared by two texts."""
+    return len(_meaningful_words(text_a) & _meaningful_words(text_b))
+
+
+def _meaningful_words(text: str) -> set[str]:
+    words = set(re.findall(r"[a-z0-9][a-z0-9'_-]*", text.casefold()))
+    return {word for word in words if len(word) > 2 and word not in _EVIDENCE_STOPWORDS}
 
 
 def _events_by_conversation(events: list[RawContextEvent]) -> dict[str, list[RawContextEvent]]:
