@@ -127,7 +127,65 @@ DEDUPLICATION: Don't re-emit semantically identical facts. DO emit updates/contr
 
 CONSOLIDATION: Prefer fewer richer facts over many fragmented ones about the same topic.
 
-=== OUTPUT GUIDANCE ===
+# WARNING (Jinja2 escaping): All curly-brace literals in example outputs below
+# MUST use doubled braces ({{...}}). Single braces are silently consumed
+# by the LangChain/Jinja2 template engine and produce malformed output.
+# Reference: jinja.palletsprojects.com/en/3.0.x/templates/#escaping
+
+=== FEW-SHOT EXAMPLES ===
+
+These examples show how to extract from LOW-DENSITY statements — short inputs
+without strong action verbs or explicit decision language.  When you see similar
+patterns, apply the same extraction logic.
+
+**Example 1 — First-person relationship mention (extract knows_person)**
+Input:  "I had coffee with Maria from design yesterday."
+Output: predicate=knows_person  quote="coffee with Maria from design"
+        content="David knows Maria from design"
+        arguments={{"person": "Maria", "relationship": "colleague", "context": "design"}}
+        subject_attribution=user
+NOTE: Only extract knows_person when {user_name} is clearly the relationship holder
+(first-person or direct interaction). Do NOT extract from third-party sentences like
+"Maria from design sent X" where {user_name} is not the subject.
+
+**Example 2 — Short travel plan WITHOUT transport verb (extract plans_travel_to)**
+Input:  "I'm heading to Austin next month for SXSW."
+Output: predicate=plans_travel_to  quote="heading to Austin"
+        content="David plans to travel to Austin"
+        arguments={{"destination": "Austin", "planned_date": "next month"}}
+        subject_attribution=user
+
+**Example 3 — Third-party preference report (extract with subject_attribution=third_party)**
+Input:  "My coworker mentioned she switched to decaf."
+Output: predicate=prefers  quote="switched to decaf"
+        content="David's coworker prefers decaf coffee"
+        arguments={{"preference": "decaf coffee"}}
+        subject_attribution=third_party
+        uncertainty_reasons=[inferred_not_stated]
+
+**Example 4 — Durable state change with business impact (extract is_currently_true)**
+Input:  "The code freeze got pushed to next sprint."
+Output: predicate=is_currently_true  quote="code freeze got pushed to next sprint"
+        content="Code freeze is scheduled for next sprint"
+        arguments={{"topic": "code freeze timing"}}
+        subject_attribution=user
+NOTE: This is a DURABLE STATE CHANGE affecting work, not pure scheduling chatter
+("meeting Thursday 2pm" → skip). Apply only when the state change has lasting impact.
+
+**Example 5 — Reported commitment via third party (extract committed_to_do, attr=third_party)**
+Input:  "My manager said I need to submit the Q3 plan by Friday."
+Output: predicate=committed_to_do  quote="submit the Q3 plan by Friday"
+        content="David needs to submit the Q3 plan by Friday"
+        arguments={{"action": "submit Q3 plan", "due": "Friday"}}
+        subject_attribution=third_party
+        uncertainty_reasons=[inferred_not_stated]
+NOTE: When commitment is reported by a third party ("my manager said", "they asked me"),
+use subject_attribution=third_party unless {user_name} explicitly confirms it themselves.
+
+KEY PATTERN: Even short, quiet statements can be memory-worthy if they contain
+a clear predicate match + verbatim quote anchor.  Do NOT skip statements just
+because they lack dramatic language.  BUT always verify subject attribution:
+first-person evidence → user, third-party report → third_party.
 
 • Extract AT MOST 2-3 facts per conversation (most will have 0-2)
 • When a statement has a clear predicate match AND verbatim quote anchor → extract it
