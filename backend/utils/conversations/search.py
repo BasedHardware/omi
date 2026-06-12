@@ -20,24 +20,28 @@ def _get_required_env_var(name: str) -> str:
     return value
 
 
+def _create_typesense_client():
+    return typesense.Client(
+        {
+            'nodes': [
+                {
+                    'host': _get_required_env_var('TYPESENSE_HOST'),
+                    'port': _get_required_env_var('TYPESENSE_HOST_PORT'),
+                    'protocol': 'https',
+                }
+            ],
+            'api_key': _get_required_env_var('TYPESENSE_API_KEY'),
+            'connection_timeout_seconds': 2,
+        }
+    )
+
+
 def _get_typesense_client():
     global _typesense_client
     if _typesense_client is None:
         with _typesense_client_lock:
             if _typesense_client is None:
-                _typesense_client = typesense.Client(
-                    {
-                        'nodes': [
-                            {
-                                'host': _get_required_env_var('TYPESENSE_HOST'),
-                                'port': _get_required_env_var('TYPESENSE_HOST_PORT'),
-                                'protocol': 'https',
-                            }
-                        ],
-                        'api_key': _get_required_env_var('TYPESENSE_API_KEY'),
-                        'connection_timeout_seconds': 2,
-                    }
-                )
+                _typesense_client = _create_typesense_client()
     return _typesense_client
 
 
