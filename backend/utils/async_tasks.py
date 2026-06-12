@@ -32,32 +32,43 @@ T = TypeVar('T')
 # Metrics
 # ---------------------------------------------------------------------------
 
+_METRIC_CACHE_ATTR = 'omi_async_tasks_metric_cache'
 
-def _get_registered_collector(name):
-    names_to_collectors = getattr(REGISTRY, '_names_to_collectors', {})
-    candidates = [name]
-    if name.endswith('_total'):
-        candidates.append(name[: -len('_total')])
-    else:
-        candidates.append(f'{name}_total')
-    for candidate in candidates:
-        collector = names_to_collectors.get(candidate)
-        if collector is not None:
-            return collector
-    return None
+
+def _metric_cache():
+    cache = getattr(REGISTRY, _METRIC_CACHE_ATTR, None)
+    if cache is None:
+        cache = {}
+        setattr(REGISTRY, _METRIC_CACHE_ATTR, cache)
+    return cache
+
+
+def _cacheable_value(value):
+    if isinstance(value, list):
+        return tuple(value)
+    if isinstance(value, dict):
+        return tuple(sorted((key, _cacheable_value(item)) for key, item in value.items()))
+    return value
+
+
+def _metric_cache_key(metric_class, name, labelnames=(), **kwargs):
+    return (
+        metric_class,
+        name,
+        tuple(labelnames),
+        tuple(sorted((key, _cacheable_value(value)) for key, value in kwargs.items())),
+    )
 
 
 def _get_or_create_metric(metric_class, name, documentation, labelnames=(), **kwargs):
-    existing = _get_registered_collector(name)
+    cache = _metric_cache()
+    cache_key = _metric_cache_key(metric_class, name, labelnames, **kwargs)
+    existing = cache.get(cache_key)
     if existing is not None:
         return existing
-    try:
-        return metric_class(name, documentation, labelnames, **kwargs)
-    except ValueError as exc:
-        existing = _get_registered_collector(name)
-        if existing is None or 'Duplicated timeseries' not in str(exc):
-            raise
-        return existing
+    metric = metric_class(name, documentation, labelnames, **kwargs)
+    cache[cache_key] = metric
+    return metric
 
 
 SUPERVISOR_EXIT_TOTAL = _get_or_create_metric(
