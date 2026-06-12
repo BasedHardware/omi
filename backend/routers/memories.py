@@ -38,6 +38,13 @@ class BatchMemoriesResponse(BaseModel):
     created_count: int
 
 
+class BatchDeleteMemoriesRequest(BaseModel):
+    memory_ids: List[str] = Field(
+        description="List of memory IDs to delete",
+        max_length=MEMORIES_BATCH_MAX,
+    )
+
+
 def _validate_memory(uid: str, memory_id: str) -> dict:
     memory = memories_db.get_memory(uid, memory_id)
     if memory is None:
@@ -168,6 +175,29 @@ def get_memories(limit: int = 100, offset: int = 0, uid: str = Depends(auth.get_
             )
             continue
     return valid_memories
+
+
+@router.delete('/v3/memories/batch', tags=['memories'])
+def delete_memories_batch(
+    data: BatchDeleteMemoriesRequest,
+    uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "memories:delete_batch")),
+):
+    # Deduplicate to avoid double-counting and redundant Firestore ops
+    unique_ids = list(dict.fromkeys(data.memory_ids))
+    if not unique_ids:
+        return {'status': 'ok', 'deleted_count': 0}
+    # Validate ownership with a single Firestore batch-get instead of N serial reads
+    fetched = memories_db.get_memories_by_ids(uid, unique_ids)
+    fetched_ids = {m['id'] for m in fetched}
+    missing = [mid for mid in unique_ids if mid not in fetched_ids]
+    if missing:
+        raise HTTPException(status_code=404, detail=f"Memories not found or not owned: {missing}")
+    memories_db.delete_memories_batch(uid, unique_ids)
+    try:
+        delete_memory_vectors_batch(uid, unique_ids)
+    except Exception:
+        logger.exception("Vector batch delete failed uid=%s count=%d (Firestore deleted)", uid, len(unique_ids))
+    return {'status': 'ok', 'deleted_count': len(unique_ids)}
 
 
 @router.delete('/v3/memories/{memory_id}', tags=['memories'])
