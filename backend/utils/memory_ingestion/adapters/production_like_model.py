@@ -85,6 +85,7 @@ class TypedProductionLikeMemories(BaseModel):
     facts: list[TypedProductionLikeMemory] = Field(
         default_factory=list,
         description="All memory-worthy facts from the conversation, as typed propositions.",
+        max_items=3,
     )
 
 
@@ -306,9 +307,9 @@ def _frame_argument_value(value: object) -> object:
     return json.dumps(value, sort_keys=True, default=str)
 
 
-def _memory_llm():
+def _memory_llm(temperature: float = 0.0):
     model = os.environ.get("OMI_MEMORY_PIPELINE_MODEL", "gpt-4.1-mini")
-    return ChatOpenAI(model=model, request_timeout=120, max_retries=1)
+    return ChatOpenAI(model=model, temperature=temperature, request_timeout=120, max_retries=1)
 
 
 def _language_instruction(language: str | None) -> str:
@@ -319,34 +320,29 @@ def _language_instruction(language: str | None) -> str:
 
 def _calibration(memory: ProductionLikeMemory, events: list[RawContextEvent]) -> dict:
     text = memory.content.casefold()
-    confidence = "high"
+    confidence = "medium"
     uncertainty_reasons: list[str] = []
     categories = ["ordinary_personal_fact"] if _category_value(memory.category) == "system" else ["ordinary_work_fact"]
     sensitivity_level = "none"
     review_required = False
 
     if _has_ocr_uncertainty(events):
-        confidence = "medium"
         uncertainty_reasons.append("low_quality_transcript")
 
     unknown_speaker = _has_unknown_speaker(events)
     if unknown_speaker:
-        confidence = "medium"
         uncertainty_reasons.append("speaker_uncertain")
 
     if _has_speculative_signal(text):
-        confidence = "medium"
         uncertainty_reasons.append("inferred_not_stated")
         review_required = True
 
     if _has_future_plan_signal(text):
-        confidence = "medium"
         uncertainty_reasons.append("temporal_scope_unclear")
         review_required = True
 
     third_party = memory.subject_attribution == "third_party" or _has_third_party_signal(text, events)
     if third_party:
-        confidence = "medium"
         categories = ["third_party_private_fact"]
         sensitivity_level = "medium"
         review_required = True
@@ -357,6 +353,14 @@ def _calibration(memory: ProductionLikeMemory, events: list[RawContextEvent]) ->
         categories = ["health", "third_party_private_fact"] if third_party else ["health"]
         sensitivity_level = "high"
         review_required = True
+
+    # Upgrade to high confidence only when strong positive signals are present
+    speaker_confirmed = not unknown_speaker and "speaker_uncertain" not in uncertainty_reasons
+    no_speculation = not _has_speculative_signal(text)
+    has_entities = _has_named_entities(memory.content)
+    content_specific = len(memory.content.strip()) > 40
+    if speaker_confirmed and no_speculation and has_entities and content_specific:
+        confidence = "high"
 
     return {
         "confidence": confidence,
@@ -474,6 +478,31 @@ def _has_health_signal(text: str) -> bool:
         "treatment",
     )
     return any(term in text for term in terms)
+
+
+def _has_named_entities(text: str) -> bool:
+    """Check if text contains likely named entities (proper nouns, places, organizations).
+    
+    Uses simple heuristics: capitalized words that aren't sentence-starters,
+    plus known patterns like multi-word capitalized sequences.
+    """
+    import re
+    # Look for capitalized words not at start of sentence
+    # Patterns like "John", "Paris", "Google", "Monday", etc.
+    mid_sentence_capitalized = re.findall(r'(?:^|\.\s+|\!\s+|\?\s+)\s*([A-Z][a-z]+)\b', text)  # sentence starts
+    all_capitalized = re.findall(r'\b([A-Z][a-z]{2,})\b', text)
+    # Named entities are capitalized words beyond sentence starters
+    non_start_capitalized = [w for w in all_capitalized if w not in set(mid_sentence_capitalized)]
+    if len(non_start_capitalized) >= 1:
+        return True
+    # Also check for common entity patterns (dates, places with prepositions)
+    entity_patterns = re.findall(
+        r'\b(?:in|at|on|from|to)\s+[A-Z][a-z]+|(?:Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday)'
+        r'|(?:January|February|March|April|May|June|July|August|September|October|November|December)'
+        r'|\d{1,2}[/-]\d{1,2}[/-]\d{2,4}',
+        text,
+    )
+    return len(entity_patterns) >= 1
 
 
 def _events_by_conversation(events: list[RawContextEvent]) -> dict[str, list[RawContextEvent]]:
