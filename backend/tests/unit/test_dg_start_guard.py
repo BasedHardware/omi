@@ -45,15 +45,30 @@ for _mod_name in [
     sys.modules.setdefault(_mod_name, MagicMock())
 
 os.environ.setdefault('DEEPGRAM_API_KEY', 'fake-for-test')
-# NOTE: Do NOT set sys.modules['deepgram'].LiveTranscriptionEvents here.
-# MagicMock auto-generates attributes on access, and overwriting would pollute
-# shared pytest state for test_streaming_deepgram_backoff.py's close/error handler tests.
+_deepgram_module = sys.modules['deepgram']
+if not hasattr(_deepgram_module, 'DeepgramClient'):
+    _deepgram_module.DeepgramClient = MagicMock
+if not hasattr(_deepgram_module, 'DeepgramClientOptions'):
+    _deepgram_module.DeepgramClientOptions = MagicMock
+if not hasattr(_deepgram_module, 'LiveTranscriptionEvents'):
+    # Do not overwrite an existing event object because test_streaming_deepgram_backoff.py
+    # verifies the same event identities that streaming.py registered.
+    _deepgram_module.LiveTranscriptionEvents = MagicMock()
 
-_speaker_embedding = ModuleType('utils.stt.speaker_embedding')
-_speaker_embedding.SPEAKER_MATCH_THRESHOLD = 0.45
-_speaker_embedding.async_extract_embedding_from_bytes = AsyncMock(return_value=None)
-_speaker_embedding.compare_embeddings = MagicMock(return_value=0.0)
-sys.modules.setdefault('utils.stt.speaker_embedding', _speaker_embedding)
+_live_options_module = sys.modules['deepgram.clients.live.v1']
+if not hasattr(_live_options_module, 'LiveOptions'):
+    _live_options_module.LiveOptions = MagicMock
+
+_speaker_embedding = sys.modules.get('utils.stt.speaker_embedding')
+if _speaker_embedding is None:
+    _speaker_embedding = ModuleType('utils.stt.speaker_embedding')
+    sys.modules['utils.stt.speaker_embedding'] = _speaker_embedding
+if not hasattr(_speaker_embedding, 'SPEAKER_MATCH_THRESHOLD'):
+    _speaker_embedding.SPEAKER_MATCH_THRESHOLD = 0.45
+if not hasattr(_speaker_embedding, 'async_extract_embedding_from_bytes'):
+    _speaker_embedding.async_extract_embedding_from_bytes = AsyncMock(return_value=None)
+if not hasattr(_speaker_embedding, 'compare_embeddings'):
+    _speaker_embedding.compare_embeddings = MagicMock(return_value=0.0)
 
 # Now import the real streaming module
 from utils.stt.streaming import connect_to_deepgram
