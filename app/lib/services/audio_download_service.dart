@@ -27,7 +27,16 @@ class AudioDownloadService {
 
       onStageChange?.call(AudioDownloadStage.preparing);
 
-      final audioFileInfos = (await getConversationAudioSignedUrls(conversation.id)).files;
+      // Asking for URLs also enqueues artifact builds server-side; poll while
+      // they finish instead of giving up immediately.
+      final deadline = DateTime.now().add(const Duration(seconds: 60));
+      var urlsResponse = await getConversationAudioSignedUrls(conversation.id);
+      while (urlsResponse.files.isEmpty || urlsResponse.hasPending) {
+        if (DateTime.now().isAfter(deadline)) break;
+        await Future.delayed(Duration(milliseconds: urlsResponse.pollAfterMs ?? 3000));
+        urlsResponse = await getConversationAudioSignedUrls(conversation.id);
+      }
+      final audioFileInfos = urlsResponse.files;
 
       if (audioFileInfos.isEmpty) {
         Logger.debug('No audio file URLs available');
@@ -78,9 +87,31 @@ class AudioDownloadService {
 
       onStageChange?.call(AudioDownloadStage.processing);
 
-      final combinedFilename = _generateSafeFilename(conversation);
+      final extensions = cachedFiles.map((f) => f.fileExtension).toSet();
+      if (extensions.length > 1) {
+        // Mixed legacy wav + new mp3 artifacts can't be combined; share the
+        // first part rather than producing a corrupt file.
+        Logger.debug('Mixed audio artifact formats $extensions, sharing first part only');
+        return downloadedFiles.first;
+      }
+
+      final extension = extensions.first;
+      final combinedFilename = _generateSafeFilename(conversation, extension);
       final combinedPath = '${tempDir.path}/$combinedFilename';
-      final combinedFile = await WavCombiner.combineWavFiles(downloadedFiles, combinedPath);
+
+      final File combinedFile;
+      if (extension == 'mp3') {
+        // MPEG audio frames are self-contained: concatenated MP3 files play
+        // as one continuous stream.
+        final sink = File(combinedPath).openWrite();
+        for (final part in downloadedFiles) {
+          await sink.addStream(part.openRead());
+        }
+        await sink.close();
+        combinedFile = File(combinedPath);
+      } else {
+        combinedFile = await WavCombiner.combineWavFiles(downloadedFiles, combinedPath);
+      }
       _tempFiles.add(combinedFile);
 
       return combinedFile;
@@ -121,11 +152,11 @@ class AudioDownloadService {
     return file;
   }
 
-  String _generateSafeFilename(ServerConversation conversation) {
+  String _generateSafeFilename(ServerConversation conversation, String extension) {
     final now = DateTime.now();
     final timestamp =
         '${now.year}${now.month.toString().padLeft(2, '0')}${now.day.toString().padLeft(2, '0')}_${now.hour.toString().padLeft(2, '0')}${now.minute.toString().padLeft(2, '0')}${now.second.toString().padLeft(2, '0')}';
-    return 'omi_$timestamp.wav';
+    return 'omi_$timestamp.$extension';
   }
 
   Future<void> cleanup() async {
