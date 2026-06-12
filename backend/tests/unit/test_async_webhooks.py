@@ -27,6 +27,8 @@ _db_redis.user_webhook_status_db = MagicMock(return_value=True)
 _db_redis.disable_user_webhook_db = MagicMock()
 _db_redis.enable_user_webhook_db = MagicMock()
 _db_redis.set_user_webhook_db = MagicMock()
+_db_redis.get_generic_cache = MagicMock(return_value=None)
+_db_redis.set_generic_cache = MagicMock()
 _db_redis.r = MagicMock()
 
 _backend_dir = os.path.join(os.path.dirname(__file__), '..', '..')
