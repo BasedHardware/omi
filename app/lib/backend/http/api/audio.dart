@@ -37,7 +37,8 @@ class AudioUrlsResponse {
 
   AudioUrlsResponse({required this.files, this.pollAfterMs});
 
-  bool get hasPending => files.any((f) => !f.isCached);
+  /// 'unavailable' is terminal (source chunks gone) — not worth polling for.
+  bool get hasPending => files.any((f) => !f.isCached && f.status != 'unavailable');
 }
 
 String getAudioStreamUrl({required String conversationId, required String audioFileId, String format = 'wav'}) {
