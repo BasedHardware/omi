@@ -122,7 +122,7 @@ def _meaningful_words(text: str) -> set[str]:
 
 
 def _check_active_create_guardrails(output: MemoryPipelineOutput) -> list[LintResult]:
-    """Error when an active create bypasses uncertainty or quote-overlap guardrails."""
+    """Error when an active create bypasses uncertainty, quote, or speaker guardrails."""
     lints: list[LintResult] = []
     for create in output.mutation_plan.creates:
         if create.status != "active":
@@ -158,6 +158,20 @@ def _check_active_create_guardrails(output: MemoryPipelineOutput) -> list[LintRe
                         create.mutation_id,
                     )
                 )
+        evidence_with_speakers = [evidence for evidence in create.evidence if evidence.speaker is not None]
+        if evidence_with_speakers and not any(
+            evidence.speaker and evidence.speaker.is_actor_user is True for evidence in evidence_with_speakers
+        ):
+            lints.append(
+                _lint(
+                    "error",
+                    "active_memory_without_actor_quote",
+                    f"Active create {create.mutation_id} has no actor-authored supporting evidence",
+                    create.frame_id,
+                    create.decision_id,
+                    create.mutation_id,
+                )
+            )
     return lints
 
 

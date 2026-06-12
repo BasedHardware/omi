@@ -50,9 +50,9 @@ EXTRACT a fact when it is durable context about {user_name}: preferences and dis
 
 FOR EVERY FACT, FILL THE TYPED FIELDS:
 
-0. quote_anchor — before deciding to extract, identify the exact source sentence or clause that proves the fact. The final content must preserve at least 2 distinctive non-stopword terms from that quote. If you cannot point to a quote anchor, output no fact.
+0. quote_anchor — copy the exact source sentence or clause that proves the fact into the quote_anchor field. It MUST be a verbatim substring from the transcript, not a paraphrase. The final content must preserve at least 2 distinctive non-stopword terms from that quote. If you cannot copy a literal quote anchor, output no fact.
 
-1. content — one concise sentence (max 15 words), specific and timeless, starting with {user_name} when about them. Do not paraphrase beyond what the quote anchor directly states.
+1. content — one concise sentence (max 15 words), specific and timeless, starting with {user_name} when about them. Do not paraphrase beyond what the quote_anchor directly states.
 
 2. predicate — EXACTLY ONE of:
    - plans_travel_to — a trip or relocation plan. arguments: destination, planned_date (if stated)
@@ -74,7 +74,7 @@ FOR EVERY FACT, FILL THE TYPED FIELDS:
 
 3. arguments — the named slots listed for the predicate, as short literal strings. Only fill argument slots when value is EXPLICITLY stated in conversation; leave unfilled slots out entirely rather than guessing.
 
-4. subject_attribution — "user" if the fact is about {user_name}; "third_party" if about someone else; "assistant_suggested" if an assistant/AI proposed it and {user_name} did not confirm.
+4. subject_attribution — "user" if the fact is about {user_name} and {user_name} directly states or confirms it; "third_party" if about someone else; "assistant_suggested" if an assistant/AI/team member proposed it and {user_name} did not explicitly confirm in first person. Facts with assistant_suggested are normally not durable memories; only emit them when needed to preserve a reviewable contradiction/update.
 
 5. uncertainty_reasons — zero or more of: speaker_uncertain, inferred_not_stated, temporal_scope_unclear, low_quality_transcript, subject_ambiguous, conflicts_with_existing_memory, duplicate_near_match. Use them honestly; an uncertain fact WITH reasons is better than a dropped fact or a confidently wrong one.
 

@@ -34,6 +34,7 @@ from utils.memory_ingestion.pipeline import MemoryModelClient
 
 class ProductionLikeMemory(BaseModel):
     content: str
+    quote_anchor: str | None = None
     category: str = "system"
     tags: list[str] = Field(default_factory=list)
     visibility: str = "private"
@@ -128,12 +129,12 @@ class ProductionLikeMemoryModelClient(MemoryModelClient):
                     typed=self.typed,
                 )
                 for memory_index, memory in enumerate(memories):
-                    if not _has_sufficient_evidence(memory.content, event_chunk):
+                    if not _has_sufficient_evidence(memory.content, event_chunk, quote_anchor=memory.quote_anchor):
                         continue
                     source_events = [event.event_id for event in event_chunk]
                     calibration = _calibration(memory, event_chunk)
                     supporting_events = _supporting_events(memory.content, event_chunk)
-                    quote = _find_supporting_quote(memory.content, event_chunk)
+                    quote = _find_supporting_quote(memory.content, event_chunk, quote_anchor=memory.quote_anchor)
                     evidence = [
                         EvidenceSpan(
                             evidence_id=id_factory.new_id(
@@ -351,11 +352,19 @@ def _calibration(memory: ProductionLikeMemory, events: list[RawContextEvent]) ->
         uncertainty_reasons.append("unsupported_by_existing_state")
         review_required = True
 
+    if not _quote_anchor_is_supported(memory.quote_anchor, events):
+        uncertainty_reasons.append("weak_evidence")
+        review_required = True
+
     if _has_future_plan_signal(text):
         uncertainty_reasons.append("temporal_scope_unclear")
         review_required = True
 
     third_party = memory.subject_attribution == "third_party" or _has_third_party_signal(text, events)
+    assistant_suggested = memory.subject_attribution == "assistant_suggested"
+    if assistant_suggested:
+        uncertainty_reasons.append("inferred_not_stated")
+        review_required = True
     if third_party:
         categories = ["third_party_private_fact"]
         sensitivity_level = "medium"
@@ -384,7 +393,11 @@ def _calibration(memory: ProductionLikeMemory, events: list[RawContextEvent]) ->
         and not review_required
     ):
         confidence = "high"
-    elif "weak_evidence" in uncertainty_reasons or "unsupported_by_existing_state" in uncertainty_reasons:
+    elif (
+        "weak_evidence" in uncertainty_reasons
+        or "unsupported_by_existing_state" in uncertainty_reasons
+        or assistant_suggested
+    ):
         confidence = "low"
 
     return {
@@ -596,8 +609,15 @@ _EVIDENCE_STOPWORDS = {
 }
 
 
-def _find_supporting_quote(memory_content: str, events: list[RawContextEvent]) -> str | None:
-    """Return the text of the event that best supports the memory content."""
+def _find_supporting_quote(
+    memory_content: str,
+    events: list[RawContextEvent],
+    *,
+    quote_anchor: str | None = None,
+) -> str | None:
+    """Return the source quote that best supports the memory content."""
+    if quote_anchor and _quote_anchor_is_supported(quote_anchor, events):
+        return quote_anchor.strip()
     if not events:
         return None
     best_event = max(events, key=lambda e: _evidence_overlap_count(memory_content, e.text or ""))
@@ -614,21 +634,38 @@ def _supporting_events(memory_content: str, events: list[RawContextEvent]) -> li
     return supporting if supporting else None
 
 
-def _has_sufficient_evidence(memory_content: str, events: list[RawContextEvent]) -> bool:
-    """Reject extracted memories with no grounded content words in the source chunk.
+def _has_sufficient_evidence(
+    memory_content: str,
+    events: list[RawContextEvent],
+    *,
+    quote_anchor: str | None = None,
+) -> bool:
+    """Reject extracted memories without grounded source support.
 
     The production prompt often paraphrases first-person speech into third-person
     memories, so exact containment is too strict.  But allowing evidence fallback
     when only stopwords overlap lets unsupported memories leak into the benchmark.
-    Require at least one meaningful source token, and require two when the memory
-    itself contains several distinct factual tokens.
+    Require meaningful source-token overlap, and when the typed extractor emits a
+    quote_anchor, require that anchor to be a literal source substring.
     """
     memory_words = _meaningful_words(memory_content)
     if not memory_words:
         return False
     best_overlap = max((_evidence_overlap_count(memory_content, event.text or "") for event in events), default=0)
     required_overlap = 2 if len(memory_words) >= 4 else 1
-    return best_overlap >= required_overlap
+    if best_overlap < required_overlap:
+        return False
+    return _quote_anchor_is_supported(quote_anchor, events)
+
+
+def _quote_anchor_is_supported(quote_anchor: str | None, events: list[RawContextEvent]) -> bool:
+    """True when no anchor is supplied or the anchor is a real source quote."""
+    if quote_anchor is None:
+        return True
+    anchor = " ".join(quote_anchor.split()).casefold()
+    if not anchor:
+        return False
+    return any(anchor in " ".join((event.text or "").split()).casefold() for event in events)
 
 
 def _evidence_overlap_count(text_a: str, text_b: str) -> int:
