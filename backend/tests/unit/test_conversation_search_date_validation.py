@@ -21,7 +21,9 @@ os.environ.setdefault(
 class _AutoMockModule(ModuleType):
     """Module stub that returns a MagicMock for any missing attribute."""
 
-    __path__ = []
+    def __init__(self, name):
+        super().__init__(name)
+        self.__path__ = []
 
     def __getattr__(self, name):
         if name.startswith('__') and name.endswith('__'):
@@ -67,11 +69,23 @@ _stubs = [
 
 _MISSING = object()
 _saved_modules = {}
+_saved_parent_attrs = {}
+
+
+def _save_module_for_restore(name):
+    if name not in _saved_modules:
+        _saved_modules[name] = sys.modules.get(name, _MISSING)
+    if '.' in name:
+        parent_name, attr = name.rsplit('.', 1)
+        parent = sys.modules.get(parent_name)
+        key = (parent_name, attr)
+        if key not in _saved_parent_attrs:
+            previous_attr = parent.__dict__.get(attr, _MISSING) if parent is not None else _MISSING
+            _saved_parent_attrs[key] = (parent, previous_attr)
 
 
 def _register_module(name, module):
-    if name not in _saved_modules:
-        _saved_modules[name] = sys.modules.get(name, _MISSING)
+    _save_module_for_restore(name)
     sys.modules[name] = module
     if '.' in name:
         parent_name, attr = name.rsplit('.', 1)
@@ -83,6 +97,16 @@ def _register_module(name, module):
     return module
 
 
+def _remove_module_for_fresh_import(name):
+    _save_module_for_restore(name)
+    sys.modules.pop(name, None)
+    if '.' in name:
+        parent_name, attr = name.rsplit('.', 1)
+        parent = sys.modules.get(parent_name)
+        if parent is not None:
+            parent.__dict__.pop(attr, None)
+
+
 def _restore_stubbed_modules():
     for name in sorted(_saved_modules, key=lambda item: item.count('.'), reverse=True):
         previous = _saved_modules[name]
@@ -90,6 +114,15 @@ def _restore_stubbed_modules():
             sys.modules.pop(name, None)
         else:
             sys.modules[name] = previous
+    for (_parent_name, attr), (parent, previous_attr) in _saved_parent_attrs.items():
+        if parent is None:
+            continue
+        if previous_attr is _MISSING:
+            parent.__dict__.pop(attr, None)
+        else:
+            setattr(parent, attr, previous_attr)
+    _saved_modules.clear()
+    _saved_parent_attrs.clear()
 
 
 for _mod_name in _stubs:
@@ -118,9 +151,12 @@ _register_module('utils.other.endpoints', _endpoints)
 from fastapi import FastAPI  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
 
-from routers import conversations as conv  # noqa: E402
-
-_restore_stubbed_modules()
+_remove_module_for_fresh_import('routers.conversations')
+_remove_module_for_fresh_import('routers')
+try:
+    from routers import conversations as conv  # noqa: E402
+finally:
+    _restore_stubbed_modules()
 
 
 def _client():
