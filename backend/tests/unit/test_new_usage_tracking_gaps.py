@@ -378,7 +378,10 @@ class TestLLMClientsStreamOptions:
     def test_llm_clients_has_include_usage(self):
         clients_path = Path(__file__).resolve().parent.parent.parent / "utils" / "llm" / "clients.py"
         source = clients_path.read_text(encoding="utf-8")
-        assert "stream_options" in source and '"include_usage": True' in source
+        assert re.search(
+            r"stream_options[\"']?\]\s*=\s*\{[^\n]*[\"']include_usage[\"']:\s*True",
+            source,
+        )
 
 
 # ===================================================================
@@ -455,9 +458,7 @@ class TestSourceTrackUsageWrapping:
         """utils/llm/clients.py must attach _usage_callback to ChatOpenAI."""
         source = (BACKEND_ROOT / "utils" / "llm" / "clients.py").read_text(encoding="utf-8")
         assert "_usage_callback = get_usage_callback()" in source, "clients.py must initialize the usage callback"
-        assert (
-            "_usage_callback" in source and "'callbacks': [_usage_callback]" in source
-        ), "clients.py must attach usage callback"
+        assert "'callbacks': [_usage_callback]" in source, "clients.py must attach usage callback"
 
     def test_usage_tracker_imports_in_modified_files(self):
         """Each modified file must import track_usage and Features from usage_tracker."""
