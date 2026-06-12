@@ -159,18 +159,17 @@ if _http_mod is not None and not hasattr(_http_mod, '__file__'):
 # run_in_executor calls executor.submit() and wraps the returned Future.
 from concurrent.futures import ThreadPoolExecutor as _TPE
 
-if "utils.executors" not in sys.modules:
-    sys.modules["utils.executors"] = types.ModuleType("utils.executors")
-sys.modules["utils.executors"].critical_executor = _TPE(max_workers=2, thread_name_prefix="test-critical")
-sys.modules["utils.executors"].db_executor = _TPE(max_workers=2, thread_name_prefix="test-db")
-sys.modules["utils.executors"].storage_executor = _TPE(max_workers=2, thread_name_prefix="test-storage")
+_executors_mod = sys.modules.setdefault("utils.executors", types.ModuleType("utils.executors"))
+_executors_mod.critical_executor = _TPE(max_workers=2, thread_name_prefix="test-critical")
+_executors_mod.db_executor = _TPE(max_workers=2, thread_name_prefix="test-db")
+_executors_mod.storage_executor = _TPE(max_workers=2, thread_name_prefix="test-storage")
 
 
 async def _run_blocking(_executor, func, *args, **kwargs):
     return func(*args, **kwargs)
 
 
-sys.modules["utils.executors"].run_blocking = _run_blocking
+_executors_mod.run_blocking = _run_blocking
 
 import importlib
 
