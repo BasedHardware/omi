@@ -4,12 +4,17 @@ import json
 import os
 import struct
 import threading
+
+
 import time
+
 import wave
 from typing import List
 from concurrent.futures import as_completed, wait, FIRST_COMPLETED
 
 from utils.executors import postprocess_executor, storage_executor
+
+_STORAGE_FANOUT_SEMAPHORE = threading.Semaphore(20)
 
 import opuslib
 from google.cloud import storage
@@ -831,6 +836,24 @@ def download_audio_chunks_and_merge(
     chunk_results = {}
 
     individual_timestamps = [ts for ts in timestamps if round(ts, 3) not in ts_to_batch_path]
+
+    unique_batch_paths = set(ts_to_batch_path.values())
+
+    def _bounded_download_single_chunk(ts):
+        with _STORAGE_FANOUT_SEMAPHORE:
+            return download_single_chunk(ts)
+
+    def _bounded_download_and_decode_blob(path):
+        with _STORAGE_FANOUT_SEMAPHORE:
+            return _download_and_decode_blob(path)
+
+    individual_futures = {
+        storage_executor.submit(_bounded_download_single_chunk, ts): ts for ts in individual_timestamps
+    }
+    batch_futures = {
+        storage_executor.submit(_bounded_download_and_decode_blob, path): path for path in unique_batch_paths
+    }
+
     unique_batch_paths = list(set(ts_to_batch_path.values()))
 
     # Build unified job list: ('individual', ts) or ('batch', path)
@@ -1114,6 +1137,12 @@ def precache_conversation_audio(
             except Exception as e:
                 logger.error(f"[PRECACHE] Error caching audio file {af.get('id')}: {e}")
 
+        def _bounded_cache_single(af):
+            with _STORAGE_FANOUT_SEMAPHORE:
+                return _cache_single(af)
+
+        futures = [storage_executor.submit(_bounded_cache_single, af) for af in audio_files]
+
         futures = []
         for af in audio_files:
             _PRECACHE_FILE_SEM.acquire()
@@ -1124,6 +1153,7 @@ def precache_conversation_audio(
             except Exception:
                 _PRECACHE_FILE_SEM.release()
                 raise
+
         for future in as_completed(futures):
             try:
                 future.result()

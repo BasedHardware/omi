@@ -262,6 +262,14 @@ def rebuild_knowledge_graph(uid: str, memories: List[Dict[str, Any]], user_name:
     all_nodes = []
     all_edges = []
 
+    _kg_sem = threading.Semaphore(10)
+
+    def _bounded_process_memory(m):
+        with _kg_sem:
+            return process_memory(m)
+
+    futures = [storage_executor.submit(_bounded_process_memory, m) for m in memories]
+
     futures = []
     for m in memories:
         _KG_REBUILD_SEM.acquire()
@@ -272,6 +280,7 @@ def rebuild_knowledge_graph(uid: str, memories: List[Dict[str, Any]], user_name:
         except Exception:
             _KG_REBUILD_SEM.release()
             raise
+
     for future in as_completed(futures):
         try:
             result = future.result()
