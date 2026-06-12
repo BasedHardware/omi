@@ -41,6 +41,24 @@ def test_metrics_are_reused_after_module_cache_eviction():
                 utils_pkg.async_tasks = previous_attr
 
 
+def test_metrics_are_tracked_in_module_cache():
+    cache = async_tasks_mod._metric_cache()
+    supervisor_key = async_tasks_mod._metric_cache_key(
+        async_tasks_mod.Counter,
+        'async_supervisor_exit_total',
+        ['label', 'reason'],
+    )
+    drain_duration_key = async_tasks_mod._metric_cache_key(
+        async_tasks_mod.Histogram,
+        'async_drain_duration_seconds',
+        ['label'],
+        buckets=[0.1, 0.5, 1.0, 2.0, 5.0, 10.0, 30.0, 60.0],
+    )
+
+    assert cache[supervisor_key] is async_tasks_mod.SUPERVISOR_EXIT_TOTAL
+    assert cache[drain_duration_key] is async_tasks_mod.DRAIN_DURATION
+
+
 # ---------------------------------------------------------------------------
 # Tests for create_named_task
 # ---------------------------------------------------------------------------
