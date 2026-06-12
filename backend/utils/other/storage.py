@@ -1134,6 +1134,26 @@ def upload_playback_artifact(uid: str, conversation_id: str, audio_file_id: str,
     blob.upload_from_string(mp3_data, content_type='audio/mpeg')
 
 
+def _playback_unavailable_blob(uid: str, conversation_id: str, audio_file_id: str):
+    bucket = storage_client.bucket(private_cloud_sync_bucket)
+    return bucket.blob(f'{PLAYBACK_ARTIFACT_PREFIX}/{uid}/{conversation_id}/{audio_file_id}.unavailable')
+
+
+def mark_playback_unavailable(uid: str, conversation_id: str, audio_file_id: str, reason: str) -> None:
+    """Mark an audio file as unbuildable (e.g. source chunks gone).
+
+    Without this, /urls would report the file as pending forever and clients
+    would poll to exhaustion. The marker lives under playback/ so the 30-day
+    lifecycle rule grants even these a retry eventually.
+    """
+    blob = _playback_unavailable_blob(uid, conversation_id, audio_file_id)
+    blob.upload_from_string(reason, content_type='text/plain')
+
+
+def is_playback_unavailable(uid: str, conversation_id: str, audio_file_id: str) -> bool:
+    return _playback_unavailable_blob(uid, conversation_id, audio_file_id).exists()
+
+
 def enqueue_conversation_audio_merge(uid: str, conversation_id: str, audio_files: list, caller: str) -> None:
     """Enqueue one audio-merge Cloud Task per audio file (named-task deduped).
 
