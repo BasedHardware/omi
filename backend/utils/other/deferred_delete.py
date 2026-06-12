@@ -34,7 +34,10 @@ class DeferredDeleter:
         with self._cond:
             self._seq += 1
             heapq.heappush(self._heap, (time.monotonic() + delay_seconds, self._seq, path))
-            if self._thread is None:
+            # is_alive() guard: restart the janitor if a BaseException
+            # (MemoryError, SystemExit) ever killed it — otherwise schedules
+            # would pile up silently for the rest of the process lifetime
+            if self._thread is None or not self._thread.is_alive():
                 self._thread = threading.Thread(target=self._run, name=self._name, daemon=True)
                 self._thread.start()
             self._cond.notify()
