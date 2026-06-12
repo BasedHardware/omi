@@ -1274,39 +1274,51 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
         isLoadingMoreMessages = true
 
         do {
-            let offset = messagesPaginationOffset
-            let olderMessages: [ChatMessageDB]
-            if let sessionId = currentSessionId {
-                olderMessages = try await APIClient.shared.getMessages(
-                    sessionId: sessionId,
-                    limit: messagesPageSize,
-                    offset: offset
-                )
-            } else {
-                olderMessages = try await APIClient.shared.getMessages(
-                    appId: selectedAppId,
-                    limit: messagesPageSize,
-                    offset: offset
-                )
+            // A burst of live messages (e.g. from another device) shifts the
+            // newest-first window, so a fetched page can dedupe entirely to
+            // messages we already hold. Consume up to a few windows per call so
+            // one user action always yields visible progress; the cursor
+            // advances every iteration, so this terminates. Deliberately NOT
+            // derived from the local message count — overcounting (deletions,
+            // polling gaps) would overshoot and silently skip history, while a
+            // duplicate window only costs a redundant fetch.
+            var appendedCount = 0
+            for _ in 0..<3 {
+                let offset = messagesPaginationOffset
+                let olderMessages: [ChatMessageDB]
+                if let sessionId = currentSessionId {
+                    olderMessages = try await APIClient.shared.getMessages(
+                        sessionId: sessionId,
+                        limit: messagesPageSize,
+                        offset: offset
+                    )
+                } else {
+                    olderMessages = try await APIClient.shared.getMessages(
+                        appId: selectedAppId,
+                        limit: messagesPageSize,
+                        offset: offset
+                    )
+                }
+
+                // Advance by raw records consumed — even when dedupe below drops
+                // some — so the next request can never re-issue the same window.
+                messagesPaginationOffset += olderMessages.count
+
+                // Drop the window overlap before appending.
+                let existingIds = Set(messages.map(\.id))
+                let newMessages = olderMessages.map(ChatMessage.init(from:))
+                    .filter { !existingIds.contains($0.id) }
+
+                // Append older messages and re-sort to ensure correct chronological order
+                messages.append(contentsOf: newMessages)
+                messages.sort(by: { $0.createdAt < $1.createdAt })
+                appendedCount += newMessages.count
+
+                // Check if there are more (based on the raw page size, pre-dedupe)
+                hasMoreMessages = olderMessages.count == messagesPageSize
+                if appendedCount > 0 || !hasMoreMessages { break }
             }
-
-            // Advance by raw records consumed — even when dedupe below drops some —
-            // so the next request can never re-issue the same window.
-            messagesPaginationOffset += olderMessages.count
-
-            // New live messages shift the newest-first offset window, so a page can
-            // overlap messages we already hold — drop those before appending.
-            let existingIds = Set(messages.map(\.id))
-            let newMessages = olderMessages.map(ChatMessage.init(from:))
-                .filter { !existingIds.contains($0.id) }
-
-            // Append older messages and re-sort to ensure correct chronological order
-            messages.append(contentsOf: newMessages)
-            messages.sort(by: { $0.createdAt < $1.createdAt })
-
-            // Check if there are more (based on the raw page size, pre-dedupe)
-            hasMoreMessages = olderMessages.count == messagesPageSize
-            log("Loaded \(newMessages.count) more messages, total: \(messages.count), hasMore: \(hasMoreMessages)")
+            log("Loaded \(appendedCount) more messages, total: \(messages.count), hasMore: \(hasMoreMessages)")
         } catch {
             logError("Failed to load more messages", error: error)
         }
