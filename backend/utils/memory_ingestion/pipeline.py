@@ -205,6 +205,7 @@ class CoreMemoryPipeline:
             redacted_input.config.output.emit_diagnostic_triples_for_rejections,
             id_factory,
         )
+        triples = _dedupe_triples(triples)
         mutation_plan, vector_plan, review_items, rejected_items = _compile_mutations(
             frames,
             decisions,
@@ -864,6 +865,80 @@ def _compile_triples(
                     )
                 )
     return triples, relationships
+
+
+def _triple_object_text(obj: FrameObject) -> str:
+    """Return a comparable text representation of a triple object for ranking."""
+    if obj.value is not None:
+        return str(obj.value)
+    if obj.entity is not None:
+        return obj.entity.canonical_name or obj.entity.entity_id or ""
+    return ""
+
+
+def _triple_canonical(triple: DerivedTriple) -> str:
+    """Build a canonical string for near-duplicate comparison."""
+    subj = triple.subject.canonical_name or triple.subject.entity_id or ""
+    obj_text = _triple_object_text(triple.object)
+    return f"{subj}|{triple.predicate}|{obj_text}".casefold()
+
+
+def _edit_distance(a: str, b: str) -> int:
+    """Levenshtein edit distance between two strings."""
+    if len(a) < len(b):
+        return _edit_distance(b, a)
+    if len(b) == 0:
+        return len(a)
+    prev_row = list(range(len(b) + 1))
+    for i, ca in enumerate(a):
+        curr_row = [i + 1]
+        for j, cb in enumerate(b):
+            insertions = prev_row[j + 1] + 1
+            deletions = curr_row[j] + 1
+            substitutions = prev_row[j] + (ca != cb)
+            curr_row.append(min(insertions, deletions, substitutions))
+        prev_row = curr_row
+    return prev_row[-1]
+
+
+def _dedupe_triples(
+    triples: list[DerivedTriple],
+) -> list[DerivedTriple]:
+    """Deduplicate derived triples so that each (subject, predicate, frame_id)
+    produces at most one claim.  When multiple triples share the same key we
+    keep the most concise one (shortest object text).  We also drop
+    near-duplicates whose canonical texts are within edit-distance < 5."""
+    # --- Pass 1: exact-key dedup (subject, predicate, source_frame_id) ---
+    groups: dict[tuple[str, str, str, str], list[DerivedTriple]] = {}
+    for t in triples:
+        subj_key = (
+            t.subject.entity_type,
+            (t.subject.canonical_name or t.subject.entity_id or "").casefold(),
+        )
+        key = (subj_key[0], subj_key[1], t.predicate, t.source_frame_id)
+        groups.setdefault(key, []).append(t)
+
+    best_per_key: list[DerivedTriple] = []
+    for group in groups.values():
+        # Prefer shortest / most concise object
+        best = min(group, key=lambda t: len(_triple_object_text(t.object)))
+        best_per_key.append(best)
+
+    # --- Pass 2: near-duplicate suppression (edit distance < 5) ---
+    kept: list[DerivedTriple] = []
+    seen_canonicals: list[str] = []
+    for t in best_per_key:
+        canon = _triple_canonical(t)
+        is_dup = False
+        for existing in seen_canonicals:
+            if _edit_distance(canon, existing) < 5:
+                is_dup = True
+                break
+        if not is_dup:
+            kept.append(t)
+            seen_canonicals.append(canon)
+
+    return kept
 
 
 def _compile_mutations(
