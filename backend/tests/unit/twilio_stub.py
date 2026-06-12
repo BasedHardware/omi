@@ -16,7 +16,7 @@ def restore_backend_package(package_name):
     return package_module
 
 
-def ensure_real_twilio_service_package():
+def prepare_twilio_service_import():
     utils_module = restore_backend_package('utils')
     twilio_service_module = sys.modules.get('utils.twilio_service')
     if twilio_service_module is None:
@@ -30,6 +30,16 @@ def ensure_real_twilio_service_package():
     sys.modules.pop('utils.twilio_service', None)
     if getattr(utils_module, 'twilio_service', None) is twilio_service_module:
         delattr(utils_module, 'twilio_service')
+
+
+def install_phone_calls_stub():
+    database_module = restore_backend_package('database')
+    if 'database.phone_calls' not in sys.modules:
+        stub = types.ModuleType('database.phone_calls')
+        stub.get_phone_numbers = lambda uid: []
+        sys.modules['database.phone_calls'] = stub
+        setattr(database_module, 'phone_calls', stub)
+    return sys.modules['database.phone_calls']
 
 
 def install_twilio_stub():
