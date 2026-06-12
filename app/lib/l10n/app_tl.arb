@@ -10616,5 +10616,13 @@
     "unableToDetermineFirmwareVersion": "Hindi matukoy ang kasalukuyang bersyon ng firmware",
     "promoCode": "Promo code",
     "enterPromoCode": "Ilagay ang promo code",
-    "invalidPromotionCode": "Hindi valid na promo code."
+    "invalidPromotionCode": "Hindi valid na promo code.",
+    "localYoloeObjectAnnouncements": "Mga lokal na anunsyo ng bagay ng YOLOE",
+    "@localYoloeObjectAnnouncements": {
+        "description": "Experimental feature name for local YOLOE object announcements"
+    },
+    "localYoloeObjectAnnouncementsDescription": "Eksperimental: pinoproseso ang mga larawan ng Omi Glass sa device at nilalaktawan ang pag-upload ng larawan sa LLM.",
+    "@localYoloeObjectAnnouncementsDescription": {
+        "description": "Description for local YOLOE object announcements developer setting"
+    }
 }

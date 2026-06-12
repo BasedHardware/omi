@@ -27,6 +27,8 @@ import 'package:omi/pages/settings/widgets/mcp_api_key_list_item.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/developer_mode_provider.dart';
 import 'package:omi/providers/mcp_provider.dart';
+import 'package:omi/services/local_vision/local_vision_service.dart';
+import 'package:omi/services/local_vision/object_announcement_service.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:omi/utils/debug_log_manager.dart';
 import 'package:omi/utils/l10n_extensions.dart';
@@ -138,6 +140,308 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
         ),
         Switch(value: value, onChanged: onChanged, activeThumbColor: const Color(0xFF22C55E)),
       ],
+    );
+  }
+
+  Widget _buildLocalYoloeSlider({
+    required String label,
+    required String valueLabel,
+    required double value,
+    required double min,
+    required double max,
+    required int divisions,
+    required ValueChanged<double> onChanged,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Expanded(child: Text(label, style: const TextStyle(color: Colors.white, fontSize: 14))),
+            Text(valueLabel, style: TextStyle(color: Colors.grey.shade400, fontSize: 12)),
+          ],
+        ),
+        Slider(
+          value: value.clamp(min, max),
+          min: min,
+          max: max,
+          divisions: divisions,
+          activeColor: const Color(0xFF22C55E),
+          inactiveColor: Colors.grey.shade800,
+          onChanged: onChanged,
+        ),
+      ],
+    );
+  }
+
+  Widget _buildLocalYoloeVoiceControls(DeveloperModeProvider provider) {
+    final currentMode = AnnouncementModeSettings.fromPreference(provider.localYoloeAnnouncementMode);
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(color: const Color(0xFF111113), borderRadius: BorderRadius.circular(12)),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              FaIcon(FontAwesomeIcons.volumeHigh, color: Colors.grey.shade400, size: 14),
+              const SizedBox(width: 8),
+              const Text(
+                'Local YOLOE voice',
+                style: TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w600),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          _buildExperimentalItem(
+            title: 'Voice announcements',
+            description: 'Speak newly detected local objects using Android TextToSpeech.',
+            icon: FontAwesomeIcons.commentDots,
+            value: provider.localYoloeVoiceEnabled,
+            onChanged: provider.onLocalYoloeVoiceChanged,
+          ),
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 12),
+            child: Divider(color: Colors.grey.shade800, height: 1),
+          ),
+          _buildExperimentalItem(
+            title: 'Interrupt previous speech',
+            description: 'When enabled, newer announcements stop any current local YOLOE speech.',
+            icon: FontAwesomeIcons.forward,
+            value: provider.localYoloeInterruptSpeech,
+            onChanged: provider.onLocalYoloeInterruptSpeechChanged,
+          ),
+          const SizedBox(height: 12),
+          Text('Announcement mode', style: TextStyle(color: Colors.grey.shade400, fontSize: 12)),
+          const SizedBox(height: 8),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            decoration: BoxDecoration(color: const Color(0xFF242428), borderRadius: BorderRadius.circular(10)),
+            child: DropdownButtonHideUnderline(
+              child: DropdownButton<AnnouncementMode>(
+                dropdownColor: const Color(0xFF242428),
+                value: currentMode,
+                style: const TextStyle(color: Colors.white, fontSize: 14),
+                items: AnnouncementMode.values
+                    .map(
+                      (mode) => DropdownMenuItem<AnnouncementMode>(
+                        value: mode,
+                        child: Text(mode.displayName),
+                      ),
+                    )
+                    .toList(),
+                onChanged: (mode) {
+                  if (mode == null) return;
+                  provider.onLocalYoloeAnnouncementModeChanged(mode.preferenceValue);
+                },
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+          _buildLocalYoloeSlider(
+            label: 'Speech rate',
+            valueLabel: provider.localYoloeSpeechRate.toStringAsFixed(2),
+            value: provider.localYoloeSpeechRate,
+            min: 0.1,
+            max: 1.0,
+            divisions: 9,
+            onChanged: provider.onLocalYoloeSpeechRateChanged,
+          ),
+          _buildLocalYoloeSlider(
+            label: 'Global announcement cooldown',
+            valueLabel: '${provider.localYoloeMinSecondsBetweenAnnouncements.toStringAsFixed(0)}s',
+            value: provider.localYoloeMinSecondsBetweenAnnouncements,
+            min: 1,
+            max: 10,
+            divisions: 9,
+            onChanged: provider.onLocalYoloeMinSecondsBetweenAnnouncementsChanged,
+          ),
+          _buildLocalYoloeSlider(
+            label: 'Object absence threshold',
+            valueLabel: '${provider.localYoloeObjectAbsenceSeconds.toStringAsFixed(0)}s',
+            value: provider.localYoloeObjectAbsenceSeconds,
+            min: 3,
+            max: 20,
+            divisions: 17,
+            onChanged: provider.onLocalYoloeObjectAbsenceSecondsChanged,
+          ),
+          _buildLocalYoloeSlider(
+            label: 'Repeat cooldown',
+            valueLabel: '${provider.localYoloeRepeatCooldownSeconds.toStringAsFixed(0)}s',
+            value: provider.localYoloeRepeatCooldownSeconds,
+            min: 10,
+            max: 120,
+            divisions: 11,
+            onChanged: provider.onLocalYoloeRepeatCooldownSecondsChanged,
+          ),
+          _buildLocalYoloeSlider(
+            label: 'Max objects per announcement',
+            valueLabel: provider.localYoloeMaxObjectsPerAnnouncement.toString(),
+            value: provider.localYoloeMaxObjectsPerAnnouncement.toDouble(),
+            min: 1,
+            max: 5,
+            divisions: 4,
+            onChanged: provider.onLocalYoloeMaxObjectsPerAnnouncementChanged,
+          ),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              Expanded(
+                child: GestureDetector(
+                  onTap: () => ObjectAnnouncementService.instance.speak('Local YOLOE voice is working.', force: true),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    decoration: BoxDecoration(color: const Color(0xFF22C55E), borderRadius: BorderRadius.circular(10)),
+                    child: const Center(
+                      child: Text(
+                        'Test voice',
+                        style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w600),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              GestureDetector(
+                onTap: ObjectAnnouncementService.instance.stop,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  decoration:
+                      BoxDecoration(color: Colors.red.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(10)),
+                  child: const Text(
+                    'Stop',
+                    style: TextStyle(color: Colors.redAccent, fontSize: 14, fontWeight: FontWeight.w600),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _formatLocalVisionTimestamp(DateTime? timestamp) {
+    if (timestamp == null) return 'No frame yet';
+    final local = timestamp.toLocal();
+    return '${local.hour.toString().padLeft(2, '0')}:'
+        '${local.minute.toString().padLeft(2, '0')}:'
+        '${local.second.toString().padLeft(2, '0')}';
+  }
+
+  Widget _buildLocalVisionDebugPanel() {
+    return Consumer<LocalVisionService>(
+      builder: (context, service, child) {
+        final detections = service.detections;
+        return Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(color: const Color(0xFF111113), borderRadius: BorderRadius.circular(12)),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  FaIcon(FontAwesomeIcons.bug, color: Colors.grey.shade400, size: 14),
+                  const SizedBox(width: 8),
+                  const Text(
+                    'Local YOLOE debug',
+                    style: TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w600),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  _buildLocalVisionMetric('Frame', _formatLocalVisionTimestamp(service.latestFrameTimestamp)),
+                  _buildLocalVisionMetric('Status', service.status.name),
+                  _buildLocalVisionMetric('Dropped', service.droppedFrameCount.toString()),
+                  _buildLocalVisionMetric('Detections', service.detectionCount.toString()),
+                  _buildLocalVisionMetric('Announce', service.announcementCandidateCount.toString()),
+                ],
+              ),
+              if (service.lastError != null) ...[
+                const SizedBox(height: 10),
+                Text('Last error: ${service.lastError}', style: const TextStyle(color: Colors.redAccent, fontSize: 12)),
+              ],
+              const SizedBox(height: 12),
+              if (detections.isEmpty)
+                Text('No fake detections yet. Capture an Omi Glass image in local mode.',
+                    style: TextStyle(color: Colors.grey.shade500, fontSize: 12))
+              else
+                Column(
+                  children: detections.map(_buildLocalVisionDetectionRow).toList(),
+                ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildLocalVisionMetric(String label, String value) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: BoxDecoration(color: const Color(0xFF242428), borderRadius: BorderRadius.circular(8)),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(label, style: TextStyle(color: Colors.grey.shade500, fontSize: 11)),
+          const SizedBox(height: 2),
+          Text(value, style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600)),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLocalVisionDetectionRow(Detection detection) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(color: const Color(0xFF1C1C1E), borderRadius: BorderRadius.circular(8)),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  detection.label,
+                  style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w600),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  'conf ${(detection.confidence * 100).toStringAsFixed(0)}% · box ${detection.box}',
+                  style: TextStyle(color: Colors.grey.shade500, fontSize: 12),
+                ),
+              ],
+            ),
+          ),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            decoration: BoxDecoration(
+              color:
+                  detection.wouldAnnounce ? Colors.green.withValues(alpha: 0.16) : Colors.grey.withValues(alpha: 0.16),
+              borderRadius: BorderRadius.circular(999),
+            ),
+            child: Text(
+              detection.wouldAnnounce ? 'announce' : 'silent',
+              style: TextStyle(
+                color: detection.wouldAnnounce ? Colors.greenAccent : Colors.grey.shade400,
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -1537,6 +1841,23 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
                           value: provider.vadGateEnabled,
                           onChanged: provider.onVadGateChanged,
                         ),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                          child: Divider(color: Colors.grey.shade800, height: 1),
+                        ),
+                        // Local YOLOE object announcements
+                        _buildExperimentalItem(
+                          title: 'Local YOLOE object announcements',
+                          description:
+                              'Experimental: processes Omi Glass images on-device and skips LLM image uploads.',
+                          icon: FontAwesomeIcons.eye,
+                          value: provider.localYoloeEnabled,
+                          onChanged: provider.onLocalYoloeChanged,
+                        ),
+                        const SizedBox(height: 12),
+                        _buildLocalVisionDebugPanel(),
+                        const SizedBox(height: 12),
+                        _buildLocalYoloeVoiceControls(provider),
                         Padding(
                           padding: const EdgeInsets.symmetric(vertical: 16),
                           child: Divider(color: Colors.grey.shade800, height: 1),

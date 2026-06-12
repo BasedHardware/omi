@@ -10616,5 +10616,13 @@
     "unableToDetermineFirmwareVersion": "ప్రస్తుత ఫర్మ్‌వేర్ సంస్కరణను నిర్ధారించలేకపోయాము",
     "promoCode": "ప్రోమో కోడ్",
     "enterPromoCode": "ప్రోమో కోడ్ ఎంటర్ చేయండి",
-    "invalidPromotionCode": "చెల్లని ప్రోమో కోడ్."
+    "invalidPromotionCode": "చెల్లని ప్రోమో కోడ్.",
+    "localYoloeObjectAnnouncements": "స్థానిక YOLOE వస్తు ప్రకటనలు",
+    "@localYoloeObjectAnnouncements": {
+        "description": "Experimental feature name for local YOLOE object announcements"
+    },
+    "localYoloeObjectAnnouncementsDescription": "ప్రయోగాత్మకం: Omi Glass చిత్రాలను పరికరంలోనే ప్రాసెస్ చేస్తుంది మరియు LLM కు చిత్ర అప్‌లోడ్‌లను దాటవేస్తుంది.",
+    "@localYoloeObjectAnnouncementsDescription": {
+        "description": "Description for local YOLOE object announcements developer setting"
+    }
 }

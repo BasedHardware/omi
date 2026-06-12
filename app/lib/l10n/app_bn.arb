@@ -10616,5 +10616,13 @@
     "unableToDetermineFirmwareVersion": "বর্তমান ফার্মওয়্যার সংস্করণ নির্ধারণ করা যায়নি",
     "promoCode": "প্রোমো কোড",
     "enterPromoCode": "প্রোমো কোড লিখুন",
-    "invalidPromotionCode": "অবৈধ প্রোমো কোড।"
+    "invalidPromotionCode": "অবৈধ প্রোমো কোড।",
+    "localYoloeObjectAnnouncements": "স্থানীয় YOLOE অবজেক্ট ঘোষণা",
+    "@localYoloeObjectAnnouncements": {
+        "description": "Experimental feature name for local YOLOE object announcements"
+    },
+    "localYoloeObjectAnnouncementsDescription": "পরীক্ষামূলক: Omi Glass ছবি ডিভাইসেই প্রক্রিয়া করে এবং LLM ছবি আপলোড এড়িয়ে যায়।",
+    "@localYoloeObjectAnnouncementsDescription": {
+        "description": "Description for local YOLOE object announcements developer setting"
+    }
 }

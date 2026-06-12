@@ -3134,5 +3134,13 @@
     "unableToDetermineFirmwareVersion": "A jelenlegi firmware verziója nem határozható meg",
     "promoCode": "Promóciós kód",
     "enterPromoCode": "Adja meg a promóciós kódot",
-    "invalidPromotionCode": "Érvénytelen promóciós kód."
+    "invalidPromotionCode": "Érvénytelen promóciós kód.",
+    "localYoloeObjectAnnouncements": "Helyi YOLOE objektumbejelentések",
+    "@localYoloeObjectAnnouncements": {
+        "description": "Experimental feature name for local YOLOE object announcements"
+    },
+    "localYoloeObjectAnnouncementsDescription": "Kísérleti: az Omi Glass képeit az eszközön dolgozza fel, és kihagyja a képfeltöltéseket az LLM-be.",
+    "@localYoloeObjectAnnouncementsDescription": {
+        "description": "Description for local YOLOE object announcements developer setting"
+    }
 }

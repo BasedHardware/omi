@@ -3038,5 +3038,13 @@
     "unableToDetermineFirmwareVersion": "Nevar noteikt pašreizējo programmaparatūras versiju",
     "promoCode": "Reklāmas kods",
     "enterPromoCode": "Ievadiet reklāmas kodu",
-    "invalidPromotionCode": "Nederīgs reklāmas kods."
+    "invalidPromotionCode": "Nederīgs reklāmas kods.",
+    "localYoloeObjectAnnouncements": "Lokāli YOLOE objektu paziņojumi",
+    "@localYoloeObjectAnnouncements": {
+        "description": "Experimental feature name for local YOLOE object announcements"
+    },
+    "localYoloeObjectAnnouncementsDescription": "Eksperimentāli: apstrādā Omi Glass attēlus ierīcē un izlaiž attēlu augšupielādi uz LLM.",
+    "@localYoloeObjectAnnouncementsDescription": {
+        "description": "Description for local YOLOE object announcements developer setting"
+    }
 }

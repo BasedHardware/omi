@@ -3038,5 +3038,13 @@
     "unableToDetermineFirmwareVersion": "현재 펌웨어 버전을 확인할 수 없습니다",
     "promoCode": "프로모 코드",
     "enterPromoCode": "프로모 코드를 입력하세요",
-    "invalidPromotionCode": "유효하지 않은 프로모 코드입니다."
+    "invalidPromotionCode": "유효하지 않은 프로모 코드입니다.",
+    "localYoloeObjectAnnouncements": "로컬 YOLOE 객체 알림",
+    "@localYoloeObjectAnnouncements": {
+        "description": "Experimental feature name for local YOLOE object announcements"
+    },
+    "localYoloeObjectAnnouncementsDescription": "실험 기능: Omi Glass 이미지를 기기에서 처리하고 LLM 이미지 업로드를 건너뜁니다.",
+    "@localYoloeObjectAnnouncementsDescription": {
+        "description": "Description for local YOLOE object announcements developer setting"
+    }
 }

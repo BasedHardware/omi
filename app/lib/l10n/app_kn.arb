@@ -10616,5 +10616,13 @@
     "unableToDetermineFirmwareVersion": "ಪ್ರಸ್ತುತ ಫರ್ಮ್‌ವೇರ್ ಆವೃತ್ತಿಯನ್ನು ನಿರ್ಧರಿಸಲು ಸಾಧ್ಯವಾಗಲಿಲ್ಲ",
     "promoCode": "ಪ್ರೋಮೋ ಕೋಡ್",
     "enterPromoCode": "ಪ್ರೋಮೋ ಕೋಡ್ ನಮೂದಿಸಿ",
-    "invalidPromotionCode": "ಅಮಾನ್ಯ ಪ್ರೋಮೋ ಕೋಡ್."
+    "invalidPromotionCode": "ಅಮಾನ್ಯ ಪ್ರೋಮೋ ಕೋಡ್.",
+    "localYoloeObjectAnnouncements": "ಸ್ಥಳೀಯ YOLOE ವಸ್ತು ಘೋಷಣೆಗಳು",
+    "@localYoloeObjectAnnouncements": {
+        "description": "Experimental feature name for local YOLOE object announcements"
+    },
+    "localYoloeObjectAnnouncementsDescription": "ಪ್ರಾಯೋಗಿಕ: Omi Glass ಚಿತ್ರಗಳನ್ನು ಸಾಧನದಲ್ಲೇ ಪ್ರಕ್ರಿಯೆಗೊಳಿಸುತ್ತದೆ ಮತ್ತು LLM ಗೆ ಚಿತ್ರ ಅಪ್‌ಲೋಡ್‌ಗಳನ್ನು ಬಿಟ್ಟುಬಿಡುತ್ತದೆ.",
+    "@localYoloeObjectAnnouncementsDescription": {
+        "description": "Description for local YOLOE object announcements developer setting"
+    }
 }

@@ -3047,5 +3047,13 @@
     "unableToDetermineFirmwareVersion": "Kan ikke fastslå den aktuelle firmware-version",
     "promoCode": "Kampagnekode",
     "enterPromoCode": "Indtast kampagnekode",
-    "invalidPromotionCode": "Ugyldig kampagnekode."
+    "invalidPromotionCode": "Ugyldig kampagnekode.",
+    "localYoloeObjectAnnouncements": "Lokale YOLOE-objektannonceringer",
+    "@localYoloeObjectAnnouncements": {
+        "description": "Experimental feature name for local YOLOE object announcements"
+    },
+    "localYoloeObjectAnnouncementsDescription": "Eksperimentelt: behandler Omi Glass-billeder på enheden og springer billeduploads til LLM over.",
+    "@localYoloeObjectAnnouncementsDescription": {
+        "description": "Description for local YOLOE object announcements developer setting"
+    }
 }

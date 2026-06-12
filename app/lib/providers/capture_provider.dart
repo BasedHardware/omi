@@ -30,6 +30,7 @@ import 'package:omi/providers/message_provider.dart';
 import 'package:omi/providers/people_provider.dart';
 import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/services/connectivity_service.dart';
+import 'package:omi/services/local_vision/local_vision_service.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/services/voice_playback/omi_voice_playback_service.dart';
 import 'package:omi/services/sockets/transcription_service.dart';
@@ -372,6 +373,7 @@ class CaptureProvider extends ChangeNotifier
 
   StreamSubscription? _bleBytesStream;
   StreamSubscription? _blePhotoStream;
+  int _localYoloeSkippedUploadFrameCount = 0;
 
   get bleBytesStream => _bleBytesStream;
 
@@ -954,6 +956,22 @@ class CaptureProvider extends ChangeNotifier
     _blePhotoStream = await connection.performGetImageListener(
       onImageReceived: (orientedImage) async {
         final rotatedImageBytes = rotateImage(orientedImage);
+
+        if (SharedPreferencesUtil().localYoloeEnabled) {
+          await LocalVisionService.instance.submitFrame(
+            Uint8List.fromList(rotatedImageBytes),
+            timestamp: DateTime.now(),
+          );
+          _localYoloeSkippedUploadFrameCount++;
+          if (_localYoloeSkippedUploadFrameCount == 1 || _localYoloeSkippedUploadFrameCount % 10 == 0) {
+            Logger.debug(
+              'Local YOLOE image processed; backend image upload skipped '
+              '(frames=$_localYoloeSkippedUploadFrameCount)',
+            );
+          }
+          return;
+        }
+
         final String tempId = 'temp_img_${DateTime.now().millisecondsSinceEpoch}';
         final String base64Image = base64Encode(rotatedImageBytes);
 

@@ -3073,5 +3073,13 @@
     "unableToDetermineFirmwareVersion": "Nie można określić bieżącej wersji oprogramowania układowego",
     "promoCode": "Kod promocyjny",
     "enterPromoCode": "Wpisz kod promocyjny",
-    "invalidPromotionCode": "Nieprawidłowy kod promocyjny."
+    "invalidPromotionCode": "Nieprawidłowy kod promocyjny.",
+    "localYoloeObjectAnnouncements": "Lokalne ogłoszenia obiektów YOLOE",
+    "@localYoloeObjectAnnouncements": {
+        "description": "Experimental feature name for local YOLOE object announcements"
+    },
+    "localYoloeObjectAnnouncementsDescription": "Eksperymentalne: przetwarza obrazy Omi Glass na urządzeniu i pomija przesyłanie obrazów do LLM.",
+    "@localYoloeObjectAnnouncementsDescription": {
+        "description": "Description for local YOLOE object announcements developer setting"
+    }
 }

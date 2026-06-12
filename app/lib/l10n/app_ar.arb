@@ -3005,5 +3005,13 @@
     "unableToDetermineFirmwareVersion": "تعذر تحديد إصدار البرنامج الثابت الحالي",
     "promoCode": "رمز ترويجي",
     "enterPromoCode": "أدخل الرمز الترويجي",
-    "invalidPromotionCode": "رمز ترويجي غير صالح."
+    "invalidPromotionCode": "رمز ترويجي غير صالح.",
+    "localYoloeObjectAnnouncements": "إعلانات كائنات YOLOE المحلية",
+    "@localYoloeObjectAnnouncements": {
+        "description": "Experimental feature name for local YOLOE object announcements"
+    },
+    "localYoloeObjectAnnouncementsDescription": "تجريبي: يعالج صور Omi Glass على الجهاز ويتخطى تحميل الصور إلى LLM.",
+    "@localYoloeObjectAnnouncementsDescription": {
+        "description": "Description for local YOLOE object announcements developer setting"
+    }
 }

@@ -3038,5 +3038,13 @@
     "unableToDetermineFirmwareVersion": "ไม่สามารถระบุเวอร์ชันเฟิร์มแวร์ปัจจุบันได้",
     "promoCode": "รหัสโปรโมชัน",
     "enterPromoCode": "กรอกรหัสโปรโมชัน",
-    "invalidPromotionCode": "รหัสโปรโมชันไม่ถูกต้อง"
+    "invalidPromotionCode": "รหัสโปรโมชันไม่ถูกต้อง",
+    "localYoloeObjectAnnouncements": "การประกาศวัตถุ YOLOE ในเครื่อง",
+    "@localYoloeObjectAnnouncements": {
+        "description": "Experimental feature name for local YOLOE object announcements"
+    },
+    "localYoloeObjectAnnouncementsDescription": "ทดลอง: ประมวลผลภาพ Omi Glass บนอุปกรณ์และข้ามการอัปโหลดภาพไปยัง LLM",
+    "@localYoloeObjectAnnouncementsDescription": {
+        "description": "Description for local YOLOE object announcements developer setting"
+    }
 }

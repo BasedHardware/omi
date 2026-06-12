@@ -3006,5 +3006,13 @@
     "unableToDetermineFirmwareVersion": "Aktuelle Firmware-Version konnte nicht ermittelt werden",
     "promoCode": "Aktionscode",
     "enterPromoCode": "Aktionscode eingeben",
-    "invalidPromotionCode": "Ungültiger Aktionscode."
+    "invalidPromotionCode": "Ungültiger Aktionscode.",
+    "localYoloeObjectAnnouncements": "Lokale YOLOE-Objektansagen",
+    "@localYoloeObjectAnnouncements": {
+        "description": "Experimental feature name for local YOLOE object announcements"
+    },
+    "localYoloeObjectAnnouncementsDescription": "Experimentell: verarbeitet Omi Glass-Bilder auf dem Gerät und überspringt Bild-Uploads an das LLM.",
+    "@localYoloeObjectAnnouncementsDescription": {
+        "description": "Description for local YOLOE object announcements developer setting"
+    }
 }

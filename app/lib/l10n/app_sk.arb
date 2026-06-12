@@ -3043,5 +3043,13 @@
     "unableToDetermineFirmwareVersion": "Nedá sa určiť aktuálna verzia firmvéru",
     "promoCode": "Promo kód",
     "enterPromoCode": "Zadajte promo kód",
-    "invalidPromotionCode": "Neplatný promo kód."
+    "invalidPromotionCode": "Neplatný promo kód.",
+    "localYoloeObjectAnnouncements": "Miestne oznamovanie objektov YOLOE",
+    "@localYoloeObjectAnnouncements": {
+        "description": "Experimental feature name for local YOLOE object announcements"
+    },
+    "localYoloeObjectAnnouncementsDescription": "Experimentálne: spracúva obrázky z Omi Glass v zariadení a preskakuje nahrávanie obrázkov do LLM.",
+    "@localYoloeObjectAnnouncementsDescription": {
+        "description": "Description for local YOLOE object announcements developer setting"
+    }
 }

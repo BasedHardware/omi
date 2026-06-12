@@ -3038,5 +3038,13 @@
     "unableToDetermineFirmwareVersion": "Kan de huidige firmwareversie niet bepalen",
     "promoCode": "Promotiecode",
     "enterPromoCode": "Voer promotiecode in",
-    "invalidPromotionCode": "Ongeldige promotiecode."
+    "invalidPromotionCode": "Ongeldige promotiecode.",
+    "localYoloeObjectAnnouncements": "Lokale YOLOE-objectaankondigingen",
+    "@localYoloeObjectAnnouncements": {
+        "description": "Experimental feature name for local YOLOE object announcements"
+    },
+    "localYoloeObjectAnnouncementsDescription": "Experimenteel: verwerkt Omi Glass-afbeeldingen op het apparaat en slaat afbeeldingsuploads naar de LLM over.",
+    "@localYoloeObjectAnnouncementsDescription": {
+        "description": "Description for local YOLOE object announcements developer setting"
+    }
 }

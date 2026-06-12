@@ -3038,5 +3038,13 @@
     "unableToDetermineFirmwareVersion": "Nykyistä laiteohjelmistoversiota ei voida määrittää",
     "promoCode": "Tarjouskoodi",
     "enterPromoCode": "Syötä tarjouskoodi",
-    "invalidPromotionCode": "Virheellinen tarjouskoodi."
+    "invalidPromotionCode": "Virheellinen tarjouskoodi.",
+    "localYoloeObjectAnnouncements": "Paikalliset YOLOE-kohdeilmoitukset",
+    "@localYoloeObjectAnnouncements": {
+        "description": "Experimental feature name for local YOLOE object announcements"
+    },
+    "localYoloeObjectAnnouncementsDescription": "Kokeellinen: käsittelee Omi Glass -kuvat laitteessa ja ohittaa kuvien lataukset LLM:ään.",
+    "@localYoloeObjectAnnouncementsDescription": {
+        "description": "Description for local YOLOE object announcements developer setting"
+    }
 }

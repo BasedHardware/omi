@@ -10616,5 +10616,13 @@
     "unableToDetermineFirmwareVersion": "تعیین نسخه فعلی سفت‌افزار امکان‌پذیر نیست",
     "promoCode": "کد تخفیف",
     "enterPromoCode": "کد تخفیف را وارد کنید",
-    "invalidPromotionCode": "کد تخفیف نامعتبر."
+    "invalidPromotionCode": "کد تخفیف نامعتبر.",
+    "localYoloeObjectAnnouncements": "اعلان‌های محلی اشیای YOLOE",
+    "@localYoloeObjectAnnouncements": {
+        "description": "Experimental feature name for local YOLOE object announcements"
+    },
+    "localYoloeObjectAnnouncementsDescription": "آزمایشی: تصاویر Omi Glass را روی دستگاه پردازش می‌کند و بارگذاری تصویر به LLM را رد می‌کند.",
+    "@localYoloeObjectAnnouncementsDescription": {
+        "description": "Description for local YOLOE object announcements developer setting"
+    }
 }

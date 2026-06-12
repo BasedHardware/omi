@@ -3038,5 +3038,13 @@
     "unableToDetermineFirmwareVersion": "Δεν είναι δυνατός ο προσδιορισμός της τρέχουσας έκδοσης firmware",
     "promoCode": "Κωδικός προσφοράς",
     "enterPromoCode": "Εισάγετε κωδικό προσφοράς",
-    "invalidPromotionCode": "Μη έγκυρος κωδικός προσφοράς."
+    "invalidPromotionCode": "Μη έγκυρος κωδικός προσφοράς.",
+    "localYoloeObjectAnnouncements": "Τοπικές ανακοινώσεις αντικειμένων YOLOE",
+    "@localYoloeObjectAnnouncements": {
+        "description": "Experimental feature name for local YOLOE object announcements"
+    },
+    "localYoloeObjectAnnouncementsDescription": "Πειραματικό: επεξεργάζεται εικόνες Omi Glass στη συσκευή και παραλείπει τις μεταφορτώσεις εικόνων στο LLM.",
+    "@localYoloeObjectAnnouncementsDescription": {
+        "description": "Description for local YOLOE object announcements developer setting"
+    }
 }

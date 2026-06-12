@@ -3038,5 +3038,13 @@
     "unableToDetermineFirmwareVersion": "Kan ikke bestemme gjeldende fastvareversjon",
     "promoCode": "Kampanjekode",
     "enterPromoCode": "Skriv inn kampanjekode",
-    "invalidPromotionCode": "Ugyldig kampanjekode."
+    "invalidPromotionCode": "Ugyldig kampanjekode.",
+    "localYoloeObjectAnnouncements": "Lokale YOLOE-objektkunngjøringer",
+    "@localYoloeObjectAnnouncements": {
+        "description": "Experimental feature name for local YOLOE object announcements"
+    },
+    "localYoloeObjectAnnouncementsDescription": "Eksperimentelt: behandler Omi Glass-bilder på enheten og hopper over bildeopplastinger til LLM.",
+    "@localYoloeObjectAnnouncementsDescription": {
+        "description": "Description for local YOLOE object announcements developer setting"
+    }
 }

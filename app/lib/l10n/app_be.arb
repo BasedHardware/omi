@@ -10616,5 +10616,13 @@
     "unableToDetermineFirmwareVersion": "Не ўдалося вызначыць бягучую версію прашыўкі",
     "promoCode": "Промакод",
     "enterPromoCode": "Увядзіце промакод",
-    "invalidPromotionCode": "Няправільны промакод."
+    "invalidPromotionCode": "Няправільны промакод.",
+    "localYoloeObjectAnnouncements": "Лакальныя абвяшчэнні аб абʼектах YOLOE",
+    "@localYoloeObjectAnnouncements": {
+        "description": "Experimental feature name for local YOLOE object announcements"
+    },
+    "localYoloeObjectAnnouncementsDescription": "Эксперыментальна: апрацоўвае выявы Omi Glass на прыладзе і прапускае загрузку выяў у LLM.",
+    "@localYoloeObjectAnnouncementsDescription": {
+        "description": "Description for local YOLOE object announcements developer setting"
+    }
 }

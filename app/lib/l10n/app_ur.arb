@@ -10616,5 +10616,13 @@
     "unableToDetermineFirmwareVersion": "موجودہ فرم ویئر ورژن کا تعین نہیں کیا جا سکا",
     "promoCode": "پرومو کوڈ",
     "enterPromoCode": "پرومو کوڈ درج کریں",
-    "invalidPromotionCode": "غلط پرومو کوڈ۔"
+    "invalidPromotionCode": "غلط پرومو کوڈ۔",
+    "localYoloeObjectAnnouncements": "مقامی YOLOE آبجیکٹ اعلانات",
+    "@localYoloeObjectAnnouncements": {
+        "description": "Experimental feature name for local YOLOE object announcements"
+    },
+    "localYoloeObjectAnnouncementsDescription": "تجرباتی: Omi Glass تصاویر کو ڈیوائس پر پروسیس کرتا ہے اور LLM پر تصویر اپ لوڈ کو چھوڑتا ہے۔",
+    "@localYoloeObjectAnnouncementsDescription": {
+        "description": "Description for local YOLOE object announcements developer setting"
+    }
 }

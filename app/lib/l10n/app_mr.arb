@@ -10616,5 +10616,13 @@
     "unableToDetermineFirmwareVersion": "सद्य फर्मवेअर आवृत्ती निर्धारित करता आली नाही",
     "promoCode": "प्रोमो कोड",
     "enterPromoCode": "प्रोमो कोड प्रविष्ट करा",
-    "invalidPromotionCode": "अवैध प्रोमो कोड."
+    "invalidPromotionCode": "अवैध प्रोमो कोड.",
+    "localYoloeObjectAnnouncements": "स्थानिक YOLOE ऑब्जेक्ट घोषणा",
+    "@localYoloeObjectAnnouncements": {
+        "description": "Experimental feature name for local YOLOE object announcements"
+    },
+    "localYoloeObjectAnnouncementsDescription": "प्रायोगिक: Omi Glass प्रतिमा डिव्हाइसवर प्रक्रिया करते आणि LLM कडे प्रतिमा अपलोड वगळते.",
+    "@localYoloeObjectAnnouncementsDescription": {
+        "description": "Description for local YOLOE object announcements developer setting"
+    }
 }

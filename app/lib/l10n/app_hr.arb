@@ -10616,5 +10616,13 @@
     "unableToDetermineFirmwareVersion": "Nije moguće utvrditi trenutnu verziju firmvera",
     "promoCode": "Promo kod",
     "enterPromoCode": "Unesite promo kod",
-    "invalidPromotionCode": "Nevažeći promo kod."
+    "invalidPromotionCode": "Nevažeći promo kod.",
+    "localYoloeObjectAnnouncements": "Lokalne YOLOE najave objekata",
+    "@localYoloeObjectAnnouncements": {
+        "description": "Experimental feature name for local YOLOE object announcements"
+    },
+    "localYoloeObjectAnnouncementsDescription": "Eksperimentalno: obrađuje Omi Glass slike na uređaju i preskače prijenos slika u LLM.",
+    "@localYoloeObjectAnnouncementsDescription": {
+        "description": "Description for local YOLOE object announcements developer setting"
+    }
 }

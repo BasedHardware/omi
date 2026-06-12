@@ -3060,5 +3060,13 @@
     "unableToDetermineFirmwareVersion": "无法确定当前固件版本",
     "promoCode": "促销代码",
     "enterPromoCode": "输入促销代码",
-    "invalidPromotionCode": "促销代码无效。"
+    "invalidPromotionCode": "促销代码无效。",
+    "localYoloeObjectAnnouncements": "本地 YOLOE 对象播报",
+    "@localYoloeObjectAnnouncements": {
+        "description": "Experimental feature name for local YOLOE object announcements"
+    },
+    "localYoloeObjectAnnouncementsDescription": "实验性：在设备端处理 Omi Glass 图像，并跳过上传图像到 LLM。",
+    "@localYoloeObjectAnnouncementsDescription": {
+        "description": "Description for local YOLOE object announcements developer setting"
+    }
 }

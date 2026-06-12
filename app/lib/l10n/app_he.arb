@@ -10616,5 +10616,13 @@
     "unableToDetermineFirmwareVersion": "לא ניתן לקבוע את גרסת הקושחה הנוכחית",
     "promoCode": "קוד קידום",
     "enterPromoCode": "הזינו קוד קידום",
-    "invalidPromotionCode": "קוד קידום לא תקין."
+    "invalidPromotionCode": "קוד קידום לא תקין.",
+    "localYoloeObjectAnnouncements": "הכרזות אובייקטים מקומיות של YOLOE",
+    "@localYoloeObjectAnnouncements": {
+        "description": "Experimental feature name for local YOLOE object announcements"
+    },
+    "localYoloeObjectAnnouncementsDescription": "ניסיוני: מעבד תמונות Omi Glass במכשיר ומדלג על העלאות תמונות ל-LLM.",
+    "@localYoloeObjectAnnouncementsDescription": {
+        "description": "Description for local YOLOE object announcements developer setting"
+    }
 }

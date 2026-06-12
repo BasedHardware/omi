@@ -3073,5 +3073,13 @@
     "unableToDetermineFirmwareVersion": "Mevcut donanım yazılımı sürümü belirlenemiyor",
     "promoCode": "Promosyon kodu",
     "enterPromoCode": "Promosyon kodunu girin",
-    "invalidPromotionCode": "Geçersiz promosyon kodu."
+    "invalidPromotionCode": "Geçersiz promosyon kodu.",
+    "localYoloeObjectAnnouncements": "Yerel YOLOE nesne duyuruları",
+    "@localYoloeObjectAnnouncements": {
+        "description": "Experimental feature name for local YOLOE object announcements"
+    },
+    "localYoloeObjectAnnouncementsDescription": "Deneysel: Omi Glass görüntülerini cihazda işler ve LLM görüntü yüklemelerini atlar.",
+    "@localYoloeObjectAnnouncementsDescription": {
+        "description": "Description for local YOLOE object announcements developer setting"
+    }
 }

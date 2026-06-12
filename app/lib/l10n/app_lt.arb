@@ -3038,5 +3038,13 @@
     "unableToDetermineFirmwareVersion": "Nepavyko nustatyti dabartinės programinės aparatinės įrangos versijos",
     "promoCode": "Reklamos kodas",
     "enterPromoCode": "Įveskite reklamos kodą",
-    "invalidPromotionCode": "Neteisingas reklamos kodas."
+    "invalidPromotionCode": "Neteisingas reklamos kodas.",
+    "localYoloeObjectAnnouncements": "Vietiniai YOLOE objektų pranešimai",
+    "@localYoloeObjectAnnouncements": {
+        "description": "Experimental feature name for local YOLOE object announcements"
+    },
+    "localYoloeObjectAnnouncementsDescription": "Eksperimentinė funkcija: apdoroja Omi Glass vaizdus įrenginyje ir praleidžia vaizdų įkėlimą į LLM.",
+    "@localYoloeObjectAnnouncementsDescription": {
+        "description": "Description for local YOLOE object announcements developer setting"
+    }
 }

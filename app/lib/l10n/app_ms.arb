@@ -3038,5 +3038,13 @@
     "unableToDetermineFirmwareVersion": "Tidak dapat menentukan versi perisian tegar semasa",
     "promoCode": "Kod promo",
     "enterPromoCode": "Masukkan kod promo",
-    "invalidPromotionCode": "Kod promo tidak sah."
+    "invalidPromotionCode": "Kod promo tidak sah.",
+    "localYoloeObjectAnnouncements": "Pengumuman objek YOLOE setempat",
+    "@localYoloeObjectAnnouncements": {
+        "description": "Experimental feature name for local YOLOE object announcements"
+    },
+    "localYoloeObjectAnnouncementsDescription": "Eksperimen: memproses imej Omi Glass pada peranti dan melangkau muat naik imej ke LLM.",
+    "@localYoloeObjectAnnouncementsDescription": {
+        "description": "Description for local YOLOE object announcements developer setting"
+    }
 }

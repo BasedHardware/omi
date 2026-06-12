@@ -3080,5 +3080,13 @@
     "unableToDetermineFirmwareVersion": "Tidak dapat menentukan versi firmware saat ini",
     "promoCode": "Kode promo",
     "enterPromoCode": "Masukkan kode promo",
-    "invalidPromotionCode": "Kode promo tidak valid."
+    "invalidPromotionCode": "Kode promo tidak valid.",
+    "localYoloeObjectAnnouncements": "Pengumuman objek YOLOE lokal",
+    "@localYoloeObjectAnnouncements": {
+        "description": "Experimental feature name for local YOLOE object announcements"
+    },
+    "localYoloeObjectAnnouncementsDescription": "Eksperimental: memproses gambar Omi Glass di perangkat dan melewati unggahan gambar ke LLM.",
+    "@localYoloeObjectAnnouncementsDescription": {
+        "description": "Description for local YOLOE object announcements developer setting"
+    }
 }

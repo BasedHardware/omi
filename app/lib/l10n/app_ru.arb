@@ -3073,5 +3073,13 @@
     "unableToDetermineFirmwareVersion": "Не удаётся определить текущую версию прошивки",
     "promoCode": "Промокод",
     "enterPromoCode": "Введите промокод",
-    "invalidPromotionCode": "Недействительный промокод."
+    "invalidPromotionCode": "Недействительный промокод.",
+    "localYoloeObjectAnnouncements": "Локальные объявления объектов YOLOE",
+    "@localYoloeObjectAnnouncements": {
+        "description": "Experimental feature name for local YOLOE object announcements"
+    },
+    "localYoloeObjectAnnouncementsDescription": "Экспериментально: обрабатывает изображения Omi Glass на устройстве и пропускает загрузку изображений в LLM.",
+    "@localYoloeObjectAnnouncementsDescription": {
+        "description": "Description for local YOLOE object announcements developer setting"
+    }
 }

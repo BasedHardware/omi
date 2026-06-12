@@ -10616,5 +10616,13 @@
     "unableToDetermineFirmwareVersion": "தற்போதைய ஃபார்ம்வேர் பதிப்பை தீர்மானிக்க முடியவில்லை",
     "promoCode": "விளம்பர குறியீடு",
     "enterPromoCode": "விளம்பர குறியீட்டை உள்ளிடவும்",
-    "invalidPromotionCode": "தவறான விளம்பர குறியீடு."
+    "invalidPromotionCode": "தவறான விளம்பர குறியீடு.",
+    "localYoloeObjectAnnouncements": "உள்ளூர் YOLOE பொருள் அறிவிப்புகள்",
+    "@localYoloeObjectAnnouncements": {
+        "description": "Experimental feature name for local YOLOE object announcements"
+    },
+    "localYoloeObjectAnnouncementsDescription": "சோதனை: Omi Glass படங்களை சாதனத்திலேயே செயலாக்கி, LLM படப் பதிவேற்றங்களைத் தவிர்க்கிறது.",
+    "@localYoloeObjectAnnouncementsDescription": {
+        "description": "Description for local YOLOE object announcements developer setting"
+    }
 }

@@ -3073,5 +3073,13 @@
     "unableToDetermineFirmwareVersion": "Impossible de déterminer la version actuelle du firmware",
     "promoCode": "Code promo",
     "enterPromoCode": "Entrez le code promo",
-    "invalidPromotionCode": "Code promo invalide."
+    "invalidPromotionCode": "Code promo invalide.",
+    "localYoloeObjectAnnouncements": "Annonces locales d’objets YOLOE",
+    "@localYoloeObjectAnnouncements": {
+        "description": "Experimental feature name for local YOLOE object announcements"
+    },
+    "localYoloeObjectAnnouncementsDescription": "Expérimental : traite les images Omi Glass sur l’appareil et ignore les téléversements d’images vers le LLM.",
+    "@localYoloeObjectAnnouncementsDescription": {
+        "description": "Description for local YOLOE object announcements developer setting"
+    }
 }

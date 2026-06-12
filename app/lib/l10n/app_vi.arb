@@ -3043,5 +3043,13 @@
     "unableToDetermineFirmwareVersion": "Không thể xác định phiên bản firmware hiện tại",
     "promoCode": "Mã khuyến mãi",
     "enterPromoCode": "Nhập mã khuyến mãi",
-    "invalidPromotionCode": "Mã khuyến mãi không hợp lệ."
+    "invalidPromotionCode": "Mã khuyến mãi không hợp lệ.",
+    "localYoloeObjectAnnouncements": "Thông báo đối tượng YOLOE cục bộ",
+    "@localYoloeObjectAnnouncements": {
+        "description": "Experimental feature name for local YOLOE object announcements"
+    },
+    "localYoloeObjectAnnouncementsDescription": "Thử nghiệm: xử lý ảnh Omi Glass trên thiết bị và bỏ qua tải ảnh lên LLM.",
+    "@localYoloeObjectAnnouncementsDescription": {
+        "description": "Description for local YOLOE object announcements developer setting"
+    }
 }

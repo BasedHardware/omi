@@ -3038,5 +3038,13 @@
     "unableToDetermineFirmwareVersion": "Praeguse püsivara versiooni ei õnnestunud tuvastada",
     "promoCode": "Sooduskood",
     "enterPromoCode": "Sisestage sooduskood",
-    "invalidPromotionCode": "Kehtetu sooduskood."
+    "invalidPromotionCode": "Kehtetu sooduskood.",
+    "localYoloeObjectAnnouncements": "Kohalikud YOLOE objektiteavitused",
+    "@localYoloeObjectAnnouncements": {
+        "description": "Experimental feature name for local YOLOE object announcements"
+    },
+    "localYoloeObjectAnnouncementsDescription": "Eksperimentaalne: töötleb Omi Glassi pilte seadmes ja jätab LLM-i pildiüleslaadimised vahele.",
+    "@localYoloeObjectAnnouncementsDescription": {
+        "description": "Description for local YOLOE object announcements developer setting"
+    }
 }

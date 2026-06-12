@@ -3039,5 +3039,13 @@
     "unableToDetermineFirmwareVersion": "現在のファームウェアバージョンを特定できません",
     "promoCode": "プロモコード",
     "enterPromoCode": "プロモコードを入力",
-    "invalidPromotionCode": "無効なプロモコードです。"
+    "invalidPromotionCode": "無効なプロモコードです。",
+    "localYoloeObjectAnnouncements": "ローカルYOLOEオブジェクト通知",
+    "@localYoloeObjectAnnouncements": {
+        "description": "Experimental feature name for local YOLOE object announcements"
+    },
+    "localYoloeObjectAnnouncementsDescription": "実験的: Omi Glassの画像をデバイス上で処理し、LLMへの画像アップロードをスキップします。",
+    "@localYoloeObjectAnnouncementsDescription": {
+        "description": "Description for local YOLOE object announcements developer setting"
+    }
 }

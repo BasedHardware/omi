@@ -10989,5 +10989,13 @@
     },
     "promoCode": "Promo code",
     "enterPromoCode": "Enter promo code",
-    "invalidPromotionCode": "Invalid promotion code."
+    "invalidPromotionCode": "Invalid promotion code.",
+    "localYoloeObjectAnnouncements": "Local YOLOE object announcements",
+    "@localYoloeObjectAnnouncements": {
+        "description": "Experimental feature name for local YOLOE object announcements"
+    },
+    "localYoloeObjectAnnouncementsDescription": "Experimental: processes Omi Glass images on-device and skips LLM image uploads.",
+    "@localYoloeObjectAnnouncementsDescription": {
+        "description": "Description for local YOLOE object announcements developer setting"
+    }
 }

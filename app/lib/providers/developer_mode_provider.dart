@@ -41,6 +41,17 @@ class DeveloperModeProvider extends BaseProvider {
   // VAD Gate (experimental)
   bool vadGateEnabled = false;
 
+  // Local YOLOE object announcements (experimental)
+  bool localYoloeEnabled = true;
+  bool localYoloeVoiceEnabled = true;
+  bool localYoloeInterruptSpeech = true;
+  double localYoloeSpeechRate = 0.5;
+  double localYoloeMinSecondsBetweenAnnouncements = 2.0;
+  double localYoloeObjectAbsenceSeconds = 8.0;
+  double localYoloeRepeatCooldownSeconds = 45.0;
+  int localYoloeMaxObjectsPerAnnouncement = 3;
+  String localYoloeAnnouncementMode = 'allObjects';
+
   // Claude Agent (experimental)
   bool claudeAgentEnabled = false;
   bool claudeAgentLoading = false;
@@ -120,6 +131,15 @@ class DeveloperModeProvider extends BaseProvider {
     showTasksEnabled = SharedPreferencesUtil().showTasksEnabled;
     showPhoneCallButton = SharedPreferencesUtil().showPhoneCallButton;
     vadGateEnabled = SharedPreferencesUtil().vadGateEnabled;
+    localYoloeEnabled = SharedPreferencesUtil().localYoloeEnabled;
+    localYoloeVoiceEnabled = SharedPreferencesUtil().localYoloeVoiceEnabled;
+    localYoloeInterruptSpeech = SharedPreferencesUtil().localYoloeInterruptSpeech;
+    localYoloeSpeechRate = SharedPreferencesUtil().localYoloeSpeechRate;
+    localYoloeMinSecondsBetweenAnnouncements = SharedPreferencesUtil().localYoloeMinSecondsBetweenAnnouncements;
+    localYoloeObjectAbsenceSeconds = SharedPreferencesUtil().localYoloeObjectAbsenceSeconds;
+    localYoloeRepeatCooldownSeconds = SharedPreferencesUtil().localYoloeRepeatCooldownSeconds;
+    localYoloeMaxObjectsPerAnnouncement = SharedPreferencesUtil().localYoloeMaxObjectsPerAnnouncement;
+    localYoloeAnnouncementMode = SharedPreferencesUtil().localYoloeAnnouncementMode;
     claudeAgentEnabled = SharedPreferencesUtil().claudeAgentEnabled;
     conversationEventsToggled = SharedPreferencesUtil().conversationEventsToggled;
     transcriptsToggled = SharedPreferencesUtil().transcriptsToggled;
@@ -285,6 +305,61 @@ class DeveloperModeProvider extends BaseProvider {
   void onVadGateChanged(bool value) {
     vadGateEnabled = value;
     SharedPreferencesUtil().vadGateEnabled = value;
+    notifyListeners();
+  }
+
+  void onLocalYoloeChanged(bool value) {
+    localYoloeEnabled = value;
+    SharedPreferencesUtil().localYoloeEnabled = value;
+    Logger.debug('Local YOLOE object announcements ${value ? 'enabled' : 'disabled'}');
+    notifyListeners();
+  }
+
+  void onLocalYoloeVoiceChanged(bool value) {
+    localYoloeVoiceEnabled = value;
+    SharedPreferencesUtil().localYoloeVoiceEnabled = value;
+    notifyListeners();
+  }
+
+  void onLocalYoloeInterruptSpeechChanged(bool value) {
+    localYoloeInterruptSpeech = value;
+    SharedPreferencesUtil().localYoloeInterruptSpeech = value;
+    notifyListeners();
+  }
+
+  void onLocalYoloeSpeechRateChanged(double value) {
+    localYoloeSpeechRate = value;
+    SharedPreferencesUtil().localYoloeSpeechRate = value;
+    notifyListeners();
+  }
+
+  void onLocalYoloeMinSecondsBetweenAnnouncementsChanged(double value) {
+    localYoloeMinSecondsBetweenAnnouncements = value;
+    SharedPreferencesUtil().localYoloeMinSecondsBetweenAnnouncements = value;
+    notifyListeners();
+  }
+
+  void onLocalYoloeObjectAbsenceSecondsChanged(double value) {
+    localYoloeObjectAbsenceSeconds = value;
+    SharedPreferencesUtil().localYoloeObjectAbsenceSeconds = value;
+    notifyListeners();
+  }
+
+  void onLocalYoloeRepeatCooldownSecondsChanged(double value) {
+    localYoloeRepeatCooldownSeconds = value;
+    SharedPreferencesUtil().localYoloeRepeatCooldownSeconds = value;
+    notifyListeners();
+  }
+
+  void onLocalYoloeMaxObjectsPerAnnouncementChanged(double value) {
+    localYoloeMaxObjectsPerAnnouncement = value.round();
+    SharedPreferencesUtil().localYoloeMaxObjectsPerAnnouncement = localYoloeMaxObjectsPerAnnouncement;
+    notifyListeners();
+  }
+
+  void onLocalYoloeAnnouncementModeChanged(String value) {
+    localYoloeAnnouncementMode = value;
+    SharedPreferencesUtil().localYoloeAnnouncementMode = value;
     notifyListeners();
   }
 

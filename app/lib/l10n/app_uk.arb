@@ -3038,5 +3038,13 @@
     "unableToDetermineFirmwareVersion": "Не вдається визначити поточну версію мікропрограми",
     "promoCode": "Промокод",
     "enterPromoCode": "Введіть промокод",
-    "invalidPromotionCode": "Недійсний промокод."
+    "invalidPromotionCode": "Недійсний промокод.",
+    "localYoloeObjectAnnouncements": "Локальні оголошення об’єктів YOLOE",
+    "@localYoloeObjectAnnouncements": {
+        "description": "Experimental feature name for local YOLOE object announcements"
+    },
+    "localYoloeObjectAnnouncementsDescription": "Експериментально: обробляє зображення Omi Glass на пристрої та пропускає завантаження зображень до LLM.",
+    "@localYoloeObjectAnnouncementsDescription": {
+        "description": "Description for local YOLOE object announcements developer setting"
+    }
 }
