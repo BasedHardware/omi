@@ -433,7 +433,8 @@ class AppLocalizationsTl extends AppLocalizations {
   String get autoSync => 'Awtomatikong pag-sync';
 
   @override
-  String get autoSyncDescription => 'Awtomatikong i-sync ang mga offline na recording kapag nakakonekta ang iyong device';
+  String get autoSyncDescription =>
+      'Awtomatikong i-sync ang mga offline na recording kapag nakakonekta ang iyong device';
 
   @override
   String get deviceSettings => 'Mga Device Setting';
@@ -4732,10 +4733,7 @@ class AppLocalizationsTl extends AppLocalizations {
   }
 
   @override
-  String accessesAndTriggeredBy(
-    String accessDescription,
-    String triggerDescription,
-  ) {
+  String accessesAndTriggeredBy(String accessDescription, String triggerDescription) {
     return '$accessDescription at ay $triggerDescription.';
   }
 
