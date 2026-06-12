@@ -19,10 +19,13 @@ named utilities with bounded resources, clean shutdown, and observability.
 
 import asyncio
 import logging
+import sys
+import threading
 from dataclasses import dataclass, field
+from types import ModuleType
 from typing import Any, Awaitable, Generic, Iterable, TypeVar
 
-from prometheus_client import Counter, Histogram, REGISTRY
+from prometheus_client import Counter, Histogram
 
 logger = logging.getLogger(__name__)
 
@@ -32,20 +35,30 @@ T = TypeVar('T')
 # Metrics
 # ---------------------------------------------------------------------------
 
-_METRIC_CACHE_ATTR = 'omi_async_tasks_metric_cache'
+_METRIC_CACHE_MODULE = 'utils._async_tasks_metric_cache'
+
+
+def _new_metric_cache_module():
+    module = ModuleType(_METRIC_CACHE_MODULE)
+    module.cache = {}
+    module.lock = threading.Lock()
+    return module
+
+
+def _metric_cache_state():
+    state = sys.modules.get(_METRIC_CACHE_MODULE)
+    if state is None:
+        state = sys.modules.setdefault(_METRIC_CACHE_MODULE, _new_metric_cache_module())
+    return state
 
 
 def _metric_cache():
-    cache = getattr(REGISTRY, _METRIC_CACHE_ATTR, None)
-    if cache is None:
-        cache = {}
-        setattr(REGISTRY, _METRIC_CACHE_ATTR, cache)
-    return cache
+    return _metric_cache_state().cache
 
 
 def _cacheable_value(value):
     if isinstance(value, list):
-        return tuple(value)
+        return tuple(_cacheable_value(item) for item in value)
     if isinstance(value, dict):
         return tuple(sorted((key, _cacheable_value(item)) for key, item in value.items()))
     return value
@@ -61,14 +74,16 @@ def _metric_cache_key(metric_class, name, labelnames=(), **kwargs):
 
 
 def _get_or_create_metric(metric_class, name, documentation, labelnames=(), **kwargs):
-    cache = _metric_cache()
+    state = _metric_cache_state()
     cache_key = _metric_cache_key(metric_class, name, labelnames, **kwargs)
-    existing = cache.get(cache_key)
-    if existing is not None:
-        return existing
-    metric = metric_class(name, documentation, labelnames, **kwargs)
-    cache[cache_key] = metric
-    return metric
+    with state.lock:
+        cache = state.cache
+        existing = cache.get(cache_key)
+        if existing is not None:
+            return existing
+        metric = metric_class(name, documentation, labelnames, **kwargs)
+        cache[cache_key] = metric
+        return metric
 
 
 SUPERVISOR_EXIT_TOTAL = _get_or_create_metric(
