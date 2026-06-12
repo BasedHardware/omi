@@ -134,8 +134,11 @@ class ProductionLikeMemoryModelClient(MemoryModelClient):
                         continue
                     source_events = [event.event_id for event in event_chunk]
                     calibration = _calibration(memory, event_chunk)
-                    supporting_events = _supporting_events(memory.content, event_chunk)
-                    quote = _find_supporting_quote(memory.content, event_chunk, quote_anchor=memory.quote_anchor)
+                    supporting_events = _supporting_events(
+                        memory.content,
+                        event_chunk,
+                        quote_anchor=memory.quote_anchor,
+                    )
                     evidence = [
                         EvidenceSpan(
                             evidence_id=id_factory.new_id(
@@ -143,7 +146,11 @@ class ProductionLikeMemoryModelClient(MemoryModelClient):
                             ),
                             source_event_id=event.event_id,
                             source_ref=event.source_ref,
-                            quote=quote,
+                            quote=_find_supporting_quote_for_event(
+                                memory.content,
+                                event,
+                                quote_anchor=memory.quote_anchor,
+                            ),
                             start_at=event.start_at,
                             end_at=event.end_at,
                             speaker=event.speaker,
@@ -375,7 +382,7 @@ def _calibration(memory: ProductionLikeMemory, events: list[RawContextEvent]) ->
         uncertainty_reasons.append("inferred_not_stated")
         review_required = True
 
-    if _has_low_value_memory_text(text):
+    if _has_low_value_memory_text(text) or _has_external_information_signal(text, events):
         uncertainty_reasons.append("unsupported_by_existing_state")
         review_required = True
 
@@ -614,6 +621,38 @@ def _has_low_value_memory_text(text: str) -> bool:
     return any(phrase in padded for phrase in banned_phrases)
 
 
+def _has_external_information_signal(text: str, events: list[RawContextEvent]) -> bool:
+    """Detect product/news/documentation facts not explicitly tied to the user.
+
+    Prompt guardrails ban these, but a model can still convert passive media,
+    docs, or meeting chatter into durable memories.  Keep direct first-person
+    user reports reviewable/creatable; demote product/news-shaped statements
+    that lack self-report provenance.
+    """
+    if _has_direct_self_report_evidence(text, events):
+        return False
+    padded = f" {text} "
+    external_terms = (
+        " announced ",
+        " released ",
+        " launched ",
+        " acquired ",
+        " acquisition ",
+        " feature ",
+        " capability ",
+        " supports ",
+        " enables ",
+        " documentation ",
+        " api ",
+        " company ",
+        " customer ",
+        " survey ",
+        " metric ",
+        " average deal ",
+    )
+    return any(term in padded for term in external_terms)
+
+
 def _has_future_plan_signal(text: str) -> bool:
     padded = f" {text} "
     plan_terms = (
@@ -723,10 +762,46 @@ def _find_supporting_quote(
     return events[0].text or None
 
 
-def _supporting_events(memory_content: str, events: list[RawContextEvent]) -> list[RawContextEvent] | None:
+def _find_supporting_quote_for_event(
+    memory_content: str,
+    event: RawContextEvent,
+    *,
+    quote_anchor: str | None = None,
+) -> str | None:
+    """Return a quote that is actually present in this evidence event.
+
+    The best quote in a chunk may come from a different event.  Attaching that
+    same quote to every EvidenceSpan makes unrelated events look grounded, so a
+    span only receives a quote when the quote anchor or source text belongs to
+    that exact event.
+    """
+    event_text = event.text or ""
+    if quote_anchor:
+        anchor = " ".join(quote_anchor.split())
+        normalized_event = " ".join(event_text.split())
+        if anchor and anchor.casefold() in normalized_event.casefold():
+            return quote_anchor.strip()
+        return None
+    if _evidence_overlap_count(memory_content, event_text) > 0:
+        return event_text
+    return None
+
+
+def _supporting_events(
+    memory_content: str,
+    events: list[RawContextEvent],
+    *,
+    quote_anchor: str | None = None,
+) -> list[RawContextEvent] | None:
     """Return only events whose text has meaningful overlap with the memory content."""
     if not events:
         return None
+    if quote_anchor:
+        anchor = " ".join(quote_anchor.split()).casefold()
+        supporting = [
+            e for e in events if anchor and anchor in " ".join((e.text or "").split()).casefold()
+        ]
+        return supporting if supporting else None
     supporting = [e for e in events if _evidence_overlap_count(memory_content, e.text or "") > 0]
     return supporting if supporting else None
 

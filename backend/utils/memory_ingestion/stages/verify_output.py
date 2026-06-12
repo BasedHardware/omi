@@ -145,10 +145,8 @@ def _check_active_create_guardrails(output: MemoryPipelineOutput) -> list[LintRe
         create_words = _meaningful_words(create.text)
         quotes = [evidence.quote for evidence in create.evidence if evidence.quote]
         if create_words and quotes:
-            best_overlap = max(
-                (len(create_words & _meaningful_words(quote)) for quote in quotes),
-                default=0,
-            )
+            quote_overlaps = [len(create_words & _meaningful_words(quote)) for quote in quotes]
+            best_overlap = max(quote_overlaps, default=0)
             required_overlap = 2 if len(create_words) >= 4 else 1
             if best_overlap < required_overlap:
                 lints.append(
@@ -156,6 +154,18 @@ def _check_active_create_guardrails(output: MemoryPipelineOutput) -> list[LintRe
                         "error",
                         "active_memory_weak_quote_overlap",
                         f"Active create {create.mutation_id} lacks meaningful quote overlap ({best_overlap}/{required_overlap})",
+                        create.frame_id,
+                        create.decision_id,
+                        create.mutation_id,
+                    )
+                )
+            unrelated_count = sum(1 for overlap in quote_overlaps if overlap == 0)
+            if unrelated_count:
+                lints.append(
+                    _lint(
+                        "error",
+                        "active_memory_unrelated_evidence_span",
+                        f"Active create {create.mutation_id} has {unrelated_count} quoted evidence span(s) with no content-token overlap",
                         create.frame_id,
                         create.decision_id,
                         create.mutation_id,

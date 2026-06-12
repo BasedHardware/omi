@@ -50,7 +50,7 @@ EXTRACT a fact when it is durable context about {user_name}: preferences and dis
 
 FOR EVERY FACT, FILL THE TYPED FIELDS:
 
-0. quote_anchor — copy the exact source sentence or clause that proves the fact into the quote_anchor field. It MUST be a verbatim substring from the transcript, not a paraphrase. For any fact about {user_name}, the quote_anchor must be self-report evidence: either {user_name}'s own speaker turn or a literal clause containing first-person language ("I", "my", "we", "our") that directly asserts the fact. The final content must preserve at least 2 distinctive non-stopword terms from that quote. If you cannot copy a literal self-report quote anchor for a user fact, output no fact.
+0. quote_anchor — copy the exact source sentence or clause that proves the fact into the quote_anchor field. It MUST be a verbatim substring from the transcript, not a paraphrase. For any fact about {user_name}, the quote_anchor must be self-report evidence: either {user_name}'s own speaker turn or a literal clause containing first-person language ("I", "my", "we", "our") that directly asserts the fact. The final content must preserve at least 2 distinctive non-stopword terms from that quote. Do not use a different turn as supporting evidence: every extracted fact must be supported by its own quote_anchor, not by nearby context. If you cannot copy a literal self-report quote anchor for a user fact, output no fact.
 
 1. content — one concise sentence (max 15 words), specific and timeless, starting with {user_name} when about them. Do not paraphrase beyond what the quote_anchor directly states.
 
@@ -101,6 +101,10 @@ NEVER EXTRACT (Absolute Rules):
 
 5. INTERNAL METRICS: Survey rates, deal sizes, percentages, team statistics
    ❌ "Team survey response rate is 83%" / "Average deal size is $30K"
+
+5b. PRODUCT / TOOL / API CAPABILITIES WITHOUT USER ADOPTION: Do not extract what software, APIs, docs, or vendors can do unless {user_name} explicitly says they use, chose, built, or are evaluating it in first person.
+   ❌ "The API supports webhooks" / "Notion has automations" / "Linear released initiatives"
+   ✅ "I decided to use Linear initiatives for roadmap planning" → extract decided_to_use
 
 6. ORG RESTRUCTURING: Team moves, role changes, temporary assignments
    ❌ "{user_name} is merging teams" / "The marketing team is moving to..."
