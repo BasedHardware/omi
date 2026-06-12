@@ -88,6 +88,24 @@ class TestDeferredDeleterBehavior:
         assert d._thread is first_thread
         assert _wait_for(lambda: d.pending_count() == 0)
 
+    def test_janitor_restarts_if_killed_by_base_exception(self):
+        """SystemExit/MemoryError bypass the except-Exception catch and kill the
+        thread; the next schedule() must notice and start a fresh janitor."""
+        deleted = []
+
+        def lethal_then_ok(path):
+            if path == 'lethal.wav':
+                raise SystemExit  # BaseException: terminates the janitor thread
+            deleted.append(path)
+
+        d = DeferredDeleter(lethal_then_ok)
+        d.schedule('lethal.wav', 0.02)
+        dead_thread = d._thread
+        assert _wait_for(lambda: not dead_thread.is_alive())
+        d.schedule('after-death.wav', 0.02)
+        assert d._thread is not dead_thread, 'schedule() must replace a dead janitor'
+        assert _wait_for(lambda: deleted == ['after-death.wav'])
+
     def test_many_pending_use_one_thread(self):
         before = threading.active_count()
         d = DeferredDeleter(lambda path: None)
