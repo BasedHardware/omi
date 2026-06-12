@@ -1,7 +1,8 @@
 """GitHub public no-auth chat tools app for Omi."""
 from __future__ import annotations
 
-from typing import Any, Dict, List
+from contextlib import asynccontextmanager
+from typing import Any, AsyncIterator, Dict, List
 from urllib.parse import quote
 
 import httpx
@@ -22,11 +23,20 @@ HEADERS = {
     "User-Agent": "omi-github-public-app",
     "X-GitHub-Api-Version": "2022-11-28",
 }
+MAX_ISSUE_PAGES = 3
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+    async with httpx.AsyncClient(timeout=TIMEOUT, headers=HEADERS) as client:
+        app.state.github_client = client
+        yield
 
 app = FastAPI(
     title="GitHub Public Omi Integration",
     description="No-auth public GitHub chat tools for Omi",
     version="1.0.0",
+    lifespan=lifespan,
 )
 
 
@@ -47,10 +57,37 @@ def format_topics(topics: List[str]) -> str:
 
 async def github_get(path: str, params: Dict[str, Any] | None = None) -> Any:
     url = f"{API_BASE}{path}"
-    async with httpx.AsyncClient(timeout=TIMEOUT, headers=HEADERS) as client:
-        resp = await client.get(url, params=params)
-        resp.raise_for_status()
-        return resp.json()
+    client = getattr(app.state, "github_client", None)
+    if client is None:
+        async with httpx.AsyncClient(timeout=TIMEOUT, headers=HEADERS) as temp_client:
+            resp = await temp_client.get(url, params=params)
+            resp.raise_for_status()
+            return resp.json()
+
+    resp = await client.get(url, params=params)
+    resp.raise_for_status()
+    return resp.json()
+
+
+def github_error_message(exc: httpx.HTTPStatusError, not_found_message: str | None = None) -> str:
+    code = exc.response.status_code
+    if code == 404 and not_found_message:
+        return not_found_message
+    if code in {403, 429}:
+        retry_after = exc.response.headers.get("retry-after")
+        reset_at = exc.response.headers.get("x-ratelimit-reset")
+        if retry_after:
+            return f"GitHub API rate limit or abuse protection hit. Try again after {retry_after} seconds."
+        if reset_at:
+            return f"GitHub API rate limit hit. Try again after reset time {reset_at}."
+        return "GitHub API rate limit or abuse protection hit. Try again later with a narrower request."
+    return f"GitHub API error: {code}"
+
+
+async def github_issue_page(path: str, params: Dict[str, Any], page: int) -> List[Dict[str, Any]]:
+    page_params = {**params, "page": page}
+    data = await github_get(path, page_params)
+    return data if isinstance(data, list) else []
 
 
 @app.get("/.well-known/omi-tools.json")
@@ -167,7 +204,7 @@ async def search_repositories(req: SearchRepositoriesRequest) -> ChatToolRespons
             )
         return ChatToolResponse(result="\n\n".join(lines))
     except httpx.HTTPStatusError as exc:
-        return ChatToolResponse(error=f"GitHub API error: {exc.response.status_code}")
+        return ChatToolResponse(error=github_error_message(exc))
     except Exception as exc:
         return ChatToolResponse(error=f"Unexpected error: {exc}")
 
@@ -194,10 +231,7 @@ async def get_repository(req: GetRepositoryRequest) -> ChatToolResponse:
         )
         return ChatToolResponse(result=result)
     except httpx.HTTPStatusError as exc:
-        code = exc.response.status_code
-        if code == 404:
-            return ChatToolResponse(error="Repository not found or not public.")
-        return ChatToolResponse(error=f"GitHub API error: {code}")
+        return ChatToolResponse(error=github_error_message(exc, "Repository not found or not public."))
     except Exception as exc:
         return ChatToolResponse(error=f"Unexpected error: {exc}")
 
@@ -206,7 +240,7 @@ async def get_repository(req: GetRepositoryRequest) -> ChatToolResponse:
 async def list_issues(req: ListIssuesRequest) -> ChatToolResponse:
     params: Dict[str, Any] = {
         "state": req.state,
-        "per_page": min(req.max_results * 2, 20),
+        "per_page": min(max(req.max_results * 3, req.max_results), 30),
         "sort": "updated",
         "direction": "desc",
     }
@@ -216,8 +250,15 @@ async def list_issues(req: ListIssuesRequest) -> ChatToolResponse:
     try:
         owner = safe_path(req.owner)
         repo_name = safe_path(req.repo)
-        data = await github_get(f"/repos/{owner}/{repo_name}/issues", params)
-        issues = [item for item in data if "pull_request" not in item][: req.max_results]
+        issues: List[Dict[str, Any]] = []
+        for page in range(1, MAX_ISSUE_PAGES + 1):
+            data = await github_issue_page(f"/repos/{owner}/{repo_name}/issues", params, page)
+            if not data:
+                break
+            issues.extend(item for item in data if "pull_request" not in item)
+            if len(issues) >= req.max_results:
+                break
+        issues = issues[: req.max_results]
         if not issues:
             return ChatToolResponse(result="No matching issues found.")
 
@@ -234,10 +275,7 @@ async def list_issues(req: ListIssuesRequest) -> ChatToolResponse:
             )
         return ChatToolResponse(result="\n\n".join(lines))
     except httpx.HTTPStatusError as exc:
-        code = exc.response.status_code
-        if code == 404:
-            return ChatToolResponse(error="Repository not found or issues are unavailable.")
-        return ChatToolResponse(error=f"GitHub API error: {code}")
+        return ChatToolResponse(error=github_error_message(exc, "Repository not found or issues are unavailable."))
     except Exception as exc:
         return ChatToolResponse(error=f"Unexpected error: {exc}")
 
@@ -259,10 +297,7 @@ async def get_latest_release(req: GetLatestReleaseRequest) -> ChatToolResponse:
         )
         return ChatToolResponse(result=result)
     except httpx.HTTPStatusError as exc:
-        code = exc.response.status_code
-        if code == 404:
-            return ChatToolResponse(error="No public latest release found for this repository.")
-        return ChatToolResponse(error=f"GitHub API error: {code}")
+        return ChatToolResponse(error=github_error_message(exc, "No public latest release found for this repository."))
     except Exception as exc:
         return ChatToolResponse(error=f"Unexpected error: {exc}")
 

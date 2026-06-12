@@ -11,8 +11,8 @@ class ChatToolResponse(BaseModel):
 
     @model_validator(mode="after")
     def validate_result_or_error(self):
-        if self.result is None and self.error is None:
-            raise ValueError("Either result or error must be provided.")
+        if (self.result is None) == (self.error is None):
+            raise ValueError("Exactly one of result or error must be provided.")
         return self
 
 
