@@ -600,7 +600,6 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
     @Published var showOmiThresholdAlert = false
 
     private let messagesPageSize = 50
-    private let maxMessagesInMemory = 200
     private var multiChatObserver: AnyCancellable?
     private var playwrightExtensionObserver: AnyCancellable?
     private var sessionGroupingObserver: AnyCancellable?
@@ -1269,6 +1268,9 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
         isLoadingMoreMessages = true
 
         do {
+            // messages.count doubles as the server-side pagination offset (the backend
+            // pages newest-first), so loaded history must never be trimmed while a
+            // session is open — trimming makes every scroll re-fetch the same page.
             let offset = messages.count
             let olderMessages: [ChatMessageDB]
             if let sessionId = currentSessionId {
@@ -1285,18 +1287,17 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                 )
             }
 
+            // New live messages shift the newest-first offset window, so a page can
+            // overlap messages we already hold — drop those before appending.
+            let existingIds = Set(messages.map(\.id))
             let newMessages = olderMessages.map(ChatMessage.init(from:))
+                .filter { !existingIds.contains($0.id) }
 
             // Append older messages and re-sort to ensure correct chronological order
             messages.append(contentsOf: newMessages)
             messages.sort(by: { $0.createdAt < $1.createdAt })
 
-            // Cap memory usage: keep only the most recent messages
-            if messages.count > maxMessagesInMemory {
-                messages.removeFirst(messages.count - maxMessagesInMemory)
-            }
-
-            // Check if there are more
+            // Check if there are more (based on the raw page size, pre-dedupe)
             hasMoreMessages = olderMessages.count == messagesPageSize
             log("Loaded \(newMessages.count) more messages, total: \(messages.count), hasMore: \(hasMoreMessages)")
         } catch {
