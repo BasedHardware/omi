@@ -47,6 +47,8 @@ setattr(langchain_core_mod, "callbacks", langchain_callbacks_mod)
 setattr(langchain_core_mod, "outputs", langchain_outputs_mod)
 
 
+# Replace models.* stubs unconditionally so stale partial modules from earlier
+# collection cannot hide the minimal classes this import sandbox requires.
 models_mod = _stub_module("models")
 models_mod.__path__ = []
 models_app_mod = _stub_module("models.app")
@@ -191,6 +193,8 @@ for name in [
     "utils.conversations",
     "utils.conversations.factory",
     "utils.conversations.render",
+    "utils.executors",
+    "utils.async_tasks",
     "utils.llm.clients",
     "utils.llm.proactive_notification",
     "utils.mentor_notifications",
@@ -216,6 +220,21 @@ import asyncio as _asyncio
 sys.modules["utils.http_client"].get_webhook_semaphore = MagicMock(return_value=_asyncio.Semaphore(64))
 sys.modules["utils.http_client"].latest_wins_start = MagicMock(return_value=1)
 sys.modules["utils.http_client"].latest_wins_check = MagicMock(return_value=True)
+
+# Ensure executor/async task stubs have correct attributes
+sys.modules["utils.executors"].db_executor = MagicMock()
+
+
+async def _run_blocking(_executor, func, *args, **kwargs):
+    return func(*args, **kwargs)
+
+
+async def _gather_safe(*aws, **_kwargs):
+    return await _asyncio.gather(*aws)
+
+
+sys.modules["utils.executors"].run_blocking = _run_blocking
+sys.modules["utils.async_tasks"].gather_safe = _gather_safe
 
 # Ensure log_sanitizer stubs have correct attributes
 sys.modules["utils.log_sanitizer"].sanitize = MagicMock(side_effect=lambda x: x)
