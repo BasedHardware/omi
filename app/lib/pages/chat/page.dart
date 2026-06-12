@@ -22,9 +22,7 @@ import 'package:omi/pages/settings/widgets/plans_sheet.dart';
 import 'package:omi/pages/chat/widgets/user_message.dart';
 import 'package:omi/pages/chat/widgets/voice_recorder_widget.dart';
 import 'package:omi/pages/settings/integrations_page.dart';
-import 'package:omi/pages/settings/settings_drawer.dart';
 import 'package:omi/providers/app_provider.dart';
-import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/home_provider.dart';
@@ -184,20 +182,6 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
         final success = await appleHealthService.syncHealthDataToBackend(days: 7);
         debugPrint('🍎 [Apple Health] Auto-sync ${success ? "completed" : "failed"}');
       }
-    }
-  }
-
-  void _openSettingsDrawer() {
-    HapticFeedback.mediumImpact();
-    PlatformManager.instance.analytics.pageOpened('Settings');
-    final previousLanguage = SharedPreferencesUtil().userPrimaryLanguage;
-    final previousSpeech = SharedPreferencesUtil().hasSpeakerProfile;
-    final previousModel = SharedPreferencesUtil().transcriptionModel;
-    SettingsDrawer.show(context);
-    if (previousLanguage != SharedPreferencesUtil().userPrimaryLanguage ||
-        previousSpeech != SharedPreferencesUtil().hasSpeakerProfile ||
-        previousModel != SharedPreferencesUtil().transcriptionModel) {
-      context.read<CaptureProvider>().onRecordProfileSettingChanged();
     }
   }
 
@@ -1499,117 +1483,6 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
         children: [Image.asset(Assets.images.herologo.path, height: 16, width: 16)],
       ),
     );
-  }
-
-  void _showIOSStyleActionSheet(BuildContext context) {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.transparent,
-      isScrollControlled: true,
-      builder: (BuildContext context) {
-        return Container(
-          margin: const EdgeInsets.all(10),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              // Main options container
-              Container(
-                decoration: BoxDecoration(
-                  color: const Color(0xFF1C1C1E).withOpacity(0.95),
-                  borderRadius: BorderRadius.circular(13),
-                ),
-                child: Column(
-                  children: [
-                    _buildIOSActionItem(
-                      title: context.l10n.takePhoto,
-                      icon: Icons.camera_alt,
-                      onTap: () {
-                        HapticFeedback.selectionClick();
-                        Navigator.pop(context);
-                        if (mounted) {
-                          this.context.read<MessageProvider>().captureImage();
-                        }
-                      },
-                      isFirst: true,
-                    ),
-                    _buildDivider(),
-                    _buildIOSActionItem(
-                      title: context.l10n.photoLibrary,
-                      icon: Icons.photo_library,
-                      onTap: () {
-                        HapticFeedback.selectionClick();
-                        Navigator.pop(context);
-                        if (mounted) {
-                          this.context.read<MessageProvider>().selectImage();
-                        }
-                      },
-                    ),
-                    _buildDivider(),
-                    _buildIOSActionItem(
-                      title: context.l10n.chooseFile,
-                      icon: Icons.folder,
-                      onTap: () {
-                        HapticFeedback.selectionClick();
-                        Navigator.pop(context);
-                        if (mounted) {
-                          this.context.read<MessageProvider>().selectFile();
-                        }
-                      },
-                      isLast: true,
-                    ),
-                  ],
-                ),
-              ),
-              SizedBox(height: MediaQuery.of(context).padding.bottom + 10),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
-  Widget _buildIOSActionItem({
-    required String title,
-    required VoidCallback onTap,
-    IconData? icon,
-    bool isFirst = false,
-    bool isLast = false,
-    bool isCancel = false,
-  }) {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.vertical(
-          top: isFirst ? const Radius.circular(13) : Radius.zero,
-          bottom: isLast ? const Radius.circular(13) : Radius.zero,
-        ),
-        child: Container(
-          width: double.infinity,
-          padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 20),
-          child: Row(
-            children: [
-              Expanded(
-                child: Text(
-                  title,
-                  style: TextStyle(
-                    color: isCancel ? Colors.red : Colors.blue,
-                    fontSize: 20,
-                    fontWeight: isCancel ? FontWeight.w600 : FontWeight.w400,
-                  ),
-                  textAlign: TextAlign.center,
-                ),
-              ),
-              if (icon != null && !isCancel) Icon(icon, color: Colors.grey.shade600, size: 24),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildDivider() {
-    return Container(height: 0.5, color: Colors.grey.shade700, margin: const EdgeInsets.symmetric(horizontal: 20));
   }
 }
 
