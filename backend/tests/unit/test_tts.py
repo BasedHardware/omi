@@ -40,6 +40,15 @@ def _stub_package(name):
     return mod
 
 
+def _restore_real_package(name, path):
+    mod = sys.modules.get(name)
+    if mod is None or not getattr(mod, "__path__", None):
+        mod = types.ModuleType(name)
+        sys.modules[name] = mod
+    mod.__path__ = [str(path)]
+    return mod
+
+
 # ---------------------------------------------------------------------------
 # Stub heavy deps pulled in transitively by routers.tts → database.redis_db
 # ---------------------------------------------------------------------------
@@ -88,8 +97,12 @@ def _load_tts_router_module():
     log_sanitizer_stub.sanitize = lambda s: str(s)
     sys.modules["utils.log_sanitizer"] = log_sanitizer_stub
 
-    # Stub models.tts (real module is safe — pure pydantic)
+    # Use the real models.tts module even if an earlier test installed a package stub.
     sys.path.insert(0, str(BACKEND_DIR))
+    _restore_real_package("models", BACKEND_DIR / "models")
+    existing_tts_model = sys.modules.get("models.tts")
+    if existing_tts_model is not None and not getattr(existing_tts_model, "__file__", None):
+        del sys.modules["models.tts"]
 
     spec = importlib.util.spec_from_file_location(
         "routers.tts",
