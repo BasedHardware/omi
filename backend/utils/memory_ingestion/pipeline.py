@@ -820,6 +820,11 @@ def _decision_for_frame(
         ):
             action = "route_to_review"
             rationale = "Uncertain frame requires review by the rollout routing profile."
+        elif _is_idle_speculation_frame(frame):
+            # T1-2: Speculation guard — idle "might try someday" patterns
+            # route to review instead of auto-accept, even at high confidence
+            action = "route_to_review"
+            rationale = "Idle speculation detected — lacks evaluation context (no comparison, trial, timeline, or decision criteria)."
         elif frame.confidence == "high" and routing.auto_create_high_confidence:
             action = "create_memory"
             rationale = "High-confidence ordinary frame is eligible for active memory creation."
@@ -948,13 +953,92 @@ def _is_self_report_speaker_uncertain_frame(frame: MemoryEventFrame) -> bool:
     if set(frame.uncertainty_reasons) != {"speaker_uncertain"}:
         return False
     first_person_re = re.compile(
-        r"\b(i|i['’]m|i['’]ve|i['’]d|i['’]ll|me|my|mine|we|we['’]re|we['’]ve|we['’]d|we['’]ll|our|ours)\b"
+        r"\b(i|i['']m|i['']ve|i['']d|i['']ll|me|my|mine|we|we['']re|we['']ve|we['']d|we['']ll|our|ours)\b"
     )
     return any(
         (evidence.speaker and evidence.speaker.is_actor_user is True)
         or bool(evidence.quote and first_person_re.search(evidence.quote.casefold()))
         for evidence in frame.evidence
     )
+
+
+def _is_idle_speculation_frame(frame: MemoryEventFrame) -> bool:
+    """Detect idle daydreaming vs active evaluation.
+
+    Active evaluation (KEEP for extraction):
+      - "I'm comparing Deepgram vs AssemblyAI for our transcript pipeline"
+      - "We're considering Linear — ran a 2-week trial last month"
+      - "Might switch to Raycast; the API looks cleaner than Alfred"
+
+    Idle speculation (ROUTE TO REVIEW, not auto-accept):
+      - "I might try LangGraph someday"
+      - "Could give Rust a shot at some point"
+      - "Thinking about learning Blender"
+
+    Heuristic: idle speculation uses considering_using predicate with
+    speculation keywords but lacks ANY evaluation context keywords
+    (comparison, trial, timeline, criteria, cost, team discussion).
+    """
+    import re
+
+    # Only applies to consideration/plan predicates
+    speculative_predicates = {"considering_using", "plans_travel_to", "committed_to_do"}
+    # Get predicate from frame slots or type
+    frame_type = getattr(frame, "type", None) or getattr(frame, "frame_type", None)
+    slots = getattr(frame, "slots", None) or {}
+    predicate = slots.get("predicate") or frame_type
+
+    if predicate not in speculative_predicates:
+        return False
+
+    # Gather text from content + evidence quotes for analysis
+    texts = []
+    content = getattr(frame, "content", None) or ""
+    if content:
+        texts.append(content.lower())
+    for ev in getattr(frame, "evidence", []):
+        quote = getattr(ev, "quote", None)
+        if quote:
+            texts.append(quote.lower())
+
+    combined = " ".join(texts)
+
+    # Speculation markers (idle patterns)
+    idle_markers = [
+        r"\bmight\s+(try|use|give|check|look)\b",
+        r"\bcould\s+(try|use|give|check|look)\b",
+        r"\bsomeday\b",
+        r"\bat\s+some\s+point\b",
+        r"\bthinking\s+about\s+(trying|learning|using|giving)\b",
+        r"\bwant\s+to\s+(try|learn|check)\b",
+    ]
+
+    # Evaluation context markers (active patterns — if ANY present, NOT idle)
+    active_markers = [
+        r"\bcompar(e|ing|ed|ison)\b",
+        r"\btrial\b",
+        r"\bpilot\b",
+        r"\bprototype\b",
+        r"\bbenchmark(ed|ing)?\b",
+        r"\bevaluat(e|ing|ed)\b",
+        r"\bvs\.?\b",
+        r"\balternative\b",
+        r"\bmigrat(e|ing|ed)\b",
+        r"\bswitch(e|ing|ed)\s+(from|to)\b",
+        r"\bdecid(e|ing|ed)\b",
+        r"\bteam\s+(discuss|agreed|chose)\b",
+        r"\bcost\b",
+        r"\bpricing\b",
+        r"\bAPI\b",
+        r"\bintegration\b",
+        r"\bnext\s+(quarter|month|week|sprint)\b",
+        r"\bQ[1-4]\b",
+    ]
+
+    has_idle = any(re.search(p, combined) for p in idle_markers)
+    has_active = any(re.search(p, combined) for p in active_markers)
+
+    return has_idle and not has_active
 
 
 def _normalized_text(text: str) -> str:

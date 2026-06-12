@@ -5,6 +5,13 @@ keyless (generic ``related_to`` with no structured arguments) and the layer-2
 typed consolidation resolver has nothing to merge on. This prompt asks the
 same single call to also emit a typed proposition: a predicate from a fixed
 vocabulary plus named argument slots. It does not add model calls.
+
+v2 (2026-06-12): Simplified from v1's ~245-line prompt to ~160 lines.
+Removed redundant exclusion sections (anti-hallucination + strict exclusions + 
+double-check were 77+11 lines repeating the same rules). Consolidated three 
+contradictory conservative-bias phrases into one clear principle. Resolved 
+date/time vs plan predicate contradiction. Removed quality-over-quantity section 
+that fought against lean-toward-extraction guidance.
 """
 
 from langchain_core.prompts import ChatPromptTemplate
@@ -39,225 +46,93 @@ CRITICAL CONTEXT:
 • NEVER use "Speaker 0", "Speaker 1" etc. — resolve real names when confident, otherwise use roles ("colleague", "friend")
 • Resolve "it", "that", "this" from the full conversation before writing the fact
 
-IDENTITY RULES (CRITICAL):
-• Never create new family members without EXPLICIT evidence ("This is my daughter Sarah", "My son's name is...")
-• Recognize nicknames — don't create new people (common nicknames like "Buddy", "Junior" are likely existing family members)
-• Verify name spellings against existing memories before creating new entries
+IDENTITY RULES:
+• Never create new family members without EXPLICIT evidence
+• Recognize nicknames — don't create new people (common nicknames like "Buddy" are likely existing family members)
 • Never use "User" — always use {user_name}
-• If uncertain about a person's identity, DO NOT extract the memory
+• If uncertain about a person's identity, DO NOT extract
 
-EXTRACT a fact when it is durable context about {user_name}: preferences and dislikes, decisions and commitments, projects and tools, relationships, plans, addresses/birthdays, changes of state ("no longer..."). Skip media/news narration that is not about {user_name}, generic world knowledge, and pure scheduling chatter.
+EXTRACT durable context: preferences/dislikes, decisions/commitments, projects/tools, relationships, plans, addresses/birthdays, state changes ("no longer..."). Skip media/news narration not about {user_name}, generic world knowledge, and pure scheduling chatter.
 
-|FOR EVERY FACT, FILL THE TYPED FIELDS:
-|
-|0. ⚠️ PREDICATE (MOST IMPORTANT FIELD) — You MUST pick EXACTLY ONE predicate from this list. This is NOT optional. Every fact MUST have a predicate:
-|
-|   - plans_travel_to — a trip or relocation plan
-|   - prefers — a stable preference
-|   - dislikes — a stable dislike
-|   - works_on — a project/product they actively work on
-|   - decided_to_use — a decision in favor of a tool/approach
-|   - considering_using — an option under consideration, not decided
-|   - committed_to_do — a concrete commitment/promise
-|   - knows_person — a relationship
-|   - has_birthday — birthday information
-|   - has_address — address/location information
-|   - uses_tool — a tool/service they use routinely
-|   - belongs_to_project — an artifact/person belongs to a project
-|   - is_currently_true — durable state/fact with no better predicate above (LAST RESORT)
-|   - is_no_longer_true — a fact that stopped holding
-|
-|   Write the predicate value EXACTLY as shown above (e.g. "prefers", not "prefers coffee").
-|   Prefer the MOST SPECIFIC predicate. Use is_currently_true only as absolute last resort.
-|   If you do not fill this field with one of the exact values above, the extraction will fail.
-|
-|1. quote_anchor — copy the exact source sentence or clause that proves the fact into the quote_anchor field. It MUST be a verbatim substring from the transcript, not a paraphrase. For any fact about {user_name}, the quote_anchor must be self-report evidence: either {user_name}'s own speaker turn or a literal clause containing first-person language ("I", "my", "we", "our") that directly asserts the fact. The final content must preserve at least 2 distinctive non-stopword terms from that quote. Do not use a different turn as supporting evidence: every extracted fact must be supported by its own quote_anchor, not by nearby context. If you cannot copy a literal self-report quote anchor for a user fact, output no fact.
-|
-|2. content — one concise sentence (max 15 words), specific and timeless, starting with {user_name} when about them. Do not paraphrase beyond what the quote_anchor directly states.
-|
-|3. arguments — the named slots listed for the chosen predicate, as short literal strings. Only fill argument slots when value is EXPLICITLY stated in conversation; leave unfilled slots out entirely rather than guessing.
-|   - plans_travel_to: destination, planned_date (if stated)
-|   - prefers: preference, over (if a comparison)
-|   - dislikes: target
-|   - works_on: project
-|   - decided_to_use: tool, purpose
-|   - considering_using: tool, purpose
-|   - committed_to_do: action, due (if stated)
-|   - knows_person: person, relationship, context
-|   - has_birthday: person, date
-|   - has_address: person, address_or_location
-|   - uses_tool: tool, purpose
-|   - belongs_to_project: member, project
-|   - is_currently_true: topic
-|   - is_no_longer_true: topic, replaced_by (if stated)
-|
-|4. subject_attribution — "user" ONLY if the fact is about {user_name} AND the quote_anchor is self-report evidence from {user_name} (actor-authored or first-person wording). Use "third_party" if about someone else; use "assistant_suggested" if an assistant/AI/team member proposed it or if the quote lacks first-person confirmation. Facts with assistant_suggested are normally not durable memories; only emit them when needed to preserve a reviewable contradiction/update.
-|
-|5. uncertainty_reasons — zero or more of: speaker_uncertain, inferred_not_stated, temporal_scope_unclear, low_quality_transcript, subject_ambiguous, conflicts_with_existing_memory, duplicate_near_match. Use them honestly; an uncertain fact WITH reasons is better than a dropped fact or a confidently wrong one.
-|
-|6. modality discipline — encode uncertainty/change in predicate and uncertainty_reasons, NOT vague prose. Use considering_using for explicit "I might/I'm considering..." options, plans_travel_to/committed_to_do for explicit future commitments, and is_no_longer_true for direct statements that a prior fact stopped holding. Keep content concise and timeless (no "might", "maybe", "could", or "discussed" in content).
-|
-|7. category — "interesting" only for external wisdom from attribution; otherwise "system".
+=== TYPED FIELDS (every fact MUST fill these) ===
 
-------------------------------------------------------------------------------
-ANTI-HALLUCINATION GUARDRAILS
-------------------------------------------------------------------------------
+0. ⚠️ PREDICATE (REQUIRED) — Pick EXACTLY ONE from this list:
 
-NEVER EXTRACT (Absolute Rules):
-1. NEWS & ANNOUNCEMENTS: Product releases, acquisitions, feature launches, company news
-   ❌ "Company X acquired startup Y" / "OpenAI released a new model" / "Apple announced..."
+   - plans_travel_to — a trip or relocation plan (extract the intent/destination; drop only the specific date)
+   - prefers — a stable preference
+   - dislikes — a stable dislike
+   - works_on — a project/product they actively work on
+   - decided_to_use — a decision in favor of a tool/approach
+   - considering_using — an option under ACTIVE evaluation (not idle speculation — must show research/comparison/decision context)
+   - committed_to_do — a concrete commitment/promise
+   - knows_person — a relationship
+   - has_birthday — birthday information
+   - has_address — address/location information
+   - uses_tool — a tool/service they use routinely
+   - belongs_to_project — an artifact/person belongs to a project
+   - is_currently_true — durable state/fact with no better predicate above (LAST RESORT)
+   - is_no_longer_true — a fact that stopped holding
 
-2. GENERAL KNOWLEDGE: Science facts, geography, statistics not about the user
-   ❌ "Light travels at 186,000 miles per second" / "Certain plants are toxic to pets"
+   Write the predicate EXACTLY as shown. Prefer the MOST SPECIFIC predicate. Use is_currently_true only as absolute last resort.
 
-3. PRODUCT DOCUMENTATION: How features work, product capabilities, technical specs
-   ❌ "Feature X enables automated workflows" / "The API can process documents"
+1. quote_anchor — verbatim substring from transcript proving the fact. For {user_name} facts, must be self-report evidence ({user_name}'s own turn or first-person language "I"/"my"/"we"). Preserve ≥2 distinctive non-stopword terms. No paraphrase. If no literal self-report quote exists → no fact.
 
-4. CUSTOMER/COMPANY FACTS: Unless user is directly involved with specific outcome
-   ❌ "Acme Corp is evaluating new software" / "BigCo delayed their rollout"
+2. content — one concise sentence (max 15 words), specific and timeless, starting with {user_name}. No hedging words ("might", "maybe", "could") — encode uncertainty in uncertainty_reasons instead.
 
-5. INTERNAL METRICS: Survey rates, deal sizes, percentages, team statistics
-   ❌ "Team survey response rate is 83%" / "Average deal size is $30K"
+3. arguments — named slots for the chosen predicate. Only fill when EXPLICITLY stated; leave unfilled slots out entirely.
+   - plans_travel_to: destination, planned_date (if stated)
+   - prefers: preference, over (if comparison)
+   - dislikes: target
+   - works_on: project
+   - decided_to_use: tool, purpose
+   - considering_using: tool, purpose
+   - committed_to_do: action, due (if stated)
+   - knows_person: person, relationship, context
+   - has_birthday: person, date
+   - has_address: person, address_or_location
+   - uses_tool: tool, purpose
+   - belongs_to_project: member, project
+   - is_currently_true: topic
+   - is_no_longer_true: topic, replaced_by (if stated)
 
-5b. PRODUCT / TOOL / API CAPABILITIES WITHOUT USER ADOPTION: Do not extract what software, APIs, docs, or vendors can do unless {user_name} explicitly says they use, chose, built, or are evaluating it in first person.
-   ❌ "The API supports webhooks" / "Notion has automations" / "Linear released initiatives"
-   ✅ "I decided to use Linear initiatives for roadmap planning" → extract decided_to_use
+4. subject_attribution — "user" if fact is about {user_name} AND quote_anchor is self-report. Use "third_party" for others; "assistant_suggested" for AI/team proposals lacking first-person confirmation.
 
-6. ORG RESTRUCTURING: Team moves, role changes, temporary assignments
-   ❌ "{user_name} is merging teams" / "The marketing team is moving to..."
+5. uncertainty_reasons — zero or more of: speaker_uncertain, inferred_not_stated, temporal_scope_unclear, low_quality_transcript, subject_ambiguous, conflicts_with_existing_memory, duplicate_near_match, speculative_idle_consideration.
 
-7. COLLEAGUE FACTS WITHOUT RELATIONSHIP: Must state how they relate to user
-   ❌ "Alex is a senior engineer at the company" (no relationship to user)
-   ✅ "Alex reports to {user_name} and leads the backend team" (relationship stated)
+6. modality — encode uncertainty in predicate choice and uncertainty_reasons, NOT in prose. Keep content timeless.
 
-8. GENERIC RELATIONSHIPS: "Has a friend named X" without meaningful context
-   ❌ "{user_name} has a friend named Mike" (no context = useless)
-   ✅ "Mike is {user_name}'s running partner who they train with for marathons" (specific context)
+7. category — "interesting" only for external wisdom attribution; otherwise "system".
 
-9. UNCONFIRMED OWNERSHIP / GROUP ATTRIBUTION: Do not turn group plans, team chatter, assistant suggestions, or another speaker's statement into a personal fact about {user_name} unless {user_name} explicitly confirms it in first person.
-   ❌ Team says "we might use Linear" → "{user_name} uses Linear"
-   ❌ Assistant says "You could try Notion" → "{user_name} uses Notion"
-   ✅ {user_name} says "I decided to use Linear for roadmap planning" → extract decided_to_use
+=== WHAT NOT TO EXTRACT (consolidated rules) ===
 
-STRICT EXCLUSION RULES — DO NOT extract if memory is:
+NEVER extract these categories:
+• News/announcements, general science/geography, product documentation not about {user_name}
+• Internal metrics (survey rates, deal sizes) unless {user_name} personally involved
+• Colleague facts WITHOUT stated relationship to {user_name}
+• Generic/vague statements: "had an interesting conversation", "learned something new", "feeling motivated", "discussed X"
+• Trivial preferences: "likes coffee", "enjoys reading", "prefers blue" (no specificity)
+• One-off activities: "went to the gym", "had lunch", "watched a movie"
+• Obvious/contextual facts: "uses a computer" (if engineer), "has meetings" (if corporate)
+• Group/assistant statements rewritten as {user_name}'s personal fact without first-person confirmation
+• Product capabilities unless {user_name} explicitly says they use/chose/evaluate it
 
-Trivial Personal Preferences:
-❌ "Likes coffee" / "Enjoys reading" / "Prefers the color blue"
-❌ "Went to the gym" / "Had lunch with a friend"
-❌ "Watched a movie last night" / "Listened to music"
+BANNED IN content: "likely", "possibly", "seems to", "appears to", "may be", "indicating...", "suggesting...", "reflecting..."
+Exception: if {user_name} explicitly states a first-person consideration ("I might switch to Raycast"), extract it with considering_using and put hedge in uncertainty_reasons.
 
-Generic Activities or Events:
-❌ "Attended a meeting" / "Went to a conference"
-❌ "Traveled to New York" (unless there's remarkable context)
-❌ "Worked on a project" (unless specific and notable)
+DATE/TIME: Extract the PLAN or COMMITMENT (destination/intent), not the schedule detail. "I'm flying to NY next week" → plans_travel_to(NY). "Meeting Thursday 2pm" → skip (pure scheduling). Focus on WHO/WHAT, not WHEN.
 
-Common Knowledge or Obvious Facts:
-❌ "Exercise is good for health"
-❌ "Important to save money"
-❌ "JavaScript is used for web development"
-❌ "Automation saves time" / "AI needs development" / "Robots are hard to build"
+LOGIC CHECK: Verify age math, family consistency, location consistency. If impossible or contradictory → don't extract.
 
-Vague or Generic Statements:
-❌ "Had an interesting conversation"
-❌ "Learned something new"
-❌ "Feeling motivated"
-❌ "Expressed concern about X" / "Discussed Y" / "Mentioned Z"
-❌ "Thinks X is important" / "Believes Y" / "Feels Z"
+DEDUPLICATION: Don't re-emit semantically identical facts. DO emit updates/contradictions (use is_no_longer_true + conflicts_with_existing_memory).
 
-Low-Impact Observations:
-❌ "It's been a busy week"
-❌ "The office is crowded today"
-❌ "Coffee shop was noisy"
+CONSOLIDATION: Prefer fewer richer facts over many fragmented ones about the same topic.
 
-Already Obvious from Context:
-❌ "Uses a computer for work" (if user is a software engineer)
-❌ "Has meetings regularly" (if user is in a corporate job)
+=== OUTPUT GUIDANCE ===
 
-Skills — Prefer Achievements Over Tool Lists:
-✅ "{user_name} uses Python for data analysis and automation scripts" (specific use case)
-✅ "{user_name} built a real-time notification system using WebSockets and Redis" (applied expertise)
-❌ "{user_name} knows programming" (too vague — which languages? for what?)
-❌ "{user_name} has technical skills" (meaningless without specifics)
-
-BANNED LANGUAGE — DO NOT USE IN content:
-• Hedging words: "likely", "possibly", "seems to", "appears to", "may be", "might", "maybe", "could", "perhaps"
-• Filler phrases: "indicating a...", "suggesting a...", "reflecting a...", "showcasing"
-• Transient verbs: "is working on", "is building", "is developing", "is testing", "is focusing on"
-• Org change verbs: "is merging", "is reorganizing", "is restructuring"
-
-If you find yourself using these words in the final content, the memory is too uncertain or transient — DO NOT extract. Exception: if {user_name} explicitly says a first-person consideration or plan ("I might switch to Raycast", "we are considering Linear", "I plan to move to Berlin"), extract it with predicate considering_using, committed_to_do, or plans_travel_to, preserve the literal quote_anchor, and put the uncertainty in uncertainty_reasons instead of the content.
-
-DATE AND TIME HANDLING:
-• NEVER use vague time references like "Thursday", "next week", "tomorrow", "Monday" AS THE PRIMARY FACT
-• These become meaningless after a few days as scheduling detail — but the underlying intent IS durable
-• If someone states a travel plan or future commitment: extract the PLAN itself (destination, intent) using plans_travel_to or committed_to_do, dropping only the specific date
-• Examples:
-  ✅ "{user_name} plans to visit San Francisco" → extract plans_travel_to(destination="San Francisco")
-  ✅ "{user_name} committed to deliver the Q3 report" → extract committed_to_do(action="deliver Q3 report")
-  ❌ "Meeting on Thursday at 2pm" (pure scheduling, no durable fact)
-  ❌ "Client call next Monday" (scheduling-only, no relationship/decision extracted)
-• Focus on WHO and WHAT (the durable part), not WHEN (the transient part)
-
-LOGIC CHECK (Sanity Test):
-Before extracting, verify the fact is logically possible:
-• Age math: Don't claim 40 years work experience for someone who appears to be ~40
-• Family consistency: Don't create children that contradict existing family structure
-• Location consistency: Don't claim multiple contradictory home locations
-• Career consistency: Don't claim conflicting job titles or employers simultaneously
-
-If a fact seems mathematically impossible or contradicts existing memories, DO NOT extract.
-
-BEFORE YOU OUTPUT — MANDATORY DOUBLE-CHECK:
-For EACH fact you're about to extract, verify it does NOT match these patterns:
-❌ "{user_name} expressed [feeling/opinion] about X" → DELETE THIS
-❌ "{user_name} discussed X" or "talked about Y" → DELETE THIS
-❌ "{user_name} mentioned that [obvious fact]" → DELETE THIS
-❌ "{user_name} thinks/believes/feels X" → DELETE THIS
-❌ A group/team/assistant statement rewritten as {user_name}'s personal preference, tool use, or commitment without a first-person confirmation quote → DELETE THIS
-❌ Any fact whose key nouns/verbs are synonyms or inferences rather than words present in its quote anchor → DELETE THIS
-❌ Any fact about {user_name} whose quote_anchor is not actor-authored and does not contain first-person confirmation language ("I", "my", "we", "our") → DELETE THIS
-
-If a fact matches ANY of the above patterns, REMOVE it from your output.
-
-CONSOLIDATION CHECK (Before Creating New Fact):
-When you're about to extract a fact about a topic that already has existing memories:
-1. CHECK: Does a fact about this topic/person already exist?
-2. IF YES: Is new info significant enough to warrant separate fact, or would it fragment the topic?
-3. PREFER: Fewer, richer facts over many fragmented ones about the same subject
-
-Example — if existing memories already include:
-- "{user_name} uses AWS for cloud hosting"
-- "{user_name} deploys apps on AWS"
-
-DON'T add: "{user_name} uses AWS Lambda" (fragmented, same topic)
-Instead: Skip it — avoid creating more fragments about the same topic.
-
-DEDUPLICATION:
-• Scan the existing memories below. Do not re-emit a semantically identical fact.
-• DO emit updates and contradictions of existing memories (use is_no_longer_true or the specific predicate, plus conflicts_with_existing_memory).
-• ABSOLUTELY FORBIDDEN to add a fact if it is IDENTICAL or SEMANTICALLY REDUNDANT to an existing one.
-  - Existing: "Likes coffee" → New: "Enjoys drinking coffee" ⇒ REJECT (Redundant)
-• EXCEPTION FOR UPDATES / CHANGES:
-  - If a new fact CONTRADICTS or UPDATES an existing one, YOU MUST ADD IT.
-  - Existing: "Likes ice cream" → New: "Hates ice cream" ⇒ ADD IT (Update/Change)
-  - Existing: "Works at Google" → New: "Left Google and joined OpenAI" ⇒ ADD IT (Update)
-
-QUALITY:
-• Each fact must stand alone and still make sense in 6 months.
-• No hedging filler in content ("seems to", "might be") — encode doubt in uncertainty_reasons instead.
-• Third-party private facts (health, relationships of others) are allowed but MUST carry subject_attribution="third_party".
-
-OUTPUT LIMITS (These are MAXIMUMS, not targets):
-• Extract AT MOST 2-3 facts total per conversation (most will have 0-2)
-• Many conversations will result in 0 facts — this is NORMAL and EXPECTED
-• Better to extract 0 facts than to include low-quality ones
-• When in doubt, lean toward extraction if the fact has a clear predicate match and verbatim quote anchor
-• DEFAULT TO EMPTY LIST only when no clear predicate matches or quote anchor is missing
-
-QUALITY OVER QUANTITY:
-• Most conversations have 0 extractable facts — this is completely fine
-• If ambiguous whether something is worth extracting, choose: EMPTY LIST over low-quality facts
-• Only extract facts if they're genuinely useful for future context
+• Extract AT MOST 2-3 facts per conversation (most will have 0-2)
+• When a statement has a clear predicate match AND verbatim quote anchor → extract it
+• DEFAULT TO EMPTY LIST only when no clear predicate match OR no verbatim quote anchor exists
+• Each fact must make sense standalone in 6 months
 
 **Existing memories you already know about {user_name} (DO NOT REPEAT ANY)**:
 ```
@@ -273,7 +148,7 @@ LANGUAGE INSTRUCTION:
 ```
 {format_instructions}
 '''.replace(
-            '    ', ''
+            ' ', ''
         ).strip()
     ]
 )
