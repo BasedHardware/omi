@@ -22,7 +22,7 @@ import logging
 from dataclasses import dataclass, field
 from typing import Any, Awaitable, Generic, Iterable, TypeVar
 
-from prometheus_client import Counter, Histogram
+from prometheus_client import Counter, Histogram, REGISTRY
 
 logger = logging.getLogger(__name__)
 
@@ -32,32 +32,65 @@ T = TypeVar('T')
 # Metrics
 # ---------------------------------------------------------------------------
 
-SUPERVISOR_EXIT_TOTAL = Counter(
+
+def _get_registered_collector(name):
+    names_to_collectors = getattr(REGISTRY, '_names_to_collectors', {})
+    candidates = [name]
+    if name.endswith('_total'):
+        candidates.append(name[: -len('_total')])
+    else:
+        candidates.append(f'{name}_total')
+    for candidate in candidates:
+        collector = names_to_collectors.get(candidate)
+        if collector is not None:
+            return collector
+    return None
+
+
+def _get_or_create_metric(metric_class, name, documentation, labelnames=(), **kwargs):
+    existing = _get_registered_collector(name)
+    if existing is not None:
+        return existing
+    try:
+        return metric_class(name, documentation, labelnames, **kwargs)
+    except ValueError as exc:
+        existing = _get_registered_collector(name)
+        if existing is None or 'Duplicated timeseries' not in str(exc):
+            raise
+        return existing
+
+
+SUPERVISOR_EXIT_TOTAL = _get_or_create_metric(
+    Counter,
     'async_supervisor_exit_total',
     'Supervisor loop exits by reason',
     ['label', 'reason'],
 )
 
-DRAIN_TIMEOUT_TOTAL = Counter(
+DRAIN_TIMEOUT_TOTAL = _get_or_create_metric(
+    Counter,
     'async_drain_timeout_total',
     'Task drain operations that hit timeout',
     ['label'],
 )
 
-DRAIN_DURATION = Histogram(
+DRAIN_DURATION = _get_or_create_metric(
+    Histogram,
     'async_drain_duration_seconds',
     'Time spent draining tasks',
     ['label'],
     buckets=[0.1, 0.5, 1.0, 2.0, 5.0, 10.0, 30.0, 60.0],
 )
 
-GATHER_FAILURES_TOTAL = Counter(
+GATHER_FAILURES_TOTAL = _get_or_create_metric(
+    Counter,
     'async_gather_failures_total',
     'Individual coroutine failures in gather_safe',
     ['label'],
 )
 
-GATHER_DURATION = Histogram(
+GATHER_DURATION = _get_or_create_metric(
+    Histogram,
     'async_gather_duration_seconds',
     'Total duration of gather_safe calls',
     ['label'],
