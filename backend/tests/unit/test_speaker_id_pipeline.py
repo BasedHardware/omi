@@ -10,6 +10,7 @@ import os
 import struct
 import sys
 import wave
+from types import ModuleType
 
 import numpy as np
 import pytest
@@ -17,10 +18,36 @@ import pytest
 # Mock modules that initialize GCP clients at import time
 from unittest.mock import MagicMock
 
+
+def _cosine_cdist(a, b, metric="cosine"):
+    if metric != "cosine":
+        raise ValueError(f"Unsupported test cdist metric: {metric}")
+
+    a = np.asarray(a, dtype=np.float32)
+    b = np.asarray(b, dtype=np.float32)
+    numerator = a @ b.T
+    denominator = np.linalg.norm(a, axis=1)[:, None] * np.linalg.norm(b, axis=1)[None, :]
+
+    with np.errstate(divide="ignore", invalid="ignore"):
+        similarity = np.divide(numerator, denominator, out=np.zeros_like(numerator), where=denominator != 0)
+    return 1.0 - similarity
+
+
 os.environ.setdefault("ENCRYPTION_SECRET", "omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv")
 sys.modules.setdefault("database._client", MagicMock())
+sys.modules.setdefault("av", MagicMock())
 sys.modules.setdefault("utils.other.storage", MagicMock())
 sys.modules.setdefault("utils.stt.pre_recorded", MagicMock())
+try:
+    from scipy.spatial.distance import cdist as _scipy_cdist  # noqa: F401
+except ImportError:
+    scipy_mod = sys.modules.setdefault("scipy", ModuleType("scipy"))
+    spatial_mod = sys.modules.setdefault("scipy.spatial", ModuleType("scipy.spatial"))
+    distance_mod = ModuleType("scipy.spatial.distance")
+    distance_mod.cdist = _cosine_cdist
+    scipy_mod.spatial = spatial_mod
+    spatial_mod.distance = distance_mod
+    sys.modules["scipy.spatial.distance"] = distance_mod
 
 from utils.audio import AudioRingBuffer
 from utils.speaker_identification import detect_speaker_from_text, SPEAKER_IDENTIFICATION_PATTERNS, _pcm_to_wav_bytes
