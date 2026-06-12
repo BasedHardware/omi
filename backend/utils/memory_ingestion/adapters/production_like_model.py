@@ -129,6 +129,8 @@ class ProductionLikeMemoryModelClient(MemoryModelClient):
                 for memory_index, memory in enumerate(memories):
                     source_events = [event.event_id for event in event_chunk]
                     calibration = _calibration(memory, event_chunk)
+                    supporting_events = _supporting_events(memory.content, event_chunk)
+                    quote = _find_supporting_quote(memory.content, event_chunk)
                     evidence = [
                         EvidenceSpan(
                             evidence_id=id_factory.new_id(
@@ -136,12 +138,12 @@ class ProductionLikeMemoryModelClient(MemoryModelClient):
                             ),
                             source_event_id=event.event_id,
                             source_ref=event.source_ref,
-                            quote=None,
+                            quote=quote,
                             start_at=event.start_at,
                             end_at=event.end_at,
                             speaker=event.speaker,
                         )
-                        for event in event_chunk[:5]
+                        for event in (supporting_events or event_chunk[:1])
                     ]
                     frame = MemoryEventFrame(
                         frame_type=_frame_type(memory.category),
@@ -503,6 +505,43 @@ def _has_named_entities(text: str) -> bool:
         text,
     )
     return len(entity_patterns) >= 1
+
+
+def _find_supporting_quote(memory_content: str, events: list[RawContextEvent]) -> str | None:
+    """Return the text of the event that best supports the memory content."""
+    if not events:
+        return None
+    memory_lower = memory_content.casefold()
+    best_event = max(
+        events,
+        key=lambda e: _word_overlap_count(memory_lower, (e.text or "").casefold()),
+    )
+    if best_event.text:
+        return best_event.text
+    return events[0].text or None
+
+
+def _supporting_events(memory_content: str, events: list[RawContextEvent]) -> list[RawContextEvent] | None:
+    """Return only events whose text overlaps with the memory content.
+    
+    Returns None (indicating fallback to first-event-only) when no events
+    have any keyword overlap with the memory content.
+    """
+    if not events:
+        return None
+    memory_lower = memory_content.casefold()
+    supporting = [
+        e for e in events
+        if _word_overlap_count(memory_lower, (e.text or "").casefold()) > 0
+    ]
+    return supporting if supporting else None
+
+
+def _word_overlap_count(text_a: str, text_b: str) -> int:
+    """Count how many words from text_a appear in text_b."""
+    words_a = set(text_a.split())
+    words_b = set(text_b.split())
+    return len(words_a & words_b)
 
 
 def _events_by_conversation(events: list[RawContextEvent]) -> dict[str, list[RawContextEvent]]:
