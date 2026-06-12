@@ -14,7 +14,7 @@ import importlib.util
 import os
 import sys
 import types
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone, tzinfo
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -100,6 +100,34 @@ conv_proc = _load_module_from_file(
     BACKEND_DIR / "utils" / "llm" / "conversation_processing.py",
 )
 
+# Keep timezone assertions independent of host OS tzdata, which is often absent on Windows test environments.
+
+
+class _JulyOnlyNewYorkTestZone(tzinfo):
+    """Minimal test zone: only the current July DST case needs EDT behavior."""
+
+    def utcoffset(self, dt):
+        return timedelta(hours=-4 if dt is not None and dt.month == 7 else -5)
+
+    def dst(self, dt):
+        return timedelta(hours=1 if dt is not None and dt.month == 7 else 0)
+
+    def tzname(self, dt):
+        return "EDT" if dt is not None and dt.month == 7 else "EST"
+
+
+def _test_zone_info(name):
+    if name == "Pacific/Honolulu":
+        return timezone(timedelta(hours=-10), name)
+    if name == "America/New_York":
+        return _JulyOnlyNewYorkTestZone()
+    if name == "UTC":
+        return timezone.utc
+    raise KeyError(name)
+
+
+conv_proc.ZoneInfo = _test_zone_info
+
 
 # ===========================================================================
 # _local_started_at_iso unit tests (pure conversion logic)
@@ -163,9 +191,7 @@ def _capture_structure(fn, **kwargs):
 
     with patch.object(conv_proc, "get_llm", return_value=mock_llm), patch.object(
         conv_proc, "ChatPromptTemplate"
-    ) as mock_prompt_cls, patch.object(conv_proc, "get_user_name", return_value="Test User"), patch.object(
-        conv_proc, "_build_conversation_context", return_value="ctx"
-    ):
+    ) as mock_prompt_cls, patch.object(conv_proc, "_build_conversation_context", return_value="ctx"):
         mock_prompt = MagicMock()
         mock_prompt.__or__ = MagicMock(return_value=mock_chain)
         mock_prompt_cls.from_messages.return_value = mock_prompt
