@@ -340,7 +340,12 @@ def _calibration(memory: ProductionLikeMemory, events: list[RawContextEvent]) ->
         uncertainty_reasons.append("speaker_uncertain")
 
     best_overlap = max((_evidence_overlap_count(memory.content, event.text or "") for event in events), default=0)
-    if best_overlap < 3 and len(_meaningful_words(memory.content)) >= 3:
+    direct_self_report = _has_direct_self_report_evidence(
+        memory.content,
+        events,
+        quote_anchor=memory.quote_anchor,
+    )
+    if best_overlap < 3 and len(_meaningful_words(memory.content)) >= 3 and not direct_self_report:
         uncertainty_reasons.append("weak_evidence")
         review_required = True
 
@@ -459,9 +464,32 @@ def _has_self_report_source(
         for event in events
     ):
         return True
-    candidate_texts: list[str] = [quote_anchor] if quote_anchor else []
-    candidate_texts.extend(event.text or "" for event in events)
-    return any(_has_first_person_language(text) for text in candidate_texts)
+    return _has_direct_self_report_evidence(memory_content, events, quote_anchor=quote_anchor)
+
+
+def _has_direct_self_report_evidence(
+    memory_content: str,
+    events: list[RawContextEvent],
+    *,
+    quote_anchor: str | None = None,
+) -> bool:
+    """True for terse but explicit first-person support for a user memory.
+
+    Three shared content words is too strict for valid short memories such as
+    "I use Raycast" or "we chose Linear", where the quote is first-person and
+    the extracted object is intentionally concise.  Keep provenance strict, but
+    allow a lower overlap bar for direct self-reports.
+    """
+    candidates: list[tuple[str, bool]] = []
+    if quote_anchor:
+        candidates.append((quote_anchor, _quote_anchor_is_supported(quote_anchor, events)))
+    candidates.extend((event.text or "", True) for event in events)
+    return any(
+        supported
+        and _has_first_person_language(text)
+        and _evidence_overlap_count(memory_content, text) >= 1
+        for text, supported in candidates
+    )
 
 
 def _has_first_person_language(text: str) -> bool:

@@ -173,8 +173,12 @@ def _check_active_create_guardrails(output: MemoryPipelineOutput) -> list[LintRe
                 )
             )
         create_text = (create.text or "").casefold()
+        subject_name = (create.subject.canonical_name or create.subject.entity_id or "").casefold()
         if (
-            create_text.startswith(("user ", "user's "))
+            (
+                create_text.startswith(("user ", "user's "))
+                or (subject_name and create_text.startswith((f"{subject_name} ", f"{subject_name}'s ")))
+            )
             and any(evidence.quote for evidence in create.evidence)
             and not _has_self_report_evidence(create.evidence)
         ):

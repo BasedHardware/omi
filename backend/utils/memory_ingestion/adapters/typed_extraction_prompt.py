@@ -156,13 +156,13 @@ Skills — Prefer Achievements Over Tool Lists:
 ❌ "{user_name} knows programming" (too vague — which languages? for what?)
 ❌ "{user_name} has technical skills" (meaningless without specifics)
 
-BANNED LANGUAGE — DO NOT USE:
+BANNED LANGUAGE — DO NOT USE IN content:
 • Hedging words: "likely", "possibly", "seems to", "appears to", "may be", "might", "maybe", "could", "perhaps"
 • Filler phrases: "indicating a...", "suggesting a...", "reflecting a...", "showcasing"
 • Transient verbs: "is working on", "is building", "is developing", "is testing", "is focusing on"
-• Org change verbs: "is merging", "is reorganizing", "is restructuring", "plans to"
+• Org change verbs: "is merging", "is reorganizing", "is restructuring"
 
-If you find yourself using these words, the memory is too uncertain or transient — DO NOT extract.
+If you find yourself using these words in the final content, the memory is too uncertain or transient — DO NOT extract. Exception: if {user_name} explicitly says a first-person consideration or plan ("I might switch to Raycast", "we are considering Linear", "I plan to move to Berlin"), extract it with predicate considering_using, committed_to_do, or plans_travel_to, preserve the literal quote_anchor, and put the uncertainty in uncertainty_reasons instead of the content.
 
 DATE AND TIME HANDLING:
 • NEVER use vague time references like "Thursday", "next week", "tomorrow", "Monday"

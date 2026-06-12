@@ -902,10 +902,31 @@ def _should_reject_unsupported_frame(frame: MemoryEventFrame) -> bool:
 
     Review queues are for plausible but uncertain memories.  Weak-evidence or
     meta-commentary frames with low confidence are better rejected so they cannot
-    later become active memories through review-store shortcuts.
+    later become active memories through review-store shortcuts.  Recall recovery
+    exception: a first-person/actor-backed claim demoted only for inference or
+    temporal uncertainty is still useful review material, so keep it reviewable.
     """
     hard_uncertainties = {"weak_evidence", "unsupported_by_existing_state", "inferred_not_stated"}
-    return frame.confidence == "low" and bool(hard_uncertainties & set(frame.uncertainty_reasons))
+    uncertainties = set(frame.uncertainty_reasons)
+    if frame.confidence != "low" or not (hard_uncertainties & uncertainties):
+        return False
+    if uncertainties <= {"inferred_not_stated", "temporal_scope_unclear", "speaker_uncertain"} and _has_self_report_evidence(frame):
+        return False
+    return True
+
+
+def _has_self_report_evidence(frame: MemoryEventFrame) -> bool:
+    return any(
+        (evidence.speaker and evidence.speaker.is_actor_user is True)
+        or bool(
+            evidence.quote
+            and re.search(
+                r"\b(i|i'm|i’ve|i'd|i’ll|me|my|mine|we|we're|we’ve|our|ours)\b",
+                evidence.quote.casefold(),
+            )
+        )
+        for evidence in frame.evidence
+    )
 
 
 def _is_self_report_speaker_uncertain_frame(frame: MemoryEventFrame) -> bool:
