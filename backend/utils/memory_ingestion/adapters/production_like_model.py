@@ -25,6 +25,7 @@ from utils.memory_ingestion.models import (
     MemoryEventFrame,
     MemoryPipelineInput,
     ModelManifest,
+    Modality,
     RawContextEvent,
     SensitivityClassification,
     TemporalScope,
@@ -162,6 +163,8 @@ class ProductionLikeMemoryModelClient(MemoryModelClient):
                         canonical_text=memory.content,
                         original_text=None,
                         temporal=TemporalScope(kind="unknown"),
+                        modality=_frame_modality(memory),
+                        polarity=_frame_polarity(memory),
                         durability="long_term",
                         sensitivity=calibration["sensitivity"],
                         scope="conversation",
@@ -311,6 +314,25 @@ def _frame_argument_value(value: object) -> object:
     if isinstance(value, (str, int, float, bool, dict)) or value is None:
         return value
     return json.dumps(value, sort_keys=True, default=str)
+
+
+def _frame_modality(memory: ProductionLikeMemory) -> Modality:
+    """Preserve typed extractor epistemics instead of flattening every fact to asserted."""
+    predicate = _validated_predicate(memory)
+    if predicate == "considering_using":
+        return Modality(kind="considered", text="typed predicate indicates consideration")
+    if predicate in {"plans_travel_to", "committed_to_do"}:
+        return Modality(kind="planned", text="typed predicate indicates a plan or commitment")
+    if predicate == "is_no_longer_true":
+        return Modality(kind="past", text="typed predicate indicates the fact no longer holds")
+    if "temporal_scope_unclear" in _model_uncertainty_reasons(memory):
+        return Modality(kind="uncertain", text="model marked temporal scope unclear")
+    return Modality(kind="asserted")
+
+
+def _frame_polarity(memory: ProductionLikeMemory) -> str:
+    """Expose explicit stopped/negated state changes for conflict routing and scoring."""
+    return "negative" if _validated_predicate(memory) == "is_no_longer_true" else "neutral"
 
 
 def _memory_llm(temperature: float = 0.0):
@@ -492,8 +514,13 @@ def _has_direct_self_report_evidence(
     )
 
 
+_FIRST_PERSON_RE = re.compile(
+    r"\b(i|i['’]m|i['’]ve|i['’]d|i['’]ll|me|my|mine|we|we['’]re|we['’]ve|we['’]d|we['’]ll|our|ours)\b"
+)
+
+
 def _has_first_person_language(text: str) -> bool:
-    return bool(re.search(r"\b(i|i'm|i’ve|i'd|i’ll|me|my|mine|we|we're|we’ve|our|ours)\b", text.casefold()))
+    return bool(_FIRST_PERSON_RE.search(text.casefold()))
 
 
 def _is_user_attributed(memory: ProductionLikeMemory) -> bool:

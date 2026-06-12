@@ -880,6 +880,7 @@ def _memory_texts_match(left: str, right: str) -> bool:
 def _find_conflicting_memory(frame: MemoryEventFrame, memories):
     if not (
         frame.predicate.startswith("no_longer_")
+        or frame.predicate == "is_no_longer_true"
         or frame.modality.kind in ("negated", "past")
         or frame.polarity == "negative"
     ):
@@ -916,15 +917,12 @@ def _should_reject_unsupported_frame(frame: MemoryEventFrame) -> bool:
 
 
 def _has_self_report_evidence(frame: MemoryEventFrame) -> bool:
+    first_person_re = re.compile(
+        r"\b(i|i['’]m|i['’]ve|i['’]d|i['’]ll|me|my|mine|we|we['’]re|we['’]ve|we['’]d|we['’]ll|our|ours)\b"
+    )
     return any(
         (evidence.speaker and evidence.speaker.is_actor_user is True)
-        or bool(
-            evidence.quote
-            and re.search(
-                r"\b(i|i'm|i’ve|i'd|i’ll|me|my|mine|we|we're|we’ve|our|ours)\b",
-                evidence.quote.casefold(),
-            )
-        )
+        or bool(evidence.quote and first_person_re.search(evidence.quote.casefold()))
         for evidence in frame.evidence
     )
 
@@ -932,9 +930,12 @@ def _has_self_report_evidence(frame: MemoryEventFrame) -> bool:
 def _is_self_report_speaker_uncertain_frame(frame: MemoryEventFrame) -> bool:
     if set(frame.uncertainty_reasons) != {"speaker_uncertain"}:
         return False
+    first_person_re = re.compile(
+        r"\b(i|i['’]m|i['’]ve|i['’]d|i['’]ll|me|my|mine|we|we['’]re|we['’]ve|we['’]d|we['’]ll|our|ours)\b"
+    )
     return any(
         (evidence.speaker and evidence.speaker.is_actor_user is True)
-        or bool(evidence.quote and re.search(r"\b(i|i'm|i’ve|i'd|i’ll|me|my|mine|we|we're|we’ve|our|ours)\b", evidence.quote.casefold()))
+        or bool(evidence.quote and first_person_re.search(evidence.quote.casefold()))
         for evidence in frame.evidence
     )
 

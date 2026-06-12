@@ -78,7 +78,9 @@ FOR EVERY FACT, FILL THE TYPED FIELDS:
 
 5. uncertainty_reasons — zero or more of: speaker_uncertain, inferred_not_stated, temporal_scope_unclear, low_quality_transcript, subject_ambiguous, conflicts_with_existing_memory, duplicate_near_match. Use them honestly; an uncertain fact WITH reasons is better than a dropped fact or a confidently wrong one.
 
-6. category — "interesting" only for external wisdom from others with attribution; otherwise "system".
+6. modality discipline — encode uncertainty/change in predicate and uncertainty_reasons, NOT vague prose. Use considering_using for explicit "I might/I'm considering..." options, plans_travel_to/committed_to_do for explicit future commitments, and is_no_longer_true for direct statements that a prior fact stopped holding. Keep content concise and timeless (no "might", "maybe", "could", or "discussed" in content).
+
+7. category — "interesting" only for external wisdom from others with attribution; otherwise "system".
 
 ------------------------------------------------------------------------------
 ANTI-HALLUCINATION GUARDRAILS

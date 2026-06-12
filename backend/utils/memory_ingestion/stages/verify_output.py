@@ -114,6 +114,9 @@ _GROUNDING_STOPWORDS = {
     "i", "in", "is", "it", "me", "my", "of", "on", "our", "the", "their", "to", "user",
     "was", "we", "with",
 }
+_FIRST_PERSON_RE = re.compile(
+    r"\b(i|i['’]m|i['’]ve|i['’]d|i['’]ll|me|my|mine|we|we['’]re|we['’]ve|we['’]d|we['’]ll|our|ours)\b"
+)
 
 
 def _meaningful_words(text: str) -> set[str]:
@@ -199,7 +202,7 @@ def _has_self_report_evidence(evidence_spans) -> bool:
     for evidence in evidence_spans:
         if evidence.speaker and evidence.speaker.is_actor_user is True:
             return True
-        if evidence.quote and re.search(r"\b(i|i'm|i’ve|i'd|i’ll|me|my|mine|we|we're|we’ve|our|ours)\b", evidence.quote.casefold()):
+        if evidence.quote and _FIRST_PERSON_RE.search(evidence.quote.casefold()):
             return True
     return False
 
