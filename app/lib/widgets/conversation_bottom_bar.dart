@@ -12,6 +12,9 @@ import 'package:provider/provider.dart';
 import 'package:omi/backend/http/api/audio.dart';
 import 'package:omi/backend/schema/app.dart';
 import 'package:omi/backend/schema/conversation.dart';
+import 'package:omi/utils/alerts/app_snackbar.dart';
+import 'package:omi/utils/analytics/analytics_manager.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
 import 'package:omi/pages/conversation_detail/widgets/summarized_apps_sheet.dart';
@@ -219,29 +222,50 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
     try {
       _audioPlayer = AudioPlayer();
 
-      final signedUrlInfos = await getConversationAudioSignedUrls(widget.conversation!.id);
-      final sortedAudioFiles = _getSortedAudioFiles();
-
-      List<AudioSource> audioSources = [];
-      Map<String, String>? fallbackHeaders;
-
-      for (final audioFile in sortedAudioFiles) {
-        final fileId = audioFile.id;
-        // Find matching signed URL info
-        final urlInfo = signedUrlInfos.firstWhere(
-          (info) => info.id == fileId,
-          orElse: () => AudioFileUrlInfo(id: fileId, status: 'pending', duration: 0),
-        );
-
-        if (urlInfo.isCached && urlInfo.signedUrl != null) {
-          // Use signed URL directly
-          audioSources.add(AudioSource.uri(Uri.parse(urlInfo.signedUrl!)));
-        } else {
-          // Fall back to API URL
-          fallbackHeaders ??= await getAudioHeaders();
-          final apiUrl = getAudioStreamUrl(conversationId: widget.conversation!.id, audioFileId: fileId, format: 'wav');
-          audioSources.add(AudioSource.uri(Uri.parse(apiUrl), headers: fallbackHeaders));
+      // The backend builds playback artifacts asynchronously; poll while any
+      // file is pending instead of streaming through the merge-in-request
+      // endpoint that used to time out on long conversations.
+      final deadline = DateTime.now().add(const Duration(seconds: 90));
+      var urlsResponse = await getConversationAudioSignedUrls(widget.conversation!.id);
+      while (urlsResponse.files.isEmpty || urlsResponse.hasPending) {
+        if (!mounted) return;
+        if (DateTime.now().isAfter(deadline)) {
+          Logger.debug('Audio still pending after poll budget for ${widget.conversation!.id}');
+          AnalyticsManager().audioPlaybackFailed(
+            conversationId: widget.conversation!.id,
+            reason: 'pending_timeout',
+          );
+          setState(() {
+            _isAudioLoading = false;
+          });
+          if (mounted) {
+            AppSnackbar.showSnackbarError(context.l10n.anErrorOccurredTryAgain);
+          }
+          return;
         }
+        await Future.delayed(Duration(milliseconds: urlsResponse.pollAfterMs ?? 3000));
+        if (!mounted) return;
+        urlsResponse = await getConversationAudioSignedUrls(widget.conversation!.id);
+      }
+
+      final sortedAudioFiles = _getSortedAudioFiles();
+      List<AudioSource> audioSources = [];
+      for (final audioFile in sortedAudioFiles) {
+        final urlInfo = urlsResponse.files.where((info) => info.id == audioFile.id && info.isCached).firstOrNull;
+        if (urlInfo?.signedUrl != null) {
+          audioSources.add(AudioSource.uri(Uri.parse(urlInfo!.signedUrl!)));
+        }
+      }
+      if (audioSources.isEmpty) {
+        Logger.debug('No cached audio sources for ${widget.conversation!.id}');
+        AnalyticsManager().audioPlaybackFailed(
+          conversationId: widget.conversation!.id,
+          reason: 'no_matching_sources',
+        );
+        if (mounted) {
+          AppSnackbar.showSnackbarError(context.l10n.anErrorOccurredTryAgain);
+        }
+        return;
       }
 
       final playlist = ConcatenatingAudioSource(useLazyPreparation: true, children: audioSources);
@@ -250,6 +274,7 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
       _isAudioInitialized = true;
     } catch (e) {
       Logger.debug('Error initializing audio: $e');
+      AnalyticsManager().audioPlaybackFailed(conversationId: widget.conversation?.id ?? '', reason: e.toString());
     } finally {
       if (mounted) {
         setState(() {

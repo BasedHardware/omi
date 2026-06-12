@@ -1038,6 +1038,13 @@ class AnalyticsManager {
   // AUDIO PLAYBACK TRACKING
   // ============================================================================
 
+  void audioPlaybackFailed({required String conversationId, required String reason}) {
+    track(
+      'Audio Playback Failed',
+      properties: {'conversation_id': conversationId, 'reason': reason},
+    );
+  }
+
   void audioPlaybackStarted({required String conversationId, int? durationSeconds}) {
     track(
       'Audio Playback Started',

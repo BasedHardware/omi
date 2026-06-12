@@ -67,6 +67,11 @@ from utils.other.storage import (
     download_audio_chunks_and_merge,
     get_or_create_merged_audio,
     get_merged_audio_signed_url,
+    download_legacy_merged_wav,
+    get_playback_artifact_signed_url,
+    download_playback_artifact,
+    upload_playback_artifact,
+    enqueue_conversation_audio_merge,
     _PRECACHE_FILE_SEM,
 )
 
@@ -75,6 +80,7 @@ from utils.byok import get_byok_keys, set_byok_keys, has_byok_keys
 from utils.cloud_tasks import (
     enqueue_sync_job,
     get_sync_tasks_max_attempts,
+    is_audio_merge_dispatch_enabled,
     is_cloud_tasks_dispatch_enabled,
     verify_cloud_tasks_oidc,
 )
@@ -223,6 +229,10 @@ def precache_conversation_audio_endpoint(
     if not audio_files:
         return {"status": "no_audio", "message": "No audio files in conversation"}
 
+    if is_audio_merge_dispatch_enabled():
+        enqueue_conversation_audio_merge(uid, conversation_id, audio_files, caller='precache_endpoint')
+        return {"status": "started", "audio_file_count": len(audio_files)}
+
     # Start background parallel pre-caching with bounded concurrency (#7387)
     def _precache_all_parallel():
         logger.info(f"Pre-caching all {len(audio_files)} audio files for conversation {conversation_id} (parallel)")
@@ -250,6 +260,59 @@ def precache_conversation_audio_endpoint(
     return {"status": "started", "audio_file_count": len(audio_files)}
 
 
+AUDIO_URLS_POLL_AFTER_MS = 3000
+
+
+def _get_audio_urls_via_artifacts(uid: str, conversation_id: str, audio_files: list) -> dict:
+    """Artifact-backed /urls: a pure metadata read that never merges in-request.
+
+    Cached = a playback MP3 artifact (or legacy unexpired WAV cache) exists.
+    Everything else is reported pending and enqueued as an audio-merge task
+    (named-task deduped); the app polls until cached.
+    """
+    result = []
+    to_enqueue = []
+    for af in audio_files:
+        audio_file_id = af.get('id')
+        if not audio_file_id:
+            continue
+
+        signed_url = get_playback_artifact_signed_url(uid, conversation_id, audio_file_id)
+        content_type = 'audio/mpeg' if signed_url else None
+        if not signed_url:
+            signed_url = get_merged_audio_signed_url(uid, conversation_id, audio_file_id)
+            content_type = 'audio/wav' if signed_url else None
+
+        if signed_url:
+            result.append(
+                {
+                    "id": audio_file_id,
+                    "status": "cached",
+                    "signed_url": signed_url,
+                    "content_type": content_type,
+                    "duration": af.get('duration', 0),
+                }
+            )
+        else:
+            result.append(
+                {
+                    "id": audio_file_id,
+                    "status": "pending",
+                    "signed_url": None,
+                    "duration": af.get('duration', 0),
+                }
+            )
+            to_enqueue.append(af)
+
+    if to_enqueue:
+        enqueue_conversation_audio_merge(uid, conversation_id, to_enqueue, caller='sync_urls')
+
+    return {
+        "audio_files": result,
+        "poll_after_ms": AUDIO_URLS_POLL_AFTER_MS if to_enqueue else None,
+    }
+
+
 @router.get("/v1/sync/audio/{conversation_id}/urls", tags=['v1'])
 def get_audio_signed_urls_endpoint(
     conversation_id: str,
@@ -272,6 +335,9 @@ def get_audio_signed_urls_endpoint(
     audio_files = conversation.get('audio_files', [])
     if not audio_files:
         return {"audio_files": []}
+
+    if is_audio_merge_dispatch_enabled():
+        return _get_audio_urls_via_artifacts(uid, conversation_id, audio_files)
 
     result = []
     uncached_files = []
@@ -408,7 +474,33 @@ def download_audio_file_endpoint(
         if not audio_file.get('chunk_timestamps'):
             raise HTTPException(status_code=500, detail="Audio file has no chunk timestamps")
 
-        if format == "wav":
+        if format == "wav" and is_audio_merge_dispatch_enabled():
+            # Artifact-backed mode: serve only prebuilt audio, never merge
+            # in-request. On miss, enqueue the merge task and tell the client
+            # to poll /urls (old app versions hit this path uncached and get
+            # a fast 202 instead of the inline merge that used to time out).
+            audio_data = download_playback_artifact(uid, conversation_id, audio_file_id)
+            if audio_data is not None:
+                content_type = "audio/mpeg"
+                extension = "mp3"
+            else:
+                # Direct blob download — get_or_create_merged_audio would fall
+                # through to a full inline merge for cached blobs missing
+                # expires_at metadata, violating the no-merge guarantee.
+                legacy_data = None
+                if get_merged_audio_signed_url(uid, conversation_id, audio_file_id):
+                    legacy_data = download_legacy_merged_wav(uid, conversation_id, audio_file_id)
+                if legacy_data is not None:
+                    audio_data = legacy_data
+                    content_type = "audio/wav"
+                    extension = "wav"
+                else:
+                    enqueue_conversation_audio_merge(uid, conversation_id, [audio_file], caller='sync_download')
+                    return JSONResponse(
+                        status_code=202,
+                        content={"status": "pending", "poll_after_ms": AUDIO_URLS_POLL_AFTER_MS},
+                    )
+        elif format == "wav":
             audio_data, was_cached = get_or_create_merged_audio(
                 uid=uid,
                 conversation_id=conversation_id,
@@ -2029,3 +2121,75 @@ async def run_sync_job(request: Request, task_retry_count: int = Depends(verify_
         return JSONResponse(status_code=200, content={'status': 'done'})
     finally:
         await run_blocking(db_executor, release_job_run_lock, job_id, lock_token)
+
+
+def _build_playback_artifact(uid: str, conversation_id: str, timestamps: list) -> bytes:
+    """Merge chunks (download → decrypt → decode → gap-fill) and encode MP3 ~48kbps mono."""
+    pcm_data = download_audio_chunks_and_merge(
+        uid, conversation_id, timestamps, fill_gaps=True, sample_rate=AUDIO_SAMPLE_RATE
+    )
+    if not pcm_data:
+        return b''
+    segment = AudioSegment(data=pcm_data, sample_width=2, frame_rate=AUDIO_SAMPLE_RATE, channels=1)
+    del pcm_data
+    buf = io.BytesIO()
+    segment.export(buf, format='mp3', bitrate='48k')
+    return buf.getvalue()
+
+
+@router.post("/v2/audio-merge-jobs/run", include_in_schema=False)
+async def run_audio_merge_job(request: Request, task_retry_count: int = Depends(verify_cloud_tasks_oidc)):
+    """Cloud Tasks handler: build one playback MP3 artifact inside the request.
+
+    Response semantics drive the queue: 2xx consumes the task, 409 while the
+    run-lock is held retries later, 500 retries with backoff. Idempotency:
+    named tasks dedupe enqueues, the run-lock serializes duplicate deliveries,
+    and an existing artifact is acked without rebuilding.
+    """
+    try:
+        payload = await request.json()
+        uid = payload['uid']
+        conversation_id = payload['conversation_id']
+        audio_file_id = payload['audio_file_id']
+        timestamps = list(payload['timestamps'])
+    except Exception as e:
+        logger.error(f'audio_merge handler: invalid payload, dropping task: {e}')
+        return JSONResponse(status_code=200, content={'status': 'dropped', 'reason': 'invalid_payload'})
+
+    lock_key = f'audio:{conversation_id}:{audio_file_id}'
+    lock_token = await run_blocking(db_executor, try_acquire_job_run_lock, lock_key)
+    if not lock_token:
+        return JSONResponse(status_code=409, content={'status': 'locked'})
+
+    try:
+        existing = await run_blocking(
+            storage_executor, get_playback_artifact_signed_url, uid, conversation_id, audio_file_id
+        )
+        if existing:
+            return JSONResponse(status_code=200, content={'status': 'exists'})
+
+        try:
+            mp3_data = await run_blocking(sync_executor, _build_playback_artifact, uid, conversation_id, timestamps)
+        except FileNotFoundError:
+            logger.warning(f'audio_merge: chunks missing conv={conversation_id} file={audio_file_id}, dropping')
+            return JSONResponse(status_code=200, content={'status': 'dropped', 'reason': 'chunks_missing'})
+        except Exception as e:
+            max_attempts = get_sync_tasks_max_attempts()
+            if task_retry_count >= max_attempts - 1:
+                logger.error(f'audio_merge_failed_final conv={conversation_id} file={audio_file_id}: {e}')
+                return JSONResponse(status_code=200, content={'status': 'failed_final'})
+            logger.warning(
+                f'audio_merge: attempt {task_retry_count + 1} failed conv={conversation_id} '
+                f'file={audio_file_id}, will retry: {e}'
+            )
+            return JSONResponse(status_code=500, content={'status': 'retry'})
+
+        if not mp3_data:
+            logger.warning(f'audio_merge: no audio data conv={conversation_id} file={audio_file_id}, dropping')
+            return JSONResponse(status_code=200, content={'status': 'dropped', 'reason': 'empty_audio'})
+
+        await run_blocking(storage_executor, upload_playback_artifact, uid, conversation_id, audio_file_id, mp3_data)
+        logger.info(f'audio_merge: built artifact conv={conversation_id} file={audio_file_id} size={len(mp3_data)}')
+        return JSONResponse(status_code=200, content={'status': 'done'})
+    finally:
+        await run_blocking(db_executor, release_job_run_lock, lock_key, lock_token)

@@ -19,6 +19,7 @@ from google.cloud.exceptions import NotFound
 
 from database.redis_db import cache_signed_url, get_cached_signed_url
 from utils import encryption
+from utils.cloud_tasks import enqueue_audio_merge_job, is_audio_merge_dispatch_enabled
 from utils.other.deferred_delete import DeferredDeleter
 from database import users as users_db
 import logging
@@ -1099,6 +1100,81 @@ def _pcm_to_wav(pcm_data: bytes, sample_rate: int = 16000, channels: int = 1) ->
     return wav_buffer.getvalue()
 
 
+# ----------------------------------------------------------------------------
+# Playback artifacts: merged MP3 under playback/, expiry via the bucket's
+# 30-day lifecycle rule on the prefix (existence == validity, no metadata).
+# Built off-request by the audio-merge Cloud Tasks handler (routers/sync.py).
+# ----------------------------------------------------------------------------
+
+PLAYBACK_ARTIFACT_PREFIX = 'playback'
+
+
+def _playback_artifact_blob(uid: str, conversation_id: str, audio_file_id: str):
+    bucket = storage_client.bucket(private_cloud_sync_bucket)
+    return bucket.blob(f'{PLAYBACK_ARTIFACT_PREFIX}/{uid}/{conversation_id}/{audio_file_id}.mp3')
+
+
+def get_playback_artifact_signed_url(uid: str, conversation_id: str, audio_file_id: str):
+    blob = _playback_artifact_blob(uid, conversation_id, audio_file_id)
+    if not blob.exists():
+        return None
+    return _get_signed_url(blob, 60)
+
+
+def download_playback_artifact(uid: str, conversation_id: str, audio_file_id: str):
+    blob = _playback_artifact_blob(uid, conversation_id, audio_file_id)
+    try:
+        return blob.download_as_bytes()
+    except BlobNotFound:
+        return None
+
+
+def upload_playback_artifact(uid: str, conversation_id: str, audio_file_id: str, mp3_data: bytes) -> None:
+    blob = _playback_artifact_blob(uid, conversation_id, audio_file_id)
+    blob.upload_from_string(mp3_data, content_type='audio/mpeg')
+
+
+def enqueue_conversation_audio_merge(uid: str, conversation_id: str, audio_files: list, caller: str) -> None:
+    """Enqueue one audio-merge Cloud Task per audio file (named-task deduped).
+
+    Enqueue failures are swallowed: the file stays pending and the next /urls
+    poll re-enqueues it.
+    """
+    for af in audio_files:
+        audio_file_id = af.get('id')
+        timestamps = af.get('chunk_timestamps')
+        if not audio_file_id or not timestamps:
+            continue
+        try:
+            enqueue_audio_merge_job(
+                {
+                    'schema_version': 1,
+                    'uid': uid,
+                    'conversation_id': conversation_id,
+                    'audio_file_id': audio_file_id,
+                    'timestamps': timestamps,
+                    'caller': caller,
+                }
+            )
+        except Exception as e:
+            logger.error(f'audio_merge: enqueue failed conv={conversation_id} file={audio_file_id}: {e}')
+
+
+def download_legacy_merged_wav(uid: str, conversation_id: str, audio_file_id: str):
+    """Download a legacy merged WAV cache blob directly — never merges.
+
+    Used by the artifact-backed download path so a cached blob missing
+    expires_at metadata can't fall through get_or_create_merged_audio into
+    the inline merge pipeline (Greptile P1 on #7872).
+    """
+    bucket = storage_client.bucket(private_cloud_sync_bucket)
+    blob = bucket.blob(get_cached_merged_audio_path(uid, conversation_id, audio_file_id))
+    try:
+        return blob.download_as_bytes()
+    except BlobNotFound:
+        return None
+
+
 def precache_conversation_audio(
     uid: str, conversation_id: str, audio_files: list, fill_gaps: bool = True, sample_rate: int = 16000
 ) -> None:
@@ -1113,6 +1189,11 @@ def precache_conversation_audio(
         sample_rate: Audio sample rate in Hz (default 16000)
     """
     if not audio_files:
+        return
+
+    if is_audio_merge_dispatch_enabled():
+        # Eager build at conversation completion, off-process via Cloud Tasks
+        enqueue_conversation_audio_merge(uid, conversation_id, audio_files, caller='process_conversation')
         return
 
     def _precache_all():
