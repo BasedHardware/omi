@@ -11,23 +11,14 @@ Verifies:
 """
 
 import asyncio
-import sys
 import time
-import types
-from unittest.mock import MagicMock, patch, AsyncMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 
-if 'websockets' not in sys.modules:
-    websockets_stub = types.ModuleType('websockets')
-    websockets_stub.__path__ = []
-    websockets_stub.connect = AsyncMock()
-    sys.modules['websockets'] = websockets_stub
-if 'websockets.exceptions' not in sys.modules:
-    websockets_exceptions_stub = types.ModuleType('websockets.exceptions')
-    websockets_exceptions_stub.ConnectionClosed = type('ConnectionClosed', (Exception,), {})
-    sys.modules['websockets.exceptions'] = websockets_exceptions_stub
-    sys.modules['websockets'].exceptions = websockets_exceptions_stub
+from pusher_websockets_stub import install_websockets_stub
+
+install_websockets_stub()
 
 from utils.pusher import (
     PusherCircuitBreaker,
