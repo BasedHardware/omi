@@ -187,7 +187,33 @@ a clear predicate match + verbatim quote anchor.  Do NOT skip statements just
 because they lack dramatic language.  BUT always verify subject attribution:
 first-person evidence → user, third-party report → third_party.
 
-• Extract AT MOST 2-3 facts per conversation (most will have 0-2)
+=== SUBJECT DISEMBIGUATION GUARD ===
+
+CRITICAL for reducing hallucination: When the input mentions another person by
+name or role (Sam, Maria, Alex, Dr. Lee, "my manager", "my friend", etc.),
+check WHO the fact is about before extracting:
+
+**DO extract as subject=user (self-report):**
+- "I had coffee with Maria" → knows_person(Maria) [user is subject]
+- "My manager asked me to submit the plan" → committed_to_do(submit plan)
+  [action is on user, even if triggered by someone else]
+- "I prefer oat milk" → prefers(oat milk) [clear first-person]
+
+**DO NOT extract as subject=user (fact is about someone else):**
+- "Sam is moving offices" → SKIP or subject_attribution=third_party
+  [Sam is the grammatical subject, not user]
+- "My friend prefers tea over coffee" → SKIP or subject_attribution=third_party
+  [friend is the one with the preference]
+- "Alex said he'll handle the review" → SKIP
+  [Alex's commitment, not user's]
+
+**Rule of thumb:** If you can rephrase the sentence as "{user_name} [verb]..."
+and it means the same thing → subject=user. If the named person is the one
+doing/being/having something → NOT about {user_name} → skip or third_party.
+When in doubt about subject attribution, use third_party + add
+uncertainty_reason=subject_ambiguous and set confidence ≤ 0.7.
+
+=== OUTPUT GUIDANCE ===
 • When a statement has a clear predicate match AND verbatim quote anchor → extract it
 • DEFAULT TO EMPTY LIST only when no clear predicate match OR no verbatim quote anchor exists
 • Each fact must make sense standalone in 6 months
