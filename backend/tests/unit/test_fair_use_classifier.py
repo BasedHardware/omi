@@ -32,6 +32,14 @@ _llm_clients = types.ModuleType('utils.llm.clients')
 _llm_clients.llm_mini = MagicMock()
 sys.modules.setdefault('utils.llm.clients', _llm_clients)
 
+_langchain_openai = types.ModuleType('langchain_openai')
+_langchain_openai.ChatOpenAI = MagicMock(return_value=_llm_clients.llm_mini)
+sys.modules['langchain_openai'] = _langchain_openai
+
+_usage_tracker = types.ModuleType('utils.llm.usage_tracker')
+_usage_tracker.get_usage_callback = MagicMock(return_value=MagicMock())
+sys.modules['utils.llm.usage_tracker'] = _usage_tracker
+
 import utils.llm.fair_use_classifier as classifier_mod
 
 
