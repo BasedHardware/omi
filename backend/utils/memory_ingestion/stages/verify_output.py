@@ -1,9 +1,110 @@
 from __future__ import annotations
 
 from collections import Counter
+from difflib import SequenceMatcher
 
 from utils.memory_ingestion.ids import stable_hash
 from utils.memory_ingestion.models import LintResult, MemoryPipelineOutput
+
+
+def _edit_distance(a: str, b: str) -> int:
+    """Levenshtein edit distance between two strings."""
+    if len(a) < len(b):
+        return _edit_distance(b, a)
+    if len(b) == 0:
+        return len(a)
+    prev_row = list(range(len(b) + 1))
+    for i, ca in enumerate(a):
+        curr_row = [i + 1]
+        for j, cb in enumerate(b):
+            insertions = prev_row[j + 1] + 1
+            deletions = curr_row[j] + 1
+            substitutions = prev_row[j] + (ca != cb)
+            curr_row.append(min(insertions, deletions, substitutions))
+        prev_row = curr_row
+    return prev_row[-1]
+
+
+def _check_confidence_contradiction(output: MemoryPipelineOutput) -> list[LintResult]:
+    """Flag high-confidence units that claim 'inferred_not_stated' — a contradiction."""
+    lints: list[LintResult] = []
+    for frame in output.event_frames:
+        if frame.confidence == "high" and "inferred_not_stated" in frame.uncertainty_reasons:
+            lints.append(
+                _lint(
+                    "error",
+                    "confidence_contradiction",
+                    f"Frame {frame.frame_id} has high confidence but claims inferred_not_stated",
+                    frame.frame_id,
+                )
+            )
+    for create in output.mutation_plan.creates:
+        if create.confidence == "high" and "inferred_not_stated" in create.uncertainty_reasons:
+            lints.append(
+                _lint(
+                    "error",
+                    "confidence_contradiction",
+                    f"Create {create.mutation_id} has high confidence but claims inferred_not_stated",
+                    create.frame_id,
+                    create.decision_id,
+                    create.mutation_id,
+                )
+            )
+    return lints
+
+
+def _check_grounding(output: MemoryPipelineOutput) -> list[LintResult]:
+    """Warn when canonical_text / memory text is not substantiated by evidence quotes."""
+    lints: list[LintResult] = []
+    for frame in output.event_frames:
+        if not frame.canonical_text.strip():
+            continue
+        quotes = [ev.quote for ev in frame.evidence if ev.quote]
+        if quotes and not any(frame.canonical_text.casefold() in q.casefold() for q in quotes):
+            lints.append(
+                _lint(
+                    "warning",
+                    "ungrounded_content",
+                    f"Frame {frame.frame_id} canonical_text not found in any evidence quote",
+                    frame.frame_id,
+                )
+            )
+    for create in output.mutation_plan.creates:
+        if not create.text.strip():
+            continue
+        quotes = [ev.quote for ev in create.evidence if ev.quote]
+        if quotes and not any(create.text.casefold() in q.casefold() for q in quotes):
+            lints.append(
+                _lint(
+                    "warning",
+                    "ungrounded_content",
+                    f"Create {create.mutation_id} text not found in any evidence quote",
+                    create.frame_id,
+                    create.decision_id,
+                    create.mutation_id,
+                )
+            )
+    return lints
+
+
+def _check_near_duplicates(output: MemoryPipelineOutput) -> list[LintResult]:
+    """Flag pairs of event frames whose canonical_texts are nearly identical (edit distance < 3)."""
+    lints: list[LintResult] = []
+    frames = [f for f in output.event_frames if f.canonical_text.strip()]
+    for i in range(len(frames)):
+        for j in range(i + 1, len(frames)):
+            dist = _edit_distance(frames[i].canonical_text, frames[j].canonical_text)
+            if dist < 3:
+                lints.append(
+                    _lint(
+                        "warning",
+                        "near_duplicate_canonical_text",
+                        f"Frames {frames[i].frame_id} and {frames[j].frame_id} have near-identical "
+                        f"canonical texts (edit distance={dist})",
+                        frames[i].frame_id,
+                    )
+                )
+    return lints
 
 
 def verify_output(output: MemoryPipelineOutput) -> list[LintResult]:
@@ -130,6 +231,12 @@ def verify_output(output: MemoryPipelineOutput) -> list[LintResult]:
     for key, count in Counter(active_texts).items():
         if count > 1:
             lints.append(_lint("error", "duplicate_active_create", f"Duplicate active memory create for {key}"))
+
+    # --- content-level grounding checks ---
+    lints.extend(_check_confidence_contradiction(output))
+    lints.extend(_check_grounding(output))
+    lints.extend(_check_near_duplicates(output))
+
     return lints
 
 
