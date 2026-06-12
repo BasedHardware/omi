@@ -57,7 +57,7 @@ class PolicyConfig(StrictBaseModel):
 
 class RoutingConfig(StrictBaseModel):
     auto_create_high_confidence: bool = True
-    auto_create_medium_confidence: bool = False
+    auto_create_medium_confidence: bool = True  # relaxed from False post-hallucination-campaign
     review_uncertain: bool = True
     review_low_confidence: bool = True
     review_sensitive: bool = True

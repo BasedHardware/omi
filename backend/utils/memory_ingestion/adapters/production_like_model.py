@@ -2,9 +2,10 @@ from __future__ import annotations
 
 from collections import defaultdict
 import json
+import logging
 import os
 import re
-from typing import Iterable
+from typing import Iterable, Literal
 
 from langchain_core.output_parsers import PydanticOutputParser
 from langchain_openai import ChatOpenAI
@@ -31,6 +32,8 @@ from utils.memory_ingestion.models import (
     TemporalScope,
 )
 from utils.memory_ingestion.pipeline import MemoryModelClient
+
+logger = logging.getLogger(__name__)
 
 
 class ProductionLikeMemory(BaseModel):
@@ -63,12 +66,21 @@ class HighRecallProductionLikeMemories(BaseModel):
     )
 
 
+# Build a Literal type from TYPED_PREDICATES so Pydantic validates at parse time.
+_PredicateLiteral = Literal[tuple(TYPED_PREDICATES)]  # type: ignore[misc]
+
+
 class TypedProductionLikeMemory(ProductionLikeMemory):
     """Typed proposition variant; field descriptions steer the structured output."""
 
-    predicate: str | None = Field(
+    predicate: _PredicateLiteral | None = Field(
         default=None,
-        description="Exactly one predicate from the fixed vocabulary in the prompt.",
+        description=(
+            "EXACTLY ONE predicate from the fixed vocabulary. "
+            "MUST be one of: " + ", ".join(TYPED_PREDICATES) + ". "
+            "This field is REQUIRED — do not leave it null or empty. "
+            "Pick the most specific predicate that matches the fact."
+        ),
     )
     arguments: dict[str, object] = Field(
         default_factory=dict,
@@ -160,7 +172,7 @@ class ProductionLikeMemoryModelClient(MemoryModelClient):
                     frame = MemoryEventFrame(
                         frame_type=_frame_type(memory.category),
                         subject=_actor_subject(pipeline_input.actor),
-                        predicate=_validated_predicate(memory) or _predicate(memory.category),
+                        predicate=_resolve_predicate(memory),
                         object=FrameObject(
                             object_type="literal",
                             value=memory.content,
@@ -291,9 +303,173 @@ _UNCERTAINTY_REASON_ALIASES = {
 
 
 def _validated_predicate(memory: ProductionLikeMemory) -> str | None:
-    if memory.predicate and memory.predicate in TYPED_PREDICATES:
-        return memory.predicate
+    """Validate and normalize the predicate from extracted memory.
+
+    Does fuzzy matching against TYPED_PREDICATES so that minor LLM output
+    variations (extra whitespace, slight rewording, predicate: value format)
+    still resolve to the correct typed predicate instead of falling through
+    to the generic 'related_to' fallback.
+    """
+    raw = memory.predicate
+    if not raw or not isinstance(raw, str):
+        return None
+    raw_stripped = raw.strip()
+
+    # 1. Exact match (fast path)
+    if raw_stripped in TYPED_PREDICATES:
+        return raw_stripped
+
+    # 2. Case-insensitive match
+    raw_lower = raw_stripped.lower()
+    for p in TYPED_PREDICATES:
+        if p.lower() == raw_lower:
+            logger.debug("predicate normalized case: %r → %r", raw_stripped, p)
+            return p
+
+    # 3. Substring match — LLM may emit "prefers X" or "decided_to_use tool"
+    for p in TYPED_PREDICATES:
+        if raw_lower.startswith(p + " ") or raw_lower.startswith(p + "_") or raw_lower == p:
+            logger.debug("predicate prefix match: %r → %r", raw_stripped, p)
+            return p
+        if raw_lower.endswith(" " + p) or raw_lower.endswith("_" + p):
+            logger.debug("predicate suffix match: %r → %r", raw_stripped, p)
+            return p
+
+    # 4. [i10 REMOVED] Containment check was too broad — substring matches on long LLM outputs
+    #    produced false predicate resolutions (e.g., "is_currently_truefact" → is_currently_true).
+    #    Steps 1 (exact), 2 (casefold), 3 (prefix/suffix), and 5 (alias) cover realistic LLM output space.
+
+    # 5. Known alias / common LLM mistake mapping
+    alias_map = {
+        "likes": "prefers",
+        "loves": "prefers",
+        "hates": "dislikes",
+        "planning": "committed_to_do",
+        "plans": "committed_to_do",
+        "using": "uses_tool",
+        "uses": "uses_tool",
+        "working on": "works_on",
+        "work on": "works_on",
+        "decided": "decided_to_use",
+        "chose": "decided_to_use",
+        "chosen": "decided_to_use",
+        "considering": "considering_using",
+        "thinking about": "considering_using",
+        "knows": "knows_person",
+        "met": "knows_person",
+        "birthday": "has_birthday",
+        "address": "has_address",
+        "travel": "plans_travel_to",
+        "trip": "plans_travel_to",
+        "belongs to": "belongs_to_project",
+        "no longer": "is_no_longer_true",
+        "not true": "is_no_longer_true",
+        "stopped": "is_no_longer_true",
+        "currently": "is_currently_true",
+        "fact": "is_currently_true",
+        "related": "is_currently_true",
+        "related_to": "is_currently_true",
+    }
+    normalized_alias = raw_lower.replace(" ", "_").replace("-", "_")
+    if normalized_alias in alias_map:
+        resolved = alias_map[normalized_alias]
+        logger.debug("predicate alias match: %r → %r", raw_stripped, resolved)
+        return resolved
+    for alias, canonical in alias_map.items():
+        if alias in raw_lower:
+            logger.debug("predicate alias containment: %r → %r via %r", raw_stripped, canonical, alias)
+            return canonical
+
+    logger.warning(
+        "predicate %r could not be matched to any TYPED_PREDICATE; "
+        "will attempt content-based inference before fallback to related_to",
+        raw_stripped,
+    )
     return None
+
+
+_CONTENT_PREDICATE_RULES: list[tuple[str, list[str]]] = [
+    ("prefers", ["prefers", "likes", "favor", "rather", "over"]),
+    ("dislikes", ["dislike", "hate", "can't stand", "annoy"]),
+    ("works_on", ["works on", "working on", "building", "developing", "leading", "managing project"]),
+    ("decided_to_use", ["decided to use", "decided on", "chose to use", "switched to", "adopted", "settled on"]),
+    ("considering_using", ["considering using", "thinking about using", "looking into", "evaluating", "exploring", "might use"]),
+    ("committed_to_do", ["committed to", "promised to", "plan to", "going to", "will definitely", "pledged"]),
+    ("knows_person", ["knows", "met", "friend", "colleague", "coworker", "partner", "boss", "manager", "report", "sibling", "parent", "spouse", "relative"]),
+    ("has_birthday", ["birthday", "born on", "turns age", "age is"]),
+    ("has_address", ["address", "lives at", "home is", "located at", "residence"]),
+    ("uses_tool", ["uses ", "relies on", "leverages", "runs on", "built with"]),
+    ("belongs_to_project", ["belongs to", "part of team", "on the team", "member of project"]),
+    ("plans_travel_to", ["travel to", "trip to", "visit", "moving to", "relocating", "fly to", "drive to"]),
+    ("is_no_longer_true", ["no longer", "not anymore", "stopped", "quit", "left", "cancelled", "no more"]),
+]
+
+
+def _infer_predicate_from_content(content: str) -> str | None:
+    """Infer the best predicate from memory content text as a secondary fallback.
+
+    When the LLM fails to provide a valid predicate (or we're running in
+    non-typed mode where no predicate field exists), scan the memory content
+    for signal words that indicate which typed predicate should apply.
+    Returns None only when no inference is possible (truly generic content).
+    """
+    if not content:
+        return None
+    text = content.strip().lower()
+    best_predicate = None
+    best_score = 0
+
+    for predicate, signals in _CONTENT_PREDICATE_RULES:
+        score = sum(1 for s in signals if s in text)
+        if score > best_score:
+            best_score = score
+            best_predicate = predicate
+
+    if best_score >= 1:
+        logger.debug("content-based predicate inference: %r → %r (score=%d)", content[:60], best_predicate, best_score)
+        return best_predicate
+
+    return None
+
+
+def _resolve_predicate(memory: ProductionLikeMemory) -> str:
+    """Resolve the final predicate for a memory fact with full fallback chain.
+
+    Priority order:
+      1. Validated predicate from LLM output (fuzzy-matched)
+      2. Content-based inference from memory text
+      3. Category-based fallback ('learned' for interesting, 'is_currently_true' otherwise)
+
+    This replaces the old pattern of ``_validated_predicate(memory) or _predicate(memory.category)``
+    so that 'related_to' is never emitted — we always try to find a specific predicate first.
+    """
+    # 1. Try validated predicate from LLM
+    validated = _validated_predicate(memory)
+    if validated:
+        return validated
+
+    # 2. Try content-based inference
+    inferred = _infer_predicate_from_content(memory.content)
+    if inferred:
+        logger.info(
+            "predicate inferred from content for %r: %s (LLM predicate was %r)",
+            memory.content[:60],
+            inferred,
+            memory.predicate,
+        )
+        return inferred
+
+    # 3. Final category-based fallback — but use specific predicates, not 'related_to'
+    if _category_value(memory.category) == "interesting":
+        return "learned"
+    # Use is_currently_true as the last resort instead of related_to,
+    # since it's semantically clearer and maps correctly in the crosswalk.
+    logger.info(
+        "no specific predicate found for %r; using is_currently_true fallback (category=%s)",
+        memory.content[:60],
+        memory.category,
+    )
+    return "is_currently_true"
 
 
 def _model_uncertainty_reasons(memory: ProductionLikeMemory) -> list[str]:
@@ -325,7 +501,9 @@ def _frame_argument_value(value: object) -> object:
 
 def _frame_modality(memory: ProductionLikeMemory) -> Modality:
     """Preserve typed extractor epistemics instead of flattening every fact to asserted."""
-    predicate = _validated_predicate(memory)
+    # Use the fully resolved predicate so modality is correct even when
+    # the predicate was inferred from content rather than provided by LLM.
+    predicate = _resolve_predicate(memory)
     if predicate == "considering_using":
         return Modality(kind="considered", text="typed predicate indicates consideration")
     if predicate in {"plans_travel_to", "committed_to_do"}:
@@ -339,7 +517,7 @@ def _frame_modality(memory: ProductionLikeMemory) -> Modality:
 
 def _frame_polarity(memory: ProductionLikeMemory) -> str:
     """Expose explicit stopped/negated state changes for conflict routing and scoring."""
-    return "negative" if _validated_predicate(memory) == "is_no_longer_true" else "neutral"
+    return "negative" if _resolve_predicate(memory) == "is_no_longer_true" else "neutral"
 
 
 def _memory_llm(temperature: float = 0.0):
@@ -374,7 +552,9 @@ def _calibration(memory: ProductionLikeMemory, events: list[RawContextEvent]) ->
         events,
         quote_anchor=memory.quote_anchor,
     )
-    if best_overlap < 3 and len(_meaningful_words(memory.content)) >= 3 and not direct_self_report:
+    # Relaxed: direct self-reports only need 2+ overlap words (was 3) since
+    # first-person language already provides strong attribution signal.
+    if best_overlap < (2 if direct_self_report else 3) and len(_meaningful_words(memory.content)) >= 3 and not direct_self_report:
         uncertainty_reasons.append("weak_evidence")
         review_required = True
 
@@ -386,11 +566,15 @@ def _calibration(memory: ProductionLikeMemory, events: list[RawContextEvent]) ->
         uncertainty_reasons.append("unsupported_by_existing_state")
         review_required = True
 
-    if not _quote_anchor_is_supported(memory.quote_anchor, events):
-        uncertainty_reasons.append("weak_evidence")
-        review_required = True
+    # A8 removed (redundant with A4 quote_anchor validation at extraction gate):
+    # A4 already rejects memories with unsupported anchors before they reach
+    # calibration. Re-checking here only lowered confidence of what passed.
 
-    if _has_future_plan_signal(text):
+    # Relaxed: plan predicates (plans_travel_to, committed_to_do, considering_using)
+    # are inherently temporally scoped — don't penalize them for future-plan signals.
+    resolved_predicate = _resolve_predicate(memory) if memory else None
+    is_plan_predicate = resolved_predicate in ("plans_travel_to", "committed_to_do", "considering_using")
+    if _has_future_plan_signal(text) and not is_plan_predicate:
         uncertainty_reasons.append("temporal_scope_unclear")
         review_required = True
 
@@ -420,20 +604,21 @@ def _calibration(memory: ProductionLikeMemory, events: list[RawContextEvent]) ->
         sensitivity_level = "high"
         review_required = True
 
-    # Upgrade to high confidence only when a direct actor-authored quote strongly
-    # anchors the memory and no review-triggering uncertainty/sensitivity exists.
+    # Upgrade to high confidence when a direct actor-authored quote anchors
+    # the memory and no review-triggering uncertainty/sensitivity exists.
+    # Relaxed from 6-condition gate (post-hallucination-campaign): removed
+    # has_entities and content_specific>40 as hard requirements since they
+    # blocked valid short memories (e.g., "I use Raycast").
     speaker_confirmed = not unknown_speaker and "speaker_uncertain" not in uncertainty_reasons
     no_speculation = not _has_speculative_signal(text)
-    has_entities = _has_named_entities(memory.content)
-    content_specific = len(memory.content.strip()) > 40
     actor_supported = _has_actor_supported_quote(memory.content, events, min_overlap=3)
+    content_words = len(_meaningful_words(memory.content))
     if (
         speaker_confirmed
         and no_speculation
-        and has_entities
-        and content_specific
         and actor_supported
         and not review_required
+        and content_words >= 3  # i10 Fix #3: restore minimal specificity floor for high-conf
     ):
         confidence = "high"
     elif (
@@ -605,14 +790,13 @@ def _has_low_value_memory_text(text: str) -> bool:
     concrete preference/decision/fact.  They are routed away from auto-create.
     """
     padded = f" {text} "
+    # Relaxed post-hallucination-campaign: removed preference-indicating phrases
+    # ("expressed", "showed interest", "has/is interested in") that caught valid
+    # preference extractions like "David expressed interest in using Rust."
     banned_phrases = (
         " discussed ",
         " talked about ",
         " mentioned ",
-        " expressed ",
-        " showed interest ",
-        " has interest in ",
-        " is interested in ",
         " thinks ",
         " believes ",
         " feels ",

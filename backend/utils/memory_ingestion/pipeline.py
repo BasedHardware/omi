@@ -372,7 +372,7 @@ _FILLER_WORDS = frozenset({
     "pure", "chatter", "example",
 })
 
-_MIN_SIGNAL_DENSITY = 3.5  # avg substantive words per text-bearing turn
+_MIN_SIGNAL_DENSITY = 2.0  # avg substantive words per text-bearing turn (relaxed from 3.5 post-hallucination-campaign)
 
 
 def _compute_signal_density(pipeline_input: MemoryPipelineInput) -> float:
@@ -810,9 +810,13 @@ def _decision_for_frame(
         elif frame.confidence == "high" and routing.auto_create_high_confidence:
             action = "create_memory"
             rationale = "High-confidence ordinary frame is eligible for active memory creation."
-        elif frame.confidence == "medium" and routing.auto_create_medium_confidence:
+        elif (
+            frame.confidence == "medium"
+            and routing.auto_create_medium_confidence
+            and not frame.uncertainty_reasons  # i10 Fix #1: guard medium-AA on uncertainty
+        ):
             action = "create_memory"
-            rationale = "Medium-confidence frame is eligible by routing config."
+            rationale = "Medium-confidence clean frame is eligible for auto-creation."
         elif frame.confidence == "low" and routing.review_low_confidence:
             action = "route_to_review"
             rationale = "Low-confidence frame requires review."

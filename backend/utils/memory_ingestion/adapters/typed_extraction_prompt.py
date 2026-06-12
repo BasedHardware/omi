@@ -48,39 +48,56 @@ IDENTITY RULES (CRITICAL):
 
 EXTRACT a fact when it is durable context about {user_name}: preferences and dislikes, decisions and commitments, projects and tools, relationships, plans, addresses/birthdays, changes of state ("no longer..."). Skip media/news narration that is not about {user_name}, generic world knowledge, and pure scheduling chatter.
 
-FOR EVERY FACT, FILL THE TYPED FIELDS:
-
-0. quote_anchor — copy the exact source sentence or clause that proves the fact into the quote_anchor field. It MUST be a verbatim substring from the transcript, not a paraphrase. For any fact about {user_name}, the quote_anchor must be self-report evidence: either {user_name}'s own speaker turn or a literal clause containing first-person language ("I", "my", "we", "our") that directly asserts the fact. The final content must preserve at least 2 distinctive non-stopword terms from that quote. Do not use a different turn as supporting evidence: every extracted fact must be supported by its own quote_anchor, not by nearby context. If you cannot copy a literal self-report quote anchor for a user fact, output no fact.
-
-1. content — one concise sentence (max 15 words), specific and timeless, starting with {user_name} when about them. Do not paraphrase beyond what the quote_anchor directly states.
-
-2. predicate — EXACTLY ONE of:
-   - plans_travel_to — a trip or relocation plan. arguments: destination, planned_date (if stated)
-   - prefers — a stable preference. arguments: preference, over (if a comparison)
-   - dislikes — a stable dislike. arguments: target
-   - works_on — a project/product they actively work on. arguments: project
-   - decided_to_use — a decision in favor of a tool/approach. arguments: tool, purpose
-   - considering_using — an option under consideration, not decided. arguments: tool, purpose
-   - committed_to_do — a concrete commitment/promise. arguments: action, due (if stated)
-   - knows_person — a relationship. arguments: person, relationship, context
-   - has_birthday — arguments: person, date
-   - has_address — arguments: person, address_or_location
-   - uses_tool — a tool/service they use routinely. arguments: tool, purpose
-   - belongs_to_project — an artifact/person belongs to a project. arguments: member, project
-   - is_currently_true — durable state/fact with no better predicate above. arguments: topic
-   - is_no_longer_true — a fact that stopped holding (supersession/contradiction). arguments: topic, replaced_by (if stated)
-
-   Prefer the MOST SPECIFIC predicate. Use is_currently_true only as a last resort.
-
-3. arguments — the named slots listed for the predicate, as short literal strings. Only fill argument slots when value is EXPLICITLY stated in conversation; leave unfilled slots out entirely rather than guessing.
-
-4. subject_attribution — "user" ONLY if the fact is about {user_name} AND the quote_anchor is self-report evidence from {user_name} (actor-authored or first-person wording). Use "third_party" if about someone else; use "assistant_suggested" if an assistant/AI/team member proposed it or if the quote lacks first-person confirmation. Facts with assistant_suggested are normally not durable memories; only emit them when needed to preserve a reviewable contradiction/update.
-
-5. uncertainty_reasons — zero or more of: speaker_uncertain, inferred_not_stated, temporal_scope_unclear, low_quality_transcript, subject_ambiguous, conflicts_with_existing_memory, duplicate_near_match. Use them honestly; an uncertain fact WITH reasons is better than a dropped fact or a confidently wrong one.
-
-6. modality discipline — encode uncertainty/change in predicate and uncertainty_reasons, NOT vague prose. Use considering_using for explicit "I might/I'm considering..." options, plans_travel_to/committed_to_do for explicit future commitments, and is_no_longer_true for direct statements that a prior fact stopped holding. Keep content concise and timeless (no "might", "maybe", "could", or "discussed" in content).
-
-7. category — "interesting" only for external wisdom from others with attribution; otherwise "system".
+|FOR EVERY FACT, FILL THE TYPED FIELDS:
+|
+|0. ⚠️ PREDICATE (MOST IMPORTANT FIELD) — You MUST pick EXACTLY ONE predicate from this list. This is NOT optional. Every fact MUST have a predicate:
+|
+|   - plans_travel_to — a trip or relocation plan
+|   - prefers — a stable preference
+|   - dislikes — a stable dislike
+|   - works_on — a project/product they actively work on
+|   - decided_to_use — a decision in favor of a tool/approach
+|   - considering_using — an option under consideration, not decided
+|   - committed_to_do — a concrete commitment/promise
+|   - knows_person — a relationship
+|   - has_birthday — birthday information
+|   - has_address — address/location information
+|   - uses_tool — a tool/service they use routinely
+|   - belongs_to_project — an artifact/person belongs to a project
+|   - is_currently_true — durable state/fact with no better predicate above (LAST RESORT)
+|   - is_no_longer_true — a fact that stopped holding
+|
+|   Write the predicate value EXACTLY as shown above (e.g. "prefers", not "prefers coffee").
+|   Prefer the MOST SPECIFIC predicate. Use is_currently_true only as absolute last resort.
+|   If you do not fill this field with one of the exact values above, the extraction will fail.
+|
+|1. quote_anchor — copy the exact source sentence or clause that proves the fact into the quote_anchor field. It MUST be a verbatim substring from the transcript, not a paraphrase. For any fact about {user_name}, the quote_anchor must be self-report evidence: either {user_name}'s own speaker turn or a literal clause containing first-person language ("I", "my", "we", "our") that directly asserts the fact. The final content must preserve at least 2 distinctive non-stopword terms from that quote. Do not use a different turn as supporting evidence: every extracted fact must be supported by its own quote_anchor, not by nearby context. If you cannot copy a literal self-report quote anchor for a user fact, output no fact.
+|
+|2. content — one concise sentence (max 15 words), specific and timeless, starting with {user_name} when about them. Do not paraphrase beyond what the quote_anchor directly states.
+|
+|3. arguments — the named slots listed for the chosen predicate, as short literal strings. Only fill argument slots when value is EXPLICITLY stated in conversation; leave unfilled slots out entirely rather than guessing.
+|   - plans_travel_to: destination, planned_date (if stated)
+|   - prefers: preference, over (if a comparison)
+|   - dislikes: target
+|   - works_on: project
+|   - decided_to_use: tool, purpose
+|   - considering_using: tool, purpose
+|   - committed_to_do: action, due (if stated)
+|   - knows_person: person, relationship, context
+|   - has_birthday: person, date
+|   - has_address: person, address_or_location
+|   - uses_tool: tool, purpose
+|   - belongs_to_project: member, project
+|   - is_currently_true: topic
+|   - is_no_longer_true: topic, replaced_by (if stated)
+|
+|4. subject_attribution — "user" ONLY if the fact is about {user_name} AND the quote_anchor is self-report evidence from {user_name} (actor-authored or first-person wording). Use "third_party" if about someone else; use "assistant_suggested" if an assistant/AI/team member proposed it or if the quote lacks first-person confirmation. Facts with assistant_suggested are normally not durable memories; only emit them when needed to preserve a reviewable contradiction/update.
+|
+|5. uncertainty_reasons — zero or more of: speaker_uncertain, inferred_not_stated, temporal_scope_unclear, low_quality_transcript, subject_ambiguous, conflicts_with_existing_memory, duplicate_near_match. Use them honestly; an uncertain fact WITH reasons is better than a dropped fact or a confidently wrong one.
+|
+|6. modality discipline — encode uncertainty/change in predicate and uncertainty_reasons, NOT vague prose. Use considering_using for explicit "I might/I'm considering..." options, plans_travel_to/committed_to_do for explicit future commitments, and is_no_longer_true for direct statements that a prior fact stopped holding. Keep content concise and timeless (no "might", "maybe", "could", or "discussed" in content).
+|
+|7. category — "interesting" only for external wisdom from attribution; otherwise "system".
 
 ------------------------------------------------------------------------------
 ANTI-HALLUCINATION GUARDRAILS
