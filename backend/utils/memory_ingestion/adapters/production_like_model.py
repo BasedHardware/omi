@@ -520,9 +520,22 @@ def _frame_polarity(memory: ProductionLikeMemory) -> str:
     return "negative" if _resolve_predicate(memory) == "is_no_longer_true" else "neutral"
 
 
+_memory_llm_logged = False  # module-level flag: has the LLM endpoint been logged?
+
+
 def _memory_llm(temperature: float = 0.0):
+    global _memory_llm_logged
     model = os.environ.get("OMI_MEMORY_PIPELINE_MODEL", "gpt-4.1-mini")
-    return ChatOpenAI(model=model, temperature=temperature, request_timeout=120, max_retries=1)
+    base_url = os.environ.get("OPENAI_BASE_URL", "")
+    # Log resolved endpoint once for debuggability — catches credential mismatches early
+    if not _memory_llm_logged:
+        url_preview = base_url or "(default OpenAI)"
+        print(f"[pipeline-llm] model={model}  base_url={url_preview}")
+        _memory_llm_logged = True
+    kwargs: dict = dict(model=model, temperature=temperature, request_timeout=120, max_retries=1)
+    if base_url:
+        kwargs["base_url"] = base_url
+    return ChatOpenAI(**kwargs)
 
 
 def _language_instruction(language: str | None) -> str:
