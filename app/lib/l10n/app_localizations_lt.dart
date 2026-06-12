@@ -432,7 +432,8 @@ class AppLocalizationsLt extends AppLocalizations {
   String get autoSync => 'Automatinis sinchronizavimas';
 
   @override
-  String get autoSyncDescription => 'Automatiškai sinchronizuoti neprisijungus įrašytus įrašus, kai prijungiamas įrenginys';
+  String get autoSyncDescription =>
+      'Automatiškai sinchronizuoti neprisijungus įrašytus įrašus, kai prijungiamas įrenginys';
 
   @override
   String get deviceSettings => 'Įrenginio nustatymai';
@@ -4692,10 +4693,7 @@ class AppLocalizationsLt extends AppLocalizations {
   }
 
   @override
-  String accessesAndTriggeredBy(
-    String accessDescription,
-    String triggerDescription,
-  ) {
+  String accessesAndTriggeredBy(String accessDescription, String triggerDescription) {
     return '$accessDescription ir yra $triggerDescription.';
   }
 

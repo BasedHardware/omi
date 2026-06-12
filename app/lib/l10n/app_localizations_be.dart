@@ -4705,10 +4705,7 @@ class AppLocalizationsBe extends AppLocalizations {
   }
 
   @override
-  String accessesAndTriggeredBy(
-    String accessDescription,
-    String triggerDescription,
-  ) {
+  String accessesAndTriggeredBy(String accessDescription, String triggerDescription) {
     return '$accessDescription і запушчаны $triggerDescription.';
   }
 

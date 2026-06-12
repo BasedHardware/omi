@@ -4689,10 +4689,7 @@ class AppLocalizationsSk extends AppLocalizations {
   }
 
   @override
-  String accessesAndTriggeredBy(
-    String accessDescription,
-    String triggerDescription,
-  ) {
+  String accessesAndTriggeredBy(String accessDescription, String triggerDescription) {
     return '$accessDescription a je $triggerDescription.';
   }
 

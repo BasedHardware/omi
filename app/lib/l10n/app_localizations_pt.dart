@@ -431,7 +431,8 @@ class AppLocalizationsPt extends AppLocalizations {
   String get autoSync => 'Sincronização automática';
 
   @override
-  String get autoSyncDescription => 'Sincronizar automaticamente as gravações offline quando o seu dispositivo se conectar';
+  String get autoSyncDescription =>
+      'Sincronizar automaticamente as gravações offline quando o seu dispositivo se conectar';
 
   @override
   String get deviceSettings => 'Configurações do dispositivo';
@@ -4677,10 +4678,7 @@ class AppLocalizationsPt extends AppLocalizations {
   }
 
   @override
-  String accessesAndTriggeredBy(
-    String accessDescription,
-    String triggerDescription,
-  ) {
+  String accessesAndTriggeredBy(String accessDescription, String triggerDescription) {
     return '$accessDescription e é $triggerDescription.';
   }
 

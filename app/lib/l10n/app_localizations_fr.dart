@@ -434,7 +434,8 @@ class AppLocalizationsFr extends AppLocalizations {
   String get autoSync => 'Synchronisation automatique';
 
   @override
-  String get autoSyncDescription => 'Synchroniser automatiquement les enregistrements hors ligne lorsque votre appareil se connecte';
+  String get autoSyncDescription =>
+      'Synchroniser automatiquement les enregistrements hors ligne lorsque votre appareil se connecte';
 
   @override
   String get deviceSettings => 'Paramètres de l\'appareil';
@@ -4737,10 +4738,7 @@ class AppLocalizationsFr extends AppLocalizations {
   }
 
   @override
-  String accessesAndTriggeredBy(
-    String accessDescription,
-    String triggerDescription,
-  ) {
+  String accessesAndTriggeredBy(String accessDescription, String triggerDescription) {
     return '$accessDescription et est $triggerDescription.';
   }
 

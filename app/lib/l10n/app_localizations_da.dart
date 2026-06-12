@@ -4678,10 +4678,7 @@ class AppLocalizationsDa extends AppLocalizations {
   }
 
   @override
-  String accessesAndTriggeredBy(
-    String accessDescription,
-    String triggerDescription,
-  ) {
+  String accessesAndTriggeredBy(String accessDescription, String triggerDescription) {
     return '$accessDescription og er $triggerDescription.';
   }
 
