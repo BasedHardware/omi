@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 import copy
+import logging
 import re
 from datetime import datetime, timezone
 from enum import Enum
 from typing import Protocol
 
 from pydantic import ValidationError
+
+logger = logging.getLogger(__name__)
 
 from utils.memory_ingestion.ids import StableIdFactory, stable_hash, stable_hmac
 from utils.memory_ingestion.models import (
@@ -707,16 +710,12 @@ def _decision_for_frame(
         elif (
             frame.uncertainty_reasons
             and routing.review_uncertain
-            and not _is_unknown_speaker_only_ordinary_frame(frame)
         ):
             action = "route_to_review"
             rationale = "Uncertain frame requires review by the rollout routing profile."
         elif frame.confidence == "high" and routing.auto_create_high_confidence:
             action = "create_memory"
             rationale = "High-confidence ordinary frame is eligible for active memory creation."
-        elif _is_unknown_speaker_only_ordinary_frame(frame):
-            action = "create_memory"
-            rationale = "Ordinary first-person memory has only generic speaker-label uncertainty."
         elif frame.confidence == "medium" and routing.auto_create_medium_confidence:
             action = "create_memory"
             rationale = "Medium-confidence frame is eligible by routing config."
@@ -756,15 +755,6 @@ def _decision_for_frame(
         confidence=frame.confidence,
         uncertainty_reasons=frame.uncertainty_reasons,
         preconditions=preconditions,
-    )
-
-
-def _is_unknown_speaker_only_ordinary_frame(frame: MemoryEventFrame) -> bool:
-    return (
-        frame.confidence == "medium"
-        and frame.sensitivity.level == "none"
-        and frame.sensitivity.review_required is False
-        and set(frame.uncertainty_reasons) == {"speaker_uncertain"}
     )
 
 
