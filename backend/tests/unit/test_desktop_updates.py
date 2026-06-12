@@ -18,6 +18,11 @@ sys.modules.setdefault('google.cloud.firestore_v1', MagicMock())
 sys.modules.setdefault('google.auth', MagicMock())
 sys.modules.setdefault('google.auth.transport.requests', MagicMock())
 
+redis_db_stub = sys.modules.setdefault('database.redis_db', MagicMock())
+redis_db_stub.get_generic_cache = MagicMock(return_value=None)
+redis_db_stub.set_generic_cache = MagicMock()
+redis_db_stub.delete_generic_cache = MagicMock()
+
 from fastapi import FastAPI
 
 from routers.updates import (
