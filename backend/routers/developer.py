@@ -104,6 +104,30 @@ def delete_key(key_id: str, uid: str = Depends(get_current_user_id)):
 # ******************************************************
 
 
+def _coerce_required_memory_id(value) -> str:
+    if not value and value != 0:
+        raise ValueError('id is required')
+    return str(value)
+
+
+def _coerce_optional_memory_datetime(value) -> Optional[datetime]:
+    if value in [None, '']:
+        return None
+    if isinstance(value, datetime):
+        return value
+    if isinstance(value, str):
+        try:
+            return datetime.fromisoformat(value.replace('Z', '+00:00'))
+        except ValueError:
+            return None
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        try:
+            return datetime.fromtimestamp(value, tz=timezone.utc)
+        except (OSError, OverflowError, ValueError):
+            return None
+    return None
+
+
 class CleanerMemory(BaseModel):
     # Core fields (aligned with MemoryResponse)
     id: str
@@ -121,9 +145,7 @@ class CleanerMemory(BaseModel):
 
     @field_validator('id', mode='before')
     def coerce_id(cls, value):
-        if not value and value != 0:
-            raise ValueError('id is required')
-        return str(value)
+        return _coerce_required_memory_id(value)
 
     @field_validator('content', mode='before')
     def coerce_content(cls, value):
@@ -158,21 +180,7 @@ class CleanerMemory(BaseModel):
 
     @field_validator('created_at', 'updated_at', mode='before')
     def coerce_datetime(cls, value):
-        if value in [None, '']:
-            return None
-        if isinstance(value, datetime):
-            return value
-        if isinstance(value, str):
-            try:
-                return datetime.fromisoformat(value.replace('Z', '+00:00'))
-            except ValueError:
-                return None
-        if isinstance(value, (int, float)) and not isinstance(value, bool):
-            try:
-                return datetime.fromtimestamp(value, tz=timezone.utc)
-            except (OSError, OverflowError, ValueError):
-                return None
-        return None
+        return _coerce_optional_memory_datetime(value)
 
     @field_validator('user_review', mode='before')
     def coerce_user_review(cls, value):
