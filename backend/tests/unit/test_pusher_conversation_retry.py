@@ -12,6 +12,11 @@ import time
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+
+from pusher_websockets_stub import install_websockets_stub
+
+install_websockets_stub()
+
 from websockets.exceptions import ConnectionClosed
 
 # ---------------------------------------------------------------------------
