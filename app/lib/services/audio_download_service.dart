@@ -27,7 +27,7 @@ class AudioDownloadService {
 
       onStageChange?.call(AudioDownloadStage.preparing);
 
-      final audioFileInfos = await getConversationAudioSignedUrls(conversation.id);
+      final audioFileInfos = (await getConversationAudioSignedUrls(conversation.id)).files;
 
       if (audioFileInfos.isEmpty) {
         Logger.debug('No audio file URLs available');
@@ -51,7 +51,7 @@ class AudioDownloadService {
         final audioInfo = cachedFiles[i];
         if (audioInfo.signedUrl == null) continue;
 
-        final filename = 'audio_part_${i + 1}_${DateTime.now().millisecondsSinceEpoch}.wav';
+        final filename = 'audio_part_${i + 1}_${DateTime.now().millisecondsSinceEpoch}.${audioInfo.fileExtension}';
         final filePath = '${tempDir.path}/$filename';
 
         final file = await _downloadFile(
