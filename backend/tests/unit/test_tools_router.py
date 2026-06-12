@@ -140,6 +140,35 @@ factory_mod = _stub_module("utils.conversations.factory")
 factory_mod.deserialize_conversation = MagicMock(
     side_effect=lambda d: d if not isinstance(d, dict) else type('FakeConv', (), d)()
 )
+search_mod = _stub_module("utils.conversations.search")
+search_mod.keyword_search_conversation_ids = MagicMock(return_value=[])
+
+
+def _merge_conversation_search_ids(keyword_ids, vector_ids):
+    return list(keyword_ids) + [cid for cid in vector_ids if cid not in keyword_ids]
+
+
+search_mod.merge_conversation_search_ids = MagicMock(side_effect=_merge_conversation_search_ids)
+transcript_chunks_mod = _stub_module("utils.conversations.transcript_chunks")
+
+
+def _hydrate_chunk_texts(_uid, conversations):
+    return conversations
+
+
+transcript_chunks_mod.hydrate_chunk_texts = MagicMock(side_effect=_hydrate_chunk_texts)
+
+
+@pytest.fixture(autouse=True)
+def reset_conversation_search_stubs():
+    search_mod.keyword_search_conversation_ids.reset_mock()
+    search_mod.keyword_search_conversation_ids.return_value = []
+    search_mod.merge_conversation_search_ids.reset_mock()
+    search_mod.merge_conversation_search_ids.side_effect = _merge_conversation_search_ids
+    transcript_chunks_mod.hydrate_chunk_texts.reset_mock()
+    transcript_chunks_mod.hydrate_chunk_texts.side_effect = _hydrate_chunk_texts
+
+
 endpoints_mod = _stub_module("utils.other.endpoints")
 endpoints_mod.get_current_user_uid = MagicMock()
 endpoints_mod.with_rate_limit = MagicMock(return_value=MagicMock())
