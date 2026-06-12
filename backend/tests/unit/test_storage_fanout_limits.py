@@ -90,10 +90,14 @@ class TestPrecacheFileSemaphore:
         src = _read_source('utils/other/storage.py')
         assert '_PRECACHE_FILE_SEM' in src
 
-    def test_precache_file_semaphore_is_2(self):
-        """Global precache file semaphore must be BoundedSemaphore(2)."""
+    def test_precache_file_semaphore_is_4(self):
+        """Global precache file semaphore must be BoundedSemaphore(4).
+
+        Was 2 while storage_executor was saturated by per-file sleep(480)
+        deletion timers; restored to 4 once the janitor thread took those
+        over (see test_deferred_blob_janitor.py)."""
         src = _read_source('utils/other/storage.py')
-        assert 'BoundedSemaphore(2)' in src
+        assert '_PRECACHE_FILE_SEM = threading.BoundedSemaphore(4)' in src
 
     def test_precache_conversation_audio_uses_semaphore(self):
         """precache_conversation_audio must gate submissions with _PRECACHE_FILE_SEM."""
