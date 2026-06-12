@@ -63,7 +63,7 @@ class _FakeAnthropicClient:
 
 class _FakeEncoding:
     def encode(self, text):
-        return list(text)
+        return list(range(len(text)))
 
 
 def _module(name: str, **attrs):
@@ -114,6 +114,10 @@ _HEAVY_MOCKS = {
     'database.llm_usage': _module('database.llm_usage', record_llm_usage=MagicMock()),
 }
 
+# These import-time fakes intentionally replace optional SDK/database modules:
+# this file imports utils.llm.clients at module scope, before a fixture could
+# install or clean up stubs, and broad Windows collection can leave partial
+# sys.modules entries that hide required attributes.
 for _mod, _mock in _HEAVY_MOCKS.items():
     sys.modules[_mod] = _mock
 
