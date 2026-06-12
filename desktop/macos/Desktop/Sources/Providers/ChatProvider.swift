@@ -1293,6 +1293,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             // polling gaps) would overshoot and silently skip history, while a
             // duplicate window only costs a redundant fetch.
             var appendedCount = 0
+            var existingIds = Set(messages.map(\.id))
             for _ in 0..<3 {
                 let offset = messagesPaginationOffset
                 let olderMessages: [ChatMessageDB]
@@ -1315,9 +1316,9 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                 messagesPaginationOffset += olderMessages.count
 
                 // Drop the window overlap before appending.
-                let existingIds = Set(messages.map(\.id))
                 let newMessages = olderMessages.map(ChatMessage.init(from:))
                     .filter { !existingIds.contains($0.id) }
+                existingIds.formUnion(newMessages.map(\.id))
 
                 // Append older messages and re-sort to ensure correct chronological order
                 messages.append(contentsOf: newMessages)
