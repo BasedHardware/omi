@@ -88,6 +88,11 @@ export const AudioPlayer = forwardRef<AudioPlayerRef, AudioPlayerProps>(
               setIsLoading(false);
               return;
             }
+            if (info?.status === 'unavailable') {
+              setError('Audio is no longer available for this conversation');
+              setIsLoading(false);
+              return;
+            }
             await new Promise((resolve) => setTimeout(resolve, pollAfterMs ?? 3000));
           }
           if (!cancelled) {
