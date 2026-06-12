@@ -21,7 +21,10 @@ def _ensure_package_path(name, path):
     if mod is None or not isinstance(mod, types.ModuleType):
         mod = types.ModuleType(name)
         sys.modules[name] = mod
-    mod.__path__ = [path]
+    paths = list(getattr(mod, "__path__", []) or [])
+    if path not in paths:
+        paths.append(path)
+    mod.__path__ = paths
     if '.' in name:
         parent_name, attr_name = name.rsplit('.', 1)
         parent = _ensure_package_path(parent_name, os.path.dirname(path))
@@ -52,7 +55,6 @@ if not hasattr(_http_mod, "get_webhook_client"):
 if not hasattr(_http_mod, "get_maps_semaphore"):
     _http_mod.get_maps_semaphore = MagicMock(return_value=asyncio.Semaphore(8))
 
-_ensure_package_path("utils", os.path.join(BACKEND_DIR, "utils"))
 _ensure_package_path("utils.conversations", os.path.join(BACKEND_DIR, "utils", "conversations"))
 sys.modules.pop("utils.conversations.location", None)
 
