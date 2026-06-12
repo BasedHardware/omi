@@ -10,7 +10,7 @@ import {
 } from 'react';
 import { Play, Pause, Volume2, VolumeX, Loader2, Download } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { getConversationAudioUrls } from '@/lib/api';
+import { getConversationAudioUrlsWithPoll } from '@/lib/api';
 import type { AudioFile } from '@/types/conversation';
 
 interface AudioPlayerProps {
@@ -79,15 +79,16 @@ export const AudioPlayer = forwardRef<AudioPlayerRef, AudioPlayerProps>(
           const fileId = firstFile.id || '0';
           const deadline = Date.now() + 90_000;
           while (Date.now() < deadline && !cancelled) {
-            const urls = await getConversationAudioUrls(conversationId);
+            const { files, pollAfterMs } =
+              await getConversationAudioUrlsWithPoll(conversationId);
             if (cancelled) return;
-            const info = urls.find((f) => f.id === fileId) ?? urls[0];
+            const info = files.find((f) => f.id === fileId) ?? files[0];
             if (info?.signed_url) {
               setAudioUrl(info.signed_url);
               setIsLoading(false);
               return;
             }
-            await new Promise((resolve) => setTimeout(resolve, 3000));
+            await new Promise((resolve) => setTimeout(resolve, pollAfterMs ?? 3000));
           }
           if (!cancelled) {
             setError('Audio is still processing — try again shortly');
