@@ -68,6 +68,10 @@ for _mod in _stub_modules:
 
 sys.modules['database.redis_db'].r = MagicMock()
 sys.modules['database._client'].db = MagicMock()
+if 'google.cloud.tasks_v2' not in sys.modules:
+    sys.modules['google.cloud.tasks_v2'] = MagicMock()
+if not hasattr(sys.modules.setdefault('google.cloud', MagicMock()), 'tasks_v2'):
+    sys.modules['google.cloud'].tasks_v2 = sys.modules['google.cloud.tasks_v2']
 sys.modules['utils.log_sanitizer'].sanitize = lambda x: x
 sys.modules['utils.log_sanitizer'].sanitize_pii = lambda x: x
 

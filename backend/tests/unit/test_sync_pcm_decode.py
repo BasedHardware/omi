@@ -55,6 +55,10 @@ for mod_name in _stub_modules:
 # Ensure specific attributes exist on key stubs
 sys.modules['database.redis_db'].r = MagicMock()
 sys.modules['database._client'].db = MagicMock()
+if 'google.cloud.tasks_v2' not in sys.modules:
+    sys.modules['google.cloud.tasks_v2'] = MagicMock()
+if not hasattr(sys.modules.setdefault('google.cloud', MagicMock()), 'tasks_v2'):
+    sys.modules['google.cloud'].tasks_v2 = sys.modules['google.cloud.tasks_v2']
 
 from routers.sync import _is_pcm_codec, decode_pcm_file_to_wav, decode_files_to_wav
 
