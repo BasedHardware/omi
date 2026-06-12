@@ -26,6 +26,10 @@ import pytest
 # ---------------------------------------------------------------------------
 BACKEND_DIR = Path(__file__).resolve().parent.parent.parent
 IST_TZ = timezone(timedelta(hours=5, minutes=30), "IST")
+ZONEINFO_FALLBACKS = {
+    "UTC": timezone.utc,
+    "Asia/Kolkata": IST_TZ,
+}
 
 os.environ.setdefault(
     "ENCRYPTION_SECRET",
@@ -67,11 +71,10 @@ def _zoneinfo_for_test(key):
     try:
         return ZoneInfo(key)
     except (ZoneInfoNotFoundError, KeyError):
-        if key == "UTC":
-            return timezone.utc
-        if key == "Asia/Kolkata":
-            return timezone(timedelta(hours=5, minutes=30), key)
-        raise
+        fallback = ZONEINFO_FALLBACKS.get(key)
+        if fallback is None:
+            raise
+        return fallback
 
 
 # ---------------------------------------------------------------------------
