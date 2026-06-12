@@ -19,6 +19,7 @@ from google.cloud.exceptions import NotFound
 
 from database.redis_db import cache_signed_url, get_cached_signed_url
 from utils import encryption
+from utils.other.deferred_delete import DeferredDeleter
 from database import users as users_db
 import logging
 
@@ -26,7 +27,10 @@ logger = logging.getLogger(__name__)
 
 # Per-request fan-out limits for storage_executor (#7387)
 _STORAGE_CHUNK_SEM = threading.BoundedSemaphore(32)
-_PRECACHE_FILE_SEM = threading.BoundedSemaphore(2)
+# 4 → 2 in #7526 was load-shedding while the pool was full of sleeping
+# per-file deletion timers; restored to 4 now that the janitor thread
+# (deferred_delete.py) holds those instead of pool threads.
+_PRECACHE_FILE_SEM = threading.BoundedSemaphore(4)
 _CHUNK_WINDOW_SIZE = 8
 
 _merge_tracker_lock = threading.Lock()
@@ -340,6 +344,24 @@ def delete_syncing_temporal_file(file_path: str):
         blob.delete()
     except BlobNotFound:
         pass
+
+
+# Long enough for every signed-URL consumer (Deepgram fetch, speaker-ID
+# download) to finish; the URLs themselves expire at 15 minutes.
+SYNCING_TEMPORAL_DELETE_DELAY_SECONDS = 480
+
+_syncing_temporal_deleter = DeferredDeleter(delete_syncing_temporal_file, name='syncing-blob-janitor')
+
+
+def schedule_syncing_temporal_file_deletion(
+    file_path: str, delay_seconds: float = SYNCING_TEMPORAL_DELETE_DELAY_SECONDS
+):
+    """Delete a temporal syncing blob once its signed-URL consumers are done.
+
+    One janitor thread + a due-time heap, instead of the previous per-file
+    time.sleep(480) that parked a storage_executor thread per blob (#7531).
+    """
+    _syncing_temporal_deleter.schedule(file_path, delay_seconds)
 
 
 def upload_syncing_temporal_file(file_path: str):
