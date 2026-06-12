@@ -11,14 +11,23 @@ and structurally guard that both chat retrieval call sites use the hybrid path.
 """
 
 import os
+import sys
+from types import ModuleType
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
 os.environ.setdefault('TYPESENSE_HOST', 'localhost')
 os.environ.setdefault('TYPESENSE_HOST_PORT', '8108')
 os.environ.setdefault('TYPESENSE_API_KEY', 'test-key-not-real')
+
+typesense_mod = sys.modules.get('typesense')
+if typesense_mod is None:
+    typesense_mod = ModuleType('typesense')
+    sys.modules['typesense'] = typesense_mod
+if not hasattr(typesense_mod, 'Client'):
+    typesense_mod.Client = MagicMock
 
 import utils.conversations.search as search_module
 from utils.conversations.search import keyword_search_conversation_ids, merge_conversation_search_ids
@@ -89,6 +98,6 @@ class TestCallSitesUseHybridSearch:
         ],
     )
     def test_call_site_merges_keyword_and_vector(self, rel_path):
-        source = (BACKEND_DIR / rel_path).read_text()
+        source = (BACKEND_DIR / rel_path).read_text(encoding='utf-8')
         assert 'keyword_search_conversation_ids(' in source, f'{rel_path} lost the keyword search half of #5072'
         assert 'merge_conversation_search_ids(' in source, f'{rel_path} lost the hybrid merge of #5072'
