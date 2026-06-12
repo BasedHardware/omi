@@ -61,6 +61,7 @@ from utils.other import endpoints as auth
 from utils.other.storage import (
     get_syncing_file_temporal_signed_url,
     delete_syncing_temporal_file,
+    schedule_syncing_temporal_file_deletion,
     upload_syncing_temporal_file,
     download_syncing_temporal_file,
     download_audio_chunks_and_merge,
@@ -1016,12 +1017,7 @@ def process_segment(
 ):
     try:
         url = get_syncing_file_temporal_signed_url(path)
-
-        def delete_file():
-            time.sleep(480)
-            delete_syncing_temporal_file(path)
-
-        submit_with_context(storage_executor, delete_file)
+        schedule_syncing_temporal_file_deletion(path)
 
         # Apply user transcription preferences (vocabulary, language, model)
         prefs = transcription_prefs or {}

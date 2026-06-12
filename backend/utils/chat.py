@@ -1,10 +1,7 @@
-import time
 import base64
 import uuid
 from datetime import datetime, timezone
 from typing import AsyncGenerator, List, Optional, Tuple
-
-from utils.executors import storage_executor
 
 import database.chat as chat_db
 import database.notifications as notification_db
@@ -17,7 +14,7 @@ from models.app import UsageHistoryType
 from models.transcript_segment import TranscriptSegment
 from utils.conversation_helpers import extract_memory_ids
 from utils.notifications import send_notification
-from utils.other.storage import get_syncing_file_temporal_signed_url, delete_syncing_temporal_file
+from utils.other.storage import get_syncing_file_temporal_signed_url, schedule_syncing_temporal_file_deletion
 from utils.retrieval.graph import execute_graph_chat, execute_graph_chat_stream
 from utils.stt.pre_recorded import (
     get_deepgram_model_for_language,
@@ -63,12 +60,7 @@ def transcribe_voice_message_segment(
     language: str = 'multi',
 ) -> Tuple[Optional[str], Optional[str]]:
     url = get_syncing_file_temporal_signed_url(path)
-
-    def delete_file():
-        time.sleep(480)
-        delete_syncing_temporal_file(path)
-
-    storage_executor.submit(delete_file)
+    schedule_syncing_temporal_file_deletion(path)
 
     if not language:
         language = resolve_voice_message_language(uid, None)
@@ -178,12 +170,7 @@ def process_voice_message_segment(
     language: str = 'multi',
 ):
     url = get_syncing_file_temporal_signed_url(path)
-
-    def delete_file():
-        time.sleep(480)
-        delete_syncing_temporal_file(path)
-
-    storage_executor.submit(delete_file)
+    schedule_syncing_temporal_file_deletion(path)
 
     if not language:
         language = resolve_voice_message_language(uid, None)
@@ -252,12 +239,7 @@ async def process_voice_message_segment_stream(
     language: str = 'multi',
 ) -> AsyncGenerator[str, None]:
     url = get_syncing_file_temporal_signed_url(path)
-
-    def delete_file():
-        time.sleep(480)
-        delete_syncing_temporal_file(path)
-
-    storage_executor.submit(delete_file)
+    schedule_syncing_temporal_file_deletion(path)
 
     if not language:
         language = resolve_voice_message_language(uid, None)
