@@ -6,11 +6,28 @@ instead of blocking requests.get.
 
 import asyncio
 import json
+import os
 import sys
 import types
 from unittest.mock import MagicMock, AsyncMock, patch
 
 import pytest
+
+BACKEND_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
+
+
+def _ensure_package_path(name, path):
+    mod = sys.modules.get(name)
+    if mod is None or not isinstance(mod, types.ModuleType):
+        mod = types.ModuleType(name)
+        sys.modules[name] = mod
+    mod.__path__ = [path]
+    if '.' in name:
+        parent_name, attr_name = name.rsplit('.', 1)
+        parent = _ensure_package_path(parent_name, os.path.dirname(path))
+        setattr(parent, attr_name, mod)
+    return mod
+
 
 # Mock database._client before importing anything that touches GCP
 sys.modules.setdefault("database._client", MagicMock())
@@ -24,12 +41,20 @@ if not hasattr(_redis_mod, 'r'):
     _redis_mod.r = MagicMock()
 
 # Stub utils.http_client
-if "utils.http_client" not in sys.modules:
+_http_mod = sys.modules.get("utils.http_client")
+if _http_mod is None:
     _http_mod = types.ModuleType("utils.http_client")
-    _http_mod.get_maps_client = MagicMock()
-    _http_mod.get_webhook_client = MagicMock()
-    _http_mod.get_maps_semaphore = MagicMock(return_value=asyncio.Semaphore(8))
     sys.modules["utils.http_client"] = _http_mod
+if not hasattr(_http_mod, "get_maps_client"):
+    _http_mod.get_maps_client = MagicMock()
+if not hasattr(_http_mod, "get_webhook_client"):
+    _http_mod.get_webhook_client = MagicMock()
+if not hasattr(_http_mod, "get_maps_semaphore"):
+    _http_mod.get_maps_semaphore = MagicMock(return_value=asyncio.Semaphore(8))
+
+_ensure_package_path("utils", os.path.join(BACKEND_DIR, "utils"))
+_ensure_package_path("utils.conversations", os.path.join(BACKEND_DIR, "utils", "conversations"))
+sys.modules.pop("utils.conversations.location", None)
 
 from models.conversation import Geolocation
 from utils.conversations.location import async_get_google_maps_location
