@@ -969,37 +969,57 @@ def _dedupe_triples(
 ) -> list[DerivedTriple]:
     """Deduplicate derived triples across the whole run.
 
-    Keep one claim per normalized (subject, predicate, object) rather than per
-    source frame.  This suppresses repeated LLM paraphrases across adjacent
-    chunks while preserving the shortest, highest-confidence object rendering.
-    We also drop near-duplicates whose canonical texts are within edit-distance
-    < 5.
+    Three-pass strategy:
+      Pass 1: Within same (subject, predicate, source_frame_id), keep the
+              shortest / highest-confidence rendering.  This collapses
+              paraphrases the LLM emitted in a single extraction chunk.
+      Pass 2: Cross-frame dedup by normalized (subject, predicate, object)
+              to suppress repeated LLM paraphrases across adjacent chunks.
+      Pass 3: Near-duplicate suppression via edit-distance < 5 on canonical
+              form, catching typos and minor rephrases that eluded Pass 2.
     """
-    # --- Pass 1: exact semantic-key dedup (subject, predicate, object) ---
-    groups: dict[tuple[str, str, str, str], list[DerivedTriple]] = {}
+    # --- Pass 1: within-frame dedup (subject, predicate, frame_id) ---
+    frame_groups: dict[tuple[str, str, str, str], list[DerivedTriple]] = {}
     for t in triples:
+        subj_key = (
+            t.subject.entity_type,
+            (t.subject.canonical_name or t.subject.entity_id or "").casefold(),
+        )
+        key = (subj_key[0], subj_key[1], t.predicate, t.source_frame_id or "")
+        frame_groups.setdefault(key, []).append(t)
+
+    confidence_rank = {"high": 0, "medium": 1, "low": 2}
+    pass1_best: list[DerivedTriple] = []
+    for group in frame_groups.values():
+        best = min(
+            group,
+            key=lambda t: (confidence_rank.get(t.confidence, 3), len(_triple_object_text(t.object))),
+        )
+        pass1_best.append(best)
+
+    # --- Pass 2: cross-frame dedup by normalized (subject, predicate, object) ---
+    obj_groups: dict[tuple[str, str, str, str], list[DerivedTriple]] = {}
+    for t in pass1_best:
         subj_key = (
             t.subject.entity_type,
             (t.subject.canonical_name or t.subject.entity_id or "").casefold(),
         )
         obj_key = _normalized_text(_triple_object_text(t.object))
         key = (subj_key[0], subj_key[1], t.predicate, obj_key)
-        groups.setdefault(key, []).append(t)
+        obj_groups.setdefault(key, []).append(t)
 
-    best_per_key: list[DerivedTriple] = []
-    confidence_rank = {"high": 0, "medium": 1, "low": 2}
-    for group in groups.values():
-        # Prefer higher confidence, then shortest / most concise object.
+    pass2_best: list[DerivedTriple] = []
+    for group in obj_groups.values():
         best = min(
             group,
             key=lambda t: (confidence_rank.get(t.confidence, 3), len(_triple_object_text(t.object))),
         )
-        best_per_key.append(best)
+        pass2_best.append(best)
 
-    # --- Pass 2: near-duplicate suppression (edit distance < 5) ---
+    # --- Pass 3: near-duplicate suppression (edit distance < 5) ---
     kept: list[DerivedTriple] = []
     seen_canonicals: list[str] = []
-    for t in best_per_key:
+    for t in pass2_best:
         canon = _triple_canonical(t)
         is_dup = False
         for existing in seen_canonicals:
