@@ -150,7 +150,25 @@ def _merge_conversation_search_ids(keyword_ids, vector_ids):
 
 search_mod.merge_conversation_search_ids = MagicMock(side_effect=_merge_conversation_search_ids)
 transcript_chunks_mod = _stub_module("utils.conversations.transcript_chunks")
-transcript_chunks_mod.hydrate_chunk_texts = MagicMock(side_effect=lambda _uid, conversations: conversations)
+
+
+def _hydrate_chunk_texts(_uid, conversations):
+    return conversations
+
+
+transcript_chunks_mod.hydrate_chunk_texts = MagicMock(side_effect=_hydrate_chunk_texts)
+
+
+@pytest.fixture(autouse=True)
+def reset_conversation_search_stubs():
+    search_mod.keyword_search_conversation_ids.reset_mock()
+    search_mod.keyword_search_conversation_ids.return_value = []
+    search_mod.merge_conversation_search_ids.reset_mock()
+    search_mod.merge_conversation_search_ids.side_effect = _merge_conversation_search_ids
+    transcript_chunks_mod.hydrate_chunk_texts.reset_mock()
+    transcript_chunks_mod.hydrate_chunk_texts.side_effect = _hydrate_chunk_texts
+
+
 endpoints_mod = _stub_module("utils.other.endpoints")
 endpoints_mod.get_current_user_uid = MagicMock()
 endpoints_mod.with_rate_limit = MagicMock(return_value=MagicMock())
@@ -234,16 +252,6 @@ action_items_svc = _load_module_from_file(
     "utils.retrieval.tool_services.action_items",
     BACKEND_DIR / "utils" / "retrieval" / "tool_services" / "action_items.py",
 )
-
-
-@pytest.fixture(autouse=True)
-def reset_conversation_search_stubs():
-    search_mod.keyword_search_conversation_ids.reset_mock()
-    search_mod.keyword_search_conversation_ids.return_value = []
-    search_mod.merge_conversation_search_ids.reset_mock()
-    search_mod.merge_conversation_search_ids.side_effect = _merge_conversation_search_ids
-    transcript_chunks_mod.hydrate_chunk_texts.reset_mock()
-    transcript_chunks_mod.hydrate_chunk_texts.side_effect = lambda _uid, conversations: conversations
 
 
 # ===========================================================================
