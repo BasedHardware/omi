@@ -2,26 +2,132 @@
 
 import os
 import sys
+import types
 from unittest.mock import MagicMock, patch
 
 import pytest
+
+
+class _FakeBaseChatModel:
+    def __init__(self, **kwargs):
+        self.kwargs = kwargs
+
+    def invoke(self, *args, **kwargs):
+        return MagicMock()
+
+    async def ainvoke(self, *args, **kwargs):
+        return MagicMock()
+
+    def stream(self, *args, **kwargs):
+        return iter(())
+
+    def with_structured_output(self, *args, **kwargs):
+        return self
+
+    def bind(self, **kwargs):
+        bound = object.__new__(self.__class__)
+        bound.__dict__ = {**self.__dict__, **kwargs}
+        return bound
+
+
+class _FakeChatOpenAI(_FakeBaseChatModel):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.model_name = kwargs.get('model') or kwargs.get('model_name') or ''
+        self.temperature = kwargs.get('temperature')
+        self.openai_api_base = kwargs.get('base_url') or kwargs.get('openai_api_base') or ''
+        self.base_url = self.openai_api_base
+
+
+class _FakeChatGoogleGenerativeAI(_FakeBaseChatModel):
+    pass
+
+
+class _FakeOpenAIEmbeddings:
+    def __init__(self, **kwargs):
+        self.kwargs = kwargs
+
+    def embed_documents(self, texts):
+        return [[0.0] for _text in texts]
+
+
+class _FakePydanticOutputParser:
+    def __init__(self, **kwargs):
+        self.kwargs = kwargs
+
+
+class _FakeAnthropicClient:
+    def __init__(self, **kwargs):
+        self.kwargs = kwargs
+
+
+class _FakeEncoding:
+    def encode(self, text):
+        return list(text)
+
+
+def _module(name: str, **attrs):
+    mod = types.ModuleType(name)
+    for attr, value in attrs.items():
+        setattr(mod, attr, value)
+    return mod
+
+
+def _drop_stale_module(name: str, *required_attrs: str):
+    existing = sys.modules.get(name)
+    if existing is not None and not getattr(existing, '__file__', None):
+        if not required_attrs or not all(hasattr(existing, attr) for attr in required_attrs):
+            sys.modules.pop(name, None)
+
+
+_drop_stale_module('utils.llm')
+_drop_stale_module('utils.llm.clients', 'MODEL_QOS_PROFILES', 'get_llm')
+_drop_stale_module('utils.llm.usage_tracker', 'LLMUsageCallback', 'get_usage_callback')
+
+_langchain_core = _module('langchain_core')
+_langchain_core.__path__ = []
 
 # ---------------------------------------------------------------------------
 # Pre-mock heavy deps before any imports touch them
 # ---------------------------------------------------------------------------
 _HEAVY_MOCKS = {
+    'anthropic': _module('anthropic', AsyncAnthropic=_FakeAnthropicClient),
     'firebase_admin': MagicMock(),
     'firebase_admin.firestore': MagicMock(),
     'google.cloud.firestore': MagicMock(),
     'google.cloud.firestore_v1': MagicMock(),
     'google.cloud.firestore_v1.base_query': MagicMock(),
-    'database': MagicMock(),
+    'langchain_core': _langchain_core,
+    'langchain_core.callbacks': _module(
+        'langchain_core.callbacks', BaseCallbackHandler=type('BaseCallbackHandler', (), {})
+    ),
+    'langchain_core.language_models': _module('langchain_core.language_models', BaseChatModel=_FakeBaseChatModel),
+    'langchain_core.outputs': _module('langchain_core.outputs', LLMResult=type('LLMResult', (), {})),
+    'langchain_core.output_parsers': _module(
+        'langchain_core.output_parsers', PydanticOutputParser=_FakePydanticOutputParser
+    ),
+    'langchain_google_genai': _module('langchain_google_genai', ChatGoogleGenerativeAI=_FakeChatGoogleGenerativeAI),
+    'langchain_openai': _module('langchain_openai', ChatOpenAI=_FakeChatOpenAI, OpenAIEmbeddings=_FakeOpenAIEmbeddings),
+    'tiktoken': _module('tiktoken', encoding_for_model=lambda _model: _FakeEncoding()),
+    'database': _module('database'),
     'database._client': MagicMock(),
-    'database.llm_usage': MagicMock(),
+    'database.llm_usage': _module('database.llm_usage', record_llm_usage=MagicMock()),
 }
 
 for _mod, _mock in _HEAVY_MOCKS.items():
-    sys.modules.setdefault(_mod, _mock)
+    sys.modules[_mod] = _mock
+
+_SUBPROCESS_IMPORT_STUBS = (
+    "import sys, types; from unittest.mock import MagicMock; "
+    "langchain_core = types.ModuleType('langchain_core'); langchain_core.__path__ = []; "
+    "sys.modules['langchain_core'] = langchain_core; "
+    "[sys.modules.setdefault(m, MagicMock()) for m in "
+    "['anthropic','firebase_admin','firebase_admin.firestore','google.cloud.firestore',"
+    "'google.cloud.firestore_v1','google.cloud.firestore_v1.base_query',"
+    "'database','database._client','database.llm_usage',"
+    "'langchain_core.callbacks','langchain_core.language_models','langchain_core.outputs',"
+    "'langchain_core.output_parsers','langchain_google_genai','langchain_openai','tiktoken']]; "
+)
 
 # Set required env vars before importing clients
 os.environ.setdefault('OPENAI_API_KEY', 'sk-test-fake-key-for-unit-tests')
@@ -506,15 +612,10 @@ class TestProfileSelectionAtImportTime:
 
         result = subprocess.run(
             [
-                'python3',
+                sys.executable,
                 '-c',
                 (
-                    "import sys; from unittest.mock import MagicMock; "
-                    "[sys.modules.setdefault(m, MagicMock()) for m in "
-                    "['firebase_admin','firebase_admin.firestore','google.cloud.firestore',"
-                    "'google.cloud.firestore_v1','google.cloud.firestore_v1.base_query',"
-                    "'database','database._client','database.llm_usage']]; "
-                    "import os; os.environ['OPENAI_API_KEY']='sk-test'; "
+                    _SUBPROCESS_IMPORT_STUBS + "import os; os.environ['OPENAI_API_KEY']='sk-test'; "
                     "os.environ['ANTHROPIC_API_KEY']='sk-ant-test'; "
                     "os.environ['MODEL_QOS']='premium'; "
                     "from utils.llm.clients import _active_profile_name; "
@@ -533,15 +634,10 @@ class TestProfileSelectionAtImportTime:
 
         result = subprocess.run(
             [
-                'python3',
+                sys.executable,
                 '-c',
                 (
-                    "import sys; from unittest.mock import MagicMock; "
-                    "[sys.modules.setdefault(m, MagicMock()) for m in "
-                    "['firebase_admin','firebase_admin.firestore','google.cloud.firestore',"
-                    "'google.cloud.firestore_v1','google.cloud.firestore_v1.base_query',"
-                    "'database','database._client','database.llm_usage']]; "
-                    "import os; os.environ['OPENAI_API_KEY']='sk-test'; "
+                    _SUBPROCESS_IMPORT_STUBS + "import os; os.environ['OPENAI_API_KEY']='sk-test'; "
                     "os.environ['ANTHROPIC_API_KEY']='sk-ant-test'; "
                     "os.environ['MODEL_QOS']='bogus'; "
                     "from utils.llm.clients import _active_profile_name; "
@@ -562,7 +658,7 @@ class TestExpandedCallsiteCoverage:
         from pathlib import Path
 
         backend_dir = Path(__file__).resolve().parent.parent.parent
-        return (backend_dir / rel_path).read_text()
+        return (backend_dir / rel_path).read_text(encoding='utf-8')
 
     def test_conversation_processing_all_keys(self):
         import re
@@ -865,15 +961,10 @@ class TestBYOKProfileFixed:
 
         result = subprocess.run(
             [
-                'python3',
+                sys.executable,
                 '-c',
                 (
-                    "import sys; from unittest.mock import MagicMock; "
-                    "[sys.modules.setdefault(m, MagicMock()) for m in "
-                    "['firebase_admin','firebase_admin.firestore','google.cloud.firestore',"
-                    "'google.cloud.firestore_v1','google.cloud.firestore_v1.base_query',"
-                    "'database','database._client','database.llm_usage']]; "
-                    "import os; os.environ['OPENAI_API_KEY']='sk-test'; "
+                    _SUBPROCESS_IMPORT_STUBS + "import os; os.environ['OPENAI_API_KEY']='sk-test'; "
                     "os.environ['ANTHROPIC_API_KEY']='sk-ant-test'; "
                     "os.environ['MODEL_QOS']='max'; "
                     "from utils.llm.clients import _byok_profile_name, _byok_profile; "
