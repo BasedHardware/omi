@@ -21,6 +21,10 @@ os.environ.setdefault(
 class _AutoMockModule(ModuleType):
     """Module stub that returns a MagicMock for any missing attribute."""
 
+    def __init__(self, name):
+        super().__init__(name)
+        self.__path__ = []
+
     def __getattr__(self, name):
         if name.startswith('__') and name.endswith('__'):
             raise AttributeError(name)
@@ -47,6 +51,7 @@ _stubs = [
     'firebase_admin.firestore',
     'google.cloud.firestore',
     'google.cloud.firestore_v1',
+    'utils.other.endpoints',
     'utils.other.storage',
     'utils.conversations.factory',
     'utils.conversations.render',
@@ -61,9 +66,67 @@ _stubs = [
     'utils.retrieval.tools.calendar_tools',
     'utils.retrieval.tools.google_utils',
 ]
+
+_MISSING = object()
+_saved_modules = {}
+_saved_parent_attrs = {}
+
+
+def _save_module_for_restore(name):
+    if name not in _saved_modules:
+        _saved_modules[name] = sys.modules.get(name, _MISSING)
+    if '.' in name:
+        parent_name, attr = name.rsplit('.', 1)
+        parent = sys.modules.get(parent_name)
+        key = (parent_name, attr)
+        if key not in _saved_parent_attrs:
+            previous_attr = parent.__dict__.get(attr, _MISSING) if parent is not None else _MISSING
+            _saved_parent_attrs[key] = (parent, previous_attr)
+
+
+def _register_module(name, module):
+    _save_module_for_restore(name)
+    sys.modules[name] = module
+    if '.' in name:
+        parent_name, attr = name.rsplit('.', 1)
+        parent = sys.modules.get(parent_name)
+        if not isinstance(parent, _AutoMockModule):
+            parent = _AutoMockModule(parent_name)
+            _register_module(parent_name, parent)
+        setattr(parent, attr, module)
+    return module
+
+
+def _remove_module_for_fresh_import(name):
+    _save_module_for_restore(name)
+    sys.modules.pop(name, None)
+    if '.' in name:
+        parent_name, attr = name.rsplit('.', 1)
+        parent = sys.modules.get(parent_name)
+        if parent is not None:
+            parent.__dict__.pop(attr, None)
+
+
+def _restore_stubbed_modules():
+    for name in sorted(_saved_modules, key=lambda item: item.count('.'), reverse=True):
+        previous = _saved_modules[name]
+        if previous is _MISSING:
+            sys.modules.pop(name, None)
+        else:
+            sys.modules[name] = previous
+    for (_parent_name, attr), (parent, previous_attr) in _saved_parent_attrs.items():
+        if parent is None:
+            continue
+        if previous_attr is _MISSING:
+            parent.__dict__.pop(attr, None)
+        else:
+            setattr(parent, attr, previous_attr)
+    _saved_modules.clear()
+    _saved_parent_attrs.clear()
+
+
 for _mod_name in _stubs:
-    if _mod_name not in sys.modules:
-        sys.modules[_mod_name] = _AutoMockModule(_mod_name)
+    _register_module(_mod_name, _AutoMockModule(_mod_name))
 
 sys.modules['firebase_admin.auth'].InvalidIdTokenError = type('InvalidIdTokenError', (Exception,), {})
 
@@ -83,12 +146,17 @@ def _fake_with_rate_limit(dependency, _policy):  # pragma: no cover - returns wr
 _endpoints.get_current_user_uid = _fake_get_current_user_uid
 _endpoints.with_rate_limit = _fake_with_rate_limit
 _endpoints.get_user = MagicMock()
-sys.modules['utils.other.endpoints'] = _endpoints
+_register_module('utils.other.endpoints', _endpoints)
 
 from fastapi import FastAPI  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
 
-from routers import conversations as conv  # noqa: E402
+_remove_module_for_fresh_import('routers.conversations')
+_remove_module_for_fresh_import('routers')
+try:
+    from routers import conversations as conv  # noqa: E402
+finally:
+    _restore_stubbed_modules()
 
 
 def _client():
