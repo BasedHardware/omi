@@ -103,7 +103,9 @@ conv_proc = _load_module_from_file(
 # Keep timezone assertions independent of host OS tzdata, which is often absent on Windows test environments.
 
 
-class _NewYorkTestZone(tzinfo):
+class _JulyOnlyNewYorkTestZone(tzinfo):
+    """Minimal test zone: only the current July DST case needs EDT behavior."""
+
     def utcoffset(self, dt):
         return timedelta(hours=-4 if dt is not None and dt.month == 7 else -5)
 
@@ -118,7 +120,7 @@ def _test_zone_info(name):
     if name == "Pacific/Honolulu":
         return timezone(timedelta(hours=-10), name)
     if name == "America/New_York":
-        return _NewYorkTestZone()
+        return _JulyOnlyNewYorkTestZone()
     if name == "UTC":
         return timezone.utc
     raise KeyError(name)
