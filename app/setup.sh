@@ -61,15 +61,109 @@ function generate_device_suffix() {
 }
 
 ######################################
+# Detect Apple Development Team ID
+######################################
+function detect_apple_team_id() {
+  # 1. Honour explicit override
+  if [ -n "${APPLE_DEVELOPMENT_TEAM:-}" ]; then
+    echo "$APPLE_DEVELOPMENT_TEAM"
+    return
+  fi
+
+  local profiles_dir="$HOME/Library/Developer/Xcode/UserData/Provisioning Profiles"
+  local suffix
+  suffix=$(generate_device_suffix)
+  local bundle_pattern="com.friend-app-with-wearable.ios12-${suffix}"
+
+  # 2. Look for a profile whose AppID matches this machine's bundle ID
+  local team_id=""
+  if [ -d "$profiles_dir" ]; then
+    while IFS= read -r -d '' profile; do
+      local plist
+      plist=$(security cms -D -i "$profile" 2>/dev/null) || continue
+      local app_id
+      app_id=$(echo "$plist" | xmllint --xpath \
+        "string(//key[text()='application-identifier']/following-sibling::string[1])" \
+        - 2>/dev/null)
+      local bare_id="${app_id#*.}"
+      if [ "$bare_id" = "$bundle_pattern" ]; then
+        team_id=$(echo "$plist" | xmllint --xpath \
+          "string(//key[text()='TeamIdentifier']/following-sibling::array[1]/string[1])" \
+          - 2>/dev/null)
+        break
+      fi
+    done < <(find "$profiles_dir" -name '*.mobileprovision' -print0 2>/dev/null)
+  fi
+
+  # 3. Fallback: collect all team IDs that have a valid signing cert in the keychain
+  if [ -z "$team_id" ] && [ -d "$profiles_dir" ]; then
+    local seen_teams=()
+    while IFS= read -r -d '' profile; do
+      local plist candidate
+      plist=$(security cms -D -i "$profile" 2>/dev/null) || continue
+      candidate=$(echo "$plist" | xmllint --xpath \
+        "string(//key[text()='TeamIdentifier']/following-sibling::array[1]/string[1])" \
+        - 2>/dev/null)
+      if [ -n "$candidate" ]; then
+        if security find-identity -v -p codesigning 2>/dev/null | grep -q "$candidate"; then
+          local already_seen=false
+          for t in "${seen_teams[@]:-}"; do [ "$t" = "$candidate" ] && already_seen=true && break; done
+          $already_seen || seen_teams+=("$candidate")
+        fi
+      fi
+    done < <(find "$profiles_dir" -name '*.mobileprovision' -print0 2>/dev/null)
+
+    if [ "${#seen_teams[@]}" -eq 1 ]; then
+      team_id="${seen_teams[0]}"
+    elif [ "${#seen_teams[@]}" -gt 1 ]; then
+      echo "⚠️  Multiple Apple Developer accounts found. Choose one:" >&2
+      for i in "${!seen_teams[@]}"; do
+        echo "   $((i+1))) ${seen_teams[$i]}" >&2
+      done
+      local choice
+      read -rp "   Enter number [1-${#seen_teams[@]}]: " choice
+      if [[ "$choice" =~ ^[0-9]+$ ]] && [ "$choice" -ge 1 ] && [ "$choice" -le "${#seen_teams[@]}" ]; then
+        team_id="${seen_teams[$((choice-1))]}"
+      fi
+    fi
+  fi
+
+  # 4. Last resort: prompt the user (with format validation)
+  if [ -z "$team_id" ]; then
+    echo "⚠️  Could not auto-detect your Apple Development Team ID." >&2
+    echo "   Find it at: https://developer.apple.com/account -> Membership" >&2
+    echo "   or run: APPLE_DEVELOPMENT_TEAM=XXXXXXXXXX bash setup.sh ios" >&2
+    while true; do
+      read -rp "   Enter your Team ID (10 uppercase alphanumeric characters): " team_id
+      team_id=$(echo "${team_id}" | tr '[:lower:]' '[:upper:]' | tr -d ' ')
+      if [[ "$team_id" =~ ^[A-Z0-9]{10}$ ]]; then
+        break
+      fi
+      echo "   ❌ Invalid Team ID '${team_id}' — must be exactly 10 uppercase letters/digits." >&2
+    done
+  fi
+
+  echo "$team_id"
+}
+
+######################################
 # Generate custom configs for iOS
 ######################################
 function generate_ios_custom_config() {
   bash scripts/generate_ios_custom_config.sh ios/Config/Dev/GoogleService-Info.plist ios/Flutter \
 
-  # Custom bundle identifier
+  # Custom bundle identifier and app group
   SUFFIX=$(generate_device_suffix)
   CUSTOM_BUNDLE="com.friend-app-with-wearable.ios12-${SUFFIX}"
+  CUSTOM_GROUP="group.com.friend-app-with-wearable.ios12-${SUFFIX}"
   echo APP_BUNDLE_IDENTIFIER=${CUSTOM_BUNDLE} >> "ios/Flutter/Custom.xcconfig"
+  echo APP_GROUP_IDENTIFIER=${CUSTOM_GROUP} >> "ios/Flutter/Custom.xcconfig"
+
+  # Detect and write the Development Team ID for iOS automatic signing
+  echo "🔍 Detecting Apple Development Team ID..."
+  DEVELOPMENT_TEAM=$(detect_apple_team_id)
+  echo "✅ Team ID: ${DEVELOPMENT_TEAM}"
+  echo "DEVELOPMENT_TEAM=${DEVELOPMENT_TEAM}" >> "ios/Flutter/Custom.xcconfig"
 }
 
 ######################################
