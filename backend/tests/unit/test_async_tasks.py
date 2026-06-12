@@ -1,11 +1,14 @@
 """Unit tests for utils/async_tasks.py — structured concurrency utilities."""
 
 import asyncio
+import importlib
+import sys
 from pathlib import Path
 
 import pytest
 from unittest.mock import patch
 
+import utils.async_tasks as async_tasks_mod
 from utils.async_tasks import (
     GatherResult,
     SupervisorResult,
@@ -16,6 +19,27 @@ from utils.async_tasks import (
     create_named_task,
     wait_for_event,
 )
+
+
+def test_metrics_are_reused_after_module_cache_eviction():
+    utils_pkg = sys.modules.get('utils')
+    previous_attr = getattr(utils_pkg, 'async_tasks', None) if utils_pkg is not None else None
+    sys.modules.pop('utils.async_tasks', None)
+    try:
+        reimported = importlib.import_module('utils.async_tasks')
+        assert reimported.SUPERVISOR_EXIT_TOTAL is async_tasks_mod.SUPERVISOR_EXIT_TOTAL
+        assert reimported.DRAIN_TIMEOUT_TOTAL is async_tasks_mod.DRAIN_TIMEOUT_TOTAL
+        assert reimported.DRAIN_DURATION is async_tasks_mod.DRAIN_DURATION
+        assert reimported.GATHER_FAILURES_TOTAL is async_tasks_mod.GATHER_FAILURES_TOTAL
+        assert reimported.GATHER_DURATION is async_tasks_mod.GATHER_DURATION
+    finally:
+        sys.modules['utils.async_tasks'] = async_tasks_mod
+        if utils_pkg is not None:
+            if previous_attr is None:
+                utils_pkg.__dict__.pop('async_tasks', None)
+            else:
+                utils_pkg.async_tasks = previous_attr
+
 
 # ---------------------------------------------------------------------------
 # Tests for create_named_task
