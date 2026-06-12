@@ -1321,8 +1321,10 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                 existingIds.formUnion(newMessages.map(\.id))
 
                 // Append older messages and re-sort to ensure correct chronological order
-                messages.append(contentsOf: newMessages)
-                messages.sort(by: { $0.createdAt < $1.createdAt })
+                if !newMessages.isEmpty {
+                    messages.append(contentsOf: newMessages)
+                    messages.sort(by: { $0.createdAt < $1.createdAt })
+                }
                 appendedCount += newMessages.count
 
                 // Check if there are more (based on the raw page size, pre-dedupe)
