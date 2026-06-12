@@ -50,7 +50,7 @@ EXTRACT a fact when it is durable context about {user_name}: preferences and dis
 
 FOR EVERY FACT, FILL THE TYPED FIELDS:
 
-0. quote_anchor — copy the exact source sentence or clause that proves the fact into the quote_anchor field. It MUST be a verbatim substring from the transcript, not a paraphrase. The final content must preserve at least 2 distinctive non-stopword terms from that quote. If you cannot copy a literal quote anchor, output no fact.
+0. quote_anchor — copy the exact source sentence or clause that proves the fact into the quote_anchor field. It MUST be a verbatim substring from the transcript, not a paraphrase. For any fact about {user_name}, the quote_anchor must be self-report evidence: either {user_name}'s own speaker turn or a literal clause containing first-person language ("I", "my", "we", "our") that directly asserts the fact. The final content must preserve at least 2 distinctive non-stopword terms from that quote. If you cannot copy a literal self-report quote anchor for a user fact, output no fact.
 
 1. content — one concise sentence (max 15 words), specific and timeless, starting with {user_name} when about them. Do not paraphrase beyond what the quote_anchor directly states.
 
@@ -74,7 +74,7 @@ FOR EVERY FACT, FILL THE TYPED FIELDS:
 
 3. arguments — the named slots listed for the predicate, as short literal strings. Only fill argument slots when value is EXPLICITLY stated in conversation; leave unfilled slots out entirely rather than guessing.
 
-4. subject_attribution — "user" if the fact is about {user_name} and {user_name} directly states or confirms it; "third_party" if about someone else; "assistant_suggested" if an assistant/AI/team member proposed it and {user_name} did not explicitly confirm in first person. Facts with assistant_suggested are normally not durable memories; only emit them when needed to preserve a reviewable contradiction/update.
+4. subject_attribution — "user" ONLY if the fact is about {user_name} AND the quote_anchor is self-report evidence from {user_name} (actor-authored or first-person wording). Use "third_party" if about someone else; use "assistant_suggested" if an assistant/AI/team member proposed it or if the quote lacks first-person confirmation. Facts with assistant_suggested are normally not durable memories; only emit them when needed to preserve a reviewable contradiction/update.
 
 5. uncertainty_reasons — zero or more of: speaker_uncertain, inferred_not_stated, temporal_scope_unclear, low_quality_transcript, subject_ambiguous, conflicts_with_existing_memory, duplicate_near_match. Use them honestly; an uncertain fact WITH reasons is better than a dropped fact or a confidently wrong one.
 
@@ -194,6 +194,7 @@ For EACH fact you're about to extract, verify it does NOT match these patterns:
 ❌ "{user_name} thinks/believes/feels X" → DELETE THIS
 ❌ A group/team/assistant statement rewritten as {user_name}'s personal preference, tool use, or commitment without a first-person confirmation quote → DELETE THIS
 ❌ Any fact whose key nouns/verbs are synonyms or inferences rather than words present in its quote anchor → DELETE THIS
+❌ Any fact about {user_name} whose quote_anchor is not actor-authored and does not contain first-person confirmation language ("I", "my", "we", "our") → DELETE THIS
 
 If a fact matches ANY of the above patterns, REMOVE it from your output.
 

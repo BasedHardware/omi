@@ -395,6 +395,20 @@ def _compute_signal_density(pipeline_input: MemoryPipelineInput) -> float:
     return total_substantive / len(text_events)
 
 
+def _has_direct_memory_signal(pipeline_input: MemoryPipelineInput) -> bool:
+    """Allow terse but explicit first-person memory statements through density gating."""
+    patterns = (
+        r"\b(i|we)\s+(like|love|prefer|use|work on|decided|commit|promise|plan|might switch|consider)\b",
+        r"\bmy\s+\w+\s+(is|has|uses|prefers|works)\b",
+        r"\bremember that\s+(i|we|my)\b",
+    )
+    for event in pipeline_input.raw_events:
+        text = event.text or ""
+        if any(re.search(pattern, text, flags=re.IGNORECASE) for pattern in patterns):
+            return True
+    return False
+
+
 def _validate_input(pipeline_input: MemoryPipelineInput) -> None:
     event_ids = [event.event_id for event in pipeline_input.raw_events]
     if len(event_ids) != len(set(event_ids)):
@@ -408,7 +422,7 @@ def _validate_input(pipeline_input: MemoryPipelineInput) -> None:
     # Only enforce density when there is at least one text-bearing event.
     # Structured-payload-only inputs (e.g. OCR frames) carry signal differently.
     text_event_count = sum(1 for e in pipeline_input.raw_events if e.text and e.text.strip())
-    if text_event_count > 0 and density < _MIN_SIGNAL_DENSITY:
+    if text_event_count > 0 and density < _MIN_SIGNAL_DENSITY and not _has_direct_memory_signal(pipeline_input):
         logger.info(
             "Signal density %.1f < threshold %.1f — skipping low-density transcript "
             "(%d text events, likely noise/chitchat)",
@@ -784,6 +798,9 @@ def _decision_for_frame(
         elif frame.sensitivity.review_required or frame.sensitivity.level == "high":
             action = "route_to_review" if routing.review_sensitive else "reject_policy"
             rationale = "Sensitive memory requires review."
+        elif _is_self_report_speaker_uncertain_frame(frame) and routing.auto_create_high_confidence:
+            action = "create_memory"
+            rationale = "Only uncertainty is speaker label, but first-person evidence directly supports the memory."
         elif (
             frame.uncertainty_reasons
             and routing.review_uncertain
@@ -839,9 +856,25 @@ def _find_matching_memory(frame: MemoryEventFrame, memories):
     frame_text = _normalized_text(frame.canonical_text)
     for memory in memories:
         memory_text = _normalized_text(memory.normalized_text or memory.text)
-        if frame_text == memory_text:
+        if _memory_texts_match(frame_text, memory_text):
             return memory
     return None
+
+
+def _memory_texts_match(left: str, right: str) -> bool:
+    if left == right:
+        return True
+    if not left or not right:
+        return False
+    shorter, longer = (left, right) if len(left) <= len(right) else (right, left)
+    if len(shorter) >= 8 and shorter in longer:
+        return True
+    left_tokens = set(left.split())
+    right_tokens = set(right.split())
+    if not left_tokens or not right_tokens:
+        return False
+    overlap = len(left_tokens & right_tokens)
+    return overlap >= 3 and overlap / min(len(left_tokens), len(right_tokens)) >= 0.8
 
 
 def _find_conflicting_memory(frame: MemoryEventFrame, memories):
@@ -873,6 +906,16 @@ def _should_reject_unsupported_frame(frame: MemoryEventFrame) -> bool:
     """
     hard_uncertainties = {"weak_evidence", "unsupported_by_existing_state", "inferred_not_stated"}
     return frame.confidence == "low" and bool(hard_uncertainties & set(frame.uncertainty_reasons))
+
+
+def _is_self_report_speaker_uncertain_frame(frame: MemoryEventFrame) -> bool:
+    if set(frame.uncertainty_reasons) != {"speaker_uncertain"}:
+        return False
+    return any(
+        (evidence.speaker and evidence.speaker.is_actor_user is True)
+        or bool(evidence.quote and re.search(r"\b(i|i'm|i’ve|i'd|i’ll|me|my|mine|we|we're|we’ve|our|ours)\b", evidence.quote.casefold()))
+        for evidence in frame.evidence
+    )
 
 
 def _normalized_text(text: str) -> str:

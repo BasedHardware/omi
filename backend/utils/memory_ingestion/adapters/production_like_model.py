@@ -362,6 +362,15 @@ def _calibration(memory: ProductionLikeMemory, events: list[RawContextEvent]) ->
 
     third_party = memory.subject_attribution == "third_party" or _has_third_party_signal(text, events)
     assistant_suggested = memory.subject_attribution == "assistant_suggested"
+    if (
+        _is_user_attributed(memory)
+        and not third_party
+        and not assistant_suggested
+        and not _has_ocr_uncertainty(events)
+        and not _has_self_report_source(memory.content, events, quote_anchor=memory.quote_anchor)
+    ):
+        uncertainty_reasons.append("inferred_not_stated")
+        review_required = True
     if assistant_suggested:
         uncertainty_reasons.append("inferred_not_stated")
         review_required = True
@@ -428,6 +437,39 @@ def _has_actor_supported_quote(memory_content: str, events: list[RawContextEvent
         and _evidence_overlap_count(memory_content, event.text or "") >= min_overlap
         for event in events
     )
+
+
+def _has_self_report_source(
+    memory_content: str,
+    events: list[RawContextEvent],
+    *,
+    quote_anchor: str | None = None,
+) -> bool:
+    """True when a user-attributed memory is backed by user/self-report wording.
+
+    Speaker labels are often unavailable in fixture exports, so accept either an
+    actor-authored event or first-person language in the literal quote/event that
+    also overlaps the memory. This blocks passive media narration and team/AI
+    suggestions from becoming durable facts about the recording user.
+    """
+    if any(
+        event.speaker
+        and event.speaker.is_actor_user is True
+        and _evidence_overlap_count(memory_content, event.text or "") >= 1
+        for event in events
+    ):
+        return True
+    candidate_texts: list[str] = [quote_anchor] if quote_anchor else []
+    candidate_texts.extend(event.text or "" for event in events)
+    return any(_has_first_person_language(text) for text in candidate_texts)
+
+
+def _has_first_person_language(text: str) -> bool:
+    return bool(re.search(r"\b(i|i'm|i’ve|i'd|i’ll|me|my|mine|we|we're|we’ve|our|ours)\b", text.casefold()))
+
+
+def _is_user_attributed(memory: ProductionLikeMemory) -> bool:
+    return getattr(memory, "subject_attribution", None) in (None, "", "user")
 
 
 def _has_non_actor_speaker(events: list[RawContextEvent]) -> bool:

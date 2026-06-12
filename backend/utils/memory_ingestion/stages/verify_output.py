@@ -172,7 +172,32 @@ def _check_active_create_guardrails(output: MemoryPipelineOutput) -> list[LintRe
                     create.mutation_id,
                 )
             )
+        create_text = (create.text or "").casefold()
+        if (
+            create_text.startswith(("user ", "user's "))
+            and any(evidence.quote for evidence in create.evidence)
+            and not _has_self_report_evidence(create.evidence)
+        ):
+            lints.append(
+                _lint(
+                    "error",
+                    "active_memory_without_self_report_evidence",
+                    f"Active create {create.mutation_id} has no actor or first-person self-report evidence",
+                    create.frame_id,
+                    create.decision_id,
+                    create.mutation_id,
+                )
+            )
     return lints
+
+
+def _has_self_report_evidence(evidence_spans) -> bool:
+    for evidence in evidence_spans:
+        if evidence.speaker and evidence.speaker.is_actor_user is True:
+            return True
+        if evidence.quote and re.search(r"\b(i|i'm|i’ve|i'd|i’ll|me|my|mine|we|we're|we’ve|our|ours)\b", evidence.quote.casefold()):
+            return True
+    return False
 
 
 def verify_output(output: MemoryPipelineOutput) -> list[LintResult]:
