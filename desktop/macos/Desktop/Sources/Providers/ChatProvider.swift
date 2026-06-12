@@ -600,6 +600,10 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
     @Published var showOmiThresholdAlert = false
 
     private let messagesPageSize = 50
+    /// Raw server records consumed by history pagination (the backend pages newest-first).
+    /// Kept separate from messages.count: deduped pages and live messages merged by
+    /// polling would otherwise stall or skew the offset.
+    private var messagesPaginationOffset = 0
     private var multiChatObserver: AnyCancellable?
     private var playwrightExtensionObserver: AnyCancellable?
     private var sessionGroupingObserver: AnyCancellable?
@@ -1249,12 +1253,14 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             )
             messages = persistedMessages.map(ChatMessage.init(from:))
                 .sorted(by: { $0.createdAt < $1.createdAt })
+            messagesPaginationOffset = persistedMessages.count
             // If we got a full page, there might be more messages
             hasMoreMessages = persistedMessages.count == messagesPageSize
             log("ChatProvider loaded \(messages.count) messages for session \(session.id), hasMore: \(hasMoreMessages)")
         } catch {
             logError("Failed to load messages for session", error: error)
             messages = []
+            messagesPaginationOffset = 0
         }
 
         isLoading = false
@@ -1268,10 +1274,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
         isLoadingMoreMessages = true
 
         do {
-            // messages.count doubles as the server-side pagination offset (the backend
-            // pages newest-first), so loaded history must never be trimmed while a
-            // session is open — trimming makes every scroll re-fetch the same page.
-            let offset = messages.count
+            let offset = messagesPaginationOffset
             let olderMessages: [ChatMessageDB]
             if let sessionId = currentSessionId {
                 olderMessages = try await APIClient.shared.getMessages(
@@ -1286,6 +1289,10 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                     offset: offset
                 )
             }
+
+            // Advance by raw records consumed — even when dedupe below drops some —
+            // so the next request can never re-issue the same window.
+            messagesPaginationOffset += olderMessages.count
 
             // New live messages shift the newest-first offset window, so a page can
             // overlap messages we already hold — drop those before appending.
@@ -2123,6 +2130,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                 )
                 messages = persistedMessages.map(ChatMessage.init(from:))
                     .sorted(by: { $0.createdAt < $1.createdAt })
+                messagesPaginationOffset = persistedMessages.count
                 hasMoreMessages = persistedMessages.count == messagesPageSize
                 sessionsLoadError = nil
                 log("ChatProvider loaded \(messages.count) default chat messages, hasMore: \(hasMoreMessages)")
@@ -2138,6 +2146,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
         }
 
         messages = []
+        messagesPaginationOffset = 0
         sessionsLoadError = lastError?.localizedDescription ?? "Failed to load messages. Check your connection and try again."
         isLoading = false
     }
