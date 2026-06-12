@@ -34,21 +34,29 @@ class _FakeChatPromptTemplate:
         return MagicMock()
 
 
+def _install_langchain_child_stub(module_name, **attrs):
+    mod = ModuleType(module_name)
+    for name, value in attrs.items():
+        setattr(mod, name, value)
+    sys.modules.setdefault("langchain_core", ModuleType("langchain_core"))
+    sys.modules[module_name] = mod
+
+
 try:
     from langchain_core.output_parsers import PydanticOutputParser as _real_parser  # noqa: F401
 except ImportError:
-    output_parsers_mod = ModuleType("langchain_core.output_parsers")
-    output_parsers_mod.PydanticOutputParser = _FakePydanticOutputParser
-    sys.modules.setdefault("langchain_core", ModuleType("langchain_core"))
-    sys.modules["langchain_core.output_parsers"] = output_parsers_mod
+    _install_langchain_child_stub(
+        "langchain_core.output_parsers",
+        PydanticOutputParser=_FakePydanticOutputParser,
+    )
 
 try:
     from langchain_core.prompts import ChatPromptTemplate as _real_prompt  # noqa: F401
 except ImportError:
-    prompts_mod = ModuleType("langchain_core.prompts")
-    prompts_mod.ChatPromptTemplate = _FakeChatPromptTemplate
-    sys.modules.setdefault("langchain_core", ModuleType("langchain_core"))
-    sys.modules["langchain_core.prompts"] = prompts_mod
+    _install_langchain_child_stub(
+        "langchain_core.prompts",
+        ChatPromptTemplate=_FakeChatPromptTemplate,
+    )
 
 from models.calendar_context import CalendarMeetingContext, MeetingParticipant
 from models.conversation_photo import ConversationPhoto
