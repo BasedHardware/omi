@@ -68,6 +68,7 @@ for attr in [
     "find_similar_action_items",
     "upsert_vector2",
     "update_vector_metadata",
+    "upsert_transcript_chunk_vectors",
 ]:
     setattr(vector_db_mod, attr, MagicMock())
 
