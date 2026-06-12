@@ -59,12 +59,7 @@ class RingStatus {
   final int freeBytes;
   final int rtcValid; // 0 = device RTC not yet synced (timestamps unreliable), 1 = synced
 
-  RingStatus({
-    required this.usedBytes,
-    required this.unreadPackets,
-    required this.freeBytes,
-    required this.rtcValid,
-  });
+  RingStatus({required this.usedBytes, required this.unreadPackets, required this.freeBytes, required this.rtcValid});
 
   bool get isRtcValid => rtcValid != 0;
 
@@ -105,7 +100,8 @@ class DeviceConnectionFactory {
 
     // Use name-based detection as fallback for OmiGlass devices (some advertise as DeviceType.omi).
     final deviceName = device.name.toLowerCase();
-    final isOmiGlass = device.type == DeviceType.openglass ||
+    final isOmiGlass =
+        device.type == DeviceType.openglass ||
         deviceName.contains('openglass') ||
         deviceName.contains('omiglass') ||
         deviceName.contains('glass');
@@ -626,4 +622,10 @@ abstract class DeviceConnection {
   }
 
   Future<int?> performGetMicGain();
+
+  /// Called when the server transcription WebSocket reconnects after a
+  /// network-only outage (BLE stayed connected throughout). Override to
+  /// re-initialize device streaming if the device may have stopped sending
+  /// audio while the socket was dead.
+  Future<void> onNetworkSocketReconnected() async {}
 }
