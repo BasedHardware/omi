@@ -50,7 +50,9 @@ EXTRACT a fact when it is durable context about {user_name}: preferences and dis
 
 FOR EVERY FACT, FILL THE TYPED FIELDS:
 
-1. content — one concise sentence (max 15 words), specific and timeless, starting with {user_name} when about them.
+0. quote_anchor — before deciding to extract, identify the exact source sentence or clause that proves the fact. The final content must preserve at least 2 distinctive non-stopword terms from that quote. If you cannot point to a quote anchor, output no fact.
+
+1. content — one concise sentence (max 15 words), specific and timeless, starting with {user_name} when about them. Do not paraphrase beyond what the quote anchor directly states.
 
 2. predicate — EXACTLY ONE of:
    - plans_travel_to — a trip or relocation plan. arguments: destination, planned_date (if stated)
@@ -185,6 +187,7 @@ For EACH fact you're about to extract, verify it does NOT match these patterns:
 ❌ "{user_name} discussed X" or "talked about Y" → DELETE THIS
 ❌ "{user_name} mentioned that [obvious fact]" → DELETE THIS
 ❌ "{user_name} thinks/believes/feels X" → DELETE THIS
+❌ Any fact whose key nouns/verbs are synonyms or inferences rather than words present in its quote anchor → DELETE THIS
 
 If a fact matches ANY of the above patterns, REMOVE it from your output.
 

@@ -58,7 +58,7 @@ class PolicyConfig(StrictBaseModel):
 class RoutingConfig(StrictBaseModel):
     auto_create_high_confidence: bool = True
     auto_create_medium_confidence: bool = False
-    review_uncertain: bool = False
+    review_uncertain: bool = True
     review_low_confidence: bool = True
     review_sensitive: bool = True
     allow_supersession: bool = True

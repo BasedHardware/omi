@@ -967,24 +967,33 @@ def _edit_distance(a: str, b: str) -> int:
 def _dedupe_triples(
     triples: list[DerivedTriple],
 ) -> list[DerivedTriple]:
-    """Deduplicate derived triples so that each (subject, predicate, frame_id)
-    produces at most one claim.  When multiple triples share the same key we
-    keep the most concise one (shortest object text).  We also drop
-    near-duplicates whose canonical texts are within edit-distance < 5."""
-    # --- Pass 1: exact-key dedup (subject, predicate, source_frame_id) ---
+    """Deduplicate derived triples across the whole run.
+
+    Keep one claim per normalized (subject, predicate, object) rather than per
+    source frame.  This suppresses repeated LLM paraphrases across adjacent
+    chunks while preserving the shortest, highest-confidence object rendering.
+    We also drop near-duplicates whose canonical texts are within edit-distance
+    < 5.
+    """
+    # --- Pass 1: exact semantic-key dedup (subject, predicate, object) ---
     groups: dict[tuple[str, str, str, str], list[DerivedTriple]] = {}
     for t in triples:
         subj_key = (
             t.subject.entity_type,
             (t.subject.canonical_name or t.subject.entity_id or "").casefold(),
         )
-        key = (subj_key[0], subj_key[1], t.predicate, t.source_frame_id)
+        obj_key = _normalized_text(_triple_object_text(t.object))
+        key = (subj_key[0], subj_key[1], t.predicate, obj_key)
         groups.setdefault(key, []).append(t)
 
     best_per_key: list[DerivedTriple] = []
+    confidence_rank = {"high": 0, "medium": 1, "low": 2}
     for group in groups.values():
-        # Prefer shortest / most concise object
-        best = min(group, key=lambda t: len(_triple_object_text(t.object)))
+        # Prefer higher confidence, then shortest / most concise object.
+        best = min(
+            group,
+            key=lambda t: (confidence_rank.get(t.confidence, 3), len(_triple_object_text(t.object))),
+        )
         best_per_key.append(best)
 
     # --- Pass 2: near-duplicate suppression (edit distance < 5) ---

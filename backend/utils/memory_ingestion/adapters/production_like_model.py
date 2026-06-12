@@ -338,6 +338,11 @@ def _calibration(memory: ProductionLikeMemory, events: list[RawContextEvent]) ->
     if unknown_speaker:
         uncertainty_reasons.append("speaker_uncertain")
 
+    best_overlap = max((_evidence_overlap_count(memory.content, event.text or "") for event in events), default=0)
+    if best_overlap < 3 and len(_meaningful_words(memory.content)) >= 3:
+        uncertainty_reasons.append("weak_evidence")
+        review_required = True
+
     if _has_speculative_signal(text):
         uncertainty_reasons.append("inferred_not_stated")
         review_required = True
@@ -359,13 +364,24 @@ def _calibration(memory: ProductionLikeMemory, events: list[RawContextEvent]) ->
         sensitivity_level = "high"
         review_required = True
 
-    # Upgrade to high confidence only when strong positive signals are present
+    # Upgrade to high confidence only when a direct actor-authored quote strongly
+    # anchors the memory and no review-triggering uncertainty/sensitivity exists.
     speaker_confirmed = not unknown_speaker and "speaker_uncertain" not in uncertainty_reasons
     no_speculation = not _has_speculative_signal(text)
     has_entities = _has_named_entities(memory.content)
     content_specific = len(memory.content.strip()) > 40
-    if speaker_confirmed and no_speculation and has_entities and content_specific:
+    actor_supported = _has_actor_supported_quote(memory.content, events, min_overlap=3)
+    if (
+        speaker_confirmed
+        and no_speculation
+        and has_entities
+        and content_specific
+        and actor_supported
+        and not review_required
+    ):
         confidence = "high"
+    elif "weak_evidence" in uncertainty_reasons:
+        confidence = "low"
 
     return {
         "confidence": confidence,
@@ -385,6 +401,16 @@ def _has_ocr_uncertainty(events: list[RawContextEvent]) -> bool:
 
 def _has_unknown_speaker(events: list[RawContextEvent]) -> bool:
     return any(event.speaker and event.speaker.is_actor_user is None for event in events)
+
+
+def _has_actor_supported_quote(memory_content: str, events: list[RawContextEvent], *, min_overlap: int) -> bool:
+    """True when an actor-authored event directly anchors the memory wording."""
+    return any(
+        event.speaker
+        and event.speaker.is_actor_user is True
+        and _evidence_overlap_count(memory_content, event.text or "") >= min_overlap
+        for event in events
+    )
 
 
 def _has_non_actor_speaker(events: list[RawContextEvent]) -> bool:
