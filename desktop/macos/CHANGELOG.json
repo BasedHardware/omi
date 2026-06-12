@@ -1,5 +1,7 @@
 {
-  "unreleased": [],
+  "unreleased": [
+    "Fixed chat history no longer loading older messages when scrolling back in long chats"
+  ],
   "releases": [
     {
       "version": "0.11.463",
