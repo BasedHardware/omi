@@ -1,7 +1,45 @@
+import os
 import importlib.util
 import sys
 import types
 from html import escape
+
+BACKEND_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
+
+
+def restore_backend_package(package_name):
+    package_module = sys.modules.get(package_name)
+    if package_module is None:
+        package_module = types.ModuleType(package_name)
+        sys.modules[package_name] = package_module
+    package_module.__path__ = [os.path.join(BACKEND_DIR, package_name)]
+    return package_module
+
+
+def prepare_twilio_service_import():
+    utils_module = restore_backend_package('utils')
+    twilio_service_module = sys.modules.get('utils.twilio_service')
+    if twilio_service_module is None:
+        return
+
+    real_service_path = os.path.join(BACKEND_DIR, 'utils', 'twilio_service.py')
+    module_file = getattr(twilio_service_module, '__file__', None)
+    if module_file is not None and os.path.abspath(module_file) == real_service_path:
+        return
+
+    sys.modules.pop('utils.twilio_service', None)
+    if getattr(utils_module, 'twilio_service', None) is twilio_service_module:
+        delattr(utils_module, 'twilio_service')
+
+
+def install_phone_calls_stub():
+    database_module = restore_backend_package('database')
+    if 'database.phone_calls' not in sys.modules:
+        stub = types.ModuleType('database.phone_calls')
+        stub.get_phone_numbers = lambda uid: []
+        sys.modules['database.phone_calls'] = stub
+        setattr(database_module, 'phone_calls', stub)
+    return sys.modules['database.phone_calls']
 
 
 def install_twilio_stub():

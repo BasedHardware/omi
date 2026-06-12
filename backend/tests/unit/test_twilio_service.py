@@ -1,9 +1,7 @@
 import os
-import sys
-import types
 from unittest.mock import patch, MagicMock
 
-from tests.unit.twilio_stub import install_twilio_stub
+from tests.unit.twilio_stub import install_phone_calls_stub, install_twilio_stub, prepare_twilio_service_import
 
 os.environ.setdefault('TWILIO_ACCOUNT_SID', 'ACtest123')
 os.environ.setdefault('TWILIO_AUTH_TOKEN', 'test_auth_token')
@@ -11,23 +9,8 @@ os.environ.setdefault('TWILIO_API_KEY_SID', 'SKtest123')
 os.environ.setdefault('TWILIO_API_KEY_SECRET', 'test_api_secret')
 os.environ.setdefault('TWILIO_TWIML_APP_SID', 'APtest123')
 install_twilio_stub()
-
-
-def _install_phone_calls_stub():
-    database_module = sys.modules.get('database')
-    if database_module is None:
-        database_module = types.ModuleType('database')
-        sys.modules['database'] = database_module
-    if not hasattr(database_module, '__path__'):
-        database_module.__path__ = [os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', 'database'))]
-    if 'database.phone_calls' not in sys.modules:
-        stub = types.ModuleType('database.phone_calls')
-        stub.get_phone_numbers = lambda uid: []
-        sys.modules['database.phone_calls'] = stub
-        setattr(database_module, 'phone_calls', stub)
-
-
-_install_phone_calls_stub()
+prepare_twilio_service_import()
+install_phone_calls_stub()
 
 from utils.twilio_service import generate_access_token, validate_twilio_signature
 
