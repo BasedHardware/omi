@@ -71,11 +71,20 @@ _stubs = [
     'utils.llm.chat',
     'utils.log_sanitizer',
     'utils.executors',
+    'dependencies',
 ]
 for mod_name in _stubs:
     if mod_name not in sys.modules:
         sys.modules[mod_name] = _AutoMockModule(mod_name)
 
+sys.modules['dependencies'].get_uid_from_mcp_api_key = MagicMock(return_value='user-1')
+sys.modules['dependencies'].get_current_user_id = MagicMock(return_value='user-1')
+sys.modules['utils.other.endpoints'].with_rate_limit = MagicMock(side_effect=lambda dependency, _policy: dependency)
+sys.modules['utils.other.endpoints'].check_rate_limit_inline = MagicMock()
+sys.modules['utils.apps'].update_personas_async = MagicMock()
+sys.modules['utils.executors'].db_executor = MagicMock()
+sys.modules['utils.executors'].postprocess_executor = MagicMock()
+sys.modules['utils.llm.memories'].identify_category_for_memory = MagicMock(return_value='other')
 sys.modules['firebase_admin.auth'].InvalidIdTokenError = type('InvalidIdTokenError', (Exception,), {})
 sys.modules['firebase_admin.auth'].ExpiredIdTokenError = type('ExpiredIdTokenError', (Exception,), {})
 sys.modules['firebase_admin.auth'].RevokedIdTokenError = type('RevokedIdTokenError', (Exception,), {})
