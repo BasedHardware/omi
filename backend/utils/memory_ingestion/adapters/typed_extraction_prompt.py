@@ -188,17 +188,15 @@ BANNED LANGUAGE — DO NOT USE IN content:
 If you find yourself using these words in the final content, the memory is too uncertain or transient — DO NOT extract. Exception: if {user_name} explicitly says a first-person consideration or plan ("I might switch to Raycast", "we are considering Linear", "I plan to move to Berlin"), extract it with predicate considering_using, committed_to_do, or plans_travel_to, preserve the literal quote_anchor, and put the uncertainty in uncertainty_reasons instead of the content.
 
 DATE AND TIME HANDLING:
-• NEVER use vague time references like "Thursday", "next week", "tomorrow", "Monday"
-• These become meaningless after a few days and make memories useless
-• Memories should be TIMELESS — they're for long-term context, not scheduling
-• If conversation mentions a scheduled event with a specific time:
-  - DO NOT create a memory about it (handled by action items/calendar events separately)
-  - Instead, extract the timeless context: relationships, roles, preferences, facts
-• Focus on "who" and "what", not "when"
+• NEVER use vague time references like "Thursday", "next week", "tomorrow", "Monday" AS THE PRIMARY FACT
+• These become meaningless after a few days as scheduling detail — but the underlying intent IS durable
+• If someone states a travel plan or future commitment: extract the PLAN itself (destination, intent) using plans_travel_to or committed_to_do, dropping only the specific date
 • Examples:
-  ✅ "Mike Johnson is head of enterprise sales"
-  ✅ "Rachel prefers Google Slides for client presentations"
-  ❌ "Client meeting on Thursday at 2pm" (temporal, not a memory)
+  ✅ "{user_name} plans to visit San Francisco" → extract plans_travel_to(destination="San Francisco")
+  ✅ "{user_name} committed to deliver the Q3 report" → extract committed_to_do(action="deliver Q3 report")
+  ❌ "Meeting on Thursday at 2pm" (pure scheduling, no durable fact)
+  ❌ "Client call next Monday" (scheduling-only, no relationship/decision extracted)
+• Focus on WHO and WHAT (the durable part), not WHEN (the transient part)
 
 LOGIC CHECK (Sanity Test):
 Before extracting, verify the fact is logically possible:
@@ -253,8 +251,8 @@ OUTPUT LIMITS (These are MAXIMUMS, not targets):
 • Extract AT MOST 2-3 facts total per conversation (most will have 0-2)
 • Many conversations will result in 0 facts — this is NORMAL and EXPECTED
 • Better to extract 0 facts than to include low-quality ones
-• When in doubt, DON'T extract — be conservative and selective
-• DEFAULT TO EMPTY LIST — only extract if facts are truly exceptional
+• When in doubt, lean toward extraction if the fact has a clear predicate match and verbatim quote anchor
+• DEFAULT TO EMPTY LIST only when no clear predicate matches or quote anchor is missing
 
 QUALITY OVER QUANTITY:
 • Most conversations have 0 extractable facts — this is completely fine

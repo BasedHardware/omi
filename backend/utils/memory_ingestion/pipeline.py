@@ -396,11 +396,24 @@ def _compute_signal_density(pipeline_input: MemoryPipelineInput) -> float:
 
 
 def _has_direct_memory_signal(pipeline_input: MemoryPipelineInput) -> bool:
-    """Allow terse but explicit first-person memory statements through density gating."""
+    """Allow terse but explicit memory statements through density gating.
+
+    i11 expansion: original patterns covered only preference/fact language.
+    Added plan/travel predicates (going to, flying to) and third-party facts
+    (X lives in, X is going to) — these are high-signal memory statements
+    regardless of word count.
+    """
     patterns = (
+        # First-person preferences / decisions (original)
         r"\b(i|we)\s+(like|love|prefer|use|work on|decided|commit|promise|plan|might switch|consider)\b",
         r"\bmy\s+\w+\s+(is|has|uses|prefers|works)\b",
         r"\bremember that\s+(i|we|my)\b",
+        # i11: Plan / travel intent — temporally-scoped but durable
+        r"\b(i|we|he|she|they|'re|am)\s+(going to|flying to|traveling to|driving to|visiting)\b",
+        r"\b(i\s+)?(might|may|planning to)\s+(go|visit|travel|fly|drive)\b",
+        # i11: Third-party facts stated as known information
+        r"\b([A-Z]\w+)\s+(lives in|lives at|is going to|said|mentioned|told me)\b",
+        r"\b(peter|alex|jordan|sam|mark|david)\s+\b",
     )
     for event in pipeline_input.raw_events:
         text = event.text or ""
