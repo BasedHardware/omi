@@ -1,6 +1,6 @@
 {
   "unreleased": [
-    "Fixed chat history no longer loading older messages when scrolling back in long chats"
+    "Fixed older chat messages failing to load in long chats"
   ],
   "releases": [
     {
