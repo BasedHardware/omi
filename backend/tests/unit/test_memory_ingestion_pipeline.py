@@ -136,7 +136,7 @@ def test_hard_secret_event_is_dropped_before_model_extraction_but_emits_rejectio
 
 
 def test_email_pii_is_not_whole_dropped_by_secret_gate():
-    output = _run(_input(text="Reach me at user@example.com.", payload={"memory_frames": [_frame_payload()]}))
+    output = _run(_input(text="Please reach me at user@example.com regarding the Atlas project invoice.", payload={"memory_frames": [_frame_payload()]}))
 
     assert output.stats.redaction_count == 0
     assert output.stats.dropped_artifact_count == 0
@@ -279,5 +279,103 @@ def test_cli_reads_json_and_writes_pipeline_output(tmp_path):
         check=True,
     )
     output = json.loads(output_path.read_text())
-    assert output["schema_version"] == "memory_pipeline_output.v1"
+    assert output["schema_version"] == "memory_pipeline_output"
     assert output["decisions"][0]["action"] == "create_memory"
+
+
+# ---------------------------------------------------------------------------
+# Signal density filter tests (T-H10 / committee-D2)
+# ---------------------------------------------------------------------------
+
+def test_signal_density_rejects_pure_chitchat():
+    """Gold=0 noise examples like 'Thanks, sounds good.' must be rejected early."""
+    output = _run(_input(text="Thanks, sounds good."))
+    assert output.status == "failed"
+    assert any("signal density" in err.message for err in output.errors)
+    assert len(output.event_frames) == 0
+    assert len(output.mutation_plan.creates) == 0
+
+
+def test_signal_density_rejects_weather_chitchat():
+    """'The weather is nice today.' — no memory signal."""
+    output = _run(_input(text="The weather is nice today."))
+    assert output.status == "failed"
+    assert any("signal density" in err.message for err in output.errors)
+
+
+def test_signal_density_rejects_empty_chatter():
+    """'Pure chatter/no-memory example.' — explicit noise marker."""
+    output = _run(_input(text="Pure chatter/no-memory example."))
+    assert output.status == "failed"
+    assert any("signal density" in err.message for err in output.errors)
+
+
+def test_signal_density_accepts_substantive_text():
+    """Normal memory-bearing input must pass through."""
+    output = _run(_input(text="I prefer oat milk in my coffee every morning."))
+    assert output.status != "failed"
+    # Should not have a signal-density error
+    assert not any("signal density" in err.message for err in output.errors)
+
+
+def test_signal_density_accepts_structured_payload_without_text():
+    """Events with structured payload but no text should not be penalized."""
+    output = _run(_input(text=None, payload={"memory_frames": [_frame_payload()]}))
+    assert output.status == "ok"
+    assert len(output.event_frames) == 1
+
+
+def test_signal_density_filler_heavy_transcript_is_rejected():
+    """A turn that is mostly fillers: 'Um, like, uh, you know, yeah, ok.'"""
+    output = _run(_input(text="Um, like, uh, you know, yeah, ok, I mean, right?"))
+    assert output.status == "failed"
+    assert any("signal density" in err.message for err in output.errors)
+
+
+def test_signal_density_multi_event_average():
+    """Multiple events where average density is below threshold."""
+    pipeline_input = MemoryPipelineInput(
+        run_id="run-multi",
+        mode="offline",
+        source=SourceDescriptor(source_type="benchmark_fixture", source_id="fixture-1"),
+        actor=ActorDescriptor(synthetic_user_id="synthetic-user", display_name="User"),
+        user_state=UserStateSnapshot(
+            snapshot_id="snapshot-1",
+            snapshot_at=datetime(2026, 6, 8, tzinfo=timezone.utc),
+        ),
+        raw_events=[
+            RawContextEvent(
+                event_id="e1", event_type="manual_text",
+                text="Uh huh.", source_ref=SourceRef(fixture_id="f1"),
+            ),
+            RawContextEvent(
+                event_id="e2", event_type="manual_text",
+                text="Yeah, ok.", source_ref=SourceRef(fixture_id="f1"),
+            ),
+            RawContextEvent(
+                event_id="e3", event_type="manual_text",
+                text="Sure thing.", source_ref=SourceRef(fixture_id="f1"),
+            ),
+        ],
+        config=MemoryPipelineConfig(),
+    )
+    output = _run(pipeline_input)
+    assert output.status == "failed"
+    assert any("signal density" in err.message for err in output.errors)
+
+
+def test_compute_signal_density_unit():
+    """Direct unit test of the helper function."""
+    from utils.memory_ingestion.pipeline import _compute_signal_density, _MIN_SIGNAL_DENSITY
+
+    # Substantial text
+    substantial = _input(text="I work on Atlas project using Python and Postgres.")
+    assert _compute_signal_density(substantial) >= _MIN_SIGNAL_DENSITY
+
+    # Pure filler
+    filler = _input(text="um like yeah you know uh ok")
+    assert _compute_signal_density(filler) < _MIN_SIGNAL_DENSITY
+
+    # No text events
+    no_text = _input(text=None, payload={"key": "val"})
+    assert _compute_signal_density(no_text) == 0.0

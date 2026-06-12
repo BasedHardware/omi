@@ -338,6 +338,63 @@ class CoreMemoryPipeline:
         return input_copy, redactions, dropped_artifacts
 
 
+# Filler / discourse-marker words that carry no substantive memory signal.
+_FILLER_WORDS = frozenset({
+    # Speech disfluencies
+    "uh", "um", "uhh", "umm", "er", "erm",
+    # Discourse fillers / backchannels
+    "like",  # discourse filler sense
+    "yeah", "yep", "yah", "yup", "yes", "ok", "okay", "okayyy",
+    "you", "know",  # "you know" as a tag
+    "hmm", "hm", "ah", "oh", "aha", "ooh", "ugh", "mhm", "mm",
+    "right", "sure", "alright", "alrighty",
+    "basically", "literally",
+    # Pronouns (near-zero information density)
+    "i", "me", "my", "we", "us", "our",
+    "it", "its", "this", "that", "these", "those",
+    # Copulas / auxiliaries
+    "is", "are", "was", "were", "be", "been", "being",
+    "have", "has", "had", "do", "does", "did",
+    "will", "would", "could", "should", "may", "might", "can",
+    # Determiners / articles
+    "a", "an", "the",
+    # Conjunctions / prepositions
+    "and", "or", "but", "so", "if", "then", "because", "as",
+    "in", "on", "at", "to", "for", "of", "with", "from", "by", "about",
+    # Common chitchat / phatic words (no memory value)
+    "not", "no", "just", "really", "very", "too", "also", "well",
+    "thanks", "thank", "hi", "hello", "hey", "bye", "goodbye",
+    "sounds", "good", "great", "fine", "nice", "cool", "awesome",
+    "sure thing", "yeah", "yep",
+    "weather", "today", "tomorrow", "yesterday",
+    "how", "what", "when", "where", "who", "why",
+    "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten",
+    "pure", "chatter", "example",
+})
+
+_MIN_SIGNAL_DENSITY = 3.5  # avg substantive words per text-bearing turn
+
+
+def _compute_signal_density(pipeline_input: MemoryPipelineInput) -> float:
+    """Return average non-filler word count across all text-bearing events.
+
+    A low value indicates noise, chitchat, or filler-heavy transcript turns
+    that are unlikely to yield useful memories.  Returns 0.0 when there are
+    no text events.
+    """
+    text_events = [e for e in pipeline_input.raw_events if e.text and e.text.strip()]
+    if not text_events:
+        return 0.0
+
+    total_substantive = 0
+    for event in text_events:
+        words = re.findall(r"[A-Za-z']+", event.text.lower())
+        substantive = [w for w in words if w not in _FILLER_WORDS]
+        total_substantive += len(substantive)
+
+    return total_substantive / len(text_events)
+
+
 def _validate_input(pipeline_input: MemoryPipelineInput) -> None:
     event_ids = [event.event_id for event in pipeline_input.raw_events]
     if len(event_ids) != len(set(event_ids)):
@@ -346,6 +403,23 @@ def _validate_input(pipeline_input: MemoryPipelineInput) -> None:
         return
     if not pipeline_input.raw_events:
         raise ValueError("raw_events must not be empty")
+
+    density = _compute_signal_density(pipeline_input)
+    # Only enforce density when there is at least one text-bearing event.
+    # Structured-payload-only inputs (e.g. OCR frames) carry signal differently.
+    text_event_count = sum(1 for e in pipeline_input.raw_events if e.text and e.text.strip())
+    if text_event_count > 0 and density < _MIN_SIGNAL_DENSITY:
+        logger.info(
+            "Signal density %.1f < threshold %.1f — skipping low-density transcript "
+            "(%d text events, likely noise/chitchat)",
+            density,
+            _MIN_SIGNAL_DENSITY,
+            text_event_count,
+        )
+        raise ValueError(
+            f"signal density {density:.1f} < {_MIN_SIGNAL_DENSITY} "
+            f"(avg substantive words per turn); transcript appears to be noise/chitchat"
+        )
 
 
 def _input_fingerprint(pipeline_input: MemoryPipelineInput) -> str:
