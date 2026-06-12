@@ -132,6 +132,34 @@ class TestPlaybackReadPathsStructure:
         assert 'HTTP_AUDIO_MERGE_RUN_TIMEOUT' in src
 
 
+class TestUnavailableContract:
+    """Unbuildable audio (chunks gone) must surface as terminal 'unavailable',
+    never as pending-forever (named-task tombstones block re-enqueues)."""
+
+    def test_handler_marks_unavailable_on_chunks_missing(self):
+        src = _read_source(os.path.join('routers', 'sync.py'))
+        handler = src[src.index('async def run_audio_merge_job') :]
+        missing = handler[handler.index('except FileNotFoundError') : handler.index("'chunks_missing'}")]
+        assert 'mark_playback_unavailable' in missing
+
+    def test_urls_reports_unavailable_without_enqueue(self):
+        src = _read_source(os.path.join('routers', 'sync.py'))
+        fn = src[src.index('def _get_audio_urls_via_artifacts') : src.index('def get_audio_signed_urls_endpoint')]
+        unavailable = fn[fn.index('is_playback_unavailable') : fn.index('else:')]
+        assert '"unavailable"' in unavailable
+        assert 'to_enqueue.append' not in unavailable
+
+    def test_storage_marker_helpers(self):
+        src = _read_source(os.path.join('utils', 'other', 'storage.py'))
+        assert 'def mark_playback_unavailable' in src
+        assert 'def is_playback_unavailable' in src
+        assert '.unavailable' in src
+
+    def test_app_treats_unavailable_as_terminal(self):
+        src = _read_source(os.path.join('..', 'app', 'lib', 'backend', 'http', 'api', 'audio.dart'))
+        assert "f.status != 'unavailable'" in src
+
+
 class TestStorageArtifactHelpers:
     def test_playback_prefix_and_helpers(self):
         src = _read_source(os.path.join('utils', 'other', 'storage.py'))
