@@ -778,6 +778,9 @@ def _decision_for_frame(
         elif matching_active:
             action = "attach_evidence"
             rationale = "Frame matches an active memory; attach evidence instead of recreating."
+        elif _should_reject_unsupported_frame(frame):
+            action = "reject_unsupported_inference"
+            rationale = "Frame has weak or meta-commentary evidence and is not eligible for review-store routing."
         elif frame.sensitivity.review_required or frame.sensitivity.level == "high":
             action = "route_to_review" if routing.review_sensitive else "reject_policy"
             rationale = "Sensitive memory requires review."
@@ -859,6 +862,17 @@ def _find_conflicting_memory(frame: MemoryEventFrame, memories):
                 continue
         return memory
     return None
+
+
+def _should_reject_unsupported_frame(frame: MemoryEventFrame) -> bool:
+    """Reject low-confidence extraction artifacts that have no safe review value.
+
+    Review queues are for plausible but uncertain memories.  Weak-evidence or
+    meta-commentary frames with low confidence are better rejected so they cannot
+    later become active memories through review-store shortcuts.
+    """
+    hard_uncertainties = {"weak_evidence", "unsupported_by_existing_state", "inferred_not_stated"}
+    return frame.confidence == "low" and bool(hard_uncertainties & set(frame.uncertainty_reasons))
 
 
 def _normalized_text(text: str) -> str:

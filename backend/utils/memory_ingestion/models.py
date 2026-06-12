@@ -719,7 +719,7 @@ class ModelManifest(StrictBaseModel):
 
 
 class MemoryPipelineOutput(StrictBaseModel):
-    schema_version: Literal["memory_pipeline_output.v1"] = "memory_pipeline_output.v1"
+    schema_version: Literal["memory_pipeline_output"] = "memory_pipeline_output"
     run_id: str
     mode: PipelineMode
     status: Literal["ok", "partial", "failed"]

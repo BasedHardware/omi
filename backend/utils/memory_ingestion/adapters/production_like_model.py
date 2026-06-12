@@ -347,6 +347,10 @@ def _calibration(memory: ProductionLikeMemory, events: list[RawContextEvent]) ->
         uncertainty_reasons.append("inferred_not_stated")
         review_required = True
 
+    if _has_low_value_memory_text(text):
+        uncertainty_reasons.append("unsupported_by_existing_state")
+        review_required = True
+
     if _has_future_plan_signal(text):
         uncertainty_reasons.append("temporal_scope_unclear")
         review_required = True
@@ -380,7 +384,7 @@ def _calibration(memory: ProductionLikeMemory, events: list[RawContextEvent]) ->
         and not review_required
     ):
         confidence = "high"
-    elif "weak_evidence" in uncertainty_reasons:
+    elif "weak_evidence" in uncertainty_reasons or "unsupported_by_existing_state" in uncertainty_reasons:
         confidence = "low"
 
     return {
@@ -474,6 +478,30 @@ def _has_speculative_signal(text: str) -> bool:
     )
     padded = f" {text} "
     return any(term in padded for term in terms)
+
+
+def _has_low_value_memory_text(text: str) -> bool:
+    """Detect summary-shaped outputs that describe conversation activity, not durable memory.
+
+    These phrases commonly arise when the model converts weak evidence into
+    meta-commentary ("discussed X", "expressed interest in Y") instead of a
+    concrete preference/decision/fact.  They are routed away from auto-create.
+    """
+    padded = f" {text} "
+    banned_phrases = (
+        " discussed ",
+        " talked about ",
+        " mentioned ",
+        " expressed ",
+        " showed interest ",
+        " has interest in ",
+        " is interested in ",
+        " thinks ",
+        " believes ",
+        " feels ",
+        " had a conversation ",
+    )
+    return any(phrase in padded for phrase in banned_phrases)
 
 
 def _has_future_plan_signal(text: str) -> bool:

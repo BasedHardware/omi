@@ -111,6 +111,11 @@ NEVER EXTRACT (Absolute Rules):
    ❌ "{user_name} has a friend named Mike" (no context = useless)
    ✅ "Mike is {user_name}'s running partner who they train with for marathons" (specific context)
 
+9. UNCONFIRMED OWNERSHIP / GROUP ATTRIBUTION: Do not turn group plans, team chatter, assistant suggestions, or another speaker's statement into a personal fact about {user_name} unless {user_name} explicitly confirms it in first person.
+   ❌ Team says "we might use Linear" → "{user_name} uses Linear"
+   ❌ Assistant says "You could try Notion" → "{user_name} uses Notion"
+   ✅ {user_name} says "I decided to use Linear for roadmap planning" → extract decided_to_use
+
 STRICT EXCLUSION RULES — DO NOT extract if memory is:
 
 Trivial Personal Preferences:
@@ -187,6 +192,7 @@ For EACH fact you're about to extract, verify it does NOT match these patterns:
 ❌ "{user_name} discussed X" or "talked about Y" → DELETE THIS
 ❌ "{user_name} mentioned that [obvious fact]" → DELETE THIS
 ❌ "{user_name} thinks/believes/feels X" → DELETE THIS
+❌ A group/team/assistant statement rewritten as {user_name}'s personal preference, tool use, or commitment without a first-person confirmation quote → DELETE THIS
 ❌ Any fact whose key nouns/verbs are synonyms or inferences rather than words present in its quote anchor → DELETE THIS
 
 If a fact matches ANY of the above patterns, REMOVE it from your output.

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections import Counter
 from difflib import SequenceMatcher
+import re
 
 from utils.memory_ingestion.ids import stable_hash
 from utils.memory_ingestion.models import LintResult, MemoryPipelineOutput
@@ -102,6 +103,59 @@ def _check_near_duplicates(output: MemoryPipelineOutput) -> list[LintResult]:
                         f"Frames {frames[i].frame_id} and {frames[j].frame_id} have near-identical "
                         f"canonical texts (edit distance={dist})",
                         frames[i].frame_id,
+                    )
+                )
+    return lints
+
+
+_BLOCKING_CREATE_UNCERTAINTIES = {"weak_evidence", "inferred_not_stated", "unsupported_by_existing_state"}
+_GROUNDING_STOPWORDS = {
+    "a", "about", "an", "and", "are", "at", "for", "from", "has", "have", "her", "his",
+    "i", "in", "is", "it", "me", "my", "of", "on", "our", "the", "their", "to", "user",
+    "was", "we", "with",
+}
+
+
+def _meaningful_words(text: str) -> set[str]:
+    words = set(re.findall(r"[a-z0-9][a-z0-9'_-]*", text.casefold()))
+    return {word for word in words if len(word) > 2 and word not in _GROUNDING_STOPWORDS}
+
+
+def _check_active_create_guardrails(output: MemoryPipelineOutput) -> list[LintResult]:
+    """Error when an active create bypasses uncertainty or quote-overlap guardrails."""
+    lints: list[LintResult] = []
+    for create in output.mutation_plan.creates:
+        if create.status != "active":
+            continue
+        blocking = sorted(_BLOCKING_CREATE_UNCERTAINTIES & set(create.uncertainty_reasons))
+        if blocking:
+            lints.append(
+                _lint(
+                    "error",
+                    "uncertain_active_memory_mutation",
+                    f"Active create {create.mutation_id} has blocking uncertainty reasons: {', '.join(blocking)}",
+                    create.frame_id,
+                    create.decision_id,
+                    create.mutation_id,
+                )
+            )
+        create_words = _meaningful_words(create.text)
+        quotes = [evidence.quote for evidence in create.evidence if evidence.quote]
+        if create_words and quotes:
+            best_overlap = max(
+                (len(create_words & _meaningful_words(quote)) for quote in quotes),
+                default=0,
+            )
+            required_overlap = 2 if len(create_words) >= 4 else 1
+            if best_overlap < required_overlap:
+                lints.append(
+                    _lint(
+                        "error",
+                        "active_memory_weak_quote_overlap",
+                        f"Active create {create.mutation_id} lacks meaningful quote overlap ({best_overlap}/{required_overlap})",
+                        create.frame_id,
+                        create.decision_id,
+                        create.mutation_id,
                     )
                 )
     return lints
@@ -236,6 +290,7 @@ def verify_output(output: MemoryPipelineOutput) -> list[LintResult]:
     lints.extend(_check_confidence_contradiction(output))
     lints.extend(_check_grounding(output))
     lints.extend(_check_near_duplicates(output))
+    lints.extend(_check_active_create_guardrails(output))
 
     return lints
 
