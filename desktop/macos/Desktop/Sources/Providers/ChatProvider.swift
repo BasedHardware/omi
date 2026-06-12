@@ -604,6 +604,15 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
     /// Kept separate from messages.count: deduped pages and live messages merged by
     /// polling would otherwise stall or skew the offset.
     private var messagesPaginationOffset = 0
+
+    /// Reset history-pagination state. Must accompany every clear/replace of
+    /// `messages` outside the two loaders (`selectSession`,
+    /// `loadDefaultChatMessages`), which set both fields from a fresh fetch.
+    private func resetMessagesPagination() {
+        messagesPaginationOffset = 0
+        hasMoreMessages = false
+    }
+
     private var multiChatObserver: AnyCancellable?
     private var playwrightExtensionObserver: AnyCancellable?
     private var sessionGroupingObserver: AnyCancellable?
@@ -791,6 +800,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                     await self.agentBridge.stop()
                     self.agentBridgeStarted = false
                     self.messages.removeAll()
+                    self.resetMessagesPagination()
                     self.pendingAttachments.removeAll()
                     self.sessions.removeAll()
                     self.currentSession = nil
@@ -1184,7 +1194,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             currentSession = session
             isInDefaultChat = false
             messages = []
-            hasMoreMessages = false
+            resetMessagesPagination()
             log("Created new chat session: \(session.id)")
             AnalyticsManager.shared.chatSessionCreated()
 
@@ -1260,7 +1270,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
         } catch {
             logError("Failed to load messages for session", error: error)
             messages = []
-            messagesPaginationOffset = 0
+            resetMessagesPagination()
         }
 
         isLoading = false
@@ -1344,6 +1354,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                 } else {
                     currentSession = nil
                     messages = []
+                    resetMessagesPagination()
                 }
             }
 
@@ -1929,6 +1940,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
     func reinitialize() async {
         sessions = []
         messages = []
+        resetMessagesPagination()
         currentSession = nil
         isInDefaultChat = true
         await initialize()
@@ -2158,7 +2170,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
         }
 
         messages = []
-        messagesPaginationOffset = 0
+        resetMessagesPagination()
         sessionsLoadError = lastError?.localizedDescription ?? "Failed to load messages. Check your connection and try again."
         isLoading = false
     }
@@ -3438,6 +3450,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
         if isInDefaultChat {
             // Default chat mode: clear UI immediately, delete in background
             messages = []
+            resetMessagesPagination()
             log("Cleared default chat messages")
             Task {
                 do {
@@ -3456,6 +3469,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             }
             currentSession = nil
             messages = []
+            resetMessagesPagination()
 
             // Delete old session in background (don't await — backend is slow)
             if let session = sessionToDelete {
@@ -3485,6 +3499,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
         selectedAppId = appId
         currentSession = nil
         messages = []
+        resetMessagesPagination()
         sessions = []
         errorMessage = nil
         isInDefaultChat = true
