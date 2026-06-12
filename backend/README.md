@@ -124,7 +124,7 @@ macOS/Linux:
 bash test-preflight.sh
 ```
 
-Windows PowerShell:
+Windows PowerShell (works with the default Restricted execution policy):
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File .\test-preflight.ps1
 ```
