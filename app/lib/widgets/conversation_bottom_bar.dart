@@ -258,6 +258,13 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
       }
       if (audioSources.isEmpty) {
         Logger.debug('No cached audio sources for ${widget.conversation!.id}');
+        AnalyticsManager().audioPlaybackFailed(
+          conversationId: widget.conversation!.id,
+          reason: 'no_matching_sources',
+        );
+        if (mounted) {
+          AppSnackbar.showSnackbarError(context.l10n.anErrorOccurredTryAgain);
+        }
         return;
       }
 
