@@ -40,6 +40,12 @@ _STUB = (
 )
 
 
+def _clear_stubbed_modules():
+    for name in list(sys.modules):
+        if any(name == p or name.startswith(p + '.') for p in _STUB):
+            sys.modules.pop(name, None)
+
+
 class _AutoMock(types.ModuleType):
     __path__ = []
 
@@ -65,14 +71,13 @@ class _Finder(importlib.abc.MetaPathFinder, importlib.abc.Loader):
 
 
 _finder = _Finder()
+_clear_stubbed_modules()
 sys.meta_path.insert(0, _finder)
 try:
     from routers import apps as apps_mod
 finally:
     sys.meta_path.remove(_finder)
-    for _n in list(sys.modules):
-        if any(_n == p or _n.startswith(p + '.') for p in _STUB):
-            sys.modules.pop(_n, None)
+    _clear_stubbed_modules()
 
 from fastapi import HTTPException  # noqa: E402
 
