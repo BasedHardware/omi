@@ -20,6 +20,7 @@ Mapping to real-world clients:
 
 from __future__ import annotations
 
+import asyncio
 import os
 import sys
 import types
@@ -72,6 +73,11 @@ if _BACKEND_DIR not in sys.path:
     sys.path.insert(0, _BACKEND_DIR)
 
 from routers.auth import _validate_redirect_uri  # noqa: E402
+
+
+def _run_async(coro):
+    return asyncio.run(coro)
+
 
 for mod, previous in _previous_modules.items():
     if previous is _missing:
@@ -214,12 +220,10 @@ class TestAuthCodeBinding:
         )
 
         with patch('routers.auth.get_auth_code', return_value=code_data), patch('routers.auth.delete_auth_code'):
-            import asyncio
-
             request = MagicMock()
 
             with pytest.raises(HTTPException) as exc_info:
-                asyncio.get_event_loop().run_until_complete(
+                _run_async(
                     auth_token(
                         request=request,
                         grant_type='authorization_code',
@@ -248,11 +252,9 @@ class TestAuthCodeBinding:
         )
 
         with patch('routers.auth.get_auth_code', return_value=code_data), patch('routers.auth.delete_auth_code'):
-            import asyncio
-
             request = MagicMock()
 
-            result = asyncio.get_event_loop().run_until_complete(
+            result = _run_async(
                 auth_token(
                     request=request,
                     grant_type='authorization_code',
@@ -276,11 +278,9 @@ class TestAuthCodeBinding:
         )
 
         with patch('routers.auth.get_auth_code', return_value=legacy_data), patch('routers.auth.delete_auth_code'):
-            import asyncio
-
             request = MagicMock()
 
-            result = asyncio.get_event_loop().run_until_complete(
+            result = _run_async(
                 auth_token(
                     request=request,
                     grant_type='authorization_code',
@@ -304,10 +304,8 @@ class TestAuthCodeBinding:
         )
         request = MagicMock()
         with patch('routers.auth.get_auth_code', return_value=code_data), patch('routers.auth.delete_auth_code'):
-            import asyncio
-
             with pytest.raises(HTTPException) as exc_info:
-                asyncio.get_event_loop().run_until_complete(
+                _run_async(
                     auth_token(
                         request=request,
                         grant_type='authorization_code',
@@ -375,7 +373,6 @@ class TestCallbackEndpoints:
     def test_google_callback_binds_redirect_uri_to_auth_code(self):
         """Google callback wraps credentials with redirect_uri and stores with TTL 300."""
         from routers.auth import auth_callback_google
-        import asyncio
 
         session_data = {
             'provider': 'google',
@@ -394,9 +391,7 @@ class TestCallbackEndpoints:
             return_value=fake_creds,
         ), patch('routers.auth.set_auth_code') as mock_set_code, patch('routers.auth.templates') as mock_templates:
             mock_templates.TemplateResponse.return_value = MagicMock()
-            asyncio.get_event_loop().run_until_complete(
-                auth_callback_google(request=request, code='oauth-code', state='session-id')
-            )
+            _run_async(auth_callback_google(request=request, code='oauth-code', state='session-id'))
             mock_set_code.assert_called_once()
             stored_json = mock_set_code.call_args[0][1]
             ttl = mock_set_code.call_args[0][2]
@@ -408,7 +403,6 @@ class TestCallbackEndpoints:
     def test_callback_defaults_redirect_uri_when_missing_from_session(self):
         """When session has no redirect_uri, callback falls back to default."""
         from routers.auth import auth_callback_google
-        import asyncio
 
         session_data = {
             'provider': 'google',
@@ -426,7 +420,7 @@ class TestCallbackEndpoints:
             return_value=fake_creds,
         ), patch('routers.auth.set_auth_code') as mock_set_code, patch('routers.auth.templates') as mock_templates:
             mock_templates.TemplateResponse.return_value = MagicMock()
-            asyncio.get_event_loop().run_until_complete(auth_callback_google(request=request, code='c', state='s'))
+            _run_async(auth_callback_google(request=request, code='c', state='s'))
             stored = json.loads(mock_set_code.call_args[0][1])
             assert stored['redirect_uri'] == _DEFAULT_MOBILE_REDIRECT
 
@@ -436,8 +430,6 @@ class TestTokenEdgeCases:
 
     def test_token_deletes_code_on_use(self):
         """Auth code is single-use — delete_auth_code must be called."""
-        import asyncio
-
         code_data = json.dumps(
             {'provider': 'google', 'id_token': 't', 'access_token': 'a', 'provider_id': 'google.com'}
         )
@@ -446,7 +438,7 @@ class TestTokenEdgeCases:
         with patch('routers.auth.get_auth_code', return_value=code_data), patch(
             'routers.auth.delete_auth_code'
         ) as mock_delete:
-            asyncio.get_event_loop().run_until_complete(
+            _run_async(
                 auth_token(
                     request=request,
                     grant_type='authorization_code',
@@ -459,12 +451,10 @@ class TestTokenEdgeCases:
 
     def test_token_rejects_expired_code(self):
         """Expired/missing code returns 400."""
-        import asyncio
-
         request = MagicMock()
         with patch('routers.auth.get_auth_code', return_value=None):
             with pytest.raises(HTTPException) as exc_info:
-                asyncio.get_event_loop().run_until_complete(
+                _run_async(
                     auth_token(
                         request=request,
                         grant_type='authorization_code',
@@ -478,8 +468,6 @@ class TestTokenEdgeCases:
 
     def test_token_handles_credentials_as_dict(self):
         """When credentials is already a dict (not JSON string), parsing succeeds."""
-        import asyncio
-
         code_data = json.dumps(
             {
                 'credentials': {
@@ -494,7 +482,7 @@ class TestTokenEdgeCases:
         request = MagicMock()
 
         with patch('routers.auth.get_auth_code', return_value=code_data), patch('routers.auth.delete_auth_code'):
-            result = asyncio.get_event_loop().run_until_complete(
+            result = _run_async(
                 auth_token(
                     request=request,
                     grant_type='authorization_code',
@@ -508,11 +496,9 @@ class TestTokenEdgeCases:
 
     def test_token_rejects_unsupported_grant_type(self):
         """Non-authorization_code grant type returns 400."""
-        import asyncio
-
         request = MagicMock()
         with pytest.raises(HTTPException) as exc_info:
-            asyncio.get_event_loop().run_until_complete(
+            _run_async(
                 auth_token(
                     request=request,
                     grant_type='client_credentials',
