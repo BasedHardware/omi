@@ -3,7 +3,7 @@ import sys
 import types
 from unittest.mock import patch
 
-from tests.unit.twilio_stub import install_twilio_stub
+from tests.unit.twilio_stub import ensure_real_twilio_service_package, install_twilio_stub, restore_backend_package
 
 os.environ.setdefault('TWILIO_ACCOUNT_SID', 'ACtest123')
 os.environ.setdefault('TWILIO_AUTH_TOKEN', 'test_auth_token')
@@ -11,6 +11,7 @@ os.environ.setdefault('TWILIO_API_KEY_SID', 'SKtest123')
 os.environ.setdefault('TWILIO_API_KEY_SECRET', 'test_api_secret')
 os.environ.setdefault('TWILIO_TWIML_APP_SID', 'APtest123')
 install_twilio_stub()
+ensure_real_twilio_service_package()
 
 
 # Stub `database.phone_calls` before twilio_service tries to import it so we can
@@ -18,8 +19,7 @@ install_twilio_stub()
 # rest of the database init chain. The real implementation only uses
 # `get_phone_numbers`, which the tests override per-case via patch.object.
 def _install_phone_calls_stub():
-    if 'database' not in sys.modules:
-        sys.modules['database'] = types.ModuleType('database')
+    database_module = restore_backend_package('database')
     if 'database.phone_calls' not in sys.modules:
         stub = types.ModuleType('database.phone_calls')
 
@@ -28,7 +28,7 @@ def _install_phone_calls_stub():
 
         stub.get_phone_numbers = get_phone_numbers
         sys.modules['database.phone_calls'] = stub
-        setattr(sys.modules['database'], 'phone_calls', stub)
+        setattr(database_module, 'phone_calls', stub)
 
 
 _install_phone_calls_stub()
