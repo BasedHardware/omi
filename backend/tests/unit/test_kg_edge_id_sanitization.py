@@ -18,11 +18,37 @@ os.environ.setdefault(
     "omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv",
 )
 
+_google = sys.modules.setdefault("google", types.ModuleType("google"))
+_google_cloud = sys.modules.setdefault("google.cloud", types.ModuleType("google.cloud"))
+_google_firestore = sys.modules.setdefault("google.cloud.firestore", types.ModuleType("google.cloud.firestore"))
+_google_firestore_v1 = sys.modules.setdefault(
+    "google.cloud.firestore_v1", types.ModuleType("google.cloud.firestore_v1")
+)
+_google.cloud = _google_cloud
+_google_cloud.firestore = _google_firestore
+_google_cloud.firestore_v1 = _google_firestore_v1
+_google_firestore.Client = getattr(_google_firestore, "Client", MagicMock)
+_google_firestore_v1.FieldFilter = getattr(_google_firestore_v1, "FieldFilter", MagicMock)
+
+_BACKEND_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
+if _BACKEND_DIR not in sys.path:
+    sys.path.insert(0, _BACKEND_DIR)
+_database_pkg = sys.modules.setdefault("database", types.ModuleType("database"))
+_database_pkg.__path__ = [os.path.join(_BACKEND_DIR, "database")]
+sys.modules.pop("database.knowledge_graph", None)
+sys.modules.pop("database._client", None)
+
 # Patch the Firestore Client before importing any database module
 with patch("google.cloud.firestore.Client") as mock_client_cls:
     mock_db = MagicMock()
     mock_client_cls.return_value = mock_db
     from database.knowledge_graph import upsert_knowledge_edge
+
+sys.modules.pop("database.knowledge_graph", None)
+sys.modules.pop("database._client", None)
+for _database_attr in ("knowledge_graph", "_client"):
+    if hasattr(_database_pkg, _database_attr):
+        delattr(_database_pkg, _database_attr)
 
 
 class TestEdgeIdSanitization:
