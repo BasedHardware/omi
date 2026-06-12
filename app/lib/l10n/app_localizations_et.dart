@@ -9283,4 +9283,11 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get invalidPromotionCode => 'Kehtetu sooduskood.';
+
+  @override
+  String get localYoloeObjectAnnouncements => 'Kohalikud YOLOE objektiteavitused';
+
+  @override
+  String get localYoloeObjectAnnouncementsDescription =>
+      'Eksperimentaalne: töötleb Omi Glassi pilte seadmes ja jätab LLM-i pildiüleslaadimised vahele.';
 }

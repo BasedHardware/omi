@@ -9278,4 +9278,11 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get invalidPromotionCode => 'Neplatný promo kód.';
+
+  @override
+  String get localYoloeObjectAnnouncements => 'Miestne oznamovanie objektov YOLOE';
+
+  @override
+  String get localYoloeObjectAnnouncementsDescription =>
+      'Experimentálne: spracúva obrázky z Omi Glass v zariadení a preskakuje nahrávanie obrázkov do LLM.';
 }

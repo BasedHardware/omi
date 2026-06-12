@@ -9216,4 +9216,11 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get invalidPromotionCode => 'קוד קידום לא תקין.';
+
+  @override
+  String get localYoloeObjectAnnouncements => 'הכרזות אובייקטים מקומיות של YOLOE';
+
+  @override
+  String get localYoloeObjectAnnouncementsDescription =>
+      'ניסיוני: מעבד תמונות Omi Glass במכשיר ומדלג על העלאות תמונות ל-LLM.';
 }

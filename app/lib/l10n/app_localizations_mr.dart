@@ -9296,4 +9296,11 @@ class AppLocalizationsMr extends AppLocalizations {
 
   @override
   String get invalidPromotionCode => 'अवैध प्रोमो कोड.';
+
+  @override
+  String get localYoloeObjectAnnouncements => 'स्थानिक YOLOE ऑब्जेक्ट घोषणा';
+
+  @override
+  String get localYoloeObjectAnnouncementsDescription =>
+      'प्रायोगिक: Omi Glass प्रतिमा डिव्हाइसवर प्रक्रिया करते आणि LLM कडे प्रतिमा अपलोड वगळते.';
 }

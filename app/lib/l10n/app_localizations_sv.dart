@@ -9291,4 +9291,11 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get invalidPromotionCode => 'Ogiltig kampanjkod.';
+
+  @override
+  String get localYoloeObjectAnnouncements => 'Lokala YOLOE-objektmeddelanden';
+
+  @override
+  String get localYoloeObjectAnnouncementsDescription =>
+      'Experimentellt: bearbetar Omi Glass-bilder på enheten och hoppar över bilduppladdningar till LLM.';
 }

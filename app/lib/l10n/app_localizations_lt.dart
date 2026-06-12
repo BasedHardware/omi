@@ -9299,4 +9299,11 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get invalidPromotionCode => 'Neteisingas reklamos kodas.';
+
+  @override
+  String get localYoloeObjectAnnouncements => 'Vietiniai YOLOE objektų pranešimai';
+
+  @override
+  String get localYoloeObjectAnnouncementsDescription =>
+      'Eksperimentinė funkcija: apdoroja Omi Glass vaizdus įrenginyje ir praleidžia vaizdų įkėlimą į LLM.';
 }

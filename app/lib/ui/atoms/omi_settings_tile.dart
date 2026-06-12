@@ -97,7 +97,7 @@ class OmiSettingsTile extends AdaptiveWidget {
                   trailing!,
                 ] else if (showArrow) ...[
                   if (value != null) const SizedBox(width: 16),
-                  const Icon(FontAwesomeIcons.chevronRight, size: 12, color: ResponsiveHelper.textTertiary),
+                  const FaIcon(FontAwesomeIcons.chevronRight, size: 12, color: ResponsiveHelper.textTertiary),
                 ],
               ],
             ),

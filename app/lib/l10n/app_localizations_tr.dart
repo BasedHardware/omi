@@ -9297,4 +9297,11 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get invalidPromotionCode => 'Geçersiz promosyon kodu.';
+
+  @override
+  String get localYoloeObjectAnnouncements => 'Yerel YOLOE nesne duyuruları';
+
+  @override
+  String get localYoloeObjectAnnouncementsDescription =>
+      'Deneysel: Omi Glass görüntülerini cihazda işler ve LLM görüntü yüklemelerini atlar.';
 }

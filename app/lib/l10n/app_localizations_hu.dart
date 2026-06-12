@@ -9325,4 +9325,11 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get invalidPromotionCode => 'Érvénytelen promóciós kód.';
+
+  @override
+  String get localYoloeObjectAnnouncements => 'Helyi YOLOE objektumbejelentések';
+
+  @override
+  String get localYoloeObjectAnnouncementsDescription =>
+      'Kísérleti: az Omi Glass képeit az eszközön dolgozza fel, és kihagyja a képfeltöltéseket az LLM-be.';
 }

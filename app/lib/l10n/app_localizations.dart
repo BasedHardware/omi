@@ -17306,6 +17306,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Invalid promotion code.'**
   String get invalidPromotionCode;
+
+  /// Experimental feature name for local YOLOE object announcements
+  ///
+  /// In en, this message translates to:
+  /// **'Local YOLOE object announcements'**
+  String get localYoloeObjectAnnouncements;
+
+  /// Description for local YOLOE object announcements developer setting
+  ///
+  /// In en, this message translates to:
+  /// **'Experimental: processes Omi Glass images on-device and skips LLM image uploads.'**
+  String get localYoloeObjectAnnouncementsDescription;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

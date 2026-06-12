@@ -9370,4 +9370,11 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get invalidPromotionCode => 'Hindi valid na promo code.';
+
+  @override
+  String get localYoloeObjectAnnouncements => 'Mga lokal na anunsyo ng bagay ng YOLOE';
+
+  @override
+  String get localYoloeObjectAnnouncementsDescription =>
+      'Eksperimental: pinoproseso ang mga larawan ng Omi Glass sa device at nilalaktawan ang pag-upload ng larawan sa LLM.';
 }

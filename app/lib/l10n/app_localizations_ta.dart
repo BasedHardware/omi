@@ -9352,4 +9352,11 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get invalidPromotionCode => 'தவறான விளம்பர குறியீடு.';
+
+  @override
+  String get localYoloeObjectAnnouncements => 'உள்ளூர் YOLOE பொருள் அறிவிப்புகள்';
+
+  @override
+  String get localYoloeObjectAnnouncementsDescription =>
+      'சோதனை: Omi Glass படங்களை சாதனத்திலேயே செயலாக்கி, LLM படப் பதிவேற்றங்களைத் தவிர்க்கிறது.';
 }

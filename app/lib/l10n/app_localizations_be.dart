@@ -9314,4 +9314,11 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String get invalidPromotionCode => 'Няправільны промакод.';
+
+  @override
+  String get localYoloeObjectAnnouncements => 'Лакальныя абвяшчэнні аб абʼектах YOLOE';
+
+  @override
+  String get localYoloeObjectAnnouncementsDescription =>
+      'Эксперыментальна: апрацоўвае выявы Omi Glass на прыладзе і прапускае загрузку выяў у LLM.';
 }

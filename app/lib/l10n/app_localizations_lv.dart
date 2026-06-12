@@ -9308,4 +9308,11 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get invalidPromotionCode => 'Nederīgs reklāmas kods.';
+
+  @override
+  String get localYoloeObjectAnnouncements => 'Lokāli YOLOE objektu paziņojumi';
+
+  @override
+  String get localYoloeObjectAnnouncementsDescription =>
+      'Eksperimentāli: apstrādā Omi Glass attēlus ierīcē un izlaiž attēlu augšupielādi uz LLM.';
 }

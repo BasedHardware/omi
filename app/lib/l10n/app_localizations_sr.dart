@@ -9298,4 +9298,11 @@ class AppLocalizationsSr extends AppLocalizations {
 
   @override
   String get invalidPromotionCode => 'Неважећи промо код.';
+
+  @override
+  String get localYoloeObjectAnnouncements => 'Локална YOLOE обавештења о објектима';
+
+  @override
+  String get localYoloeObjectAnnouncementsDescription =>
+      'Експериментално: обрађује Omi Glass слике на уређају и прескаче отпремање слика у LLM.';
 }

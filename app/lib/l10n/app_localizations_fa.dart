@@ -9288,4 +9288,11 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get invalidPromotionCode => 'کد تخفیف نامعتبر.';
+
+  @override
+  String get localYoloeObjectAnnouncements => 'اعلان‌های محلی اشیای YOLOE';
+
+  @override
+  String get localYoloeObjectAnnouncementsDescription =>
+      'آزمایشی: تصاویر Omi Glass را روی دستگاه پردازش می‌کند و بارگذاری تصویر به LLM را رد می‌کند.';
 }

@@ -9284,4 +9284,11 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get invalidPromotionCode => 'Mã khuyến mãi không hợp lệ.';
+
+  @override
+  String get localYoloeObjectAnnouncements => 'Thông báo đối tượng YOLOE cục bộ';
+
+  @override
+  String get localYoloeObjectAnnouncementsDescription =>
+      'Thử nghiệm: xử lý ảnh Omi Glass trên thiết bị và bỏ qua tải ảnh lên LLM.';
 }

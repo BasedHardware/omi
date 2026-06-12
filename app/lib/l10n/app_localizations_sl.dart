@@ -9313,4 +9313,11 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String get invalidPromotionCode => 'Neveljavna promocijska koda.';
+
+  @override
+  String get localYoloeObjectAnnouncements => 'Lokalna obvestila o predmetih YOLOE';
+
+  @override
+  String get localYoloeObjectAnnouncementsDescription =>
+      'Poskusno: obdeluje slike Omi Glass v napravi in preskoči nalaganje slik v LLM.';
 }

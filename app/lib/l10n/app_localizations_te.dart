@@ -9335,4 +9335,11 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get invalidPromotionCode => 'చెల్లని ప్రోమో కోడ్.';
+
+  @override
+  String get localYoloeObjectAnnouncements => 'స్థానిక YOLOE వస్తు ప్రకటనలు';
+
+  @override
+  String get localYoloeObjectAnnouncementsDescription =>
+      'ప్రయోగాత్మకం: Omi Glass చిత్రాలను పరికరంలోనే ప్రాసెస్ చేస్తుంది మరియు LLM కు చిత్ర అప్‌లోడ్‌లను దాటవేస్తుంది.';
 }

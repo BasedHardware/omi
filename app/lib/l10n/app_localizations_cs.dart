@@ -9286,4 +9286,11 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get invalidPromotionCode => 'Neplatný promo kód.';
+
+  @override
+  String get localYoloeObjectAnnouncements => 'Místní oznamování objektů YOLOE';
+
+  @override
+  String get localYoloeObjectAnnouncementsDescription =>
+      'Experimentální: zpracovává obrázky z Omi Glass v zařízení a vynechává nahrávání obrázků do LLM.';
 }

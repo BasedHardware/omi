@@ -9289,4 +9289,11 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get invalidPromotionCode => 'Código promocional inválido.';
+
+  @override
+  String get localYoloeObjectAnnouncements => 'Anúncios locais de objetos YOLOE';
+
+  @override
+  String get localYoloeObjectAnnouncementsDescription =>
+      'Experimental: processa imagens do Omi Glass no dispositivo e ignora uploads de imagens para o LLM.';
 }

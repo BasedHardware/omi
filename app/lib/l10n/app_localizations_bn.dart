@@ -9293,4 +9293,11 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String get invalidPromotionCode => 'অবৈধ প্রোমো কোড।';
+
+  @override
+  String get localYoloeObjectAnnouncements => 'স্থানীয় YOLOE অবজেক্ট ঘোষণা';
+
+  @override
+  String get localYoloeObjectAnnouncementsDescription =>
+      'পরীক্ষামূলক: Omi Glass ছবি ডিভাইসেই প্রক্রিয়া করে এবং LLM ছবি আপলোড এড়িয়ে যায়।';
 }

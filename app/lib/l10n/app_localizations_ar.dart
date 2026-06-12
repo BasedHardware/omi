@@ -9231,4 +9231,11 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get invalidPromotionCode => 'رمز ترويجي غير صالح.';
+
+  @override
+  String get localYoloeObjectAnnouncements => 'إعلانات كائنات YOLOE المحلية';
+
+  @override
+  String get localYoloeObjectAnnouncementsDescription =>
+      'تجريبي: يعالج صور Omi Glass على الجهاز ويتخطى تحميل الصور إلى LLM.';
 }

@@ -9300,4 +9300,11 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get invalidPromotionCode => 'غلط پرومو کوڈ۔';
+
+  @override
+  String get localYoloeObjectAnnouncements => 'مقامی YOLOE آبجیکٹ اعلانات';
+
+  @override
+  String get localYoloeObjectAnnouncementsDescription =>
+      'تجرباتی: Omi Glass تصاویر کو ڈیوائس پر پروسیس کرتا ہے اور LLM پر تصویر اپ لوڈ کو چھوڑتا ہے۔';
 }

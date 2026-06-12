@@ -9312,4 +9312,11 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get invalidPromotionCode => 'Ongeldige promotiecode.';
+
+  @override
+  String get localYoloeObjectAnnouncements => 'Lokale YOLOE-objectaankondigingen';
+
+  @override
+  String get localYoloeObjectAnnouncementsDescription =>
+      'Experimenteel: verwerkt Omi Glass-afbeeldingen op het apparaat en slaat afbeeldingsuploads naar de LLM over.';
 }

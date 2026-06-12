@@ -9304,4 +9304,11 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get invalidPromotionCode => 'Недійсний промокод.';
+
+  @override
+  String get localYoloeObjectAnnouncements => 'Локальні оголошення об’єктів YOLOE';
+
+  @override
+  String get localYoloeObjectAnnouncementsDescription =>
+      'Експериментально: обробляє зображення Omi Glass на пристрої та пропускає завантаження зображень до LLM.';
 }

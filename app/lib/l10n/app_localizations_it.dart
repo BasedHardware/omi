@@ -9339,4 +9339,11 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String get invalidPromotionCode => 'Codice promozionale non valido.';
+
+  @override
+  String get localYoloeObjectAnnouncements => 'Annunci locali di oggetti YOLOE';
+
+  @override
+  String get localYoloeObjectAnnouncementsDescription =>
+      'Sperimentale: elabora le immagini di Omi Glass sul dispositivo e salta i caricamenti di immagini verso l’LLM.';
 }

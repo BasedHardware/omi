@@ -9121,4 +9121,10 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get invalidPromotionCode => '促销代码无效。';
+
+  @override
+  String get localYoloeObjectAnnouncements => '本地 YOLOE 对象播报';
+
+  @override
+  String get localYoloeObjectAnnouncementsDescription => '实验性：在设备端处理 Omi Glass 图像，并跳过上传图像到 LLM。';
 }

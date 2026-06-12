@@ -9317,4 +9317,11 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get invalidPromotionCode => 'ಅಮಾನ್ಯ ಪ್ರೋಮೋ ಕೋಡ್.';
+
+  @override
+  String get localYoloeObjectAnnouncements => 'ಸ್ಥಳೀಯ YOLOE ವಸ್ತು ಘೋಷಣೆಗಳು';
+
+  @override
+  String get localYoloeObjectAnnouncementsDescription =>
+      'ಪ್ರಾಯೋಗಿಕ: Omi Glass ಚಿತ್ರಗಳನ್ನು ಸಾಧನದಲ್ಲೇ ಪ್ರಕ್ರಿಯೆಗೊಳಿಸುತ್ತದೆ ಮತ್ತು LLM ಗೆ ಚಿತ್ರ ಅಪ್‌ಲೋಡ್‌ಗಳನ್ನು ಬಿಟ್ಟುಬಿಡುತ್ತದೆ.';
 }

@@ -9135,4 +9135,10 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get invalidPromotionCode => '無効なプロモコードです。';
+
+  @override
+  String get localYoloeObjectAnnouncements => 'ローカルYOLOEオブジェクト通知';
+
+  @override
+  String get localYoloeObjectAnnouncementsDescription => '実験的: Omi Glassの画像をデバイス上で処理し、LLMへの画像アップロードをスキップします。';
 }

@@ -9309,4 +9309,11 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get invalidPromotionCode => 'Kod promo tidak sah.';
+
+  @override
+  String get localYoloeObjectAnnouncements => 'Pengumuman objek YOLOE setempat';
+
+  @override
+  String get localYoloeObjectAnnouncementsDescription =>
+      'Eksperimen: memproses imej Omi Glass pada peranti dan melangkau muat naik imej ke LLM.';
 }

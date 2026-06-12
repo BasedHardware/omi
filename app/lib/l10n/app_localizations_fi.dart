@@ -9286,4 +9286,11 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get invalidPromotionCode => 'Virheellinen tarjouskoodi.';
+
+  @override
+  String get localYoloeObjectAnnouncements => 'Paikalliset YOLOE-kohdeilmoitukset';
+
+  @override
+  String get localYoloeObjectAnnouncementsDescription =>
+      'Kokeellinen: käsittelee Omi Glass -kuvat laitteessa ja ohittaa kuvien lataukset LLM:ään.';
 }

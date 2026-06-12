@@ -9351,4 +9351,11 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get invalidPromotionCode => 'Μη έγκυρος κωδικός προσφοράς.';
+
+  @override
+  String get localYoloeObjectAnnouncements => 'Τοπικές ανακοινώσεις αντικειμένων YOLOE';
+
+  @override
+  String get localYoloeObjectAnnouncementsDescription =>
+      'Πειραματικό: επεξεργάζεται εικόνες Omi Glass στη συσκευή και παραλείπει τις μεταφορτώσεις εικόνων στο LLM.';
 }

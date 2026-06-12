@@ -9137,4 +9137,10 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get invalidPromotionCode => '유효하지 않은 프로모 코드입니다.';
+
+  @override
+  String get localYoloeObjectAnnouncements => '로컬 YOLOE 객체 알림';
+
+  @override
+  String get localYoloeObjectAnnouncementsDescription => '실험 기능: Omi Glass 이미지를 기기에서 처리하고 LLM 이미지 업로드를 건너뜁니다.';
 }

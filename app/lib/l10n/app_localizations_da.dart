@@ -9271,4 +9271,11 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get invalidPromotionCode => 'Ugyldig kampagnekode.';
+
+  @override
+  String get localYoloeObjectAnnouncements => 'Lokale YOLOE-objektannonceringer';
+
+  @override
+  String get localYoloeObjectAnnouncementsDescription =>
+      'Eksperimentelt: behandler Omi Glass-billeder på enheden og springer billeduploads til LLM over.';
 }
