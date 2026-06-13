@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/material.dart';
 
@@ -7,6 +9,7 @@ import 'package:omi/backend/preferences.dart';
 import 'package:omi/app_globals.dart';
 import 'package:omi/providers/base_provider.dart';
 import 'package:omi/services/agent_chat_service.dart';
+import 'package:omi/services/local_vision/object_announcement_service.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
@@ -323,6 +326,7 @@ class DeveloperModeProvider extends BaseProvider {
   void onLocalYoloeChanged(bool value) {
     localYoloeEnabled = value;
     SharedPreferencesUtil().localYoloeEnabled = value;
+    if (!value) unawaited(ObjectAnnouncementService.instance.stop());
     Logger.debug('Local YOLOE object announcements ${value ? 'enabled' : 'disabled'}');
     notifyListeners();
   }
@@ -330,6 +334,7 @@ class DeveloperModeProvider extends BaseProvider {
   void onLocalYoloeVoiceChanged(bool value) {
     localYoloeVoiceEnabled = value;
     SharedPreferencesUtil().localYoloeVoiceEnabled = value;
+    if (!value) unawaited(ObjectAnnouncementService.instance.stop());
     notifyListeners();
   }
 

@@ -14,6 +14,7 @@ class ObjectAnnouncementService extends ChangeNotifier {
 
   final FlutterTts _tts = FlutterTts();
   final List<String> _queue = [];
+  static const int _maxQueuedAnnouncements = 1;
 
   bool _initialized = false;
   bool _speaking = false;
@@ -56,13 +57,13 @@ class ObjectAnnouncementService extends ChangeNotifier {
     return 'I see a ${cleaned.sublist(0, cleaned.length - 1).join(', ')}, and ${cleaned.last}.';
   }
 
-  Future<void> speakObjects(List<String> labels) async {
+  Future<void> speakObjects(List<String> labels, {bool bypassQuietPeriod = false}) async {
     final message = formatObjectsMessage(labels);
     if (message.isEmpty) return;
-    await speak(message);
+    await speak(message, bypassQuietPeriod: bypassQuietPeriod);
   }
 
-  Future<void> speak(String text, {bool force = false}) async {
+  Future<void> speak(String text, {bool force = false, bool bypassQuietPeriod = false}) async {
     final trimmed = text.trim();
     if (trimmed.isEmpty) return;
 
@@ -75,7 +76,7 @@ class ObjectAnnouncementService extends ChangeNotifier {
 
     final now = DateTime.now();
     final last = _lastAnnouncementAt;
-    if (!force && last != null) {
+    if (!force && !bypassQuietPeriod && last != null) {
       final elapsed = now.difference(last).inMilliseconds / 1000;
       if (elapsed < prefs.localYoloeMinSecondsBetweenAnnouncements) return;
     }
@@ -90,6 +91,9 @@ class ObjectAnnouncementService extends ChangeNotifier {
     }
 
     if (_speaking) {
+      if (_queue.length >= _maxQueuedAnnouncements) {
+        _queue.removeAt(0);
+      }
       _queue.add(trimmed);
       notifyListeners();
       return;

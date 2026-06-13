@@ -334,6 +334,19 @@ class AnnouncementCandidate {
 
   final Detection detection;
   final String reason;
+
+  bool get isHighPriorityNewObject =>
+      reason == 'entered scene' && detection.confidence >= 0.75 && detection.box.area >= 0.04;
+}
+
+double _announcementUsefulnessScore(Detection detection) {
+  final confidenceScore = detection.confidence * 0.55;
+  final sizeScore = detection.box.area.clamp(0.0, 1.0) * 0.25;
+  final centerX = detection.box.left + detection.box.width / 2;
+  final centerY = detection.box.top + detection.box.height / 2;
+  final distanceFromCenter = ((centerX - 0.5).abs() + (centerY - 0.5).abs()).clamp(0.0, 1.0);
+  final centralityScore = (1.0 - distanceFromCenter) * 0.20;
+  return confidenceScore + sizeScore + centralityScore;
 }
 
 class ObjectPresence {
@@ -367,7 +380,7 @@ class ObjectPresenceTracker {
 
     _presenceByLabel.removeWhere((label, presence) => presence.lastSeenAt.isBefore(cutoff));
 
-    final filtered = _filterForMode(detections, mode)..sort((a, b) => b.confidence.compareTo(a.confidence));
+    final filtered = _rankUsefulDetections(_filterForMode(detections, mode));
     final candidates = <AnnouncementCandidate>[];
 
     for (final detection in filtered.take(prefs.localYoloeMaxObjectsPerAnnouncement)) {
@@ -408,6 +421,15 @@ class ObjectPresenceTracker {
   List<Detection> _filterForMode(List<Detection> detections, AnnouncementMode mode) {
     if (mode == AnnouncementMode.allObjects) return List<Detection>.from(detections);
     return detections.where((detection) => detection.heldObjectSelected && !detection.isHand).toList();
+  }
+
+  List<Detection> _rankUsefulDetections(List<Detection> detections) {
+    return List<Detection>.from(detections)
+      ..sort((a, b) {
+        final scoreComparison = _announcementUsefulnessScore(b).compareTo(_announcementUsefulnessScore(a));
+        if (scoreComparison != 0) return scoreComparison;
+        return b.confidence.compareTo(a.confidence);
+      });
   }
 
   void clear() => _presenceByLabel.clear();
@@ -574,7 +596,8 @@ class LocalVisionService extends ChangeNotifier {
         status: _heldObjectStatusFor(mode, handCount, heldSelectedCount, annotatedResults.length),
       );
       final candidates = _presenceTracker.update(annotatedResults, timestamp: frame.timestamp, mode: mode);
-      final candidateLabels = candidates.map((candidate) => candidate.detection.label.toLowerCase()).toSet();
+      final candidatesToSpeak = _announcementCandidatesAllowedBySpeechGuardrails(candidates);
+      final candidateLabels = candidatesToSpeak.map((candidate) => candidate.detection.label.toLowerCase()).toSet();
       final results = annotatedResults
           .map(
             (detection) => detection.copyWith(
@@ -583,11 +606,11 @@ class LocalVisionService extends ChangeNotifier {
           )
           .toList();
       _detections = results;
-      _announcementCandidates = candidates;
+      _announcementCandidates = candidatesToSpeak;
       _status = LocalVisionInferenceStatus.completed;
       Logger.debug(
         'Local YOLOE detections frame=${frame.frameId} '
-        'detector=${implementation.preferenceValue} count=${results.length} announce=${candidates.length} '
+        'detector=${implementation.preferenceValue} count=${results.length} announce=${candidatesToSpeak.length} '
         'mode=${mode.preferenceValue} threshold=${confidenceThreshold.toStringAsFixed(2)} '
         'handCount=$handCount handIouThreshold=${handIouThreshold.toStringAsFixed(2)} '
         'heldSelected=$heldSelectedCount '
@@ -601,9 +624,10 @@ class LocalVisionService extends ChangeNotifier {
         handIouThreshold: handIouThreshold,
         detections: results,
       );
-      if (candidates.isNotEmpty) {
+      if (candidatesToSpeak.isNotEmpty) {
         await ObjectAnnouncementService.instance.speakObjects(
-          candidates.map((candidate) => candidate.detection.label).toList(),
+          candidatesToSpeak.map((candidate) => candidate.detection.label).toList(),
+          bypassQuietPeriod: _hasHighPriorityNewObject(candidatesToSpeak),
         );
       }
     } catch (e, stackTrace) {
@@ -626,6 +650,41 @@ class LocalVisionService extends ChangeNotifier {
         await _runFrame(nextFrame);
       }
     }
+  }
+
+  List<AnnouncementCandidate> _announcementCandidatesAllowedBySpeechGuardrails(List<AnnouncementCandidate> candidates) {
+    if (candidates.isEmpty) return candidates;
+
+    final prefs = SharedPreferencesUtil();
+    final maxObjects = prefs.localYoloeMaxObjectsPerAnnouncement.clamp(1, 5).toInt();
+    final rankedCandidates = List<AnnouncementCandidate>.from(candidates)
+      ..sort((a, b) {
+        final highPriorityComparison = (b.isHighPriorityNewObject ? 1 : 0).compareTo(a.isHighPriorityNewObject ? 1 : 0);
+        if (highPriorityComparison != 0) return highPriorityComparison;
+        final usefulnessComparison =
+            _announcementUsefulnessScore(b.detection).compareTo(_announcementUsefulnessScore(a.detection));
+        if (usefulnessComparison != 0) return usefulnessComparison;
+        return b.detection.confidence.compareTo(a.detection.confidence);
+      });
+
+    final lastAnnouncementAt = ObjectAnnouncementService.instance.lastAnnouncementAt;
+    if (lastAnnouncementAt != null && !_hasHighPriorityNewObject(rankedCandidates)) {
+      final quietPeriod = Duration(milliseconds: (prefs.localYoloeMinSecondsBetweenAnnouncements * 1000).round());
+      final quietUntil = lastAnnouncementAt.add(quietPeriod);
+      if (DateTime.now().isBefore(quietUntil)) {
+        Logger.debug(
+          'Local YOLOE announcement suppressed by quiet period: '
+          'candidateCount=${rankedCandidates.length} quietUntil=${quietUntil.toIso8601String()}',
+        );
+        return const [];
+      }
+    }
+
+    return rankedCandidates.take(maxObjects).toList();
+  }
+
+  bool _hasHighPriorityNewObject(List<AnnouncementCandidate> candidates) {
+    return candidates.any((candidate) => candidate.isHighPriorityNewObject);
   }
 
   List<Detection> _annotateHeldObjectSelection(

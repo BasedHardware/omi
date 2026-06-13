@@ -1,29 +1,17 @@
-import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-
-import 'package:flutter_map/flutter_map.dart';
-import 'package:latlong2/latlong.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:provider/provider.dart';
 
-import 'package:omi/backend/http/api/users.dart';
-import 'package:omi/backend/schema/conversation.dart';
-import 'package:omi/backend/schema/daily_summary.dart';
-import 'package:omi/pages/conversation_capturing/page.dart';
-import 'package:omi/pages/conversations/widgets/conversation_list_item.dart';
-import 'package:omi/pages/conversations/widgets/processing_capture.dart';
-import 'package:omi/pages/conversations/widgets/today_tasks_widget.dart';
-import 'package:omi/pages/memories/widgets/memory_graph_page.dart';
+import 'package:omi/backend/preferences.dart';
+import 'package:omi/backend/schema/bt_device/bt_device.dart';
+import 'package:omi/pages/home/device.dart';
 import 'package:omi/pages/onboarding/device_selection.dart';
-import 'package:omi/pages/phone_calls/phone_calls_page.dart';
-import 'package:omi/pages/settings/daily_summary_detail_page.dart';
-import 'package:omi/providers/capture_provider.dart';
-import 'package:omi/providers/conversation_provider.dart';
-import 'package:omi/providers/home_provider.dart';
-import 'package:omi/utils/enums.dart';
-import 'package:omi/utils/l10n_extensions.dart';
-import 'package:omi/utils/ui_guidelines.dart';
-import 'package:omi/widgets/shimmer_with_timeout.dart';
+import 'package:omi/pages/settings/object_announcements_settings_page.dart';
+import 'package:omi/providers/device_provider.dart';
+import 'package:omi/services/local_vision/local_vision_service.dart';
+import 'package:omi/services/local_vision/object_announcement_service.dart';
+import 'package:omi/utils/device.dart';
 
 class HomeContentPage extends StatefulWidget {
   const HomeContentPage({super.key});
@@ -34,29 +22,10 @@ class HomeContentPage extends StatefulWidget {
 
 class HomeContentPageState extends State<HomeContentPage> with AutomaticKeepAliveClientMixin {
   final ScrollController _scrollController = ScrollController();
-  List<DailySummary> _recentSummaries = [];
-  bool _loadingSummaries = true;
+  final SharedPreferencesUtil _prefs = SharedPreferencesUtil();
 
   @override
   bool get wantKeepAlive => true;
-
-  @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) => _loadSummaries());
-  }
-
-  Future<void> _loadSummaries() async {
-    if (!mounted) return;
-    setState(() => _loadingSummaries = true);
-    final summaries = await getDailySummaries(limit: 3, offset: 0);
-    if (mounted) {
-      setState(() {
-        _recentSummaries = summaries;
-        _loadingSummaries = false;
-      });
-    }
-  }
 
   void scrollToTop() {
     if (_scrollController.hasClients) {
@@ -70,99 +39,50 @@ class HomeContentPageState extends State<HomeContentPage> with AutomaticKeepAliv
     super.dispose();
   }
 
+  Future<void> _setAnnouncementsEnabled(bool value) async {
+    HapticFeedback.mediumImpact();
+    setState(() => _prefs.localYoloeEnabled = value);
+    if (!value) await ObjectAnnouncementService.instance.stop();
+  }
+
+  Future<void> _setVoiceEnabled(bool value) async {
+    HapticFeedback.lightImpact();
+    setState(() => _prefs.localYoloeVoiceEnabled = value);
+    if (!value) await ObjectAnnouncementService.instance.stop();
+  }
+
+  Future<void> _setMode(AnnouncementMode mode) async {
+    HapticFeedback.lightImpact();
+    setState(() => _prefs.localYoloeAnnouncementMode = mode.preferenceValue);
+    await ObjectAnnouncementService.instance.stop();
+  }
+
   @override
   Widget build(BuildContext context) {
     super.build(context);
-    return Consumer<ConversationProvider>(
-      builder: (context, convoProvider, child) {
+    return AnimatedBuilder(
+      animation: Listenable.merge([LocalVisionService.instance, ObjectAnnouncementService.instance]),
+      builder: (context, _) {
         return RefreshIndicator(
-          onRefresh: () async {
-            HapticFeedback.mediumImpact();
-            await Future.wait([convoProvider.getInitialConversations(), _loadSummaries()]);
-          },
-          color: Colors.deepPurpleAccent,
+          onRefresh: () async => LocalVisionService.instance.initialize(),
+          color: const Color(0xFF22C55E),
           backgroundColor: Colors.white,
-          child: CustomScrollView(
+          child: ListView(
             controller: _scrollController,
             physics: const AlwaysScrollableScrollPhysics(),
-            slivers: [
-              // Live capture widget — shows when device or phone mic is recording
-              const SliverToBoxAdapter(child: ConversationCaptureWidget()),
-
-              // Today section — TodayTasksWidget has its own header
-              const SliverToBoxAdapter(child: TodayTasksWidget()),
-
-              // Daily Recaps section — hidden entirely when not loading and empty
-              if (_loadingSummaries || _recentSummaries.isNotEmpty) ...[
-                SliverToBoxAdapter(
-                  child: _buildSectionHeader(
-                    context,
-                    context.l10n.dailyRecaps,
-                    onViewAll: () {
-                      if (!convoProvider.showDailySummaries) convoProvider.toggleDailySummaries();
-                      context.read<HomeProvider>().setIndex(1);
-                    },
-                  ),
-                ),
-                SliverToBoxAdapter(child: _buildDailyRecapsPreview(context)),
-              ],
-
-              // Conversations section.
-              //
-              // If the user has fewer than 3 non-discarded conversations,
-              // we replace the recent-conversations preview with three
-              // big "get started" options so the home page doesn't feel
-              // empty for new users.
-              if (_nonDiscardedConversationCount(convoProvider) >= 3) ...[
-                SliverToBoxAdapter(
-                  child: _buildSectionHeader(
-                    context,
-                    context.l10n.conversations,
-                    onViewAll: () {
-                      // Reset the daily-summaries flag so the conversations tab
-                      // actually shows conversations (it persists from Daily
-                      // Recaps' View All otherwise).
-                      if (convoProvider.showDailySummaries) convoProvider.toggleDailySummaries();
-                      context.read<HomeProvider>().setIndex(1);
-                    },
-                  ),
-                ),
-                _buildConversationsPreview(convoProvider),
-
-                // Mind Map section — only shown for users with enough activity.
-                SliverToBoxAdapter(
-                  child: _buildSectionHeader(
-                    context,
-                    context.l10n.mindMap,
-                    onViewAll: () => Navigator.push(
-                      context,
-                      MaterialPageRoute(builder: (context) => const MemoryGraphPage(trackOpenEvent: false)),
-                    ),
-                  ),
-                ),
-                SliverToBoxAdapter(child: _buildMindMapPreview(context)),
-
-                // Bottom padding so content isn't hidden behind chat bar + nav
-                const SliverToBoxAdapter(child: SizedBox(height: 160)),
-              ] else if (convoProvider.isLoadingConversations || convoProvider.isFetchingConversations)
-                // Hide both the recent-convos preview AND the get-started tiles
-                // while we're still fetching — otherwise users with conversations
-                // briefly see the new-user triangle UI while the network call
-                // is in flight, which looks broken.
-                const SliverFillRemaining(hasScrollBody: false, child: SizedBox.shrink())
-              else
-                // For new users (< 3 non-discarded convos): hide the conversations
-                // preview AND the mind map. The 3 "get started" tiles fill the
-                // remaining vertical space and sit centered between Today/Daily
-                // Recaps above and the floating chat bar below.
-                SliverFillRemaining(
-                  hasScrollBody: false,
-                  child: Padding(
-                    // Bottom padding leaves room for the floating chat bar.
-                    padding: const EdgeInsets.only(bottom: 160),
-                    child: Center(child: _buildGetStartedOptions(context)),
-                  ),
-                ),
+            padding: const EdgeInsets.fromLTRB(20, 8, 20, 32),
+            children: [
+              _buildHero(),
+              const SizedBox(height: 18),
+              Consumer<DeviceProvider>(builder: (context, deviceProvider, _) => _buildDeviceCard(context, deviceProvider)),
+              const SizedBox(height: 14),
+              _buildAnnouncementControlCard(),
+              const SizedBox(height: 14),
+              _buildSpeechCard(),
+              const SizedBox(height: 14),
+              _buildLatestDetectionsCard(),
+              const SizedBox(height: 14),
+              _buildPrivacyCard(),
             ],
           ),
         );
@@ -170,408 +90,394 @@ class HomeContentPageState extends State<HomeContentPage> with AutomaticKeepAliv
     );
   }
 
-  int _nonDiscardedConversationCount(ConversationProvider provider) {
-    return provider.conversations.where((c) => !c.discarded).length;
-  }
-
-  // The capturing page only renders transcript/photos that are already
-  // streaming in — it does not start the mic itself. So opening it without
-  // first kicking off phone-mic recording leaves the user stuck on the
-  // "waiting for transcript or photos" placeholder forever. Mirror the
-  // proven start path (battery_info_widget._startRecording).
-  Future<void> _startPhoneRecording(BuildContext context) async {
-    // No haptic here — the option() wrapper already fires lightImpact() on tap;
-    // a mediumImpact() on top of it double-vibrates on a single tap.
-    final captureProvider = context.read<CaptureProvider>();
-    if (captureProvider.recordingState == RecordingState.initialising) return;
-    if (captureProvider.recordingState != RecordingState.record) {
-      await captureProvider.streamRecording();
-      PlatformManager.instance.analytics.phoneMicRecordingStarted();
-    }
-    if (!context.mounted) return;
-    final topConvoId = (captureProvider.conversationProvider?.conversations ?? []).isNotEmpty
-        ? captureProvider.conversationProvider!.conversations.first.id
-        : null;
-    Navigator.push(
-      context,
-      MaterialPageRoute(builder: (context) => ConversationCapturingPage(topConversationId: topConvoId)),
+  Widget _buildHero() {
+    return Container(
+      padding: const EdgeInsets.all(22),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(28),
+        gradient: const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [Color(0xFF12311F), Color(0xFF0F172A)],
+        ),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            decoration: BoxDecoration(color: const Color(0xFF22C55E).withValues(alpha: 0.16), borderRadius: BorderRadius.circular(99)),
+            child: const Text(
+              'Detect & say out loud',
+              style: TextStyle(color: Color(0xFF86EFAC), fontSize: 12, fontWeight: FontWeight.w700),
+            ),
+          ),
+          const SizedBox(height: 16),
+          const Text(
+            'Hear what your glasses see.',
+            style: TextStyle(color: Colors.white, fontSize: 30, fontWeight: FontWeight.w800, height: 1.05),
+          ),
+          const SizedBox(height: 10),
+          Text(
+            'Omi Glass detects objects locally on this phone and speaks new things out loud.',
+            style: TextStyle(color: Colors.grey.shade300, fontSize: 15, height: 1.35),
+          ),
+        ],
+      ),
     );
   }
 
-  Widget _buildGetStartedOptions(BuildContext context) {
-    Widget option({required IconData icon, required String label, required VoidCallback onTap}) {
-      return GestureDetector(
-        onTap: () {
-          HapticFeedback.lightImpact();
-          onTap();
-        },
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              width: 88,
-              height: 88,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                gradient: const LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: [Color(0xFF7B5CFF), Color(0xFF5733E0)],
+  Widget _buildDeviceCard(BuildContext context, DeviceProvider provider) {
+    final connectedDevice = provider.connectedDevice;
+    final pairedDevice = provider.pairedDevice;
+    final hasDevice = connectedDevice != null || pairedDevice != null;
+    final status = connectedDevice != null
+        ? 'Connected'
+        : provider.isConnecting
+            ? 'Connecting…'
+            : pairedDevice != null
+                ? 'Disconnected'
+                : 'No glasses connected';
+    final subtitle = connectedDevice != null
+        ? _deviceSubtitle(connectedDevice, provider.batteryLevel, provider.isCharging)
+        : pairedDevice != null
+            ? 'Tap to reconnect ${pairedDevice.name.isEmpty ? 'Omi Glass' : pairedDevice.name}.'
+            : 'Connect Omi Glass to start local object announcements.';
+
+    return _card(
+      child: Column(
+        children: [
+          _statusRow(
+            icon: FontAwesomeIcons.glasses,
+            title: 'Omi Glass',
+            subtitle: subtitle,
+            status: status,
+            statusColor: connectedDevice != null ? const Color(0xFF22C55E) : Colors.orangeAccent,
+          ),
+          const SizedBox(height: 16),
+          _fullWidthButton(
+            label: hasDevice ? 'Device details' : 'Connect glasses',
+            icon: hasDevice ? Icons.settings_bluetooth_rounded : Icons.bluetooth_searching_rounded,
+            color: const Color(0xFF27272A),
+            onTap: () {
+              HapticFeedback.mediumImpact();
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => hasDevice ? const ConnectedDevice() : const DeviceSelectionPage()),
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _deviceSubtitle(BtDevice device, int batteryLevel, bool isCharging) {
+    final name = device.name.isEmpty ? DeviceUtils.getDeviceName(device.type) : device.name;
+    final battery = batteryLevel > 0 ? ' · ${isCharging ? 'Charging ' : ''}$batteryLevel%' : '';
+    return '$name$battery · receiving camera frames when available';
+  }
+
+  Widget _buildAnnouncementControlCard() {
+    final enabled = _prefs.localYoloeEnabled;
+    final vision = LocalVisionService.instance;
+    return _card(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: _statusRow(
+                  icon: FontAwesomeIcons.eye,
+                  title: 'Object announcements',
+                  subtitle: enabled ? _visionStatusText(vision) : 'Off. Detection frames will not be announced.',
+                  status: enabled ? 'ON' : 'OFF',
+                  statusColor: enabled ? const Color(0xFF22C55E) : Colors.grey,
                 ),
-                border: Border.all(color: Colors.white.withValues(alpha: 0.08), width: 1),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.deepPurple.withValues(alpha: 0.45),
-                    blurRadius: 28,
-                    spreadRadius: 1,
-                    offset: const Offset(0, 10),
+              ),
+              Switch(value: enabled, onChanged: _setAnnouncementsEnabled, activeThumbColor: const Color(0xFF22C55E)),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              Expanded(
+                child: _modeChip(
+                  title: 'All new objects',
+                  selected: _currentMode == AnnouncementMode.allObjects,
+                  onTap: enabled ? () => _setMode(AnnouncementMode.allObjects) : null,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: _modeChip(
+                  title: 'In my hand',
+                  selected: _currentMode == AnnouncementMode.heldObjectsOnly,
+                  onTap: enabled ? () => _setMode(AnnouncementMode.heldObjectsOnly) : null,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  AnnouncementMode get _currentMode => AnnouncementModeSettings.fromPreference(_prefs.localYoloeAnnouncementMode);
+
+  String _visionStatusText(LocalVisionService vision) {
+    return switch (vision.status) {
+      LocalVisionInferenceStatus.idle => 'Ready. Waiting for Omi Glass images.',
+      LocalVisionInferenceStatus.queued => 'New frame queued. Keeping the freshest image only.',
+      LocalVisionInferenceStatus.running => 'Detecting objects locally…',
+      LocalVisionInferenceStatus.completed => 'Detected ${vision.detectionCount} object${vision.detectionCount == 1 ? '' : 's'}.',
+      LocalVisionInferenceStatus.failed => 'Needs attention: ${vision.lastError ?? 'local detector unavailable'}',
+    };
+  }
+
+  Widget _buildSpeechCard() {
+    final voiceEnabled = _prefs.localYoloeVoiceEnabled;
+    final announcementService = ObjectAnnouncementService.instance;
+    final candidates = LocalVisionService.instance.announcementCandidates;
+    final lastPhrase = candidates.isEmpty
+        ? 'No new objects to announce yet.'
+        : announcementService.formatObjectsMessage(candidates.map((candidate) => candidate.detection.label).toList());
+
+    return _card(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: _statusRow(
+                  icon: voiceEnabled ? FontAwesomeIcons.volumeHigh : FontAwesomeIcons.volumeXmark,
+                  title: 'Speech',
+                  subtitle: announcementService.isSpeaking ? 'Speaking now: $lastPhrase' : lastPhrase,
+                  status: voiceEnabled ? 'READY' : 'MUTED',
+                  statusColor: voiceEnabled ? const Color(0xFF22C55E) : Colors.grey,
+                ),
+              ),
+              Switch(value: voiceEnabled, onChanged: _setVoiceEnabled, activeThumbColor: const Color(0xFF22C55E)),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              Expanded(
+                child: _fullWidthButton(
+                  label: 'Test voice',
+                  icon: Icons.play_arrow_rounded,
+                  color: const Color(0xFF16A34A),
+                  onTap: () => ObjectAnnouncementService.instance.speak('Local object announcements are working.', force: true),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: _fullWidthButton(
+                  label: 'Stop speaking',
+                  icon: Icons.stop_rounded,
+                  color: const Color(0xFF27272A),
+                  onTap: ObjectAnnouncementService.instance.stop,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLatestDetectionsCard() {
+    final vision = LocalVisionService.instance;
+    final detections = vision.detections.take(5).toList();
+
+    return _card(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text('Latest detections', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w700)),
+              TextButton(
+                onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ObjectAnnouncementsSettingsPage())),
+                child: const Text('Settings', style: TextStyle(color: Color(0xFF86EFAC))),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          if (detections.isEmpty)
+            Text(
+              'No objects detected yet. Connect Omi Glass and keep announcements on.',
+              style: TextStyle(color: Colors.grey.shade400, fontSize: 14, height: 1.35),
+            )
+          else
+            ...detections.map(_detectionRow),
+          const SizedBox(height: 14),
+          _metricStrip(vision),
+        ],
+      ),
+    );
+  }
+
+  Widget _detectionRow(Detection detection) {
+    final detail = detection.wouldAnnounce
+        ? 'spoken'
+        : detection.isHand
+            ? 'hand anchor'
+            : 'seen';
+    return Padding(
+      padding: const EdgeInsets.only(top: 10),
+      child: Row(
+        children: [
+          Container(width: 8, height: 8, decoration: const BoxDecoration(color: Color(0xFF22C55E), shape: BoxShape.circle)),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(detection.label, style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w600)),
+          ),
+          Text('${(detection.confidence * 100).round()}% · $detail', style: TextStyle(color: Colors.grey.shade400, fontSize: 13)),
+        ],
+      ),
+    );
+  }
+
+  Widget _metricStrip(LocalVisionService vision) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(color: const Color(0xFF111113), borderRadius: BorderRadius.circular(14)),
+      child: Row(
+        children: [
+          Expanded(child: _metric('Frames', '${vision.processedFrameCount}/${vision.receivedFrameCount}')),
+          Expanded(child: _metric('Dropped', '${vision.droppedFrameCount}')),
+          Expanded(child: _metric('Latency', '${vision.latestLatency.pipelineTotalMs?.toStringAsFixed(0) ?? '—'}ms')),
+        ],
+      ),
+    );
+  }
+
+  Widget _metric(String label, String value) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(value, style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w700)),
+        const SizedBox(height: 2),
+        Text(label, style: TextStyle(color: Colors.grey.shade500, fontSize: 11)),
+      ],
+    );
+  }
+
+  Widget _buildPrivacyCard() {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: const Color(0xFF122019),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: const Color(0xFF22C55E).withValues(alpha: 0.2)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const FaIcon(FontAwesomeIcons.shieldHalved, color: Color(0xFF22C55E), size: 18),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              'Local mode processes images on this phone. Backend image upload and Omi vision LLM calls are skipped for object announcements.',
+              style: TextStyle(color: Colors.grey.shade200, fontSize: 13, height: 1.35),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _card({required Widget child}) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1C1C1E),
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
+      ),
+      child: child,
+    );
+  }
+
+  Widget _statusRow({
+    required FaIconData icon,
+    required String title,
+    required String subtitle,
+    required String status,
+    required Color statusColor,
+  }) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          width: 42,
+          height: 42,
+          decoration: BoxDecoration(color: const Color(0xFF2A2A2E), borderRadius: BorderRadius.circular(12)),
+          child: Center(child: FaIcon(icon, color: Colors.grey.shade300, size: 17)),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Expanded(child: Text(title, style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w700))),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(color: statusColor.withValues(alpha: 0.14), borderRadius: BorderRadius.circular(99)),
+                    child: Text(status, style: TextStyle(color: statusColor, fontSize: 11, fontWeight: FontWeight.w800)),
                   ),
                 ],
               ),
-              child: Icon(icon, color: Colors.white, size: 32),
-            ),
-            const SizedBox(height: 10),
-            SizedBox(
-              width: 120,
-              child: Text(
-                label,
-                textAlign: TextAlign.center,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w500, height: 1.2),
-              ),
-            ),
-          ],
-        ),
-      );
-    }
-
-    final phoneOption = option(
-      icon: Icons.mic_rounded,
-      label: 'Record with Phone',
-      onTap: () => _startPhoneRecording(context),
-    );
-    final callOption = option(
-      icon: Icons.phone_in_talk_rounded,
-      label: 'Record Call',
-      onTap: () {
-        Navigator.push(context, MaterialPageRoute(builder: (_) => const PhoneCallsPage()));
-      },
-    );
-    final deviceOption = option(
-      icon: Icons.bluetooth_searching_rounded,
-      label: 'Connect Device',
-      onTap: () {
-        Navigator.push(context, MaterialPageRoute(builder: (_) => const DeviceSelectionPage()));
-      },
-    );
-
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 28, 16, 24),
-      child: Column(
-        children: [
-          // Top of the triangle: Record with Phone (the simplest path).
-          phoneOption,
-          const SizedBox(height: 22),
-          // Bottom of the triangle: the other two side by side.
-          Row(mainAxisAlignment: MainAxisAlignment.spaceEvenly, children: [callOption, deviceOption]),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildSectionHeader(BuildContext context, String title, {VoidCallback? onViewAll}) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(24, 20, 16, 8),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text(
-            title,
-            style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
-          ),
-          if (onViewAll != null)
-            GestureDetector(
-              onTap: onViewAll,
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                decoration: BoxDecoration(
-                  color: Colors.grey.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(18),
-                ),
-                child: Text(
-                  context.l10n.viewAll,
-                  style: TextStyle(color: Colors.grey[400], fontSize: 12, fontWeight: FontWeight.w500),
-                ),
-              ),
-            ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildDailyRecapsPreview(BuildContext context) {
-    const cardHeight = 130.0;
-    if (_loadingSummaries) {
-      return Padding(
-        padding: const EdgeInsets.only(top: 12),
-        child: SizedBox(
-          height: cardHeight,
-          child: ListView.builder(
-            scrollDirection: Axis.horizontal,
-            padding: const EdgeInsets.only(left: 16),
-            itemCount: 3,
-            itemBuilder: (_, __) => Padding(
-              padding: const EdgeInsets.only(right: 12),
-              child: ShimmerWithTimeout(
-                baseColor: AppStyles.backgroundSecondary,
-                highlightColor: AppStyles.backgroundTertiary,
-                child: Container(
-                  width: 260,
-                  decoration: BoxDecoration(
-                    color: AppStyles.backgroundSecondary,
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ),
-      );
-    }
-
-    if (_recentSummaries.isEmpty) return const SizedBox.shrink();
-
-    return Padding(
-      padding: const EdgeInsets.only(top: 12, bottom: 12),
-      child: SizedBox(
-        height: cardHeight,
-        child: ListView.builder(
-          scrollDirection: Axis.horizontal,
-          padding: const EdgeInsets.only(left: 16),
-          itemCount: _recentSummaries.length,
-          itemBuilder: (context, index) => _buildSummaryCard(context, _recentSummaries[index], cardHeight),
-        ),
-      ),
-    );
-  }
-
-  static const double _cardWidth = 260.0;
-  static const double _mapHeight = 60.0;
-
-  Widget _buildSummaryCard(BuildContext context, DailySummary summary, double cardHeight) {
-    final hasMap = summary.locations.isNotEmpty;
-
-    return GestureDetector(
-      onTap: () async {
-        PlatformManager.instance.analytics.dailySummaryDetailViewed(summaryId: summary.id, date: summary.date);
-        // Detail page pops with ``{deleted: true, summaryId}`` when the user
-        // deletes from there — drop the card so the home recap row doesn't
-        // linger until the next pull-to-refresh.
-        final result = await Navigator.push<dynamic>(
-          context,
-          MaterialPageRoute(
-            builder: (context) => DailySummaryDetailPage(summaryId: summary.id, summary: summary),
-          ),
-        );
-        if (!mounted) return;
-        if (result is Map && result['deleted'] == true) {
-          final deletedId = result['summaryId'] as String?;
-          if (deletedId != null) {
-            setState(() => _recentSummaries.removeWhere((s) => s.id == deletedId));
-          }
-        }
-      },
-      child: Container(
-        width: _cardWidth,
-        height: cardHeight,
-        margin: const EdgeInsets.only(right: 12),
-        decoration: BoxDecoration(color: const Color(0xFF1F1F25), borderRadius: BorderRadius.circular(20)),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(20),
-          child: Stack(
-            children: [
-              // Map at bottom
-              if (hasMap) Positioned(bottom: 0, left: 0, right: 0, height: _mapHeight, child: _buildCardMap(summary)),
-              // Text content at top
-              Positioned(
-                top: 0,
-                left: 0,
-                right: 0,
-                bottom: hasMap ? _mapHeight : 0,
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(14, 10, 14, 4),
-                  child: Text(
-                    summary.headline,
-                    style: const TextStyle(color: Colors.white, fontSize: 15, height: 1.35),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-              ),
-              // Date chip overlaying the map at bottom-right
-              Positioned(
-                bottom: 10,
-                right: 10,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: Colors.black.withValues(alpha: 0.55),
-                    borderRadius: BorderRadius.circular(50),
-                  ),
-                  child: Text(
-                    _formatDate(context, summary.date),
-                    style: const TextStyle(color: Color(0xFFBBBCC2), fontSize: 11),
-                  ),
-                ),
-              ),
+              const SizedBox(height: 4),
+              Text(subtitle, style: TextStyle(color: Colors.grey.shade400, fontSize: 13, height: 1.3)),
             ],
           ),
         ),
+      ],
+    );
+  }
+
+  Widget _modeChip({required String title, required bool selected, required VoidCallback? onTap}) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Opacity(
+        opacity: onTap == null ? 0.45 : 1,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+          decoration: BoxDecoration(
+            color: selected ? const Color(0xFF22C55E).withValues(alpha: 0.16) : const Color(0xFF111113),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: selected ? const Color(0xFF22C55E) : const Color(0xFF2A2A2E)),
+          ),
+          child: Center(child: Text(title, style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w700))),
+        ),
       ),
     );
   }
 
-  Widget _buildCardMap(DailySummary summary) {
-    final centerLat = summary.locations.map((l) => l.latitude).reduce((a, b) => a + b) / summary.locations.length;
-    final centerLng = summary.locations.map((l) => l.longitude).reduce((a, b) => a + b) / summary.locations.length;
-
-    final markers = summary.locations
-        .map(
-          (loc) => Marker(
-            point: LatLng(loc.latitude, loc.longitude),
-            width: 22,
-            height: 22,
-            child: Container(
-              decoration: const BoxDecoration(color: Colors.deepPurple, shape: BoxShape.circle),
-              child: const Icon(Icons.location_on, color: Colors.white, size: 13),
-            ),
-          ),
-        )
-        .toList();
-
-    return SizedBox(
-      width: _cardWidth,
-      height: _mapHeight,
-      child: IgnorePointer(
-        child: FlutterMap(
-          options: MapOptions(
-            initialCenter: LatLng(centerLat, centerLng),
-            initialZoom: 13,
-            interactionOptions: const InteractionOptions(flags: InteractiveFlag.none),
-          ),
+  Widget _fullWidthButton({required String label, required IconData icon, required Color color, required VoidCallback onTap}) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 13),
+        decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(14)),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            TileLayer(
-              urlTemplate: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
-              subdomains: const ['a', 'b', 'c', 'd'],
-              userAgentPackageName: 'me.omi.app',
-              minNativeZoom: 0,
-              maxNativeZoom: 19,
-              retinaMode: true,
-            ),
-            MarkerLayer(markers: markers),
+            Icon(icon, color: Colors.white, size: 18),
+            const SizedBox(width: 8),
+            Text(label, style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w800)),
           ],
         ),
       ),
-    );
-  }
-
-  String _formatDate(BuildContext context, String dateStr) {
-    final parts = dateStr.split('-');
-    if (parts.length != 3) return dateStr;
-    final year = int.tryParse(parts[0]) ?? 2024;
-    final month = int.tryParse(parts[1]) ?? 1;
-    final day = int.tryParse(parts[2]) ?? 1;
-    final date = DateTime(year, month, day);
-    final now = DateTime.now();
-    final today = DateTime(now.year, now.month, now.day);
-    final yesterday = today.subtract(const Duration(days: 1));
-    if (date == today) return context.l10n.today;
-    if (date == yesterday) return context.l10n.yesterday;
-    const weekdays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-    return '${weekdays[date.weekday - 1]}, ${months[month - 1]} $day';
-  }
-
-  Widget _buildMindMapPreview(BuildContext context) {
-    return GestureDetector(
-      onTap: () => Navigator.push(
-        context,
-        MaterialPageRoute(builder: (context) => const MemoryGraphPage(trackOpenEvent: false)),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(24),
-          child: const SizedBox(
-            height: 180,
-            child: IgnorePointer(
-              child: MemoryGraphPage(
-                embedded: true,
-                showAppBar: false,
-                showShareButton: false,
-                trackOpenEvent: false,
-                autoRebuildIfEmpty: false,
-                hideRebuildButtonWhenEmpty: true,
-                initialZoom: 0.6,
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildConversationsPreview(ConversationProvider convoProvider) {
-    if (convoProvider.isLoadingConversations && convoProvider.conversations.isEmpty) {
-      return SliverToBoxAdapter(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16),
-          child: Column(
-            children: List.generate(
-              2,
-              (_) => Padding(
-                padding: const EdgeInsets.only(top: 12),
-                child: ShimmerWithTimeout(
-                  baseColor: AppStyles.backgroundSecondary,
-                  highlightColor: AppStyles.backgroundTertiary,
-                  child: Container(
-                    height: 80,
-                    decoration: BoxDecoration(
-                      color: AppStyles.backgroundSecondary,
-                      borderRadius: BorderRadius.circular(24),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ),
-      );
-    }
-
-    // Use groupedConversations because it has the user's filters already applied
-    // (discarded / short / starred / date). conversations.take(3) ignores
-    // showDiscardedConversations and would show items that aren't on the
-    // conversations page.
-    final sortedDates = convoProvider.groupedConversations.keys.toList()..sort((a, b) => b.compareTo(a));
-    final recent = <ServerConversation>[];
-    for (final date in sortedDates) {
-      final list = convoProvider.groupedConversations[date] ?? const [];
-      for (final c in list) {
-        recent.add(c);
-        if (recent.length >= 3) break;
-      }
-      if (recent.length >= 3) break;
-    }
-    if (recent.isEmpty) return const SliverToBoxAdapter(child: SizedBox.shrink());
-
-    return SliverList(
-      delegate: SliverChildBuilderDelegate(childCount: recent.length, (context, index) {
-        final c = recent[index];
-        final dateKey = DateTime(c.createdAt.year, c.createdAt.month, c.createdAt.day);
-        return ConversationListItem(key: ValueKey(c.id), conversation: c, date: dateKey, conversationIdx: index);
-      }),
     );
   }
 }

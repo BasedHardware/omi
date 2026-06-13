@@ -17318,6 +17318,168 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Experimental: processes Omi Glass images on-device and skips LLM image uploads.'**
   String get localYoloeObjectAnnouncementsDescription;
+
+  /// Local YOLOE object announcements settings string
+  ///
+  /// In en, this message translates to:
+  /// **'Object announcements'**
+  String get objectAnnouncementsSettingsTitle;
+
+  /// Local YOLOE object announcements settings string
+  ///
+  /// In en, this message translates to:
+  /// **'Hear simple spoken updates when Omi Glass sees new objects.'**
+  String get objectAnnouncementsSettingsSubtitle;
+
+  /// Local YOLOE object announcements settings string
+  ///
+  /// In en, this message translates to:
+  /// **'Local object announcements'**
+  String get objectAnnouncementsMainToggleTitle;
+
+  /// Local YOLOE object announcements settings string
+  ///
+  /// In en, this message translates to:
+  /// **'Runs object detection on this phone.'**
+  String get objectAnnouncementsMainToggleSubtitle;
+
+  /// Local YOLOE object announcements settings string
+  ///
+  /// In en, this message translates to:
+  /// **'Mode'**
+  String get objectAnnouncementsModeSectionTitle;
+
+  /// Local YOLOE object announcements settings string
+  ///
+  /// In en, this message translates to:
+  /// **'All new objects'**
+  String get objectAnnouncementsAllObjectsModeTitle;
+
+  /// Local YOLOE object announcements settings string
+  ///
+  /// In en, this message translates to:
+  /// **'Announce new objects in the scene.'**
+  String get objectAnnouncementsAllObjectsModeSubtitle;
+
+  /// Local YOLOE object announcements settings string
+  ///
+  /// In en, this message translates to:
+  /// **'Objects in my hand'**
+  String get objectAnnouncementsHeldObjectsModeTitle;
+
+  /// Local YOLOE object announcements settings string
+  ///
+  /// In en, this message translates to:
+  /// **'Quieter. Requires hand detection.'**
+  String get objectAnnouncementsHeldObjectsModeSubtitle;
+
+  /// Local YOLOE object announcements settings string
+  ///
+  /// In en, this message translates to:
+  /// **'Voice'**
+  String get objectAnnouncementsVoiceTitle;
+
+  /// Local YOLOE object announcements settings string
+  ///
+  /// In en, this message translates to:
+  /// **'Speak announcements out loud.'**
+  String get objectAnnouncementsVoiceOnSubtitle;
+
+  /// Local YOLOE object announcements settings string
+  ///
+  /// In en, this message translates to:
+  /// **'Muted. Detection can still run.'**
+  String get objectAnnouncementsVoiceOffSubtitle;
+
+  /// Local YOLOE object announcements settings string
+  ///
+  /// In en, this message translates to:
+  /// **'Test voice'**
+  String get objectAnnouncementsTestVoiceButton;
+
+  /// Local YOLOE object announcements settings string
+  ///
+  /// In en, this message translates to:
+  /// **'Local object announcements are working.'**
+  String get objectAnnouncementsTestVoiceMessage;
+
+  /// Local YOLOE object announcements settings string
+  ///
+  /// In en, this message translates to:
+  /// **'Speech rate'**
+  String get objectAnnouncementsSpeechRateTitle;
+
+  /// Local YOLOE object announcements settings string
+  ///
+  /// In en, this message translates to:
+  /// **'Quiet time after speech'**
+  String get objectAnnouncementsQuietTimeTitle;
+
+  /// Local YOLOE object announcements settings string
+  ///
+  /// In en, this message translates to:
+  /// **'Privacy: in local mode, Omi Glass images are processed on this phone and are not sent to Omi’s vision LLM.'**
+  String get objectAnnouncementsPrivacyCopy;
+
+  /// Local YOLOE object announcements settings string
+  ///
+  /// In en, this message translates to:
+  /// **'Advanced'**
+  String get objectAnnouncementsAdvancedTitle;
+
+  /// Local YOLOE object announcements settings string
+  ///
+  /// In en, this message translates to:
+  /// **'Detector and filtering controls'**
+  String get objectAnnouncementsAdvancedSubtitle;
+
+  /// Local YOLOE object announcements settings string
+  ///
+  /// In en, this message translates to:
+  /// **'Interrupt current speech'**
+  String get objectAnnouncementsInterruptSpeechTitle;
+
+  /// Local YOLOE object announcements settings string
+  ///
+  /// In en, this message translates to:
+  /// **'New announcements replace the current one.'**
+  String get objectAnnouncementsInterruptSpeechSubtitle;
+
+  /// Local YOLOE object announcements settings string
+  ///
+  /// In en, this message translates to:
+  /// **'Detector'**
+  String get objectAnnouncementsDetectorTitle;
+
+  /// Local YOLOE object announcements settings string
+  ///
+  /// In en, this message translates to:
+  /// **'Max objects spoken'**
+  String get objectAnnouncementsMaxObjectsSpokenTitle;
+
+  /// Local YOLOE object announcements settings string
+  ///
+  /// In en, this message translates to:
+  /// **'Confidence threshold'**
+  String get objectAnnouncementsConfidenceThresholdTitle;
+
+  /// Local YOLOE object announcements settings string
+  ///
+  /// In en, this message translates to:
+  /// **'Hand match threshold'**
+  String get objectAnnouncementsHandMatchThresholdTitle;
+
+  /// Local YOLOE object announcements settings string
+  ///
+  /// In en, this message translates to:
+  /// **'Adaptive throttling'**
+  String get objectAnnouncementsAdaptiveThrottlingTitle;
+
+  /// Local YOLOE object announcements settings string
+  ///
+  /// In en, this message translates to:
+  /// **'Slow detection when inference gets heavy.'**
+  String get objectAnnouncementsAdaptiveThrottlingSubtitle;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

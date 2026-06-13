@@ -40,6 +40,7 @@ import 'package:omi/pages/settings/daily_summary_detail_page.dart';
 import 'package:omi/pages/settings/data_privacy_page.dart';
 import 'package:omi/pages/apps/add_app.dart';
 import 'package:omi/pages/apps/add_mcp_server_page.dart';
+import 'package:omi/pages/settings/object_announcements_settings_page.dart';
 import 'package:omi/pages/settings/settings_drawer.dart';
 import 'package:omi/pages/settings/task_integrations_page.dart';
 import 'package:omi/pages/settings/wrapped_2025_page.dart';
@@ -117,16 +118,13 @@ class HomePage extends StatefulWidget {
 
 class _HomePageState extends State<HomePage> with WidgetsBindingObserver, TickerProviderStateMixin {
   ForegroundUtil foregroundUtil = ForegroundUtil();
-  List<Widget> screens = [Container(), const SizedBox(), const SizedBox(), const SizedBox()];
+  List<Widget> screens = [Container(), const SizedBox()];
 
   final _upgrader = MyUpgrader(debugLogging: false, debugDisplayOnce: false);
   bool scriptsInProgress = false;
   StreamSubscription? _notificationStreamSubscription;
 
   final GlobalKey<HomeContentPageState> _homeContentPageKey = GlobalKey<HomeContentPageState>();
-  final GlobalKey<State<ConversationsPage>> _conversationsPageKey = GlobalKey<State<ConversationsPage>>();
-  final GlobalKey<State<ActionItemsPage>> _actionItemsPageKey = GlobalKey<State<ActionItemsPage>>();
-  final GlobalKey<AppsPageState> _appsPageKey = GlobalKey<AppsPageState>();
   late final List<Widget> _pages;
 
   // Freemium switch handler for auto-switch dialogs
@@ -136,39 +134,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
   DeviceProvider? _deviceProviderForQuickActions;
   CaptureProvider? _captureProviderForQuickActions;
 
-  void _initiateApps() {
-    context.read<AppProvider>().getApps();
-    context.read<AppProvider>().getPopularApps();
-  }
-
   void _scrollToTop(int pageIndex) {
-    switch (pageIndex) {
-      case 0:
-        _homeContentPageKey.currentState?.scrollToTop();
-        break;
-      case 1:
-        final conversationsState = _conversationsPageKey.currentState;
-        if (conversationsState != null) {
-          (conversationsState as dynamic).scrollToTop();
-        }
-        break;
-      case 2:
-        final actionItemsState = _actionItemsPageKey.currentState;
-        if (actionItemsState != null) {
-          (actionItemsState as dynamic).scrollToTop();
-        }
-        break;
-      case 3:
-        _appsPageKey.currentState?.scrollToTop();
-        break;
-    }
-  }
-
-  void _addGoal() {
-    context.read<HomeProvider>().setIndex(1);
-    final conversationsState = _conversationsPageKey.currentState;
-    if (conversationsState != null) {
-      (conversationsState as dynamic).addGoal();
+    if (pageIndex == 0) {
+      _homeContentPageKey.currentState?.scrollToTop();
     }
   }
 
@@ -241,9 +209,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
   void initState() {
     _pages = [
       HomeContentPage(key: _homeContentPageKey),
-      ConversationsPage(key: _conversationsPageKey),
-      ActionItemsPage(key: _actionItemsPageKey, onAddGoal: _addGoal),
-      AppsPage(key: _appsPageKey),
+      const ObjectAnnouncementsSettingsPage(showBackButton: false),
     ];
     SharedPreferencesUtil().onboardingCompleted = true;
     if (!SharedPreferencesUtil().permissionsCompleted) {
@@ -269,15 +235,12 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
       }
 
       switch (pageAlias) {
-        case "action-items":
-          homePageIdx = 2;
-          break;
         case "memories":
         case "facts":
           homePageIdx = 0;
           break;
-        case "apps":
-          homePageIdx = 3;
+        case "settings":
+          homePageIdx = 1;
           break;
       }
     }
@@ -298,8 +261,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
     }
 
     WidgetsBinding.instance.addPostFrameCallback((_) async {
-      _initiateApps();
-
       final permission = await Geolocator.checkPermission();
       if (permission == LocationPermission.always || permission == LocationPermission.whileInUse) {
         await ForegroundUtil.initializeForegroundService();
@@ -357,12 +318,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
           }
           break;
         case "settings":
-          // Use context from the current widget instead of navigator key for bottom sheet
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (mounted) {
-              SettingsDrawer.show(context);
-            }
-          });
           if (detailPageId == 'data-privacy') {
             globalNavigatorKey.currentState?.push(MaterialPageRoute(builder: (context) => const DataPrivacyPage()));
           }
@@ -421,9 +376,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
               Navigator.push(context, MaterialPageRoute(builder: (context) => const Wrapped2025Page()));
             }
           });
-          break;
-        case "action-items":
-          // Tab index already set to 2 (ActionItemsPage) above
           break;
         default:
       }
@@ -637,7 +589,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
             return Scaffold(
               backgroundColor: Theme.of(context).colorScheme.primary,
               resizeToAvoidBottomInset: false,
-              appBar: homeProvider.selectedIndex == 5 ? null : _buildAppBar(context),
+              appBar: homeProvider.selectedIndex == 1 ? null : _buildAppBar(context),
               body: GestureDetector(
                 onTap: () {
                   primaryFocus?.unfocus();
@@ -648,8 +600,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                   children: [
                     Column(
                       children: [
-                        // Show slim green call bar on non-home/conversations tabs when a call is active
-                        if (homeProvider.selectedIndex > 1) const ActiveCallTopBar(),
                         Expanded(
                           child: IndexedStack(index: context.watch<HomeProvider>().selectedIndex, children: _pages),
                         ),
@@ -670,28 +620,14 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                 if (isRepeat) {
                                   _scrollToTop(index);
                                 } else {
-                                  // When tapping Conversations directly, reset to conversations view
-                                  if (index == 1) {
-                                    final cp = context.read<ConversationProvider>();
-                                    if (cp.showDailySummaries) cp.toggleDailySummaries();
-                                  }
                                   home.setIndex(index);
                                 }
                               },
                             ),
-                            if (home.selectedIndex == 0)
-                              Positioned(left: 16, right: 16, bottom: 78, child: _buildChatBar(context)),
                           ],
                         );
                       },
                     ),
-                    // Merge action bar - floats above bottom nav when in selection mode
-                    if (homeProvider.selectedIndex == 1)
-                      const Positioned(left: 0, right: 0, bottom: 0, child: MergeActionBar()),
-                    // Task selection action bar - floats above bottom nav on the
-                    // tasks tab when selection mode is active in ActionItemsProvider.
-                    if (homeProvider.selectedIndex == 2)
-                      const Positioned(left: 0, right: 0, bottom: 0, child: TaskSelectionActionBar()),
                   ],
                 ),
               ),

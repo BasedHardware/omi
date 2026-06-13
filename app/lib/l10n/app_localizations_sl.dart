@@ -9320,4 +9320,86 @@ class AppLocalizationsSl extends AppLocalizations {
   @override
   String get localYoloeObjectAnnouncementsDescription =>
       'Poskusno: obdeluje slike Omi Glass v napravi in preskoči nalaganje slik v LLM.';
+
+  @override
+  String get objectAnnouncementsSettingsTitle => 'Object announcements';
+
+  @override
+  String get objectAnnouncementsSettingsSubtitle => 'Hear simple spoken updates when Omi Glass sees new objects.';
+
+  @override
+  String get objectAnnouncementsMainToggleTitle => 'Local object announcements';
+
+  @override
+  String get objectAnnouncementsMainToggleSubtitle => 'Runs object detection on this phone.';
+
+  @override
+  String get objectAnnouncementsModeSectionTitle => 'Mode';
+
+  @override
+  String get objectAnnouncementsAllObjectsModeTitle => 'All new objects';
+
+  @override
+  String get objectAnnouncementsAllObjectsModeSubtitle => 'Announce new objects in the scene.';
+
+  @override
+  String get objectAnnouncementsHeldObjectsModeTitle => 'Objects in my hand';
+
+  @override
+  String get objectAnnouncementsHeldObjectsModeSubtitle => 'Quieter. Requires hand detection.';
+
+  @override
+  String get objectAnnouncementsVoiceTitle => 'Voice';
+
+  @override
+  String get objectAnnouncementsVoiceOnSubtitle => 'Speak announcements out loud.';
+
+  @override
+  String get objectAnnouncementsVoiceOffSubtitle => 'Muted. Detection can still run.';
+
+  @override
+  String get objectAnnouncementsTestVoiceButton => 'Test voice';
+
+  @override
+  String get objectAnnouncementsTestVoiceMessage => 'Local object announcements are working.';
+
+  @override
+  String get objectAnnouncementsSpeechRateTitle => 'Speech rate';
+
+  @override
+  String get objectAnnouncementsQuietTimeTitle => 'Quiet time after speech';
+
+  @override
+  String get objectAnnouncementsPrivacyCopy =>
+      'Privacy: in local mode, Omi Glass images are processed on this phone and are not sent to Omi’s vision LLM.';
+
+  @override
+  String get objectAnnouncementsAdvancedTitle => 'Advanced';
+
+  @override
+  String get objectAnnouncementsAdvancedSubtitle => 'Detector and filtering controls';
+
+  @override
+  String get objectAnnouncementsInterruptSpeechTitle => 'Interrupt current speech';
+
+  @override
+  String get objectAnnouncementsInterruptSpeechSubtitle => 'New announcements replace the current one.';
+
+  @override
+  String get objectAnnouncementsDetectorTitle => 'Detector';
+
+  @override
+  String get objectAnnouncementsMaxObjectsSpokenTitle => 'Max objects spoken';
+
+  @override
+  String get objectAnnouncementsConfidenceThresholdTitle => 'Confidence threshold';
+
+  @override
+  String get objectAnnouncementsHandMatchThresholdTitle => 'Hand match threshold';
+
+  @override
+  String get objectAnnouncementsAdaptiveThrottlingTitle => 'Adaptive throttling';
+
+  @override
+  String get objectAnnouncementsAdaptiveThrottlingSubtitle => 'Slow detection when inference gets heavy.';
 }
