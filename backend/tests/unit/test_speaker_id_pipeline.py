@@ -16,7 +16,7 @@ import numpy as np
 import pytest
 
 # Mock modules that initialize GCP clients at import time
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 
 
 def _cosine_cdist(a, b, metric="cosine"):
@@ -34,30 +34,119 @@ def _cosine_cdist(a, b, metric="cosine"):
 
 
 os.environ.setdefault("ENCRYPTION_SECRET", "omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv")
-sys.modules.setdefault("database._client", MagicMock())
-sys.modules.setdefault("av", MagicMock())
-sys.modules.setdefault("utils.other.storage", MagicMock())
-sys.modules.setdefault("utils.stt.pre_recorded", MagicMock())
+_RESTORED_MODULES = (
+    "database._client",
+    "database.conversations",
+    "database.users",
+    "av",
+    "utils.other.storage",
+    "utils.speaker_identification",
+    "utils.speaker_sample",
+    "utils.speaker_sample_migration",
+    "utils.stt.speaker_embedding",
+    "utils.stt.pre_recorded",
+    "scipy",
+    "scipy.spatial",
+    "scipy.spatial.distance",
+)
+_PARENT_ATTRS = (
+    ("database", "_client"),
+    ("database", "conversations"),
+    ("database", "users"),
+    ("utils.other", "storage"),
+    ("utils", "speaker_identification"),
+    ("utils", "speaker_sample"),
+    ("utils", "speaker_sample_migration"),
+    ("utils.stt", "speaker_embedding"),
+    ("utils.stt", "pre_recorded"),
+    ("scipy", "spatial"),
+    ("scipy.spatial", "distance"),
+)
+_MISSING = object()
+_saved_modules = {name: sys.modules.get(name, _MISSING) for name in _RESTORED_MODULES}
+_saved_parent_attrs = {
+    (parent_name, attr): getattr(sys.modules.get(parent_name), attr, _MISSING) for parent_name, attr in _PARENT_ATTRS
+}
+
+
+def _install_module(name, module):
+    sys.modules[name] = module
+    if "." in name:
+        parent_name, attr = name.rsplit(".", 1)
+        parent = sys.modules.get(parent_name)
+        if parent is not None:
+            setattr(parent, attr, module)
+
+
+def _restore_stub_modules():
+    current_modules = {name: sys.modules.get(name, _MISSING) for name in _RESTORED_MODULES}
+    for name in sorted(_RESTORED_MODULES, key=lambda module_name: module_name.count("."), reverse=True):
+        original = _saved_modules[name]
+        if original is _MISSING:
+            sys.modules.pop(name, None)
+        else:
+            sys.modules[name] = original
+
+    for (parent_name, attr), original in _saved_parent_attrs.items():
+        parent = sys.modules.get(parent_name)
+        if parent is None:
+            continue
+        if original is _MISSING:
+            child_name = f"{parent_name}.{attr}"
+            if getattr(parent, attr, _MISSING) is current_modules.get(child_name):
+                delattr(parent, attr)
+        else:
+            setattr(parent, attr, original)
+
+
+_install_module("database._client", MagicMock())
+_install_module("av", MagicMock())
+
+_storage_mod = ModuleType("utils.other.storage")
+for _name in [
+    "delete_speech_profile_blob",
+    "download_audio_chunks_and_merge",
+    "download_speech_profile_bytes",
+    "list_audio_chunks",
+    "upload_person_speech_sample_from_bytes",
+]:
+    setattr(_storage_mod, _name, MagicMock())
+_install_module("utils.other.storage", _storage_mod)
+
+_migration_mod = ModuleType("utils.speaker_sample_migration")
+_migration_mod.maybe_migrate_person_samples = AsyncMock(side_effect=lambda _uid, person: person)
+_install_module("utils.speaker_sample_migration", _migration_mod)
+
+_install_module("utils.stt.pre_recorded", MagicMock())
 try:
     from scipy.spatial.distance import cdist as _scipy_cdist  # noqa: F401
 except ImportError:
-    scipy_mod = sys.modules.setdefault("scipy", ModuleType("scipy"))
-    spatial_mod = sys.modules.setdefault("scipy.spatial", ModuleType("scipy.spatial"))
+    scipy_mod = ModuleType("scipy")
+    spatial_mod = ModuleType("scipy.spatial")
     distance_mod = ModuleType("scipy.spatial.distance")
     distance_mod.cdist = _cosine_cdist
     scipy_mod.spatial = spatial_mod
     spatial_mod.distance = distance_mod
-    sys.modules["scipy.spatial.distance"] = distance_mod
+    _install_module("scipy", scipy_mod)
+    _install_module("scipy.spatial", spatial_mod)
+    _install_module("scipy.spatial.distance", distance_mod)
 
-from utils.audio import AudioRingBuffer
-from utils.speaker_identification import detect_speaker_from_text, SPEAKER_IDENTIFICATION_PATTERNS, _pcm_to_wav_bytes
-from utils.stt.speaker_embedding import (
-    compare_embeddings,
-    is_same_speaker,
-    find_best_match,
-    SPEAKER_MATCH_THRESHOLD,
-    _get_wav_duration,
-)
+try:
+    from utils.audio import AudioRingBuffer
+    from utils.speaker_identification import (
+        detect_speaker_from_text,
+        SPEAKER_IDENTIFICATION_PATTERNS,
+        _pcm_to_wav_bytes,
+    )
+    from utils.stt.speaker_embedding import (
+        compare_embeddings,
+        is_same_speaker,
+        find_best_match,
+        SPEAKER_MATCH_THRESHOLD,
+        _get_wav_duration,
+    )
+finally:
+    _restore_stub_modules()
 
 # ─── AudioRingBuffer ─────────────────────────────────────────────────────────
 
