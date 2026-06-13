@@ -7,7 +7,7 @@ import 'package:omi/utils/logger.dart';
 /// Audio file info from signed URL endpoint
 class AudioFileUrlInfo {
   final String id;
-  final String status; // 'cached' or 'pending'
+  final String status; // 'cached' | 'pending' | 'unavailable'
   final String? signedUrl;
   final String? contentType;
   final double duration;
