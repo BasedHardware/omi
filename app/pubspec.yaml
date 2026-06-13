@@ -64,7 +64,6 @@ dependencies:
   # Utils
   pool: ^1.5.1
   collection: ^1.19.1
-  flutter_blue_plus: 2.1.0
   http: ^1.4.0
   pdf: ^3.11.0
   intl: 0.20.2

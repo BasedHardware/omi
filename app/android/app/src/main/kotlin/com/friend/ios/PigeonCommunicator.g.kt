@@ -809,6 +809,11 @@ interface BleHostApi {
   fun subscribeCharacteristic(peripheralUuid: String, serviceUuid: String, characteristicUuid: String)
   fun unsubscribeCharacteristic(peripheralUuid: String, serviceUuid: String, characteristicUuid: String)
   fun getBluetoothState(): String
+  /**
+   * (Android only) Show the system "enable Bluetooth" prompt. Resolves to true
+   * once Bluetooth is on. No-op on iOS — returns whether the adapter is powered on.
+   */
+  fun enableBluetooth(callback: (Result<Boolean>) -> Unit)
   fun isPeripheralConnected(uuid: String): Boolean
   fun startRssiStreaming(uuid: String)
   fun stopRssiStreaming(uuid: String)
@@ -1014,6 +1019,24 @@ interface BleHostApi {
               PigeonCommunicatorPigeonUtils.wrapError(exception)
             }
             reply.reply(wrapped)
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.omi_pigeon.BleHostApi.enableBluetooth$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { _, reply ->
+            api.enableBluetooth{ result: Result<Boolean> ->
+              val error = result.exceptionOrNull()
+              if (error != null) {
+                reply.reply(PigeonCommunicatorPigeonUtils.wrapError(error))
+              } else {
+                val data = result.getOrNull()
+                reply.reply(PigeonCommunicatorPigeonUtils.wrapResult(data))
+              }
+            }
           }
         } else {
           channel.setMessageHandler(null)
