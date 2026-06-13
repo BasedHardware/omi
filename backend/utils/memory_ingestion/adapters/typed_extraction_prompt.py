@@ -281,11 +281,37 @@ content are not durable facts about {user_name}. Screenshots capture momentary
 state, not memory-worthy information. Unless OCR contains a clear self-reported
 fact (name, address, preference) in coherent text → output [].
 
+**Example 9 — Work chatter that SOUNDS factual but is NOT durable (output EMPTY list)**
+Input:  "[Speaker 0]: We're committing to hire 10 engineers this quarter, "
+        "and I'm going to lead the Omi wearable to GPT integration. "
+        "[Speaker 0]: The goal is full-time offers for all interns by September."
+Output: []
+NOTE: Work discussions contain action verbs ('committing', 'lead', 'goal') that
+MIMIC durable fact patterns. These are NOT memory-worthy because:
+  (a) They describe team/company objectives, not {user_name}'s personal facts
+  (b) They lack the specificity of a personal preference, relationship, or biographical detail
+  (c) They are context-bound to a specific work project/quarter
+Even with SPECIFIC numbers (10 engineers, September) and ACTION verbs (commit, lead)
+  → output [] if the fact is about work deliverables, not {user_name} personally.
+The key test: "Will this still be a true fact about ME in 6 months?" If no → skip.
+
 KEY PATTERN: Short statements CAN be memory-worthy IF they contain a SPECIFIC
 predicate match (preferably not is_currently_true), a verbatim self-report quote
 anchor, AND represent a non-obvious durable fact. Generic observations, mood
 statements, activity mentions, or scheduling chatter — even with quote anchors
 — should still be skipped. When in doubt, do NOT extract.
+
+**Example 10 — Casual chat with first-person commitment (extract committed_to_do)**
+Input:  "human: Can you make me a snake game, and just, like, launch it once done?\nhuman: Yo, yo. How's going?\nai: Your trial has ended."
+Output: predicate=committed_to_do  quote="make me a snake game, and just, like, launch it once done"
+        content="David committed to making a snake game and launching it when done"
+        arguments={{\"action": "make a snake game and launch it"}}
+        subject_attribution=user
+NOTE: Chat exchanges often bury commitments in casual, chatty language ('make me',
+'like', 'yo'). A first-person action request IS a commitment even when surrounded
+by filler. Extract when {user_name} explicitly requests or commits to an action,
+regardless of how casual the surrounding chat is. Skip the greeting/filler turns
+('Yo', 'How's going') — only extract the substantive turn.
 
 
 

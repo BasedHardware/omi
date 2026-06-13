@@ -151,11 +151,14 @@ def _build_source_type_registry() -> dict[str, SourceTypeConfig]:
             requires_corroboration=True,
             default_empty_on_noise=True,
             guidance_notes=(
-                "Voice transcript: HIGH noise floor even when intentional. "
-                "VERY CONSERVATIVE. Require ≥2 independent utterances supporting "
-                "the same fact with clean quote anchors. If any disfluency, filler, "
-                "or uncertainty markers present → output [] immediately. "
-                "Default to empty unless fact is unambiguous and appears verbatim."
+                "Voice transcript: MODERATELY CONSERVATIVE (was VERY). "
+                "Require ≥1 clear first-person statement for HIGH-VALUE biographical facts "
+                "(origin, religion, location, tools used, projects, travel plans). "
+                "Require ≥2 corroborating utterances for weaker claims (preferences, opinions). "
+                "Filler words (um, like, yeah, so) do NOT invalidate a fact — extract when "
+                "the substantive content is clear despite surrounding disfluency. "
+                "Only output [] when input is predominantly filler with NO factual statements "
+                "about {user_name}. Biographical facts are always worth extracting if stated."
             ),
         ),
         "manual_note": SourceTypeConfig(
