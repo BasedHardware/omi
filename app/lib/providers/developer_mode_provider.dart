@@ -55,6 +55,7 @@ class DeveloperModeProvider extends BaseProvider {
   double localYoloeMaxFps = 0.0;
   bool localYoloeAdaptiveThrottlingEnabled = true;
   String localYoloeAnnouncementMode = 'allObjects';
+  double localYoloeHandObjectIouThreshold = 0.10;
   String localYoloeDetectorImplementation = 'yoloe';
 
   // Claude Agent (experimental)
@@ -149,6 +150,7 @@ class DeveloperModeProvider extends BaseProvider {
     localYoloeMaxFps = SharedPreferencesUtil().localYoloeMaxFps;
     localYoloeAdaptiveThrottlingEnabled = SharedPreferencesUtil().localYoloeAdaptiveThrottlingEnabled;
     localYoloeAnnouncementMode = SharedPreferencesUtil().localYoloeAnnouncementMode;
+    localYoloeHandObjectIouThreshold = SharedPreferencesUtil().localYoloeHandObjectIouThreshold;
     localYoloeDetectorImplementation = SharedPreferencesUtil().localYoloeDetectorImplementation;
     claudeAgentEnabled = SharedPreferencesUtil().claudeAgentEnabled;
     conversationEventsToggled = SharedPreferencesUtil().conversationEventsToggled;
@@ -394,6 +396,12 @@ class DeveloperModeProvider extends BaseProvider {
   void onLocalYoloeAnnouncementModeChanged(String value) {
     localYoloeAnnouncementMode = value;
     SharedPreferencesUtil().localYoloeAnnouncementMode = value;
+    notifyListeners();
+  }
+
+  void onLocalYoloeHandObjectIouThresholdChanged(double value) {
+    localYoloeHandObjectIouThreshold = value;
+    SharedPreferencesUtil().localYoloeHandObjectIouThreshold = value;
     notifyListeners();
   }
 

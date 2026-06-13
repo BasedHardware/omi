@@ -237,6 +237,10 @@ class SharedPreferencesUtil {
 
   String get localYoloeAnnouncementMode => getString('localYoloeAnnouncementMode', defaultValue: 'allObjects');
 
+  set localYoloeHandObjectIouThreshold(double value) => saveDouble('localYoloeHandObjectIouThreshold', value);
+
+  double get localYoloeHandObjectIouThreshold => getDouble('localYoloeHandObjectIouThreshold', defaultValue: 0.10);
+
   set localYoloeDetectorImplementation(String value) => saveString('localYoloeDetectorImplementation', value);
 
   String get localYoloeDetectorImplementation => getString('localYoloeDetectorImplementation', defaultValue: 'yoloe');

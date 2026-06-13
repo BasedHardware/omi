@@ -64,6 +64,31 @@ class DetectionBox {
   final double width;
   final double height;
 
+  double get right => left + width;
+  double get bottom => top + height;
+  double get area {
+    final safeWidth = width <= 0 ? 0.0 : width;
+    final safeHeight = height <= 0 ? 0.0 : height;
+    return safeWidth * safeHeight;
+  }
+
+  double intersectionOverUnion(DetectionBox other) {
+    final intersectionLeft = left > other.left ? left : other.left;
+    final intersectionTop = top > other.top ? top : other.top;
+    final intersectionRight = right < other.right ? right : other.right;
+    final intersectionBottom = bottom < other.bottom ? bottom : other.bottom;
+
+    final intersectionWidth = intersectionRight - intersectionLeft;
+    final intersectionHeight = intersectionBottom - intersectionTop;
+    if (intersectionWidth <= 0 || intersectionHeight <= 0) return 0;
+
+    final intersectionArea = intersectionWidth * intersectionHeight;
+    final unionArea = area + other.area - intersectionArea;
+    if (unionArea <= 0) return 0;
+
+    return intersectionArea / unionArea;
+  }
+
   @override
   String toString() {
     return '(${left.toStringAsFixed(2)}, ${top.toStringAsFixed(2)}, '
@@ -80,6 +105,10 @@ class Detection {
     required this.timestamp,
     this.mask,
     this.wouldAnnounce = true,
+    this.isHand = false,
+    this.maxHandIoU,
+    this.heldObjectSelected = false,
+    this.heldObjectReason,
   });
 
   final String label;
@@ -89,6 +118,51 @@ class Detection {
   final DateTime timestamp;
   final Uint8List? mask;
   final bool wouldAnnounce;
+
+  /// True only when the normalized detector label is exactly `hand`.
+  final bool isHand;
+
+  /// Maximum bounding-box IoU with any YOLOE `hand` detection in the same frame.
+  /// Null outside held-object evaluation, including hand detections themselves.
+  final double? maxHandIoU;
+
+  /// Whether this non-hand detection passed strict hand-IoU held-object selection.
+  final bool heldObjectSelected;
+
+  /// Metadata-only explanation for debug UI/logs. Never contains image data.
+  final String? heldObjectReason;
+
+  String get normalizedLabel => label.trim().toLowerCase();
+
+  Detection copyWith({
+    String? label,
+    double? confidence,
+    DetectionBox? box,
+    String? sourceFrameId,
+    DateTime? timestamp,
+    Uint8List? mask,
+    bool? wouldAnnounce,
+    bool? isHand,
+    double? maxHandIoU,
+    bool clearMaxHandIoU = false,
+    bool? heldObjectSelected,
+    String? heldObjectReason,
+    bool clearHeldObjectReason = false,
+  }) {
+    return Detection(
+      label: label ?? this.label,
+      confidence: confidence ?? this.confidence,
+      box: box ?? this.box,
+      sourceFrameId: sourceFrameId ?? this.sourceFrameId,
+      timestamp: timestamp ?? this.timestamp,
+      mask: mask ?? this.mask,
+      wouldAnnounce: wouldAnnounce ?? this.wouldAnnounce,
+      isHand: isHand ?? this.isHand,
+      maxHandIoU: clearMaxHandIoU ? null : maxHandIoU ?? this.maxHandIoU,
+      heldObjectSelected: heldObjectSelected ?? this.heldObjectSelected,
+      heldObjectReason: clearHeldObjectReason ? null : heldObjectReason ?? this.heldObjectReason,
+    );
+  }
 }
 
 class LocalVisionLatencyMetrics {
@@ -309,13 +383,7 @@ class ObjectPresenceTracker {
 
   List<Detection> _filterForMode(List<Detection> detections, AnnouncementMode mode) {
     if (mode == AnnouncementMode.allObjects) return List<Detection>.from(detections);
-    return detections.where(_isLikelyHeldObject).toList();
-  }
-
-  bool _isLikelyHeldObject(Detection detection) {
-    final centerX = detection.box.left + detection.box.width / 2;
-    final centerY = detection.box.top + detection.box.height / 2;
-    return centerX >= 0.25 && centerX <= 0.75 && centerY >= 0.55;
+    return detections.where((detection) => detection.heldObjectSelected && !detection.isHand).toList();
   }
 
   void clear() => _presenceByLabel.clear();
@@ -363,6 +431,7 @@ class LocalVisionService extends ChangeNotifier {
   int get receivedFrameCount => _receivedFrameCount;
   int get processedFrameCount => _processedFrameCount;
   int get throttledFrameCount => _throttledFrameCount;
+  bool get hasPendingFrame => _pendingFrame != null;
   double get incomingFrameRateFps => _frameRateFor(_receivedFrameTimes);
   double get inferenceFrameRateFps => _frameRateFor(_processedFrameTimes);
   DateTime? get lastAnnouncementAt => ObjectAnnouncementService.instance.lastAnnouncementAt;
@@ -418,6 +487,8 @@ class LocalVisionService extends ChangeNotifier {
       }
       // Keep only the newest pending frame. Older pending frame bytes become
       // unreachable here, so the VM can reclaim them instead of queueing stale images.
+      // This app-side scheduler processes every received frame when inference is fast enough;
+      // actual Omi Glass image cadence can still be limited by firmware/photo-controller timing.
       _pendingFrame = frame;
       _status = LocalVisionInferenceStatus.queued;
       notifyListeners();
@@ -465,17 +536,15 @@ class LocalVisionService extends ChangeNotifier {
         ..sort((a, b) => b.confidence.compareTo(a.confidence));
       final thresholdedResults = rawResults.take(maxObjectsPerFrame).toList();
       final mode = AnnouncementModeSettings.fromPreference(SharedPreferencesUtil().localYoloeAnnouncementMode);
-      final candidates = _presenceTracker.update(thresholdedResults, timestamp: frame.timestamp, mode: mode);
+      final handIouThreshold = prefs.localYoloeHandObjectIouThreshold;
+      final annotatedResults = _annotateHeldObjectSelection(thresholdedResults, mode, handIouThreshold);
+      final handCount = annotatedResults.where((detection) => detection.isHand).length;
+      final heldSelectedCount = annotatedResults.where((detection) => detection.heldObjectSelected).length;
+      final candidates = _presenceTracker.update(annotatedResults, timestamp: frame.timestamp, mode: mode);
       final candidateLabels = candidates.map((candidate) => candidate.detection.label.toLowerCase()).toSet();
-      final results = thresholdedResults
+      final results = annotatedResults
           .map(
-            (detection) => Detection(
-              label: detection.label,
-              confidence: detection.confidence,
-              box: detection.box,
-              sourceFrameId: detection.sourceFrameId,
-              timestamp: detection.timestamp,
-              mask: detection.mask,
+            (detection) => detection.copyWith(
               wouldAnnounce: candidateLabels.contains(detection.label.toLowerCase()),
             ),
           )
@@ -487,6 +556,8 @@ class LocalVisionService extends ChangeNotifier {
         'Local YOLOE detections frame=${frame.frameId} '
         'detector=${implementation.preferenceValue} count=${results.length} announce=${candidates.length} '
         'mode=${mode.preferenceValue} threshold=${confidenceThreshold.toStringAsFixed(2)} '
+        'handCount=$handCount handIouThreshold=${handIouThreshold.toStringAsFixed(2)} '
+        'heldSelected=$heldSelectedCount '
         'latencyMs=${latency.pipelineTotalMs?.toStringAsFixed(1) ?? 'unknown'} '
         'labels=${results.map((detection) => detection.label).join(',')}',
       );
@@ -515,6 +586,65 @@ class LocalVisionService extends ChangeNotifier {
         await _runFrame(nextFrame);
       }
     }
+  }
+
+  List<Detection> _annotateHeldObjectSelection(
+    List<Detection> detections,
+    AnnouncementMode mode,
+    double handIouThreshold,
+  ) {
+    final handDetections = detections.where((detection) => detection.normalizedLabel == 'hand').toList();
+    final handBoxes = handDetections.map((detection) => detection.box).toList();
+
+    return detections.map((detection) {
+      final isHand = detection.normalizedLabel == 'hand';
+      if (mode != AnnouncementMode.heldObjectsOnly) {
+        return detection.copyWith(
+          isHand: isHand,
+          maxHandIoU: isHand ? null : _maxIoUWithHandBoxes(detection.box, handBoxes),
+          heldObjectSelected: false,
+          clearHeldObjectReason: true,
+        );
+      }
+
+      if (isHand) {
+        return detection.copyWith(
+          isHand: true,
+          clearMaxHandIoU: true,
+          heldObjectSelected: false,
+          heldObjectReason: 'hand anchor only; never announced',
+        );
+      }
+
+      if (handBoxes.isEmpty) {
+        return detection.copyWith(
+          isHand: false,
+          maxHandIoU: 0,
+          heldObjectSelected: false,
+          heldObjectReason: 'rejected: no YOLOE hand detection',
+        );
+      }
+
+      final maxHandIoU = _maxIoUWithHandBoxes(detection.box, handBoxes);
+      final selected = maxHandIoU > handIouThreshold;
+      return detection.copyWith(
+        isHand: false,
+        maxHandIoU: maxHandIoU,
+        heldObjectSelected: selected,
+        heldObjectReason: selected
+            ? 'selected: hand IoU ${maxHandIoU.toStringAsFixed(2)} > ${handIouThreshold.toStringAsFixed(2)}'
+            : 'rejected: hand IoU ${maxHandIoU.toStringAsFixed(2)} <= ${handIouThreshold.toStringAsFixed(2)}',
+      );
+    }).toList();
+  }
+
+  double _maxIoUWithHandBoxes(DetectionBox box, List<DetectionBox> handBoxes) {
+    var maxIoU = 0.0;
+    for (final handBox in handBoxes) {
+      final iou = box.intersectionOverUnion(handBox);
+      if (iou > maxIoU) maxIoU = iou;
+    }
+    return maxIoU;
   }
 
   bool _shouldThrottleFrame(DateTime capturedAt) {

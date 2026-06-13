@@ -272,6 +272,15 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
           ),
           const SizedBox(height: 12),
           _buildLocalYoloeSlider(
+            label: 'Held hand IoU threshold',
+            valueLabel: provider.localYoloeHandObjectIouThreshold.toStringAsFixed(2),
+            value: provider.localYoloeHandObjectIouThreshold,
+            min: 0,
+            max: 0.5,
+            divisions: 50,
+            onChanged: provider.onLocalYoloeHandObjectIouThresholdChanged,
+          ),
+          _buildLocalYoloeSlider(
             label: 'Speech rate',
             valueLabel: provider.localYoloeSpeechRate.toStringAsFixed(2),
             value: provider.localYoloeSpeechRate,
@@ -430,6 +439,7 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
                   _buildLocalVisionMetric('Input', service.modelAssetStatus.inputSize),
                   _buildLocalVisionMetric('Frame', _formatLocalVisionTimestamp(service.latestFrameTimestamp)),
                   _buildLocalVisionMetric('Status', service.status.name),
+                  _buildLocalVisionMetric('Pending latest', service.hasPendingFrame ? 'Yes' : 'No'),
                   _buildLocalVisionMetric('Incoming FPS', service.incomingFrameRateFps.toStringAsFixed(1)),
                   _buildLocalVisionMetric('Inference FPS', service.inferenceFrameRateFps.toStringAsFixed(1)),
                   _buildLocalVisionMetric('Received', service.receivedFrameCount.toString()),
@@ -516,6 +526,17 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
                   'conf ${(detection.confidence * 100).toStringAsFixed(0)}% · box ${detection.box}',
                   style: TextStyle(color: Colors.grey.shade500, fontSize: 12),
                 ),
+                if (detection.isHand || detection.maxHandIoU != null || detection.heldObjectReason != null) ...[
+                  const SizedBox(height: 3),
+                  Text(
+                    [
+                      if (detection.isHand) 'YOLOE hand anchor',
+                      if (detection.maxHandIoU != null) 'max hand IoU ${detection.maxHandIoU!.toStringAsFixed(2)}',
+                      if (detection.heldObjectReason != null) detection.heldObjectReason!,
+                    ].join(' · '),
+                    style: TextStyle(color: Colors.grey.shade500, fontSize: 12),
+                  ),
+                ],
               ],
             ),
           ),

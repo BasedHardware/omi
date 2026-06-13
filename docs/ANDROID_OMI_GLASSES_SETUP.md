@@ -217,6 +217,12 @@ After pairing:
 
 If nothing appears immediately, wait a little. The onboarding docs mention that first transcription can be delayed.
 
+### Local YOLOE frame scheduling note
+
+When local YOLOE object announcements are enabled, the app processes Omi Glass photo frames on the Android phone and skips backend image upload for those frames. The app-side scheduler processes every received image frame when inference keeps up; if inference is busy, it keeps only the newest pending frame and drops older pending frames so stale images do not build up lag.
+
+The developer Local YOLOE debug panel reports incoming FPS, inference FPS, received/processed/dropped/throttled frame counts, latency, and last announcement time. If frames arrive slowly, that may be an Omi Glass firmware/photo-controller capture cadence limitation rather than an app scheduling issue. Faster capture rates can require firmware changes; this app-side path is designed to be ready for faster incoming frames when firmware provides them.
+
 ## 9. Omi Glass firmware notes
 
 If the glasses do not power on, do not advertise over Bluetooth, or never connect, firmware may need to be flashed.
