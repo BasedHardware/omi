@@ -38,7 +38,7 @@ TYPED_PREDICATES = [
     "has_birthday",
     "has_address",
     "uses_tool",           # absorbs owns_device
-    "is_currently_true",   # LAST RESORT — tightened definition, <10% of extractions
+    "is_currently_true",   # PRIMARY predicate for voice/transcript sources (~30% of extractions); use for biographical identity, ongoing states, location/residence, visa/status, family relationships, health, travel history when no more specific predicate fits
     "is_no_longer_true",
     "credential_detected",  # credentials, passwords, PII, auth material (OCR/security sources)
     "sensitive_info_visible",  # sensitive but non-credential info (emails, personal identifiers)
@@ -70,17 +70,20 @@ def render_source_guidance(source_type: str) -> str:
     if config.strength == SourceStrength.HIGH:
         parts.append(
             "HIGH CONFIDENCE SOURCE. Extract when both conditions are met:\n"
-            "  (a) clear, SPECIFIC predicate match (not is_currently_true unless no other fits)\n"
+            "  (a) clear, SPECIFIC predicate match (is_currently_true for state facts is fine)\n"
             "  (b) verbatim self-report quote anchor with ≥2 distinctive terms\n"
             "Do NOT suppress clear user claims from this source."
         )
     elif config.strength == SourceStrength.MEDIUM:
         parts.append(
-            "MEDIUM CONFIDENCE SOURCE. Extract when:\n"
-            "  (a) clear predicate match\n"
+            "MEDIUM CONFIDENCE SOURCE (e.g., voice transcript). Extract liberally:\n"
+            "  (a) clear predicate match — is_currently_true is EXPECTED and PRIMARY for biographical facts\n"
             "  (b) verbatim quote anchor\n"
             "  (c) content is substantive (not filler/chitchat)\n"
-            "Apply moderate skepticism for garbled or sparse input."
+            "For voice transcripts: extract ALL distinct biographical facts (origin, visa status,\n"
+            "family, health, religion, location, work arrangement). Each fact gets its own frame.\n"
+            "3-6+ frames from one session is NORMAL when multiple topics are covered.\n"
+            "Apply only light skepticism for garbled or sparse input."
         )
     elif config.strength == SourceStrength.LOW:
         parts.append("LOW CONFIDENCE SOURCE — extract liberally, filter in post-processing.")
@@ -146,12 +149,12 @@ EXTRACT durable context: preferences/dislikes, decisions/commitments, projects/t
    - has_birthday — birthday information
    - has_address — address/location information
    - uses_tool — a tool/service they routinely use (absorbs "owns_device")
-   - is_currently_true — durable state/fact with no better predicate above (use for biographical identity, ongoing states, location/residence, travel history when no more specific predicate fits). Represents up to ~30% of extractions for voice/transcript sources where most facts are state descriptions rather than actions.
+   - is_currently_true — durable state/fact with no better predicate above (use for biographical identity, ongoing states, location/residence, visa/immigration status, family relationships, health diagnoses, travel history, religion, nationality, work arrangement like WFH). This is the PRIMARY predicate for voice/transcript sources where most facts are state descriptions rather than actions. Represents ~30% of extractions for those sources.
    - is_no_longer_true — a fact that stopped holding
    - credential_detected — credentials, passwords, PII, or auth material visible on screen (OCR/security sources)
    - sensitive_info_visible — sensitive but non-credential info visible (email addresses, personal identifiers)
 
-   Write the predicate EXACTLY as shown. Prefer the MOST SPECIFIC predicate. Use is_currently_true only as absolute last resort and only for concrete, non-obvious facts.
+   Write the predicate EXACTLY as shown. Prefer the MOST SPECIFIC predicate. For voice/transcript sources, is_currently_true is expected and normal — use it freely for biographical/state facts. For chat sources, prefer action predicates when available.
 
 1. quote_anchor — verbatim substring from transcript proving the fact. For {user_name} facts, must be self-report evidence ({user_name}'s own turn or first-person language "I"/"my"/"we"). Preserve ≥2 distinctive non-stopword terms. No paraphrase. If no literal self-report quote exists → no fact.
    **OCR/security source EXCEPTION:** For credential_detected, sensitive_info_visible, and is_currently_true (when describing visible PII/passwords/credentials on screen), accept UI text fragments as evidence — a visible email address, password field, login prompt, or keychain dialog IS the evidence. No first-person language required for security-relevant OCR extractions only.
@@ -278,7 +281,65 @@ Output: []
 NOTE: Even long transcripts that contain only casual chatter, disfluencies,
 or narrative monologue without explicit factual statements about {user_name}
 produce an empty list. Do not extract from filler-heavy or garbled input.
-When in doubt on voice transcripts → output [].
+BUT: If the same transcript contains clear biographical facts (origin, family
+status, visa, health, location, tools used, projects) → DO extract those as
+is_currently_true. Only output [] when there are ZERO extractable facts.
+
+**Example 7b — Voice transcript with multiple biographical facts (extract MULTIPLE is_currently_true)**
+Input:  "[Speaker 0]: I'm from rural Russia, near Japan. Moved to Moscow later.\\n[Speaker 0]: I got an O-1 visa after applying five times.\\n[Speaker 0]: I'm Orthodox Christian, like people in Ethiopia.\\n[Speaker 0]: I work from home, no office."
+Output: predicate=is_currently_true  quote="from rural Russia, near Japan"
+        content="Alex is originally from rural Russia near Japan"
+        arguments={{"topic": "originally from rural Russia near Japan"}}
+        subject_attribution=user
+---
+Output: predicate=is_currently_true  quote="moved to Moscow"
+        content="Alex moved to Moscow, Russia"
+        arguments={{"topic": "moved to Moscow, Russia"}}
+        subject_attribution=user
+---
+Output: predicate=is_currently_true  quote="O-1 visa"
+        content="Alex has O-1 visa status"
+        arguments={{"topic": "O-1 visa status"}}
+        subject_attribution=user
+---
+Output: predicate=is_currently_true  quote="Orthodox Christian"
+        content="Alex is Orthodox Christian"
+        arguments={{"topic": "Orthodox Christian"}}
+        subject_attribution=user
+---
+Output: predicate=is_currently_true  quote="work from home, no office"
+        content="Alex works from home"
+        arguments={{"topic": "works from home"}}
+        subject_attribution=user
+NOTE: Voice transcripts often contain MULTIPLE biographical facts in one session.
+Extract EACH distinct fact as its own is_currently_true frame. Do NOT consolidate
+different facts into one frame, and do NOT skip facts just because there are many.
+Biographical identity facts, visa/status, origin, religion, family, health, and
+work arrangement are ALWAYS worth extracting when clearly stated by {user_name}.
+A single voice session can (and should) produce 3-6+ is_currently_true frames when
+the conversation covers multiple biographical topics.
+
+**Example 7c — Voice transcript with family/health biographical facts (extract is_currently_true)**
+Input:  "[Speaker 0]: My father was diagnosed with cancer last month.\\n[Speaker 0]: I have a paternal half-brother — my dad recently had a baby.\\n[Speaker 0]: I've been on a green card for about 2 years now."
+Output: predicate=is_currently_true  quote="father was diagnosed with cancer"
+        content="Alex's father was diagnosed with cancer"
+        arguments={{"topic": "father diagnosed with cancer"}}
+        subject_attribution=user
+        importance=high
+---
+Output: predicate=is_currently_true  quote="paternal half-brother"
+        content="Alex has a paternal half-brother (father recently had baby)"
+        arguments={{"topic": "has paternal half-brother"}}
+        subject_attribution=user
+---
+Output: predicate=is_currently_true  quote="green card for about 2 years"
+        content="Alex has been pursuing green card process for approximately 2 years"
+        arguments={{"topic": "pursuing green card process"}}
+        subject_attribution=user
+NOTE: Family relationships and health diagnoses are HIGH-VALUE biographical facts.
+Always extract these with is_currently_true when {user_name} states them explicitly,
+even from voice transcripts. Set importance=high for serious health diagnoses
+(family or self). These facts are exactly what is_currently_true is designed for.
 
 **Example 8 — OCR screenshot showing UI chrome / product page with NO credentials (output EMPTY list)**
 Input:  "••• tDo (a Chat * What's up next, Nik? + Nv*sesslon\nCustOTlliZe ••• Retard-12608921"
@@ -306,16 +367,18 @@ Even with SPECIFIC numbers (10 engineers, September) and ACTION verbs (commit, l
 The key test: "Will this still be a true fact about ME in 6 months?" If no → skip.
 
 KEY PATTERN: Short statements CAN be memory-worthy IF they contain a SPECIFIC
-predicate match (preferably not is_currently_true), a verbatim self-report quote
-anchor, AND represent a non-obvious durable fact. Generic observations, mood
-statements, activity mentions, or scheduling chatter — even with quote anchors
-— should still be skipped. When in doubt, do NOT extract.
+predicate match (is_currently_true is PERFECTLY VALID for voice biographical facts),
+a verbatim self-report quote anchor, AND represent a non-obvious durable fact.
+Generic observations, mood statements, activity mentions, or scheduling chatter —
+even with quote anchors — should still be skipped. When in doubt for voice transcripts
+with biographical content → extract (don't suppress). When in doubt for trivial chatter
+→ skip.
 
 **Example 10 — Casual chat with first-person commitment (extract committed_to_do)**
 Input:  "human: Can you make me a snake game, and just, like, launch it once done?\nhuman: Yo, yo. How's going?\nai: Your trial has ended."
 Output: predicate=committed_to_do  quote="make me a snake game, and just, like, launch it once done"
         content="David committed to making a snake game and launching it when done"
-        arguments={{\"action": "make a snake game and launch it"}}
+        arguments={{\"action\": \"make a snake game and launch it\"}}
         subject_attribution=user
 NOTE: Chat exchanges often bury commitments in casual, chatty language ('make me',
 'like', 'yo'). A first-person action request IS a commitment even when surrounded
@@ -323,8 +386,68 @@ by filler. Extract when {user_name} explicitly requests or commits to an action,
 regardless of how casual the surrounding chat is. Skip the greeting/filler turns
 ('Yo', 'How's going') — only extract the substantive turn.
 
+**Example 10b — AI-observed user activity from chat context (extract with assistant_suggested)**
+Input:  "human: Yo yo yo. can i help you?\nai: haha I think you meant to ask *me* if I can help *you* 😄\n\nlooks like you're working on the congressional casework form for your USCIS case — filling it out on Velázquez's site. need help with anything specific on that?"
+Output: predicate=works_on  quote="working on the congressional casework form for your USCIS case"
+        content="David works on congressional casework form for USCIS case"
+        arguments={{\"project\": "congressional casework form for USCIS case"}}
+        subject_attribution=assistant_suggested
+NOTE: When the AI assistant observes {user_name} doing something specific and
+personally meaningful (NOT generic work chatter), extract it with
+subject_attribution=assistant_suggested. The key distinction:
+  - ✅ EXTRACT: \"looks like you're working on [specific personal task]\" → works_on
+  - ✅ EXTRACT: \"I see you're using [specific tool/app]\" → uses_tool
+  - ❌ SKIP: \"you're working on [generic work deliverable]\" → work chatter
+The observation must name a SPECIFIC personal activity, not a vague work summary.
+Personal administrative tasks (forms, cases, applications) ARE extractable.
+
+**Example 10c — First-person tool usage mentioned casually in chat (extract uses_tool)**
+Input:  "human: Omi, я вот играю в Rust, и короче у меня вот типа видишь, вот такой вот туман типа.\nai: Это TAA + depth of field в Rust."
+Output: predicate=uses_tool  quote="играю в Rust"
+        content="David uses Rust (video game)"
+        arguments={{\\"tool\\": \\"Rust (video game)\\"}}
+        subject_attribution=user
+NOTE: First-person statements about tools/games/apps in ANY language (including
+non-English) are extractable. Look for \"{user_name} plays/uses/играет в [tool]\"
+patterns even when buried in troubleshooting or casual chat. The language of
+the input doesn't matter — extract the fact if the semantic signal is clear.
+Profanity and informal language surrounding the fact do NOT invalidate extraction.
+
+**Example 10d — AI-observed user preference from chat (extract prefers, attr=assistant_suggested)**
+Input:  "human: У меня MacBook, какой? Pro, нахуй, который, типа, сколько там? 14 дюймов? Вот. Какое мне resolution ставить?\nai: MacBook Pro 14\" — нативное 3024x1964. Из того что видишь в списке — ставь **1440x900**, это самое близкое к нормальному соотношению сторон."
+Output: predicate=uses_tool  quote="У меня MacBook, какой? Pro"
+        content="David uses a MacBook Pro 14-inch"
+        arguments={{\\"tool\\": \\"MacBook Pro 14-inch\\"}}
+        subject_attribution=user
+---
+Output: predicate=prefers  quote="ставь 1440x900"
+        content="David prefers 1440x900 screen resolution for gaming"
+        arguments={{\\"preference\\": \\"1440x900 screen resolution\\", \\"context\\": \\"gaming on MacBook Pro\\"}}
+        subject_attribution=assistant_suggested
+NOTE: When the chat contains MULTIPLE extractable facts (device ownership +
+a specific setting/preference), extract EACH as a separate frame. The AI's
+recommendation about a specific setting value IS extractable as a preference
+(assistant_suggested) when it's a personalized response to {user_name}'s question.
+Device ownership comes from {user_name}'s own words; preferences can come from
+either speaker when they're specific to {user_name}'s situation.
+
+**Example 10e — Multi-fact chat with commitment + biographical state (extract BOTH)**
+Input:  "human: I need to change my company interest to receive email on this that i have been stable, which you currently can see on my screen. can you do all these 13 actions, basically, and make sure that my address is updated everywhere?\nhuman: hi"
+Output: predicate=committed_to_do  quote="make sure that my address is updated everywhere"
+        content="David committed to updating address everywhere across multiple services"
+        arguments={{\\"action\\": \\"update address everywhere across multiple services\\"}}
+        subject_attribution=user
+---
+Output: predicate=is_currently_true  quote="i have been stable"
+        content="David has been stable at current company"
+        arguments={{\\"topic\\": \\"stable at current company\\"}}
+        subject_attribution=user
+NOTE: Long chat messages often contain MULTIPLE facts buried together. Extract
+EACH distinct fact separately: action commitments get committed_to_do, durable
+state facts get is_currently_true. Don't stop after extracting the most obvious
+fact — scan the entire message for all extractable signals.
+
 **Example 11 — OCR screenshot with visible credentials / security material (EXTRACT)**
-Input:  "••• • o\nChatGPT\n* Sign in\nclaude.ai/login?from=logout\n7ciaude IThACPI\nExlensions\nNotes\nTranslate\nSam\nkodjirna33@gmail.com"
 Output: predicate=sensitive_info_visible  quote="kodjirna33@gmail.com"
         content="Nikita Shevchenko's email address (kodjirna33@gmail.com) is visible on screen"
         subject_attribution=user
@@ -334,6 +457,38 @@ These represent credential/PII exposure events that should be recorded even thou
 the source is OCR (low signal). Use credential_detected for passwords/auth material,
 sensitive_info_visible for emails/personal identifiers. The visible UI text itself
 serves as evidence — no first-person quote needed for security-relevant OCR extractions.
+
+**Example 12 — Garbled OCR with keychain/password dialog (EXTRACT credential_detected)**
+Input:  "curltywantsto useyour confSdentlDI\nInformation stored In-Chrorne Safe Stornp- In\nyour keyohaln.\nTo allow this, 8nt•rth8 4login' k•ychain password.\nPa5wmrd..\nAW MIow\nDery\nIr*W"
+Output: predicate=credential_detected  quote="keychain password"
+        content="Password field or keychain credential prompt is visible on screen"
+        subject_attribution=user
+NOTE: Even heavily garbled OCR text that contains 'password', 'keychain', 'login',
+'credential', or masked characters (•••, ****) indicates a security-sensitive
+screen. ALWAYS extract these — do not return [] just because text is garbled.
+The presence of ANY security keyword in OCR overrides the garbled-text → [] rule.
+
+**Example 13 — Garbled OCR with encryption password / SSH credentials (EXTRACT)**
+Input:  "Enteryour encryption password\nkodjima33@gm8il.¢om\nEneryptAMV&&WQ\nContinu•\nForgot pAssword?\n*****\nV8uIts\nsThp\nHosts\nmacos\nkodjimB33"
+Output: predicate=credential_detected  quote="encryption password"
+        content="Encryption password or SSH credential material is visible on screen (Termius context)"
+        arguments={{"topic": "Termius encryption password / SSH credentials"}}
+        subject_attribution=user
+NOTE: SSH clients (Termius), terminal hosts, and encryption setup screens showing
+passwords, hostnames, or usernames are credential extraction targets. Even when
+the email/hostname is OCR-garbled (gm8il.¢om instead of gmail.com), the STRUCTURE
+(email@domain format + 'encryption password' label) is enough to extract.
+
+**Example 14 — Garbled OCR with sign-in page / email field (EXTRACT sensitive_info_visible)**
+Input:  "hatGPT\nChatGPT\nSlgnln-C\nChatGPT\n+ Ask G¢mlnl\nch8tgpt.com\nClaudè Ik4CPI\nExlensions\nnl Nule5\nTTF\nRec"
+Output: predicate=sensitive_info_visible  quote="Sign in"
+        content="Login or sign-in page with email address field is visible on screen"
+        subject_attribution=user
+uncertainty_reasons=[low_quality_transcript]
+NOTE: Sign-in pages, login forms, and authentication UI elements visible in
+screenshots are extractable even from noisy OCR. Use sensitive_info_visible
+for login/sign-in contexts where an email or identifier may be present but
+is too garbled to read precisely.
 
 === SUBJECT DISEMBIGUATION GUARD ===
 
@@ -391,8 +546,14 @@ Pick the MOST SPECIFIC predicate. Common mis-mappings that cause errors:
   [Travel plans have their own predicate — do NOT degrade to is_currently_true]
 
 When two predicates could fit, ALWAYS pick the more specific one. is_currently_true
-is a LAST RESORT predicate (<10% of extractions). If you're using it for >10% of
-your extractions, you're being too lazy with predicate selection.
+is the PRIMARY predicate for voice/transcript sources (expected ~30% of extractions).
+For chat sources, prefer action predicates. is_currently_true is correct and expected
+for: biographical facts (origin, nationality, religion), visa/immigration status,
+residence/location, family relationships, health conditions, work arrangements (WFH),
+travel history, and any durable state that doesn't fit a more specific action predicate.
+Do NOT degrade travel plans or device ownership to is_currently_true — those have
+their own predicates. But for everything else that is a state rather than an action,
+is_currently_true is the RIGHT choice, not a last resort.
 
 
 === EXTRACTION CONSOLIDATION RULE ===
@@ -403,9 +564,15 @@ ONE factual statement = ONE frame maximum. Never split one fact into multiple fr
 • ❌ "Committed to $100K ARR by June" → 2 frames ($100K ARR, June deadline)
 • ✅ "Committed to $100K ARR by June" → 1 frame with full commitment
 
-If you find yourself extracting 3+ frames from a single short transcript,
-STOP and consolidate. Each additional frame increases hallucination risk.
-Prefer 1 well-formed frame over 3 redundant ones. Quality > quantity.
+EXCEPTION for voice transcripts: Different biographical facts SHOULD be separate
+frames. "I'm from Russia. I have an O-1 visa. My father has cancer." → 3 frames,
+not 1. Each distinct topic (origin, visa, family health) deserves its own frame.
+Only consolidate when the SAME fact is stated multiple ways.
+
+If you find yourself extracting 10+ frames from a single short transcript,
+review whether some are trivial. But 3-6 is_currently_true frames from a rich
+voice conversation covering multiple biographical topics is NORMAL and EXPECTED.
+Prefer complete coverage of distinct facts over aggressive consolidation.
 
 
 UNIVERSAL RULES (all sources):
@@ -413,6 +580,7 @@ UNIVERSAL RULES (all sources):
 • Never extract greetings, pure backchannel, or question-only input
 • HIGH signal sources (chat, conversation): Do NOT suppress clear user claims
 • LOW signal sources (ambient voice, OCR): Default to [] UNLESS the content contains credentials, PII, passwords, email addresses, login fields, or other security-sensitive material visible on screen — extract those with credential_detected or sensitive_info_visible
+• ⚠️ OCR SECURITY OVERRIDE: For screenshot_ocr source, if ANY security pattern is present (password, keychain, login, sign-in, email@domain, ••• masking, credential manager, SSH host/username, encryption password, [SECURITY_OCR_ALERT] marker), you MUST extract. The garbled text quality is NOT a valid reason to return [] for security-sensitive OCR. This rule takes priority over Example 8's "garbled → []" guidance.
 
 **Existing memories you already know about {user_name} (DO NOT REPEAT ANY)**:
 ```

@@ -133,7 +133,13 @@ def _build_source_type_registry() -> dict[str, SourceTypeConfig]:
             default_empty_on_noise=False,
             guidance_notes=(
                 "Highest-confidence source. If {user_name} explicitly states "
-                "a fact about themselves, extract it. Do NOT suppress clear claims."
+                "a fact about themselves, extract it. Do NOT suppress clear claims. "
+                "Also extract when the AI assistant observes {user_name} doing "
+                "something specific and personally meaningful (works_on, uses_tool, "
+                "prefers with subject_attribution=assistant_suggested). "
+                "Chat messages often contain MULTIPLE facts — extract each one. "
+                "Informal language, profanity, non-English, and casual chitchat "
+                "wrapping do NOT invalidate a clear factual signal."
             ),
         ),
         "conversation": SourceTypeConfig(
@@ -145,20 +151,26 @@ def _build_source_type_registry() -> dict[str, SourceTypeConfig]:
             guidance_notes="High-confidence multi-party conversation. Standard extraction rules apply.",
         ),
         "voice_transcript": SourceTypeConfig(
-            strength=SourceStrength.LOW,  # v5: kept LOW but liberal guidance
+            strength=SourceStrength.MEDIUM,  # v6: raised from LOW — voice has real signal for bio facts
             label="VOICE TRANSCRIPT",
-            confidence_cap=0.85,  # v5: raised from 0.6 — we have 17pp H headroom
-            requires_corroboration=True,
+            confidence_cap=0.9,  # v6: raised from 0.85 — high-value bio facts deserve confidence
+            requires_corroboration=False,  # v6: was True — single-mention bio facts were being suppressed
             default_empty_on_noise=True,
             guidance_notes=(
-                "Voice transcript: MODERATELY CONSERVATIVE (was VERY). "
-                "Require ≥1 clear first-person statement for HIGH-VALUE biographical facts "
-                "(origin, religion, location, tools used, projects, travel plans). "
-                "Require ≥2 corroborating utterances for weaker claims (preferences, opinions). "
+                "Voice transcript: EXTRACTION-ENCOURAGING for biographical facts. "
+                "is_currently_true is the PRIMARY predicate for this source — expect to use it "
+                "for ~30% of extractions. Extract ALL clear first-person biographical statements: "
+                "origin/nationality, residence/location, visa/immigration status, religion, "
+                "family relationships (parents, siblings, spouse, children), health diagnoses "
+                "(self or family), work arrangements (WFH, role), education status, travel history, "
+                "language fluency, and any other durable state {user_name} states about themselves. "
+                "Each distinct biographical fact gets its OWN frame — do not consolidate different "
+                "facts together. A single session can produce 3-6+ is_currently_true frames normally. "
+                "Require ≥1 clear first-person statement per fact (not ≥2). "
                 "Filler words (um, like, yeah, so) do NOT invalidate a fact — extract when "
                 "the substantive content is clear despite surrounding disfluency. "
-                "Only output [] when input is predominantly filler with NO factual statements "
-                "about {user_name}. Biographical facts are always worth extracting if stated."
+                "Only output [] when input is predominantly filler with ZERO factual statements "
+                "about {user_name}. Biographical facts are ALWAYS worth extracting if stated."
             ),
         ),
         "manual_note": SourceTypeConfig(
@@ -204,12 +216,20 @@ def _build_source_type_registry() -> dict[str, SourceTypeConfig]:
             default_empty_on_noise=True,
             guidance_notes=(
                 "Screenshot OCR: may contain UI fragments, but ALSO may contain "
-                "credentials, PII, or sensitive information. ALWAYS extract if you see: "
-                "passwords, login fields, email addresses, API keys, security tokens, "
-                "credential managers (1Password, keychain), or any authentication UI. "
-                "Use predicate 'credential_detected' or 'sensitive_info_visible' for these. "
-                "For other content, extract coherent factual statements about {user_name}. "
-                "Prefer false positives over missing a password on screen."
+                "credentials, PII, or sensitive information. "
+                "PRIORITY RULE: If you see ANY of these patterns → EXTRACT immediately, "
+                "do NOT return []: "
+                "password/Passwd/PWD fields, keychain dialogs, login/sign-in pages, "
+                "email addresses (even garbled like user@gm8il.com), API keys, "
+                "security tokens, credential managers (1Password, keychain), "
+                "SSH hosts/usernames (Termius), encryption passwords, "
+                "masked characters (•••, ****), 'confidential', 'sensitive data', "
+                "Chrome 'wants to use your password' dialogs. "
+                "Use predicate 'credential_detected' for passwords/auth material, "
+                "'sensitive_info_visible' for emails/personal identifiers. "
+                "The garbled text quality does NOT matter — if a security pattern is "
+                "present, extract it. Prefer false positives over missing credentials. "
+                "If [SECURITY_OCR_ALERT] marker is present in input → you MUST extract."
             ),
         ),
         "ambient_voice": SourceTypeConfig(

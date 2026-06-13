@@ -101,7 +101,7 @@ class TypedProductionLikeMemories(BaseModel):
     facts: list[TypedProductionLikeMemory] = Field(
         default_factory=list,
         description="All memory-worthy facts from the conversation, as typed propositions.",
-        max_items=3,
+        max_items=6,
     )
 
 
