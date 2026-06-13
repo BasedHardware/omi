@@ -40,6 +40,8 @@ TYPED_PREDICATES = [
     "uses_tool",           # absorbs owns_device
     "is_currently_true",   # LAST RESORT — tightened definition, <10% of extractions
     "is_no_longer_true",
+    "credential_detected",  # credentials, passwords, PII, auth material (OCR/security sources)
+    "sensitive_info_visible",  # sensitive but non-credential info (emails, personal identifiers)
 ]
 
 
@@ -152,6 +154,7 @@ EXTRACT durable context: preferences/dislikes, decisions/commitments, projects/t
    Write the predicate EXACTLY as shown. Prefer the MOST SPECIFIC predicate. Use is_currently_true only as absolute last resort and only for concrete, non-obvious facts.
 
 1. quote_anchor — verbatim substring from transcript proving the fact. For {user_name} facts, must be self-report evidence ({user_name}'s own turn or first-person language "I"/"my"/"we"). Preserve ≥2 distinctive non-stopword terms. No paraphrase. If no literal self-report quote exists → no fact.
+   **OCR/security source EXCEPTION:** For credential_detected, sensitive_info_visible, and is_currently_true (when describing visible PII/passwords/credentials on screen), accept UI text fragments as evidence — a visible email address, password field, login prompt, or keychain dialog IS the evidence. No first-person language required for security-relevant OCR extractions only.
 
 2. content — one concise sentence (max 15 words), specific and timeless, starting with {user_name}. No hedging words ("might", "maybe", "could") — encode uncertainty in uncertainty_reasons instead.
 
@@ -208,7 +211,7 @@ NOISE SIGNALS — output EMPTY list when input is predominantly:
 • Narrative/media description: someone describing what they're watching/reading
   without personal factual content about {user_name}
 • Question-only input: questions without embedded factual assertions
-• UI/navigation chrome: menu items, button labels, notification text
+• UI/navigation chrome: menu items, button labels, notification text (EXCEPT login forms, password fields, email addresses, keychain dialogs, credential managers — those ARE extractable with credential_detected/sensitive_info_visible)
 • Garbled/incomprehensible: text with >20% unrecognizable or corrupted words
 • Generic work chatter: "had a meeting", "discussed X", "learned something new"
   unless it contains a concrete commitment/decision/preference about {user_name}
@@ -277,13 +280,16 @@ or narrative monologue without explicit factual statements about {user_name}
 produce an empty list. Do not extract from filler-heavy or garbled input.
 When in doubt on voice transcripts → output [].
 
-**Example 8 — OCR screenshot showing UI chrome / product page (output EMPTY list)**
+**Example 8 — OCR screenshot showing UI chrome / product page with NO credentials (output EMPTY list)**
 Input:  "••• tDo (a Chat * What's up next, Nik? + Nv*sesslon\nCustOTlliZe ••• Retard-12608921"
 Output: []
 NOTE: Fragmented/garbled OCR text, UI navigation elements, and transient screen
 content are not durable facts about {user_name}. Screenshots capture momentary
 state, not memory-worthy information. Unless OCR contains a clear self-reported
 fact (name, address, preference) in coherent text → output [].
+**BUT: If OCR shows passwords, email addresses, login prompts, keychain dialogs,
+credential fields, or other security-sensitive material visible on screen →
+EXTRACT with credential_detected or sensitive_info_visible. See Example 11.**
 
 **Example 9 — Work chatter that SOUNDS factual but is NOT durable (output EMPTY list)**
 Input:  "[Speaker 0]: We're committing to hire 10 engineers this quarter, "
@@ -317,7 +323,17 @@ by filler. Extract when {user_name} explicitly requests or commits to an action,
 regardless of how casual the surrounding chat is. Skip the greeting/filler turns
 ('Yo', 'How's going') — only extract the substantive turn.
 
-
+**Example 11 — OCR screenshot with visible credentials / security material (EXTRACT)**
+Input:  "••• • o\nChatGPT\n* Sign in\nclaude.ai/login?from=logout\n7ciaude IThACPI\nExlensions\nNotes\nTranslate\nSam\nkodjirna33@gmail.com"
+Output: predicate=sensitive_info_visible  quote="kodjirna33@gmail.com"
+        content="Nikita Shevchenko's email address (kodjirna33@gmail.com) is visible on screen"
+        subject_attribution=user
+NOTE: OCR screenshots that show email addresses, login fields, password prompts,
+keychain dialogs, API keys, or other security-sensitive material ARE memory-worthy.
+These represent credential/PII exposure events that should be recorded even though
+the source is OCR (low signal). Use credential_detected for passwords/auth material,
+sensitive_info_visible for emails/personal identifiers. The visible UI text itself
+serves as evidence — no first-person quote needed for security-relevant OCR extractions.
 
 === SUBJECT DISEMBIGUATION GUARD ===
 
@@ -396,7 +412,7 @@ UNIVERSAL RULES (all sources):
 • Each fact must be DURABLE (still true in 6 months) and NON-OBVIOUS
 • Never extract greetings, pure backchannel, or question-only input
 • HIGH signal sources (chat, conversation): Do NOT suppress clear user claims
-• LOW signal sources (ambient voice, OCR): Default to [] unless fact is unambiguous
+• LOW signal sources (ambient voice, OCR): Default to [] UNLESS the content contains credentials, PII, passwords, email addresses, login fields, or other security-sensitive material visible on screen — extract those with credential_detected or sensitive_info_visible
 
 **Existing memories you already know about {user_name} (DO NOT REPEAT ANY)**:
 ```
