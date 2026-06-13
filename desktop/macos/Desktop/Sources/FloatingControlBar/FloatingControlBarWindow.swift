@@ -908,6 +908,13 @@ class FloatingControlBarManager {
     private var pendingNotificationContext: PendingNotificationContext?
     private var floatingSessionKey = "floating"
     private var activeQueryGeneration: Int = 0
+    /// Per-query timing telemetry (Track 2: Make Omi Fast). Created on every
+    /// fired query (typed, voice, follow-up) and finalized once the response
+    /// ends — success, cancellation, quota-exceeded, error, or agent-routed.
+    /// Recorded by `AnalyticsManager.floatingBarQueryTiming` on completion.
+    /// Best-effort: a missing `record()` call is silently dropped, never blocks
+    /// the user's query.
+    private var activeTiming: FloatingBarQueryTiming?
     private var pendingFollowUpQuery: PendingFollowUpQuery?
 
     /// Whether the user has enabled the Ask Omi bar (persisted across launches).
@@ -1373,7 +1380,18 @@ class FloatingControlBarManager {
         // this down before the chat actually streams anything.
         prepareVisibleQueryState(message, in: barWindow, fromVoice: fromVoice)
 
+        // Start a fresh timing for this query. Every fired query — typed,
+        // voice, follow-up — gets its own timing struct. Stored as
+        // `activeTiming` so `sendAIQuery` (and the streaming sink) can
+        // append stage marks and call `record()` exactly once.
+        activeTiming = FloatingBarQueryTiming(
+            source: fromVoice ? .voice : .text,
+            queryLength: message.count
+        )
+        activeTiming?.mark(.userInput)
+
         let decision = await AgentPillsManager.classify(message)
+        activeTiming?.mark(.routerDone)
         if decision.route == .agent {
             let model = ShortcutSettings.shared.selectedModel.isEmpty
                 ? "claude-sonnet-4-6"
@@ -1388,6 +1406,17 @@ class FloatingControlBarManager {
             // Tear down the inline state we set up for the thinking spinner.
             barWindow.state.aiInputText = ""
             barWindow.closeAIConversation()
+            // Record the timing — query ended because we routed to an agent.
+            if var timing = activeTiming {
+                var ended = timing
+                ended.endQuery(
+                    hadScreenshot: false,
+                    toolCallCount: 0,
+                    reason: .routedToAgent
+                )
+                AnalyticsManager.shared.floatingBarQueryTiming(ended)
+            }
+            activeTiming = nil
             return
         }
         // Chat route: continue with the normal inline flow. sendAIQuery will
@@ -1672,6 +1701,16 @@ class FloatingControlBarManager {
         prepareVisibleQueryState(message, in: barWindow, fromVoice: queryFromVoice)
         let generation = activeQueryGeneration
 
+        // Defensive: if routeQuery wasn't called (e.g. direct call from a
+        // follow-up helper), start a timing now so we still record telemetry.
+        if activeTiming == nil {
+            activeTiming = FloatingBarQueryTiming(
+                source: queryFromVoice ? .voice : .text,
+                queryLength: message.count
+            )
+            activeTiming?.mark(.userInput)
+        }
+
         // Check monthly usage limit for free users (shared with main chat page).
         let limiter = FloatingBarUsageLimiter.shared
         if provider.isUsingOmiAccountProvider {
@@ -1689,16 +1728,32 @@ class FloatingControlBarManager {
                     object: nil,
                     userInfo: ["reason": "floating_bar"]
                 )
+                // End timing: query blocked at the quota gate.
+                if var timing = activeTiming {
+                    var ended = timing
+                    ended.mark(.quotaDone)
+                    ended.endQuery(
+                        hadScreenshot: false,
+                        toolCallCount: 0,
+                        cancelled: true,
+                        reason: .quotaExceeded
+                    )
+                    AnalyticsManager.shared.floatingBarQueryTiming(ended)
+                }
+                activeTiming = nil
                 return
             }
 
             limiter.recordQuery()
         }
+        activeTiming?.mark(.quotaDone)
+
         FloatingBarVoicePlaybackService.shared.interruptCurrentResponse()
 
         let screenshotData = await Task.detached { () -> Data? in
             return ScreenCaptureManager.captureScreenData()
         }.value
+        activeTiming?.mark(.screenshotDone, note: screenshotData == nil ? "skipped" : nil)
         barWindow.orderFrontRegardless()
 
         AnalyticsManager.shared.floatingBarQuerySent(messageLength: message.count, hasScreenshot: screenshotData != nil)
@@ -1715,6 +1770,12 @@ class FloatingControlBarManager {
         // Record message count before sending so we can detect the new AI response
         // in a shared provider that may already have many messages
         let messageCountBefore = provider.messages.count
+
+        // Track the model used so timing records it on the final PostHog payload.
+        let floatingModel = ShortcutSettings.shared.selectedModel.isEmpty
+            ? ModelQoS.Claude.defaultSelection
+            : ShortcutSettings.shared.selectedModel
+        activeTiming?.model = floatingModel
 
         // Observe messages for streaming response
         chatCancellable?.cancel()
@@ -1740,6 +1801,12 @@ class FloatingControlBarManager {
                     )
                 }
 
+                // Time-to-first-delta — mark the first moment we see an AI
+                // message marked as streaming. This is the latency users feel.
+                if aiMessage.isStreaming, self.activeTiming?.ms(for: .firstDelta) == nil {
+                    self.activeTiming?.mark(.firstDelta)
+                }
+
                 if aiMessage.isStreaming {
                     barWindow?.state.isAILoading = false
                     if let barWindow = barWindow, !hasSetUpResponseHeight {
@@ -1753,12 +1820,29 @@ class FloatingControlBarManager {
                     }
                 } else {
                     barWindow?.state.isAILoading = false
+                    // isStreaming flipped to false — full response arrived.
+                    // End the timing now while the final token counts are
+                    // still attached to the AI message.
+                    if self.activeTiming?.final == nil {
+                        if var timing = self.activeTiming {
+                            let toolCallCount = aiMessage.contentBlocks.filter { block in
+                                if case .toolCall = block { return true } else { return false }
+                            }.count
+                            var ended = timing
+                            ended.endQuery(
+                                hadScreenshot: screenshotData != nil,
+                                toolCallCount: toolCallCount,
+                                promptTokens: aiMessage.metadata?.inputTokens,
+                                completionTokens: aiMessage.metadata?.outputTokens,
+                                costUsd: aiMessage.metadata?.costUsd
+                            )
+                            AnalyticsManager.shared.floatingBarQueryTiming(ended)
+                            self.activeTiming = nil
+                        }
+                    }
                 }
             }
 
-        let floatingModel = ShortcutSettings.shared.selectedModel.isEmpty
-            ? ModelQoS.Claude.defaultSelection
-            : ShortcutSettings.shared.selectedModel
         let notificationContextSuffix = notificationContextSuffixIfNeeded(for: message)
         await provider.sendMessage(
             message,
@@ -1792,6 +1876,25 @@ class FloatingControlBarManager {
         // Handle errors after sendMessage completes
         barWindow.state.isAILoading = false
 
+        // If the streaming sink never fired (e.g. sendMessage threw before any
+        // first delta was published), finalize the timing here with the
+        // appropriate reason. Normal completions are finalized in the sink
+        // itself when isStreaming flips to false.
+        if activeTiming?.final == nil, let errorText = provider.errorMessage {
+            if var timing = activeTiming {
+                var ended = timing
+                ended.endQuery(
+                    hadScreenshot: screenshotData != nil,
+                    toolCallCount: 0,
+                    cancelled: true,
+                    reason: .error,
+                    error: errorText
+                )
+                AnalyticsManager.shared.floatingBarQueryTiming(ended)
+            }
+            activeTiming = nil
+        }
+
         if let errorText = provider.errorMessage {
             // Provider reported an error (timeout, bridge crash, etc.)
             // Show it even if there's partial content — append to existing or create new message
@@ -1803,6 +1906,20 @@ class FloatingControlBarManager {
         } else if barWindow.state.currentAIMessage == nil || barWindow.state.aiResponseText.isEmpty {
             // No error message and no response — something else went wrong
             barWindow.state.currentAIMessage = ChatMessage(text: "Failed to get a response. Please try again.", sender: .ai)
+            // Same as the error path: finalize the timing if the streaming
+            // sink never ran.
+            if activeTiming?.final == nil, var timing = activeTiming {
+                var ended = timing
+                ended.endQuery(
+                    hadScreenshot: screenshotData != nil,
+                    toolCallCount: 0,
+                    cancelled: true,
+                    reason: .error,
+                    error: "no_response"
+                )
+                AnalyticsManager.shared.floatingBarQueryTiming(ended)
+                activeTiming = nil
+            }
         }
 
         // Ensure the response view is visible and resized (handles the case where
