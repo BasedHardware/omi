@@ -1236,6 +1236,7 @@ def process_segment(
                 transcript_segments=transcript_segments,
                 source=source,
                 is_locked=is_locked,
+                private_cloud_sync_enabled=private_cloud_sync_enabled,
             )
             created = process_conversation(uid, language, create_memory)
             with lock:
@@ -1522,6 +1523,9 @@ async def sync_local_files(
 
         # Fetch user transcription preferences once before spawning threads
         transcription_prefs = await run_blocking(db_executor, users_db.get_user_transcription_preferences, uid)
+        private_cloud_sync_enabled = bool(
+            await run_blocking(db_executor, users_db.get_user_private_cloud_sync_enabled, uid)
+        )
 
         # Build speaker embeddings cache once for all segments (voice + text identification)
         try:
@@ -1553,6 +1557,7 @@ async def sync_local_files(
                     person_embeddings_cache,
                     conversation_id,
                     assignment_turnstile,
+                    private_cloud_sync_enabled=private_cloud_sync_enabled,
                 )
                 for path in ordered_paths
             ]
@@ -1827,8 +1832,8 @@ async def _run_full_pipeline_background_async(
             # --- Phase 4: Fetch prefs & embeddings ---
             transcription_prefs = await run_blocking(db_executor, users_db.get_user_transcription_preferences, uid)
             # Mirror realtime: store conversation audio only when private cloud sync is on.
-            private_cloud_sync_enabled = await run_blocking(
-                db_executor, users_db.get_user_private_cloud_sync_enabled, uid
+            private_cloud_sync_enabled = bool(
+                await run_blocking(db_executor, users_db.get_user_private_cloud_sync_enabled, uid)
             )
             data_protection_level = (
                 await run_blocking(db_executor, users_db.get_data_protection_level, uid)
@@ -1883,8 +1888,8 @@ async def _run_full_pipeline_background_async(
                     person_embeddings_cache,
                     target_conversation_id,
                     assignment_turnstile,
-                    private_cloud_sync_enabled,
-                    data_protection_level,
+                    private_cloud_sync_enabled=private_cloud_sync_enabled,
+                    data_protection_level=data_protection_level,
                 )
                 if ok and task_mode:
                     add_processed_segment(job_id, path)
