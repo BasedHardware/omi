@@ -11,13 +11,74 @@ import inspect
 import re
 import sys
 from datetime import datetime, timezone
+from pathlib import Path
 from types import ModuleType
 from unittest.mock import MagicMock
 
+BACKEND_DIR = Path(__file__).resolve().parents[2]
+
+
+def _ensure_package_path(name: str, path: Path):
+    module = sys.modules.get(name)
+    if module is None:
+        module = ModuleType(name)
+        sys.modules[name] = module
+
+    module.__path__ = [str(path)]
+
+    parent_name, _, child_name = name.rpartition(".")
+    if parent_name:
+        parent = sys.modules.get(parent_name)
+        if parent is not None:
+            setattr(parent, child_name, module)
+
+    return module
+
+
+def _drop_stale_module(name: str, expected_file: Path):
+    module = sys.modules.get(name)
+    if module is None:
+        return
+
+    module_file = getattr(module, "__file__", None)
+    if module_file is not None and Path(module_file).resolve() == expected_file.resolve():
+        return
+
+    sys.modules.pop(name, None)
+    parent_name, _, child_name = name.rpartition(".")
+    parent = sys.modules.get(parent_name)
+    if parent is not None and getattr(parent, child_name, None) is module:
+        delattr(parent, child_name)
+
+
+_ensure_package_path("utils", BACKEND_DIR / "utils")
+_ensure_package_path("utils.llm", BACKEND_DIR / "utils" / "llm")
+_ensure_package_path("models", BACKEND_DIR / "models")
+for _module_name in [
+    "models.app",
+    "models.audio_file",
+    "models.calendar_context",
+    "models.chat",
+    "models.conversation",
+    "models.conversation_enums",
+    "models.conversation_photo",
+    "models.geolocation",
+    "models.other",
+    "models.structured",
+    "models.transcript_segment",
+]:
+    _drop_stale_module(_module_name, BACKEND_DIR / Path(*_module_name.split(".")).with_suffix(".py"))
+_drop_stale_module("utils.llm.conversation_processing", BACKEND_DIR / "utils" / "llm" / "conversation_processing.py")
+
 # Mock modules that initialize GCP clients or require API keys at import time
 sys.modules.setdefault("database._client", MagicMock())
-_mock_clients = MagicMock()
-sys.modules.setdefault("utils.llm.clients", _mock_clients)
+_mock_clients = sys.modules.get("utils.llm.clients")
+if _mock_clients is None:
+    _mock_clients = ModuleType("utils.llm.clients")
+    sys.modules["utils.llm.clients"] = _mock_clients
+sys.modules["utils.llm"].clients = _mock_clients
+_mock_clients.get_llm = MagicMock()
+_mock_clients.parser = MagicMock()
 
 
 class _FakePydanticOutputParser:
