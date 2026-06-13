@@ -80,7 +80,7 @@ _saved_model_modules = {name: module for name, module in sys.modules.items() if 
 for _n in list(sys.modules):
     if _is_stubbed_name(_n):
         sys.modules.pop(_n, None)
-    if _is_model_name(_n):
+    elif _is_model_name(_n):
         sys.modules.pop(_n, None)
 sys.meta_path.insert(0, _finder)
 try:
@@ -90,8 +90,9 @@ finally:
     for _n in list(sys.modules):
         if _is_stubbed_name(_n):
             sys.modules.pop(_n, None)
-        if _is_model_name(_n) and _n not in _saved_model_modules:
+        elif _is_model_name(_n) and _n not in _saved_model_modules:
             sys.modules.pop(_n, None)
+    # Restore the pre-collection module state; integ already holds the real model classes it needs.
     for _n, _module in _saved_model_modules.items():
         sys.modules[_n] = _module
 
