@@ -9,10 +9,59 @@ Covers:
 """
 
 import asyncio
+import sys
 import time
+import types
+from pathlib import Path
 from unittest.mock import patch
 
 import pytest
+
+BACKEND_DIR = Path(__file__).resolve().parents[2]
+
+
+def _ensure_package_path(name: str, path: Path) -> types.ModuleType:
+    module = sys.modules.get(name)
+    if module is None or not hasattr(module, "__path__"):
+        module = types.ModuleType(name)
+        sys.modules[name] = module
+
+    module.__path__ = [str(path)]
+
+    if "." in name:
+        parent_name, attr_name = name.rsplit(".", 1)
+        parent = sys.modules.get(parent_name)
+        if parent is not None:
+            setattr(parent, attr_name, module)
+
+    return module
+
+
+def _drop_stale_module(name: str, expected_file: Path) -> None:
+    module = sys.modules.get(name)
+    if module is None:
+        return
+
+    module_file = getattr(module, "__file__", None)
+    try:
+        module_path = Path(module_file).resolve() if module_file else None
+    except TypeError:
+        module_path = None
+
+    if module_path == expected_file.resolve():
+        return
+
+    sys.modules.pop(name, None)
+
+    if "." in name:
+        parent_name, attr_name = name.rsplit(".", 1)
+        parent = sys.modules.get(parent_name)
+        if parent is not None and getattr(parent, attr_name, None) is module:
+            delattr(parent, attr_name)
+
+
+_ensure_package_path("utils", BACKEND_DIR / "utils")
+_drop_stale_module("utils.http_client", BACKEND_DIR / "utils" / "http_client.py")
 
 from utils.http_client import (
     WebhookCircuitBreaker,
