@@ -23,6 +23,7 @@ from __future__ import annotations
 import os
 import sys
 import types
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -37,12 +38,84 @@ os.environ.setdefault("GOOGLE_CLIENT_ID", "test")
 os.environ.setdefault("GOOGLE_CLIENT_SECRET", "test")
 os.environ.setdefault("BASE_API_URL", "http://localhost:8080")
 
-# Pre-mock heavy deps before importing the module under test (Python 3.9 compat —
-# database.redis_db uses dict | None syntax that requires 3.10+).
-_mock = MagicMock()
-for mod in ['firebase_admin.auth', 'database.redis_db', 'utils.http_client', 'utils.log_sanitizer']:
-    sys.modules.setdefault(mod, _mock)
+_BACKEND_DIR = Path(__file__).resolve().parents[2]
 
+
+def _ensure_package_path(name: str, path: Path) -> types.ModuleType:
+    module = sys.modules.get(name)
+    if module is None or not hasattr(module, "__path__"):
+        module = types.ModuleType(name)
+        sys.modules[name] = module
+
+    module.__path__ = [str(path)]
+
+    if "." in name:
+        parent_name, attr_name = name.rsplit(".", 1)
+        parent = sys.modules.get(parent_name)
+        if parent is not None:
+            setattr(parent, attr_name, module)
+
+    return module
+
+
+def _stub_module(name: str) -> types.ModuleType:
+    module = sys.modules.get(name)
+    if module is None or isinstance(module, MagicMock):
+        module = types.ModuleType(name)
+        sys.modules[name] = module
+
+    if "." in name:
+        parent_name, attr_name = name.rsplit(".", 1)
+        parent = sys.modules.get(parent_name)
+        if parent is not None:
+            setattr(parent, attr_name, module)
+
+    return module
+
+
+def _drop_stale_module(name: str, expected_file: Path) -> None:
+    module = sys.modules.get(name)
+    if module is None:
+        return
+
+    module_file = getattr(module, "__file__", None)
+    try:
+        module_path = Path(module_file).resolve() if module_file else None
+    except TypeError:
+        module_path = None
+
+    if module_path == expected_file.resolve():
+        return
+
+    sys.modules.pop(name, None)
+
+    if "." in name:
+        parent_name, attr_name = name.rsplit(".", 1)
+        parent = sys.modules.get(parent_name)
+        if parent is not None and getattr(parent, attr_name, None) is module:
+            delattr(parent, attr_name)
+
+
+_ensure_package_path("utils", _BACKEND_DIR / "utils")
+_ensure_package_path("routers", _BACKEND_DIR / "routers")
+_drop_stale_module("routers.auth", _BACKEND_DIR / "routers" / "auth.py")
+
+firebase_admin_mod = _stub_module("firebase_admin")
+firebase_auth_mod = _stub_module("firebase_admin.auth")
+firebase_admin_mod.auth = firebase_auth_mod
+redis_mod = _stub_module("database.redis_db")
+http_client_mod = _stub_module("utils.http_client")
+log_sanitizer_mod = _stub_module("utils.log_sanitizer")
+
+for attr in ["set_auth_session", "get_auth_session", "set_auth_code", "get_auth_code", "delete_auth_code"]:
+    if not hasattr(redis_mod, attr):
+        setattr(redis_mod, attr, MagicMock())
+if not hasattr(http_client_mod, "get_auth_client"):
+    http_client_mod.get_auth_client = MagicMock()
+if not hasattr(log_sanitizer_mod, "sanitize"):
+    log_sanitizer_mod.sanitize = lambda value: value
+
+# Stub template support when jinja2 is unavailable in a minimal test environment.
 try:
     import jinja2  # noqa: F401
 except ImportError:
@@ -52,9 +125,8 @@ except ImportError:
 
 # Allow importing ``backend.routers.auth`` without running the full backend
 # entrypoint — same trick the rest of tests/unit uses.
-_BACKEND_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
-if _BACKEND_DIR not in sys.path:
-    sys.path.insert(0, _BACKEND_DIR)
+if str(_BACKEND_DIR) not in sys.path:
+    sys.path.insert(0, str(_BACKEND_DIR))
 
 from routers.auth import _validate_redirect_uri  # noqa: E402
 
