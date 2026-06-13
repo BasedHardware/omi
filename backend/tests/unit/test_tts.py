@@ -30,6 +30,11 @@ os.environ.setdefault(
 def _stub_module(name):
     mod = types.ModuleType(name)
     sys.modules[name] = mod
+    if "." in name:
+        parent_name, attr = name.rsplit(".", 1)
+        parent = sys.modules.get(parent_name)
+        if parent is not None:
+            setattr(parent, attr, mod)
     return mod
 
 
@@ -47,6 +52,60 @@ def _restore_real_package(name, path):
         sys.modules[name] = mod
     mod.__path__ = [str(path)]
     return mod
+
+
+_RESTORED_MODULES = (
+    "firebase_admin",
+    "firebase_admin.firestore",
+    "firebase_admin.auth",
+    "firebase_admin.credentials",
+    "redis",
+    "database",
+    "database.redis_db",
+    "utils.other.endpoints",
+    "utils.http_client",
+    "utils.log_sanitizer",
+    "models",
+    "models.tts",
+    "routers.tts",
+)
+_PARENT_ATTRS = (
+    ("firebase_admin", "firestore"),
+    ("firebase_admin", "auth"),
+    ("firebase_admin", "credentials"),
+    ("database", "redis_db"),
+    ("utils.other", "endpoints"),
+    ("utils", "http_client"),
+    ("utils", "log_sanitizer"),
+    ("models", "tts"),
+    ("routers", "tts"),
+)
+_MISSING = object()
+_saved_modules = {name: sys.modules.get(name, _MISSING) for name in _RESTORED_MODULES}
+_saved_parent_attrs = {
+    (parent_name, attr): getattr(sys.modules.get(parent_name), attr, _MISSING)
+    for parent_name, attr in _PARENT_ATTRS
+    if sys.modules.get(parent_name) is not None
+}
+
+
+def _restore_stub_modules():
+    for name in sorted(_RESTORED_MODULES, key=lambda module_name: module_name.count("."), reverse=True):
+        original = _saved_modules[name]
+        if original is _MISSING:
+            sys.modules.pop(name, None)
+        else:
+            sys.modules[name] = original
+
+    for (parent_name, attr), original in _saved_parent_attrs.items():
+        parent = sys.modules.get(parent_name)
+        if parent is None:
+            continue
+        if original is _MISSING:
+            if hasattr(parent, attr):
+                delattr(parent, attr)
+        else:
+            setattr(parent, attr, original)
 
 
 # ---------------------------------------------------------------------------
@@ -83,8 +142,10 @@ def _load_tts_router_module():
     redis_db_stub = types.ModuleType("database.redis_db")
     redis_db_stub.check_tts_rate_limit = MagicMock(return_value=(0, 0))
     sys.modules["database.redis_db"] = redis_db_stub
-    sys.modules.setdefault("database", _stub_package("database"))
-    sys.modules["database"].redis_db = redis_db_stub
+    database_pkg = sys.modules.get("database")
+    if database_pkg is None:
+        database_pkg = _stub_package("database")
+    database_pkg.redis_db = redis_db_stub
 
     # Stub http_client
     http_client_stub = types.ModuleType("utils.http_client")
@@ -114,7 +175,10 @@ def _load_tts_router_module():
     return mod
 
 
-tts_router = _load_tts_router_module()
+try:
+    tts_router = _load_tts_router_module()
+finally:
+    _restore_stub_modules()
 
 
 # ---------------------------------------------------------------------------

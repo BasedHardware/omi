@@ -11,12 +11,90 @@ import importlib
 import sys
 import types
 import unittest
+from pathlib import Path
 from unittest.mock import patch, MagicMock
 
 from fastapi import FastAPI, WebSocket, WebSocketException, Depends
 from fastapi.testclient import TestClient
-from firebase_admin.auth import InvalidIdTokenError
 from starlette.websockets import WebSocketDisconnect
+
+BACKEND_DIR = Path(__file__).resolve().parent.parent.parent
+
+
+def _remove_module(name):
+    mod = sys.modules.pop(name, None)
+    if "." not in name:
+        return
+
+    parent_name, attr = name.rsplit(".", 1)
+    parent = sys.modules.get(parent_name)
+    if parent is not None and getattr(parent, attr, None) is mod:
+        delattr(parent, attr)
+
+
+def _restore_package_path(name, path):
+    mod = sys.modules.get(name)
+    if not isinstance(mod, types.ModuleType) or not getattr(mod, "__path__", None):
+        mod = types.ModuleType(name)
+        sys.modules[name] = mod
+    mod.__path__ = [str(path)]
+    if "." in name:
+        parent_name, attr = name.rsplit(".", 1)
+        parent = sys.modules.get(parent_name)
+        if parent is not None:
+            setattr(parent, attr, mod)
+    return mod
+
+
+def _remove_incomplete_module(name, required_attrs):
+    mod = sys.modules.get(name)
+    if mod is not None and not all(hasattr(mod, attr) for attr in required_attrs):
+        _remove_module(name)
+
+
+def _install_firebase_auth_stub():
+    firebase_admin = types.ModuleType("firebase_admin")
+    firebase_admin.__path__ = []
+    auth_module = types.ModuleType("firebase_admin.auth")
+
+    class _InvalidIdTokenError(Exception):
+        pass
+
+    def _raise_invalid_token(_token):
+        raise _InvalidIdTokenError("invalid token")
+
+    auth_module.InvalidIdTokenError = _InvalidIdTokenError
+    auth_module.verify_id_token = _raise_invalid_token
+    auth_module.get_user = MagicMock()
+    firebase_admin.auth = auth_module
+    sys.modules["firebase_admin"] = firebase_admin
+    sys.modules["firebase_admin.auth"] = auth_module
+
+
+firebase_auth_module = sys.modules.get("firebase_admin.auth")
+if firebase_auth_module is None or not isinstance(getattr(firebase_auth_module, "InvalidIdTokenError", None), type):
+    _install_firebase_auth_stub()
+
+_restore_package_path("database", BACKEND_DIR / "database")
+_restore_package_path("utils", BACKEND_DIR / "utils")
+_restore_package_path("utils.other", BACKEND_DIR / "utils" / "other")
+
+_remove_incomplete_module("database.redis_db", ("check_rate_limit", "try_acquire_listen_lock"))
+_remove_incomplete_module(
+    "utils.byok",
+    ("extract_byok_from_websocket", "set_byok_keys", "validate_byok_request", "validate_byok_websocket"),
+)
+_remove_incomplete_module("utils.executors", ("critical_executor", "run_blocking"))
+_remove_incomplete_module(
+    "utils.rate_limit_config",
+    ("RATE_POLICIES", "RATE_LIMIT_SHADOW", "get_effective_limit"),
+)
+_remove_incomplete_module(
+    "utils.other.endpoints",
+    ("get_current_user_uid_ws_listen", "get_current_user_uid_ws", "get_current_user_uid"),
+)
+
+from firebase_admin.auth import InvalidIdTokenError
 
 database_users_stub = types.ModuleType('database.users')
 database_users_stub.record_user_platform = MagicMock()
