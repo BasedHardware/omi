@@ -335,18 +335,57 @@ check WHO the fact is about before extracting:
 |- "Alex said he'll handle the review" → SKIP
   [Alex's commitment, not user's]
 
-**VOICE TRANSCRIPT MULTI-SPEAKER RULE:**
+**VOICE TRANSCRIPT MULTI-SPEAKER RULE — VIOLATION = HALLUCINATION:**
 When input contains multiple speakers (SPEAKER 0, SPEAKER 1, SPEAKER 2, etc.),
 ONLY extract facts where {user_name} (SPEAKER 0 / primary speaker) is the explicit subject.
 Facts about other speakers' preferences, tools, work, or plans are NOT about {user_name}
 → output [] for those. A transcript mentioning "SPEAKER 2 uses Chrome" tells you nothing
-about {user_name} → SKIP entirely. This is the #1 source of voice FPs.
+about {user_name} → SKIP entirely.
+
+⚠️ EXTRACTING A SPEAKER_N FACT AS IF IT WERE ABOUT {user_name} IS A HALLUCINATION.
+This is the #1 source of voice FPs. Every time you extract a fact about SPEAKER 1/2/3+
+and attribute it to {user_name}, you are hallucinating. When you see another speaker's
+name/role as the grammatical subject, that fact is NOT about {user_name}. No exceptions.
+If 100% of facts in a transcript are about other speakers → output [] for the entire transcript.
 
 **Rule of thumb:** If you can rephrase the sentence as "{user_name} [verb]..."
 and it means the same thing → subject=user. If the named person is the one
 doing/being/having something → NOT about {user_name} → skip or third_party.
 When in doubt about subject attribution, use third_party + add
 uncertainty_reason=subject_ambiguous and set confidence ≤ 0.7.
+
+
+=== PREDICATE DISAMBIGUATION RULES ===
+
+Pick the MOST SPECIFIC predicate. Common mis-mappings that cause errors:
+
+• "founder / creator / co-founder of X" → knows_person(person=X), NOT works_on.
+  [Founding a relationship, not working on a project]
+• "uses / owns / has a [device]" (MacBook, iPhone, monitor) → uses_tool, NOT is_currently_true.
+  [Device ownership is a tool-use fact, not a generic state]
+• "leading / heading X project" → works_on(X), NOT knows_person.
+  [Project leadership = working on the project]
+• "meeting with / talking to [person]" → knows_person if relationship context, else SKIP.
+  [One-time meetings without enduring relationship context are not memory-worthy]
+• "going to / traveling to [place]" → plans_travel_to, NOT is_currently_true.
+  [Travel plans have their own predicate — do NOT degrade to is_currently_true]
+
+When two predicates could fit, ALWAYS pick the more specific one. is_currently_true
+is a LAST RESORT predicate (<10% of extractions). If you're using it for >10% of
+your extractions, you're being too lazy with predicate selection.
+
+
+=== EXTRACTION CONSOLIDATION RULE ===
+
+ONE factual statement = ONE frame maximum. Never split one fact into multiple frames:
+• ❌ "Applying for green card" → 3 separate frames (application, card, status)
+• ✅ "Applying for green card" → 1 frame with the complete thought
+• ❌ "Committed to $100K ARR by June" → 2 frames ($100K ARR, June deadline)
+• ✅ "Committed to $100K ARR by June" → 1 frame with full commitment
+
+If you find yourself extracting 3+ frames from a single short transcript,
+STOP and consolidate. Each additional frame increases hallucination risk.
+Prefer 1 well-formed frame over 3 redundant ones. Quality > quantity.
 
 
 UNIVERSAL RULES (all sources):
