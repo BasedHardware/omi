@@ -1036,8 +1036,14 @@ async def _stream_handler(
                         return cb
 
                     callback = make_multi_channel_callback(ch_config)
+                    # Pass the user's vocabulary (always includes "Omi") so phone-call /
+                    # multi-channel transcripts get the same keyterm hinting as single-channel.
                     stt_sockets_multi[i] = await _create_stt_socket(
-                        callback, stt_language, TARGET_SAMPLE_RATE, stt_model
+                        callback,
+                        stt_language,
+                        TARGET_SAMPLE_RATE,
+                        stt_model,
+                        kw=vocabulary[:100] if vocabulary else None,
                     )
                 logger.info(
                     f"Multi-channel STT connections established ({len(channel_configs)} channels) {uid} {session_id}"
