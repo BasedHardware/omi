@@ -11,7 +11,7 @@ import logging
 import os
 import time
 import uuid
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 import database.fair_use as fair_use_db
 import database.users as users_db
@@ -434,66 +434,69 @@ def clear_fair_use_on_upgrade(uid: str) -> bool:
     return True
 
 
-def is_hard_restricted(uid: str) -> bool:
-    """Check if a user is hard-restricted (speech cap enforced as hard block)."""
+def _as_naive_utc(dt: datetime) -> datetime:
+    """Normalize a datetime to naive UTC for comparisons with datetime.utcnow()."""
+    if dt.tzinfo is not None:
+        return dt.astimezone(timezone.utc).replace(tzinfo=None)
+    return dt
+
+
+def _retry_after_seconds_from_restrict_until(restrict_until) -> int | None:
+    if not isinstance(restrict_until, datetime):
+        return None
+    restrict_until = _as_naive_utc(restrict_until)
+    seconds = int((restrict_until - datetime.utcnow()).total_seconds())
+    return max(seconds, 1) if seconds > 0 else None
+
+
+def get_hard_restriction_status(uid: str) -> tuple[bool, int | None]:
+    """Return whether the user is hard-restricted and, when known, the retry window in seconds."""
     if not FAIR_USE_ENABLED or FAIR_USE_KILL_SWITCH:
-        return False
+        return False, None
     if uid in FAIR_USE_EXEMPT_UIDS:
-        return False
+        return False, None
 
     # Single Firestore read — get_enforcement_stage uses cache, but we need
     # restrict_until too, so read the full state once and check stage from it.
     state = fair_use_db.get_fair_use_state(uid)
     stage = state.get('stage', 'none')
     if stage != 'restrict':
-        return False
+        return False, None
 
     # Check if restriction has expired
     restrict_until = state.get('restrict_until')
     if restrict_until and isinstance(restrict_until, datetime):
         # Normalize to naive UTC for comparison (Firestore may return aware datetimes)
-        if restrict_until.tzinfo is not None:
-            restrict_until = restrict_until.replace(tzinfo=None)
+        restrict_until = _as_naive_utc(restrict_until)
         if datetime.utcnow() > restrict_until:
             # Restriction expired, reset to throttle
             fair_use_db.update_fair_use_state(uid, {'stage': 'throttle', 'restrict_until': None})
             invalidate_enforcement_cache(uid)
-            return False
+            return False, None
 
     # Check if speech is over hard cap
     speech = get_rolling_speech_ms(uid)
     # In restrict mode, enforce the soft caps as hard caps
-    return (
+    restricted = (
         speech['daily_ms'] > FAIR_USE_DAILY_SPEECH_MS
         or speech['three_day_ms'] > FAIR_USE_3DAY_SPEECH_MS
         or speech['weekly_ms'] > FAIR_USE_WEEKLY_SPEECH_MS
     )
+    return restricted, _retry_after_seconds_from_restrict_until(restrict_until) if restricted else None
+
+
+def is_hard_restricted(uid: str) -> bool:
+    """Check if a user is hard-restricted (speech cap enforced as hard block)."""
+    return get_hard_restriction_status(uid)[0]
 
 
 def get_hard_restriction_retry_after_seconds(uid: str) -> int | None:
     """Return seconds until the active hard restriction expires, if known."""
-    if not FAIR_USE_ENABLED or FAIR_USE_KILL_SWITCH:
-        return None
-    if uid in FAIR_USE_EXEMPT_UIDS:
-        return None
-
     try:
-        state = fair_use_db.get_fair_use_state(uid)
+        return get_hard_restriction_status(uid)[1]
     except Exception as e:
         logger.error(f'fair_use: error checking hard restriction retry-after for {uid}: {e}')
         return None
-
-    if state.get('stage', 'none') != 'restrict':
-        return None
-
-    restrict_until = state.get('restrict_until')
-    if not isinstance(restrict_until, datetime):
-        return None
-    if restrict_until.tzinfo is not None:
-        restrict_until = restrict_until.replace(tzinfo=None)
-
-    seconds = int((restrict_until - datetime.utcnow()).total_seconds())
-    return max(seconds, 1) if seconds > 0 else None
 
 
 # ---------------------------------------------------------------------------
