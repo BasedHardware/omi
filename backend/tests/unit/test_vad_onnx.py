@@ -11,6 +11,7 @@ import os
 import struct
 import tempfile
 import wave
+from pathlib import Path
 from unittest.mock import MagicMock, patch, PropertyMock
 
 import numpy as np
@@ -24,6 +25,47 @@ _mock_redis = MagicMock()
 
 import sys
 import types
+
+BACKEND_DIR = Path(__file__).resolve().parents[2]
+
+
+def _ensure_package_path(name: str, path: Path):
+    module = sys.modules.get(name)
+    if module is None:
+        module = types.ModuleType(name)
+        sys.modules[name] = module
+
+    module.__path__ = [str(path)]
+
+    parent_name, _, child_name = name.rpartition(".")
+    if parent_name:
+        parent = sys.modules.get(parent_name)
+        if parent is not None:
+            setattr(parent, child_name, module)
+
+    return module
+
+
+def _drop_stale_module(name: str, expected_file: Path):
+    module = sys.modules.get(name)
+    if module is None:
+        return
+
+    module_file = getattr(module, "__file__", None)
+    if module_file is not None and Path(module_file).resolve() == expected_file.resolve():
+        return
+
+    sys.modules.pop(name, None)
+    parent_name, _, child_name = name.rpartition(".")
+    parent = sys.modules.get(parent_name)
+    if parent is not None and getattr(parent, child_name, None) is module:
+        delattr(parent, child_name)
+
+
+_ensure_package_path("utils", BACKEND_DIR / "utils")
+_ensure_package_path("utils.stt", BACKEND_DIR / "utils" / "stt")
+_drop_stale_module("utils.http_client", BACKEND_DIR / "utils" / "http_client.py")
+_drop_stale_module("utils.stt.vad", BACKEND_DIR / "utils" / "stt" / "vad.py")
 
 
 class _MockAudioSegment:
