@@ -177,6 +177,7 @@ class CreateConversation(BaseModel):
     processing_conversation_id: Optional[str] = None
     calendar_meeting_context: Optional[CalendarMeetingContext] = None
     is_locked: bool = False
+    private_cloud_sync_enabled: bool = False
 
     def get_transcript(self, include_timestamps: bool, people: List[Person] = None, user_name: str = None) -> str:
         return TranscriptSegment.segments_as_string(
