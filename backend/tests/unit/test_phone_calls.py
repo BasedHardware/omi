@@ -97,6 +97,7 @@ _TEMP_STUB_MODULES = (
 )
 _MISSING = object()
 _saved_modules = {name: sys.modules.get(name, _MISSING) for name in _TEMP_STUB_MODULES}
+_saved_parent_attrs = {}
 
 
 def _install_module(name, module):
@@ -105,6 +106,7 @@ def _install_module(name, module):
         parent_name, attr = name.rsplit('.', 1)
         parent = sys.modules.get(parent_name)
         if parent is not None:
+            _saved_parent_attrs.setdefault((parent, attr), getattr(parent, attr, _MISSING))
             setattr(parent, attr, module)
 
 
@@ -112,6 +114,7 @@ _database_pkg = ModuleType('database')
 _database_pkg.__path__ = []
 _database_pkg.__package__ = 'database'
 _install_module('database', _database_pkg)
+# These DB stubs are import-only; endpoint tests patch router-level DB modules per case.
 _install_module('database.phone_calls', ModuleType('database.phone_calls'))
 _install_module('database.phone_call_usage', ModuleType('database.phone_call_usage'))
 
@@ -168,6 +171,12 @@ for _name, _module in _saved_modules.items():
         sys.modules.pop(_name, None)
     else:
         sys.modules[_name] = _module
+for (_parent, _attr), _original in _saved_parent_attrs.items():
+    if _original is _MISSING:
+        if hasattr(_parent, _attr):
+            delattr(_parent, _attr)
+    else:
+        setattr(_parent, _attr, _original)
 
 # ---------------------------------------------------------------------------
 # App / client fixtures
