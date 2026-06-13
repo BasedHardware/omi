@@ -1369,6 +1369,14 @@ class FloatingControlBarManager {
     /// chat or get hoisted into a background agent pill, then dispatch to
     /// whichever path it chose. The router call is ~300-500ms; we show the
     /// inline "thinking" UI immediately so the user knows the message landed.
+    ///
+    /// Track 2 PR 2 — the chat send now runs **in parallel** with the
+    /// router. For obvious chat queries (`QueryRouter.fastPath` is
+    /// confident), the router is skipped entirely. For ambiguous queries
+    /// the chat starts immediately and the router either:
+    /// - returns `.chat` — chat is already streaming, no extra latency
+    /// - returns `.agent` — we call `provider.stopAgent()` to interrupt
+    ///   the in-flight chat and spawn the agent pill instead
     private func routeQuery(
         _ message: String,
         barWindow: FloatingControlBarWindow,
@@ -1390,9 +1398,46 @@ class FloatingControlBarManager {
         )
         activeTiming?.mark(.userInput)
 
-        let decision = await AgentPillsManager.classify(message)
+        // Fast-path: skip the Haiku router entirely for obvious chat queries
+        // (greetings, short chat-shaped queries, personal recall). The vast
+        // majority of judge prompts and top-20 queries fall in this bucket.
+        // The router is only consulted when the keyword check is unsure.
+        let fastPath = QueryRouter.fastPath(message)
+        if fastPath.isFastPath {
+            activeTiming?.mark(.routerDone, note: "fast_path")
+            await sendAIQuery(message, barWindow: barWindow, provider: provider)
+            return
+        }
+
+        // Ambiguous queries: run the Haiku router in parallel with the chat
+        // send. Both run as @MainActor tasks that interleave on awaits, so
+        // "parallel" here means the chat's network/inference awaits release
+        // the main actor long enough for the router's HTTP call to make
+        // progress. The router is typically faster than Claude's TTFT
+        // (~300-500ms vs ~800-2000ms), so it usually returns first.
+        let routerTask = Task { @MainActor in
+            await AgentPillsManager.classify(message)
+        }
+        let chatTask = Task { @MainActor in
+            await self.sendAIQuery(message, barWindow: barWindow, provider: provider)
+        }
+        let decision = await routerTask.value
         activeTiming?.mark(.routerDone)
+
         if decision.route == .agent {
+            // Capture the timing BEFORE nil-ing `activeTiming` — the chat
+            // task's success / error / no-response paths all guard on
+            // `activeTiming != nil` and become no-ops once we nil it.
+            let capturedTiming = activeTiming
+            activeTiming = nil
+            // Interrupt the in-flight chat. The bridge will emit a `.stopped`
+            // error and the chat task will unwind via its error path, which
+            // is now a no-op for telemetry (activeTiming is nil). If the
+            // chat has already started streaming, a partial response may
+            // briefly flash on screen before closeAIConversation clears it.
+            provider.stopAgent()
+            chatTask.cancel()
+
             let model = ShortcutSettings.shared.selectedModel.isEmpty
                 ? "claude-sonnet-4-6"
                 : ShortcutSettings.shared.selectedModel
@@ -1406,8 +1451,8 @@ class FloatingControlBarManager {
             // Tear down the inline state we set up for the thinking spinner.
             barWindow.state.aiInputText = ""
             barWindow.closeAIConversation()
-            // Record the timing — query ended because we routed to an agent.
-            if var timing = activeTiming {
+            // Record the timing for the agent route.
+            if var timing = capturedTiming {
                 var ended = timing
                 ended.endQuery(
                     hadScreenshot: false,
@@ -1416,12 +1461,14 @@ class FloatingControlBarManager {
                 )
                 AnalyticsManager.shared.floatingBarQueryTiming(ended)
             }
-            activeTiming = nil
+            // Drain the chat task so it doesn't leak.
+            _ = await chatTask.value
             return
         }
-        // Chat route: continue with the normal inline flow. sendAIQuery will
-        // re-prepare the visible state, which is idempotent.
-        await sendAIQuery(message, barWindow: barWindow, provider: provider)
+
+        // Chat route: the chat task is already running and will produce the
+        // response. Just await it.
+        _ = await chatTask.value
     }
 
     /// Send a follow-up query in the existing AI conversation (used by PTT follow-up).
