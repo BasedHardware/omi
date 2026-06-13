@@ -48,6 +48,7 @@ _stub_modules = [
     'utils.encryption',
     'utils.analytics',
     'utils.byok',
+    'utils.cloud_tasks',
     'utils.http_client',
     'utils.stt.pre_recorded',
     'utils.stt.vad',
@@ -66,6 +67,7 @@ for _mod in _stub_modules:
     if _mod not in sys.modules:
         sys.modules[_mod] = MagicMock()
 
+sys.modules['opuslib'].Decoder = MagicMock()
 sys.modules['database.redis_db'].r = MagicMock()
 sys.modules['database._client'].db = MagicMock()
 if 'google.cloud.tasks_v2' not in sys.modules:
