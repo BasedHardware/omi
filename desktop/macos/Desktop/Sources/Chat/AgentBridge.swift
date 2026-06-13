@@ -436,18 +436,15 @@ actor AgentBridge {
       throw BridgeError.notRunning
     }
 
-    // Hard cap: check monthly chat quota before spending any Anthropic tokens.
-    // Free / Operator / Unlimited cap by question count; Architect (pro) caps by
-    // cost_usd. Raises BridgeError.quotaExceeded if over — caller shows upgrade UI.
-    if let quota = await APIClient.shared.fetchChatUsageQuota(), !quota.allowed {
-      throw BridgeError.quotaExceeded(
-        plan: quota.plan,
-        unit: quota.unit,
-        used: quota.used,
-        limit: quota.limit,
-        resetAtUnix: quota.resetAt
-      )
-    }
+    // NOTE: monthly chat quota is enforced by the caller via
+    // `FloatingBarUsageLimiter.isLimitReached` (the floating bar and the
+    // main chat page both check it before calling `sendMessage`). The
+    // previous per-query network round-trip is gone (Track 2 PR 2) — both
+    // surfaces already cover the same logic locally, and the TTL-cached
+    // `APIClient.fetchChatUsageQuota` is called by `FloatingBarUsageLimiter`
+    // on app activation / sign-in. `BridgeError.quotaExceeded` is retained
+    // as a public error case for any future caller that wants to surface
+    // the upgrade UI without going through the limiter.
 
     var queryDict: [String: Any] = [
       "type": "query",
