@@ -66,8 +66,21 @@ class _Finder(importlib.abc.MetaPathFinder, importlib.abc.Loader):
 
 
 _finder = _Finder()
+
+
+def _is_stubbed_name(name):
+    return any(name == prefix or name.startswith(prefix + '.') for prefix in _STUB)
+
+
+def _is_model_name(name):
+    return name == 'models' or name.startswith('models.')
+
+
+_saved_model_modules = {name: module for name, module in sys.modules.items() if _is_model_name(name)}
 for _n in list(sys.modules):
-    if any(_n == p or _n.startswith(p + '.') for p in _STUB):
+    if _is_stubbed_name(_n):
+        sys.modules.pop(_n, None)
+    if _is_model_name(_n):
         sys.modules.pop(_n, None)
 sys.meta_path.insert(0, _finder)
 try:
@@ -75,8 +88,12 @@ try:
 finally:
     sys.meta_path.remove(_finder)
     for _n in list(sys.modules):
-        if any(_n == p or _n.startswith(p + '.') for p in _STUB):
+        if _is_stubbed_name(_n):
             sys.modules.pop(_n, None)
+        if _is_model_name(_n) and _n not in _saved_model_modules:
+            sys.modules.pop(_n, None)
+    for _n, _module in _saved_model_modules.items():
+        sys.modules[_n] = _module
 
 
 def _setup_gates():
