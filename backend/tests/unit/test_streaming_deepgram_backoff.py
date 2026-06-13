@@ -1240,6 +1240,62 @@ class TestFillerWordsLanguageBehavior:
         assert self._get_filler_words_option('zh') is True
 
 
+class TestConnectKeywordsNoneGuard:
+    """connect_to_deepgram must tolerate keywords=None.
+
+    The multi-channel / phone-call path opens the STT socket without passing a
+    vocabulary list, so keywords arrives as None. Previously `if len(keywords) > 0`
+    raised "object of type 'NoneType' has no len()", which aborted the socket open
+    ("Could not open socket: ...") and left the client stuck reconnecting. This is a
+    regression guard for that phone-call breakage.
+    """
+
+    def _connect(self, keywords):
+        """Call connect_to_deepgram with the given keywords; return (raised, keyword_set_called)."""
+        from utils.stt.streaming import connect_to_deepgram
+
+        mock_dg_conn = MagicMock()
+        mock_dg_conn.on = MagicMock()
+        mock_dg_conn.start.return_value = True
+
+        mock_client = MagicMock()
+        mock_client.listen.websocket.v.return_value = mock_dg_conn
+
+        keyword_set = MagicMock(side_effect=lambda options, kw: options)
+
+        with patch('utils.stt.streaming._deepgram_client_for_request', return_value=mock_client), patch(
+            'utils.stt.streaming.LiveOptions', side_effect=lambda **kwargs: MagicMock()
+        ), patch('utils.stt.streaming._dg_keywords_set', keyword_set):
+            result = connect_to_deepgram(
+                on_message=MagicMock(),
+                on_error=MagicMock(),
+                language='en',
+                sample_rate=16000,
+                channels=2,
+                model='nova-3',
+                keywords=keywords,
+            )
+        return result, keyword_set.called
+
+    def test_none_keywords_does_not_raise(self):
+        """keywords=None (phone-call path) opens the socket without crashing."""
+        result, keyword_set_called = self._connect(None)
+        assert result is not None  # socket opened (start() returned True)
+        assert keyword_set_called is False  # no keyterms applied when none given
+
+    def test_empty_keywords_does_not_apply(self):
+        """keywords=[] opens the socket and applies no keyterms."""
+        result, keyword_set_called = self._connect([])
+        assert result is not None
+        assert keyword_set_called is False
+
+    def test_nonempty_keywords_applied(self):
+        """A real vocabulary list (single-channel path) is still applied to the options."""
+        result, keyword_set_called = self._connect(['Omi'])
+        assert result is not None
+        assert keyword_set_called is True
+
+
 class TestShouldPreserveFillerWords:
     """Direct tests for the should_preserve_filler_words helper (#6575)."""
 
