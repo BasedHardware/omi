@@ -224,6 +224,30 @@ class LocalVisionLatencyAverages {
   static const empty = LocalVisionLatencyAverages(sampleCount: 0);
 }
 
+class HeldObjectDebugState {
+  const HeldObjectDebugState({
+    required this.mode,
+    required this.threshold,
+    required this.handCount,
+    required this.selectedCount,
+    required this.status,
+  });
+
+  final AnnouncementMode mode;
+  final double threshold;
+  final int handCount;
+  final int selectedCount;
+  final String status;
+
+  static const empty = HeldObjectDebugState(
+    mode: AnnouncementMode.allObjects,
+    threshold: 0.10,
+    handCount: 0,
+    selectedCount: 0,
+    status: 'Awaiting detections',
+  );
+}
+
 class LocalVisionFrame {
   const LocalVisionFrame({
     required this.jpegBytes,
@@ -416,6 +440,7 @@ class LocalVisionService extends ChangeNotifier {
   YoloeModelAssetStatus _modelAssetStatus = const YoloeModelAssetStatus.notChecked();
   LocalVisionDetectorImplementation _activeImplementation = LocalVisionDetectorImplementation.yoloe;
   LocalVisionLatencyMetrics _latestLatency = const LocalVisionLatencyMetrics();
+  HeldObjectDebugState _heldObjectDebugState = HeldObjectDebugState.empty;
   final _latencyWindow = _LatencyRollingWindow();
 
   bool _isRunning = false;
@@ -440,6 +465,7 @@ class LocalVisionService extends ChangeNotifier {
   LocalVisionDetectorImplementation get activeImplementation => _activeImplementation;
   LocalVisionLatencyMetrics get latestLatency => _latestLatency;
   LocalVisionLatencyAverages get averageLatency => _latencyWindow.averages;
+  HeldObjectDebugState get heldObjectDebugState => _heldObjectDebugState;
 
   Future<void> initialize() async {
     _modelAssetStatus = await YoloeModelAssets.validate();
@@ -540,6 +566,13 @@ class LocalVisionService extends ChangeNotifier {
       final annotatedResults = _annotateHeldObjectSelection(thresholdedResults, mode, handIouThreshold);
       final handCount = annotatedResults.where((detection) => detection.isHand).length;
       final heldSelectedCount = annotatedResults.where((detection) => detection.heldObjectSelected).length;
+      _heldObjectDebugState = HeldObjectDebugState(
+        mode: mode,
+        threshold: handIouThreshold,
+        handCount: handCount,
+        selectedCount: heldSelectedCount,
+        status: _heldObjectStatusFor(mode, handCount, heldSelectedCount, annotatedResults.length),
+      );
       final candidates = _presenceTracker.update(annotatedResults, timestamp: frame.timestamp, mode: mode);
       final candidateLabels = candidates.map((candidate) => candidate.detection.label.toLowerCase()).toSet();
       final results = annotatedResults
@@ -560,6 +593,13 @@ class LocalVisionService extends ChangeNotifier {
         'heldSelected=$heldSelectedCount '
         'latencyMs=${latency.pipelineTotalMs?.toStringAsFixed(1) ?? 'unknown'} '
         'labels=${results.map((detection) => detection.label).join(',')}',
+      );
+      _logHeldObjectSelectionDecisions(
+        frameId: frame.frameId,
+        mode: mode,
+        handCount: handCount,
+        handIouThreshold: handIouThreshold,
+        detections: results,
       );
       if (candidates.isNotEmpty) {
         await ObjectAnnouncementService.instance.speakObjects(
@@ -636,6 +676,42 @@ class LocalVisionService extends ChangeNotifier {
             : 'rejected: hand IoU ${maxHandIoU.toStringAsFixed(2)} <= ${handIouThreshold.toStringAsFixed(2)}',
       );
     }).toList();
+  }
+
+  String _heldObjectStatusFor(AnnouncementMode mode, int handCount, int selectedCount, int detectionCount) {
+    if (mode != AnnouncementMode.heldObjectsOnly) return 'All-object mode; hand IoU is diagnostic only';
+    if (detectionCount == 0) return 'No detections above confidence threshold';
+    if (handCount == 0) return 'No hand detected; held-object mode intentionally selects nothing';
+    if (selectedCount == 0) return 'Hand detected; no object exceeded the hand-IoU threshold';
+    return 'Hand detected; $selectedCount held object${selectedCount == 1 ? '' : 's'} selected';
+  }
+
+  void _logHeldObjectSelectionDecisions({
+    required String frameId,
+    required AnnouncementMode mode,
+    required int handCount,
+    required double handIouThreshold,
+    required List<Detection> detections,
+  }) {
+    if (mode != AnnouncementMode.heldObjectsOnly) return;
+
+    if (detections.isEmpty) {
+      Logger.debug(
+        'Local YOLOE held-object decision frame=$frameId handCount=$handCount '
+        'threshold=${handIouThreshold.toStringAsFixed(2)} status=no_detections',
+      );
+      return;
+    }
+
+    for (final detection in detections) {
+      Logger.debug(
+        'Local YOLOE held-object decision frame=$frameId handCount=$handCount '
+        'threshold=${handIouThreshold.toStringAsFixed(2)} label=${detection.normalizedLabel} '
+        'confidence=${detection.confidence.toStringAsFixed(2)} '
+        'isHand=${detection.isHand} maxHandIoU=${(detection.maxHandIoU ?? 0).toStringAsFixed(2)} '
+        'selected=${detection.heldObjectSelected} reason=${detection.heldObjectReason ?? 'n/a'}',
+      );
+    }
   }
 
   double _maxIoUWithHandBoxes(DetectionBox box, List<DetectionBox> handBoxes) {

@@ -483,6 +483,50 @@ class $AssetsIntegrationAppLogosGen {
   ];
 }
 
+class $AssetsModelsGen {
+  const $AssetsModelsGen();
+
+  /// Directory path: assets/models/yoloe-26n-seg-pf_ncnn_model
+  $AssetsModelsYoloe26nSegPfNcnnModelGen get yoloe26nSegPfNcnnModel =>
+      const $AssetsModelsYoloe26nSegPfNcnnModelGen();
+}
+
+class $AssetsModelsYoloe26nSegPfNcnnModelGen {
+  const $AssetsModelsYoloe26nSegPfNcnnModelGen();
+
+  /// File path: assets/models/yoloe-26n-seg-pf_ncnn_model/README.md
+  String get readme => 'assets/models/yoloe-26n-seg-pf_ncnn_model/README.md';
+
+  /// File path: assets/models/yoloe-26n-seg-pf_ncnn_model/labels.json
+  String get labels => 'assets/models/yoloe-26n-seg-pf_ncnn_model/labels.json';
+
+  /// File path: assets/models/yoloe-26n-seg-pf_ncnn_model/metadata.yaml
+  String get metadata =>
+      'assets/models/yoloe-26n-seg-pf_ncnn_model/metadata.yaml';
+
+  /// File path: assets/models/yoloe-26n-seg-pf_ncnn_model/model.ncnn.bin
+  String get modelNcnnBin =>
+      'assets/models/yoloe-26n-seg-pf_ncnn_model/model.ncnn.bin';
+
+  /// File path: assets/models/yoloe-26n-seg-pf_ncnn_model/model.ncnn.param
+  String get modelNcnnParam =>
+      'assets/models/yoloe-26n-seg-pf_ncnn_model/model.ncnn.param';
+
+  /// File path: assets/models/yoloe-26n-seg-pf_ncnn_model/model_ncnn.py
+  String get modelNcnnPy =>
+      'assets/models/yoloe-26n-seg-pf_ncnn_model/model_ncnn.py';
+
+  /// List of all assets
+  List<String> get values => [
+    readme,
+    labels,
+    metadata,
+    modelNcnnBin,
+    modelNcnnParam,
+    modelNcnnPy,
+  ];
+}
+
 class Assets {
   const Assets._();
 
@@ -493,6 +537,7 @@ class Assets {
   static const $AssetsImagesGen images = $AssetsImagesGen();
   static const $AssetsIntegrationAppLogosGen integrationAppLogos =
       $AssetsIntegrationAppLogosGen();
+  static const $AssetsModelsGen models = $AssetsModelsGen();
   static const String shorebird = 'shorebird.yaml';
 
   /// List of all assets

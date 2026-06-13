@@ -411,6 +411,7 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
         final detections = service.detections;
         final latestLatency = service.latestLatency;
         final averageLatency = service.averageLatency;
+        final heldDebug = service.heldObjectDebugState;
         return Container(
           width: double.infinity,
           padding: const EdgeInsets.all(14),
@@ -448,6 +449,10 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
                   _buildLocalVisionMetric('Throttled', service.throttledFrameCount.toString()),
                   _buildLocalVisionMetric('Detections', service.detectionCount.toString()),
                   _buildLocalVisionMetric('Announce', service.announcementCandidateCount.toString()),
+                  _buildLocalVisionMetric('Held mode', heldDebug.mode.displayName),
+                  _buildLocalVisionMetric('Hand count', heldDebug.handCount.toString()),
+                  _buildLocalVisionMetric('Held selected', heldDebug.selectedCount.toString()),
+                  _buildLocalVisionMetric('Hand IoU X', heldDebug.threshold.toStringAsFixed(2)),
                   _buildLocalVisionMetric('Last announcement', _formatLocalVisionTimestamp(service.lastAnnouncementAt)),
                   _buildLocalVisionMetric('Latest total', _formatLatencyMs(latestLatency.pipelineTotalMs)),
                   _buildLocalVisionMetric('Avg total', _formatLatencyMs(averageLatency.pipelineTotalMs)),
@@ -457,6 +462,16 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
                   _buildLocalVisionMetric('Avg postprocess', _formatLatencyMs(averageLatency.postprocessMs)),
                   _buildLocalVisionMetric('Latency samples', averageLatency.sampleCount.toString()),
                 ],
+              ),
+              const SizedBox(height: 10),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(color: const Color(0xFF242428), borderRadius: BorderRadius.circular(8)),
+                child: Text(
+                  'Held-object status: ${heldDebug.status}',
+                  style: TextStyle(color: Colors.grey.shade300, fontSize: 12, fontWeight: FontWeight.w500),
+                ),
               ),
               if (service.lastError != null) ...[
                 const SizedBox(height: 10),
@@ -523,7 +538,7 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
                 ),
                 const SizedBox(height: 3),
                 Text(
-                  'conf ${(detection.confidence * 100).toStringAsFixed(0)}% · box ${detection.box}',
+                  'conf ${(detection.confidence * 100).toStringAsFixed(0)}% · box ${detection.box} · frame ${detection.sourceFrameId}',
                   style: TextStyle(color: Colors.grey.shade500, fontSize: 12),
                 ),
                 if (detection.isHand || detection.maxHandIoU != null || detection.heldObjectReason != null) ...[
