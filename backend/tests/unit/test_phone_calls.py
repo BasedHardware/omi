@@ -7,7 +7,6 @@ os.environ.setdefault("ENCRYPTION_SECRET", "omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7
 
 # Mock modules that initialize GCP/Firebase clients at import time
 _mock_firebase = MagicMock()
-sys.modules.setdefault("database._client", MagicMock())
 sys.modules.setdefault("firebase_admin", _mock_firebase)
 sys.modules.setdefault("firebase_admin.auth", _mock_firebase.auth)
 
@@ -85,11 +84,90 @@ sys.modules.setdefault('twilio.jwt.access_token', _twilio_jwt_access_token)
 sys.modules.setdefault('twilio.jwt.access_token.grants', _twilio_jwt_access_token_grants)
 sys.modules.setdefault('twilio.request_validator', _twilio_request_validator)
 
+
+_TEMP_STUB_MODULES = (
+    'database',
+    'database.phone_calls',
+    'database.phone_call_usage',
+    'utils',
+    'utils.phone_calls',
+    'utils.other',
+    'utils.other.endpoints',
+    'utils.twilio_service',
+)
+_MISSING = object()
+_saved_modules = {name: sys.modules.get(name, _MISSING) for name in _TEMP_STUB_MODULES}
+
+
+def _install_module(name, module):
+    sys.modules[name] = module
+    if '.' in name:
+        parent_name, attr = name.rsplit('.', 1)
+        parent = sys.modules.get(parent_name)
+        if parent is not None:
+            setattr(parent, attr, module)
+
+
+_database_pkg = ModuleType('database')
+_database_pkg.__path__ = []
+_database_pkg.__package__ = 'database'
+_install_module('database', _database_pkg)
+_install_module('database.phone_calls', ModuleType('database.phone_calls'))
+_install_module('database.phone_call_usage', ModuleType('database.phone_call_usage'))
+
+_utils_pkg = ModuleType('utils')
+_utils_pkg.__path__ = []
+_utils_pkg.__package__ = 'utils'
+_install_module('utils', _utils_pkg)
+
+_utils_phone_calls = ModuleType('utils.phone_calls')
+_utils_phone_calls.check_call_access = MagicMock()
+_utils_phone_calls.check_destination_allowed = MagicMock()
+_utils_phone_calls.get_quota_snapshot = MagicMock(
+    return_value=SimpleNamespace(has_access=True, is_paid=True, max_duration_seconds=None)
+)
+_install_module('utils.phone_calls', _utils_phone_calls)
+
+_utils_other = ModuleType('utils.other')
+_utils_other.__path__ = []
+_utils_other.__package__ = 'utils.other'
+_install_module('utils.other', _utils_other)
+
+_endpoints = ModuleType('utils.other.endpoints')
+_endpoints.get_current_user_uid = MagicMock()
+
+
+def _rate_limit_dependency(**_kwargs):
+    def _dependency():
+        return None
+
+    return _dependency
+
+
+_endpoints.rate_limit_dependency = _rate_limit_dependency
+_install_module('utils.other.endpoints', _endpoints)
+
+_twilio_service = ModuleType('utils.twilio_service')
+_twilio_service.generate_access_token = MagicMock()
+_twilio_service.start_caller_id_verification = MagicMock()
+_twilio_service.check_caller_id_verified = MagicMock()
+_twilio_service.delete_caller_id = MagicMock()
+_twilio_service.get_caller_id = MagicMock()
+_twilio_service.validate_twilio_signature = MagicMock()
+_install_module('utils.twilio_service', _twilio_service)
+
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from routers import phone_calls as phone_calls_router
 from routers.phone_calls import router, _redact_phone, E164_PATTERN
+
+for _name, _module in _saved_modules.items():
+    if _module is _MISSING:
+        sys.modules.pop(_name, None)
+    else:
+        sys.modules[_name] = _module
 
 # ---------------------------------------------------------------------------
 # App / client fixtures
@@ -120,8 +198,7 @@ def client():
     app = _make_app()
 
     # Override auth dependency to return a fixed uid
-    from utils.other import endpoints as auth
-
+    auth = phone_calls_router.auth
     app.dependency_overrides[auth.get_current_user_uid] = lambda: TEST_UID
     return TestClient(app)
 
@@ -129,8 +206,8 @@ def client():
 @pytest.fixture()
 def client_other_uid():
     app = _make_app()
-    from utils.other import endpoints as auth
 
+    auth = phone_calls_router.auth
     app.dependency_overrides[auth.get_current_user_uid] = lambda: TEST_UID_OTHER
     return TestClient(app)
 
