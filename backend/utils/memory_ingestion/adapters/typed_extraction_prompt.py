@@ -71,8 +71,8 @@ def render_source_guidance(source_type: str) -> str:
         parts.append(
             "HIGH CONFIDENCE SOURCE. Extract when both conditions are met:\n"
             "  (a) clear, SPECIFIC predicate match (is_currently_true for state facts is fine)\n"
-            "  (b) verbatim self-report quote anchor with ≥2 distinctive terms\n"
-            "Do NOT suppress clear user claims from this source."
+            "  (b) verbatim self-report quote anchor OR qualifying assistant_suggested quote evidence described below\n"
+            "Do NOT suppress clear user claims or specific grounded assistant_suggested observations from this source."
         )
     elif config.strength == SourceStrength.MEDIUM:
         parts.append(
@@ -127,6 +127,23 @@ precisely. Do NOT attempt to re-detect or second-guess the source type from text
 patterns like [Speaker N:] labels or disfluencies — the signal quality is already
 characterized above.
 
+ASSISTANT-TURN ATTRIBUTION FOR CHAT SOURCES:
+• human/user-authored turns are direct evidence about {user_name}.
+• ai/assistant/model-authored turns are CONTEXTUAL evidence only. Extract from them
+  only when they describe a SPECIFIC, PERSONALIZED, GROUNDED observation or
+  recommendation about {user_name}'s current task, tool, form, setting, or situation.
+• Valid assistant_suggested evidence names concrete user-specific details, e.g.
+  "working on the congressional casework form for your USCIS case" or
+  "set 1440x900 on your MacBook Pro".
+• NEVER extract generic assistant filler as user memory: praise, encouragement,
+  "back to work" nudges, "keep pushing Omi features", "what's next", app-switch
+  reminders ("back to Telegram/Discord/X"), generic productivity reminders,
+  name-only mentions ("Nik"), or broad guesses about what {user_name} is doing.
+• Test: if the assistant sentence could be sent to any Omi user as motivation or
+  a generic reminder, output [] for that sentence. If it identifies a concrete
+  personal object/task/tool/setting grounded in the visible/chat context, extract
+  with subject_attribution=assistant_suggested.
+
 IDENTITY RULES:
 • Never create new family members without EXPLICIT evidence
 • Recognize nicknames — don't create new people (common nicknames like "Buddy" are likely existing family members)
@@ -156,7 +173,8 @@ EXTRACT durable context: preferences/dislikes, decisions/commitments, projects/t
 
    Write the predicate EXACTLY as shown. Prefer the MOST SPECIFIC predicate. For voice/transcript sources, is_currently_true is expected and normal — use it freely for biographical/state facts. For chat sources, prefer action predicates when available.
 
-1. quote_anchor — verbatim substring from transcript proving the fact. For {user_name} facts, must be self-report evidence ({user_name}'s own turn or first-person language "I"/"my"/"we"). Preserve ≥2 distinctive non-stopword terms. No paraphrase. If no literal self-report quote exists → no fact.
+1. quote_anchor — verbatim substring from transcript proving the fact. For direct {user_name} facts, prefer self-report evidence ({user_name}'s own turn or first-person language "I"/"my"/"we"). Preserve ≥2 distinctive non-stopword terms. No paraphrase. If no literal quote evidence exists → no fact.
+   **ASSISTANT-SUGGESTED EXCEPTION:** For chat sources only, assistant-authored quote evidence is allowed when it is specific, personalized, and grounded in the user's visible/current context. Mark subject_attribution=assistant_suggested. Do NOT use generic assistant praise, nudges, reminders, or app-switch chatter as quote evidence.
    **OCR/security source EXCEPTION:** For credential_detected, sensitive_info_visible, and is_currently_true (when describing visible PII/passwords/credentials on screen), accept UI text fragments as evidence — a visible email address, password field, login prompt, or keychain dialog IS the evidence. No first-person language required for security-relevant OCR extractions only.
 
 2. content — one concise sentence (max 15 words), specific and timeless, starting with {user_name}. No hedging words ("might", "maybe", "could") — encode uncertainty in uncertainty_reasons instead.
@@ -175,7 +193,7 @@ EXTRACT durable context: preferences/dislikes, decisions/commitments, projects/t
    - is_currently_true: topic
    - is_no_longer_true: topic, replaced_by (if stated)
 
-4. subject_attribution — "user" if fact is about {user_name} AND quote_anchor is self-report. Use "third_party" for others; "assistant_suggested" for AI/team proposals lacking first-person confirmation.
+4. subject_attribution — "user" if fact is about {user_name} AND quote_anchor is self-report. Use "third_party" for others; use "assistant_suggested" ONLY for qualifying chat assistant-authored observations/recommendations described in the ASSISTANT-TURN ATTRIBUTION rules.
 
 5. uncertainty_reasons — zero or more of: speaker_uncertain, inferred_not_stated, temporal_scope_unclear, low_quality_transcript, subject_ambiguous, conflicts_with_existing_memory, duplicate_near_match, speculative_idle_consideration.
 
@@ -194,6 +212,7 @@ NEVER extract these categories:
 • One-off activities: "went to the gym", "had lunch", "watched a movie"
 • Obvious/contextual facts: "uses a computer" (if engineer), "has meetings" (if corporate)
 • Group/assistant statements rewritten as {user_name}'s personal fact without first-person confirmation
+• Generic assistant-authored encouragement, praise, productivity nudges, app-switch reminders, or broad activity guesses rewritten as durable {user_name} facts
 • Product capabilities unless {user_name} explicitly says they use/chose/evaluate it
 
 BANNED IN content: "likely", "possibly", "seems to", "appears to", "may be", "indicating...", "suggesting...", "reflecting..."
@@ -386,6 +405,28 @@ by filler. Extract when {user_name} explicitly requests or commits to an action,
 regardless of how casual the surrounding chat is. Skip the greeting/filler turns
 ('Yo', 'How's going') — only extract the substantive turn.
 
+**Example 10a — Assistant-only generic Omi nudge (output EMPTY list)**
+Input:  "ai: Solid progress today, Nik. Keep pushing those Omi features forward — your task list is waiting."
+Output: []
+NOTE: Generic assistant praise, encouragement, and productivity nudges are NOT
+source evidence for durable facts. Do not extract works_on(Omi), uses_tool(task list),
+or name facts from assistant motivational filler.
+
+**Example 10a.2 — Assistant-only app switch reminder (output EMPTY list)**
+Input:  "ai: Back to Telegram, Nik — looks like you still have Omi messages to handle."
+Output: []
+NOTE: App-switch reminders and broad guesses about current activity are not durable
+memories. Do not extract uses_tool(Telegram), works_on(Omi), or name facts unless
+{user_name}'s own turn or a specific grounded assistant observation supports them.
+
+**Example 10a.3 — Assistant-only browsing/activity chatter (output EMPTY list)**
+Input:  "ai: Looks like you're browsing movies, Nik. Want to get back to what matters?"
+Output: []
+NOTE: Assistant observations about transient browsing, generic refocus prompts, or
+name-only mentions are not memory-worthy. Output [] unless the assistant identifies
+a concrete personal task/tool/setting like a form, credential screen, or specific
+user-requested configuration.
+
 **Example 10b — AI-observed user activity from chat context (extract with assistant_suggested)**
 Input:  "human: Yo yo yo. can i help you?\nai: haha I think you meant to ask *me* if I can help *you* 😄\n\nlooks like you're working on the congressional casework form for your USCIS case — filling it out on Velázquez's site. need help with anything specific on that?"
 Output: predicate=works_on  quote="working on the congressional casework form for your USCIS case"
@@ -393,13 +434,15 @@ Output: predicate=works_on  quote="working on the congressional casework form fo
         arguments={{\"project\": "congressional casework form for USCIS case"}}
         subject_attribution=assistant_suggested
 NOTE: When the AI assistant observes {user_name} doing something specific and
-personally meaningful (NOT generic work chatter), extract it with
-subject_attribution=assistant_suggested. The key distinction:
-  - ✅ EXTRACT: \"looks like you're working on [specific personal task]\" → works_on
-  - ✅ EXTRACT: \"I see you're using [specific tool/app]\" → uses_tool
-  - ❌ SKIP: \"you're working on [generic work deliverable]\" → work chatter
-The observation must name a SPECIFIC personal activity, not a vague work summary.
-Personal administrative tasks (forms, cases, applications) ARE extractable.
+personally meaningful (NOT generic work chatter, praise, or refocus reminders),
+extract it with subject_attribution=assistant_suggested. The key distinction:
+  - ✅ EXTRACT: "looks like you're working on [specific personal form/case/task]" → works_on
+  - ✅ EXTRACT: "for your MacBook Pro, set [specific setting]" → prefers/uses_tool
+  - ❌ SKIP: "back to Telegram/Discord/X", "keep pushing Omi", "good job debugging" → generic assistant chatter
+  - ❌ SKIP: "looks like you're browsing movies" → transient activity
+The observation must name a SPECIFIC personal object/task/tool setting, not a vague
+work summary, app reminder, or motivational line. Personal administrative tasks
+(forms, cases, applications) ARE extractable.
 
 **Example 10c — First-person tool usage mentioned casually in chat (extract uses_tool)**
 Input:  "human: Omi, я вот играю в Rust, и короче у меня вот типа видишь, вот такой вот туман типа.\nai: Это TAA + depth of field в Rust."

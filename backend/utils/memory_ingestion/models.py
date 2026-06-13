@@ -132,11 +132,14 @@ def _build_source_type_registry() -> dict[str, SourceTypeConfig]:
             requires_corroboration=False,
             default_empty_on_noise=False,
             guidance_notes=(
-                "Highest-confidence source. If {user_name} explicitly states "
+                "Highest-confidence source. If the primary user explicitly states "
                 "a fact about themselves, extract it. Do NOT suppress clear claims. "
-                "Also extract when the AI assistant observes {user_name} doing "
-                "something specific and personally meaningful (works_on, uses_tool, "
-                "prefers with subject_attribution=assistant_suggested). "
+                "Assistant-authored turns are contextual evidence only: extract them "
+                "with subject_attribution=assistant_suggested when they name a "
+                "specific, personalized, grounded user task/tool/setting (for example "
+                "a USCIS form or MacBook resolution recommendation). Do NOT extract "
+                "generic assistant praise, 'back to work' nudges, app-switch reminders "
+                "(Telegram/Discord/X), broad Omi encouragement, or name-only mentions. "
                 "Chat messages often contain MULTIPLE facts — extract each one. "
                 "Informal language, profanity, non-English, and casual chitchat "
                 "wrapping do NOT invalidate a clear factual signal."
