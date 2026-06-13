@@ -16,6 +16,8 @@ os.environ.setdefault(
     "omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv",
 )
 
+_BACKEND_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+
 _database_stubs = [
     "database",
     "database._client",
@@ -94,7 +96,7 @@ def _restore_stub_modules():
 
 # Stub database modules
 _db_pkg = types.ModuleType("database")
-_db_pkg.__path__ = [os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', 'database'))]
+_db_pkg.__path__ = [os.path.join(_BACKEND_DIR, "database")]
 _install_module("database", _db_pkg)
 _install_module("database._client", MagicMock())
 
@@ -150,8 +152,19 @@ sys.modules["database.webhook_health"].record_dev_webhook_failure = MagicMock(re
 sys.modules["database.webhook_health"].record_dev_webhook_success = MagicMock()
 sys.modules["database.webhook_health"]._DEV_FAILURE_THRESHOLD = 100
 
+_utils_pkg = sys.modules.get("utils")
+if _utils_pkg is None:
+    _utils_pkg = types.ModuleType("utils")
+    sys.modules["utils"] = _utils_pkg
+_utils_pkg.__path__ = [os.path.join(_BACKEND_DIR, "utils")]
+
 for name in _utils_stubs:
-    _install_module(name, types.ModuleType(name))
+    module = sys.modules.get(name)
+    if module is None:
+        module = types.ModuleType(name)
+    _install_module(name, module)
+
+sys.modules["utils.conversations"].__path__ = [os.path.join(_BACKEND_DIR, "utils", "conversations")]
 
 sys.modules["utils.apps"].get_available_apps = MagicMock(return_value=[])
 sys.modules["utils.notifications"].send_notification = MagicMock()
@@ -203,6 +216,7 @@ if _http_mod is not None and not hasattr(_http_mod, '__file__'):
     # Stub module — safe to add mock attributes for import resolution
     _http_mod.get_webhook_client = MagicMock()
     _http_mod.get_maps_client = MagicMock()
+    _http_mod.get_maps_semaphore = MagicMock(return_value=_asyncio.Semaphore(8))
     _mock_cb = MagicMock()
     _mock_cb.allow_request = MagicMock(return_value=True)
     _mock_cb.record_success = MagicMock()
