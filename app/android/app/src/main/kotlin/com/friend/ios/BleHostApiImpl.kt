@@ -98,6 +98,13 @@ class BleHostApiImpl(private val getActivity: () -> Activity?) : BleHostApi {
             callback(Result.success(true))
             return
         }
+        if (enableBluetoothCallback != null) {
+            // A system prompt is already in flight; don't overwrite the pending
+            // callback (which would leave its Future hanging) or stack a second
+            // dialog. Report the current (still-off) state to this caller.
+            callback(Result.success(false))
+            return
+        }
         val activity = getActivity()
         if (activity == null) {
             Log.w(TAG, "enableBluetooth: no activity")
