@@ -98,12 +98,33 @@ sys.modules.setdefault('firebase_admin.auth', _fb.auth)
 _deepgram = ModuleType('deepgram')
 _deepgram.DeepgramClient = MagicMock
 _deepgram.DeepgramClientOptions = MagicMock
+_deepgram.LiveTranscriptionEvents = type(
+    'LiveTranscriptionEvents',
+    (),
+    {
+        'Open': 'Open',
+        'Transcript': 'Transcript',
+        'Metadata': 'Metadata',
+        'SpeechStarted': 'SpeechStarted',
+        'UtteranceEnd': 'UtteranceEnd',
+        'Close': 'Close',
+        'Error': 'Error',
+        'Unhandled': 'Unhandled',
+    },
+)
 sys.modules.setdefault('deepgram', _deepgram)
 
 _speaker_embedding = ModuleType('utils.stt.speaker_embedding')
 _speaker_embedding.SPEAKER_MATCH_THRESHOLD = 0.45
 _speaker_embedding.compare_embeddings = MagicMock(return_value=0.0)
 _speaker_embedding.extract_embedding_from_bytes = MagicMock()
+
+
+async def _async_extract_embedding_from_bytes(*_args, **_kwargs):
+    return None
+
+
+_speaker_embedding.async_extract_embedding_from_bytes = _async_extract_embedding_from_bytes
 sys.modules['utils.stt.speaker_embedding'] = _speaker_embedding
 
 import google.cloud.storage as _gcs
