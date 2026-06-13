@@ -16,7 +16,7 @@ public final class FloatingBarTimingLogger {
     public static let shared = FloatingBarTimingLogger()
 
     /// Path of the per-query timings log file. One JSON object per line.
-    public nonisolated(unsafe) static let defaultLogFile = "/tmp/omi-floating-bar-timings.log"
+    public static let defaultLogFile = "/tmp/omi-floating-bar-timings.log"
 
     private let timingsLogFile: String
     private let logQueue: DispatchQueue
@@ -41,7 +41,7 @@ public final class FloatingBarTimingLogger {
     /// Safe to call multiple times; only the first call writes (idempotent).
     public func record(_ timing: FloatingBarQueryTiming) {
         guard timing.final != nil else {
-            standardLog.log(
+            standardLog.write(
                 "FloatingBarTimingLogger: skipping record — query not ended (\(timing.queryId))"
             )
             return
@@ -56,13 +56,13 @@ public final class FloatingBarTimingLogger {
         do {
             data = try encoder.encode(timing)
         } catch {
-            standardLog.log(
+            standardLog.write(
                 "FloatingBarTimingLogger: encode failed: \(error.localizedDescription)"
             )
             return
         }
         guard let jsonString = String(data: data, encoding: .utf8) else {
-            standardLog.log("FloatingBarTimingLogger: json string conversion failed")
+            standardLog.write("FloatingBarTimingLogger: json string conversion failed")
             return
         }
 
@@ -158,14 +158,17 @@ public final class PostHogEmitCapture: PostHogEmit, @unchecked Sendable {
 }
 
 /// Thin wrapper around the file logger so tests can capture the error log
-/// without polluting the real /tmp/omi.log.
+/// without polluting the real /tmp/omi.log. Named `write` to avoid
+/// shadowing the global `log(_:)` function in `Logger.swift` (using the
+/// same name in a @MainActor protocol witness caused infinite recursion
+/// at runtime — see Greptile review on PR #7886).
 public protocol StandardLog: Sendable {
-    @MainActor func log(_ message: String)
+    @MainActor func write(_ message: String)
 }
 
 public struct StandardLogLive: StandardLog {
     public init() {}
-    @MainActor public func log(_ message: String) {
+    @MainActor public func write(_ message: String) {
         log(message)
     }
 }
@@ -174,7 +177,7 @@ public final class StandardLogCapture: StandardLog, @unchecked Sendable {
     public private(set) var messages: [String] = []
     private let lock = NSLock()
     public init() {}
-    @MainActor public func log(_ message: String) {
+    @MainActor public func write(_ message: String) {
         lock.lock(); defer { lock.unlock() }
         messages.append(message)
     }

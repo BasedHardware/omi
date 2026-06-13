@@ -76,10 +76,11 @@ final class FloatingBarTimingLoggerTests: XCTestCase {
         let timing = makeEndedTiming(id: "abc-123")
         logger.record(timing)
 
-        // The file write is dispatched on the log queue. Drain it synchronously
-        // by issuing a sync barrier through the same queue.
-        DispatchQueue(label: "test.timings").sync { }
-        // Easier: poll until the file exists and has content.
+        // The file write is dispatched on the log queue. Poll until the
+        // file exists and has content (waitForFileContent has a 1s deadline
+        // and gives up with XCTFail). Previous versions tried to drain via
+        // a sync barrier on a fresh queue but that's a no-op — the fresh
+        // queue has no relationship to the logger's queue.
         let data = try waitForFileContent()
         let line = try XCTUnwrap(
             String(data: data, encoding: .utf8)
@@ -191,6 +192,25 @@ final class FloatingBarTimingLoggerTests: XCTestCase {
         logger.record(timing)
 
         XCTAssertEqual(capture.events.count, 2)  // documented behavior
+    }
+
+    // MARK: - StandardLog (recursion regression guard)
+
+    func testStandardLogLiveDoesNotRecurseInfinitely() {
+        // Regression guard for the Greptile-flagged bug on PR #7886:
+        // `StandardLogLive.log(_:)` was named the same as the global
+        // `log(_:)` function and recursed into itself with no base case.
+        // The fix renamed the protocol witness to `write(_:)`. Verify the
+        // live impl now dispatches to the global log without recursing.
+        //
+        // Calling `write(_:)` on StandardLogLive used to crash with stack
+        // overflow. With the fix, it calls the global log() function which
+        // writes to the standard log file (no crash). We don't assert on
+        // the log content here (the global log goes to /tmp/omi.log and
+        // is not captured in tests); we just verify the call returns.
+        let live = StandardLogLive()
+        live.write("FloatingBarTimingLogger: regression test for recursion")
+        // If we got here without crashing, the recursion is fixed.
     }
 
     // MARK: - appendLine (static, testable)

@@ -1365,6 +1365,31 @@ class FloatingControlBarManager {
         }
     }
 
+    /// Replace the active timing with `new`. If the previous timing exists
+    /// and was never ended (i.e. the user fired a new query before the old
+    /// one finished streaming), finalize it with `.stopped` and emit a
+    /// telemetry record so the data isn't silently dropped. Called at every
+    /// `activeTiming = ...` assignment site.
+    private func replaceActiveTiming(_ new: FloatingBarQueryTiming) {
+        if var prev = activeTiming, prev.final == nil {
+            // `hadScreenshot` is best-effort — the screenshot may or may not
+            // have been captured for the superseded query. We don't have the
+            // value here; the caller (routeQuery / sendAIQuery) is the only
+            // one who knows. For now, pass `false` and rely on the normal
+            // completion path to record the truth when the chat does finish.
+            // The superseded record's `cancelled` flag captures the intent.
+            var ended = prev
+            ended.endQuery(
+                hadScreenshot: false,
+                toolCallCount: 0,
+                cancelled: true,
+                reason: .stopped
+            )
+            AnalyticsManager.shared.floatingBarQueryTiming(ended)
+        }
+        activeTiming = new
+    }
+
     /// Ask the router (Haiku) whether this query should stay in the inline
     /// chat or get hoisted into a background agent pill, then dispatch to
     /// whichever path it chose. The router call is ~300-500ms; we show the
@@ -1391,11 +1416,14 @@ class FloatingControlBarManager {
         // Start a fresh timing for this query. Every fired query — typed,
         // voice, follow-up — gets its own timing struct. Stored as
         // `activeTiming` so `sendAIQuery` (and the streaming sink) can
-        // append stage marks and call `record()` exactly once.
-        activeTiming = FloatingBarQueryTiming(
+        // append stage marks and call `record()` exactly once. If a
+        // previous timing is still in flight (the user fired a new query
+        // before the old one finished), `replaceActiveTiming` finalizes it
+        // with `.stopped` so we don't silently drop its telemetry.
+        replaceActiveTiming(FloatingBarQueryTiming(
             source: fromVoice ? .voice : .text,
             queryLength: message.count
-        )
+        ))
         activeTiming?.mark(.userInput)
 
         // Fast-path: skip the Haiku router entirely for obvious chat queries
@@ -1750,11 +1778,14 @@ class FloatingControlBarManager {
 
         // Defensive: if routeQuery wasn't called (e.g. direct call from a
         // follow-up helper), start a timing now so we still record telemetry.
+        // `replaceActiveTiming` finalizes any in-flight timing first so
+        // superseded queries are not silently dropped (Greptile review on
+        // PR #7886).
         if activeTiming == nil {
-            activeTiming = FloatingBarQueryTiming(
+            replaceActiveTiming(FloatingBarQueryTiming(
                 source: queryFromVoice ? .voice : .text,
                 queryLength: message.count
-            )
+            ))
             activeTiming?.mark(.userInput)
         }
 
