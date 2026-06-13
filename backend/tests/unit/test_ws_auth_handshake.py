@@ -15,8 +15,21 @@ from unittest.mock import patch, MagicMock
 
 from fastapi import FastAPI, WebSocket, WebSocketException, Depends
 from fastapi.testclient import TestClient
-from firebase_admin.auth import InvalidIdTokenError
+from firebase_admin.auth import CertificateFetchError, InvalidIdTokenError
 from starlette.websockets import WebSocketDisconnect
+
+database_client_stub = types.ModuleType('database._client')
+database_client_stub.db = MagicMock()
+database_client_stub.document_id_from_seed = MagicMock(return_value='doc-id')
+original_database_client = sys.modules.get('database._client')
+sys.modules['database._client'] = database_client_stub
+
+database_redis_stub = types.ModuleType('database.redis_db')
+database_redis_stub.check_rate_limit = MagicMock(return_value=True)
+database_redis_stub.try_acquire_listen_lock = MagicMock(return_value=True)
+database_redis_stub.try_acquire_user_platform_write_lock = MagicMock(return_value=True)
+original_database_redis = sys.modules.get('database.redis_db')
+sys.modules['database.redis_db'] = database_redis_stub
 
 database_users_stub = types.ModuleType('database.users')
 database_users_stub.record_user_platform = MagicMock()
@@ -30,6 +43,14 @@ try:
     get_current_user_uid_ws = endpoints.get_current_user_uid_ws
     get_current_user_uid = endpoints.get_current_user_uid
 finally:
+    if original_database_client is None:
+        sys.modules.pop('database._client', None)
+    else:
+        sys.modules['database._client'] = original_database_client
+    if original_database_redis is None:
+        sys.modules.pop('database.redis_db', None)
+    else:
+        sys.modules['database.redis_db'] = original_database_redis
     if original_database_users is None:
         sys.modules.pop('database.users', None)
     else:
@@ -63,13 +84,56 @@ class TestWebSocketAuthListen(WebSocketAuthTestCase):
                 self.fail("Expected WebSocket to be closed by server")
         self.assertEqual(ctx.exception.code, 1008)
 
-    @patch('utils.other.endpoints.verify_token', side_effect=InvalidIdTokenError('Token expired'))
+    @patch('utils.other.endpoints.verify_token', side_effect=InvalidIdTokenError('bad token'))
     def test_invalid_token_sends_close_1008(self, mock_verify):
         """Invalid token -> WebSocketDisconnect with code 1008."""
         with self.assertRaises(WebSocketDisconnect) as ctx:
             with self.client.websocket_connect("/ws-listen", headers={"Authorization": "Bearer invalid_token"}):
                 self.fail("Expected WebSocket to be closed by server")
         self.assertEqual(ctx.exception.code, 1008)
+
+    @patch('utils.other.endpoints.verify_token', side_effect=InvalidIdTokenError('Token expired'))
+    def test_expired_token_sends_close_4001(self, mock_verify):
+        """Expired token -> WebSocketDisconnect with code 4001 so clients can refresh."""
+        with self.assertRaises(WebSocketDisconnect) as ctx:
+            with self.client.websocket_connect("/ws-listen", headers={"Authorization": "Bearer expired_token"}):
+                self.fail("Expected WebSocket to be closed by server")
+        self.assertEqual(ctx.exception.code, 4001)
+
+    @patch('utils.other.endpoints.verify_token', side_effect=InvalidIdTokenError('Certificate key not found'))
+    def test_certificate_key_error_sends_close_4001(self, mock_verify):
+        """Certificate/key failures -> 4001 so clients can force-refresh the token."""
+        with self.assertRaises(WebSocketDisconnect) as ctx:
+            with self.client.websocket_connect("/ws-listen", headers={"Authorization": "Bearer stale_key_token"}):
+                self.fail("Expected WebSocket to be closed by server")
+        self.assertEqual(ctx.exception.code, 4001)
+
+    @patch(
+        'utils.other.endpoints.verify_token',
+        side_effect=CertificateFetchError('Certificate fetch failed', RuntimeError('network unavailable')),
+    )
+    def test_certificate_fetch_error_sends_close_4001(self, mock_verify):
+        """Real Firebase cert fetch failures -> 4001 so clients can refresh their token."""
+        with self.assertRaises(WebSocketDisconnect) as ctx:
+            with self.client.websocket_connect("/ws-listen", headers={"Authorization": "Bearer cert_fetch_token"}):
+                self.fail("Expected WebSocket to be closed by server")
+        self.assertEqual(ctx.exception.code, 4001)
+
+    @patch('utils.other.endpoints.verify_token', side_effect=InvalidIdTokenError('API key invalid'))
+    def test_non_certificate_key_error_sends_close_1008(self, mock_verify):
+        """Generic key errors should not be treated as token-refresh certificate failures."""
+        with self.assertRaises(WebSocketDisconnect) as ctx:
+            with self.client.websocket_connect("/ws-listen", headers={"Authorization": "Bearer invalid_key_token"}):
+                self.fail("Expected WebSocket to be closed by server")
+        self.assertEqual(ctx.exception.code, 1008)
+
+    @patch('utils.other.endpoints.verify_token', side_effect=InvalidIdTokenError('Token revoked'))
+    def test_revoked_token_sends_close_4004(self, mock_verify):
+        """Revoked token -> WebSocketDisconnect with code 4004 so clients can re-login."""
+        with self.assertRaises(WebSocketDisconnect) as ctx:
+            with self.client.websocket_connect("/ws-listen", headers={"Authorization": "Bearer revoked_token"}):
+                self.fail("Expected WebSocket to be closed by server")
+        self.assertEqual(ctx.exception.code, 4004)
 
     def test_malformed_auth_header_sends_close_1008(self):
         """Malformed auth header -> WebSocketDisconnect with code 1008."""
@@ -184,12 +248,12 @@ class TestWebSocketAuthWithRateLimit(WebSocketAuthTestCase):
 
     @patch('utils.other.endpoints.try_acquire_listen_lock')
     @patch('utils.other.endpoints.verify_token', side_effect=InvalidIdTokenError('expired'))
-    def test_invalid_token_does_not_call_rate_limiter(self, mock_verify, mock_lock):
-        """Invalid token should short-circuit before rate limiter is called."""
+    def test_expired_token_does_not_call_rate_limiter(self, mock_verify, mock_lock):
+        """Expired token should short-circuit before rate limiter is called."""
         with self.assertRaises(WebSocketDisconnect) as ctx:
             with self.client.websocket_connect("/ws-ratelimited", headers={"Authorization": "Bearer bad"}):
                 pass
-        self.assertEqual(ctx.exception.code, 1008)
+        self.assertEqual(ctx.exception.code, 4001)
         mock_lock.assert_not_called()
 
 
