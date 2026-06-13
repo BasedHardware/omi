@@ -73,6 +73,12 @@ export const AudioPlayer = forwardRef<AudioPlayerRef, AudioPlayerProps>(
             return;
           }
 
+          if (firstFile.status === 'unavailable') {
+            setError('Audio is no longer available for this conversation');
+            setIsLoading(false);
+            return;
+          }
+
           // The backend builds playback artifacts asynchronously; poll until
           // the file is cached instead of streaming through the merge proxy
           // that used to time out on long conversations.
