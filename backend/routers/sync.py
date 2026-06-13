@@ -96,6 +96,7 @@ from utils.fair_use import (
     trigger_classifier_if_needed,
     is_dg_budget_exhausted,
     get_enforcement_stage,
+    get_hard_restriction_retry_after_seconds,
     record_dg_usage_ms,
     FAIR_USE_ENABLED,
     FAIR_USE_RESTRICT_DAILY_DG_MS,
@@ -117,6 +118,14 @@ AUDIO_SAMPLE_RATE = 16000
 _V1_DEPRECATION_HEADERS = {'Deprecation': 'true', 'Link': '</v2/sync-local-files>; rel="successor-version"'}
 
 router = APIRouter()
+
+
+def _hard_restriction_headers(uid: str, base_headers: Optional[Dict[str, str]] = None) -> Dict[str, str]:
+    headers = dict(base_headers or {})
+    retry_after = get_hard_restriction_retry_after_seconds(uid)
+    if retry_after is not None:
+        headers['Retry-After'] = str(retry_after)
+    return headers
 
 
 # **********************************************
@@ -1315,7 +1324,7 @@ async def sync_local_files(
         raise HTTPException(
             status_code=429,
             detail="Account temporarily restricted due to fair-use policy",
-            headers=_V1_DEPRECATION_HEADERS,
+            headers=_hard_restriction_headers(uid, _V1_DEPRECATION_HEADERS),
         )
 
     # Check credits: if exhausted, still process but lock the conversation so user can pay to unlock
@@ -1913,7 +1922,12 @@ async def sync_local_files_v2(
     """
     # Pre-check gates (same as v1)
     if await run_blocking(critical_executor, is_hard_restricted, uid):
-        raise HTTPException(status_code=429, detail="Account temporarily restricted due to fair-use policy")
+        headers = await run_blocking(critical_executor, _hard_restriction_headers, uid)
+        raise HTTPException(
+            status_code=429,
+            detail="Account temporarily restricted due to fair-use policy",
+            headers=headers,
+        )
 
     should_lock = not await run_blocking(critical_executor, has_transcription_credits, uid)
 

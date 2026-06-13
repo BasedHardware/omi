@@ -470,6 +470,32 @@ def is_hard_restricted(uid: str) -> bool:
     )
 
 
+def get_hard_restriction_retry_after_seconds(uid: str) -> int | None:
+    """Return seconds until the active hard restriction expires, if known."""
+    if not FAIR_USE_ENABLED or FAIR_USE_KILL_SWITCH:
+        return None
+    if uid in FAIR_USE_EXEMPT_UIDS:
+        return None
+
+    try:
+        state = fair_use_db.get_fair_use_state(uid)
+    except Exception as e:
+        logger.error(f'fair_use: error checking hard restriction retry-after for {uid}: {e}')
+        return None
+
+    if state.get('stage', 'none') != 'restrict':
+        return None
+
+    restrict_until = state.get('restrict_until')
+    if not isinstance(restrict_until, datetime):
+        return None
+    if restrict_until.tzinfo is not None:
+        restrict_until = restrict_until.replace(tzinfo=None)
+
+    seconds = int((restrict_until - datetime.utcnow()).total_seconds())
+    return max(seconds, 1) if seconds > 0 else None
+
+
 # ---------------------------------------------------------------------------
 # Restrict-stage daily Deepgram budget
 # ---------------------------------------------------------------------------
