@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any, Literal
+from typing import Any, ClassVar, Literal
+from enum import Enum
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -95,8 +96,163 @@ class SourceRef(StrictBaseModel):
     fixture_id: str | None = None
 
 
+class SourceStrength(str, Enum):
+    """Signal quality tier for extraction behavior modulation."""
+    HIGH = "high"       # chat_exchange, conversation — clean, intentional
+    MEDIUM = "medium"   # voice_transcript, manual_note — some noise
+    LOW = "low"         # transcript, desktop_rewind, ocr_screenshot_text, ambient_voice
+    UNKNOWN = "unknown" # benchmark_fixture
+
+
+class SourceTypeConfig(StrictBaseModel):
+    """Extensible per-source-type configuration for extraction behavior.
+
+    To add a new source type:
+      1. Add the literal to SourceDescriptor.source_type
+      2. Add an entry here (or accept UNKNOWN defaults)
+      3. Zero other code changes needed — prompt receives guidance string automatically.
+    """
+    strength: SourceStrength = SourceStrength.UNKNOWN
+    label: str  # human-readable name for the prompt
+    confidence_cap: float = 1.0
+    requires_corroboration: bool = False
+    default_empty_on_noise: bool = False
+    guidance_notes: str = ""
+
+    _REGISTRY: ClassVar[dict[str, "SourceTypeConfig"]] = {}
+
+
+# Build registry after class definition
+def _build_source_type_registry() -> dict[str, SourceTypeConfig]:
+    return {
+        "chat_exchange": SourceTypeConfig(
+            strength=SourceStrength.HIGH,
+            label="CHAT EXCHANGE",
+            confidence_cap=1.0,
+            requires_corroboration=False,
+            default_empty_on_noise=False,
+            guidance_notes=(
+                "Highest-confidence source. If {user_name} explicitly states "
+                "a fact about themselves, extract it. Do NOT suppress clear claims."
+            ),
+        ),
+        "conversation": SourceTypeConfig(
+            strength=SourceStrength.HIGH,
+            label="CONVERSATION",
+            confidence_cap=1.0,
+            requires_corroboration=False,
+            default_empty_on_noise=False,
+            guidance_notes="High-confidence multi-party conversation. Standard extraction rules apply.",
+        ),
+        "voice_transcript": SourceTypeConfig(
+            strength=SourceStrength.LOW,  # DEMOTED from MEDIUM: voice produces high-conf FPs
+            label="VOICE TRANSCRIPT",
+            confidence_cap=0.6,
+            requires_corroboration=True,
+            default_empty_on_noise=True,
+            guidance_notes=(
+                "Voice transcript: HIGH noise floor even when intentional. "
+                "VERY CONSERVATIVE. Require ≥2 independent utterances supporting "
+                "the same fact with clean quote anchors. If any disfluency, filler, "
+                "or uncertainty markers present → output [] immediately. "
+                "Default to empty unless fact is unambiguous and appears verbatim."
+            ),
+        ),
+        "manual_note": SourceTypeConfig(
+            strength=SourceStrength.MEDIUM,
+            label="MANUAL NOTE",
+            confidence_cap=0.85,
+            requires_corroboration=False,
+            default_empty_on_noise=False,
+            guidance_notes=(
+                "User-typed note: intentional but may be terse or informal. "
+                "Extract specific facts; skip vague journaling."
+            ),
+        ),
+        "transcript": SourceTypeConfig(
+            strength=SourceStrength.LOW,
+            label="VOICE TRANSCRIPT (ambient)",
+            confidence_cap=0.7,
+            requires_corroboration=True,
+            default_empty_on_noise=True,
+            guidance_notes=(
+                "Ambient voice transcript: often noisy with filler/disfluencies. "
+                "EXTRA CONSERVATIVE. Require ≥2 independent utterances supporting "
+                "the same fact. If >60% filler → output [] immediately."
+            ),
+        ),
+        "desktop_rewind": SourceTypeConfig(
+            strength=SourceStrength.LOW,
+            label="SCREENSHOT / DESKTOP REWIND",
+            confidence_cap=0.6,
+            requires_corroboration=False,
+            default_empty_on_noise=True,
+            guidance_notes=(
+                "Screen capture / OCR: fragmented, may contain UI chrome. "
+                "SKEPTICAL. Only extract coherent factual statements about "
+                "{user_name}. Never extract UI elements or transient state."
+            ),
+        ),
+        "ocr_screenshot_text": SourceTypeConfig(
+            strength=SourceStrength.LOW,
+            label="SCREENSHOT OCR",
+            confidence_cap=0.6,
+            requires_corroboration=False,
+            default_empty_on_noise=True,
+            guidance_notes="Same as desktop_rewind — garbled OCR text, UI fragments.",
+        ),
+        "ambient_voice": SourceTypeConfig(
+            strength=SourceStrength.LOW,
+            label="AMBIENT VOICE RECORDING",
+            confidence_cap=0.65,
+            requires_corroboration=True,
+            default_empty_on_noise=True,
+            guidance_notes="Always-on ambient recording. High noise floor. Very conservative.",
+        ),
+        "integration": SourceTypeConfig(
+            strength=SourceStrength.MEDIUM,
+            label="INTEGRATION FEED",
+            confidence_cap=0.8,
+            requires_corroboration=False,
+            default_empty_on_noise=False,
+            guidance_notes="Third-party integration data. Structure varies by provider.",
+        ),
+        "import": SourceTypeConfig(
+            strength=SourceStrength.MEDIUM,
+            label="IMPORTED DATA",
+            confidence_cap=0.75,
+            requires_corroboration=False,
+            default_empty_on_noise=False,
+            guidance_notes="Bulk-imported data. May have varying quality.",
+        ),
+        "developer_api": SourceTypeConfig(
+            strength=SourceStrength.HIGH,
+            label="DEVELOPER API",
+            confidence_cap=1.0,
+            requires_corroboration=False,
+            default_empty_on_noise=False,
+            guidance_notes="Developer-submitted via API. Trust caller's intent.",
+        ),
+        "benchmark_fixture": SourceTypeConfig(
+            strength=SourceStrength.UNKNOWN,
+            label="BENCHMARK FIXTURE",
+            confidence_cap=1.0,
+            requires_corroboration=False,
+            default_empty_on_noise=False,
+            guidance_notes=(
+                "Test fixture. Apply standard extraction rules. "
+                "Real source_type preserved in metadata for evaluation."
+            ),
+        ),
+    }
+
+
+SourceTypeConfig._REGISTRY = _build_source_type_registry()
+
+
 class SourceDescriptor(StrictBaseModel):
     source_type: Literal[
+        # --- Existing ---
         "conversation",
         "transcript",
         "desktop_rewind",
@@ -105,6 +261,11 @@ class SourceDescriptor(StrictBaseModel):
         "import",
         "developer_api",
         "benchmark_fixture",
+        # --- NEW: granular source types ---
+        "chat_exchange",          # HIGH: intentional user statements in chat UI
+        "voice_transcript",       # MEDIUM: push-to-talk / recorded voice
+        "ocr_screenshot_text",    # LOW: screen capture OCR output
+        "ambient_voice",          # LOW: always-on ambient recording
     ]
     source_id: str
     source_uri: str | None = None

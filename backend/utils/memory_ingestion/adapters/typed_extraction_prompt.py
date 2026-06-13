@@ -42,6 +42,66 @@ TYPED_PREDICATES = [
     "is_no_longer_true",
 ]
 
+
+def render_source_guidance(source_type: str) -> str:
+    """Render source-aware extraction guidance from a declared source_type.
+
+    This REPLACES the v3 'SOURCE TYPE DETECTION' heuristic section.
+    Instead of guessing from text patterns, we receive the definitive source type
+    and emit precise behavioral instructions.
+
+    Backward compatible: if source_type is unknown/empty, returns neutral guidance
+    that tells the model to use standard rules (no suppression).
+    """
+    from utils.memory_ingestion.models import SourceTypeConfig, SourceStrength
+
+    config = SourceTypeConfig._REGISTRY.get(source_type)
+    if not config:
+        return (
+            "Source type: UNKNOWN.\n"
+            "Apply standard extraction rules. Default to conservative: "
+            "when in doubt, do not extract."
+        )
+
+    parts = [f"Source type: {config.label} (signal strength: {config.strength.value})."]
+
+    if config.strength == SourceStrength.HIGH:
+        parts.append(
+            "HIGH CONFIDENCE SOURCE. Extract when both conditions are met:\n"
+            "  (a) clear, SPECIFIC predicate match (not is_currently_true unless no other fits)\n"
+            "  (b) verbatim self-report quote anchor with ≥2 distinctive terms\n"
+            "Do NOT suppress clear user claims from this source."
+        )
+    elif config.strength == SourceStrength.MEDIUM:
+        parts.append(
+            "MEDIUM CONFIDENCE SOURCE. Extract when:\n"
+            "  (a) clear predicate match\n"
+            "  (b) verbatim quote anchor\n"
+            "  (c) content is substantive (not filler/chitchat)\n"
+            "Apply moderate skepticism for garbled or sparse input."
+        )
+    elif config.strength == SourceStrength.LOW:
+        parts.append("LOW CONFIDENCE SOURCE — BE CONSERVATIVE.")
+        if config.requires_corroboration:
+            parts.append(
+                "  Require ≥2 independent utterances supporting the same fact."
+            )
+        parts.append(
+            "  Only extract if text is coherent and contains a clear factual statement.\n"
+            "  If input is predominantly filler, fragments, or UI chrome → output [] immediately."
+        )
+    else:
+        parts.append("Apply standard extraction rules with conservative default.")
+
+    if config.confidence_cap < 1.0:
+        parts.append(f"  Confidence cap: {config.confidence_cap} for extractions from this source.")
+
+    if config.guidance_notes:
+        parts.append(config.guidance_notes)
+
+    return "\n".join(parts)
+
+
 typed_extract_memories_prompt = ChatPromptTemplate.from_messages(
     [
         '''
@@ -53,26 +113,12 @@ CRITICAL CONTEXT:
 • NEVER use "Speaker 0", "Speaker 1" etc. — resolve real names when confident, otherwise use roles ("colleague", "friend")
 • Resolve "it", "that", "this" from the full conversation before writing the fact
 
-SOURCE TYPE DETECTION — adjust extraction aggressiveness based on input type:
+SOURCE SIGNAL: {source_guidance}
 
-• VOICE TRANSCRIPT indicators: [Speaker N:] labels, disfluencies (um, uh, like),
-  non-English text (Cyrillic, etc.), monologue-style single-speaker text,
-  garbled words, filler-heavy turns (>40% filler words).
-  → EXTRA CONSERVATIVE. Require ≥2 independent utterances supporting the same fact.
-  → Flag with uncertainty_reason=low_quality_transcript if extracting anything.
-  → If >60% of text is filler/disfluency → output [] immediately.
-
-• SCREENSHOT OCR indicators: Fragmented text, garbled characters (typos like
-  "CustOTlliZe"), UI element labels (buttons, menus, navigation),
-  transient state (notifications, counts, timestamps), credential-looking strings.
-  → SKEPTICAL. Only extract if text forms a complete, coherent factual statement
-    about {user_name} (not just UI chrome or transient state).
-  → Never extract UI elements, navigation labels, or transient notifications.
-  → If text is mostly fragments/garble → output [] immediately.
-
-• CHAT indicators: Clean turn-taking (human:/ai: labels), complete sentences,
-  low disfluency rate.
-  → Standard extraction rules apply. Still default to empty for chitchat/greetings.
+This source type is DECLARED (not inferred from text). Follow the above guidance
+precisely. Do NOT attempt to re-detect or second-guess the source type from text
+patterns like [Speaker N:] labels or disfluencies — the signal quality is already
+characterized above.
 
 IDENTITY RULES:
 • Never create new family members without EXPLICIT evidence
@@ -250,18 +296,25 @@ name or role (Sam, Maria, Alex, Dr. Lee, "my manager", "my friend", etc.),
 check WHO the fact is about before extracting:
 
 **DO extract as subject=user (self-report):**
-- "I had coffee with Maria" → knows_person(Maria) [user is subject]
-- "My manager asked me to submit the plan" → committed_to_do(submit plan)
+|- "I had coffee with Maria" → knows_person(Maria) [user is subject]
+|- "My manager asked me to submit the plan" → committed_to_do(submit plan)
   [action is on user, even if triggered by someone else]
-- "I prefer oat milk" → prefers(oat milk) [clear first-person]
+|- "I prefer oat milk" → prefers(oat milk) [clear first-person]
 
 **DO NOT extract as subject=user (fact is about someone else):**
-- "Sam is moving offices" → SKIP or subject_attribution=third_party
+|- "Sam is moving offices" → SKIP or subject_attribution=third_party
   [Sam is the grammatical subject, not user]
-- "My friend prefers tea over coffee" → SKIP or subject_attribution=third_party
+|- "My friend prefers tea over coffee" → SKIP or subject_attribution=third_party
   [friend is the one with the preference]
-- "Alex said he'll handle the review" → SKIP
+|- "Alex said he'll handle the review" → SKIP
   [Alex's commitment, not user's]
+
+**VOICE TRANSCRIPT MULTI-SPEAKER RULE:**
+When input contains multiple speakers (SPEAKER 0, SPEAKER 1, SPEAKER 2, etc.),
+ONLY extract facts where {user_name} (SPEAKER 0 / primary speaker) is the explicit subject.
+Facts about other speakers' preferences, tools, work, or plans are NOT about {user_name}
+→ output [] for those. A transcript mentioning "SPEAKER 2 uses Chrome" tells you nothing
+about {user_name} → SKIP entirely. This is the #1 source of voice FPs.
 
 **Rule of thumb:** If you can rephrase the sentence as "{user_name} [verb]..."
 and it means the same thing → subject=user. If the named person is the one
@@ -270,32 +323,11 @@ When in doubt about subject attribution, use third_party + add
 uncertainty_reason=subject_ambiguous and set confidence ≤ 0.7.
 
 
-=== OUTPUT GUIDANCE (SOURCE-CONDITIONAL) ===
-
-FOR CHAT INPUTS (clean turn-taking, complete sentences):
-• Extract when BOTH conditions are met:
-  (a) clear, SPECIFIC predicate match (not is_currently_true unless no other fits)
-  (b) verbatim self-report quote anchor with ≥2 distinctive terms
-• Chat is the HIGHEST-CONFIDENCE source — if the user explicitly states a fact
-  about themselves in chat, extract it. Do NOT suppress clear chat claims.
-
-FOR VOICE TRANSCRIPTS ([Speaker N:] labels, disfluencies):
-• EXTRA CONSERVATIVE. Only extract when ALL conditions are met:
-  (a) clear predicate match with ≥2 independent utterances supporting it
-  (b) verbatim quote from {user_name}'s own turns
-  (c) the transcript quality is sufficient (>40% of text is not filler/disfluency)
-• When in doubt on voice → output []. Most voice input is noise.
-
-FOR SCREENSHOT OCR (fragmented text, UI elements):
-• SKEPTICAL. Only extract when:
-  (a) text forms a COMPLETE, COHERENT factual statement about {user_name}
-  (b) NOT UI chrome, navigation labels, or transient notifications
-  (c) contains a specific predicate match
-• If OCR is fragmented/garbled → output [] immediately.
-
 UNIVERSAL RULES (all sources):
 • Each fact must be DURABLE (still true in 6 months) and NON-OBVIOUS
 • Never extract greetings, pure backchannel, or question-only input
+• HIGH signal sources (chat, conversation): Do NOT suppress clear user claims
+• LOW signal sources (ambient voice, OCR): Default to [] unless fact is unambiguous
 
 **Existing memories you already know about {user_name} (DO NOT REPEAT ANY)**:
 ```

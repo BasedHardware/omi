@@ -14,6 +14,7 @@ from pydantic import BaseModel, Field
 from utils.prompts import extract_memories_prompt
 from utils.memory_ingestion.adapters.typed_extraction_prompt import (
     TYPED_PREDICATES,
+    render_source_guidance,
     typed_extract_memories_prompt,
 )
 from utils.memory_ingestion.ids import StableIdFactory
@@ -138,6 +139,7 @@ class ProductionLikeMemoryModelClient(MemoryModelClient):
                     user_name=user_name,
                     memories_str=memories_str,
                     language=pipeline_input.source.language,
+                    source_type=pipeline_input.source.source_type,  # v4: flow source type to prompt
                     high_recall=self.high_recall,
                     typed=self.typed,
                 )
@@ -259,6 +261,7 @@ def _extract_memories_with_production_prompt(
     user_name: str,
     memories_str: str,
     language: str | None,
+    source_type: str,  # from pipeline_input.source.source_type
     high_recall: bool,
     typed: bool = False,
 ) -> list[ProductionLikeMemory]:
@@ -281,6 +284,7 @@ def _extract_memories_with_production_prompt(
             "memories_str": memories_str,
             "language_instruction": _language_instruction(language),
             "format_instructions": parser.get_format_instructions(),
+            "source_guidance": render_source_guidance(source_type),  # v4: source-aware
         }
     )
     return response.facts
