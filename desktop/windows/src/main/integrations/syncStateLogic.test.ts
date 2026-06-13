@@ -41,6 +41,14 @@ describe('normalizeSourceState', () => {
     expect(next.processedIds[0]).toBe('id2')
     expect(next.processedIds.at(-1)).toBe(`id${MAX_PROCESSED + 1}`)
   })
+
+  it('bounds normalized ids after deduping newest entries', () => {
+    const ids = [...Array.from({ length: MAX_PROCESSED }, (_, i) => `id${i}`), 'tail', 'tail']
+    const next = normalizeSourceState({ lastSyncAt: 1, processedIds: ids })
+    expect(next.processedIds.length).toBe(MAX_PROCESSED)
+    expect(next.processedIds[0]).toBe('id1')
+    expect(next.processedIds.at(-1)).toBe('tail')
+  })
 })
 
 describe('recordProcessed', () => {

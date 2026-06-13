@@ -31,6 +31,7 @@ export function normalizeSourceState(value: unknown): SourceState {
     if (typeof id !== 'string' || !id || seen.has(id)) continue
     processedIds.unshift(id)
     seen.add(id)
+    if (seen.size >= MAX_PROCESSED) break
   }
 
   const bounded =
