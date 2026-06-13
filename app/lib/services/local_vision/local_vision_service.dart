@@ -11,6 +11,27 @@ import 'package:omi/utils/logger.dart';
 
 enum AnnouncementMode { allObjects, heldObjectsOnly }
 
+enum LocalVisionDetectorImplementation { fake, yoloe }
+
+extension LocalVisionDetectorImplementationSettings on LocalVisionDetectorImplementation {
+  String get preferenceValue => switch (this) {
+        LocalVisionDetectorImplementation.fake => 'fake',
+        LocalVisionDetectorImplementation.yoloe => 'yoloe',
+      };
+
+  String get displayName => switch (this) {
+        LocalVisionDetectorImplementation.fake => 'Fake detector',
+        LocalVisionDetectorImplementation.yoloe => 'YOLOE detector',
+      };
+
+  static LocalVisionDetectorImplementation fromPreference(String value) {
+    return LocalVisionDetectorImplementation.values.firstWhere(
+      (implementation) => implementation.preferenceValue == value,
+      orElse: () => LocalVisionDetectorImplementation.yoloe,
+    );
+  }
+}
+
 extension AnnouncementModeSettings on AnnouncementMode {
   String get preferenceValue => switch (this) {
         AnnouncementMode.allObjects => 'allObjects',
@@ -70,6 +91,65 @@ class Detection {
   final bool wouldAnnounce;
 }
 
+class LocalVisionLatencyMetrics {
+  const LocalVisionLatencyMetrics({
+    this.preprocessMs,
+    this.inferenceMs,
+    this.postprocessMs,
+    this.nativeTotalMs,
+    this.pipelineTotalMs,
+  });
+
+  final double? preprocessMs;
+  final double? inferenceMs;
+  final double? postprocessMs;
+  final double? nativeTotalMs;
+  final double? pipelineTotalMs;
+
+  LocalVisionLatencyMetrics copyWith({
+    double? preprocessMs,
+    double? inferenceMs,
+    double? postprocessMs,
+    double? nativeTotalMs,
+    double? pipelineTotalMs,
+  }) {
+    return LocalVisionLatencyMetrics(
+      preprocessMs: preprocessMs ?? this.preprocessMs,
+      inferenceMs: inferenceMs ?? this.inferenceMs,
+      postprocessMs: postprocessMs ?? this.postprocessMs,
+      nativeTotalMs: nativeTotalMs ?? this.nativeTotalMs,
+      pipelineTotalMs: pipelineTotalMs ?? this.pipelineTotalMs,
+    );
+  }
+}
+
+class LocalVisionDetectorResult {
+  const LocalVisionDetectorResult({required this.detections, this.latency = const LocalVisionLatencyMetrics()});
+
+  final List<Detection> detections;
+  final LocalVisionLatencyMetrics latency;
+}
+
+class LocalVisionLatencyAverages {
+  const LocalVisionLatencyAverages({
+    required this.sampleCount,
+    this.preprocessMs,
+    this.inferenceMs,
+    this.postprocessMs,
+    this.nativeTotalMs,
+    this.pipelineTotalMs,
+  });
+
+  final int sampleCount;
+  final double? preprocessMs;
+  final double? inferenceMs;
+  final double? postprocessMs;
+  final double? nativeTotalMs;
+  final double? pipelineTotalMs;
+
+  static const empty = LocalVisionLatencyAverages(sampleCount: 0);
+}
+
 class LocalVisionFrame {
   const LocalVisionFrame({
     required this.jpegBytes,
@@ -85,16 +165,18 @@ class LocalVisionFrame {
 enum LocalVisionInferenceStatus { idle, queued, running, completed, failed }
 
 abstract class LocalVisionDetector {
-  Future<List<Detection>> detect(LocalVisionFrame frame);
+  Future<LocalVisionDetectorResult> detect(LocalVisionFrame frame);
 }
 
 class FakeLocalVisionDetector implements LocalVisionDetector {
   const FakeLocalVisionDetector();
 
   @override
-  Future<List<Detection>> detect(LocalVisionFrame frame) async {
+  Future<LocalVisionDetectorResult> detect(LocalVisionFrame frame) async {
+    final stopwatch = Stopwatch()..start();
     await Future<void>.delayed(const Duration(milliseconds: 120));
-    return [
+    stopwatch.stop();
+    return LocalVisionDetectorResult(detections: [
       Detection(
         label: 'cup',
         confidence: 0.91,
@@ -116,7 +198,36 @@ class FakeLocalVisionDetector implements LocalVisionDetector {
         sourceFrameId: frame.frameId,
         timestamp: frame.timestamp,
       ),
-    ];
+    ], latency: LocalVisionLatencyMetrics(pipelineTotalMs: stopwatch.elapsedMicroseconds / 1000));
+  }
+}
+
+class _LatencyRollingWindow {
+  static const int _maxSamples = 20;
+
+  final List<LocalVisionLatencyMetrics> _samples = [];
+
+  void add(LocalVisionLatencyMetrics metrics) {
+    _samples.add(metrics);
+    if (_samples.length > _maxSamples) _samples.removeAt(0);
+  }
+
+  LocalVisionLatencyAverages get averages {
+    if (_samples.isEmpty) return LocalVisionLatencyAverages.empty;
+    return LocalVisionLatencyAverages(
+      sampleCount: _samples.length,
+      preprocessMs: _average((sample) => sample.preprocessMs),
+      inferenceMs: _average((sample) => sample.inferenceMs),
+      postprocessMs: _average((sample) => sample.postprocessMs),
+      nativeTotalMs: _average((sample) => sample.nativeTotalMs),
+      pipelineTotalMs: _average((sample) => sample.pipelineTotalMs),
+    );
+  }
+
+  double? _average(double? Function(LocalVisionLatencyMetrics sample) selector) {
+    final values = _samples.map(selector).whereType<double>().toList();
+    if (values.isEmpty) return null;
+    return values.reduce((a, b) => a + b) / values.length;
   }
 }
 
@@ -211,12 +322,14 @@ class ObjectPresenceTracker {
 }
 
 class LocalVisionService extends ChangeNotifier {
-  LocalVisionService._({LocalVisionDetector? detector})
-      : _detector = detector ?? (Platform.isAndroid ? AndroidYoloeDetector() : const FakeLocalVisionDetector());
+  LocalVisionService._({LocalVisionDetector? fakeDetector, LocalVisionDetector? yoloeDetector})
+      : _fakeDetector = fakeDetector ?? const FakeLocalVisionDetector(),
+        _yoloeDetector = yoloeDetector ?? AndroidYoloeDetector();
 
   static final LocalVisionService instance = LocalVisionService._();
 
-  final LocalVisionDetector _detector;
+  final LocalVisionDetector _fakeDetector;
+  final LocalVisionDetector _yoloeDetector;
   final ObjectPresenceTracker _presenceTracker = ObjectPresenceTracker();
 
   LocalVisionInferenceStatus _status = LocalVisionInferenceStatus.idle;
@@ -224,9 +337,18 @@ class LocalVisionService extends ChangeNotifier {
   LocalVisionFrame? _pendingFrame;
   List<Detection> _detections = [];
   List<AnnouncementCandidate> _announcementCandidates = [];
+  final List<DateTime> _receivedFrameTimes = [];
+  final List<DateTime> _processedFrameTimes = [];
+  DateTime? _lastAcceptedFrameAt;
   int _droppedFrameCount = 0;
+  int _receivedFrameCount = 0;
+  int _processedFrameCount = 0;
+  int _throttledFrameCount = 0;
   Object? _lastError;
   YoloeModelAssetStatus _modelAssetStatus = const YoloeModelAssetStatus.notChecked();
+  LocalVisionDetectorImplementation _activeImplementation = LocalVisionDetectorImplementation.yoloe;
+  LocalVisionLatencyMetrics _latestLatency = const LocalVisionLatencyMetrics();
+  final _latencyWindow = _LatencyRollingWindow();
 
   bool _isRunning = false;
 
@@ -238,8 +360,17 @@ class LocalVisionService extends ChangeNotifier {
   int get detectionCount => _detections.length;
   int get announcementCandidateCount => _announcementCandidates.length;
   int get droppedFrameCount => _droppedFrameCount;
+  int get receivedFrameCount => _receivedFrameCount;
+  int get processedFrameCount => _processedFrameCount;
+  int get throttledFrameCount => _throttledFrameCount;
+  double get incomingFrameRateFps => _frameRateFor(_receivedFrameTimes);
+  double get inferenceFrameRateFps => _frameRateFor(_processedFrameTimes);
+  DateTime? get lastAnnouncementAt => ObjectAnnouncementService.instance.lastAnnouncementAt;
   Object? get lastError => _lastError;
   YoloeModelAssetStatus get modelAssetStatus => _modelAssetStatus;
+  LocalVisionDetectorImplementation get activeImplementation => _activeImplementation;
+  LocalVisionLatencyMetrics get latestLatency => _latestLatency;
+  LocalVisionLatencyAverages get averageLatency => _latencyWindow.averages;
 
   Future<void> initialize() async {
     _modelAssetStatus = await YoloeModelAssets.validate();
@@ -249,23 +380,29 @@ class LocalVisionService extends ChangeNotifier {
         'input=${_modelAssetStatus.inputSize} dir=${_modelAssetStatus.modelDirectory}',
       );
     } else {
-      SharedPreferencesUtil().localYoloeEnabled = false;
       _lastError = _modelAssetStatus.error;
       _status = LocalVisionInferenceStatus.failed;
-      Logger.error('Local YOLOE disabled: ${_modelAssetStatus.error}');
+      _activeImplementation = _selectDetectorImplementation();
+      Logger.error(
+        'Local YOLOE model unavailable: ${_modelAssetStatus.error}. '
+        'Detector fallback=${_activeImplementation.preferenceValue}',
+      );
     }
     notifyListeners();
   }
 
   Future<void> submitFrame(Uint8List jpegBytes, {DateTime? timestamp}) async {
-    if (!_modelAssetStatus.isValid) {
+    final capturedAt = timestamp ?? DateTime.now();
+    _receivedFrameCount++;
+    _trackFrameTime(_receivedFrameTimes, capturedAt);
+
+    if (!_canProcessFrames) {
       _lastError = _modelAssetStatus.error ?? 'Local YOLOE model assets have not been validated';
       _status = LocalVisionInferenceStatus.failed;
       notifyListeners();
       return;
     }
 
-    final capturedAt = timestamp ?? DateTime.now();
     final frame = LocalVisionFrame(
       jpegBytes: jpegBytes,
       timestamp: capturedAt,
@@ -279,11 +416,21 @@ class LocalVisionService extends ChangeNotifier {
       if (_pendingFrame != null) {
         _droppedFrameCount++;
       }
+      // Keep only the newest pending frame. Older pending frame bytes become
+      // unreachable here, so the VM can reclaim them instead of queueing stale images.
       _pendingFrame = frame;
       _status = LocalVisionInferenceStatus.queued;
       notifyListeners();
       return;
     }
+
+    if (_shouldThrottleFrame(capturedAt)) {
+      _throttledFrameCount++;
+      notifyListeners();
+      return;
+    }
+
+    _lastAcceptedFrameAt = capturedAt;
 
     await _runFrame(frame);
   }
@@ -294,11 +441,33 @@ class LocalVisionService extends ChangeNotifier {
     notifyListeners();
 
     try {
-      final rawResults = await _detector.detect(frame);
+      final implementation = _selectDetectorImplementation();
+      final detector = _detectorFor(implementation);
+      _activeImplementation = implementation;
+      Logger.debug(
+        'Local YOLOE processing rotated JPEG bytes frame=${frame.frameId} '
+        'bytes=${frame.jpegBytes.length} detector=${implementation.preferenceValue}',
+      );
+      final pipelineStopwatch = Stopwatch()..start();
+      final detectorResult = await detector.detect(frame);
+      pipelineStopwatch.stop();
+      final latency = detectorResult.latency.copyWith(pipelineTotalMs: pipelineStopwatch.elapsedMicroseconds / 1000);
+      _latestLatency = latency;
+      _latencyWindow.add(latency);
+      _processedFrameCount++;
+      _trackFrameTime(_processedFrameTimes, DateTime.now());
+      final prefs = SharedPreferencesUtil();
+      final confidenceThreshold = prefs.localYoloeConfidenceThreshold;
+      final maxObjectsPerFrame = prefs.localYoloeMaxObjectsPerFrame;
+      final rawResults = detectorResult.detections
+          .where((detection) => detection.confidence >= confidenceThreshold)
+          .toList()
+        ..sort((a, b) => b.confidence.compareTo(a.confidence));
+      final thresholdedResults = rawResults.take(maxObjectsPerFrame).toList();
       final mode = AnnouncementModeSettings.fromPreference(SharedPreferencesUtil().localYoloeAnnouncementMode);
-      final candidates = _presenceTracker.update(rawResults, timestamp: frame.timestamp, mode: mode);
+      final candidates = _presenceTracker.update(thresholdedResults, timestamp: frame.timestamp, mode: mode);
       final candidateLabels = candidates.map((candidate) => candidate.detection.label.toLowerCase()).toSet();
-      final results = rawResults
+      final results = thresholdedResults
           .map(
             (detection) => Detection(
               label: detection.label,
@@ -316,7 +485,9 @@ class LocalVisionService extends ChangeNotifier {
       _status = LocalVisionInferenceStatus.completed;
       Logger.debug(
         'Local YOLOE detections frame=${frame.frameId} '
-        'count=${results.length} announce=${candidates.length} mode=${mode.preferenceValue} '
+        'detector=${implementation.preferenceValue} count=${results.length} announce=${candidates.length} '
+        'mode=${mode.preferenceValue} threshold=${confidenceThreshold.toStringAsFixed(2)} '
+        'latencyMs=${latency.pipelineTotalMs?.toStringAsFixed(1) ?? 'unknown'} '
         'labels=${results.map((detection) => detection.label).join(',')}',
       );
       if (candidates.isNotEmpty) {
@@ -336,7 +507,84 @@ class LocalVisionService extends ChangeNotifier {
     final nextFrame = _pendingFrame;
     if (nextFrame != null) {
       _pendingFrame = null;
-      await _runFrame(nextFrame);
+      if (_shouldThrottleFrame(nextFrame.timestamp)) {
+        _throttledFrameCount++;
+        notifyListeners();
+      } else {
+        _lastAcceptedFrameAt = nextFrame.timestamp;
+        await _runFrame(nextFrame);
+      }
     }
+  }
+
+  bool _shouldThrottleFrame(DateTime capturedAt) {
+    final interval = _effectiveMinFrameInterval;
+    if (interval == Duration.zero) return false;
+
+    final lastAccepted = _lastAcceptedFrameAt;
+    if (lastAccepted == null) return false;
+
+    return capturedAt.difference(lastAccepted) < interval;
+  }
+
+  Duration get _effectiveMinFrameInterval {
+    final prefs = SharedPreferencesUtil();
+    Duration minInterval = Duration.zero;
+
+    final maxFps = prefs.localYoloeMaxFps;
+    if (maxFps > 0) {
+      minInterval = Duration(microseconds: (Duration.microsecondsPerSecond / maxFps).round());
+    }
+
+    if (prefs.localYoloeAdaptiveThrottlingEnabled) {
+      final averagePipelineMs = _latencyWindow.averages.pipelineTotalMs;
+      if (averagePipelineMs != null && averagePipelineMs > 0) {
+        final adaptiveInterval = Duration(microseconds: (averagePipelineMs * 1250).round());
+        if (adaptiveInterval > minInterval) {
+          minInterval = adaptiveInterval;
+        }
+      }
+    }
+
+    return minInterval;
+  }
+
+  void _trackFrameTime(List<DateTime> samples, DateTime timestamp) {
+    samples.add(timestamp);
+    final cutoff = timestamp.subtract(const Duration(seconds: 10));
+    samples.removeWhere((sample) => sample.isBefore(cutoff));
+  }
+
+  double _frameRateFor(List<DateTime> samples) {
+    if (samples.length < 2) return 0;
+    final elapsedMs = samples.last.difference(samples.first).inMilliseconds;
+    if (elapsedMs <= 0) return 0;
+    return (samples.length - 1) * 1000 / elapsedMs;
+  }
+
+  bool get _canProcessFrames {
+    final implementation = _selectDetectorImplementation();
+    if (implementation == LocalVisionDetectorImplementation.fake) return true;
+    return _modelAssetStatus.isValid && Platform.isAndroid;
+  }
+
+  LocalVisionDetectorImplementation _selectDetectorImplementation() {
+    final requested = LocalVisionDetectorImplementationSettings.fromPreference(
+      SharedPreferencesUtil().localYoloeDetectorImplementation,
+    );
+    if (requested == LocalVisionDetectorImplementation.fake) {
+      return LocalVisionDetectorImplementation.fake;
+    }
+    if (_modelAssetStatus.isValid && Platform.isAndroid) {
+      return LocalVisionDetectorImplementation.yoloe;
+    }
+    return LocalVisionDetectorImplementation.fake;
+  }
+
+  LocalVisionDetector _detectorFor(LocalVisionDetectorImplementation implementation) {
+    return switch (implementation) {
+      LocalVisionDetectorImplementation.fake => _fakeDetector,
+      LocalVisionDetectorImplementation.yoloe => _yoloeDetector,
+    };
   }
 }

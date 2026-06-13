@@ -217,9 +217,29 @@ class SharedPreferencesUtil {
 
   int get localYoloeMaxObjectsPerAnnouncement => getInt('localYoloeMaxObjectsPerAnnouncement', defaultValue: 3);
 
+  set localYoloeConfidenceThreshold(double value) => saveDouble('localYoloeConfidenceThreshold', value);
+
+  double get localYoloeConfidenceThreshold => getDouble('localYoloeConfidenceThreshold', defaultValue: 0.4);
+
+  set localYoloeMaxObjectsPerFrame(int value) => saveInt('localYoloeMaxObjectsPerFrame', value);
+
+  int get localYoloeMaxObjectsPerFrame => getInt('localYoloeMaxObjectsPerFrame', defaultValue: 20);
+
+  set localYoloeMaxFps(double value) => saveDouble('localYoloeMaxFps', value);
+
+  double get localYoloeMaxFps => getDouble('localYoloeMaxFps', defaultValue: 0.0);
+
+  set localYoloeAdaptiveThrottlingEnabled(bool value) => saveBool('localYoloeAdaptiveThrottlingEnabled', value);
+
+  bool get localYoloeAdaptiveThrottlingEnabled => getBool('localYoloeAdaptiveThrottlingEnabled', defaultValue: true);
+
   set localYoloeAnnouncementMode(String value) => saveString('localYoloeAnnouncementMode', value);
 
   String get localYoloeAnnouncementMode => getString('localYoloeAnnouncementMode', defaultValue: 'allObjects');
+
+  set localYoloeDetectorImplementation(String value) => saveString('localYoloeDetectorImplementation', value);
+
+  String get localYoloeDetectorImplementation => getString('localYoloeDetectorImplementation', defaultValue: 'yoloe');
 
   // Claude Agent — route chat through desktop agent VM (experimental)
   set claudeAgentEnabled(bool value) => saveBool('claudeAgentEnabled', value);

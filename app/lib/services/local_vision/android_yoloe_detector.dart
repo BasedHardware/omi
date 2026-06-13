@@ -15,7 +15,7 @@ class AndroidYoloeDetector implements LocalVisionDetector {
   bool _loaded = false;
 
   @override
-  Future<List<Detection>> detect(LocalVisionFrame frame) async {
+  Future<LocalVisionDetectorResult> detect(LocalVisionFrame frame) async {
     if (!Platform.isAndroid) {
       throw UnsupportedError('Android YOLOE detector is only available on Android');
     }
@@ -23,18 +23,23 @@ class AndroidYoloeDetector implements LocalVisionDetector {
     await _loadModelIfNeeded();
 
     final prefs = SharedPreferencesUtil();
-    final rawDetections = await _channel.invokeListMethod<dynamic>('detectJpeg', <String, dynamic>{
+    final rawResult = await _channel.invokeMethod<dynamic>('detectJpeg', <String, dynamic>{
       'bytes': frame.jpegBytes,
-      'confidenceThreshold': 0.25,
+      'confidenceThreshold': prefs.localYoloeConfidenceThreshold,
       'iouThreshold': 0.45,
-      'maxDetections': prefs.localYoloeMaxObjectsPerAnnouncement * 4,
+      'maxDetections': prefs.localYoloeMaxObjectsPerFrame,
     });
 
-    return (rawDetections ?? const <dynamic>[])
+    final rawDetections = rawResult is Map ? rawResult['detections'] : rawResult;
+    final detections = (rawDetections is List ? rawDetections : const <dynamic>[])
         .whereType<Map<dynamic, dynamic>>()
         .map((raw) => _parseDetection(raw, frame))
         .whereType<Detection>()
         .toList();
+    return LocalVisionDetectorResult(
+      detections: detections,
+      latency: _parseLatency(rawResult),
+    );
   }
 
   Future<void> close() async {
@@ -76,5 +81,21 @@ class AndroidYoloeDetector implements LocalVisionDetector {
       sourceFrameId: frame.frameId,
       timestamp: frame.timestamp,
     );
+  }
+
+  LocalVisionLatencyMetrics _parseLatency(dynamic rawResult) {
+    if (rawResult is! Map) return const LocalVisionLatencyMetrics();
+    final latency = rawResult['latencyMs'];
+    if (latency is! Map) return const LocalVisionLatencyMetrics();
+    return LocalVisionLatencyMetrics(
+      preprocessMs: _doubleValue(latency['preprocess']),
+      inferenceMs: _doubleValue(latency['inference']),
+      postprocessMs: _doubleValue(latency['postprocess']),
+      nativeTotalMs: _doubleValue(latency['total']),
+    );
+  }
+
+  double? _doubleValue(dynamic value) {
+    return value is num ? value.toDouble() : null;
   }
 }

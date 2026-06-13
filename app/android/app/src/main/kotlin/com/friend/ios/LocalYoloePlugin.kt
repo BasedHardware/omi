@@ -74,12 +74,14 @@ class LocalYoloePlugin(private val context: Context) : MethodChannel.MethodCallH
 
     private fun handleDetectJpeg(call: MethodCall, result: MethodChannel.Result) {
         try {
+            val totalStartedAt = System.nanoTime()
             if (nativeHandle == 0L) error("Model is not loaded")
             val bytes = call.argument<ByteArray>("bytes") ?: error("Missing JPEG bytes")
             val confidenceThreshold = (call.argument<Double>("confidenceThreshold") ?: 0.25).toFloat()
             val iouThreshold = (call.argument<Double>("iouThreshold") ?: 0.45).toFloat()
             val maxDetections = call.argument<Int>("maxDetections") ?: 20
 
+            val preprocessStartedAt = System.nanoTime()
             val decoded = BitmapFactory.decodeByteArray(bytes, 0, bytes.size) ?: error("Failed to decode JPEG")
             val letterbox = letterbox(decoded)
             if (letterbox.bitmap != decoded) decoded.recycle()
@@ -87,14 +89,33 @@ class LocalYoloePlugin(private val context: Context) : MethodChannel.MethodCallH
             val pixels = IntArray(INPUT_SIZE * INPUT_SIZE)
             letterbox.bitmap.getPixels(pixels, 0, INPUT_SIZE, 0, 0, INPUT_SIZE, INPUT_SIZE)
             letterbox.bitmap.recycle()
+            val preprocessMs = elapsedMs(preprocessStartedAt)
 
+            val inferenceStartedAt = System.nanoTime()
             val raw = nativeDetect(nativeHandle, pixels, INPUT_SIZE, INPUT_SIZE, confidenceThreshold, iouThreshold, maxDetections)
-            result.success(mapDetections(raw, letterbox))
+            val inferenceMs = elapsedMs(inferenceStartedAt)
+
+            val postprocessStartedAt = System.nanoTime()
+            val detections = mapDetections(raw, letterbox)
+            val postprocessMs = elapsedMs(postprocessStartedAt)
+            result.success(
+                mapOf(
+                    "detections" to detections,
+                    "latencyMs" to mapOf(
+                        "preprocess" to preprocessMs,
+                        "inference" to inferenceMs,
+                        "postprocess" to postprocessMs,
+                        "total" to elapsedMs(totalStartedAt),
+                    ),
+                ),
+            )
         } catch (e: Throwable) {
             Log.e(TAG, "detectJpeg failed", e)
             result.error("LOCAL_YOLOE_DETECT_FAILED", e.message, null)
         }
     }
+
+    private fun elapsedMs(startedAt: Long): Double = (System.nanoTime() - startedAt) / 1_000_000.0
 
     private fun handleClose(result: MethodChannel.Result) {
         try {

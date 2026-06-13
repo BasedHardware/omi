@@ -50,7 +50,12 @@ class DeveloperModeProvider extends BaseProvider {
   double localYoloeObjectAbsenceSeconds = 8.0;
   double localYoloeRepeatCooldownSeconds = 45.0;
   int localYoloeMaxObjectsPerAnnouncement = 3;
+  double localYoloeConfidenceThreshold = 0.4;
+  int localYoloeMaxObjectsPerFrame = 20;
+  double localYoloeMaxFps = 0.0;
+  bool localYoloeAdaptiveThrottlingEnabled = true;
   String localYoloeAnnouncementMode = 'allObjects';
+  String localYoloeDetectorImplementation = 'yoloe';
 
   // Claude Agent (experimental)
   bool claudeAgentEnabled = false;
@@ -139,7 +144,12 @@ class DeveloperModeProvider extends BaseProvider {
     localYoloeObjectAbsenceSeconds = SharedPreferencesUtil().localYoloeObjectAbsenceSeconds;
     localYoloeRepeatCooldownSeconds = SharedPreferencesUtil().localYoloeRepeatCooldownSeconds;
     localYoloeMaxObjectsPerAnnouncement = SharedPreferencesUtil().localYoloeMaxObjectsPerAnnouncement;
+    localYoloeConfidenceThreshold = SharedPreferencesUtil().localYoloeConfidenceThreshold;
+    localYoloeMaxObjectsPerFrame = SharedPreferencesUtil().localYoloeMaxObjectsPerFrame;
+    localYoloeMaxFps = SharedPreferencesUtil().localYoloeMaxFps;
+    localYoloeAdaptiveThrottlingEnabled = SharedPreferencesUtil().localYoloeAdaptiveThrottlingEnabled;
     localYoloeAnnouncementMode = SharedPreferencesUtil().localYoloeAnnouncementMode;
+    localYoloeDetectorImplementation = SharedPreferencesUtil().localYoloeDetectorImplementation;
     claudeAgentEnabled = SharedPreferencesUtil().claudeAgentEnabled;
     conversationEventsToggled = SharedPreferencesUtil().conversationEventsToggled;
     transcriptsToggled = SharedPreferencesUtil().transcriptsToggled;
@@ -357,9 +367,40 @@ class DeveloperModeProvider extends BaseProvider {
     notifyListeners();
   }
 
+  void onLocalYoloeConfidenceThresholdChanged(double value) {
+    localYoloeConfidenceThreshold = value;
+    SharedPreferencesUtil().localYoloeConfidenceThreshold = value;
+    notifyListeners();
+  }
+
+  void onLocalYoloeMaxObjectsPerFrameChanged(double value) {
+    localYoloeMaxObjectsPerFrame = value.round();
+    SharedPreferencesUtil().localYoloeMaxObjectsPerFrame = localYoloeMaxObjectsPerFrame;
+    notifyListeners();
+  }
+
+  void onLocalYoloeMaxFpsChanged(double value) {
+    localYoloeMaxFps = value;
+    SharedPreferencesUtil().localYoloeMaxFps = value;
+    notifyListeners();
+  }
+
+  void onLocalYoloeAdaptiveThrottlingChanged(bool value) {
+    localYoloeAdaptiveThrottlingEnabled = value;
+    SharedPreferencesUtil().localYoloeAdaptiveThrottlingEnabled = value;
+    notifyListeners();
+  }
+
   void onLocalYoloeAnnouncementModeChanged(String value) {
     localYoloeAnnouncementMode = value;
     SharedPreferencesUtil().localYoloeAnnouncementMode = value;
+    notifyListeners();
+  }
+
+  void onLocalYoloeDetectorImplementationChanged(String value) {
+    localYoloeDetectorImplementation = value;
+    SharedPreferencesUtil().localYoloeDetectorImplementation = value;
+    Logger.debug('Local YOLOE detector implementation set to $value');
     notifyListeners();
   }
 

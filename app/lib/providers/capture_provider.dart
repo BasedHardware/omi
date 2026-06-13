@@ -958,15 +958,16 @@ class CaptureProvider extends ChangeNotifier
         final rotatedImageBytes = rotateImage(orientedImage);
 
         if (SharedPreferencesUtil().localYoloeEnabled) {
+          final rotatedJpegBytes = Uint8List.fromList(rotatedImageBytes);
           await LocalVisionService.instance.submitFrame(
-            Uint8List.fromList(rotatedImageBytes),
+            rotatedJpegBytes,
             timestamp: DateTime.now(),
           );
           _localYoloeSkippedUploadFrameCount++;
           if (_localYoloeSkippedUploadFrameCount == 1 || _localYoloeSkippedUploadFrameCount % 10 == 0) {
             Logger.debug(
-              'Local YOLOE image processed; backend image upload skipped '
-              '(frames=$_localYoloeSkippedUploadFrameCount)',
+              'Local YOLOE processed rotated JPEG bytes without base64 encoding; backend image upload skipped '
+              '(frames=$_localYoloeSkippedUploadFrameCount bytes=${rotatedJpegBytes.length})',
             );
           }
           return;

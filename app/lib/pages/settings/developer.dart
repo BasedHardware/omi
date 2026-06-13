@@ -176,6 +176,9 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
 
   Widget _buildLocalYoloeVoiceControls(DeveloperModeProvider provider) {
     final currentMode = AnnouncementModeSettings.fromPreference(provider.localYoloeAnnouncementMode);
+    final currentImplementation = LocalVisionDetectorImplementationSettings.fromPreference(
+      provider.localYoloeDetectorImplementation,
+    );
 
     return Container(
       width: double.infinity,
@@ -206,6 +209,33 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
             padding: const EdgeInsets.symmetric(vertical: 12),
             child: Divider(color: Colors.grey.shade800, height: 1),
           ),
+          Text('Detector implementation', style: TextStyle(color: Colors.grey.shade400, fontSize: 12)),
+          const SizedBox(height: 8),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            decoration: BoxDecoration(color: const Color(0xFF242428), borderRadius: BorderRadius.circular(10)),
+            child: DropdownButtonHideUnderline(
+              child: DropdownButton<LocalVisionDetectorImplementation>(
+                dropdownColor: const Color(0xFF242428),
+                value: currentImplementation,
+                style: const TextStyle(color: Colors.white, fontSize: 14),
+                items: LocalVisionDetectorImplementation.values
+                    .map(
+                      (implementation) => DropdownMenuItem<LocalVisionDetectorImplementation>(
+                        value: implementation,
+                        child: Text(implementation.displayName),
+                      ),
+                    )
+                    .toList(),
+                onChanged: (implementation) {
+                  if (implementation == null) return;
+                  provider.onLocalYoloeDetectorImplementationChanged(implementation.preferenceValue);
+                },
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
           _buildExperimentalItem(
             title: 'Interrupt previous speech',
             description: 'When enabled, newer announcements stop any current local YOLOE speech.',
@@ -286,6 +316,40 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
             divisions: 4,
             onChanged: provider.onLocalYoloeMaxObjectsPerAnnouncementChanged,
           ),
+          _buildLocalYoloeSlider(
+            label: 'Confidence threshold',
+            valueLabel: '${(provider.localYoloeConfidenceThreshold * 100).toStringAsFixed(0)}%',
+            value: provider.localYoloeConfidenceThreshold,
+            min: 0.05,
+            max: 0.95,
+            divisions: 18,
+            onChanged: provider.onLocalYoloeConfidenceThresholdChanged,
+          ),
+          _buildLocalYoloeSlider(
+            label: 'Max objects per frame',
+            valueLabel: provider.localYoloeMaxObjectsPerFrame.toString(),
+            value: provider.localYoloeMaxObjectsPerFrame.toDouble(),
+            min: 1,
+            max: 50,
+            divisions: 49,
+            onChanged: provider.onLocalYoloeMaxObjectsPerFrameChanged,
+          ),
+          _buildLocalYoloeSlider(
+            label: 'Max inference FPS',
+            valueLabel: provider.localYoloeMaxFps <= 0 ? 'Unlimited' : provider.localYoloeMaxFps.toStringAsFixed(0),
+            value: provider.localYoloeMaxFps,
+            min: 0,
+            max: 10,
+            divisions: 10,
+            onChanged: provider.onLocalYoloeMaxFpsChanged,
+          ),
+          _buildExperimentalItem(
+            title: 'Adaptive throttling',
+            description: 'Automatically slows local inference when measured latency suggests heat or battery pressure.',
+            icon: FontAwesomeIcons.gaugeHigh,
+            value: provider.localYoloeAdaptiveThrottlingEnabled,
+            onChanged: provider.onLocalYoloeAdaptiveThrottlingChanged,
+          ),
           const SizedBox(height: 10),
           Row(
             children: [
@@ -336,6 +400,8 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
     return Consumer<LocalVisionService>(
       builder: (context, service, child) {
         final detections = service.detections;
+        final latestLatency = service.latestLatency;
+        final averageLatency = service.averageLatency;
         return Container(
           width: double.infinity,
           padding: const EdgeInsets.all(14),
@@ -359,13 +425,27 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
                 runSpacing: 8,
                 children: [
                   _buildLocalVisionMetric('Model', service.modelAssetStatus.displayName),
+                  _buildLocalVisionMetric('Detector', service.activeImplementation.displayName),
                   _buildLocalVisionMetric('Labels', service.modelAssetStatus.labelCount.toString()),
                   _buildLocalVisionMetric('Input', service.modelAssetStatus.inputSize),
                   _buildLocalVisionMetric('Frame', _formatLocalVisionTimestamp(service.latestFrameTimestamp)),
                   _buildLocalVisionMetric('Status', service.status.name),
+                  _buildLocalVisionMetric('Incoming FPS', service.incomingFrameRateFps.toStringAsFixed(1)),
+                  _buildLocalVisionMetric('Inference FPS', service.inferenceFrameRateFps.toStringAsFixed(1)),
+                  _buildLocalVisionMetric('Received', service.receivedFrameCount.toString()),
+                  _buildLocalVisionMetric('Processed', service.processedFrameCount.toString()),
                   _buildLocalVisionMetric('Dropped', service.droppedFrameCount.toString()),
+                  _buildLocalVisionMetric('Throttled', service.throttledFrameCount.toString()),
                   _buildLocalVisionMetric('Detections', service.detectionCount.toString()),
                   _buildLocalVisionMetric('Announce', service.announcementCandidateCount.toString()),
+                  _buildLocalVisionMetric('Last announcement', _formatLocalVisionTimestamp(service.lastAnnouncementAt)),
+                  _buildLocalVisionMetric('Latest total', _formatLatencyMs(latestLatency.pipelineTotalMs)),
+                  _buildLocalVisionMetric('Avg total', _formatLatencyMs(averageLatency.pipelineTotalMs)),
+                  _buildLocalVisionMetric('Avg native', _formatLatencyMs(averageLatency.nativeTotalMs)),
+                  _buildLocalVisionMetric('Avg preprocess', _formatLatencyMs(averageLatency.preprocessMs)),
+                  _buildLocalVisionMetric('Avg inference', _formatLatencyMs(averageLatency.inferenceMs)),
+                  _buildLocalVisionMetric('Avg postprocess', _formatLatencyMs(averageLatency.postprocessMs)),
+                  _buildLocalVisionMetric('Latency samples', averageLatency.sampleCount.toString()),
                 ],
               ),
               if (service.lastError != null) ...[
@@ -408,6 +488,11 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
         ],
       ),
     );
+  }
+
+  String _formatLatencyMs(double? value) {
+    if (value == null) return '—';
+    return '${value.toStringAsFixed(value >= 100 ? 0 : 1)} ms';
   }
 
   Widget _buildLocalVisionDetectionRow(Detection detection) {
