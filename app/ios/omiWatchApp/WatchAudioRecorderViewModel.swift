@@ -46,9 +46,9 @@ class WatchAudioRecorderViewModel: NSObject, ObservableObject {
             if success {
                 self.setupAudioStreaming()
                 self.isRecording = true
-                self.session.sendMessage(["method": "startRecording"], replyHandler: nil)
+                self.sendReliably(["method": "startRecording"])
             } else {
-                self.session.sendMessage(["method": "recordingError", "error": "Microphone permission denied"], replyHandler: nil)
+                self.sendReliably(["method": "recordingError", "error": "Microphone permission denied"])
             }
         }
     }
@@ -79,7 +79,7 @@ class WatchAudioRecorderViewModel: NSObject, ObservableObject {
         chunkBuffer = Data()
         bufferStartTime = nil
 
-        session.sendMessage(["method": "stopRecording"], replyHandler: nil)
+        sendReliably(["method": "stopRecording"])
     }
 
     private func bufferAndSendAudioData(_ audioData: Data) {
@@ -202,25 +202,24 @@ class WatchAudioRecorderViewModel: NSObject, ObservableObject {
         
         switch permissionStatus {
         case .granted:
-            session.sendMessage(["method": "microphonePermissionResult", "granted": true], replyHandler: nil)
-            
+            sendReliably(["method": "microphonePermissionResult", "granted": true])
+
         case .denied:
-            session.sendMessage(["method": "microphonePermissionResult", "granted": false], replyHandler: nil)
-            
+            sendReliably(["method": "microphonePermissionResult", "granted": false])
+
         case .undetermined:
             // Request permission - this will show the permission dialog
             audioSession.requestRecordPermission { [weak self] granted in
                 DispatchQueue.main.async {
-                    self?.session.sendMessage([
-                        "method": "microphonePermissionResult", 
+                    self?.sendReliably([
+                        "method": "microphonePermissionResult",
                         "granted": granted
-                    ], replyHandler: nil)
+                    ])
                 }
             }
-            
+
         @unknown default:
-            // Send failure result to main app
-            session.sendMessage(["method": "microphonePermissionResult", "granted": false], replyHandler: nil)
+            sendReliably(["method": "microphonePermissionResult", "granted": false])
         }
     }
 
@@ -339,6 +338,16 @@ class WatchAudioRecorderViewModel: NSObject, ObservableObject {
         // Buffer audio data for target-duration chunks
         bufferAndSendAudioData(byteData)
     }
+
+    private func sendReliably(_ message: [String: Any]) {
+        if session.isReachable {
+            session.sendMessage(message, replyHandler: nil) { error in
+                self.session.transferUserInfo(message)
+            }
+        } else {
+            session.transferUserInfo(message)
+        }
+    }
 }
 
 extension WatchAudioRecorderViewModel: WCSessionDelegate {
@@ -346,7 +355,13 @@ extension WatchAudioRecorderViewModel: WCSessionDelegate {
     public func sessionDidBecomeInactive(_ session: WCSession) { }
     public func sessionDidDeactivate(_ session: WCSession) { }
 #endif
-    func session(_ session: WCSession, activationDidCompleteWith activationState: WCSessionActivationState, error: (any Error)?) {}
+    func session(_ session: WCSession, activationDidCompleteWith activationState: WCSessionActivationState, error: (any Error)?) {
+        if let error = error {
+            NSLog("[Watch] WCSession activation failed: \(error.localizedDescription)")
+        } else {
+            NSLog("[Watch] WCSession activated state=\(activationState.rawValue)")
+        }
+    }
     
     func session(_ session: WCSession, didReceiveMessage message: [String : Any]) {
         Task {
@@ -378,6 +393,33 @@ extension WatchAudioRecorderViewModel: WCSessionDelegate {
                 BatteryManager.shared.sendWatchInfo()
             default:
                 print("Unknown background method: \(method)")
+            }
+        }
+    }
+
+    func session(_ session: WCSession, didFinish userInfoTransfer: WCSessionUserInfoTransfer, error: (any Error)?) {
+        if let error = error {
+            let method = userInfoTransfer.userInfo["method"] as? String ?? "unknown"
+            NSLog("[Watch] transferUserInfo failed (method=\(method)): \(error.localizedDescription)")
+        }
+    }
+
+    func sessionReachabilityDidChange(_ session: WCSession) {
+        NSLog("[Watch] reachability changed: \(session.isReachable)")
+    }
+
+    func session(_ session: WCSession, didReceiveApplicationContext applicationContext: [String : Any]) {
+        Task { @MainActor in
+            guard let method = applicationContext["method"] as? String else { return }
+            switch method {
+            case "startRecording":
+                self.startRecording()
+            case "stopRecording":
+                self.stopRecording()
+            case "requestMicrophonePermission":
+                self.requestMicrophonePermissionOnly()
+            default:
+                print("Unknown applicationContext method: \(method)")
             }
         }
     }

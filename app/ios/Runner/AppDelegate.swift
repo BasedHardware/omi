@@ -363,16 +363,28 @@ final class QuickActionsIconPatcher: NSObject {
     }
 
     private func handleAudioChunk(_ message: [String: Any]) {
-        guard isRecordingActive else {
-            print("Ignoring audio chunk - recording not active") // probably started recording with main omi app closed
-            return
-        }
-
         guard let audioChunk = message["audioChunk"] as? Data,
               let chunkIndex = message["chunkIndex"] as? Int,
               let isLast = message["isLast"] as? Bool,
               let sampleRate = message["sampleRate"] as? Double else {
             return
+        }
+
+        if !isRecordingActive {
+            NSLog("[Watch] Audio chunk arrived without prior startRecording — recovering state (chunkIndex=\(chunkIndex))")
+            isRecordingActive = true
+            audioChunks.removeAll()
+            nextExpectedChunkIndex = 0
+            DispatchQueue.main.async {
+                self.flutterWatchAPI?.onRecordingStarted() { result in
+                    switch result {
+                    case .success:
+                        break
+                    case .failure(let error):
+                        print("Recording started (recovered from divergence) sent to Flutter - Error: \(error.message)")
+                    }
+                }
+            }
         }
 
         audioChunks[chunkIndex] = (audioChunk, sampleRate)
@@ -431,14 +443,46 @@ func registerPlugins(registry: FlutterPluginRegistry) {
 
 extension AppDelegate: WCSessionDelegate {
     
-    func session(_ session: WCSession, activationDidCompleteWith activationState: WCSessionActivationState, error: Error?) { }
-    
+    func session(_ session: WCSession, activationDidCompleteWith activationState: WCSessionActivationState, error: Error?) {
+        if let error = error {
+            NSLog("[Watch] phone-side WCSession activation failed: \(error.localizedDescription)")
+        } else {
+            NSLog("[Watch] phone-side WCSession activated state=\(activationState.rawValue)")
+        }
+    }
+
+    func session(_ session: WCSession, didFinish userInfoTransfer: WCSessionUserInfoTransfer, error: Error?) {
+        if let error = error {
+            let method = userInfoTransfer.userInfo["method"] as? String ?? "unknown"
+            NSLog("[Watch] phone-side transferUserInfo failed (method=\(method)): \(error.localizedDescription)")
+        }
+    }
+
     func sessionDidBecomeInactive(_ session: WCSession) {
         print("Session Watch Become Inactive")
     }
-    
+
     func sessionDidDeactivate(_ session: WCSession) {
         print("Session Watch Deactivate")
+        WCSession.default.activate()
+    }
+
+    func sessionReachabilityDidChange(_ session: WCSession) {
+        let isReachable = session.isReachable
+        NSLog("[Watch] reachability changed: \(isReachable)")
+        DispatchQueue.main.async {
+            self.flutterWatchAPI?.onWatchReachabilityChanged(isReachable: isReachable) { _ in }
+        }
+    }
+
+    func sessionWatchStateDidChange(_ session: WCSession) {
+        let isPaired = session.isPaired
+        let isInstalled = session.isWatchAppInstalled
+        let isReachable = session.isReachable
+        NSLog("[Watch] state changed paired=\(isPaired) installed=\(isInstalled) reachable=\(isReachable)")
+        DispatchQueue.main.async {
+            self.flutterWatchAPI?.onWatchStateChanged(isPaired: isPaired, isWatchAppInstalled: isInstalled, isReachable: isReachable) { _ in }
+        }
     }
     
     // Receive a message from watch (foreground/active)
@@ -561,6 +605,21 @@ extension AppDelegate: WCSessionDelegate {
             }
             
             switch method {
+            case "startRecording":
+                self.isRecordingActive = true
+                self.audioChunks.removeAll()
+                self.nextExpectedChunkIndex = 0
+
+                DispatchQueue.main.async {
+                    self.flutterWatchAPI?.onRecordingStarted() { result in
+                        switch result {
+                        case .success:
+                            break
+                        case .failure(let error):
+                            print("Recording started (background) sent to Flutter - Error: \(error.message)")
+                        }
+                    }
+                }
             case "sendAudioChunk":
                 self.handleAudioChunk(userInfo)
             case "stopRecording":

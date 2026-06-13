@@ -816,6 +816,10 @@ abstract class WatchRecorderFlutterAPI {
 
   void onWatchBatteryUpdate(double batteryLevel, int batteryState);
 
+  void onWatchReachabilityChanged(bool isReachable);
+
+  void onWatchStateChanged(bool isPaired, bool isWatchAppInstalled, bool isReachable);
+
   static void setUp(WatchRecorderFlutterAPI? api, {BinaryMessenger? binaryMessenger, String messageChannelSuffix = '',}) {
     messageChannelSuffix = messageChannelSuffix.isNotEmpty ? '.$messageChannelSuffix' : '';
     {
@@ -1009,6 +1013,62 @@ abstract class WatchRecorderFlutterAPI {
               'Argument for dev.flutter.pigeon.omi_pigeon.WatchRecorderFlutterAPI.onWatchBatteryUpdate was null, expected non-null int.');
           try {
             api.onWatchBatteryUpdate(arg_batteryLevel!, arg_batteryState!);
+            return wrapResponse(empty: true);
+          } on PlatformException catch (e) {
+            return wrapResponse(error: e);
+          }          catch (e) {
+            return wrapResponse(error: PlatformException(code: 'error', message: e.toString()));
+          }
+        });
+      }
+    }
+    {
+      final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
+          'dev.flutter.pigeon.omi_pigeon.WatchRecorderFlutterAPI.onWatchReachabilityChanged$messageChannelSuffix', pigeonChannelCodec,
+          binaryMessenger: binaryMessenger);
+      if (api == null) {
+        pigeonVar_channel.setMessageHandler(null);
+      } else {
+        pigeonVar_channel.setMessageHandler((Object? message) async {
+          assert(message != null,
+          'Argument for dev.flutter.pigeon.omi_pigeon.WatchRecorderFlutterAPI.onWatchReachabilityChanged was null.');
+          final List<Object?> args = (message as List<Object?>?)!;
+          final bool? arg_isReachable = (args[0] as bool?);
+          assert(arg_isReachable != null,
+              'Argument for dev.flutter.pigeon.omi_pigeon.WatchRecorderFlutterAPI.onWatchReachabilityChanged was null, expected non-null bool.');
+          try {
+            api.onWatchReachabilityChanged(arg_isReachable!);
+            return wrapResponse(empty: true);
+          } on PlatformException catch (e) {
+            return wrapResponse(error: e);
+          }          catch (e) {
+            return wrapResponse(error: PlatformException(code: 'error', message: e.toString()));
+          }
+        });
+      }
+    }
+    {
+      final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
+          'dev.flutter.pigeon.omi_pigeon.WatchRecorderFlutterAPI.onWatchStateChanged$messageChannelSuffix', pigeonChannelCodec,
+          binaryMessenger: binaryMessenger);
+      if (api == null) {
+        pigeonVar_channel.setMessageHandler(null);
+      } else {
+        pigeonVar_channel.setMessageHandler((Object? message) async {
+          assert(message != null,
+          'Argument for dev.flutter.pigeon.omi_pigeon.WatchRecorderFlutterAPI.onWatchStateChanged was null.');
+          final List<Object?> args = (message as List<Object?>?)!;
+          final bool? arg_isPaired = (args[0] as bool?);
+          assert(arg_isPaired != null,
+              'Argument for dev.flutter.pigeon.omi_pigeon.WatchRecorderFlutterAPI.onWatchStateChanged was null, expected non-null bool.');
+          final bool? arg_isWatchAppInstalled = (args[1] as bool?);
+          assert(arg_isWatchAppInstalled != null,
+              'Argument for dev.flutter.pigeon.omi_pigeon.WatchRecorderFlutterAPI.onWatchStateChanged was null, expected non-null bool.');
+          final bool? arg_isReachable = (args[2] as bool?);
+          assert(arg_isReachable != null,
+              'Argument for dev.flutter.pigeon.omi_pigeon.WatchRecorderFlutterAPI.onWatchStateChanged was null, expected non-null bool.');
+          try {
+            api.onWatchStateChanged(arg_isPaired!, arg_isWatchAppInstalled!, arg_isReachable!);
             return wrapResponse(empty: true);
           } on PlatformException catch (e) {
             return wrapResponse(error: e);

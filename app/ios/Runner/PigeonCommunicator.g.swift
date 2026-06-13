@@ -648,6 +648,8 @@ protocol WatchRecorderFlutterAPIProtocol {
   func onMicrophonePermissionResult(granted grantedArg: Bool, completion: @escaping (Result<Void, PigeonError>) -> Void)
   func onMainAppMicrophonePermissionResult(granted grantedArg: Bool, completion: @escaping (Result<Void, PigeonError>) -> Void)
   func onWatchBatteryUpdate(batteryLevel batteryLevelArg: Double, batteryState batteryStateArg: Int64, completion: @escaping (Result<Void, PigeonError>) -> Void)
+  func onWatchReachabilityChanged(isReachable isReachableArg: Bool, completion: @escaping (Result<Void, PigeonError>) -> Void)
+  func onWatchStateChanged(isPaired isPairedArg: Bool, isWatchAppInstalled isWatchAppInstalledArg: Bool, isReachable isReachableArg: Bool, completion: @escaping (Result<Void, PigeonError>) -> Void)
 }
 class WatchRecorderFlutterAPI: WatchRecorderFlutterAPIProtocol {
   private let binaryMessenger: FlutterBinaryMessenger
@@ -789,6 +791,42 @@ class WatchRecorderFlutterAPI: WatchRecorderFlutterAPIProtocol {
     let channelName: String = "dev.flutter.pigeon.omi_pigeon.WatchRecorderFlutterAPI.onWatchBatteryUpdate\(messageChannelSuffix)"
     let channel = FlutterBasicMessageChannel(name: channelName, binaryMessenger: binaryMessenger, codec: codec)
     channel.sendMessage([batteryLevelArg, batteryStateArg] as [Any?]) { response in
+      guard let listResponse = response as? [Any?] else {
+        completion(.failure(createConnectionError(withChannelName: channelName)))
+        return
+      }
+      if listResponse.count > 1 {
+        let code: String = listResponse[0] as! String
+        let message: String? = nilOrValue(listResponse[1])
+        let details: String? = nilOrValue(listResponse[2])
+        completion(.failure(PigeonError(code: code, message: message, details: details)))
+      } else {
+        completion(.success(()))
+      }
+    }
+  }
+  func onWatchReachabilityChanged(isReachable isReachableArg: Bool, completion: @escaping (Result<Void, PigeonError>) -> Void) {
+    let channelName: String = "dev.flutter.pigeon.omi_pigeon.WatchRecorderFlutterAPI.onWatchReachabilityChanged\(messageChannelSuffix)"
+    let channel = FlutterBasicMessageChannel(name: channelName, binaryMessenger: binaryMessenger, codec: codec)
+    channel.sendMessage([isReachableArg] as [Any?]) { response in
+      guard let listResponse = response as? [Any?] else {
+        completion(.failure(createConnectionError(withChannelName: channelName)))
+        return
+      }
+      if listResponse.count > 1 {
+        let code: String = listResponse[0] as! String
+        let message: String? = nilOrValue(listResponse[1])
+        let details: String? = nilOrValue(listResponse[2])
+        completion(.failure(PigeonError(code: code, message: message, details: details)))
+      } else {
+        completion(.success(()))
+      }
+    }
+  }
+  func onWatchStateChanged(isPaired isPairedArg: Bool, isWatchAppInstalled isWatchAppInstalledArg: Bool, isReachable isReachableArg: Bool, completion: @escaping (Result<Void, PigeonError>) -> Void) {
+    let channelName: String = "dev.flutter.pigeon.omi_pigeon.WatchRecorderFlutterAPI.onWatchStateChanged\(messageChannelSuffix)"
+    let channel = FlutterBasicMessageChannel(name: channelName, binaryMessenger: binaryMessenger, codec: codec)
+    channel.sendMessage([isPairedArg, isWatchAppInstalledArg, isReachableArg] as [Any?]) { response in
       guard let listResponse = response as? [Any?] else {
         completion(.failure(createConnectionError(withChannelName: channelName)))
         return
