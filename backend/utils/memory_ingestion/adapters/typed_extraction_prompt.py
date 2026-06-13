@@ -81,14 +81,16 @@ def render_source_guidance(source_type: str) -> str:
             "Apply moderate skepticism for garbled or sparse input."
         )
     elif config.strength == SourceStrength.LOW:
-        parts.append("LOW CONFIDENCE SOURCE — BE CONSERVATIVE.")
+        parts.append("LOW CONFIDENCE SOURCE — extract liberally, filter in post-processing.")
         if config.requires_corroboration:
             parts.append(
-                "  Require ≥2 independent utterances supporting the same fact."
+                "  Prefer facts with ≥2 independent utterances, but do NOT suppress"
+                " single-mention facts that are specific and verifiable."
             )
         parts.append(
-            "  Only extract if text is coherent and contains a clear factual statement.\n"
-            "  If input is predominantly filler, fragments, or UI chrome → output [] immediately."
+            "  Extract any plausible memory-worthy fact. Prefer false positives over"
+            " false negatives — the post-processing stack will deduplicate and filter."
+            "  Only skip content that is pure noise/gibberish with zero factual signal."
         )
     else:
         parts.append("Apply standard extraction rules with conservative default.")
@@ -142,8 +144,10 @@ EXTRACT durable context: preferences/dislikes, decisions/commitments, projects/t
    - has_birthday — birthday information
    - has_address — address/location information
    - uses_tool — a tool/service they routinely use (absorbs "owns_device")
-   - is_currently_true — durable state/fact with no better predicate above (LAST RESORT — use for <10% of extractions MAXIMUM). Must represent a concrete, verifiable state change or enduring biographical fact about {user_name}, NOT generic activity descriptions, mood states, work observations, or transient status.
+   - is_currently_true — durable state/fact with no better predicate above (use for biographical identity, ongoing states, location/residence, travel history when no more specific predicate fits). Represents up to ~30% of extractions for voice/transcript sources where most facts are state descriptions rather than actions.
    - is_no_longer_true — a fact that stopped holding
+   - credential_detected — credentials, passwords, PII, or auth material visible on screen (OCR/security sources)
+   - sensitive_info_visible — sensitive but non-credential info visible (email addresses, personal identifiers)
 
    Write the predicate EXACTLY as shown. Prefer the MOST SPECIFIC predicate. Use is_currently_true only as absolute last resort and only for concrete, non-obvious facts.
 

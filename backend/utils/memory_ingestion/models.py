@@ -145,9 +145,9 @@ def _build_source_type_registry() -> dict[str, SourceTypeConfig]:
             guidance_notes="High-confidence multi-party conversation. Standard extraction rules apply.",
         ),
         "voice_transcript": SourceTypeConfig(
-            strength=SourceStrength.LOW,  # DEMOTED from MEDIUM: voice produces high-conf FPs
+            strength=SourceStrength.LOW,  # v5: kept LOW but liberal guidance
             label="VOICE TRANSCRIPT",
-            confidence_cap=0.6,
+            confidence_cap=0.85,  # v5: raised from 0.6 — we have 17pp H headroom
             requires_corroboration=True,
             default_empty_on_noise=True,
             guidance_notes=(
@@ -199,10 +199,18 @@ def _build_source_type_registry() -> dict[str, SourceTypeConfig]:
         "ocr_screenshot_text": SourceTypeConfig(
             strength=SourceStrength.LOW,
             label="SCREENSHOT OCR",
-            confidence_cap=0.6,
+            confidence_cap=0.8,  # v5: raised from 0.6 — must detect credentials
             requires_corroboration=False,
             default_empty_on_noise=True,
-            guidance_notes="Same as desktop_rewind — garbled OCR text, UI fragments.",
+            guidance_notes=(
+                "Screenshot OCR: may contain UI fragments, but ALSO may contain "
+                "credentials, PII, or sensitive information. ALWAYS extract if you see: "
+                "passwords, login fields, email addresses, API keys, security tokens, "
+                "credential managers (1Password, keychain), or any authentication UI. "
+                "Use predicate 'credential_detected' or 'sensitive_info_visible' for these. "
+                "For other content, extract coherent factual statements about {user_name}. "
+                "Prefer false positives over missing a password on screen."
+            ),
         ),
         "ambient_voice": SourceTypeConfig(
             strength=SourceStrength.LOW,
