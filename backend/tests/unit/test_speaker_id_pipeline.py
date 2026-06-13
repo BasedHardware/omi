@@ -63,6 +63,7 @@ _PARENT_ATTRS = (
     ("scipy.spatial", "distance"),
 )
 _MISSING = object()
+_NOT_IMPORTED = object()
 _saved_modules = {name: sys.modules.get(name, _MISSING) for name in _RESTORED_MODULES}
 _saved_parent_attrs = {
     (parent_name, attr): getattr(sys.modules.get(parent_name), attr, _MISSING) for parent_name, attr in _PARENT_ATTRS
@@ -78,8 +79,16 @@ def _install_module(name, module):
             setattr(parent, attr, module)
 
 
+def _restore_parent_attr(parent, attr, original, current):
+    if original is _MISSING:
+        if current is not _NOT_IMPORTED and getattr(parent, attr, _MISSING) is current:
+            delattr(parent, attr)
+    else:
+        setattr(parent, attr, original)
+
+
 def _restore_stub_modules():
-    current_modules = {name: sys.modules.get(name, _MISSING) for name in _RESTORED_MODULES}
+    current_modules = {name: sys.modules.get(name, _NOT_IMPORTED) for name in _RESTORED_MODULES}
     for name in sorted(_RESTORED_MODULES, key=lambda module_name: module_name.count("."), reverse=True):
         original = _saved_modules[name]
         if original is _MISSING:
@@ -91,12 +100,8 @@ def _restore_stub_modules():
         parent = sys.modules.get(parent_name)
         if parent is None:
             continue
-        if original is _MISSING:
-            child_name = f"{parent_name}.{attr}"
-            if getattr(parent, attr, _MISSING) is current_modules.get(child_name):
-                delattr(parent, attr)
-        else:
-            setattr(parent, attr, original)
+        child_name = f"{parent_name}.{attr}"
+        _restore_parent_attr(parent, attr, original, current_modules.get(child_name, _NOT_IMPORTED))
 
 
 _install_module("database._client", MagicMock())
@@ -149,6 +154,13 @@ finally:
     _restore_stub_modules()
 
 # ─── AudioRingBuffer ─────────────────────────────────────────────────────────
+
+
+class TestImportStubCleanup:
+    def test_restore_parent_attr_ignores_missing_child_and_absent_attr(self):
+        parent = ModuleType("parent")
+        _restore_parent_attr(parent, "child", _MISSING, _NOT_IMPORTED)
+        assert not hasattr(parent, "child")
 
 
 class TestAudioRingBuffer:
