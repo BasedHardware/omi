@@ -8,15 +8,22 @@ import asyncio
 import json
 import sys
 import types
+from pathlib import Path
 from unittest.mock import MagicMock, AsyncMock, patch
 
 import pytest
 
+BACKEND_DIR = Path(__file__).resolve().parents[2]
+
 _RESTORED_MODULES = (
     "database._client",
     "database.redis_db",
-    "utils.http_client",
+    "models",
+    "models.conversation",
+    "utils",
+    "utils.conversations",
     "utils.conversations.location",
+    "utils.http_client",
 )
 _MISSING = object()
 _saved_modules = {name: sys.modules.get(name, _MISSING) for name in _RESTORED_MODULES}
@@ -51,6 +58,53 @@ def _restore_modules():
                     setattr(parent, attr, original)
 
 
+def _ensure_package_path(name: str, path: Path) -> types.ModuleType:
+    module = sys.modules.get(name)
+    if module is None or not hasattr(module, "__path__"):
+        module = types.ModuleType(name)
+        sys.modules[name] = module
+
+    module.__path__ = [str(path)]
+
+    if "." in name:
+        parent_name, attr_name = name.rsplit(".", 1)
+        parent = sys.modules.get(parent_name)
+        if parent is not None:
+            setattr(parent, attr_name, module)
+
+    return module
+
+
+def _drop_stale_module(name: str, expected_file: Path) -> None:
+    module = sys.modules.get(name)
+    if module is None:
+        return
+
+    module_file = getattr(module, "__file__", None)
+    try:
+        module_path = Path(module_file).resolve() if module_file else None
+    except TypeError:
+        module_path = None
+
+    if module_path == expected_file.resolve():
+        return
+
+    sys.modules.pop(name, None)
+
+    if "." in name:
+        parent_name, attr_name = name.rsplit(".", 1)
+        parent = sys.modules.get(parent_name)
+        if parent is not None and getattr(parent, attr_name, None) is module:
+            delattr(parent, attr_name)
+
+
+_ensure_package_path("models", BACKEND_DIR / "models")
+_ensure_package_path("utils", BACKEND_DIR / "utils")
+_ensure_package_path("utils.conversations", BACKEND_DIR / "utils" / "conversations")
+_drop_stale_module("models.conversation", BACKEND_DIR / "models" / "conversation.py")
+_drop_stale_module("utils.conversations.location", BACKEND_DIR / "utils" / "conversations" / "location.py")
+
+
 # Mock database._client before importing anything that touches GCP
 _install_module("database._client", MagicMock())
 
@@ -60,10 +114,15 @@ _redis_mod.r = MagicMock()
 _install_module("database.redis_db", _redis_mod)
 
 # Stub utils.http_client
-_http_mod = types.ModuleType("utils.http_client")
-_http_mod.get_maps_client = MagicMock()
-_http_mod.get_webhook_client = MagicMock()
-_http_mod.get_maps_semaphore = MagicMock(return_value=asyncio.Semaphore(8))
+_http_mod = sys.modules.get("utils.http_client")
+if _http_mod is None:
+    _http_mod = types.ModuleType("utils.http_client")
+if not hasattr(_http_mod, "get_maps_client"):
+    _http_mod.get_maps_client = MagicMock()
+if not hasattr(_http_mod, "get_webhook_client"):
+    _http_mod.get_webhook_client = MagicMock()
+if not hasattr(_http_mod, "get_maps_semaphore"):
+    _http_mod.get_maps_semaphore = MagicMock(return_value=asyncio.Semaphore(8))
 _install_module("utils.http_client", _http_mod)
 
 try:
