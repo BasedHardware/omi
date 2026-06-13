@@ -56,6 +56,8 @@ _RESTORED_MODULES = tuple(
     ["database"]
     + [f"database.{submodule}" for submodule in _DATABASE_SUBMODULES]
     + [
+        "utils",
+        "utils.llm",
         "utils.llms",
         "utils.llms.memory",
         "utils.llm.clients",
@@ -66,6 +68,8 @@ _RESTORED_MODULES = tuple(
 _PARENT_ATTRS = tuple(
     [("database", submodule) for submodule in _DATABASE_SUBMODULES]
     + [
+        ("utils", "llm"),
+        ("utils", "llms"),
         ("utils.llms", "memory"),
         ("utils.llm", "clients"),
         ("utils.llm", "usage_tracker"),
@@ -94,7 +98,8 @@ def _restore_stub_modules():
             continue
         if original is _MISSING:
             child_name = f"{parent_name}.{attr}"
-            if getattr(parent, attr, _MISSING) is current_modules.get(child_name):
+            current = current_modules.get(child_name, _MISSING)
+            if current is not _MISSING and getattr(parent, attr, _MISSING) is current:
                 delattr(parent, attr)
         else:
             setattr(parent, attr, original)
@@ -137,7 +142,7 @@ if not hasattr(clients_mod, 'get_llm'):
 
 # Stub usage tracking so importing utils.llm.goals does not pull optional usage deps.
 usage_tracker_mod = _stub_module("utils.llm.usage_tracker")
-usage_tracker_mod.track_usage = MagicMock(return_value=nullcontext())
+usage_tracker_mod.track_usage = MagicMock(side_effect=lambda *args, **kwargs: nullcontext())
 usage_tracker_mod.Features = types.SimpleNamespace(GOALS="goals")
 
 # Shortcut references to mocked db functions
