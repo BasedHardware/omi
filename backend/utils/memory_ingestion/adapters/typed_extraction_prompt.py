@@ -270,15 +270,32 @@ When in doubt about subject attribution, use third_party + add
 uncertainty_reason=subject_ambiguous and set confidence ≤ 0.7.
 
 
-=== OUTPUT GUIDANCE ===
-• Only extract when ALL conditions are met:
+=== OUTPUT GUIDANCE (SOURCE-CONDITIONAL) ===
+
+FOR CHAT INPUTS (clean turn-taking, complete sentences):
+• Extract when BOTH conditions are met:
   (a) clear, SPECIFIC predicate match (not is_currently_true unless no other fits)
   (b) verbatim self-report quote anchor with ≥2 distinctive terms
-  (c) the fact is DURABLE (still true in 6 months) and NON-OBVIOUS
-  (d) the input contains substantive content (not greetings, filler, or noise)
-• DEFAULT TO EMPTY LIST. Extraction is the exception, not the rule.
-• When in doubt, do NOT extract. A missed real memory is better than a hallucinated one.
-• Each fact must make sense standalone in 6 months
+• Chat is the HIGHEST-CONFIDENCE source — if the user explicitly states a fact
+  about themselves in chat, extract it. Do NOT suppress clear chat claims.
+
+FOR VOICE TRANSCRIPTS ([Speaker N:] labels, disfluencies):
+• EXTRA CONSERVATIVE. Only extract when ALL conditions are met:
+  (a) clear predicate match with ≥2 independent utterances supporting it
+  (b) verbatim quote from {user_name}'s own turns
+  (c) the transcript quality is sufficient (>40% of text is not filler/disfluency)
+• When in doubt on voice → output []. Most voice input is noise.
+
+FOR SCREENSHOT OCR (fragmented text, UI elements):
+• SKEPTICAL. Only extract when:
+  (a) text forms a COMPLETE, COHERENT factual statement about {user_name}
+  (b) NOT UI chrome, navigation labels, or transient notifications
+  (c) contains a specific predicate match
+• If OCR is fragmented/garbled → output [] immediately.
+
+UNIVERSAL RULES (all sources):
+• Each fact must be DURABLE (still true in 6 months) and NON-OBVIOUS
+• Never extract greetings, pure backchannel, or question-only input
 
 **Existing memories you already know about {user_name} (DO NOT REPEAT ANY)**:
 ```
