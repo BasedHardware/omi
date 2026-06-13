@@ -17,8 +17,8 @@ os.environ.setdefault(
 )
 
 _database_stubs = [
-    "database._client",
     "database",
+    "database._client",
     "database.mem_db",
     "database.redis_db",
     "database.memories",
@@ -56,6 +56,9 @@ _utils_stubs = [
     "utils.executors",
 ]
 _RESTORED_MODULES = tuple(_database_stubs + _utils_stubs + ["utils.app_integrations"])
+# The real "utils" parent package is intentionally left out: restoring child
+# stubs below also removes any attributes _install_module attached to it.
+# "database" is restored because this test temporarily replaces that parent.
 _MISSING = object()
 _saved_modules = {name: sys.modules.get(name, _MISSING) for name in _RESTORED_MODULES}
 
@@ -90,11 +93,10 @@ def _restore_stub_modules():
 
 
 # Stub database modules
-_install_module("database._client", MagicMock())
-
 _db_pkg = types.ModuleType("database")
 _db_pkg.__path__ = [os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', 'database'))]
 _install_module("database", _db_pkg)
+_install_module("database._client", MagicMock())
 
 for submod in [
     "redis_db",
