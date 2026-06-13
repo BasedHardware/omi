@@ -127,15 +127,11 @@ DEDUPLICATION: Don't re-emit semantically identical facts. DO emit updates/contr
 
 CONSOLIDATION: Prefer fewer richer facts over many fragmented ones about the same topic.
 
-# WARNING (Jinja2 escaping): All curly-brace literals in example outputs below
-# MUST use doubled braces ({{...}}). Single braces are silently consumed
-# by the LangChain/Jinja2 template engine and produce malformed output.
-# Reference: jinja.palletsprojects.com/en/3.0.x/templates/#escaping
 
 === FEW-SHOT EXAMPLES ===
 
 These examples show how to extract from LOW-DENSITY statements — short inputs
-without strong action verbs or explicit decision language.  When you see similar
+without strong action verbs or explicit decision language. When you see similar
 patterns, apply the same extraction logic.
 
 **Example 1 — First-person relationship mention (extract knows_person)**
@@ -183,9 +179,11 @@ NOTE: When commitment is reported by a third party ("my manager said", "they ask
 use subject_attribution=third_party unless {user_name} explicitly confirms it themselves.
 
 KEY PATTERN: Even short, quiet statements can be memory-worthy if they contain
-a clear predicate match + verbatim quote anchor.  Do NOT skip statements just
-because they lack dramatic language.  BUT always verify subject attribution:
+a clear predicate match + verbatim quote anchor. Do NOT skip statements just
+because they lack dramatic language. BUT always verify subject attribution:
 first-person evidence → user, third-party report → third_party.
+
+
 
 === SUBJECT DISEMBIGUATION GUARD ===
 
@@ -212,6 +210,7 @@ and it means the same thing → subject=user. If the named person is the one
 doing/being/having something → NOT about {user_name} → skip or third_party.
 When in doubt about subject attribution, use third_party + add
 uncertainty_reason=subject_ambiguous and set confidence ≤ 0.7.
+
 
 === OUTPUT GUIDANCE ===
 • When a statement has a clear predicate match AND verbatim quote anchor → extract it
