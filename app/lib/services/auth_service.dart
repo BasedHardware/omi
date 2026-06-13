@@ -350,7 +350,14 @@ class AuthService {
     // Use custom token if enabled and available
     if (useCustomToken && customToken != null) {
       Logger.debug('Signing in with Firebase custom token from $provider');
-      return await FirebaseAuth.instance.signInWithCustomToken(customToken);
+      try {
+        return await FirebaseAuth.instance.signInWithCustomToken(customToken);
+      } on FirebaseAuthException catch (e) {
+        if (e.code != 'custom-token-mismatch') {
+          rethrow;
+        }
+        Logger.debug('Custom token audience mismatch; falling back to $provider OAuth credentials');
+      }
     }
 
     // Fallback to OAuth credentials

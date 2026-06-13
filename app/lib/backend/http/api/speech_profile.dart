@@ -6,7 +6,13 @@ import 'package:omi/env/env.dart';
 import 'package:omi/utils/logger.dart';
 
 Future<bool> userHasSpeakerProfile() async {
-  var response = await makeApiCall(url: '${Env.apiBaseUrl}v3/speech-profile', headers: {}, method: 'GET', body: '');
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v3/speech-profile',
+    headers: {},
+    method: 'GET',
+    body: '',
+    signOutOn401: false,
+  );
   if (response == null) return true;
   Logger.debug('userHasSpeakerProfile: ${response.body}');
   if (response.statusCode == 200) {

@@ -14,6 +14,7 @@ class KnowledgeGraphApi {
       method: 'GET',
       timeout: const Duration(seconds: 60),
       retries: 2,
+      signOutOn401: false,
     );
 
     if (response != null && response.statusCode == 200) {
@@ -24,7 +25,13 @@ class KnowledgeGraphApi {
   }
 
   static Future<Map<String, dynamic>> rebuildKnowledgeGraph() async {
-    final response = await makeApiCall(url: '$_baseUrl/rebuild', headers: {}, body: '{}', method: 'POST');
+    final response = await makeApiCall(
+      url: '$_baseUrl/rebuild',
+      headers: {},
+      body: '{}',
+      method: 'POST',
+      signOutOn401: false,
+    );
 
     if (response != null && response.statusCode == 200) {
       return jsonDecode(response.body);
@@ -34,7 +41,13 @@ class KnowledgeGraphApi {
   }
 
   static Future<void> deleteKnowledgeGraph() async {
-    final response = await makeApiCall(url: _baseUrl, headers: {}, body: '{}', method: 'DELETE');
+    final response = await makeApiCall(
+      url: _baseUrl,
+      headers: {},
+      body: '{}',
+      method: 'DELETE',
+      signOutOn401: false,
+    );
 
     if (response == null || response.statusCode != 200) {
       throw Exception('Failed to delete knowledge graph: ${response?.body}');

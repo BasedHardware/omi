@@ -240,22 +240,25 @@ class HomeProvider extends ChangeNotifier {
 
   Future<bool> updateUserPrimaryLanguage(String languageCode, {UserProvider? userProvider}) async {
     try {
+      userPrimaryLanguage = languageCode;
+      hasSetPrimaryLanguage = true;
+      SharedPreferencesUtil().userPrimaryLanguage = languageCode;
+      SharedPreferencesUtil().hasSetPrimaryLanguage = true;
+      PlatformManager.instance.analytics.setUserAttribute('Primary Language', languageCode);
+
+      // Backend auto-sets single_language_mode — sync local state to match.
+      // Keep this local update even if backend language sync fails, so dev/offline
+      // auth mismatches do not block the user from choosing a language.
+      final singleLanguageMode = !multiLanguageSupported.contains(languageCode);
+      userProvider?.updateSingleLanguageModeLocally(singleLanguageMode);
+
       final success = await setUserPrimaryLanguage(languageCode);
-      if (success) {
-        userPrimaryLanguage = languageCode;
-        hasSetPrimaryLanguage = true;
-        SharedPreferencesUtil().userPrimaryLanguage = languageCode;
-        SharedPreferencesUtil().hasSetPrimaryLanguage = true;
-        PlatformManager.instance.analytics.setUserAttribute('Primary Language', languageCode);
-
-        // Backend auto-sets single_language_mode — sync local state to match
-        final singleLanguageMode = !multiLanguageSupported.contains(languageCode);
-        userProvider?.updateSingleLanguageModeLocally(singleLanguageMode);
-
-        notifyListeners();
-        return true;
+      if (!success) {
+        Logger.debug('Backend language sync failed; keeping local primary language=$languageCode');
       }
-      return false;
+
+      notifyListeners();
+      return true;
     } catch (e) {
       Logger.debug('Error setting user primary language: $e');
       return false;

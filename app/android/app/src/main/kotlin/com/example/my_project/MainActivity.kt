@@ -15,10 +15,15 @@ import io.flutter.plugin.common.MethodChannel
 class MainActivity: FlutterActivity() {
     private val CHANNEL = "com.friend.ios/notifyOnKill"
     private val NATIVE_BLE_TRANSCRIPT_CHANNEL = "com.friend.ios/native_ble_transcript"
+    private val DEEP_LINK_CHANNEL = "com.omi/deep_links"
     private var bleHostApiImpl: BleHostApiImpl? = null
+    private var deepLinkChannel: MethodChannel? = null
 
     override fun configureFlutterEngine(@NonNull flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+
+        deepLinkChannel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, DEEP_LINK_CHANNEL)
+        deliverDeepLink(intent)
 
         // Register WiFi Network Plugin
         WifiNetworkPlugin.registerWith(flutterEngine, this)
@@ -64,6 +69,17 @@ class MainActivity: FlutterActivity() {
                 result.notImplemented()
             }
         }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        deliverDeepLink(intent)
+    }
+
+    private fun deliverDeepLink(intent: Intent?) {
+        val url = intent?.dataString ?: return
+        deepLinkChannel?.invokeMethod("onDeepLink", url)
     }
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {

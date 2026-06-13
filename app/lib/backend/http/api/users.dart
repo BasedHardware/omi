@@ -293,7 +293,13 @@ Future<bool> getHasConversationSummaryRating(String conversationId) async {
 
 // User language preference API calls
 Future<String?> getUserPrimaryLanguage() async {
-  var response = await makeApiCall(url: '${Env.apiBaseUrl}v1/users/language', headers: {}, method: 'GET', body: '');
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/users/language',
+    headers: {},
+    method: 'GET',
+    body: '',
+    signOutOn401: false,
+  );
   if (response == null) return null;
   Logger.debug('getUserPrimaryLanguage response: ${response.body}');
 
@@ -316,6 +322,7 @@ Future<bool> setUserPrimaryLanguage(String languageCode) async {
     headers: {},
     method: 'PATCH',
     body: jsonEncode({'language': languageCode}),
+    signOutOn401: false,
   );
   if (response == null) return false;
   Logger.debug('setUserPrimaryLanguage response: ${response.body}');
@@ -566,7 +573,13 @@ Future<String?> generateDailySummary({String? date}) async {
 
 Future<Map<String, dynamic>?> getUserOnboardingState() async {
   print('DEBUG getUserOnboardingState: calling ${Env.apiBaseUrl}v1/users/onboarding');
-  var response = await makeApiCall(url: '${Env.apiBaseUrl}v1/users/onboarding', headers: {}, method: 'GET', body: '');
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/users/onboarding',
+    headers: {},
+    method: 'GET',
+    body: '',
+    signOutOn401: false,
+  );
   print('DEBUG getUserOnboardingState: response=${response?.statusCode}, body=${response?.body}');
   if (response == null) return null;
   if (response.statusCode == 200) {
