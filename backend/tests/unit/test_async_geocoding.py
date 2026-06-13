@@ -66,11 +66,13 @@ _http_mod.get_webhook_client = MagicMock()
 _http_mod.get_maps_semaphore = MagicMock(return_value=asyncio.Semaphore(8))
 _install_module("utils.http_client", _http_mod)
 
-from models.conversation import Geolocation
-from utils.conversations import location as location_module
+try:
+    from models.conversation import Geolocation
+    from utils.conversations import location as location_module
 
-async_get_google_maps_location = location_module.async_get_google_maps_location
-_restore_modules()
+    async_get_google_maps_location = location_module.async_get_google_maps_location
+finally:
+    _restore_modules()
 
 
 class TestAsyncCacheHit:
