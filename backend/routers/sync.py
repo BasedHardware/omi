@@ -92,11 +92,10 @@ from utils.fair_use import (
     record_speech_ms,
     get_rolling_speech_ms,
     check_soft_caps,
-    is_hard_restricted,
+    get_hard_restriction_status,
     trigger_classifier_if_needed,
     is_dg_budget_exhausted,
     get_enforcement_stage,
-    get_hard_restriction_retry_after_seconds,
     record_dg_usage_ms,
     FAIR_USE_ENABLED,
     FAIR_USE_RESTRICT_DAILY_DG_MS,
@@ -120,9 +119,8 @@ _V1_DEPRECATION_HEADERS = {'Deprecation': 'true', 'Link': '</v2/sync-local-files
 router = APIRouter()
 
 
-def _hard_restriction_headers(uid: str, base_headers: Optional[Dict[str, str]] = None) -> Dict[str, str]:
+def _hard_restriction_headers(retry_after: int | None, base_headers: Optional[Dict[str, str]] = None) -> Dict[str, str]:
     headers = dict(base_headers or {})
-    retry_after = get_hard_restriction_retry_after_seconds(uid)
     if retry_after is not None:
         headers['Retry-After'] = str(retry_after)
     return headers
@@ -1320,11 +1318,12 @@ async def sync_local_files(
     response.headers.update(_V1_DEPRECATION_HEADERS)
 
     # Pre-check gates (#5854)
-    if is_hard_restricted(uid):
+    hard_restricted, retry_after = get_hard_restriction_status(uid)
+    if hard_restricted:
         raise HTTPException(
             status_code=429,
             detail="Account temporarily restricted due to fair-use policy",
-            headers=_hard_restriction_headers(uid, _V1_DEPRECATION_HEADERS),
+            headers=_hard_restriction_headers(retry_after, _V1_DEPRECATION_HEADERS),
         )
 
     # Check credits: if exhausted, still process but lock the conversation so user can pay to unlock
@@ -1921,8 +1920,9 @@ async def sync_local_files_v2(
     an async background task. The app polls GET /v2/sync-local-files/{job_id}.
     """
     # Pre-check gates (same as v1)
-    if await run_blocking(critical_executor, is_hard_restricted, uid):
-        headers = await run_blocking(critical_executor, _hard_restriction_headers, uid)
+    hard_restricted, retry_after = await run_blocking(critical_executor, get_hard_restriction_status, uid)
+    if hard_restricted:
+        headers = _hard_restriction_headers(retry_after)
         raise HTTPException(
             status_code=429,
             detail="Account temporarily restricted due to fair-use policy",
