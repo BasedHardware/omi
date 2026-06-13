@@ -7,7 +7,7 @@ import 'package:omi/utils/logger.dart';
 /// Audio file info from signed URL endpoint
 class AudioFileUrlInfo {
   final String id;
-  final String status; // 'cached' or 'pending'
+  final String status; // 'cached' | 'pending' | 'unavailable'
   final String? signedUrl;
   final String? contentType;
   final double duration;
@@ -37,7 +37,8 @@ class AudioUrlsResponse {
 
   AudioUrlsResponse({required this.files, this.pollAfterMs});
 
-  bool get hasPending => files.any((f) => !f.isCached);
+  /// 'unavailable' is terminal (source chunks gone) — not worth polling for.
+  bool get hasPending => files.any((f) => !f.isCached && f.status != 'unavailable');
 }
 
 String getAudioStreamUrl({required String conversationId, required String audioFileId, String format = 'wav'}) {

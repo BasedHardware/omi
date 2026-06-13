@@ -71,6 +71,8 @@ from utils.other.storage import (
     get_playback_artifact_signed_url,
     download_playback_artifact,
     upload_playback_artifact,
+    mark_playback_unavailable,
+    is_playback_unavailable,
     enqueue_conversation_audio_merge,
     _PRECACHE_FILE_SEM,
 )
@@ -290,6 +292,15 @@ def _get_audio_urls_via_artifacts(uid: str, conversation_id: str, audio_files: l
                     "status": "cached",
                     "signed_url": signed_url,
                     "content_type": content_type,
+                    "duration": af.get('duration', 0),
+                }
+            )
+        elif is_playback_unavailable(uid, conversation_id, audio_file_id):
+            result.append(
+                {
+                    "id": audio_file_id,
+                    "status": "unavailable",
+                    "signed_url": None,
                     "duration": af.get('duration', 0),
                 }
             )
@@ -2172,11 +2183,22 @@ async def run_audio_merge_job(request: Request, task_retry_count: int = Depends(
             mp3_data = await run_blocking(sync_executor, _build_playback_artifact, uid, conversation_id, timestamps)
         except FileNotFoundError:
             logger.warning(f'audio_merge: chunks missing conv={conversation_id} file={audio_file_id}, dropping')
+            # Persist the verdict or /urls reports pending forever and clients
+            # poll to exhaustion (named-task tombstones block re-enqueues too)
+            await run_blocking(
+                storage_executor, mark_playback_unavailable, uid, conversation_id, audio_file_id, 'chunks_missing'
+            )
             return JSONResponse(status_code=200, content={'status': 'dropped', 'reason': 'chunks_missing'})
         except Exception as e:
             max_attempts = get_sync_tasks_max_attempts()
             if task_retry_count >= max_attempts - 1:
                 logger.error(f'audio_merge_failed_final conv={conversation_id} file={audio_file_id}: {e}')
+                # Same pending-forever trap as chunks_missing: a consumed task
+                # leaves a tombstone that blocks re-enqueue. Mark unavailable so
+                # clients stop polling; the 30-day lifecycle grants a retry.
+                await run_blocking(
+                    storage_executor, mark_playback_unavailable, uid, conversation_id, audio_file_id, 'merge_failed'
+                )
                 return JSONResponse(status_code=200, content={'status': 'failed_final'})
             logger.warning(
                 f'audio_merge: attempt {task_retry_count + 1} failed conv={conversation_id} '
@@ -2186,6 +2208,9 @@ async def run_audio_merge_job(request: Request, task_retry_count: int = Depends(
 
         if not mp3_data:
             logger.warning(f'audio_merge: no audio data conv={conversation_id} file={audio_file_id}, dropping')
+            await run_blocking(
+                storage_executor, mark_playback_unavailable, uid, conversation_id, audio_file_id, 'empty_audio'
+            )
             return JSONResponse(status_code=200, content={'status': 'dropped', 'reason': 'empty_audio'})
 
         await run_blocking(storage_executor, upload_playback_artifact, uid, conversation_id, audio_file_id, mp3_data)
