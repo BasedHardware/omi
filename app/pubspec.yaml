@@ -189,6 +189,7 @@ flutter:
     - assets/images/
     - assets/integration_app_logos/
     - assets/competitor-logos/
+    - assets/models/yoloe-26n-seg-pf_ncnn_model/
     - shorebird.yaml
     - assets/device_assets/frame_lib.lua
   fonts:

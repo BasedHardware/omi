@@ -57,6 +57,10 @@ final class DevEnv implements EnvFields {
   final bool? useAuthCustomToken = _DevEnv.useAuthCustomToken;
 
   @override
+  @EnviedField(varName: 'LOCAL_ONLY_MODE', obfuscate: false, defaultValue: true)
+  final bool? localOnlyMode = _DevEnv.localOnlyMode;
+
+  @override
   @EnviedField(varName: 'STAGING_API_URL', obfuscate: true)
   final String? stagingApiUrl = _DevEnv.stagingApiUrl;
 }

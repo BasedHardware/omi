@@ -69,6 +69,11 @@ class PureSocket implements IPureSocket {
       return false;
     }
 
+    if (shouldSkipCloudNetworkCall(url)) {
+      Logger.debug('LOCAL_ONLY_MODE enabled: skipping cloud WebSocket $url');
+      return false;
+    }
+
     Logger.debug("request wss $url");
     final headers = await buildHeaders(requireAuthCheck: true);
 

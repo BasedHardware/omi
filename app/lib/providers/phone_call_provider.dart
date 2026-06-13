@@ -14,6 +14,7 @@ import 'package:omi/backend/http/shared.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/phone_call.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
+import 'package:omi/env/env.dart';
 import 'package:omi/models/audio_route.dart';
 import 'package:omi/services/phone_call_service.dart';
 import 'package:omi/utils/logger.dart';
@@ -431,6 +432,14 @@ class PhoneCallProvider extends ChangeNotifier {
 
   Future<void> _connectTranscriptionSocket() async {
     if (_currentCallId == null) return;
+
+    if (Env.localOnlyMode) {
+      Logger.info('LOCAL_ONLY_MODE enabled: skipping phone-call transcription WebSocket');
+      _transcriptionStatus = TranscriptionStatus.idle;
+      _audioBuffer.clear();
+      notifyListeners();
+      return;
+    }
 
     _wsReconnectTimer?.cancel();
     _wsReconnectTimer = null;

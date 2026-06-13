@@ -57,6 +57,10 @@ final class ProdEnv implements EnvFields {
   final bool? useAuthCustomToken = _ProdEnv.useAuthCustomToken;
 
   @override
+  @EnviedField(varName: 'LOCAL_ONLY_MODE', obfuscate: false, defaultValue: true)
+  final bool? localOnlyMode = _ProdEnv.localOnlyMode;
+
+  @override
   @EnviedField(varName: 'STAGING_API_URL', obfuscate: true)
   final String? stagingApiUrl = _ProdEnv.stagingApiUrl;
 }

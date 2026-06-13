@@ -1,6 +1,5 @@
 import 'dart:io';
 
-
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -74,6 +73,7 @@ class AuthenticationProvider extends BaseProvider {
   }
 
   bool isSignedIn() {
+    if (Env.localOnlyMode) return SharedPreferencesUtil().uid.isNotEmpty;
     return _auth.currentUser != null && !_auth.currentUser!.isAnonymous;
   }
 
@@ -87,6 +87,13 @@ class AuthenticationProvider extends BaseProvider {
     if (!loading) {
       setLoadingState(true);
       try {
+        if (Env.localOnlyMode) {
+          await AuthService.instance.signInLocalOnly();
+          onSignIn();
+          setLoadingState(false);
+          return;
+        }
+
         UserCredential? credential;
         if (PlatformService.isMobile && !useWebAuth) {
           credential = await AuthService.instance.signInWithGoogleMobile();
@@ -145,7 +152,9 @@ class AuthenticationProvider extends BaseProvider {
   Future<String?> _getIdToken() async {
     try {
       final token = await AuthService.instance.getIdToken();
-      NotificationService.instance.saveNotificationToken();
+      if (!Env.localOnlyMode) {
+        NotificationService.instance.saveNotificationToken();
+      }
 
       Logger.debug('Token: $token');
       return token;
@@ -161,6 +170,12 @@ class AuthenticationProvider extends BaseProvider {
   }
 
   void _signIn(Function() onSignIn) async {
+    if (Env.localOnlyMode) {
+      await AuthService.instance.signInLocalOnly();
+      onSignIn();
+      return;
+    }
+
     String? token = await _getIdToken();
 
     if (token != null) {

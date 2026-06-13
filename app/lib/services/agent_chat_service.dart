@@ -53,6 +53,11 @@ class AgentChatService {
     final connectSw = Stopwatch()..start();
     agentLog('connect() called');
 
+    if (Env.localOnlyMode) {
+      agentLog('LOCAL_ONLY_MODE enabled: skipping agent proxy WebSocket');
+      return false;
+    }
+
     // Clean up any existing connection
     await _streamSubscription?.cancel();
     _streamSubscription = null;

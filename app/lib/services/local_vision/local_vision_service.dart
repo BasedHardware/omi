@@ -1,10 +1,12 @@
 import 'dart:async';
-import 'dart:typed_data';
+import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 
 import 'package:omi/backend/preferences.dart';
+import 'package:omi/services/local_vision/android_yoloe_detector.dart';
 import 'package:omi/services/local_vision/object_announcement_service.dart';
+import 'package:omi/services/local_vision/yoloe_model_assets.dart';
 import 'package:omi/utils/logger.dart';
 
 enum AnnouncementMode { allObjects, heldObjectsOnly }
@@ -209,7 +211,8 @@ class ObjectPresenceTracker {
 }
 
 class LocalVisionService extends ChangeNotifier {
-  LocalVisionService._({LocalVisionDetector? detector}) : _detector = detector ?? const FakeLocalVisionDetector();
+  LocalVisionService._({LocalVisionDetector? detector})
+      : _detector = detector ?? (Platform.isAndroid ? AndroidYoloeDetector() : const FakeLocalVisionDetector());
 
   static final LocalVisionService instance = LocalVisionService._();
 
@@ -223,6 +226,7 @@ class LocalVisionService extends ChangeNotifier {
   List<AnnouncementCandidate> _announcementCandidates = [];
   int _droppedFrameCount = 0;
   Object? _lastError;
+  YoloeModelAssetStatus _modelAssetStatus = const YoloeModelAssetStatus.notChecked();
 
   bool _isRunning = false;
 
@@ -235,8 +239,32 @@ class LocalVisionService extends ChangeNotifier {
   int get announcementCandidateCount => _announcementCandidates.length;
   int get droppedFrameCount => _droppedFrameCount;
   Object? get lastError => _lastError;
+  YoloeModelAssetStatus get modelAssetStatus => _modelAssetStatus;
+
+  Future<void> initialize() async {
+    _modelAssetStatus = await YoloeModelAssets.validate();
+    if (_modelAssetStatus.isValid) {
+      Logger.debug(
+        'Local YOLOE model assets validated: labels=${_modelAssetStatus.labelCount} '
+        'input=${_modelAssetStatus.inputSize} dir=${_modelAssetStatus.modelDirectory}',
+      );
+    } else {
+      SharedPreferencesUtil().localYoloeEnabled = false;
+      _lastError = _modelAssetStatus.error;
+      _status = LocalVisionInferenceStatus.failed;
+      Logger.error('Local YOLOE disabled: ${_modelAssetStatus.error}');
+    }
+    notifyListeners();
+  }
 
   Future<void> submitFrame(Uint8List jpegBytes, {DateTime? timestamp}) async {
+    if (!_modelAssetStatus.isValid) {
+      _lastError = _modelAssetStatus.error ?? 'Local YOLOE model assets have not been validated';
+      _status = LocalVisionInferenceStatus.failed;
+      notifyListeners();
+      return;
+    }
+
     final capturedAt = timestamp ?? DateTime.now();
     final frame = LocalVisionFrame(
       jpegBytes: jpegBytes,
@@ -287,7 +315,7 @@ class LocalVisionService extends ChangeNotifier {
       _announcementCandidates = candidates;
       _status = LocalVisionInferenceStatus.completed;
       Logger.debug(
-        'Local YOLOE fake detections frame=${frame.frameId} '
+        'Local YOLOE detections frame=${frame.frameId} '
         'count=${results.length} announce=${candidates.length} mode=${mode.preferenceValue} '
         'labels=${results.map((detection) => detection.label).join(',')}',
       );
@@ -299,7 +327,7 @@ class LocalVisionService extends ChangeNotifier {
     } catch (e, stackTrace) {
       _lastError = e;
       _status = LocalVisionInferenceStatus.failed;
-      Logger.error('Local YOLOE fake detection failed: $e\n$stackTrace');
+      Logger.error('Local YOLOE detection failed: $e\n$stackTrace');
     } finally {
       _isRunning = false;
       notifyListeners();

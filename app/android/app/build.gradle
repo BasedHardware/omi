@@ -99,6 +99,21 @@ android {
         multiDexEnabled true
         buildConfigField("String", "INTERCOM_APP_ID", "\"${env.getProperty('INTERCOM_APP_ID', '')}\"")
         buildConfigField("String", "INTERCOM_ANDROID_API_KEY", "\"${env.getProperty('INTERCOM_ANDROID_API_KEY', '')}\"")
+        ndk {
+            abiFilters "arm64-v8a", "armeabi-v7a", "x86", "x86_64"
+        }
+        externalNativeBuild {
+            cmake {
+                cppFlags "-std=c++17 -fexceptions -frtti"
+            }
+        }
+    }
+
+    externalNativeBuild {
+        cmake {
+            path "src/main/cpp/CMakeLists.txt"
+            version "3.22.1"
+        }
     }
 
     signingConfigs {

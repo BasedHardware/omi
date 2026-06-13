@@ -48,7 +48,7 @@ class MessageActionMenu extends StatelessWidget {
             const SizedBox(height: 16),
             _buildActionButton(title: context.l10n.copy, icon: Icons.copy, onTap: onCopy),
             _buildActionButton(title: context.l10n.selectText, icon: Icons.description_outlined, onTap: onSelectText),
-            _buildActionButton(title: context.l10n.share, icon: FontAwesomeIcons.share, onTap: onShare),
+            _buildActionButton(title: context.l10n.share, faIcon: FontAwesomeIcons.share, onTap: onShare),
             if (onThumbsDown != null) ...[
               _buildActionButton(
                 title: context.l10n.notHelpful,
@@ -71,7 +71,8 @@ class MessageActionMenu extends StatelessWidget {
 
   Widget _buildActionButton({
     required String title,
-    required IconData icon,
+    IconData? icon,
+    FaIconData? faIcon,
     required Function()? onTap,
     bool isDestructive = false,
   }) {
@@ -83,7 +84,10 @@ class MessageActionMenu extends StatelessWidget {
           children: [
             Text(title, style: TextStyle(fontSize: 16, color: isDestructive ? Colors.red : Colors.white)),
             const Spacer(),
-            Icon(icon, size: 20, color: isDestructive ? Colors.red : Colors.white),
+            if (faIcon != null)
+              FaIcon(faIcon, size: 20, color: isDestructive ? Colors.red : Colors.white)
+            else
+              Icon(icon, size: 20, color: isDestructive ? Colors.red : Colors.white),
           ],
         ),
       ),

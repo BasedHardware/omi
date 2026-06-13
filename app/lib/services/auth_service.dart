@@ -26,8 +26,21 @@ class AuthService {
 
   bool isSignedIn() => FirebaseAuth.instance.currentUser != null && !FirebaseAuth.instance.currentUser!.isAnonymous;
 
+  bool isLocalOnlySignedIn() => Env.localOnlyMode && SharedPreferencesUtil().uid.isNotEmpty;
+
   getFirebaseUser() {
     return FirebaseAuth.instance.currentUser;
+  }
+
+  Future<void> signInLocalOnly() async {
+    if (!Env.localOnlyMode) return;
+    SharedPreferencesUtil().uid = 'local-user';
+    if (SharedPreferencesUtil().email.isEmpty) {
+      SharedPreferencesUtil().email = 'local@omi.offline';
+    }
+    if (SharedPreferencesUtil().givenName.isEmpty) {
+      SharedPreferencesUtil().givenName = 'Local';
+    }
   }
 
   /// Google Sign In using the standard google_sign_in package (iOS, Android)
@@ -163,6 +176,10 @@ class AuthService {
 
   Future<String?> getIdToken() async {
     try {
+      if (Env.localOnlyMode) {
+        await signInLocalOnly();
+        return 'local-only-token';
+      }
       if (FirebaseAuth.instance.currentUser == null) {
         Logger.debug('getIdToken: currentUser is null, clearing cached token');
         _clearCachedAuth();

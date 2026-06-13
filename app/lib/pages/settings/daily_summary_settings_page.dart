@@ -147,7 +147,8 @@ class _DailySummarySettingsPageState extends State<DailySummarySettingsPage> {
               onPrimary: Colors.white,
               surface: Color(0xFF1C1C1E),
               onSurface: Colors.white,
-            ), dialogTheme: const DialogThemeData(backgroundColor: Color(0xFF1C1C1E)),
+            ),
+            dialogTheme: const DialogThemeData(backgroundColor: Color(0xFF1C1C1E)),
           ),
           child: child!,
         );
@@ -297,7 +298,7 @@ class _DailySummarySettingsPageState extends State<DailySummarySettingsPage> {
     );
   }
 
-  Widget _buildSettingRow({required IconData icon, required String title, required Widget trailing}) {
+  Widget _buildSettingRow({required FaIconData icon, required String title, required Widget trailing}) {
     return Row(
       children: [
         Container(

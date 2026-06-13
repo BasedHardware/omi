@@ -10,6 +10,7 @@ import 'package:provider/provider.dart';
 import 'package:omi/backend/http/api/knowledge_graph_api.dart';
 import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/preferences.dart';
+import 'package:omi/env/env.dart';
 import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/pages/home/page.dart';
 import 'package:omi/pages/onboarding/ai_consent_widget.dart';
@@ -101,10 +102,12 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
       //   context.read<OnboardingProvider>().updatePermissions();
       // }
 
-      if (AuthService.instance.isSignedIn()) {
+      if (AuthService.instance.isSignedIn() || AuthService.instance.isLocalOnlySignedIn()) {
         // && !SharedPreferencesUtil().onboardingCompleted
         if (mounted) {
-          context.read<HomeProvider>().setupHasSpeakerProfile();
+          if (!Env.localOnlyMode) {
+            context.read<HomeProvider>().setupHasSpeakerProfile();
+          }
           // The consent gate is checked first and is independent of the
           // server-side onboardingCompleted flag. This ensures every user
           // — including someone signing back into a previously-onboarded
@@ -155,6 +158,10 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
   }
 
   Future<void> _prebuildKnowledgeGraph() async {
+    if (Env.localOnlyMode) {
+      return;
+    }
+
     try {
       final current = await KnowledgeGraphApi.getKnowledgeGraph();
       final nodes = current['nodes'] as List<dynamic>? ?? const [];
@@ -302,11 +309,14 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
       NameWidget(
         goNext: () {
           _goNext(); // Go to Primary Language page
-          IntercomManager.instance.updateUser(
-            FirebaseAuth.instance.currentUser!.email,
-            FirebaseAuth.instance.currentUser!.displayName,
-            FirebaseAuth.instance.currentUser!.uid,
-          );
+          final firebaseUser = FirebaseAuth.instance.currentUser;
+          if (!Env.localOnlyMode && firebaseUser != null) {
+            IntercomManager.instance.updateUser(
+              firebaseUser.email,
+              firebaseUser.displayName,
+              firebaseUser.uid,
+            );
+          }
           PlatformManager.instance.analytics.onboardingStepCompleted('Name');
         },
       ),
@@ -361,7 +371,9 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
         onComplete: () {
           SharedPreferencesUtil().onboardingCompleted = true;
           SharedPreferencesUtil().permissionsCompleted = true;
-          updateUserOnboardingState(completed: true);
+          if (!Env.localOnlyMode) {
+            updateUserOnboardingState(completed: true);
+          }
           PlatformManager.instance.analytics.onboardingCompleted();
           PaintingBinding.instance.imageCache.clear();
           routeToPage(context, const HomePageWrapper(), replace: true);
@@ -465,7 +477,8 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
                               width: 36,
                               height: 36,
                               margin: const EdgeInsets.all(8),
-                              decoration: BoxDecoration(color: Colors.grey.withValues(alpha: 0.3), shape: BoxShape.circle),
+                              decoration:
+                                  BoxDecoration(color: Colors.grey.withValues(alpha: 0.3), shape: BoxShape.circle),
                               child: IconButton(
                                 padding: EdgeInsets.zero,
                                 onPressed: () {
@@ -544,7 +557,8 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
                                 width: 36,
                                 height: 36,
                                 margin: const EdgeInsets.all(8),
-                                decoration: BoxDecoration(color: Colors.grey.withValues(alpha: 0.3), shape: BoxShape.circle),
+                                decoration:
+                                    BoxDecoration(color: Colors.grey.withValues(alpha: 0.3), shape: BoxShape.circle),
                                 child: IconButton(
                                   padding: EdgeInsets.zero,
                                   onPressed: () {

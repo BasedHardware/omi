@@ -149,6 +149,7 @@ Future _init() async {
   }
 
   await SharedPreferencesUtil.init();
+  await LocalVisionService.instance.initialize();
 
   // TestFlight environment detection — must be after SharedPreferencesUtil.init()
   if (F.env == Environment.prod) {
@@ -169,9 +170,16 @@ Future _init() async {
     }
   }
 
+  if (Env.localOnlyMode) {
+    await AuthService.instance.signInLocalOnly();
+    SharedPreferencesUtil().aiConsentGiven = true;
+    SharedPreferencesUtil().onboardingCompleted = true;
+    debugPrint('LOCAL_ONLY_MODE enabled: using local session and skipping cloud auth bootstrap');
+  }
+
   // DEBUG: Log Firebase Auth state before getIdToken
   print('DEBUG main: Before getIdToken - currentUser=${FirebaseAuth.instance.currentUser?.uid}');
-  bool isAuth = (await AuthService.instance.getIdToken()) != null;
+  bool isAuth = Env.localOnlyMode || (await AuthService.instance.getIdToken()) != null;
   print('DEBUG main: After getIdToken - isAuth=$isAuth, currentUser=${FirebaseAuth.instance.currentUser?.uid}');
   if (isAuth) {
     PlatformManager.instance.analytics.identify();
@@ -194,7 +202,7 @@ Future _init() async {
   };
 
   await CrashlyticsManager.init();
-  if (isAuth) {
+  if (isAuth && !Env.localOnlyMode) {
     PlatformManager.instance.crashReporter.identifyUser(
       FirebaseAuth.instance.currentUser?.email ?? '',
       SharedPreferencesUtil().fullName,

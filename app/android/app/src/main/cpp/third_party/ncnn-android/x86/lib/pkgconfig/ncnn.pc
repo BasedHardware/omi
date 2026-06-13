@@ -1,0 +1,11 @@
+prefix=${pcfiledir}/../..
+librarydir=${prefix}/lib
+includedir=${prefix}/include
+
+Name: ncnn
+Description: high-performance neural network inference framework optimized for the mobile platform
+Version: 1.0.20260526
+URL: https://github.com/Tencent/ncnn
+Libs: -L"${librarydir}" -lncnn
+Cflags: -I"${includedir}"
+

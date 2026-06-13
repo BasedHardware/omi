@@ -358,6 +358,9 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
                 spacing: 8,
                 runSpacing: 8,
                 children: [
+                  _buildLocalVisionMetric('Model', service.modelAssetStatus.displayName),
+                  _buildLocalVisionMetric('Labels', service.modelAssetStatus.labelCount.toString()),
+                  _buildLocalVisionMetric('Input', service.modelAssetStatus.inputSize),
                   _buildLocalVisionMetric('Frame', _formatLocalVisionTimestamp(service.latestFrameTimestamp)),
                   _buildLocalVisionMetric('Status', service.status.name),
                   _buildLocalVisionMetric('Dropped', service.droppedFrameCount.toString()),
@@ -369,9 +372,16 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
                 const SizedBox(height: 10),
                 Text('Last error: ${service.lastError}', style: const TextStyle(color: Colors.redAccent, fontSize: 12)),
               ],
+              if (!service.modelAssetStatus.isValid && service.modelAssetStatus.error != null) ...[
+                const SizedBox(height: 10),
+                Text(
+                  'Model validation: ${service.modelAssetStatus.error}',
+                  style: const TextStyle(color: Colors.orangeAccent, fontSize: 12),
+                ),
+              ],
               const SizedBox(height: 12),
               if (detections.isEmpty)
-                Text('No fake detections yet. Capture an Omi Glass image in local mode.',
+                Text('No local detections yet. Capture an Omi Glass image in local mode.',
                     style: TextStyle(color: Colors.grey.shade500, fontSize: 12))
               else
                 Column(
@@ -672,7 +682,6 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
     );
   }
 
-  @override
   Widget _buildManualFirmwareFlash(DeviceProvider provider) {
     return _buildSectionContainer(
       children: [

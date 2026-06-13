@@ -53,6 +53,10 @@ bool _isTransientNetworkError(Object e) {
 }
 
 Future<String> getAuthHeader() async {
+  if (Env.localOnlyMode) {
+    return 'Bearer local-only-token';
+  }
+
   DateTime? expiry = DateTime.fromMillisecondsSinceEpoch(SharedPreferencesUtil().tokenExpirationTime);
   bool hasAuthToken = SharedPreferencesUtil().authToken.isNotEmpty;
 
@@ -112,6 +116,7 @@ Future<Map<String, String>> buildHeaders({
 }
 
 bool _isRequiredAuthCheck(String url) {
+  if (Env.localOnlyMode) return false;
   // Agent VM endpoints always hit prod even when app uses dev
   if (url.contains('api.omi.me')) return true;
   if (url.contains(Env.apiBaseUrl!)) {
@@ -120,11 +125,29 @@ bool _isRequiredAuthCheck(String url) {
   return false;
 }
 
+bool isOmiCloudUrl(String url) {
+  final uri = Uri.tryParse(url);
+  final host = uri?.host.toLowerCase() ?? '';
+  return host == 'api.omi.me' || host == 'api.omiapi.com' || host.endsWith('.omi.me') || host.endsWith('.omiapi.com');
+}
+
+bool shouldSkipCloudNetworkCall(String url) => Env.localOnlyMode && isOmiCloudUrl(url);
+
+http.Response _offlineResponse(String url) {
+  Logger.debug('LOCAL_ONLY_MODE enabled: skipping cloud API call $url');
+  return http.Response('{"offline":true,"detail":"Local-only mode skipped cloud API call"}', 503);
+}
+
 Future<http.StreamedResponse> makeRawApiCall({
   required String url,
   required String method,
   Map<String, String> headers = const {},
 }) async {
+  if (shouldSkipCloudNetworkCall(url)) {
+    final response = _offlineResponse(url);
+    return http.StreamedResponse(http.ByteStream.fromBytes(utf8.encode(response.body)), response.statusCode);
+  }
+
   final builtHeaders = await buildHeaders(requireAuthCheck: _isRequiredAuthCheck(url), fromHeaders: headers);
   var request = http.Request(method, Uri.parse(url));
   request.headers.addAll(builtHeaders);
@@ -145,6 +168,10 @@ Future<http.Response?> makeApiCall({
   bool signOutOn401 = true,
 }) async {
   try {
+    if (shouldSkipCloudNetworkCall(url)) {
+      return _offlineResponse(url);
+    }
+
     final bool requireAuthCheck = _isRequiredAuthCheck(url);
     Map<String, String> builtHeaders = await buildHeaders(requireAuthCheck: requireAuthCheck, fromHeaders: headers);
 
@@ -286,6 +313,10 @@ Future<http.Response> makeMultipartApiCall({
   UploadProgressCallback? onUploadProgress,
 }) async {
   try {
+    if (shouldSkipCloudNetworkCall(url)) {
+      return _offlineResponse(url);
+    }
+
     final bool requireAuthCheck = _isRequiredAuthCheck(url);
     Map<String, String> builtHeaders = await buildHeaders(requireAuthCheck: requireAuthCheck, fromHeaders: headers);
 
@@ -359,6 +390,10 @@ Future<http.Response> makeMultipartApiCallUnpooled({
 }) async {
   final client = http.Client();
   try {
+    if (shouldSkipCloudNetworkCall(url)) {
+      return _offlineResponse(url);
+    }
+
     final bool requireAuthCheck = _isRequiredAuthCheck(url);
     Map<String, String> builtHeaders = await buildHeaders(requireAuthCheck: requireAuthCheck, fromHeaders: headers);
 
@@ -430,6 +465,11 @@ Stream<String> makeStreamingApiCall({
   String method = 'POST',
 }) async* {
   try {
+    if (shouldSkipCloudNetworkCall(url)) {
+      _offlineResponse(url);
+      return;
+    }
+
     final builtHeaders = await buildHeaders(requireAuthCheck: _isRequiredAuthCheck(url), fromHeaders: headers);
 
     var request = http.Request(method, Uri.parse(url));
@@ -493,6 +533,11 @@ Stream<String> makeMultipartStreamingApiCall({
   String fileFieldName = 'files',
 }) async* {
   try {
+    if (shouldSkipCloudNetworkCall(url)) {
+      _offlineResponse(url);
+      return;
+    }
+
     final bool requireAuthCheck = _isRequiredAuthCheck(url);
     Map<String, String> builtHeaders = await buildHeaders(requireAuthCheck: requireAuthCheck, fromHeaders: headers);
 

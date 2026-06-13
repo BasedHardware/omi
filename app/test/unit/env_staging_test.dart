@@ -10,7 +10,7 @@ class _StagingEnvFields implements EnvFields {
   @override
   String? get openAIAPIKey => null;
   @override
-  String? get mixpanelProjectToken => null;
+  String? get posthogApiKey => null;
   @override
   String? get apiBaseUrl => 'https://api.prod.example.com/';
   @override
@@ -31,6 +31,8 @@ class _StagingEnvFields implements EnvFields {
   bool? get useWebAuth => false;
   @override
   bool? get useAuthCustomToken => false;
+  @override
+  bool? get localOnlyMode => false;
 }
 
 void main() {
