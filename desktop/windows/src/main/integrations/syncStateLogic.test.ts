@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import {
   emptySourceState,
   filterNew,
+  normalizeSourceState,
   recordProcessed,
   MAX_PROCESSED
 } from './syncStateLogic'
@@ -14,6 +15,31 @@ describe('filterNew', () => {
 
   it('returns all when nothing processed', () => {
     expect(filterNew([{ id: 'a' }], []).map((i) => i.id)).toEqual(['a'])
+  })
+})
+
+describe('normalizeSourceState', () => {
+  it('returns an empty state for missing or malformed persisted data', () => {
+    expect(normalizeSourceState(null)).toEqual(emptySourceState())
+    expect(normalizeSourceState('bad')).toEqual(emptySourceState())
+    expect(normalizeSourceState({ lastSyncAt: 'soon', processedIds: 'a,b' })).toEqual(emptySourceState())
+  })
+
+  it('keeps valid fields and drops invalid processed ids', () => {
+    expect(
+      normalizeSourceState({
+        lastSyncAt: 1234,
+        processedIds: ['a', '', 42, 'b', 'a', 'c']
+      })
+    ).toEqual({ lastSyncAt: 1234, processedIds: ['b', 'a', 'c'] })
+  })
+
+  it('bounds normalized ids to the newest MAX_PROCESSED entries', () => {
+    const ids = Array.from({ length: MAX_PROCESSED + 2 }, (_, i) => `id${i}`)
+    const next = normalizeSourceState({ lastSyncAt: 1, processedIds: ids })
+    expect(next.processedIds.length).toBe(MAX_PROCESSED)
+    expect(next.processedIds[0]).toBe('id2')
+    expect(next.processedIds.at(-1)).toBe(`id${MAX_PROCESSED + 1}`)
   })
 })
 
