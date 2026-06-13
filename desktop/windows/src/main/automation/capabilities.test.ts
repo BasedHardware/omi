@@ -39,6 +39,9 @@ describe('validateStep', () => {
   it('rejects empty/whitespace value-bearing fields', () => {
     bad({ type: 'invoke_element', elementRef: '' })
     bad({ type: 'focus_window', windowRef: '   ' })
+    bad({ type: 'send_keys', keys: '' })
+    bad({ type: 'send_keys', keys: '   ' })
+    bad({ type: 'send_keys' } as unknown as AutomationStep)
   })
 
   it('rejects set_value with an empty value', () => {
