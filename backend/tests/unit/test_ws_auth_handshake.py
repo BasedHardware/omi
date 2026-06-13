@@ -20,10 +20,13 @@ from starlette.websockets import WebSocketDisconnect
 
 BACKEND_DIR = Path(__file__).resolve().parent.parent.parent
 
+# Keep these helpers local: they repair import-time state for this test module
+# without adding a global collection hook that could affect unrelated tests.
+
 
 def _remove_module(name):
     mod = sys.modules.pop(name, None)
-    if "." not in name:
+    if mod is None or "." not in name:
         return
 
     parent_name, attr = name.rsplit(".", 1)
@@ -112,6 +115,30 @@ finally:
         sys.modules.pop('database.users', None)
     else:
         sys.modules['database.users'] = original_database_users
+
+
+def test_remove_module_ignores_absent_child_attribute():
+    sentinel = object()
+    parent_name = "test_ws_auth_absent_parent"
+    child_name = f"{parent_name}.child"
+    original_parent = sys.modules.get(parent_name, sentinel)
+    original_child = sys.modules.get(child_name, sentinel)
+    parent = types.ModuleType(parent_name)
+    sys.modules[parent_name] = parent
+    sys.modules.pop(child_name, None)
+
+    try:
+        _remove_module(child_name)
+        assert not hasattr(parent, "child")
+    finally:
+        if original_child is sentinel:
+            sys.modules.pop(child_name, None)
+        else:
+            sys.modules[child_name] = original_child
+        if original_parent is sentinel:
+            sys.modules.pop(parent_name, None)
+        else:
+            sys.modules[parent_name] = original_parent
 
 
 class WebSocketAuthTestCase(unittest.TestCase):
