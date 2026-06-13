@@ -518,7 +518,11 @@ def connect_to_deepgram(
             sample_rate=sample_rate,
             encoding='linear16',
         )
-        if len(keywords) > 0:
+        # `keywords` can be None (e.g. the multi-channel / phone-call path opens the
+        # socket without passing a vocabulary list). Guard against `len(None)`, which
+        # previously raised "object of type 'NoneType' has no len()" and aborted the
+        # socket open, leaving the client stuck in a reconnect loop.
+        if keywords:
             options = _dg_keywords_set(options, keywords)
 
         result = dg_connection.start(options)
