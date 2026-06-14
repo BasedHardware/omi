@@ -1,5 +1,7 @@
 FROM gcr.io/based-hardware-dev/python:3.11-slim-forky AS builder
 
+RUN apt-get update && apt-get -y install git && rm -rf /var/lib/apt/lists/*
+
 ENV PATH="/opt/venv/bin:$PATH"
 RUN python -m venv /opt/venv
 
