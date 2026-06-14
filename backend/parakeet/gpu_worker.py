@@ -190,7 +190,7 @@ class GPUWorker:
         torch.cuda.empty_cache()
 
         vram_used = torch.cuda.memory_allocated() / 1024**2
-        vram_total = torch.cuda.get_device_properties(0).total_mem / 1024**2
+        vram_total = torch.cuda.get_device_properties(0).total_memory / 1024**2
         logger.info(f"VRAM after model load: {vram_used:.0f}MiB / {vram_total:.0f}MiB")
         logger.info("Batch model loaded and ready")
 
