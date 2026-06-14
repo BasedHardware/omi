@@ -11,6 +11,7 @@ Covers:
 
 import asyncio
 import hashlib
+import os
 import sys
 import time
 from collections import OrderedDict
@@ -37,6 +38,46 @@ if 'google.cloud' not in sys.modules:
     sys.modules['google.cloud'] = MagicMock()
 if 'google.cloud.translate_v3' not in sys.modules:
     sys.modules['google.cloud.translate_v3'] = MagicMock()
+sys.modules['google.cloud'].translate_v3 = sys.modules['google.cloud.translate_v3']
+
+_BACKEND_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+_REAL_PACKAGE_DIRS = {
+    "utils": os.path.join(_BACKEND_DIR, "utils"),
+    "models": os.path.join(_BACKEND_DIR, "models"),
+}
+
+
+def _restore_real_backend_package(package_name: str) -> None:
+    """Discard empty package stubs left by earlier collected unit tests."""
+    if _BACKEND_DIR not in sys.path:
+        sys.path.insert(0, _BACKEND_DIR)
+
+    package = sys.modules.get(package_name)
+    if package is None:
+        return
+
+    expected_dir = os.path.abspath(_REAL_PACKAGE_DIRS[package_name])
+    package_paths = getattr(package, "__path__", None)
+    if not package_paths:
+        sys.modules.pop(package_name, None)
+        return
+
+    try:
+        has_real_path = any(os.path.abspath(str(path)) == expected_dir for path in package_paths)
+    except TypeError:
+        has_real_path = False
+    if not has_real_path:
+        sys.modules.pop(package_name, None)
+
+
+_restore_real_backend_package("utils")
+_restore_real_backend_package("models")
+for mod_name in list(sys.modules.keys()):
+    if not mod_name.startswith("utils.translation"):
+        continue
+    module_file = getattr(sys.modules[mod_name], "__file__", None)
+    if not module_file or not os.path.abspath(module_file).startswith(_BACKEND_DIR):
+        del sys.modules[mod_name]
 
 # Now import project modules (they'll use the mocks above)
 from utils.translation import (
