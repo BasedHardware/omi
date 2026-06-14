@@ -1,3 +1,4 @@
+import importlib.util
 import os
 import sys
 from types import ModuleType, SimpleNamespace
@@ -5,11 +6,94 @@ from unittest.mock import MagicMock, patch
 
 os.environ.setdefault("ENCRYPTION_SECRET", "omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv")
 
+_BACKEND_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
+
 # Mock modules that initialize GCP/Firebase clients at import time
 _mock_firebase = MagicMock()
 sys.modules.setdefault("database._client", MagicMock())
 sys.modules.setdefault("firebase_admin", _mock_firebase)
 sys.modules.setdefault("firebase_admin.auth", _mock_firebase.auth)
+
+if importlib.util.find_spec('python_multipart') is None and importlib.util.find_spec('multipart') is None:
+
+    class _QuerystringParser:
+        def __init__(self, callbacks):
+            self._callbacks = callbacks
+            self._buffer = bytearray()
+
+        def write(self, data):
+            self._buffer.extend(data)
+
+        def finalize(self):
+            for field in bytes(self._buffer).split(b'&'):
+                if not field:
+                    continue
+                name, _, value = field.partition(b'=')
+                self._callbacks['on_field_start']()
+                self._callbacks['on_field_name'](name, 0, len(name))
+                self._callbacks['on_field_data'](value, 0, len(value))
+                self._callbacks['on_field_end']()
+            self._callbacks['on_end']()
+
+    def _parse_options_header(value):
+        if not value:
+            return b'', {}
+        if isinstance(value, str):
+            value = value.encode('latin-1')
+        content_type = value.split(b';', 1)[0].strip().lower()
+        return content_type, {}
+
+    _python_multipart = ModuleType('python_multipart')
+    _python_multipart.QuerystringParser = _QuerystringParser
+    _python_multipart_multipart = ModuleType('python_multipart.multipart')
+    _python_multipart_multipart.parse_options_header = _parse_options_header
+    sys.modules.setdefault('python_multipart', _python_multipart)
+    sys.modules.setdefault('python_multipart.multipart', _python_multipart_multipart)
+
+_phone_calls_db = ModuleType('database.phone_calls')
+for _name in [
+    'get_phone_number_by_number',
+    'set_pending_verification',
+    'get_pending_verification_uid',
+    'get_phone_numbers',
+    'upsert_phone_number',
+    'delete_pending_verification',
+    'get_phone_number',
+    'delete_phone_number',
+    'get_primary_phone_number',
+]:
+    setattr(_phone_calls_db, _name, MagicMock())
+sys.modules['database.phone_calls'] = _phone_calls_db
+
+_phone_call_usage_db = ModuleType('database.phone_call_usage')
+_phone_call_usage_db.get_current_month_count = MagicMock(return_value=(0, 0))
+_phone_call_usage_db.increment_current_month = MagicMock()
+sys.modules['database.phone_call_usage'] = _phone_call_usage_db
+_database_pkg = sys.modules.setdefault('database', ModuleType('database'))
+_database_pkg.__path__ = [os.path.join(_BACKEND_DIR, 'database')]
+_database_pkg.phone_calls = _phone_calls_db
+_database_pkg.phone_call_usage = _phone_call_usage_db
+
+_phone_call_utils = ModuleType('utils.phone_calls')
+_phone_call_utils.check_call_access = MagicMock()
+_phone_call_utils.check_destination_allowed = MagicMock()
+_phone_call_utils.get_quota_snapshot = MagicMock(
+    return_value=SimpleNamespace(has_access=True, is_paid=True, max_duration_seconds=None)
+)
+sys.modules['utils.phone_calls'] = _phone_call_utils
+
+_utils_other = ModuleType('utils.other')
+_utils_other.__path__ = []
+_utils_other_endpoints = ModuleType('utils.other.endpoints')
+_utils_other_endpoints.get_current_user_uid = MagicMock()
+_utils_other_endpoints.rate_limit_dependency = lambda **_kwargs: (lambda: None)
+_utils_other.endpoints = _utils_other_endpoints
+sys.modules['utils.other'] = _utils_other
+sys.modules['utils.other.endpoints'] = _utils_other_endpoints
+_utils_pkg = sys.modules.setdefault('utils', ModuleType('utils'))
+_utils_pkg.__path__ = [os.path.join(_BACKEND_DIR, 'utils')]
+_utils_pkg.phone_calls = _phone_call_utils
+_utils_pkg.other = _utils_other
 
 
 class _TwilioRestException(Exception):
