@@ -357,3 +357,51 @@ class TestSafeSetHelpers:
             assert loop.run_until_complete(fut) == "ok"
         finally:
             loop.close()
+
+
+class TestBF16Loading:
+
+    def test_bf16_enabled_calls_to_bfloat16(self):
+        import gpu_worker as gw_mod
+
+        torch_mod = gw_mod.torch
+        orig_avail = torch_mod.cuda.is_available.return_value
+        torch_mod.cuda.is_available.return_value = True
+        torch_mod.cuda.is_bf16_supported.return_value = True
+        torch_mod.bfloat16 = "bf16_dtype"
+
+        nemo_asr = _get_nemo_asr()
+        mock_model = _make_mock_model()
+        mock_model.to.return_value = mock_model
+        nemo_asr.models.ASRModel.from_pretrained.return_value = mock_model
+        nemo_asr.models.ASRModel.from_pretrained.side_effect = None
+
+        worker = GPUWorker()
+        with patch.dict(os.environ, {"PARAKEET_BF16": "1", "PARAKEET_TORCH_COMPILE": "false"}):
+            worker._load_model()
+
+        mock_model.to.assert_called_once_with("bf16_dtype")
+        mock_model.eval.assert_called()
+        torch_mod.cuda.is_available.return_value = orig_avail
+        worker.stop()
+
+    def test_bf16_disabled_skips_conversion(self):
+        import gpu_worker as gw_mod
+
+        torch_mod = gw_mod.torch
+        orig_avail = torch_mod.cuda.is_available.return_value
+        torch_mod.cuda.is_available.return_value = True
+        torch_mod.cuda.is_bf16_supported.return_value = True
+
+        nemo_asr = _get_nemo_asr()
+        mock_model = _make_mock_model()
+        nemo_asr.models.ASRModel.from_pretrained.return_value = mock_model
+        nemo_asr.models.ASRModel.from_pretrained.side_effect = None
+
+        worker = GPUWorker()
+        with patch.dict(os.environ, {"PARAKEET_BF16": "0", "PARAKEET_TORCH_COMPILE": "false"}):
+            worker._load_model()
+
+        mock_model.to.assert_not_called()
+        torch_mod.cuda.is_available.return_value = orig_avail
+        worker.stop()

@@ -38,6 +38,7 @@ class BatchEngine:
         self._pending: list[PendingRequest] = []
         self._lock = asyncio.Lock()
         self._flush_task: Optional[asyncio.Task] = None
+        self._inflight_flushes: set[asyncio.Task] = set()
         self._loop: Optional[asyncio.AbstractEventLoop] = None
         self._shutting_down = False
         self._metrics = {
@@ -59,6 +60,10 @@ class BatchEngine:
                 await self._flush_task
             except asyncio.CancelledError:
                 pass
+        for task in list(self._inflight_flushes):
+            task.cancel()
+        if self._inflight_flushes:
+            await asyncio.gather(*self._inflight_flushes, return_exceptions=True)
         while self._pending:
             await self._flush_batch()
 
@@ -83,7 +88,9 @@ class BatchEngine:
                 self._metrics["total_requests"] += 1
 
                 if len(self._pending) >= self._max_batch_size:
-                    asyncio.create_task(self._flush_batch())
+                    task = asyncio.create_task(self._flush_batch())
+                    self._inflight_flushes.add(task)
+                    task.add_done_callback(self._inflight_flushes.discard)
         except BaseException:
             if owns_file and not enqueued:
                 _unlink_safe(audio_path)
@@ -132,6 +139,11 @@ class BatchEngine:
                         result = items[i] if i < len(items) else {"text": ""}
                         req.future.set_result(result)
 
+        except asyncio.CancelledError:
+            err = RuntimeError("Batch cancelled during shutdown")
+            for req in batch:
+                if not req.future.done():
+                    req.future.set_exception(err)
         except RuntimeError as exc:
             err = QueueFullError(str(exc)) if "GPU queue full" in str(exc) else exc
             logger.error(f"Batch transcription failed: {exc}")

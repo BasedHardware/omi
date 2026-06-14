@@ -341,6 +341,39 @@ class TestBatchEngineShutdown:
         finally:
             loop.close()
 
+    def test_cancellation_during_flush_resolves_futures(self):
+        """CancelledError in _flush_batch fails futures instead of stranding them."""
+        gpu = MagicMock(spec=GPUWorker)
+        gpu.is_ready = True
+
+        def submit_hang(payload, loop):
+            return loop.create_future()
+
+        gpu.submit.side_effect = submit_hang
+        engine = BatchEngine(gpu, max_batch_size=1, max_wait_seconds=0.01)
+
+        loop = asyncio.new_event_loop()
+        try:
+
+            async def run():
+                await engine.start()
+                submit_fut = asyncio.ensure_future(engine.submit("/tmp/hang.wav", owns_file=False))
+                for _ in range(20):
+                    await asyncio.sleep(0.01)
+                    if gpu.submit.called:
+                        break
+                assert gpu.submit.called, "flush_batch never called gpu.submit"
+                await engine.stop()
+                # Let event loop process future resolution callbacks
+                await asyncio.sleep(0)
+                assert submit_fut.done()
+                with pytest.raises(RuntimeError, match="cancelled during shutdown"):
+                    submit_fut.result()
+
+            loop.run_until_complete(run())
+        finally:
+            loop.close()
+
 
 class TestUnlinkSafe:
 
