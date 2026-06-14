@@ -9,8 +9,8 @@ import io
 import os
 import struct
 import sys
+import types
 import wave
-from types import ModuleType
 
 import numpy as np
 import pytest
@@ -19,45 +19,105 @@ import pytest
 from unittest.mock import MagicMock
 
 
-def _cosine_cdist(a, b, metric="cosine"):
-    if metric != "cosine":
-        raise ValueError(f"Unsupported test cdist metric: {metric}")
+_MISSING = object()
+_SCIPY_MODULES = ("scipy", "scipy.spatial", "scipy.spatial.distance")
 
-    a = np.asarray(a, dtype=np.float32)
-    b = np.asarray(b, dtype=np.float32)
-    numerator = a @ b.T
-    denominator = np.linalg.norm(a, axis=1)[:, None] * np.linalg.norm(b, axis=1)[None, :]
 
-    with np.errstate(divide="ignore", invalid="ignore"):
-        similarity = np.divide(numerator, denominator, out=np.zeros_like(numerator), where=denominator != 0)
-    return 1.0 - similarity
+def _restore_modules(original_modules):
+    if original_modules is None:
+        return
+
+    for name, module in original_modules.items():
+        if module is _MISSING:
+            sys.modules.pop(name, None)
+        else:
+            sys.modules[name] = module
+
+
+def _install_av_stub_if_missing():
+    try:
+        import av  # noqa: F401
+
+        return None
+    except ModuleNotFoundError as exc:
+        if exc.name != "av":
+            raise
+
+    original_modules = {"av": sys.modules.get("av", _MISSING)}
+    av_mod = types.ModuleType("av")
+
+    def _av_open(*args, **kwargs):
+        raise RuntimeError("av is not installed; this test module only covers helpers that do not decode audio")
+
+    av_mod.open = _av_open
+    sys.modules["av"] = av_mod
+    return original_modules
+
+
+def _install_scipy_stub_if_missing():
+    try:
+        import scipy.spatial.distance  # noqa: F401
+
+        return None
+    except ModuleNotFoundError as exc:
+        if exc.name is None or not exc.name.startswith("scipy"):
+            raise
+
+    original_modules = {name: sys.modules.get(name, _MISSING) for name in _SCIPY_MODULES}
+
+    scipy_mod = types.ModuleType("scipy")
+    spatial_mod = types.ModuleType("scipy.spatial")
+    distance_mod = types.ModuleType("scipy.spatial.distance")
+    scipy_mod.__path__ = []
+    spatial_mod.__path__ = []
+
+    def cdist(a, b, metric="cosine"):
+        if metric != "cosine":
+            raise NotImplementedError(f"Unsupported scipy stub metric: {metric}")
+
+        a = np.asarray(a, dtype=np.float64)
+        b = np.asarray(b, dtype=np.float64)
+        distances = np.zeros((a.shape[0], b.shape[0]), dtype=np.float64)
+        for i, left in enumerate(a):
+            left_norm = np.linalg.norm(left)
+            for j, right in enumerate(b):
+                denom = left_norm * np.linalg.norm(right)
+                distances[i, j] = np.nan if denom == 0 else 1.0 - float(np.dot(left, right) / denom)
+        return distances
+
+    distance_mod.cdist = cdist
+    spatial_mod.distance = distance_mod
+    scipy_mod.spatial = spatial_mod
+    sys.modules["scipy"] = scipy_mod
+    sys.modules["scipy.spatial"] = spatial_mod
+    sys.modules["scipy.spatial.distance"] = distance_mod
+    return original_modules
 
 
 os.environ.setdefault("ENCRYPTION_SECRET", "omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv")
 sys.modules.setdefault("database._client", MagicMock())
-sys.modules.setdefault("av", MagicMock())
 sys.modules.setdefault("utils.other.storage", MagicMock())
 sys.modules.setdefault("utils.stt.pre_recorded", MagicMock())
-try:
-    from scipy.spatial.distance import cdist as _scipy_cdist  # noqa: F401
-except ImportError:
-    scipy_mod = sys.modules.setdefault("scipy", ModuleType("scipy"))
-    spatial_mod = sys.modules.setdefault("scipy.spatial", ModuleType("scipy.spatial"))
-    distance_mod = ModuleType("scipy.spatial.distance")
-    distance_mod.cdist = _cosine_cdist
-    scipy_mod.spatial = spatial_mod
-    spatial_mod.distance = distance_mod
-    sys.modules["scipy.spatial.distance"] = distance_mod
 
-from utils.audio import AudioRingBuffer
-from utils.speaker_identification import detect_speaker_from_text, SPEAKER_IDENTIFICATION_PATTERNS, _pcm_to_wav_bytes
-from utils.stt.speaker_embedding import (
-    compare_embeddings,
-    is_same_speaker,
-    find_best_match,
-    SPEAKER_MATCH_THRESHOLD,
-    _get_wav_duration,
-)
+_original_av_modules = _install_av_stub_if_missing()
+_original_scipy_modules = _install_scipy_stub_if_missing()
+try:
+    from utils.audio import AudioRingBuffer
+    from utils.speaker_identification import (
+        detect_speaker_from_text,
+        SPEAKER_IDENTIFICATION_PATTERNS,
+        _pcm_to_wav_bytes,
+    )
+    from utils.stt.speaker_embedding import (
+        compare_embeddings,
+        is_same_speaker,
+        find_best_match,
+        SPEAKER_MATCH_THRESHOLD,
+        _get_wav_duration,
+    )
+finally:
+    _restore_modules(_original_scipy_modules)
+    _restore_modules(_original_av_modules)
 
 # ─── AudioRingBuffer ─────────────────────────────────────────────────────────
 
@@ -371,6 +431,12 @@ class TestSpeakerEmbeddingMath:
         b[0, 1] = 1.0
         distance = compare_embeddings(a, b)
         assert distance == pytest.approx(1.0, abs=1e-6)
+
+    def test_compare_zero_vector_distance_nan(self):
+        """Zero-norm inputs match scipy cosine behavior."""
+        zero = np.zeros((1, 512), dtype=np.float32)
+        emb = self._random_embedding(seed=42)
+        assert np.isnan(compare_embeddings(zero, emb))
 
     def test_compare_opposite_vectors_distance_two(self):
         """Opposite vectors → cosine distance 2."""
