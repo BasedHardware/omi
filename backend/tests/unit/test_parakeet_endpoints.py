@@ -42,6 +42,7 @@ from fastapi.testclient import TestClient
 def _make_app_with_mocks(gpu_ready=True, nim_mode=False):
     import main as parakeet_main
 
+    os.makedirs("_temp", exist_ok=True)
     parakeet_main.start_time = 0.0
 
     mock_gpu = MagicMock(spec=GPUWorker)
