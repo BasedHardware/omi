@@ -39,10 +39,14 @@ _RESTORED_MODULES = (
     "database.conversations",
     "database.users",
     "av",
+    "utils.audio",
+    "utils.http_client",
+    "utils.other",
     "utils.other.storage",
     "utils.speaker_identification",
     "utils.speaker_sample",
     "utils.speaker_sample_migration",
+    "utils.stt",
     "utils.stt.speaker_embedding",
     "utils.stt.pre_recorded",
     "scipy",
@@ -53,10 +57,14 @@ _PARENT_ATTRS = (
     ("database", "_client"),
     ("database", "conversations"),
     ("database", "users"),
+    ("utils", "audio"),
+    ("utils", "http_client"),
+    ("utils", "other"),
     ("utils.other", "storage"),
     ("utils", "speaker_identification"),
     ("utils", "speaker_sample"),
     ("utils", "speaker_sample_migration"),
+    ("utils", "stt"),
     ("utils.stt", "speaker_embedding"),
     ("utils.stt", "pre_recorded"),
     ("scipy", "spatial"),
@@ -77,6 +85,23 @@ def _install_module(name, module):
         parent = sys.modules.get(parent_name)
         if parent is not None:
             setattr(parent, attr, module)
+
+
+def _drop_module_and_parent_attr(name):
+    current = sys.modules.pop(name, _MISSING)
+    if "." not in name:
+        return
+
+    parent_name, attr = name.rsplit(".", 1)
+    parent = sys.modules.get(parent_name)
+    if parent is None:
+        return
+
+    if current is _MISSING:
+        if hasattr(parent, attr):
+            delattr(parent, attr)
+    elif getattr(parent, attr, _MISSING) is current:
+        delattr(parent, attr)
 
 
 def _restore_parent_attr(parent, attr, original, current):
@@ -104,6 +129,14 @@ def _restore_stub_modules():
         _restore_parent_attr(parent, attr, original, current_modules.get(child_name, _NOT_IMPORTED))
 
 
+for _real_import in (
+    "utils.audio",
+    "utils.speaker_identification",
+    "utils.speaker_sample",
+    "utils.stt.speaker_embedding",
+):
+    _drop_module_and_parent_attr(_real_import)
+
 _install_module("database._client", MagicMock())
 _conversations_mod = ModuleType("database.conversations")
 _conversations_mod.get_conversation = MagicMock(return_value=None)
@@ -115,6 +148,10 @@ _users_mod.get_person_speech_samples_count = MagicMock(return_value=0)
 _users_mod.add_person_speech_sample = MagicMock(return_value=True)
 _users_mod.set_person_speaker_embedding = MagicMock(return_value=None)
 _install_module("database.users", _users_mod)
+
+_http_client_mod = ModuleType("utils.http_client")
+_http_client_mod.get_stt_client = MagicMock()
+_install_module("utils.http_client", _http_client_mod)
 
 _install_module("av", MagicMock())
 
