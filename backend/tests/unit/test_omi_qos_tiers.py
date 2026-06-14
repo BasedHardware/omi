@@ -933,3 +933,76 @@ class TestStructuredOutputFeatureTracking:
         profile = MODEL_QOS_PROFILES['byok']
         for feature in _STRUCTURED_OUTPUT_FEATURES:
             assert profile[feature][1] == 'openai', f'byok {feature} should be openai, got {profile[feature][1]}'
+
+
+class TestGeminiThinkingBudget:
+    """thinking_budget is a native google-genai SDK param — it must never reach the OpenAI-compat fallback.
+
+    Regression for the pusher crash: pusher has no GEMINI_API_KEY/USE_VERTEX_AI, so the Gemini client
+    resolves to the ChatOpenAI OpenAI-compat fallback. Passing thinking_budget there leaks it into
+    model_kwargs and crashes at invoke ("Completions.parse() got an unexpected keyword argument
+    'thinking_budget'"), disabling trends/memory-discard for all users.
+    """
+
+    def test_openai_compat_fallback_omits_thinking_budget(self):
+        from unittest.mock import patch as _patch
+
+        saved = dict(_llm_cache)
+        _llm_cache.clear()
+        captured = {}
+
+        def fake_openai(*args, **kwargs):
+            captured.update(kwargs)
+            return MagicMock()
+
+        try:
+            with _patch.dict(os.environ, {'GEMINI_API_KEY': '', 'USE_VERTEX_AI': ''}), _patch(
+                'utils.llm.clients.ChatOpenAI', side_effect=fake_openai
+            ), _patch('utils.llm.clients.ChatGoogleGenerativeAI', side_effect=lambda *a, **k: MagicMock()):
+                _get_or_create_gemini_llm('gemini-2.5-flash-lite', thinking_budget=0)
+            assert 'thinking_budget' not in captured, 'thinking_budget must not reach the ChatOpenAI fallback'
+        finally:
+            _llm_cache.clear()
+            _llm_cache.update(saved)
+
+    def test_native_gemini_receives_thinking_budget(self):
+        from unittest.mock import patch as _patch
+
+        saved = dict(_llm_cache)
+        _llm_cache.clear()
+        captured = {}
+
+        def fake_genai(*args, **kwargs):
+            captured.update(kwargs)
+            return MagicMock()
+
+        try:
+            with _patch.dict(os.environ, {'GEMINI_API_KEY': 'test-key', 'USE_VERTEX_AI': ''}), _patch(
+                'utils.llm.clients.ChatGoogleGenerativeAI', side_effect=fake_genai
+            ), _patch('utils.llm.clients.ChatOpenAI', side_effect=lambda *a, **k: MagicMock()):
+                _get_or_create_gemini_llm('gemini-2.5-flash-lite', thinking_budget=0)
+            assert captured.get('thinking_budget') == 0, 'native ChatGoogleGenerativeAI must receive thinking_budget'
+        finally:
+            _llm_cache.clear()
+            _llm_cache.update(saved)
+
+    def test_non_25_model_omits_thinking_budget(self):
+        from unittest.mock import patch as _patch
+
+        saved = dict(_llm_cache)
+        _llm_cache.clear()
+        captured = {}
+
+        def fake_genai(*args, **kwargs):
+            captured.update(kwargs)
+            return MagicMock()
+
+        try:
+            with _patch.dict(os.environ, {'GEMINI_API_KEY': 'test-key', 'USE_VERTEX_AI': ''}), _patch(
+                'utils.llm.clients.ChatGoogleGenerativeAI', side_effect=fake_genai
+            ), _patch('utils.llm.clients.ChatOpenAI', side_effect=lambda *a, **k: MagicMock()):
+                _get_or_create_gemini_llm('gemini-3-flash-preview', thinking_budget=0)
+            assert 'thinking_budget' not in captured, 'thinking_budget only applies to gemini-2.5* models'
+        finally:
+            _llm_cache.clear()
+            _llm_cache.update(saved)
