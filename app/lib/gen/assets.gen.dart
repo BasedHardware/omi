@@ -486,44 +486,38 @@ class $AssetsIntegrationAppLogosGen {
 class $AssetsModelsGen {
   const $AssetsModelsGen();
 
-  /// Directory path: assets/models/yoloe-26n-seg-pf_ncnn_model
-  $AssetsModelsYoloe26nSegPfNcnnModelGen get yoloe26nSegPfNcnnModel =>
-      const $AssetsModelsYoloe26nSegPfNcnnModelGen();
+  /// Directory path: assets/models/yoloe-26n-seg-pf
+  $AssetsModelsYoloe26nSegPfGen get yoloe26nSegPf =>
+      const $AssetsModelsYoloe26nSegPfGen();
 }
 
-class $AssetsModelsYoloe26nSegPfNcnnModelGen {
-  const $AssetsModelsYoloe26nSegPfNcnnModelGen();
+class $AssetsModelsYoloe26nSegPfGen {
+  const $AssetsModelsYoloe26nSegPfGen();
 
-  /// File path: assets/models/yoloe-26n-seg-pf_ncnn_model/README.md
-  String get readme => 'assets/models/yoloe-26n-seg-pf_ncnn_model/README.md';
+  /// File path: assets/models/yoloe-26n-seg-pf/fingerprint.pb
+  String get fingerprint => 'assets/models/yoloe-26n-seg-pf/fingerprint.pb';
 
-  /// File path: assets/models/yoloe-26n-seg-pf_ncnn_model/labels.json
-  String get labels => 'assets/models/yoloe-26n-seg-pf_ncnn_model/labels.json';
+  /// File path: assets/models/yoloe-26n-seg-pf/labels.json
+  String get labels => 'assets/models/yoloe-26n-seg-pf/labels.json';
 
-  /// File path: assets/models/yoloe-26n-seg-pf_ncnn_model/metadata.yaml
-  String get metadata =>
-      'assets/models/yoloe-26n-seg-pf_ncnn_model/metadata.yaml';
+  /// File path: assets/models/yoloe-26n-seg-pf/saved_model.pb
+  String get savedModel => 'assets/models/yoloe-26n-seg-pf/saved_model.pb';
 
-  /// File path: assets/models/yoloe-26n-seg-pf_ncnn_model/model.ncnn.bin
-  String get modelNcnnBin =>
-      'assets/models/yoloe-26n-seg-pf_ncnn_model/model.ncnn.bin';
+  /// File path: assets/models/yoloe-26n-seg-pf/yoloe-26n-seg-pf.onnx2tf-fixed_float16.tflite
+  String get yoloe26nSegPfOnnx2tfFixedFloat16 =>
+      'assets/models/yoloe-26n-seg-pf/yoloe-26n-seg-pf.onnx2tf-fixed_float16.tflite';
 
-  /// File path: assets/models/yoloe-26n-seg-pf_ncnn_model/model.ncnn.param
-  String get modelNcnnParam =>
-      'assets/models/yoloe-26n-seg-pf_ncnn_model/model.ncnn.param';
-
-  /// File path: assets/models/yoloe-26n-seg-pf_ncnn_model/model_ncnn.py
-  String get modelNcnnPy =>
-      'assets/models/yoloe-26n-seg-pf_ncnn_model/model_ncnn.py';
+  /// File path: assets/models/yoloe-26n-seg-pf/yoloe-26n-seg-pf.onnx2tf-fixed_float32.tflite
+  String get yoloe26nSegPfOnnx2tfFixedFloat32 =>
+      'assets/models/yoloe-26n-seg-pf/yoloe-26n-seg-pf.onnx2tf-fixed_float32.tflite';
 
   /// List of all assets
   List<String> get values => [
-    readme,
+    fingerprint,
     labels,
-    metadata,
-    modelNcnnBin,
-    modelNcnnParam,
-    modelNcnnPy,
+    savedModel,
+    yoloe26nSegPfOnnx2tfFixedFloat16,
+    yoloe26nSegPfOnnx2tfFixedFloat32,
   ];
 }
 

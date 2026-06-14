@@ -31,9 +31,6 @@ class MainActivity: FlutterActivity() {
         // Register Phone Calls Plugin
         PhoneCallsPlugin.registerWith(flutterEngine, this)
 
-        // Register Local YOLOE native inference plugin
-        LocalYoloePlugin.registerWith(flutterEngine, applicationContext)
-
         // Register Native BLE Pigeon APIs
         OmiBleManager.initialize(application)
         getSharedPreferences("FlutterSharedPreferences", MODE_PRIVATE)

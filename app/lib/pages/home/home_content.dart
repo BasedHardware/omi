@@ -321,6 +321,8 @@ class HomeContentPageState extends State<HomeContentPage> with AutomaticKeepAliv
             ],
           ),
           const SizedBox(height: 4),
+          _buildLiveVisionPreview(vision),
+          const SizedBox(height: 14),
           if (detections.isEmpty)
             Text(
               context.l10n.objectAnnouncementsNoDetections,
@@ -331,6 +333,53 @@ class HomeContentPageState extends State<HomeContentPage> with AutomaticKeepAliv
           const SizedBox(height: 14),
           _metricStrip(vision),
         ],
+      ),
+    );
+  }
+
+  Widget _buildLiveVisionPreview(LocalVisionService vision) {
+    final frameBytes = vision.latestFrameJpegBytes;
+    final detections = vision.detections;
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(16),
+      child: Container(
+        color: const Color(0xFF111113),
+        child: AspectRatio(
+          aspectRatio: 4 / 3,
+          child: frameBytes == null
+              ? Center(
+                  child: Text(
+                    context.l10n.objectAnnouncementsNoDetections,
+                    style: TextStyle(color: Colors.grey.shade500, fontSize: 13),
+                  ),
+                )
+              : Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    Image.memory(
+                      frameBytes,
+                      fit: BoxFit.fill,
+                      gaplessPlayback: true,
+                    ),
+                    CustomPaint(painter: _LocalVisionOverlayPainter(detections)),
+                    Positioned(
+                      left: 10,
+                      top: 10,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+                        decoration: BoxDecoration(
+                          color: Colors.black.withValues(alpha: 0.58),
+                          borderRadius: BorderRadius.circular(99),
+                        ),
+                        child: Text(
+                          '${vision.detectionCount} · ${vision.status.name}',
+                          style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w800),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+        ),
       ),
     );
   }
@@ -511,5 +560,61 @@ class HomeContentPageState extends State<HomeContentPage> with AutomaticKeepAliv
         ),
       ),
     );
+  }
+}
+
+class _LocalVisionOverlayPainter extends CustomPainter {
+  _LocalVisionOverlayPainter(this.detections);
+
+  final List<Detection> detections;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final boxPaint = Paint()
+      ..color = const Color(0xFF22C55E)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2.2;
+    final fillPaint = Paint()
+      ..color = const Color(0xFF22C55E).withValues(alpha: 0.10)
+      ..style = PaintingStyle.fill;
+
+    for (final detection in detections.take(12)) {
+      final rect = Rect.fromLTWH(
+        detection.box.left * size.width,
+        detection.box.top * size.height,
+        detection.box.width * size.width,
+        detection.box.height * size.height,
+      );
+      if (rect.width <= 0 || rect.height <= 0) continue;
+
+      canvas.drawRect(rect, fillPaint);
+      canvas.drawRect(rect, boxPaint);
+
+      final label = '${detection.label} ${(detection.confidence * 100).round()}%';
+      final textPainter = TextPainter(
+        text: TextSpan(
+          text: label,
+          style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w800),
+        ),
+        maxLines: 1,
+        textDirection: TextDirection.ltr,
+      )..layout(maxWidth: size.width - 16);
+
+      final labelWidth = textPainter.width + 10;
+      final labelHeight = textPainter.height + 6;
+      final labelLeft = rect.left.clamp(0.0, (size.width - labelWidth).clamp(0.0, size.width));
+      final labelTop = (rect.top - labelHeight).clamp(0.0, (size.height - labelHeight).clamp(0.0, size.height));
+      final labelRect = RRect.fromRectAndRadius(
+        Rect.fromLTWH(labelLeft, labelTop, labelWidth, labelHeight),
+        const Radius.circular(6),
+      );
+      canvas.drawRRect(labelRect, Paint()..color = Colors.black.withValues(alpha: 0.72));
+      textPainter.paint(canvas, Offset(labelLeft + 5, labelTop + 3));
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _LocalVisionOverlayPainter oldDelegate) {
+    return oldDelegate.detections != detections;
   }
 }

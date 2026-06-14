@@ -1,11 +1,10 @@
 import 'dart:async';
-import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 
 import 'package:omi/backend/preferences.dart';
-import 'package:omi/services/local_vision/android_yoloe_detector.dart';
 import 'package:omi/services/local_vision/object_announcement_service.dart';
+import 'package:omi/services/local_vision/tflite_yoloe_detector.dart';
 import 'package:omi/services/local_vision/yoloe_model_assets.dart';
 import 'package:omi/utils/logger.dart';
 
@@ -21,7 +20,7 @@ extension LocalVisionDetectorImplementationSettings on LocalVisionDetectorImplem
 
   String get displayName => switch (this) {
         LocalVisionDetectorImplementation.fake => 'Fake detector',
-        LocalVisionDetectorImplementation.yoloe => 'YOLOE detector',
+        LocalVisionDetectorImplementation.yoloe => 'TFLite YOLOE detector',
       };
 
   static LocalVisionDetectorImplementation fromPreference(String value) {
@@ -438,7 +437,7 @@ class ObjectPresenceTracker {
 class LocalVisionService extends ChangeNotifier {
   LocalVisionService._({LocalVisionDetector? fakeDetector, LocalVisionDetector? yoloeDetector})
       : _fakeDetector = fakeDetector ?? const FakeLocalVisionDetector(),
-        _yoloeDetector = yoloeDetector ?? AndroidYoloeDetector();
+        _yoloeDetector = yoloeDetector ?? TfliteYoloeDetector();
 
   static final LocalVisionService instance = LocalVisionService._();
 
@@ -470,6 +469,7 @@ class LocalVisionService extends ChangeNotifier {
   LocalVisionInferenceStatus get status => _status;
   DateTime? get latestFrameTimestamp => _latestFrame?.timestamp;
   String? get latestFrameId => _latestFrame?.frameId;
+  Uint8List? get latestFrameJpegBytes => _latestFrame?.jpegBytes;
   List<Detection> get detections => List.unmodifiable(_detections);
   List<AnnouncementCandidate> get announcementCandidates => List.unmodifiable(_announcementCandidates);
   int get detectionCount => _detections.length;
@@ -830,7 +830,7 @@ class LocalVisionService extends ChangeNotifier {
   bool get _canProcessFrames {
     final implementation = _selectDetectorImplementation();
     if (implementation == LocalVisionDetectorImplementation.fake) return true;
-    return _modelAssetStatus.isValid && Platform.isAndroid;
+    return _modelAssetStatus.isValid;
   }
 
   LocalVisionDetectorImplementation _selectDetectorImplementation() {
@@ -840,7 +840,7 @@ class LocalVisionService extends ChangeNotifier {
     if (requested == LocalVisionDetectorImplementation.fake) {
       return LocalVisionDetectorImplementation.fake;
     }
-    if (_modelAssetStatus.isValid && Platform.isAndroid) {
+    if (_modelAssetStatus.isValid) {
       return LocalVisionDetectorImplementation.yoloe;
     }
     return LocalVisionDetectorImplementation.fake;

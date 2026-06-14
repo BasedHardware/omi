@@ -102,18 +102,6 @@ android {
         ndk {
             abiFilters "arm64-v8a", "armeabi-v7a", "x86", "x86_64"
         }
-        externalNativeBuild {
-            cmake {
-                cppFlags "-std=c++17 -fexceptions -frtti"
-            }
-        }
-    }
-
-    externalNativeBuild {
-        cmake {
-            path "src/main/cpp/CMakeLists.txt"
-            version "3.22.1"
-        }
     }
 
     signingConfigs {
@@ -167,6 +155,7 @@ dependencies {
     androidTestImplementation 'androidx.test:runner:1.2.0'
     androidTestImplementation 'androidx.test.espresso:espresso-core:3.2.0'
     implementation 'androidx.multidex:multidex:2.0.1'
+    implementation 'org.tensorflow:tensorflow-lite-gpu-api:2.16.1'
     implementation 'com.squareup.okhttp3:okhttp:4.12.0'
     implementation 'androidx.constraintlayout:constraintlayout:2.0.0-alpha3'
     implementation 'io.intercom.android:intercom-sdk:latest.release'
