@@ -17,12 +17,15 @@ WORKDIR /app
 RUN pip install --no-cache-dir --no-deps --force-reinstall \
     "nemo_toolkit[asr] @ git+https://github.com/beastoin/NeMo.git@68d99a17944181452205dc60da21e82bf3647054"
 
-# Extra deps not in the NGC image.
-# Lock torch/torchaudio to NGC versions via constraints so pyannote.audio
-# doesn't upgrade them and break CUDA ABI compatibility.
-RUN python -c "import torch; print(f'torch=={torch.__version__}')" > /tmp/torch-pin.txt && \
-    python -c "import torchaudio; print(f'torchaudio=={torchaudio.__version__}')" >> /tmp/torch-pin.txt && \
-    pip install --no-cache-dir -c /tmp/torch-pin.txt \
+# NGC 26.02 ships torch 2.6 but NOT torchaudio.  pyannote.audio pulls in
+# the latest torchaudio, whose C extension is ABI-incompatible with torch 2.6
+# (undefined symbol: torch_library_impl).  Install a matching torchaudio first,
+# then pin both so later deps can't upgrade them.
+RUN TORCH_MM=$(python -c "import torch; print('.'.join(torch.__version__.split('.')[:2]))") && \
+    pip install --no-cache-dir "torchaudio==${TORCH_MM}.*" && \
+    python -c "import torch; print(f'torch=={torch.__version__}')" > /tmp/pin.txt && \
+    python -c "import torchaudio; print(f'torchaudio=={torchaudio.__version__}')" >> /tmp/pin.txt && \
+    pip install --no-cache-dir -c /tmp/pin.txt \
     "fastapi>=0.115.0" \
     "uvicorn[standard]>=0.30.0" \
     "python-multipart>=0.0.6" \
