@@ -128,6 +128,15 @@ _speaker_embedding.compare_embeddings = _compare_embeddings
 _speaker_embedding.SPEAKER_MATCH_THRESHOLD = 0.45
 sys.modules['utils.stt.speaker_embedding'] = _speaker_embedding
 
+_cloud_tasks = ModuleType('utils.cloud_tasks')
+_cloud_tasks.enqueue_audio_merge_job = MagicMock()
+_cloud_tasks.enqueue_sync_job = MagicMock()
+_cloud_tasks.get_sync_tasks_max_attempts = MagicMock(return_value=5)
+_cloud_tasks.is_audio_merge_dispatch_enabled = MagicMock(return_value=False)
+_cloud_tasks.is_cloud_tasks_dispatch_enabled = MagicMock(return_value=False)
+_cloud_tasks.verify_cloud_tasks_oidc = MagicMock(return_value=0)
+sys.modules['utils.cloud_tasks'] = _cloud_tasks
+
 # Stub google.cloud.storage.Client to avoid GCS credentials
 import google.cloud.storage as _gcs
 
@@ -561,6 +570,37 @@ class TestProcessSegmentPreferences:
         call_args = mock_process.call_args
         # The language arg is the second positional argument
         assert call_args[0][1] == 'en', "Should use user's language 'en', not Deepgram's detected 'fr'"
+
+    @patch('routers.sync.process_conversation')
+    @patch('routers.sync.get_closest_conversation_to_timestamps', return_value=None)
+    @patch('routers.sync.get_timestamp_from_path', return_value=1700000000)
+    @patch('routers.sync.prerecorded')
+    @patch('routers.sync.delete_syncing_temporal_file')
+    @patch('routers.sync.get_syncing_file_temporal_signed_url', return_value='http://example.com/audio.wav')
+    def test_private_cloud_sync_flag_passed_to_new_conversation(
+        self, mock_url, mock_delete, mock_dg, mock_ts, mock_closest, mock_process
+    ):
+        """New offline sync conversations must retain private-cloud audio metadata intent."""
+        from routers.sync import process_segment
+
+        mock_dg.return_value = (self._make_mock_words(), 'en')
+        mock_process.return_value = MagicMock(id='test-id')
+
+        response = {'new_memories': set(), 'updated_memories': set()}
+        lock = threading.Lock()
+        errors = []
+
+        process_segment(
+            'test/path.bin',
+            'uid123',
+            response,
+            lock,
+            errors,
+            private_cloud_sync_enabled=True,
+        )
+
+        create_conversation = mock_process.call_args[0][2]
+        assert create_conversation.private_cloud_sync_enabled is True
 
 
 # ---------------------------------------------------------------------------

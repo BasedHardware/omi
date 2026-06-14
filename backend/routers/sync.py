@@ -1117,6 +1117,7 @@ def process_segment(
     person_embeddings_cache: dict = None,
     target_conversation_id: str = None,
     turnstile: Optional[_OrderedTurnstile] = None,
+    private_cloud_sync_enabled: bool = False,
 ):
     try:
         url = get_syncing_file_temporal_signed_url(path)
@@ -1194,6 +1195,7 @@ def process_segment(
                 transcript_segments=transcript_segments,
                 source=source,
                 is_locked=is_locked,
+                private_cloud_sync_enabled=private_cloud_sync_enabled,
             )
             created = process_conversation(uid, language, create_memory)
             with lock:
@@ -1421,6 +1423,9 @@ async def sync_local_files(
 
         # Fetch user transcription preferences once before spawning threads
         transcription_prefs = await run_blocking(db_executor, users_db.get_user_transcription_preferences, uid)
+        private_cloud_sync_enabled = bool(
+            await run_blocking(db_executor, users_db.get_user_private_cloud_sync_enabled, uid)
+        )
 
         # Build speaker embeddings cache once for all segments (voice + text identification)
         try:
@@ -1452,6 +1457,7 @@ async def sync_local_files(
                     person_embeddings_cache,
                     conversation_id,
                     assignment_turnstile,
+                    private_cloud_sync_enabled=private_cloud_sync_enabled,
                 )
                 for path in ordered_paths
             ]
@@ -1725,6 +1731,9 @@ async def _run_full_pipeline_background_async(
 
             # --- Phase 4: Fetch prefs & embeddings ---
             transcription_prefs = await run_blocking(db_executor, users_db.get_user_transcription_preferences, uid)
+            private_cloud_sync_enabled = bool(
+                await run_blocking(db_executor, users_db.get_user_private_cloud_sync_enabled, uid)
+            )
             try:
                 person_embeddings_cache = await run_blocking(db_executor, build_person_embeddings_cache, uid)
                 if person_embeddings_cache:
@@ -1773,6 +1782,7 @@ async def _run_full_pipeline_background_async(
                     person_embeddings_cache,
                     target_conversation_id,
                     assignment_turnstile,
+                    private_cloud_sync_enabled=private_cloud_sync_enabled,
                 )
                 if ok and task_mode:
                     add_processed_segment(job_id, path)
