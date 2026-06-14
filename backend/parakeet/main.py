@@ -1,9 +1,11 @@
 import asyncio
+import functools
 import gc
 import os
 import time
 import uuid
 import logging
+from concurrent.futures import ThreadPoolExecutor
 from contextlib import asynccontextmanager
 from typing import Optional
 
@@ -49,6 +51,7 @@ BATCH_SIZE_HIST = Histogram(
 gpu_worker: Optional[GPUWorker] = None
 batch_engine: Optional[BatchEngine] = None
 start_time: float = 0
+_diarize_pool = ThreadPoolExecutor(max_workers=4, thread_name_prefix="diarize")
 
 
 @asynccontextmanager
@@ -61,8 +64,6 @@ async def lifespan(app: FastAPI):
     if INFERENCE_MODE != "nim":
         gpu_worker = GPUWorker()
         gpu_worker.start()
-        logger.info("Waiting for GPU batch model to load...")
-        gpu_worker.wait_ready(timeout=600)
         set_gpu_worker(gpu_worker)
 
         batch_engine = BatchEngine(
@@ -72,9 +73,11 @@ async def lifespan(app: FastAPI):
             max_queue_depth=int(os.getenv("PARAKEET_MAX_QUEUE_DEPTH", "4096")),
         )
         await batch_engine.start()
+        logger.info("Server started, GPU model loading in background...")
+    else:
+        logger.info("Parakeet ASR server ready (NIM mode)")
 
     warmup_rnnt_decoder()
-    logger.info("Parakeet ASR server ready")
     yield
 
     logger.info("Shutting down...")
@@ -90,6 +93,8 @@ app.mount("/metrics", make_asgi_app())
 
 @app.post("/v1/transcribe")
 async def transcribe(file: UploadFile = File(...)):
+    if gpu_worker is not None and not gpu_worker.is_ready:
+        return JSONResponse(status_code=503, content={"detail": "Model loading, try again shortly"})
     upload_id = str(uuid.uuid4())
     file_path = f"_temp/{upload_id}_{file.filename}"
     ACTIVE_BATCH.inc()
@@ -120,19 +125,26 @@ async def transcribe_v2(
     file: UploadFile = File(...),
     diarize: bool = Form(True),
 ):
+    if gpu_worker is not None and not gpu_worker.is_ready:
+        return JSONResponse(status_code=503, content={"detail": "Model loading, try again shortly"})
     upload_id = str(uuid.uuid4())
     file_path = f"_temp/{upload_id}_{file.filename}"
     ACTIVE_BATCH.inc()
     t0 = time.monotonic()
+    loop = asyncio.get_running_loop()
     try:
         with open(file_path, "wb") as f:
             f.write(await file.read())
 
         if batch_engine is not None:
             gpu_result = await batch_engine.submit(file_path, timestamps=True, owns_file=False)
-            result = transcribe_file_v2(file_path, gpu_result=gpu_result, diarize=diarize)
+            result = await loop.run_in_executor(
+                _diarize_pool, functools.partial(transcribe_file_v2, file_path, gpu_result=gpu_result, diarize=diarize)
+            )
         else:
-            result = transcribe_file_v2(file_path, diarize=diarize)
+            result = await loop.run_in_executor(
+                _diarize_pool, functools.partial(transcribe_file_v2, file_path, diarize=diarize)
+            )
         return result
     except QueueFullError:
         return JSONResponse(status_code=503, content={"detail": "Server overloaded — try again later"})

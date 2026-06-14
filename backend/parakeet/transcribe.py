@@ -138,6 +138,9 @@ def transcribe_file_v2(file_path: str, gpu_result: dict = None, diarize: bool = 
 
     if diarize:
         base = _diarize_segments(file_path, base)
+    else:
+        for seg in base["segments"]:
+            seg["speaker"] = "SPEAKER_0"
 
     base["detected_language"] = detect_language_from_text(base.get("text", ""))
     return base
