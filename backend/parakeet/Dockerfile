@@ -17,12 +17,14 @@ WORKDIR /app
 RUN pip install --no-cache-dir --no-deps --force-reinstall \
     "nemo_toolkit[asr] @ git+https://github.com/beastoin/NeMo.git@68d99a17944181452205dc60da21e82bf3647054"
 
-# NGC 26.02 has torch but NOT torchaudio.  Without this step, pyannote.audio
-# pulls in the latest torchaudio + standard PyPI torch, overwriting NGC's
-# custom CUDA-aligned torch and causing ABI crashes.
-# --no-deps prevents torchaudio from dragging in standard torch.
+# NGC ships torch with CUDA 12.8 but no torchaudio/torchvision.
+# pyannote.audio's transitive deps pull in latest versions compiled
+# against CUDA 13+, breaking ABI. Pre-install matching versions
+# with --no-deps to avoid dragging in standard PyPI torch.
 RUN TORCH_MM=$(python -c "import torch; print('.'.join(torch.__version__.split('.')[:2]))") && \
-    pip install --no-cache-dir --no-deps "torchaudio==${TORCH_MM}.*"
+    pip install --no-cache-dir --no-deps \
+    "torchaudio==${TORCH_MM}.*" \
+    "torchvision==${TORCH_MM}.*"
 
 # Extra deps not in the NGC image.
 RUN pip install --no-cache-dir \
