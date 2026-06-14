@@ -1,5 +1,15 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import { buildGoalPrompt, parseTargetValue } from './goals'
+
+vi.mock('./apiClient', () => ({
+  omiApi: {
+    post: vi.fn()
+  }
+}))
+
+vi.mock('./agentLLM', () => ({
+  callAgentLLM: vi.fn()
+}))
 
 describe('buildGoalPrompt', () => {
   it('includes the apps the user works with', () => {
