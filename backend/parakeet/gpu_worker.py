@@ -108,6 +108,7 @@ class GPUWorker:
 
     def _run_loop(self) -> None:
         logger.info("GPU worker thread started")
+        gc.disable()
         try:
             self._load_model()
             self._ready.set()
@@ -158,7 +159,7 @@ class GPUWorker:
 
         model_name = os.getenv("PARAKEET_MODEL", "nvidia/parakeet-tdt-0.6b-v3")
         device = os.getenv("PARAKEET_DEVICE", "cuda:0")
-        do_compile = os.getenv("PARAKEET_TORCH_COMPILE", "true").lower() in ("true", "1", "yes")
+        do_compile = os.getenv("PARAKEET_TORCH_COMPILE", "false").lower() in ("true", "1", "yes")
         disable_cuda_graphs = os.getenv("PARAKEET_CUDA_GRAPHS", "false").lower() not in ("true", "1", "yes")
 
         torch.backends.cudnn.benchmark = True
