@@ -23,6 +23,7 @@ from __future__ import annotations
 import os
 import sys
 import types
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -39,9 +40,53 @@ os.environ.setdefault("BASE_API_URL", "http://localhost:8080")
 
 # Pre-mock heavy deps before importing the module under test (Python 3.9 compat —
 # database.redis_db uses dict | None syntax that requires 3.10+).
-_mock = MagicMock()
-for mod in ['firebase_admin.auth', 'database.redis_db', 'utils.http_client', 'utils.log_sanitizer']:
-    sys.modules.setdefault(mod, _mock)
+BACKEND_DIR = Path(__file__).resolve().parents[2]
+
+
+def _ensure_package(name, path):
+    module = sys.modules.get(name)
+    if module is None or not hasattr(module, "__path__"):
+        module = types.ModuleType(name)
+        sys.modules[name] = module
+    module.__path__ = [str(path)]
+
+    if "." in name:
+        parent_name, attr_name = name.rsplit(".", 1)
+        parent = sys.modules.get(parent_name)
+        if parent is not None:
+            setattr(parent, attr_name, module)
+
+    return module
+
+
+def _install_module(name):
+    module = types.ModuleType(name)
+    sys.modules[name] = module
+    parent_name, _, attr_name = name.rpartition(".")
+    parent = sys.modules.get(parent_name)
+    if parent is not None:
+        setattr(parent, attr_name, module)
+    return module
+
+
+_ensure_package("database", BACKEND_DIR / "database")
+_ensure_package("utils", BACKEND_DIR / "utils")
+
+firebase_auth_stub = _install_module("firebase_admin.auth")
+firebase_auth_stub.verify_id_token = MagicMock()
+
+redis_stub = _install_module("database.redis_db")
+redis_stub.set_auth_session = MagicMock()
+redis_stub.get_auth_session = MagicMock()
+redis_stub.set_auth_code = MagicMock()
+redis_stub.get_auth_code = MagicMock()
+redis_stub.delete_auth_code = MagicMock()
+
+http_client_stub = _install_module("utils.http_client")
+http_client_stub.get_auth_client = MagicMock()
+
+log_sanitizer_stub = _install_module("utils.log_sanitizer")
+log_sanitizer_stub.sanitize = MagicMock(side_effect=lambda value: value)
 
 try:
     import jinja2  # noqa: F401
@@ -52,9 +97,8 @@ except ImportError:
 
 # Allow importing ``backend.routers.auth`` without running the full backend
 # entrypoint — same trick the rest of tests/unit uses.
-_BACKEND_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
-if _BACKEND_DIR not in sys.path:
-    sys.path.insert(0, _BACKEND_DIR)
+if str(BACKEND_DIR) not in sys.path:
+    sys.path.insert(0, str(BACKEND_DIR))
 
 from routers.auth import _validate_redirect_uri  # noqa: E402
 
