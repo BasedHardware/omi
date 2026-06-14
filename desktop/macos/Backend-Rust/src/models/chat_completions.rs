@@ -176,7 +176,6 @@ pub struct AnthropicRequest {
     // String or array-of-content-blocks. We emit the block form with a
     // cache_control breakpoint to cache the static tools+system prefix.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub system: Option<serde_json::Value>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub temperature: Option<f64>,
     pub stream: bool,
@@ -190,6 +189,20 @@ pub struct AnthropicRequest {
 pub struct AnthropicMessage {
     pub role: String,
     pub content: serde_json::Value,
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct AnthropicSystemContentBlock {
+    #[serde(rename = "type")]
+    pub block_type: String,
+    pub text: String,
+    pub cache_control: AnthropicCacheControl,
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct AnthropicCacheControl {
+    #[serde(rename = "type")]
+    pub cache_type: String,
 }
 
 #[derive(Debug, Clone, Serialize)]
