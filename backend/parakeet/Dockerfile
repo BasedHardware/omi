@@ -17,17 +17,21 @@ WORKDIR /app
 RUN pip install --no-cache-dir --no-deps --force-reinstall \
     "nemo_toolkit[asr] @ git+https://github.com/beastoin/NeMo.git@68d99a17944181452205dc60da21e82bf3647054"
 
-# NGC ships torch with CUDA 12.8 but no torchaudio/torchvision.
-# pyannote.audio's transitive deps pull in latest versions compiled
-# against CUDA 13+, breaking ABI. Pre-install matching versions
-# with --no-deps to avoid dragging in standard PyPI torch.
+# NGC ships torch+torchvision with CUDA 12.8 but no torchaudio.
+# pyannote.audio's transitive deps upgrade torch ecosystem packages to
+# versions compiled against CUDA 13+, breaking ABI.
+# Strategy: install torchaudio (--no-deps), then pin ALL torch packages
+# via constraints (base versions, stripped of +cu128 local tags) so pip
+# cannot upgrade them when resolving pyannote.audio's dependency tree.
 RUN TORCH_MM=$(python -c "import torch; print('.'.join(torch.__version__.split('.')[:2]))") && \
-    pip install --no-cache-dir --no-deps \
-    "torchaudio==${TORCH_MM}.*" \
-    "torchvision==${TORCH_MM}.*"
+    pip install --no-cache-dir --no-deps "torchaudio==${TORCH_MM}.*"
 
-# Extra deps not in the NGC image.
-RUN pip install --no-cache-dir \
+RUN python3 -c "\
+import torch; print('torch==' + torch.__version__.split('+')[0]); \
+import torchaudio; print('torchaudio==' + torchaudio.__version__.split('+')[0]); \
+import torchvision; print('torchvision==' + torchvision.__version__.split('+')[0])" \
+    > /tmp/torch-pin.txt && cat /tmp/torch-pin.txt && \
+    pip install --no-cache-dir -c /tmp/torch-pin.txt \
     "fastapi>=0.115.0" \
     "uvicorn[standard]>=0.30.0" \
     "python-multipart>=0.0.6" \
