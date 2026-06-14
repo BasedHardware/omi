@@ -9,14 +9,11 @@ acrylic paint
 adhesive tape
 antenna
 spray can
-afro
 air conditioner
 air sock
-aircraft cabin
 aircraft model
 airliner
 plane
-airplane window
 airship
 alarm clock
 mollymawk
@@ -397,7 +394,6 @@ glass jar
 glass plate
 glass table
 glass vase
-glass wall
 glass window
 glasses
 glove
@@ -681,7 +677,6 @@ tea bag
 tea pot
 television
 television camera
-television studio
 thermos bottle
 throw pillow
 tie

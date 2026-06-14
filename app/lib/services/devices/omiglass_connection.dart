@@ -70,6 +70,8 @@ class OmiGlassOtaStatus {
 class OmiGlassConnection extends DeviceConnection {
   OmiGlassConnection(super.device, super.transport);
 
+  static const int _foregroundPhotoCaptureIntervalSeconds = 5;
+
   StreamSubscription? _otaStatusSubscription;
 
   @override
@@ -494,7 +496,11 @@ class OmiGlassConnection extends DeviceConnection {
       await transport.writeCharacteristic(
         omiServiceUuid,
         imageCaptureControlCharacteristicUuid,
-        [0x05], // Start interval capture (5 = minimum accepted by firmware, range 5-300)
+        [_foregroundPhotoCaptureIntervalSeconds], // Start interval capture (seconds, firmware range 5-300)
+      );
+      Logger.debug(
+        'OmiGlassConnection: Requested photo capture interval '
+        '${_foregroundPhotoCaptureIntervalSeconds}s',
       );
     } catch (e) {
       Logger.debug('OmiGlassConnection: Error starting photo controller: $e');

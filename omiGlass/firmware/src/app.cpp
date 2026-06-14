@@ -737,9 +737,12 @@ void handlePhotoControl(int8_t controlValue)
         Serial.print("Received command: Start interval capture with parameter ");
         Serial.println(controlValue);
 
-        // Use fixed interval from config for optimal battery life
-        captureInterval = PHOTO_CAPTURE_INTERVAL_MS;
-        Serial.print("Using configured interval: ");
+        // Interpret the control value as seconds. Keep PHOTO_CAPTURE_INTERVAL_MS
+        // as the default startup interval, but honor app-requested foreground
+        // capture cadence so local vision can run faster than the battery-optimized
+        // 30s firmware default.
+        captureInterval = controlValue * 1000;
+        Serial.print("Using requested interval: ");
         Serial.print(captureInterval / 1000);
         Serial.println(" seconds");
 

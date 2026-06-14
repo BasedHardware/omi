@@ -437,7 +437,9 @@ class ObjectPresenceTracker {
 class LocalVisionService extends ChangeNotifier {
   LocalVisionService._({LocalVisionDetector? fakeDetector, LocalVisionDetector? yoloeDetector})
       : _fakeDetector = fakeDetector ?? const FakeLocalVisionDetector(),
-        _yoloeDetector = yoloeDetector ?? const TfliteYoloeDetector();
+        // Do not make this const: the conditionally-exported native detector constructor is non-const.
+        // ignore: prefer_const_constructors
+        _yoloeDetector = yoloeDetector ?? TfliteYoloeDetector();
 
   static final LocalVisionService instance = LocalVisionService._();
 
