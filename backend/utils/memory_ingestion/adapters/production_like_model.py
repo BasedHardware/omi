@@ -197,6 +197,7 @@ class ProductionLikeMemoryModelClient(MemoryModelClient):
                     **route.model_dump(),
                 })
                 segments = [_to_transcript_segment(event, index) for index, event in enumerate(event_chunk)]
+                retry_attempts = 1 if (pipeline_input.source.source_type == "voice_transcript" and route_family == "voice_recall_v1") else 0
                 memories = _extract_memories_with_production_prompt(
                     segments=segments,
                     user_name=user_name,
@@ -210,7 +211,9 @@ class ProductionLikeMemoryModelClient(MemoryModelClient):
                         "conversation_id": conversation_id,
                         "chunk_index": chunk_index,
                         "source_event_ids": [event.event_id for event in event_chunk],
+                        "route_family": route_family,
                     },
+                    retry_attempts=retry_attempts,
                 )
                 for memory_index, memory in enumerate(memories):
                     if not _has_sufficient_evidence(memory.content, event_chunk, quote_anchor=memory.quote_anchor):
@@ -350,6 +353,7 @@ def _extract_memories_with_production_prompt(
     typed: bool = False,
     trace_sink: Callable[[dict[str, Any]], None] | None = None,
     trace_context: dict[str, Any] | None = None,
+    retry_attempts: int = 0,
 ) -> list[ProductionLikeMemory]:
     trace_context = trace_context or {}
     content = TranscriptSegment.segments_as_string(segments, user_name=user_name, people=[])
@@ -380,22 +384,43 @@ def _extract_memories_with_production_prompt(
     }
     prompt_value = prompt.invoke(prompt_inputs)
     raw_response = None
-    try:
-        raw_response = _memory_llm().invoke(prompt_value)
-        parsed_response: ProductionLikeMemories = parser.invoke(raw_response)
-    except Exception as exc:
-        _emit_optional_trace(trace_sink, {
-            "stage": "model_call",
-            "status": "error",
-            "source_type": source_type,
-            "typed": typed,
-            "high_recall": high_recall,
-            "selected_text": content,
-            "raw_model_response": _model_dump(raw_response),
-            "parser_error": str(exc),
-            **trace_context,
-        })
-        raise
+    parsed_response = None
+    max_attempts = max(1, retry_attempts + 1)
+    attempt = 0
+    for attempt in range(1, max_attempts + 1):
+        raw_response = None
+        try:
+            raw_response = _memory_llm().invoke(prompt_value)
+            parsed_response = parser.invoke(raw_response)
+            break
+        except Exception as exc:
+            final_attempt = attempt >= max_attempts
+            _emit_optional_trace(trace_sink, {
+                "stage": "model_call",
+                "status": "error",
+                "source_type": source_type,
+                "typed": typed,
+                "high_recall": high_recall,
+                "selected_text": content,
+                "raw_model_response": _model_dump(raw_response),
+                "parser_error": str(exc),
+                "attempt": attempt,
+                "max_attempts": max_attempts,
+                "will_retry": not final_attempt,
+                **trace_context,
+            })
+            if not final_attempt:
+                _emit_optional_trace(trace_sink, {
+                    "stage": "model_call_retry",
+                    "source_type": source_type,
+                    "attempt": attempt + 1,
+                    "max_attempts": max_attempts,
+                    "previous_error": str(exc),
+                    **trace_context,
+                })
+                continue
+            raise
+    assert parsed_response is not None
     _emit_optional_trace(trace_sink, {
         "stage": "model_call",
         "status": "ok",
@@ -406,6 +431,8 @@ def _extract_memories_with_production_prompt(
         "raw_model_response": _model_dump(raw_response),
         "parsed_facts_before_filter": _model_dump(parsed_response.facts),
         "parser_error": None,
+        "attempt": attempt,
+        "max_attempts": max_attempts,
         **trace_context,
     })
     return parsed_response.facts

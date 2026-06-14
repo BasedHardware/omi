@@ -256,3 +256,56 @@ def test_prodlike_source_route_config_records_chat_v7a(monkeypatch):
     assert route_event["declared_source_type"] == "chat_exchange"
     assert route_event["effective_source_type"] == "chat_exchange"
     assert route_event["metadata"]["route_family"] == "v7a"
+
+
+class _FlakyLLMThenSuccess:
+    def __init__(self):
+        self.calls = 0
+
+    def invoke(self, _prompt_value):
+        self.calls += 1
+        if self.calls == 1:
+            raise TimeoutError("Request timed out.")
+        from langchain_core.messages import AIMessage
+        return AIMessage(content='{"facts":[{"content":"User is going to San Francisco to find a cofounder","category":"system"}]}')
+
+
+def test_prodlike_voice_recall_route_retries_model_call(monkeypatch):
+    llm = _FlakyLLMThenSuccess()
+    monkeypatch.setattr(production_like_model, "_memory_llm", lambda: llm)
+    event = _event("I am going to San Francisco to find a cofounder and a team.")
+    pipeline_input = _input(event)
+    pipeline_input.source.source_type = "voice_transcript"
+    client = ProductionLikeMemoryModelClient(source_route_config={"voice_transcript": "voice_recall_v1"})
+
+    output = asyncio.run(CoreMemoryPipeline(model_client=client).run(pipeline_input))
+
+    assert llm.calls == 2
+    assert output.event_frames[0].canonical_text == "User is going to San Francisco to find a cofounder"
+    stages = [event["stage"] for event in client.trace_events]
+    assert "model_call_retry" in stages
+    error_event = next(event for event in client.trace_events if event["stage"] == "model_call" and event["status"] == "error")
+    ok_event = next(event for event in client.trace_events if event["stage"] == "model_call" and event["status"] == "ok")
+    assert error_event["will_retry"] is True
+    assert error_event["attempt"] == 1
+    assert ok_event["attempt"] == 2
+    assert ok_event["max_attempts"] == 2
+    route_event = next(event for event in client.trace_events if event["stage"] == "source_route")
+    assert route_event["metadata"]["route_family"] == "voice_recall_v1"
+
+
+def test_prodlike_current_voice_route_does_not_retry(monkeypatch):
+    llm = _FlakyLLMThenSuccess()
+    monkeypatch.setattr(production_like_model, "_memory_llm", lambda: llm)
+    event = _event("I am going to San Francisco to find a cofounder and a team.")
+    pipeline_input = _input(event)
+    pipeline_input.source.source_type = "voice_transcript"
+    client = ProductionLikeMemoryModelClient(source_route_config={"voice_transcript": "current"})
+
+    output = asyncio.run(CoreMemoryPipeline(model_client=client).run(pipeline_input))
+
+    assert llm.calls == 1
+    assert output.event_frames == []
+    error_event = next(event for event in client.trace_events if event["stage"] == "model_call" and event["status"] == "error")
+    assert error_event["will_retry"] is False
+    assert error_event["max_attempts"] == 1
