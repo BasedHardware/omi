@@ -52,6 +52,7 @@ gpu_worker: Optional[GPUWorker] = None
 batch_engine: Optional[BatchEngine] = None
 start_time: float = 0
 _diarize_pool = ThreadPoolExecutor(max_workers=4, thread_name_prefix="diarize")
+_io_pool = ThreadPoolExecutor(max_workers=4, thread_name_prefix="file-io")
 
 
 @asynccontextmanager
@@ -91,6 +92,18 @@ app = FastAPI(lifespan=lifespan)
 app.mount("/metrics", make_asgi_app())
 
 
+def _write_file(path: str, data: bytes) -> None:
+    with open(path, "wb") as f:
+        f.write(data)
+
+
+def _remove_file(path: str) -> None:
+    try:
+        os.remove(path)
+    except OSError:
+        pass
+
+
 @app.post("/v1/transcribe")
 async def transcribe(file: UploadFile = File(...)):
     if gpu_worker is not None and not gpu_worker.is_ready:
@@ -99,9 +112,10 @@ async def transcribe(file: UploadFile = File(...)):
     file_path = f"_temp/{upload_id}_{file.filename}"
     ACTIVE_BATCH.inc()
     t0 = time.monotonic()
+    loop = asyncio.get_running_loop()
     try:
-        with open(file_path, "wb") as f:
-            f.write(await file.read())
+        data = await file.read()
+        await loop.run_in_executor(_io_pool, _write_file, file_path, data)
 
         if batch_engine is not None:
             result = await batch_engine.submit(file_path, timestamps=True, owns_file=True)
@@ -114,10 +128,7 @@ async def transcribe(file: UploadFile = File(...)):
         REQUEST_DURATION.labels(endpoint="v1_transcribe").observe(time.monotonic() - t0)
         ACTIVE_BATCH.dec()
         if batch_engine is None:
-            try:
-                os.remove(file_path)
-            except OSError:
-                pass
+            await loop.run_in_executor(_io_pool, _remove_file, file_path)
 
 
 @app.post("/v2/transcribe")
@@ -133,8 +144,8 @@ async def transcribe_v2(
     t0 = time.monotonic()
     loop = asyncio.get_running_loop()
     try:
-        with open(file_path, "wb") as f:
-            f.write(await file.read())
+        data = await file.read()
+        await loop.run_in_executor(_io_pool, _write_file, file_path, data)
 
         if batch_engine is not None:
             gpu_result = await batch_engine.submit(file_path, timestamps=True, owns_file=False)
@@ -151,10 +162,7 @@ async def transcribe_v2(
     finally:
         REQUEST_DURATION.labels(endpoint="v2_transcribe").observe(time.monotonic() - t0)
         ACTIVE_BATCH.dec()
-        try:
-            os.remove(file_path)
-        except OSError:
-            pass
+        await loop.run_in_executor(_io_pool, _remove_file, file_path)
 
 
 _WS_RECEIVE_TIMEOUT = 30.0

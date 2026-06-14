@@ -39,6 +39,10 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../../parakeet"))
 from gpu_worker import GPUWorker, WorkItem, WorkType, _safe_set_result, _safe_set_exception
 
 
+def _get_nemo_asr():
+    return sys.modules["nemo.collections.asr"]
+
+
 def _make_mock_model():
     model = MagicMock()
     model.eval.return_value = model
@@ -59,8 +63,9 @@ def _make_mock_model():
 def _start_worker_with_mock():
     w = GPUWorker()
     mock_model = _make_mock_model()
-    _nemo_asr.models.ASRModel.from_pretrained.return_value = mock_model
-    _nemo_asr.models.ASRModel.from_pretrained.side_effect = None
+    nemo_asr = _get_nemo_asr()
+    nemo_asr.models.ASRModel.from_pretrained.return_value = mock_model
+    nemo_asr.models.ASRModel.from_pretrained.side_effect = None
     w.start()
     w.wait_ready(timeout=10)
     return w
@@ -78,8 +83,9 @@ class TestGPUWorkerLifecycle:
         assert not worker.is_ready
 
     def test_model_load_failure_sets_error(self):
+        nemo_asr = _get_nemo_asr()
         worker = GPUWorker()
-        _nemo_asr.models.ASRModel.from_pretrained.side_effect = RuntimeError("CUDA OOM")
+        nemo_asr.models.ASRModel.from_pretrained.side_effect = RuntimeError("CUDA OOM")
 
         worker.start()
         worker._ready.wait(timeout=10)
@@ -89,10 +95,11 @@ class TestGPUWorkerLifecycle:
         with pytest.raises(RuntimeError, match="CUDA OOM"):
             worker.wait_ready(timeout=1)
 
-        _nemo_asr.models.ASRModel.from_pretrained.side_effect = None
+        nemo_asr.models.ASRModel.from_pretrained.side_effect = None
         worker.stop()
 
     def test_wait_ready_timeout(self):
+        nemo_asr = _get_nemo_asr()
         worker = GPUWorker()
         blocker = threading.Event()
 
@@ -100,14 +107,14 @@ class TestGPUWorkerLifecycle:
             blocker.wait(timeout=5)
             return _make_mock_model()
 
-        _nemo_asr.models.ASRModel.from_pretrained.side_effect = slow_load
+        nemo_asr.models.ASRModel.from_pretrained.side_effect = slow_load
 
         worker.start()
         with pytest.raises(TimeoutError):
             worker.wait_ready(timeout=0.1)
 
         blocker.set()
-        _nemo_asr.models.ASRModel.from_pretrained.side_effect = None
+        nemo_asr.models.ASRModel.from_pretrained.side_effect = None
         worker.stop()
 
 

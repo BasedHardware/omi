@@ -12,11 +12,22 @@ os.environ.setdefault("PARAKEET_INFERENCE_MODE", "nemo")
 
 _torch = MagicMock()
 _torch.cuda.is_available.return_value = False
+_torch.cuda.memory_allocated.return_value = 0
+_torch_props = MagicMock()
+_torch_props.total_mem = 16 * 1024**3
+_torch.cuda.get_device_properties.return_value = _torch_props
+_torch.cuda.empty_cache = MagicMock()
 _torch.inference_mode = lambda: (lambda fn: fn)
-sys.modules.setdefault("torch", _torch)
-sys.modules.setdefault("nemo", MagicMock())
-sys.modules.setdefault("nemo.collections", MagicMock())
-sys.modules.setdefault("nemo.collections.asr", MagicMock())
+_torch.compile = lambda m: m
+_torch.backends.cudnn = MagicMock()
+sys.modules["torch"] = _torch
+
+_nemo_asr = MagicMock()
+_nemo = MagicMock()
+_nemo.collections.asr = _nemo_asr
+sys.modules["nemo"] = _nemo
+sys.modules["nemo.collections"] = _nemo.collections
+sys.modules["nemo.collections.asr"] = _nemo_asr
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../../parakeet"))
 
