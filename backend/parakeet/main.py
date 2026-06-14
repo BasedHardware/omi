@@ -209,11 +209,14 @@ async def stream_transcribe(
 async def health_check():
     if gpu_worker is not None:
         ready = gpu_worker.is_ready
-        return {
+        body = {
             "status": "healthy" if ready else "loading",
             "ready": ready,
             "uptime_seconds": round(time.monotonic() - start_time, 1),
         }
+        if not ready:
+            return JSONResponse(status_code=503, content=body)
+        return body
     return {"status": "healthy"}
 
 

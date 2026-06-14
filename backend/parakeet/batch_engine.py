@@ -54,6 +54,7 @@ class BatchEngine:
     async def stop(self) -> None:
         self._shutting_down = True
         if self._flush_task:
+            self._flush_task.cancel()
             try:
                 await self._flush_task
             except asyncio.CancelledError:
