@@ -15,6 +15,9 @@ from utils.memory_ingestion.ids import StableIdFactory, stable_hash, stable_hmac
 from utils.memory_ingestion.models import (
     ActorDescriptor,
     AuditTrace,
+    CandidateClaim,
+    CandidateEntityMention,
+    CandidateEvidenceSpan,
     CreateMemoryMutation,
     DerivedTriple,
     DroppedArtifactRecord,
@@ -218,6 +221,7 @@ class CoreMemoryPipeline:
             self.clock.now(),
         )
         entity_ops = _compile_entity_ops(frames, id_factory)
+        candidates = _candidates_from_frames(frames, redacted_input, id_factory)
         stage_traces.append(
             _stage_trace(
                 "compile_output",
@@ -239,6 +243,7 @@ class CoreMemoryPipeline:
             config_version=redacted_input.config.config_version,
             model_manifest=self.model_client.manifest(redacted_input),
             event_frames=frames,
+            candidates=candidates,
             frame_resolutions=frame_resolutions,
             derived_triples=triples,
             decisions=decisions,
@@ -452,6 +457,83 @@ def _validate_input(pipeline_input: MemoryPipelineInput) -> None:
 def _input_fingerprint(pipeline_input: MemoryPipelineInput) -> str:
     payload = pipeline_input.model_dump(mode="json", exclude={"run_id", "mode"})
     return f"ifp_{stable_hash(payload, length=40)}"
+
+
+def _candidate_attribution(frame: MemoryEventFrame, pipeline_input: MemoryPipelineInput) -> str:
+    subject_id = frame.subject.entity_id or ""
+    actor_id = pipeline_input.actor.user_id or pipeline_input.actor.synthetic_user_id if pipeline_input.actor else None
+    if actor_id and subject_id == actor_id:
+        return "primary_user"
+    if subject_id in {"ent_user", "ent_speaker_0"}:
+        return "primary_user"
+    if subject_id.startswith("ent_speaker_"):
+        return "third_party"
+    return "entity_or_project"
+
+
+def _candidate_mentions_from_frame(frame: MemoryEventFrame) -> list[CandidateEntityMention]:
+    mentions: dict[str, CandidateEntityMention] = {}
+    if frame.subject.entity_id:
+        surface = frame.subject.entity_id
+        if surface.startswith("ent_speaker_"):
+            surface = "SPEAKER_" + surface.rsplit("_", 1)[-1]
+        mentions[surface] = CandidateEntityMention(
+            surface=surface,
+            type_hint=frame.subject.entity_type,
+            normalized_entity_id=frame.subject.entity_id,
+            confidence=frame.subject.confidence or "medium",
+        )
+    text = " ".join(str(part or "") for part in [frame.canonical_text, frame.original_text, frame.object.value if frame.object else ""])
+    for match in re.finditer(r"\b(?:SPEAKER_\d+|[A-Z][A-Za-z0-9][A-Za-z0-9._+-]{2,})\b", text):
+        surface = match.group(0)
+        mentions.setdefault(surface, CandidateEntityMention(surface=surface, type_hint=None, confidence="medium"))
+    return list(mentions.values())
+
+
+def _candidates_from_frames(
+    frames: list[MemoryEventFrame],
+    pipeline_input: MemoryPipelineInput,
+    id_factory: StableIdFactory,
+) -> list[CandidateClaim]:
+    candidates: list[CandidateClaim] = []
+    route_id = None
+    route_meta = pipeline_input.source.metadata.get("route_id") if isinstance(pipeline_input.source.metadata, dict) else None
+    if route_meta:
+        route_id = str(route_meta)
+    for frame in frames:
+        evidence_spans = [
+            CandidateEvidenceSpan(
+                source_event_id=e.source_event_id,
+                source_ref=e.source_ref,
+                quote=e.quote,
+                speaker=e.speaker,
+                char_start=e.char_start,
+                char_end=e.char_end,
+            )
+            for e in frame.evidence
+        ]
+        object_mentions = [str(frame.object.value)] if frame.object and frame.object.value else []
+        candidates.append(
+            CandidateClaim(
+                candidate_id=id_factory.new_id("candidate", frame.frame_id or frame.canonical_text),
+                source_type=pipeline_input.source.source_type,
+                source_id=pipeline_input.source.source_id,
+                route_id=route_id,
+                speaker_or_actor_attribution=_candidate_attribution(frame, pipeline_input),
+                raw_claim=frame.original_text or frame.canonical_text,
+                predicate_hint=frame.predicate,
+                subject_mention=frame.subject.entity_id,
+                object_mentions=object_mentions,
+                qualifier_mentions=[str(arg.value) for arg in frame.arguments.values() if arg.value],
+                entity_mentions=_candidate_mentions_from_frame(frame),
+                evidence_spans=evidence_spans,
+                risk_flags=list(frame.sensitivity.categories),
+                confidence=frame.confidence,
+                extraction_notes=list(frame.extraction.notes),
+            )
+        )
+    return candidates
+
 
 
 def _failed_output(

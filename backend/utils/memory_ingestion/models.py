@@ -525,6 +525,40 @@ class EvidenceSpan(StrictBaseModel):
     speaker: SpeakerRef | None = None
 
 
+class CandidateEntityMention(StrictBaseModel):
+    surface: str
+    type_hint: str | None = None
+    normalized_entity_id: str | None = None
+    confidence: ConfidenceLabel = "medium"
+
+
+class CandidateEvidenceSpan(StrictBaseModel):
+    source_event_id: str
+    source_ref: SourceRef
+    quote: str | None = None
+    speaker: SpeakerRef | None = None
+    char_start: int | None = None
+    char_end: int | None = None
+
+
+class CandidateClaim(StrictBaseModel):
+    candidate_id: str
+    source_type: str
+    source_id: str
+    route_id: str | None = None
+    speaker_or_actor_attribution: str | None = None
+    raw_claim: str
+    predicate_hint: str | None = None
+    subject_mention: str | None = None
+    object_mentions: list[str] = Field(default_factory=list)
+    qualifier_mentions: list[str] = Field(default_factory=list)
+    entity_mentions: list[CandidateEntityMention] = Field(default_factory=list)
+    evidence_spans: list[CandidateEvidenceSpan] = Field(default_factory=list)
+    risk_flags: list[str] = Field(default_factory=list)
+    confidence: ConfidenceLabel = "medium"
+    extraction_notes: list[str] = Field(default_factory=list)
+
+
 class ExtractionMetadata(StrictBaseModel):
     extractor: str = "stub"
     model: str | None = None
@@ -925,6 +959,7 @@ class MemoryPipelineOutput(StrictBaseModel):
     config_version: str
     model_manifest: ModelManifest
     event_frames: list[MemoryEventFrame]
+    candidates: list[CandidateClaim] = Field(default_factory=list)
     frame_resolutions: list[FrameResolution]
     derived_triples: list[DerivedTriple]
     decisions: list[MemoryDecision]

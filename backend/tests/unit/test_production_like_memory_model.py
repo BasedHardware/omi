@@ -311,6 +311,92 @@ def test_prodlike_current_voice_route_does_not_retry(monkeypatch):
     assert error_event["max_attempts"] == 1
 
 
+def test_pipeline_output_emits_lightweight_candidates(monkeypatch):
+    def fake_extract_memories_with_production_prompt(**_kwargs):
+        return [
+            ProductionLikeMemory(
+                content="SPEAKER_1 works on Remux, a Tmux mobile app.",
+                category="system",
+                predicate="works_on",
+                subject_entity_id="ent_speaker_1",
+                subject_attribution="third_party",
+                quote_anchor="work on Remux",
+            )
+        ]
+
+    monkeypatch.setattr(
+        production_like_model,
+        "_extract_memories_with_production_prompt",
+        fake_extract_memories_with_production_prompt,
+    )
+    event = _event("[SPEAKER_1]: I work on Remux, a Tmux mobile app.")
+    pipeline_input = _input(event)
+    pipeline_input.source.source_type = "voice_transcript"
+    client = ProductionLikeMemoryModelClient(source_route_config={"voice_transcript": "voice_recall_v1"})
+
+    output = asyncio.run(CoreMemoryPipeline(model_client=client).run(pipeline_input))
+
+    assert len(output.candidates) == 1
+    candidate = output.candidates[0]
+    assert candidate.raw_claim == "SPEAKER_1 works on Remux, a Tmux mobile app."
+    assert candidate.predicate_hint == "works_on"
+    assert candidate.subject_mention == "ent_speaker_1"
+    assert candidate.source_type == "voice_transcript"
+    assert candidate.speaker_or_actor_attribution == "third_party"
+    assert candidate.evidence_spans[0].quote == "work on Remux"
+    assert {m.surface for m in candidate.entity_mentions} >= {"SPEAKER_1", "Remux"}
+
+
+def test_candidate_schema_serializes_chat_and_ocr_candidates(monkeypatch):
+    cases = [
+        (
+            "chat_exchange",
+            "I use Mercury for banking.",
+            ProductionLikeMemory(
+                content="User uses Mercury for banking.",
+                category="tool",
+                predicate="uses_tool",
+                subject_entity_id="ent_user",
+                quote_anchor="Mercury for banking",
+            ),
+            "primary_user",
+            "Mercury",
+            "chat_message",
+        ),
+        (
+            "ocr_screenshot_text",
+            "Termius account email screen shows user@example.com.",
+            ProductionLikeMemory(
+                content="User has a visible Termius account email.",
+                category="system",
+                predicate="has_visible_account",
+                subject_entity_id="ent_user",
+                quote_anchor="Termius account email",
+            ),
+            "primary_user",
+            "Termius",
+            "screen_ocr",
+        ),
+    ]
+    for idx, (source_type, text, memory, attribution, mention, event_type) in enumerate(cases):
+        def fake_extract_memories_with_production_prompt(**_kwargs):
+            return [memory]
+
+        monkeypatch.setattr(
+            production_like_model,
+            "_extract_memories_with_production_prompt",
+            fake_extract_memories_with_production_prompt,
+        )
+        pipeline_input = _input(_event(text, event_type=event_type), run_id=f"candidate-{idx}")
+        pipeline_input.source.source_type = source_type
+        output = _run(pipeline_input)
+        dumped = output.model_dump(mode="json")
+        assert dumped["candidates"][0]["source_type"] == source_type
+        assert dumped["candidates"][0]["speaker_or_actor_attribution"] == attribution
+        assert any(m["surface"] == mention for m in dumped["candidates"][0]["entity_mentions"])
+
+
+
 def test_prodlike_voice_recall_route_preserves_non_user_subject(monkeypatch):
     def fake_extract_memories_with_production_prompt(**kwargs):
         assert kwargs["route_family"] == "voice_recall_v1"
