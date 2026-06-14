@@ -125,13 +125,15 @@ livenessProbe:
   periodSeconds: 10
 
 readinessProbe:
-  tcpSocket:
+  httpGet:
+    path: /health
     port: 8080
   failureThreshold: 30
   periodSeconds: 10
 
 startupProbe:
-  tcpSocket:
+  httpGet:
+    path: /health
     port: 8080
   failureThreshold: 60
   periodSeconds: 10
