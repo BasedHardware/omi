@@ -5,7 +5,7 @@ import json
 import logging
 import os
 import re
-from typing import Iterable, Literal
+from typing import Iterable, Literal, Any, Callable
 
 from langchain_core.output_parsers import PydanticOutputParser
 from langchain_openai import ChatOpenAI
@@ -35,6 +35,34 @@ from utils.memory_ingestion.models import (
 from utils.memory_ingestion.pipeline import MemoryModelClient
 
 logger = logging.getLogger(__name__)
+
+
+def _model_dump(obj: Any) -> Any:
+    """Best-effort JSONable dump for trace events."""
+    if obj is None or isinstance(obj, (str, int, float, bool)):
+        return obj
+    if isinstance(obj, dict):
+        return {str(k): _model_dump(v) for k, v in obj.items()}
+    if isinstance(obj, (list, tuple, set)):
+        return [_model_dump(v) for v in obj]
+    if hasattr(obj, "model_dump"):
+        try:
+            return obj.model_dump(mode="json")
+        except Exception:
+            try:
+                return obj.model_dump()
+            except Exception:
+                pass
+    if hasattr(obj, "content") and obj.__class__.__name__.endswith("Message"):
+        return str(getattr(obj, "content", ""))
+    if hasattr(obj, "__dict__"):
+        return {str(k): _model_dump(v) for k, v in vars(obj).items() if not k.startswith("_")}
+    return str(obj)
+
+
+def _emit_optional_trace(trace_sink: Callable[[dict[str, Any]], None] | None, event: dict[str, Any]) -> None:
+    if trace_sink is not None:
+        trace_sink(event)
 
 
 class ProductionLikeMemory(BaseModel):
@@ -113,10 +141,26 @@ class ProductionLikeMemoryModelClient(MemoryModelClient):
     Firestore state or writing usage telemetry.
     """
 
-    def __init__(self, *, max_events_per_call: int = 250, high_recall: bool = False, typed: bool = False):
+    def __init__(
+        self,
+        *,
+        max_events_per_call: int = 250,
+        high_recall: bool = False,
+        typed: bool = False,
+        trace_sink: Callable[[dict[str, Any]], None] | None = None,
+    ):
         self.max_events_per_call = max_events_per_call
         self.high_recall = high_recall
         self.typed = typed
+        self.trace_events: list[dict[str, Any]] = []
+        self.trace_sink = trace_sink or self.trace_events.append
+
+    def clear_trace_events(self) -> None:
+        self.trace_events.clear()
+
+    def _emit_trace(self, event: dict[str, Any]) -> None:
+        if self.trace_sink is not None:
+            self.trace_sink(event)
 
     async def extract_frames(
         self,
@@ -132,6 +176,13 @@ class ProductionLikeMemoryModelClient(MemoryModelClient):
         for conversation_id, grouped_events in _events_by_conversation(events).items():
             for chunk_index, event_chunk in enumerate(_chunks(grouped_events, self.max_events_per_call)):
                 if _is_passive_media_monologue(event_chunk):
+                    self._emit_trace({
+                        "stage": "model_client_chunk_skip",
+                        "reason": "passive_media_monologue",
+                        "conversation_id": conversation_id,
+                        "chunk_index": chunk_index,
+                        "source_event_ids": [event.event_id for event in event_chunk],
+                    })
                     continue
                 segments = [_to_transcript_segment(event, index) for index, event in enumerate(event_chunk)]
                 memories = _extract_memories_with_production_prompt(
@@ -142,9 +193,23 @@ class ProductionLikeMemoryModelClient(MemoryModelClient):
                     source_type=pipeline_input.source.source_type,  # v4: flow source type to prompt
                     high_recall=self.high_recall,
                     typed=self.typed,
+                    trace_sink=self._emit_trace,
+                    trace_context={
+                        "conversation_id": conversation_id,
+                        "chunk_index": chunk_index,
+                        "source_event_ids": [event.event_id for event in event_chunk],
+                    },
                 )
                 for memory_index, memory in enumerate(memories):
                     if not _has_sufficient_evidence(memory.content, event_chunk, quote_anchor=memory.quote_anchor):
+                        self._emit_trace({
+                            "stage": "candidate_rejected",
+                            "reason": "insufficient_evidence",
+                            "conversation_id": conversation_id,
+                            "chunk_index": chunk_index,
+                            "memory_index": memory_index,
+                            "memory": _model_dump(memory),
+                        })
                         continue
                     source_events = [event.event_id for event in event_chunk]
                     calibration = _calibration(memory, event_chunk)
@@ -205,6 +270,13 @@ class ProductionLikeMemoryModelClient(MemoryModelClient):
                             notes=self._extraction_notes(),
                         ),
                     )
+                    self._emit_trace({
+                        "stage": "frame_created",
+                        "conversation_id": conversation_id,
+                        "chunk_index": chunk_index,
+                        "memory_index": memory_index,
+                        "frame": _model_dump(frame),
+                    })
                     frames.append(frame)
         for frame in frames:
             frame.frame_id = id_factory.new_id(
@@ -264,9 +336,19 @@ def _extract_memories_with_production_prompt(
     source_type: str,  # from pipeline_input.source.source_type
     high_recall: bool,
     typed: bool = False,
+    trace_sink: Callable[[dict[str, Any]], None] | None = None,
+    trace_context: dict[str, Any] | None = None,
 ) -> list[ProductionLikeMemory]:
+    trace_context = trace_context or {}
     content = TranscriptSegment.segments_as_string(segments, user_name=user_name, people=[])
     if not content or len(content) < 25:
+        _emit_optional_trace(trace_sink, {
+            "stage": "model_call_skipped",
+            "reason": "selected_content_too_short",
+            "source_type": source_type,
+            "selected_text_chars": len(content or ""),
+            **trace_context,
+        })
         return []
     if typed:
         parser = PydanticOutputParser(pydantic_object=TypedProductionLikeMemories)
@@ -276,18 +358,45 @@ def _extract_memories_with_production_prompt(
             pydantic_object=HighRecallProductionLikeMemories if high_recall else ProductionLikeMemories
         )
         prompt = extract_memories_prompt
-    chain = prompt | _memory_llm() | parser
-    response: ProductionLikeMemories = chain.invoke(
-        {
-            "user_name": user_name,
-            "conversation": content,
-            "memories_str": memories_str,
-            "language_instruction": _language_instruction(language),
-            "format_instructions": parser.get_format_instructions(),
-            "source_guidance": render_source_guidance(source_type),  # v4: source-aware
-        }
-    )
-    return response.facts
+    prompt_inputs = {
+        "user_name": user_name,
+        "conversation": content,
+        "memories_str": memories_str,
+        "language_instruction": _language_instruction(language),
+        "format_instructions": parser.get_format_instructions(),
+        "source_guidance": render_source_guidance(source_type),  # v4: source-aware
+    }
+    prompt_value = prompt.invoke(prompt_inputs)
+    raw_response = None
+    try:
+        raw_response = _memory_llm().invoke(prompt_value)
+        parsed_response: ProductionLikeMemories = parser.invoke(raw_response)
+    except Exception as exc:
+        _emit_optional_trace(trace_sink, {
+            "stage": "model_call",
+            "status": "error",
+            "source_type": source_type,
+            "typed": typed,
+            "high_recall": high_recall,
+            "selected_text": content,
+            "raw_model_response": _model_dump(raw_response),
+            "parser_error": str(exc),
+            **trace_context,
+        })
+        raise
+    _emit_optional_trace(trace_sink, {
+        "stage": "model_call",
+        "status": "ok",
+        "source_type": source_type,
+        "typed": typed,
+        "high_recall": high_recall,
+        "selected_text": content,
+        "raw_model_response": _model_dump(raw_response),
+        "parsed_facts_before_filter": _model_dump(parsed_response.facts),
+        "parser_error": None,
+        **trace_context,
+    })
+    return parsed_response.facts
 
 
 _KNOWN_UNCERTAINTY_REASONS = {
