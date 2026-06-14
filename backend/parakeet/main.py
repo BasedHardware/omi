@@ -1,17 +1,28 @@
 import asyncio
+import gc
 import os
-import threading
 import time
 import uuid
 import logging
+from contextlib import asynccontextmanager
+from typing import Optional
+
+gc.disable()
 
 from fastapi import FastAPI, Form, UploadFile, File, WebSocket, WebSocketDisconnect, Query
+from fastapi.responses import JSONResponse
 from prometheus_client import Gauge, Histogram, make_asgi_app
 
-from transcribe import transcribe_file, transcribe_file_v2
+from gpu_worker import GPUWorker
+from batch_engine import BatchEngine, QueueFullError
+from transcribe import (
+    transcribe_file,
+    transcribe_file_v2,
+    set_gpu_worker,
+    INFERENCE_MODE,
+    _transcribe_from_gpu_result,
+)
 from stream_handler import StreamSession, warmup_rnnt_decoder
-
-_GPU_SEMAPHORE = threading.Semaphore(int(os.getenv("PARAKEET_MAX_CONCURRENT", "1")))
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -29,41 +40,83 @@ STREAM_DURATION = Histogram(
     'WebSocket stream session duration',
     buckets=[10, 30, 60, 120, 300, 600, 1800, 3600],
 )
+BATCH_SIZE_HIST = Histogram(
+    'parakeet_batch_size',
+    'Number of files per GPU batch',
+    buckets=[1, 2, 4, 8, 16, 32, 64],
+)
 
-app = FastAPI()
-app.mount("/metrics", make_asgi_app())
+gpu_worker: Optional[GPUWorker] = None
+batch_engine: Optional[BatchEngine] = None
+start_time: float = 0
 
-os.makedirs("_temp", exist_ok=True)
 
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    global gpu_worker, batch_engine, start_time
+    start_time = time.monotonic()
 
-@app.on_event("startup")
-async def startup_warmup():
+    os.makedirs("_temp", exist_ok=True)
+
+    if INFERENCE_MODE != "nim":
+        gpu_worker = GPUWorker()
+        gpu_worker.start()
+        logger.info("Waiting for GPU batch model to load...")
+        gpu_worker.wait_ready(timeout=600)
+        set_gpu_worker(gpu_worker)
+
+        batch_engine = BatchEngine(
+            gpu_worker=gpu_worker,
+            max_batch_size=int(os.getenv("PARAKEET_MAX_BATCH_SIZE", "32")),
+            max_wait_seconds=float(os.getenv("PARAKEET_BATCH_WAIT_SECONDS", "0.002")),
+            max_queue_depth=int(os.getenv("PARAKEET_MAX_QUEUE_DEPTH", "4096")),
+        )
+        await batch_engine.start()
+
     warmup_rnnt_decoder()
+    logger.info("Parakeet ASR server ready")
+    yield
+
+    logger.info("Shutting down...")
+    if batch_engine:
+        await batch_engine.stop()
+    if gpu_worker:
+        gpu_worker.stop()
+
+
+app = FastAPI(lifespan=lifespan)
+app.mount("/metrics", make_asgi_app())
 
 
 @app.post("/v1/transcribe")
-def transcribe(file: UploadFile = File(...)):
-    """Batch-transcribe an audio chunk (16 kHz mono) with on-GPU Parakeet."""
+async def transcribe(file: UploadFile = File(...)):
     upload_id = str(uuid.uuid4())
     file_path = f"_temp/{upload_id}_{file.filename}"
     ACTIVE_BATCH.inc()
     t0 = time.monotonic()
     try:
         with open(file_path, "wb") as f:
-            f.write(file.file.read())
-        with _GPU_SEMAPHORE:
+            f.write(await file.read())
+
+        if batch_engine is not None:
+            result = await batch_engine.submit(file_path, timestamps=True, owns_file=True)
+            return JSONResponse(content=_transcribe_from_gpu_result(result))
+        else:
             return transcribe_file(file_path)
+    except QueueFullError:
+        return JSONResponse(status_code=503, content={"detail": "Server overloaded — try again later"})
     finally:
         REQUEST_DURATION.labels(endpoint="v1_transcribe").observe(time.monotonic() - t0)
         ACTIVE_BATCH.dec()
-        try:
-            os.remove(file_path)
-        except OSError:
-            pass
+        if batch_engine is None:
+            try:
+                os.remove(file_path)
+            except OSError:
+                pass
 
 
 @app.post("/v2/transcribe")
-def transcribe_v2(
+async def transcribe_v2(
     file: UploadFile = File(...),
     diarize: bool = Form(True),
 ):
@@ -73,9 +126,16 @@ def transcribe_v2(
     t0 = time.monotonic()
     try:
         with open(file_path, "wb") as f:
-            f.write(file.file.read())
-        with _GPU_SEMAPHORE:
-            return transcribe_file_v2(file_path, diarize=diarize)
+            f.write(await file.read())
+
+        if batch_engine is not None:
+            gpu_result = await batch_engine.submit(file_path, timestamps=True, owns_file=False)
+            result = transcribe_file_v2(file_path, gpu_result=gpu_result, diarize=diarize)
+        else:
+            result = transcribe_file_v2(file_path, diarize=diarize)
+        return result
+    except QueueFullError:
+        return JSONResponse(status_code=503, content={"detail": "Server overloaded — try again later"})
     finally:
         REQUEST_DURATION.labels(endpoint="v2_transcribe").observe(time.monotonic() - t0)
         ACTIVE_BATCH.dec()
@@ -134,5 +194,19 @@ async def stream_transcribe(
 
 
 @app.get("/health")
-def health_check():
+async def health_check():
+    if gpu_worker is not None:
+        ready = gpu_worker.is_ready
+        return {
+            "status": "healthy" if ready else "loading",
+            "ready": ready,
+            "uptime_seconds": round(time.monotonic() - start_time, 1),
+        }
     return {"status": "healthy"}
+
+
+@app.get("/batch/metrics")
+async def batch_metrics():
+    if batch_engine is not None:
+        return batch_engine.metrics
+    return {}

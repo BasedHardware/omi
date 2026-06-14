@@ -15,15 +15,19 @@ BATCH_MODEL_NAME = os.getenv("PARAKEET_MODEL", "nvidia/parakeet-tdt-0.6b-v3")
 STREAM_MODEL_NAME = os.getenv("PARAKEET_STREAM_MODEL", "")
 INFERENCE_MODE = os.getenv("PARAKEET_INFERENCE_MODE", "nemo")
 
-_batch_model = None
 _stream_model = None
 _nim_url = None
-
+_gpu_worker = None
 
 try:
     import nemo.collections.asr as nemo_asr
 except ImportError:
     nemo_asr = None
+
+
+def set_gpu_worker(worker) -> None:
+    global _gpu_worker
+    _gpu_worker = worker
 
 
 def _load_nemo_model(model_name: str):
@@ -74,13 +78,11 @@ def _load_nemo_model(model_name: str):
     raise RuntimeError(f"Could not load model {model_name} with any NeMo class: {last_err}")
 
 
-def _init_nemo():
-    global _batch_model, _stream_model
-
-    _batch_model = _load_nemo_model(BATCH_MODEL_NAME)
-
+def _init_stream_model():
+    global _stream_model
     if not STREAM_MODEL_NAME:
-        raise RuntimeError("PARAKEET_STREAM_MODEL env var is required")
+        logger.info("No PARAKEET_STREAM_MODEL set, streaming will be unavailable")
+        return
     _stream_model = _load_nemo_model(STREAM_MODEL_NAME)
 
 
@@ -93,31 +95,52 @@ def _init_nim():
 if INFERENCE_MODE == "nim":
     _init_nim()
 else:
-    _init_nemo()
+    _init_stream_model()
 
-_model = _batch_model
+
+def _transcribe_from_gpu_result(result: dict) -> dict:
+    text = result.get("text", "")
+    segments = []
+    timestamp = result.get("timestamp", {})
+    for s in timestamp.get("segment", []) or []:
+        segments.append(
+            {
+                "text": s.get("segment", ""),
+                "start": float(s.get("start", 0.0)),
+                "end": float(s.get("end", 0.0)),
+            }
+        )
+    if not segments and text:
+        segments = [{"text": text, "start": 0.0, "end": 0.0}]
+    return {"text": text, "segments": segments}
 
 
 def transcribe_file(file_path: str):
-    """Transcribe a 16 kHz mono audio file.
-
-    Returns: {"text": str, "segments": [{"text", "start", "end"}, ...]}
-    """
     if INFERENCE_MODE == "nim":
         return _transcribe_nim(file_path)
-    return _transcribe_nemo(file_path)
+    return _transcribe_via_gpu_worker(file_path)
 
 
-def transcribe_file_v2(file_path: str, diarize: bool = True):
-    """V2: transcribe with speaker diarization and language detection.
+def _transcribe_via_gpu_worker(file_path: str):
+    if _gpu_worker is None:
+        raise RuntimeError("GPU worker not initialized — call set_gpu_worker() first")
+    results = _gpu_worker.submit_sync({"audio_paths": [file_path], "timestamps": True, "batch_size": 1})
+    if results and len(results) > 0:
+        return _transcribe_from_gpu_result(results[0])
+    return {"text": "", "segments": []}
 
-    Returns: {"text": str, "segments": [...], "detected_language": str}
-    Segments include "speaker" labels (SPEAKER_0, SPEAKER_1, etc).
-    Language detected via langdetect from transcribed text.
-    """
-    result = _transcribe_v2_with_diarization(file_path, diarize=diarize)
-    result["detected_language"] = detect_language_from_text(result.get("text", ""))
-    return result
+
+def transcribe_file_v2(file_path: str, gpu_result: dict = None, diarize: bool = True):
+    if gpu_result is not None:
+        base = _transcribe_from_gpu_result(gpu_result)
+    else:
+        base = transcribe_file(file_path)
+
+    if diarize:
+        base = _diarize_segments(file_path, base)
+
+    base["detected_language"] = detect_language_from_text(base.get("text", ""))
+    return base
 
 
 SPEAKER_EMBEDDING_URL = os.getenv("HOSTED_SPEAKER_EMBEDDING_API_URL", "")
@@ -132,27 +155,6 @@ def detect_language_from_text(text: str) -> str:
         return langdetect_detect(text)
     except LangDetectException:
         return 'en'
-
-
-def _transcribe_nemo(file_path: str):
-    hyps = _model.transcribe([file_path], timestamps=True)
-    hyp = hyps[0]
-    text = getattr(hyp, "text", None) or ""
-
-    segments = []
-    timestamp = getattr(hyp, "timestamp", None) or {}
-    for s in timestamp.get("segment", []) or []:
-        segments.append(
-            {
-                "text": s.get("segment", ""),
-                "start": float(s.get("start", 0.0)),
-                "end": float(s.get("end", 0.0)),
-            }
-        )
-    if not segments and text:
-        segments = [{"text": text, "start": 0.0, "end": 0.0}]
-
-    return {"text": text, "segments": segments}
 
 
 def _transcribe_nim(file_path: str):
@@ -191,10 +193,8 @@ def _transcribe_nim(file_path: str):
         raise
 
 
-def _transcribe_v2_with_diarization(file_path: str, diarize: bool = True):
-    base = transcribe_file(file_path)
-
-    if not diarize or not SPEAKER_EMBEDDING_URL:
+def _diarize_segments(file_path: str, base: dict) -> dict:
+    if not SPEAKER_EMBEDDING_URL:
         for seg in base["segments"]:
             seg["speaker"] = "SPEAKER_0"
         return base
