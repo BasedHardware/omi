@@ -18,28 +18,32 @@ RUN pip install --no-cache-dir --no-deps --force-reinstall \
     "nemo_toolkit[asr] @ git+https://github.com/beastoin/NeMo.git@68d99a17944181452205dc60da21e82bf3647054"
 
 # NGC ships torch+torchvision with CUDA 12.8 but no torchaudio.
-# pyannote.audio's transitive deps upgrade torch ecosystem packages to
-# versions compiled against CUDA 13+, breaking ABI.
-# Strategy: install torchaudio (--no-deps), then pin ALL torch packages
-# via constraints (base versions, stripped of +cu128 local tags) so pip
-# cannot upgrade them when resolving pyannote.audio's dependency tree.
+# Standard PyPI torchaudio is ABI-incompatible with NGC's custom torch.
+# Install from PyTorch's CUDA 12.8 wheel index for ABI-compatible builds.
+# --no-deps prevents pulling in standard PyPI torch over NGC's build.
 RUN TORCH_MM=$(python -c "import torch; print('.'.join(torch.__version__.split('.')[:2]))") && \
-    pip install --no-cache-dir --no-deps "torchaudio==${TORCH_MM}.*"
+    pip install --no-cache-dir --no-deps \
+    "torchaudio==${TORCH_MM}.*" \
+    --index-url https://download.pytorch.org/whl/cu128
 
-RUN python3 -c "\
-import torch; print('torch==' + torch.__version__.split('+')[0]); \
-import torchaudio; print('torchaudio==' + torchaudio.__version__.split('+')[0]); \
-import torchvision; print('torchvision==' + torchvision.__version__.split('+')[0])" \
-    > /tmp/torch-pin.txt && cat /tmp/torch-pin.txt && \
-    pip install --no-cache-dir -c /tmp/torch-pin.txt \
+# Extra deps not in the NGC image.
+# pyannote.audio installed --no-deps to prevent it and its transitive
+# deps (speechbrain, torchmetrics) from upgrading torch/torchvision.
+# Its non-torch deps are installed separately below.
+RUN pip install --no-cache-dir \
     "fastapi>=0.115.0" \
     "uvicorn[standard]>=0.30.0" \
     "python-multipart>=0.0.6" \
     "httpx>=0.28.0" \
     "langdetect>=1.0.9" \
-    "pyannote.audio>=3.1.0" \
     "prometheus-client>=0.21.0" \
     "soundfile>=0.13.0"
+
+RUN pip install --no-cache-dir --no-deps "pyannote.audio>=3.1.0" && \
+    pip install --no-cache-dir --no-deps \
+    "pyannote.core" "pyannote.database" "pyannote.pipeline" \
+    "speechbrain" "asteroid-filterbanks" "einops" "semver" \
+    "hf_transfer" "tensorboardX"
 
 COPY backend/parakeet/ .
 
