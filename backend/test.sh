@@ -24,6 +24,7 @@ pytest tests/unit/test_parakeet_stream_session.py -v
 pytest tests/unit/test_parakeet_gpu_worker.py -v
 pytest tests/unit/test_parakeet_batch_engine.py -v
 pytest tests/unit/test_parakeet_batch_routing.py -v
+pytest tests/unit/test_parakeet_endpoints.py -v
 pytest tests/unit/test_memory_leak_buffers.py -v
 pytest tests/unit/test_mcp_search_memories.py -v
 pytest tests/unit/test_mcp_client_tool_result.py -v
