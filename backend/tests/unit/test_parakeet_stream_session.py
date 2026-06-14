@@ -29,6 +29,19 @@ mock_transcribe._model = None
 mock_transcribe.INFERENCE_MODE = "nemo"
 sys.modules['transcribe'] = mock_transcribe
 
+_langdetect = types.ModuleType('langdetect')
+_langdetect_exceptions = types.ModuleType('langdetect.lang_detect_exception')
+
+
+class _LangDetectException(Exception):
+    pass
+
+
+_langdetect.detect = MagicMock(return_value='en')
+_langdetect_exceptions.LangDetectException = _LangDetectException
+sys.modules.setdefault('langdetect', _langdetect)
+sys.modules.setdefault('langdetect.lang_detect_exception', _langdetect_exceptions)
+
 _scipy = types.ModuleType('scipy')
 _scipy_spatial = types.ModuleType('scipy.spatial')
 _scipy_distance = types.ModuleType('scipy.spatial.distance')
