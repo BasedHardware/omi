@@ -1127,9 +1127,11 @@ class ParakeetWebSocketSocket(STTSocket):
 
     async def _run(self):
         url = f"{self._ws_url}?sample_rate={self._sample_rate}"
+        auth_header = os.getenv('ENCRYPTION_SECRET')
+        headers = {'authorization': auth_header} if auth_header else None
 
         try:
-            async with websockets.connect(url, max_size=10 * 1024 * 1024) as ws:
+            async with websockets.connect(url, extra_headers=headers, max_size=10 * 1024 * 1024) as ws:
                 self._ws = ws
                 self._receiver_task = create_named_task(self._receive_loop(ws), name="parakeet_ws_recv")
                 self._connected_event.set()
