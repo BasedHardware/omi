@@ -8,6 +8,14 @@ actor APIClient {
     DesktopBackendEnvironment.pythonBaseURL()
   }
 
+  /// In-memory TTL cache for chat quota snapshots. The quota only changes
+  /// on the order of seconds (one per user action, e.g. sending a message
+  /// increments `used`; upgrading plan changes `limit`). 30s is short
+  /// enough that even a flapping value converges quickly and long enough
+  /// that the floating bar's per-query check is a memory lookup, not a
+  /// network round trip. Bypassed in tests by passing `forceRefresh: true`.
+  private var chatQuotaCache = TTLCache<ChatUsageQuota>(ttl: 30)
+
   // Rust desktop backend URL — used only for: agent VM provisioning/status,
   // config/api-keys, Crisp, and local test subscription. All data CRUD,
   // chat AI, and title generation are on Python.
@@ -4794,16 +4802,25 @@ extension APIClient {
     }
   }
 
-  func fetchChatUsageQuota() async -> ChatUsageQuota? {
+  func fetchChatUsageQuota(forceRefresh: Bool = false) async -> ChatUsageQuota? {
+    let now = Date()
+    if !forceRefresh, let cached = chatQuotaCache.get(now: now) {
+      return cached
+    }
     do {
       let res: ChatUsageQuota = try await get("v1/users/me/usage-quota")
+      chatQuotaCache.set(res, now: now)
       log(
         "APIClient: Quota plan=\(res.plan) unit=\(res.unit) used=\(res.used) limit=\(res.limit ?? -1) allowed=\(res.allowed)"
       )
       return res
     } catch {
       log("APIClient: Chat quota fetch failed: \(error.localizedDescription)")
-      return nil
+      // On a network failure, prefer the last known value over nothing —
+      // `FloatingBarUsageLimiter.isLimitReached` already treats nil as
+      // "allow", so dropping the cache on error would silently relax the
+      // cap. Keeping the stale value preserves the previous decision.
+      return chatQuotaCache.entry?.value
     }
   }
 

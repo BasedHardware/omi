@@ -828,6 +828,15 @@ class AnalyticsManager {
     PostHogManager.shared.track("floating_bar_query_sent", properties: props)
   }
 
+  /// Persist a per-query timing to the timings log + PostHog.
+  /// See `FloatingBarQueryTiming` for the data model and `FloatingBarTimingLogger`
+  /// for the side effects. This is the single public hook used by the floating
+  /// bar / PTT call sites — pass a fully-populated timing struct after the
+  /// query ends (success, cancellation, quota, error, or agent-routed).
+  func floatingBarQueryTiming(_ timing: FloatingBarQueryTiming) {
+    FloatingBarTimingLogger.shared.record(timing)
+  }
+
   /// Track when push-to-talk starts listening
   func floatingBarPTTStarted(mode: String) {
     let props: [String: Any] = ["mode": mode]
