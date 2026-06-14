@@ -28,10 +28,10 @@ This README provides a quick setup guide for the Omi backend. For a comprehensiv
    Replace `<project-id>` with your Google Cloud Project ID.
    This should generate the `application_default_credentials.json` file in the `~/.config/gcloud` directory. This file is read automatically by gcloud in Python.
 
-4. Install Python
-   - Mac: `brew install python`
-   - Windows: `choco install python`
-   - Nix envdir: It should be pre-installed
+4. Install Python 3.11
+   - Mac: `brew install python@3.11`
+   - Windows: Install Python 3.11 from [python.org](https://www.python.org/downloads/windows/), then verify `python --version` prints `3.11.x`
+   - Nix envdir: It should be pre-installed; verify `python --version` prints `3.11.x`
 
 5. Install `pip` if it doesn't exist (follow instructions on [pip installation page](https://pip.pypa.io/en/stable/installation/))
 
@@ -65,6 +65,9 @@ This README provides a quick setup guide for the Omi backend. For a comprehensiv
 
     **Option A: Using a virtual environment (recommended)**
     ```bash
+    # Verify Python 3.11 before creating the virtual environment
+    python --version
+
     # Create a virtual environment
     python -m venv venv
 
