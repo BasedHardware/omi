@@ -121,7 +121,8 @@ async def transcribe(file: UploadFile = File(...)):
             result = await batch_engine.submit(file_path, timestamps=True, owns_file=True)
             return JSONResponse(content=_transcribe_from_gpu_result(result))
         else:
-            return transcribe_file(file_path)
+            result = await loop.run_in_executor(_diarize_pool, transcribe_file, file_path)
+            return result
     except QueueFullError:
         return JSONResponse(status_code=503, content={"detail": "Server overloaded — try again later"})
     finally:
