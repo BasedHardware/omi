@@ -1,5 +1,7 @@
 {
-  "unreleased": [],
+  "unreleased": [
+    "Faster, cheaper assistant responses via Anthropic prompt caching of the system+tools prefix and conversation history"
+  ],
   "releases": [
     {
       "version": "0.11.463",

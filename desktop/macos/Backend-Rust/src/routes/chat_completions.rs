@@ -215,16 +215,75 @@ fn translate_request(
     );
     let anthropic_tool_choice = translate_tool_choice(&req.tool_choice)?;
 
+    // ── Prompt caching ──────────────────────────────────────────────────────
+    // Breakpoint 1: emit the system prompt as a content block carrying an
+    // ephemeral cache_control breakpoint. Anthropic renders the request as
+    // tools → system → messages, so a single breakpoint on the system block
+    // caches the entire static tools+system prefix (~11k tokens for desktop
+    // chat). It is stable within a pi-mono session, so every query after the
+    // first reads it at 0.1x instead of re-paying full input cost.
+    // (Sonnet min cacheable = 2048 tokens; our prefix clears it easily.)
+    let system = system_prompt.map(cached_system_block);
+
+    // Breakpoint 2: mark the latest user message so the conversation prefix up
+    // to the current turn is cached too. During a tool-use loop one user turn
+    // explodes into many assistant/tool round-trips, so caching at that
+    // boundary lets every intra-turn request hit the cached prefix — directly
+    // attacking the multi-second agentic case. (system + latest-user = 2
+    // breakpoints, well under Anthropic's cap of 4.)
+    mark_latest_user_message_cached(&mut anthropic_messages);
+
     Ok(AnthropicRequest {
         model: upstream_model.to_string(),
         max_tokens,
         messages: anthropic_messages,
-        system: system_prompt,
+        system,
         temperature: req.temperature,
         stream: req.stream,
         tools: if is_tool_choice_none { None } else { anthropic_tools },
         tool_choice: anthropic_tool_choice,
     })
+}
+
+/// Ephemeral cache_control breakpoint marker.
+fn ephemeral_cache_control() -> serde_json::Value {
+    json!({ "type": "ephemeral" })
+}
+
+/// Wrap a system prompt string in a single text content block carrying an
+/// ephemeral cache_control breakpoint.
+fn cached_system_block(text: String) -> serde_json::Value {
+    json!([{
+        "type": "text",
+        "text": text,
+        "cache_control": ephemeral_cache_control()
+    }])
+}
+
+/// Attach an ephemeral cache_control breakpoint to the latest user message so
+/// the conversation prefix up to the current turn is cached. No-op unless the
+/// final message is a `user` message. Array content → marks the last block;
+/// plain-string content → promoted to a single cached text block (Anthropic
+/// accepts either form).
+fn mark_latest_user_message_cached(messages: &mut [AnthropicMessage]) {
+    let last = match messages.last_mut() {
+        Some(m) if m.role == "user" => m,
+        _ => return,
+    };
+    if let serde_json::Value::Array(blocks) = &mut last.content {
+        if let Some(serde_json::Value::Object(map)) = blocks.last_mut() {
+            map.insert("cache_control".to_string(), ephemeral_cache_control());
+        }
+        return;
+    }
+    if let serde_json::Value::String(text) = &last.content {
+        let text = text.clone();
+        last.content = json!([{
+            "type": "text",
+            "text": text,
+            "cache_control": ephemeral_cache_control()
+        }]);
+    }
 }
 
 /// Translate OpenAI tool_choice to Anthropic format.
@@ -1175,12 +1234,86 @@ mod tests {
 
         let result = translate_request(&req, "claude-sonnet-4-6").unwrap();
         assert_eq!(result.model, "claude-sonnet-4-6");
-        assert_eq!(result.system, Some("You are helpful.".to_string()));
+        // system is now an ephemeral-cached content-block array, not a bare string.
+        let system = result.system.as_ref().expect("system block should be present");
+        assert_eq!(system[0]["text"], "You are helpful.");
+        assert_eq!(system[0]["cache_control"]["type"], "ephemeral");
         assert_eq!(result.messages.len(), 1); // only user message, system extracted
         assert_eq!(result.messages[0].role, "user");
         assert_eq!(result.max_tokens, 1024);
         assert_eq!(result.temperature, Some(0.7));
         assert!(!result.stream);
+    }
+
+    #[test]
+    fn test_translate_request_caches_latest_user_message() {
+        // The latest user message gets an ephemeral cache_control breakpoint so
+        // the conversation prefix is cached across tool-loop round-trips. A
+        // plain-string user content is promoted to a cached text block.
+        let req = ChatCompletionRequest {
+            model: "omi-sonnet".to_string(),
+            messages: vec![ChatMessage {
+                role: "user".to_string(),
+                content: Some(json!("What did I do today?")),
+                name: None,
+                tool_calls: None,
+                tool_call_id: None,
+            }],
+            stream: false,
+            temperature: None,
+            max_tokens: None,
+            max_completion_tokens: None,
+            tools: None,
+            tool_choice: None,
+        };
+
+        let result = translate_request(&req, "claude-sonnet-4-6").unwrap();
+        let last = result.messages.last().expect("a user message");
+        assert_eq!(last.role, "user");
+        let blocks = last.content.as_array().expect("content promoted to blocks");
+        let final_block = blocks.last().expect("at least one block");
+        assert_eq!(final_block["text"], "What did I do today?");
+        assert_eq!(final_block["cache_control"]["type"], "ephemeral");
+    }
+
+    #[test]
+    fn test_translate_request_caches_tool_result_turn() {
+        // During a tool-use loop the final message is a tool result (Anthropic
+        // `user` role with a tool_result block). The breakpoint must land on it
+        // so each intra-turn request reads the cached prefix.
+        let req = ChatCompletionRequest {
+            model: "omi-sonnet".to_string(),
+            messages: vec![
+                ChatMessage {
+                    role: "user".to_string(),
+                    content: Some(json!("run it")),
+                    name: None,
+                    tool_calls: None,
+                    tool_call_id: None,
+                },
+                ChatMessage {
+                    role: "tool".to_string(),
+                    content: Some(json!("42 rows")),
+                    name: None,
+                    tool_calls: None,
+                    tool_call_id: Some("call_1".to_string()),
+                },
+            ],
+            stream: false,
+            temperature: None,
+            max_tokens: None,
+            max_completion_tokens: None,
+            tools: None,
+            tool_choice: None,
+        };
+
+        let result = translate_request(&req, "claude-sonnet-4-6").unwrap();
+        let last = result.messages.last().expect("tool result message");
+        assert_eq!(last.role, "user");
+        let blocks = last.content.as_array().expect("tool_result blocks");
+        let final_block = blocks.last().expect("at least one block");
+        assert_eq!(final_block["type"], "tool_result");
+        assert_eq!(final_block["cache_control"]["type"], "ephemeral");
     }
 
     #[test]
@@ -1263,7 +1396,9 @@ mod tests {
         };
 
         let result = translate_request(&req, "claude-sonnet-4-6").unwrap();
-        assert_eq!(result.system, Some("You are terse.".to_string()));
+        let system = result.system.as_ref().expect("system block should be present");
+        assert_eq!(system[0]["text"], "You are terse.");
+        assert_eq!(system[0]["cache_control"]["type"], "ephemeral");
         assert_eq!(result.messages.len(), 1, "developer msg must be extracted, not forwarded");
         assert_eq!(result.messages[0].role, "user");
     }
@@ -1855,6 +1990,7 @@ mod tests {
             prompt_tokens: 10,
             completion_tokens: 20,
             total_tokens: 30,
+            prompt_tokens_details: None,
         };
         let chunk = make_chunk("id-3", 3000, "omi-sonnet", delta, Some("stop".to_string()), Some(usage));
         assert_eq!(chunk["usage"]["prompt_tokens"], 10);
