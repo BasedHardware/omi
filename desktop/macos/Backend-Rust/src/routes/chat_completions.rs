@@ -1497,6 +1497,43 @@ mod tests {
     }
 
     #[test]
+    fn test_translate_request_empty_system_prompt_omits_system() {
+        // Empty or whitespace-only system prompts must NOT be sent as cached blocks
+        // (Anthropic rejects empty cached text blocks with 400).
+        for content in [Some(json!("")), Some(json!("   ")), None] {
+            let req = ChatCompletionRequest {
+                model: "omi-sonnet".to_string(),
+                messages: vec![ChatMessage {
+                    role: "system".to_string(),
+                    content: content.clone(),
+                    name: None,
+                    tool_calls: None,
+                    tool_call_id: None,
+                }, ChatMessage {
+                    role: "user".to_string(),
+                    content: Some(json!("Hello")),
+                    name: None,
+                    tool_calls: None,
+                    tool_call_id: None,
+                }],
+                stream: false,
+                temperature: None,
+                max_tokens: None,
+                max_completion_tokens: None,
+                tools: None,
+                tool_choice: None,
+            };
+
+            let result = translate_request(&req, "claude-sonnet-4-6").unwrap();
+            assert!(
+                result.system.is_none(),
+                "empty/whitespace system prompt must omit system field, got: {:?}",
+                result.system
+            );
+        }
+    }
+
+    #[test]
     fn test_translate_request_max_completion_tokens_preferred() {
         // OpenAI renamed `max_tokens` → `max_completion_tokens` for reasoning
         // models. Pi sends the new field. Accept both, and prefer
