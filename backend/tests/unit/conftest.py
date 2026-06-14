@@ -164,5 +164,29 @@ def _install_redis_stub():
     sys.modules['redis'] = redis_module
 
 
+def _install_cachetools_stub():
+    if 'cachetools' in sys.modules:
+        return
+    if importlib.util.find_spec('cachetools') is not None:
+        return
+
+    cachetools_module = types.ModuleType('cachetools')
+
+    class TTLCache(dict):
+        def __init__(self, maxsize, ttl, *args, **kwargs):
+            super().__init__(*args, **kwargs)
+            self.maxsize = maxsize
+            self.ttl = ttl
+
+        def __setitem__(self, key, value):
+            if len(self) >= self.maxsize and key not in self:
+                self.pop(next(iter(self)))
+            super().__setitem__(key, value)
+
+    cachetools_module.TTLCache = TTLCache
+    sys.modules['cachetools'] = cachetools_module
+
+
 _install_prometheus_client_stub()
 _install_redis_stub()
+_install_cachetools_stub()
