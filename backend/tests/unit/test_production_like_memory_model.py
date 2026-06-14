@@ -6,6 +6,9 @@ from utils.memory_ingestion.adapters.production_like_model import ProductionLike
 from utils.memory_ingestion.models import (
     ActorDescriptor,
     EventQuality,
+    LiberalMemoryCandidate,
+    CandidateEvidenceSpan,
+    CandidateEntityMention,
     MemoryPipelineInput,
     RawContextEvent,
     SourceDescriptor,
@@ -454,3 +457,73 @@ def test_prodlike_current_route_keeps_actor_subject_for_extracted_subject(monkey
     output = asyncio.run(CoreMemoryPipeline(model_client=client).run(pipeline_input))
 
     assert output.event_frames[0].subject.entity_id == "benchmark-user"
+
+
+def test_liberal_memory_candidate_schema_is_natural_language_and_source_grounded():
+    candidate = LiberalMemoryCandidate(
+        candidate_id="raw_voice_x:chunk:0:cand:0",
+        candidate_text="The user prefers the main Chrome profile for daily workflows.",
+        source_type="voice_transcript",
+        source_example_id="raw_voice_x",
+        source_unit_ids=["raw_voice_x:seg:1"],
+        source_artifact_ids=["raw_voice_x"],
+        source_chunk_ids=["raw_voice_x:chunk:0"],
+        evidence_spans=[
+            CandidateEvidenceSpan(
+                source_event_id="event-1",
+                source_unit_id="raw_voice_x:seg:1",
+                source_ref=SourceRef(conversation_id="conversation-1", fixture_id="raw_voice_x"),
+                quote="I prefer the main Chrome profile",
+                speaker=SpeakerRef(speaker_id="speaker-0", label="Speaker 0", is_actor_user=True),
+                start_sec=1.2,
+                end_sec=3.4,
+            )
+        ],
+        raw_quotes=["I prefer the main Chrome profile"],
+        speaker_or_actor_attribution="user_stated",
+        attribution_confidence="high",
+        candidate_kind_hint="preference",
+        subject_mention="the user",
+        entity_mentions=[CandidateEntityMention(surface="Chrome", type_hint="tool")],
+        time_qualifiers=["daily"],
+        confidence="medium",
+        extractor_id="liberal_l1_v1",
+        prompt_version="liberal_l1_source_grounded_v1",
+    )
+
+    dumped = candidate.model_dump(mode="json")
+    assert dumped["schema_version"] == "liberal_memory_candidate.v1"
+    assert dumped["candidate_text"].startswith("The user prefers")
+    assert dumped["predicate_hint"] is None
+    assert dumped["evidence_spans"][0]["source_unit_id"] == "raw_voice_x:seg:1"
+    assert dumped["evidence_spans"][0]["start_sec"] == 1.2
+    assert dumped["entity_mentions"][0]["surface"] == "Chrome"
+
+
+def test_pipeline_output_can_include_liberal_candidates_without_final_frame_decision():
+    output = _run(_input(_event("No memory should be emitted from this ordinary sentence.")))
+    liberal = LiberalMemoryCandidate(
+        candidate_id="raw_chat_x:msg:0:cand:0",
+        candidate_text="The user may prefer terse benchmark reports.",
+        source_type="chat",
+        source_example_id="raw_chat_x",
+        source_unit_ids=["raw_chat_x:msg:0"],
+        source_artifact_ids=["raw_chat_x"],
+        evidence_spans=[
+            CandidateEvidenceSpan(
+                source_event_id="event-1",
+                source_unit_id="raw_chat_x:msg:0",
+                source_ref=SourceRef(conversation_id="conversation-1", fixture_id="raw_chat_x"),
+                quote="prefer terse benchmark reports",
+            )
+        ],
+        raw_quotes=["prefer terse benchmark reports"],
+        speaker_or_actor_attribution="user_stated",
+    )
+    copied = output.model_copy(update={"liberal_candidates": [liberal]})
+    dumped = copied.model_dump(mode="json")
+
+    assert dumped["liberal_candidates"][0]["candidate_text"] == liberal.candidate_text
+    assert dumped["liberal_candidates"][0]["source_unit_ids"] == ["raw_chat_x:msg:0"]
+    # V9 L1 candidates are allowed to exist without forcing an active/review/reject decision.
+    assert "decision_state" not in dumped["liberal_candidates"][0]

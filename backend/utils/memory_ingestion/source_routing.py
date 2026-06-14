@@ -41,16 +41,22 @@ def route_source(source: SourceDescriptor, *, route_family: str = "current") -> 
     voice/OCR route families.
     """
     metadata = source.metadata or {}
+    route_metadata = {
+        "source_id": source.source_id,
+        "route_family": route_family,
+        "benchmark_source_type": metadata.get("benchmark_source_type"),
+        "benchmark_original_source_type": metadata.get("benchmark_original_source_type"),
+        "benchmark_example_id": metadata.get("benchmark_example_id"),
+    }
+    reason = "declared_source_type_passthrough"
+    if route_family == "liberal_l1_v1":
+        reason = "liberal_l1_v1_selected"
+        route_metadata["l1_contract"] = "liberal_memory_candidate.v1"
+        route_metadata["l2_required_for_storage"] = True
     return SourceRouteDecision(
         route_version=SOURCE_ROUTER_VERSION,
         declared_source_type=source.source_type,
         effective_source_type=source.source_type,
-        reason="declared_source_type_passthrough",
-        metadata={
-            "source_id": source.source_id,
-            "route_family": route_family,
-            "benchmark_source_type": metadata.get("benchmark_source_type"),
-            "benchmark_original_source_type": metadata.get("benchmark_original_source_type"),
-            "benchmark_example_id": metadata.get("benchmark_example_id"),
-        },
+        reason=reason,
+        metadata=route_metadata,
     )

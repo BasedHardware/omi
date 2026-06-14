@@ -40,3 +40,16 @@ def test_source_router_records_native_source_type():
     assert decision.declared_source_type == "voice_transcript"
     assert decision.effective_source_type == "voice_transcript"
     assert decision.model_dump()["route_version"] == SOURCE_ROUTER_VERSION
+
+
+def test_source_router_liberal_l1_records_candidate_contract():
+    source = SourceDescriptor(source_type="voice_transcript", source_id="raw_voice_example", metadata={})
+
+    decision = route_source(source, route_family="liberal_l1_v1")
+
+    assert decision.declared_source_type == "voice_transcript"
+    assert decision.effective_source_type == "voice_transcript"
+    assert decision.reason == "liberal_l1_v1_selected"
+    assert decision.metadata["route_family"] == "liberal_l1_v1"
+    assert decision.metadata["l1_contract"] == "liberal_memory_candidate.v1"
+    assert decision.metadata["l2_required_for_storage"] is True

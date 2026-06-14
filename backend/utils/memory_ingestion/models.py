@@ -539,6 +539,44 @@ class CandidateEvidenceSpan(StrictBaseModel):
     speaker: SpeakerRef | None = None
     char_start: int | None = None
     char_end: int | None = None
+    source_unit_id: str | None = None
+    start_sec: float | None = None
+    end_sec: float | None = None
+    ocr_block_id: str | None = None
+    bbox: list[float | int] | None = None
+    ocr_confidence: float | None = None
+
+
+class LiberalMemoryCandidate(StrictBaseModel):
+    """High-recall L1 memory candidate.
+
+    Liberal candidates are intentionally natural-language and source-grounded.
+    They are not final memories: they do not need canonical entity IDs, a fixed
+    predicate, or an active/review/reject decision. L2 owns those decisions.
+    """
+
+    schema_version: Literal["liberal_memory_candidate.v1"] = "liberal_memory_candidate.v1"
+    candidate_id: str
+    candidate_text: str
+    source_type: str
+    source_example_id: str | None = None
+    source_unit_ids: list[str] = Field(default_factory=list)
+    source_artifact_ids: list[str] = Field(default_factory=list)
+    source_chunk_ids: list[str] = Field(default_factory=list)
+    evidence_spans: list[CandidateEvidenceSpan] = Field(default_factory=list)
+    raw_quotes: list[str] = Field(default_factory=list)
+    speaker_or_actor_attribution: str | None = None
+    attribution_confidence: ConfidenceLabel = "medium"
+    candidate_kind_hint: str | None = None
+    predicate_hint: str | None = None
+    subject_mention: str | None = None
+    entity_mentions: list[CandidateEntityMention] = Field(default_factory=list)
+    time_qualifiers: list[str] = Field(default_factory=list)
+    risk_flags: list[str] = Field(default_factory=list)
+    confidence: ConfidenceLabel = "medium"
+    extractor_id: str = "liberal_l1_v1"
+    prompt_version: str | None = None
+    extraction_notes: list[str] = Field(default_factory=list)
 
 
 class CandidateClaim(StrictBaseModel):
@@ -960,6 +998,7 @@ class MemoryPipelineOutput(StrictBaseModel):
     model_manifest: ModelManifest
     event_frames: list[MemoryEventFrame]
     candidates: list[CandidateClaim] = Field(default_factory=list)
+    liberal_candidates: list[LiberalMemoryCandidate] = Field(default_factory=list)
     frame_resolutions: list[FrameResolution]
     derived_triples: list[DerivedTriple]
     decisions: list[MemoryDecision]
