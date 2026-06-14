@@ -527,24 +527,27 @@ def _get_or_create_gemini_llm(
         use_vertex = os.environ.get('USE_VERTEX_AI', '').lower() == 'true'
         gcp_project = os.environ.get('GOOGLE_CLOUD_PROJECT', '') if use_vertex else ''
         gemini_key = os.environ.get('GEMINI_API_KEY', '')
-        kwargs: Dict[str, Any] = {'callbacks': [_usage_callback], 'timeout': 120, 'max_retries': 1}
+        base_kwargs: Dict[str, Any] = {'callbacks': [_usage_callback], 'timeout': 120, 'max_retries': 1}
         if streaming:
-            kwargs['streaming'] = True
-        if thinking_budget is not None and model_name.startswith('gemini-2.5'):
-            kwargs['thinking_budget'] = thinking_budget
+            base_kwargs['streaming'] = True
 
         if gcp_project:
+            kwargs = {**base_kwargs}
+            if thinking_budget is not None and model_name.startswith('gemini-2.5'):
+                kwargs['thinking_budget'] = thinking_budget
             gcp_location = os.environ.get('GCP_LOCATION', 'us-central1')
             _llm_cache[key] = ChatGoogleGenerativeAI(
                 model=model_name, project=gcp_project, location=gcp_location, **kwargs
             )
         elif gemini_key:
-            kwargs['google_api_key'] = gemini_key
+            kwargs = {**base_kwargs, 'google_api_key': gemini_key}
+            if thinking_budget is not None and model_name.startswith('gemini-2.5'):
+                kwargs['thinking_budget'] = thinking_budget
             _llm_cache[key] = ChatGoogleGenerativeAI(model=model_name, **kwargs)
         else:
-            logger.warning('No USE_VERTEX_AI or GEMINI_API_KEY — Gemini calls will fail at invoke time')
+            logger.warning('No USE_VERTEX_AI or GEMINI_API_KEY — Gemini calls will fall back to ChatOpenAI placeholder')
             _llm_cache[key] = ChatOpenAI(
-                model=model_name, api_key='not-set', base_url=_GEMINI_OPENAI_BASE_URL, **kwargs
+                model=model_name, api_key='not-set', base_url=_GEMINI_OPENAI_BASE_URL, **base_kwargs
             )
     return _llm_cache[key]
 

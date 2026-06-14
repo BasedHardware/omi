@@ -750,6 +750,15 @@ class TestRuntimeProviderRouting:
             # No key — falls back to ChatOpenAI placeholder pointing at Gemini endpoint
             assert hasattr(llm, 'invoke')
 
+    def test_gemini_fallback_no_thinking_budget_leak(self):
+        if os.environ.get('GEMINI_API_KEY'):
+            pytest.skip('GEMINI_API_KEY is set — fallback path not exercised')
+        from langchain_openai import ChatOpenAI
+
+        llm = get_llm('trends')
+        assert isinstance(llm, ChatOpenAI)
+        assert 'thinking_budget' not in llm.model_kwargs
+
     def test_openglass_routes_to_openai(self):
         """openglass (vision) should route to OpenAI gpt-4.1-mini."""
         llm = get_llm('openglass')
