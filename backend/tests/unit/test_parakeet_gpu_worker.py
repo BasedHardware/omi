@@ -405,3 +405,121 @@ class TestBF16Loading:
         mock_model.to.assert_not_called()
         torch_mod.cuda.is_available.return_value = orig_avail
         worker.stop()
+
+
+class TestTorchCompile:
+
+    def test_compile_enabled_wraps_model(self):
+        import gpu_worker as gw_mod
+
+        torch_mod = gw_mod.torch
+        nemo_asr = _get_nemo_asr()
+        mock_model = _make_mock_model()
+        nemo_asr.models.ASRModel.from_pretrained.return_value = mock_model
+        nemo_asr.models.ASRModel.from_pretrained.side_effect = None
+
+        compiled_sentinel = MagicMock(name="compiled_model")
+        orig_compile = torch_mod.compile
+        torch_mod.compile = MagicMock(return_value=compiled_sentinel)
+
+        worker = GPUWorker()
+        with patch.dict(os.environ, {"PARAKEET_TORCH_COMPILE": "true", "PARAKEET_BF16": "0"}):
+            worker._load_model()
+
+        torch_mod.compile.assert_called_once_with(mock_model)
+        assert worker._model is compiled_sentinel
+        torch_mod.compile = orig_compile
+        worker.stop()
+
+    def test_compile_disabled_skips_torch_compile(self):
+        import gpu_worker as gw_mod
+
+        torch_mod = gw_mod.torch
+        nemo_asr = _get_nemo_asr()
+        mock_model = _make_mock_model()
+        nemo_asr.models.ASRModel.from_pretrained.return_value = mock_model
+        nemo_asr.models.ASRModel.from_pretrained.side_effect = None
+
+        orig_compile = torch_mod.compile
+        torch_mod.compile = MagicMock(return_value=mock_model)
+
+        worker = GPUWorker()
+        with patch.dict(os.environ, {"PARAKEET_TORCH_COMPILE": "false", "PARAKEET_BF16": "0"}):
+            worker._load_model()
+
+        torch_mod.compile.assert_not_called()
+        torch_mod.compile = orig_compile
+        worker.stop()
+
+
+class TestCUDAGraphConfig:
+
+    def test_cuda_graphs_disabled_calls_disable(self):
+        nemo_asr = _get_nemo_asr()
+        mock_model = _make_mock_model()
+        mock_model.decoding.decoding.disable_cuda_graphs.return_value = True
+        nemo_asr.models.ASRModel.from_pretrained.return_value = mock_model
+        nemo_asr.models.ASRModel.from_pretrained.side_effect = None
+
+        worker = GPUWorker()
+        with patch.dict(
+            os.environ, {"PARAKEET_CUDA_GRAPHS": "false", "PARAKEET_TORCH_COMPILE": "false", "PARAKEET_BF16": "0"}
+        ):
+            worker._load_model()
+
+        mock_model.decoding.decoding.disable_cuda_graphs.assert_called_once()
+        worker.stop()
+
+    def test_cuda_graphs_enabled_skips_disable(self):
+        nemo_asr = _get_nemo_asr()
+        mock_model = _make_mock_model()
+        nemo_asr.models.ASRModel.from_pretrained.return_value = mock_model
+        nemo_asr.models.ASRModel.from_pretrained.side_effect = None
+
+        worker = GPUWorker()
+        with patch.dict(
+            os.environ, {"PARAKEET_CUDA_GRAPHS": "true", "PARAKEET_TORCH_COMPILE": "false", "PARAKEET_BF16": "0"}
+        ):
+            worker._load_model()
+
+        mock_model.decoding.decoding.disable_cuda_graphs.assert_not_called()
+        worker.stop()
+
+
+class TestTorchStartupOptimizations:
+
+    def test_cudnn_benchmark_enabled(self):
+        import gpu_worker as gw_mod
+
+        torch_mod = gw_mod.torch
+        nemo_asr = _get_nemo_asr()
+        mock_model = _make_mock_model()
+        nemo_asr.models.ASRModel.from_pretrained.return_value = mock_model
+        nemo_asr.models.ASRModel.from_pretrained.side_effect = None
+
+        torch_mod.backends.cudnn.benchmark = False
+
+        worker = GPUWorker()
+        with patch.dict(os.environ, {"PARAKEET_TORCH_COMPILE": "false", "PARAKEET_BF16": "0"}):
+            worker._load_model()
+
+        assert torch_mod.backends.cudnn.benchmark is True
+        worker.stop()
+
+    def test_matmul_precision_set_to_high(self):
+        import gpu_worker as gw_mod
+
+        torch_mod = gw_mod.torch
+        nemo_asr = _get_nemo_asr()
+        mock_model = _make_mock_model()
+        nemo_asr.models.ASRModel.from_pretrained.return_value = mock_model
+        nemo_asr.models.ASRModel.from_pretrained.side_effect = None
+
+        torch_mod.set_float32_matmul_precision = MagicMock()
+
+        worker = GPUWorker()
+        with patch.dict(os.environ, {"PARAKEET_TORCH_COMPILE": "false", "PARAKEET_BF16": "0"}):
+            worker._load_model()
+
+        torch_mod.set_float32_matmul_precision.assert_called_with("high")
+        worker.stop()
