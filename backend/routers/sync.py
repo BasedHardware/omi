@@ -94,7 +94,7 @@ from utils.fair_use import (
     record_speech_ms,
     get_rolling_speech_ms,
     check_soft_caps,
-    is_hard_restricted,
+    get_hard_restriction_status,
     trigger_classifier_if_needed,
     is_dg_budget_exhausted,
     get_enforcement_stage,
@@ -119,6 +119,13 @@ AUDIO_SAMPLE_RATE = 16000
 _V1_DEPRECATION_HEADERS = {'Deprecation': 'true', 'Link': '</v2/sync-local-files>; rel="successor-version"'}
 
 router = APIRouter()
+
+
+def _hard_restriction_headers(retry_after: int | None, base_headers: Optional[Dict[str, str]] = None) -> Dict[str, str]:
+    headers = dict(base_headers or {})
+    if retry_after is not None:
+        headers['Retry-After'] = str(retry_after)
+    return headers
 
 
 # **********************************************
@@ -1322,11 +1329,12 @@ async def sync_local_files(
     response.headers.update(_V1_DEPRECATION_HEADERS)
 
     # Pre-check gates (#5854)
-    if is_hard_restricted(uid):
+    hard_restricted, retry_after = get_hard_restriction_status(uid)
+    if hard_restricted:
         raise HTTPException(
             status_code=429,
             detail="Account temporarily restricted due to fair-use policy",
-            headers=_V1_DEPRECATION_HEADERS,
+            headers=_hard_restriction_headers(retry_after, _V1_DEPRECATION_HEADERS),
         )
 
     # Check credits: if exhausted, still process but lock the conversation so user can pay to unlock
@@ -1923,8 +1931,14 @@ async def sync_local_files_v2(
     an async background task. The app polls GET /v2/sync-local-files/{job_id}.
     """
     # Pre-check gates (same as v1)
-    if await run_blocking(critical_executor, is_hard_restricted, uid):
-        raise HTTPException(status_code=429, detail="Account temporarily restricted due to fair-use policy")
+    hard_restricted, retry_after = await run_blocking(critical_executor, get_hard_restriction_status, uid)
+    if hard_restricted:
+        headers = _hard_restriction_headers(retry_after)
+        raise HTTPException(
+            status_code=429,
+            detail="Account temporarily restricted due to fair-use policy",
+            headers=headers,
+        )
 
     should_lock = not await run_blocking(critical_executor, has_transcription_credits, uid)
 

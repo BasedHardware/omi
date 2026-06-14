@@ -1,5 +1,6 @@
 """Tests for sync endpoint fair-use gates (#5854)."""
 
+from datetime import datetime, timedelta, timezone
 from unittest.mock import patch, MagicMock
 
 import pytest
@@ -9,7 +10,8 @@ import sys
 from types import ModuleType
 
 # Stub database modules
-for mod_name in [
+_MISSING = object()
+_STUB_MODULE_NAMES = [
     'database._client',
     'database.redis_db',
     'database.fair_use',
@@ -19,7 +21,15 @@ for mod_name in [
     'firebase_admin',
     'firebase_admin.auth',
     'firebase_admin.messaging',
-]:
+    'utils.fair_use',
+]
+_SAVED_MODULES = {mod_name: sys.modules.get(mod_name, _MISSING) for mod_name in _STUB_MODULE_NAMES}
+_utils_parent = sys.modules.get('utils')
+_SAVED_UTILS_FAIR_USE_ATTR = getattr(_utils_parent, 'fair_use', _MISSING) if _utils_parent else _MISSING
+
+for mod_name in _STUB_MODULE_NAMES:
+    if mod_name == 'utils.fair_use':
+        continue
     if mod_name not in sys.modules:
         sys.modules[mod_name] = ModuleType(mod_name)
 
@@ -33,7 +43,21 @@ sys.modules['database.redis_db'].r = _mock_redis
 # Stub database._client.db
 sys.modules['database._client'].db = MagicMock()
 
+sys.modules.pop('utils.fair_use', None)
 import utils.fair_use as fair_use_mod
+
+for mod_name, original in _SAVED_MODULES.items():
+    if original is _MISSING:
+        sys.modules.pop(mod_name, None)
+    else:
+        sys.modules[mod_name] = original
+_utils_parent = sys.modules.get('utils')
+if _utils_parent is not None:
+    if _SAVED_UTILS_FAIR_USE_ATTR is _MISSING:
+        if getattr(_utils_parent, 'fair_use', _MISSING) is fair_use_mod:
+            delattr(_utils_parent, 'fair_use')
+    else:
+        setattr(_utils_parent, 'fair_use', _SAVED_UTILS_FAIR_USE_ATTR)
 
 
 class TestRecordSpeechMsSource:
@@ -170,6 +194,134 @@ class TestIsHardRestrictedGate:
         assert fair_use_mod.is_hard_restricted('exempt-user') is False
 
 
+class TestHardRestrictionRetryAfter:
+    """Test Retry-After calculation for hard-restricted sync users."""
+
+    @patch.object(fair_use_mod, 'FAIR_USE_ENABLED', True)
+    @patch.object(fair_use_mod, 'FAIR_USE_KILL_SWITCH', False)
+    @patch.object(fair_use_mod, 'FAIR_USE_EXEMPT_UIDS', set())
+    @patch.object(
+        fair_use_mod,
+        'get_rolling_speech_ms',
+        return_value={'daily_ms': 999999999, 'three_day_ms': 0, 'weekly_ms': 0},
+    )
+    @patch.object(fair_use_mod, 'fair_use_db')
+    def test_returns_seconds_until_restrict_until(self, mock_fair_use_db, mock_speech):
+        mock_fair_use_db.get_fair_use_state.return_value = {
+            'stage': 'restrict',
+            'restrict_until': datetime.utcnow() + timedelta(seconds=120),
+        }
+
+        retry_after = fair_use_mod.get_hard_restriction_retry_after_seconds('user1')
+
+        assert retry_after is not None
+        assert 1 <= retry_after <= 120
+
+    @patch.object(fair_use_mod, 'FAIR_USE_ENABLED', True)
+    @patch.object(fair_use_mod, 'FAIR_USE_KILL_SWITCH', False)
+    @patch.object(fair_use_mod, 'FAIR_USE_EXEMPT_UIDS', set())
+    @patch.object(
+        fair_use_mod,
+        'get_rolling_speech_ms',
+        return_value={'daily_ms': 999999999, 'three_day_ms': 0, 'weekly_ms': 0},
+    )
+    @patch.object(fair_use_mod, 'fair_use_db')
+    def test_supports_aware_utc_datetimes(self, mock_fair_use_db, mock_speech):
+        mock_fair_use_db.get_fair_use_state.return_value = {
+            'stage': 'restrict',
+            'restrict_until': datetime.now(timezone.utc) + timedelta(seconds=60),
+        }
+
+        retry_after = fair_use_mod.get_hard_restriction_retry_after_seconds('user1')
+
+        assert retry_after is not None
+        assert 1 <= retry_after <= 60
+
+    @patch.object(fair_use_mod, 'FAIR_USE_ENABLED', True)
+    @patch.object(fair_use_mod, 'FAIR_USE_KILL_SWITCH', False)
+    @patch.object(fair_use_mod, 'FAIR_USE_EXEMPT_UIDS', set())
+    @patch.object(
+        fair_use_mod,
+        'get_rolling_speech_ms',
+        return_value={'daily_ms': 999999999, 'three_day_ms': 0, 'weekly_ms': 0},
+    )
+    @patch.object(fair_use_mod, 'fair_use_db')
+    def test_supports_aware_non_utc_datetimes(self, mock_fair_use_db, mock_speech):
+        offset = timezone(timedelta(hours=5, minutes=30))
+        restrict_until = (datetime.now(timezone.utc) + timedelta(seconds=90)).astimezone(offset)
+        mock_fair_use_db.get_fair_use_state.return_value = {
+            'stage': 'restrict',
+            'restrict_until': restrict_until,
+        }
+
+        retry_after = fair_use_mod.get_hard_restriction_retry_after_seconds('user1')
+
+        assert retry_after is not None
+        assert 1 <= retry_after <= 90
+
+    @patch.object(fair_use_mod, 'FAIR_USE_ENABLED', True)
+    @patch.object(fair_use_mod, 'FAIR_USE_KILL_SWITCH', False)
+    @patch.object(fair_use_mod, 'FAIR_USE_EXEMPT_UIDS', set())
+    @patch.object(
+        fair_use_mod,
+        'get_rolling_speech_ms',
+        return_value={'daily_ms': 999999999, 'three_day_ms': 0, 'weekly_ms': 0},
+    )
+    @patch.object(fair_use_mod, 'fair_use_db')
+    def test_status_returns_retry_after_with_single_state_read(self, mock_fair_use_db, mock_speech):
+        mock_fair_use_db.get_fair_use_state.return_value = {
+            'stage': 'restrict',
+            'restrict_until': datetime.utcnow() + timedelta(seconds=120),
+        }
+
+        restricted, retry_after = fair_use_mod.get_hard_restriction_status('user1')
+
+        assert restricted is True
+        assert retry_after is not None
+        assert 1 <= retry_after <= 120
+        mock_fair_use_db.get_fair_use_state.assert_called_once_with('user1')
+
+    @patch.object(fair_use_mod, 'FAIR_USE_ENABLED', True)
+    @patch.object(fair_use_mod, 'FAIR_USE_KILL_SWITCH', False)
+    @patch.object(fair_use_mod, 'FAIR_USE_EXEMPT_UIDS', set())
+    @patch.object(fair_use_mod, 'fair_use_db')
+    def test_returns_none_when_stage_is_not_restrict(self, mock_fair_use_db):
+        mock_fair_use_db.get_fair_use_state.return_value = {
+            'stage': 'throttle',
+            'restrict_until': datetime.utcnow() + timedelta(seconds=120),
+        }
+
+        assert fair_use_mod.get_hard_restriction_retry_after_seconds('user1') is None
+
+    @patch.object(fair_use_mod, 'FAIR_USE_ENABLED', True)
+    @patch.object(fair_use_mod, 'FAIR_USE_KILL_SWITCH', False)
+    @patch.object(fair_use_mod, 'FAIR_USE_EXEMPT_UIDS', set())
+    @patch.object(
+        fair_use_mod,
+        'get_rolling_speech_ms',
+        return_value={'daily_ms': 999999999, 'three_day_ms': 0, 'weekly_ms': 0},
+    )
+    @patch.object(fair_use_mod, 'fair_use_db')
+    def test_returns_none_when_restrict_until_is_missing_or_expired(self, mock_fair_use_db, mock_speech):
+        mock_fair_use_db.get_fair_use_state.return_value = {'stage': 'restrict'}
+        assert fair_use_mod.get_hard_restriction_retry_after_seconds('user1') is None
+
+        mock_fair_use_db.get_fair_use_state.return_value = {
+            'stage': 'restrict',
+            'restrict_until': datetime.utcnow() - timedelta(seconds=1),
+        }
+        assert fair_use_mod.get_hard_restriction_retry_after_seconds('user1') is None
+
+    @patch.object(fair_use_mod, 'FAIR_USE_ENABLED', True)
+    @patch.object(fair_use_mod, 'FAIR_USE_KILL_SWITCH', False)
+    @patch.object(fair_use_mod, 'FAIR_USE_EXEMPT_UIDS', set())
+    @patch.object(fair_use_mod, 'fair_use_db')
+    def test_returns_none_when_state_read_fails(self, mock_fair_use_db):
+        mock_fair_use_db.get_fair_use_state.side_effect = RuntimeError('firestore timeout')
+
+        assert fair_use_mod.get_hard_restriction_retry_after_seconds('user1') is None
+
+
 class TestSyncEndpointImports:
     """Verify that all fair-use imports are available from utils.fair_use."""
 
@@ -179,6 +331,8 @@ class TestSyncEndpointImports:
         assert callable(fair_use_mod.get_rolling_speech_ms)
         assert callable(fair_use_mod.check_soft_caps)
         assert callable(fair_use_mod.is_hard_restricted)
+        assert callable(fair_use_mod.get_hard_restriction_status)
+        assert callable(fair_use_mod.get_hard_restriction_retry_after_seconds)
         assert hasattr(fair_use_mod, 'FAIR_USE_ENABLED')
         assert hasattr(fair_use_mod, 'trigger_classifier_if_needed')
 
@@ -293,9 +447,17 @@ class TestSyncEndpointCodeStructure:
         assert 'is_locked=is_locked' in source
 
     def test_hard_restricted_gate_exists(self):
-        """sync.py must check is_hard_restricted."""
+        """sync.py must check hard restriction status once."""
         source = self._read_sync_source()
-        assert 'is_hard_restricted(uid)' in source
+        assert 'get_hard_restriction_status(uid)' in source
+
+    def test_hard_restricted_429_uses_retry_after_headers(self):
+        """Hard-restricted sync responses must expose Retry-After for client cooldowns."""
+        source = self._read_sync_source()
+        assert 'get_hard_restriction_retry_after_seconds' not in source
+        assert 'headers=_hard_restriction_headers(retry_after, _V1_DEPRECATION_HEADERS)' in source
+        assert 'headers=headers' in self._function_body(source, 'async def sync_local_files_v2(')
+        assert 'run_blocking(critical_executor, _hard_restriction_headers' not in source
 
     def test_zero_speech_skips_recording(self):
         """Verify zero-speech guard in code: only records when total_speech_ms > 0."""
