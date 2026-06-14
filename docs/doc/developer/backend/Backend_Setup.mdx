@@ -143,7 +143,7 @@ New to backend development? Install [Homebrew](https://docs.brew.sh/Installation
       </Tab>
       <Tab title="Windows">
         ```powershell
-        copy %APPDATA%\gcloud\application_default_credentials.json google-credentials.json
+        Copy-Item "$env:APPDATA\gcloud\application_default_credentials.json" .\google-credentials.json
         ```
       </Tab>
     </Tabs>
