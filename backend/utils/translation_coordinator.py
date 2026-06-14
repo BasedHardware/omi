@@ -210,6 +210,11 @@ class TranslationCoordinator:
                     state.assembled_translation = translated_text
                     state.detected_lang = detected_lang
                     self.metrics['prefix_resets'] += 1
+                    # Invalidate any pending batch entries for this segment so
+                    # _flush_batch() does not overwrite with stale buffered text.
+                    self._batch_buffer = [
+                        entry for entry in self._batch_buffer if entry[0] != segment.id
+                    ]
                     await self.on_translation_ready(segment.id, translated_text, detected_lang, conversation_id)
                     continue  # Don't add to batch buffer
                 else:

@@ -592,6 +592,7 @@ class TranslationService:
             uncached_sent_hashes.append(sent_hash)
 
         # Phase 2: Batch translate uncached sentences
+        _failed_sent_hashes: set = set()  # track which sentences fell back to original text
         if uncached_sent_hashes:
             uncached_texts = [sent_hash_to_info[h]['text'] for h in uncached_sent_hashes]
 
@@ -619,9 +620,12 @@ class TranslationService:
 
                 except Exception as e:
                     logger.error(f"Sentence-level batch translation error: {e}")
+                    # Mark failed sentences as fallbacks so Phase 3 does NOT
+                    # write them to Redis (avoids poisoning cache with raw text).
                     for h in chunk_hashes:
                         if h not in sent_translation:
                             sent_translation[h] = (sent_hash_to_info[h]['text'], '')
+                            _failed_sent_hashes.add(h)
 
         # Phase 3: Reassemble per-unit results from sentence translations
         results = []
@@ -651,7 +655,10 @@ class TranslationService:
 
             text_hash = hashlib.md5(original_text.encode()).hexdigest()
             self._set_memory_cache(text_hash, dest_language, assembled, dominant_lang)
-            cache_translation(text_hash, dest_language, assembled, dominant_lang)
+            # Only persist to long-lived Redis cache if NO sentence fell back
+            # to original text (avoids poisoning cache with untranslated output).
+            if not any(sh in _failed_sent_hashes for _, sh in sentences):
+                cache_translation(text_hash, dest_language, assembled, dominant_lang)
 
             results.append((unit_id, assembled, dominant_lang))
 
