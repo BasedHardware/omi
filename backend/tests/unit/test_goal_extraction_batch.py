@@ -145,8 +145,14 @@ usage_tracker_mod = _stub_module("utils.llm.usage_tracker")
 usage_tracker_mod.track_usage = MagicMock(side_effect=lambda *args, **kwargs: nullcontext())
 usage_tracker_mod.Features = types.SimpleNamespace(GOALS="goals")
 
-# Shortcut references to mocked db functions
+# Shortcut references to mocked modules and functions
+mock_llm_usage_db = sys.modules["database.llm_usage"]
 mock_goals_db = sys.modules["database.goals"]
+mock_memories_db = sys.modules["database.memories"]
+mock_conversations_db = sys.modules["database.conversations"]
+mock_chat_db = sys.modules["database.chat"]
+mock_vector_db = sys.modules["database.vector_db"]
+mock_memory_module = sys.modules["utils.llms.memory"]
 
 try:
     _goals_module = importlib.import_module("utils.llm.goals")
@@ -192,10 +198,30 @@ def _run_with_llm(mock_llm, uid: str, text: str):
         return goals_module.extract_and_update_goal_progress(uid, text)
 
 
+def _reset_mock(mock, *, return_value=_MISSING, side_effect=_MISSING):
+    mock.reset_mock(return_value=True, side_effect=True)
+    if return_value is not _MISSING:
+        mock.return_value = return_value
+    if side_effect is not _MISSING:
+        mock.side_effect = side_effect
+
+
 @pytest.fixture(autouse=True)
 def reset_mocks():
-    mock_goals_db.get_user_goals.reset_mock()
-    mock_goals_db.update_goal_progress.reset_mock()
+    _reset_mock(mock_llm_usage_db.record_llm_usage)
+    _reset_mock(mock_goals_db.get_user_goal, return_value=None)
+    _reset_mock(mock_goals_db.get_user_goals, return_value=[])
+    _reset_mock(mock_goals_db.update_goal_progress)
+    _reset_mock(mock_memories_db.get_memories, return_value=[])
+    _reset_mock(mock_conversations_db.get_conversations, return_value=[])
+    _reset_mock(mock_conversations_db.get_conversations_by_id, return_value=[])
+    _reset_mock(mock_chat_db.get_messages, return_value=[])
+    _reset_mock(mock_vector_db.query_vectors, return_value=[])
+    _reset_mock(mock_memory_module.get_prompt_memories, return_value=("TestUser", "some memories"))
+
+    goals_module = _import_goals_module()
+    _reset_mock(goals_module.track_usage, side_effect=lambda *args, **kwargs: nullcontext())
+    _reset_mock(goals_module.get_llm)
     yield
 
 
