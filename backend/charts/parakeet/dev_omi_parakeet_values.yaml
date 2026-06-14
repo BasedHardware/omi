@@ -206,7 +206,7 @@ affinity:
             - key: service
               operator: In
               values:
-                - vad
+                - parakeet
             - key: env
               operator: In
               values:

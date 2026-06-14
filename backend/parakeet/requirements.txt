@@ -9,8 +9,10 @@ soundfile==0.13.1
 httpx==0.28.1
 scipy>=1.11.0
 langdetect>=1.0.9
-# NVIDIA NeMo ASR (Parakeet TDT). Pulls torch/torchaudio transitively; pin after a GPU build.
-nemo_toolkit[asr]>=2.2.0
+# NVIDIA NeMo ASR (Parakeet TDT) — beastoin fork with thread-safety fixes for
+# model.transcribe() (freeze/unfreeze race, generator leak, CUDA graph disable).
+# Upstream NeMo segfaults under concurrent GPU inference.
+nemo_toolkit[asr] @ git+https://github.com/beastoin/NeMo.git@68d99a17944181452205dc60da21e82bf3647054
 # Built-in speaker embedding for streaming diarization (no external service dependency).
 pyannote.audio>=3.1.0
 # Prometheus metrics for autoscaling (active streams, request latency, GPU memory).
