@@ -252,7 +252,11 @@ OAuth is required for user authentication. You need to configure both Google and
         ```powershell
         choco install python git.install ffmpeg
         ```
-        <Note>Opus is included in Windows 10 version 1903 and above.</Note>
+        <Note>
+          The Python `opuslib` package still needs a native `libopus` DLL on `PATH`. One common setup is MSYS2 UCRT64:
+          install MSYS2, run `pacman -S mingw-w64-ucrt-x86_64-opus`, add `C:\msys64\ucrt64\bin` to `PATH`,
+          then open a new shell and verify with `where.exe opus.dll`.
+        </Note>
       </Tab>
       <Tab title="Linux/Nix">
         Python, Git, and FFmpeg are typically pre-installed. Install opus via your package manager if needed.
