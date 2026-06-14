@@ -221,6 +221,11 @@ def test_prodlike_client_trace_sink_records_candidate_and_frame(monkeypatch):
 
     assert output.event_frames[0].canonical_text == "User uses Warp terminal"
     stages = [event["stage"] for event in client.trace_events]
+    assert "source_route" in stages
+    route_event = next(event for event in client.trace_events if event["stage"] == "source_route")
+    assert route_event["declared_source_type"] == "benchmark_fixture"
+    assert route_event["effective_source_type"] == "benchmark_fixture"
+    assert route_event["reason"] == "declared_source_type_passthrough"
     assert "model_call" in stages
     assert "frame_created" in stages
 

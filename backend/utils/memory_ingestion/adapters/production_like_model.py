@@ -33,6 +33,7 @@ from utils.memory_ingestion.models import (
     TemporalScope,
 )
 from utils.memory_ingestion.pipeline import MemoryModelClient
+from utils.memory_ingestion.source_routing import route_source
 
 logger = logging.getLogger(__name__)
 
@@ -184,13 +185,21 @@ class ProductionLikeMemoryModelClient(MemoryModelClient):
                         "source_event_ids": [event.event_id for event in event_chunk],
                     })
                     continue
+                route = route_source(pipeline_input.source)
+                self._emit_trace({
+                    "stage": "source_route",
+                    "conversation_id": conversation_id,
+                    "chunk_index": chunk_index,
+                    "source_event_ids": [event.event_id for event in event_chunk],
+                    **route.model_dump(),
+                })
                 segments = [_to_transcript_segment(event, index) for index, event in enumerate(event_chunk)]
                 memories = _extract_memories_with_production_prompt(
                     segments=segments,
                     user_name=user_name,
                     memories_str=memories_str,
                     language=pipeline_input.source.language,
-                    source_type=pipeline_input.source.source_type,  # v4: flow source type to prompt
+                    source_type=route.effective_source_type,  # V8-3 passthrough router scaffold
                     high_recall=self.high_recall,
                     typed=self.typed,
                     trace_sink=self._emit_trace,
