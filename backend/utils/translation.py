@@ -530,60 +530,75 @@ class TranslationService:
     def translate_units_batch(self, dest_language: str, units: List[Tuple[str, str]]) -> List[Tuple[str, str, str]]:
         """Translate a batch of (unit_id, text) pairs in minimal GCP API calls.
 
-        Deduplicates identical texts, checks all cache layers, and batches
-        only truly uncached texts into a single API call.
+        Splits each text into sentences, checks all cache layers PER SENTENCE,
+        batches only truly uncached sentences into a single API call, then
+        reassembles per-unit results.
+
+        This sentence-level dedup means that if two different units share
+        a common sentence (e.g., "How are you?"), only the first occurrence
+        triggers an API call — subsequent units get the cached result.
 
         Returns list of (unit_id, translated_text, detected_lang) in input order.
         """
         if not units:
             return []
 
-        # Build deduplicated mapping: text_hash -> (text, [indices])
-        results = [None] * len(units)
-        hash_to_info = {}  # text_hash -> {'text': str, 'indices': [int]}
+        # Phase 0: Split each unit's text into sentences
+        # unit_sentences[i] = list of (sentence_text, sentence_hash) for unit i
+        unit_sentences = []
+        for unit_id, text in units:
+            sentences = split_into_sentences(text)
+            hashed = [(s, hashlib.md5(s.encode()).hexdigest()) for s in sentences]
+            unit_sentences.append((unit_id, text, hashed))
 
-        for i, (unit_id, text) in enumerate(units):
-            text_hash = hashlib.md5(text.encode()).hexdigest()
-            if text_hash not in hash_to_info:
-                hash_to_info[text_hash] = {'text': text, 'indices': [], 'hash': text_hash}
-            hash_to_info[text_hash]['indices'].append(i)
+        # Build global sentence-level dedup map:
+        # sent_hash -> {'text': str, 'indices': [(unit_idx, sent_idx), ...]}
+        sent_hash_to_info = {}
+        for unit_idx, (_, _, sentences) in enumerate(unit_sentences):
+            for sent_idx, (sent_text, sent_hash) in enumerate(sentences):
+                if sent_hash not in sent_hash_to_info:
+                    sent_hash_to_info[sent_hash] = {
+                        'text': sent_text,
+                        'indices': [],
+                    }
+                sent_hash_to_info[sent_hash]['indices'].append((unit_idx, sent_idx))
 
-        # Phase 1: Check caches for each unique text
-        uncached_hashes = []
-        for text_hash, info in hash_to_info.items():
+        # Phase 1: Check caches for each unique sentence
+        # sent_translation[hash] = (translated_text, detected_lang) or None
+        sent_translation = {}  # hash -> (str, str)
+        uncached_sent_hashes = []
+
+        for sent_hash, info in sent_hash_to_info.items():
             # Check negative cache first
-            if get_negative_cache(text_hash, dest_language):
-                for idx in info['indices']:
-                    results[idx] = (units[idx][0], info['text'], '')  # return original text
+            if get_negative_cache(sent_hash, dest_language):
+                sent_translation[sent_hash] = (info['text'], '')  # return original
                 continue
 
             # Check memory cache
-            cached = self._check_memory_cache(text_hash, dest_language)
+            cached = self._check_memory_cache(sent_hash, dest_language)
             if cached:
-                for idx in info['indices']:
-                    results[idx] = (units[idx][0], cached[0], cached[1])
+                sent_translation[sent_hash] = cached
                 continue
 
             # Check Redis cache
-            redis_cached = get_cached_translation(text_hash, dest_language)
+            redis_cached = get_cached_translation(sent_hash, dest_language)
             if redis_cached:
                 translated = redis_cached["text"]
                 detected = redis_cached.get("detected_lang", "")
-                self._set_memory_cache(text_hash, dest_language, translated, detected)
-                for idx in info['indices']:
-                    results[idx] = (units[idx][0], translated, detected)
+                self._set_memory_cache(sent_hash, dest_language, translated, detected)
+                sent_translation[sent_hash] = (translated, detected)
                 continue
 
-            uncached_hashes.append(text_hash)
+            uncached_sent_hashes.append(sent_hash)
 
-        # Phase 2: Batch translate uncached texts
-        if uncached_hashes:
-            uncached_texts = [hash_to_info[h]['text'] for h in uncached_hashes]
+        # Phase 2: Batch translate uncached sentences
+        if uncached_sent_hashes:
+            uncached_texts = [sent_hash_to_info[h]['text'] for h in uncached_sent_hashes]
 
             for chunk_start in range(0, len(uncached_texts), MAX_BATCH_SIZE):
                 chunk_end = min(chunk_start + MAX_BATCH_SIZE, len(uncached_texts))
                 chunk = uncached_texts[chunk_start:chunk_end]
-                chunk_hashes = uncached_hashes[chunk_start:chunk_end]
+                chunk_hashes = uncached_sent_hashes[chunk_start:chunk_end]
 
                 try:
                     response = _client.translate_text(
@@ -594,29 +609,47 @@ class TranslationService:
                     )
 
                     for j, translation in enumerate(response.translations):
-                        text_hash = chunk_hashes[j]
+                        sent_hash = chunk_hashes[j]
                         translated_text = translation.translated_text
                         detected_lang = translation.detected_language_code or ""
-                        info = hash_to_info[text_hash]
 
-                        self._set_memory_cache(text_hash, dest_language, translated_text, detected_lang)
-                        cache_translation(text_hash, dest_language, translated_text, detected_lang)
-
-                        for idx in info['indices']:
-                            results[idx] = (units[idx][0], translated_text, detected_lang)
+                        self._set_memory_cache(sent_hash, dest_language, translated_text, detected_lang)
+                        cache_translation(sent_hash, dest_language, translated_text, detected_lang)
+                        sent_translation[sent_hash] = (translated_text, detected_lang)
 
                 except Exception as e:
-                    logger.error(f"Batch translation error: {e}")
+                    logger.error(f"Sentence-level batch translation error: {e}")
                     for h in chunk_hashes:
-                        info = hash_to_info[h]
-                        for idx in info['indices']:
-                            if results[idx] is None:
-                                results[idx] = (units[idx][0], info['text'], '')
+                        if h not in sent_translation:
+                            sent_translation[h] = (sent_hash_to_info[h]['text'], '')
 
-        # Fill any remaining None results (shouldn't happen, but be safe)
-        for i in range(len(results)):
-            if results[i] is None:
-                results[i] = (units[i][0], units[i][1], '')
+        # Phase 3: Reassemble per-unit results from sentence translations
+        results = []
+        for unit_idx, (unit_id, original_text, sentences) in enumerate(unit_sentences):
+            if not sentences:
+                results.append((unit_id, original_text, ''))
+                continue
+
+            translated_parts = []
+            detected_langs = []
+            for sent_text, sent_hash in sentences:
+                if sent_hash in sent_translation:
+                    trans_text, det_lang = sent_translation[sent_hash]
+                    translated_parts.append(trans_text)
+                    if det_lang:
+                        detected_langs.append(det_lang)
+                else:
+                    # Fallback: should not happen, but use original text
+                    translated_parts.append(sent_text)
+
+            assembled = ' '.join(translated_parts)
+            # Dominant detected language from constituent sentences
+            dominant_lang = ''
+            if detected_langs:
+                lang_counts = Counter(detected_langs)
+                dominant_lang = lang_counts.most_common(1)[0][0]
+
+            results.append((unit_id, assembled, dominant_lang))
 
         return results
 

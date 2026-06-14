@@ -21,6 +21,7 @@ from models.transcript_segment import TranscriptSegment, Translation, SENTENCE_E
 from utils.translation import (
     TranslationNeed,
     classify_translation_need,
+    get_cached_translation,
     set_negative_cache,
     TranslationService,
 )
@@ -97,16 +98,30 @@ def _compute_stability_signals(
 class TranslationCoordinator:
     """Orchestrates real-time translation for a single WebSocket session.
 
-    Usage in transcribe.py:
-        coordinator = TranslationCoordinator(
-            target_language='en',
-            translation_service=translation_service,
-            on_translation_ready=callback,
-        )
-        # On each segment update:
-        await coordinator.observe(updated_segments, removed_ids, conversation_id)
-        # On session close:
-        await coordinator.flush()
+    ## Architecture
+
+    This coordinator implements SINGLE-PHASE translation: every stable text
+    update is sent in full to the batch translator, which calls Google
+    Translate V3 with the complete segment text. See DD-008 design doc
+    (`deep-dives/DD-008-design-review.md`) for the planned TWO-PHASE
+    architecture (streaming deltas + final full-sentence translation).
+
+    ## Data Flow
+
+    observe() → [stability gates] → batch_buffer → _flush_batch()
+        → translate_units_batch() → [LRU → Redis → API]
+        → on_translation_ready() → Firestore persist + WebSocket push
+
+    ## Cost Note
+
+    Because we send full text (not delta), each evolving segment generates
+    multiple translations of overlapping content. Current cost: ~$4,282/mo
+    for 284M characters. Target (with DD-008 fixes): ~$1,900–2,500/mo.
+
+    ## Key Trade-off
+
+    Translation quality (full context) vs cost (redundant chars).
+    Currently optimized for quality. See DD-008 for path to both.
     """
 
     def __init__(
@@ -184,10 +199,21 @@ class TranslationCoordinator:
 
             # Prefix-safe check: if prefix changed, reset
             if state.committed_text and not text.startswith(state.committed_text):
-                state.committed_text = ''
-                state.assembled_translation = None
-                state.detected_lang = None
-                self.metrics['prefix_resets'] += 1
+                # Check if the new merged text was already translated (Redis cache)
+                text_hash = hashlib.md5(text.encode()).hexdigest()
+                redis_cached = get_cached_translation(text_hash, self.target_language)
+                if redis_cached:
+                    # Found in Redis — adopt as committed, skip re-translation
+                    state.committed_text = text
+                    state.assembled_translation = redis_cached['text']
+                    state.detected_lang = redis_cached.get('detected_lang', '')
+                    self.metrics['prefix_resets'] += 1
+                    continue  # Don't add to batch buffer
+                else:
+                    state.committed_text = ''
+                    state.assembled_translation = None
+                    state.detected_lang = None
+                    self.metrics['prefix_resets'] += 1
 
             # Only translate the new (uncommitted) portion
             new_text = text[len(state.committed_text) :].strip() if state.committed_text else text
@@ -242,6 +268,27 @@ class TranslationCoordinator:
             self.metrics['classify_translates'] += 1
             version = self._next_version()
             state.version = version
+
+            # DESIGN DECISION: We send `text` (full segment text) instead of
+            # `new_text` (the uncommitted delta) to the batch translator.
+            #
+            # Rationale:
+            # - Google Translate V3 translates each content string independently;
+            #   full sentence context improves disambiguation (gender agreement,
+            #   idioms like "estoy de acuerdo" → "I agree", not "acuerdo" → "agreement")
+            # - The assembled_translation IS the final persisted result — it must be
+            #   high quality since it's stored in Firestore and displayed to users
+            #
+            # Trade-off: This means evolving text ("Hola" → "Hola como" → "Hola como estas")
+            # generates unique MD5 cache keys at every step, causing 3–4x redundant
+            # translations per stabilized segment. See DD-008 for cost analysis and
+            # proposed two-phase architecture that preserves quality while reducing cost.
+            #
+            # If you change this to send new_text (delta), you MUST also:
+            # 1. Update assembly stitching logic in _flush_batch()
+            # 2. Ensure stability gates filter out sub-sentence fragments
+            # 3. Update the cache key strategy
+            # 4. Measure translation quality regression in production
             self._batch_buffer.append((segment.id, text, conversation_id, version))
 
         # (Re)start batch aggregation timer
