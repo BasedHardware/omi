@@ -821,6 +821,50 @@ def test_page_context_in_dynamic_section():
 
 
 # ---------------------------------------------------------------------------
+# Tests: Anthropic cache_control includes TTL
+# ---------------------------------------------------------------------------
+
+
+def test_anthropic_cache_control_has_ttl():
+    """
+    The cache_control dict in _run_anthropic_agent_stream must include
+    ttl="1h" so that interactive chat sessions (with gaps >5min between
+    turns) get cache hits instead of re-writing on every request.
+
+    Regression: Anthropic changed default TTL from 1h→5m on 2026-03-06.
+    """
+    agentic_mod = _get_agentic_module()
+
+    # Inspect the source to find the system_blocks construction
+    import inspect
+
+    src = inspect.getsource(agentic_mod._run_anthropic_agent_stream)
+    assert '"ttl": "1h"' in src or "'ttl': '1h'" in src, (
+        "cache_control must include ttl='1h' to avoid 5-min default "
+        f"(source excerpt: ...{src[src.find('cache_control'):src.find('cache_control')+120]}...)"
+    )
+    assert "ephemeral" in src, "cache type must be ephemeral"
+
+
+def test_anthropic_cache_control_not_5min_default():
+    """
+    Guard against regression: ensure we are NOT relying on the 5-minute
+    default TTL that Anthropic introduced in March 2026.
+    """
+    agentic_mod = _get_agentic_module()
+    import inspect
+
+    src = inspect.getsource(agentic_mod._run_anthropic_agent_stream)
+    # The old (broken) pattern was just {"type": "ephemeral"} with no ttl field
+    # Find the cache_control line(s)
+    lines_with_cache_ctrl = [l for l in src.splitlines() if "cache_control" in l]
+    for line in lines_with_cache_ctrl:
+        # Must NOT be the bare {"type": "ephemeral"} form
+        if '"type": "ephemeral"' in line or "'type': 'ephemeral'" in line:
+            assert "ttl" in line, f"cache_control line missing ttl field: {line.strip()}"
+
+
+# ---------------------------------------------------------------------------
 # Utility
 # ---------------------------------------------------------------------------
 
