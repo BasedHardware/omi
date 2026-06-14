@@ -85,4 +85,84 @@ def _install_prometheus_client_stub():
     sys.modules['prometheus_client'] = prometheus_client
 
 
+def _install_redis_stub():
+    if 'redis' in sys.modules:
+        return
+    if importlib.util.find_spec('redis') is not None:
+        return
+
+    redis_module = types.ModuleType('redis')
+
+    class _Pipeline:
+        def __init__(self, client):
+            self._client = client
+            self._results = []
+
+        def __getattr__(self, name):
+            def _call(*args, **kwargs):
+                result = getattr(self._client, name)(*args, **kwargs)
+                self._results.append(result)
+                return self
+
+            return _call
+
+        def execute(self):
+            results = list(self._results)
+            self._results.clear()
+            return results
+
+    class _Redis:
+        def __init__(self, *args, **kwargs):
+            self._store = {}
+
+        def get(self, key):
+            return self._store.get(key)
+
+        def set(self, key, value, ex=None, nx=False, **kwargs):
+            if nx and key in self._store:
+                return None
+            self._store[key] = value
+            return True
+
+        def delete(self, *keys):
+            deleted = 0
+            for key in keys:
+                deleted += int(key in self._store)
+                self._store.pop(key, None)
+            return deleted
+
+        def expire(self, key, ttl):
+            return key in self._store
+
+        def ttl(self, key):
+            return -1 if key in self._store else -2
+
+        def incr(self, key, amount=1):
+            return self.incrby(key, amount)
+
+        def incrby(self, key, amount=1):
+            value = int(self._store.get(key, 0)) + amount
+            self._store[key] = value
+            return value
+
+        def pipeline(self, *args, **kwargs):
+            return _Pipeline(self)
+
+        def eval(self, *args, **kwargs):
+            return [0, 0]
+
+        def __getattr__(self, name):
+            def _noop(*args, **kwargs):
+                return None
+
+            return _noop
+
+    redis_module.Redis = _Redis
+    redis_module.ConnectionError = ConnectionError
+    redis_module.exceptions = types.SimpleNamespace(ConnectionError=ConnectionError, RedisError=Exception)
+
+    sys.modules['redis'] = redis_module
+
+
 _install_prometheus_client_stub()
+_install_redis_stub()
