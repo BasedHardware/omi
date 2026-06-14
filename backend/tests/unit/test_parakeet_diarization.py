@@ -39,6 +39,7 @@ if 'deepgram.clients.live.v1' in _owned_modules:
 _speaker_embedding = ModuleType('utils.stt.speaker_embedding')
 _speaker_embedding.SPEAKER_MATCH_THRESHOLD = 0.45
 _speaker_embedding.async_extract_embedding_from_bytes = AsyncMock(return_value=None)
+_speaker_embedding.extract_embedding_from_bytes = MagicMock(return_value=None)
 
 
 def _cosine_distance(a, b):
