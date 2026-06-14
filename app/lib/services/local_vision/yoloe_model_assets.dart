@@ -32,9 +32,11 @@ class YoloeModelAssets {
   static const modelDirectory = 'assets/models/yoloe-26n-seg-pf';
   static const modelPath = '$modelDirectory/yoloe-26n-seg-pf.onnx2tf-fixed_float32.tflite';
   static const labelsPath = '$modelDirectory/labels.json';
+  static const physicalObjectTagsPath = 'assets/models/ram_physical_object_tag_list.txt';
   static const requiredAssetPaths = [
     modelPath,
     labelsPath,
+    physicalObjectTagsPath,
   ];
 
   const YoloeModelAssets._();
@@ -48,7 +50,7 @@ class YoloeModelAssets {
         }
       }
 
-      return YoloeModelAssetStatus(
+      return const YoloeModelAssetStatus(
         isValid: true,
         modelDirectory: modelDirectory,
         labelCount: 4585,

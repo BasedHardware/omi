@@ -229,6 +229,8 @@ class _ObjectAnnouncementsSettingsPageState extends State<ObjectAnnouncementsSet
 
   @override
   Widget build(BuildContext context) {
+    final bottomPadding = widget.showBackButton ? 32.0 : 132.0 + MediaQuery.paddingOf(context).bottom;
+
     return Scaffold(
       backgroundColor: const Color(0xFF0D0D0D),
       appBar: AppBar(
@@ -248,7 +250,7 @@ class _ObjectAnnouncementsSettingsPageState extends State<ObjectAnnouncementsSet
         centerTitle: true,
       ),
       body: ListView(
-        padding: const EdgeInsets.fromLTRB(20, 8, 20, 32),
+        padding: EdgeInsets.fromLTRB(20, 8, 20, bottomPadding),
         children: [
           Text(
             context.l10n.objectAnnouncementsSettingsSubtitle,

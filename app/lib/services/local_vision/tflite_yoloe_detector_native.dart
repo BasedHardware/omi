@@ -17,6 +17,7 @@ class TfliteYoloeDetector implements LocalVisionDetector {
 
   Interpreter? _interpreter;
   List<String>? _labels;
+  Set<String>? _physicalObjectLabels;
 
   @override
   Future<LocalVisionDetectorResult> detect(LocalVisionFrame frame) async {
@@ -44,6 +45,7 @@ class TfliteYoloeDetector implements LocalVisionDetector {
     final detections = _parseOutputs(
       outputs: outputs.values.toList(growable: false),
       labels: _labels!,
+      physicalObjectLabels: _physicalObjectLabels!,
       frame: frame,
       originalWidth: decoded.width,
       originalHeight: decoded.height,
@@ -74,12 +76,13 @@ class TfliteYoloeDetector implements LocalVisionDetector {
   }
 
   Future<void> _loadIfNeeded() async {
-    if (_interpreter != null && _labels != null) return;
+    if (_interpreter != null && _labels != null && _physicalObjectLabels != null) return;
     _interpreter = await Interpreter.fromAsset(
       YoloeModelAssets.modelPath,
       options: InterpreterOptions()..threads = 2,
     );
     _labels = await _loadLabels();
+    _physicalObjectLabels = await _loadPhysicalObjectLabels();
   }
 
   Future<List<String>> _loadLabels() async {
@@ -91,6 +94,15 @@ class TfliteYoloeDetector implements LocalVisionDetector {
       if (entry is Map && entry['name'] is String) return entry['name'] as String;
       return '';
     }).toList(growable: false);
+  }
+
+  Future<Set<String>> _loadPhysicalObjectLabels() async {
+    final raw = await rootBundle.loadString(YoloeModelAssets.physicalObjectTagsPath);
+    return raw
+        .split('\n')
+        .map((line) => line.trim().toLowerCase())
+        .where((label) => label.isNotEmpty && !label.startsWith('#'))
+        .toSet();
   }
 
   _LetterboxInput _letterbox(img.Image source) {
@@ -132,6 +144,7 @@ class TfliteYoloeDetector implements LocalVisionDetector {
   List<Detection> _parseOutputs({
     required List<Object> outputs,
     required List<String> labels,
+    required Set<String> physicalObjectLabels,
     required LocalVisionFrame frame,
     required int originalWidth,
     required int originalHeight,
@@ -154,6 +167,7 @@ class TfliteYoloeDetector implements LocalVisionDetector {
         _parseRows(
           rows: rows,
           labels: labels,
+          physicalObjectLabels: physicalObjectLabels,
           frame: frame,
           originalWidth: originalWidth,
           originalHeight: originalHeight,
@@ -218,6 +232,7 @@ class TfliteYoloeDetector implements LocalVisionDetector {
   List<Detection> _parseRows({
     required List<List<double>> rows,
     required List<String> labels,
+    required Set<String> physicalObjectLabels,
     required LocalVisionFrame frame,
     required int originalWidth,
     required int originalHeight,
@@ -235,6 +250,8 @@ class TfliteYoloeDetector implements LocalVisionDetector {
       if (score < confidenceThreshold || score.isNaN) continue;
       final classId = parsedClass.classId;
       if (classId < 0 || classId >= labels.length) continue;
+      final label = labels[classId];
+      if (!physicalObjectLabels.contains(label.trim().toLowerCase())) continue;
 
       var x0 = row[0];
       var y0 = row[1];
@@ -261,7 +278,7 @@ class TfliteYoloeDetector implements LocalVisionDetector {
 
       candidates.add(
         Detection(
-          label: labels[classId],
+          label: label,
           confidence: score,
           box: DetectionBox(
             left: left / originalWidth,

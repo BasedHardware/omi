@@ -437,7 +437,7 @@ class ObjectPresenceTracker {
 class LocalVisionService extends ChangeNotifier {
   LocalVisionService._({LocalVisionDetector? fakeDetector, LocalVisionDetector? yoloeDetector})
       : _fakeDetector = fakeDetector ?? const FakeLocalVisionDetector(),
-        _yoloeDetector = yoloeDetector ?? TfliteYoloeDetector();
+        _yoloeDetector = yoloeDetector ?? const TfliteYoloeDetector();
 
   static final LocalVisionService instance = LocalVisionService._();
 
@@ -615,6 +615,10 @@ class LocalVisionService extends ChangeNotifier {
         'handCount=$handCount handIouThreshold=${handIouThreshold.toStringAsFixed(2)} '
         'heldSelected=$heldSelectedCount '
         'latencyMs=${latency.pipelineTotalMs?.toStringAsFixed(1) ?? 'unknown'} '
+        'preprocessMs=${latency.preprocessMs?.toStringAsFixed(1) ?? 'unknown'} '
+        'inferenceMs=${latency.inferenceMs?.toStringAsFixed(1) ?? 'unknown'} '
+        'postprocessMs=${latency.postprocessMs?.toStringAsFixed(1) ?? 'unknown'} '
+        'detectorTotalMs=${latency.nativeTotalMs?.toStringAsFixed(1) ?? 'unknown'} '
         'labels=${results.map((detection) => detection.label).join(',')}',
       );
       _logHeldObjectSelectionDecisions(

@@ -190,6 +190,7 @@ flutter:
     - assets/images/
     - assets/integration_app_logos/
     - assets/competitor-logos/
+    - assets/models/ram_physical_object_tag_list.txt
     - assets/models/yoloe-26n-seg-pf/
     - shorebird.yaml
     - assets/device_assets/frame_lib.lua

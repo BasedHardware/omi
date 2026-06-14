@@ -537,6 +537,8 @@ class OmiGlassConnection extends DeviceConnection {
       var nextExpectedFrame = 0;
       var isTransferring = false;
       ImageOrientation? currentOrientation;
+      DateTime? transferStartedAt;
+      var receivedChunkCount = 0;
 
       // Firmware version check for orientation byte support
       Version newFirmwareVersion = Version.parse("2.1.1");
@@ -558,7 +560,18 @@ class OmiGlassConnection extends DeviceConnection {
           if (isTransferring) {
             final imageBytes = buffer.toBytes();
             if (imageBytes.isNotEmpty) {
-              Logger.debug('OmiGlass: Completed image bytes length: ${imageBytes.length}');
+              final transferDurationMs = transferStartedAt == null
+                  ? null
+                  : DateTime.now().difference(transferStartedAt!).inMicroseconds / 1000;
+              final transferRateKbps = transferDurationMs == null || transferDurationMs <= 0
+                  ? null
+                  : imageBytes.length * 8 / transferDurationMs;
+              Logger.debug(
+                'OmiGlass: Completed image bytes length: ${imageBytes.length} '
+                'chunks=$receivedChunkCount transferMs=${transferDurationMs?.toStringAsFixed(1) ?? 'unknown'} '
+                'rateKbps=${transferRateKbps?.toStringAsFixed(1) ?? 'unknown'} '
+                'orientation=${currentOrientation?.name ?? 'unknown'}',
+              );
               try {
                 onImageReceived(
                   OrientedImage(
@@ -575,6 +588,8 @@ class OmiGlassConnection extends DeviceConnection {
           isTransferring = false;
           nextExpectedFrame = 0;
           currentOrientation = null;
+          transferStartedAt = null;
+          receivedChunkCount = 0;
           return;
         }
 
@@ -584,6 +599,9 @@ class OmiGlassConnection extends DeviceConnection {
           isTransferring = true;
           nextExpectedFrame = 0;
           currentOrientation = null;
+          transferStartedAt = DateTime.now();
+          receivedChunkCount = 0;
+          Logger.debug('OmiGlass: Image transfer started');
         }
 
         if (!isTransferring) {
@@ -592,6 +610,7 @@ class OmiGlassConnection extends DeviceConnection {
         }
 
         if (frameIndex == nextExpectedFrame) {
+          receivedChunkCount++;
           if (frameIndex == 0) {
             if (deviceFirmwareVersion >= newFirmwareVersion) {
               // New firmware: parse orientation from packet
@@ -624,6 +643,8 @@ class OmiGlassConnection extends DeviceConnection {
           isTransferring = false;
           nextExpectedFrame = 0;
           currentOrientation = null;
+          transferStartedAt = null;
+          receivedChunkCount = 0;
         }
 
         // Safety limit
@@ -633,6 +654,8 @@ class OmiGlassConnection extends DeviceConnection {
           isTransferring = false;
           nextExpectedFrame = 0;
           currentOrientation = null;
+          transferStartedAt = null;
+          receivedChunkCount = 0;
         }
       });
     } catch (e) {

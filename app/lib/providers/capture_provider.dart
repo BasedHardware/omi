@@ -955,7 +955,15 @@ class CaptureProvider extends ChangeNotifier
     await connection.performCameraStartPhotoController();
     _blePhotoStream = await connection.performGetImageListener(
       onImageReceived: (orientedImage) async {
+        final imagePipelineStopwatch = Stopwatch()..start();
+        final rotationStopwatch = Stopwatch()..start();
         final rotatedImageBytes = rotateImage(orientedImage);
+        rotationStopwatch.stop();
+        Logger.debug(
+          'OmiGlass image rotation completed '
+          'inputBytes=${orientedImage.imageBytes.length} outputBytes=${rotatedImageBytes.length} '
+          'orientation=${orientedImage.orientation.name} rotationMs=${rotationStopwatch.elapsedMicroseconds / 1000}',
+        );
 
         if (SharedPreferencesUtil().localYoloeEnabled) {
           final rotatedJpegBytes = Uint8List.fromList(rotatedImageBytes);
@@ -967,14 +975,23 @@ class CaptureProvider extends ChangeNotifier
           if (_localYoloeSkippedUploadFrameCount == 1 || _localYoloeSkippedUploadFrameCount % 10 == 0) {
             Logger.debug(
               'Local YOLOE processed rotated JPEG bytes without base64 encoding; backend image upload skipped '
-              '(frames=$_localYoloeSkippedUploadFrameCount bytes=${rotatedJpegBytes.length})',
+              '(frames=$_localYoloeSkippedUploadFrameCount bytes=${rotatedJpegBytes.length} '
+              'totalImagePipelineMs=${imagePipelineStopwatch.elapsedMicroseconds / 1000})',
             );
           }
           return;
         }
 
         final String tempId = 'temp_img_${DateTime.now().millisecondsSinceEpoch}';
+        final base64Stopwatch = Stopwatch()..start();
         final String base64Image = base64Encode(rotatedImageBytes);
+        base64Stopwatch.stop();
+        Logger.debug(
+          'OmiGlass image base64 encoding completed '
+          'bytes=${rotatedImageBytes.length} base64Length=${base64Image.length} '
+          'base64Ms=${base64Stopwatch.elapsedMicroseconds / 1000} '
+          'totalImagePipelineMs=${imagePipelineStopwatch.elapsedMicroseconds / 1000}',
+        );
 
         // Add placeholder to UI for immediate feedback
         photos.add(ConversationPhoto(id: tempId, base64: base64Image, createdAt: DateTime.now()));

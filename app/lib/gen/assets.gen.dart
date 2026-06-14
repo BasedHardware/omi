@@ -486,9 +486,16 @@ class $AssetsIntegrationAppLogosGen {
 class $AssetsModelsGen {
   const $AssetsModelsGen();
 
+  /// File path: assets/models/ram_physical_object_tag_list.txt
+  String get ramPhysicalObjectTagList =>
+      'assets/models/ram_physical_object_tag_list.txt';
+
   /// Directory path: assets/models/yoloe-26n-seg-pf
   $AssetsModelsYoloe26nSegPfGen get yoloe26nSegPf =>
       const $AssetsModelsYoloe26nSegPfGen();
+
+  /// List of all assets
+  List<String> get values => [ramPhysicalObjectTagList];
 }
 
 class $AssetsModelsYoloe26nSegPfGen {
