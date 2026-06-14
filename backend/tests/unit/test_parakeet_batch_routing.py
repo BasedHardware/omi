@@ -31,6 +31,17 @@ sys.modules["nemo.collections.asr"] = _nemo_asr
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../../parakeet"))
 
+import importlib
+
+os.environ["PARAKEET_STREAM_MODEL"] = ""
+if "transcribe" in sys.modules:
+    _existing = sys.modules["transcribe"]
+    if not hasattr(_existing, "__file__") or _existing.__file__ is None:
+        del sys.modules["transcribe"]
+        import transcribe  # noqa: F811
+
+        importlib.reload(transcribe)
+
 
 class TestTranscribeFromGpuResult:
 

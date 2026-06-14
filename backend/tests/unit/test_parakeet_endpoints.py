@@ -33,6 +33,22 @@ sys.modules["nemo.collections.asr"] = _nemo_asr
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../../parakeet"))
 
+import importlib
+
+os.environ["PARAKEET_STREAM_MODEL"] = ""
+if "transcribe" in sys.modules:
+    _existing = sys.modules["transcribe"]
+    if not hasattr(_existing, "__file__") or _existing.__file__ is None:
+        del sys.modules["transcribe"]
+        import transcribe  # noqa: F811
+
+        importlib.reload(transcribe)
+
+if "main" in sys.modules:
+    _existing_main = sys.modules["main"]
+    if not hasattr(_existing_main, "__file__") or _existing_main.__file__ is None:
+        del sys.modules["main"]
+
 from gpu_worker import GPUWorker
 from batch_engine import BatchEngine, QueueFullError
 
