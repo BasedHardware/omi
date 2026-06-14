@@ -3,7 +3,7 @@
 import { app } from 'electron'
 import { existsSync, readFileSync, writeFileSync, rmSync } from 'fs'
 import { join } from 'path'
-import { emptySourceState, recordProcessed, type SourceState } from './syncStateLogic'
+import { emptySourceState, normalizeSourceState, recordProcessed, type SourceState } from './syncStateLogic'
 import type { GoogleSource } from '../../shared/types'
 
 type SyncFile = { gmail: SourceState; calendar: SourceState }
@@ -17,8 +17,8 @@ function read(): SyncFile {
     if (existsSync(file())) {
       const raw = JSON.parse(readFileSync(file(), 'utf8')) as Partial<SyncFile>
       return {
-        gmail: raw.gmail ?? emptySourceState(),
-        calendar: raw.calendar ?? emptySourceState()
+        gmail: normalizeSourceState(raw.gmail),
+        calendar: normalizeSourceState(raw.calendar)
       }
     }
   } catch {
