@@ -35,6 +35,10 @@ sys.modules.pop('utils.stt.pre_recorded', None)
 sys.modules.pop('utils.other.endpoints', None)
 sys.modules.pop('utils.http_client', None)
 
+_endpoints = types.ModuleType('utils.other.endpoints')
+_endpoints.timeit = lambda func: func
+sys.modules['utils.other.endpoints'] = _endpoints
+
 _database_pkg = sys.modules.setdefault('database', types.ModuleType('database'))
 _database_pkg.__path__ = [os.path.join(_BACKEND_DIR, 'database')]
 
@@ -49,6 +53,61 @@ sys.modules['database.redis_db'] = _redis_db
 _database_users = types.ModuleType('database.users')
 _database_users.record_user_platform = MagicMock()
 sys.modules['database.users'] = _database_users
+
+_cachetools = types.ModuleType('cachetools')
+
+
+class _TTLCache(dict):
+    def __init__(self, maxsize, ttl, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.maxsize = maxsize
+        self.ttl = ttl
+
+    def __setitem__(self, key, value):
+        if len(self) >= self.maxsize and key not in self:
+            self.pop(next(iter(self)))
+        super().__setitem__(key, value)
+
+
+_cachetools.TTLCache = _TTLCache
+sys.modules.setdefault('cachetools', _cachetools)
+
+_prometheus_client = types.ModuleType('prometheus_client')
+
+
+class _Registry:
+    def __init__(self):
+        self._names_to_collectors = {}
+
+
+class _Metric:
+    def __init__(self, name, documentation, labelnames=(), **kwargs):
+        self._name = name
+        self._documentation = documentation
+        self._labelnames = labelnames
+        self._kwargs = kwargs
+
+    def labels(self, *args, **kwargs):
+        return self
+
+    def inc(self, amount=1):
+        return None
+
+    def time(self):
+        class _Timer:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, exc_type, exc, tb):
+                return False
+
+        return _Timer()
+
+
+_prometheus_client.Counter = _Metric
+_prometheus_client.Histogram = _Metric
+_prometheus_client.REGISTRY = _Registry()
+sys.modules.setdefault('prometheus_client', _prometheus_client)
 
 _deepgram = types.ModuleType('deepgram')
 _deepgram.DeepgramClient = MagicMock
