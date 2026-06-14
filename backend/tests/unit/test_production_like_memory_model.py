@@ -309,3 +309,62 @@ def test_prodlike_current_voice_route_does_not_retry(monkeypatch):
     error_event = next(event for event in client.trace_events if event["stage"] == "model_call" and event["status"] == "error")
     assert error_event["will_retry"] is False
     assert error_event["max_attempts"] == 1
+
+
+def test_prodlike_voice_recall_route_preserves_non_user_subject(monkeypatch):
+    def fake_extract_memories_with_production_prompt(**kwargs):
+        assert kwargs["route_family"] == "voice_recall_v1"
+        return [
+            ProductionLikeMemory(
+                content="I work on Remux, a Tmux mobile app.",
+                category="system",
+                predicate="works_on",
+                subject_entity_id="ent_speaker_1",
+                subject_attribution="third_party",
+                quote_anchor="work on Remux",
+            )
+        ]
+
+    monkeypatch.setattr(
+        production_like_model,
+        "_extract_memories_with_production_prompt",
+        fake_extract_memories_with_production_prompt,
+    )
+    event = _event("[SPEAKER_1]: I work on Remux, a Tmux mobile app.")
+    pipeline_input = _input(event)
+    pipeline_input.source.source_type = "voice_transcript"
+    client = ProductionLikeMemoryModelClient(source_route_config={"voice_transcript": "voice_recall_v1"})
+
+    output = asyncio.run(CoreMemoryPipeline(model_client=client).run(pipeline_input))
+
+    assert output.event_frames[0].subject.entity_id == "ent_speaker_1"
+    assert output.event_frames[0].subject.entity_type == "person"
+    assert output.event_frames[0].predicate == "works_on"
+
+
+def test_prodlike_current_route_keeps_actor_subject_for_extracted_subject(monkeypatch):
+    def fake_extract_memories_with_production_prompt(**_kwargs):
+        return [
+            ProductionLikeMemory(
+                content="I work on Remux, a Tmux mobile app.",
+                category="system",
+                predicate="works_on",
+                subject_entity_id="ent_speaker_1",
+                subject_attribution="third_party",
+                quote_anchor="work on Remux",
+            )
+        ]
+
+    monkeypatch.setattr(
+        production_like_model,
+        "_extract_memories_with_production_prompt",
+        fake_extract_memories_with_production_prompt,
+    )
+    event = _event("[SPEAKER_1]: I work on Remux, a Tmux mobile app.")
+    pipeline_input = _input(event)
+    pipeline_input.source.source_type = "voice_transcript"
+    client = ProductionLikeMemoryModelClient(source_route_config={"voice_transcript": "current"})
+
+    output = asyncio.run(CoreMemoryPipeline(model_client=client).run(pipeline_input))
+
+    assert output.event_frames[0].subject.entity_id == "benchmark-user"

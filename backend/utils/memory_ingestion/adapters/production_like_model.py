@@ -103,6 +103,15 @@ _PredicateLiteral = Literal[tuple(TYPED_PREDICATES)]  # type: ignore[misc]
 class TypedProductionLikeMemory(ProductionLikeMemory):
     """Typed proposition variant; field descriptions steer the structured output."""
 
+    subject_entity_id: str | None = Field(
+        default=None,
+        description=(
+            "Stable subject id. Use ent_user for facts about the primary user; "
+            "ent_speaker_1/ent_speaker_2 for explicitly speaker-scoped facts; "
+            "or a project/person id such as ent_omi when the fact is about that entity. "
+            "Leave null only when the subject is truly ambiguous."
+        ),
+    )
     predicate: _PredicateLiteral | None = Field(
         default=None,
         description=(
@@ -132,6 +141,33 @@ class TypedProductionLikeMemories(BaseModel):
         description="All memory-worthy facts from the conversation, as typed propositions.",
         max_items=6,
     )
+
+
+class VoiceRecallTypedProductionLikeMemories(BaseModel):
+    facts: list[TypedProductionLikeMemory] = Field(
+        default_factory=list,
+        description=(
+            "All memory-worthy voice facts from the selected claim-dense spans. "
+            "Preserve user, speaker, project, organization, and tool subjects explicitly."
+        ),
+        max_items=10,
+    )
+
+
+_VOICE_RECALL_EXTRA_GUIDANCE = """
+V8 voice_recall_v1 route: selected spans were chosen for claim density. Extract durable facts from task/project/action, money/deadline/progress, team/equity, tooling/security, and biographical spans.
+Subject rules for this route:
+  - Preserve the actual subject instead of forcing every fact onto the primary user.
+  - If the selected input metadata says primary_speaker_user_alias maps_to ent_user, treat that speaker label as the primary user for subject_entity_id purposes.
+  - Use subject_entity_id=ent_user only when the quoted span is about the primary user, an explicit user command/commitment, or the declared primary_speaker_user_alias.
+  - Use subject_entity_id=ent_speaker_1, ent_speaker_2, etc. for facts explicitly about that speaker when no real name is known.
+  - This route intentionally keeps speaker-scoped project/task facts even when the speaker's relationship to the user is unknown; do not output [] solely because a fact is about another speaker's concrete work, PR, tool, project, or commitment.
+  - If a span is entirely about another speaker's concrete project/task, emit it as subject_attribution=third_party with the speaker subject instead of suppressing it.
+  - Use project/entity subjects such as ent_omi when the fact is about a project/company/team rather than a person.
+  - The content sentence may start with that subject/project name instead of {user_name}; do not rewrite non-user/project facts as {user_name} facts.
+  - If the subject is ambiguous, include subject_ambiguous or speaker_uncertain and lower confidence instead of misattributing.
+Useful voice facts include: concrete commitments, PR/merge/project work, tools used for work, bank/security/tool access, startup team/equity/state, travel/fundraising/goals, and family/health context when source-grounded.
+"""
 
 
 class ProductionLikeMemoryModelClient(MemoryModelClient):
@@ -197,7 +233,8 @@ class ProductionLikeMemoryModelClient(MemoryModelClient):
                     **route.model_dump(),
                 })
                 segments = [_to_transcript_segment(event, index) for index, event in enumerate(event_chunk)]
-                retry_attempts = 1 if (pipeline_input.source.source_type == "voice_transcript" and route_family == "voice_recall_v1") else 0
+                is_voice_recall_route = pipeline_input.source.source_type == "voice_transcript" and route_family == "voice_recall_v1"
+                retry_attempts = 1 if is_voice_recall_route else 0
                 memories = _extract_memories_with_production_prompt(
                     segments=segments,
                     user_name=user_name,
@@ -214,6 +251,7 @@ class ProductionLikeMemoryModelClient(MemoryModelClient):
                         "route_family": route_family,
                     },
                     retry_attempts=retry_attempts,
+                    route_family=route_family,
                 )
                 for memory_index, memory in enumerate(memories):
                     if not _has_sufficient_evidence(memory.content, event_chunk, quote_anchor=memory.quote_anchor):
@@ -253,7 +291,7 @@ class ProductionLikeMemoryModelClient(MemoryModelClient):
                     ]
                     frame = MemoryEventFrame(
                         frame_type=_frame_type(memory.category),
-                        subject=_actor_subject(pipeline_input.actor),
+                        subject=_frame_subject(memory, pipeline_input.actor, allow_non_user=is_voice_recall_route),
                         predicate=_resolve_predicate(memory),
                         object=FrameObject(
                             object_type="literal",
@@ -354,6 +392,7 @@ def _extract_memories_with_production_prompt(
     trace_sink: Callable[[dict[str, Any]], None] | None = None,
     trace_context: dict[str, Any] | None = None,
     retry_attempts: int = 0,
+    route_family: str = "current",
 ) -> list[ProductionLikeMemory]:
     trace_context = trace_context or {}
     content = TranscriptSegment.segments_as_string(segments, user_name=user_name, people=[])
@@ -366,8 +405,11 @@ def _extract_memories_with_production_prompt(
             **trace_context,
         })
         return []
+    is_voice_recall_route = source_type == "voice_transcript" and route_family == "voice_recall_v1"
     if typed:
-        parser = PydanticOutputParser(pydantic_object=TypedProductionLikeMemories)
+        parser = PydanticOutputParser(
+            pydantic_object=VoiceRecallTypedProductionLikeMemories if is_voice_recall_route else TypedProductionLikeMemories
+        )
         prompt = typed_extract_memories_prompt
     else:
         parser = PydanticOutputParser(
@@ -380,7 +422,10 @@ def _extract_memories_with_production_prompt(
         "memories_str": memories_str,
         "language_instruction": _language_instruction(language),
         "format_instructions": parser.get_format_instructions(),
-        "source_guidance": render_source_guidance(source_type),  # v4: source-aware
+        "source_guidance": (
+            render_source_guidance(source_type)
+            + ("\n\n" + _VOICE_RECALL_EXTRA_GUIDANCE if is_voice_recall_route else "")
+        ),  # v4: source-aware
     }
     prompt_value = prompt.invoke(prompt_inputs)
     raw_response = None
@@ -1236,6 +1281,38 @@ def _to_transcript_segment(event: RawContextEvent, index: int) -> TranscriptSegm
         person_id=event.speaker.person_id if event.speaker else None,
         start=start,
         end=end,
+    )
+
+
+def _frame_subject(
+    memory: ProductionLikeMemory,
+    actor: ActorDescriptor | None,
+    *,
+    allow_non_user: bool = False,
+):
+    """Resolve frame subject, optionally preserving route-specific non-user subjects."""
+    actor_ref = _actor_subject(actor)
+    if not allow_non_user:
+        return actor_ref
+    raw_subject = (memory.subject_entity_id or "").strip()
+    if not raw_subject:
+        return actor_ref
+    actor_id = (actor.user_id or actor.synthetic_user_id) if actor else "ent_user"
+    if raw_subject in {"user", "ent_user", actor_id}:
+        return actor_ref
+    if not raw_subject.startswith("ent_"):
+        return actor_ref
+    if raw_subject.startswith("ent_speaker_"):
+        canonical_name = raw_subject.replace("ent_", "").replace("_", " ")
+        entity_type = "person"
+    else:
+        canonical_name = raw_subject.replace("ent_", "").replace("_", " ")
+        entity_type = "project" if raw_subject in {"ent_omi", "ent_remux"} else "concept"
+    return EntityRef(
+        entity_id=raw_subject,
+        entity_type=entity_type,
+        canonical_name=canonical_name,
+        confidence="medium",
     )
 
 
