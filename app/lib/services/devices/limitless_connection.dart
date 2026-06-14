@@ -74,9 +74,8 @@ class LimitlessDeviceConnection extends DeviceConnection {
 
   void _attachRxSubscription() {
     _rxSubscription?.cancel();
-    _rxSubscription = transport
-        .getCharacteristicStream(limitlessServiceUuid, limitlessRxCharUuid)
-        .listen(_handleNotification);
+    _rxSubscription =
+        transport.getCharacteristicStream(limitlessServiceUuid, limitlessRxCharUuid).listen(_handleNotification);
   }
 
   Future<void> _handleTransportReconnected() async {
@@ -104,6 +103,14 @@ class LimitlessDeviceConnection extends DeviceConnection {
     } catch (e) {
       Logger.debug('Limitless: Re-initialization after reconnect failed: $e');
     }
+  }
+
+  @override
+  Future<void> onNetworkSocketReconnected() async {
+    // The Limitless pendant stops streaming BLE audio after an extended period
+    // without a live server connection. Re-send the enable-data-stream command
+    // so it resumes, just as _reinitializeAfterReconnect() does after BT reconnect.
+    await _reinitializeAfterReconnect();
   }
 
   @override
@@ -367,10 +374,8 @@ class LimitlessDeviceConnection extends DeviceConnection {
           } else {
             // Audio page that yielded zero frames — genuine parse failure
             final firstBytesLen = flashPageData.length < 64 ? flashPageData.length : 64;
-            final firstBytes = flashPageData
-                .sublist(0, firstBytesLen)
-                .map((b) => b.toRadixString(16).padLeft(2, '0'))
-                .join(' ');
+            final firstBytes =
+                flashPageData.sublist(0, firstBytesLen).map((b) => b.toRadixString(16).padLeft(2, '0')).join(' ');
             DebugLogManager.logWarning('Limitless flash page yielded zero Opus frames', {
               'index': index,
               'session': session,
@@ -1771,7 +1776,8 @@ class LimitlessDeviceConnection extends DeviceConnection {
   @override
   Future<StreamSubscription?> performGetBleStorageBytesListener({
     required void Function(List<int>) onStorageBytesReceived,
-  }) async => null;
+  }) async =>
+      null;
 
   @override
   Future performCameraStartPhotoController() async {}
@@ -1785,7 +1791,8 @@ class LimitlessDeviceConnection extends DeviceConnection {
   @override
   Future<StreamSubscription?> performGetImageListener({
     required void Function(OrientedImage orientedImage) onImageReceived,
-  }) async => null;
+  }) async =>
+      null;
 
   @override
   Future<StreamSubscription<List<int>>?> performGetAccelListener({void Function(int)? onAccelChange}) async => null;
