@@ -166,8 +166,15 @@ class GPUWorker:
             torch.set_float32_matmul_precision('high')
         logger.info("Torch optimizations: cudnn.benchmark=True, matmul_precision=high")
 
+        use_bf16 = (
+            os.getenv("PARAKEET_BF16", "1") == "1" and torch.cuda.is_available() and torch.cuda.is_bf16_supported()
+        )
+
         logger.info(f"Loading batch model: {model_name}")
         model = nemo_asr.models.ASRModel.from_pretrained(model_name, map_location=device)
+        if use_bf16:
+            logger.info(f"Converting {model_name} to BF16 (halves GPU memory)")
+            model = model.to(torch.bfloat16)
         model.eval()
 
         if disable_cuda_graphs:
