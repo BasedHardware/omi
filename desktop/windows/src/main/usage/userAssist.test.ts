@@ -10,9 +10,9 @@ function blob(opts: {
   len?: number
 }): Buffer {
   const b = Buffer.alloc(opts.len ?? 72)
-  if (b.length >= 8) b.writeInt32LE(opts.runCount ?? 0, 4)
-  if (b.length >= 12) b.writeInt32LE(opts.focusCount ?? 0, 8)
-  if (b.length >= 16) b.writeInt32LE(opts.focusMs ?? 0, 12)
+  if (b.length >= 8) b.writeUInt32LE(opts.runCount ?? 0, 4)
+  if (b.length >= 12) b.writeUInt32LE(opts.focusCount ?? 0, 8)
+  if (b.length >= 16) b.writeUInt32LE(opts.focusMs ?? 0, 12)
   if (b.length >= 68 && opts.lastUsedMs != null) {
     // ms epoch -> Windows FILETIME (100ns ticks since 1601-01-01)
     const ticks = (BigInt(opts.lastUsedMs) + 11644473600000n) * 10000n
@@ -38,6 +38,15 @@ describe('parseUserAssistData', () => {
     expect(p!.runCount).toBe(22)
     expect(p!.focusCount).toBe(757)
     expect(p!.focusSeconds).toBe(43_147) // rounded
+  })
+  it('reads high-bit DWORD counters as unsigned values', () => {
+    const p = parseUserAssistData(
+      blob({ runCount: 3_000_000_000, focusCount: 4_000_000_000, focusMs: 3_000_000_000 })
+    )
+    expect(p).not.toBeNull()
+    expect(p!.runCount).toBe(3_000_000_000)
+    expect(p!.focusCount).toBe(4_000_000_000)
+    expect(p!.focusSeconds).toBe(3_000_000)
   })
   it('reads last-used from the FILETIME at offset 60', () => {
     const when = Date.UTC(2026, 5, 3, 12, 0, 0)
