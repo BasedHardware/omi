@@ -20,6 +20,7 @@ Mapping to real-world clients:
 
 from __future__ import annotations
 
+import importlib.util
 import os
 import sys
 import types
@@ -40,8 +41,34 @@ os.environ.setdefault("BASE_API_URL", "http://localhost:8080")
 # Pre-mock heavy deps before importing the module under test (Python 3.9 compat —
 # database.redis_db uses dict | None syntax that requires 3.10+).
 _mock = MagicMock()
-for mod in ['firebase_admin.auth', 'database.redis_db', 'utils.http_client', 'utils.log_sanitizer']:
+for mod in ['firebase_admin.auth', 'database.redis_db', 'utils.http_client', 'utils.log_sanitizer', 'jwt']:
     sys.modules.setdefault(mod, _mock)
+
+_redis_db_mod = sys.modules['database.redis_db']
+for name in ['set_auth_session', 'get_auth_session', 'set_auth_code', 'get_auth_code', 'delete_auth_code']:
+    if not hasattr(_redis_db_mod, name):
+        setattr(_redis_db_mod, name, MagicMock())
+
+_firebase_admin_mod = types.ModuleType('firebase_admin')
+_firebase_admin_mod.auth = sys.modules['firebase_admin.auth']
+sys.modules.setdefault('firebase_admin', _firebase_admin_mod)
+
+_jwt_algorithms_mod = types.ModuleType('jwt.algorithms')
+_jwt_algorithms_mod.RSAAlgorithm = MagicMock()
+sys.modules.setdefault('jwt.algorithms', _jwt_algorithms_mod)
+
+
+def _install_python_multipart_stub():
+    if 'python_multipart' in sys.modules:
+        return False
+    if importlib.util.find_spec('python_multipart') is not None:
+        return False
+
+    mod = types.ModuleType('python_multipart')
+    mod.__version__ = '0.0.20'
+    sys.modules['python_multipart'] = mod
+    return True
+
 
 try:
     import jinja2  # noqa: F401
@@ -56,7 +83,16 @@ _BACKEND_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..
 if _BACKEND_DIR not in sys.path:
     sys.path.insert(0, _BACKEND_DIR)
 
-from routers.auth import _validate_redirect_uri  # noqa: E402
+_utils_pkg = sys.modules.get('utils')
+if _utils_pkg is not None:
+    _utils_pkg.__path__ = [os.path.join(_BACKEND_DIR, 'utils')]
+
+_remove_python_multipart_stub = _install_python_multipart_stub()
+try:
+    from routers.auth import _validate_redirect_uri  # noqa: E402
+finally:
+    if _remove_python_multipart_stub:
+        sys.modules.pop('python_multipart', None)
 
 # ---------------------------------------------------------------------------
 # Acceptance — every shape an existing Omi client uses
