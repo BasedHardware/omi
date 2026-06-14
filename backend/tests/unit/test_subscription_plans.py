@@ -12,7 +12,6 @@ sys.modules.setdefault("database.user_usage", types.SimpleNamespace())
 
 from models.users import PlanType
 
-
 _MISSING = object()
 
 
