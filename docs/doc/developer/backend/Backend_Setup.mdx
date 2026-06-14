@@ -143,7 +143,7 @@ New to backend development? Install [Homebrew](https://docs.brew.sh/Installation
       </Tab>
       <Tab title="Windows">
         ```powershell
-        copy %APPDATA%\gcloud\application_default_credentials.json google-credentials.json
+        Copy-Item "$env:APPDATA\gcloud\application_default_credentials.json" .\google-credentials.json
         ```
       </Tab>
     </Tabs>
@@ -242,15 +242,20 @@ OAuth is required for user authentication. You need to configure both Google and
     ```
   </Step>
   <Step title="Install System Dependencies" icon="box">
+    The backend Docker images run Python 3.11, so use Python 3.11 locally as well. If your package manager installs a newer default Python, install or select Python 3.11 before creating the virtual environment.
+
     <Tabs>
       <Tab title="macOS">
         ```bash
-        brew install python git ffmpeg opus
+        brew install python@3.11 git ffmpeg opus
         ```
       </Tab>
       <Tab title="Windows">
+        Install Python 3.11 from [python.org](https://www.python.org/downloads/windows/), then install the remaining system tools:
+
         ```powershell
-        choco install python git.install ffmpeg
+        choco install git.install ffmpeg
+        python --version  # should print 3.11.x
         ```
         <Note>Opus is included in Windows 10 version 1903 and above.</Note>
       </Tab>
@@ -265,7 +270,8 @@ OAuth is required for user authentication. You need to configure both Google and
     </Tip>
 
     ```bash
-    # Create virtual environment (use Python 3.9-3.12)
+    # Create virtual environment with Python 3.11
+    python --version
     python -m venv venv
     ```
 
@@ -427,7 +433,7 @@ OAuth is required for user authentication. You need to configure both Google and
   </Accordion>
   <Accordion title="Virtual environment not activating" icon="terminal">
     - On Windows, you may need to enable script execution: `Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser`
-    - Make sure you're using Python 3.9-3.12
+    - Make sure you're using Python 3.11
   </Accordion>
 </AccordionGroup>
 
