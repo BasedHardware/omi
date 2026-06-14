@@ -105,6 +105,17 @@ def _restore_stub_modules():
 
 
 _install_module("database._client", MagicMock())
+_conversations_mod = ModuleType("database.conversations")
+_conversations_mod.get_conversation = MagicMock(return_value=None)
+_install_module("database.conversations", _conversations_mod)
+
+_users_mod = ModuleType("database.users")
+_users_mod.get_person = MagicMock(return_value=None)
+_users_mod.get_person_speech_samples_count = MagicMock(return_value=0)
+_users_mod.add_person_speech_sample = MagicMock(return_value=True)
+_users_mod.set_person_speaker_embedding = MagicMock(return_value=None)
+_install_module("database.users", _users_mod)
+
 _install_module("av", MagicMock())
 
 _storage_mod = ModuleType("utils.other.storage")
