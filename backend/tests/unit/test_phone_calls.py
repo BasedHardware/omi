@@ -1,9 +1,75 @@
 import os
 import sys
+from pathlib import Path
 from types import ModuleType, SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 os.environ.setdefault("ENCRYPTION_SECRET", "omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv")
+
+BACKEND_DIR = Path(__file__).resolve().parents[2]
+
+
+def _ensure_package(name, path):
+    module = sys.modules.get(name)
+    if not isinstance(module, ModuleType):
+        module = ModuleType(name)
+        sys.modules[name] = module
+    module.__path__ = [str(path)]
+
+    if "." in name:
+        parent_name, attr_name = name.rsplit(".", 1)
+        parent = sys.modules.get(parent_name)
+        if parent is not None:
+            setattr(parent, attr_name, module)
+
+    return module
+
+
+def _install_module(name):
+    module = ModuleType(name)
+    sys.modules[name] = module
+    parent_name, _, attr_name = name.rpartition(".")
+    parent = sys.modules.get(parent_name)
+    if parent is not None:
+        setattr(parent, attr_name, module)
+    return module
+
+
+_ensure_package("database", BACKEND_DIR / "database")
+_ensure_package("utils", BACKEND_DIR / "utils")
+_ensure_package("utils.other", BACKEND_DIR / "utils" / "other")
+
+_install_module("database.phone_calls")
+_install_module("database.phone_call_usage")
+
+_phone_utils = _install_module("utils.phone_calls")
+_phone_utils.check_call_access = MagicMock()
+_phone_utils.check_destination_allowed = MagicMock()
+_phone_utils.get_quota_snapshot = MagicMock()
+
+_endpoints = _install_module("utils.other.endpoints")
+_endpoints.get_current_user_uid = lambda: "test-uid-123"
+
+
+def _rate_limit_dependency(**_kwargs):
+    def _dependency():
+        return None
+
+    return _dependency
+
+
+_endpoints.rate_limit_dependency = _rate_limit_dependency
+
+_twilio_service = _install_module("utils.twilio_service")
+for _attr in [
+    "generate_access_token",
+    "start_caller_id_verification",
+    "check_caller_id_verified",
+    "delete_caller_id",
+    "get_caller_id",
+    "validate_twilio_signature",
+]:
+    setattr(_twilio_service, _attr, MagicMock())
 
 # Mock modules that initialize GCP/Firebase clients at import time
 _mock_firebase = MagicMock()
