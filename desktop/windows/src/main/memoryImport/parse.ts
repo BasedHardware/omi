@@ -20,9 +20,10 @@ const SCAFFOLDING = [
   /^i (?:currently )?(?:remember|have stored|don'?t have)\b.*(?:memor|the following|about you)/i
 ]
 
-// Remove a single leading list marker: -, *, •, –, or "1." / "1)".
+// Remove a single leading list marker: -, *, common bullet/dash markers,
+// or "1." / "1)".
 function stripMarker(line: string): string {
-  return line.replace(/^\s*(?:[-*•–]\s+|\d+[.)]\s+)/, '')
+  return line.replace(/^\s*(?:[-*\u2022\u2013\u2014\u2023\u2043]\s+|\d+[.)]\s+)/, '')
 }
 
 // Strip surrounding markdown emphasis / heading syntax.
@@ -34,10 +35,15 @@ function stripFormatting(s: string): string {
   return t.trim()
 }
 
+function isMarkdownFence(line: string): boolean {
+  return /^\s*(?:```|~~~)/.test(line)
+}
+
 export function parseMemoryDump(dump: string): string[] {
   const out: string[] = []
   const seen = new Set<string>()
   for (const raw of dump.split(/\r?\n/)) {
+    if (isMarkdownFence(raw)) continue
     const stripped = stripFormatting(stripMarker(raw))
     if (stripped.length < 3) continue // blank lines, stray numbering/punctuation
     if (SCAFFOLDING.some((re) => re.test(stripped))) continue
