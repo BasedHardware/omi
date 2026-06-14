@@ -9456,4 +9456,71 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get objectAnnouncementsAdaptiveThrottlingSubtitle => 'Slow detection when inference gets heavy.';
+
+  @override
+  String get objectAnnouncementsDetectTab => 'Detect';
+
+  @override
+  String get objectAnnouncementsDeviceName => 'Omi Glass';
+
+  @override
+  String get objectAnnouncementsConnectDeviceSubtitle => 'Connect Omi Glass to start local object announcements.';
+
+  @override
+  String get objectAnnouncementsReconnectDeviceSubtitle => 'Tap to reconnect Omi Glass.';
+
+  @override
+  String get objectAnnouncementsDeviceFrameSubtitle => 'Receiving camera frames when available.';
+
+  @override
+  String get objectAnnouncementsOffSubtitle => 'Off. Detection frames will not be announced.';
+
+  @override
+  String get objectAnnouncementsDetectingLocally => 'Detecting objects locally…';
+
+  @override
+  String get objectAnnouncementsFrameQueued => 'New frame queued. Keeping the freshest image only.';
+
+  @override
+  String objectAnnouncementsDetectionCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 's',
+      one: '',
+    );
+    return 'Detected $count object$_temp0.';
+  }
+
+  @override
+  String get objectAnnouncementsNoNewObjects => 'No new objects to announce yet.';
+
+  @override
+  String objectAnnouncementsSpeakingNow(String phrase) {
+    return 'Speaking now: $phrase';
+  }
+
+  @override
+  String get objectAnnouncementsLatestDetectionsTitle => 'Latest detections';
+
+  @override
+  String get objectAnnouncementsNoDetections => 'No objects detected yet. Connect Omi Glass and keep announcements on.';
+
+  @override
+  String get objectAnnouncementsSpokenStatus => 'spoken';
+
+  @override
+  String get objectAnnouncementsHandAnchorStatus => 'hand anchor';
+
+  @override
+  String get objectAnnouncementsSeenStatus => 'seen';
+
+  @override
+  String get objectAnnouncementsFramesMetric => 'Frames';
+
+  @override
+  String get objectAnnouncementsDroppedMetric => 'Dropped';
+
+  @override
+  String get objectAnnouncementsLatencyMetric => 'Latency';
 }

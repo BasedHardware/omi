@@ -11,7 +11,7 @@ import 'package:omi/pages/settings/object_announcements_settings_page.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/services/local_vision/local_vision_service.dart';
 import 'package:omi/services/local_vision/object_announcement_service.dart';
-import 'package:omi/utils/device.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 
 class HomeContentPage extends StatefulWidget {
   const HomeContentPage({super.key});
@@ -72,9 +72,10 @@ class HomeContentPageState extends State<HomeContentPage> with AutomaticKeepAliv
             physics: const AlwaysScrollableScrollPhysics(),
             padding: const EdgeInsets.fromLTRB(20, 8, 20, 32),
             children: [
-              _buildHero(),
+              _buildHero(context),
               const SizedBox(height: 18),
-              Consumer<DeviceProvider>(builder: (context, deviceProvider, _) => _buildDeviceCard(context, deviceProvider)),
+              Consumer<DeviceProvider>(
+                  builder: (context, deviceProvider, _) => _buildDeviceCard(context, deviceProvider)),
               const SizedBox(height: 14),
               _buildAnnouncementControlCard(),
               const SizedBox(height: 14),
@@ -90,7 +91,7 @@ class HomeContentPageState extends State<HomeContentPage> with AutomaticKeepAliv
     );
   }
 
-  Widget _buildHero() {
+  Widget _buildHero(BuildContext context) {
     return Container(
       padding: const EdgeInsets.all(22),
       decoration: BoxDecoration(
@@ -107,20 +108,21 @@ class HomeContentPageState extends State<HomeContentPage> with AutomaticKeepAliv
         children: [
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-            decoration: BoxDecoration(color: const Color(0xFF22C55E).withValues(alpha: 0.16), borderRadius: BorderRadius.circular(99)),
-            child: const Text(
-              'Detect & say out loud',
-              style: TextStyle(color: Color(0xFF86EFAC), fontSize: 12, fontWeight: FontWeight.w700),
+            decoration: BoxDecoration(
+                color: const Color(0xFF22C55E).withValues(alpha: 0.16), borderRadius: BorderRadius.circular(99)),
+            child: Text(
+              context.l10n.objectAnnouncementsSettingsTitle,
+              style: const TextStyle(color: Color(0xFF86EFAC), fontSize: 12, fontWeight: FontWeight.w700),
             ),
           ),
           const SizedBox(height: 16),
-          const Text(
-            'Hear what your glasses see.',
-            style: TextStyle(color: Colors.white, fontSize: 30, fontWeight: FontWeight.w800, height: 1.05),
+          Text(
+            context.l10n.objectAnnouncementsSettingsSubtitle,
+            style: const TextStyle(color: Colors.white, fontSize: 30, fontWeight: FontWeight.w800, height: 1.05),
           ),
           const SizedBox(height: 10),
           Text(
-            'Omi Glass detects objects locally on this phone and speaks new things out loud.',
+            context.l10n.objectAnnouncementsPrivacyCopy,
             style: TextStyle(color: Colors.grey.shade300, fontSize: 15, height: 1.35),
           ),
         ],
@@ -133,31 +135,31 @@ class HomeContentPageState extends State<HomeContentPage> with AutomaticKeepAliv
     final pairedDevice = provider.pairedDevice;
     final hasDevice = connectedDevice != null || pairedDevice != null;
     final status = connectedDevice != null
-        ? 'Connected'
+        ? context.l10n.connected
         : provider.isConnecting
-            ? 'Connecting…'
+            ? context.l10n.searching
             : pairedDevice != null
-                ? 'Disconnected'
-                : 'No glasses connected';
+                ? context.l10n.disconnected
+                : context.l10n.deviceNotConnected;
     final subtitle = connectedDevice != null
         ? _deviceSubtitle(connectedDevice, provider.batteryLevel, provider.isCharging)
         : pairedDevice != null
-            ? 'Tap to reconnect ${pairedDevice.name.isEmpty ? 'Omi Glass' : pairedDevice.name}.'
-            : 'Connect Omi Glass to start local object announcements.';
+            ? context.l10n.objectAnnouncementsReconnectDeviceSubtitle
+            : context.l10n.objectAnnouncementsConnectDeviceSubtitle;
 
     return _card(
       child: Column(
         children: [
           _statusRow(
             icon: FontAwesomeIcons.glasses,
-            title: 'Omi Glass',
+            title: context.l10n.objectAnnouncementsDeviceName,
             subtitle: subtitle,
             status: status,
             statusColor: connectedDevice != null ? const Color(0xFF22C55E) : Colors.orangeAccent,
           ),
           const SizedBox(height: 16),
           _fullWidthButton(
-            label: hasDevice ? 'Device details' : 'Connect glasses',
+            label: hasDevice ? context.l10n.deviceSettings : context.l10n.connectDevice,
             icon: hasDevice ? Icons.settings_bluetooth_rounded : Icons.bluetooth_searching_rounded,
             color: const Color(0xFF27272A),
             onTap: () {
@@ -174,9 +176,9 @@ class HomeContentPageState extends State<HomeContentPage> with AutomaticKeepAliv
   }
 
   String _deviceSubtitle(BtDevice device, int batteryLevel, bool isCharging) {
-    final name = device.name.isEmpty ? DeviceUtils.getDeviceName(device.type) : device.name;
-    final battery = batteryLevel > 0 ? ' · ${isCharging ? 'Charging ' : ''}$batteryLevel%' : '';
-    return '$name$battery · receiving camera frames when available';
+    final name = device.name.isEmpty ? context.l10n.objectAnnouncementsDeviceName : device.name;
+    final battery = batteryLevel > 0 ? ' · ${isCharging ? '${context.l10n.charging} ' : ''}$batteryLevel%' : '';
+    return '$name$battery · ${context.l10n.objectAnnouncementsDeviceFrameSubtitle}';
   }
 
   Widget _buildAnnouncementControlCard() {
@@ -191,9 +193,9 @@ class HomeContentPageState extends State<HomeContentPage> with AutomaticKeepAliv
               Expanded(
                 child: _statusRow(
                   icon: FontAwesomeIcons.eye,
-                  title: 'Object announcements',
-                  subtitle: enabled ? _visionStatusText(vision) : 'Off. Detection frames will not be announced.',
-                  status: enabled ? 'ON' : 'OFF',
+                  title: context.l10n.objectAnnouncementsSettingsTitle,
+                  subtitle: enabled ? _visionStatusText(vision) : context.l10n.objectAnnouncementsOffSubtitle,
+                  status: enabled ? context.l10n.on.toUpperCase() : context.l10n.off.toUpperCase(),
                   statusColor: enabled ? const Color(0xFF22C55E) : Colors.grey,
                 ),
               ),
@@ -205,7 +207,7 @@ class HomeContentPageState extends State<HomeContentPage> with AutomaticKeepAliv
             children: [
               Expanded(
                 child: _modeChip(
-                  title: 'All new objects',
+                  title: context.l10n.objectAnnouncementsAllObjectsModeTitle,
                   selected: _currentMode == AnnouncementMode.allObjects,
                   onTap: enabled ? () => _setMode(AnnouncementMode.allObjects) : null,
                 ),
@@ -213,7 +215,7 @@ class HomeContentPageState extends State<HomeContentPage> with AutomaticKeepAliv
               const SizedBox(width: 10),
               Expanded(
                 child: _modeChip(
-                  title: 'In my hand',
+                  title: context.l10n.objectAnnouncementsHeldObjectsModeTitle,
                   selected: _currentMode == AnnouncementMode.heldObjectsOnly,
                   onTap: enabled ? () => _setMode(AnnouncementMode.heldObjectsOnly) : null,
                 ),
@@ -229,11 +231,11 @@ class HomeContentPageState extends State<HomeContentPage> with AutomaticKeepAliv
 
   String _visionStatusText(LocalVisionService vision) {
     return switch (vision.status) {
-      LocalVisionInferenceStatus.idle => 'Ready. Waiting for Omi Glass images.',
-      LocalVisionInferenceStatus.queued => 'New frame queued. Keeping the freshest image only.',
-      LocalVisionInferenceStatus.running => 'Detecting objects locally…',
-      LocalVisionInferenceStatus.completed => 'Detected ${vision.detectionCount} object${vision.detectionCount == 1 ? '' : 's'}.',
-      LocalVisionInferenceStatus.failed => 'Needs attention: ${vision.lastError ?? 'local detector unavailable'}',
+      LocalVisionInferenceStatus.idle => context.l10n.objectAnnouncementsMainToggleSubtitle,
+      LocalVisionInferenceStatus.queued => context.l10n.objectAnnouncementsFrameQueued,
+      LocalVisionInferenceStatus.running => context.l10n.objectAnnouncementsDetectingLocally,
+      LocalVisionInferenceStatus.completed => context.l10n.objectAnnouncementsDetectionCount(vision.detectionCount),
+      LocalVisionInferenceStatus.failed => '${context.l10n.somethingWentWrong}: ${vision.lastError ?? ''}',
     };
   }
 
@@ -241,9 +243,11 @@ class HomeContentPageState extends State<HomeContentPage> with AutomaticKeepAliv
     final voiceEnabled = _prefs.localYoloeVoiceEnabled;
     final announcementService = ObjectAnnouncementService.instance;
     final candidates = LocalVisionService.instance.announcementCandidates;
-    final lastPhrase = candidates.isEmpty
-        ? 'No new objects to announce yet.'
+    final lastSpokenText = announcementService.lastSpokenText;
+    final candidatePhrase = candidates.isEmpty
+        ? null
         : announcementService.formatObjectsMessage(candidates.map((candidate) => candidate.detection.label).toList());
+    final phrase = lastSpokenText ?? candidatePhrase ?? context.l10n.objectAnnouncementsNoNewObjects;
 
     return _card(
       child: Column(
@@ -254,9 +258,10 @@ class HomeContentPageState extends State<HomeContentPage> with AutomaticKeepAliv
               Expanded(
                 child: _statusRow(
                   icon: voiceEnabled ? FontAwesomeIcons.volumeHigh : FontAwesomeIcons.volumeXmark,
-                  title: 'Speech',
-                  subtitle: announcementService.isSpeaking ? 'Speaking now: $lastPhrase' : lastPhrase,
-                  status: voiceEnabled ? 'READY' : 'MUTED',
+                  title: context.l10n.objectAnnouncementsVoiceTitle,
+                  subtitle:
+                      announcementService.isSpeaking ? context.l10n.objectAnnouncementsSpeakingNow(phrase) : phrase,
+                  status: voiceEnabled ? context.l10n.on.toUpperCase() : context.l10n.muted.toUpperCase(),
                   statusColor: voiceEnabled ? const Color(0xFF22C55E) : Colors.grey,
                 ),
               ),
@@ -268,16 +273,19 @@ class HomeContentPageState extends State<HomeContentPage> with AutomaticKeepAliv
             children: [
               Expanded(
                 child: _fullWidthButton(
-                  label: 'Test voice',
+                  label: context.l10n.objectAnnouncementsTestVoiceButton,
                   icon: Icons.play_arrow_rounded,
                   color: const Color(0xFF16A34A),
-                  onTap: () => ObjectAnnouncementService.instance.speak('Local object announcements are working.', force: true),
+                  onTap: () => ObjectAnnouncementService.instance.speak(
+                    context.l10n.objectAnnouncementsTestVoiceMessage,
+                    force: true,
+                  ),
                 ),
               ),
               const SizedBox(width: 10),
               Expanded(
                 child: _fullWidthButton(
-                  label: 'Stop speaking',
+                  label: context.l10n.stop,
                   icon: Icons.stop_rounded,
                   color: const Color(0xFF27272A),
                   onTap: ObjectAnnouncementService.instance.stop,
@@ -301,17 +309,21 @@ class HomeContentPageState extends State<HomeContentPage> with AutomaticKeepAliv
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text('Latest detections', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w700)),
+              Text(
+                context.l10n.objectAnnouncementsLatestDetectionsTitle,
+                style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w700),
+              ),
               TextButton(
-                onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ObjectAnnouncementsSettingsPage())),
-                child: const Text('Settings', style: TextStyle(color: Color(0xFF86EFAC))),
+                onPressed: () =>
+                    Navigator.push(context, MaterialPageRoute(builder: (_) => const ObjectAnnouncementsSettingsPage())),
+                child: Text(context.l10n.settings, style: const TextStyle(color: Color(0xFF86EFAC))),
               ),
             ],
           ),
           const SizedBox(height: 4),
           if (detections.isEmpty)
             Text(
-              'No objects detected yet. Connect Omi Glass and keep announcements on.',
+              context.l10n.objectAnnouncementsNoDetections,
               style: TextStyle(color: Colors.grey.shade400, fontSize: 14, height: 1.35),
             )
           else
@@ -325,20 +337,23 @@ class HomeContentPageState extends State<HomeContentPage> with AutomaticKeepAliv
 
   Widget _detectionRow(Detection detection) {
     final detail = detection.wouldAnnounce
-        ? 'spoken'
+        ? context.l10n.objectAnnouncementsSpokenStatus
         : detection.isHand
-            ? 'hand anchor'
-            : 'seen';
+            ? context.l10n.objectAnnouncementsHandAnchorStatus
+            : context.l10n.objectAnnouncementsSeenStatus;
     return Padding(
       padding: const EdgeInsets.only(top: 10),
       child: Row(
         children: [
-          Container(width: 8, height: 8, decoration: const BoxDecoration(color: Color(0xFF22C55E), shape: BoxShape.circle)),
+          Container(
+              width: 8, height: 8, decoration: const BoxDecoration(color: Color(0xFF22C55E), shape: BoxShape.circle)),
           const SizedBox(width: 10),
           Expanded(
-            child: Text(detection.label, style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w600)),
+            child: Text(detection.label,
+                style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w600)),
           ),
-          Text('${(detection.confidence * 100).round()}% · $detail', style: TextStyle(color: Colors.grey.shade400, fontSize: 13)),
+          Text('${(detection.confidence * 100).round()}% · $detail',
+              style: TextStyle(color: Colors.grey.shade400, fontSize: 13)),
         ],
       ),
     );
@@ -350,9 +365,19 @@ class HomeContentPageState extends State<HomeContentPage> with AutomaticKeepAliv
       decoration: BoxDecoration(color: const Color(0xFF111113), borderRadius: BorderRadius.circular(14)),
       child: Row(
         children: [
-          Expanded(child: _metric('Frames', '${vision.processedFrameCount}/${vision.receivedFrameCount}')),
-          Expanded(child: _metric('Dropped', '${vision.droppedFrameCount}')),
-          Expanded(child: _metric('Latency', '${vision.latestLatency.pipelineTotalMs?.toStringAsFixed(0) ?? '—'}ms')),
+          Expanded(
+            child: _metric(
+              context.l10n.objectAnnouncementsFramesMetric,
+              '${vision.processedFrameCount}/${vision.receivedFrameCount}',
+            ),
+          ),
+          Expanded(child: _metric(context.l10n.objectAnnouncementsDroppedMetric, '${vision.droppedFrameCount}')),
+          Expanded(
+            child: _metric(
+              context.l10n.objectAnnouncementsLatencyMetric,
+              '${vision.latestLatency.pipelineTotalMs?.toStringAsFixed(0) ?? '—'}ms',
+            ),
+          ),
         ],
       ),
     );
@@ -384,7 +409,7 @@ class HomeContentPageState extends State<HomeContentPage> with AutomaticKeepAliv
           const SizedBox(width: 12),
           Expanded(
             child: Text(
-              'Local mode processes images on this phone. Backend image upload and Omi vision LLM calls are skipped for object announcements.',
+              context.l10n.objectAnnouncementsPrivacyCopy,
               style: TextStyle(color: Colors.grey.shade200, fontSize: 13, height: 1.35),
             ),
           ),
@@ -428,11 +453,15 @@ class HomeContentPageState extends State<HomeContentPage> with AutomaticKeepAliv
             children: [
               Row(
                 children: [
-                  Expanded(child: Text(title, style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w700))),
+                  Expanded(
+                      child: Text(title,
+                          style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w700))),
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    decoration: BoxDecoration(color: statusColor.withValues(alpha: 0.14), borderRadius: BorderRadius.circular(99)),
-                    child: Text(status, style: TextStyle(color: statusColor, fontSize: 11, fontWeight: FontWeight.w800)),
+                    decoration: BoxDecoration(
+                        color: statusColor.withValues(alpha: 0.14), borderRadius: BorderRadius.circular(99)),
+                    child:
+                        Text(status, style: TextStyle(color: statusColor, fontSize: 11, fontWeight: FontWeight.w800)),
                   ),
                 ],
               ),
@@ -457,13 +486,16 @@ class HomeContentPageState extends State<HomeContentPage> with AutomaticKeepAliv
             borderRadius: BorderRadius.circular(14),
             border: Border.all(color: selected ? const Color(0xFF22C55E) : const Color(0xFF2A2A2E)),
           ),
-          child: Center(child: Text(title, style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w700))),
+          child: Center(
+              child:
+                  Text(title, style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w700))),
         ),
       ),
     );
   }
 
-  Widget _fullWidthButton({required String label, required IconData icon, required Color color, required VoidCallback onTap}) {
+  Widget _fullWidthButton(
+      {required String label, required IconData icon, required Color color, required VoidCallback onTap}) {
     return GestureDetector(
       onTap: onTap,
       child: Container(

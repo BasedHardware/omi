@@ -17480,6 +17480,120 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Slow detection when inference gets heavy.'**
   String get objectAnnouncementsAdaptiveThrottlingSubtitle;
+
+  /// Bottom navigation label for local object detection
+  ///
+  /// In en, this message translates to:
+  /// **'Detect'**
+  String get objectAnnouncementsDetectTab;
+
+  /// Device name shown on the local object detection dashboard
+  ///
+  /// In en, this message translates to:
+  /// **'Omi Glass'**
+  String get objectAnnouncementsDeviceName;
+
+  /// Detect dashboard empty device state
+  ///
+  /// In en, this message translates to:
+  /// **'Connect Omi Glass to start local object announcements.'**
+  String get objectAnnouncementsConnectDeviceSubtitle;
+
+  /// Detect dashboard disconnected device state
+  ///
+  /// In en, this message translates to:
+  /// **'Tap to reconnect Omi Glass.'**
+  String get objectAnnouncementsReconnectDeviceSubtitle;
+
+  /// Detect dashboard connected device frame status
+  ///
+  /// In en, this message translates to:
+  /// **'Receiving camera frames when available.'**
+  String get objectAnnouncementsDeviceFrameSubtitle;
+
+  /// Detect dashboard announcement disabled state
+  ///
+  /// In en, this message translates to:
+  /// **'Off. Detection frames will not be announced.'**
+  String get objectAnnouncementsOffSubtitle;
+
+  /// Detect dashboard inference running state
+  ///
+  /// In en, this message translates to:
+  /// **'Detecting objects locally…'**
+  String get objectAnnouncementsDetectingLocally;
+
+  /// Detect dashboard inference queued state
+  ///
+  /// In en, this message translates to:
+  /// **'New frame queued. Keeping the freshest image only.'**
+  String get objectAnnouncementsFrameQueued;
+
+  /// Detect dashboard detection count status
+  ///
+  /// In en, this message translates to:
+  /// **'Detected {count} object{count, plural, =1{} other{s}}.'**
+  String objectAnnouncementsDetectionCount(int count);
+
+  /// Detect dashboard no speech state
+  ///
+  /// In en, this message translates to:
+  /// **'No new objects to announce yet.'**
+  String get objectAnnouncementsNoNewObjects;
+
+  /// Detect dashboard currently speaking state
+  ///
+  /// In en, this message translates to:
+  /// **'Speaking now: {phrase}'**
+  String objectAnnouncementsSpeakingNow(String phrase);
+
+  /// Detect dashboard latest detections card title
+  ///
+  /// In en, this message translates to:
+  /// **'Latest detections'**
+  String get objectAnnouncementsLatestDetectionsTitle;
+
+  /// Detect dashboard empty detections state
+  ///
+  /// In en, this message translates to:
+  /// **'No objects detected yet. Connect Omi Glass and keep announcements on.'**
+  String get objectAnnouncementsNoDetections;
+
+  /// Detect dashboard detection row status
+  ///
+  /// In en, this message translates to:
+  /// **'spoken'**
+  String get objectAnnouncementsSpokenStatus;
+
+  /// Detect dashboard detection row status for hand detections
+  ///
+  /// In en, this message translates to:
+  /// **'hand anchor'**
+  String get objectAnnouncementsHandAnchorStatus;
+
+  /// Detect dashboard detection row status
+  ///
+  /// In en, this message translates to:
+  /// **'seen'**
+  String get objectAnnouncementsSeenStatus;
+
+  /// Detect dashboard processed/received frame metric label
+  ///
+  /// In en, this message translates to:
+  /// **'Frames'**
+  String get objectAnnouncementsFramesMetric;
+
+  /// Detect dashboard dropped frame metric label
+  ///
+  /// In en, this message translates to:
+  /// **'Dropped'**
+  String get objectAnnouncementsDroppedMetric;
+
+  /// Detect dashboard latency metric label
+  ///
+  /// In en, this message translates to:
+  /// **'Latency'**
+  String get objectAnnouncementsLatencyMetric;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

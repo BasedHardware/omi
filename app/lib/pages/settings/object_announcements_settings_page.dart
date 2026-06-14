@@ -4,6 +4,7 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/services/local_vision/local_vision_service.dart';
 import 'package:omi/services/local_vision/object_announcement_service.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 
 class ObjectAnnouncementsSettingsPage extends StatefulWidget {
   const ObjectAnnouncementsSettingsPage({super.key, this.showBackButton = true});
@@ -240,39 +241,46 @@ class _ObjectAnnouncementsSettingsPageState extends State<ObjectAnnouncementsSet
                 onPressed: () => Navigator.of(context).pop(),
               )
             : null,
-        title: const Text('Object announcements', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 18)),
+        title: Text(
+          context.l10n.objectAnnouncementsSettingsTitle,
+          style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 18),
+        ),
         centerTitle: true,
       ),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(20, 8, 20, 32),
         children: [
           Text(
-            'Hear short spoken updates when Omi Glass sees new objects.',
+            context.l10n.objectAnnouncementsSettingsSubtitle,
             style: TextStyle(color: Colors.grey.shade400, fontSize: 14),
           ),
           const SizedBox(height: 16),
           _section(
             children: [
               _row(
-                title: 'Local object announcements',
-                subtitle: _enabled ? 'On. Images are processed on this phone.' : 'Off. No local object announcements.',
+                title: context.l10n.objectAnnouncementsMainToggleTitle,
+                subtitle: context.l10n.objectAnnouncementsMainToggleSubtitle,
                 icon: FontAwesomeIcons.eye,
                 trailing: Switch(value: _enabled, onChanged: _setEnabled, activeThumbColor: const Color(0xFF22C55E)),
               ),
             ],
           ),
           const SizedBox(height: 16),
-          _sectionTitle('Mode'),
+          _sectionTitle(context.l10n.objectAnnouncementsModeSectionTitle),
           const SizedBox(height: 8),
           Row(
             children: [
-              _modeButton(AnnouncementMode.allObjects, 'All new objects', 'Best for general awareness.',
-                  enabled: _enabled),
+              _modeButton(
+                AnnouncementMode.allObjects,
+                context.l10n.objectAnnouncementsAllObjectsModeTitle,
+                context.l10n.objectAnnouncementsAllObjectsModeSubtitle,
+                enabled: _enabled,
+              ),
               const SizedBox(width: 10),
               _modeButton(
                 AnnouncementMode.heldObjectsOnly,
-                'Objects in my hand',
-                'Quieter. Requires hand detection.',
+                context.l10n.objectAnnouncementsHeldObjectsModeTitle,
+                context.l10n.objectAnnouncementsHeldObjectsModeSubtitle,
                 enabled: _enabled,
               ),
             ],
@@ -281,13 +289,14 @@ class _ObjectAnnouncementsSettingsPageState extends State<ObjectAnnouncementsSet
           _section(
             children: [
               _row(
-                title: 'Mute speech',
-                subtitle:
-                    _voiceEnabled ? 'Off. Announcements will speak out loud.' : 'On. Detection can still run silently.',
+                title: context.l10n.objectAnnouncementsVoiceTitle,
+                subtitle: _voiceEnabled
+                    ? context.l10n.objectAnnouncementsVoiceOnSubtitle
+                    : context.l10n.objectAnnouncementsVoiceOffSubtitle,
                 icon: FontAwesomeIcons.volumeHigh,
                 trailing: Switch(
-                  value: !_voiceEnabled,
-                  onChanged: _enabled ? (value) => _setVoiceEnabled(!value) : null,
+                  value: _voiceEnabled,
+                  onChanged: _enabled ? _setVoiceEnabled : null,
                   activeThumbColor: const Color(0xFF22C55E),
                 ),
                 enabled: _enabled,
@@ -299,50 +308,22 @@ class _ObjectAnnouncementsSettingsPageState extends State<ObjectAnnouncementsSet
                   children: [
                     Expanded(
                       child: _primaryButton(
-                        'Test voice',
+                        context.l10n.objectAnnouncementsTestVoiceButton,
                         () => ObjectAnnouncementService.instance
-                            .speak('Local object announcements are working.', force: true),
+                            .speak(context.l10n.objectAnnouncementsTestVoiceMessage, force: true),
                         enabled: _enabled && _voiceEnabled,
                       ),
                     ),
                     const SizedBox(width: 10),
                     Expanded(
                       child: _secondaryButton(
-                        'Stop speaking',
+                        context.l10n.stop,
                         ObjectAnnouncementService.instance.stop,
                         enabled: _enabled,
                       ),
                     ),
                   ],
                 ),
-              ),
-              _divider(),
-              _slider(
-                title: 'Speech rate',
-                value: _speechRate.toStringAsFixed(2),
-                sliderValue: _speechRate,
-                min: 0.1,
-                max: 1.0,
-                divisions: 9,
-                onChanged: (value) {
-                  setState(() => _speechRate = value);
-                  _prefs.localYoloeSpeechRate = value;
-                },
-                enabled: _enabled && _voiceEnabled,
-              ),
-              _divider(),
-              _slider(
-                title: 'Quiet time between announcements',
-                value: '${_announcementCooldown.toStringAsFixed(0)}s',
-                sliderValue: _announcementCooldown,
-                min: 1,
-                max: 10,
-                divisions: 9,
-                onChanged: (value) {
-                  setState(() => _announcementCooldown = value);
-                  _prefs.localYoloeMinSecondsBetweenAnnouncements = value;
-                },
-                enabled: _enabled && _voiceEnabled,
               ),
             ],
           ),
@@ -357,7 +338,7 @@ class _ObjectAnnouncementsSettingsPageState extends State<ObjectAnnouncementsSet
                 const SizedBox(width: 12),
                 Expanded(
                   child: Text(
-                    'Privacy: in local mode, Omi Glass images are processed on this phone and are not sent to Omi’s vision LLM.',
+                    context.l10n.objectAnnouncementsPrivacyCopy,
                     style: TextStyle(color: Colors.grey.shade200, fontSize: 13, height: 1.35),
                   ),
                 ),
@@ -376,14 +357,17 @@ class _ObjectAnnouncementsSettingsPageState extends State<ObjectAnnouncementsSet
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
               iconColor: Colors.grey.shade400,
               collapsedIconColor: Colors.grey.shade500,
-              title: const Text('Advanced', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
-              subtitle: Text('Optional tuning for detection and speech',
+              title: Text(
+                context.l10n.objectAnnouncementsAdvancedTitle,
+                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+              ),
+              subtitle: Text(context.l10n.objectAnnouncementsAdvancedSubtitle,
                   style: TextStyle(color: Colors.grey.shade500, fontSize: 12)),
               children: [
                 _divider(),
                 _row(
-                  title: 'Interrupt current speech',
-                  subtitle: 'New announcements replace the current one.',
+                  title: context.l10n.objectAnnouncementsInterruptSpeechTitle,
+                  subtitle: context.l10n.objectAnnouncementsInterruptSpeechSubtitle,
                   icon: FontAwesomeIcons.forward,
                   trailing: Switch(
                     value: _interruptSpeech,
@@ -398,13 +382,41 @@ class _ObjectAnnouncementsSettingsPageState extends State<ObjectAnnouncementsSet
                   enabled: _enabled && _voiceEnabled,
                 ),
                 _divider(),
+                _slider(
+                  title: context.l10n.objectAnnouncementsSpeechRateTitle,
+                  value: _speechRate.toStringAsFixed(2),
+                  sliderValue: _speechRate,
+                  min: 0.1,
+                  max: 1.0,
+                  divisions: 9,
+                  onChanged: (value) {
+                    setState(() => _speechRate = value);
+                    _prefs.localYoloeSpeechRate = value;
+                  },
+                  enabled: _enabled && _voiceEnabled,
+                ),
+                _divider(),
+                _slider(
+                  title: context.l10n.objectAnnouncementsQuietTimeTitle,
+                  value: '${_announcementCooldown.toStringAsFixed(0)}s',
+                  sliderValue: _announcementCooldown,
+                  min: 1,
+                  max: 10,
+                  divisions: 9,
+                  onChanged: (value) {
+                    setState(() => _announcementCooldown = value);
+                    _prefs.localYoloeMinSecondsBetweenAnnouncements = value;
+                  },
+                  enabled: _enabled && _voiceEnabled,
+                ),
+                _divider(),
                 Padding(
                   padding: const EdgeInsets.fromLTRB(16, 14, 16, 10),
                   child: DropdownButtonFormField<LocalVisionDetectorImplementation>(
                     initialValue: _detectorImplementation,
                     dropdownColor: const Color(0xFF242428),
                     decoration: InputDecoration(
-                      labelText: 'Detector',
+                      labelText: context.l10n.objectAnnouncementsDetectorTitle,
                       labelStyle: TextStyle(color: Colors.grey.shade400),
                       filled: true,
                       fillColor: const Color(0xFF111113),
@@ -428,7 +440,7 @@ class _ObjectAnnouncementsSettingsPageState extends State<ObjectAnnouncementsSet
                 ),
                 _divider(),
                 _slider(
-                  title: 'Max objects spoken',
+                  title: context.l10n.objectAnnouncementsMaxObjectsSpokenTitle,
                   value: _maxObjectsPerAnnouncement.toString(),
                   sliderValue: _maxObjectsPerAnnouncement.toDouble(),
                   min: 1,
@@ -441,7 +453,7 @@ class _ObjectAnnouncementsSettingsPageState extends State<ObjectAnnouncementsSet
                 ),
                 _divider(),
                 _slider(
-                  title: 'Confidence threshold',
+                  title: context.l10n.objectAnnouncementsConfidenceThresholdTitle,
                   value: '${(_confidenceThreshold * 100).toStringAsFixed(0)}%',
                   sliderValue: _confidenceThreshold,
                   min: 0.05,
@@ -454,7 +466,7 @@ class _ObjectAnnouncementsSettingsPageState extends State<ObjectAnnouncementsSet
                 ),
                 _divider(),
                 _slider(
-                  title: 'Hand match threshold',
+                  title: context.l10n.objectAnnouncementsHandMatchThresholdTitle,
                   value: _handIouThreshold.toStringAsFixed(2),
                   sliderValue: _handIouThreshold,
                   min: 0,
@@ -467,8 +479,8 @@ class _ObjectAnnouncementsSettingsPageState extends State<ObjectAnnouncementsSet
                 ),
                 _divider(),
                 _row(
-                  title: 'Adaptive throttling',
-                  subtitle: 'Slow detection when inference gets heavy.',
+                  title: context.l10n.objectAnnouncementsAdaptiveThrottlingTitle,
+                  subtitle: context.l10n.objectAnnouncementsAdaptiveThrottlingSubtitle,
                   icon: FontAwesomeIcons.gaugeHigh,
                   trailing: Switch(
                     value: _adaptiveThrottlingEnabled,

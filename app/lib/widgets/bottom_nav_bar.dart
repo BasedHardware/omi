@@ -6,6 +6,7 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:provider/provider.dart';
 
 import 'package:omi/providers/home_provider.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 
 class BottomNavBar extends StatelessWidget {
   const BottomNavBar({super.key, required this.onTabTap});
@@ -32,8 +33,8 @@ class BottomNavBar extends StatelessWidget {
             ),
             child: Row(
               children: [
-                _buildTab(context, home, 0, FontAwesomeIcons.eye, 'Detect'),
-                _buildTab(context, home, 1, FontAwesomeIcons.gear, 'Settings'),
+                _buildTab(context, home, 0, FontAwesomeIcons.eye, context.l10n.objectAnnouncementsDetectTab),
+                _buildTab(context, home, 1, FontAwesomeIcons.gear, context.l10n.settings),
               ],
             ),
           ),

@@ -19,9 +19,11 @@ class ObjectAnnouncementService extends ChangeNotifier {
   bool _initialized = false;
   bool _speaking = false;
   DateTime? _lastAnnouncementAt;
+  String? _lastSpokenText;
 
   bool get isSpeaking => _speaking;
   DateTime? get lastAnnouncementAt => _lastAnnouncementAt;
+  String? get lastSpokenText => _lastSpokenText;
 
   Future<void> _ensureInitialized() async {
     if (_initialized) return;
@@ -116,6 +118,7 @@ class ObjectAnnouncementService extends ChangeNotifier {
   Future<void> _speakNow(String text) async {
     _speaking = true;
     _lastAnnouncementAt = DateTime.now();
+    _lastSpokenText = text;
     notifyListeners();
     Logger.debug('Local YOLOE TTS speaking: $text');
     try {

@@ -3122,5 +3122,91 @@
   "objectAnnouncementsAdaptiveThrottlingSubtitle": "Slow detection when inference gets heavy.",
   "@objectAnnouncementsAdaptiveThrottlingSubtitle": {
     "description": "Local YOLOE object announcements settings string"
+  },
+  "objectAnnouncementsDetectTab": "Detect",
+  "@objectAnnouncementsDetectTab": {
+    "description": "Bottom navigation label for local object detection"
+  },
+  "objectAnnouncementsDeviceName": "Omi Glass",
+  "@objectAnnouncementsDeviceName": {
+    "description": "Device name shown on the local object detection dashboard"
+  },
+  "objectAnnouncementsConnectDeviceSubtitle": "Connect Omi Glass to start local object announcements.",
+  "@objectAnnouncementsConnectDeviceSubtitle": {
+    "description": "Detect dashboard empty device state"
+  },
+  "objectAnnouncementsReconnectDeviceSubtitle": "Tap to reconnect Omi Glass.",
+  "@objectAnnouncementsReconnectDeviceSubtitle": {
+    "description": "Detect dashboard disconnected device state"
+  },
+  "objectAnnouncementsDeviceFrameSubtitle": "Receiving camera frames when available.",
+  "@objectAnnouncementsDeviceFrameSubtitle": {
+    "description": "Detect dashboard connected device frame status"
+  },
+  "objectAnnouncementsOffSubtitle": "Off. Detection frames will not be announced.",
+  "@objectAnnouncementsOffSubtitle": {
+    "description": "Detect dashboard announcement disabled state"
+  },
+  "objectAnnouncementsDetectingLocally": "Detecting objects locally…",
+  "@objectAnnouncementsDetectingLocally": {
+    "description": "Detect dashboard inference running state"
+  },
+  "objectAnnouncementsFrameQueued": "New frame queued. Keeping the freshest image only.",
+  "@objectAnnouncementsFrameQueued": {
+    "description": "Detect dashboard inference queued state"
+  },
+  "objectAnnouncementsDetectionCount": "Detected {count} object{count, plural, =1{} other{s}}.",
+  "@objectAnnouncementsDetectionCount": {
+    "description": "Detect dashboard detection count status",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "objectAnnouncementsNoNewObjects": "No new objects to announce yet.",
+  "@objectAnnouncementsNoNewObjects": {
+    "description": "Detect dashboard no speech state"
+  },
+  "objectAnnouncementsSpeakingNow": "Speaking now: {phrase}",
+  "@objectAnnouncementsSpeakingNow": {
+    "description": "Detect dashboard currently speaking state",
+    "placeholders": {
+      "phrase": {
+        "type": "String"
+      }
+    }
+  },
+  "objectAnnouncementsLatestDetectionsTitle": "Latest detections",
+  "@objectAnnouncementsLatestDetectionsTitle": {
+    "description": "Detect dashboard latest detections card title"
+  },
+  "objectAnnouncementsNoDetections": "No objects detected yet. Connect Omi Glass and keep announcements on.",
+  "@objectAnnouncementsNoDetections": {
+    "description": "Detect dashboard empty detections state"
+  },
+  "objectAnnouncementsSpokenStatus": "spoken",
+  "@objectAnnouncementsSpokenStatus": {
+    "description": "Detect dashboard detection row status"
+  },
+  "objectAnnouncementsHandAnchorStatus": "hand anchor",
+  "@objectAnnouncementsHandAnchorStatus": {
+    "description": "Detect dashboard detection row status for hand detections"
+  },
+  "objectAnnouncementsSeenStatus": "seen",
+  "@objectAnnouncementsSeenStatus": {
+    "description": "Detect dashboard detection row status"
+  },
+  "objectAnnouncementsFramesMetric": "Frames",
+  "@objectAnnouncementsFramesMetric": {
+    "description": "Detect dashboard processed/received frame metric label"
+  },
+  "objectAnnouncementsDroppedMetric": "Dropped",
+  "@objectAnnouncementsDroppedMetric": {
+    "description": "Detect dashboard dropped frame metric label"
+  },
+  "objectAnnouncementsLatencyMetric": "Latency",
+  "@objectAnnouncementsLatencyMetric": {
+    "description": "Detect dashboard latency metric label"
   }
 }
