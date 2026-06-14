@@ -149,10 +149,12 @@ class ProductionLikeMemoryModelClient(MemoryModelClient):
         high_recall: bool = False,
         typed: bool = False,
         trace_sink: Callable[[dict[str, Any]], None] | None = None,
+        source_route_config: dict[str, str] | None = None,
     ):
         self.max_events_per_call = max_events_per_call
         self.high_recall = high_recall
         self.typed = typed
+        self.source_route_config = dict(source_route_config or {})
         self.trace_events: list[dict[str, Any]] = []
         self.trace_sink = trace_sink or self.trace_events.append
 
@@ -185,7 +187,8 @@ class ProductionLikeMemoryModelClient(MemoryModelClient):
                         "source_event_ids": [event.event_id for event in event_chunk],
                     })
                     continue
-                route = route_source(pipeline_input.source)
+                route_family = self.source_route_config.get(pipeline_input.source.source_type, "current")
+                route = route_source(pipeline_input.source, route_family=route_family)
                 self._emit_trace({
                     "stage": "source_route",
                     "conversation_id": conversation_id,

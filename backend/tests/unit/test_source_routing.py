@@ -19,6 +19,17 @@ def test_source_router_passthrough_preserves_declared_source_type_with_benchmark
     assert decision.effective_source_type == "benchmark_fixture"
     assert decision.reason == "declared_source_type_passthrough"
     assert decision.metadata["benchmark_source_type"] == "voice_transcript"
+    assert decision.metadata["route_family"] == "current"
+
+
+def test_source_router_chat_v7a_preserves_effective_source_type():
+    source = SourceDescriptor(source_type="chat_exchange", source_id="raw_chat_example", metadata={})
+
+    decision = route_source(source, route_family="v7a")
+
+    assert decision.declared_source_type == "chat_exchange"
+    assert decision.effective_source_type == "chat_exchange"
+    assert decision.metadata["route_family"] == "v7a"
 
 
 def test_source_router_records_native_source_type():

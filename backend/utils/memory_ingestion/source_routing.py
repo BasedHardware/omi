@@ -33,8 +33,13 @@ class SourceRouteDecision:
         }
 
 
-def route_source(source: SourceDescriptor) -> SourceRouteDecision:
-    """Return a passthrough route decision for V8-3 compatibility mode."""
+def route_source(source: SourceDescriptor, *, route_family: str = "current") -> SourceRouteDecision:
+    """Return a route decision for V8 source routing.
+
+    V8-4 freezes the current strict chat behavior under route_family='v7a'.
+    Effective source type remains unchanged; future tickets may add behavior-changing
+    voice/OCR route families.
+    """
     metadata = source.metadata or {}
     return SourceRouteDecision(
         route_version=SOURCE_ROUTER_VERSION,
@@ -43,6 +48,7 @@ def route_source(source: SourceDescriptor) -> SourceRouteDecision:
         reason="declared_source_type_passthrough",
         metadata={
             "source_id": source.source_id,
+            "route_family": route_family,
             "benchmark_source_type": metadata.get("benchmark_source_type"),
             "benchmark_original_source_type": metadata.get("benchmark_original_source_type"),
             "benchmark_example_id": metadata.get("benchmark_example_id"),

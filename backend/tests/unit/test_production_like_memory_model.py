@@ -226,6 +226,33 @@ def test_prodlike_client_trace_sink_records_candidate_and_frame(monkeypatch):
     assert route_event["declared_source_type"] == "benchmark_fixture"
     assert route_event["effective_source_type"] == "benchmark_fixture"
     assert route_event["reason"] == "declared_source_type_passthrough"
+    assert route_event["metadata"]["route_family"] == "current"
     assert "model_call" in stages
     assert "frame_created" in stages
 
+
+
+def test_prodlike_source_route_config_records_chat_v7a(monkeypatch):
+    captured = {}
+
+    def fake_extract_memories_with_production_prompt(**kwargs):
+        captured.update(kwargs)
+        return [ProductionLikeMemory(content="User uses Warp terminal", category="system")]
+
+    monkeypatch.setattr(
+        production_like_model,
+        "_extract_memories_with_production_prompt",
+        fake_extract_memories_with_production_prompt,
+    )
+    event = _event("I use Warp terminal every day.")
+    pipeline_input = _input(event)
+    pipeline_input.source.source_type = "chat_exchange"
+    client = ProductionLikeMemoryModelClient(source_route_config={"chat_exchange": "v7a"})
+    output = asyncio.run(CoreMemoryPipeline(model_client=client).run(pipeline_input))
+
+    assert output.event_frames[0].canonical_text == "User uses Warp terminal"
+    assert captured["source_type"] == "chat_exchange"
+    route_event = next(event for event in client.trace_events if event["stage"] == "source_route")
+    assert route_event["declared_source_type"] == "chat_exchange"
+    assert route_event["effective_source_type"] == "chat_exchange"
+    assert route_event["metadata"]["route_family"] == "v7a"
