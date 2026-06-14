@@ -18,7 +18,10 @@ RUN pip install --no-cache-dir --no-deps --force-reinstall \
     "nemo_toolkit[asr] @ git+https://github.com/beastoin/NeMo.git@68d99a17944181452205dc60da21e82bf3647054"
 
 # Extra deps not in the NGC image.
-RUN pip install --no-cache-dir \
+# Constraint: lock torch/torchaudio to NGC versions so pyannote.audio
+# doesn't upgrade them and break ABI compatibility.
+RUN pip freeze | grep -E '^(torch|torchaudio)==' > /tmp/torch-constraints.txt && \
+    pip install --no-cache-dir -c /tmp/torch-constraints.txt \
     "fastapi>=0.115.0" \
     "uvicorn[standard]>=0.30.0" \
     "python-multipart>=0.0.6" \
