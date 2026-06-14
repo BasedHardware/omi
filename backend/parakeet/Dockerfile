@@ -17,19 +17,17 @@ WORKDIR /app
 RUN pip install --no-cache-dir --no-deps --force-reinstall \
     "nemo_toolkit[asr] @ git+https://github.com/beastoin/NeMo.git@68d99a17944181452205dc60da21e82bf3647054"
 
-# NGC ships torch+torchvision with CUDA 12.8 but no torchaudio.
-# Standard PyPI torchaudio is ABI-incompatible with NGC's custom torch.
-# Install from PyTorch's CUDA 12.8 wheel index for ABI-compatible builds.
-# --no-deps prevents pulling in standard PyPI torch over NGC's build.
-RUN TORCH_MM=$(python -c "import torch; print('.'.join(torch.__version__.split('.')[:2]))") && \
-    pip install --no-cache-dir --no-deps \
-    "torchaudio==${TORCH_MM}.*" \
-    --index-url https://download.pytorch.org/whl/cu128
+# NGC's custom torch ABI is incompatible with ALL standard torchaudio
+# wheels (PyPI, cu128 index).  NeMo imports torchaudio at module level
+# (via squim metrics) but parakeet never calls those functions.
+# Create a lightweight stub that satisfies `import torchaudio`.
+RUN mkdir -p /usr/local/lib/python3.12/dist-packages/torchaudio && \
+    printf '__version__ = "stub"\n' > \
+    /usr/local/lib/python3.12/dist-packages/torchaudio/__init__.py
 
 # Extra deps not in the NGC image.
-# pyannote.audio installed --no-deps to prevent it and its transitive
-# deps (speechbrain, torchmetrics) from upgrading torch/torchvision.
-# Its non-torch deps are installed separately below.
+# pyannote.audio and torch-dependent deps installed --no-deps to prevent
+# upgrading torch/torchvision/torchaudio in the NGC stack.
 RUN pip install --no-cache-dir \
     "fastapi>=0.115.0" \
     "uvicorn[standard]>=0.30.0" \
