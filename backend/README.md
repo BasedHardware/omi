@@ -26,7 +26,7 @@ This README provides a quick setup guide for the Omi backend. For a comprehensiv
    gcloud auth application-default login --project <project-id>
    ```
    Replace `<project-id>` with your Google Cloud Project ID.
-   This should generate the `application_default_credentials.json` file in the `~/.config/gcloud` directory. This file is read automatically by gcloud in Python.
+   This should generate the `application_default_credentials.json` file in the gcloud config directory (`~/.config/gcloud` on macOS/Linux or `%APPDATA%\gcloud` on Windows). This file is read automatically by gcloud in Python.
 
 4. Install Python 3.11
    - Mac: `brew install python@3.11`
