@@ -13,8 +13,9 @@ from datetime import datetime, timezone
 os.environ.setdefault('ENCRYPTION_SECRET', 'omi_test_secret_key_for_unit_tests_only_000000000000000000')
 
 # Stub database._client so importing models.memories doesn't spin up Firestore.
-if 'database' not in sys.modules:
-    sys.modules['database'] = ModuleType('database')
+_BACKEND_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
+database_pkg = sys.modules.setdefault('database', ModuleType('database'))
+database_pkg.__path__ = [os.path.join(_BACKEND_DIR, 'database')]
 _client_stub = ModuleType('database._client')
 _client_stub.document_id_from_seed = lambda seed: 'id-' + str(abs(hash(seed)) % (10**12))
 sys.modules['database._client'] = _client_stub
