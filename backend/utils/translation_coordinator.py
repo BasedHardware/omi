@@ -204,10 +204,13 @@ class TranslationCoordinator:
                 redis_cached = get_cached_translation(text_hash, self.target_language)
                 if redis_cached:
                     # Found in Redis — adopt as committed, skip re-translation
+                    translated_text = redis_cached['text']
+                    detected_lang = redis_cached.get('detected_lang', '')
                     state.committed_text = text
-                    state.assembled_translation = redis_cached['text']
-                    state.detected_lang = redis_cached.get('detected_lang', '')
+                    state.assembled_translation = translated_text
+                    state.detected_lang = detected_lang
                     self.metrics['prefix_resets'] += 1
+                    await self.on_translation_ready(segment.id, translated_text, detected_lang, conversation_id)
                     continue  # Don't add to batch buffer
                 else:
                     state.committed_text = ''
