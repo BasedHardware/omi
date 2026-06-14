@@ -16,11 +16,13 @@ os.environ.setdefault(
     "omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv",
 )
 
+_BACKEND_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
+
 # Stub database modules
 sys.modules.setdefault("database._client", MagicMock())
 
 _db_pkg = types.ModuleType("database")
-_db_pkg.__path__ = [os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', 'database'))]
+_db_pkg.__path__ = [os.path.join(_BACKEND_DIR, 'database')]
 sys.modules.setdefault("database", _db_pkg)
 
 for submod in [
@@ -92,9 +94,17 @@ _utils_stubs = [
     "utils.http_client",
     "utils.subscription",
 ]
+_utils_pkg = sys.modules.setdefault("utils", types.ModuleType("utils"))
+_utils_pkg.__path__ = [os.path.join(_BACKEND_DIR, "utils")]
 for name in _utils_stubs:
     if name not in sys.modules:
         sys.modules[name] = types.ModuleType(name)
+    parent_name, _, child_name = name.rpartition(".")
+    parent = sys.modules.get(parent_name)
+    if parent is not None:
+        setattr(parent, child_name, sys.modules[name])
+
+sys.modules["utils.conversations"].__path__ = [os.path.join(_BACKEND_DIR, "utils", "conversations")]
 
 sys.modules["utils.apps"].get_available_apps = MagicMock(return_value=[])
 sys.modules["utils.notifications"].send_notification = MagicMock()
@@ -146,6 +156,7 @@ if _http_mod is not None and not hasattr(_http_mod, '__file__'):
     # Stub module — safe to add mock attributes for import resolution
     _http_mod.get_webhook_client = MagicMock()
     _http_mod.get_maps_client = MagicMock()
+    _http_mod.get_maps_semaphore = MagicMock(return_value=_asyncio.Semaphore(8))
     _mock_cb = MagicMock()
     _mock_cb.allow_request = MagicMock(return_value=True)
     _mock_cb.record_success = MagicMock()
