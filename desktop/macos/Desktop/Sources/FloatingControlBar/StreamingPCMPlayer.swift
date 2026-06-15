@@ -20,15 +20,21 @@ final class StreamingPCMPlayer {
       commonFormat: .pcmFormatFloat32, sampleRate: sampleRate, channels: 1, interleaved: false)!
     engine.attach(player)
     engine.connect(player, to: engine.mainMixerNode, format: format)
-    // An audio configuration change (another process grabbing the audio device,
-    // a device/sample-rate change, etc.) STOPS the engine mid-stream — that's
-    // what cuts the reply off and leaves follow-ups silent. Reconnect + restart
-    // when it happens so playback recovers.
+    // An audio configuration change (another process grabbing the audio device, a
+    // device/sample-rate change, a Bluetooth A2DP↔HFP flip, etc.) STOPS the engine
+    // mid-stream — that's what cuts the reply off and can leave the engine in a
+    // half-dead state (isRunning=true but no output) that silences later turns.
+    // Fully tear down + rebuild the node graph and restart so playback always
+    // recovers. (The PTT path also avoids the BT flip by capturing from the
+    // built-in mic when output is Bluetooth — see PushToTalkManager.)
     configObserver = NotificationCenter.default.addObserver(
       forName: .AVAudioEngineConfigurationChange, object: engine, queue: .main
     ) { [weak self] _ in
       guard let self = self else { return }
-      log("StreamingPCMPlayer: audio config changed — reconnecting + restarting")
+      log("StreamingPCMPlayer: audio config changed — rebuilding engine")
+      self.player.stop()
+      self.engine.stop()
+      self.engine.disconnectNodeOutput(self.player)
       self.engine.connect(self.player, to: self.engine.mainMixerNode, format: self.format)
       self.ensureRunning()
     }
