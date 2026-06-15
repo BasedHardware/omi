@@ -1,7 +1,9 @@
 import asyncio
 import io
 import os
+import struct
 import sys
+import wave
 from unittest.mock import MagicMock, AsyncMock, patch
 
 import pytest
@@ -206,3 +208,68 @@ class TestV2TranscribeEndpoint:
             "/v2/transcribe", files={"file": ("test.wav", b"fake", "audio/wav")}, data={"diarize": "true"}
         )
         assert resp.status_code == 503
+
+
+def _make_wav_bytes(duration_s=2.0, sample_rate=16000, channels=1, sampwidth=2):
+    buf = io.BytesIO()
+    with wave.open(buf, 'wb') as wf:
+        wf.setnchannels(channels)
+        wf.setsampwidth(sampwidth)
+        wf.setframerate(sample_rate)
+        n_frames = int(sample_rate * duration_s)
+        wf.writeframes(b'\x00' * n_frames * channels * sampwidth)
+    return buf.getvalue()
+
+
+class TestAudioDurationFromBytes:
+
+    def test_valid_wav_returns_positive_duration(self):
+        from main import _get_audio_duration_from_bytes
+
+        data = _make_wav_bytes(duration_s=2.0, sample_rate=16000)
+        dur = _get_audio_duration_from_bytes(data)
+        assert abs(dur - 2.0) < 0.01
+
+    def test_invalid_bytes_returns_zero(self):
+        from main import _get_audio_duration_from_bytes
+
+        assert _get_audio_duration_from_bytes(b"not a wav") == 0.0
+
+    def test_empty_bytes_returns_zero(self):
+        from main import _get_audio_duration_from_bytes
+
+        assert _get_audio_duration_from_bytes(b"") == 0.0
+
+    def test_v1_with_real_wav_observes_audio_duration(self):
+        app, mod, _, engine = _make_app_with_mocks(gpu_ready=True)
+
+        async def fake_submit(path, timestamps=True, owns_file=False):
+            return {"text": "ok", "timestamp": {"segment": [{"segment": "ok", "start": 0.0, "end": 1.0}]}}
+
+        engine.submit = AsyncMock(side_effect=fake_submit)
+        wav_data = _make_wav_bytes(duration_s=1.5, sample_rate=16000)
+        before = mod.AUDIO_DURATION._sum.get()
+        client = TestClient(app, raise_server_exceptions=False)
+        resp = client.post("/v1/transcribe", files={"file": ("test.wav", wav_data, "audio/wav")})
+        assert resp.status_code == 200
+        after = mod.AUDIO_DURATION._sum.get()
+        assert after - before >= 1.4
+
+
+class TestMetricsEndpoint:
+
+    def test_metrics_endpoint_contains_new_series(self):
+        app, mod, _, _ = _make_app_with_mocks()
+        client = TestClient(app, raise_server_exceptions=False)
+        resp = client.get("/metrics")
+        assert resp.status_code == 200
+        body = resp.text
+        for name in [
+            "parakeet_rtfx",
+            "parakeet_audio_duration_seconds",
+            "parakeet_queue_duration_seconds",
+            "parakeet_inference_duration_seconds",
+            "parakeet_gpu_oom_total",
+            "parakeet_requests_total",
+        ]:
+            assert name in body, f"Missing metric: {name}"
