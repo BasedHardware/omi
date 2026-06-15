@@ -138,6 +138,13 @@ final class RealtimeHubSession: NSObject {
     // Receive + setup begin in didOpenWithProtocol.
   }
 
+  /// Stop delivering events to the delegate. Used when the controller intentionally
+  /// drops this socket (barge-in / cancel reconnect) so its teardown close/error
+  /// can't reach the controller and tear down the replacement session.
+  func detach() {
+    q.async { [weak self] in self?.delegate = nil }
+  }
+
   func stop() {
     q.async { [weak self] in
       guard let self else { return }
@@ -192,15 +199,7 @@ final class RealtimeHubSession: NSObject {
     q.async { [weak self] in
       guard let self else { return }
       guard self.isOpen else { self.pendingAudio.append(pcm); return }
-      let b64 = pcm.base64EncodedString()
-      switch self.provider {
-      case .openai:
-        self.send(json: ["type": "input_audio_buffer.append", "audio": b64])
-      case .gemini:
-        self.send(json: [
-          "realtimeInput": ["audio": ["data": b64, "mimeType": "audio/pcm;rate=16000"]]
-        ])
-      }
+      self.appendAudioFrame(pcm)
     }
   }
 
@@ -379,7 +378,7 @@ final class RealtimeHubSession: NSObject {
       pendingActivityStart = false
       send(json: ["realtimeInput": ["activityStart": [:]]])
     }
-    for chunk in pendingAudio { rawSendAudio(chunk) }
+    for chunk in pendingAudio { appendAudioFrame(chunk) }
     pendingAudio.removeAll()
     if pendingCommit {
       pendingCommit = false
@@ -398,7 +397,9 @@ final class RealtimeHubSession: NSObject {
   }
 
   // Send buffered audio after open (already on q).
-  private func rawSendAudio(_ pcm: Data) {
+  /// Send one mic PCM frame to the provider. Must be called on `q` with `isOpen`.
+  /// Shared by sendAudio (live) and the markReady flush of buffered pre-connect audio.
+  private func appendAudioFrame(_ pcm: Data) {
     let b64 = pcm.base64EncodedString()
     switch provider {
     case .openai:
