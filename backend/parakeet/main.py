@@ -163,7 +163,7 @@ async def transcribe(file: UploadFile = File(...)):
         data = await file.read()
         await loop.run_in_executor(_io_pool, _write_file, file_path, data)
 
-        audio_dur = _get_audio_duration(file_path)
+        audio_dur = await loop.run_in_executor(_io_pool, _get_audio_duration, file_path)
         if audio_dur > 0:
             AUDIO_DURATION.observe(audio_dur)
 
@@ -211,7 +211,7 @@ async def transcribe_v2(
         data = await file.read()
         await loop.run_in_executor(_io_pool, _write_file, file_path, data)
 
-        audio_dur = _get_audio_duration(file_path)
+        audio_dur = await loop.run_in_executor(_io_pool, _get_audio_duration, file_path)
         if audio_dur > 0:
             AUDIO_DURATION.observe(audio_dur)
 
