@@ -32,6 +32,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 _ASR_BUCKETS = (0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0, 30.0)
+_AUDIO_LEN_BUCKETS = (1, 5, 10, 30, 60, 120, 300, 600, 1800, 3600, 7200, 18000, 36000)
 
 ACTIVE_STREAMS = Gauge('parakeet_active_streams', 'Active /v3/stream WebSocket connections')
 ACTIVE_BATCH = Gauge('parakeet_active_batch_requests', 'Active batch transcription requests')
@@ -56,7 +57,7 @@ RTFX = Gauge('parakeet_rtfx', 'Real-time factor of last request (audio_duration 
 AUDIO_DURATION = Histogram(
     'parakeet_audio_duration_seconds',
     'Input audio length distribution',
-    buckets=_ASR_BUCKETS,
+    buckets=_AUDIO_LEN_BUCKETS,
 )
 QUEUE_DURATION = Histogram(
     'parakeet_queue_duration_seconds',
