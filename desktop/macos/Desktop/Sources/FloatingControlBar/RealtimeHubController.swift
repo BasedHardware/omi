@@ -33,6 +33,10 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
   private var speculativeWarmDone = false
   private var speculativeScreenshot: Data?
   private var audioReceivedThisTurn = false
+  /// When the last PTT turn started — used to keep the socket warm via auto-reconnect
+  /// only while the user is actively using it (Gemini idle-closes the WS ~2.5 min).
+  private var lastTurnAt: Date?
+  private var reconnectPending = false
 
   /// Held warm so spawn_agent's pi-mono bridge boot is off the hot path. The pill
   /// spawn creates its own provider; warming this one primes node/auth caches.
@@ -110,8 +114,12 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     speculativeWarmDone = false
     speculativeScreenshot = nil
     audioReceivedThisTurn = false
-    pcmPlayer?.stop()  // interrupt any prior reply
+    lastTurnAt = Date()
+    pcmPlayer?.stop()  // interrupt any prior reply (local)
     if speech.isSpeaking { speech.stopSpeaking(at: .immediate) }
+    // Barge-in: cancel any reply still in flight from the previous turn so the new
+    // turn starts clean (avoids OpenAI "active response" + Gemini 1008 aborts).
+    session?.cancelActiveResponse()
     // Open a fresh speech window for this turn (Gemini manual-VAD needs it EVERY
     // turn on a warm session; OpenAI no-op).
     session?.beginInputTurn()
@@ -239,9 +247,21 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
   func hubDidError(_ message: String) {
     logError("RealtimeHub: session error — \(message)")
     exitVoiceUI()
-    // Drop the socket so the next PTT reconnects cleanly; legacy cascade still
-    // works as the broader fallback (hub is gated/optional).
+    // Drop the socket; the next PTT reconnects lazily anyway.
     teardownSession()
+    // If the user has been active recently, the provider likely idle-closed the
+    // warm socket (Gemini does this ~2.5 min idle) — re-warm a fresh one so the
+    // next turn is instant. Bounded to recent activity so an idle, walked-away
+    // session doesn't reconnect-churn forever.
+    let recentlyActive = lastTurnAt.map { Date().timeIntervalSince($0) < 180 } ?? false
+    if isActive, recentlyActive, !reconnectPending {
+      reconnectPending = true
+      DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in
+        guard let self else { return }
+        self.reconnectPending = false
+        if self.isActive, self.session == nil { self.ensureWarm() }
+      }
+    }
   }
 
   /// Return the floating bar from its PTT voice state to compact after a hub turn.
