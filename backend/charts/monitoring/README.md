@@ -252,9 +252,9 @@ Folder: `Omi Services` (folder UID: `betdycdziadc0e`)
 | Category | Count | Source | Version-controlled |
 |----------|------:|--------|--------------------|
 | Bundled (kube-prometheus-stack) | 28 | Helm chart sidecar | Yes (via chart defaults) |
-| Custom (Omi-specific) | 17 | Created in Grafana UI | **No** — needs export to repo |
+| Custom (Omi-specific) | 16 | Exported from Grafana UI | Yes — `dashboards/` directory |
 
-**Action items:** The 17 custom dashboards (4 General + 4 Cloud Run + 5 GKE + 4 Omi Services) should be exported to `dashboards/` and provisioned via sidecar ConfigMaps.
+All 16 custom dashboards are exported to `dashboards/` as provisioning-ready JSON (`.id` and `.version` stripped). The K8s Node Metrics dashboard (`your_custom_uid_X0dfg`) is a community import bundled with the chart and not separately exported.
 
 ## Developer Guide
 
@@ -566,11 +566,27 @@ Emergency edits in the Grafana UI are acceptable but must be exported back to th
 
 ```
 backend/charts/monitoring/
-├── dashboards/                          # (proposed) Grafana dashboard JSON files
-│   ├── backend-listen-overview.json
-│   ├── pusher-overview.json
-│   ├── parakeet-gpu.json
-│   └── ...
+├── dashboards/                          # Grafana dashboard JSON (source of truth)
+│   ├── general/                         # Matches Grafana "General" folder
+│   │   ├── backend-api-monitoring-v1.json
+│   │   ├── backend-api-monitoring-v2.json
+│   │   └── parakeet-asr-monitoring.json
+│   ├── cloud-run/                       # Matches Grafana "Cloud Run" folder
+│   │   ├── backend.json
+│   │   ├── backend-integration.json
+│   │   ├── backend-sync.json
+│   │   └── plugins.json
+│   ├── gke/                             # Matches Grafana "GKE" folder
+│   │   ├── backend-listen.json
+│   │   ├── deepgram-self-hosted.json
+│   │   ├── diarizer.json
+│   │   ├── pusher.json
+│   │   └── vad.json
+│   └── omi-services/                    # Matches Grafana "Omi Services" folder
+│       ├── cloud-armor-denied-requests.json
+│       ├── cloud-run-services-logs.json
+│       ├── global-external-alb.json
+│       └── omi-kubernetes-events.json
 ├── alerts/                              # (proposed) PrometheusRule or Grafana alert YAML
 │   └── ...
 ├── kube-prometheus-stack/               # existing
