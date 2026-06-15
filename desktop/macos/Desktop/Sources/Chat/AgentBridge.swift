@@ -439,7 +439,9 @@ actor AgentBridge {
     // Hard cap: check monthly chat quota before spending any Anthropic tokens.
     // Free / Operator / Unlimited cap by question count; Architect (pro) caps by
     // cost_usd. Raises BridgeError.quotaExceeded if over — caller shows upgrade UI.
+    QueryTracerContext.current?.begin("quota_check", metadata: ["method": "fetchChatUsageQuota"])
     if let quota = await APIClient.shared.fetchChatUsageQuota(), !quota.allowed {
+      QueryTracerContext.current?.end("quota_check", metadata: ["result": "exceeded"])
       throw BridgeError.quotaExceeded(
         plan: quota.plan,
         unit: quota.unit,
@@ -448,6 +450,7 @@ actor AgentBridge {
         resetAtUnix: quota.resetAt
       )
     }
+    QueryTracerContext.current?.end("quota_check", metadata: ["result": "allowed"])
 
     var queryDict: [String: Any] = [
       "type": "query",
