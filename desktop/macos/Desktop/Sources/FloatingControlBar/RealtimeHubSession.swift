@@ -68,6 +68,18 @@ final class RealtimeHubSession: NSObject {
   private var openAIFunctionNames: [String: String] = [:]
   /// OpenAI: assistant items already dispatched as tool calls (dedup on response.done).
   private var dispatchedToolItems = Set<String>()
+  /// Gemini manual-VAD: each PTT turn must be bracketed activityStart…activityEnd.
+  /// On a WARM session that brackets per turn — sending it once at connect made
+  /// turns 2+ arrive with no speech window (Gemini then greets generically).
+  private var activityOpen = false
+  private var pendingActivityStart = false
+  /// OpenAI: a response is mid-flight — don't create a second one (the realtime
+  /// API rejects "Conversation already has an active response in progress").
+  private var openAIResponseActive = false
+
+  /// Log prefix that names the provider + model on every line, so it's always
+  /// clear which model produced which event.
+  private var tag: String { "RealtimeHub[\(provider == .openai ? "openai" : "gemini"):\(provider.modelID)]" }
 
   init(provider: RealtimeHubProvider, apiKey: String, delegate: RealtimeHubSessionDelegate) {
     self.provider = provider
@@ -120,6 +132,9 @@ final class RealtimeHubSession: NSObject {
       self.pendingCommit = false
       self.openAIFunctionNames.removeAll()
       self.dispatchedToolItems.removeAll()
+      self.activityOpen = false
+      self.pendingActivityStart = false
+      self.openAIResponseActive = false
     }
   }
 
@@ -150,16 +165,35 @@ final class RealtimeHubSession: NSObject {
   }
 
   /// End the user's PTT turn and ask the model to respond.
+  /// Start a new PTT turn. Gemini: open a fresh speech-activity window (must be
+  /// done EVERY turn on a warm session). OpenAI: no-op (input_audio_buffer based).
+  func beginInputTurn() {
+    guard provider == .gemini else { return }
+    q.async { [weak self] in
+      guard let self else { return }
+      guard !self.activityOpen else { return }
+      self.activityOpen = true
+      if self.isOpen {
+        self.send(json: ["realtimeInput": ["activityStart": [:]]])
+        log("\(self.tag): turn begin (activityStart)")
+      } else {
+        self.pendingActivityStart = true
+      }
+    }
+  }
+
   func commitInputTurn() {
     q.async { [weak self] in
       guard let self else { return }
       guard self.isOpen else { self.pendingCommit = true; return }
+      log("\(self.tag): turn committed")
       switch self.provider {
       case .openai:
         self.send(json: ["type": "input_audio_buffer.commit"])
         self.requestResponse(audio: true)
       case .gemini:
         self.send(json: ["realtimeInput": ["activityEnd": [:]]])
+        self.activityOpen = false
       // Gemini auto-responds at activityEnd; no explicit response request.
       }
     }
@@ -214,6 +248,11 @@ final class RealtimeHubSession: NSObject {
   // OpenAI: ask for a response with the given modality (audio for spoken turns).
   private func requestResponse(audio: Bool) {
     guard provider == .openai else { return }
+    guard !openAIResponseActive else {
+      log("\(tag): skip response.create — a response is already in progress")
+      return
+    }
+    openAIResponseActive = true
     send(json: ["type": "response.create", "response": ["output_modalities": [audio ? "audio" : "text"]]])
   }
 
@@ -282,8 +321,10 @@ final class RealtimeHubSession: NSObject {
   private func markReady() {
     guard !isOpen else { return }
     isOpen = true
-    log("RealtimeHub: \(provider.displayName) ready")
-    if provider == .gemini {
+    log("\(tag): ready")
+    // Open the speech window if a turn started before we connected (Gemini).
+    if provider == .gemini, pendingActivityStart {
+      pendingActivityStart = false
       send(json: ["realtimeInput": ["activityStart": [:]]])
     }
     for chunk in pendingAudio { rawSendAudio(chunk) }
@@ -297,6 +338,7 @@ final class RealtimeHubSession: NSObject {
         requestResponse(audio: true)
       case .gemini:
         send(json: ["realtimeInput": ["activityEnd": [:]]])
+        activityOpen = false
       }
     }
     let d = delegate
@@ -360,6 +402,7 @@ final class RealtimeHubSession: NSObject {
   }
 
   private func emitTool(name: String, callId: String, argumentsJSON: String) {
+    log("\(tag): tool_call \(name)(\(argumentsJSON.prefix(160)))")
     let d = delegate
     Task { @MainActor in
       d?.hubDidRequestTool(name: name, callId: callId, argumentsJSON: argumentsJSON)
@@ -385,7 +428,10 @@ final class RealtimeHubSession: NSObject {
     case "conversation.item.input_audio_transcription.delta":
       if let t = e["delta"] as? String { emitTranscript(t, isFinal: false) }
     case "conversation.item.input_audio_transcription.completed":
-      if let t = e["transcript"] as? String { emitTranscript(t, isFinal: true) }
+      if let t = e["transcript"] as? String {
+        log("\(tag): heard \"\(t.prefix(120))\"")
+        emitTranscript(t, isFinal: true)
+      }
     case "response.output_item.added":
       // Record function-call name keyed by call_id for the done parse below.
       if let item = e["item"] as? [String: Any], (item["type"] as? String) == "function_call",
@@ -396,6 +442,7 @@ final class RealtimeHubSession: NSObject {
     case "response.done":
       handleOpenAIResponseDone(e)
     case "error":
+      openAIResponseActive = false
       let msg = (e["error"] as? [String: Any])?["message"] as? String ?? "OpenAI realtime error"
       notifyError(msg)
     default:
@@ -404,6 +451,7 @@ final class RealtimeHubSession: NSObject {
   }
 
   private func handleOpenAIResponseDone(_ e: [String: Any]) {
+    openAIResponseActive = false  // this response finished — a new one may be created
     let output = (e["response"] as? [String: Any])?["output"] as? [[String: Any]] ?? []
     var firedTool = false
     for item in output where (item["type"] as? String) == "function_call" {
