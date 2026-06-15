@@ -375,6 +375,72 @@ class TestBatchEngineShutdown:
             loop.close()
 
 
+class TestBatchEngineCallbacks:
+
+    def test_on_batch_complete_called_with_timing(self):
+        gpu = _make_mock_gpu_worker()
+        callback_data = {}
+
+        def on_complete(queue_durations, inference_seconds, batch_size):
+            callback_data["queue_durations"] = queue_durations
+            callback_data["inference_seconds"] = inference_seconds
+            callback_data["batch_size"] = batch_size
+
+        engine = BatchEngine(gpu, max_batch_size=2, max_wait_seconds=0.01, on_batch_complete=on_complete)
+
+        loop = asyncio.new_event_loop()
+        try:
+
+            async def run():
+                await engine.start()
+                try:
+                    futs = [asyncio.ensure_future(engine.submit(f"/tmp/{i}.wav", owns_file=False)) for i in range(2)]
+                    await asyncio.wait_for(asyncio.gather(*futs), timeout=5)
+                    assert "queue_durations" in callback_data
+                    assert len(callback_data["queue_durations"]) == 2
+                    assert all(d >= 0 for d in callback_data["queue_durations"])
+                    assert callback_data["inference_seconds"] >= 0
+                    assert callback_data["batch_size"] == 2
+                finally:
+                    await engine.stop()
+
+            loop.run_until_complete(run())
+        finally:
+            loop.close()
+
+    def test_on_gpu_oom_called_on_cuda_oom(self):
+        gpu = MagicMock(spec=GPUWorker)
+        gpu.is_ready = True
+        oom_count = [0]
+
+        def on_oom():
+            oom_count[0] += 1
+
+        def submit_oom(payload, loop):
+            fut = loop.create_future()
+            loop.call_soon(fut.set_exception, RuntimeError("CUDA out of memory"))
+            return fut
+
+        gpu.submit.side_effect = submit_oom
+        engine = BatchEngine(gpu, max_batch_size=1, max_wait_seconds=0.01, on_gpu_oom=on_oom)
+
+        loop = asyncio.new_event_loop()
+        try:
+
+            async def run():
+                await engine.start()
+                try:
+                    with pytest.raises(RuntimeError, match="CUDA out of memory"):
+                        await asyncio.wait_for(engine.submit("/tmp/oom.wav", owns_file=False), timeout=5)
+                    assert oom_count[0] == 1
+                finally:
+                    await engine.stop()
+
+            loop.run_until_complete(run())
+        finally:
+            loop.close()
+
+
 class TestUnlinkSafe:
 
     def test_unlink_existing(self):
