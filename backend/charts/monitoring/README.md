@@ -676,8 +676,8 @@ helm -n prod-omi-monitoring upgrade --install prod-omi-loki \
   grafana/loki \
   -f loki/prod_omi_loki_values.yaml
 
-# Alloy (k8s-monitoring)
-helm -n prod-omi-monitoring upgrade --install prod-omi-k8s-monitoring \
+# Alloy (k8s-monitoring) — release name is prod-omi-alloy (not prod-omi-k8s-monitoring)
+helm -n prod-omi-monitoring upgrade --install prod-omi-alloy \
   grafana/k8s-monitoring \
   -f alloy/prod_omi_k8s_monitoring_values.yml
 
@@ -701,7 +701,7 @@ helm -n dev-omi-monitoring upgrade --install dev-omi-loki \
   grafana/loki \
   -f loki/dev_omi_loki_values.yaml
 
-helm -n dev-omi-monitoring upgrade --install dev-omi-k8s-monitoring \
+helm -n dev-omi-monitoring upgrade --install dev-omi-alloy \
   grafana/k8s-monitoring \
   -f alloy/dev_omi_k8s_monitoring_values.yml
 
