@@ -34,13 +34,14 @@ enum RealtimeHubProvider: String, CaseIterable, Sendable {
   var modelID: String {
     switch self {
     case .openai: return "gpt-realtime-2"
-    // Native-audio Live model. NOTE (deviation): the original plan called for a
-    // TEXT-modality half-cascade model spoken via AVSpeechSynthesizer, but Google
-    // deprecated the half-cascade Live models — every model that currently exposes
-    // bidiGenerateContent is native-audio and rejects TEXT modality (close 1007).
-    // Verified function calling works on this one; it speaks via native audio (24k
-    // PCM) played by StreamingPCMPlayer, same as OpenAI.
-    case .gemini: return "gemini-2.5-flash-native-audio-preview-12-2025"
+    // Same Live model OMI already uses (RealtimeOmniProvider.geminiFlashLive).
+    // NOTE (deviation): the original plan called for a TEXT-modality half-cascade
+    // model spoken via AVSpeechSynthesizer, but Google deprecated the half-cascade
+    // Live models — every model that currently exposes bidiGenerateContent is
+    // native-audio and rejects TEXT modality (close 1007). Verified this model does
+    // AUDIO + function calling; it speaks via native audio (24k PCM) played by
+    // StreamingPCMPlayer, same as OpenAI.
+    case .gemini: return "gemini-3.1-flash-live-preview"
     }
   }
 
