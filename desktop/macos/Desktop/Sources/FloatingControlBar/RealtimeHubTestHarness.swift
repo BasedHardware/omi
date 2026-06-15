@@ -14,7 +14,7 @@ import Foundation
 @MainActor
 final class RealtimeHubTestHarness: NSObject, RealtimeHubSessionDelegate {
   private let provider: RealtimeHubProvider
-  private let apiKey: String
+  private let auth: HubAuth
   private let pcm16k: Data
 
   private var session: RealtimeHubSession?
@@ -27,15 +27,15 @@ final class RealtimeHubTestHarness: NSObject, RealtimeHubSessionDelegate {
   private var done = false
   private var continuation: CheckedContinuation<[String: String], Never>?
 
-  init(provider: RealtimeHubProvider, apiKey: String, pcm16k: Data) {
+  init(provider: RealtimeHubProvider, auth: HubAuth, pcm16k: Data) {
     self.provider = provider
-    self.apiKey = apiKey
+    self.auth = auth
     self.pcm16k = pcm16k
     super.init()
   }
 
   func run(timeoutSeconds: Double) async -> [String: String] {
-    let s = RealtimeHubSession(provider: provider, auth: .byokKey(apiKey), delegate: self)
+    let s = RealtimeHubSession(provider: provider, auth: auth, delegate: self)
     session = s
     let rate = s.requiredInputSampleRate
     let audio = rate == 16000 ? pcm16k : PushToTalkManager.resamplePCM16(pcm16k, from: 16000, to: rate)
@@ -122,8 +122,9 @@ final class RealtimeHubTestHarness: NSObject, RealtimeHubSessionDelegate {
   static func registerAutomationAction() {
     DesktopAutomationActionRegistry.shared.register(
       name: "hub_test_turn",
-      summary: "Drive the realtime hub client-direct with a PCM16/16k file; returns the normalized turn",
-      params: ["pcm", "provider", "timeout"]
+      summary: "Drive the realtime hub with a PCM16/16k file; returns the normalized turn. "
+        + "auth=byok (default, uses BYOK key) | ephemeral (mints a server token, Phase 2)",
+      params: ["pcm", "provider", "timeout", "auth"]
     ) { params in
       guard let path = params["pcm"],
         let data = try? Data(contentsOf: URL(fileURLWithPath: path)), !data.isEmpty
@@ -131,12 +132,25 @@ final class RealtimeHubTestHarness: NSObject, RealtimeHubSessionDelegate {
       let provider =
         params["provider"].flatMap(RealtimeHubProvider.init(rawValue:))
         ?? RealtimeHubSettings.shared.provider
-      guard let key = APIKeyService.byokKey(provider.byokProvider) else {
-        return ["error": "no BYOK \(provider.byokProvider.displayName) key set for \(provider.displayName)"]
+      // Phase 2: if asked for ephemeral, or no BYOK key exists (managed user),
+      // mint a server-side ephemeral token via the backend; else use the BYOK key.
+      let wantEphemeral = params["auth"] == "ephemeral"
+      let byok = APIKeyService.byokKey(provider.byokProvider)
+      let auth: HubAuth
+      if !wantEphemeral, let key = byok {
+        auth = .byokKey(key)
+      } else {
+        let p = provider == .openai ? "openai" : "gemini"
+        guard let token = await APIClient.shared.mintRealtimeToken(provider: p) else {
+          return ["error": "ephemeral mint failed for \(p) (check backend route + entitlement)"]
+        }
+        auth = .ephemeral(token)
       }
       let timeout = Double(params["timeout"] ?? "") ?? 25
-      let harness = RealtimeHubTestHarness(provider: provider, apiKey: key, pcm16k: data)
-      return await harness.run(timeoutSeconds: timeout)
+      let harness = RealtimeHubTestHarness(provider: provider, auth: auth, pcm16k: data)
+      var result = await harness.run(timeoutSeconds: timeout)
+      result["auth_mode"] = auth.isEphemeral ? "ephemeral" : "byok"
+      return result
     }
   }
 }
