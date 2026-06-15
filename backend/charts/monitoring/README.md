@@ -442,7 +442,7 @@ kubectl apply -f dashboards/<name>-cm.yaml
 
 5. **Commit both files** — the dashboard JSON and its ConfigMap manifest — in the same PR.
 
-6. **Verify** — open Grafana and confirm the dashboard appears. The sidecar searches its own namespace (`{env}-omi-monitoring`) by default.
+6. **Verify** — open Grafana and confirm the dashboard appears. The sidecar watches all namespaces by default (`searchNamespace: ALL`); we create ConfigMaps in `{env}-omi-monitoring` for consistency.
 
 #### Updating an Existing Dashboard
 
@@ -557,7 +557,7 @@ Developer edits dashboard JSON in repo
         ↓
     Merge to main
         ↓
-    Helm upgrade deploys to Grafana (sidecar provisioning)
+    kubectl apply ConfigMap → sidecar auto-loads into Grafana
 ```
 
 Emergency edits in the Grafana UI are acceptable but must be exported back to the repo within the same day.
