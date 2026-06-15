@@ -381,10 +381,19 @@ class PushToTalkManager: ObservableObject {
   /// RMS threshold (int16 samples) above which a 20ms frame counts as voiced.
   /// ~-41 dBFS: comfortably above quiet-room mic noise, far below soft speech.
   private static let voicedRMSThreshold: Double = 300
+  // Hub silence gate is gentler than the omni gate: the realtime model tolerates a
+  // little noise, and a too-strict gate that drops real speech ("not even listening")
+  // is far worse than occasionally letting a marginal turn through. Lower RMS so a
+  // quieter / further mic still registers, and require only a sliver of voice.
+  private static let hubVoicedRMSThreshold: Double = 170
+  private static let hubMinTurnAudioSeconds: Double = 0.2
+  private static let hubMinVoicedSeconds: Double = 0.08
 
   /// Returns (totalSeconds, voicedSeconds) for raw PCM16 mono 16kHz audio,
-  /// where voiced = 20ms frames whose RMS exceeds `voicedRMSThreshold`.
-  static func voicedAudioSeconds(pcm16k data: Data) -> (total: Double, voiced: Double) {
+  /// where voiced = 20ms frames whose RMS exceeds `rmsThreshold`.
+  static func voicedAudioSeconds(pcm16k data: Data, rmsThreshold: Double = voicedRMSThreshold) -> (
+    total: Double, voiced: Double
+  ) {
     let sampleCount = data.count / 2
     guard sampleCount > 0 else { return (0, 0) }
     let frameSamples = 320  // 20ms at 16kHz
@@ -400,7 +409,7 @@ class PushToTalkManager: ObservableObject {
           sumSquares += s * s
         }
         let rms = (sumSquares / Double(frameSamples)).squareRoot()
-        if rms > voicedRMSThreshold { voicedFrames += 1 }
+        if rms > rmsThreshold { voicedFrames += 1 }
         totalFrames += 1
         i += frameSamples
       }
@@ -437,8 +446,9 @@ class PushToTalkManager: ObservableObject {
       let turnAudio = batchAudioBuffer
       batchAudioBuffer = Data()
       batchAudioLock.unlock()
-      let (totalSec, voicedSec) = Self.voicedAudioSeconds(pcm16k: turnAudio)
-      if totalSec < Self.minTurnAudioSeconds || voicedSec < Self.minVoicedSeconds {
+      let (totalSec, voicedSec) = Self.voicedAudioSeconds(
+        pcm16k: turnAudio, rmsThreshold: Self.hubVoicedRMSThreshold)
+      if totalSec < Self.hubMinTurnAudioSeconds || voicedSec < Self.hubMinVoicedSeconds {
         log(
           "PushToTalkManager: discarding silent hub turn (audio \(String(format: "%.2f", totalSec))s, voiced \(String(format: "%.2f", voicedSec))s) — not committing"
         )
@@ -716,17 +726,12 @@ class PushToTalkManager: ObservableObject {
       // Retain the turn's raw audio so finalize() can silence-gate it.
       batchAudioLock.lock(); batchAudioBuffer = Data(); batchAudioLock.unlock()
       RealtimeHubController.shared.beginTurn()
-      // Bluetooth output: opening a BT mic forces the device into 16 kHz HFP mode,
-      // which drops the OUTPUT rate too and chops the spoken reply. Capture from the
-      // built-in mic so the BT device stays in A2DP and playback stays full-quality.
-      if AudioCaptureService.isDefaultOutputBluetooth(),
-        let builtIn = AudioCaptureService.findBuiltInMicDeviceID()
-      {
-        log("PushToTalkManager: hub on Bluetooth output — capturing from built-in mic to keep A2DP")
-        startMicCapture(overrideDeviceID: builtIn)
-      } else {
-        startMicCapture()
-      }
+      // Capture from the system default mic — on AirPods/BT that's the headset mic
+      // the user is actually speaking into. (We tried forcing the built-in mic to
+      // keep the BT output in A2DP, but then the laptop mic hears nothing when the
+      // user talks into their AirPods → every turn was dropped as silent. Listening
+      // wins; the reply just rides the BT device's HFP mode.)
+      startMicCapture()
       log("PushToTalkManager: realtime hub active — model is the voice hub")
       return
     }
