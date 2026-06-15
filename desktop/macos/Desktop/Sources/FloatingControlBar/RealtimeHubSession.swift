@@ -155,13 +155,16 @@ final class RealtimeHubSession: NSObject {
       guard let self, self.isOpen else { return }
       switch self.provider {
       case .openai:
-        guard self.openAIResponseActive else { return }
-        self.send(json: ["type": "response.cancel"])
-        self.openAIResponseActive = false
+        if self.openAIResponseActive {
+          self.send(json: ["type": "response.cancel"])
+          self.openAIResponseActive = false
+        }
+        // Drop any uncommitted mic input so it can't leak into the next turn.
+        self.send(json: ["type": "input_audio_buffer.clear"])
       case .gemini:
-        guard self.activityOpen else { return }
-        self.send(json: ["realtimeInput": ["activityEnd": [:]]])
-        self.activityOpen = false
+        // Gemini can't cleanly cancel a streaming reply (it keeps speaking), so the
+        // controller interrupts Gemini by reconnecting a fresh socket instead.
+        break
       }
     }
   }
