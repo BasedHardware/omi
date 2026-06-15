@@ -478,9 +478,9 @@ class ChatProvider: ObservableObject {
 ================================================================================
 🚨 FLOATING BAR MODE — READ THIS FIRST BEFORE ANYTHING ELSE 🚨
 ================================================================================
-ALWAYS check the user's memories and facts using available tools (get_memories, search_memories, execute_sql) before answering ANY question. The user expects personalized answers based on what you know about them.
+SCOPE TOOLS TO THE USER'S OWN DATA. First decide whether the question actually needs the user's personal data. If it's about the user — their memories, facts, preferences, past conversations, tasks, schedule, goals, or app/screen activity — use the available data tools (get_memories, search_memories, execute_sql, get_daily_recap, etc.) to look it up before answering; don't guess. If it's chit-chat, a greeting, or general knowledge that does NOT depend on the user's data, answer directly and immediately WITHOUT calling any tools. The user expects personalized answers when the question is about them — but not a tool round-trip for "hey" or a general question.
 NEVER ask follow-up questions or ask for clarification. ALWAYS give a direct, concrete answer immediately using whatever you know about the user from their memories, context, and facts. If memories mention their devices, preferences, work, budget, or interests — use that to give a specific recommendation, not a generic one.
-If the question contains a product name, software name, or proper noun — search the web for it before answering, even if you think you know what it is.
+Search the web only when you genuinely need current or unfamiliar information you don't already know (e.g. a product/version detail you're unsure of). Don't reflexively look up things you already know — answer general knowledge directly.
 If a screenshot is attached and the user asks a deictic question like "which one", "which option", "which suits me", "what should I choose", or "what's on my screen", ground the answer in the visible options first and prefer what is actually on screen over unrelated context.
 If the screenshot already clearly shows the relevant options, do not ignore it just because the query is short or ambiguous.
 Respond concisely in 1-2 sentences. No lists. No headers. NEVER ask follow-up questions — just answer.
@@ -2560,13 +2560,21 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             usageLimiter.recordQuery()
         }
 
+        // QueryTracer: picked up from the TaskLocal context established by the
+        // floating-bar / PTT entry points (nil for non-traced call sites).
+        let tracer = QueryTracerContext.current
+
         // Ensure bridge is running
+        tracer?.begin("bridge_ensure")
         guard await ensureBridgeStarted() else {
+            tracer?.end("bridge_ensure", metadata: ["error": "bridge_failed"])
+            tracer?.finalize(tokenCount: 0, model: model ?? modelOverride)
             if errorMessage?.isEmpty ?? true {
                 errorMessage = "AI not available"
             }
             return
         }
+        tracer?.end("bridge_ensure", metadata: ["status": "ok"])
 
         // Show upgrade prompt if over threshold but don't block the message
         if bridgeMode != BridgeMode.userClaude.rawValue && omiAICumulativeCostUsd >= 50.0 {
@@ -2584,6 +2592,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             }
             guard let sid = currentSessionId else {
                 errorMessage = "Failed to create chat session"
+                tracer?.finalize(tokenCount: 0, model: model ?? modelOverride)
                 return
             }
             sessionId = sid
@@ -2622,6 +2631,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             if !ok {
                 isSending = false
                 errorMessage = "Some attachments failed to upload. Remove them and try again."
+                tracer?.finalize(tokenCount: 0, model: model ?? modelOverride)
                 return
             }
             attachmentsForMessage = pendingAttachments
@@ -2765,14 +2775,40 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
 
             // Query the active bridge with streaming
             // Callbacks for agent bridge
+            //
+            // QueryTracer: `isFirstResponse` marks TTFT on the very first output of
+            // any kind (text delta OR tool_use start). `isGenerating` brackets the
+            // text-streaming window so the `generation` span excludes tool time.
+            var isFirstResponse = true
+            var isGenerating = false
             let textDeltaHandler: AgentBridge.TextDeltaHandler = { [weak self] delta in
+                if isFirstResponse {
+                    isFirstResponse = false
+                    tracer?.end("ttft")
+                    tracer?.markTTFT()
+                }
+                if !isGenerating {
+                    isGenerating = true
+                    tracer?.begin("generation")
+                }
                 Task { @MainActor [weak self] in
                     self?.appendToMessage(id: aiMessageId, text: delta)
                 }
             }
             let toolCallHandler: AgentBridge.ToolCallHandler = { callId, name, input in
                 let toolCall = ToolCall(name: name, arguments: input, thoughtSignature: nil)
+                // QueryTracer: time the actual tool execution (client-side run of the
+                // tool, distinct from the model-visible tool span in toolActivity).
+                let toolStart = ContinuousClock.now
                 let result = await ChatToolExecutor.execute(toolCall)
+                if let tracer {
+                    let toolDurMs = (ContinuousClock.now - toolStart).milliseconds
+                    let inputJson =
+                        (try? String(data: JSONSerialization.data(withJSONObject: input), encoding: .utf8))
+                        ?? "\(input)"
+                    tracer.captureToolExecution(
+                        toolUseId: callId, name: name, input: inputJson, output: result, durationMs: toolDurMs)
+                }
                 log("OMI tool \(name) executed for callId=\(callId)")
                 // Track SQL query stats for metadata
                 if name == "execute_sql" {
@@ -2786,6 +2822,22 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                 return result
             }
             let toolActivityHandler: AgentBridge.ToolActivityHandler = { [weak self] name, status, toolUseId, input in
+                // QueryTracer: a span per tool invocation, keyed by toolUseId so
+                // concurrent calls to the same tool don't collide. Overlapping
+                // start/end windows across spans reveal parallel vs sequential
+                // tool execution. A tool_use start also counts as first output
+                // for TTFT when the model leads with a tool call (no text first).
+                let spanKey = "tool:\(toolUseId ?? name)"
+                if status == "started" {
+                    if isFirstResponse {
+                        isFirstResponse = false
+                        tracer?.end("ttft")
+                        tracer?.markTTFT()
+                    }
+                    tracer?.begin(spanKey, metadata: ["tool": name])
+                } else if status == "completed" {
+                    tracer?.end(spanKey)
+                }
                 Task { @MainActor [weak self] in
                     self?.addToolActivity(
                         messageId: aiMessageId,
@@ -2836,6 +2888,22 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                 Task { @MainActor [weak self] in
                     self?.addToolResult(messageId: aiMessageId, toolUseId: toolUseId, name: name, output: output)
                 }
+            }
+
+            // QueryTracer: snapshot the exact request (system prompt + recent
+            // message history) and open the request/TTFT spans. The clock starts
+            // here so ttft measures input → first streamed output.
+            if let tracer {
+                let tracedModel = model ?? modelOverride ?? "unknown"
+                tracer.captureRequest(
+                    systemPrompt: systemPrompt,
+                    messages: Array(messages.suffix(40)).map {
+                        ["role": $0.sender == .user ? "user" : "assistant", "content": $0.text]
+                    },
+                    hasScreenshot: effectiveImageData != nil
+                )
+                tracer.begin("llm_request", metadata: ["model": tracedModel])
+                tracer.begin("ttft")
             }
 
             let queryResult = try await agentBridge.query(
@@ -2899,6 +2967,23 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                 messageText = queryResult.text
                 log("Chat response arrived after session switch")
             }
+
+            // QueryTracer: success path — record the response, close the remaining
+            // spans (end calls are no-ops if already closed), and write the trace
+            // with real token / cache / cost numbers from the bridge result.
+            tracer?.captureResponse(text: messageText)
+            tracer?.end("ttft")
+            tracer?.end("generation")
+            tracer?.end("llm_request")
+            tracer?.finalize(
+                tokenCount: queryResult.outputTokens,
+                model: model ?? modelOverride,
+                inputTokens: queryResult.inputTokens,
+                outputTokens: queryResult.outputTokens,
+                cacheReadTokens: queryResult.cacheReadTokens,
+                cacheWriteTokens: queryResult.cacheWriteTokens,
+                costUsd: queryResult.costUsd
+            )
 
             // Release the sending lock as soon as the AI response is visible in the
             // UI. Backend persistence is slow (can timeout at 30s+) and should not
@@ -3031,6 +3116,13 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                 await GoalsAIService.shared.extractProgressFromAllGoals(text: chatText)
             }
         } catch {
+            // QueryTracer: error path — close spans and write the (partial) trace
+            // so failed/timed-out queries still show up in benchmarks.
+            tracer?.end("ttft")
+            tracer?.end("generation")
+            tracer?.end("llm_request")
+            tracer?.finalize(tokenCount: 0, model: model ?? modelOverride)
+
             // On timeout, cancel the stuck ACP session so it's not left dangling
             if let bridgeError = error as? BridgeError, case .timeout = bridgeError {
                 log("ChatProvider: ACP query timed out, sending interrupt to cancel stuck session")
