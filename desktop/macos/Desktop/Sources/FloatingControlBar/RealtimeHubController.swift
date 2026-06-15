@@ -50,9 +50,19 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
 
   private override init() { super.init() }
 
-  /// True when the hub should drive PTT (enabled + a usable BYOK key for the
-  /// selected provider). Read by PushToTalkManager at PTT start.
-  var isActive: Bool { RealtimeHubSettings.shared.isActive }
+  /// In-flight ephemeral mint guard (managed users).
+  private var minting = false
+
+  /// True when the hub should drive this PTT turn. Read by PushToTalkManager at PTT
+  /// start. BYOK users are ready immediately (own key); managed users are ready only
+  /// once a warm session exists (token minted + connecting) — otherwise PTT falls
+  /// back to the legacy cascade for that turn.
+  var isActive: Bool {
+    guard RealtimeHubSettings.shared.isEnabled else { return false }
+    let provider = RealtimeHubSettings.shared.provider
+    if APIKeyService.byokKey(provider.byokProvider) != nil { return true }
+    return session != nil && sessionProvider == provider
+  }
 
   func setup(barState: FloatingControlBarState) {
     self.barState = barState
@@ -69,9 +79,9 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
   }
 
   @objc private func settingsChanged() {
-    // Only reconnect if the effective provider actually changed (or we're now
-    // off) — avoids redundant teardown/recreate races on unrelated notifications.
-    if !isActive { teardownSession(); return }
+    // Only reconnect if enabled and the provider actually changed — avoids
+    // redundant teardown/recreate races on unrelated notifications.
+    if !RealtimeHubSettings.shared.isEnabled { teardownSession(); return }
     if session != nil, sessionProvider == RealtimeHubSettings.shared.provider { return }
     teardownSession()
     ensureWarm()
@@ -79,28 +89,59 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
 
   // MARK: - Warm session lifecycle (kept open between turns)
 
-  /// Open the WS now if it isn't already (no-op if not active or already warm).
+  /// Open the WS now if it isn't already (no-op if disabled or already warm).
+  /// BYOK → connect client-direct with the user's key (Phase 1). Otherwise, if
+  /// signed in → mint a server-side ephemeral token (Phase 2) and connect with it.
   func ensureWarm() {
-    guard isActive else { return }
+    guard RealtimeHubSettings.shared.isEnabled else { return }
     let provider = RealtimeHubSettings.shared.provider
     if session != nil, sessionProvider == provider { return }
     if session != nil { teardownSession() }
 
-    guard let key = APIKeyService.byokKey(provider.byokProvider) else {
-      log(
-        "⚠️ RealtimeHub: no BYOK \(provider.byokProvider.displayName) key set — realtime hub "
-          + "cannot connect client-direct (Phase 1 is dev/BYOK only). Falling back to the cascade.")
-      return
+    if let key = APIKeyService.byokKey(provider.byokProvider) {
+      startSession(provider: provider, auth: .byokKey(key))
+    } else if AuthService.shared.isSignedIn {
+      mintAndConnect(provider: provider)
+    } else {
+      log("RealtimeHub: enabled but no BYOK key and not signed in — hub unavailable (cascade).")
     }
-    let s = RealtimeHubSession(provider: provider, apiKey: key, delegate: self)
+  }
+
+  /// Managed users: fetch a short-lived ephemeral token from the backend (gated by
+  /// auth + paywall there), then connect. On any failure (incl. 402 not-entitled),
+  /// leave the session nil so PTT falls back to the cascade.
+  private func mintAndConnect(provider: RealtimeHubProvider) {
+    guard !minting else { return }
+    minting = true
+    let providerParam = provider == .openai ? "openai" : "gemini"
+    log("RealtimeHub: minting ephemeral \(provider.displayName) token (managed)")
+    Task { [weak self] in
+      let token = await APIClient.shared.mintRealtimeToken(provider: providerParam)
+      guard let self else { return }
+      self.minting = false
+      guard let token else {
+        log("⚠️ RealtimeHub: ephemeral mint failed / not entitled — staying on cascade")
+        return
+      }
+      // Provider/enable may have changed while minting; only connect if still wanted.
+      guard RealtimeHubSettings.shared.isEnabled,
+        RealtimeHubSettings.shared.provider == provider, self.session == nil
+      else { return }
+      self.startSession(provider: provider, auth: .ephemeral(token))
+    }
+  }
+
+  private func startSession(provider: RealtimeHubProvider, auth: HubAuth) {
+    let s = RealtimeHubSession(provider: provider, auth: auth, delegate: self)
     session = s
     sessionProvider = provider
-    // Both providers now stream native spoken audio (24k PCM): OpenAI gpt-realtime,
-    // Gemini native-audio Live. The half-cascade TEXT→AVSpeech plan is infeasible
-    // (those models were deprecated), so AVSpeech is only a no-audio fallback.
+    // Both providers stream native spoken audio (24k PCM) → StreamingPCMPlayer;
+    // AVSpeech is only a no-audio fallback.
     if pcmPlayer == nil { pcmPlayer = StreamingPCMPlayer(sampleRate: 24000) }
     s.start()
-    log("RealtimeHub: warming \(provider.displayName) session (client-direct, BYOK)")
+    log(
+      "RealtimeHub: warming \(provider.displayName) session "
+        + "(\(auth.isEphemeral ? "ephemeral/managed" : "client-direct/BYOK"))")
   }
 
   private func teardownSession() {
