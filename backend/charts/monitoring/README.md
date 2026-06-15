@@ -184,34 +184,34 @@ Most are bundled with kube-prometheus-stack and auto-provisioned. Custom dashboa
 | Backend API Monitoring | `57c2a5ea-c310-4401-ac72-54dbc6da4c7e` | `api, backend, monitoring, omi` | **Custom** |
 | Backend API Monitoring | `3e7c5f57-a1be-4175-81e6-1f0c7c28b9dd` | `api, backend, monitoring, omi` | **Custom** (duplicate — consolidate) |
 | CoreDNS | `vkQ0UHxik` | `coredns, dns` | Bundled |
-| etcd | `c2f4e12c…` | `etcd-mixin` | Bundled |
+| etcd | `c2f4e12cdf69feb95caa41a5a1b423d9` | `etcd-mixin` | Bundled |
 | Grafana Overview | `6be0s85Mk` | — | Bundled |
 | K8s Node Metrics / Multi Clusters | `your_custom_uid_X0dfg` | `Prometheus, node_exporter` | **Custom** (community import) |
-| Kubernetes / API server | `09ec8aa1…` | `kubernetes-mixin` | Bundled |
-| Kubernetes / Compute Resources / Multi-Cluster | `b59e6c9f…` | `kubernetes-mixin` | Bundled |
-| Kubernetes / Compute Resources / Cluster | `efa86fd1…` | `kubernetes-mixin` | Bundled |
-| Kubernetes / Compute Resources / Namespace (Pods) | `85a56207…` | `kubernetes-mixin` | Bundled |
-| Kubernetes / Compute Resources / Namespace (Workloads) | `a87fb0d9…` | `kubernetes-mixin` | Bundled |
-| Kubernetes / Compute Resources / Node (Pods) | `200ac8fd…` | `kubernetes-mixin` | Bundled |
-| Kubernetes / Compute Resources / Pod | `6581e46e…` | `kubernetes-mixin` | Bundled |
-| Kubernetes / Compute Resources / Workload | `a164a7f0…` | `kubernetes-mixin` | Bundled |
-| Kubernetes / Controller Manager | `72e0e05b…` | `kubernetes-mixin` | Bundled |
-| Kubernetes / Kubelet | `3138fa15…` | `kubernetes-mixin` | Bundled |
-| Kubernetes / Networking / Cluster | `ff635a02…` | `kubernetes-mixin` | Bundled |
-| Kubernetes / Networking / Namespace (Pods) | `8b7a8b32…` | `kubernetes-mixin` | Bundled |
-| Kubernetes / Networking / Namespace (Workload) | `bbb2a765…` | `kubernetes-mixin` | Bundled |
-| Kubernetes / Networking / Pod | `7a18067c…` | `kubernetes-mixin` | Bundled |
-| Kubernetes / Networking / Workload | `728bf77c…` | `kubernetes-mixin` | Bundled |
-| Kubernetes / Persistent Volumes | `919b92a8…` | `kubernetes-mixin` | Bundled |
-| Kubernetes / Proxy | `632e265d…` | `kubernetes-mixin` | Bundled |
-| Kubernetes / Scheduler | `2e6b6a3b…` | `kubernetes-mixin` | Bundled |
-| Node Exporter / AIX | `7e0a61e4…` | `node-exporter-mixin` | Bundled |
-| Node Exporter / MacOS | `629701ea…` | `node-exporter-mixin` | Bundled |
-| Node Exporter / Nodes | `7d577163…` | `node-exporter-mixin` | Bundled |
-| Node Exporter / USE Method / Cluster | `3e97d1d0…` | `node-exporter-mixin` | Bundled |
-| Node Exporter / USE Method / Node | `fac67cfb…` | `node-exporter-mixin` | Bundled |
+| Kubernetes / API server | `09ec8aa1e996d6ffcd6817bbaff4db1b` | `kubernetes-mixin` | Bundled |
+| Kubernetes / Compute Resources / Multi-Cluster | `b59e6c9f2fcbe2e16d77fc492374cc4f` | `kubernetes-mixin` | Bundled |
+| Kubernetes / Compute Resources / Cluster | `efa86fd1d0c121a26444b636a3f509a8` | `kubernetes-mixin` | Bundled |
+| Kubernetes / Compute Resources / Namespace (Pods) | `85a562078cdf77779eaa1add43ccec1e` | `kubernetes-mixin` | Bundled |
+| Kubernetes / Compute Resources / Namespace (Workloads) | `a87fb0d919ec0ea5f6543124e16c42a5` | `kubernetes-mixin` | Bundled |
+| Kubernetes / Compute Resources / Node (Pods) | `200ac8fdbfbb74b39aff88118e4d1c2c` | `kubernetes-mixin` | Bundled |
+| Kubernetes / Compute Resources / Pod | `6581e46e4e5c7ba40a07646395ef7b23` | `kubernetes-mixin` | Bundled |
+| Kubernetes / Compute Resources / Workload | `a164a7f0339f99e89cea5cb47e9be617` | `kubernetes-mixin` | Bundled |
+| Kubernetes / Controller Manager | `72e0e05bef5099e5f049b05fdc429ed4` | `kubernetes-mixin` | Bundled |
+| Kubernetes / Kubelet | `3138fa155d5915769fbded898ac09fd9` | `kubernetes-mixin` | Bundled |
+| Kubernetes / Networking / Cluster | `ff635a025bcfea7bc3dd4f508990a3e9` | `kubernetes-mixin` | Bundled |
+| Kubernetes / Networking / Namespace (Pods) | `8b7a8b326d7a6f1f04244066368c67af` | `kubernetes-mixin` | Bundled |
+| Kubernetes / Networking / Namespace (Workload) | `bbb2a765a623ae38130206c7d94a160f` | `kubernetes-mixin` | Bundled |
+| Kubernetes / Networking / Pod | `7a18067ce943a40ae25454675c19ff5c` | `kubernetes-mixin` | Bundled |
+| Kubernetes / Networking / Workload | `728bf77cc1166d2f3133bf25846876cc` | `kubernetes-mixin` | Bundled |
+| Kubernetes / Persistent Volumes | `919b92a8e8041bd567af9edab12c840c` | `kubernetes-mixin` | Bundled |
+| Kubernetes / Proxy | `632e265de029684c40b21cb76bca4f94` | `kubernetes-mixin` | Bundled |
+| Kubernetes / Scheduler | `2e6b6a3b4bddf1427b3a55aa1311c656` | `kubernetes-mixin` | Bundled |
+| Node Exporter / AIX | `7e0a61e486f727d763fb1d86fdd629c2` | `node-exporter-mixin` | Bundled |
+| Node Exporter / MacOS | `629701ea43bf69291922ea45f4a87d37` | `node-exporter-mixin` | Bundled |
+| Node Exporter / Nodes | `7d57716318ee0dddbac5a7f451fb7753` | `node-exporter-mixin` | Bundled |
+| Node Exporter / USE Method / Cluster | `3e97d1d02672cdd0861f4c97c64f89b2` | `node-exporter-mixin` | Bundled |
+| Node Exporter / USE Method / Node | `fac67cfbe174d3ef53eb473d73d9212f` | `node-exporter-mixin` | Bundled |
 | Parakeet ASR Monitoring | `07e4c65f-ae79-414d-bf05-99468267d199` | `asr, gke, gpu, parakeet` | **Custom** — GPU ASR service metrics |
-| Prometheus / Overview | `9fa0d141…` | `prometheus-mixin` | Bundled |
+| Prometheus / Overview | `9fa0d141-d019-4ad7-8bc5-42196ee308bd` | `prometheus-mixin` | Bundled |
 
 ### Cloud Run (4) — per-service dashboards
 
@@ -424,39 +424,25 @@ curl -s -H "Authorization: Bearer $GRAFANA_TOKEN" \
    - Strip runtime fields: `.id`, `.version` (done by the `jq` command above)
    - Keep the `.uid` field — it links the repo copy to the live dashboard
 
-4. **Deploy via Grafana sidecar** — kube-prometheus-stack includes a sidecar container that watches for ConfigMaps with the label `grafana_dashboard: "1"` and auto-loads them into Grafana. Create a ConfigMap for your dashboard:
+4. **Deploy via Grafana sidecar** — kube-prometheus-stack ships a sidecar container that watches for ConfigMaps labeled `grafana_dashboard: "1"` and loads them into Grafana. The sidecar is enabled by default in the chart (label: `grafana_dashboard`, labelValue: `"1"`, watchMethod: `WATCH`). Our values do not override these defaults.
 
-```yaml
-# backend/charts/monitoring/dashboards/<name>-cm.yaml
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: omi-dashboard-<name>
-  namespace: {env}-omi-monitoring
-  labels:
-    grafana_dashboard: "1"
-data:
-  <name>.json: |-
-    # paste dashboard JSON here, or use --from-file at apply time
-```
-
-   Generate and apply:
+   Generate a labeled ConfigMap from the exported JSON and apply it directly with kubectl:
 ```bash
-# Generate ConfigMap from the exported JSON
+# Generate ConfigMap with the required sidecar label
 kubectl -n {env}-omi-monitoring create configmap omi-dashboard-<name> \
   --from-file=<name>.json=dashboards/<name>.json \
   --dry-run=client -o yaml | \
   kubectl label --local -f - grafana_dashboard=1 -o yaml > dashboards/<name>-cm.yaml
 
-# Apply (sidecar picks it up automatically)
+# Apply to the cluster (sidecar picks it up automatically via WATCH)
 kubectl apply -f dashboards/<name>-cm.yaml
 ```
 
-   The sidecar (`grafana.sidecar.dashboards`) is already enabled in kube-prometheus-stack values with `searchNamespace: null` (searches its own namespace) and `watchMethod: WATCH` (auto-reloads on ConfigMap changes).
+   **Note:** The `dashboards/<name>-cm.yaml` files are raw Kubernetes manifests applied via `kubectl apply`, not Helm templates. They persist in the cluster independently of Helm upgrades. If you need dashboards managed by Helm, add them to `grafana.dashboards` in the kube-prometheus-stack values instead.
 
-5. **Commit both files** — the dashboard JSON and its ConfigMap manifest — in the same PR. On future Helm upgrades, the ConfigMap persists and sidecar keeps serving it.
+5. **Commit both files** — the dashboard JSON and its ConfigMap manifest — in the same PR.
 
-6. **Verify** — open Grafana and confirm the dashboard appears. If you specified a folder annotation, check the correct folder.
+6. **Verify** — open Grafana and confirm the dashboard appears. The sidecar searches its own namespace (`{env}-omi-monitoring`) by default.
 
 #### Updating an Existing Dashboard
 
