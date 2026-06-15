@@ -170,6 +170,92 @@ Each component has dev and prod values:
 | Stackdriver exporter | `prometheus-stackdriver-exporter/dev_omi_stackdriver_exporter.yaml` | `prometheus-stackdriver-exporter/prod_omi_stackdriver_exporter.yaml` |
 | Grafana ALB cert | `kube-prometheus-stack/dev_omi_grafana_alb_cert.yaml` | `kube-prometheus-stack/prod_omi_grafana_alb_cert.yaml` |
 
+## Current Dashboards
+
+45 dashboards on prod Grafana (`monitor.omi.me`), organized by folder.
+
+### General (32) — kube-prometheus-stack defaults + custom
+
+Most are bundled with kube-prometheus-stack and auto-provisioned. Custom dashboards are noted.
+
+| Dashboard | UID | Tags | Notes |
+|-----------|-----|------|-------|
+| Alertmanager / Overview | `alertmanager-overview` | `alertmanager-mixin` | Bundled |
+| Backend API Monitoring | `57c2a5ea` | `api, backend, monitoring, omi` | **Custom** |
+| Backend API Monitoring | `3e7c5f57` | `api, backend, monitoring, omi` | **Custom** (duplicate — consolidate) |
+| CoreDNS | `vkQ0UHxik` | `coredns, dns` | Bundled |
+| etcd | `c2f4e12c…` | `etcd-mixin` | Bundled |
+| Grafana Overview | `6be0s85Mk` | — | Bundled |
+| K8s Node Metrics / Multi Clusters | `your_custom_uid_X0dfg` | `Prometheus, node_exporter` | **Custom** (community import) |
+| Kubernetes / API server | `09ec8aa1…` | `kubernetes-mixin` | Bundled |
+| Kubernetes / Compute Resources / Multi-Cluster | `b59e6c9f…` | `kubernetes-mixin` | Bundled |
+| Kubernetes / Compute Resources / Cluster | `efa86fd1…` | `kubernetes-mixin` | Bundled |
+| Kubernetes / Compute Resources / Namespace (Pods) | `85a56207…` | `kubernetes-mixin` | Bundled |
+| Kubernetes / Compute Resources / Namespace (Workloads) | `a87fb0d9…` | `kubernetes-mixin` | Bundled |
+| Kubernetes / Compute Resources / Node (Pods) | `200ac8fd…` | `kubernetes-mixin` | Bundled |
+| Kubernetes / Compute Resources / Pod | `6581e46e…` | `kubernetes-mixin` | Bundled |
+| Kubernetes / Compute Resources / Workload | `a164a7f0…` | `kubernetes-mixin` | Bundled |
+| Kubernetes / Controller Manager | `72e0e05b…` | `kubernetes-mixin` | Bundled |
+| Kubernetes / Kubelet | `3138fa15…` | `kubernetes-mixin` | Bundled |
+| Kubernetes / Networking / Cluster | `ff635a02…` | `kubernetes-mixin` | Bundled |
+| Kubernetes / Networking / Namespace (Pods) | `8b7a8b32…` | `kubernetes-mixin` | Bundled |
+| Kubernetes / Networking / Namespace (Workload) | `bbb2a765…` | `kubernetes-mixin` | Bundled |
+| Kubernetes / Networking / Pod | `7a18067c…` | `kubernetes-mixin` | Bundled |
+| Kubernetes / Networking / Workload | `728bf77c…` | `kubernetes-mixin` | Bundled |
+| Kubernetes / Persistent Volumes | `919b92a8…` | `kubernetes-mixin` | Bundled |
+| Kubernetes / Proxy | `632e265d…` | `kubernetes-mixin` | Bundled |
+| Kubernetes / Scheduler | `2e6b6a3b…` | `kubernetes-mixin` | Bundled |
+| Node Exporter / AIX | `7e0a61e4…` | `node-exporter-mixin` | Bundled |
+| Node Exporter / MacOS | `629701ea…` | `node-exporter-mixin` | Bundled |
+| Node Exporter / Nodes | `7d577163…` | `node-exporter-mixin` | Bundled |
+| Node Exporter / USE Method / Cluster | `3e97d1d0…` | `node-exporter-mixin` | Bundled |
+| Node Exporter / USE Method / Node | `fac67cfb…` | `node-exporter-mixin` | Bundled |
+| Parakeet ASR Monitoring | `07e4c65f` | `asr, gke, gpu, parakeet` | **Custom** — GPU ASR service metrics |
+| Prometheus / Overview | `9fa0d141…` | `prometheus-mixin` | Bundled |
+
+### Cloud Run (4) — per-service dashboards
+
+Folder: `Cloud Run` (folder UID: `aev9if48326f4e`)
+
+| Dashboard | UID | Notes |
+|-----------|-----|-------|
+| Backend | `0253019b` | Cloud Run backend (main API) |
+| Backend-integration | `5be48038` | Cloud Run backend-integration |
+| Backend-sync | `8bf7bd3f` | Cloud Run backend-sync |
+| Plugins | `e736ab7d` | Cloud Run plugins service |
+
+### GKE (5) — per-service dashboards
+
+Folder: `GKE` (folder UID: `aev9igt5fwgsgc`)
+
+| Dashboard | UID | Notes |
+|-----------|-----|-------|
+| Backend-listen | `855b2e16` | GKE WebSocket listener |
+| Deepgram self-hosted | `fedizdco` | Self-hosted STT engine |
+| Diarizer | `303b7396` | Speaker diarization GPU service |
+| Pusher | `c758b698` | Audio pusher service |
+| VAD | `72cfe240` | Voice activity detection GPU service |
+
+### Omi Services (4) — cross-cutting dashboards
+
+Folder: `Omi Services` (folder UID: `betdycdziadc0e`)
+
+| Dashboard | UID | Notes |
+|-----------|-----|-------|
+| Cloud Armor denied requests | `5feac510` | WAF/security denied traffic |
+| Cloud Run Services - Logs | `d2d782ef` | Aggregated Cloud Run logs view |
+| Global External ALB | `59aa0de7` | External load balancer metrics |
+| Omi Kubernetes Events | `3714dbfa` | K8s event stream (OOM kills, pod evictions) |
+
+### Dashboard Summary
+
+| Category | Count | Source | Version-controlled |
+|----------|------:|--------|--------------------|
+| Bundled (kube-prometheus-stack) | 29 | Helm chart sidecar | Yes (via chart defaults) |
+| Custom (Omi-specific) | 16 | Created in Grafana UI | **No** — needs export to repo |
+
+**Action items:** The 16 custom dashboards (3 General + 4 Cloud Run + 5 GKE + 4 Omi Services) should be exported to `dashboards/` and provisioned via sidecar ConfigMaps.
+
 ## Developer Guide
 
 ### Adding Metrics to a New Service
@@ -310,20 +396,156 @@ metrics:
 
 ### Grafana Dashboards
 
-Grafana: prod at `https://monitor.omi.me/`, dev at `https://monitor.omiapi.com/`. Dashboards are currently managed via the Grafana UI (not version-controlled).
+Grafana: prod at `https://monitor.omi.me/`, dev at `https://monitor.omiapi.com/`. See "Current Dashboards" above for the full inventory.
 
-**To export a dashboard as JSON:**
+#### Creating a New Dashboard
+
+1. **Create in Grafana UI first** — build the dashboard in dev (`monitor.omiapi.com`), iterate until it works.
+
+2. **Export the dashboard JSON:**
 ```bash
-# List all dashboards
-curl -s -H "Authorization: Bearer $GRAFANA_TOKEN" \
-  https://monitor.omi.me/api/search?type=dash-db | jq '.[].uid'
+# Get a Grafana API token (Settings → API Keys → Add, role=Viewer)
+export GRAFANA_TOKEN="your-token"
+export GRAFANA_HOST="https://monitor.omiapi.com"  # dev first
 
-# Export a specific dashboard
+# List dashboards to find the UID
 curl -s -H "Authorization: Bearer $GRAFANA_TOKEN" \
-  https://monitor.omi.me/api/dashboards/uid/<UID> | jq '.dashboard' > dashboard.json
+  "$GRAFANA_HOST/api/search?type=dash-db" | jq '.[] | {title, uid}'
+
+# Export a specific dashboard (strips runtime fields)
+curl -s -H "Authorization: Bearer $GRAFANA_TOKEN" \
+  "$GRAFANA_HOST/api/dashboards/uid/<UID>" | \
+  jq '.dashboard | del(.id, .version)' > dashboards/<name>.json
 ```
 
-**To provision a dashboard from JSON**, add it to a ConfigMap and reference it in the Grafana sidecar config within `kube-prometheus-stack` values.
+3. **Add to version control:**
+   - Save the JSON to `backend/charts/monitoring/dashboards/<name>.json`
+   - Use a descriptive filename matching the dashboard title (e.g. `parakeet-asr-monitoring.json`)
+   - Strip runtime fields: `.id`, `.version` (done by the `jq` command above)
+   - Keep the `.uid` field — it links the repo copy to the live dashboard
+
+4. **Create a provisioning ConfigMap** in `kube-prometheus-stack` values:
+```yaml
+# In kube-prometheus-stack/{env}_omi_monitoring_values.yaml
+grafana:
+  dashboardProviders:
+    dashboardproviders.yaml:
+      apiVersion: 1
+      providers:
+        - name: omi-dashboards
+          orgId: 1
+          folder: ""       # or a specific folder name
+          type: file
+          disableDeletion: false
+          editable: true   # allow UI edits (sync back later)
+          options:
+            path: /var/lib/grafana/dashboards/omi
+  dashboardsConfigMaps:
+    omi: "omi-grafana-dashboards"
+```
+
+5. **Create the ConfigMap template** (or use Grafana sidecar if available):
+```bash
+kubectl -n {env}-omi-monitoring create configmap omi-grafana-dashboards \
+  --from-file=dashboards/ --dry-run=client -o yaml > /tmp/cm.yaml
+kubectl apply -f /tmp/cm.yaml
+```
+
+6. **PR the changes** — dashboard JSON + values update in the same PR.
+
+#### Updating an Existing Dashboard
+
+**Option A: Edit in Grafana UI, then sync back (preferred for visual changes)**
+
+1. Make edits in Grafana UI (dev first, then prod)
+2. Follow the "Sync-Back Workflow" below to export and commit
+
+**Option B: Edit the JSON directly (preferred for metric renames, variable changes)**
+
+1. Edit `dashboards/<name>.json` in the repo
+2. Re-deploy via Helm or ConfigMap update
+3. Verify in Grafana UI
+
+#### Sync-Back Workflow: Grafana UI → Repo
+
+When a dashboard is edited via the Grafana UI (emergency fixes, quick iterations), export it back to the repo:
+
+```bash
+# 1. Set up
+export GRAFANA_TOKEN="your-token"
+export GRAFANA_HOST="https://monitor.omi.me"  # or monitor.omiapi.com
+
+# 2. Export the updated dashboard
+DASHBOARD_UID="07e4c65f"  # example: Parakeet ASR
+curl -s -H "Authorization: Bearer $GRAFANA_TOKEN" \
+  "$GRAFANA_HOST/api/dashboards/uid/$DASHBOARD_UID" | \
+  jq '.dashboard | del(.id, .version)' > dashboards/parakeet-asr-monitoring.json
+
+# 3. Review the diff
+git diff dashboards/parakeet-asr-monitoring.json
+
+# 4. Commit and PR
+git add dashboards/parakeet-asr-monitoring.json
+git commit -m "sync(monitoring): export parakeet dashboard from Grafana UI"
+```
+
+**Bulk sync (all custom dashboards):**
+```bash
+export GRAFANA_TOKEN="your-token"
+export GRAFANA_HOST="https://monitor.omi.me"
+
+# Custom dashboard UIDs (from Current Dashboards section)
+CUSTOM_UIDS=(
+  "57c2a5ea"  # Backend API Monitoring
+  "3e7c5f57"  # Backend API Monitoring (dup)
+  "07e4c65f"  # Parakeet ASR Monitoring
+  "your_custom_uid_X0dfg"  # K8s Node Metrics
+  "0253019b"  # Cloud Run: Backend
+  "5be48038"  # Cloud Run: Backend-integration
+  "8bf7bd3f"  # Cloud Run: Backend-sync
+  "e736ab7d"  # Cloud Run: Plugins
+  "855b2e16"  # GKE: Backend-listen
+  "fedizdco"  # GKE: Deepgram self-hosted
+  "303b7396"  # GKE: Diarizer
+  "c758b698"  # GKE: Pusher
+  "72cfe240"  # GKE: VAD
+  "5feac510"  # Omi: Cloud Armor
+  "d2d782ef"  # Omi: Cloud Run Logs
+  "59aa0de7"  # Omi: Global External ALB
+  "3714dbfa"  # Omi: K8s Events
+)
+
+mkdir -p dashboards
+for uid in "${CUSTOM_UIDS[@]}"; do
+  slug=$(curl -s -H "Authorization: Bearer $GRAFANA_TOKEN" \
+    "$GRAFANA_HOST/api/dashboards/uid/$uid" | \
+    jq -r '.meta.slug // .dashboard.title' | tr ' /' '-' | tr '[:upper:]' '[:lower:]')
+  curl -s -H "Authorization: Bearer $GRAFANA_TOKEN" \
+    "$GRAFANA_HOST/api/dashboards/uid/$uid" | \
+    jq '.dashboard | del(.id, .version)' > "dashboards/${slug}.json"
+  echo "Exported: $slug ($uid)"
+done
+```
+
+**Dev → Prod promotion:**
+```bash
+# Export from dev
+GRAFANA_HOST="https://monitor.omiapi.com" DASHBOARD_UID="<uid>" \
+  # ... export as above ...
+
+# Import to prod (update UID + datasource references if needed)
+curl -s -X POST -H "Authorization: Bearer $GRAFANA_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d "{\"dashboard\": $(cat dashboards/<name>.json), \"overwrite\": true}" \
+  "https://monitor.omi.me/api/dashboards/db"
+```
+
+**Rules:**
+- Always export from prod to repo (prod is the live source until full provisioning is in place)
+- Strip `.id` and `.version` — they are instance-specific
+- Keep `.uid` — it prevents duplicate dashboards on import
+- Emergency UI edits must be synced back to repo within the same day
+- When syncing, check `git diff` to ensure only intended panels changed (Grafana may reorder JSON keys)
 
 ### Alert Rules
 
