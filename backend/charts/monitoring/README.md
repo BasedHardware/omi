@@ -278,7 +278,7 @@ spec:
   type: ClusterIP
   ports:
     - port: {{ .Values.metrics.port }}
-      targetPort: {{ .Values.service.port }}
+      targetPort: {{ .Values.metrics.port }}
       protocol: TCP
       name: metrics
   selector:
@@ -728,7 +728,7 @@ helm -n dev-omi-monitoring upgrade --install dev-omi-prometheus-stackdriver-expo
 1. Check the pod exposes `/metrics` and returns valid Prometheus format
 2. For ServiceMonitor: verify the `release` label matches Prometheus's `serviceMonitorSelector`
 3. For annotations: verify the scrape job exists in `additionalScrapeConfigs`
-4. Check Prometheus targets: `https://monitor.omi.me/` → Explore → Prometheus datasource → metric name
+4. Check Prometheus targets: access Prometheus UI → Status → Targets to see scrape status. To query the metric: Grafana → Explore → Prometheus datasource → metric name
 
 **HPA shows `<unknown>` for custom metric:**
 1. Verify the metric exists: `kubectl get --raw "/apis/external.metrics.k8s.io/v1beta1/namespaces/{ns}/{metric}"`
