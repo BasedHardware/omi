@@ -150,6 +150,7 @@ def _remove_file(path: str) -> None:
 @app.post("/v1/transcribe")
 async def transcribe(file: UploadFile = File(...)):
     if gpu_worker is not None and not gpu_worker.is_ready:
+        REQUESTS_TOTAL.labels(endpoint="v1_transcribe", status="error").inc()
         return JSONResponse(status_code=503, content={"detail": "Model loading, try again shortly"})
     upload_id = str(uuid.uuid4())
     file_path = f"_temp/{upload_id}_{file.filename}"
@@ -197,6 +198,7 @@ async def transcribe_v2(
     diarize: bool = Form(True),
 ):
     if gpu_worker is not None and not gpu_worker.is_ready:
+        REQUESTS_TOTAL.labels(endpoint="v2_transcribe", status="error").inc()
         return JSONResponse(status_code=503, content={"detail": "Model loading, try again shortly"})
     upload_id = str(uuid.uuid4())
     file_path = f"_temp/{upload_id}_{file.filename}"

@@ -34,7 +34,7 @@ sys.modules["nemo.collections.asr"] = _nemo_asr
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../../parakeet"))
 
 from batch_engine import BatchEngine, QueueFullError, _unlink_safe
-from gpu_worker import GPUWorker
+from gpu_worker import GPUWorker, WorkItem, WorkType
 
 
 def _make_mock_gpu_worker(results_fn=None):
@@ -43,12 +43,14 @@ def _make_mock_gpu_worker(results_fn=None):
 
     def submit(payload, loop):
         fut = loop.create_future()
+        item = WorkItem(WorkType.BATCH_TRANSCRIBE, payload, future=fut, loop=loop)
         if results_fn:
             res = results_fn(payload)
         else:
             res = [{"text": f"ok:{p}", "timestamp": {}} for p in payload["audio_paths"]]
+        item.inference_seconds = 0.01
         loop.call_soon(fut.set_result, res)
-        return fut
+        return fut, item
 
     worker.submit.side_effect = submit
     return worker
@@ -215,8 +217,9 @@ class TestBatchEngineErrorPropagation:
 
         def submit_error(payload, loop):
             fut = loop.create_future()
+            item = WorkItem(WorkType.BATCH_TRANSCRIBE, payload, future=fut, loop=loop)
             loop.call_soon(fut.set_exception, RuntimeError("GPU exploded"))
-            return fut
+            return fut, item
 
         gpu.submit.side_effect = submit_error
         engine = BatchEngine(gpu, max_batch_size=3, max_wait_seconds=0.01)
@@ -244,8 +247,9 @@ class TestBatchEngineErrorPropagation:
 
         def submit_queue_full(payload, loop):
             fut = loop.create_future()
+            item = WorkItem(WorkType.BATCH_TRANSCRIBE, payload, future=fut, loop=loop)
             loop.call_soon(fut.set_exception, RuntimeError("GPU queue full"))
-            return fut
+            return fut, item
 
         gpu.submit.side_effect = submit_queue_full
         engine = BatchEngine(gpu, max_batch_size=1, max_wait_seconds=0.01)
@@ -347,7 +351,9 @@ class TestBatchEngineShutdown:
         gpu.is_ready = True
 
         def submit_hang(payload, loop):
-            return loop.create_future()
+            fut = loop.create_future()
+            item = WorkItem(WorkType.BATCH_TRANSCRIBE, payload, future=fut, loop=loop)
+            return fut, item
 
         gpu.submit.side_effect = submit_hang
         engine = BatchEngine(gpu, max_batch_size=1, max_wait_seconds=0.01)
@@ -418,8 +424,9 @@ class TestBatchEngineCallbacks:
 
         def submit_oom(payload, loop):
             fut = loop.create_future()
+            item = WorkItem(WorkType.BATCH_TRANSCRIBE, payload, future=fut, loop=loop)
             loop.call_soon(fut.set_exception, RuntimeError("CUDA out of memory"))
-            return fut
+            return fut, item
 
         gpu.submit.side_effect = submit_oom
         engine = BatchEngine(gpu, max_batch_size=1, max_wait_seconds=0.01, on_gpu_oom=on_oom)

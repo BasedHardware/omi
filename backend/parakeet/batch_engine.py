@@ -126,7 +126,7 @@ class BatchEngine:
         timestamps = batch[0].timestamps if batch else True
         is_oom = False
         try:
-            gpu_future = self._gpu_worker.submit(
+            gpu_future, work_item = self._gpu_worker.submit(
                 {
                     "audio_paths": audio_paths,
                     "timestamps": timestamps,
@@ -135,10 +135,10 @@ class BatchEngine:
                 self._loop,
             )
             results = await gpu_future
-            inference_duration = time.monotonic() - batch_start
+            inference_seconds = work_item.inference_seconds if work_item else 0.0
 
             if self._on_batch_complete:
-                self._on_batch_complete(queue_durations, inference_duration, len(batch))
+                self._on_batch_complete(queue_durations, inference_seconds, len(batch))
 
             if isinstance(results, list) and len(results) == len(batch):
                 for req, result in zip(batch, results):
