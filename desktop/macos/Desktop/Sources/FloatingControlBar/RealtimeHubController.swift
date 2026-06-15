@@ -40,9 +40,9 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
   /// True between commit and turn-done — used to detect barge-in (a new PTT while
   /// the previous reply is still in flight).
   private var responding = false
-  /// After an INTENTIONAL teardown+reconnect (barge-in/cancel), swallow the old
-  /// socket's death-rattle error briefly so it doesn't tear down the fresh session.
-  private var ignoreErrorsUntil: Date?
+
+  /// Log tag for the currently-connected provider.
+  private var providerTag: String { sessionProvider == .gemini ? "gemini" : "openai" }
 
   /// Held warm so spawn_agent's pi-mono bridge boot is off the hot path. The pill
   /// spawn creates its own provider; warming this one primes node/auth caches.
@@ -145,6 +145,9 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
   }
 
   private func teardownSession() {
+    // Detach first so a socket we're dropping can't deliver a late error/close to us
+    // and tear down the fresh session we're about to create.
+    session?.detach()
     session?.stop()
     session = nil
     sessionProvider = nil
@@ -172,7 +175,6 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
       // interrupt is to drop the socket — that stops the in-flight audio. The new
       // turn proceeds on a fresh socket (audio buffers until it reconnects).
       log("RealtimeHub[gemini]: barge-in — reconnecting to stop in-flight reply")
-      ignoreErrorsUntil = Date().addingTimeInterval(0.6)
       teardownSession()
     } else if bargeIn {
       session?.cancelActiveResponse()  // OpenAI: response.cancel + clear input
@@ -211,7 +213,6 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     if sessionProvider == .gemini {
       // The speech window was already opened (activityStart on beginTurn); the only
       // way to drop it without the model answering the silence is a fresh socket.
-      ignoreErrorsUntil = Date().addingTimeInterval(0.6)
       teardownSession()
       ensureWarm()
     } else {
@@ -262,7 +263,6 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
   }
 
   func hubDidRequestTool(name: String, callId: String, argumentsJSON: String) {
-    let providerTag = sessionProvider == .gemini ? "gemini" : "openai"
     let arguments =
       (try? JSONSerialization.jsonObject(with: Data(argumentsJSON.utf8)) as? [String: Any]) ?? [:]
     guard let tool = HubTool(rawValue: name) else {
@@ -309,19 +309,15 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
 
   func hubDidFinishTurn() {
     responding = false
-    let providerTag = sessionProvider == .gemini ? "gemini" : "openai"
     let heard = turnTranscript.trimmingCharacters(in: .whitespacesAndNewlines)
     log("RealtimeHub[\(providerTag)]: turn done — heard=\"\(heard.prefix(80))\" audio=\(audioReceivedThisTurn)")
     exitVoiceUI()
   }
 
   func hubDidError(_ message: String) {
-    // Swallow the death-rattle from a socket we just intentionally dropped
-    // (barge-in/cancel reconnect) so it can't tear down the fresh session.
-    if let until = ignoreErrorsUntil, Date() < until {
-      log("RealtimeHub: ignoring expected post-reconnect error — \(message)")
-      return
-    }
+    // A socket we intentionally dropped (barge-in/cancel reconnect) is detached in
+    // teardownSession() before it's released, so its death-rattle never reaches us —
+    // only the live session's errors land here.
     responding = false
     logError("RealtimeHub: session error — \(message)")
     exitVoiceUI()
