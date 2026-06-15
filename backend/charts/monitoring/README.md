@@ -181,8 +181,8 @@ Most are bundled with kube-prometheus-stack and auto-provisioned. Custom dashboa
 | Dashboard | UID | Tags | Notes |
 |-----------|-----|------|-------|
 | Alertmanager / Overview | `alertmanager-overview` | `alertmanager-mixin` | Bundled |
-| Backend API Monitoring | `57c2a5ea` | `api, backend, monitoring, omi` | **Custom** |
-| Backend API Monitoring | `3e7c5f57` | `api, backend, monitoring, omi` | **Custom** (duplicate — consolidate) |
+| Backend API Monitoring | `57c2a5ea-c310-4401-ac72-54dbc6da4c7e` | `api, backend, monitoring, omi` | **Custom** |
+| Backend API Monitoring | `3e7c5f57-a1be-4175-81e6-1f0c7c28b9dd` | `api, backend, monitoring, omi` | **Custom** (duplicate — consolidate) |
 | CoreDNS | `vkQ0UHxik` | `coredns, dns` | Bundled |
 | etcd | `c2f4e12c…` | `etcd-mixin` | Bundled |
 | Grafana Overview | `6be0s85Mk` | — | Bundled |
@@ -210,7 +210,7 @@ Most are bundled with kube-prometheus-stack and auto-provisioned. Custom dashboa
 | Node Exporter / Nodes | `7d577163…` | `node-exporter-mixin` | Bundled |
 | Node Exporter / USE Method / Cluster | `3e97d1d0…` | `node-exporter-mixin` | Bundled |
 | Node Exporter / USE Method / Node | `fac67cfb…` | `node-exporter-mixin` | Bundled |
-| Parakeet ASR Monitoring | `07e4c65f` | `asr, gke, gpu, parakeet` | **Custom** — GPU ASR service metrics |
+| Parakeet ASR Monitoring | `07e4c65f-ae79-414d-bf05-99468267d199` | `asr, gke, gpu, parakeet` | **Custom** — GPU ASR service metrics |
 | Prometheus / Overview | `9fa0d141…` | `prometheus-mixin` | Bundled |
 
 ### Cloud Run (4) — per-service dashboards
@@ -219,10 +219,10 @@ Folder: `Cloud Run` (folder UID: `aev9if48326f4e`)
 
 | Dashboard | UID | Notes |
 |-----------|-----|-------|
-| Backend | `0253019b` | Cloud Run backend (main API) |
-| Backend-integration | `5be48038` | Cloud Run backend-integration |
-| Backend-sync | `8bf7bd3f` | Cloud Run backend-sync |
-| Plugins | `e736ab7d` | Cloud Run plugins service |
+| Backend | `0253019b-c68a-4aef-a27d-6bb3408727fb` | Cloud Run backend (main API) |
+| Backend-integration | `5be48038-a72b-4938-99ed-7a8747655294` | Cloud Run backend-integration |
+| Backend-sync | `8bf7bd3f-8dbc-4f86-a532-557bfac0d7ac` | Cloud Run backend-sync |
+| Plugins | `e736ab7d-d3e8-444f-a743-369b054def9e` | Cloud Run plugins service |
 
 ### GKE (5) — per-service dashboards
 
@@ -230,11 +230,11 @@ Folder: `GKE` (folder UID: `aev9igt5fwgsgc`)
 
 | Dashboard | UID | Notes |
 |-----------|-----|-------|
-| Backend-listen | `855b2e16` | GKE WebSocket listener |
-| Deepgram self-hosted | `fedizdco` | Self-hosted STT engine |
-| Diarizer | `303b7396` | Speaker diarization GPU service |
-| Pusher | `c758b698` | Audio pusher service |
-| VAD | `72cfe240` | Voice activity detection GPU service |
+| Backend-listen | `855b2e16-c098-407a-85dc-dc9ce87698a9` | GKE WebSocket listener |
+| Deepgram self-hosted | `fedizdcosu1oga` | Self-hosted STT engine |
+| Diarizer | `303b7396-ce6e-48ee-be24-9c157a710adf` | Speaker diarization GPU service |
+| Pusher | `c758b698-01a0-4b5c-b58c-e81e4ff33ccd` | Audio pusher service |
+| VAD | `72cfe240-ae8c-4076-845e-c58e28f12d87` | Voice activity detection GPU service |
 
 ### Omi Services (4) — cross-cutting dashboards
 
@@ -242,19 +242,19 @@ Folder: `Omi Services` (folder UID: `betdycdziadc0e`)
 
 | Dashboard | UID | Notes |
 |-----------|-----|-------|
-| Cloud Armor denied requests | `5feac510` | WAF/security denied traffic |
-| Cloud Run Services - Logs | `d2d782ef` | Aggregated Cloud Run logs view |
-| Global External ALB | `59aa0de7` | External load balancer metrics |
-| Omi Kubernetes Events | `3714dbfa` | K8s event stream (OOM kills, pod evictions) |
+| Cloud Armor denied requests | `5feac510-b391-48fc-9c4b-1b8dde4ab32a` | WAF/security denied traffic |
+| Cloud Run Services - Logs | `d2d782ef-f537-46b8-969d-f73561ec7d07` | Aggregated Cloud Run logs view |
+| Global External ALB | `59aa0de7-15c6-413f-acba-b7e99296ad75` | External load balancer metrics |
+| Omi Kubernetes Events | `3714dbfa-114b-47a0-99ca-1a26354e792a` | K8s event stream (OOM kills, pod evictions) |
 
 ### Dashboard Summary
 
 | Category | Count | Source | Version-controlled |
 |----------|------:|--------|--------------------|
-| Bundled (kube-prometheus-stack) | 29 | Helm chart sidecar | Yes (via chart defaults) |
-| Custom (Omi-specific) | 16 | Created in Grafana UI | **No** — needs export to repo |
+| Bundled (kube-prometheus-stack) | 28 | Helm chart sidecar | Yes (via chart defaults) |
+| Custom (Omi-specific) | 17 | Created in Grafana UI | **No** — needs export to repo |
 
-**Action items:** The 16 custom dashboards (3 General + 4 Cloud Run + 5 GKE + 4 Omi Services) should be exported to `dashboards/` and provisioned via sidecar ConfigMaps.
+**Action items:** The 17 custom dashboards (4 General + 4 Cloud Run + 5 GKE + 4 Omi Services) should be exported to `dashboards/` and provisioned via sidecar ConfigMaps.
 
 ## Developer Guide
 
@@ -424,34 +424,39 @@ curl -s -H "Authorization: Bearer $GRAFANA_TOKEN" \
    - Strip runtime fields: `.id`, `.version` (done by the `jq` command above)
    - Keep the `.uid` field — it links the repo copy to the live dashboard
 
-4. **Create a provisioning ConfigMap** in `kube-prometheus-stack` values:
+4. **Deploy via Grafana sidecar** — kube-prometheus-stack includes a sidecar container that watches for ConfigMaps with the label `grafana_dashboard: "1"` and auto-loads them into Grafana. Create a ConfigMap for your dashboard:
+
 ```yaml
-# In kube-prometheus-stack/{env}_omi_monitoring_values.yaml
-grafana:
-  dashboardProviders:
-    dashboardproviders.yaml:
-      apiVersion: 1
-      providers:
-        - name: omi-dashboards
-          orgId: 1
-          folder: ""       # or a specific folder name
-          type: file
-          disableDeletion: false
-          editable: true   # allow UI edits (sync back later)
-          options:
-            path: /var/lib/grafana/dashboards/omi
-  dashboardsConfigMaps:
-    omi: "omi-grafana-dashboards"
+# backend/charts/monitoring/dashboards/<name>-cm.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: omi-dashboard-<name>
+  namespace: {env}-omi-monitoring
+  labels:
+    grafana_dashboard: "1"
+data:
+  <name>.json: |-
+    # paste dashboard JSON here, or use --from-file at apply time
 ```
 
-5. **Create the ConfigMap template** (or use Grafana sidecar if available):
+   Generate and apply:
 ```bash
-kubectl -n {env}-omi-monitoring create configmap omi-grafana-dashboards \
-  --from-file=dashboards/ --dry-run=client -o yaml > /tmp/cm.yaml
-kubectl apply -f /tmp/cm.yaml
+# Generate ConfigMap from the exported JSON
+kubectl -n {env}-omi-monitoring create configmap omi-dashboard-<name> \
+  --from-file=<name>.json=dashboards/<name>.json \
+  --dry-run=client -o yaml | \
+  kubectl label --local -f - grafana_dashboard=1 -o yaml > dashboards/<name>-cm.yaml
+
+# Apply (sidecar picks it up automatically)
+kubectl apply -f dashboards/<name>-cm.yaml
 ```
 
-6. **PR the changes** — dashboard JSON + values update in the same PR.
+   The sidecar (`grafana.sidecar.dashboards`) is already enabled in kube-prometheus-stack values with `searchNamespace: null` (searches its own namespace) and `watchMethod: WATCH` (auto-reloads on ConfigMap changes).
+
+5. **Commit both files** — the dashboard JSON and its ConfigMap manifest — in the same PR. On future Helm upgrades, the ConfigMap persists and sidecar keeps serving it.
+
+6. **Verify** — open Grafana and confirm the dashboard appears. If you specified a folder annotation, check the correct folder.
 
 #### Updating an Existing Dashboard
 
@@ -476,7 +481,7 @@ export GRAFANA_TOKEN="your-token"
 export GRAFANA_HOST="https://monitor.omi.me"  # or monitor.omiapi.com
 
 # 2. Export the updated dashboard
-DASHBOARD_UID="07e4c65f"  # example: Parakeet ASR
+DASHBOARD_UID="07e4c65f-ae79-414d-bf05-99468267d199"  # example: Parakeet ASR
 curl -s -H "Authorization: Bearer $GRAFANA_TOKEN" \
   "$GRAFANA_HOST/api/dashboards/uid/$DASHBOARD_UID" | \
   jq '.dashboard | del(.id, .version)' > dashboards/parakeet-asr-monitoring.json
@@ -496,23 +501,23 @@ export GRAFANA_HOST="https://monitor.omi.me"
 
 # Custom dashboard UIDs (from Current Dashboards section)
 CUSTOM_UIDS=(
-  "57c2a5ea"  # Backend API Monitoring
-  "3e7c5f57"  # Backend API Monitoring (dup)
-  "07e4c65f"  # Parakeet ASR Monitoring
-  "your_custom_uid_X0dfg"  # K8s Node Metrics
-  "0253019b"  # Cloud Run: Backend
-  "5be48038"  # Cloud Run: Backend-integration
-  "8bf7bd3f"  # Cloud Run: Backend-sync
-  "e736ab7d"  # Cloud Run: Plugins
-  "855b2e16"  # GKE: Backend-listen
-  "fedizdco"  # GKE: Deepgram self-hosted
-  "303b7396"  # GKE: Diarizer
-  "c758b698"  # GKE: Pusher
-  "72cfe240"  # GKE: VAD
-  "5feac510"  # Omi: Cloud Armor
-  "d2d782ef"  # Omi: Cloud Run Logs
-  "59aa0de7"  # Omi: Global External ALB
-  "3714dbfa"  # Omi: K8s Events
+  "57c2a5ea-c310-4401-ac72-54dbc6da4c7e"  # Backend API Monitoring
+  "3e7c5f57-a1be-4175-81e6-1f0c7c28b9dd"  # Backend API Monitoring (dup)
+  "07e4c65f-ae79-414d-bf05-99468267d199"  # Parakeet ASR Monitoring
+  "your_custom_uid_X0dfg"                  # K8s Node Metrics
+  "0253019b-c68a-4aef-a27d-6bb3408727fb"  # Cloud Run: Backend
+  "5be48038-a72b-4938-99ed-7a8747655294"  # Cloud Run: Backend-integration
+  "8bf7bd3f-8dbc-4f86-a532-557bfac0d7ac"  # Cloud Run: Backend-sync
+  "e736ab7d-d3e8-444f-a743-369b054def9e"  # Cloud Run: Plugins
+  "855b2e16-c098-407a-85dc-dc9ce87698a9"  # GKE: Backend-listen
+  "fedizdcosu1oga"                         # GKE: Deepgram self-hosted
+  "303b7396-ce6e-48ee-be24-9c157a710adf"  # GKE: Diarizer
+  "c758b698-01a0-4b5c-b58c-e81e4ff33ccd"  # GKE: Pusher
+  "72cfe240-ae8c-4076-845e-c58e28f12d87"  # GKE: VAD
+  "5feac510-b391-48fc-9c4b-1b8dde4ab32a"  # Omi: Cloud Armor
+  "d2d782ef-f537-46b8-969d-f73561ec7d07"  # Omi: Cloud Run Logs
+  "59aa0de7-15c6-413f-acba-b7e99296ad75"  # Omi: Global External ALB
+  "3714dbfa-114b-47a0-99ca-1a26354e792a"  # Omi: K8s Events
 )
 
 mkdir -p dashboards
