@@ -147,6 +147,25 @@ final class RealtimeHubSession: NSObject {
 
   // MARK: Public stream API
 
+  /// Barge-in: cancel any in-flight reply so a new turn starts clean. Prevents the
+  /// OpenAI "Conversation already has an active response in progress" error and a
+  /// dangling Gemini activity window (which the server aborts with close 1008).
+  func cancelActiveResponse() {
+    q.async { [weak self] in
+      guard let self, self.isOpen else { return }
+      switch self.provider {
+      case .openai:
+        guard self.openAIResponseActive else { return }
+        self.send(json: ["type": "response.cancel"])
+        self.openAIResponseActive = false
+      case .gemini:
+        guard self.activityOpen else { return }
+        self.send(json: ["realtimeInput": ["activityEnd": [:]]])
+        self.activityOpen = false
+      }
+    }
+  }
+
   /// Feed mic PCM16 mono at `requiredInputSampleRate` (caller resamples).
   func sendAudio(_ pcm: Data) {
     q.async { [weak self] in
