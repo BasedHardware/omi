@@ -1,7 +1,5 @@
 import 'package:flutter/services.dart';
 
-import 'package:flutter_blue_plus/flutter_blue_plus.dart';
-
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/services/devices/apple_watch_connection.dart';
 import 'package:omi/services/devices/bee_connection.dart';
@@ -11,7 +9,6 @@ import 'package:omi/services/devices/fieldy_connection.dart';
 import 'package:omi/services/devices/frame_connection.dart';
 import 'package:omi/services/devices/friend_pendant_connection.dart';
 import 'package:omi/services/devices/limitless_connection.dart';
-import 'package:omi/services/devices/models.dart';
 import 'package:omi/services/devices/omi_connection.dart';
 import 'package:omi/services/devices/omiglass_connection.dart';
 import 'package:omi/services/devices/plaud_connection.dart';
@@ -186,43 +183,6 @@ int mapCodecToBitDepth(BleAudioCodec codec) {
     default:
       return 16;
   }
-}
-
-Future<DeviceType?> getTypeOfBluetoothDevice(BluetoothDevice device) async {
-  if (cachedDevicesMap.containsKey(device.remoteId.toString())) {
-    return cachedDevicesMap[device.remoteId.toString()];
-  }
-  DeviceType? deviceType;
-  await device.discoverServices();
-
-  // Check for device types using helper methods
-  if (BtDevice.isBeeDeviceFromDevice(device)) {
-    deviceType = DeviceType.bee;
-  } else if (BtDevice.isPlaudDeviceFromDevice(device)) {
-    deviceType = DeviceType.plaud;
-  } else if (BtDevice.isFieldyDeviceFromDevice(device)) {
-    deviceType = DeviceType.fieldy;
-  } else if (BtDevice.isFriendPendantDeviceFromDevice(device)) {
-    deviceType = DeviceType.friendPendant;
-  } else if (BtDevice.isLimitlessDeviceFromDevice(device)) {
-    deviceType = DeviceType.limitless;
-  } else if (BtDevice.isOmiDeviceFromDevice(device)) {
-    // Check if the device has the image data stream characteristic
-    final hasImageStream = device.servicesList
-        .where((s) => s.uuid == Guid.fromString(omiServiceUuid))
-        .expand((s) => s.characteristics)
-        .any((c) => c.uuid.toString().toLowerCase() == imageDataStreamCharacteristicUuid.toLowerCase());
-    // Also check device name for OpenGlass/OmiGlass detection
-    final isOpenGlassByName =
-        device.platformName.toLowerCase().contains('openglass') || device.platformName.toLowerCase().contains('glass');
-    deviceType = (hasImageStream || isOpenGlassByName) ? DeviceType.openglass : DeviceType.omi;
-  } else if (BtDevice.isFrameDeviceFromDevice(device)) {
-    deviceType = DeviceType.frame;
-  }
-  if (deviceType != null) {
-    cachedDevicesMap[device.remoteId.toString()] = deviceType;
-  }
-  return deviceType;
 }
 
 enum DeviceType { omi, openglass, frame, appleWatch, plaud, bee, fieldy, friendPendant, limitless }
@@ -682,161 +642,6 @@ class BtDevice {
       case DeviceType.appleWatch:
         return ''; // No warning needed
     }
-  }
-
-  // from BluetoothDevice
-  Future fromBluetoothDevice(BluetoothDevice device) async {
-    var rssi = await device.readRssi();
-    return BtDevice(name: device.platformName, id: device.remoteId.str, type: DeviceType.omi, rssi: rssi);
-  }
-
-  // Check if a scan result is from a supported device
-  static bool isSupportedDevice(ScanResult result) {
-    return isBeeDevice(result) ||
-        isPlaudDevice(result) ||
-        isFieldyDevice(result) ||
-        isFriendPendantDevice(result) ||
-        isLimitlessDevice(result) ||
-        isOmiDevice(result) ||
-        isFrameDevice(result);
-  }
-
-  static bool isBeeDevice(ScanResult result) {
-    return result.device.platformName.toLowerCase().contains('bee');
-  }
-
-  static bool isBeeDeviceFromDevice(BluetoothDevice device) {
-    return device.servicesList.any((s) => s.uuid.toString().toLowerCase() == beeServiceUuid.toLowerCase()) ||
-        device.platformName.toLowerCase().contains('bee');
-  }
-
-  static bool isPlaudDevice(ScanResult result) {
-    final manufacturerData = result.advertisementData.manufacturerData;
-
-    // Check for PLAUD manufacturer ID (93 / 0x5D)
-    // This should be consistent across all PLAUD devices
-    if (manufacturerData.containsKey(93)) {
-      final data = manufacturerData[93]!;
-
-      // Log the pattern to learn new devices
-      Logger.debug(
-        '[PLAUD] Found manufacturer ID 93 with data: ${data.map((e) => e.toRadixString(16).padLeft(2, '0')).join()}',
-      );
-
-      // Known pattern for NotePin: 0456cf00
-      if (data.length >= 4 && data[0] == 0x04 && data[1] == 0x56 && data[2] == 0xcf && data[3] == 0x00) {
-        return true;
-      }
-
-      // Accept any device with manufacturer ID 93 if it has data
-      // This catches other PLAUD models we haven't seen yet
-      if (data.isNotEmpty) {
-        Logger.debug('[PLAUD] Accepting device with manufacturer ID 93');
-        return true;
-      }
-    }
-
-    // Fallback: name check for renamed/unknown variants
-    return result.device.platformName.toUpperCase().startsWith('PLAUD');
-  }
-
-  static bool isPlaudDeviceFromDevice(BluetoothDevice device) {
-    // Primary check: PLAUD service UUID (most reliable after connection)
-    if (device.servicesList.any((s) => s.uuid == Guid(plaudServiceUuid))) {
-      return true;
-    }
-
-    // Fallback: name check for compatibility
-    return device.platformName.toUpperCase().startsWith('PLAUD');
-  }
-
-  static bool isFieldyDevice(ScanResult result) {
-    final name = result.device.platformName.toLowerCase();
-    return name == 'compass' || name == 'fieldy';
-  }
-
-  static bool isFieldyDeviceFromDevice(BluetoothDevice device) {
-    final name = device.platformName.toLowerCase();
-    return device.servicesList.any((s) => s.uuid.toString().toLowerCase() == fieldyServiceUuid.toLowerCase()) ||
-        name == 'compass' ||
-        name == 'fieldy';
-  }
-
-  static bool isFriendPendantDevice(ScanResult result) {
-    return result.device.platformName.toLowerCase().startsWith('friend_') ||
-        result.advertisementData.serviceUuids.any(
-          (uuid) => uuid.toString().toLowerCase() == friendPendantServiceUuid.toLowerCase(),
-        );
-  }
-
-  static bool isFriendPendantDeviceFromDevice(BluetoothDevice device) {
-    return device.platformName.toLowerCase().startsWith('friend_') ||
-        device.servicesList.any((s) => s.uuid.toString().toLowerCase() == friendPendantServiceUuid.toLowerCase());
-  }
-
-  static bool isLimitlessDevice(ScanResult result) {
-    final name = result.device.platformName.toLowerCase();
-    return name.contains('limitless') ||
-        name.contains('pendant') ||
-        result.advertisementData.serviceUuids.any(
-          (uuid) => uuid.toString().toLowerCase() == limitlessServiceUuid.toLowerCase(),
-        );
-  }
-
-  static bool isLimitlessDeviceFromDevice(BluetoothDevice device) {
-    final name = device.platformName.toLowerCase();
-    return name.contains('limitless') ||
-        name.contains('pendant') ||
-        device.servicesList.any((s) => s.uuid.toString().toLowerCase() == limitlessServiceUuid.toLowerCase());
-  }
-
-  static bool isOmiDevice(ScanResult result) {
-    return result.advertisementData.serviceUuids.contains(Guid(omiServiceUuid));
-  }
-
-  static bool isOmiDeviceFromDevice(BluetoothDevice device) {
-    return device.servicesList.any((s) => s.uuid == Guid(omiServiceUuid));
-  }
-
-  static bool isFrameDevice(ScanResult result) {
-    return result.advertisementData.serviceUuids.contains(Guid(frameServiceUuid));
-  }
-
-  static bool isFrameDeviceFromDevice(BluetoothDevice device) {
-    return device.servicesList.any((s) => s.uuid == Guid(frameServiceUuid));
-  }
-
-  // from ScanResult
-  static fromScanResult(ScanResult result) {
-    DeviceType? deviceType;
-
-    if (isBeeDevice(result)) {
-      deviceType = DeviceType.bee;
-    } else if (isPlaudDevice(result)) {
-      deviceType = DeviceType.plaud;
-    } else if (isFieldyDevice(result)) {
-      deviceType = DeviceType.fieldy;
-    } else if (isFriendPendantDevice(result)) {
-      deviceType = DeviceType.friendPendant;
-    } else if (isLimitlessDevice(result)) {
-      deviceType = DeviceType.limitless;
-    } else if (isOmiDevice(result)) {
-      deviceType = DeviceType.omi;
-    } else if (isFrameDevice(result)) {
-      deviceType = DeviceType.frame;
-    }
-    if (deviceType != null) {
-      cachedDevicesMap[result.device.remoteId.toString()] = deviceType;
-    } else if (cachedDevicesMap.containsKey(result.device.remoteId.toString())) {
-      deviceType = cachedDevicesMap[result.device.remoteId.toString()];
-    }
-    return BtDevice(
-      name: result.device.platformName,
-      id: result.device.remoteId.str,
-      type: deviceType ?? DeviceType.omi,
-      rssi: result.rssi,
-      locator: DeviceLocator.bluetooth(deviceId: result.device.remoteId.str),
-    );
   }
 
   // from json

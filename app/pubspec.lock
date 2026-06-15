@@ -679,7 +679,7 @@ packages:
     source: hosted
     version: "5.1.2"
   flutter_blue_plus:
-    dependency: "direct main"
+    dependency: transitive
     description:
       name: flutter_blue_plus
       sha256: "399b3dbc15562ef59749f04e43a99ccbb91540022380d5f269aff3c2787534e4"
