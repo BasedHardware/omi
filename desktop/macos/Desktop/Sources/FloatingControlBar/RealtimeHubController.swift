@@ -46,6 +46,11 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
 
   func setup(barState: FloatingControlBarState) {
     self.barState = barState
+    // Register the observer exactly once — duplicate registrations (re-entrant
+    // setup) fired settingsChanged N times, each tearing down + recreating the
+    // socket, which orphaned a connecting session (Gemini 1001/1008 closes).
+    NotificationCenter.default.removeObserver(
+      self, name: .realtimeHubSettingsDidChange, object: nil)
     NotificationCenter.default.addObserver(
       self, selector: #selector(settingsChanged),
       name: .realtimeHubSettingsDidChange, object: nil)
@@ -54,10 +59,12 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
   }
 
   @objc private func settingsChanged() {
-    // Provider/enabled changed — drop the old socket so the next turn reconnects
-    // with the new provider/key (the hub reads provider at connect, per spec).
+    // Only reconnect if the effective provider actually changed (or we're now
+    // off) — avoids redundant teardown/recreate races on unrelated notifications.
+    if !isActive { teardownSession(); return }
+    if session != nil, sessionProvider == RealtimeHubSettings.shared.provider { return }
     teardownSession()
-    if isActive { ensureWarm() }
+    ensureWarm()
   }
 
   // MARK: - Warm session lifecycle (kept open between turns)
@@ -105,6 +112,9 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     audioReceivedThisTurn = false
     pcmPlayer?.stop()  // interrupt any prior reply
     if speech.isSpeaking { speech.stopSpeaking(at: .immediate) }
+    // Open a fresh speech window for this turn (Gemini manual-VAD needs it EVERY
+    // turn on a warm session; OpenAI no-op).
+    session?.beginInputTurn()
     // Speculative, parallel, non-blocking screen grab (item 6a).
     Task.detached(priority: .utility) {
       let shot = ScreenCaptureManager.captureScreenData()
@@ -174,16 +184,18 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
   }
 
   func hubDidRequestTool(name: String, callId: String, argumentsJSON: String) {
-    log("RealtimeHub: tool_call \(name) \(argumentsJSON)")
+    let providerTag = sessionProvider == .gemini ? "gemini" : "openai"
     let arguments =
       (try? JSONSerialization.jsonObject(with: Data(argumentsJSON.utf8)) as? [String: Any]) ?? [:]
     guard let tool = HubTool(rawValue: name) else {
+      log("RealtimeHub[\(providerTag)]: tool_call UNKNOWN \(name) — rejecting")
       session?.sendToolResult(callId: callId, name: name, output: "Unknown tool.")
       return
     }
     switch tool {
     case .askHigherModel:
       let query = (arguments["query"] as? String) ?? turnTranscript
+      log("RealtimeHub[\(providerTag)]: tool ask_higher_model → POST /v2/chat/completions (claude-sonnet-4-6) query=\"\(query.prefix(80))\"")
       Task { [weak self] in
         guard let self else { return }
         let answer = await self.escalateToHigherModel(query)
@@ -196,12 +208,14 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
       // Non-blocking: spawn renders its own pill ("text bubble") and runs on its
       // own ChatProvider/AgentBridge. We don't await it on the voice loop.
       let pill = AgentPillsManager.shared.spawnFromUserQuery(brief, model: model, fromVoice: true)
+      log("RealtimeHub[\(providerTag)]: tool spawn_agent → AgentBridge pill=\"\(pill.title)\" model=\(model)")
       session?.sendToolResult(
         callId: callId, name: name,
         output: "Started a background agent: \"\(pill.title)\". It's working on it now.")
     case .screenshot:
       let shot = speculativeScreenshot ?? ScreenCaptureManager.captureScreenData()
       if let shot { session?.injectImage(shot) }
+      log("RealtimeHub[\(providerTag)]: tool screenshot → local capture (\(shot?.count ?? 0) bytes)")
       session?.sendToolResult(
         callId: callId, name: name,
         output: shot == nil ? "Could not capture the screen." : "Screen captured.")
@@ -216,6 +230,9 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
   }
 
   func hubDidFinishTurn() {
+    let providerTag = sessionProvider == .gemini ? "gemini" : "openai"
+    let heard = turnTranscript.trimmingCharacters(in: .whitespacesAndNewlines)
+    log("RealtimeHub[\(providerTag)]: turn done — heard=\"\(heard.prefix(80))\" audio=\(audioReceivedThisTurn)")
     exitVoiceUI()
   }
 
@@ -269,12 +286,14 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
       ],
       "stream": false,
     ]
+    let t0 = Date()
     do {
       request.httpBody = try JSONSerialization.data(withJSONObject: body)
       let (data, response) = try await URLSession.shared.data(for: request)
+      let ms = Int(Date().timeIntervalSince(t0) * 1000)
       guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
         let code = (response as? HTTPURLResponse)?.statusCode ?? -1
-        log("RealtimeHub: ask_higher_model HTTP \(code)")
+        log("RealtimeHub: ask_higher_model ← claude-sonnet-4-6 HTTP \(code) in \(ms)ms (FAILED)")
         return "The model is unavailable right now."
       }
       guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
@@ -282,9 +301,12 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
         let message = choices.first?["message"] as? [String: Any],
         let text = message["content"] as? String
       else {
+        log("RealtimeHub: ask_higher_model ← unexpected response shape in \(ms)ms")
         return "I didn't get a usable answer."
       }
-      return text.trimmingCharacters(in: .whitespacesAndNewlines)
+      let answer = text.trimmingCharacters(in: .whitespacesAndNewlines)
+      log("RealtimeHub: ask_higher_model ← claude-sonnet-4-6 OK in \(ms)ms (\(answer.count) chars)")
+      return answer
     } catch {
       log("RealtimeHub: ask_higher_model failed — \(error.localizedDescription)")
       return "I ran into an error reaching the model."
