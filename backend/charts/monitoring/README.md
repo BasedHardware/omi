@@ -426,12 +426,17 @@ curl -s -H "Authorization: Bearer $GRAFANA_TOKEN" \
 
 4. **Import to Grafana** (if creating on a new/different instance):
 ```bash
-# Import via Grafana API
+# First, get or create the target folder (returns folderUid)
+FOLDER_UID=$(curl -s -H "Authorization: Bearer $GRAFANA_TOKEN" \
+  "$GRAFANA_HOST/api/folders" | jq -r '.[] | select(.title=="GKE") | .uid')
+
+# Import with folder placement
 curl -s -X POST -H "Authorization: Bearer $GRAFANA_TOKEN" \
   -H "Content-Type: application/json" \
-  -d "{\"dashboard\": $(cat dashboards/<folder>/<name>.json), \"overwrite\": true}" \
+  -d "{\"dashboard\": $(cat dashboards/<folder>/<name>.json), \"folderUid\": \"$FOLDER_UID\", \"overwrite\": true}" \
   "$GRAFANA_HOST/api/dashboards/db"
 ```
+   Without `folderUid`, the dashboard lands in General. See the folder UIDs in the "Current Dashboards" section above.
 
 5. **Commit the JSON** and open a PR.
 
@@ -463,54 +468,61 @@ git add dashboards/parakeet-asr-monitoring.json
 git commit -m "sync(monitoring): export parakeet dashboard from Grafana UI"
 ```
 
-**Bulk sync (all custom dashboards):**
+**Bulk sync (all 16 custom dashboards):**
 ```bash
 export GRAFANA_TOKEN="your-token"
 export GRAFANA_HOST="https://monitor.omi.me"
 
-# Custom dashboard UIDs (from Current Dashboards section)
-CUSTOM_UIDS=(
-  "57c2a5ea-c310-4401-ac72-54dbc6da4c7e"  # Backend API Monitoring
-  "3e7c5f57-a1be-4175-81e6-1f0c7c28b9dd"  # Backend API Monitoring (dup)
-  "07e4c65f-ae79-414d-bf05-99468267d199"  # Parakeet ASR Monitoring
-  "your_custom_uid_X0dfg"                  # K8s Node Metrics
-  "0253019b-c68a-4aef-a27d-6bb3408727fb"  # Cloud Run: Backend
-  "5be48038-a72b-4938-99ed-7a8747655294"  # Cloud Run: Backend-integration
-  "8bf7bd3f-8dbc-4f86-a532-557bfac0d7ac"  # Cloud Run: Backend-sync
-  "e736ab7d-d3e8-444f-a743-369b054def9e"  # Cloud Run: Plugins
-  "855b2e16-c098-407a-85dc-dc9ce87698a9"  # GKE: Backend-listen
-  "fedizdcosu1oga"                         # GKE: Deepgram self-hosted
-  "303b7396-ce6e-48ee-be24-9c157a710adf"  # GKE: Diarizer
-  "c758b698-01a0-4b5c-b58c-e81e4ff33ccd"  # GKE: Pusher
-  "72cfe240-ae8c-4076-845e-c58e28f12d87"  # GKE: VAD
-  "5feac510-b391-48fc-9c4b-1b8dde4ab32a"  # Omi: Cloud Armor
-  "d2d782ef-f537-46b8-969d-f73561ec7d07"  # Omi: Cloud Run Logs
-  "59aa0de7-15c6-413f-acba-b7e99296ad75"  # Omi: Global External ALB
-  "3714dbfa-114b-47a0-99ca-1a26354e792a"  # Omi: K8s Events
+# UID → folder mapping (mirrors repo directory structure)
+declare -A DASHBOARDS=(
+  # general/
+  ["57c2a5ea-c310-4401-ac72-54dbc6da4c7e"]="general"
+  ["3e7c5f57-a1be-4175-81e6-1f0c7c28b9dd"]="general"
+  ["07e4c65f-ae79-414d-bf05-99468267d199"]="general"
+  # cloud-run/
+  ["0253019b-c68a-4aef-a27d-6bb3408727fb"]="cloud-run"
+  ["5be48038-a72b-4938-99ed-7a8747655294"]="cloud-run"
+  ["8bf7bd3f-8dbc-4f86-a532-557bfac0d7ac"]="cloud-run"
+  ["e736ab7d-d3e8-444f-a743-369b054def9e"]="cloud-run"
+  # gke/
+  ["855b2e16-c098-407a-85dc-dc9ce87698a9"]="gke"
+  ["fedizdcosu1oga"]="gke"
+  ["303b7396-ce6e-48ee-be24-9c157a710adf"]="gke"
+  ["c758b698-01a0-4b5c-b58c-e81e4ff33ccd"]="gke"
+  ["72cfe240-ae8c-4076-845e-c58e28f12d87"]="gke"
+  # omi-services/
+  ["5feac510-b391-48fc-9c4b-1b8dde4ab32a"]="omi-services"
+  ["d2d782ef-f537-46b8-969d-f73561ec7d07"]="omi-services"
+  ["59aa0de7-15c6-413f-acba-b7e99296ad75"]="omi-services"
+  ["3714dbfa-114b-47a0-99ca-1a26354e792a"]="omi-services"
 )
 
-mkdir -p dashboards
-for uid in "${CUSTOM_UIDS[@]}"; do
+for uid in "${!DASHBOARDS[@]}"; do
+  folder="${DASHBOARDS[$uid]}"
+  mkdir -p "dashboards/$folder"
   slug=$(curl -s -H "Authorization: Bearer $GRAFANA_TOKEN" \
     "$GRAFANA_HOST/api/dashboards/uid/$uid" | \
     jq -r '.meta.slug // .dashboard.title' | tr ' /' '-' | tr '[:upper:]' '[:lower:]')
   curl -s -H "Authorization: Bearer $GRAFANA_TOKEN" \
     "$GRAFANA_HOST/api/dashboards/uid/$uid" | \
-    jq '.dashboard | del(.id, .version)' > "dashboards/${slug}.json"
-  echo "Exported: $slug ($uid)"
+    jq '.dashboard | del(.id, .version)' > "dashboards/$folder/${slug}.json"
+  echo "Exported: $folder/$slug ($uid)"
 done
 ```
 
 **Dev → Prod promotion:**
 ```bash
 # Export from dev
-GRAFANA_HOST="https://monitor.omiapi.com" DASHBOARD_UID="<uid>" \
-  # ... export as above ...
+export GRAFANA_HOST="https://monitor.omiapi.com"
+curl -s -H "Authorization: Bearer $GRAFANA_TOKEN" \
+  "$GRAFANA_HOST/api/dashboards/uid/<uid>" | \
+  jq '.dashboard | del(.id, .version)' > dashboards/<folder>/<name>.json
 
-# Import to prod (update UID + datasource references if needed)
-curl -s -X POST -H "Authorization: Bearer $GRAFANA_TOKEN" \
+# Import to prod with correct folder
+FOLDER_UID="aev9igt5fwgsgc"  # example: GKE folder
+curl -s -X POST -H "Authorization: Bearer $PROD_GRAFANA_TOKEN" \
   -H "Content-Type: application/json" \
-  -d "{\"dashboard\": $(cat dashboards/<name>.json), \"overwrite\": true}" \
+  -d "{\"dashboard\": $(cat dashboards/<folder>/<name>.json), \"folderUid\": \"$FOLDER_UID\", \"overwrite\": true}" \
   "https://monitor.omi.me/api/dashboards/db"
 ```
 
