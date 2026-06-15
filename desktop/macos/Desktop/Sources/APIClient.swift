@@ -148,6 +148,25 @@ actor APIClient {
     return try await performRequest(request)
   }
 
+  /// Phase 2 realtime hub: ask the backend to mint a short-lived ephemeral token
+  /// for `provider` ("openai"|"gemini"). The backend gates on auth + paywall and
+  /// returns 402/403 if not entitled — any non-200 surfaces here as a thrown error,
+  /// so we return nil and the caller falls back to the legacy cascade.
+  func mintRealtimeToken(provider: String) async -> String? {
+    struct Resp: Decodable { let token: String }
+    let base = rustBackendURL
+    guard !base.isEmpty else { return nil }
+    let normalized = base.hasSuffix("/") ? base : base + "/"
+    do {
+      let resp: Resp = try await post(
+        "v2/realtime/session", body: ["provider": provider], customBaseURL: normalized)
+      return resp.token.isEmpty ? nil : resp.token
+    } catch {
+      log("APIClient: realtime token mint failed for \(provider): \(error.localizedDescription)")
+      return nil
+    }
+  }
+
   func delete(
     _ endpoint: String,
     requireAuth: Bool = true,
