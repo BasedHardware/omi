@@ -698,7 +698,17 @@ class PushToTalkManager: ObservableObject {
     if RealtimeHubController.shared.isActive {
       isHubMode = true
       RealtimeHubController.shared.beginTurn()
-      startMicCapture()
+      // Bluetooth output: opening a BT mic forces the device into 16 kHz HFP mode,
+      // which drops the OUTPUT rate too and chops the spoken reply. Capture from the
+      // built-in mic so the BT device stays in A2DP and playback stays full-quality.
+      if AudioCaptureService.isDefaultOutputBluetooth(),
+        let builtIn = AudioCaptureService.findBuiltInMicDeviceID()
+      {
+        log("PushToTalkManager: hub on Bluetooth output — capturing from built-in mic to keep A2DP")
+        startMicCapture(overrideDeviceID: builtIn)
+      } else {
+        startMicCapture()
+      }
       log("PushToTalkManager: realtime hub active — model is the voice hub")
       return
     }
