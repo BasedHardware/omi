@@ -5,6 +5,7 @@ import os
 import time
 import uuid
 import logging
+import io as _io
 import wave as _wave
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import asynccontextmanager
@@ -77,9 +78,9 @@ _diarize_pool = ThreadPoolExecutor(max_workers=4, thread_name_prefix="diarize")
 _io_pool = ThreadPoolExecutor(max_workers=4, thread_name_prefix="file-io")
 
 
-def _get_audio_duration(file_path: str) -> float:
+def _get_audio_duration_from_bytes(data: bytes) -> float:
     try:
-        with _wave.open(file_path, 'rb') as wf:
+        with _wave.open(_io.BytesIO(data), 'rb') as wf:
             return wf.getnframes() / wf.getframerate()
     except Exception:
         return 0.0
@@ -161,11 +162,10 @@ async def transcribe(file: UploadFile = File(...)):
     loop = asyncio.get_running_loop()
     try:
         data = await file.read()
-        await loop.run_in_executor(_io_pool, _write_file, file_path, data)
-
-        audio_dur = await loop.run_in_executor(_io_pool, _get_audio_duration, file_path)
+        audio_dur = _get_audio_duration_from_bytes(data)
         if audio_dur > 0:
             AUDIO_DURATION.observe(audio_dur)
+        await loop.run_in_executor(_io_pool, _write_file, file_path, data)
 
         if batch_engine is not None:
             PENDING_REQUESTS.set(len(batch_engine._pending))
@@ -209,11 +209,10 @@ async def transcribe_v2(
     loop = asyncio.get_running_loop()
     try:
         data = await file.read()
-        await loop.run_in_executor(_io_pool, _write_file, file_path, data)
-
-        audio_dur = await loop.run_in_executor(_io_pool, _get_audio_duration, file_path)
+        audio_dur = _get_audio_duration_from_bytes(data)
         if audio_dur > 0:
             AUDIO_DURATION.observe(audio_dur)
+        await loop.run_in_executor(_io_pool, _write_file, file_path, data)
 
         if batch_engine is not None:
             PENDING_REQUESTS.set(len(batch_engine._pending))
