@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import os
 import sys
+import types
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -41,6 +42,13 @@ os.environ.setdefault("BASE_API_URL", "http://localhost:8080")
 _mock = MagicMock()
 for mod in ['firebase_admin.auth', 'database.redis_db', 'utils.http_client', 'utils.log_sanitizer']:
     sys.modules.setdefault(mod, _mock)
+
+try:
+    import jinja2  # noqa: F401
+except ImportError:
+    _templating_mod = types.ModuleType("fastapi.templating")
+    _templating_mod.Jinja2Templates = MagicMock(return_value=MagicMock())
+    sys.modules["fastapi.templating"] = _templating_mod
 
 # Allow importing ``backend.routers.auth`` without running the full backend
 # entrypoint — same trick the rest of tests/unit uses.
@@ -288,6 +296,7 @@ class TestCallbackTemplateRendering:
 
     def test_template_uses_dynamic_redirect_uri(self):
         """Verify auth_callback.html renders with the session's redirect_uri, not hardcoded."""
+        pytest.importorskip("jinja2")
         from jinja2 import Environment, FileSystemLoader
         import pathlib
 
@@ -306,6 +315,7 @@ class TestCallbackTemplateRendering:
 
     def test_template_json_escapes_redirect_uri(self):
         """Verify redirect_uri is JSON-escaped in the template (XSS prevention)."""
+        pytest.importorskip("jinja2")
         from jinja2 import Environment, FileSystemLoader
         import pathlib
 
@@ -323,6 +333,7 @@ class TestCallbackTemplateRendering:
 
     def test_template_defaults_when_redirect_uri_missing(self):
         """Verify template falls back to omi://auth/callback when redirect_uri not provided."""
+        pytest.importorskip("jinja2")
         from jinja2 import Environment, FileSystemLoader
         import pathlib
 

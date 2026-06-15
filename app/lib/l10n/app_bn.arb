@@ -10818,5 +10818,17 @@
   "objectAnnouncementsLatencyMetric": "Latency",
   "@objectAnnouncementsLatencyMetric": {
     "description": "Detect dashboard latency metric label"
-  }
+  },
+  "autoSync": "স্বয়ংক্রিয় সিঙ্ক",
+  "autoSyncDescription": "আপনার ডিভাইস সংযুক্ত হলে অফলাইন রেকর্ডিংগুলি স্বয়ংক্রিয়ভাবে সিঙ্ক করুন",
+  "backgroundModeTitle": "ব্যাকগ্রাউন্ড মোড",
+  "backgroundModeDescription": "অ্যাপ সম্পূর্ণ বন্ধ থাকলেও আপনার Omi রেকর্ডিং চালু রাখুন।",
+  "backgroundModeNote": "আপাতত শুধু Omi ডিভাইসের সাথে কাজ করে এবং ক্রমাগত উন্নত করা হচ্ছে।",
+  "regenerateRecap": "রিক্যাপ পুনরায় তৈরি করুন",
+  "recapRegeneratedSnackbar": "রিক্যাপ পুনরায় তৈরি হয়েছে",
+  "recapRegenerateFailed": "রিক্যাপ পুনরায় তৈরি করা যায়নি। পরে আবার চেষ্টা করুন।",
+  "recapRegenerateCooldown": "পুনরায় তৈরি করার আগে কয়েক সেকেন্ড অপেক্ষা করুন।",
+  "recapRegenerateNoConversations": "এই দিনের জন্য সংক্ষেপ করার কোনো কথোপকথন নেই।",
+  "syncCustomSttWarningTitle": "সিঙ্ক Omi-এর ট্রান্সক্রিপশন ব্যবহার করে",
+  "syncCustomSttWarningMessage": "আপনি নিজের ট্রান্সক্রিপশন প্রদানকারী ব্যবহার করেন। এই রেকর্ডিংগুলি সিঙ্ক করলে সেগুলি Omi-এর সার্ভারে ট্রান্সক্রাইব হবে এবং আপনার প্ল্যানের ট্রান্সক্রিপশন সীমার মধ্যে গণনা হবে।"
 }

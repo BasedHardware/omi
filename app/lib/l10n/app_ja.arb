@@ -3241,5 +3241,17 @@
   "objectAnnouncementsLatencyMetric": "Latency",
   "@objectAnnouncementsLatencyMetric": {
     "description": "Detect dashboard latency metric label"
-  }
+  },
+  "autoSync": "自動同期",
+  "autoSyncDescription": "デバイスの接続時にオフライン録音を自動的に同期します",
+  "backgroundModeTitle": "バックグラウンドモード",
+  "backgroundModeDescription": "アプリを完全に閉じても Omi の録音を続けます。",
+  "backgroundModeNote": "現在は Omi デバイスのみ対応しており、継続的に改善しています。",
+  "regenerateRecap": "要約を再生成",
+  "recapRegeneratedSnackbar": "要約を再生成しました",
+  "recapRegenerateFailed": "要約を再生成できませんでした。後でもう一度お試しください。",
+  "recapRegenerateCooldown": "再生成する前に数秒お待ちください。",
+  "recapRegenerateNoConversations": "この日の要約対象となる会話はありません。",
+  "syncCustomSttWarningTitle": "同期では Omi の文字起こしを使用します",
+  "syncCustomSttWarningMessage": "ご自身の文字起こしプロバイダーを使用しています。これらの録音を同期すると Omi のサーバーで文字起こしされ、プランの文字起こし上限にカウントされます。"
 }

@@ -9,7 +9,7 @@ import database.action_items as action_items_db
 import database.memories as memories_db
 import database.redis_db as redis_db
 import database.users as users_db
-from database.vector_db import delete_vector, delete_memory_vector
+from database.vector_db import delete_vector, delete_memory_vector, delete_transcript_chunk_vectors
 from utils.other.storage import delete_conversation_audio_files
 from models.calendar_context import CalendarMeetingContext
 from models.conversation import (
@@ -389,6 +389,7 @@ def delete_conversation(
     logger.info(f'delete_conversation {conversation_id} {uid} cascade={cascade}')
     conversations_db.delete_conversation(uid, conversation_id)
     delete_vector(uid, conversation_id)
+    delete_transcript_chunk_vectors(uid, conversation_id)
 
     if cascade:
         # Delete audio files
@@ -809,10 +810,16 @@ def search_conversations_endpoint(
     end_timestamp = None
 
     if search_request.start_date:
-        start_timestamp = int(datetime.fromisoformat(search_request.start_date).timestamp())
+        try:
+            start_timestamp = int(datetime.fromisoformat(search_request.start_date).timestamp())
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid start_date; expected an ISO 8601 datetime string")
 
     if search_request.end_date:
-        end_timestamp = int(datetime.fromisoformat(search_request.end_date).timestamp())
+        try:
+            end_timestamp = int(datetime.fromisoformat(search_request.end_date).timestamp())
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid end_date; expected an ISO 8601 datetime string")
 
     return search_conversations(
         query=search_request.query,

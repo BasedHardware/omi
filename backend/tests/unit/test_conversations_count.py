@@ -84,7 +84,7 @@ class TestConversationsCount:
     def test_source_matches_implementation(self):
         """Verify the real function's core logic matches this test's inline copy."""
         source_path = os.path.join(os.path.dirname(__file__), '..', '..', 'database', 'conversations.py')
-        with open(source_path) as f:
+        with open(source_path, encoding='utf-8') as f:
             source = f.read()
         assert 'def get_conversations_count(' in source
         assert "FieldFilter('discarded', '==', False)" in source
@@ -217,25 +217,25 @@ class TestConversationsCountRouteSource:
 
     def test_route_registered_with_correct_path(self):
         source_path = os.path.join(os.path.dirname(__file__), '..', '..', 'routers', 'conversations.py')
-        with open(source_path) as f:
+        with open(source_path, encoding='utf-8') as f:
             source = f.read()
         assert "'/v1/conversations/count'" in source
 
     def test_route_forwards_include_discarded(self):
         source_path = os.path.join(os.path.dirname(__file__), '..', '..', 'routers', 'conversations.py')
-        with open(source_path) as f:
+        with open(source_path, encoding='utf-8') as f:
             source = f.read()
         assert 'include_discarded=include_discarded' in source
 
     def test_route_forwards_statuses_as_list(self):
         source_path = os.path.join(os.path.dirname(__file__), '..', '..', 'routers', 'conversations.py')
-        with open(source_path) as f:
+        with open(source_path, encoding='utf-8') as f:
             source = f.read()
         assert 'statuses=status_list' in source
 
     def test_route_returns_count_dict(self):
         source_path = os.path.join(os.path.dirname(__file__), '..', '..', 'routers', 'conversations.py')
-        with open(source_path) as f:
+        with open(source_path, encoding='utf-8') as f:
             source = f.read()
         assert "{'count': count}" in source or "{'count':count}" in source
 
@@ -246,14 +246,14 @@ class TestAppsV2LimitBoundary:
     def test_source_has_le_100(self):
         """Verify the real route source has le=100 (not le=50 or other)."""
         source_path = os.path.join(os.path.dirname(__file__), '..', '..', 'routers', 'apps.py')
-        with open(source_path) as f:
+        with open(source_path, encoding='utf-8') as f:
             source = f.read()
         assert 'le=100' in source
 
     def test_source_has_ge_1(self):
         """Verify the real route source has ge=1."""
         source_path = os.path.join(os.path.dirname(__file__), '..', '..', 'routers', 'apps.py')
-        with open(source_path) as f:
+        with open(source_path, encoding='utf-8') as f:
             source = f.read()
         assert 'ge=1' in source
 

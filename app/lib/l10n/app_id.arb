@@ -3282,5 +3282,17 @@
   "objectAnnouncementsLatencyMetric": "Latency",
   "@objectAnnouncementsLatencyMetric": {
     "description": "Detect dashboard latency metric label"
-  }
+  },
+  "autoSync": "Sinkronisasi otomatis",
+  "autoSyncDescription": "Sinkronkan rekaman offline secara otomatis saat perangkat Anda terhubung",
+  "backgroundModeTitle": "Mode Latar Belakang",
+  "backgroundModeDescription": "Biarkan Omi tetap merekam meskipun aplikasi ditutup sepenuhnya.",
+  "backgroundModeNote": "Untuk saat ini hanya berfungsi dengan perangkat Omi dan terus ditingkatkan.",
+  "regenerateRecap": "Buat ulang ringkasan",
+  "recapRegeneratedSnackbar": "Ringkasan dibuat ulang",
+  "recapRegenerateFailed": "Tidak dapat membuat ulang ringkasan. Coba lagi nanti.",
+  "recapRegenerateCooldown": "Mohon tunggu beberapa detik sebelum membuat ulang.",
+  "recapRegenerateNoConversations": "Tidak ada percakapan untuk diringkas pada hari ini.",
+  "syncCustomSttWarningTitle": "Sinkronisasi memakai transkripsi Omi",
+  "syncCustomSttWarningMessage": "Anda memakai penyedia transkripsi sendiri. Menyinkronkan rekaman ini akan mentranskripsikannya di server Omi dan dihitung dalam batas transkripsi paket Anda."
 }

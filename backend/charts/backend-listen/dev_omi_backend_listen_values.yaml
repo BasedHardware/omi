@@ -91,6 +91,11 @@ env:
       secretKeyRef:
         name: dev-omi-backend-secrets
         key: DEEPGRAM_API_KEY
+  - name: MODULATE_API_KEY
+    valueFrom:
+      secretKeyRef:
+        name: dev-omi-backend-secrets
+        key: MODULATE_API_KEY
   - name: FAL_KEY
     valueFrom:
       secretKeyRef:
@@ -150,6 +155,13 @@ env:
       secretKeyRef:
         name: dev-omi-backend-secrets
         key: STT_SERVICE_MODELS
+  - name: STT_PRERECORDED_MODEL
+    valueFrom:
+      secretKeyRef:
+        name: dev-omi-backend-secrets
+        key: STT_PRERECORDED_MODEL
+  - name: HOSTED_PARAKEET_API_URL
+    value: "http://dev-omi-parakeet.dev-omi-backend.svc.cluster.local:8080"
   - name: NO_SOCKET_TIMEOUT
     value: "true"
   - name: HOSTED_PUSHER_API_URL

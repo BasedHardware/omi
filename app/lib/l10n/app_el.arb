@@ -3240,5 +3240,17 @@
   "objectAnnouncementsLatencyMetric": "Latency",
   "@objectAnnouncementsLatencyMetric": {
     "description": "Detect dashboard latency metric label"
-  }
+  },
+  "autoSync": "Αυτόματος συγχρονισμός",
+  "autoSyncDescription": "Αυτόματος συγχρονισμός των εκτός σύνδεσης εγγραφών όταν συνδέεται η συσκευή σας",
+  "backgroundModeTitle": "Λειτουργία παρασκηνίου",
+  "backgroundModeDescription": "Διατηρήστε την εγγραφή του Omi ακόμη και όταν η εφαρμογή είναι εντελώς κλειστή.",
+  "backgroundModeNote": "Προς το παρόν λειτουργεί μόνο με συσκευές Omi και βελτιώνεται συνεχώς.",
+  "regenerateRecap": "Αναδημιουργία ανακεφαλαίωσης",
+  "recapRegeneratedSnackbar": "Η ανακεφαλαίωση δημιουργήθηκε ξανά",
+  "recapRegenerateFailed": "Δεν ήταν δυνατή η αναδημιουργία της ανακεφαλαίωσης. Δοκιμάστε ξανά αργότερα.",
+  "recapRegenerateCooldown": "Παρακαλώ περιμένετε λίγα δευτερόλεπτα πριν δοκιμάσετε ξανά.",
+  "recapRegenerateNoConversations": "Δεν υπάρχουν συνομιλίες για ανακεφαλαίωση αυτής της ημέρας.",
+  "syncCustomSttWarningTitle": "Ο συγχρονισμός χρησιμοποιεί τη μεταγραφή του Omi",
+  "syncCustomSttWarningMessage": "Χρησιμοποιείτε δικό σας πάροχο μεταγραφής. Ο συγχρονισμός αυτών των ηχογραφήσεων τις μεταγράφει στους διακομιστές του Omi και προσμετρώνται στο όριο μεταγραφής του προγράμματός σας."
 }

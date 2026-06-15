@@ -1,9 +1,16 @@
 'use client';
 
-import { useState, useRef, useEffect, useCallback, useImperativeHandle, forwardRef } from 'react';
+import {
+  useState,
+  useRef,
+  useEffect,
+  useCallback,
+  useImperativeHandle,
+  forwardRef,
+} from 'react';
 import { Play, Pause, Volume2, VolumeX, Loader2, Download } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { fetchAudioBlob } from '@/lib/api';
+import { getConversationAudioUrlsWithPoll } from '@/lib/api';
 import type { AudioFile } from '@/types/conversation';
 
 interface AudioPlayerProps {
@@ -43,7 +50,7 @@ export const AudioPlayer = forwardRef<AudioPlayerRef, AudioPlayerProps>(
 
     // Load audio URL on mount
     useEffect(() => {
-      let blobUrl: string | null = null;
+      let cancelled = false;
 
       async function loadAudioUrl() {
         if (!audioFiles || audioFiles.length === 0) {
@@ -66,11 +73,38 @@ export const AudioPlayer = forwardRef<AudioPlayerRef, AudioPlayerProps>(
             return;
           }
 
-          // Fallback: fetch through proxy with auth headers
+          if (firstFile.status === 'unavailable') {
+            setError('Audio is no longer available for this conversation');
+            setIsLoading(false);
+            return;
+          }
+
+          // The backend builds playback artifacts asynchronously; poll until
+          // the file is cached instead of streaming through the merge proxy
+          // that used to time out on long conversations.
           const fileId = firstFile.id || '0';
-          blobUrl = await fetchAudioBlob(conversationId, fileId);
-          setAudioUrl(blobUrl);
-          setIsLoading(false);
+          const deadline = Date.now() + 90_000;
+          while (Date.now() < deadline && !cancelled) {
+            const { files, pollAfterMs } =
+              await getConversationAudioUrlsWithPoll(conversationId);
+            if (cancelled) return;
+            const info = files.find((f) => f.id === fileId) ?? files[0];
+            if (info?.signed_url) {
+              setAudioUrl(info.signed_url);
+              setIsLoading(false);
+              return;
+            }
+            if (info?.status === 'unavailable') {
+              setError('Audio is no longer available for this conversation');
+              setIsLoading(false);
+              return;
+            }
+            await new Promise((resolve) => setTimeout(resolve, pollAfterMs ?? 3000));
+          }
+          if (!cancelled) {
+            setError('Audio is still processing — try again shortly');
+            setIsLoading(false);
+          }
         } catch (err) {
           console.error('Failed to load audio:', err);
           setError('Failed to load audio');
@@ -80,11 +114,8 @@ export const AudioPlayer = forwardRef<AudioPlayerRef, AudioPlayerProps>(
 
       loadAudioUrl();
 
-      // Cleanup: revoke blob URL to free memory
       return () => {
-        if (blobUrl) {
-          URL.revokeObjectURL(blobUrl);
-        }
+        cancelled = true;
       };
     }, [conversationId, audioFiles]);
 
@@ -168,11 +199,13 @@ export const AudioPlayer = forwardRef<AudioPlayerRef, AudioPlayerProps>(
 
     if (error) {
       return (
-        <div className={cn(
-          'flex items-center gap-3 p-3 rounded-xl bg-bg-tertiary border border-bg-quaternary/50',
-          'text-text-tertiary text-sm',
-          className
-        )}>
+        <div
+          className={cn(
+            'flex items-center gap-3 p-3 rounded-xl bg-bg-tertiary border border-bg-quaternary/50',
+            'text-text-tertiary text-sm',
+            className,
+          )}
+        >
           <VolumeX className="w-5 h-5" />
           <span>{error}</span>
         </div>
@@ -180,10 +213,12 @@ export const AudioPlayer = forwardRef<AudioPlayerRef, AudioPlayerProps>(
     }
 
     return (
-      <div className={cn(
-        'flex items-center gap-3 p-3 rounded-xl bg-bg-tertiary border border-bg-quaternary/50',
-        className
-      )}>
+      <div
+        className={cn(
+          'flex items-center gap-3 p-3 rounded-xl bg-bg-tertiary border border-bg-quaternary/50',
+          className,
+        )}
+      >
         {/* Hidden audio element */}
         {audioUrl && (
           <audio
@@ -208,7 +243,7 @@ export const AudioPlayer = forwardRef<AudioPlayerRef, AudioPlayerProps>(
             'bg-purple-primary text-white',
             'hover:bg-purple-secondary transition-colors',
             'disabled:opacity-50 disabled:cursor-not-allowed',
-            'flex-shrink-0'
+            'flex-shrink-0',
           )}
         >
           {isLoading ? (
@@ -248,12 +283,13 @@ export const AudioPlayer = forwardRef<AudioPlayerRef, AudioPlayerProps>(
               '[&::-moz-range-thumb]:bg-purple-primary',
               '[&::-moz-range-thumb]:border-0',
               '[&::-moz-range-thumb]:cursor-pointer',
-              'disabled:opacity-50'
+              'disabled:opacity-50',
             )}
             style={{
-              background: duration > 0
-                ? `linear-gradient(to right, var(--purple-primary) ${(currentTime / duration) * 100}%, var(--bg-quaternary) ${(currentTime / duration) * 100}%)`
-                : undefined,
+              background:
+                duration > 0
+                  ? `linear-gradient(to right, var(--purple-primary) ${(currentTime / duration) * 100}%, var(--bg-quaternary) ${(currentTime / duration) * 100}%)`
+                  : undefined,
             }}
           />
 
@@ -269,7 +305,7 @@ export const AudioPlayer = forwardRef<AudioPlayerRef, AudioPlayerProps>(
             className={cn(
               'px-2 py-1 rounded-md text-xs font-medium',
               'bg-bg-quaternary text-text-secondary',
-              'hover:bg-bg-tertiary hover:text-text-primary transition-colors'
+              'hover:bg-bg-tertiary hover:text-text-primary transition-colors',
             )}
           >
             {playbackSpeed}x
@@ -286,7 +322,7 @@ export const AudioPlayer = forwardRef<AudioPlayerRef, AudioPlayerProps>(
                     'hover:bg-bg-tertiary transition-colors',
                     speed === playbackSpeed
                       ? 'text-purple-primary font-medium'
-                      : 'text-text-secondary'
+                      : 'text-text-secondary',
                   )}
                 >
                   {speed}x
@@ -301,14 +337,10 @@ export const AudioPlayer = forwardRef<AudioPlayerRef, AudioPlayerProps>(
           onClick={toggleMute}
           className={cn(
             'p-2 rounded-md',
-            'text-text-secondary hover:text-text-primary transition-colors'
+            'text-text-secondary hover:text-text-primary transition-colors',
           )}
         >
-          {isMuted ? (
-            <VolumeX className="w-4 h-4" />
-          ) : (
-            <Volume2 className="w-4 h-4" />
-          )}
+          {isMuted ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
         </button>
 
         {/* Download button */}
@@ -318,7 +350,7 @@ export const AudioPlayer = forwardRef<AudioPlayerRef, AudioPlayerProps>(
           className={cn(
             'p-2 rounded-md',
             'text-text-secondary hover:text-text-primary transition-colors',
-            'disabled:opacity-50 disabled:cursor-not-allowed'
+            'disabled:opacity-50 disabled:cursor-not-allowed',
           )}
           title="Download audio"
         >
@@ -326,5 +358,5 @@ export const AudioPlayer = forwardRef<AudioPlayerRef, AudioPlayerProps>(
         </button>
       </div>
     );
-  }
+  },
 );

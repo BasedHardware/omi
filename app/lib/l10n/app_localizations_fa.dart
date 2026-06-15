@@ -9444,4 +9444,41 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get objectAnnouncementsLatencyMetric => 'Latency';
+
+  @override
+  String get autoSync => 'همگام‌سازی خودکار';
+
+  @override
+  String get autoSyncDescription => 'هنگام اتصال دستگاه، ضبط‌های آفلاین به‌طور خودکار همگام‌سازی شوند';
+
+  @override
+  String get backgroundModeTitle => 'حالت پس‌زمینه';
+
+  @override
+  String get backgroundModeDescription => 'حتی وقتی برنامه کاملاً بسته است، ضبط Omi شما را ادامه دهید.';
+
+  @override
+  String get backgroundModeNote => 'فعلاً فقط با دستگاه‌های Omi کار می‌کند و به‌طور مداوم در حال بهبود است.';
+
+  @override
+  String get regenerateRecap => 'بازسازی خلاصه';
+
+  @override
+  String get recapRegeneratedSnackbar => 'خلاصه دوباره ساخته شد';
+
+  @override
+  String get recapRegenerateFailed => 'بازسازی خلاصه ممکن نشد. بعداً دوباره تلاش کنید.';
+
+  @override
+  String get recapRegenerateCooldown => 'لطفاً چند ثانیه قبل از بازسازی مجدد صبر کنید.';
+
+  @override
+  String get recapRegenerateNoConversations => 'هیچ مکالمه‌ای برای خلاصه‌سازی این روز وجود ندارد.';
+
+  @override
+  String get syncCustomSttWarningTitle => 'همگام‌سازی از رونویسی Omi استفاده می‌کند';
+
+  @override
+  String get syncCustomSttWarningMessage =>
+      'شما از سرویس رونویسی خودتان استفاده می‌کنید. همگام‌سازی این ضبط‌ها آن‌ها را روی سرورهای Omi رونویسی می‌کند و در سقف رونویسی پلن شما محاسبه می‌شوند.';
 }

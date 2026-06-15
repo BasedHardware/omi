@@ -9465,4 +9465,41 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get objectAnnouncementsLatencyMetric => 'Latency';
+
+  @override
+  String get autoSync => 'Penyegerakan automatik';
+
+  @override
+  String get autoSyncDescription => 'Segerakkan rakaman luar talian secara automatik apabila peranti anda disambungkan';
+
+  @override
+  String get backgroundModeTitle => 'Mod Latar Belakang';
+
+  @override
+  String get backgroundModeDescription => 'Pastikan Omi anda terus merakam walaupun apl ditutup sepenuhnya.';
+
+  @override
+  String get backgroundModeNote => 'Buat masa ini hanya berfungsi dengan peranti Omi dan sentiasa diperbaiki.';
+
+  @override
+  String get regenerateRecap => 'Jana semula ringkasan';
+
+  @override
+  String get recapRegeneratedSnackbar => 'Ringkasan dijana semula';
+
+  @override
+  String get recapRegenerateFailed => 'Tidak dapat menjana semula ringkasan. Cuba sebentar lagi.';
+
+  @override
+  String get recapRegenerateCooldown => 'Sila tunggu beberapa saat sebelum menjana semula.';
+
+  @override
+  String get recapRegenerateNoConversations => 'Tiada perbualan untuk diringkaskan untuk hari ini.';
+
+  @override
+  String get syncCustomSttWarningTitle => 'Penyegerakan menggunakan transkripsi Omi';
+
+  @override
+  String get syncCustomSttWarningMessage =>
+      'Anda menggunakan penyedia transkripsi sendiri. Menyegerakkan rakaman ini akan mentranskripsikannya di pelayan Omi dan dikira dalam had transkripsi pelan anda.';
 }

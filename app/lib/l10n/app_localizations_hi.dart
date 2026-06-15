@@ -9419,4 +9419,41 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get objectAnnouncementsLatencyMetric => 'Latency';
+
+  @override
+  String get autoSync => 'स्वतः सिंक';
+
+  @override
+  String get autoSyncDescription => 'जब आपका डिवाइस कनेक्ट हो, तो ऑफ़लाइन रिकॉर्डिंग अपने आप सिंक करें';
+
+  @override
+  String get backgroundModeTitle => 'बैकग्राउंड मोड';
+
+  @override
+  String get backgroundModeDescription => 'ऐप पूरी तरह बंद होने पर भी अपने Omi की रिकॉर्डिंग जारी रखें।';
+
+  @override
+  String get backgroundModeNote => 'फ़िलहाल केवल Omi डिवाइस के साथ काम करता है और इसे लगातार बेहतर बनाया जा रहा है।';
+
+  @override
+  String get regenerateRecap => 'रीकैप पुनः बनाएं';
+
+  @override
+  String get recapRegeneratedSnackbar => 'रीकैप पुनः बनाया गया';
+
+  @override
+  String get recapRegenerateFailed => 'रीकैप पुनः नहीं बनाया जा सका। बाद में पुनः प्रयास करें।';
+
+  @override
+  String get recapRegenerateCooldown => 'पुनः बनाने से पहले कुछ सेकंड प्रतीक्षा करें।';
+
+  @override
+  String get recapRegenerateNoConversations => 'इस दिन के लिए सारांश बनाने के लिए कोई बातचीत नहीं है।';
+
+  @override
+  String get syncCustomSttWarningTitle => 'सिंक Omi ट्रांसक्रिप्शन का उपयोग करता है';
+
+  @override
+  String get syncCustomSttWarningMessage =>
+      'आप अपना स्वयं का ट्रांसक्रिप्शन प्रदाता उपयोग करते हैं। इन रिकॉर्डिंग को सिंक करने पर ये Omi के सर्वर पर ट्रांसक्राइब होंगी और आपकी योजना की ट्रांसक्रिप्शन सीमा में गिनी जाएंगी।';
 }

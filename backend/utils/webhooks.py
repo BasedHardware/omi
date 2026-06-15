@@ -39,6 +39,13 @@ async def _handle_dev_webhook_disable(uid: str, wtype: str, should_disable: bool
         )
 
 
+def _build_conversation_webhook_payload_sync(uid: str, memory: Conversation) -> dict:
+    payload = conversation_to_dict(memory)
+    populate_speaker_names(uid, [payload])
+    populate_folder_names(uid, [payload])
+    return payload
+
+
 async def conversation_created_webhook(uid, memory: Conversation):
     if memory.is_locked:
         return
@@ -55,9 +62,7 @@ async def conversation_created_webhook(uid, memory: Conversation):
             logger.info(f'memory_created_webhook: circuit breaker open for {webhook_url[:80]}')
             return
         try:
-            payload = await run_blocking(db_executor, conversation_to_dict, memory)
-            await run_blocking(db_executor, populate_speaker_names, uid, [payload])
-            await run_blocking(db_executor, populate_folder_names, uid, [payload])
+            payload = await run_blocking(db_executor, _build_conversation_webhook_payload_sync, uid, memory)
             async with get_webhook_semaphore():
                 client = get_webhook_client()
                 response = await client.post(

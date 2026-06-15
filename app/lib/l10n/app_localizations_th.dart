@@ -9392,4 +9392,41 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get objectAnnouncementsLatencyMetric => 'Latency';
+
+  @override
+  String get autoSync => 'ซิงค์อัตโนมัติ';
+
+  @override
+  String get autoSyncDescription => 'ซิงค์การบันทึกแบบออฟไลน์โดยอัตโนมัติเมื่ออุปกรณ์ของคุณเชื่อมต่อ';
+
+  @override
+  String get backgroundModeTitle => 'โหมดเบื้องหลัง';
+
+  @override
+  String get backgroundModeDescription => 'ให้ Omi ของคุณบันทึกต่อไปแม้ปิดแอปไปทั้งหมดแล้ว';
+
+  @override
+  String get backgroundModeNote => 'ขณะนี้ใช้ได้กับอุปกรณ์ Omi เท่านั้น และกำลังพัฒนาอย่างต่อเนื่อง';
+
+  @override
+  String get regenerateRecap => 'สร้างสรุปใหม่';
+
+  @override
+  String get recapRegeneratedSnackbar => 'สร้างสรุปใหม่แล้ว';
+
+  @override
+  String get recapRegenerateFailed => 'ไม่สามารถสร้างสรุปใหม่ได้ ลองอีกครั้งในภายหลัง';
+
+  @override
+  String get recapRegenerateCooldown => 'โปรดรอสักครู่ก่อนสร้างใหม่อีกครั้ง';
+
+  @override
+  String get recapRegenerateNoConversations => 'ไม่มีการสนทนาที่จะสรุปสำหรับวันนี้';
+
+  @override
+  String get syncCustomSttWarningTitle => 'การซิงค์ใช้การถอดเสียงของ Omi';
+
+  @override
+  String get syncCustomSttWarningMessage =>
+      'คุณใช้ผู้ให้บริการถอดเสียงของคุณเอง การซิงค์การบันทึกเหล่านี้จะถอดเสียงบนเซิร์ฟเวอร์ของ Omi และจะนับรวมในขีดจำกัดการถอดเสียงของแพ็กเกจของคุณ';
 }

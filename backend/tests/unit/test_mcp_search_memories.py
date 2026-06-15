@@ -71,11 +71,20 @@ _stubs = [
     'utils.llm.chat',
     'utils.log_sanitizer',
     'utils.executors',
+    'dependencies',
 ]
 for mod_name in _stubs:
     if mod_name not in sys.modules:
         sys.modules[mod_name] = _AutoMockModule(mod_name)
 
+sys.modules['dependencies'].get_uid_from_mcp_api_key = MagicMock(return_value='user-1')
+sys.modules['dependencies'].get_current_user_id = MagicMock(return_value='user-1')
+sys.modules['utils.other.endpoints'].with_rate_limit = MagicMock(side_effect=lambda dependency, _policy: dependency)
+sys.modules['utils.other.endpoints'].check_rate_limit_inline = MagicMock()
+sys.modules['utils.apps'].update_personas_async = MagicMock()
+sys.modules['utils.executors'].db_executor = MagicMock()
+sys.modules['utils.executors'].postprocess_executor = MagicMock()
+sys.modules['utils.llm.memories'].identify_category_for_memory = MagicMock(return_value='other')
 sys.modules['firebase_admin.auth'].InvalidIdTokenError = type('InvalidIdTokenError', (Exception,), {})
 sys.modules['firebase_admin.auth'].ExpiredIdTokenError = type('ExpiredIdTokenError', (Exception,), {})
 sys.modules['firebase_admin.auth'].RevokedIdTokenError = type('RevokedIdTokenError', (Exception,), {})
@@ -273,6 +282,47 @@ class TestSearchMemoriesUserReview:
         ]
         result = search_memories(query="test", limit=10, uid="user-1")
         assert result == []
+
+
+class TestSearchMemoriesInvalidated:
+    """search_memories must not surface superseded/invalidated memories — the brain
+    only returns facts that are currently true."""
+
+    @patch('routers.mcp.memories_db')
+    @patch('routers.mcp.vector_db')
+    def test_invalidated_memory_excluded(self, mock_vector_db, mock_memories_db):
+        mock_vector_db.find_similar_memories.return_value = [
+            {'memory_id': 'mem-old', 'score': 0.95},
+            {'memory_id': 'mem-new', 'score': 0.80},
+        ]
+        mock_memories_db.get_memories_by_ids.return_value = [
+            # superseded "loves ice cream" — higher vector score but invalidated
+            {
+                'id': 'mem-old',
+                'content': 'loves ice cream',
+                'category': 'system',
+                'is_locked': False,
+                'invalid_at': '2026-06-01T00:00:00+00:00',
+                'superseded_by': 'mem-new',
+            },
+            {'id': 'mem-new', 'content': 'hates ice cream', 'category': 'system', 'is_locked': False},
+        ]
+        result = search_memories(query="ice cream", limit=10, uid="user-1")
+        assert len(result) == 1
+        assert result[0]['id'] == 'mem-new'
+
+    @patch('routers.mcp.memories_db')
+    @patch('routers.mcp.vector_db')
+    def test_active_memory_with_null_invalid_at_included(self, mock_vector_db, mock_memories_db):
+        mock_vector_db.find_similar_memories.return_value = [
+            {'memory_id': 'mem-1', 'score': 0.9},
+        ]
+        mock_memories_db.get_memories_by_ids.return_value = [
+            {'id': 'mem-1', 'content': 'active', 'category': 'system', 'is_locked': False, 'invalid_at': None},
+        ]
+        result = search_memories(query="test", limit=10, uid="user-1")
+        assert len(result) == 1
+        assert result[0]['id'] == 'mem-1'
 
 
 class TestEditMemoryVectorSync:

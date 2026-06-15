@@ -9474,4 +9474,41 @@ class AppLocalizationsHr extends AppLocalizations {
 
   @override
   String get objectAnnouncementsLatencyMetric => 'Latency';
+
+  @override
+  String get autoSync => 'Automatska sinkronizacija';
+
+  @override
+  String get autoSyncDescription => 'Automatski sinkroniziraj izvanmrežne snimke kada se uređaj poveže';
+
+  @override
+  String get backgroundModeTitle => 'Pozadinski način rada';
+
+  @override
+  String get backgroundModeDescription => 'Zadržite Omi snimanje čak i kada je aplikacija potpuno zatvorena.';
+
+  @override
+  String get backgroundModeNote => 'Zasad radi samo s Omi uređajima i neprestano se poboljšava.';
+
+  @override
+  String get regenerateRecap => 'Ponovno generiraj sažetak';
+
+  @override
+  String get recapRegeneratedSnackbar => 'Sažetak je ponovno generiran';
+
+  @override
+  String get recapRegenerateFailed => 'Nije bilo moguće ponovno generirati sažetak. Pokušajte kasnije.';
+
+  @override
+  String get recapRegenerateCooldown => 'Pričekajte nekoliko sekundi prije ponovnog generiranja.';
+
+  @override
+  String get recapRegenerateNoConversations => 'Nema razgovora za sažimanje za ovaj dan.';
+
+  @override
+  String get syncCustomSttWarningTitle => 'Sinkronizacija koristi Omi transkripciju';
+
+  @override
+  String get syncCustomSttWarningMessage =>
+      'Koristite vlastiti pružatelj transkripcije. Sinkronizacija ovih snimaka transkribira ih na Omijevim poslužiteljima i broje se u ograničenje transkripcije vašeg plana.';
 }

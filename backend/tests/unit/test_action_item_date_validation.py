@@ -16,6 +16,7 @@ import sys
 import types
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from zoneinfo import ZoneInfo
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -24,6 +25,7 @@ import pytest
 # Paths
 # ---------------------------------------------------------------------------
 BACKEND_DIR = Path(__file__).resolve().parent.parent.parent
+IST_TZ = timezone(timedelta(hours=5, minutes=30), "IST")
 
 os.environ.setdefault(
     "ENCRYPTION_SECRET",
@@ -53,7 +55,11 @@ def _load_module_from_file(module_name, file_path):
     spec = importlib.util.spec_from_file_location(module_name, str(file_path))
     mod = importlib.util.module_from_spec(spec)
     sys.modules[module_name] = mod
-    spec.loader.exec_module(mod)
+    try:
+        spec.loader.exec_module(mod)
+    except Exception:
+        sys.modules.pop(module_name, None)
+        raise
     return mod
 
 
@@ -81,6 +87,7 @@ for mod_name in [
 ]:
     if mod_name not in sys.modules:
         _stub_module(mod_name)
+sys.modules["database.auth"].get_user_name = MagicMock(return_value="Test User")
 
 # Stub database.action_items
 action_items_db = _stub_module("database.action_items")
@@ -101,6 +108,7 @@ notif_mod = _stub_module("utils.notifications")
 notif_mod.send_action_item_completed_notification = MagicMock()
 notif_mod.send_action_item_created_notification = MagicMock()
 notif_mod.send_action_item_data_message = MagicMock()
+notif_mod.sync_action_item_reminder = MagicMock()
 
 # Stub langchain
 langchain_core = _stub_package("langchain_core")
@@ -464,8 +472,8 @@ class TestExtractActionItemsPostValidation:
             )
 
         invoke_args = mock_chain.invoke.call_args[0][0]
-        assert 'current_time' in invoke_args, "Must pass current_time to prompt"
-        assert 'started_at' in invoke_args, "Must still pass started_at"
+        assert 'current_time_local' in invoke_args, "Must pass current_time (local) to prompt"
+        assert 'started_at_local' in invoke_args, "Must still pass started_at (local)"
 
     def test_preserves_none_due_dates(self):
         """Action items with no due date should remain unchanged."""
@@ -552,3 +560,103 @@ class TestExtractActionItemsPostValidation:
         assert len(result) == 1
         # At exact boundary, strict < means it should NOT be cleared
         assert result[0].due_at is not None
+
+
+class TestActionItemTimezoneConversion:
+    """#7059: the LLM emits naive LOCAL due dates; the server must convert them to UTC in Python."""
+
+    def _zone_info(self, key):
+        if key == "Asia/Kolkata":
+            return IST_TZ
+        return ZoneInfo(key)
+
+    def _run(self, due_at, tz):
+        from models.structured import ActionItem, ActionItemsExtraction
+
+        mock_response = ActionItemsExtraction(action_items=[ActionItem(description="Task", due_at=due_at)])
+        mock_chain = MagicMock()
+        mock_chain.invoke.return_value = mock_response
+        mock_chain.__or__ = MagicMock(return_value=mock_chain)
+
+        conv_proc = sys.modules.get("utils.llm.conversation_processing")
+        if conv_proc is None:
+            conv_proc = _load_module_from_file(
+                "utils.llm.conversation_processing",
+                BACKEND_DIR / "utils" / "llm" / "conversation_processing.py",
+            )
+
+        mock_llm = MagicMock()
+        mock_llm.bind.return_value = mock_llm
+        mock_llm.__or__ = MagicMock(return_value=mock_chain)
+        with patch.object(conv_proc, 'get_llm', return_value=mock_llm), patch.object(
+            conv_proc, 'PydanticOutputParser'
+        ) as mock_parser_cls, patch.object(conv_proc, 'ChatPromptTemplate') as mock_prompt_cls, patch.object(
+            conv_proc, 'ZoneInfo', side_effect=self._zone_info
+        ):
+            mock_parser = MagicMock()
+            mock_parser.get_format_instructions.return_value = "format"
+            mock_parser_cls.return_value = mock_parser
+            mock_prompt = MagicMock()
+            mock_prompt.__or__ = MagicMock(return_value=mock_chain)
+            mock_prompt_cls.from_messages.return_value = mock_prompt
+            result = conv_proc.extract_action_items(
+                transcript="t",
+                started_at=datetime.now(timezone.utc),
+                language_code="en",
+                tz=tz,
+            )
+        return result, mock_chain
+
+    def test_naive_local_due_converted_to_utc_for_ist(self):
+        # LLM emits naive local 10:00 IST tomorrow -> server stores 04:30 UTC (the #7059 bug).
+        naive_local = (datetime.now(timezone.utc).astimezone(IST_TZ) + timedelta(days=1)).replace(
+            hour=10, minute=0, second=0, microsecond=0, tzinfo=None
+        )
+        result, _ = self._run(naive_local, tz="Asia/Kolkata")
+        assert len(result) == 1 and result[0].due_at is not None
+        due = result[0].due_at
+        assert due.utcoffset() == timedelta(0)  # stored as UTC
+        assert (due.hour, due.minute) == (4, 30)  # 10:00 IST == 04:30 UTC
+
+    def test_utc_tz_no_shift(self):
+        naive_local = (datetime.now(timezone.utc) + timedelta(days=1)).replace(
+            hour=15, minute=0, second=0, microsecond=0, tzinfo=None
+        )
+        result, _ = self._run(naive_local, tz="UTC")
+        due = result[0].due_at
+        assert due.utcoffset() == timedelta(0)
+        assert (due.hour, due.minute) == (15, 0)  # no shift for UTC
+
+    def test_invalid_tz_falls_back_to_utc_without_crashing(self):
+        naive_local = (datetime.now(timezone.utc) + timedelta(days=1)).replace(
+            hour=9, minute=0, second=0, microsecond=0, tzinfo=None
+        )
+        result, _ = self._run(naive_local, tz="Not/AZone")
+        due = result[0].due_at
+        assert due is not None and due.utcoffset() == timedelta(0)
+        assert (due.hour, due.minute) == (9, 0)  # treated as UTC on fallback
+
+    def test_passes_local_reference_times_to_prompt(self):
+        naive_local = (datetime.now(timezone.utc) + timedelta(days=1)).replace(microsecond=0, tzinfo=None)
+        _, mock_chain = self._run(naive_local, tz="Asia/Kolkata")
+        invoke_args = mock_chain.invoke.call_args[0][0]
+        assert 'started_at_local' in invoke_args and 'current_time_local' in invoke_args
+        ct = invoke_args['current_time_local']
+        assert 'Z' not in ct and '+' not in ct  # naive local string, no offset/suffix
+
+    def test_aware_datetime_is_normalized_to_utc(self):
+        # Regression guard for the else-branch: if the LLM ignores the prompt and emits a tz-aware
+        # value, it must be normalized to UTC (not shifted again, not trusted at a non-UTC offset).
+        base = datetime.now(timezone.utc) + timedelta(days=1)
+        # (a) already-UTC aware value stays UTC unchanged
+        aware_utc = base.replace(hour=4, minute=30, second=0, microsecond=0)
+        r1, _ = self._run(aware_utc, tz="Asia/Kolkata")
+        d1 = r1[0].due_at
+        assert d1 is not None and d1.utcoffset() == timedelta(0)
+        assert (d1.hour, d1.minute) == (4, 30)
+        # (b) aware +05:30 value is converted to UTC, not trusted as-is
+        aware_ist = base.replace(hour=10, minute=0, second=0, microsecond=0, tzinfo=IST_TZ)
+        r2, _ = self._run(aware_ist, tz="UTC")
+        d2 = r2[0].due_at
+        assert d2 is not None and d2.utcoffset() == timedelta(0)
+        assert (d2.hour, d2.minute) == (4, 30)  # 10:00 IST -> 04:30 UTC

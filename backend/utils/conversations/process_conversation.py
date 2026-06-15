@@ -11,6 +11,7 @@ from typing import Union, Tuple, List, Optional
 from fastapi import HTTPException
 
 from database import redis_db
+from database.auth import get_user_name
 import database.memories as memories_db
 import database.conversations as conversations_db
 import database.notifications as notification_db
@@ -30,7 +31,8 @@ from database.vector_db import (
 )
 from utils.llm.memories import resolve_memory_conflict
 from database.apps import record_app_usage, get_omi_personas_by_uid_db, get_app_by_id_db
-from database.vector_db import upsert_vector2, update_vector_metadata
+from database.vector_db import upsert_vector2, update_vector_metadata, upsert_transcript_chunk_vectors
+from utils.conversations.transcript_chunks import build_transcript_chunks
 from models.app import App, UsageHistoryType
 from models.memories import MemoryDB, Memory
 from models.calendar_context import CalendarMeetingContext
@@ -192,7 +194,8 @@ def _get_structured(
             # not supported conversation source
             raise HTTPException(status_code=400, detail=f'Invalid conversation source: {conversation.text_source}')
 
-        transcript_text = conversation.get_transcript(False, people=people)
+        user_name = get_user_name(uid, use_default=False)
+        transcript_text = conversation.get_transcript(False, people=people, user_name=user_name)
 
         # For re-processing, we don't discard, just re-structure.
         if force_process:
@@ -470,17 +473,27 @@ def _extract_memories_inner(uid: str, conversation: Conversation):
 
     is_locked = conversation.is_locked
     parsed_memories = []
-    memories_to_delete = []
+    # (old_memory_id, new_memory_id) pairs to invalidate after the new memories are saved.
+    invalidations = []
+    # Cheap exact-duplicate guard within this batch (avoids redundant conflict LLM calls).
+    seen_norm = set()
 
     for memory in new_memories:
-        # Find similar existing memories
-        similar_matches = find_similar_memories(uid, memory.content, threshold=0.7, limit=3)
+        norm = ' '.join((memory.content or '').lower().split())
+        if not norm or norm in seen_norm:
+            continue
+        seen_norm.add(norm)
 
-        # Fetch content for each similar memory
+        # Wider net (lower threshold, more candidates) than before so cross-phrasing
+        # contradictions are caught — "loves ice cream" vs "hates ice cream",
+        # "lives in NYC" vs "lives in LA" — then let the LLM decide what's outdated.
+        similar_matches = find_similar_memories(uid, memory.content, threshold=0.6, limit=8)
+
+        # Only compare against currently-active memories (never resurface superseded ones).
         similar_memories = []
         for match in similar_matches:
             memory_data = memories_db.get_memory(uid, match['memory_id'])
-            if memory_data:
+            if memory_data and memory_data.get('invalid_at') is None:
                 similar_memories.append(
                     {
                         'memory_id': match['memory_id'],
@@ -490,28 +503,30 @@ def _extract_memories_inner(uid: str, conversation: Conversation):
                     }
                 )
 
+        supersede_ids = []
         if similar_memories:
             resolution = resolve_memory_conflict(memory.content, similar_memories, language=language)
 
-            if resolution.action == 'keep_existing':
+            if resolution.action == 'skip':
                 continue
 
-            elif resolution.action == 'merge':
-                # Replace existing memory with merged version
-                if resolution.merged_content:
-                    memories_to_delete.append(similar_memories[0]['memory_id'])
-                    memory.content = resolution.merged_content
+            if resolution.action == 'merge' and resolution.merged_content:
+                memory.content = resolution.merged_content
 
-            elif resolution.action == 'keep_both':
-                pass
+            if resolution.action in ('update', 'merge'):
+                for idx in resolution.supersedes or []:
+                    if isinstance(idx, int) and 1 <= idx <= len(similar_memories):
+                        supersede_ids.append(similar_memories[idx - 1]['memory_id'])
 
         memory_db_obj = MemoryDB.from_memory(memory, uid, conversation.id, False)
         memory_db_obj.is_locked = is_locked
         parsed_memories.append(memory_db_obj)
 
-    for memory_id in memories_to_delete:
-        delete_memory_vector(uid, memory_id)
-        memories_db.delete_memory(uid, memory_id)
+        for old_id in supersede_ids:
+            # Guard against superseding the very memory we're about to (re)write — the
+            # merged content can hash to an existing id.
+            if old_id and old_id != memory_db_obj.id:
+                invalidations.append((old_id, memory_db_obj.id))
 
     if len(parsed_memories) == 0:
         logger.info(f"No memories extracted for conversation {conversation.id}")
@@ -523,12 +538,21 @@ def _extract_memories_inner(uid: str, conversation: Conversation):
     for memory_db_obj in parsed_memories:
         upsert_memory_vector(uid, memory_db_obj.id, memory_db_obj.content, memory_db_obj.category.value)
 
+    # Invalidate (not delete) superseded memories: keep them as history but drop them from
+    # every retrieval path. Removing the vector also pulls them out of semantic search.
+    for old_id, new_id in invalidations:
+        try:
+            memories_db.invalidate_memory(uid, old_id, superseded_by=new_id)
+            delete_memory_vector(uid, old_id)
+            logger.info(f"Invalidated superseded memory {old_id} -> {new_id}")
+        except Exception:
+            logger.exception(f"Failed to invalidate superseded memory {old_id}")
+
     if len(parsed_memories) > 0:
         record_usage(uid, memories_created=len(parsed_memories))
 
         try:
             from utils.llm.knowledge_graph import extract_knowledge_from_memory
-            from database.auth import get_user_name
 
             user_name = get_user_name(uid)
 
@@ -630,6 +654,18 @@ def _save_action_items(uid: str, conversation: Conversation):
                 for aid, data in zip(action_item_ids, action_items_data)
             ],
         )
+
+
+# Verbatim transcript-chunk indexing (ns_tchunks). Off by default: enables semantic
+# retrieval over raw transcript text, which the summary-only conversation vectors miss.
+TRANSCRIPT_CHUNK_INDEXING_ENABLED = os.getenv('TRANSCRIPT_CHUNK_INDEXING_ENABLED', 'false').lower() == 'true'
+
+
+def save_transcript_chunk_vectors(uid: str, conversation: Conversation):
+    segments = [s.dict() if hasattr(s, 'dict') else s for s in (conversation.transcript_segments or [])]
+    chunks = build_transcript_chunks(segments, conversation.started_at or conversation.created_at)
+    if chunks:
+        upsert_transcript_chunk_vectors(uid, conversation.id, chunks)
 
 
 def save_structured_vector(uid: str, conversation: Conversation, update_only: bool = False):
@@ -823,6 +859,8 @@ def process_conversation(
         )
         if not is_reprocess:
             submit_with_context(postprocess_executor, save_structured_vector, uid, conversation)
+            if TRANSCRIPT_CHUNK_INDEXING_ENABLED:
+                submit_with_context(postprocess_executor, save_transcript_chunk_vectors, uid, conversation)
         submit_with_context(postprocess_executor, _extract_memories, uid, conversation)
         submit_with_context(postprocess_executor, _extract_trends, uid, conversation)
         submit_with_context(postprocess_executor, _save_action_items, uid, conversation)
@@ -843,7 +881,7 @@ def process_conversation(
             logger.error(f"Error creating audio files: {e}")
 
     conversation.status = ConversationStatus.completed
-    conversations_db.upsert_conversation(uid, conversation.as_dict_cleaned_dates())
+    conversations_db.upsert_conversation(uid, conversation.dict())
 
     # Update folder conversation count after conversation is saved
     if assigned_folder_id:

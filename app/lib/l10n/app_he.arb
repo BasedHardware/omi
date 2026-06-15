@@ -10818,5 +10818,17 @@
   "objectAnnouncementsLatencyMetric": "Latency",
   "@objectAnnouncementsLatencyMetric": {
     "description": "Detect dashboard latency metric label"
-  }
+  },
+  "autoSync": "סנכרון אוטומטי",
+  "autoSyncDescription": "סנכרן אוטומטית הקלטות לא מקוונות כשהמכשיר שלך מתחבר",
+  "backgroundModeTitle": "מצב רקע",
+  "backgroundModeDescription": "השאירו את ה-Omi מקליט גם כשהאפליקציה סגורה לחלוטין.",
+  "backgroundModeNote": "כרגע עובד רק עם מכשירי Omi ומשתפר באופן מתמיד.",
+  "regenerateRecap": "צור סיכום מחדש",
+  "recapRegeneratedSnackbar": "הסיכום נוצר מחדש",
+  "recapRegenerateFailed": "לא ניתן ליצור מחדש את הסיכום. נסה שוב מאוחר יותר.",
+  "recapRegenerateCooldown": "אנא המתן מספר שניות לפני יצירה מחודשת.",
+  "recapRegenerateNoConversations": "אין שיחות לסיכום עבור היום הזה.",
+  "syncCustomSttWarningTitle": "הסנכרון משתמש בתמלול של Omi",
+  "syncCustomSttWarningMessage": "אתה משתמש בספק תמלול משלך. סנכרון ההקלטות האלה יתמלל אותן בשרתי Omi והן ייכללו במגבלת התמלול של התוכנית שלך."
 }

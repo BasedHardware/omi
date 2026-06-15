@@ -46,8 +46,14 @@ _stub_modules = [
     'utils.other.endpoints',
     'utils.other.storage',
     'utils.encryption',
+    'utils.analytics',
+    'utils.byok',
+    'utils.http_client',
     'utils.stt.pre_recorded',
     'utils.stt.vad',
+    'utils.speaker_assignment',
+    'utils.speaker_identification',
+    'utils.stt.speaker_embedding',
     'utils.fair_use',
     'utils.subscription',
     'utils.log_sanitizer',
@@ -62,6 +68,10 @@ for _mod in _stub_modules:
 
 sys.modules['database.redis_db'].r = MagicMock()
 sys.modules['database._client'].db = MagicMock()
+if 'google.cloud.tasks_v2' not in sys.modules:
+    sys.modules['google.cloud.tasks_v2'] = MagicMock()
+if not hasattr(sys.modules.setdefault('google.cloud', MagicMock()), 'tasks_v2'):
+    sys.modules['google.cloud'].tasks_v2 = sys.modules['google.cloud.tasks_v2']
 sys.modules['utils.log_sanitizer'].sanitize = lambda x: x
 sys.modules['utils.log_sanitizer'].sanitize_pii = lambda x: x
 

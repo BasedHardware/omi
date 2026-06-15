@@ -3245,5 +3245,17 @@
   "objectAnnouncementsLatencyMetric": "Latency",
   "@objectAnnouncementsLatencyMetric": {
     "description": "Detect dashboard latency metric label"
-  }
+  },
+  "autoSync": "Automatická synchronizácia",
+  "autoSyncDescription": "Automaticky synchronizovať offline nahrávky pri pripojení zariadenia",
+  "backgroundModeTitle": "Režim na pozadí",
+  "backgroundModeDescription": "Udržujte nahrávanie Omi, aj keď je aplikácia úplne zatvorená.",
+  "backgroundModeNote": "Zatiaľ funguje len so zariadeniami Omi a priebežne sa vylepšuje.",
+  "regenerateRecap": "Znovu vygenerovať zhrnutie",
+  "recapRegeneratedSnackbar": "Zhrnutie znovu vygenerované",
+  "recapRegenerateFailed": "Zhrnutie sa nepodarilo znovu vygenerovať. Skúste neskôr.",
+  "recapRegenerateCooldown": "Pred opätovným generovaním prosím počkajte niekoľko sekúnd.",
+  "recapRegenerateNoConversations": "Pre tento deň nie sú žiadne konverzácie na zhrnutie.",
+  "syncCustomSttWarningTitle": "Synchronizácia používa prepis Omi",
+  "syncCustomSttWarningMessage": "Používate vlastného poskytovateľa prepisu. Synchronizácia týchto nahrávok ich prepíše na serveroch Omi a započítajú sa do limitu prepisu vášho plánu."
 }

@@ -9491,4 +9491,41 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get objectAnnouncementsLatencyMetric => 'Latency';
+
+  @override
+  String get autoSync => 'ఆటో సింక్';
+
+  @override
+  String get autoSyncDescription => 'మీ పరికరం కనెక్ట్ అయినప్పుడు ఆఫ్‌లైన్ రికార్డింగ్‌లను స్వయంచాలకంగా సింక్ చేయండి';
+
+  @override
+  String get backgroundModeTitle => 'నేపథ్య మోడ్';
+
+  @override
+  String get backgroundModeDescription => 'యాప్ పూర్తిగా మూసివేయబడినా మీ Omi రికార్డింగ్‌ను కొనసాగించండి.';
+
+  @override
+  String get backgroundModeNote => 'ప్రస్తుతం Omi పరికరాలతో మాత్రమే పనిచేస్తుంది మరియు నిరంతరం మెరుగుపరచబడుతోంది.';
+
+  @override
+  String get regenerateRecap => 'సారాంశాన్ని పునరుత్పత్తి చేయండి';
+
+  @override
+  String get recapRegeneratedSnackbar => 'సారాంశం పునరుత్పత్తి అయింది';
+
+  @override
+  String get recapRegenerateFailed => 'సారాంశాన్ని పునరుత్పత్తి చేయలేకపోయాము. తర్వాత మళ్లీ ప్రయత్నించండి.';
+
+  @override
+  String get recapRegenerateCooldown => 'మళ్లీ పునరుత్పత్తి చేయడానికి ముందు దయచేసి కొన్ని సెకన్లు వేచి ఉండండి.';
+
+  @override
+  String get recapRegenerateNoConversations => 'ఈ రోజుకి సారాంశీకరించడానికి సంభాషణలు లేవు.';
+
+  @override
+  String get syncCustomSttWarningTitle => 'సింక్ Omi ట్రాన్స్‌క్రిప్షన్‌ను ఉపయోగిస్తుంది';
+
+  @override
+  String get syncCustomSttWarningMessage =>
+      'మీరు మీ సొంత ట్రాన్స్‌క్రిప్షన్ ప్రొవైడర్‌ను ఉపయోగిస్తున్నారు. ఈ రికార్డింగ్‌లను సింక్ చేస్తే అవి Omi సర్వర్‌లలో ట్రాన్స్‌క్రైబ్ చేయబడతాయి మరియు మీ ప్లాన్ ట్రాన్స్‌క్రిప్షన్ పరిమితిలో లెక్కించబడతాయి.';
 }

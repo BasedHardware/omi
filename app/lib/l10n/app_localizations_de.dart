@@ -9517,4 +9517,43 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get objectAnnouncementsLatencyMetric => 'Latency';
+
+  @override
+  String get autoSync => 'Automatische Synchronisierung';
+
+  @override
+  String get autoSyncDescription => 'Offline-Aufnahmen automatisch synchronisieren, wenn dein Gerät verbunden wird';
+
+  @override
+  String get backgroundModeTitle => 'Hintergrundmodus';
+
+  @override
+  String get backgroundModeDescription =>
+      'Lass deinen Omi weiter aufnehmen, auch wenn die App vollständig geschlossen ist.';
+
+  @override
+  String get backgroundModeNote => 'Funktioniert vorerst nur mit Omi-Geräten und wird kontinuierlich verbessert.';
+
+  @override
+  String get regenerateRecap => 'Zusammenfassung neu erstellen';
+
+  @override
+  String get recapRegeneratedSnackbar => 'Zusammenfassung neu erstellt';
+
+  @override
+  String get recapRegenerateFailed =>
+      'Zusammenfassung konnte nicht neu erstellt werden. Bitte später erneut versuchen.';
+
+  @override
+  String get recapRegenerateCooldown => 'Bitte warte ein paar Sekunden, bevor du erneut generierst.';
+
+  @override
+  String get recapRegenerateNoConversations => 'Keine Konversationen für diesen Tag zum Zusammenfassen.';
+
+  @override
+  String get syncCustomSttWarningTitle => 'Synchronisierung nutzt Omi-Transkription';
+
+  @override
+  String get syncCustomSttWarningMessage =>
+      'Du verwendest einen eigenen Transkriptionsanbieter. Beim Synchronisieren werden diese Aufnahmen stattdessen auf den Servern von Omi transkribiert und auf das Transkriptionslimit deines Tarifs angerechnet.';
 }

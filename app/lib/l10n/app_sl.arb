@@ -10818,5 +10818,17 @@
   "objectAnnouncementsLatencyMetric": "Latency",
   "@objectAnnouncementsLatencyMetric": {
     "description": "Detect dashboard latency metric label"
-  }
+  },
+  "autoSync": "Samodejna sinhronizacija",
+  "autoSyncDescription": "Samodejno sinhroniziraj posnetke brez povezave, ko se naprava poveže",
+  "backgroundModeTitle": "Način v ozadju",
+  "backgroundModeDescription": "Ohranite snemanje Omi tudi ko je aplikacija popolnoma zaprta.",
+  "backgroundModeNote": "Zaenkrat deluje le z napravami Omi in se nenehno izboljšuje.",
+  "regenerateRecap": "Ponovno ustvari povzetek",
+  "recapRegeneratedSnackbar": "Povzetek ponovno ustvarjen",
+  "recapRegenerateFailed": "Povzetka ni bilo mogoče ponovno ustvariti. Poskusite pozneje.",
+  "recapRegenerateCooldown": "Pred ponovnim ustvarjanjem počakajte nekaj sekund.",
+  "recapRegenerateNoConversations": "Za ta dan ni pogovorov za povzemanje.",
+  "syncCustomSttWarningTitle": "Sinhronizacija uporablja prepis Omi",
+  "syncCustomSttWarningMessage": "Uporabljate svojega ponudnika prepisa. Sinhronizacija teh posnetkov jih prepiše na strežnikih Omi in se štejejo v omejitev prepisa vašega paketa."
 }

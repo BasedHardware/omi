@@ -1,20 +1,121 @@
 import os
+import wave as _wave
+from abc import ABC, abstractmethod
 from collections import defaultdict
 from io import BytesIO
 from typing import List, Optional, Sequence, Tuple, Union
 
 import fal_client
 import httpx
+import numpy as np
 from deepgram import DeepgramClient, DeepgramClientOptions
 
 from models.transcript_segment import TranscriptSegment
 from utils.byok import get_byok_key
 from utils.other.endpoints import timeit
+from utils.stt.speaker_embedding import SPEAKER_MATCH_THRESHOLD, compare_embeddings, extract_embedding_from_bytes
 import logging
 
 _DG_TIMEOUT = httpx.Timeout(connect=10.0, read=120.0, write=30.0, pool=10.0)
+_MODULATE_TIMEOUT = httpx.Timeout(connect=10.0, read=300.0, write=30.0, pool=10.0)
 
 logger = logging.getLogger(__name__)
+
+stt_prerecorded_models = os.getenv('STT_PRERECORDED_MODEL', 'dg-nova-3').split(',')
+
+_parakeet_languages = {
+    'multi',
+    'bg',
+    'hr',
+    'cs',
+    'da',
+    'nl',
+    'en',
+    'et',
+    'fi',
+    'fr',
+    'de',
+    'el',
+    'hu',
+    'it',
+    'lt',
+    'lv',
+    'mt',
+    'pl',
+    'pt',
+    'ro',
+    'ru',
+    'sk',
+    'sl',
+    'es',
+    'sv',
+    'uk',
+}
+
+
+# ---------------------------------------------------------------------------
+# Provider-agnostic ABC — mirrors STTSocket for streaming
+# ---------------------------------------------------------------------------
+
+
+class PrerecordedSTTProvider(ABC):
+
+    @abstractmethod
+    def transcribe_url(
+        self,
+        audio_url: str,
+        speakers_count: int = None,
+        attempts: int = 0,
+        return_language: bool = False,
+        diarize: bool = True,
+        language: Optional[str] = None,
+        keywords: Optional[Sequence[str]] = None,
+    ) -> Union[List[dict], Tuple[List[dict], str]]: ...
+
+    @abstractmethod
+    def transcribe_bytes(
+        self,
+        audio_bytes: bytes,
+        sample_rate: int = 16000,
+        diarize: bool = True,
+        attempts: int = 0,
+        encoding: Optional[str] = None,
+        channels: int = 1,
+        language: Optional[str] = None,
+        return_language: bool = False,
+        keywords: Optional[Sequence[str]] = None,
+    ) -> Union[List[dict], Tuple[List[dict], str]]: ...
+
+
+class PrerecordedSTTService:
+    DEEPGRAM = 'deepgram'
+    MODULATE = 'modulate'
+    PARAKEET = 'parakeet'
+
+
+def get_prerecorded_service(language: str = 'en') -> Tuple[str, str, str]:
+    """Route pre-recorded STT based on STT_PRERECORDED_MODEL env var.
+
+    Iterates comma-separated models (same pattern as STT_SERVICE_MODELS for streaming).
+    First model that supports the language wins; falls back to Deepgram nova-3.
+    """
+    base_lang = language.split('-')[0].split('_')[0].lower() if language else 'en'
+    for m in stt_prerecorded_models:
+        m = m.strip()
+        if m.startswith('dg-'):
+            dg_model = m.replace('dg-', '', 1)
+            lang = language if (language is None or language in _deepgram_nova3_languages) else 'multi'
+            return PrerecordedSTTService.DEEPGRAM, lang, dg_model
+        if m == 'modulate-velma-2':
+            if base_lang in {'en', 'es', 'fr', 'de', 'it', 'pt', 'nl', 'ja', 'ko', 'zh'}:
+                return PrerecordedSTTService.MODULATE, base_lang, 'velma-2'
+            continue
+        if m == 'parakeet':
+            if base_lang in _parakeet_languages:
+                return PrerecordedSTTService.PARAKEET, base_lang, 'parakeet'
+            continue
+    return PrerecordedSTTService.DEEPGRAM, language, 'nova-3'
+
 
 # Initialize Deepgram client for pre-recorded transcription
 # WARN: the pre-recorded transcription is available on deepgram cloud
@@ -433,6 +534,518 @@ def fal_whisperx(
         if return_language:
             return [], 'en'
         return []
+
+
+@timeit
+def modulate_prerecorded_from_bytes(
+    audio_bytes: bytes,
+    sample_rate: int = 16000,
+    diarize: bool = True,
+    attempts: int = 0,
+    return_language: bool = False,
+) -> Union[List[dict], Tuple[List[dict], str]]:
+    logger.info(f'modulate_prerecorded_from_bytes bytes_len={len(audio_bytes)} {sample_rate} {diarize} {attempts}')
+
+    api_key = os.getenv('MODULATE_API_KEY')
+    if not api_key:
+        raise ValueError('MODULATE_API_KEY environment variable is not set')
+
+    try:
+        url = 'https://modulate-developer-apis.com/api/velma-2-stt-batch'
+        headers = {'X-API-Key': api_key}
+        files = {'upload_file': ('audio.wav', BytesIO(audio_bytes), 'audio/wav')}
+        data = {'speaker_diarization': str(diarize).lower()}
+
+        with httpx.Client(timeout=300) as client:
+            response = client.post(url, headers=headers, files=files, data=data)
+        response.raise_for_status()
+        result = response.json()
+
+        utterances = result.get('utterances', [])
+        if not utterances:
+            if return_language:
+                return [], 'en'
+            return []
+
+        words = []
+        detected_language = 'en'
+        for utt in utterances:
+            text = utt.get('text', '').strip()
+            if not text:
+                continue
+
+            start_ms = utt.get('start_ms', 0)
+            duration_ms = utt.get('duration_ms', 0)
+            start = start_ms / 1000.0
+            end = (start_ms + duration_ms) / 1000.0
+
+            raw_speaker = utt.get('speaker')
+            if isinstance(raw_speaker, int) and raw_speaker >= 1:
+                speaker_idx = raw_speaker - 1
+            else:
+                speaker_idx = 0
+            speaker = f'SPEAKER_{speaker_idx:02d}'
+
+            words.append({'timestamp': [start, end], 'speaker': speaker, 'text': text})
+
+            lang = utt.get('language')
+            if lang:
+                detected_language = lang
+
+        if return_language:
+            return words, detected_language
+
+        return words
+
+    except Exception as e:
+        logger.error(f'Modulate prerecorded error: {e}')
+        if attempts < 2:
+            return modulate_prerecorded_from_bytes(audio_bytes, sample_rate, diarize, attempts + 1, return_language)
+        raise RuntimeError(f'Modulate transcription failed after {attempts + 1} attempts: {e}')
+
+
+@timeit
+def modulate_prerecorded(
+    audio_url: str,
+    speakers_count: int = None,
+    attempts: int = 0,
+    return_language: bool = False,
+    diarize: bool = True,
+    language: Optional[str] = None,
+) -> Union[List[dict], Tuple[List[dict], str]]:
+    logger.info(f'modulate_prerecorded {audio_url} {speakers_count} {attempts}')
+    try:
+        with httpx.Client(timeout=_MODULATE_TIMEOUT) as client:
+            resp = client.get(audio_url)
+            resp.raise_for_status()
+            audio_bytes = resp.content
+        return modulate_prerecorded_from_bytes(
+            audio_bytes, diarize=diarize, attempts=attempts, return_language=return_language
+        )
+    except Exception as e:
+        logger.error(f'Modulate prerecorded (url) error: {e}')
+        if attempts < 1:
+            return modulate_prerecorded(audio_url, speakers_count, attempts + 1, return_language, diarize, language)
+        raise RuntimeError(f'Modulate transcription (url) failed after {attempts + 1} attempts: {e}')
+
+
+# ---------------------------------------------------------------------------
+# Provider implementations
+# ---------------------------------------------------------------------------
+
+
+class DeepgramPrerecordedProvider(PrerecordedSTTProvider):
+
+    def __init__(self, model: str = 'nova-3'):
+        self._model = model
+
+    def transcribe_url(
+        self,
+        audio_url,
+        speakers_count=None,
+        attempts=0,
+        return_language=False,
+        diarize=True,
+        language=None,
+        keywords=None,
+    ):
+        lang = language if (language is None or language in _deepgram_nova3_languages) else 'multi'
+        return deepgram_prerecorded(
+            audio_url,
+            speakers_count=speakers_count,
+            attempts=attempts,
+            return_language=return_language,
+            diarize=diarize,
+            language=lang,
+            model=self._model,
+            keywords=keywords,
+        )
+
+    def transcribe_bytes(
+        self,
+        audio_bytes,
+        sample_rate=16000,
+        diarize=True,
+        attempts=0,
+        encoding=None,
+        channels=1,
+        language=None,
+        return_language=False,
+        keywords=None,
+    ):
+        lang = language if (language is None or language in _deepgram_nova3_languages) else 'multi'
+        return deepgram_prerecorded_from_bytes(
+            audio_bytes,
+            sample_rate=sample_rate,
+            diarize=diarize,
+            attempts=attempts,
+            encoding=encoding,
+            channels=channels,
+            language=lang,
+            model=self._model,
+            return_language=return_language,
+            keywords=keywords,
+        )
+
+
+class ModulatePrerecordedProvider(PrerecordedSTTProvider):
+
+    def _normalize_lang(self, language: Optional[str]) -> str:
+        if not language:
+            return 'en'
+        return language.split('-')[0].split('_')[0].lower()
+
+    def transcribe_url(
+        self,
+        audio_url,
+        speakers_count=None,
+        attempts=0,
+        return_language=False,
+        diarize=True,
+        language=None,
+        keywords=None,
+    ):
+        return modulate_prerecorded(
+            audio_url,
+            speakers_count=speakers_count,
+            attempts=attempts,
+            return_language=return_language,
+            diarize=diarize,
+            language=self._normalize_lang(language),
+        )
+
+    def transcribe_bytes(
+        self,
+        audio_bytes,
+        sample_rate=16000,
+        diarize=True,
+        attempts=0,
+        encoding=None,
+        channels=1,
+        language=None,
+        return_language=False,
+        keywords=None,
+    ):
+        if encoding:
+            audio_bytes = _wrap_pcm_as_wav(audio_bytes, sample_rate, channels)
+        return modulate_prerecorded_from_bytes(
+            audio_bytes,
+            sample_rate=sample_rate,
+            diarize=diarize,
+            attempts=attempts,
+            return_language=return_language,
+        )
+
+
+_PARAKEET_TIMEOUT = httpx.Timeout(connect=10.0, read=120.0, write=30.0, pool=10.0)
+_PARAKEET_URL_DOWNLOAD_TIMEOUT = httpx.Timeout(connect=10.0, read=60.0, write=10.0, pool=10.0)
+_PARAKEET_MAX_DOWNLOAD_BYTES = 100 * 1024 * 1024  # 100 MB
+
+
+@timeit
+def parakeet_prerecorded_from_bytes(
+    audio_bytes: bytes,
+    sample_rate: int = 16000,
+    diarize: bool = True,
+    attempts: int = 0,
+    encoding: Optional[str] = None,
+    channels: int = 1,
+    language: Optional[str] = None,
+    return_language: bool = False,
+) -> Union[List[dict], Tuple[List[dict], str]]:
+    logger.info(
+        f'parakeet_prerecorded_from_bytes bytes_len={len(audio_bytes)} {sample_rate} {diarize} {attempts} encoding={encoding}'
+    )
+
+    api_url = os.getenv('HOSTED_PARAKEET_API_URL')
+    if not api_url:
+        raise ValueError('HOSTED_PARAKEET_API_URL environment variable is not set')
+
+    try:
+        if encoding:
+            audio_bytes = _wrap_pcm_as_wav(audio_bytes, sample_rate, channels)
+
+        files = {'file': ('audio.wav', BytesIO(audio_bytes), 'audio/wav')}
+
+        use_v2 = diarize and os.getenv('PARAKEET_USE_V2', '1') == '1'
+        if use_v2:
+            url = api_url.rstrip('/') + '/v2/transcribe'
+            data = {'diarize': 'true'}
+        else:
+            url = api_url.rstrip('/') + '/v1/transcribe'
+            data = {}
+
+        with httpx.Client(timeout=_PARAKEET_TIMEOUT) as client:
+            response = client.post(url, files=files, data=data if data else None)
+            if response.status_code == 404 and use_v2:
+                url = api_url.rstrip('/') + '/v1/transcribe'
+                response = client.post(url, files={'file': ('audio.wav', BytesIO(audio_bytes), 'audio/wav')})
+                use_v2 = False
+        response.raise_for_status()
+        result = response.json()
+
+        segments = result.get('segments', []) or []
+        full_text = (result.get('text') or '').strip()
+
+        if not segments and not full_text:
+            if return_language:
+                return [], language or 'en'
+            return []
+
+        spk_centroids: List[np.ndarray] = []
+        spk_counts: List[int] = []
+
+        words = []
+        for seg in segments:
+            text = (seg.get('text') or '').strip()
+            if not text:
+                continue
+            start = float(seg.get('start', 0.0))
+            end = float(seg.get('end', start))
+
+            speaker_label = seg.get('speaker', '') if use_v2 else ''
+            if not speaker_label:
+                speaker_label = 'SPEAKER_00'
+                if diarize:
+                    speaker_label = _parakeet_assign_speaker_sync(
+                        audio_bytes, sample_rate, start, end, spk_centroids, spk_counts
+                    )
+
+            if not speaker_label.startswith('SPEAKER_'):
+                speaker_label = f'SPEAKER_{speaker_label}'
+
+            words.append({'timestamp': [start, end], 'speaker': speaker_label, 'text': text})
+
+        if not words and full_text:
+            words.append({'timestamp': [0.0, 0.0], 'speaker': 'SPEAKER_00', 'text': full_text})
+
+        if return_language:
+            detected = result.get('detected_language') or language or 'en'
+            return words, detected
+
+        return words
+
+    except Exception as e:
+        logger.error(f'Parakeet prerecorded error: {e}')
+        if attempts < 1:
+            return parakeet_prerecorded_from_bytes(
+                audio_bytes, sample_rate, diarize, attempts + 1, None, channels, language, return_language
+            )
+        raise RuntimeError(f'Parakeet transcription failed after {attempts + 1} attempts: {e}')
+
+
+@timeit
+def parakeet_prerecorded(
+    audio_url: str,
+    speakers_count: int = None,
+    attempts: int = 0,
+    return_language: bool = False,
+    diarize: bool = True,
+    language: Optional[str] = None,
+) -> Union[List[dict], Tuple[List[dict], str]]:
+    logger.info(f'parakeet_prerecorded url_len={len(audio_url)} {speakers_count} {attempts}')
+    try:
+        with httpx.Client(timeout=_PARAKEET_URL_DOWNLOAD_TIMEOUT) as client:
+            with client.stream('GET', audio_url) as resp:
+                resp.raise_for_status()
+                content_length = resp.headers.get('content-length')
+                if content_length and int(content_length) > _PARAKEET_MAX_DOWNLOAD_BYTES:
+                    raise ValueError(
+                        f'Audio file too large: {content_length} bytes (max {_PARAKEET_MAX_DOWNLOAD_BYTES})'
+                    )
+                chunks = []
+                total = 0
+                for chunk in resp.iter_bytes(chunk_size=1024 * 1024):
+                    total += len(chunk)
+                    if total > _PARAKEET_MAX_DOWNLOAD_BYTES:
+                        raise ValueError(f'Audio download exceeded {_PARAKEET_MAX_DOWNLOAD_BYTES} bytes')
+                    chunks.append(chunk)
+                audio_bytes = b''.join(chunks)
+                del chunks
+        return parakeet_prerecorded_from_bytes(
+            audio_bytes, diarize=diarize, attempts=attempts, return_language=return_language, language=language
+        )
+    except Exception as e:
+        logger.error(f'Parakeet prerecorded (url) error: {e}')
+        if attempts < 1:
+            return parakeet_prerecorded(audio_url, speakers_count, attempts + 1, return_language, diarize, language)
+        raise RuntimeError(f'Parakeet transcription (url) failed after {attempts + 1} attempts: {e}')
+
+
+def _parakeet_assign_speaker_sync(
+    wav_bytes: bytes,
+    sample_rate: int,
+    seg_start: float,
+    seg_end: float,
+    centroids: List[np.ndarray],
+    counts: List[int],
+) -> str:
+    if seg_end - seg_start < 0.6:
+        return 'SPEAKER_00'
+
+    try:
+        seg_pcm = _extract_pcm_segment_from_wav(wav_bytes, seg_start, seg_end)
+
+        if len(seg_pcm) < int(sample_rate * 2 * 0.6):
+            return 'SPEAKER_00'
+
+        seg_wav = _wrap_pcm_as_wav(seg_pcm, sample_rate, 1)
+        emb = extract_embedding_from_bytes(seg_wav)
+
+        best_i, best_dist = -1, 1e9
+        for i, centroid in enumerate(centroids):
+            d = compare_embeddings(emb, centroid)
+            if d < best_dist:
+                best_i, best_dist = i, d
+
+        if best_i >= 0 and best_dist < SPEAKER_MATCH_THRESHOLD:
+            n = counts[best_i]
+            centroids[best_i] = (centroids[best_i] * n + emb) / (n + 1)
+            counts[best_i] = n + 1
+            return f'SPEAKER_{best_i:02d}'
+
+        centroids.append(emb)
+        counts.append(1)
+        return f'SPEAKER_{len(centroids) - 1:02d}'
+    except Exception as e:
+        logger.warning(f'Parakeet batch diarization failed, defaulting to SPEAKER_00: {e}')
+        return 'SPEAKER_00'
+
+
+def _extract_pcm_segment_from_wav(wav_bytes: bytes, start: float, end: float) -> bytes:
+    buf = BytesIO(wav_bytes)
+    with _wave.open(buf, 'rb') as wf:
+        sr = wf.getframerate()
+        start_frame = int(start * sr)
+        end_frame = int(end * sr)
+        wf.setpos(start_frame)
+        return wf.readframes(end_frame - start_frame)
+
+
+def _wrap_pcm_as_wav(pcm_bytes: bytes, sample_rate: int, channels: int, bits_per_sample: int = 16) -> bytes:
+    buf = BytesIO()
+    with _wave.open(buf, 'wb') as wf:
+        wf.setnchannels(channels)
+        wf.setsampwidth(bits_per_sample // 8)
+        wf.setframerate(sample_rate)
+        wf.writeframes(pcm_bytes)
+    return buf.getvalue()
+
+
+class ParakeetPrerecordedProvider(PrerecordedSTTProvider):
+
+    def transcribe_url(
+        self,
+        audio_url,
+        speakers_count=None,
+        attempts=0,
+        return_language=False,
+        diarize=True,
+        language=None,
+        keywords=None,
+    ):
+        return parakeet_prerecorded(
+            audio_url,
+            speakers_count=speakers_count,
+            attempts=attempts,
+            return_language=return_language,
+            diarize=diarize,
+            language=language,
+        )
+
+    def transcribe_bytes(
+        self,
+        audio_bytes,
+        sample_rate=16000,
+        diarize=True,
+        attempts=0,
+        encoding=None,
+        channels=1,
+        language=None,
+        return_language=False,
+        keywords=None,
+    ):
+        return parakeet_prerecorded_from_bytes(
+            audio_bytes,
+            sample_rate=sample_rate,
+            diarize=diarize,
+            attempts=attempts,
+            encoding=encoding,
+            channels=channels,
+            language=language,
+            return_language=return_language,
+        )
+
+
+def get_prerecorded_provider(language: str = 'en') -> PrerecordedSTTProvider:
+    """Factory: return the active provider based on STT_PRERECORDED_MODEL with language fallback."""
+    base_lang = language.split('-')[0].split('_')[0].lower() if language else 'en'
+    for m in stt_prerecorded_models:
+        m = m.strip()
+        if m == 'modulate-velma-2':
+            return ModulatePrerecordedProvider()
+        if m == 'parakeet':
+            if base_lang in _parakeet_languages:
+                return ParakeetPrerecordedProvider()
+            continue
+        if m.startswith('dg-'):
+            return DeepgramPrerecordedProvider(model=m.replace('dg-', '', 1))
+    return DeepgramPrerecordedProvider(model='nova-3')
+
+
+# ---------------------------------------------------------------------------
+# Convenience wrappers — delegate to the active provider
+# ---------------------------------------------------------------------------
+
+
+def prerecorded(
+    audio_url: str,
+    speakers_count: int = None,
+    attempts: int = 0,
+    return_language: bool = False,
+    diarize: bool = True,
+    language: Optional[str] = None,
+    model: str = "nova-3",
+    keywords: Optional[Sequence[str]] = None,
+) -> Union[List[dict], Tuple[List[dict], str]]:
+    """Route pre-recorded URL transcription through STT_PRERECORDED_MODEL."""
+    provider = get_prerecorded_provider()
+    return provider.transcribe_url(
+        audio_url,
+        speakers_count=speakers_count,
+        attempts=attempts,
+        return_language=return_language,
+        diarize=diarize,
+        language=language,
+        keywords=keywords,
+    )
+
+
+def prerecorded_from_bytes(
+    audio_bytes: bytes,
+    sample_rate: int = 16000,
+    diarize: bool = True,
+    attempts: int = 0,
+    encoding: Optional[str] = None,
+    channels: int = 1,
+    language: Optional[str] = None,
+    model: str = "nova-3",
+    return_language: bool = False,
+    keywords: Optional[Sequence[str]] = None,
+) -> Union[List[dict], Tuple[List[dict], str]]:
+    """Route pre-recorded bytes transcription through STT_PRERECORDED_MODEL."""
+    provider = get_prerecorded_provider()
+    return provider.transcribe_bytes(
+        audio_bytes,
+        sample_rate=sample_rate,
+        diarize=diarize,
+        attempts=attempts,
+        encoding=encoding,
+        channels=channels,
+        language=language,
+        return_language=return_language,
+        keywords=keywords,
+    )
 
 
 def _words_cleaning(words: List[dict]):

@@ -3275,5 +3275,17 @@
   "objectAnnouncementsLatencyMetric": "Latency",
   "@objectAnnouncementsLatencyMetric": {
     "description": "Detect dashboard latency metric label"
-  }
+  },
+  "autoSync": "Otomatik eşitleme",
+  "autoSyncDescription": "Cihazınız bağlandığında çevrimdışı kayıtları otomatik olarak eşitleyin",
+  "backgroundModeTitle": "Arka Plan Modu",
+  "backgroundModeDescription": "Uygulama tamamen kapalıyken bile Omi'nizi kayıtta tutun.",
+  "backgroundModeNote": "Şimdilik yalnızca Omi cihazlarıyla çalışır ve sürekli geliştirilmektedir.",
+  "regenerateRecap": "Özeti yeniden oluştur",
+  "recapRegeneratedSnackbar": "Özet yeniden oluşturuldu",
+  "recapRegenerateFailed": "Özet yeniden oluşturulamadı. Lütfen daha sonra tekrar deneyin.",
+  "recapRegenerateCooldown": "Yeniden oluşturmadan önce lütfen birkaç saniye bekleyin.",
+  "recapRegenerateNoConversations": "Bu gün için özetlenecek konuşma bulunamadı.",
+  "syncCustomSttWarningTitle": "Eşitleme, Omi transkripsiyonunu kullanır",
+  "syncCustomSttWarningMessage": "Kendi transkripsiyon sağlayıcınızı kullanıyorsunuz. Bu kayıtları eşitlemek onları Omi sunucularında yazıya döker ve planınızın transkripsiyon sınırına sayılır."
 }

@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
-
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/message_event.dart';
@@ -445,9 +444,12 @@ class TranscriptSocketServiceFactory {
   /// Build URL with query parameters
   static String _buildUrlWithParams(String baseUrl, Map<String, String> params) {
     if (params.isEmpty) return baseUrl;
-    final uri = Uri.parse(baseUrl);
-    final newUri = uri.replace(queryParameters: {...uri.queryParameters, ...params});
-    return newUri.toString();
+    final uri = Uri.tryParse(baseUrl);
+    if (uri == null) {
+      Logger.warning('[STTFactory] Invalid URL, cannot append params: $baseUrl');
+      return baseUrl;
+    }
+    return uri.replace(queryParameters: {...uri.queryParameters, ...params}).toString();
   }
 
   /// Create composite service: primary STT socket + Omi backend for conversation processing

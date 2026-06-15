@@ -9387,4 +9387,41 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get objectAnnouncementsLatencyMetric => 'Latency';
+
+  @override
+  String get autoSync => 'المزامنة التلقائية';
+
+  @override
+  String get autoSyncDescription => 'مزامنة التسجيلات دون اتصال تلقائيًا عند توصيل جهازك';
+
+  @override
+  String get backgroundModeTitle => 'الوضع في الخلفية';
+
+  @override
+  String get backgroundModeDescription => 'حافِظ على تسجيل Omi حتى عند إغلاق التطبيق تمامًا.';
+
+  @override
+  String get backgroundModeNote => 'يعمل حاليًا مع أجهزة Omi فقط، ويجري تحسينه باستمرار.';
+
+  @override
+  String get regenerateRecap => 'إعادة إنشاء الملخص';
+
+  @override
+  String get recapRegeneratedSnackbar => 'تمت إعادة إنشاء الملخص';
+
+  @override
+  String get recapRegenerateFailed => 'تعذرت إعادة إنشاء الملخص. حاول مرة أخرى لاحقًا.';
+
+  @override
+  String get recapRegenerateCooldown => 'يرجى الانتظار بضع ثوانٍ قبل إعادة الإنشاء مرة أخرى.';
+
+  @override
+  String get recapRegenerateNoConversations => 'لا توجد محادثات لتلخيصها في هذا اليوم.';
+
+  @override
+  String get syncCustomSttWarningTitle => 'المزامنة تستخدم خدمة النسخ في Omi';
+
+  @override
+  String get syncCustomSttWarningMessage =>
+      'أنت تستخدم مزوّد النسخ الخاص بك. مزامنة هذه التسجيلات تنسخها على خوادم Omi بدلاً من ذلك، وتُحتسب ضمن حد النسخ في باقتك.';
 }

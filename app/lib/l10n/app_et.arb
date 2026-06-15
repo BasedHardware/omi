@@ -3240,5 +3240,17 @@
   "objectAnnouncementsLatencyMetric": "Latency",
   "@objectAnnouncementsLatencyMetric": {
     "description": "Detect dashboard latency metric label"
-  }
+  },
+  "autoSync": "Automaatne sünkroonimine",
+  "autoSyncDescription": "Sünkrooni võrguühenduseta salvestised automaatselt, kui seade ühendatakse",
+  "backgroundModeTitle": "Taustarežiim",
+  "backgroundModeDescription": "Hoia oma Omi salvestamas ka siis, kui rakendus on täielikult suletud.",
+  "backgroundModeNote": "Praegu töötab ainult Omi seadmetega ja seda täiustatakse pidevalt.",
+  "regenerateRecap": "Loo kokkuvõte uuesti",
+  "recapRegeneratedSnackbar": "Kokkuvõte loodi uuesti",
+  "recapRegenerateFailed": "Kokkuvõtet ei õnnestunud uuesti luua. Proovi hiljem uuesti.",
+  "recapRegenerateCooldown": "Palun oota mõni sekund enne uuesti loomist.",
+  "recapRegenerateNoConversations": "Selle päeva jaoks pole vestlusi, mida kokku võtta.",
+  "syncCustomSttWarningTitle": "Sünkroonimine kasutab Omi transkriptsiooni",
+  "syncCustomSttWarningMessage": "Kasutate oma transkriptsiooniteenust. Nende salvestiste sünkroonimine transkribeerib need Omi serverites ja need arvestatakse teie paketi transkriptsioonilimiidi sisse."
 }

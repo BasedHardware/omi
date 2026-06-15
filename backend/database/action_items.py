@@ -13,6 +13,14 @@ logger = logging.getLogger(__name__)
 action_items_collection = 'action_items'
 
 
+def get_action_item_ids(uid: str) -> List[str]:
+    """Return all action item document IDs for a user (IDs-only projection, no field reads).
+
+    Used for bulk operations like account deletion (e.g. to purge derived Pinecone vectors)."""
+    coll = db.collection('users').document(uid).collection(action_items_collection)
+    return [doc.id for doc in coll.select([]).stream()]
+
+
 def _prepare_action_item_for_write(action_item_data: dict) -> dict:
     """Prepare action item data for writing to database"""
     # Ensure timestamps are properly formatted
@@ -55,21 +63,55 @@ def _prepare_action_item_for_read(action_item_data: dict) -> dict:
 # *****************************
 
 
-def create_action_item(uid: str, action_item_data: dict) -> str:
+def create_action_item(uid: str, action_item_data: dict, idempotency_key: Optional[str] = None) -> str:
     """
     Create a new action item for a user.
 
     Args:
         uid: User ID
         action_item_data: Action item data including description, dates, etc.
+        idempotency_key: Optional opaque key. When supplied, the function looks
+            for an existing action_item with the same key (any state) and returns
+            its id without creating a new document. This makes the call safe to
+            retry on flaky networks or duplicate event delivery — the previous
+            behaviour silently allocated a fresh Firestore id on every call,
+            producing user-visible duplicates. The key is stored on the
+            document so future calls can find it. Callers that want
+            content-based idempotency typically pass
+            ``hashlib.sha256(f"{uid}:{normalized_description}".encode()).hexdigest()``.
 
     Returns:
-        The ID of the created action item
+        The ID of the created (or pre-existing, when idempotency_key matches)
+        action item.
     """
     action_item_data = _prepare_action_item_for_write(action_item_data)
 
     user_ref = db.collection('users').document(uid)
     action_items_ref = user_ref.collection(action_items_collection)
+
+    # Idempotency check: if the caller supplied a key and we already have an
+    # *active* (not completed, not soft-deleted) document with that key,
+    # return its id rather than creating a duplicate. Completed/deleted
+    # matches are treated as "the user is recreating the task" and we fall
+    # through to the normal create path — otherwise a permanent content hash
+    # would silently swallow legitimate re-creation of recurring tasks.
+    if idempotency_key:
+        existing_query = (
+            action_items_ref.where(filter=FieldFilter('idempotency_key', '==', idempotency_key))
+            .where(filter=FieldFilter('completed', '==', False))
+            .limit(5)
+        )
+        for doc in existing_query.stream():
+            data = doc.to_dict() or {}
+            if data.get('deleted'):
+                continue
+            logger.info(
+                "create_action_item: idempotency hit for uid=%s key=%s -> existing id=%s",
+                uid,
+                idempotency_key,
+                doc.id,
+            )
+            return doc.id
 
     if 'created_at' not in action_item_data:
         action_item_data['created_at'] = datetime.now(timezone.utc)
@@ -79,6 +121,9 @@ def create_action_item(uid: str, action_item_data: dict) -> str:
     # Set completed_at if the item is being created as completed
     if action_item_data.get('completed', False) and 'completed_at' not in action_item_data:
         action_item_data['completed_at'] = datetime.now(timezone.utc)
+
+    if idempotency_key:
+        action_item_data['idempotency_key'] = idempotency_key
 
     doc_ref = action_items_ref.add(action_item_data)[1]
 
@@ -244,6 +289,54 @@ def get_action_items(
     )
 
     return action_items
+
+
+def _normalize_description(desc: Optional[str]) -> str:
+    """Normalize a task description for case-insensitive duplicate matching.
+
+    Strips whitespace + the legacy ``[screen]`` prefix/suffix marker that the
+    AI promotion pipeline used to add to AI-generated tasks (still appears in
+    historical data and on tasks that round-tripped through ``migrate_ai_tasks``).
+    """
+    if not desc:
+        return ''
+    s = desc.strip()
+    if s.startswith('[screen] '):
+        s = s[len('[screen] ') :]
+    if s.endswith(' [screen]'):
+        s = s[: -len(' [screen]')]
+    return s.strip().lower()
+
+
+def get_active_action_item_by_description(uid: str, description: str) -> Optional[dict]:
+    """Find an active (not completed, not deleted) action_item with a matching
+    description for the given user, or return None.
+
+    Match is case-insensitive and ignores ``[screen]`` markers and surrounding
+    whitespace, mirroring ``database.staged_tasks.create_staged_task``'s
+    dedup logic so that the staged → action_item promotion path can avoid
+    creating semantic duplicates.
+
+    Streams active items (typically a small bounded set per user) rather than
+    relying on a Firestore equality filter, because Firestore cannot do
+    case-insensitive matching natively without a normalized companion field.
+    """
+    target = _normalize_description(description)
+    if not target:
+        return None
+
+    user_ref = db.collection('users').document(uid)
+    query = user_ref.collection(action_items_collection).where(filter=FieldFilter('completed', '==', False))
+
+    for doc in query.stream():
+        data = doc.to_dict()
+        if data.get('deleted'):
+            continue
+        if _normalize_description(data.get('description')) == target:
+            data['id'] = doc.id
+            return _prepare_action_item_for_read(data)
+
+    return None
 
 
 def get_action_items_by_conversation(uid: str, conversation_id: str) -> List[dict]:

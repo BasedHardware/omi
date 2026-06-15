@@ -9507,4 +9507,42 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get objectAnnouncementsLatencyMetric => 'Latency';
+
+  @override
+  String get autoSync => 'Αυτόματος συγχρονισμός';
+
+  @override
+  String get autoSyncDescription => 'Αυτόματος συγχρονισμός των εκτός σύνδεσης εγγραφών όταν συνδέεται η συσκευή σας';
+
+  @override
+  String get backgroundModeTitle => 'Λειτουργία παρασκηνίου';
+
+  @override
+  String get backgroundModeDescription =>
+      'Διατηρήστε την εγγραφή του Omi ακόμη και όταν η εφαρμογή είναι εντελώς κλειστή.';
+
+  @override
+  String get backgroundModeNote => 'Προς το παρόν λειτουργεί μόνο με συσκευές Omi και βελτιώνεται συνεχώς.';
+
+  @override
+  String get regenerateRecap => 'Αναδημιουργία ανακεφαλαίωσης';
+
+  @override
+  String get recapRegeneratedSnackbar => 'Η ανακεφαλαίωση δημιουργήθηκε ξανά';
+
+  @override
+  String get recapRegenerateFailed => 'Δεν ήταν δυνατή η αναδημιουργία της ανακεφαλαίωσης. Δοκιμάστε ξανά αργότερα.';
+
+  @override
+  String get recapRegenerateCooldown => 'Παρακαλώ περιμένετε λίγα δευτερόλεπτα πριν δοκιμάσετε ξανά.';
+
+  @override
+  String get recapRegenerateNoConversations => 'Δεν υπάρχουν συνομιλίες για ανακεφαλαίωση αυτής της ημέρας.';
+
+  @override
+  String get syncCustomSttWarningTitle => 'Ο συγχρονισμός χρησιμοποιεί τη μεταγραφή του Omi';
+
+  @override
+  String get syncCustomSttWarningMessage =>
+      'Χρησιμοποιείτε δικό σας πάροχο μεταγραφής. Ο συγχρονισμός αυτών των ηχογραφήσεων τις μεταγράφει στους διακομιστές του Omi και προσμετρώνται στο όριο μεταγραφής του προγράμματός σας.';
 }

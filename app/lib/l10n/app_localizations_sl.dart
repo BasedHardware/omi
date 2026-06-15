@@ -9469,4 +9469,41 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String get objectAnnouncementsLatencyMetric => 'Latency';
+
+  @override
+  String get autoSync => 'Samodejna sinhronizacija';
+
+  @override
+  String get autoSyncDescription => 'Samodejno sinhroniziraj posnetke brez povezave, ko se naprava poveže';
+
+  @override
+  String get backgroundModeTitle => 'Način v ozadju';
+
+  @override
+  String get backgroundModeDescription => 'Ohranite snemanje Omi tudi ko je aplikacija popolnoma zaprta.';
+
+  @override
+  String get backgroundModeNote => 'Zaenkrat deluje le z napravami Omi in se nenehno izboljšuje.';
+
+  @override
+  String get regenerateRecap => 'Ponovno ustvari povzetek';
+
+  @override
+  String get recapRegeneratedSnackbar => 'Povzetek ponovno ustvarjen';
+
+  @override
+  String get recapRegenerateFailed => 'Povzetka ni bilo mogoče ponovno ustvariti. Poskusite pozneje.';
+
+  @override
+  String get recapRegenerateCooldown => 'Pred ponovnim ustvarjanjem počakajte nekaj sekund.';
+
+  @override
+  String get recapRegenerateNoConversations => 'Za ta dan ni pogovorov za povzemanje.';
+
+  @override
+  String get syncCustomSttWarningTitle => 'Sinhronizacija uporablja prepis Omi';
+
+  @override
+  String get syncCustomSttWarningMessage =>
+      'Uporabljate svojega ponudnika prepisa. Sinhronizacija teh posnetkov jih prepiše na strežnikih Omi in se štejejo v omejitev prepisa vašega paketa.';
 }

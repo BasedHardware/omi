@@ -249,7 +249,15 @@ def get_memories_via_integration(
         if memory.get('is_locked', False):
             content = memory.get('content', '')
             memory['content'] = (content[:70] + '...') if len(content) > 70 else content
-    memory_items = [integration_models.MemoryItem(**fact) for fact in memories]
+    memory_items = []
+    for fact in memories:
+        try:
+            memory_items.append(integration_models.MemoryItem(**fact))
+        except Exception as e:  # noqa: BLE001 - intentional broad catch: skip any malformed record
+            # One malformed/legacy record must not 500 the whole page; skip it (mirrors the
+            # conversation conversion guard in get_conversations_via_integration).
+            logger.error(f"Error parsing memory {fact.get('id')}: {str(e)}")
+            continue
 
     return {"memories": memory_items}
 
@@ -682,8 +690,13 @@ def get_tasks_via_integration(
         if task_data.get('is_locked', False):
             description = task_data.get('description', '')
             task_data['description'] = (description[:70] + '...') if len(description) > 70 else description
-        item = integration_models.TaskItem(**task_data)
-        task_items.append(item)
+        try:
+            task_items.append(integration_models.TaskItem(**task_data))
+        except Exception as e:  # noqa: BLE001 - intentional broad catch: skip any malformed record
+            # One malformed/legacy record must not 500 the whole page; skip it (mirrors the
+            # conversation conversion guard in get_conversations_via_integration).
+            logger.error(f"Error parsing task {task_data.get('id')}: {str(e)}")
+            continue
 
     response = integration_models.TasksResponse(tasks=task_items)
     return response.dict(exclude_none=True)

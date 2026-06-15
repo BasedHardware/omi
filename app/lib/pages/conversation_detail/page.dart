@@ -538,8 +538,8 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
 
         await Future.delayed(const Duration(milliseconds: 500));
 
-        if (mounted) {
-          Navigator.of(sheetContext).pop();
+        if (sheetContext.mounted) {
+          Navigator.maybeOf(sheetContext)?.pop();
         }
 
         await Share.shareXFiles([XFile(file.path, mimeType: 'audio/wav')]);
@@ -555,8 +555,8 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
 
         await service.cleanup();
       } else {
-        if (mounted) {
-          Navigator.of(sheetContext).pop();
+        if (sheetContext.mounted) {
+          Navigator.maybeOf(sheetContext)?.pop();
         }
 
         // Track failure (no audio available)
@@ -579,9 +579,10 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
 
       await Future.delayed(const Duration(seconds: 2));
 
-      if (mounted) {
-        Navigator.of(sheetContext).pop();
-
+      if (sheetContext.mounted) {
+        Navigator.maybeOf(sheetContext)?.pop();
+      }
+      if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(context.l10n.audioDownloadFailed),
@@ -738,7 +739,7 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                                         provider.conversation.id,
                                         newStarredState,
                                       );
-                                      if (!mounted) return;
+                                      if (!context.mounted) return;
                                       if (success) {
                                         provider.conversation.starred = newStarredState;
                                         // Update in conversation provider
@@ -1071,6 +1072,12 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
               // Floating bottom bar — hidden while keyboard is up (e.g. inline summary edit)
               if (MediaQuery.of(context).viewInsets.bottom == 0)
                 Positioned(
+                  // Stable key so the body Stack's collection-`if` diff matches
+                  // by identity, not by slot+type. Without it the surviving
+                  // search-overlay Positioned below was being reused into this
+                  // slot when the keyboard rose, tearing down the search
+                  // TextField subtree and dropping the IME mid-frame.
+                  key: const ValueKey('detail_floating_bottom_bar'),
                   bottom: 32,
                   left: 0,
                   right: 0,
@@ -1226,6 +1233,11 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
               // Search overlay
               if (_isSearching)
                 Positioned(
+                  // Stable key — same reason as the floating bottom bar above.
+                  // Without it the keyboard pop-up flickered closed because
+                  // the body Stack's diff was reusing this Positioned's
+                  // element into the bar's slot and remounting the TextField.
+                  key: const ValueKey('detail_search_overlay'),
                   top: 0,
                   left: 0,
                   right: 0,
@@ -2090,7 +2102,9 @@ class _ActionItemDetailWidgetState extends State<ActionItemDetailWidget> {
 
           if (!await _appReviewService.hasCompletedFirstActionItem()) {
             await _appReviewService.markFirstActionItemCompleted();
-            _appReviewService.showReviewPromptIfNeeded(context, isProcessingFirstConversation: false);
+            if (mounted) {
+              _appReviewService.showReviewPromptIfNeeded(context, isProcessingFirstConversation: false);
+            }
           }
         } else {
           PlatformManager.instance.analytics.uncheckedActionItem(provider.conversation, currentIndex);

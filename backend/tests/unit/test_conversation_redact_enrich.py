@@ -295,7 +295,7 @@ class TestCallSitesMigrated:
         backend = os.path.join(os.path.dirname(__file__), '../..')
         for rel_path in self.REDACT_CONSUMERS:
             path = os.path.join(backend, rel_path)
-            with open(path) as f:
+            with open(path, encoding='utf-8') as f:
                 content = f.read()
             # Should not have the old inline pattern of stripping action_items inside an is_locked check
             assert (
@@ -309,7 +309,7 @@ class TestCallSitesMigrated:
         backend = os.path.join(os.path.dirname(__file__), '../..')
         for rel_path in ['routers/mcp.py', 'routers/developer.py']:
             path = os.path.join(backend, rel_path)
-            with open(path) as f:
+            with open(path, encoding='utf-8') as f:
                 content = f.read()
             assert (
                 'def _add_speaker_names_to_segments' not in content
@@ -322,7 +322,7 @@ class TestCallSitesMigrated:
         backend = os.path.join(os.path.dirname(__file__), '../..')
         for rel_path in ['routers/developer.py']:
             path = os.path.join(backend, rel_path)
-            with open(path) as f:
+            with open(path, encoding='utf-8') as f:
                 content = f.read()
             assert (
                 'def _add_folder_names_to_conversations' not in content
@@ -335,7 +335,7 @@ class TestCallSitesMigrated:
         backend = os.path.join(os.path.dirname(__file__), '../..')
         for rel_path in ['utils/webhooks.py', 'utils/app_integrations.py']:
             path = os.path.join(backend, rel_path)
-            with open(path) as f:
+            with open(path, encoding='utf-8') as f:
                 content = f.read()
             assert (
                 'def _json_serialize_datetime' not in content
@@ -348,6 +348,24 @@ class TestCallSitesMigrated:
         backend = os.path.join(os.path.dirname(__file__), '../..')
         for rel_path in ['utils/webhooks.py', 'utils/app_integrations.py', 'routers/conversations.py']:
             path = os.path.join(backend, rel_path)
-            with open(path) as f:
+            with open(path, encoding='utf-8') as f:
                 content = f.read()
             assert '.as_dict_cleaned_dates()' not in content, f"{rel_path} still uses .as_dict_cleaned_dates()"
+
+    def test_conversation_upsert_uses_native_datetimes(self):
+        """Firestore writes must pass native datetimes so created_at/started_at/finished_at
+        are stored as Timestamps, not ISO strings (mixed types break sort + date filters)."""
+        import os
+
+        backend = os.path.join(os.path.dirname(__file__), '../..')
+        for rel_path in [
+            'utils/conversations/process_conversation.py',
+            'utils/conversations/postprocess_conversation.py',
+            'utils/conversations/merge_conversations.py',
+        ]:
+            path = os.path.join(backend, rel_path)
+            with open(path, encoding='utf-8') as f:
+                content = f.read()
+            assert (
+                'upsert_conversation(uid, conversation.as_dict_cleaned_dates())' not in content
+            ), f"{rel_path} writes ISO strings to Firestore via as_dict_cleaned_dates()"

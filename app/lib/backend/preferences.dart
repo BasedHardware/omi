@@ -58,6 +58,10 @@ class SharedPreferencesUtil {
 
   set deviceIsV2(bool value) => saveBool('deviceIsV2', value);
 
+  bool get backgroundModeEnabled => getBool('backgroundModeEnabled');
+
+  set backgroundModeEnabled(bool value) => saveBool('backgroundModeEnabled', value);
+
   // Double tap behavior: 0 = end conversation (default), 1 = pause/mute, 2 = star ongoing conversation
   int get doubleTapAction => getInt('doubleTapAction');
 
@@ -86,6 +90,12 @@ class SharedPreferencesUtil {
   }
 
   bool get useCustomStt => customSttConfig.isEnabled;
+
+  // Whether offline recordings auto-sync to Omi when the device connects.
+  // Defaults to true (auto-sync on) — the feature is opt-out from introduction.
+  bool get autoSyncOfflineRecordings => getBool('autoSyncOfflineRecordings', defaultValue: true);
+
+  set autoSyncOfflineRecordings(bool value) => saveBool('autoSyncOfflineRecordings', value);
 
   // Per-provider config storage
   CustomSttConfig? getConfigForProvider(SttProvider provider) {

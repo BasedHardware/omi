@@ -3240,5 +3240,17 @@
   "objectAnnouncementsLatencyMetric": "Latency",
   "@objectAnnouncementsLatencyMetric": {
     "description": "Detect dashboard latency metric label"
-  }
+  },
+  "autoSync": "Automatisch synchroniseren",
+  "autoSyncDescription": "Synchroniseer offline-opnamen automatisch wanneer je apparaat verbinding maakt",
+  "backgroundModeTitle": "Achtergrondmodus",
+  "backgroundModeDescription": "Houd je Omi aan het opnemen, zelfs wanneer de app volledig gesloten is.",
+  "backgroundModeNote": "Werkt voorlopig alleen met Omi-apparaten en wordt voortdurend verbeterd.",
+  "regenerateRecap": "Samenvatting opnieuw genereren",
+  "recapRegeneratedSnackbar": "Samenvatting opnieuw gegenereerd",
+  "recapRegenerateFailed": "Kon de samenvatting niet opnieuw genereren. Probeer het later opnieuw.",
+  "recapRegenerateCooldown": "Wacht een paar seconden voordat je opnieuw genereert.",
+  "recapRegenerateNoConversations": "Geen gesprekken om voor deze dag samen te vatten.",
+  "syncCustomSttWarningTitle": "Synchroniseren gebruikt Omi-transcriptie",
+  "syncCustomSttWarningMessage": "Je gebruikt je eigen transcriptieprovider. Door deze opnames te synchroniseren worden ze op de servers van Omi getranscribeerd en tellen ze mee voor de transcriptielimiet van je abonnement."
 }

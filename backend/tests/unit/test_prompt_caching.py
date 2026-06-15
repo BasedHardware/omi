@@ -11,12 +11,52 @@ import inspect
 import re
 import sys
 from datetime import datetime, timezone
+from types import ModuleType
 from unittest.mock import MagicMock
 
 # Mock modules that initialize GCP clients or require API keys at import time
 sys.modules.setdefault("database._client", MagicMock())
 _mock_clients = MagicMock()
 sys.modules.setdefault("utils.llm.clients", _mock_clients)
+
+
+class _FakePydanticOutputParser:
+    def __init__(self, *args, **kwargs):
+        pass
+
+    def get_format_instructions(self):
+        return ""
+
+
+class _FakeChatPromptTemplate:
+    @classmethod
+    def from_messages(cls, messages):
+        return MagicMock()
+
+
+def _install_langchain_child_stub(module_name, **attrs):
+    mod = ModuleType(module_name)
+    for name, value in attrs.items():
+        setattr(mod, name, value)
+    sys.modules.setdefault("langchain_core", ModuleType("langchain_core"))
+    sys.modules[module_name] = mod
+
+
+try:
+    from langchain_core.output_parsers import PydanticOutputParser as _real_parser  # noqa: F401
+except ImportError:
+    _install_langchain_child_stub(
+        "langchain_core.output_parsers",
+        PydanticOutputParser=_FakePydanticOutputParser,
+    )
+
+try:
+    from langchain_core.prompts import ChatPromptTemplate as _real_prompt  # noqa: F401
+except ImportError:
+    _install_langchain_child_stub(
+        "langchain_core.prompts",
+        ChatPromptTemplate=_FakeChatPromptTemplate,
+    )
 
 from models.calendar_context import CalendarMeetingContext, MeetingParticipant
 from models.conversation_photo import ConversationPhoto
@@ -257,7 +297,7 @@ class TestPromptCacheRetention:
         from pathlib import Path
 
         clients_path = Path(__file__).resolve().parent.parent.parent / "utils" / "llm" / "clients.py"
-        return clients_path.read_text()
+        return clients_path.read_text(encoding="utf-8")
 
     def test_qos_gpt51_has_cache_retention(self):
         """QoS _get_or_create_openai_llm must set prompt_cache_retention=24h for gpt-5.1."""

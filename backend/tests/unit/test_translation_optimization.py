@@ -540,7 +540,7 @@ class TestTranslateSegmentGuardWired:
 
         # Read transcribe module source to verify import
         transcribe_path = os.path.join(os.path.dirname(__file__), '..', '..', 'routers', 'transcribe.py')
-        with open(transcribe_path) as f:
+        with open(transcribe_path, encoding='utf-8') as f:
             source = f.read()
         assert 'from utils.translation_cache import' in source
         assert 'should_persist_translation' in source
@@ -548,12 +548,12 @@ class TestTranslateSegmentGuardWired:
     def test_coordinator_calls_should_persist_translation(self):
         """Guard must exist in translation_coordinator.py (moved from transcribe.py in #6155)."""
         coordinator_path = os.path.join(os.path.dirname(__file__), '..', '..', 'utils', 'translation_coordinator.py')
-        with open(coordinator_path) as f:
+        with open(coordinator_path, encoding='utf-8') as f:
             source = f.read()
         assert 'should_persist_translation(' in source, "should_persist_translation guard must exist in coordinator"
         # Verify transcribe.py uses the coordinator
         transcribe_path = os.path.join(os.path.dirname(__file__), '..', '..', 'routers', 'transcribe.py')
-        with open(transcribe_path) as f:
+        with open(transcribe_path, encoding='utf-8') as f:
             tsource = f.read()
         assert 'TranslationCoordinator' in tsource, "transcribe.py must use TranslationCoordinator"
 

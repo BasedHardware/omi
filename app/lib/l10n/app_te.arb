@@ -10818,5 +10818,17 @@
   "objectAnnouncementsLatencyMetric": "Latency",
   "@objectAnnouncementsLatencyMetric": {
     "description": "Detect dashboard latency metric label"
-  }
+  },
+  "autoSync": "ఆటో సింక్",
+  "autoSyncDescription": "మీ పరికరం కనెక్ట్ అయినప్పుడు ఆఫ్‌లైన్ రికార్డింగ్‌లను స్వయంచాలకంగా సింక్ చేయండి",
+  "backgroundModeTitle": "నేపథ్య మోడ్",
+  "backgroundModeDescription": "యాప్ పూర్తిగా మూసివేయబడినా మీ Omi రికార్డింగ్‌ను కొనసాగించండి.",
+  "backgroundModeNote": "ప్రస్తుతం Omi పరికరాలతో మాత్రమే పనిచేస్తుంది మరియు నిరంతరం మెరుగుపరచబడుతోంది.",
+  "regenerateRecap": "సారాంశాన్ని పునరుత్పత్తి చేయండి",
+  "recapRegeneratedSnackbar": "సారాంశం పునరుత్పత్తి అయింది",
+  "recapRegenerateFailed": "సారాంశాన్ని పునరుత్పత్తి చేయలేకపోయాము. తర్వాత మళ్లీ ప్రయత్నించండి.",
+  "recapRegenerateCooldown": "మళ్లీ పునరుత్పత్తి చేయడానికి ముందు దయచేసి కొన్ని సెకన్లు వేచి ఉండండి.",
+  "recapRegenerateNoConversations": "ఈ రోజుకి సారాంశీకరించడానికి సంభాషణలు లేవు.",
+  "syncCustomSttWarningTitle": "సింక్ Omi ట్రాన్స్‌క్రిప్షన్‌ను ఉపయోగిస్తుంది",
+  "syncCustomSttWarningMessage": "మీరు మీ సొంత ట్రాన్స్‌క్రిప్షన్ ప్రొవైడర్‌ను ఉపయోగిస్తున్నారు. ఈ రికార్డింగ్‌లను సింక్ చేస్తే అవి Omi సర్వర్‌లలో ట్రాన్స్‌క్రైబ్ చేయబడతాయి మరియు మీ ప్లాన్ ట్రాన్స్‌క్రిప్షన్ పరిమితిలో లెక్కించబడతాయి."
 }

@@ -9,6 +9,7 @@ from pydantic import BaseModel, Field, ValidationError
 import database.memories as memories_db
 from database.vector_db import (
     delete_memory_vector,
+    delete_memory_vectors_batch,
     upsert_memory_vector,
     upsert_memory_vectors_batch,
 )
@@ -187,7 +188,25 @@ def delete_memory(
 def delete_memories(
     uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "memories:delete_all")),
 ):
+    # Collect all memory IDs before Firestore delete so we can also purge
+    # their Pinecone vectors — otherwise orphaned vectors become search
+    # noise that never gets cleaned up.
+    memory_ids = []
+    offset = 0
+    batch_size = 1000
+    while True:
+        memories = memories_db.get_memories(uid, limit=batch_size, offset=offset, include_invalidated=True)
+        if not memories:
+            break
+        batch_ids = [m.get('id') for m in memories if m.get('id')]
+        memory_ids.extend(batch_ids)
+        offset += batch_size
+
     memories_db.delete_all_memories(uid)
+
+    if memory_ids:
+        delete_memory_vectors_batch(uid, memory_ids)
+
     return {'status': 'ok'}
 
 
@@ -208,8 +227,15 @@ def edit_memory(
     value: str,
     uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "memories:modify")),
 ):
-    _validate_memory(uid, memory_id)
+    memory = _validate_memory(uid, memory_id)
     memories_db.edit_memory(uid, memory_id, value)
+    # Re-embed so semantic search reflects the new content. Without this the Pinecone
+    # vector keeps matching the OLD text — a silent staleness bug that breaks the
+    # "constantly updated brain" (search would still surface the pre-edit fact).
+    try:
+        upsert_memory_vector(uid, memory_id, value, memory.get('category', 'system'))
+    except Exception:
+        logger.exception("Vector upsert failed uid=%s memory_id=%s (memory edited, vector stale)", uid, memory_id)
     return {'status': 'ok'}
 
 

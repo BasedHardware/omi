@@ -80,6 +80,8 @@ notif_mod.send_notification = MagicMock()
 notif_mod.send_action_item_data_message = MagicMock()
 notif_mod.send_action_item_update_message = MagicMock()
 notif_mod.send_action_item_deletion_message = MagicMock()
+notif_mod.send_action_items_batch_deletion_message = MagicMock()
+notif_mod.sync_action_item_reminder = MagicMock()
 
 _stub_module("utils.task_sync")
 sys.modules["utils.task_sync"].auto_sync_action_item = MagicMock()

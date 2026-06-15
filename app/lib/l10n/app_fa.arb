@@ -10818,5 +10818,17 @@
   "objectAnnouncementsLatencyMetric": "Latency",
   "@objectAnnouncementsLatencyMetric": {
     "description": "Detect dashboard latency metric label"
-  }
+  },
+  "autoSync": "همگام‌سازی خودکار",
+  "autoSyncDescription": "هنگام اتصال دستگاه، ضبط‌های آفلاین به‌طور خودکار همگام‌سازی شوند",
+  "backgroundModeTitle": "حالت پس‌زمینه",
+  "backgroundModeDescription": "حتی وقتی برنامه کاملاً بسته است، ضبط Omi شما را ادامه دهید.",
+  "backgroundModeNote": "فعلاً فقط با دستگاه‌های Omi کار می‌کند و به‌طور مداوم در حال بهبود است.",
+  "regenerateRecap": "بازسازی خلاصه",
+  "recapRegeneratedSnackbar": "خلاصه دوباره ساخته شد",
+  "recapRegenerateFailed": "بازسازی خلاصه ممکن نشد. بعداً دوباره تلاش کنید.",
+  "recapRegenerateCooldown": "لطفاً چند ثانیه قبل از بازسازی مجدد صبر کنید.",
+  "recapRegenerateNoConversations": "هیچ مکالمه‌ای برای خلاصه‌سازی این روز وجود ندارد.",
+  "syncCustomSttWarningTitle": "همگام‌سازی از رونویسی Omi استفاده می‌کند",
+  "syncCustomSttWarningMessage": "شما از سرویس رونویسی خودتان استفاده می‌کنید. همگام‌سازی این ضبط‌ها آن‌ها را روی سرورهای Omi رونویسی می‌کند و در سقف رونویسی پلن شما محاسبه می‌شوند."
 }

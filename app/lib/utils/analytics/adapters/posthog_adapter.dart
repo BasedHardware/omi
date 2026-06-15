@@ -6,7 +6,8 @@ class PostHogAnalyticsAdapter implements AnalyticsAdapter {
   PostHogAnalyticsAdapter({
     required this.apiKey,
     this.host = 'https://us.i.posthog.com',
-    this.captureLifecycleEvents = true,
+    // SDK default is `true`; we track lifecycle ourselves at meaningful boundaries.
+    this.captureLifecycleEvents = false,
     this.debug = false,
   });
 

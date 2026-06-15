@@ -63,7 +63,7 @@ class _PhotoViewerPageState extends State<PhotoViewerPage> {
                     imageProvider: MemoryImage(imageBytes),
                     minScale: PhotoViewComputedScale.contained,
                     maxScale: PhotoViewComputedScale.covered * 4,
-                    heroAttributes: PhotoViewHeroAttributes(tag: photo.id ?? index.toString()),
+                    heroAttributes: PhotoViewHeroAttributes(tag: photo.id),
                   );
                 },
                 scrollPhysics: const BouncingScrollPhysics(),

@@ -9475,4 +9475,41 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get objectAnnouncementsLatencyMetric => 'Latency';
+
+  @override
+  String get autoSync => 'Автосинхронизация';
+
+  @override
+  String get autoSyncDescription => 'Автоматически синхронизировать офлайн-записи при подключении устройства';
+
+  @override
+  String get backgroundModeTitle => 'Фоновый режим';
+
+  @override
+  String get backgroundModeDescription => 'Продолжайте запись Omi, даже когда приложение полностью закрыто.';
+
+  @override
+  String get backgroundModeNote => 'Пока работает только с устройствами Omi и постоянно улучшается.';
+
+  @override
+  String get regenerateRecap => 'Создать резюме заново';
+
+  @override
+  String get recapRegeneratedSnackbar => 'Резюме создано заново';
+
+  @override
+  String get recapRegenerateFailed => 'Не удалось создать резюме заново. Попробуйте позже.';
+
+  @override
+  String get recapRegenerateCooldown => 'Подождите несколько секунд перед повторным созданием.';
+
+  @override
+  String get recapRegenerateNoConversations => 'Нет разговоров для резюмирования за этот день.';
+
+  @override
+  String get syncCustomSttWarningTitle => 'Синхронизация использует транскрипцию Omi';
+
+  @override
+  String get syncCustomSttWarningMessage =>
+      'Вы используете собственный сервис транскрипции. Синхронизация этих записей расшифрует их на серверах Omi, и они будут засчитаны в лимит транскрипции вашего тарифа.';
 }

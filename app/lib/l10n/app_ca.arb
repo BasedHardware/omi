@@ -3209,5 +3209,17 @@
   "objectAnnouncementsLatencyMetric": "Latency",
   "@objectAnnouncementsLatencyMetric": {
     "description": "Detect dashboard latency metric label"
-  }
+  },
+  "autoSync": "Sincronització automàtica",
+  "autoSyncDescription": "Sincronitza automàticament els enregistraments fora de línia quan el dispositiu es connecti",
+  "backgroundModeTitle": "Mode en segon pla",
+  "backgroundModeDescription": "Mantén l'Omi gravant fins i tot quan l'aplicació està completament tancada.",
+  "backgroundModeNote": "De moment només funciona amb dispositius Omi i es millora contínuament.",
+  "regenerateRecap": "Regenera el resum",
+  "recapRegeneratedSnackbar": "Resum regenerat",
+  "recapRegenerateFailed": "No s'ha pogut regenerar el resum. Torna-ho a provar més tard.",
+  "recapRegenerateCooldown": "Espera uns segons abans de tornar a regenerar.",
+  "recapRegenerateNoConversations": "No hi ha converses per resumir d'aquest dia.",
+  "syncCustomSttWarningTitle": "La sincronització utilitza la transcripció d'Omi",
+  "syncCustomSttWarningMessage": "Utilitzes el teu propi proveïdor de transcripció. Sincronitzar aquests enregistraments els transcriu als servidors d'Omi i compten per al límit de transcripció del teu pla."
 }

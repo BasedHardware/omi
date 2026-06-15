@@ -311,7 +311,8 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
       ),
       body: Consumer<UsageProvider>(
         builder: (context, provider, child) {
-          final hasAnyData = provider.todayUsage != null ||
+          final hasAnyData =
+              provider.todayUsage != null ||
               provider.monthlyUsage != null ||
               provider.yearlyUsage != null ||
               provider.allTimeUsage != null;
@@ -473,10 +474,7 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
                     : Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          Text(
-                            context.l10n.upgradeToUnlimited,
-                            style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
-                          ),
+                          Text(context.l10n.upgrade, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
                           const SizedBox(width: 8),
                           const Icon(Icons.arrow_forward, size: 18),
                         ],
@@ -1058,7 +1056,10 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(value, style: TextStyle(fontSize: 36, fontWeight: FontWeight.bold, color: color, height: 1.1)),
+            Text(
+              value,
+              style: TextStyle(fontSize: 36, fontWeight: FontWeight.bold, color: color, height: 1.1),
+            ),
             const SizedBox(height: 12),
             Row(
               children: [
@@ -1141,8 +1142,8 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
                 builder: (context) {
                   final minutesUsed = (subscription.transcriptionSecondsUsed / 60).round();
                   final minutesLimit = (subscription.transcriptionSecondsLimit / 60).round();
-                  final percentage =
-                      (subscription.transcriptionSecondsUsed / subscription.transcriptionSecondsLimit).clamp(0.0, 1.0);
+                  final percentage = (subscription.transcriptionSecondsUsed / subscription.transcriptionSecondsLimit)
+                      .clamp(0.0, 1.0);
                   return Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [

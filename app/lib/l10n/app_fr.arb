@@ -3275,5 +3275,17 @@
   "objectAnnouncementsLatencyMetric": "Latency",
   "@objectAnnouncementsLatencyMetric": {
     "description": "Detect dashboard latency metric label"
-  }
+  },
+  "autoSync": "Synchronisation automatique",
+  "autoSyncDescription": "Synchroniser automatiquement les enregistrements hors ligne lorsque votre appareil se connecte",
+  "backgroundModeTitle": "Mode arrière-plan",
+  "backgroundModeDescription": "Gardez votre Omi en enregistrement même lorsque l'application est entièrement fermée.",
+  "backgroundModeNote": "Fonctionne uniquement avec les appareils Omi pour l'instant, et s'améliore en continu.",
+  "regenerateRecap": "Régénérer le récapitulatif",
+  "recapRegeneratedSnackbar": "Récapitulatif régénéré",
+  "recapRegenerateFailed": "Impossible de régénérer le récapitulatif. Réessayez plus tard.",
+  "recapRegenerateCooldown": "Veuillez patienter quelques secondes avant de régénérer.",
+  "recapRegenerateNoConversations": "Aucune conversation à résumer pour cette journée.",
+  "syncCustomSttWarningTitle": "La synchronisation utilise la transcription d'Omi",
+  "syncCustomSttWarningMessage": "Vous utilisez votre propre fournisseur de transcription. Synchroniser ces enregistrements les transcrit sur les serveurs d'Omi et ils comptent dans la limite de transcription de votre forfait."
 }

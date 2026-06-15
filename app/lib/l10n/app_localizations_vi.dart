@@ -9440,4 +9440,41 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get objectAnnouncementsLatencyMetric => 'Latency';
+
+  @override
+  String get autoSync => 'Tự động đồng bộ';
+
+  @override
+  String get autoSyncDescription => 'Tự động đồng bộ các bản ghi ngoại tuyến khi thiết bị của bạn kết nối';
+
+  @override
+  String get backgroundModeTitle => 'Chế độ nền';
+
+  @override
+  String get backgroundModeDescription => 'Giữ cho Omi của bạn tiếp tục ghi âm ngay cả khi ứng dụng đã đóng hoàn toàn.';
+
+  @override
+  String get backgroundModeNote => 'Hiện chỉ hoạt động với thiết bị Omi và đang được cải thiện liên tục.';
+
+  @override
+  String get regenerateRecap => 'Tạo lại tóm tắt';
+
+  @override
+  String get recapRegeneratedSnackbar => 'Đã tạo lại tóm tắt';
+
+  @override
+  String get recapRegenerateFailed => 'Không thể tạo lại tóm tắt. Vui lòng thử lại sau.';
+
+  @override
+  String get recapRegenerateCooldown => 'Vui lòng đợi vài giây trước khi tạo lại.';
+
+  @override
+  String get recapRegenerateNoConversations => 'Không có cuộc trò chuyện nào để tóm tắt cho ngày này.';
+
+  @override
+  String get syncCustomSttWarningTitle => 'Đồng bộ sử dụng phiên âm của Omi';
+
+  @override
+  String get syncCustomSttWarningMessage =>
+      'Bạn đang dùng nhà cung cấp phiên âm riêng. Đồng bộ các bản ghi này sẽ phiên âm chúng trên máy chủ của Omi và được tính vào giới hạn phiên âm của gói của bạn.';
 }

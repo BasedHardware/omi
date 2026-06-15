@@ -6,26 +6,37 @@ description: "Sequence diagrams for the /v4/listen WebSocket and Pusher processi
 
 # Listen + Pusher Pipeline — Sequence Diagrams
 
-> Last updated: 2026-03-28 (PR #6061 — remove local fallback)
+> Last updated: 2026-05-13 (PR #7142 — add Modulate Velma-2 STT, provider-agnostic architecture)
 >
 > These diagrams document the real behavior observed during E2E testing with
-> live services (backend, pusher, Deepgram, embedding API). Update when the
+> live services (backend, pusher, STT providers, embedding API). Update when the
 > pipeline changes.
 
 ## 1. Connection + Streaming + Transcription
+
+The STT provider is selected at session start via `STT_SERVICE_MODELS` env var
+(e.g., `modulate-velma-2,dg-nova-3`). The first provider supporting the
+requested language wins. All providers implement the `STTSocket` ABC and are
+wrapped by the universal `GatedSTTSocket` VAD gate.
+
+Segments buffered in `realtime_segment_buffers` are sorted by `start` time
+before processing — this corrects non-deterministic WebSocket arrival order
+from providers like Modulate whose internal parallelism can deliver shorter
+utterances before longer ones.
 
 ```mermaid
 sequenceDiagram
     participant Client
     participant Backend as Backend (/v4/listen)
-    participant Deepgram
+    participant STT as STT Provider (Deepgram / Modulate)
     participant Pusher
     participant Firestore
 
     Client->>Backend: WS connect (uid, language, sample_rate, codec)
     Backend->>Backend: Auth check (dev-token or Firebase)
+    Backend->>Backend: Select STT provider (STT_SERVICE_MODELS + language)
     Backend->>Firestore: Create stub conversation (status=in_progress)
-    Backend->>Deepgram: Open STT WebSocket
+    Backend->>STT: Open STT WebSocket
     Backend->>Pusher: Open Pusher WebSocket
     Backend-->>Client: {type: "service_status", status: "ready"}
 
@@ -34,9 +45,9 @@ sequenceDiagram
     loop Audio Streaming
         Client->>Backend: PCM audio bytes
         Backend->>Backend: Update last_activity_time
-        Backend->>Deepgram: Forward audio
-        Deepgram-->>Backend: Transcript segments
-        Backend->>Backend: Update finished_at (only on real segments)
+        Backend->>STT: Forward audio (via GatedSTTSocket VAD gate)
+        STT-->>Backend: Transcript segments (may arrive out of order)
+        Backend->>Backend: Sort segments by start_ms, update finished_at
         Backend->>Firestore: Write transcript_segments
         Backend-->>Client: JSON array of segments [{id, text, speaker, ...}]
     end

@@ -10818,5 +10818,17 @@
   "objectAnnouncementsLatencyMetric": "Latency",
   "@objectAnnouncementsLatencyMetric": {
     "description": "Detect dashboard latency metric label"
-  }
+  },
+  "autoSync": "خودکار مطابقت",
+  "autoSyncDescription": "جب آپ کا آلہ منسلک ہو تو آف لائن ریکارڈنگز کو خودکار طور پر سنک کریں",
+  "backgroundModeTitle": "بیک گراؤنڈ موڈ",
+  "backgroundModeDescription": "ایپ مکمل طور پر بند ہونے پر بھی اپنے Omi کی ریکارڈنگ جاری رکھیں۔",
+  "backgroundModeNote": "فی الحال صرف Omi آلات کے ساتھ کام کرتا ہے اور مسلسل بہتر بنایا جا رہا ہے۔",
+  "regenerateRecap": "خلاصہ دوبارہ بنائیں",
+  "recapRegeneratedSnackbar": "خلاصہ دوبارہ بن گیا",
+  "recapRegenerateFailed": "خلاصہ دوبارہ نہیں بنایا جا سکا۔ بعد میں دوبارہ کوشش کریں۔",
+  "recapRegenerateCooldown": "دوبارہ بنانے سے پہلے براہ کرم چند سیکنڈ انتظار کریں۔",
+  "recapRegenerateNoConversations": "اس دن کے لیے خلاصہ کرنے کے لیے کوئی گفتگو نہیں ہے۔",
+  "syncCustomSttWarningTitle": "سنک Omi کی ٹرانسکرپشن استعمال کرتا ہے",
+  "syncCustomSttWarningMessage": "آپ اپنا ذاتی ٹرانسکرپشن فراہم کنندہ استعمال کرتے ہیں۔ ان ریکارڈنگز کو سنک کرنے پر یہ Omi کے سرورز پر ٹرانسکرائب ہوں گی اور آپ کے پلان کی ٹرانسکرپشن حد میں شمار ہوں گی۔"
 }

@@ -3240,5 +3240,17 @@
   "objectAnnouncementsLatencyMetric": "Latency",
   "@objectAnnouncementsLatencyMetric": {
     "description": "Detect dashboard latency metric label"
-  }
+  },
+  "autoSync": "Penyegerakan automatik",
+  "autoSyncDescription": "Segerakkan rakaman luar talian secara automatik apabila peranti anda disambungkan",
+  "backgroundModeTitle": "Mod Latar Belakang",
+  "backgroundModeDescription": "Pastikan Omi anda terus merakam walaupun apl ditutup sepenuhnya.",
+  "backgroundModeNote": "Buat masa ini hanya berfungsi dengan peranti Omi dan sentiasa diperbaiki.",
+  "regenerateRecap": "Jana semula ringkasan",
+  "recapRegeneratedSnackbar": "Ringkasan dijana semula",
+  "recapRegenerateFailed": "Tidak dapat menjana semula ringkasan. Cuba sebentar lagi.",
+  "recapRegenerateCooldown": "Sila tunggu beberapa saat sebelum menjana semula.",
+  "recapRegenerateNoConversations": "Tiada perbualan untuk diringkaskan untuk hari ini.",
+  "syncCustomSttWarningTitle": "Penyegerakan menggunakan transkripsi Omi",
+  "syncCustomSttWarningMessage": "Anda menggunakan penyedia transkripsi sendiri. Menyegerakkan rakaman ini akan mentranskripsikannya di pelayan Omi dan dikira dalam had transkripsi pelan anda."
 }

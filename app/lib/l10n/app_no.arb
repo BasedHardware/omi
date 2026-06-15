@@ -3240,5 +3240,17 @@
   "objectAnnouncementsLatencyMetric": "Latency",
   "@objectAnnouncementsLatencyMetric": {
     "description": "Detect dashboard latency metric label"
-  }
+  },
+  "autoSync": "Automatisk synkronisering",
+  "autoSyncDescription": "Synkroniser frakoblede opptak automatisk når enheten din kobles til",
+  "backgroundModeTitle": "Bakgrunnsmodus",
+  "backgroundModeDescription": "Hold Omi-en din i opptak selv når appen er helt lukket.",
+  "backgroundModeNote": "Fungerer foreløpig bare med Omi-enheter og forbedres kontinuerlig.",
+  "regenerateRecap": "Generer sammendrag på nytt",
+  "recapRegeneratedSnackbar": "Sammendrag generert på nytt",
+  "recapRegenerateFailed": "Kunne ikke generere sammendraget på nytt. Prøv igjen senere.",
+  "recapRegenerateCooldown": "Vent noen sekunder før du genererer på nytt.",
+  "recapRegenerateNoConversations": "Ingen samtaler å oppsummere for denne dagen.",
+  "syncCustomSttWarningTitle": "Synkronisering bruker Omi-transkripsjon",
+  "syncCustomSttWarningMessage": "Du bruker din egen transkripsjonsleverandør. Synkronisering av disse opptakene transkriberer dem på Omis servere, og de teller mot transkripsjonsgrensen i abonnementet ditt."
 }

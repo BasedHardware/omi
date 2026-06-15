@@ -3208,5 +3208,17 @@
   "objectAnnouncementsLatencyMetric": "Latency",
   "@objectAnnouncementsLatencyMetric": {
     "description": "Detect dashboard latency metric label"
-  }
+  },
+  "autoSync": "Automatische Synchronisierung",
+  "autoSyncDescription": "Offline-Aufnahmen automatisch synchronisieren, wenn dein Gerät verbunden wird",
+  "backgroundModeTitle": "Hintergrundmodus",
+  "backgroundModeDescription": "Lass deinen Omi weiter aufnehmen, auch wenn die App vollständig geschlossen ist.",
+  "backgroundModeNote": "Funktioniert vorerst nur mit Omi-Geräten und wird kontinuierlich verbessert.",
+  "regenerateRecap": "Zusammenfassung neu erstellen",
+  "recapRegeneratedSnackbar": "Zusammenfassung neu erstellt",
+  "recapRegenerateFailed": "Zusammenfassung konnte nicht neu erstellt werden. Bitte später erneut versuchen.",
+  "recapRegenerateCooldown": "Bitte warte ein paar Sekunden, bevor du erneut generierst.",
+  "recapRegenerateNoConversations": "Keine Konversationen für diesen Tag zum Zusammenfassen.",
+  "syncCustomSttWarningTitle": "Synchronisierung nutzt Omi-Transkription",
+  "syncCustomSttWarningMessage": "Du verwendest einen eigenen Transkriptionsanbieter. Beim Synchronisieren werden diese Aufnahmen stattdessen auf den Servern von Omi transkribiert und auf das Transkriptionslimit deines Tarifs angerechnet."
 }

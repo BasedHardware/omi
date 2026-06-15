@@ -11191,5 +11191,38 @@
   "objectAnnouncementsLatencyMetric": "Latency",
   "@objectAnnouncementsLatencyMetric": {
     "description": "Detect dashboard latency metric label"
+  },
+  "autoSync": "Auto-Sync",
+  "@autoSync": {
+    "description": "Title of the toggle in device settings that controls automatic syncing of offline recordings"
+  },
+  "autoSyncDescription": "Automatically sync offline recordings when your device connects",
+  "@autoSyncDescription": {
+    "description": "Subtitle explaining the Auto-Sync toggle in device settings"
+  },
+  "backgroundModeTitle": "Background Mode",
+  "@backgroundModeTitle": {
+    "description": "Title for the background connection mode toggle in device settings (Android only)"
+  },
+  "backgroundModeDescription": "Keep your Omi recording even when the app is fully closed.",
+  "@backgroundModeDescription": {
+    "description": "Subtitle explaining the background mode toggle"
+  },
+  "backgroundModeNote": "Works with Omi devices only for now, and is being improved continuously.",
+  "@backgroundModeNote": {
+    "description": "Caveat note shown in the Background Mode sheet"
+  },
+  "regenerateRecap": "Regenerate recap",
+  "recapRegeneratedSnackbar": "Recap regenerated",
+  "recapRegenerateFailed": "Couldn't regenerate the recap. Try again later.",
+  "recapRegenerateCooldown": "Please wait a few seconds before regenerating again.",
+  "recapRegenerateNoConversations": "No conversations to summarize for this day.",
+  "syncCustomSttWarningTitle": "Sync uses Omi transcription",
+  "@syncCustomSttWarningTitle": {
+    "description": "Title of the dialog shown when a third-party (custom) STT user manually syncs offline recordings"
+  },
+  "syncCustomSttWarningMessage": "You use your own transcription provider. Syncing these recordings transcribes them on Omi's servers instead, and they count toward your plan's transcription limit.",
+  "@syncCustomSttWarningMessage": {
+    "description": "Body warning that syncing transcribes on Omi servers and counts toward the plan limit"
   }
 }

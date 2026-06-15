@@ -10,26 +10,31 @@ import pytest
 PAYMENT_SOURCE = Path(__file__).resolve().parents[2] / "routers" / "payment.py"
 STRIPE_UTILS_SOURCE = Path(__file__).resolve().parents[2] / "utils" / "stripe.py"
 
+
+def _read_source(path: Path) -> str:
+    return path.read_text(encoding="utf-8")
+
+
 # ---------------------------------------------------------------------------
 # Source-level structural tests (fast, no import needed)
 # ---------------------------------------------------------------------------
 
 
 def test_checkout_request_model_accepts_promotion_code():
-    source = PAYMENT_SOURCE.read_text()
+    source = _read_source(PAYMENT_SOURCE)
     assert 'class CreateCheckoutRequest(BaseModel):' in source
     assert 'promotion_code: Optional[str] = None' in source
 
 
 def test_upgrade_request_model_accepts_promotion_code():
-    source = PAYMENT_SOURCE.read_text()
+    source = _read_source(PAYMENT_SOURCE)
     assert 'class UpgradeSubscriptionRequest(BaseModel):' in source
     assert 'promotion_code: Optional[str] = None' in source
 
 
 def test_checkout_validates_promo_before_reactivation():
     """Promo validation must happen before _try_reactivate_subscription."""
-    source = PAYMENT_SOURCE.read_text()
+    source = _read_source(PAYMENT_SOURCE)
     endpoint_start = source.index("def create_checkout_session_endpoint")
     promo_in_checkout = source.index("PromotionCode.list", endpoint_start)
     reactivation_in_checkout = source.index("_try_reactivate_subscription", endpoint_start)
@@ -38,7 +43,7 @@ def test_checkout_validates_promo_before_reactivation():
 
 def test_upgrade_uses_promotion_code_id_not_coupon():
     """Upgrade must use promotion_code ID (preserves restrictions) not coupon ID."""
-    source = PAYMENT_SOURCE.read_text()
+    source = _read_source(PAYMENT_SOURCE)
     upgrade_start = source.index("def upgrade_subscription_endpoint")
     upgrade_section = source[upgrade_start:]
     assert "{'promotion_code': resolved_promo_id}" in upgrade_section
@@ -47,7 +52,7 @@ def test_upgrade_uses_promotion_code_id_not_coupon():
 
 def test_upgrade_applies_promo_to_schedule_phases():
     """Same-plan interval changes must apply promo discount to the target phase."""
-    source = PAYMENT_SOURCE.read_text()
+    source = _read_source(PAYMENT_SOURCE)
     upgrade_start = source.index("def upgrade_subscription_endpoint")
     upgrade_section = source[upgrade_start:]
     assert "SubscriptionSchedule.modify" in upgrade_section
@@ -57,25 +62,39 @@ def test_upgrade_applies_promo_to_schedule_phases():
 
 
 def test_checkout_helper_uses_discounts_when_promo_provided():
-    source = STRIPE_UTILS_SOURCE.read_text()
+    source = _read_source(STRIPE_UTILS_SOURCE)
     assert "if promotion_code_id:" in source
     assert "session_params['discounts'] = [{'promotion_code': promotion_code_id}]" in source
 
 
 def test_checkout_helper_allows_promo_codes_when_no_promo():
-    source = STRIPE_UTILS_SOURCE.read_text()
+    source = _read_source(STRIPE_UTILS_SOURCE)
     assert "session_params['allow_promotion_codes'] = True" in source
 
 
 def test_upgrade_catches_stripe_invalid_request_error():
-    source = PAYMENT_SOURCE.read_text()
+    source = _read_source(PAYMENT_SOURCE)
     upgrade_start = source.index("def upgrade_subscription_endpoint")
     upgrade_section = source[upgrade_start:]
     assert "stripe.error.InvalidRequestError" in upgrade_section
 
 
+def test_upgrade_releases_attached_schedule_before_change():
+    """A subscription already attached to a schedule must be released before
+    Subscription.modify() / SubscriptionSchedule.create(), otherwise Stripe
+    rejects the change ("cannot migrate a subscription already attached to a
+    schedule") and the user can never switch plans."""
+    source = _read_source(PAYMENT_SOURCE)
+    assert "def _release_attached_schedules" in source
+    upgrade_section = source[source.index("def upgrade_subscription_endpoint") :]
+    assert "_release_attached_schedules(stripe_sub)" in upgrade_section
+    release_pos = upgrade_section.index("_release_attached_schedules(stripe_sub)")
+    assert release_pos < upgrade_section.index("stripe.Subscription.modify"), "release must precede modify"
+    assert release_pos < upgrade_section.index("SubscriptionSchedule.create"), "release must precede schedule create"
+
+
 def test_checkout_catches_stripe_invalid_request_error():
-    source = PAYMENT_SOURCE.read_text()
+    source = _read_source(PAYMENT_SOURCE)
     checkout_start = source.index("def create_checkout_session_endpoint")
     checkout_section = source[checkout_start : source.index("def upgrade_subscription_endpoint")]
     assert "stripe.error.InvalidRequestError" in checkout_section
@@ -266,3 +285,44 @@ def test_checkout_no_promo_omits_promo_id():
     assert response.status_code == 200
     call_kwargs = router.stripe_utils.create_subscription_checkout_session.call_args
     assert call_kwargs[1].get("promotion_code_id") is None
+
+
+# --- _release_attached_schedules helper ---
+
+
+def test_release_attached_schedules_releases_only_matching_active():
+    """Releases active/not_started schedules attached to THIS subscription;
+    skips completed schedules and schedules for other subscriptions."""
+    client, router = _setup_payment_module()
+
+    sched_match = MagicMock(id="ss_active", status="active", subscription="sub_1")
+    sched_not_started = MagicMock(id="ss_pending", status="not_started", subscription="sub_1")
+    sched_other_sub = MagicMock(id="ss_other", status="active", subscription="sub_OTHER")
+    sched_completed = MagicMock(id="ss_done", status="completed", subscription="sub_1")
+
+    with patch.object(router.stripe, "SubscriptionSchedule") as mock_ss:
+        mock_ss.list.return_value = MagicMock(data=[sched_match, sched_not_started, sched_other_sub, sched_completed])
+        router._release_attached_schedules({"id": "sub_1", "customer": "cus_1"})
+
+    mock_ss.list.assert_called_once_with(customer="cus_1", limit=10)
+    released = {c.args[0] for c in mock_ss.release.call_args_list}
+    assert released == {"ss_active", "ss_pending"}
+
+
+def test_release_attached_schedules_noop_without_customer():
+    """No customer/sub id -> no Stripe calls (defensive)."""
+    client, router = _setup_payment_module()
+    with patch.object(router.stripe, "SubscriptionSchedule") as mock_ss:
+        router._release_attached_schedules({"id": "sub_1"})  # missing customer
+        router._release_attached_schedules({"customer": "cus_1"})  # missing id
+    mock_ss.list.assert_not_called()
+
+
+def test_release_attached_schedules_swallows_list_errors():
+    """A Stripe failure while listing schedules must not break the upgrade."""
+    client, router = _setup_payment_module()
+    with patch.object(router.stripe, "SubscriptionSchedule") as mock_ss:
+        mock_ss.list.side_effect = Exception("stripe down")
+        # Should not raise
+        router._release_attached_schedules({"id": "sub_1", "customer": "cus_1"})
+    mock_ss.release.assert_not_called()

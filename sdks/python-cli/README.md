@@ -111,8 +111,41 @@ Common config:
 omi config show
 omi config path
 omi config set api_base https://api.staging.omi.me
+omi config set local_api_url http://127.0.0.1:47778
+omi config set local_token ...
 omi config profile list
 omi config profile delete old-account --yes
+```
+
+## Local Omi Desktop API
+
+`omi local` talks to a running Omi Desktop local API. Configure the active
+profile once, or use env vars for ephemeral agent sessions:
+
+```bash
+omi local configure --url http://127.0.0.1:47778 --token ...
+export OMI_LOCAL_API_URL=http://127.0.0.1:47778
+export OMI_LOCAL_TOKEN=...
+```
+
+Common local tools:
+
+```bash
+omi --json local status
+omi --json local tools
+omi --json local call search_screen_history --args-json '{"query":"pricing page","days":7}'
+omi --json local search-screen "pricing page" --days 7 --app Safari
+omi --json local screenshot 123 --output /tmp/omi-shot.jpg
+omi --json local recap --days-ago 1
+omi --json local sql "SELECT appName, COUNT(*) FROM screenshots GROUP BY appName"
+omi --json local task search "taxes" --include-completed
+```
+
+Task writes should only run after the user clearly asks for that change:
+
+```bash
+omi --json local task complete task_123
+omi --json local task delete task_123 --yes
 ```
 
 ## Command surface
@@ -155,6 +188,19 @@ omi
 │   ├── update <id> [--description ...] [--completed/--open] [--due-at ...]
 │   ├── complete <id>
 │   └── delete <id> [-y]
+├── local
+│   ├── configure --url URL --token TOKEN
+│   ├── status
+│   ├── tools
+│   ├── call <tool> [--args-json JSON]
+│   ├── search-screen <query> [--days N] [--app NAME]
+│   ├── screenshot <id> [--output PATH]
+│   ├── recap [--days-ago N]
+│   ├── sql <query>
+│   └── task
+│       ├── search <query> [--include-completed]
+│       ├── complete <id>
+│       └── delete <id> [-y]
 └── goal
     ├── list [--limit N] [--include-inactive]
     ├── get <id>
@@ -200,6 +246,8 @@ The CLI is built so an LLM can use it without a wrapper:
   the policy name (`dev:conversations`, etc.) so an agent can back off
   intelligently.
 * `OMI_API_KEY` and `OMI_API_BASE` env vars work without any prior `auth login`.
+* `OMI_LOCAL_API_URL` and `OMI_LOCAL_TOKEN` override profile-local Desktop API
+  settings for `omi local`.
 
 See [`examples/agent_quickstart.md`](examples/agent_quickstart.md) for a worked
 example.

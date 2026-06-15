@@ -46,6 +46,7 @@ class _NameSpeakerBottomSheetState extends State<NameSpeakerBottomSheet> {
 
   void setLoading(bool value) {
     if (loading == value) return;
+    if (!mounted) return;
     setState(() {
       loading = value;
     });

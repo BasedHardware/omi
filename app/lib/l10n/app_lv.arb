@@ -3240,5 +3240,17 @@
   "objectAnnouncementsLatencyMetric": "Latency",
   "@objectAnnouncementsLatencyMetric": {
     "description": "Detect dashboard latency metric label"
-  }
+  },
+  "autoSync": "Automātiska sinhronizācija",
+  "autoSyncDescription": "Automātiski sinhronizēt bezsaistes ierakstus, kad ierīce tiek savienota",
+  "backgroundModeTitle": "Fona režīms",
+  "backgroundModeDescription": "Saglabājiet Omi ierakstīšanu pat tad, kad lietotne ir pilnībā aizvērta.",
+  "backgroundModeNote": "Pagaidām darbojas tikai ar Omi ierīcēm un tiek nepārtraukti uzlabota.",
+  "regenerateRecap": "Atjaunot kopsavilkumu",
+  "recapRegeneratedSnackbar": "Kopsavilkums atjaunots",
+  "recapRegenerateFailed": "Kopsavilkumu neizdevās atjaunot. Mēģiniet vēlāk vēlreiz.",
+  "recapRegenerateCooldown": "Lūdzu, pagaidiet dažas sekundes pirms atkārtotas ģenerēšanas.",
+  "recapRegenerateNoConversations": "Šajā dienā nav sarunu, ko apkopot.",
+  "syncCustomSttWarningTitle": "Sinhronizācija izmanto Omi transkripciju",
+  "syncCustomSttWarningMessage": "Jūs izmantojat savu transkripcijas pakalpojumu. Šo ierakstu sinhronizēšana tos transkribē Omi serveros, un tie tiek ieskaitīti jūsu plāna transkripcijas limitā."
 }

@@ -152,7 +152,12 @@ class MemoriesProvider extends ChangeNotifier {
     final filterList = prefs.getStringList('memories_filter_categories');
 
     if (filterList == null) {
-      _selectedCategories = {MemoryCategory.system, MemoryCategory.interesting, MemoryCategory.manual};
+      _selectedCategories = {
+        MemoryCategory.system,
+        MemoryCategory.interesting,
+        MemoryCategory.manual,
+        MemoryCategory.workflow,
+      };
     } else {
       _selectedCategories = filterList
           .map((e) => MemoryCategory.values.firstWhere((c) => c.name == e, orElse: () => MemoryCategory.system))

@@ -9468,4 +9468,41 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get objectAnnouncementsLatencyMetric => 'Latency';
+
+  @override
+  String get autoSync => 'Automatisch synchroniseren';
+
+  @override
+  String get autoSyncDescription => 'Synchroniseer offline-opnamen automatisch wanneer je apparaat verbinding maakt';
+
+  @override
+  String get backgroundModeTitle => 'Achtergrondmodus';
+
+  @override
+  String get backgroundModeDescription => 'Houd je Omi aan het opnemen, zelfs wanneer de app volledig gesloten is.';
+
+  @override
+  String get backgroundModeNote => 'Werkt voorlopig alleen met Omi-apparaten en wordt voortdurend verbeterd.';
+
+  @override
+  String get regenerateRecap => 'Samenvatting opnieuw genereren';
+
+  @override
+  String get recapRegeneratedSnackbar => 'Samenvatting opnieuw gegenereerd';
+
+  @override
+  String get recapRegenerateFailed => 'Kon de samenvatting niet opnieuw genereren. Probeer het later opnieuw.';
+
+  @override
+  String get recapRegenerateCooldown => 'Wacht een paar seconden voordat je opnieuw genereert.';
+
+  @override
+  String get recapRegenerateNoConversations => 'Geen gesprekken om voor deze dag samen te vatten.';
+
+  @override
+  String get syncCustomSttWarningTitle => 'Synchroniseren gebruikt Omi-transcriptie';
+
+  @override
+  String get syncCustomSttWarningMessage =>
+      'Je gebruikt je eigen transcriptieprovider. Door deze opnames te synchroniseren worden ze op de servers van Omi getranscribeerd en tellen ze mee voor de transcriptielimiet van je abonnement.';
 }

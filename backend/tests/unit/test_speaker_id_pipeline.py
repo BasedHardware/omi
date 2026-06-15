@@ -10,6 +10,7 @@ import os
 import struct
 import sys
 import wave
+from types import ModuleType
 
 import numpy as np
 import pytest
@@ -17,10 +18,36 @@ import pytest
 # Mock modules that initialize GCP clients at import time
 from unittest.mock import MagicMock
 
+
+def _cosine_cdist(a, b, metric="cosine"):
+    if metric != "cosine":
+        raise ValueError(f"Unsupported test cdist metric: {metric}")
+
+    a = np.asarray(a, dtype=np.float32)
+    b = np.asarray(b, dtype=np.float32)
+    numerator = a @ b.T
+    denominator = np.linalg.norm(a, axis=1)[:, None] * np.linalg.norm(b, axis=1)[None, :]
+
+    with np.errstate(divide="ignore", invalid="ignore"):
+        similarity = np.divide(numerator, denominator, out=np.zeros_like(numerator), where=denominator != 0)
+    return 1.0 - similarity
+
+
 os.environ.setdefault("ENCRYPTION_SECRET", "omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv")
 sys.modules.setdefault("database._client", MagicMock())
+sys.modules.setdefault("av", MagicMock())
 sys.modules.setdefault("utils.other.storage", MagicMock())
 sys.modules.setdefault("utils.stt.pre_recorded", MagicMock())
+try:
+    from scipy.spatial.distance import cdist as _scipy_cdist  # noqa: F401
+except ImportError:
+    scipy_mod = sys.modules.setdefault("scipy", ModuleType("scipy"))
+    spatial_mod = sys.modules.setdefault("scipy.spatial", ModuleType("scipy.spatial"))
+    distance_mod = ModuleType("scipy.spatial.distance")
+    distance_mod.cdist = _cosine_cdist
+    scipy_mod.spatial = spatial_mod
+    spatial_mod.distance = distance_mod
+    sys.modules["scipy.spatial.distance"] = distance_mod
 
 from utils.audio import AudioRingBuffer
 from utils.speaker_identification import detect_speaker_from_text, SPEAKER_IDENTIFICATION_PATTERNS, _pcm_to_wav_bytes
@@ -243,6 +270,18 @@ class TestDetectSpeakerFromText:
         "I am",  # No name follows
     ]
 
+    # Run-on / garbled transcripts where the regex captures a pronoun or filler
+    # word instead of a name — these created phantom contacts "It", "You", "Them" (#5223).
+    STOPWORD_CASES = [
+        "And I am It was great",
+        "I'm You know, the guy",
+        "Yeah, I'm Them and the others",
+        "My name is It",
+        "I am Sorry about that",
+        "I'm Just saying",
+        "i am Gonna do it",
+    ]
+
     @pytest.mark.parametrize("lang,text,expected_name", POSITIVE_CASES)
     def test_positive_detection(self, lang, text, expected_name):
         """Detects speaker name from self-introduction in each language."""
@@ -261,6 +300,17 @@ class TestDetectSpeakerFromText:
         """Non-introduction text returns None."""
         result = detect_speaker_from_text(text)
         assert result is None, f"False positive on: {text!r}"
+
+    @pytest.mark.parametrize("text", STOPWORD_CASES)
+    def test_pronoun_stopwords_rejected(self, text):
+        """Pronouns/fillers captured by the intro patterns are not returned as names."""
+        result = detect_speaker_from_text(text)
+        assert result is None, f"Stopword leaked as speaker name: {text!r} -> {result}"
+
+    def test_real_name_after_stopword_guard(self):
+        """Genuine introductions still detect after the stopword guard."""
+        assert detect_speaker_from_text("I am John") == "John"
+        assert detect_speaker_from_text("My name is Alice") == "Alice"
 
     def test_empty_string_returns_none(self):
         """Empty string input returns None."""

@@ -3240,5 +3240,17 @@
   "objectAnnouncementsLatencyMetric": "Latency",
   "@objectAnnouncementsLatencyMetric": {
     "description": "Detect dashboard latency metric label"
-  }
+  },
+  "autoSync": "Automatinis sinchronizavimas",
+  "autoSyncDescription": "Automatiškai sinchronizuoti neprisijungus įrašytus įrašus, kai prijungiamas įrenginys",
+  "backgroundModeTitle": "Fono režimas",
+  "backgroundModeDescription": "Palikite Omi įrašinėti net kai programėlė visiškai uždaryta.",
+  "backgroundModeNote": "Kol kas veikia tik su Omi įrenginiais ir nuolat tobulinama.",
+  "regenerateRecap": "Sukurti santrauką iš naujo",
+  "recapRegeneratedSnackbar": "Santrauka sukurta iš naujo",
+  "recapRegenerateFailed": "Nepavyko iš naujo sukurti santraukos. Bandykite vėliau.",
+  "recapRegenerateCooldown": "Palaukite kelias sekundes prieš generuodami iš naujo.",
+  "recapRegenerateNoConversations": "Šiai dienai nėra pokalbių, kuriuos būtų galima apibendrinti.",
+  "syncCustomSttWarningTitle": "Sinchronizavimas naudoja Omi transkripciją",
+  "syncCustomSttWarningMessage": "Naudojate savo transkripcijos paslaugą. Sinchronizuojant šiuos įrašus jie transkribuojami Omi serveriuose ir įskaičiuojami į jūsų plano transkripcijos limitą."
 }

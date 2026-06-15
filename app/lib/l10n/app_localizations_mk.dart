@@ -9491,4 +9491,41 @@ class AppLocalizationsMk extends AppLocalizations {
 
   @override
   String get objectAnnouncementsLatencyMetric => 'Latency';
+
+  @override
+  String get autoSync => 'Автоматска синхронизација';
+
+  @override
+  String get autoSyncDescription => 'Автоматски синхронизирај офлајн снимки кога ќе се поврзе уредот';
+
+  @override
+  String get backgroundModeTitle => 'Режим во заднина';
+
+  @override
+  String get backgroundModeDescription => 'Зачувајте го снимањето на Omi дури и кога апликацијата е целосно затворена.';
+
+  @override
+  String get backgroundModeNote => 'Засега работи само со уреди Omi и постојано се подобрува.';
+
+  @override
+  String get regenerateRecap => 'Регенерирај резиме';
+
+  @override
+  String get recapRegeneratedSnackbar => 'Резимето е регенерирано';
+
+  @override
+  String get recapRegenerateFailed => 'Не успеа регенерирањето на резимето. Обидете се повторно подоцна.';
+
+  @override
+  String get recapRegenerateCooldown => 'Почекајте неколку секунди пред повторно регенерирање.';
+
+  @override
+  String get recapRegenerateNoConversations => 'Нема разговори за сумирање за овој ден.';
+
+  @override
+  String get syncCustomSttWarningTitle => 'Синхронизацијата користи транскрипција од Omi';
+
+  @override
+  String get syncCustomSttWarningMessage =>
+      'Користите сопствен провајдер за транскрипција. Синхронизирањето на овие снимки ги транскрибира на серверите на Omi и се сметаат во лимитот за транскрипција на вашиот план.';
 }

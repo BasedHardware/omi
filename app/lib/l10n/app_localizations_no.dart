@@ -9439,4 +9439,41 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get objectAnnouncementsLatencyMetric => 'Latency';
+
+  @override
+  String get autoSync => 'Automatisk synkronisering';
+
+  @override
+  String get autoSyncDescription => 'Synkroniser frakoblede opptak automatisk når enheten din kobles til';
+
+  @override
+  String get backgroundModeTitle => 'Bakgrunnsmodus';
+
+  @override
+  String get backgroundModeDescription => 'Hold Omi-en din i opptak selv når appen er helt lukket.';
+
+  @override
+  String get backgroundModeNote => 'Fungerer foreløpig bare med Omi-enheter og forbedres kontinuerlig.';
+
+  @override
+  String get regenerateRecap => 'Generer sammendrag på nytt';
+
+  @override
+  String get recapRegeneratedSnackbar => 'Sammendrag generert på nytt';
+
+  @override
+  String get recapRegenerateFailed => 'Kunne ikke generere sammendraget på nytt. Prøv igjen senere.';
+
+  @override
+  String get recapRegenerateCooldown => 'Vent noen sekunder før du genererer på nytt.';
+
+  @override
+  String get recapRegenerateNoConversations => 'Ingen samtaler å oppsummere for denne dagen.';
+
+  @override
+  String get syncCustomSttWarningTitle => 'Synkronisering bruker Omi-transkripsjon';
+
+  @override
+  String get syncCustomSttWarningMessage =>
+      'Du bruker din egen transkripsjonsleverandør. Synkronisering av disse opptakene transkriberer dem på Omis servere, og de teller mot transkripsjonsgrensen i abonnementet ditt.';
 }

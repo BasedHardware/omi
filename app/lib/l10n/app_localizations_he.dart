@@ -9372,4 +9372,41 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get objectAnnouncementsLatencyMetric => 'Latency';
+
+  @override
+  String get autoSync => 'סנכרון אוטומטי';
+
+  @override
+  String get autoSyncDescription => 'סנכרן אוטומטית הקלטות לא מקוונות כשהמכשיר שלך מתחבר';
+
+  @override
+  String get backgroundModeTitle => 'מצב רקע';
+
+  @override
+  String get backgroundModeDescription => 'השאירו את ה-Omi מקליט גם כשהאפליקציה סגורה לחלוטין.';
+
+  @override
+  String get backgroundModeNote => 'כרגע עובד רק עם מכשירי Omi ומשתפר באופן מתמיד.';
+
+  @override
+  String get regenerateRecap => 'צור סיכום מחדש';
+
+  @override
+  String get recapRegeneratedSnackbar => 'הסיכום נוצר מחדש';
+
+  @override
+  String get recapRegenerateFailed => 'לא ניתן ליצור מחדש את הסיכום. נסה שוב מאוחר יותר.';
+
+  @override
+  String get recapRegenerateCooldown => 'אנא המתן מספר שניות לפני יצירה מחודשת.';
+
+  @override
+  String get recapRegenerateNoConversations => 'אין שיחות לסיכום עבור היום הזה.';
+
+  @override
+  String get syncCustomSttWarningTitle => 'הסנכרון משתמש בתמלול של Omi';
+
+  @override
+  String get syncCustomSttWarningMessage =>
+      'אתה משתמש בספק תמלול משלך. סנכרון ההקלטות האלה יתמלל אותן בשרתי Omi והן ייכללו במגבלת התמלול של התוכנית שלך.';
 }

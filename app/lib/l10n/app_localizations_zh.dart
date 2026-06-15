@@ -9276,4 +9276,40 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get objectAnnouncementsLatencyMetric => 'Latency';
+
+  @override
+  String get autoSync => '自动同步';
+
+  @override
+  String get autoSyncDescription => '设备连接时自动同步离线录音';
+
+  @override
+  String get backgroundModeTitle => '后台模式';
+
+  @override
+  String get backgroundModeDescription => '即使完全关闭应用，也能让你的 Omi 继续录音。';
+
+  @override
+  String get backgroundModeNote => '目前仅支持 Omi 设备，并在持续改进中。';
+
+  @override
+  String get regenerateRecap => '重新生成回顾';
+
+  @override
+  String get recapRegeneratedSnackbar => '已重新生成回顾';
+
+  @override
+  String get recapRegenerateFailed => '无法重新生成回顾。请稍后重试。';
+
+  @override
+  String get recapRegenerateCooldown => '请等待几秒后再重新生成。';
+
+  @override
+  String get recapRegenerateNoConversations => '这一天没有可以总结的对话。';
+
+  @override
+  String get syncCustomSttWarningTitle => '同步会使用 Omi 转录';
+
+  @override
+  String get syncCustomSttWarningMessage => '您使用的是自己的转录服务。同步这些录音会改为在 Omi 的服务器上转录，并计入您套餐的转录额度。';
 }

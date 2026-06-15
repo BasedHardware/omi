@@ -3240,5 +3240,17 @@
   "objectAnnouncementsLatencyMetric": "Latency",
   "@objectAnnouncementsLatencyMetric": {
     "description": "Detect dashboard latency metric label"
-  }
+  },
+  "autoSync": "Sincronizzazione automatica",
+  "autoSyncDescription": "Sincronizza automaticamente le registrazioni offline quando il dispositivo si connette",
+  "backgroundModeTitle": "Modalità in background",
+  "backgroundModeDescription": "Mantieni il tuo Omi in registrazione anche quando l'app è completamente chiusa.",
+  "backgroundModeNote": "Per ora funziona solo con i dispositivi Omi ed è in continuo miglioramento.",
+  "regenerateRecap": "Rigenera il riepilogo",
+  "recapRegeneratedSnackbar": "Riepilogo rigenerato",
+  "recapRegenerateFailed": "Impossibile rigenerare il riepilogo. Riprova più tardi.",
+  "recapRegenerateCooldown": "Attendi qualche secondo prima di rigenerare.",
+  "recapRegenerateNoConversations": "Nessuna conversazione da riepilogare per questo giorno.",
+  "syncCustomSttWarningTitle": "La sincronizzazione usa la trascrizione di Omi",
+  "syncCustomSttWarningMessage": "Usi un tuo fornitore di trascrizione. Sincronizzare queste registrazioni le trascrive sui server di Omi e contano per il limite di trascrizione del tuo piano."
 }

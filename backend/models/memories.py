@@ -13,6 +13,7 @@ class MemoryCategory(str, Enum):
     interesting = "interesting"
     system = "system"
     manual = "manual"
+    workflow = "workflow"
 
     # Legacy categories for backward compatibility
     core = "core"
@@ -32,6 +33,7 @@ CATEGORY_BOOSTS = {
     MemoryCategory.interesting.value: 1,
     MemoryCategory.system.value: 0,
     MemoryCategory.manual.value: 1,
+    MemoryCategory.workflow.value: 1,
     # Map legacy categories to appropriate new categories
     MemoryCategory.core.value: 1,
     MemoryCategory.hobbies.value: 1,
@@ -75,7 +77,7 @@ class Memory(BaseModel):
 
         if isinstance(v, str):
             # If it's already one of our main categories, use it directly
-            if v in ['interesting', 'system', 'manual']:
+            if v in ['interesting', 'system', 'manual', 'workflow']:
                 return v
 
             # For legacy categories, map them to new ones
@@ -125,9 +127,25 @@ class MemoryDB(Memory):
     is_locked: bool = False
     kg_extracted: bool = False
 
+    # Temporal lifecycle — the "constantly updated brain". All optional, so existing
+    # docs (which lack these fields) read back as active with no migration.
+    #   valid_at:      when the fact became true (defaults to created_at)
+    #   invalid_at:    when the fact stopped being true; None == currently active.
+    #                  A superseded/retracted memory is invalidated (not deleted) so
+    #                  history is kept, but it is excluded from every retrieval path.
+    #   superseded_by: id of the newer memory that replaced this one (if any).
+    valid_at: Optional[datetime] = None
+    invalid_at: Optional[datetime] = None
+    superseded_by: Optional[str] = None
+
     def __init__(self, **data):
         super().__init__(**data)
         self.memory_id = self.conversation_id
+
+    @property
+    def is_active(self) -> bool:
+        """A memory is active (currently true) until it is invalidated."""
+        return self.invalid_at is None
 
     @staticmethod
     def calculate_score(memory: 'MemoryDB') -> 'MemoryDB':
@@ -141,14 +159,16 @@ class MemoryDB(Memory):
 
     @staticmethod
     def from_memory(memory: Memory, uid: str, conversation_id: str, manually_added: bool) -> 'MemoryDB':
+        now = datetime.now(timezone.utc)
         memory_db = MemoryDB(
             id=document_id_from_seed(memory.content),
             uid=uid,
             content=memory.content,
             category=memory.category,
             tags=memory.tags,
-            created_at=datetime.now(timezone.utc),
-            updated_at=datetime.now(timezone.utc),
+            created_at=now,
+            updated_at=now,
+            valid_at=now,
             conversation_id=conversation_id,
             manually_added=manually_added,
             user_review=True if manually_added else None,

@@ -10818,5 +10818,17 @@
   "objectAnnouncementsLatencyMetric": "Latency",
   "@objectAnnouncementsLatencyMetric": {
     "description": "Detect dashboard latency metric label"
-  }
+  },
+  "autoSync": "Awtomatikong pag-sync",
+  "autoSyncDescription": "Awtomatikong i-sync ang mga offline na recording kapag nakakonekta ang iyong device",
+  "backgroundModeTitle": "Background Mode",
+  "backgroundModeDescription": "Panatilihing nagre-record ang iyong Omi kahit na ganap nang sarado ang app.",
+  "backgroundModeNote": "Sa ngayon ay gumagana lang sa mga Omi device at patuloy na pinapabuti.",
+  "regenerateRecap": "Buuin muli ang buod",
+  "recapRegeneratedSnackbar": "Nabuo muli ang buod",
+  "recapRegenerateFailed": "Hindi nagawang muling buuin ang buod. Subukang muli mamaya.",
+  "recapRegenerateCooldown": "Mangyaring maghintay ng ilang segundo bago bumuo muli.",
+  "recapRegenerateNoConversations": "Walang mga pag-uusap na ibubuod para sa araw na ito.",
+  "syncCustomSttWarningTitle": "Gumagamit ang pag-sync ng transcription ng Omi",
+  "syncCustomSttWarningMessage": "Gumagamit ka ng sarili mong transcription provider. Kapag in-sync ang mga recording na ito, ita-transcribe ang mga ito sa mga server ng Omi at mabibilang sa limitasyon ng transcription ng iyong plan."
 }

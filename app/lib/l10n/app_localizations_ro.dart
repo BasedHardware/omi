@@ -9487,4 +9487,41 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get objectAnnouncementsLatencyMetric => 'Latency';
+
+  @override
+  String get autoSync => 'Sincronizare automată';
+
+  @override
+  String get autoSyncDescription => 'Sincronizează automat înregistrările offline când dispozitivul tău se conectează';
+
+  @override
+  String get backgroundModeTitle => 'Mod în fundal';
+
+  @override
+  String get backgroundModeDescription => 'Păstrează Omi în înregistrare chiar și când aplicația este complet închisă.';
+
+  @override
+  String get backgroundModeNote => 'Deocamdată funcționează doar cu dispozitive Omi și este îmbunătățit continuu.';
+
+  @override
+  String get regenerateRecap => 'Regenerează rezumatul';
+
+  @override
+  String get recapRegeneratedSnackbar => 'Rezumat regenerat';
+
+  @override
+  String get recapRegenerateFailed => 'Rezumatul nu a putut fi regenerat. Încercați din nou mai târziu.';
+
+  @override
+  String get recapRegenerateCooldown => 'Vă rugăm să așteptați câteva secunde înainte de a regenera.';
+
+  @override
+  String get recapRegenerateNoConversations => 'Nu există conversații de rezumat pentru această zi.';
+
+  @override
+  String get syncCustomSttWarningTitle => 'Sincronizarea folosește transcrierea Omi';
+
+  @override
+  String get syncCustomSttWarningMessage =>
+      'Folosești propriul furnizor de transcriere. Sincronizarea acestor înregistrări le transcrie pe serverele Omi și se iau în calcul pentru limita de transcriere a planului tău.';
 }

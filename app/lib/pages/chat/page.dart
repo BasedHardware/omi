@@ -22,9 +22,7 @@ import 'package:omi/pages/settings/widgets/plans_sheet.dart';
 import 'package:omi/pages/chat/widgets/user_message.dart';
 import 'package:omi/pages/chat/widgets/voice_recorder_widget.dart';
 import 'package:omi/pages/settings/integrations_page.dart';
-import 'package:omi/pages/settings/settings_drawer.dart';
 import 'package:omi/providers/app_provider.dart';
-import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/home_provider.dart';
@@ -184,20 +182,6 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
         final success = await appleHealthService.syncHealthDataToBackend(days: 7);
         debugPrint('🍎 [Apple Health] Auto-sync ${success ? "completed" : "failed"}');
       }
-    }
-  }
-
-  void _openSettingsDrawer() {
-    HapticFeedback.mediumImpact();
-    PlatformManager.instance.analytics.pageOpened('Settings');
-    final previousLanguage = SharedPreferencesUtil().userPrimaryLanguage;
-    final previousSpeech = SharedPreferencesUtil().hasSpeakerProfile;
-    final previousModel = SharedPreferencesUtil().transcriptionModel;
-    SettingsDrawer.show(context);
-    if (previousLanguage != SharedPreferencesUtil().userPrimaryLanguage ||
-        previousSpeech != SharedPreferencesUtil().hasSpeakerProfile ||
-        previousModel != SharedPreferencesUtil().transcriptionModel) {
-      context.read<CaptureProvider>().onRecordProfileSettingChanged();
     }
   }
 

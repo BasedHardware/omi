@@ -3240,5 +3240,17 @@
   "objectAnnouncementsLatencyMetric": "Latency",
   "@objectAnnouncementsLatencyMetric": {
     "description": "Detect dashboard latency metric label"
-  }
+  },
+  "autoSync": "Automaattinen synkronointi",
+  "autoSyncDescription": "Synkronoi offline-tallenteet automaattisesti, kun laitteesi yhdistetään",
+  "backgroundModeTitle": "Taustatila",
+  "backgroundModeDescription": "Pidä Omi tallentamassa, vaikka sovellus olisi kokonaan suljettu.",
+  "backgroundModeNote": "Toimii toistaiseksi vain Omi-laitteiden kanssa ja sitä kehitetään jatkuvasti.",
+  "regenerateRecap": "Luo yhteenveto uudelleen",
+  "recapRegeneratedSnackbar": "Yhteenveto luotu uudelleen",
+  "recapRegenerateFailed": "Yhteenvedon uudelleenluonti epäonnistui. Yritä myöhemmin uudelleen.",
+  "recapRegenerateCooldown": "Odota muutama sekunti ennen uudelleen luomista.",
+  "recapRegenerateNoConversations": "Tänä päivänä ei ole keskusteluja yhteenvedettäväksi.",
+  "syncCustomSttWarningTitle": "Synkronointi käyttää Omin litterointia",
+  "syncCustomSttWarningMessage": "Käytät omaa litterointipalveluasi. Näiden tallenteiden synkronointi litteroi ne Omin palvelimilla, ja ne lasketaan tilauksesi litterointirajaan."
 }

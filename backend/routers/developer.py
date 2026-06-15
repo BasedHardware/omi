@@ -6,7 +6,7 @@ from enum import Enum
 from typing import List, Optional
 
 from fastapi import APIRouter, HTTPException, Depends, Query
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ValidationError
 
 import database.folders as folders_db
 import database.memories as memories_db
@@ -39,11 +39,11 @@ from dependencies import (
     get_uid_with_goals_read,
     get_uid_with_goals_write,
 )
-from utils.other.endpoints import with_rate_limit
+from utils.other.endpoints import with_rate_limit, get_current_user_uid
 from models.dev_api_key import DevApiKey, DevApiKeyCreate, DevApiKeyCreated
 from utils.scopes import AVAILABLE_SCOPES, validate_scopes
 from utils.apps import update_personas_async
-from utils.notifications import send_action_item_data_message
+from utils.notifications import send_action_item_data_message, sync_action_item_reminder
 from utils.conversations.process_conversation import process_conversation
 from utils.conversations.location import get_google_maps_location
 from utils.llm.memories import identify_category_for_memory
@@ -171,11 +171,24 @@ def get_memories(
         except ValueError as e:
             raise HTTPException(status_code=400, detail=f"Invalid category {str(e)}")
     memories = memories_db.get_memories(uid, limit, offset, [c.value for c in category_list])
+    # Validate each record individually so a single malformed/legacy doc (e.g. missing a required
+    # field or an out-of-enum category) doesn't fail the whole page with a 500. Mirrors the
+    # hardening already applied to GET /v3/memories.
+    valid_memories = []
     for memory in memories:
         if memory.get('is_locked', False):
             content = memory.get('content', '')
             memory['content'] = (content[:70] + '...') if len(content) > 70 else content
-    return memories
+        try:
+            valid_memories.append(CleanerMemory.model_validate(memory))
+        except ValidationError as e:
+            missing_fields = [err['loc'][0] for err in e.errors() if err.get('loc')]
+            logger.warning(
+                f"Skipping invalid memory doc {memory.get('id', 'unknown')} for uid {uid}: "
+                f"missing/invalid fields {missing_fields}"
+            )
+            continue
+    return valid_memories
 
 
 @router.post("/v1/dev/user/memories", response_model=MemoryResponse, tags=["developer"])
@@ -607,14 +620,17 @@ def update_action_item(
     if not action_items_db.update_action_item(uid, action_item_id, update_data):
         raise HTTPException(status_code=500, detail="Failed to update action item")
 
-    # Send FCM notification if due_at was updated
-    if request.due_at is not None:
+    # Reconcile the client-scheduled reminder when completion or due date changed, using the final
+    # state: cancel if completed or no due date, (re)schedule only for an open task with a due date
+    # (#5085).
+    if 'completed' in update_data or 'due_at' in update_data:
         description = request.description.strip() if request.description else action_item.get('description', '')
-        send_action_item_data_message(
+        sync_action_item_reminder(
             user_id=uid,
             action_item_id=action_item_id,
             description=description,
-            due_at=request.due_at.isoformat(),
+            completed=bool(update_data.get('completed', action_item.get('completed'))),
+            due_at=update_data.get('due_at', action_item.get('due_at')),
         )
 
     return action_items_db.get_action_item(uid, action_item_id)
@@ -919,58 +935,12 @@ def get_conversation_endpoint(
     return conversation
 
 
-@router.post("/v1/dev/user/conversations/from-segments", response_model=ConversationResponse, tags=["developer"])
-def create_conversation_from_segments(
-    request: CreateConversationFromTranscriptRequest,
-    uid: str = Depends(with_rate_limit(get_uid_with_conversations_write, "dev:conversations")),
-):
-    """
-    Create a new conversation from structured transcript segments.
-
-    This endpoint is for advanced integrations that have speaker diarization and timing information.
-    It processes the transcript segments through the full conversation pipeline.
-
-    **Transcript Segments:**
-    - **text**: The text spoken (required)
-    - **speaker**: Speaker identifier like 'SPEAKER_00', 'SPEAKER_01' (default: 'SPEAKER_00')
-    - **speaker_id**: Numeric speaker ID (auto-calculated from speaker if not provided)
-    - **is_user**: Whether this segment is from the user (default: False)
-    - **person_id**: ID of known person speaking (optional)
-    - **start**: Start time in seconds, e.g., 0.0, 1.5, 60.2 (required)
-    - **end**: End time in seconds, e.g., 1.5, 3.0, 65.8 (required)
-
-    **Other Parameters:**
-    - **source**: Source of conversation (default: external_integration). Options:
-      - omi, friend, openglass, phone, desktop, apple_watch, bee, plaud, frame, etc.
-    - **started_at**: When conversation started (defaults to now)
-    - **finished_at**: When conversation finished (calculated from last segment if not provided)
-    - **language**: Language code (default: 'en')
-    - **geolocation**: Optional geolocation data
-
-    **Example:**
-    ```json
-    {
-      "transcript_segments": [
-        {
-          "text": "Hey, how are you doing?",
-          "speaker": "SPEAKER_00",
-          "is_user": true,
-          "start": 0.0,
-          "end": 2.5
-        },
-        {
-          "text": "I'm doing great, thanks!",
-          "speaker": "SPEAKER_01",
-          "is_user": false,
-          "start": 2.8,
-          "end": 5.2
-        }
-      ],
-      "source": "phone",
-      "language": "en"
-    }
-    ```
-    """
+def _create_conversation_from_segments(
+    uid: str, request: CreateConversationFromTranscriptRequest
+) -> ConversationResponse:
+    """Shared impl: validate already-transcribed segments, build a CreateConversation, run the full
+    processing pipeline (title, memories, action items, sync), and return the result. Used by both
+    the developer-API-key endpoint and the Firebase-authed user endpoint (on-device transcription)."""
     if not request.transcript_segments or len(request.transcript_segments) == 0:
         raise HTTPException(status_code=422, detail="transcript_segments cannot be empty")
 
@@ -1051,6 +1021,74 @@ def create_conversation_from_segments(
         status=conversation.status.value if conversation.status else 'completed',
         discarded=conversation.discarded,
     )
+
+
+@router.post("/v1/conversations/from-segments", response_model=ConversationResponse, tags=["conversations"])
+def create_conversation_from_segments_user(
+    request: CreateConversationFromTranscriptRequest,
+    uid: str = Depends(with_rate_limit(get_current_user_uid, "conversations:from-segments")),
+):
+    """Create a conversation from already-transcribed segments (Firebase-authed).
+
+    Used by clients that transcribe ON-DEVICE (e.g. the macOS desktop app with Parakeet) and need
+    the conversation persisted, processed (memories/summaries), and synced across devices — exactly
+    like a cloud-transcribed conversation, but without the live `/v4/listen` websocket."""
+    return _create_conversation_from_segments(uid, request)
+
+
+@router.post("/v1/dev/user/conversations/from-segments", response_model=ConversationResponse, tags=["developer"])
+def create_conversation_from_segments(
+    request: CreateConversationFromTranscriptRequest,
+    uid: str = Depends(with_rate_limit(get_uid_with_conversations_write, "dev:conversations")),
+):
+    """
+    Create a new conversation from structured transcript segments.
+
+    This endpoint is for advanced integrations that have speaker diarization and timing information.
+    It processes the transcript segments through the full conversation pipeline.
+
+    **Transcript Segments:**
+    - **text**: The text spoken (required)
+    - **speaker**: Speaker identifier like 'SPEAKER_00', 'SPEAKER_01' (default: 'SPEAKER_00')
+    - **speaker_id**: Numeric speaker ID (auto-calculated from speaker if not provided)
+    - **is_user**: Whether this segment is from the user (default: False)
+    - **person_id**: ID of known person speaking (optional)
+    - **start**: Start time in seconds, e.g., 0.0, 1.5, 60.2 (required)
+    - **end**: End time in seconds, e.g., 1.5, 3.0, 65.8 (required)
+
+    **Other Parameters:**
+    - **source**: Source of conversation (default: external_integration). Options:
+      - omi, friend, openglass, phone, desktop, apple_watch, bee, plaud, frame, etc.
+    - **started_at**: When conversation started (defaults to now)
+    - **finished_at**: When conversation finished (calculated from last segment if not provided)
+    - **language**: Language code (default: 'en')
+    - **geolocation**: Optional geolocation data
+
+    **Example:**
+    ```json
+    {
+      "transcript_segments": [
+        {
+          "text": "Hey, how are you doing?",
+          "speaker": "SPEAKER_00",
+          "is_user": true,
+          "start": 0.0,
+          "end": 2.5
+        },
+        {
+          "text": "I'm doing great, thanks!",
+          "speaker": "SPEAKER_01",
+          "is_user": false,
+          "start": 2.8,
+          "end": 5.2
+        }
+      ],
+      "source": "phone",
+      "language": "en"
+    }
+    ```
+    """
+    return _create_conversation_from_segments(uid, request)
 
 
 @router.delete("/v1/dev/user/conversations/{conversation_id}", tags=["developer"])

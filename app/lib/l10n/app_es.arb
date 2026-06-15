@@ -3241,5 +3241,17 @@
   "objectAnnouncementsLatencyMetric": "Latency",
   "@objectAnnouncementsLatencyMetric": {
     "description": "Detect dashboard latency metric label"
-  }
+  },
+  "autoSync": "Sincronización automática",
+  "autoSyncDescription": "Sincroniza automáticamente las grabaciones sin conexión cuando se conecta tu dispositivo",
+  "backgroundModeTitle": "Modo en segundo plano",
+  "backgroundModeDescription": "Mantén tu Omi grabando incluso cuando la app está completamente cerrada.",
+  "backgroundModeNote": "Por ahora solo funciona con dispositivos Omi y se mejora continuamente.",
+  "regenerateRecap": "Regenerar resumen",
+  "recapRegeneratedSnackbar": "Resumen regenerado",
+  "recapRegenerateFailed": "No se pudo regenerar el resumen. Inténtalo de nuevo más tarde.",
+  "recapRegenerateCooldown": "Espera unos segundos antes de regenerar de nuevo.",
+  "recapRegenerateNoConversations": "No hay conversaciones para resumir en este día.",
+  "syncCustomSttWarningTitle": "La sincronización usa la transcripción de Omi",
+  "syncCustomSttWarningMessage": "Usas tu propio proveedor de transcripción. Sincronizar estas grabaciones las transcribe en los servidores de Omi y cuentan para el límite de transcripción de tu plan."
 }

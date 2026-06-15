@@ -3240,5 +3240,17 @@
   "objectAnnouncementsLatencyMetric": "Latency",
   "@objectAnnouncementsLatencyMetric": {
     "description": "Detect dashboard latency metric label"
-  }
+  },
+  "autoSync": "Sincronizare automată",
+  "autoSyncDescription": "Sincronizează automat înregistrările offline când dispozitivul tău se conectează",
+  "backgroundModeTitle": "Mod în fundal",
+  "backgroundModeDescription": "Păstrează Omi în înregistrare chiar și când aplicația este complet închisă.",
+  "backgroundModeNote": "Deocamdată funcționează doar cu dispozitive Omi și este îmbunătățit continuu.",
+  "regenerateRecap": "Regenerează rezumatul",
+  "recapRegeneratedSnackbar": "Rezumat regenerat",
+  "recapRegenerateFailed": "Rezumatul nu a putut fi regenerat. Încercați din nou mai târziu.",
+  "recapRegenerateCooldown": "Vă rugăm să așteptați câteva secunde înainte de a regenera.",
+  "recapRegenerateNoConversations": "Nu există conversații de rezumat pentru această zi.",
+  "syncCustomSttWarningTitle": "Sincronizarea folosește transcrierea Omi",
+  "syncCustomSttWarningMessage": "Folosești propriul furnizor de transcriere. Sincronizarea acestor înregistrări le transcrie pe serverele Omi și se iau în calcul pentru limita de transcriere a planului tău."
 }

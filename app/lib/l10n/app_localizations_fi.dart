@@ -9442,4 +9442,41 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get objectAnnouncementsLatencyMetric => 'Latency';
+
+  @override
+  String get autoSync => 'Automaattinen synkronointi';
+
+  @override
+  String get autoSyncDescription => 'Synkronoi offline-tallenteet automaattisesti, kun laitteesi yhdistetään';
+
+  @override
+  String get backgroundModeTitle => 'Taustatila';
+
+  @override
+  String get backgroundModeDescription => 'Pidä Omi tallentamassa, vaikka sovellus olisi kokonaan suljettu.';
+
+  @override
+  String get backgroundModeNote => 'Toimii toistaiseksi vain Omi-laitteiden kanssa ja sitä kehitetään jatkuvasti.';
+
+  @override
+  String get regenerateRecap => 'Luo yhteenveto uudelleen';
+
+  @override
+  String get recapRegeneratedSnackbar => 'Yhteenveto luotu uudelleen';
+
+  @override
+  String get recapRegenerateFailed => 'Yhteenvedon uudelleenluonti epäonnistui. Yritä myöhemmin uudelleen.';
+
+  @override
+  String get recapRegenerateCooldown => 'Odota muutama sekunti ennen uudelleen luomista.';
+
+  @override
+  String get recapRegenerateNoConversations => 'Tänä päivänä ei ole keskusteluja yhteenvedettäväksi.';
+
+  @override
+  String get syncCustomSttWarningTitle => 'Synkronointi käyttää Omin litterointia';
+
+  @override
+  String get syncCustomSttWarningMessage =>
+      'Käytät omaa litterointipalveluasi. Näiden tallenteiden synkronointi litteroi ne Omin palvelimilla, ja ne lasketaan tilauksesi litterointirajaan.';
 }

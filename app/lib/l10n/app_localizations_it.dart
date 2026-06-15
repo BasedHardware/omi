@@ -9495,4 +9495,43 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String get objectAnnouncementsLatencyMetric => 'Latency';
+
+  @override
+  String get autoSync => 'Sincronizzazione automatica';
+
+  @override
+  String get autoSyncDescription =>
+      'Sincronizza automaticamente le registrazioni offline quando il dispositivo si connette';
+
+  @override
+  String get backgroundModeTitle => 'Modalità in background';
+
+  @override
+  String get backgroundModeDescription =>
+      'Mantieni il tuo Omi in registrazione anche quando l\'app è completamente chiusa.';
+
+  @override
+  String get backgroundModeNote => 'Per ora funziona solo con i dispositivi Omi ed è in continuo miglioramento.';
+
+  @override
+  String get regenerateRecap => 'Rigenera il riepilogo';
+
+  @override
+  String get recapRegeneratedSnackbar => 'Riepilogo rigenerato';
+
+  @override
+  String get recapRegenerateFailed => 'Impossibile rigenerare il riepilogo. Riprova più tardi.';
+
+  @override
+  String get recapRegenerateCooldown => 'Attendi qualche secondo prima di rigenerare.';
+
+  @override
+  String get recapRegenerateNoConversations => 'Nessuna conversazione da riepilogare per questo giorno.';
+
+  @override
+  String get syncCustomSttWarningTitle => 'La sincronizzazione usa la trascrizione di Omi';
+
+  @override
+  String get syncCustomSttWarningMessage =>
+      'Usi un tuo fornitore di trascrizione. Sincronizzare queste registrazioni le trascrive sui server di Omi e contano per il limite di trascrizione del tuo piano.';
 }

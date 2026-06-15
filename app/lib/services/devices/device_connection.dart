@@ -114,9 +114,7 @@ class DeviceConnectionFactory {
       case TransportKind.bluetooth:
         final deviceId = locator.bluetoothId;
         if (deviceId == null) return null;
-        // OmiGlass firmware does not have CONFIG_BT_SMP — exclude it from the bonded set
-        // even if it advertised as DeviceType.omi.
-        final needsBond = device.type == DeviceType.limitless || (device.type == DeviceType.omi && !isOmiGlass);
+        final needsBond = device.type == DeviceType.limitless;
         transport = NativeBleTransport(deviceId, requiresBond: needsBond);
         break;
 

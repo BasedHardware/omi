@@ -9526,4 +9526,42 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get objectAnnouncementsLatencyMetric => 'Latency';
+
+  @override
+  String get autoSync => 'Awtomatikong pag-sync';
+
+  @override
+  String get autoSyncDescription =>
+      'Awtomatikong i-sync ang mga offline na recording kapag nakakonekta ang iyong device';
+
+  @override
+  String get backgroundModeTitle => 'Background Mode';
+
+  @override
+  String get backgroundModeDescription => 'Panatilihing nagre-record ang iyong Omi kahit na ganap nang sarado ang app.';
+
+  @override
+  String get backgroundModeNote => 'Sa ngayon ay gumagana lang sa mga Omi device at patuloy na pinapabuti.';
+
+  @override
+  String get regenerateRecap => 'Buuin muli ang buod';
+
+  @override
+  String get recapRegeneratedSnackbar => 'Nabuo muli ang buod';
+
+  @override
+  String get recapRegenerateFailed => 'Hindi nagawang muling buuin ang buod. Subukang muli mamaya.';
+
+  @override
+  String get recapRegenerateCooldown => 'Mangyaring maghintay ng ilang segundo bago bumuo muli.';
+
+  @override
+  String get recapRegenerateNoConversations => 'Walang mga pag-uusap na ibubuod para sa araw na ito.';
+
+  @override
+  String get syncCustomSttWarningTitle => 'Gumagamit ang pag-sync ng transcription ng Omi';
+
+  @override
+  String get syncCustomSttWarningMessage =>
+      'Gumagamit ka ng sarili mong transcription provider. Kapag in-sync ang mga recording na ito, ita-transcribe ang mga ito sa mga server ng Omi at mabibilang sa limitasyon ng transcription ng iyong plan.';
 }

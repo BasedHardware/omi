@@ -3240,5 +3240,17 @@
   "objectAnnouncementsLatencyMetric": "Latency",
   "@objectAnnouncementsLatencyMetric": {
     "description": "Detect dashboard latency metric label"
-  }
+  },
+  "autoSync": "ซิงค์อัตโนมัติ",
+  "autoSyncDescription": "ซิงค์การบันทึกแบบออฟไลน์โดยอัตโนมัติเมื่ออุปกรณ์ของคุณเชื่อมต่อ",
+  "backgroundModeTitle": "โหมดเบื้องหลัง",
+  "backgroundModeDescription": "ให้ Omi ของคุณบันทึกต่อไปแม้ปิดแอปไปทั้งหมดแล้ว",
+  "backgroundModeNote": "ขณะนี้ใช้ได้กับอุปกรณ์ Omi เท่านั้น และกำลังพัฒนาอย่างต่อเนื่อง",
+  "regenerateRecap": "สร้างสรุปใหม่",
+  "recapRegeneratedSnackbar": "สร้างสรุปใหม่แล้ว",
+  "recapRegenerateFailed": "ไม่สามารถสร้างสรุปใหม่ได้ ลองอีกครั้งในภายหลัง",
+  "recapRegenerateCooldown": "โปรดรอสักครู่ก่อนสร้างใหม่อีกครั้ง",
+  "recapRegenerateNoConversations": "ไม่มีการสนทนาที่จะสรุปสำหรับวันนี้",
+  "syncCustomSttWarningTitle": "การซิงค์ใช้การถอดเสียงของ Omi",
+  "syncCustomSttWarningMessage": "คุณใช้ผู้ให้บริการถอดเสียงของคุณเอง การซิงค์การบันทึกเหล่านี้จะถอดเสียงบนเซิร์ฟเวอร์ของ Omi และจะนับรวมในขีดจำกัดการถอดเสียงของแพ็กเกจของคุณ"
 }

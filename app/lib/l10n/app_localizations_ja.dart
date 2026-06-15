@@ -9290,4 +9290,41 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get objectAnnouncementsLatencyMetric => 'Latency';
+
+  @override
+  String get autoSync => '自動同期';
+
+  @override
+  String get autoSyncDescription => 'デバイスの接続時にオフライン録音を自動的に同期します';
+
+  @override
+  String get backgroundModeTitle => 'バックグラウンドモード';
+
+  @override
+  String get backgroundModeDescription => 'アプリを完全に閉じても Omi の録音を続けます。';
+
+  @override
+  String get backgroundModeNote => '現在は Omi デバイスのみ対応しており、継続的に改善しています。';
+
+  @override
+  String get regenerateRecap => '要約を再生成';
+
+  @override
+  String get recapRegeneratedSnackbar => '要約を再生成しました';
+
+  @override
+  String get recapRegenerateFailed => '要約を再生成できませんでした。後でもう一度お試しください。';
+
+  @override
+  String get recapRegenerateCooldown => '再生成する前に数秒お待ちください。';
+
+  @override
+  String get recapRegenerateNoConversations => 'この日の要約対象となる会話はありません。';
+
+  @override
+  String get syncCustomSttWarningTitle => '同期では Omi の文字起こしを使用します';
+
+  @override
+  String get syncCustomSttWarningMessage =>
+      'ご自身の文字起こしプロバイダーを使用しています。これらの録音を同期すると Omi のサーバーで文字起こしされ、プランの文字起こし上限にカウントされます。';
 }

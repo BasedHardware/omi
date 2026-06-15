@@ -5,6 +5,7 @@ import json
 import logging
 import os
 import random
+import audioop
 import struct
 import time
 import uuid
@@ -61,7 +62,7 @@ from models.message_event import (
 )
 from models.transcript_segment import Translation
 from models.users import PlanType
-from utils.analytics import record_usage
+from utils.analytics import billable_transcription_seconds, record_usage
 from utils.app_integrations import trigger_realtime_integrations
 from utils.apps import is_audio_bytes_app_enabled
 from utils.conversations.process_conversation import retrieve_in_progress_conversation
@@ -73,9 +74,14 @@ from utils.speaker_identification import detect_speaker_from_text
 from utils.stt.streaming import (
     STTService,
     get_stt_service_for_language,
+    make_stream_callback,
     process_audio_dg,
+    process_audio_modulate,
+    process_audio_parakeet,
+    sort_segments_by_start,
+    sort_transcript_segments_in_place,
 )
-from utils.stt.vad_gate import VADStreamingGate, VAD_GATE_MODE, is_gate_enabled
+from utils.stt.vad_gate import GatedSTTSocket, VADStreamingGate, VAD_GATE_MODE, is_gate_enabled
 from utils.fair_use import (
     FAIR_USE_ENABLED,
     FAIR_USE_CHECK_INTERVAL_SECONDS,
@@ -325,6 +331,17 @@ async def _stream_handler(
     single_language_mode = transcription_prefs.get('single_language_mode', False)
     vocabulary = transcription_prefs.get('vocabulary', [])
 
+    # Stamp mobile custom-STT usage onto the user doc so these users are queryable
+    # and meterable (#7690) — the app otherwise only signals it per-session via the
+    # custom_stt WS param. Write only on change to keep this off the hot path.
+    # Best-effort telemetry only: never let a tracking write failure (e.g. a
+    # transient Firestore error) tear down the session — catch, log, and proceed.
+    if use_custom_stt != transcription_prefs.get('uses_custom_stt', False):
+        try:
+            await run_blocking(db_executor, user_db.set_user_custom_stt_usage, uid, use_custom_stt)
+        except Exception as e:
+            logger.warning(f"Failed to persist custom_stt usage {uid} {session_id}: {e}")
+
     # Onboarding mode: force single language for better accuracy
     if onboarding_mode:
         single_language_mode = True
@@ -335,6 +352,10 @@ async def _stream_handler(
     # Convert 'auto' to 'multi' for consistency
     language = 'multi' if language == 'auto' else language
 
+    # The client's explicitly-requested engine (query param), captured before the
+    # language-based selection below overwrites stt_service.
+    requested_stt_service = stt_service
+
     # Determine the best STT service
     stt_service, stt_language, stt_model = get_stt_service_for_language(
         language, multi_lang_enabled=not single_language_mode
@@ -342,6 +363,11 @@ async def _stream_handler(
     if not stt_service or not stt_language:
         await websocket.close(code=1008, reason=f"The language is not supported, {language}")
         return
+
+    # Opt-in: honor an explicit Parakeet request only when the self-hosted service is configured.
+    # Default stays unchanged (Deepgram / language-selected) — this never auto-switches anyone.
+    if requested_stt_service == 'parakeet' and os.getenv('HOSTED_PARAKEET_API_URL'):
+        stt_service = STTService.parakeet
 
     # Translation language (disabled in single language mode)
     translation_language = None
@@ -364,6 +390,7 @@ async def _stream_handler(
     MAX_PHOTO_BUFFER_SIZE = 100  # Max photos to buffer
     MAX_AUDIO_BUFFER_SIZE = 1024 * 1024 * 10  # 10MB max audio buffer
     MAX_PENDING_REQUESTS = 100  # Max pending conversation requests
+    MAX_PENDING_SPEAKER_SAMPLE_REQUESTS = 50  # Max speaker-sample requests buffered while pusher is down
     MAX_IMAGE_CHUNKS = 50  # Max concurrent image uploads
     IMAGE_CHUNK_TTL = 60.0  # Seconds before incomplete image chunks expire
     IMAGE_CHUNK_CLEANUP_INTERVAL = 2.0  # Seconds between cleanup scans
@@ -517,7 +544,11 @@ async def _stream_handler(
 
             if last_usage_record_timestamp:
                 current_time = time.time()
-                transcription_seconds = int(current_time - last_usage_record_timestamp)
+                # Clamped to the last audio actually received (#4700): keepalive
+                # pings keep the socket alive after the device stops streaming.
+                transcription_seconds = billable_transcription_seconds(
+                    last_usage_record_timestamp, last_audio_received_time, current_time
+                )
 
                 words_to_record = words_transcribed_since_last_record
                 words_transcribed_since_last_record = 0  # reset
@@ -926,6 +957,7 @@ async def _stream_handler(
             conversation.transcript_segments, updated_segments, removed_ids = TranscriptSegment.combine_segments(
                 conversation.transcript_segments, segments
             )
+            sort_transcript_segments_in_place(conversation.transcript_segments)
             if speaker_map_dirty:
                 # A new speaker match was found — retroactively fix all earlier segments once
                 process_speaker_assigned_segments(
@@ -968,25 +1000,30 @@ async def _stream_handler(
         return
 
     # Process STT
-    deepgram_socket = None
+    stt_socket = None
 
     vad_gate = None
 
     def stream_transcript(segments):
         nonlocal realtime_segment_buffers
-        # Note: DG timestamp remapping is handled inside GatedDeepgramSocket wrapper
         realtime_segment_buffers.extend(segments)
+
+    async def _create_stt_socket(callback, lang, sr, model, kw=None, active_check=None):
+        if stt_service == STTService.parakeet:
+            return await process_audio_parakeet(callback, lang, sr, 1, model=model, keywords=kw, is_active=active_check)
+        if stt_service == STTService.modulate:
+            return await process_audio_modulate(callback, sr, lang)
+        return await process_audio_dg(callback, lang, sr, 1, model=model, keywords=kw, is_active=active_check)
 
     async def _process_stt():
         nonlocal websocket_close_code
-        nonlocal deepgram_socket
+        nonlocal stt_socket
         try:
             if use_custom_stt:
                 logger.info(f"Custom STT mode enabled - using suggested transcripts from app {uid} {session_id}")
                 return None
 
             if is_multi_channel:
-                # Create one STT connection per channel
                 for i, ch_config in enumerate(channel_configs):
 
                     def make_multi_channel_callback(cfg):
@@ -999,23 +1036,20 @@ async def _stream_handler(
                         return cb
 
                     callback = make_multi_channel_callback(ch_config)
-                    stt_sockets_multi[i] = await process_audio_dg(
+                    # Pass the user's vocabulary (always includes "Omi") so phone-call /
+                    # multi-channel transcripts get the same keyterm hinting as single-channel.
+                    stt_sockets_multi[i] = await _create_stt_socket(
                         callback,
                         stt_language,
                         TARGET_SAMPLE_RATE,
-                        1,
-                        model=stt_model,
+                        stt_model,
+                        kw=vocabulary[:100] if vocabulary else None,
                     )
                 logger.info(
                     f"Multi-channel STT connections established ({len(channel_configs)} channels) {uid} {session_id}"
                 )
                 return None
 
-            # Initialize VAD gate for all eligible DG sessions.
-            # Gate requires PCM16 LE (linear16). All codecs (opus, aac, lc3)
-            # decode to int16 before buffering. pcm8/pcm16 are linear16 from hardware
-            # (the "8"/"16" refers to sample rate kHz, not bit depth).
-            # DG always receives mono (channels=1), so clamp gate channels to 1.
             nonlocal vad_gate
             gate_enabled_by_override = vad_gate_override == 'enabled'
             gate_disabled_by_override = vad_gate_override == 'disabled'
@@ -1024,7 +1058,7 @@ async def _stream_handler(
                 try:
                     vad_gate = VADStreamingGate(
                         sample_rate=sample_rate,
-                        channels=1,  # DG always receives mono (encoding=linear16, channels=1)
+                        channels=1,
                         mode=gate_mode,
                         uid=uid,
                         session_id=session_id,
@@ -1041,16 +1075,20 @@ async def _stream_handler(
                     logger.exception('VAD gate init failed, continuing without gate uid=%s session=%s', uid, session_id)
                     vad_gate = None
 
-            deepgram_socket = await process_audio_dg(
-                stream_transcript,
+            passthrough = stt_service == STTService.modulate
+
+            raw_socket = await _create_stt_socket(
+                make_stream_callback(stream_transcript, vad_gate, passthrough),
                 stt_language,
                 sample_rate,
-                1,
-                model=stt_model,
-                keywords=vocabulary[:100] if vocabulary else None,
-                vad_gate=vad_gate,
-                is_active=lambda: websocket_active,
+                stt_model,
+                kw=vocabulary[:100] if vocabulary else None,
+                active_check=lambda: websocket_active,
             )
+            if vad_gate is not None and raw_socket is not None:
+                stt_socket = GatedSTTSocket(raw_socket, gate=vad_gate, passthrough_audio=passthrough)
+            else:
+                stt_socket = raw_socket
             return None
 
         except Exception as e:
@@ -1085,6 +1123,11 @@ async def _stream_handler(
         MAX_RETRIES_PER_REQUEST = 3
         pending_conversation_requests: Dict[str, dict] = {}
         pending_request_event = asyncio.Event()
+
+        # Speaker-sample extraction requests buffered while pusher is disconnected,
+        # replayed on reconnect (#6060). Bounded to avoid unbounded growth during
+        # long outages; oldest is dropped when full.
+        pending_speaker_sample_requests: deque = deque(maxlen=MAX_PENDING_SPEAKER_SAMPLE_REQUESTS)
 
         def transcript_send(segments):
             nonlocal segment_buffers
@@ -1482,6 +1525,15 @@ async def _stream_handler(
                     for cid in list(pending_conversation_requests.keys()):
                         pending_conversation_requests[cid]['sent_at'] = time.time()
                         await request_conversation_processing(cid)
+                # Re-send any speaker sample requests buffered while disconnected (#6060)
+                if pending_speaker_sample_requests:
+                    buffered = list(pending_speaker_sample_requests)
+                    pending_speaker_sample_requests.clear()
+                    logger.info(
+                        f"Reconnected to pusher, re-sending {len(buffered)} pending speaker sample requests {uid} {session_id}"
+                    )
+                    for person_id, conv_id, segment_ids in buffered:
+                        await send_speaker_sample_request(person_id, conv_id, segment_ids)
             except PusherCircuitBreakerOpen:
                 raise  # Let caller handle circuit breaker
             except Exception as e:
@@ -1512,6 +1564,13 @@ async def _stream_handler(
             """Send speaker sample extraction request to pusher with segment IDs."""
             nonlocal pusher_ws, pusher_connected
             if not pusher_connected or not pusher_ws:
+                # Buffer instead of dropping so the request survives a transient
+                # pusher disconnect and is replayed on reconnect (#6060).
+                pending_speaker_sample_requests.append((person_id, conv_id, segment_ids))
+                logger.warning(
+                    f"Pusher not connected, buffered speaker sample request: person={person_id}, "
+                    f"{len(segment_ids)} segments ({len(pending_speaker_sample_requests)} pending) {uid} {session_id}"
+                )
                 return
             try:
                 data = bytearray()
@@ -2078,7 +2137,7 @@ async def _stream_handler(
             if not realtime_segment_buffers and not realtime_photo_buffers:
                 continue
 
-            segments_to_process = list(realtime_segment_buffers)
+            segments_to_process = sort_segments_by_start(realtime_segment_buffers)
             realtime_segment_buffers.clear()
 
             photos_to_process = list(realtime_photo_buffers)
@@ -2359,7 +2418,7 @@ async def _stream_handler(
     elif codec == 'lc3':
         lc3_decoder = lc3.Decoder(lc3_frame_duration_us, sample_rate)
 
-    async def receive_data(dg_socket):
+    async def receive_data(stt_socket):
         nonlocal websocket_active, websocket_close_code, last_audio_received_time, last_activity_time, current_conversation_id
         nonlocal realtime_photo_buffers, speaker_to_person_map, first_audio_byte_timestamp, last_usage_record_timestamp
         nonlocal audio_ring_buffer, dg_usage_ms_pending
@@ -2372,7 +2431,7 @@ async def _stream_handler(
         stt_buffer_flush_size = int(sample_rate * 2 * 0.03)  # 30ms at 16-bit mono (e.g., 6400 bytes at 16kHz)
 
         async def flush_stt_buffer(force: bool = False):
-            nonlocal stt_audio_buffer, dg_usage_ms_pending, dg_socket
+            nonlocal stt_audio_buffer, dg_usage_ms_pending, stt_socket
 
             if not stt_audio_buffer:
                 return
@@ -2382,24 +2441,22 @@ async def _stream_handler(
             chunk = bytes(stt_audio_buffer)
             stt_audio_buffer.clear()
 
-            # Check if DG connection died (keepalive or send failure) (#5870)
-            if dg_socket is not None and dg_socket.is_connection_dead:
-                close_reason = dg_socket.death_reason or 'unknown'
+            if stt_socket is not None and stt_socket.is_connection_dead:
+                close_reason = stt_socket.death_reason or 'unknown'
                 logger.error(
-                    'DG connection died mid-session uid=%s session=%s reason=%s',
+                    'STT connection died mid-session uid=%s session=%s reason=%s',
                     uid,
                     session_id,
                     close_reason,
                 )
-                dg_socket = None  # Stop sending to dead connection
+                stt_socket = None
 
-            if dg_socket is not None:
+            if stt_socket is not None:
                 # DG budget gate: skip sending if daily budget is exhausted (#5746, #6083).
                 if fair_use_dg_budget_exhausted:
-                    pass  # Audio not forwarded to DG — budget exhausted or trial paywall
+                    pass  # Audio not forwarded to STT — budget exhausted or trial paywall
                 else:
-                    dg_socket.send(chunk)
-                    # Accumulate DG usage locally, flushed every 60s (#5854)
+                    stt_socket.send(chunk)
                     if fair_use_track_dg_usage:
                         chunk_ms = len(chunk) * 1000 // (sample_rate * 2)  # 16-bit mono
                         dg_usage_ms_pending += chunk_ms
@@ -2521,12 +2578,16 @@ async def _stream_handler(
                                 )
                                 continue
 
+                        if codec == 'pcm8':
+                            data = audioop.bias(data, 1, -128)
+                            data = audioop.lin2lin(data, 1, 2)
+
                         # Feed ring buffer for speaker identification (always, with wall-clock time)
                         if audio_ring_buffer is not None:
                             audio_ring_buffer.write(data, last_audio_received_time)
 
                         if not use_custom_stt:
-                            # VAD gating is handled inside GatedDeepgramSocket.send()
+                            # VAD gating is handled inside GatedSTTSocket.send()
                             stt_audio_buffer.extend(data)
                             await flush_stt_buffer()
 
@@ -2618,6 +2679,21 @@ async def _stream_handler(
             # Flush any remaining audio in buffer to STT
             if not use_custom_stt:
                 await flush_stt_buffer(force=True)
+            # EOS drain: send EOS and wait for final transcripts while
+            # stream_transcript_process is still running (before websocket_active=False)
+            try:
+                if is_multi_channel:
+                    for mc_stt_socket in stt_sockets_multi:
+                        if mc_stt_socket and hasattr(mc_stt_socket, 'drain_and_close'):
+                            await mc_stt_socket.drain_and_close()
+                else:
+                    drain_target = stt_socket
+                    if isinstance(stt_socket, GatedSTTSocket):
+                        drain_target = stt_socket._conn
+                    if drain_target and hasattr(drain_target, 'drain_and_close'):
+                        await drain_target.drain_and_close()
+            except Exception as e:
+                logger.error(f"Error draining STT EOS: {e} {uid} {session_id}")
             websocket_active = False
 
     # Start
@@ -2673,7 +2749,7 @@ async def _stream_handler(
             pusher_tasks.append(asyncio.create_task(pusher_heartbeat(), name=f"ws:{uid}:pusher_heartbeat"))
 
         # Tasks
-        data_process_task = asyncio.create_task(receive_data(deepgram_socket), name=f"ws:{uid}:receive")
+        data_process_task = asyncio.create_task(receive_data(stt_socket), name=f"ws:{uid}:receive")
         stream_transcript_task = asyncio.create_task(stream_transcript_process(), name=f"ws:{uid}:stream_transcript")
         record_usage_task = asyncio.create_task(_record_usage_periodically(), name=f"ws:{uid}:record_usage")
 
@@ -2736,7 +2812,9 @@ async def _stream_handler(
         shutdown_event.set()
         BACKEND_LISTEN_ACTIVE_WS_CONNECTIONS.dec()
         if not use_custom_stt and last_usage_record_timestamp:
-            transcription_seconds = int(time.time() - last_usage_record_timestamp)
+            transcription_seconds = billable_transcription_seconds(
+                last_usage_record_timestamp, last_audio_received_time, time.time()
+            )
             words_to_record = words_transcribed_since_last_record
 
             # Flush any pending speech_ms delta to Redis (#5746 reviewer fix)
@@ -2778,9 +2856,8 @@ async def _stream_handler(
                     if mc_stt_socket:
                         mc_stt_socket.finish()
             else:
-                if deepgram_socket:
-                    # GatedDeepgramSocket.finish() handles finalize automatically
-                    deepgram_socket.finish()
+                if stt_socket:
+                    stt_socket.finish()
         except Exception as e:
             logger.error(f"Error closing STT sockets: {e} {uid} {session_id}")
 
@@ -2940,7 +3017,7 @@ async def listen_handler(
         codec,
         channels,
         include_speech_profile,
-        None,
+        stt_service,  # pass the client's requested engine through (e.g. 'parakeet')
         conversation_timeout=conversation_timeout,
         source=source,
         custom_stt_mode=custom_stt_mode,

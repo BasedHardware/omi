@@ -9442,4 +9442,41 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get objectAnnouncementsLatencyMetric => 'Latency';
+
+  @override
+  String get autoSync => 'Automatická synchronizace';
+
+  @override
+  String get autoSyncDescription => 'Automaticky synchronizovat offline nahrávky při připojení zařízení';
+
+  @override
+  String get backgroundModeTitle => 'Režim na pozadí';
+
+  @override
+  String get backgroundModeDescription => 'Udržujte nahrávání Omi, i když je aplikace úplně zavřená.';
+
+  @override
+  String get backgroundModeNote => 'Zatím funguje pouze se zařízeními Omi a průběžně se vylepšuje.';
+
+  @override
+  String get regenerateRecap => 'Znovu vygenerovat shrnutí';
+
+  @override
+  String get recapRegeneratedSnackbar => 'Shrnutí bylo znovu vygenerováno';
+
+  @override
+  String get recapRegenerateFailed => 'Shrnutí se nepodařilo znovu vygenerovat. Zkuste to později.';
+
+  @override
+  String get recapRegenerateCooldown => 'Před opětovným generováním prosím počkejte několik sekund.';
+
+  @override
+  String get recapRegenerateNoConversations => 'Pro tento den nejsou žádné konverzace k shrnutí.';
+
+  @override
+  String get syncCustomSttWarningTitle => 'Synchronizace používá přepis Omi';
+
+  @override
+  String get syncCustomSttWarningMessage =>
+      'Používáte vlastního poskytovatele přepisu. Synchronizace těchto nahrávek je přepíše na serverech Omi a započítají se do limitu přepisu vašeho tarifu.';
 }

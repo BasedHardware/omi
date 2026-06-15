@@ -9508,4 +9508,41 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get objectAnnouncementsLatencyMetric => 'Latency';
+
+  @override
+  String get autoSync => 'தானியங்கி ஒத்திசைவு';
+
+  @override
+  String get autoSyncDescription => 'உங்கள் சாதனம் இணைக்கப்படும்போது ஆஃப்லைன் பதிவுகளைத் தானாகவே ஒத்திசைக்கவும்';
+
+  @override
+  String get backgroundModeTitle => 'பின்னணி பயன்முறை';
+
+  @override
+  String get backgroundModeDescription => 'ஆப்ஸ் முழுவதுமாக மூடப்பட்டிருந்தாலும் உங்கள் Omi பதிவைத் தொடரவும்.';
+
+  @override
+  String get backgroundModeNote => 'தற்போது Omi சாதனங்களுடன் மட்டுமே செயல்படுகிறது, தொடர்ந்து மேம்படுத்தப்படுகிறது.';
+
+  @override
+  String get regenerateRecap => 'சுருக்கத்தை மீண்டும் உருவாக்கு';
+
+  @override
+  String get recapRegeneratedSnackbar => 'சுருக்கம் மீண்டும் உருவாக்கப்பட்டது';
+
+  @override
+  String get recapRegenerateFailed => 'சுருக்கத்தை மீண்டும் உருவாக்க முடியவில்லை. பிறகு மீண்டும் முயற்சிக்கவும்.';
+
+  @override
+  String get recapRegenerateCooldown => 'மீண்டும் உருவாக்குவதற்கு முன் சில வினாடிகள் காத்திருக்கவும்.';
+
+  @override
+  String get recapRegenerateNoConversations => 'இந்த நாளுக்கு சுருக்கமாக மாற்ற உரையாடல்கள் இல்லை.';
+
+  @override
+  String get syncCustomSttWarningTitle => 'ஒத்திசைவு Omi படியெடுப்பைப் பயன்படுத்துகிறது';
+
+  @override
+  String get syncCustomSttWarningMessage =>
+      'நீங்கள் உங்கள் சொந்த படியெடுப்பு வழங்குநரைப் பயன்படுத்துகிறீர்கள். இந்தப் பதிவுகளை ஒத்திசைத்தால் அவை Omi சேவையகங்களில் படியெடுக்கப்படும், மேலும் உங்கள் திட்டத்தின் படியெடுப்பு வரம்பில் கணக்கிடப்படும்.';
 }

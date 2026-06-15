@@ -3207,5 +3207,17 @@
   "objectAnnouncementsLatencyMetric": "Latency",
   "@objectAnnouncementsLatencyMetric": {
     "description": "Detect dashboard latency metric label"
-  }
+  },
+  "autoSync": "المزامنة التلقائية",
+  "autoSyncDescription": "مزامنة التسجيلات دون اتصال تلقائيًا عند توصيل جهازك",
+  "backgroundModeTitle": "الوضع في الخلفية",
+  "backgroundModeDescription": "حافِظ على تسجيل Omi حتى عند إغلاق التطبيق تمامًا.",
+  "backgroundModeNote": "يعمل حاليًا مع أجهزة Omi فقط، ويجري تحسينه باستمرار.",
+  "regenerateRecap": "إعادة إنشاء الملخص",
+  "recapRegeneratedSnackbar": "تمت إعادة إنشاء الملخص",
+  "recapRegenerateFailed": "تعذرت إعادة إنشاء الملخص. حاول مرة أخرى لاحقًا.",
+  "recapRegenerateCooldown": "يرجى الانتظار بضع ثوانٍ قبل إعادة الإنشاء مرة أخرى.",
+  "recapRegenerateNoConversations": "لا توجد محادثات لتلخيصها في هذا اليوم.",
+  "syncCustomSttWarningTitle": "المزامنة تستخدم خدمة النسخ في Omi",
+  "syncCustomSttWarningMessage": "أنت تستخدم مزوّد النسخ الخاص بك. مزامنة هذه التسجيلات تنسخها على خوادم Omi بدلاً من ذلك، وتُحتسب ضمن حد النسخ في باقتك."
 }

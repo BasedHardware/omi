@@ -24,6 +24,8 @@ These rules apply to every AI agent working in this repository. This file is the
 - Never push directly to `main`. Land changes through a PR only. Never squash-merge — use a regular merge.
 - Never push or create PRs unless explicitly asked — commit locally by default.
 - **Nothing lands on `main` until the user explicitly says so.** Do not commit, merge, push, or open a PR against `main` until the user gives an explicit go-ahead in that turn. Keep all work on feature branches; a prior approval never carries over to later changes.
+- **Exception — reverts merge right away.** When the user asks to revert a previously merged PR/commit, open the revert PR and merge it immediately without waiting for a separate merge go-ahead; the revert request itself is the approval.
+- **Exception — verified + peer-approved changes may auto-merge.** If you have actually tested the change (exercised the real user-facing path, not just compiled/lint-passed) **and** an independent agent review approved it, you may open the PR and merge it without waiting for a separate go-ahead — especially for bug fixes. Still require explicit user sign-off for risky, wide-blast-radius, or hard-to-reverse changes (migrations, release/CI pipeline, schema, access control, data deletion).
 - **Prefer testing locally first.** The user prefers to build and run the app locally to verify a change works before it goes to a PR or merge. Default to a local named-bundle build + run for desktop changes (and the equivalent local run for other components) before proposing to land anything.
 
 ## Coding Guidelines
@@ -33,7 +35,7 @@ These rules apply to every AI agent working in this repository. This file is the
 - **No in-function imports** — all imports at module top level.
 - **Import hierarchy** (low → high): `database/` → `utils/` → `routers/` → `main.py`. Never import upward.
 - **Memory management** — `del` byte arrays after processing, `.clear()` dicts/lists holding data.
-- **Async I/O** — never `requests.*` in async (use `httpx.AsyncClient` pools from `utils/http_client.py`), never `Thread().start().join()` (use `critical_executor`/`storage_executor`), never `time.sleep()` in async (use `asyncio.sleep()`). Run `python scripts/scan_async_blockers.py` before committing.
+- **Async I/O** — never `requests.*` in async (use `httpx.AsyncClient` pools from `utils/http_client.py`), never `Thread().start().join()` (use `critical_executor`/`storage_executor`), never `time.sleep()` in async (use `asyncio.sleep()`). Run `python scripts/scan_async_blockers.py` from `backend/` before committing.
 - **`async def` vs `def` endpoints** — use `def` for endpoints that only call sync code (Firestore, Redis, file I/O); FastAPI runs `def` in a threadpool automatically. Only use `async def` when the endpoint genuinely `await`s something (httpx, file.read(), WebSocket, asyncio.sleep) or uses asyncio APIs directly. Never call sync DB/storage/file functions directly inside `async def` — wrap with `await run_blocking(executor, func, args)`.
 - **Blocking calls in async** — these block the event loop: `database.*` functions (Firestore sync SDK), `open()`/`shutil.*` (file I/O), `upload_*`/`delete_*` from storage (GCS SDK), `creds.refresh()` (Google auth HTTP). In `async def`, always offload via `await run_blocking(executor, func, args)` from `utils.executors`. Pool assignment: `critical_executor` for auth/rate-limits, `db_executor` for Firestore/Redis CRUD, `llm_executor` for LLM calls, `storage_executor` for GCS/file I/O, `postprocess_executor` for coordinators, `sync_executor` for STT/VAD. See `backend/CLAUDE.md` for full rules. Never use bare `asyncio.to_thread()`.
 
@@ -71,6 +73,10 @@ pusher
 agent-proxy (agent-proxy/main.py)
   └── ws ──► user agent VM (private IP, port 8080)
 
+backend-sync (main.py, Cloud Run)
+  ├── ──────► Cloud Tasks queue `sync-jobs` ──► POST /v2/sync-jobs/run (OIDC, same service)
+  └── ──────► Cloud Tasks queue `audio-merge` ──► POST /v2/audio-merge-jobs/run (OIDC, same service)
+
 notifications-job (modal/job.py)  [cron]
 ```
 
@@ -82,6 +88,7 @@ Helm charts: `backend/charts/{backend-listen,pusher,diarizer,vad,deepgram-self-h
 - **diarizer** (`diarizer/main.py`) — GPU. Speaker embeddings at `/v2/embedding`. Called by backend and pusher (`HOSTED_SPEAKER_EMBEDDING_API_URL`).
 - **vad** (`modal/main.py`) — GPU. `/v1/vad` and `/v1/speaker-identification`. Called by backend only.
 - **deepgram** — STT. Streaming uses self-hosted (`DEEPGRAM_SELF_HOSTED_URL`) or cloud based on `DEEPGRAM_SELF_HOSTED_ENABLED`. Pre-recorded always uses Deepgram cloud. Called by backend and pusher.
+- **backend-sync** (`main.py`, same image as backend) — Cloud Run service for `/v2/sync-local-files`. When `SYNC_DISPATCH_MODE=cloud_tasks`: stages raw audio in GCS, enqueues to Cloud Tasks queue `sync-jobs`, which POSTs `/v2/sync-jobs/run` (OIDC-verified, `utils/cloud_tasks.py`) to run decode→VAD→STT inside a request. Inline fallback when the flag is off, env is incomplete, BYOK headers are present, or enqueue fails. Audio playback merges (`/v1/sync/audio/*`) follow the same pattern via queue `audio-merge` building 30-day MP3 artifacts under `playback/` (`AUDIO_MERGE_DISPATCH_MODE`).
 - **notifications-job** (`modal/job.py`) — Cron job, reads Firestore/Redis, sends push notifications.
 
 Keep this map up to date. When adding, removing, or changing inter-service calls, update this section. If a PR changes audio streaming, transcription, conversation lifecycle, speaker identification, or the listen/pusher WebSocket protocol — update `docs/doc/developer/backend/listen_pusher_pipeline.mdx` in the same PR.
@@ -112,23 +119,23 @@ Key rules:
 
 ### Desktop (macOS — Swift app + Rust backend)
 
-The desktop app is a **Swift Package Manager** project (no Xcode project, no `.xcodeproj`). The Rust backend lives in `desktop/Backend-Rust/`.
+The desktop app is a **Swift Package Manager** project (no Xcode project, no `.xcodeproj`). The Rust backend lives in `desktop/macos/Backend-Rust/`.
 
 #### Building & Running
 
-- `./run.sh` — full local dev (build Swift app + Rust backend + Cloudflare tunnel + launch).
-- `./run.sh --yolo` — quick start against the prod backend, no local services.
+- `cd desktop/macos && ./run.sh` — full local dev (build Swift app + Rust backend + Cloudflare tunnel + launch).
+- `cd desktop/macos && ./run.sh --yolo` — quick start against the prod backend, no local services.
 - `OMI_SKIP_BACKEND=1` — app only, use remote backend via `OMI_DESKTOP_API_URL`. `OMI_SKIP_TUNNEL=1` — no Cloudflare tunnel.
-- Compile-only check: `xcrun swift build -c debug --package-path Desktop` (the `xcrun` prefix is required to match the SDK).
-- **DO NOT** use bare `swift build`, `xcodebuild`, or launch from `build/` directly. Always launch via `./run.sh` (installs to `/Applications/` and registers with LaunchServices, required for permission "Quit & Reopen").
+- Compile-only check: `cd desktop/macos && xcrun swift build -c debug --package-path Desktop` (the `xcrun` prefix is required to match the SDK).
+- **DO NOT** use bare `swift build`, `xcodebuild`, or launch from `build/` directly. Always launch via `cd desktop/macos && ./run.sh` (installs to `/Applications/` and registers with LaunchServices, required for permission "Quit & Reopen").
 - Release builds are handled entirely by Codemagic CI (no local release script).
-- For PRs that change function signatures or cross-file types, run a clean release build before merge: `cd desktop && rm -rf .build && xcrun swift build -c release --triple arm64-apple-macosx` — incremental debug builds miss stale-cache type errors that Codemagic's clean release build catches later.
+- For PRs that change function signatures or cross-file types, run a clean release build before merge: `cd desktop/macos && rm -rf .build && xcrun swift build -c release --triple arm64-apple-macosx` — incremental debug builds miss stale-cache type errors that Codemagic's clean release build catches later.
 
 #### Named Test Bundles
 
 When testing a feature or fix, **always create a separate named bundle** so it runs side-by-side with dev/prod:
 ```bash
-OMI_APP_NAME="omi-fix-rewind" ./run.sh
+cd desktop/macos && OMI_APP_NAME="omi-fix-rewind" ./run.sh
 ```
 This installs `/Applications/omi-fix-rewind.app` with bundle id `com.omi.omi-fix-rewind`, with its own permissions, database, and auth state.
 
@@ -144,10 +151,10 @@ Rules:
 
 Agents can and should self-test the running app — don't stop at a successful compile. The fast path skips the slow parts (web login, sidebar click-through):
 
-1. **Build + launch a named bundle:** `OMI_APP_NAME="omi-<feature>" ./run.sh` (add `OMI_SKIP_TUNNEL=1` for a local backend without a tunnel; `OMI_SKIP_BACKEND=1 OMI_DESKTOP_API_URL=…` to point at a remote backend).
+1. **Build + launch a named bundle:** `cd desktop/macos && OMI_APP_NAME="omi-<feature>" ./run.sh` (add `OMI_SKIP_TUNNEL=1` for a local backend without a tunnel; `OMI_SKIP_BACKEND=1 OMI_DESKTOP_API_URL=…` to point at a remote backend).
 2. **Boot signed-in (no browser):** sign into "Omi Dev" once, then clone the session into the named bundle **before launch** (UserDefaults is read at startup):
    ```bash
-   cd desktop && ./scripts/omi-auth-dump.sh                  # capture the Omi Dev session
+   cd desktop/macos && ./scripts/omi-auth-dump.sh                  # capture the Omi Dev session
    ./scripts/omi-auth-seed.sh com.omi.omi-<feature>          # replay into the test bundle
    ```
    On next launch `restoreAuthState()` picks it up and boots already-signed-in.
@@ -155,12 +162,12 @@ Agents can and should self-test the running app — don't stop at a successful c
    - **Prefer the local bridge — it never touches the cursor.** It calls the app's real code in-process (no synthetic mouse events), so it won't take over the user's machine. Use it before reaching for `agent-swift click`/`cliclick`/computer-use. Auto-enables on non-prod bundles; run several at once by giving each its own `OMI_AUTOMATION_PORT` (default 47777).
    - `./scripts/omi-ctl state` — app-state snapshot (selected tab, auth, onboarding).
    - `./scripts/omi-ctl navigate <screen> [settings-section]` — jump straight to a screen in ~150ms (`omi-ctl screens` lists targets).
-   - `./scripts/omi-ctl actions` then `./scripts/omi-ctl action <name> [k=v …]` — discover and run semantic actions (e.g. `refresh_all_data`, `toggle_transcription enabled=false`). Add new ones in `DesktopAutomationActionRegistry`. See `desktop/e2e/SKILL.md` §2b.
+   - `./scripts/omi-ctl actions` then `./scripts/omi-ctl action <name> [k=v …]` — discover and run semantic actions (e.g. `refresh_all_data`, `toggle_transcription enabled=false`). Add new ones in `DesktopAutomationActionRegistry`. See `desktop/macos/e2e/SKILL.md` §2b.
    - `agent-swift connect --bundle-id com.omi.omi-<feature>` then `snapshot -i`, `find role textfield fill "…"`, `click @eN`, `screenshot /tmp/evidence.png` — only for UI the bridge can't reach yet (`click` moves the cursor).
 4. **Read logs to confirm behavior:**
    - App + chat bridge: `/private/tmp/omi-dev.log` (dev builds) or `/private/tmp/omi.log`.
    - Local Rust backend: stdout of the `./run.sh` process.
-   - Per-user issues: `./scripts/sentry-logs.sh <email>` (crashes), `./scripts/posthog_query.py <email>` (events).
+   - Per-user issues: check Sentry dashboard for crashes, PostHog for events.
 5. **Verify the actual behavior**, not just that the app launched — exercise the feature and check the logs/UI reflect the change.
 
 #### Verifying UI Changes (agent-swift)
@@ -168,7 +175,7 @@ Agents can and should self-test the running app — don't stop at a successful c
 After any Swift UI edit, verify programmatically with [agent-swift](https://github.com/beastoin/agent-swift) (macOS Accessibility API, no app-side instrumentation). Install once: `brew install beastoin/tap/agent-swift`; grant Accessibility permission to Terminal.app.
 
 Edit → Verify → Evidence loop:
-1. Edit code, rebuild + launch: `cd desktop && OMI_APP_NAME="omi-<feature>" ./run.sh`
+1. Edit code, rebuild + launch: `cd desktop/macos && OMI_APP_NAME="omi-<feature>" ./run.sh`
 2. Connect: `agent-swift connect --bundle-id com.omi.omi-<feature>`
 3. Verify: `agent-swift snapshot -i` (interactive elements only)
 4. Interact: `agent-swift click @e3` / `fill @e5 "text"` / `find role button click`
@@ -182,7 +189,7 @@ Key rules:
 - Always use `snapshot -i` — full snapshots of complex apps are very verbose.
 - Argument order: `get <property> <ref>`, `is <condition> <ref>`, `wait <condition> [<target>]`, `find <locator> <value>`.
 - Dev bundle id: `com.omi.desktop-dev`. Prod: `com.omi.computer-macos` (never automate prod).
-- App flows & screen map: `desktop/e2e/SKILL.md`. Full command reference: `agent-swift schema`.
+- App flows & screen map: `desktop/macos/e2e/SKILL.md`. Full command reference: `agent-swift schema`.
 
 ## Computer Control (clicking, typing, screenshots)
 
@@ -191,14 +198,12 @@ For controlling the Mac GUI, use the right tool for each job:
 | Task | Tool | Example |
 |------|------|---------|
 | Click at coordinates | `cliclick` | `cliclick c:X,Y` |
-| Screenshots/OCR | `codriver` | `mcp__codriver__desktop_screenshot` (scale: 0.5) |
+| Mac desktop screenshots | `screencapture` | `screencapture -x /tmp/screen.png` |
 | Native macOS app testing | `agent-swift` | See Desktop section above |
 | Browser automation | `playwright` MCP | Headless, most reliable |
-| Existing browser tabs | `claude-in-chrome` | Only when extension connected |
 
 Rules:
 - NEVER try 3+ different click tools for the same action — pick one and commit.
-- `codriver` at `scale: 0.5` → multiply coordinates by 2 before clicking.
 - Prefer `cliclick` over `automac`/`mac-use-mcp` (coordinate bugs on multi-monitor).
 
 ## Formatting
@@ -217,7 +222,7 @@ Files ending in `.gen.dart` or `.g.dart` are auto-generated — don't format man
 
 - **Before your first commit**, verify the pre-commit hook is installed (see Setup).
 - Before starting work, run `git fetch origin && git pull --ff-only` on `main` — don't branch off stale local state.
-- Always commit to the current branch — never switch branches mid-task. Always work in a git worktree for code changes (`EnterWorktree`).
+- Always commit to the current branch — never switch branches mid-task. Always work in a git worktree for code changes (`git worktree add`).
 - Never push directly to `main`. Land changes through PRs only. Never squash-merge — use a regular merge.
 - Make individual commits per file, not bulk commits.
 - If push fails (remote ahead): `git pull --rebase && git push`.
@@ -237,9 +242,8 @@ Full RELEASE flow + `gh workflow run gcp_backend.yml -f environment=prod -f bran
 
 ## CI/CD & Logs
 
-- Deploy triggers and checks: `docs/runbooks/deploy.md`.
-- Log commands: `docs/runbooks/logging.md`.
-- Desktop release pipeline: merging `desktop/**` to `main` auto-increments the version, tags `v*-macos`, and triggers Codemagic (build, sign, notarize, publish GitHub release, deploy Rust backend). Promote channels with `desktop/scripts/promote_release.sh <tag>` (staging → beta → stable).
+- Desktop release pipeline: merging `desktop/macos/**` to `main` auto-increments the version, tags `v*-macos`, and triggers Codemagic (build, sign, notarize, publish GitHub release, deploy Rust backend).
+- Backend deploy: `gh workflow run gcp_backend.yml -f environment=prod -f branch=main`.
 
 ## Documentation Maintenance
 

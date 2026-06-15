@@ -9455,4 +9455,42 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get objectAnnouncementsLatencyMetric => 'Latency';
+
+  @override
+  String get autoSync => 'Automatinis sinchronizavimas';
+
+  @override
+  String get autoSyncDescription =>
+      'Automatiškai sinchronizuoti neprisijungus įrašytus įrašus, kai prijungiamas įrenginys';
+
+  @override
+  String get backgroundModeTitle => 'Fono režimas';
+
+  @override
+  String get backgroundModeDescription => 'Palikite Omi įrašinėti net kai programėlė visiškai uždaryta.';
+
+  @override
+  String get backgroundModeNote => 'Kol kas veikia tik su Omi įrenginiais ir nuolat tobulinama.';
+
+  @override
+  String get regenerateRecap => 'Sukurti santrauką iš naujo';
+
+  @override
+  String get recapRegeneratedSnackbar => 'Santrauka sukurta iš naujo';
+
+  @override
+  String get recapRegenerateFailed => 'Nepavyko iš naujo sukurti santraukos. Bandykite vėliau.';
+
+  @override
+  String get recapRegenerateCooldown => 'Palaukite kelias sekundes prieš generuodami iš naujo.';
+
+  @override
+  String get recapRegenerateNoConversations => 'Šiai dienai nėra pokalbių, kuriuos būtų galima apibendrinti.';
+
+  @override
+  String get syncCustomSttWarningTitle => 'Sinchronizavimas naudoja Omi transkripciją';
+
+  @override
+  String get syncCustomSttWarningMessage =>
+      'Naudojate savo transkripcijos paslaugą. Sinchronizuojant šiuos įrašus jie transkribuojami Omi serveriuose ir įskaičiuojami į jūsų plano transkripcijos limitą.';
 }

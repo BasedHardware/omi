@@ -9481,4 +9481,42 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get objectAnnouncementsLatencyMetric => 'Latency';
+
+  @override
+  String get autoSync => 'Automatikus szinkronizálás';
+
+  @override
+  String get autoSyncDescription => 'Offline felvételek automatikus szinkronizálása az eszköz csatlakozásakor';
+
+  @override
+  String get backgroundModeTitle => 'Háttérmód';
+
+  @override
+  String get backgroundModeDescription =>
+      'Tartsd az Omi-t felvételen akkor is, amikor az alkalmazás teljesen be van zárva.';
+
+  @override
+  String get backgroundModeNote => 'Egyelőre csak Omi eszközökkel működik, és folyamatosan fejlesztjük.';
+
+  @override
+  String get regenerateRecap => 'Összegzés újragenerálása';
+
+  @override
+  String get recapRegeneratedSnackbar => 'Összegzés újragenerálva';
+
+  @override
+  String get recapRegenerateFailed => 'Nem sikerült újragenerálni az összegzést. Próbáld újra később.';
+
+  @override
+  String get recapRegenerateCooldown => 'Kérlek, várj néhány másodpercet az újragenerálás előtt.';
+
+  @override
+  String get recapRegenerateNoConversations => 'Erre a napra nincsenek összegezhető beszélgetések.';
+
+  @override
+  String get syncCustomSttWarningTitle => 'A szinkronizálás az Omi átiratát használja';
+
+  @override
+  String get syncCustomSttWarningMessage =>
+      'Saját átírási szolgáltatót használsz. Ezek a felvételek szinkronizáláskor az Omi szerverein kerülnek átírásra, és beleszámítanak a csomagod átírási keretébe.';
 }

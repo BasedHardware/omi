@@ -15,6 +15,7 @@ import 'package:omi/services/wals.dart';
 import 'package:omi/ui/molecules/omi_confirm_dialog.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/other/time_utils.dart';
+import 'package:omi/utils/sync_confirmation.dart';
 import 'local_storage_page.dart';
 import 'private_cloud_sync_page.dart';
 import 'synced_conversations_page.dart';
@@ -416,6 +417,11 @@ class _SyncPageState extends State<SyncPage> {
   }
 
   void _handleSyncWals(BuildContext context, SyncProvider syncProvider) async {
+    // Custom STT users: offline files are transcribed on Omi and count toward
+    // the limit. Confirm before proceeding.
+    if (!await confirmSyncForCustomStt(context)) return;
+    if (!context.mounted) return;
+
     final sdCardWals = syncProvider.missingWals.where((wal) => wal.storage == WalStorage.sdcard).toList();
 
     if (sdCardWals.isNotEmpty) {

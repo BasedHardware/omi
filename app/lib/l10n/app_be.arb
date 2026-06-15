@@ -10818,5 +10818,17 @@
   "objectAnnouncementsLatencyMetric": "Latency",
   "@objectAnnouncementsLatencyMetric": {
     "description": "Detect dashboard latency metric label"
-  }
+  },
+  "autoSync": "Аўтасінхранізацыя",
+  "autoSyncDescription": "Аўтаматычна сінхранізаваць офлайн-запісы пры падключэнні прылады",
+  "backgroundModeTitle": "Фонавы рэжым",
+  "backgroundModeDescription": "Працягвайце запіс Omi, нават калі праграма цалкам закрыта.",
+  "backgroundModeNote": "Пакуль працуе толькі з прыладамі Omi і пастаянна ўдасканальваецца.",
+  "regenerateRecap": "Згенераваць рэзюмэ паўторна",
+  "recapRegeneratedSnackbar": "Рэзюмэ перагенеравана",
+  "recapRegenerateFailed": "Не атрымалася перагенераваць рэзюмэ. Паспрабуйце пазней.",
+  "recapRegenerateCooldown": "Калі ласка, пачакайце некалькі секунд перад паўторнай генерацыяй.",
+  "recapRegenerateNoConversations": "Няма размоў для рэзюмавання гэтага дня.",
+  "syncCustomSttWarningTitle": "Сінхранізацыя выкарыстоўвае транскрыпцыю Omi",
+  "syncCustomSttWarningMessage": "Вы карыстаецеся ўласным сэрвісам транскрыпцыі. Сінхранізацыя гэтых запісаў транскрыбуе іх на серверах Omi, і яны залічацца ў ліміт транскрыпцыі вашага тарыфу."
 }

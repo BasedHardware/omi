@@ -1,0 +1,100 @@
+---
+# Reaper for leaked `omi-agent-*` GCE VMs (desktop agent sandboxes).
+#
+# Why this exists: the desktop agent feature provisions one e2-small VM per user
+# (desktop/macos/Backend-Rust/src/routes/agent.rs `create_gce_vm`) but NOTHING ever
+# deletes them. `delete_agent_vm` only clears the Firestore `agentVm` field
+# (services/firestore.rs) — it never calls the GCE delete API, and there is no
+# deprovision route. VMs auto-stop when idle (→ TERMINATED) but linger forever,
+# so every user who ever opened the feature left a permanent VM. This grew to
+# ~280 instances (~$2.7k/mo).
+#
+# This CronJob bounds the fleet hourly:
+#   - delete every TERMINATED omi-agent VM (idle-stopped; the client re-provisions
+#     and re-uploads its DB on next use — the status path already handles a
+#     NOT_FOUND VM gracefully by clearing Firestore, agent.rs ~line 269).
+#   - delete RUNNING omi-agent VMs older than REAP_RUNNING_AGE_DAYS (abandoned;
+#     nobody runs a multi-day continuous agent session).
+#
+# Permanent source fix (separate, larger change): make `delete_agent_vm` issue a
+# real GCE delete + add a `/v2/agent/deprovision` route the desktop client calls
+# on sign-out/quit. This reaper is the backstop that also catches crashes.
+#
+# Set DRY_RUN=true to log what would be deleted without deleting.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: prod-agent-vm-reaper
+  namespace: prod-omi-backend
+spec:
+  schedule: "0 * * * *"  # hourly
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 2
+  timeZone: UTC
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          serviceAccountName: prod-agent-vm-reaper-sa
+          restartPolicy: OnFailure
+          containers:
+          - name: reaper
+            image: google/cloud-sdk:slim
+            env:
+            - name: GCE_PROJECT
+              value: "based-hardware"
+            - name: REAP_RUNNING_AGE_DAYS
+              value: "2"
+            - name: DRY_RUN
+              value: "false"
+            command: ["/bin/bash", "-c"]
+            args:
+            - |
+              set -euo pipefail
+              echo "agent-vm-reaper start project=$GCE_PROJECT running_age_days=$REAP_RUNNING_AGE_DAYS dry_run=$DRY_RUN"
+
+              # RUNNING older than threshold (abandoned) + all TERMINATED (idle-stopped).
+              CUTOFF=$(date -u -d "${REAP_RUNNING_AGE_DAYS} days ago" +%Y-%m-%dT%H:%M:%SZ)
+              FILTER="name~^omi-agent- AND ( status=TERMINATED OR ( status=RUNNING AND creationTimestamp<${CUTOFF} ) )"
+
+              mapfile -t TARGETS < <(gcloud compute instances list \
+                --project="$GCE_PROJECT" \
+                --filter="$FILTER" \
+                --format="value(name,zone)")
+
+              echo "found ${#TARGETS[@]} reapable omi-agent VMs"
+              [ "${#TARGETS[@]}" -eq 0 ] && { echo "nothing to reap"; exit 0; }
+
+              for row in "${TARGETS[@]}"; do
+                name=$(echo "$row" | awk '{print $1}')
+                zone=$(echo "$row" | awk '{print $2}')
+                if [ "$DRY_RUN" = "true" ]; then
+                  echo "DRY_RUN would delete $name ($zone)"
+                else
+                  gcloud compute instances delete "$name" --zone="$zone" \
+                    --project="$GCE_PROJECT" --quiet \
+                    && echo "deleted $name ($zone)" \
+                    || echo "FAILED to delete $name ($zone)"
+                fi
+              done
+              echo "agent-vm-reaper done"
+---
+# Workload-identity SA bound to a GCP SA that can delete GCE instances.
+# After apply, bind it (one-time):
+#   gcloud iam service-accounts add-iam-policy-binding \
+#     agent-vm-reaper@based-hardware.iam.gserviceaccount.com \
+#     --role roles/iam.workloadIdentityUser \
+#     --member "serviceAccount:based-hardware.svc.id.goog[prod-omi-backend/prod-agent-vm-reaper-sa]"
+#   gcloud projects add-iam-policy-binding based-hardware \
+#     --member "serviceAccount:agent-vm-reaper@based-hardware.iam.gserviceaccount.com" \
+#     --role roles/compute.instanceAdmin.v1
+# (Or, if the GKE node default compute SA already has compute.instanceAdmin,
+#  drop the annotation and serviceAccountName and the job uses node creds.)
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: prod-agent-vm-reaper-sa
+  namespace: prod-omi-backend
+  annotations:
+    iam.gke.io/gcp-service-account: agent-vm-reaper@based-hardware.iam.gserviceaccount.com

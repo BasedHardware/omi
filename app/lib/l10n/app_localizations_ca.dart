@@ -9494,4 +9494,43 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get objectAnnouncementsLatencyMetric => 'Latency';
+
+  @override
+  String get autoSync => 'Sincronització automàtica';
+
+  @override
+  String get autoSyncDescription =>
+      'Sincronitza automàticament els enregistraments fora de línia quan el dispositiu es connecti';
+
+  @override
+  String get backgroundModeTitle => 'Mode en segon pla';
+
+  @override
+  String get backgroundModeDescription =>
+      'Mantén l\'Omi gravant fins i tot quan l\'aplicació està completament tancada.';
+
+  @override
+  String get backgroundModeNote => 'De moment només funciona amb dispositius Omi i es millora contínuament.';
+
+  @override
+  String get regenerateRecap => 'Regenera el resum';
+
+  @override
+  String get recapRegeneratedSnackbar => 'Resum regenerat';
+
+  @override
+  String get recapRegenerateFailed => 'No s\'ha pogut regenerar el resum. Torna-ho a provar més tard.';
+
+  @override
+  String get recapRegenerateCooldown => 'Espera uns segons abans de tornar a regenerar.';
+
+  @override
+  String get recapRegenerateNoConversations => 'No hi ha converses per resumir d\'aquest dia.';
+
+  @override
+  String get syncCustomSttWarningTitle => 'La sincronització utilitza la transcripció d\'Omi';
+
+  @override
+  String get syncCustomSttWarningMessage =>
+      'Utilitzes el teu propi proveïdor de transcripció. Sincronitzar aquests enregistraments els transcriu als servidors d\'Omi i compten per al límit de transcripció del teu pla.';
 }

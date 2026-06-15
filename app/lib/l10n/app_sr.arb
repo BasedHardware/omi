@@ -10818,5 +10818,17 @@
   "objectAnnouncementsLatencyMetric": "Latency",
   "@objectAnnouncementsLatencyMetric": {
     "description": "Detect dashboard latency metric label"
-  }
+  },
+  "autoSync": "Аутоматска синхронизација",
+  "autoSyncDescription": "Аутоматски синхронизуј офлајн снимке када се уређај повеже",
+  "backgroundModeTitle": "Позадински режим",
+  "backgroundModeDescription": "Задржите Omi снимање чак и када је апликација потпуно затворена.",
+  "backgroundModeNote": "Засад ради само са Omi уређајима и непрекидно се побољшава.",
+  "regenerateRecap": "Поново генериши резиме",
+  "recapRegeneratedSnackbar": "Резиме је поново генерисан",
+  "recapRegenerateFailed": "Није могуће поново генерисати резиме. Покушајте поново касније.",
+  "recapRegenerateCooldown": "Сачекајте неколико секунди пре поновног генерисања.",
+  "recapRegenerateNoConversations": "Нема разговора за сумирање за овај дан.",
+  "syncCustomSttWarningTitle": "Синхронизација користи Omi транскрипцију",
+  "syncCustomSttWarningMessage": "Користите сопственог пружаоца транскрипције. Синхронизација ових снимака их транскрибује на Omi серверима и рачунају се у лимит транскрипције вашег плана."
 }

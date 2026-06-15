@@ -9437,4 +9437,41 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get objectAnnouncementsLatencyMetric => 'Latency';
+
+  @override
+  String get autoSync => 'Auto-Sync';
+
+  @override
+  String get autoSyncDescription => 'Automatically sync offline recordings when your device connects';
+
+  @override
+  String get backgroundModeTitle => 'Background Mode';
+
+  @override
+  String get backgroundModeDescription => 'Keep your Omi recording even when the app is fully closed.';
+
+  @override
+  String get backgroundModeNote => 'Works with Omi devices only for now, and is being improved continuously.';
+
+  @override
+  String get regenerateRecap => 'Regenerate recap';
+
+  @override
+  String get recapRegeneratedSnackbar => 'Recap regenerated';
+
+  @override
+  String get recapRegenerateFailed => 'Couldn\'t regenerate the recap. Try again later.';
+
+  @override
+  String get recapRegenerateCooldown => 'Please wait a few seconds before regenerating again.';
+
+  @override
+  String get recapRegenerateNoConversations => 'No conversations to summarize for this day.';
+
+  @override
+  String get syncCustomSttWarningTitle => 'Sync uses Omi transcription';
+
+  @override
+  String get syncCustomSttWarningMessage =>
+      'You use your own transcription provider. Syncing these recordings transcribes them on Omi\'s servers instead, and they count toward your plan\'s transcription limit.';
 }
