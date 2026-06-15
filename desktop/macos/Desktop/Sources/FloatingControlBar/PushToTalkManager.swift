@@ -42,6 +42,16 @@ class PushToTalkManager: ObservableObject {
   // Realtime omni STT (replaces Deepgram). Connects through the omi backend relay.
   private var realtimeOmniService: RealtimeOmniService?
   private var isOmniSTT = false
+  // Realtime-as-hub (Phase 1): when active, the realtime model is THE hub — it does
+  // in-session STT + reasoning + routing (tool choice) + speaks the reply. Mic PCM is
+  // streamed to RealtimeHubController; there is no transcript→router→ChatProvider hop.
+  private var isHubMode = false
+  // Cached local cue for the instant PTT-up ack (preloaded so play() never hits disk).
+  private lazy var ackSound: NSSound? = {
+    let s = NSSound(named: "Pop")
+    s?.volume = 0.35
+    return s
+  }()
   // Mic chunks captured before the relay finishes connecting (raw 16k PCM),
   // flushed once the service exists so the user's first words aren't clipped.
   private var omniPreconnectBuffer: [Data] = []
@@ -73,6 +83,10 @@ class PushToTalkManager: ObservableObject {
     self.barState = barState
     hasMicPermission = AudioCaptureService.checkPermission()
     installEventMonitors()
+    // Realtime hub: wire it to the bar and warm the WS if it's enabled + BYOK-keyed,
+    // so the persistent socket is ready before the first PTT (and stays warm after).
+    RealtimeHubController.shared.setup(barState: barState)
+    RealtimeHubController.shared.ensureWarm()
     log("PushToTalkManager: setup complete, micPermission=\(hasMicPermission)")
   }
 
@@ -314,6 +328,10 @@ class PushToTalkManager: ObservableObject {
     liveFinalizationTimeout = nil
     contextCaptureTask?.cancel()
     contextCaptureTask = nil
+    if isHubMode {
+      isHubMode = false
+      RealtimeHubController.shared.cancelTurn()
+    }
     stopAudioTranscription()
     state = .idle
     transcriptSegments = []
@@ -406,6 +424,26 @@ class PushToTalkManager: ObservableObject {
     audioCaptureService?.stopCapture()
     activeTracer?.end("audio_capture")
     activeTracer?.end("ptt_recording")
+
+    // Realtime hub: the instant the user releases PTT, play a cached local cue and
+    // show "…" — BEFORE any token arrives — then commit the turn. The hub speaks
+    // the reply and dispatches tools itself; no transcript/router/LLM hop here.
+    if isHubMode {
+      isHubMode = false
+      if ShortcutSettings.shared.pttSoundsEnabled { ackSound?.play() }
+      barState?.voiceTranscript = "…"
+      RealtimeHubController.shared.commitTurn()
+      // Tracer for the hub turn lives client-side only as a recording span; the
+      // realtime round-trip isn't instrumented in Phase 1. Drop it unsent.
+      activeTracer = nil
+      state = .idle
+      // Leave the bar in its voice state showing "…"; the hub controller exits the
+      // voice UI on turn completion (so we skip the clearing updateBarState()).
+      AnalyticsManager.shared.floatingBarPTTEnded(
+        mode: finalizedMode, hadTranscript: true, transcriptLength: 0)
+      log("PushToTalkManager: hub turn committed (instant ack)")
+      return
+    }
 
     // Silence gate — an accidental tap (or a hold with nothing said) records
     // near-silence. Drop the turn here instead of letting STT hallucinate a
@@ -652,6 +690,19 @@ class PushToTalkManager: ObservableObject {
       return
     }
 
+    // Realtime-as-hub (Phase 1): when enabled + BYOK-keyed, the realtime model
+    // drives this turn end-to-end (in-session STT + reasoning + tool-choice routing
+    // + spoken reply). Stream mic PCM to the hub and skip both the omni/Deepgram
+    // STT path AND the transcript→router→ChatProvider hop. The Haiku classify()
+    // router is bypassed — routing is the model's tool choice.
+    if RealtimeHubController.shared.isActive {
+      isHubMode = true
+      RealtimeHubController.shared.beginTurn()
+      startMicCapture()
+      log("PushToTalkManager: realtime hub active — model is the voice hub")
+      return
+    }
+
     // The floating bar's STT is the realtime omni model (replaces Deepgram):
     // one omni model transcribes; reasoning/tools/TTS are untouched (the final
     // transcript still goes to ChatProvider via sendTranscript()/sendQuery()).
@@ -730,6 +781,11 @@ class PushToTalkManager: ObservableObject {
         try await capture.startCapture(
           onAudioChunk: { [weak self] audioData in
             guard let self else { return }
+            if self.isHubMode {
+              // Realtime hub owns this turn — stream mic PCM straight to it.
+              RealtimeHubController.shared.feedAudio(audioData)
+              return
+            }
             if self.isOmniSTT {
               // Realtime omni: stream mic PCM (resampled to the provider's rate),
               // or buffer raw until the relay finishes connecting.
