@@ -417,6 +417,49 @@ class PushToTalkManager: ObservableObject {
     return (Double(sampleCount) / 16000.0, Double(voicedFrames) * 0.02)
   }
 
+  // Real speech detector for the hub gate (Silero VAD, on-device). Energy ≠ speech:
+  // a cough/click/keyboard clack is loud but not speech, and a too-loose amplitude
+  // gate lets those through (model answers a non-question) while a too-tight one
+  // drops real speech. Silero classifies speech directly — the same client-side
+  // pre-commit decision Clicky makes (speech → commit; else → input_audio_buffer.clear).
+  private static let hubVAD: SileroVADModel? = SileroVADModel()
+
+  /// True when the turn contains sustained real speech. Falls back to the amplitude
+  /// gate if the VAD model isn't available (ONNX missing) so we never silently drop
+  /// every turn.
+  static func hubTurnHasSpeech(pcm16k data: Data) -> Bool {
+    let count = data.count / 2
+    guard Double(count) / 16000.0 >= hubMinTurnAudioSeconds else { return false }  // too short
+    guard let vad = hubVAD, count >= 512 else {
+      let (total, voiced) = voicedAudioSeconds(pcm16k: data, rmsThreshold: hubVoicedRMSThreshold)
+      return total >= hubMinTurnAudioSeconds && voiced >= hubMinVoicedSeconds
+    }
+    var floats = [Float](repeating: 0, count: count)
+    data.withUnsafeBytes { (raw: UnsafeRawBufferPointer) in
+      let s = raw.bindMemory(to: Int16.self)
+      for i in 0..<count { floats[i] = Float(s[i]) / 32768.0 }
+    }
+    vad.resetStates()
+    var maxRun = 0
+    var run = 0
+    var speechFrames = 0
+    var i = 0
+    while i + 512 <= count {
+      let p = vad.predict(Array(floats[i..<(i + 512)]))
+      if p > 0.5 {
+        speechFrames += 1
+        run += 1
+        maxRun = max(maxRun, run)
+      } else {
+        run = 0
+      }
+      i += 512
+    }
+    // ~160ms contiguous speech (rejects a single cough/click), or ~320ms total.
+    // Each Silero frame is 512 samples = 32ms at 16kHz.
+    return maxRun >= 5 || speechFrames >= 10
+  }
+
   private func finalize() {
     guard state == .listening || state == .lockedListening || state == .pendingLockDecision else { return }
 
@@ -446,11 +489,10 @@ class PushToTalkManager: ObservableObject {
       let turnAudio = batchAudioBuffer
       batchAudioBuffer = Data()
       batchAudioLock.unlock()
-      let (totalSec, voicedSec) = Self.voicedAudioSeconds(
-        pcm16k: turnAudio, rmsThreshold: Self.hubVoicedRMSThreshold)
-      if totalSec < Self.hubMinTurnAudioSeconds || voicedSec < Self.hubMinVoicedSeconds {
+      let totalSec = Double(turnAudio.count / 2) / 16000.0
+      if !Self.hubTurnHasSpeech(pcm16k: turnAudio) {
         log(
-          "PushToTalkManager: discarding silent hub turn (audio \(String(format: "%.2f", totalSec))s, voiced \(String(format: "%.2f", voicedSec))s) — not committing"
+          "PushToTalkManager: discarding hub turn — no sustained speech (Silero VAD), audio \(String(format: "%.2f", totalSec))s — not committing"
         )
         RealtimeHubController.shared.cancelTurn()
         AnalyticsManager.shared.floatingBarPTTEnded(
