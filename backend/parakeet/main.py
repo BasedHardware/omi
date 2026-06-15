@@ -31,6 +31,7 @@ logger = logging.getLogger(__name__)
 
 ACTIVE_STREAMS = Gauge('parakeet_active_streams', 'Active /v3/stream WebSocket connections')
 ACTIVE_BATCH = Gauge('parakeet_active_batch_requests', 'Active batch transcription requests')
+PENDING_REQUESTS = Gauge('parakeet_batch_pending_requests', 'Pending requests in batch engine queue')
 REQUEST_DURATION = Histogram(
     'parakeet_request_duration_seconds',
     'Request latency',
@@ -118,7 +119,9 @@ async def transcribe(file: UploadFile = File(...)):
         await loop.run_in_executor(_io_pool, _write_file, file_path, data)
 
         if batch_engine is not None:
+            PENDING_REQUESTS.set(len(batch_engine._pending))
             result = await batch_engine.submit(file_path, timestamps=True, owns_file=True)
+            PENDING_REQUESTS.set(len(batch_engine._pending))
             return JSONResponse(content=_transcribe_from_gpu_result(result))
         else:
             result = await loop.run_in_executor(_diarize_pool, transcribe_file, file_path)
@@ -149,7 +152,9 @@ async def transcribe_v2(
         await loop.run_in_executor(_io_pool, _write_file, file_path, data)
 
         if batch_engine is not None:
+            PENDING_REQUESTS.set(len(batch_engine._pending))
             gpu_result = await batch_engine.submit(file_path, timestamps=True, owns_file=False)
+            PENDING_REQUESTS.set(len(batch_engine._pending))
             result = await loop.run_in_executor(
                 _diarize_pool, functools.partial(transcribe_file_v2, file_path, gpu_result=gpu_result, diarize=diarize)
             )
@@ -232,5 +237,6 @@ async def health_check():
 @app.get("/batch/metrics")
 async def batch_metrics():
     if batch_engine is not None:
+        PENDING_REQUESTS.set(len(batch_engine._pending))
         return batch_engine.metrics
     return {}

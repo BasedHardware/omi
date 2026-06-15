@@ -176,7 +176,7 @@ autoscaling:
         value: 2
         periodSeconds: 60
       selectPolicy: Max
-  streamsPerPod: 60
+  requestsPerPod: 25
   targetGPUUtilization: 70
 
 # Additional volumes on the output Deployment definition.

@@ -65,6 +65,7 @@ def _make_app_with_mocks(gpu_ready=True, nim_mode=False):
     mock_gpu.is_ready = gpu_ready
 
     mock_engine = MagicMock(spec=BatchEngine)
+    mock_engine._pending = []
     mock_engine.metrics = {
         "total_requests": 10,
         "total_batches": 3,
