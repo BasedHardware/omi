@@ -48,6 +48,8 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     NotificationCenter.default.addObserver(
       self, selector: #selector(settingsChanged),
       name: .realtimeHubSettingsDidChange, object: nil)
+    // Expose the headless E2E action (omi-ctl action hub_test_turn pcm=… provider=…).
+    RealtimeHubTestHarness.registerAutomationAction()
   }
 
   @objc private func settingsChanged() {
