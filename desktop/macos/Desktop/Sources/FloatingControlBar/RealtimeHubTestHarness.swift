@@ -35,7 +35,7 @@ final class RealtimeHubTestHarness: NSObject, RealtimeHubSessionDelegate {
   }
 
   func run(timeoutSeconds: Double) async -> [String: String] {
-    let s = RealtimeHubSession(provider: provider, apiKey: apiKey, delegate: self)
+    let s = RealtimeHubSession(provider: provider, auth: .byokKey(apiKey), delegate: self)
     session = s
     let rate = s.requiredInputSampleRate
     let audio = rate == 16000 ? pcm16k : PushToTalkManager.resamplePCM16(pcm16k, from: 16000, to: rate)
