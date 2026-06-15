@@ -768,12 +768,21 @@ class PushToTalkManager: ObservableObject {
       // Retain the turn's raw audio so finalize() can silence-gate it.
       batchAudioLock.lock(); batchAudioBuffer = Data(); batchAudioLock.unlock()
       RealtimeHubController.shared.beginTurn()
-      // Capture from the system default mic — on AirPods/BT that's the headset mic
-      // the user is actually speaking into. (We tried forcing the built-in mic to
-      // keep the BT output in A2DP, but then the laptop mic hears nothing when the
-      // user talks into their AirPods → every turn was dropped as silent. Listening
-      // wins; the reply just rides the BT device's HFP mode.)
-      startMicCapture()
+      // Bluetooth output: opening a BT mic forces the device into 16 kHz HFP mode,
+      // which drops the OUTPUT rate too and chops the spoken reply (the A2DP↔HFP
+      // flap). So when output is Bluetooth, capture from the built-in mic instead —
+      // the BT device stays in A2DP and the reply plays full-quality. Trade-off: it
+      // then listens via the Mac mic, so the user must speak toward the laptop
+      // (talking into far AirPods won't register). The gentle hub silence gate
+      // (170 RMS) lets the built-in mic register far better than the old 300-RMS one.
+      if AudioCaptureService.isDefaultOutputBluetooth(),
+        let builtIn = AudioCaptureService.findBuiltInMicDeviceID()
+      {
+        log("PushToTalkManager: hub on Bluetooth output — capturing from built-in mic to keep A2DP")
+        startMicCapture(overrideDeviceID: builtIn)
+      } else {
+        startMicCapture()
+      }
       log("PushToTalkManager: realtime hub active — model is the voice hub")
       return
     }
