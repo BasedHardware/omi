@@ -41,9 +41,27 @@ protocol RealtimeHubSessionDelegate: AnyObject {
   func hubDidError(_ message: String)
 }
 
+/// How the client authenticates to the realtime provider:
+///   • byokKey   — the user's own provider key (Phase 1, client-direct, no backend)
+///   • ephemeral — a short-lived token minted by the omi backend (Phase 2, managed)
+/// OpenAI takes either as the `Authorization: Bearer` value. Gemini differs: a BYOK
+/// key uses `?key=` on the normal BidiGenerateContent endpoint; an ephemeral token
+/// uses `?access_token=` on the BidiGenerateContentConstrained endpoint (v1alpha).
+enum HubAuth {
+  case byokKey(String)
+  case ephemeral(String)
+  var value: String {
+    switch self {
+    case .byokKey(let k): return k
+    case .ephemeral(let t): return t
+    }
+  }
+  var isEphemeral: Bool { if case .ephemeral = self { return true } else { return false } }
+}
+
 final class RealtimeHubSession: NSObject {
   private let provider: RealtimeHubProvider
-  private let apiKey: String
+  private let auth: HubAuth
   private weak var delegate: RealtimeHubSessionDelegate?
 
   /// Mic PCM input rate per provider (Gemini 16k native, OpenAI GA needs 24k).
@@ -81,9 +99,9 @@ final class RealtimeHubSession: NSObject {
   /// clear which model produced which event.
   private var tag: String { "RealtimeHub[\(provider == .openai ? "openai" : "gemini"):\(provider.modelID)]" }
 
-  init(provider: RealtimeHubProvider, apiKey: String, delegate: RealtimeHubSessionDelegate) {
+  init(provider: RealtimeHubProvider, auth: HubAuth, delegate: RealtimeHubSessionDelegate) {
     self.provider = provider
-    self.apiKey = apiKey
+    self.auth = auth
     self.delegate = delegate
     super.init()
   }
@@ -283,18 +301,30 @@ final class RealtimeHubSession: NSObject {
   private func makeRequest() -> URLRequest? {
     switch provider {
     case .openai:
+      // BYOK key and ephemeral token both ride the Bearer header (verified). GA: no
+      // OpenAI-Beta header. Same endpoint either way.
       guard let url = URL(string: "wss://api.openai.com/v1/realtime?model=\(provider.modelID)")
       else { return nil }
       var r = URLRequest(url: url)
-      // GA: Bearer only, no OpenAI-Beta header.
-      r.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
+      r.setValue("Bearer \(auth.value)", forHTTPHeaderField: "Authorization")
       return r
     case .gemini:
-      // Key travels in the query string for the BidiGenerateContent endpoint.
-      let base =
-        "wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent"
+      // Ephemeral tokens require the *Constrained* endpoint on v1alpha with
+      // ?access_token= (verified); a BYOK key uses the plain endpoint on v1beta
+      // with ?key=. (Apple's WS stacks can't reach either — RawWebSocket handles it.)
+      let prefix = "wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage"
+      let base: String
+      let param: String
+      switch auth {
+      case .ephemeral:
+        base = "\(prefix).v1alpha.GenerativeService.BidiGenerateContentConstrained"
+        param = "access_token"
+      case .byokKey:
+        base = "\(prefix).v1beta.GenerativeService.BidiGenerateContent"
+        param = "key"
+      }
       guard var comps = URLComponents(string: base) else { return nil }
-      comps.queryItems = [URLQueryItem(name: "key", value: apiKey)]
+      comps.queryItems = [URLQueryItem(name: param, value: auth.value)]
       guard let url = comps.url else { return nil }
       return URLRequest(url: url)
     }
