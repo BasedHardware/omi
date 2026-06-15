@@ -110,6 +110,29 @@ async fn mint_session(
     .map(Json)
 }
 
+/// Send a mint request and return the parsed JSON body, mapping transport errors to
+/// BadGateway and any non-2xx upstream to Upstream (so the client falls back).
+async fn send_and_parse(
+    req: reqwest::RequestBuilder,
+    provider: &str,
+    uid: &str,
+) -> Result<serde_json::Value, MintError> {
+    let resp = req
+        .send()
+        .await
+        .map_err(|e| MintError::BadGateway(e.to_string()))?;
+    let status = StatusCode::from_u16(resp.status().as_u16()).unwrap_or(StatusCode::BAD_GATEWAY);
+    let text = resp
+        .text()
+        .await
+        .map_err(|e| MintError::BadGateway(e.to_string()))?;
+    if !status.is_success() {
+        tracing::warn!("realtime mint({}) {} for uid={}: {}", provider, status, uid, text);
+        return Err(MintError::Upstream(status, text));
+    }
+    serde_json::from_str(&text).map_err(|e| MintError::BadGateway(e.to_string()))
+}
+
 async fn mint_openai(state: &AppState, uid: &str) -> Result<MintResponse, MintError> {
     let key = state
         .config
@@ -124,34 +147,18 @@ async fn mint_openai(state: &AppState, uid: &str) -> Result<MintResponse, MintEr
     let body = serde_json::json!({
         "session": { "type": "realtime", "model": OPENAI_REALTIME_MODEL }
     });
-
-    let resp = http_client()
+    let req = http_client()
         .post(OPENAI_CLIENT_SECRETS_URL)
         .bearer_auth(key)
-        .json(&body)
-        .send()
-        .await
-        .map_err(|e| MintError::BadGateway(e.to_string()))?;
+        .json(&body);
 
-    let status = StatusCode::from_u16(resp.status().as_u16()).unwrap_or(StatusCode::BAD_GATEWAY);
-    let text = resp
-        .text()
-        .await
-        .map_err(|e| MintError::BadGateway(e.to_string()))?;
-    if !status.is_success() {
-        tracing::warn!("realtime mint(openai) {} for uid={}: {}", status, uid, text);
-        return Err(MintError::Upstream(status, text));
-    }
-    let json: serde_json::Value =
-        serde_json::from_str(&text).map_err(|e| MintError::BadGateway(e.to_string()))?;
+    let json = send_and_parse(req, "openai", uid).await?;
     let token = json
         .get("value")
         .and_then(|v| v.as_str())
         .ok_or_else(|| MintError::BadGateway("openai mint: no client secret in response".into()))?
         .to_string();
-    let expires_at = json
-        .get("expires_at")
-        .map(|v| v.to_string());
+    let expires_at = json.get("expires_at").map(|v| v.to_string());
     tracing::info!("realtime mint(openai) ok for uid={}", uid);
     Ok(MintResponse {
         provider: "openai".to_string(),
@@ -187,26 +194,12 @@ async fn mint_gemini(state: &AppState, uid: &str) -> Result<MintResponse, MintEr
         "expireTime": expire,
         "newSessionExpireTime": new_session_expire,
     });
-
-    let resp = http_client()
+    let req = http_client()
         .post(GEMINI_AUTH_TOKENS_URL)
         .query(&[("key", key)])
-        .json(&body)
-        .send()
-        .await
-        .map_err(|e| MintError::BadGateway(e.to_string()))?;
+        .json(&body);
 
-    let status = StatusCode::from_u16(resp.status().as_u16()).unwrap_or(StatusCode::BAD_GATEWAY);
-    let text = resp
-        .text()
-        .await
-        .map_err(|e| MintError::BadGateway(e.to_string()))?;
-    if !status.is_success() {
-        tracing::warn!("realtime mint(gemini) {} for uid={}: {}", status, uid, text);
-        return Err(MintError::Upstream(status, text));
-    }
-    let json: serde_json::Value =
-        serde_json::from_str(&text).map_err(|e| MintError::BadGateway(e.to_string()))?;
+    let json = send_and_parse(req, "gemini", uid).await?;
     let token = json
         .get("name")
         .and_then(|v| v.as_str())
