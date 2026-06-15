@@ -5,47 +5,56 @@ Prometheus + Grafana + Loki observability stack for the Omi backend on GKE.
 ## Architecture
 
 ```
-┌─────────────────────────────────────────────────────────────────────────┐
-│  GKE Cluster (prod-omi-gke / dev-omi-gke)                             │
-│                                                                        │
-│  ┌──────────────┐   scrape    ┌─────────────┐   query   ┌──────────┐  │
-│  │ Pod metrics   │──────────►│  Prometheus   │◄─────────│ Grafana  │  │
-│  │ (app /metrics)│           │  (10d, 50Gi)  │          │ monitor  │  │
-│  └──────────────┘           └───────┬───────┘          │ .omi.me  │  │
-│                                      │                   └────┬─────┘  │
-│  ┌──────────────┐   scrape          │ metrics API            │         │
-│  │ DCGM exporter │──────────►       │                        │ query   │
-│  │ (GKE addon)   │                  ▼                        │         │
-│  └──────────────┘           ┌───────────────┐               │         │
-│                              │  prometheus-   │               │         │
-│  ┌──────────────┐   export  │  adapter       │               │         │
-│  │ Stackdriver   │─────────►│  (custom HPA)  │               │         │
-│  │ exporter      │          └───────┬────────┘               │         │
-│  └──────────────┘                   │                        │         │
-│                                      │ custom.metrics         │         │
-│                                      ▼ .k8s.io               │         │
-│                              ┌──────────────┐               │         │
-│                              │  HPA          │               │         │
-│                              │  controllers  │               │         │
-│                              └──────────────┘               │         │
-│                                                              │         │
-│  ┌──────────────┐   collect  ┌──────────┐   query           │         │
-│  │ Pod logs      │──────────►│  Loki     │◄─────────────────┘         │
-│  │ (stdout/err)  │ (k8s API) │ (GCS,15d) │                            │
-│  └──────────────┘           └──────────┘                             │
-│         ▲                        ▲                                     │
-│         │                        │                                     │
-│     Alloy                    basic auth                                │
-│    (DaemonSet)             (loki-basic-auth)                          │
-└─────────────────────────────────────────────────────────────────────────┘
+┌───────────────────────────────────────────────────────────────────────────┐
+│  GKE Cluster (prod-omi-gke / dev-omi-gke)                               │
+│                                                                           │
+│  ┌──────────────┐   scrape    ┌─────────────┐   query   ┌────────────┐  │
+│  │ Pod metrics   │──────────►│  Prometheus   │◄─────────│  Grafana   │  │
+│  │ (app /metrics)│           │  (10d, 50Gi)  │          │ prod: monitor│ │
+│  └──────────────┘           └───────┬───────┘          │   .omi.me   │ │
+│                                      │                   │ dev: monitor│ │
+│  ┌──────────────┐   scrape          │                   │  .omiapi.com│ │
+│  │ DCGM exporter │──────────►       │                   └─────┬──────┘  │
+│  │ (GKE addon)   │                  │                          │         │
+│  └──────────────┘                   │ query                   │ query   │
+│                                      ▼                         │         │
+│  ┌──────────────┐   scrape  ┌───────────────┐                │         │
+│  │ Stackdriver   │────────►│  prometheus-   │                │         │
+│  │ exporter      │  (via    │  adapter       │                │         │
+│  │ (GCP metrics) │  Prom)   │  (HPA metrics) │                │         │
+│  └──────────────┘          └───────┬────────┘                │         │
+│                                     │                         │         │
+│                          ┌──────────┴──────────┐             │         │
+│                          │ external.metrics     │             │         │
+│                          │ custom.metrics.k8s.io│             │         │
+│                          └──────────┬──────────┘             │         │
+│                                     ▼                         │         │
+│                             ┌──────────────┐                 │         │
+│                             │  HPA          │                 │         │
+│                             │  controllers  │                 │         │
+│                             └──────────────┘                 │         │
+│                                                               │         │
+│  ┌──────────────┐   collect  ┌──────────┐   query            │         │
+│  │ Pod logs      │──────────►│  Loki     │◄──────────────────┘         │
+│  │ (stdout/err)  │ (k8s API) │ (GCS,15d) │                             │
+│  └──────────────┘           └──────────┘                              │
+│         ▲                        ▲                                      │
+│         │                        │                                      │
+│     Alloy                    basic auth                                 │
+│    (DaemonSet)        (alloy-basic-auth → loki-basic-auth)             │
+└───────────────────────────────────────────────────────────────────────────┘
 ```
+
+Note: Stackdriver exporter is scraped by Prometheus (job `prometheus-stackdriver-metrics`), then prometheus-adapter queries Prometheus for those metrics. The exporter does not feed the adapter directly.
 
 ## Components
 
 | Component | Chart | Purpose | Namespace |
 |-----------|-------|---------|-----------|
 | **Prometheus** | `kube-prometheus-stack` | Metrics collection, 10d retention, 50Gi storage | `{env}-omi-monitoring` |
-| **Grafana** | `kube-prometheus-stack` | Dashboards and alerting at `monitor.omi.me` | `{env}-omi-monitoring` |
+| **Grafana** | `kube-prometheus-stack` | Dashboards and alerting (prod: `monitor.omi.me`, dev: `monitor.omiapi.com`) | `{env}-omi-monitoring` |
+| **Alertmanager** | `kube-prometheus-stack` | Alert routing and notification | `{env}-omi-monitoring` |
+| **Grafana Image Renderer** | `kube-prometheus-stack` | Alert screenshot capture | `{env}-omi-monitoring` |
 | **Loki** | `loki` | Log aggregation, distributed mode, GCS backend, 15d retention | `{env}-omi-monitoring` |
 | **Alloy** | `alloy` (k8s-monitoring) | Pod log collection via Kubernetes API | `{env}-omi-monitoring` |
 | **prometheus-adapter** | `prometheus-adapter` | Translates Prometheus metrics → K8s custom metrics API for HPA | `{env}-omi-monitoring` |
@@ -74,15 +83,17 @@ Pods set annotations (`prometheus.io/scrape: "true"`, `prometheus.io/port`, `pro
 
 Backend-listen and pusher require bearer token auth via the `metrics-scrape-token` secret.
 
-### Scrape Jobs (prod)
+### Custom Scrape Jobs (prod)
+
+These are the `additionalScrapeConfigs` and ServiceMonitor targets. Built-in kube-prometheus-stack targets (kube-state-metrics, node-exporter, kubelet, Alertmanager, Prometheus itself) are not listed here.
 
 | Job | Target | Interval | Auth |
 |-----|--------|----------|------|
 | `backend-listen-metrics` | backend-listen pods `/metrics:8080` | 15s | Bearer token |
 | `pusher-metrics` | pusher pods `/metrics:8080` | 15s | Bearer token |
 | `dg_engine_metrics` | DG engine pods in `prod-omi-dg-self-hosted` | 2s | None |
-| `gpu-metrics` | DCGM exporter pods in `gke-managed-system` | 1s | None |
-| `prometheus-stackdriver-metrics` | Stackdriver exporter | 1s | None |
+| `gpu-metrics` | all pods in `gke-managed-system` (includes DCGM exporter) | 1s | None |
+| `prometheus-stackdriver-metrics` | Stackdriver exporter in `prod-omi-monitoring` | 1s | None |
 | ServiceMonitor: `parakeet` | parakeet pods `/metrics:9091` | 15s | None |
 
 ### Log Pipeline
@@ -111,7 +122,9 @@ Prometheus scrapes these via the `gpu-metrics` job. GPU node pools:
 
 ### HPA Custom Metrics (prometheus-adapter)
 
-The adapter translates Prometheus queries into the K8s `external.metrics.k8s.io` API so HPAs can scale on custom metrics.
+The adapter translates Prometheus queries into K8s metrics APIs so HPAs can scale on custom metrics. It serves two APIs:
+- `external.metrics.k8s.io` — namespace-scoped metrics (most HPA metrics use this)
+- `custom.metrics.k8s.io` — pod-scoped metrics (parakeet uses this for `parakeet_active_streams` and `parakeet_active_requests_total`)
 
 | Metric | Source | Used by |
 |--------|--------|---------|
@@ -263,11 +276,16 @@ helm -n {env}-omi-monitoring upgrade --install {env}-omi-prometheus-adapter \
 
 3. Verify the metric is exposed:
 ```bash
+# For External metrics (namespace-scoped, most common):
 kubectl get --raw "/apis/external.metrics.k8s.io/v1beta1/namespaces/{env}-omi-backend/myservice_custom_metric"
+
+# For Pods metrics (pod-scoped, used by parakeet):
+kubectl get --raw "/apis/custom.metrics.k8s.io/v1beta1/namespaces/{env}-omi-backend/pods/*/myservice_pod_metric"
 ```
 
 4. Reference in your HPA:
 ```yaml
+# External metric (namespace-scoped):
 metrics:
   - type: External
     external:
@@ -276,13 +294,23 @@ metrics:
       target:
         type: Value
         value: "70"
+
+# Pods metric (per-pod average):
+metrics:
+  - type: Pods
+    pods:
+      metric:
+        name: myservice_pod_metric
+      target:
+        type: AverageValue
+        averageValue: "25"
 ```
 
-**Parakeet adapter rules:** The parakeet chart defines adapter rules in its own `values.yaml` under `prometheus-adapter.rules`, but these must be merged into the cluster-wide adapter config (the `prometheus-adapter/` values in this directory). The parakeet sub-chart adapter is disabled (`prometheus-adapter.enabled: false`) to avoid deploying a second adapter that would conflict with the cluster-scoped APIService.
+**Parakeet adapter rules:** The parakeet chart defines adapter rules in its own `values.yaml` under `prometheus-adapter.rules`, but these are NOT yet present in the cluster-wide adapter config (`prometheus-adapter/` values in this directory). They must be manually merged into `prometheus-adapter/{env}_omi_prometheus_adapter.yaml` before parakeet HPA can use them. The parakeet sub-chart adapter is disabled (`prometheus-adapter.enabled: false`) to avoid deploying a second adapter that would conflict with the cluster-scoped APIService.
 
 ### Grafana Dashboards
 
-Grafana is at `https://monitor.omi.me/`. Dashboards are currently managed via the Grafana UI (not version-controlled).
+Grafana: prod at `https://monitor.omi.me/`, dev at `https://monitor.omiapi.com/`. Dashboards are currently managed via the Grafana UI (not version-controlled).
 
 **To export a dashboard as JSON:**
 ```bash
@@ -325,12 +353,12 @@ Emergency edits in the Grafana UI are acceptable but must be exported back to th
 
 ```
 backend/charts/monitoring/
-├── dashboards/                          # Grafana dashboard JSON files
+├── dashboards/                          # (proposed) Grafana dashboard JSON files
 │   ├── backend-listen-overview.json
 │   ├── pusher-overview.json
 │   ├── parakeet-gpu.json
 │   └── ...
-├── alerts/                              # PrometheusRule or Grafana alert YAML
+├── alerts/                              # (proposed) PrometheusRule or Grafana alert YAML
 │   └── ...
 ├── kube-prometheus-stack/               # existing
 ├── prometheus-adapter/                  # existing
@@ -411,34 +439,63 @@ This can be scripted and run as a periodic check or pre-merge CI step once dashb
 
 ## Helm Upgrade Commands
 
+Run from `backend/charts/monitoring/`. Ensure repos are added first:
 ```bash
-# kube-prometheus-stack
-helm -n {env}-omi-monitoring upgrade --install {env}-omi-kube-prometheus-stack \
-  prometheus-community/kube-prometheus-stack \
-  -f kube-prometheus-stack/{env}_omi_monitoring_values.yaml
-
-# prometheus-adapter
-helm -n {env}-omi-monitoring upgrade --install {env}-omi-prometheus-adapter \
-  prometheus-community/prometheus-adapter \
-  -f prometheus-adapter/{env}_omi_prometheus_adapter.yaml
-
-# Loki
-helm -n {env}-omi-monitoring upgrade --install {env}-omi-loki \
-  grafana/loki \
-  -f loki/{env}_omi_loki_values.yaml
-
-# Alloy (k8s-monitoring)
-helm -n {env}-omi-monitoring upgrade --install {env}-omi-k8s-monitoring \
-  grafana/k8s-monitoring \
-  -f alloy/{env}_omi_k8s_monitoring_values.yml
-
-# Stackdriver exporter
-helm -n {env}-omi-monitoring upgrade --install {env}-omi-prometheus-stackdriver-exporter \
-  prometheus-community/prometheus-stackdriver-exporter \
-  -f prometheus-stackdriver-exporter/{env}_omi_stackdriver_exporter.yaml
+helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+helm repo add grafana https://grafana.github.io/helm-charts
+helm repo update
 ```
 
-Replace `{env}` with `prod` or `dev`.
+**Prod** (release names use `prod-omi-` prefix):
+```bash
+# kube-prometheus-stack
+helm -n prod-omi-monitoring upgrade --install prod-omi-kube-prometheus-stack \
+  prometheus-community/kube-prometheus-stack \
+  -f kube-prometheus-stack/prod_omi_monitoring_values.yaml
+
+# prometheus-adapter
+helm -n prod-omi-monitoring upgrade --install prod-omi-prometheus-adapter \
+  prometheus-community/prometheus-adapter \
+  -f prometheus-adapter/prod_omi_prometheus_adapter.yaml
+
+# Loki
+helm -n prod-omi-monitoring upgrade --install prod-omi-loki \
+  grafana/loki \
+  -f loki/prod_omi_loki_values.yaml
+
+# Alloy (k8s-monitoring)
+helm -n prod-omi-monitoring upgrade --install prod-omi-k8s-monitoring \
+  grafana/k8s-monitoring \
+  -f alloy/prod_omi_k8s_monitoring_values.yml
+
+# Stackdriver exporter
+helm -n prod-omi-monitoring upgrade --install prod-omi-prometheus-stackdriver-exporter \
+  prometheus-community/prometheus-stackdriver-exporter \
+  -f prometheus-stackdriver-exporter/prod_omi_stackdriver_exporter.yaml
+```
+
+**Dev** (note: kube-prometheus-stack release name is `dev-kube-prometheus-stack`, not `dev-omi-kube-prometheus-stack`):
+```bash
+helm -n dev-omi-monitoring upgrade --install dev-kube-prometheus-stack \
+  prometheus-community/kube-prometheus-stack \
+  -f kube-prometheus-stack/dev_omi_monitoring_values.yaml
+
+helm -n dev-omi-monitoring upgrade --install dev-omi-prometheus-adapter \
+  prometheus-community/prometheus-adapter \
+  -f prometheus-adapter/dev_omi_prometheus_adapter.yaml
+
+helm -n dev-omi-monitoring upgrade --install dev-omi-loki \
+  grafana/loki \
+  -f loki/dev_omi_loki_values.yaml
+
+helm -n dev-omi-monitoring upgrade --install dev-omi-k8s-monitoring \
+  grafana/k8s-monitoring \
+  -f alloy/dev_omi_k8s_monitoring_values.yml
+
+helm -n dev-omi-monitoring upgrade --install dev-omi-prometheus-stackdriver-exporter \
+  prometheus-community/prometheus-stackdriver-exporter \
+  -f prometheus-stackdriver-exporter/dev_omi_stackdriver_exporter.yaml
+```
 
 ## Troubleshooting
 
