@@ -425,20 +425,36 @@ class PushToTalkManager: ObservableObject {
     activeTracer?.end("audio_capture")
     activeTracer?.end("ptt_recording")
 
-    // Realtime hub: the instant the user releases PTT, play a cached local cue and
-    // show "…" — BEFORE any token arrives — then commit the turn. The hub speaks
-    // the reply and dispatches tools itself; no transcript/router/LLM hop here.
+    // Realtime hub: silence-gate the turn first. An accidental ⌥ tap (or a hold
+    // with nothing said) records near-silence — committing it makes the model
+    // answer anyway (often a generic "looking at your screen"). Drop those before
+    // committing, exactly like the omni/batch paths.
     if isHubMode {
       isHubMode = false
+      activeTracer = nil
+      state = .idle
+      batchAudioLock.lock()
+      let turnAudio = batchAudioBuffer
+      batchAudioBuffer = Data()
+      batchAudioLock.unlock()
+      let (totalSec, voicedSec) = Self.voicedAudioSeconds(pcm16k: turnAudio)
+      if totalSec < Self.minTurnAudioSeconds || voicedSec < Self.minVoicedSeconds {
+        log(
+          "PushToTalkManager: discarding silent hub turn (audio \(String(format: "%.2f", totalSec))s, voiced \(String(format: "%.2f", voicedSec))s) — not committing"
+        )
+        RealtimeHubController.shared.cancelTurn()
+        AnalyticsManager.shared.floatingBarPTTEnded(
+          mode: finalizedMode, hadTranscript: false, transcriptLength: 0)
+        updateBarState()  // clears the listening UI (no "…")
+        return
+      }
+      // Real speech — instant local ack + commit. The hub speaks the reply and
+      // dispatches tools itself; no transcript/router/LLM hop here.
       if ShortcutSettings.shared.pttSoundsEnabled { ackSound?.play() }
       barState?.voiceTranscript = "…"
       RealtimeHubController.shared.commitTurn()
-      // Tracer for the hub turn lives client-side only as a recording span; the
-      // realtime round-trip isn't instrumented in Phase 1. Drop it unsent.
-      activeTracer = nil
-      state = .idle
-      // Leave the bar in its voice state showing "…"; the hub controller exits the
-      // voice UI on turn completion (so we skip the clearing updateBarState()).
+      // Leave the bar showing "…"; the hub controller exits the voice UI on turn
+      // completion (so we skip the clearing updateBarState()).
       AnalyticsManager.shared.floatingBarPTTEnded(
         mode: finalizedMode, hadTranscript: true, transcriptLength: 0)
       log("PushToTalkManager: hub turn committed (instant ack)")
@@ -697,6 +713,8 @@ class PushToTalkManager: ObservableObject {
     // router is bypassed — routing is the model's tool choice.
     if RealtimeHubController.shared.isActive {
       isHubMode = true
+      // Retain the turn's raw audio so finalize() can silence-gate it.
+      batchAudioLock.lock(); batchAudioBuffer = Data(); batchAudioLock.unlock()
       RealtimeHubController.shared.beginTurn()
       // Bluetooth output: opening a BT mic forces the device into 16 kHz HFP mode,
       // which drops the OUTPUT rate too and chops the spoken reply. Capture from the
@@ -792,8 +810,12 @@ class PushToTalkManager: ObservableObject {
           onAudioChunk: { [weak self] audioData in
             guard let self else { return }
             if self.isHubMode {
-              // Realtime hub owns this turn — stream mic PCM straight to it.
+              // Realtime hub owns this turn — stream mic PCM straight to it, and
+              // retain it so finalize() can silence-gate the turn.
               RealtimeHubController.shared.feedAudio(audioData)
+              self.batchAudioLock.lock()
+              self.batchAudioBuffer.append(audioData)
+              self.batchAudioLock.unlock()
               return
             }
             if self.isOmniSTT {
