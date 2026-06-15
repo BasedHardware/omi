@@ -55,8 +55,10 @@ final class RealtimeHubSession: NSObject {
 
   private var task: URLSessionWebSocketTask?
   private lazy var session = URLSession(configuration: .default, delegate: self, delegateQueue: nil)
-  private var nw: NWConnection?
-  private var usesNW: Bool { provider == .gemini }
+  // Gemini's Live endpoint rejects both of Apple's WebSocket stacks, so it uses a
+  // hand-rolled RFC 6455 client (RawWebSocket). OpenAI uses URLSession.
+  private var rawWS: RawWebSocket?
+  private var usesRawWS: Bool { provider == .gemini }
 
   private var isOpen = false
   private var terminated = false
@@ -86,8 +88,18 @@ final class RealtimeHubSession: NSObject {
       return
     }
     log("RealtimeHub: connecting \(provider.displayName) → \(url.host ?? "?") (client-direct)")
-    if usesNW {
-      startNW(url: url)
+    if usesRawWS {
+      let ws = RawWebSocket(url: url, queue: q)
+      rawWS = ws
+      ws.onOpen = { [weak self] in
+        guard let self else { return }
+        log("RealtimeHub: raw WS open (\(self.provider.displayName))")
+        self.sendSessionSetup()
+      }
+      ws.onMessage = { [weak self] data in self?.handleMessage(data) }
+      ws.onClose = { [weak self] code, reason in self?.notifyError("WebSocket closed (\(code)) \(reason)") }
+      ws.onError = { [weak self] msg in self?.notifyError(msg) }
+      ws.connect()
       return
     }
     let t = session.webSocketTask(with: request)
@@ -101,8 +113,8 @@ final class RealtimeHubSession: NSObject {
       guard let self else { return }
       self.task?.cancel(with: .goingAway, reason: nil)
       self.task = nil
-      self.nw?.cancel()
-      self.nw = nil
+      self.rawWS?.close()
+      self.rawWS = nil
       self.isOpen = false
       self.pendingAudio.removeAll()
       self.pendingCommit = false
@@ -249,13 +261,18 @@ final class RealtimeHubSession: NSObject {
         ],
       ])
     case .gemini:
+      // AUDIO modality: the only currently-available Live models are native-audio
+      // (TEXT is rejected with close 1007). The spoken reply (24k PCM) is played by
+      // StreamingPCMPlayer. outputAudioTranscription gives us the text for logging /
+      // an optional bubble; inputAudioTranscription gives the user's STT.
       send(json: [
         "setup": [
           "model": "models/\(provider.modelID)",
-          "generationConfig": ["responseModalities": ["TEXT"]],
+          "generationConfig": ["responseModalities": ["AUDIO"]],
           "systemInstruction": ["parts": [["text": RealtimeHubTools.systemInstruction]]],
           "tools": [["functionDeclarations": RealtimeHubTools.geminiFunctionDeclarations]],
           "inputAudioTranscription": [:],
+          "outputAudioTranscription": [:],
           "realtimeInputConfig": ["automaticActivityDetection": ["disabled": true]],
         ]
       ])
@@ -433,9 +450,18 @@ final class RealtimeHubSession: NSObject {
     if let it = sc["inputTranscription"] as? [String: Any], let t = it["text"] as? String {
       emitTranscript(t, isFinal: false)
     }
+    if let ot = sc["outputTranscription"] as? [String: Any], let t = ot["text"] as? String {
+      emitText(t, isFinal: false)  // the spoken reply's text, for logging / the bubble
+    }
     if let parts = (sc["modelTurn"] as? [String: Any])?["parts"] as? [[String: Any]] {
       for p in parts {
         if let t = p["text"] as? String { emitText(t, isFinal: false) }
+        if let inline = p["inlineData"] as? [String: Any],
+          let mime = inline["mimeType"] as? String, mime.contains("audio/pcm"),
+          let b64 = inline["data"] as? String, let d = Data(base64Encoded: b64)
+        {
+          emitAudio(d)  // native spoken audio (24k PCM) → StreamingPCMPlayer
+        }
       }
     }
     if (sc["turnComplete"] as? Bool) == true {
@@ -444,70 +470,14 @@ final class RealtimeHubSession: NSObject {
     }
   }
 
-  // MARK: - Network.framework transport (Gemini, ALPN pinned to http/1.1)
-
-  private func startNW(url: URL) {
-    let wsOpts = NWProtocolWebSocket.Options()
-    wsOpts.autoReplyPing = true
-    let tls = NWProtocolTLS.Options()
-    // Pin ALPN to http/1.1 so the server does not upgrade the WebSocket to HTTP/2
-    // (which silently resets Apple's WS stacks — the reason the legacy path used a relay).
-    sec_protocol_options_add_tls_application_protocol(tls.securityProtocolOptions, "http/1.1")
-    let params = NWParameters(tls: tls)
-    params.defaultProtocolStack.applicationProtocols.insert(wsOpts, at: 0)
-    let conn = NWConnection(to: .url(url), using: params)
-    nw = conn
-    conn.stateUpdateHandler = { [weak self] state in
-      guard let self else { return }
-      switch state {
-      case .ready:
-        log("RealtimeHub: NW WS ready (Gemini)")
-        self.q.async {
-          self.receiveNW()
-          self.sendSessionSetup()
-        }
-      case .failed(let err):
-        self.q.async { self.notifyError("NW failed: \(err)") }
-      case .waiting(let err):
-        log("RealtimeHub: NW waiting: \(err)")
-      default:
-        break
-      }
-    }
-    conn.start(queue: q)
-  }
-
-  private func receiveNW() {
-    nw?.receiveMessage { [weak self] data, _, _, error in
-      guard let self else { return }
-      if let error {
-        self.q.async { self.notifyError("NW receive: \(error)") }
-        return
-      }
-      if let data { self.q.async { self.handleMessage(data) } }
-      if self.nw?.state == .ready { self.receiveNW() }
-    }
-  }
-
-  private func sendNW(_ text: String) {
-    guard let conn = nw else { return }
-    let meta = NWProtocolWebSocket.Metadata(opcode: .text)
-    let ctx = NWConnection.ContentContext(identifier: "send", metadata: [meta])
-    conn.send(
-      content: Data(text.utf8), contentContext: ctx, isComplete: true,
-      completion: .contentProcessed { [weak self] error in
-        if let error { self?.q.async { self?.notifyError("NW send: \(error)") } }
-      })
-  }
-
   // MARK: - Send (on q)
 
   private func send(json: [String: Any]) {
     guard let data = try? JSONSerialization.data(withJSONObject: json),
       let text = String(data: data, encoding: .utf8)
     else { return }
-    if usesNW {
-      sendNW(text)
+    if usesRawWS {
+      rawWS?.sendText(text)
       return
     }
     task?.send(.string(text)) { [weak self] error in
