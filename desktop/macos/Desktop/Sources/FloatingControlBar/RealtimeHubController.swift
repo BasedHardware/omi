@@ -32,6 +32,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
   private var assistantText = ""
   private var speculativeWarmDone = false
   private var speculativeScreenshot: Data?
+  private var audioReceivedThisTurn = false
 
   /// Held warm so spawn_agent's pi-mono bridge boot is off the hot path. The pill
   /// spawn creates its own provider; warming this one primes node/auth caches.
@@ -77,7 +78,10 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     let s = RealtimeHubSession(provider: provider, apiKey: key, delegate: self)
     session = s
     sessionProvider = provider
-    if provider == .openai, pcmPlayer == nil { pcmPlayer = StreamingPCMPlayer(sampleRate: 24000) }
+    // Both providers now stream native spoken audio (24k PCM): OpenAI gpt-realtime,
+    // Gemini native-audio Live. The half-cascade TEXT→AVSpeech plan is infeasible
+    // (those models were deprecated), so AVSpeech is only a no-audio fallback.
+    if pcmPlayer == nil { pcmPlayer = StreamingPCMPlayer(sampleRate: 24000) }
     s.start()
     log("RealtimeHub: warming \(provider.displayName) session (client-direct, BYOK)")
   }
@@ -98,6 +102,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     assistantText = ""
     speculativeWarmDone = false
     speculativeScreenshot = nil
+    audioReceivedThisTurn = false
     pcmPlayer?.stop()  // interrupt any prior reply
     if speech.isSpeaking { speech.stopSpeaking(at: .immediate) }
     // Speculative, parallel, non-blocking screen grab (item 6a).
@@ -152,16 +157,18 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
   }
 
   func hubDidReceiveAudio(_ pcm24k: Data) {
-    pcmPlayer?.enqueue(pcm24k)  // OpenAI native spoken audio
+    audioReceivedThisTurn = true
+    pcmPlayer?.enqueue(pcm24k)  // native spoken audio (OpenAI + Gemini)
   }
 
   func hubDidEmitText(_ text: String, isFinal: Bool) {
     if !text.isEmpty { assistantText += text }
     if isFinal {
       let reply = assistantText.trimmingCharacters(in: .whitespacesAndNewlines)
-      // Gemini is TEXT-only — speak its reply locally via macOS AVSpeechSynthesizer.
-      // OpenAI already spoke via native audio (this text is just the transcript).
-      if sessionProvider == .gemini, !reply.isEmpty { speak(reply) }
+      // Fallback only: if the model produced text but no native audio this turn,
+      // speak it locally via macOS AVSpeechSynthesizer. Normally both providers
+      // stream spoken audio (played by StreamingPCMPlayer) so this stays unused.
+      if !audioReceivedThisTurn, !reply.isEmpty { speak(reply) }
       if !reply.isEmpty { log("RealtimeHub: reply — \(reply.prefix(160))") }
     }
   }
