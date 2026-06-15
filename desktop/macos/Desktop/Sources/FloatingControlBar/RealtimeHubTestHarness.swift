@@ -40,6 +40,7 @@ final class RealtimeHubTestHarness: NSObject, RealtimeHubSessionDelegate {
     let rate = s.requiredInputSampleRate
     let audio = rate == 16000 ? pcm16k : PushToTalkManager.resamplePCM16(pcm16k, from: 16000, to: rate)
     s.start()
+    s.beginInputTurn()  // open the per-turn speech window (Gemini) before audio
     // Stream audio immediately (buffers until the session opens), in ~100ms frames.
     let frame = (rate / 10) * 2  // samples/100ms * 2 bytes
     var i = 0
