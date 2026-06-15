@@ -100,6 +100,10 @@ env:
     value: "nemo"
   - name: PARAKEET_MAX_SPEECH_S
     value: "5"
+  - name: PARAKEET_TORCH_COMPILE
+    value: "true"
+  - name: PARAKEET_CUDA_GRAPHS
+    value: "true"
   - name: HOSTED_SPEAKER_EMBEDDING_API_URL
     value: "http://dev-omi-diarizer.dev-omi-backend.svc.cluster.local:8080"
 
