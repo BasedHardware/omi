@@ -26,7 +26,7 @@ enum RealtimeHubProvider: String, CaseIterable, Sendable {
   var subtitle: String {
     switch self {
     case .openai: return "gpt-realtime-2 · native spoken audio"
-    case .gemini: return "gemini-live (half-cascade) · text + macOS voice"
+    case .gemini: return "gemini native-audio Live · spoken audio + tools"
     }
   }
 
@@ -34,11 +34,13 @@ enum RealtimeHubProvider: String, CaseIterable, Sendable {
   var modelID: String {
     switch self {
     case .openai: return "gpt-realtime-2"
-    // Half-cascade Live model: supports TEXT response modality + reliable
-    // function calling. The native-audio model the legacy relay uses
-    // (gemini-3.1-flash-live-preview) is AUDIO-out only and rejects TEXT
-    // (close 1007) / throws 1008 on function calls — unusable as a tool hub.
-    case .gemini: return "gemini-live-2.5-flash-preview"
+    // Native-audio Live model. NOTE (deviation): the original plan called for a
+    // TEXT-modality half-cascade model spoken via AVSpeechSynthesizer, but Google
+    // deprecated the half-cascade Live models — every model that currently exposes
+    // bidiGenerateContent is native-audio and rejects TEXT modality (close 1007).
+    // Verified function calling works on this one; it speaks via native audio (24k
+    // PCM) played by StreamingPCMPlayer, same as OpenAI.
+    case .gemini: return "gemini-2.5-flash-native-audio-preview-12-2025"
     }
   }
 
