@@ -84,13 +84,13 @@ Bumping the global version abandons all existing keys without scanning Redis.
 ## Cache keys
 
 ```text
-fs:v{global_version}:{namespace}:v{policy_version}:{entity_id}
+fs:v{global_version}:{namespace}:v{policy_version}:b64:{base64url(entity_id)}
 ```
 
-Example:
+Example for entity ID `uid_123`:
 
 ```text
-fs:v1:user_transcription_prefs:v1:uid_123
+fs:v1:user_transcription_prefs:v1:b64:dWlkXzEyMw
 ```
 
 Keys must include:
@@ -98,7 +98,9 @@ Keys must include:
 - global version
 - namespace
 - policy version
-- UID / entity ID
+- base64url-encoded UID / entity ID
+
+Entity IDs are encoded rather than character-replaced so keys are collision-free. For example, `a:b` and `a_b` must not map to the same Redis key.
 
 Never include raw names, emails, user text, or secrets in key names.
 

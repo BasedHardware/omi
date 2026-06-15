@@ -6,6 +6,7 @@ BYOK, privacy consent, and data-protection fields that require stricter
 correctness guarantees.
 """
 
+import base64
 import json
 import logging
 import os
@@ -50,10 +51,16 @@ def is_enabled(policy: CachePolicy) -> bool:
 
 
 def make_cache_key(policy: CachePolicy, entity_id: str) -> str:
-    """Build a deterministic, versioned key for a typed projection."""
+    """Build a deterministic, versioned key for a typed projection.
 
-    safe_id = str(entity_id).replace(':', '_')
-    return f'fs:v{_GLOBAL_VERSION}:{policy.namespace}:v{policy.version}:{safe_id}'
+    Entity IDs are base64url encoded instead of sanitized with string
+    replacement so cache keys are collision-free. For example, ``a:b`` and
+    ``a_b`` must not map to the same Redis key because this cache can hold
+    per-user projections.
+    """
+
+    encoded_id = base64.urlsafe_b64encode(str(entity_id).encode('utf-8')).decode('ascii').rstrip('=')
+    return f'fs:v{_GLOBAL_VERSION}:{policy.namespace}:v{policy.version}:b64:{encoded_id}'
 
 
 def invalidate(policy: CachePolicy, entity_id: str) -> None:

@@ -107,14 +107,21 @@ def test_cache_round_trips_datetime_payloads(monkeypatch):
     assert calls['count'] == 1
 
 
-def test_cache_key_includes_namespace_version_and_entity_id(monkeypatch):
+def test_cache_key_includes_namespace_version_and_encoded_entity_id(monkeypatch):
     monkeypatch.setenv('FIRESTORE_CACHE_GLOBAL_VERSION', '1')
     policy = fc.CachePolicy(namespace='user_language', version=3)
     key = fc.make_cache_key(policy, 'uid:abc')
 
     assert key.startswith('fs:v')
-    assert ':user_language:v3:' in key
-    assert key.endswith('uid_abc')
+    assert ':user_language:v3:b64:' in key
+    assert key.endswith('dWlkOmFiYw')
+
+
+def test_cache_key_entity_encoding_is_collision_free(monkeypatch):
+    monkeypatch.setenv('FIRESTORE_CACHE_GLOBAL_VERSION', '1')
+    policy = fc.CachePolicy(namespace='user_language', version=3)
+
+    assert fc.make_cache_key(policy, 'a:b') != fc.make_cache_key(policy, 'a_b')
 
 
 def test_users_module_only_wires_safe_projection_caches():
