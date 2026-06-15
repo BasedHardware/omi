@@ -125,6 +125,10 @@ BUNDLE_ID="${OMI_BUNDLE_ID:-$EXPECTED_BUNDLE_ID}"
 BUILD_DIR="build"
 APP_BUNDLE="$BUILD_DIR/$APP_NAME.app"
 APP_PATH="/Applications/$APP_NAME.app"
+# Agent runtime source (staged into the app bundle at Resources/agent below).
+# Without this, `[ -d "$AGENT_DIR/dist" ]` tests an empty path and the agent
+# copy is silently skipped → app shows "AI components missing".
+AGENT_DIR="$(dirname "$0")/agent"
 APP_DESKTOP_PATH="$HOME/Desktop/$APP_NAME.app"
 APP_DOWNLOADS_PATH="$HOME/Downloads/$APP_NAME.app"
 SIGN_IDENTITY="${OMI_SIGN_IDENTITY:-}"
