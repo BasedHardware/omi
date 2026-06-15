@@ -37,6 +37,12 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
   /// only while the user is actively using it (Gemini idle-closes the WS ~2.5 min).
   private var lastTurnAt: Date?
   private var reconnectPending = false
+  /// True between commit and turn-done — used to detect barge-in (a new PTT while
+  /// the previous reply is still in flight).
+  private var responding = false
+  /// After an INTENTIONAL teardown+reconnect (barge-in/cancel), swallow the old
+  /// socket's death-rattle error briefly so it doesn't tear down the fresh session.
+  private var ignoreErrorsUntil: Date?
 
   /// Held warm so spawn_agent's pi-mono bridge boot is off the hot path. The pill
   /// spawn creates its own provider; warming this one primes node/auth caches.
@@ -108,18 +114,29 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
   /// PTT-down: make sure the socket is warm and reset per-turn state. Captures a
   /// speculative screenshot in the background (non-blocking) for the screenshot tool.
   func beginTurn() {
-    ensureWarm()
+    // Barge-in: was a reply from the previous turn still in flight when the user
+    // started talking again?
+    let bargeIn = responding
+    responding = false
     turnTranscript = ""
     assistantText = ""
     speculativeWarmDone = false
     speculativeScreenshot = nil
     audioReceivedThisTurn = false
     lastTurnAt = Date()
-    pcmPlayer?.stop()  // interrupt any prior reply (local)
+    pcmPlayer?.stop()  // stop any prior reply locally
     if speech.isSpeaking { speech.stopSpeaking(at: .immediate) }
-    // Barge-in: cancel any reply still in flight from the previous turn so the new
-    // turn starts clean (avoids OpenAI "active response" + Gemini 1008 aborts).
-    session?.cancelActiveResponse()
+    if bargeIn, sessionProvider == .gemini {
+      // Gemini keeps streaming its reply even after activityEnd, so the only clean
+      // interrupt is to drop the socket — that stops the in-flight audio. The new
+      // turn proceeds on a fresh socket (audio buffers until it reconnects).
+      log("RealtimeHub[gemini]: barge-in — reconnecting to stop in-flight reply")
+      ignoreErrorsUntil = Date().addingTimeInterval(0.6)
+      teardownSession()
+    } else if bargeIn {
+      session?.cancelActiveResponse()  // OpenAI: response.cancel + clear input
+    }
+    ensureWarm()  // (re)connect if needed
     // Open a fresh speech window for this turn (Gemini manual-VAD needs it EVERY
     // turn on a warm session; OpenAI no-op).
     session?.beginInputTurn()
@@ -140,14 +157,26 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
 
   /// PTT-up: end the turn; the model now responds (and may call tools).
   func commitTurn() {
+    responding = true
     session?.commitInputTurn()
   }
 
-  /// Abandon the turn without committing (cancel / silent). Keep the socket warm.
+  /// Abandon the turn without committing (silent tap / cancel). Must leave NO open
+  /// turn behind, or the model answers the non-speech later.
   func cancelTurn() {
-    // Nothing to commit; warm session stays open for the next turn.
+    responding = false
     turnTranscript = ""
     assistantText = ""
+    if sessionProvider == .gemini {
+      // The speech window was already opened (activityStart on beginTurn); the only
+      // way to drop it without the model answering the silence is a fresh socket.
+      ignoreErrorsUntil = Date().addingTimeInterval(0.6)
+      teardownSession()
+      ensureWarm()
+    } else {
+      session?.cancelActiveResponse()  // OpenAI: clear the uncommitted input buffer
+    }
+    exitVoiceUI()
   }
 
   // MARK: - RealtimeHubSessionDelegate
@@ -238,6 +267,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
   }
 
   func hubDidFinishTurn() {
+    responding = false
     let providerTag = sessionProvider == .gemini ? "gemini" : "openai"
     let heard = turnTranscript.trimmingCharacters(in: .whitespacesAndNewlines)
     log("RealtimeHub[\(providerTag)]: turn done — heard=\"\(heard.prefix(80))\" audio=\(audioReceivedThisTurn)")
@@ -245,6 +275,13 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
   }
 
   func hubDidError(_ message: String) {
+    // Swallow the death-rattle from a socket we just intentionally dropped
+    // (barge-in/cancel reconnect) so it can't tear down the fresh session.
+    if let until = ignoreErrorsUntil, Date() < until {
+      log("RealtimeHub: ignoring expected post-reconnect error — \(message)")
+      return
+    }
+    responding = false
     logError("RealtimeHub: session error — \(message)")
     exitVoiceUI()
     // Drop the socket; the next PTT reconnects lazily anyway.
