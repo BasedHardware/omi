@@ -168,10 +168,12 @@ class TestGPUWorkerSubmitAsync:
     def test_async_submit_delivers_result(self, worker):
         loop = asyncio.new_event_loop()
         try:
-            fut = worker.submit({"audio_paths": ["/tmp/a.wav"], "timestamps": True, "batch_size": 1}, loop)
+            fut, item = worker.submit({"audio_paths": ["/tmp/a.wav"], "timestamps": True, "batch_size": 1}, loop)
             result = loop.run_until_complete(asyncio.wait_for(fut, timeout=10))
             assert len(result) == 1
             assert result[0]["text"] == "transcribed:/tmp/a.wav"
+            assert item is not None
+            assert item.inference_seconds > 0
         finally:
             loop.close()
 
@@ -179,7 +181,8 @@ class TestGPUWorkerSubmitAsync:
         w = GPUWorker()
         loop = asyncio.new_event_loop()
         try:
-            fut = w.submit({"audio_paths": ["/tmp/a.wav"]}, loop)
+            fut, item = w.submit({"audio_paths": ["/tmp/a.wav"]}, loop)
+            assert item is None
             with pytest.raises(RuntimeError, match="not ready"):
                 loop.run_until_complete(fut)
         finally:
@@ -211,7 +214,7 @@ class TestGPUWorkerQueueFull:
 
         loop = asyncio.new_event_loop()
         try:
-            fut = worker.submit({"audio_paths": ["/tmp/a.wav"]}, loop)
+            fut, item = worker.submit({"audio_paths": ["/tmp/a.wav"]}, loop)
             with pytest.raises(RuntimeError, match="GPU queue full"):
                 loop.run_until_complete(fut)
         finally:

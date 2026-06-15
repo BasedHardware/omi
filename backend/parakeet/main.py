@@ -5,6 +5,8 @@ import os
 import time
 import uuid
 import logging
+import io as _io
+import wave as _wave
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import asynccontextmanager
 from typing import Optional
@@ -13,7 +15,7 @@ gc.disable()
 
 from fastapi import FastAPI, Form, UploadFile, File, WebSocket, WebSocketDisconnect, Query
 from fastapi.responses import JSONResponse
-from prometheus_client import Gauge, Histogram, make_asgi_app
+from prometheus_client import Counter, Gauge, Histogram, make_asgi_app
 
 from gpu_worker import GPUWorker
 from batch_engine import BatchEngine, QueueFullError
@@ -29,6 +31,8 @@ from stream_handler import StreamSession, warmup_rnnt_decoder
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+_ASR_BUCKETS = (0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0, 30.0)
+
 ACTIVE_STREAMS = Gauge('parakeet_active_streams', 'Active /v3/stream WebSocket connections')
 ACTIVE_BATCH = Gauge('parakeet_active_batch_requests', 'Active batch transcription requests')
 PENDING_REQUESTS = Gauge('parakeet_batch_pending_requests', 'Pending requests in batch engine queue')
@@ -36,7 +40,7 @@ REQUEST_DURATION = Histogram(
     'parakeet_request_duration_seconds',
     'Request latency',
     ['endpoint'],
-    buckets=[0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0, 30.0, 60.0, 120.0],
+    buckets=_ASR_BUCKETS,
 )
 STREAM_DURATION = Histogram(
     'parakeet_stream_duration_seconds',
@@ -48,12 +52,49 @@ BATCH_SIZE_HIST = Histogram(
     'Number of files per GPU batch',
     buckets=[1, 2, 4, 8, 16, 32, 64],
 )
+RTFX = Gauge('parakeet_rtfx', 'Real-time factor of last request (audio_duration / processing_time)')
+AUDIO_DURATION = Histogram(
+    'parakeet_audio_duration_seconds',
+    'Input audio length distribution',
+    buckets=_ASR_BUCKETS,
+)
+QUEUE_DURATION = Histogram(
+    'parakeet_queue_duration_seconds',
+    'Time spent waiting in queue before batch assembly',
+    buckets=_ASR_BUCKETS,
+)
+INFERENCE_DURATION = Histogram(
+    'parakeet_inference_duration_seconds',
+    'Pure GPU inference time excluding queue and post-processing',
+    buckets=_ASR_BUCKETS,
+)
+GPU_OOM_TOTAL = Counter('parakeet_gpu_oom_total', 'CUDA out-of-memory events')
+REQUESTS_TOTAL = Counter('parakeet_requests_total', 'Total requests by status', ['endpoint', 'status'])
 
 gpu_worker: Optional[GPUWorker] = None
 batch_engine: Optional[BatchEngine] = None
 start_time: float = 0
 _diarize_pool = ThreadPoolExecutor(max_workers=4, thread_name_prefix="diarize")
 _io_pool = ThreadPoolExecutor(max_workers=4, thread_name_prefix="file-io")
+
+
+def _get_audio_duration_from_bytes(data: bytes) -> float:
+    try:
+        with _wave.open(_io.BytesIO(data), 'rb') as wf:
+            return wf.getnframes() / wf.getframerate()
+    except Exception:
+        return 0.0
+
+
+def _on_batch_complete(queue_durations, inference_seconds, batch_size):
+    for qd in queue_durations:
+        QUEUE_DURATION.observe(qd)
+    INFERENCE_DURATION.observe(inference_seconds)
+    BATCH_SIZE_HIST.observe(batch_size)
+
+
+def _on_gpu_oom():
+    GPU_OOM_TOTAL.inc()
 
 
 @asynccontextmanager
@@ -73,6 +114,8 @@ async def lifespan(app: FastAPI):
             max_batch_size=int(os.getenv("PARAKEET_MAX_BATCH_SIZE", "32")),
             max_wait_seconds=float(os.getenv("PARAKEET_BATCH_WAIT_SECONDS", "0.002")),
             max_queue_depth=int(os.getenv("PARAKEET_MAX_QUEUE_DEPTH", "4096")),
+            on_batch_complete=_on_batch_complete,
+            on_gpu_oom=_on_gpu_oom,
         )
         await batch_engine.start()
         logger.info("Server started, GPU model loading in background...")
@@ -108,14 +151,20 @@ def _remove_file(path: str) -> None:
 @app.post("/v1/transcribe")
 async def transcribe(file: UploadFile = File(...)):
     if gpu_worker is not None and not gpu_worker.is_ready:
+        REQUESTS_TOTAL.labels(endpoint="v1_transcribe", status="error").inc()
         return JSONResponse(status_code=503, content={"detail": "Model loading, try again shortly"})
     upload_id = str(uuid.uuid4())
     file_path = f"_temp/{upload_id}_{file.filename}"
     ACTIVE_BATCH.inc()
     t0 = time.monotonic()
+    audio_dur = 0.0
+    status = "success"
     loop = asyncio.get_running_loop()
     try:
         data = await file.read()
+        audio_dur = _get_audio_duration_from_bytes(data)
+        if audio_dur > 0:
+            AUDIO_DURATION.observe(audio_dur)
         await loop.run_in_executor(_io_pool, _write_file, file_path, data)
 
         if batch_engine is not None:
@@ -127,9 +176,17 @@ async def transcribe(file: UploadFile = File(...)):
             result = await loop.run_in_executor(_diarize_pool, transcribe_file, file_path)
             return result
     except QueueFullError:
+        status = "error"
         return JSONResponse(status_code=503, content={"detail": "Server overloaded — try again later"})
+    except Exception:
+        status = "error"
+        raise
     finally:
-        REQUEST_DURATION.labels(endpoint="v1_transcribe").observe(time.monotonic() - t0)
+        elapsed = time.monotonic() - t0
+        REQUEST_DURATION.labels(endpoint="v1_transcribe").observe(elapsed)
+        REQUESTS_TOTAL.labels(endpoint="v1_transcribe", status=status).inc()
+        if status == "success" and audio_dur > 0 and elapsed > 0:
+            RTFX.set(audio_dur / elapsed)
         ACTIVE_BATCH.dec()
         if batch_engine is None:
             await loop.run_in_executor(_io_pool, _remove_file, file_path)
@@ -141,14 +198,20 @@ async def transcribe_v2(
     diarize: bool = Form(True),
 ):
     if gpu_worker is not None and not gpu_worker.is_ready:
+        REQUESTS_TOTAL.labels(endpoint="v2_transcribe", status="error").inc()
         return JSONResponse(status_code=503, content={"detail": "Model loading, try again shortly"})
     upload_id = str(uuid.uuid4())
     file_path = f"_temp/{upload_id}_{file.filename}"
     ACTIVE_BATCH.inc()
     t0 = time.monotonic()
+    audio_dur = 0.0
+    status = "success"
     loop = asyncio.get_running_loop()
     try:
         data = await file.read()
+        audio_dur = _get_audio_duration_from_bytes(data)
+        if audio_dur > 0:
+            AUDIO_DURATION.observe(audio_dur)
         await loop.run_in_executor(_io_pool, _write_file, file_path, data)
 
         if batch_engine is not None:
@@ -164,9 +227,17 @@ async def transcribe_v2(
             )
         return result
     except QueueFullError:
+        status = "error"
         return JSONResponse(status_code=503, content={"detail": "Server overloaded — try again later"})
+    except Exception:
+        status = "error"
+        raise
     finally:
-        REQUEST_DURATION.labels(endpoint="v2_transcribe").observe(time.monotonic() - t0)
+        elapsed = time.monotonic() - t0
+        REQUEST_DURATION.labels(endpoint="v2_transcribe").observe(elapsed)
+        REQUESTS_TOTAL.labels(endpoint="v2_transcribe", status=status).inc()
+        if status == "success" and audio_dur > 0 and elapsed > 0:
+            RTFX.set(audio_dur / elapsed)
         ACTIVE_BATCH.dec()
         await loop.run_in_executor(_io_pool, _remove_file, file_path)
 

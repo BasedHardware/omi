@@ -31,6 +31,7 @@ class WorkItem:
     sync_result: Any = None
     sync_error: Optional[Exception] = None
     created_at: float = field(default_factory=time.monotonic)
+    inference_seconds: float = 0.0
 
 
 class GPUWorker:
@@ -72,17 +73,18 @@ class GPUWorker:
         if self._thread:
             self._thread.join(timeout=30)
 
-    def submit(self, payload: dict, loop: asyncio.AbstractEventLoop) -> asyncio.Future:
+    def submit(self, payload: dict, loop: asyncio.AbstractEventLoop) -> tuple:
         if not self.is_ready:
             fut = loop.create_future()
             fut.set_exception(RuntimeError("GPU worker not ready"))
-            return fut
+            return fut, None
         fut = loop.create_future()
+        item = WorkItem(WorkType.BATCH_TRANSCRIBE, payload, future=fut, loop=loop)
         try:
-            self._queue.put_nowait(WorkItem(WorkType.BATCH_TRANSCRIBE, payload, future=fut, loop=loop))
+            self._queue.put_nowait(item)
         except queue.Full:
             fut.set_exception(RuntimeError("GPU queue full"))
-        return fut
+        return fut, item
 
     def submit_sync(self, payload: dict, timeout: float = 120.0) -> list:
         if not self.is_ready:
@@ -128,7 +130,9 @@ class GPUWorker:
                 break
 
             try:
+                t_infer = time.monotonic()
                 result = self._batch_transcribe(item.payload)
+                item.inference_seconds = time.monotonic() - t_infer
                 self._deliver_result(item, result)
             except Exception as exc:
                 self._deliver_error(item, exc)

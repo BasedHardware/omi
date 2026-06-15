@@ -30,6 +30,8 @@ class BatchEngine:
         max_batch_size: int = 32,
         max_wait_seconds: float = 0.002,
         max_queue_depth: int = 4096,
+        on_batch_complete=None,
+        on_gpu_oom=None,
     ):
         self._gpu_worker = gpu_worker
         self._max_batch_size = max_batch_size
@@ -41,6 +43,8 @@ class BatchEngine:
         self._inflight_flushes: set[asyncio.Task] = set()
         self._loop: Optional[asyncio.AbstractEventLoop] = None
         self._shutting_down = False
+        self._on_batch_complete = on_batch_complete
+        self._on_gpu_oom = on_gpu_oom
         self._metrics = {
             "total_requests": 0,
             "total_batches": 0,
@@ -115,10 +119,14 @@ class BatchEngine:
         self._metrics["total_files"] += len(batch)
         logger.info(f"Flushing batch: {len(batch)} files")
 
+        batch_start = time.monotonic()
+        queue_durations = [batch_start - req.submitted_at for req in batch]
+
         audio_paths = [r.audio_path for r in batch]
         timestamps = batch[0].timestamps if batch else True
+        is_oom = False
         try:
-            gpu_future = self._gpu_worker.submit(
+            gpu_future, work_item = self._gpu_worker.submit(
                 {
                     "audio_paths": audio_paths,
                     "timestamps": timestamps,
@@ -127,6 +135,10 @@ class BatchEngine:
                 self._loop,
             )
             results = await gpu_future
+            inference_seconds = work_item.inference_seconds if work_item else 0.0
+
+            if self._on_batch_complete:
+                self._on_batch_complete(queue_durations, inference_seconds, len(batch))
 
             if isinstance(results, list) and len(results) == len(batch):
                 for req, result in zip(batch, results):
@@ -145,17 +157,23 @@ class BatchEngine:
                 if not req.future.done():
                     req.future.set_exception(err)
         except RuntimeError as exc:
+            if "CUDA out of memory" in str(exc) or "OutOfMemoryError" in type(exc).__name__:
+                is_oom = True
             err = QueueFullError(str(exc)) if "GPU queue full" in str(exc) else exc
             logger.error(f"Batch transcription failed: {exc}")
             for req in batch:
                 if not req.future.done():
                     req.future.set_exception(err)
         except Exception as exc:
+            if "CUDA out of memory" in str(exc) or "OutOfMemoryError" in type(exc).__name__:
+                is_oom = True
             logger.error(f"Batch transcription failed: {exc}")
             for req in batch:
                 if not req.future.done():
                     req.future.set_exception(exc)
         finally:
+            if is_oom and self._on_gpu_oom:
+                self._on_gpu_oom()
             for req in batch:
                 if req.owns_file:
                     _unlink_safe(req.audio_path)

@@ -34,7 +34,7 @@ sys.modules["nemo.collections.asr"] = _nemo_asr
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../../parakeet"))
 
 from batch_engine import BatchEngine, QueueFullError, _unlink_safe
-from gpu_worker import GPUWorker
+from gpu_worker import GPUWorker, WorkItem, WorkType
 
 
 def _make_mock_gpu_worker(results_fn=None):
@@ -43,12 +43,14 @@ def _make_mock_gpu_worker(results_fn=None):
 
     def submit(payload, loop):
         fut = loop.create_future()
+        item = WorkItem(WorkType.BATCH_TRANSCRIBE, payload, future=fut, loop=loop)
         if results_fn:
             res = results_fn(payload)
         else:
             res = [{"text": f"ok:{p}", "timestamp": {}} for p in payload["audio_paths"]]
+        item.inference_seconds = 0.01
         loop.call_soon(fut.set_result, res)
-        return fut
+        return fut, item
 
     worker.submit.side_effect = submit
     return worker
@@ -215,8 +217,9 @@ class TestBatchEngineErrorPropagation:
 
         def submit_error(payload, loop):
             fut = loop.create_future()
+            item = WorkItem(WorkType.BATCH_TRANSCRIBE, payload, future=fut, loop=loop)
             loop.call_soon(fut.set_exception, RuntimeError("GPU exploded"))
-            return fut
+            return fut, item
 
         gpu.submit.side_effect = submit_error
         engine = BatchEngine(gpu, max_batch_size=3, max_wait_seconds=0.01)
@@ -244,8 +247,9 @@ class TestBatchEngineErrorPropagation:
 
         def submit_queue_full(payload, loop):
             fut = loop.create_future()
+            item = WorkItem(WorkType.BATCH_TRANSCRIBE, payload, future=fut, loop=loop)
             loop.call_soon(fut.set_exception, RuntimeError("GPU queue full"))
-            return fut
+            return fut, item
 
         gpu.submit.side_effect = submit_queue_full
         engine = BatchEngine(gpu, max_batch_size=1, max_wait_seconds=0.01)
@@ -347,7 +351,9 @@ class TestBatchEngineShutdown:
         gpu.is_ready = True
 
         def submit_hang(payload, loop):
-            return loop.create_future()
+            fut = loop.create_future()
+            item = WorkItem(WorkType.BATCH_TRANSCRIBE, payload, future=fut, loop=loop)
+            return fut, item
 
         gpu.submit.side_effect = submit_hang
         engine = BatchEngine(gpu, max_batch_size=1, max_wait_seconds=0.01)
@@ -369,6 +375,73 @@ class TestBatchEngineShutdown:
                 assert submit_fut.done()
                 with pytest.raises(RuntimeError, match="cancelled during shutdown"):
                     submit_fut.result()
+
+            loop.run_until_complete(run())
+        finally:
+            loop.close()
+
+
+class TestBatchEngineCallbacks:
+
+    def test_on_batch_complete_called_with_timing(self):
+        gpu = _make_mock_gpu_worker()
+        callback_data = {}
+
+        def on_complete(queue_durations, inference_seconds, batch_size):
+            callback_data["queue_durations"] = queue_durations
+            callback_data["inference_seconds"] = inference_seconds
+            callback_data["batch_size"] = batch_size
+
+        engine = BatchEngine(gpu, max_batch_size=2, max_wait_seconds=0.01, on_batch_complete=on_complete)
+
+        loop = asyncio.new_event_loop()
+        try:
+
+            async def run():
+                await engine.start()
+                try:
+                    futs = [asyncio.ensure_future(engine.submit(f"/tmp/{i}.wav", owns_file=False)) for i in range(2)]
+                    await asyncio.wait_for(asyncio.gather(*futs), timeout=5)
+                    assert "queue_durations" in callback_data
+                    assert len(callback_data["queue_durations"]) == 2
+                    assert all(d >= 0 for d in callback_data["queue_durations"])
+                    assert callback_data["inference_seconds"] >= 0
+                    assert callback_data["batch_size"] == 2
+                finally:
+                    await engine.stop()
+
+            loop.run_until_complete(run())
+        finally:
+            loop.close()
+
+    def test_on_gpu_oom_called_on_cuda_oom(self):
+        gpu = MagicMock(spec=GPUWorker)
+        gpu.is_ready = True
+        oom_count = [0]
+
+        def on_oom():
+            oom_count[0] += 1
+
+        def submit_oom(payload, loop):
+            fut = loop.create_future()
+            item = WorkItem(WorkType.BATCH_TRANSCRIBE, payload, future=fut, loop=loop)
+            loop.call_soon(fut.set_exception, RuntimeError("CUDA out of memory"))
+            return fut, item
+
+        gpu.submit.side_effect = submit_oom
+        engine = BatchEngine(gpu, max_batch_size=1, max_wait_seconds=0.01, on_gpu_oom=on_oom)
+
+        loop = asyncio.new_event_loop()
+        try:
+
+            async def run():
+                await engine.start()
+                try:
+                    with pytest.raises(RuntimeError, match="CUDA out of memory"):
+                        await asyncio.wait_for(engine.submit("/tmp/oom.wav", owns_file=False), timeout=5)
+                    assert oom_count[0] == 1
+                finally:
+                    await engine.stop()
 
             loop.run_until_complete(run())
         finally:
