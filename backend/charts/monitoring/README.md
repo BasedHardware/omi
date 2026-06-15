@@ -424,38 +424,21 @@ curl -s -H "Authorization: Bearer $GRAFANA_TOKEN" \
    - Strip runtime fields: `.id`, `.version` (done by the `jq` command above)
    - Keep the `.uid` field — it links the repo copy to the live dashboard
 
-4. **Deploy via Grafana sidecar** — kube-prometheus-stack ships a sidecar container that watches for ConfigMaps labeled `grafana_dashboard: "1"` and loads them into Grafana. The sidecar is enabled by default in the chart (label: `grafana_dashboard`, labelValue: `"1"`, watchMethod: `WATCH`). Our values do not override these defaults.
-
-   Generate a labeled ConfigMap from the exported JSON and apply it directly with kubectl:
+4. **Import to Grafana** (if creating on a new/different instance):
 ```bash
-# Generate ConfigMap with the required sidecar label
-kubectl -n {env}-omi-monitoring create configmap omi-dashboard-<name> \
-  --from-file=<name>.json=dashboards/<name>.json \
-  --dry-run=client -o yaml | \
-  kubectl label --local -f - grafana_dashboard=1 -o yaml > dashboards/<name>-cm.yaml
-
-# Apply to the cluster (sidecar picks it up automatically via WATCH)
-kubectl apply -f dashboards/<name>-cm.yaml
+# Import via Grafana API
+curl -s -X POST -H "Authorization: Bearer $GRAFANA_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d "{\"dashboard\": $(cat dashboards/<folder>/<name>.json), \"overwrite\": true}" \
+  "$GRAFANA_HOST/api/dashboards/db"
 ```
 
-   **Note:** The `dashboards/<name>-cm.yaml` files are raw Kubernetes manifests applied via `kubectl apply`, not Helm templates. They persist in the cluster independently of Helm upgrades. If you need dashboards managed by Helm, add them to `grafana.dashboards` in the kube-prometheus-stack values instead.
-
-5. **Commit both files** — the dashboard JSON and its ConfigMap manifest — in the same PR.
-
-6. **Verify** — open Grafana and confirm the dashboard appears. The sidecar watches all namespaces by default (`searchNamespace: ALL`); we create ConfigMaps in `{env}-omi-monitoring` for consistency.
+5. **Commit the JSON** and open a PR.
 
 #### Updating an Existing Dashboard
 
-**Option A: Edit in Grafana UI, then sync back (preferred for visual changes)**
-
-1. Make edits in Grafana UI (dev first, then prod)
-2. Follow the "Sync-Back Workflow" below to export and commit
-
-**Option B: Edit the JSON directly (preferred for metric renames, variable changes)**
-
-1. Edit `dashboards/<name>.json` in the repo
-2. Re-deploy via Helm or ConfigMap update
-3. Verify in Grafana UI
+1. Edit the dashboard in Grafana UI (dev first, then prod)
+2. Sync back to the repo using the workflow below
 
 #### Sync-Back Workflow: Grafana UI → Repo
 
@@ -546,21 +529,24 @@ Loki ruler is configured to send alerts to AlertManager at `http://prod-kube-pro
 
 ## Dashboard & Metrics Lifecycle
 
-### Source of Truth: Repo-First
+### Approach: UI-First, Git-Backed
 
-Dashboards, alert rules, and metrics definitions should live in the repo and deploy to Grafana via provisioning. This makes changes reviewable, auditable, and reproducible.
+Dashboards are created and edited directly in the Grafana UI — it's purpose-built for visual iteration. Git serves as backup, version control, and the restore source for disaster recovery or new cluster setup.
 
 ```
-Developer edits dashboard JSON in repo
+Create/edit dashboard in Grafana UI
         ↓
-    PR review
+    Export JSON via API
         ↓
-    Merge to main
+    Commit to dashboards/<folder>/<name>.json
         ↓
-    kubectl apply ConfigMap → sidecar auto-loads into Grafana
+    PR review + merge
 ```
 
-Emergency edits in the Grafana UI are acceptable but must be exported back to the repo within the same day.
+**Restore flow** (new cluster, disaster recovery, dev→prod promotion):
+```
+Read JSON from repo → Import via Grafana API → Dashboard is live
+```
 
 ### Directory Structure
 
@@ -600,17 +586,15 @@ backend/charts/monitoring/
 ### When to Update
 
 **Same-PR rule:** When a PR adds, renames, or removes Prometheus metrics from application code, the PR should also update:
-1. The relevant dashboard JSON (if the metric is visualized)
-2. The prometheus-adapter rules (if the metric drives HPA)
-3. The service's metrics contract (see below)
+1. The prometheus-adapter rules (if the metric drives HPA)
+2. The service's metrics contract (see below)
+3. Update the Grafana dashboard in the UI, then export and commit the JSON in the same PR (or a follow-up PR filed as an issue before merging)
 
-If the dashboard update is complex, a follow-up PR is acceptable but must be filed as an issue before merging the metrics PR.
+### Sync Cadence
 
-### Review Process
-
-- Dashboard and alert changes go through PR review like any other code change
-- No silent Grafana UI edits for permanent changes
-- Reviewer checks: metric names match app code, PromQL is correct, thresholds are reasonable
+- After any dashboard edit in Grafana UI: export and commit within the same day
+- Periodic bulk sync: run the bulk export script (see "Sync-Back Workflow" in Developer Guide) to catch any missed UI edits
+- Before major infra changes (cluster migration, Helm upgrades): verify repo JSONs match live dashboards
 
 ### Alert Rules as Code
 
