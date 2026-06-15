@@ -213,3 +213,10 @@ affinity:
               operator: In
               values:
                 - prod
+
+
+strategy:
+  type: RollingUpdate
+  rollingUpdate:
+    maxUnavailable: 1
+    maxSurge: 0
