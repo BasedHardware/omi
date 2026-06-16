@@ -1,5 +1,7 @@
 {
-  "unreleased": [],
+  "unreleased": [
+    "Added a System Audio setting (Always / Only during meetings / Never); 'Only during meetings' records mic + system audio only while you're in a call"
+  ],
   "releases": [
     {
       "version": "0.11.463",

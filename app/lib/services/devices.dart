@@ -59,10 +59,7 @@ class DeviceService implements IDeviceService {
   DeviceServiceStatus _status = DeviceServiceStatus.init;
   List<BtDevice> _devices = [];
 
-  final List<DeviceDiscoverer> _discoverers = [
-    NativeBluetoothDiscoverer(),
-    AppleWatchDiscoverer(),
-  ];
+  final List<DeviceDiscoverer> _discoverers = [NativeBluetoothDiscoverer(), AppleWatchDiscoverer()];
 
   final Map<Object, IDeviceServiceSubsciption> _subscriptions = {};
 

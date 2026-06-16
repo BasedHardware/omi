@@ -92,6 +92,7 @@ class TestTempFileLocation(unittest.TestCase):
     def test_temp_file_not_in_cwd(self):
         """Temp file must not be in the current working directory."""
         import os
+
         _, temp_file = safe_filename_logic("test.txt")
         cwd = os.getcwd()
         self.assertFalse(str(temp_file).startswith(cwd))

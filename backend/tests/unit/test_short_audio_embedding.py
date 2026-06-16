@@ -17,7 +17,6 @@ import pytest
 import httpx
 from unittest.mock import MagicMock
 
-
 _MISSING = object()
 _SCIPY_MODULES = ("scipy", "scipy.spatial", "scipy.spatial.distance")
 

@@ -379,6 +379,23 @@ class AppState: ObservableObject {
   private var transcriptionService: TranscriptionService?
   private var systemAudioCaptureService: Any?  // SystemAudioCaptureService (macOS 14.4+)
   private var audioMixer: AudioMixer?
+  /// Detects active conferencing calls to gate capture in "Only during meetings" mode — the whole
+  /// recording (microphone + system audio) runs only while you're in a call. Created/started only
+  /// while transcribing in that mode.
+  private var meetingDetector: MeetingDetector?
+  /// Serializes async capture start/stop so overlapping reconciles don't race the HAL.
+  private var captureGateInFlight = false
+  private var captureReconcilePending = false
+  /// True while recording is armed in "Only during meetings" mode but no call is active yet
+  /// (microphone + system audio are paused). Surfaced in the UI as "Waiting for a meeting…".
+  @Published var isAwaitingMeeting = false
+
+  /// Effective system-audio capture mode. The hidden `disableSystemAudioCapture` debug UserDefault
+  /// (settable via `defaults write`) still forces `.never`; otherwise the user's setting applies.
+  private var effectiveSystemAudioMode: AssistantSettings.SystemAudioCaptureMode {
+    if UserDefaults.standard.bool(forKey: "disableSystemAudioCapture") { return .never }
+    return AssistantSettings.shared.systemAudioCaptureMode
+  }
   private var vadGateService: VADGateService?
   // On-device Parakeet STT (FluidAudio) — used instead of the cloud WebSocket when OMI_LOCAL_STT=1.
   // On-device Parakeet: separate mic vs system-audio instances so transcripts are diarized by
@@ -439,6 +456,7 @@ class AppState: ObservableObject {
   private var screenUnlockedObserver: NSObjectProtocol?
   private var screenCapturePermissionLostObserver: NSObjectProtocol?
   private var screenCaptureKitBrokenObserver: NSObjectProtocol?
+  private var systemAudioCaptureModeObserver: NSObjectProtocol?
 
   // Track transcription state across sleep/wake cycles
   private var wasTranscribingBeforeSleep = false
@@ -672,6 +690,17 @@ class AppState: ObservableObject {
         NotificationCenter.default.post(name: .screenDidUnlock, object: nil)
       }
     }
+
+    // System Audio capture mode changed — re-apply the capture gate live if a recording is armed.
+    systemAudioCaptureModeObserver = NotificationCenter.default.addObserver(
+      forName: .systemAudioCaptureModeDidChange,
+      object: nil,
+      queue: .main
+    ) { [weak self] _ in
+      Task { @MainActor in
+        await self?.reconcileCapture()
+      }
+    }
   }
 
   deinit {
@@ -694,6 +723,9 @@ class AppState: ObservableObject {
       NotificationCenter.default.removeObserver(observer)
     }
     if let observer = screenCaptureKitBrokenObserver {
+      NotificationCenter.default.removeObserver(observer)
+    }
+    if let observer = systemAudioCaptureModeObserver {
       NotificationCenter.default.removeObserver(observer)
     }
   }
@@ -1563,17 +1595,19 @@ class AppState: ObservableObject {
         // VAD gate not used for Python backend streaming (backend handles its own VAD)
         vadGateService = nil
 
-        // Initialize system audio capture if supported (macOS 14.4+)
-        // Can be disabled via: defaults write com.omi.desktop-dev disableSystemAudioCapture -bool true
-        //                  or: defaults write com.omi.computer-macos disableSystemAudioCapture -bool true
-        let systemAudioDisabled = UserDefaults.standard.bool(forKey: "disableSystemAudioCapture")
-        if systemAudioDisabled {
-          log(
-            "Transcription: System audio capture DISABLED by user preference (disableSystemAudioCapture)"
-          )
+        // Initialize system audio capture if supported (macOS 14.4+) and not in "Never" mode.
+        // The actual start/stop is driven by reconcileCapture() based on the user's System Audio
+        // mode (Always / Only during meetings / Never) and meeting state. `.never` is also forced
+        // by the hidden `disableSystemAudioCapture` debug flag — see effectiveSystemAudioMode.
+        // Toggle the debug flag with: defaults write <bundle> disableSystemAudioCapture -bool true
+        let systemAudioMode = effectiveSystemAudioMode
+        if systemAudioMode == .never {
+          log("Transcription: System audio capture mode = never — not initializing")
         } else if #available(macOS 14.4, *) {
           systemAudioCaptureService = SystemAudioCaptureService()
-          log("Transcription: System audio capture initialized (macOS 14.4+)")
+          log(
+            "Transcription: System audio capture initialized (mode=\(systemAudioMode.rawValue), macOS 14.4+)"
+          )
         } else {
           log("Transcription: System audio capture not available (requires macOS 14.4+)")
         }
@@ -1696,10 +1730,14 @@ class AppState: ObservableObject {
     }
   }
 
-  /// Start microphone + system audio capture — mixes mic and system audio into a single
-  /// mono stream (via AudioMixer) and sends it to the Python backend (`channels=1`).
-  /// This way anything playing through the Mac's speakers (YouTube, calls, music)
-  /// ends up in the conversation transcript alongside the user's voice.
+  /// Arm microphone + system audio capture for the session. Actual capture is managed by
+  /// `reconcileCapture()` according to the System Audio mode + meeting state:
+  ///  - Always / Never: the microphone runs for the whole session (system audio per mode).
+  ///  - Only during meetings: nothing is captured until a call is detected, then mic + system
+  ///    start, and both pause when the call ends — so the mic (and its indicator) stays off
+  ///    outside meetings.
+  /// Captured audio is mixed into one mono stream (cloud) or fed to separate Parakeet instances
+  /// (local) so calls/videos/music end up in the transcript alongside the user's voice.
   private func startMicrophoneAudioCapture() async {
     guard let audioCaptureService = audioCaptureService else { return }
 
@@ -1721,9 +1759,22 @@ class AppState: ObservableObject {
       }
     }
 
+    // Start (or gate) microphone + system capture according to the System Audio mode + meeting state.
+    await reconcileCapture()
+
+    log("Transcription: Audio capture armed (mic + system managed by meeting gate)")
+  }
+
+  /// Start microphone capture and wire its chunks/level to the active sink (the mixer in cloud mode,
+  /// the mic Parakeet instance in local mode).
+  /// - Returns: true if the mic is capturing after the call (already capturing or started OK);
+  ///   false on a hard start failure (or if the session was torn down during the async start).
+  @discardableResult
+  private func startMicCaptureIfNeeded() async -> Bool {
+    guard let mic = audioCaptureService else { return false }
+    guard !mic.capturing else { return true }
     do {
-      // Microphone capture → mixer (cloud) or mic Parakeet instance (local). Level drives the UI.
-      try await audioCaptureService.startCapture(
+      try await mic.startCapture(
         onAudioChunk: { [weak self] audioData in
           guard let self else { return }
           if self.useLocalSTT {
@@ -1737,42 +1788,148 @@ class AppState: ObservableObject {
           AudioLevelMonitor.shared.updateMicrophoneLevel(level)
         }
       )
-      log("Transcription: Microphone capture started (→ mixer, Python backend mono)")
+      // The HAL setup above is async and can be slow. If recording stopped — or the service was
+      // swapped (silent-mic fallback) — while we were awaiting it, undo the just-started capture.
+      guard isTranscribing, audioCaptureService === mic else {
+        mic.stopCapture()
+        return false
+      }
+      log("Transcription: Microphone capture started")
+      return true
+    } catch {
+      logError("Transcription: Failed to start microphone capture", error: error)
+      return false
+    }
+  }
 
-      // Start system audio capture if available (macOS 14.4+). When present, its
-      // samples are mixed into the same mono stream so YouTube/calls/music end up
-      // in the transcript too. If unavailable or it fails, we simply keep mic-only
-      // audio flowing through the mixer.
-      if #available(macOS 14.4, *) {
-        if let systemService = systemAudioCaptureService as? SystemAudioCaptureService {
-          do {
-            try await systemService.startCapture(
-              onAudioChunk: { [weak self] audioData in
-                guard let self else { return }
-                if self.useLocalSTT {
-                  self.localSystemService?.appendAudio(audioData)
-                } else {
-                  self.audioMixer?.setSystemAudio(audioData)
-                }
-              },
-              onAudioLevel: { level in
-                AudioLevelMonitor.shared.updateSystemLevel(level)
-              }
-            )
-            log("Transcription: System audio capture started (→ mixer, mono sum)")
-          } catch {
-            // System audio is optional — continue with mic only (mixer will just
-            // emit mic samples summed with zero system samples).
-            logError(
-              "Transcription: System audio capture failed (continuing with mic only)", error: error)
+  // MARK: - Capture Gating (meeting-aware)
+
+  /// Start the system-audio tap and wire its chunks/levels to the active sink (the mixer in cloud
+  /// mode, the system Parakeet instance in local mode). No-op if already capturing. System audio is
+  /// optional — a failure is logged and mic-only capture continues.
+  @available(macOS 14.4, *)
+  private func startSystemAudioCaptureIfNeeded() async {
+    guard let systemService = systemAudioCaptureService as? SystemAudioCaptureService else { return }
+    guard !systemService.capturing else { return }
+    do {
+      try await systemService.startCapture(
+        onAudioChunk: { [weak self] audioData in
+          guard let self else { return }
+          if self.useLocalSTT {
+            self.localSystemService?.appendAudio(audioData)
+          } else {
+            self.audioMixer?.setSystemAudio(audioData)
           }
+        },
+        onAudioLevel: { level in
+          AudioLevelMonitor.shared.updateSystemLevel(level)
+        }
+      )
+      // The HAL setup above is async and can be slow. If recording stopped — or the service was
+      // torn down / recreated — while we were awaiting it, immediately stop the just-started tap
+      // so we don't leave an orphaned capture running.
+      guard isTranscribing,
+        (systemAudioCaptureService as? SystemAudioCaptureService) === systemService
+      else {
+        systemService.stopCapture()
+        log("Transcription: System audio capture aborted (recording stopped during start)")
+        return
+      }
+      log("Transcription: System audio capture started (mode=\(effectiveSystemAudioMode.rawValue))")
+    } catch {
+      logError(
+        "Transcription: System audio capture failed (continuing with mic only)", error: error)
+    }
+  }
+
+  /// Bring microphone + system-audio capture into line with the current System Audio mode and
+  /// meeting state. Idempotent and safe to call repeatedly — invoked on capture start, when the
+  /// System Audio mode setting changes, and when the meeting detector flips.
+  ///
+  /// In "Only during meetings" mode the *entire* recording is gated: with no active call neither the
+  /// microphone nor system audio is captured (the mic indicator stays dark). When a call is
+  /// detected, both start; when it ends, both pause. In Always/Never the microphone runs for the
+  /// whole session and system audio follows the mode. Overlapping async start/stop is serialized
+  /// via `captureGateInFlight` / `captureReconcilePending`.
+  private func reconcileCapture() async {
+    guard isTranscribing else {
+      meetingDetector?.stop()
+      meetingDetector = nil
+      isAwaitingMeeting = false
+      return
+    }
+
+    // Coalesce: if an async start/stop is in flight, request another pass when it finishes.
+    if captureGateInFlight {
+      captureReconcilePending = true
+      return
+    }
+
+    let mode = effectiveSystemAudioMode
+
+    // The meeting detector runs only in "Only during meetings" mode.
+    if mode == .onlyDuringMeetings {
+      if meetingDetector == nil {
+        let detector = MeetingDetector(onChange: { [weak self] _ in
+          Task { @MainActor in await self?.reconcileCapture() }
+        })
+        meetingDetector = detector
+        detector.start()
+      }
+    } else {
+      meetingDetector?.stop()
+      meetingDetector = nil
+    }
+
+    let meetingActive = meetingDetector?.isMeetingActive ?? false
+    // Only during meetings → capture (mic + system) only while in a call. Always/Never → the mic
+    // runs continuously (system audio still respects the mode below).
+    let shouldCapture = mode != .onlyDuringMeetings || meetingActive
+    isAwaitingMeeting = mode == .onlyDuringMeetings && !meetingActive
+
+    captureGateInFlight = true
+
+    // Microphone
+    if let mic = audioCaptureService {
+      if shouldCapture, !mic.capturing {
+        let started = await startMicCaptureIfNeeded()
+        if !started, isTranscribing {
+          // Hard mic failure on a required start — stop the session rather than leave it silently
+          // "recording" with no audio (the silent-mic watchdog handles zero-sample mics separately).
+          log("Transcription: stopping — microphone could not start")
+          captureGateInFlight = false
+          stopTranscription()
+          return
+        }
+      } else if !shouldCapture, mic.capturing {
+        mic.stopCapture()
+        AudioLevelMonitor.shared.updateMicrophoneLevel(0)
+        log("Transcription: Microphone capture paused (no active call)")
+      }
+    }
+
+    // System audio (macOS 14.4+). Captured when we should capture AND the mode isn't "never".
+    if #available(macOS 14.4, *) {
+      let systemShouldCapture = shouldCapture && mode != .never
+      if systemShouldCapture, systemAudioCaptureService == nil {
+        systemAudioCaptureService = SystemAudioCaptureService()
+        log("Transcription: System audio capture service created on demand (mode=\(mode.rawValue))")
+      }
+      if let systemService = systemAudioCaptureService as? SystemAudioCaptureService {
+        if systemShouldCapture, !systemService.capturing {
+          await startSystemAudioCaptureIfNeeded()
+        } else if !systemShouldCapture, systemService.capturing {
+          systemService.stopCapture()
+          AudioLevelMonitor.shared.updateSystemLevel(0)
+          log("Transcription: System audio capture paused")
         }
       }
+    }
 
-      log("Transcription: Audio capture started (mic + system → mono mix → Python backend)")
-    } catch {
-      logError("Transcription: Failed to start audio capture", error: error)
-      stopTranscription()
+    captureGateInFlight = false
+    if captureReconcilePending {
+      captureReconcilePending = false
+      await reconcileCapture()
     }
   }
 
@@ -2282,6 +2439,13 @@ class AppState: ObservableObject {
       BleAudioService.shared.stopProcessing()
       stopButtonEventListener()
     }
+
+    // Stop the meeting detector (only active in "Only during meetings" mode)
+    meetingDetector?.stop()
+    meetingDetector = nil
+    captureGateInFlight = false
+    captureReconcilePending = false
+    isAwaitingMeeting = false
 
     // Stop system audio capture first (if available)
     if #available(macOS 14.4, *) {

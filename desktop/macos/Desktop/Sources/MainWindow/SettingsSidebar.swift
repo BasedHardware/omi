@@ -28,6 +28,12 @@ struct SettingsSearchItem: Identifiable {
       keywords: ["monitor", "screenshot", "capture", "audio", "recording", "microphone", "speech"],
       section: .general, icon: "gearshape", settingId: "general.rewind"),
     SettingsSearchItem(
+      name: "System Audio", subtitle: "When to record audio from other apps",
+      keywords: [
+        "system audio", "meeting", "zoom", "google meet", "teams", "call", "capture", "recording",
+        "speaker",
+      ], section: .general, icon: "speaker.wave.2", settingId: "general.systemaudio"),
+    SettingsSearchItem(
       name: "Notifications", subtitle: "Proactive alerts and status",
       keywords: ["alerts", "notify"], section: .general, icon: "gearshape",
       settingId: "general.notifications"),
