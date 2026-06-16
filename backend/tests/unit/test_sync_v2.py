@@ -15,6 +15,7 @@ import sys
 import threading
 import time
 import unittest
+from io import BytesIO
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -1283,11 +1284,16 @@ class TestAsyncCoordinatorBehavioral:
             'utils.speaker_assignment',
             'utils.speaker_identification',
             'utils.stt.speaker_embedding',
+            'python_multipart',
+            'python_multipart.multipart',
         ]
 
         for mod_name in heavy_deps:
             saved_modules[mod_name] = sys.modules.get(mod_name)
             sys.modules[mod_name] = MagicMock()
+
+        sys.modules['python_multipart'].__version__ = '0.0.99'
+        sys.modules['python_multipart.multipart'].parse_options_header = MagicMock(return_value={})
 
         mock_executors = MagicMock()
         mock_executors.critical_executor = MagicMock()
@@ -1760,11 +1766,16 @@ class TestV2EndpointExecution:
             'utils.speaker_assignment',
             'utils.speaker_identification',
             'utils.stt.speaker_embedding',
+            'python_multipart',
+            'python_multipart.multipart',
         ]
 
         for mod_name in heavy_deps:
             saved_modules[mod_name] = sys.modules.get(mod_name)
             sys.modules[mod_name] = MagicMock()
+
+        sys.modules['python_multipart'].__version__ = '0.0.99'
+        sys.modules['python_multipart.multipart'].parse_options_header = MagicMock(return_value={})
 
         # Stub utils.executors with real-ish executor mocks
         import contextvars
@@ -2052,18 +2063,14 @@ class TestV2EndpointExecution:
 
             module.run_blocking = _passthrough_run_blocking
 
-            from fastapi import FastAPI
-            from fastapi.testclient import TestClient
+            import asyncio
+            from starlette.datastructures import UploadFile
 
-            app = FastAPI()
-            app.include_router(module.router)
-            app.dependency_overrides[module.auth.get_current_user_uid] = lambda: 'test-uid'
-
-            client = TestClient(app)
-            resp = client.post('/v2/sync-local-files', files=[('files', ('test.opus', b'\x00' * 10, 'audio/opus'))])
+            upload = UploadFile(filename='test.opus', file=BytesIO(b'\x00' * 10))
+            resp = asyncio.run(module.sync_local_files_v2(files=[upload], uid='test-uid'))
 
             assert resp.status_code == 202, f"Expected 202, got {resp.status_code}: {resp.text}"
-            body = resp.json()
+            body = json.loads(resp.body)
             assert 'job_id' in body
             assert body['status'] == 'queued'
             assert body['poll_after_ms'] == 3000
