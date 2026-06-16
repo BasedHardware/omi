@@ -1,5 +1,7 @@
 {
-  "unreleased": [],
+  "unreleased": [
+    "Fixed older chat messages failing to load in long chats"
+  ],
   "releases": [
     {
       "version": "0.11.464",
