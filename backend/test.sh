@@ -86,6 +86,7 @@ pytest tests/unit/test_action_item_idempotency.py -v
 pytest tests/unit/test_tools_router.py -v
 pytest tests/unit/test_kg_user_type_mismatch.py -v
 pytest tests/unit/test_kg_edge_id_sanitization.py -v
+pytest tests/unit/test_goal_extraction_batch.py -v
 pytest tests/unit/test_listen_pipeline.py -v
 pytest tests/unit/test_fair_use_models.py -v
 pytest tests/unit/test_fair_use_engine.py -v
