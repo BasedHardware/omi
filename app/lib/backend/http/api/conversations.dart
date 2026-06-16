@@ -115,15 +115,63 @@ Future<ServerConversation?> reProcessConversationServer(String conversationId, {
   return null;
 }
 
-Future<bool> deleteConversationServer(String conversationId) async {
+Future<bool> deleteConversationServer(String conversationId, {bool permanent = false}) async {
   var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v1/conversations/$conversationId?cascade=true',
+    url: '${Env.apiBaseUrl}v1/conversations/$conversationId?cascade=true&permanent=$permanent',
     headers: {},
     method: 'DELETE',
     body: '',
   );
   if (response == null) return false;
   Logger.debug('deleteConversation: ${response.statusCode}');
+  return response.statusCode == 204;
+}
+
+Future<List<ServerConversation>> getTrashedConversationsServer({int limit = 50}) async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/trash/conversations?limit=$limit',
+    headers: {},
+    method: 'GET',
+    body: '',
+  );
+  if (response == null) return [];
+  if (response.statusCode == 200) {
+    final list = jsonDecode(response.body) as List;
+    return list.map((item) => ServerConversation.fromJson(item)).toList();
+  }
+  return [];
+}
+
+Future<bool> restoreConversationServer(String conversationId) async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/trash/conversations/$conversationId/restore',
+    headers: {},
+    method: 'POST',
+    body: '',
+  );
+  if (response == null) return false;
+  return response.statusCode == 204;
+}
+
+Future<bool> permanentlyDeleteTrashedConversationServer(String conversationId) async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/trash/conversations/$conversationId',
+    headers: {},
+    method: 'DELETE',
+    body: '',
+  );
+  if (response == null) return false;
+  return response.statusCode == 204;
+}
+
+Future<bool> emptyTrashServer({int olderThanDays = 0}) async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/trash/conversations?older_than_days=$olderThanDays',
+    headers: {},
+    method: 'DELETE',
+    body: '',
+  );
+  if (response == null) return false;
   return response.statusCode == 204;
 }
 

@@ -108,6 +108,7 @@ class Conversation(BaseModel):
     app_id: Optional[str] = None
 
     discarded: bool = False
+    deleted_at: Optional[datetime] = None
     visibility: ConversationVisibility = ConversationVisibility.private
     starred: bool = False
 

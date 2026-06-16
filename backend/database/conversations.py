@@ -721,7 +721,57 @@ def update_conversation_status(uid: str, conversation_id: str, status: str):
 def set_conversation_as_discarded(uid: str, conversation_id: str):
     user_ref = db.collection('users').document(uid)
     conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
-    conversation_ref.update({'discarded': True})
+    conversation_ref.update({'discarded': True, 'deleted_at': datetime.now(timezone.utc)})
+
+
+def set_conversation_as_trashed(uid: str, conversation_id: str):
+    """Soft-delete a conversation: move to trash with a deleted_at timestamp."""
+    user_ref = db.collection('users').document(uid)
+    conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
+    conversation_ref.update({'discarded': True, 'deleted_at': datetime.now(timezone.utc)})
+
+
+def restore_conversation(uid: str, conversation_id: str):
+    """Restore a trashed conversation."""
+    user_ref = db.collection('users').document(uid)
+    conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
+    conversation_ref.update({'discarded': False, 'deleted_at': None})
+
+
+def get_trashed_conversations(uid: str, limit: int = 50) -> List[dict]:
+    """Return trashed conversations ordered by deleted_at descending."""
+    user_ref = db.collection('users').document(uid)
+    conversations_ref = user_ref.collection(conversations_collection)
+    docs = (conversations_ref
+            .where(filter=FieldFilter('discarded', '==', True))
+            .order_by('deleted_at', direction=firestore.Query.DESCENDING)
+            .limit(limit)
+            .stream())
+    return [_decrypt_conversation_data(doc.to_dict(), uid) for doc in docs if doc.exists]
+
+
+def empty_trash(uid: str, older_than_days: int = 30):
+    """Permanently delete trashed conversations older than the specified number of days."""
+    from google.cloud.firestore_v1 import field_path
+    user_ref = db.collection('users').document(uid)
+    conversations_ref = user_ref.collection(conversations_collection)
+    cutoff = datetime.now(timezone.utc) - timedelta(days=older_than_days)
+    docs = (conversations_ref
+            .where(filter=FieldFilter('discarded', '==', True))
+            .where(filter=FieldFilter('deleted_at', '<=', cutoff))
+            .stream())
+    batch = db.batch()
+    count = 0
+    for doc in docs:
+        delete_conversation_photos(uid, doc.id)
+        batch.delete(doc.reference)
+        count += 1
+        if count % 450 == 0:
+            batch.commit()
+            batch = db.batch()
+    if count % 450 != 0:
+        batch.commit()
+    return count
 
 
 # *********************************

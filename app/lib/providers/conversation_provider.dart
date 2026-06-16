@@ -788,7 +788,7 @@ class ConversationProvider extends ChangeNotifier {
   }
 
   void deleteConversationOnServer(String conversationId) {
-    deleteConversationServer(conversationId);
+    deleteConversationServer(conversationId, permanent: false);
     memoriesToDelete.remove(conversationId);
     deleteTimestamps.remove(conversationId);
     if (lastDeletedConversationId == conversationId) {
@@ -815,8 +815,50 @@ class ConversationProvider extends ChangeNotifier {
   void deleteConversation(ServerConversation conversation) {
     conversations.removeWhere((element) => element.id == conversation.id);
     searchedConversations.removeWhere((element) => element.id == conversation.id);
-    deleteConversationServer(conversation.id);
+    deleteConversationServer(conversation.id, permanent: true);
     groupConversationsByDate();
+  }
+
+  /////////////////////////////////////////////////////////////////
+  ////////// Trash / Soft Delete Functionality ///////////////////
+  /////////////////////////////////////////////////////////////////
+
+  List<ServerConversation> trashedConversations = [];
+  bool isLoadingTrash = false;
+
+  Future<void> fetchTrashedConversations() async {
+    isLoadingTrash = true;
+    notifyListeners();
+    trashedConversations = await getTrashedConversationsServer();
+    isLoadingTrash = false;
+    notifyListeners();
+  }
+
+  Future<bool> restoreConversationFromTrash(String conversationId) async {
+    final ok = await restoreConversationServer(conversationId);
+    if (ok) {
+      trashedConversations.removeWhere((c) => c.id == conversationId);
+      notifyListeners();
+    }
+    return ok;
+  }
+
+  Future<bool> permanentlyDeleteFromTrash(String conversationId) async {
+    final ok = await permanentlyDeleteTrashedConversationServer(conversationId);
+    if (ok) {
+      trashedConversations.removeWhere((c) => c.id == conversationId);
+      notifyListeners();
+    }
+    return ok;
+  }
+
+  Future<bool> emptyTrash({int olderThanDays = 0}) async {
+    final ok = await emptyTrashServer(olderThanDays: olderThanDays);
+    if (ok) {
+      trashedConversations.clear();
+      notifyListeners();
+    }
+    return ok;
   }
 
   @override
