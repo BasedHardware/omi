@@ -26,6 +26,10 @@ final class RawWebSocket {
   private let queue: DispatchQueue
   private var conn: NWConnection?
   private var handshakeDone = false
+  // Heartbeat: Gemini idle-closes the connection (~2.5 min, close 1008) when no input
+  // flows. A periodic WS ping keeps it alive so the warm socket survives between turns
+  // (otherwise PTT lands in the reconnect gap and falls back to STT).
+  private var pingTimer: DispatchSourceTimer?
   private var inbound = Data()
   // Reassembly across fragmented frames.
   private var fragment = Data()
@@ -63,6 +67,8 @@ final class RawWebSocket {
   func close() {
     guard !closed else { return }
     closed = true
+    pingTimer?.cancel()
+    pingTimer = nil
     send(frame(opcode: 0x8, payload: Data()))
     conn?.cancel()
     conn = nil
@@ -121,7 +127,20 @@ final class RawWebSocket {
     let headerByteLen = (head + "\r\n\r\n").utf8.count
     inbound.removeFirst(min(headerByteLen, inbound.count))
     onOpen?()
+    startKeepalive()
     if !inbound.isEmpty { parseFrames() }
+  }
+
+  /// Send a WS ping every 20s so the idle timer never fires while the socket is warm.
+  private func startKeepalive() {
+    let t = DispatchSource.makeTimerSource(queue: queue)
+    t.schedule(deadline: .now() + 20, repeating: 20)
+    t.setEventHandler { [weak self] in
+      guard let self, !self.closed else { return }
+      self.send(self.frame(opcode: 0x9, payload: Data()))
+    }
+    pingTimer = t
+    t.resume()
   }
 
   // MARK: - Frame codec
@@ -217,6 +236,8 @@ final class RawWebSocket {
   private func fail(_ message: String) {
     guard !closed else { return }
     closed = true
+    pingTimer?.cancel()
+    pingTimer = nil
     onError?(message)
     conn?.cancel(); conn = nil
   }
