@@ -619,6 +619,8 @@ _STUB_MODULES = [
     'utils.subscription',
     'utils.cloud_tasks',
     'utils.conversations.process_conversation',
+    'python_multipart',
+    'python_multipart.multipart',
 ]
 
 
@@ -665,6 +667,8 @@ class TestProcessSegmentReal:
         sys.modules['utils.other.storage'].download_audio_chunks_and_merge = MagicMock()
         sys.modules['utils.other.storage'].get_or_create_merged_audio = MagicMock()
         sys.modules['utils.other.storage'].get_merged_audio_signed_url = MagicMock()
+        sys.modules['utils.other.storage'].is_playback_unavailable = MagicMock(return_value=False)
+        sys.modules['utils.other.storage'].mark_playback_unavailable = MagicMock()
         sys.modules['utils.other.storage']._PRECACHE_FILE_SEM = MagicMock()
         sys.modules['utils.other.storage'].upload_syncing_temporal_file = MagicMock()
         sys.modules['utils.other.storage'].download_syncing_temporal_file = MagicMock(return_value=True)
@@ -691,6 +695,8 @@ class TestProcessSegmentReal:
         sys.modules['utils.fair_use'].get_rolling_speech_ms = MagicMock()
         sys.modules['utils.fair_use'].check_soft_caps = MagicMock()
         sys.modules['utils.fair_use'].is_hard_restricted = MagicMock(return_value=False)
+        sys.modules['python_multipart'].__version__ = '0.0.99'
+        sys.modules['python_multipart.multipart'].parse_options_header = MagicMock(return_value={})
         sys.modules['utils.fair_use'].trigger_classifier_if_needed = MagicMock()
         sys.modules['utils.fair_use'].is_dg_budget_exhausted = MagicMock(return_value=False)
         sys.modules['utils.fair_use'].get_enforcement_stage = MagicMock(return_value='off')
@@ -1082,6 +1088,8 @@ class TestVoiceMessageRuntimeErrorHandling:
         sys.modules['utils.other.storage'].upload_playback_artifact = MagicMock()
         sys.modules['utils.other.storage'].enqueue_conversation_audio_merge = MagicMock()
         sys.modules['utils.other.storage'].delete_syncing_temporal_file = MagicMock()
+        sys.modules['utils.other.storage'].is_playback_unavailable = MagicMock(return_value=False)
+        sys.modules['utils.other.storage'].mark_playback_unavailable = MagicMock()
         sys.modules['utils.notifications'].send_notification = MagicMock()
         sys.modules['utils.retrieval.graph'].execute_graph_chat = MagicMock()
         sys.modules['utils.retrieval.graph'].execute_graph_chat_stream = MagicMock()
