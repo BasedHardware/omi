@@ -11022,5 +11022,57 @@
     "syncCustomSttWarningMessage": "You use your own transcription provider. Syncing these recordings transcribes them on Omi's servers instead, and they count toward your plan's transcription limit.",
     "@syncCustomSttWarningMessage": {
         "description": "Body warning that syncing transcribes on Omi servers and counts toward the plan limit"
+    },
+    "trash": "Trash",
+    "@trash": {
+        "description": "Navigation label for the trash / soft-delete page"
+    },
+    "trashIsEmpty": "Trash is empty",
+    "@trashIsEmpty": {
+        "description": "Placeholder text when there are no trashed conversations"
+    },
+    "deletedConversationsAppearHere": "Deleted conversations appear here",
+    "@deletedConversationsAppearHere": {
+        "description": "Subtitle placeholder when trash is empty"
+    },
+    "deletePermanentlyTitle": "Delete permanently?",
+    "@deletePermanentlyTitle": {
+        "description": "Title for permanent delete confirmation dialog"
+    },
+    "deletePermanentlyMessage": "This conversation will be permanently deleted and cannot be recovered.",
+    "@deletePermanentlyMessage": {
+        "description": "Message for permanent delete confirmation dialog"
+    },
+    "deletePermanently": "Delete",
+    "@deletePermanently": {
+        "description": "Button label to permanently delete a conversation from trash"
+    },
+    "emptyTrash": "Empty Trash",
+    "@emptyTrash": {
+        "description": "Button label to empty all trashed conversations"
+    },
+    "emptyTrashTitle": "Empty Trash?",
+    "@emptyTrashTitle": {
+        "description": "Title for empty trash confirmation dialog"
+    },
+    "emptyTrashMessage": "All trashed conversations will be permanently deleted.",
+    "@emptyTrashMessage": {
+        "description": "Message for empty trash confirmation dialog"
+    },
+    "deletedDate": "Deleted {date}",
+    "@deletedDate": {
+        "description": "Shows when a conversation was deleted, e.g. 'Deleted 15/3/2025'"
+    },
+    "restore": "Restore",
+    "@restore": {
+        "description": "Tooltip for restore button"
+    },
+    "deletePermanentlyTooltip": "Delete permanently",
+    "@deletePermanentlyTooltip": {
+        "description": "Tooltip for permanent delete button"
+    },
+    "recently": "Recently",
+    "@recently": {
+        "description": "Label shown when deletion date is not available"
     }
 }

@@ -9330,4 +9330,45 @@ class AppLocalizationsBn extends AppLocalizations {
   @override
   String get syncCustomSttWarningMessage =>
       'আপনি নিজের ট্রান্সক্রিপশন প্রদানকারী ব্যবহার করেন। এই রেকর্ডিংগুলি সিঙ্ক করলে সেগুলি Omi-এর সার্ভারে ট্রান্সক্রাইব হবে এবং আপনার প্ল্যানের ট্রান্সক্রিপশন সীমার মধ্যে গণনা হবে।';
+
+  @override
+  String get trash => 'Trash';
+
+  @override
+  String get trashIsEmpty => 'Trash is empty';
+
+  @override
+  String get deletedConversationsAppearHere => 'Deleted conversations appear here';
+
+  @override
+  String get deletePermanentlyTitle => 'Delete permanently?';
+
+  @override
+  String get deletePermanentlyMessage => 'This conversation will be permanently deleted and cannot be recovered.';
+
+  @override
+  String get deletePermanently => 'Delete';
+
+  @override
+  String get emptyTrash => 'Empty Trash';
+
+  @override
+  String get emptyTrashTitle => 'Empty Trash?';
+
+  @override
+  String get emptyTrashMessage => 'All trashed conversations will be permanently deleted.';
+
+  @override
+  String deletedDate(Object date) {
+    return 'Deleted $date';
+  }
+
+  @override
+  String get restore => 'Restore';
+
+  @override
+  String get deletePermanentlyTooltip => 'Delete permanently';
+
+  @override
+  String get recently => 'Recently';
 }

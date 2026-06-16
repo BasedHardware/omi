@@ -719,9 +719,11 @@ def update_conversation_status(uid: str, conversation_id: str, status: str):
 
 
 def set_conversation_as_discarded(uid: str, conversation_id: str):
+    """Auto-discard on processing failure — marks as discarded without a deleted_at timestamp.
+    Only user-initiated deletes (set_conversation_as_trashed) set deleted_at."""
     user_ref = db.collection('users').document(uid)
     conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
-    conversation_ref.update({'discarded': True, 'deleted_at': datetime.now(timezone.utc)})
+    conversation_ref.update({'discarded': True})
 
 
 def set_conversation_as_trashed(uid: str, conversation_id: str):
@@ -739,20 +741,23 @@ def restore_conversation(uid: str, conversation_id: str):
 
 
 def get_trashed_conversations(uid: str, limit: int = 50) -> List[dict]:
-    """Return trashed conversations ordered by deleted_at descending."""
+    """Return trashed conversations ordered by deleted_at descending.
+    Only returns conversations with a deleted_at timestamp (user-trashed, not auto-discarded)."""
     user_ref = db.collection('users').document(uid)
     conversations_ref = user_ref.collection(conversations_collection)
     docs = (conversations_ref
             .where(filter=FieldFilter('discarded', '==', True))
+            .where(filter=FieldFilter('deleted_at', '!=', None))
             .order_by('deleted_at', direction=firestore.Query.DESCENDING)
             .limit(limit)
             .stream())
     return [_decrypt_conversation_data(doc.to_dict(), uid) for doc in docs if doc.exists]
 
 
-def empty_trash(uid: str, older_than_days: int = 30):
-    """Permanently delete trashed conversations older than the specified number of days."""
-    from google.cloud.firestore_v1 import field_path
+def empty_trash(uid: str, older_than_days: int = 30) -> List[str]:
+    """Permanently delete trashed conversations older than the specified number of days.
+    Returns the list of deleted conversation IDs so callers can clean up vectors."""
+    from database.vector_db import delete_vector, delete_transcript_chunk_vectors
     user_ref = db.collection('users').document(uid)
     conversations_ref = user_ref.collection(conversations_collection)
     cutoff = datetime.now(timezone.utc) - timedelta(days=older_than_days)
@@ -761,17 +766,19 @@ def empty_trash(uid: str, older_than_days: int = 30):
             .where(filter=FieldFilter('deleted_at', '<=', cutoff))
             .stream())
     batch = db.batch()
-    count = 0
+    ids = []
     for doc in docs:
         delete_conversation_photos(uid, doc.id)
+        delete_vector(uid, doc.id)
+        delete_transcript_chunk_vectors(uid, doc.id)
         batch.delete(doc.reference)
-        count += 1
-        if count % 450 == 0:
+        ids.append(doc.id)
+        if len(ids) % 450 == 0:
             batch.commit()
             batch = db.batch()
-    if count % 450 != 0:
+    if ids and len(ids) % 450 != 0:
         batch.commit()
-    return count
+    return ids
 
 
 # *********************************

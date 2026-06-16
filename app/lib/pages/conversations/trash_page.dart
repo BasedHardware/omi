@@ -34,9 +34,9 @@ class _TrashPageState extends State<TrashPage> {
           icon: const FaIcon(FontAwesomeIcons.chevronLeft, size: 18),
           onPressed: () => Navigator.of(context).pop(),
         ),
-        title: const Text(
-          'Trash',
-          style: TextStyle(fontWeight: FontWeight.w600, fontSize: 18),
+        title: Text(
+          context.l10n.trash,
+          style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 18),
         ),
         centerTitle: true,
         actions: [
@@ -46,7 +46,7 @@ class _TrashPageState extends State<TrashPage> {
               return TextButton(
                 onPressed: () => _showEmptyTrashDialog(context, provider),
                 child: Text(
-                  'Empty Trash',
+                  context.l10n.emptyTrash,
                   style: TextStyle(color: Colors.redAccent.shade200, fontWeight: FontWeight.w500),
                 ),
               );
@@ -67,12 +67,12 @@ class _TrashPageState extends State<TrashPage> {
                   FaIcon(FontAwesomeIcons.trash, color: Colors.grey.shade600, size: 48),
                   const SizedBox(height: 16),
                   Text(
-                    'Trash is empty',
+                    context.l10n.trashIsEmpty,
                     style: TextStyle(color: Colors.grey.shade400, fontSize: 18, fontWeight: FontWeight.w500),
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    'Deleted conversations appear here',
+                    context.l10n.deletedConversationsAppearHere,
                     style: TextStyle(color: Colors.grey.shade600, fontSize: 14),
                   ),
                 ],
@@ -102,49 +102,49 @@ class _TrashPageState extends State<TrashPage> {
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: const Color(0xFF1C1C1E),
-        title: const Text('Delete permanently?', style: TextStyle(color: Colors.white)),
-        content: const Text(
-          'This conversation will be permanently deleted and cannot be recovered.',
-          style: TextStyle(color: Colors.white70),
+        title: Text(context.l10n.deletePermanentlyTitle, style: const TextStyle(color: Colors.white)),
+        content: Text(
+          context.l10n.deletePermanentlyMessage,
+          style: const TextStyle(color: Colors.white70),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
+            child: Text(context.l10n.cancel, style: const TextStyle(color: Colors.grey)),
           ),
           TextButton(
             onPressed: () {
               Navigator.of(ctx).pop();
               provider.permanentlyDeleteFromTrash(conversation.id);
             },
-            child: Text('Delete', style: TextStyle(color: Colors.redAccent.shade200)),
+            child: Text(context.l10n.deletePermanently, style: TextStyle(color: Colors.redAccent.shade200)),
           ),
         ],
       ),
     );
   }
 
-  void _showEmptyTrashDialog(BuildContext context, ConversationProvider provider) {
+  void _showEmptyTrashDialog(BuildContext dialogContext, ConversationProvider provider) {
     showDialog(
-      context: context,
+      context: dialogContext,
       builder: (ctx) => AlertDialog(
         backgroundColor: const Color(0xFF1C1C1E),
-        title: const Text('Empty Trash?', style: TextStyle(color: Colors.white)),
-        content: const Text(
-          'All trashed conversations will be permanently deleted.',
-          style: TextStyle(color: Colors.white70),
+        title: Text(context.l10n.emptyTrashTitle, style: const TextStyle(color: Colors.white)),
+        content: Text(
+          context.l10n.emptyTrashMessage,
+          style: const TextStyle(color: Colors.white70),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
+            child: Text(context.l10n.cancel, style: const TextStyle(color: Colors.grey)),
           ),
           TextButton(
             onPressed: () {
               Navigator.of(ctx).pop();
               provider.emptyTrash();
             },
-            child: Text('Empty', style: TextStyle(color: Colors.redAccent.shade200)),
+            child: Text(context.l10n.emptyTrash, style: TextStyle(color: Colors.redAccent.shade200)),
           ),
         ],
       ),
@@ -165,11 +165,11 @@ class _TrashItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final title = conversation.structured.title ?? 'Untitled';
+    final title = conversation.structured.title;
     final deletedAt = conversation.deletedAt;
     final deletedDate = deletedAt != null
         ? '${deletedAt.day}/${deletedAt.month}/${deletedAt.year}'
-        : 'Recently';
+        : context.l10n.recently;
 
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 12),
@@ -187,7 +187,7 @@ class _TrashItem extends StatelessWidget {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  'Deleted $deletedDate',
+                  context.l10n.deletedDate(deletedDate),
                   style: TextStyle(color: Colors.grey.shade500, fontSize: 12),
                 ),
               ],
@@ -195,13 +195,13 @@ class _TrashItem extends StatelessWidget {
           ),
           IconButton(
             icon: const FaIcon(FontAwesomeIcons.rotateLeft, color: Colors.white, size: 14),
-            tooltip: 'Restore',
+            tooltip: context.l10n.restore,
             onPressed: onRestore,
           ),
           const SizedBox(width: 4),
           IconButton(
             icon: FaIcon(FontAwesomeIcons.trashCan, color: Colors.redAccent.shade200, size: 14),
-            tooltip: 'Delete permanently',
+            tooltip: context.l10n.deletePermanentlyTooltip,
             onPressed: onPermanentDelete,
           ),
         ],

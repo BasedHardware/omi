@@ -355,7 +355,7 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
                                         FaIcon(FontAwesomeIcons.trash, color: Colors.grey.shade400, size: 11),
                                         const SizedBox(width: 4),
                                         Text(
-                                          'Trash',
+                                          context.l10n.trash,
                                           style: TextStyle(color: Colors.grey.shade400, fontSize: 12),
                                         ),
                                       ],

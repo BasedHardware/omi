@@ -445,8 +445,10 @@ def empty_trash(
     uid: str = Depends(auth.get_current_user_uid),
 ):
     """Permanently delete trashed conversations. If older_than_days=0, empties all trash."""
-    count = conversations_db.empty_trash(uid, older_than_days or 0)
-    logger.info(f'emptied trash for {uid}: {count} conversations permanently deleted')
+    deleted_ids = conversations_db.empty_trash(uid, older_than_days or 0)
+    for cid in deleted_ids:
+        background_tasks.add_task(delete_conversation_audio_files, uid, cid)
+    logger.info(f'emptied trash for {uid}: {len(deleted_ids)} conversations permanently deleted')
 
 
 @router.get("/v1/conversations/{conversation_id}/recording", response_model=dict, tags=['conversations'])

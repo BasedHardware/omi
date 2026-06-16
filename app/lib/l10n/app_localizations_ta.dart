@@ -9389,4 +9389,45 @@ class AppLocalizationsTa extends AppLocalizations {
   @override
   String get syncCustomSttWarningMessage =>
       'நீங்கள் உங்கள் சொந்த படியெடுப்பு வழங்குநரைப் பயன்படுத்துகிறீர்கள். இந்தப் பதிவுகளை ஒத்திசைத்தால் அவை Omi சேவையகங்களில் படியெடுக்கப்படும், மேலும் உங்கள் திட்டத்தின் படியெடுப்பு வரம்பில் கணக்கிடப்படும்.';
+
+  @override
+  String get trash => 'Trash';
+
+  @override
+  String get trashIsEmpty => 'Trash is empty';
+
+  @override
+  String get deletedConversationsAppearHere => 'Deleted conversations appear here';
+
+  @override
+  String get deletePermanentlyTitle => 'Delete permanently?';
+
+  @override
+  String get deletePermanentlyMessage => 'This conversation will be permanently deleted and cannot be recovered.';
+
+  @override
+  String get deletePermanently => 'Delete';
+
+  @override
+  String get emptyTrash => 'Empty Trash';
+
+  @override
+  String get emptyTrashTitle => 'Empty Trash?';
+
+  @override
+  String get emptyTrashMessage => 'All trashed conversations will be permanently deleted.';
+
+  @override
+  String deletedDate(Object date) {
+    return 'Deleted $date';
+  }
+
+  @override
+  String get restore => 'Restore';
+
+  @override
+  String get deletePermanentlyTooltip => 'Delete permanently';
+
+  @override
+  String get recently => 'Recently';
 }
