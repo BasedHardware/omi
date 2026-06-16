@@ -72,7 +72,9 @@ describe('friendlyAppName', () => {
     expect(friendlyAppName('Telegram.TelegramDesktop')).toBe('TelegramDesktop')
   })
   it('strips the package-family hash and !App suffix from packaged AUMIDs', () => {
-    expect(friendlyAppName('Microsoft.ZuneMusic_8wekyb3d8bbwe!Microsoft.ZuneMusic')).toBe('ZuneMusic')
+    expect(friendlyAppName('Microsoft.ZuneMusic_8wekyb3d8bbwe!Microsoft.ZuneMusic')).toBe(
+      'ZuneMusic'
+    )
     expect(friendlyAppName('5319275A.WhatsAppDesktop_cv1g1gvanyjgm!App')).toBe('WhatsAppDesktop')
     // Uses the package-name segment, not the !Activatable id. "SpotifyMusic"
     // still matches an indexed "Spotify" via rankApps' containment rule.
@@ -83,11 +85,15 @@ describe('friendlyAppName', () => {
   })
   it('uses the exe basename (without .exe) for full paths', () => {
     expect(friendlyAppName('C:\\Users\\me\\AppData\\Local\\Programs\\Warp\\Warp.exe')).toBe('Warp')
-    expect(friendlyAppName('C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe')).toBe('chrome')
+    expect(friendlyAppName('C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe')).toBe(
+      'chrome'
+    )
   })
   it('ignores a leading KNOWNFOLDERID GUID segment in a path', () => {
     expect(
-      friendlyAppName('{1AC14E77-02E7-4E5D-B744-2EB1AE5198B7}\\WindowsPowerShell\\v1.0\\powershell.exe')
+      friendlyAppName(
+        '{1AC14E77-02E7-4E5D-B744-2EB1AE5198B7}\\WindowsPowerShell\\v1.0\\powershell.exe'
+      )
     ).toBe('powershell')
   })
   it('returns null for empty / GUID-only names', () => {
@@ -100,9 +106,15 @@ describe('aggregateUserAssist', () => {
   it('decodes, drops control entries, and sums focus time per friendly name', () => {
     const raw = [
       { name: rot13('UEME_CTLSESSION'), data: blob({ focusMs: 999_999 }) },
-      { name: rot13('dev.warp.Warp'), data: blob({ focusMs: 60_000, runCount: 3, lastUsedMs: 100 }) },
+      {
+        name: rot13('dev.warp.Warp'),
+        data: blob({ focusMs: 60_000, runCount: 3, lastUsedMs: 100 })
+      },
       // same friendly name via a full path -> merged
-      { name: rot13('C:\\x\\Warp\\Warp.exe'), data: blob({ focusMs: 30_000, runCount: 2, lastUsedMs: 200 }) },
+      {
+        name: rot13('C:\\x\\Warp\\Warp.exe'),
+        data: blob({ focusMs: 30_000, runCount: 2, lastUsedMs: 200 })
+      },
       { name: rot13('Chrome'), data: blob({ focusMs: 120_000, lastUsedMs: 50 }) }
     ]
     const out = aggregateUserAssist(raw)
