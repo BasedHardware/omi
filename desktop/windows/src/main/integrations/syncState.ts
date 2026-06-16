@@ -3,7 +3,12 @@
 import { app } from 'electron'
 import { existsSync, readFileSync, writeFileSync, rmSync } from 'fs'
 import { join } from 'path'
-import { emptySourceState, normalizeSourceState, recordProcessed, type SourceState } from './syncStateLogic'
+import {
+  emptySourceState,
+  normalizeSourceState,
+  recordProcessed,
+  type SourceState
+} from './syncStateLogic'
 import type { GoogleSource } from '../../shared/types'
 
 type SyncFile = { gmail: SourceState; calendar: SourceState }
