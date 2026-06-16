@@ -76,7 +76,10 @@ class AddAppProvider extends ChangeNotifier {
   bool isUpdating = false;
   bool isSubmitting = false;
   bool isValid = false;
+  bool hasChanges = false;
   bool isGenratingDescription = false;
+
+  App? _originalApp;
 
   bool allowPaidApps = false;
 
@@ -214,7 +217,9 @@ class AddAppProvider extends ChangeNotifier {
     thumbnailUrls = app.thumbnailUrls;
     thumbnailIds = app.thumbnailIds;
 
+    _originalApp = app;
     isValid = false;
+    hasChanges = false;
     setIsLoading(false);
     notifyListeners();
   }
@@ -338,49 +343,33 @@ class AddAppProvider extends ChangeNotifier {
   }
 
   bool hasDataChanged(App app, String category) {
-    if (imageFile != null) {
-      return true;
-    }
-    if (appNameController.text != app.name) {
-      return true;
-    }
-    if (appDescriptionController.text != app.description) {
-      return true;
-    }
-    if (makeAppPublic != !app.private) {
-      return true;
-    }
-    if (appCategory != category) {
-      return true;
-    }
-    if (selectedCapabilities.length != app.capabilities.length) {
-      return true;
-    }
+    if (imageFile != null) return true;
+    if (appNameController.text != app.name.decodeString) return true;
+    if (appDescriptionController.text != app.description.decodeString) return true;
+    if (makeAppPublic != !app.private) return true;
+    if (appCategory != category) return true;
+    if (selectedCapabilities.length != app.capabilities.length) return true;
     if (app.externalIntegration != null) {
-      if (triggerEvent != app.externalIntegration!.triggersOn) {
-        return true;
-      }
-      if (webhookUrlController.text != app.externalIntegration!.webhookUrl) {
-        return true;
-      }
-      if (setupCompletedController.text != app.externalIntegration!.setupCompletedUrl) {
-        return true;
-      }
-      if (instructionsController.text != app.externalIntegration!.setupInstructionsFilePath) {
-        return true;
-      }
+      if (triggerEvent != app.externalIntegration!.triggersOn) return true;
+      if (webhookUrlController.text != app.externalIntegration!.webhookUrl) return true;
+      if (setupCompletedController.text != app.externalIntegration!.setupCompletedUrl) return true;
+      if (instructionsController.text != app.externalIntegration!.setupInstructionsFilePath) return true;
+      if (appHomeUrlController.text != app.externalIntegration!.appHomeUrl) return true;
+      if (chatToolsManifestUrlController.text != app.externalIntegration!.chatToolsManifestUrl) return true;
     }
-    if (chatPromptController.text != app.chatPrompt) {
-      return true;
-    }
-    if (conversationPromptController.text != app.conversationPrompt) {
-      return true;
-    }
+    if (chatPromptController.text != (app.chatPrompt ?? '').decodeString) return true;
+    if (conversationPromptController.text != (app.conversationPrompt ?? '').decodeString) return true;
+    if (sourceCodeUrlController.text != (app.sourceCodeUrl ?? '')) return true;
+    if (isPaid != app.isPaid) return true;
+    if (selectePaymentPlan != app.paymentPlan) return true;
+    if (priceController.text != app.price.toString()) return true;
+    if (!listEquals(thumbnailIds, app.thumbnailIds)) return true;
     return false;
   }
 
   void checkValidity() {
     isValid = isFormValid();
+    hasChanges = _originalApp != null && hasDataChanged(_originalApp!, _originalApp!.category);
     notifyListeners();
   }
 
