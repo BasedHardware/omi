@@ -41,6 +41,8 @@ os.environ["STRIPE_ARCHITECT_ANNUAL_PRICE_ID"] = ARCH_ANNUAL
 
 # --- Stub heavy infrastructure before importing any project modules ---
 
+_BACKEND_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
+
 # Firestore client
 _mock_client = types.ModuleType("database._client")
 _mock_client.db = MagicMock()
@@ -53,8 +55,8 @@ sys.modules["firebase_admin"] = _fb_admin
 sys.modules["firebase_admin.auth"] = _fb_admin.auth
 
 # Database submodules
-_db_mod = types.ModuleType("database")
-sys.modules.setdefault("database", _db_mod)
+_db_mod = sys.modules.setdefault("database", types.ModuleType("database"))
+_db_mod.__path__ = [os.path.join(_BACKEND_DIR, "database")]
 
 for _name in [
     "database.users",
