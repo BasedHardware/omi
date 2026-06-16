@@ -26,7 +26,7 @@ describe('parseMemoryDump', () => {
   })
 
   it('drops markdown code fences around copied dumps', () => {
-    const dump = "```markdown\n- Likes coffee\n- Prefers short replies\n```"
+    const dump = '```markdown\n- Likes coffee\n- Prefers short replies\n```'
     expect(parseMemoryDump(dump)).toEqual(['Likes coffee', 'Prefers short replies'])
   })
 
