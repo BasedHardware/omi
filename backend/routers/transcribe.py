@@ -20,7 +20,10 @@ import av
 import numpy as np
 import opuslib  # type: ignore
 
-import lc3  # lc3py
+try:
+    import lc3  # lc3py
+except ImportError:
+    lc3 = None
 
 from fastapi import APIRouter, Depends
 from fastapi.websockets import WebSocket, WebSocketDisconnect
@@ -2416,6 +2419,11 @@ async def _stream_handler(
     elif codec == 'aac':
         aac_decoder = AACDecoder(uid=uid, session_id=session_id, sample_rate=sample_rate, channels=channels)
     elif codec == 'lc3':
+        if lc3 is None:
+            websocket_close_code = 1011
+            logger.error(f"LC3 codec requested but lc3py is not installed {uid} {session_id}")
+            await websocket.close(code=websocket_close_code, reason="LC3 codec is not available")
+            return
         lc3_decoder = lc3.Decoder(lc3_frame_duration_us, sample_rate)
 
     async def receive_data(stt_socket):

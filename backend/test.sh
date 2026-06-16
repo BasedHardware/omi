@@ -97,6 +97,7 @@ pytest tests/unit/test_billable_transcription_seconds.py -v
 pytest tests/unit/test_sync_fair_use_gate.py -v
 pytest tests/unit/test_sync_pcm_decode.py -v
 pytest tests/unit/test_sync_opus_decode.py -v
+pytest tests/unit/test_transcribe_lc3_optional.py -v
 pytest tests/unit/test_sync_silent_failure.py -v
 pytest tests/unit/test_sync_ordered_assignment.py -v
 pytest tests/unit/test_fair_use_free_tier.py -v
