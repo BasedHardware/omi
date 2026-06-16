@@ -94,6 +94,17 @@ final class RealtimeHubSession: NSObject {
   /// OpenAI: a response is mid-flight — don't create a second one (the realtime
   /// API rejects "Conversation already has an active response in progress").
   private var openAIResponseActive = false
+  /// Gemini: a committed turn is awaiting its spoken reply. Gates BOTH audio
+  /// playback and turn completion to the CURRENT turn, so an interrupted/abandoned
+  /// turn's trailing audio + bookkeeping `turnComplete` can't leak into the next
+  /// one. Set on activityEnd (commit); cleared on this turn's `turnComplete`, on a
+  /// server `interrupted`, or when a new turn interrupts (beginInputTurn interrupting).
+  private var geminiResponsePending = false
+  /// Screenshot tool: injecting an image looks like new user input to Gemini, so it
+  /// interrupts its own pending reply. These tell that self-induced interrupt apart
+  /// from a real barge-in (which must drop the turn; this must NOT).
+  private var geminiImageInjected = false
+  private var geminiInterruptAfterInject = false
 
   /// Log prefix that names the provider + model on every line, so it's always
   /// clear which model produced which event.
@@ -160,6 +171,9 @@ final class RealtimeHubSession: NSObject {
       self.activityOpen = false
       self.pendingActivityStart = false
       self.openAIResponseActive = false
+      self.geminiResponsePending = false
+      self.geminiImageInjected = false
+      self.geminiInterruptAfterInject = false
     }
   }
 
@@ -206,15 +220,24 @@ final class RealtimeHubSession: NSObject {
   /// End the user's PTT turn and ask the model to respond.
   /// Start a new PTT turn. Gemini: open a fresh speech-activity window (must be
   /// done EVERY turn on a warm session). OpenAI: no-op (input_audio_buffer based).
-  func beginInputTurn() {
+  func beginInputTurn(interrupting: Bool = false) {
     guard provider == .gemini else { return }
     q.async { [weak self] in
       guard let self else { return }
+      // Barge-in: abandon the previous turn's still-pending reply so its trailing
+      // audio + bookkeeping turnComplete are ignored. A fresh activityStart on the
+      // SAME socket cancels the in-flight generation server-side (it replies with
+      // serverContent.interrupted) — no teardown, so conversation context survives.
+      if interrupting {
+        self.geminiResponsePending = false
+        self.geminiImageInjected = false
+        self.geminiInterruptAfterInject = false
+      }
       guard !self.activityOpen else { return }
       self.activityOpen = true
       if self.isOpen {
         self.send(json: ["realtimeInput": ["activityStart": [:]]])
-        log("\(self.tag): turn begin (activityStart)")
+        log("\(self.tag): turn begin (activityStart\(interrupting ? ", interrupting in-flight reply" : ""))")
       } else {
         self.pendingActivityStart = true
       }
@@ -233,7 +256,29 @@ final class RealtimeHubSession: NSObject {
       case .gemini:
         self.send(json: ["realtimeInput": ["activityEnd": [:]]])
         self.activityOpen = false
+        self.geminiResponsePending = true  // expect a spoken reply for THIS turn
       // Gemini auto-responds at activityEnd; no explicit response request.
+      }
+    }
+  }
+
+  /// Abandon the current turn without expecting a reply (silent tap / cancel). No
+  /// teardown — closes the activity window and leaves the reply gated off, so the
+  /// model never answers the silence and the warm socket (with context) is kept.
+  func abandonInputTurn() {
+    q.async { [weak self] in
+      guard let self else { return }
+      self.geminiResponsePending = false
+      switch self.provider {
+      case .openai:
+        self.send(json: ["type": "input_audio_buffer.clear"])
+      case .gemini:
+        if self.activityOpen, self.isOpen {
+          self.send(json: ["realtimeInput": ["activityEnd": [:]]])
+        }
+        self.activityOpen = false
+        self.pendingActivityStart = false
+        self.pendingCommit = false
       }
     }
   }
@@ -274,12 +319,13 @@ final class RealtimeHubSession: NSObject {
           ],
         ])
       case .gemini:
+        // gemini-3.1-flash-live-preview rejects clientContent mid-session (close 1007 —
+        // it's only for seeding initial history). Send the screenshot as a realtimeInput
+        // video frame instead — the documented mid-session image path.
         self.send(json: [
-          "clientContent": [
-            "turns": [["role": "user", "parts": [["inlineData": ["mimeType": "image/png", "data": b64]]]]],
-            "turnComplete": false,
-          ]
+          "realtimeInput": ["video": ["data": b64, "mimeType": "image/png"]]
         ])
+        self.geminiImageInjected = true  // may self-interrupt; don't drop the turn if so
       }
     }
   }
@@ -358,12 +404,18 @@ final class RealtimeHubSession: NSObject {
       send(json: [
         "setup": [
           "model": "models/\(provider.modelID)",
-          "generationConfig": ["responseModalities": ["AUDIO"]],
+          // Low temperature → tool-choice routing is consistent for identical inputs
+          // (default ~1.0 made the same request flip between answering and escalating).
+          "generationConfig": ["responseModalities": ["AUDIO"], "temperature": 0.3],
           "systemInstruction": ["parts": [["text": RealtimeHubTools.systemInstruction]]],
           "tools": [["functionDeclarations": RealtimeHubTools.geminiFunctionDeclarations]],
           "inputAudioTranscription": [:],
           "outputAudioTranscription": [:],
           "realtimeInputConfig": ["automaticActivityDetection": ["disabled": true]],
+          // Keep the session from degrading as turns accumulate: a sliding context
+          // window stops unbounded growth (which was making replies slow to ~30–48s
+          // and eventually stop). Without this, long sessions slowly die.
+          "contextWindowCompression": ["slidingWindow": [:]],
         ]
       ])
     }
@@ -390,6 +442,7 @@ final class RealtimeHubSession: NSObject {
       case .gemini:
         send(json: ["realtimeInput": ["activityEnd": [:]]])
         activityOpen = false
+        geminiResponsePending = true
       }
     }
     let d = delegate
@@ -534,6 +587,14 @@ final class RealtimeHubSession: NSObject {
     if let toolCall = e["toolCall"] as? [String: Any],
       let calls = toolCall["functionCalls"] as? [[String: Any]]
     {
+      // Ignore tool calls when no committed turn is awaiting a reply — an abandoned/
+      // discarded turn still reaches Gemini (we send activityEnd to close the window),
+      // and without this guard it acts on half-heard audio (e.g. fires get_tasks).
+      // OpenAI is immune because an abandoned turn just clears its input buffer.
+      guard geminiResponsePending else {
+        log("\(tag): ignoring tool call — no live committed turn (abandoned/discarded)")
+        return
+      }
       for call in calls {
         let name = call["name"] as? String ?? ""
         // Gemini may omit id for single calls; synthesize one for our bookkeeping.
@@ -548,6 +609,25 @@ final class RealtimeHubSession: NSObject {
       return
     }
     guard let sc = e["serverContent"] as? [String: Any] else { return }
+    if (sc["interrupted"] as? Bool) == true {
+      if geminiImageInjected {
+        // Self-induced: injecting a screenshot looks like new user input to Gemini, so it
+        // interrupts its own pending reply. Keep the turn alive — the real answer (using
+        // the image) arrives as a fresh generation right after.
+        geminiInterruptAfterInject = true
+        log("\(tag): self-induced interrupt (screenshot) — keeping turn alive")
+      } else {
+        // Real barge-in: drop the pending reply so its trailing audio + bookkeeping
+        // turnComplete are ignored; the new turn (already started via activityStart)
+        // re-arms on commit.
+        geminiResponsePending = false
+        log("\(tag): server confirmed interrupt")
+      }
+    }
+    // NOTE: do NOT finish on generationComplete — Gemini sends it while the spoken audio
+    // is still streaming, so finishing there truncates the reply and makes the next turn
+    // interrupt the server's still-open turn. We finish on turnComplete (below), which
+    // arrives when the audio actually completes.
     if let it = sc["inputTranscription"] as? [String: Any], let t = it["text"] as? String {
       emitTranscript(t, isFinal: false)
     }
@@ -561,13 +641,25 @@ final class RealtimeHubSession: NSObject {
           let mime = inline["mimeType"] as? String, mime.contains("audio/pcm"),
           let b64 = inline["data"] as? String, let d = Data(base64Encoded: b64)
         {
-          emitAudio(d)  // native spoken audio (24k PCM) → StreamingPCMPlayer
+          if geminiResponsePending { emitAudio(d) }  // gated: only the live turn's reply
         }
       }
     }
     if (sc["turnComplete"] as? Bool) == true {
-      emitText("", isFinal: true)
-      finishTurn()
+      // Only finish the turn we're actually awaiting a reply for. A turnComplete that
+      // closes an interrupted/abandoned generation (pending=false) is ignored, so it
+      // can't prematurely end the live turn — the failure both the reconnect approach
+      // and the earlier same-session attempt hit.
+      geminiImageInjected = false  // the screenshot-injection turn is over either way
+      if geminiInterruptAfterInject {
+        // This turnComplete just closes the screenshot-injection interrupt; the model's
+        // real answer follows as a fresh generation. Swallow it, keep the turn pending.
+        geminiInterruptAfterInject = false
+      } else if geminiResponsePending {
+        geminiResponsePending = false
+        emitText("", isFinal: true)
+        finishTurn()
+      }
     }
   }
 
