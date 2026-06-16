@@ -36,6 +36,7 @@ pytest tests/unit/test_memory_temporal_brain.py -v
 pytest tests/unit/test_memory_category_auto.py -v
 pytest tests/unit/test_memories_validation.py -v
 pytest tests/unit/test_memories_user_review.py -v
+pytest tests/unit/test_v17_memory_contracts.py -v
 pytest tests/unit/test_memory_ingestion_pipeline.py -v
 pytest tests/unit/test_working_memory_candidate_schema.py -v
 pytest tests/unit/test_llm_usage_tracker.py -v
