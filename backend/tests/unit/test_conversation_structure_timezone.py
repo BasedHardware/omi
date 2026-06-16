@@ -95,6 +95,10 @@ llm_clients_stub.parser = MagicMock()
 _stub_package("models")
 sys.modules["models"].__path__ = [str(BACKEND_DIR / "models")]
 
+_conversation_processing_stub = sys.modules.get("utils.llm.conversation_processing")
+if _conversation_processing_stub is not None and not hasattr(_conversation_processing_stub, "_local_started_at_iso"):
+    sys.modules.pop("utils.llm.conversation_processing", None)
+
 conv_proc = _load_module_from_file(
     "utils.llm.conversation_processing",
     BACKEND_DIR / "utils" / "llm" / "conversation_processing.py",
