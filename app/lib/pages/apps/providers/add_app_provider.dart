@@ -348,14 +348,17 @@ class AddAppProvider extends ChangeNotifier {
     if (appDescriptionController.text != app.description.decodeString) return true;
     if (makeAppPublic != !app.private) return true;
     if (appCategory != category) return true;
-    if (selectedCapabilities.length != app.capabilities.length) return true;
+    if (!listEquals(
+      selectedCapabilities.map((c) => c.id).toList()..sort(),
+      app.capabilities.map((c) => c.id).toList()..sort(),
+    )) return true;
     if (app.externalIntegration != null) {
       if (triggerEvent != app.externalIntegration!.triggersOn) return true;
-      if (webhookUrlController.text != app.externalIntegration!.webhookUrl) return true;
-      if (setupCompletedController.text != app.externalIntegration!.setupCompletedUrl) return true;
-      if (instructionsController.text != app.externalIntegration!.setupInstructionsFilePath) return true;
-      if (appHomeUrlController.text != app.externalIntegration!.appHomeUrl) return true;
-      if (chatToolsManifestUrlController.text != app.externalIntegration!.chatToolsManifestUrl) return true;
+      if (webhookUrlController.text != (app.externalIntegration!.webhookUrl ?? '')) return true;
+      if (setupCompletedController.text != (app.externalIntegration!.setupCompletedUrl ?? '')) return true;
+      if (instructionsController.text != (app.externalIntegration!.setupInstructionsFilePath ?? '')) return true;
+      if (appHomeUrlController.text != (app.externalIntegration!.appHomeUrl ?? '')) return true;
+      if (chatToolsManifestUrlController.text != (app.externalIntegration!.chatToolsManifestUrl ?? '')) return true;
     }
     if (chatPromptController.text != (app.chatPrompt ?? '').decodeString) return true;
     if (conversationPromptController.text != (app.conversationPrompt ?? '').decodeString) return true;
