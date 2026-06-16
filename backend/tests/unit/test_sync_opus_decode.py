@@ -48,6 +48,7 @@ _stub_modules = [
     'utils.encryption',
     'utils.analytics',
     'utils.byok',
+    'utils.cloud_tasks',
     'utils.http_client',
     'utils.stt.pre_recorded',
     'utils.stt.vad',
@@ -66,6 +67,41 @@ for _mod in _stub_modules:
     if _mod not in sys.modules:
         sys.modules[_mod] = MagicMock()
 
+
+def _ensure_attr(module_name: str, attr: str):
+    module = sys.modules[module_name]
+    if not hasattr(module, attr):
+        setattr(module, attr, MagicMock())
+
+
+for _module_name, _attrs in {
+    'opuslib': ['Decoder'],
+    'database.conversations': ['get_closest_conversation_to_timestamps', 'update_conversation_segments'],
+    'models.conversation': ['Conversation', 'CreateConversation'],
+    'models.conversation_enums': ['ConversationSource'],
+    'models.transcript_segment': ['TranscriptSegment'],
+    'utils.conversations.factory': ['deserialize_conversation'],
+    'utils.conversations.process_conversation': ['process_conversation'],
+    'utils.analytics': ['record_usage'],
+    'utils.byok': ['get_byok_keys', 'set_byok_keys', 'has_byok_keys'],
+    'utils.cloud_tasks': [
+        'enqueue_sync_job',
+        'get_sync_tasks_max_attempts',
+        'is_audio_merge_dispatch_enabled',
+        'is_cloud_tasks_dispatch_enabled',
+        'verify_cloud_tasks_oidc',
+    ],
+    'utils.http_client': ['_get_semaphore'],
+    'utils.log_sanitizer': ['sanitize'],
+    'utils.stt.pre_recorded': ['postprocess_words', 'prerecorded'],
+    'utils.stt.vad': ['vad_is_empty'],
+    'utils.speaker_assignment': ['process_speaker_assigned_segments'],
+    'utils.speaker_identification': ['detect_speaker_from_text'],
+    'utils.stt.speaker_embedding': ['extract_embedding_from_bytes', 'compare_embeddings', 'SPEAKER_MATCH_THRESHOLD'],
+    'utils.subscription': ['has_transcription_credits'],
+}.items():
+    for _attr in _attrs:
+        _ensure_attr(_module_name, _attr)
 sys.modules['database.redis_db'].r = MagicMock()
 sys.modules['database._client'].db = MagicMock()
 if 'google.cloud.tasks_v2' not in sys.modules:
