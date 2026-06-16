@@ -92,6 +92,20 @@ _pydub = ModuleType('pydub')
 _pydub.AudioSegment = MagicMock
 sys.modules.setdefault('pydub', _pydub)
 
+_fal_client = ModuleType('fal_client')
+_fal_client.subscribe = MagicMock()
+sys.modules.setdefault('fal_client', _fal_client)
+
+sys.modules.setdefault('stripe', ModuleType('stripe'))
+
+_python_multipart = ModuleType('python_multipart')
+_python_multipart.__version__ = '0.0.99'
+sys.modules.setdefault('python_multipart', _python_multipart)
+
+_python_multipart_parser = ModuleType('python_multipart.multipart')
+_python_multipart_parser.parse_options_header = MagicMock(return_value={})
+sys.modules.setdefault('python_multipart.multipart', _python_multipart_parser)
+
 _process_conversation = ModuleType('utils.conversations.process_conversation')
 _process_conversation.process_conversation = MagicMock()
 sys.modules['utils.conversations.process_conversation'] = _process_conversation
