@@ -98,10 +98,11 @@ class SourceRef(StrictBaseModel):
 
 class SourceStrength(str, Enum):
     """Signal quality tier for extraction behavior modulation."""
-    HIGH = "high"       # chat_exchange, conversation — clean, intentional
-    MEDIUM = "medium"   # voice_transcript, manual_note — some noise
-    LOW = "low"         # transcript, desktop_rewind, ocr_screenshot_text, ambient_voice
-    UNKNOWN = "unknown" # benchmark_fixture
+
+    HIGH = "high"  # chat_exchange, conversation — clean, intentional
+    MEDIUM = "medium"  # voice_transcript, manual_note — some noise
+    LOW = "low"  # transcript, desktop_rewind, ocr_screenshot_text, ambient_voice
+    UNKNOWN = "unknown"  # benchmark_fixture
 
 
 class SourceTypeConfig(StrictBaseModel):
@@ -112,6 +113,7 @@ class SourceTypeConfig(StrictBaseModel):
       2. Add an entry here (or accept UNKNOWN defaults)
       3. Zero other code changes needed — prompt receives guidance string automatically.
     """
+
     strength: SourceStrength = SourceStrength.UNKNOWN
     label: str  # human-readable name for the prompt
     confidence_cap: float = 1.0
@@ -296,10 +298,10 @@ class SourceDescriptor(StrictBaseModel):
         "developer_api",
         "benchmark_fixture",
         # --- NEW: granular source types ---
-        "chat_exchange",          # HIGH: intentional user statements in chat UI
-        "voice_transcript",       # MEDIUM: push-to-talk / recorded voice
-        "ocr_screenshot_text",    # LOW: screen capture OCR output
-        "ambient_voice",          # LOW: always-on ambient recording
+        "chat_exchange",  # HIGH: intentional user statements in chat UI
+        "voice_transcript",  # MEDIUM: push-to-talk / recorded voice
+        "ocr_screenshot_text",  # LOW: screen capture OCR output
+        "ambient_voice",  # LOW: always-on ambient recording
     ]
     source_id: str
     source_uri: str | None = None
@@ -545,6 +547,140 @@ class CandidateEvidenceSpan(StrictBaseModel):
     ocr_block_id: str | None = None
     bbox: list[float | int] | None = None
     ocr_confidence: float | None = None
+
+
+WorkingMemorySourceType = Literal[
+    "voice_transcript",
+    "chat_exchange",
+    "screenshot_ocr",
+    "assistant_session",
+    "integration_event",
+    "text",
+    "conversation",
+    "transcript",
+    "desktop_rewind",
+    "ocr_screenshot_text",
+    "ambient_voice",
+    "manual_note",
+    "developer_api",
+    "benchmark_fixture",
+]
+WorkingMemorySourceSignal = Literal[
+    "direct_user",
+    "assistant_observed",
+    "ocr_observed",
+    "app_event",
+    "transcript",
+    "integration_event",
+    "manual_text",
+]
+WorkingMemorySubjectScope = Literal[
+    "primary_user",
+    "identified_person",
+    "unidentified_non_primary_speaker",
+    "workspace",
+    "project",
+    "artifact",
+    "unknown",
+]
+WorkingMemorySubjectEvidenceType = Literal[
+    "direct_user_statement",
+    "assistant_observed",
+    "ocr_observed",
+    "source_local_speaker",
+    "inferred_from_context",
+    "unknown",
+]
+WorkingMemoryActorRole = Literal["user", "assistant", "other", "system", "unknown"]
+WorkingMemoryRouteHint = Literal["available_now", "pending_l2", "context_only", "review_likely", "reject_likely"]
+WorkingMemoryAllowedUse = Literal["read_with_status", "review_only", "context_only", "hidden_until_l2"]
+WorkingMemoryKindHint = Literal[
+    "identity",
+    "preference",
+    "project_context",
+    "task",
+    "plan",
+    "relationship_context",
+    "tool_use",
+    "ui_workspace",
+    "context_only",
+]
+
+
+class WorkingMemoryArtifactRef(StrictBaseModel):
+    kind: Literal["time_span", "char_span", "screen_region", "event", "document", "unknown"] = "unknown"
+    value: dict[str, Any] = Field(default_factory=dict)
+
+
+class WorkingMemoryEvidence(StrictBaseModel):
+    """Source-backed evidence object for realtime L1 working memory.
+
+    This is source evidence, not generated memory text. Speaker labels are
+    source/session-local; L2 owns any stable identity resolution.
+    """
+
+    evidence_id: str
+    source_id: str
+    source_unit_id: str | None = None
+    artifact_ref: WorkingMemoryArtifactRef = Field(default_factory=WorkingMemoryArtifactRef)
+    quote: str
+    source_type: WorkingMemorySourceType
+    source_signal: WorkingMemorySourceSignal
+    source_speaker_label: str | None = None
+    speaker_scope: Literal["session-local", "source-local", "not_applicable"] = "not_applicable"
+    extractor_id: str = "l1_realtime_v1"
+    extractor_version: str | None = None
+    capture_confidence: ConfidenceLabel = "medium"
+    independence_group: str | None = None
+    redaction_status: Literal["active", "tombstoned", "security_hidden"] = "active"
+
+
+class WorkingMemoryCandidate(StrictBaseModel):
+    """V15 L1 working-memory candidate.
+
+    L1 candidates are broad, natural-language, and immediately retrievable with
+    status attached. They are not durable memories: L2 owns stable IDs, durable
+    active/reject decisions, dedup, supersession, and temporal validity.
+    """
+
+    schema_version: Literal["working_memory_candidate.v1"] = "working_memory_candidate.v1"
+    candidate_id: str
+    user_id: str
+    session_id: str
+    source_id: str
+    source_type: WorkingMemorySourceType
+    created_at: datetime | None = None
+    observed_at_range: dict[str, datetime | None] | None = None
+    candidate_text: str
+    subject_scope: WorkingMemorySubjectScope
+    subject_entity_id: str | None = None
+    subject_evidence_type: WorkingMemorySubjectEvidenceType
+    actor_role: WorkingMemoryActorRole
+    speaker_identity_claim: str | None = None
+    evidence: list[WorkingMemoryEvidence]
+    source_refs: list[str] = Field(default_factory=list)
+    evidence_quotes: list[str] = Field(default_factory=list)
+    evidence_spans: list[dict[str, Any]] = Field(default_factory=list)
+    capture_confidence: ConfidenceLabel = "medium"
+    candidate_kind_hint: WorkingMemoryKindHint
+    risk_flags: list[str] = Field(default_factory=list)
+    route_hint: WorkingMemoryRouteHint = "pending_l2"
+    allowed_use: WorkingMemoryAllowedUse = "read_with_status"
+    extractor_id: str = "l1_realtime_v1"
+    extractor_version: str | None = None
+
+    @model_validator(mode="after")
+    def validate_working_memory_contract(self) -> "WorkingMemoryCandidate":
+        if not self.evidence:
+            raise ValueError("working memory candidates require evidence before metric-eligible use")
+        candidate_text_normalized = " ".join(self.candidate_text.lower().split())
+        for item in self.evidence:
+            quote_normalized = " ".join(item.quote.lower().split())
+            if quote_normalized == candidate_text_normalized:
+                raise ValueError("evidence quote must be a source quote, not generated candidate text")
+        if self.allowed_use == "read_with_status" and self.route_hint == "reject_likely":
+            raise ValueError("reject-likely candidates cannot be read as working memory")
+        return self
 
 
 class LiberalMemoryCandidate(StrictBaseModel):
