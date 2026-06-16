@@ -8,7 +8,20 @@ would be caught.
 import os
 import sys
 import types
+from pathlib import Path
 from unittest.mock import MagicMock
+
+BACKEND_DIR = Path(__file__).resolve().parents[2]
+
+
+def _ensure_package(name, path):
+    module = sys.modules.get(name)
+    if not isinstance(module, types.ModuleType):
+        module = types.ModuleType(name)
+        sys.modules[name] = module
+    module.__path__ = [str(path)]
+    return module
+
 
 # --- env vars needed at import time ---
 os.environ.setdefault(
@@ -100,6 +113,10 @@ _redis_mod.set_credits_invalidation_signal = MagicMock()
 _redis_mod.r = MagicMock()
 
 # Utils stubs for heavy external deps
+_ensure_package("utils", BACKEND_DIR / "utils")
+sys.modules.pop("utils.executors", None)
+sys.modules.pop("utils.subscription", None)
+
 for _name in [
     "utils.fair_use",
     "utils.notifications",
