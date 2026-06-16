@@ -9400,4 +9400,15 @@ class AppLocalizationsDe extends AppLocalizations {
   @override
   String get syncCustomSttWarningMessage =>
       'Du verwendest einen eigenen Transkriptionsanbieter. Beim Synchronisieren werden diese Aufnahmen stattdessen auf den Servern von Omi transkribiert und auf das Transkriptionslimit deines Tarifs angerechnet.';
+
+  @override
+  String get offlineModeTitle => 'Offline Mode';
+
+  @override
+  String get offlineModeDescription =>
+      'Save audio on your phone while you capture and transcribe later. There is no live transcription in this mode — recordings are stored locally, then you upload them to create conversations.';
+
+  @override
+  String get offlineModeNote =>
+      'Works with Omi devices for now. Audio stays on your phone until you choose to upload it.';
 }

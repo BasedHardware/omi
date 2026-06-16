@@ -9157,4 +9157,15 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get syncCustomSttWarningMessage => '您使用的是自己的转录服务。同步这些录音会改为在 Omi 的服务器上转录，并计入您套餐的转录额度。';
+
+  @override
+  String get offlineModeTitle => 'Offline Mode';
+
+  @override
+  String get offlineModeDescription =>
+      'Save audio on your phone while you capture and transcribe later. There is no live transcription in this mode — recordings are stored locally, then you upload them to create conversations.';
+
+  @override
+  String get offlineModeNote =>
+      'Works with Omi devices for now. Audio stays on your phone until you choose to upload it.';
 }
