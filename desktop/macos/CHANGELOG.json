@@ -4,6 +4,13 @@
   ],
   "releases": [
     {
+      "version": "0.11.465",
+      "date": "2026-06-16",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
       "version": "0.11.464",
       "date": "2026-06-16",
       "changes": [
