@@ -73,22 +73,25 @@ class _SearchWidgetState extends State<SearchWidget> {
     }
   }
 
-  Future<void> _showDatePicker(BuildContext context, {bool hasExistingFilter = false}) async {
+  Future<void> _showDateRangePicker(BuildContext context, {bool hasExistingFilter = false}) async {
     final convoProvider = Provider.of<ConversationProvider>(context, listen: false);
-    DateTime selectedDate = convoProvider.selectedDate ?? DateTime.now();
+    DateTime? startDate = convoProvider.searchStartDate;
+    DateTime? endDate = convoProvider.searchEndDate;
+    List<DateTime?> selectedRange = [startDate, endDate ?? startDate ?? DateTime.now()];
     await showCupertinoModalPopup<void>(
       context: context,
       builder: (BuildContext context) {
         return Container(
-          height: 420,
+          height: 480,
           padding: const EdgeInsets.only(top: 6.0),
           margin: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
           color: const Color(0xFF1F1F25),
           child: SafeArea(
             top: false,
             child: Column(
+              mainAxisSize: MainAxisSize.min,
               children: [
-                // Header with Cancel and Done buttons
+                // Header with Cancel and Apply buttons
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
                   decoration: const BoxDecoration(
@@ -104,7 +107,10 @@ class _SearchWidgetState extends State<SearchWidget> {
                           if (hasExistingFilter) {
                             final provider = Provider.of<ConversationProvider>(context, listen: false);
                             Navigator.of(context).pop();
-                            await provider.clearDateFilter();
+                            provider.clearSearchDateRange();
+                            if (provider.previousQuery.isNotEmpty) {
+                              await provider.searchConversations(provider.previousQuery);
+                            }
                             PlatformManager.instance.analytics.calendarFilterCleared();
                           } else {
                             Navigator.of(context).pop();
@@ -115,14 +121,23 @@ class _SearchWidgetState extends State<SearchWidget> {
                           style: const TextStyle(color: Colors.white, fontSize: 16),
                         ),
                       ),
-                      const Spacer(),
+                      Text(
+                        'Filter by date',
+                        style: TextStyle(color: Colors.grey.shade400, fontSize: 14),
+                      ),
                       CupertinoButton(
                         padding: EdgeInsets.zero,
                         onPressed: () async {
                           final provider = Provider.of<ConversationProvider>(context, listen: false);
                           Navigator.of(context).pop();
-                          await provider.filterConversationsByDate(selectedDate);
-                          PlatformManager.instance.analytics.calendarFilterApplied(selectedDate);
+                          provider.setSearchDateRange(startDate, endDate);
+                          if (provider.previousQuery.isNotEmpty) {
+                            await provider.searchConversations(provider.previousQuery);
+                          }
+                          final appliedStart = startDate;
+                          if (appliedStart != null) {
+                            PlatformManager.instance.analytics.calendarFilterApplied(appliedStart);
+                          }
                         },
                         child: Text(
                           context.l10n.done,
@@ -132,7 +147,7 @@ class _SearchWidgetState extends State<SearchWidget> {
                     ],
                   ),
                 ),
-                // Date picker
+                // Date range picker
                 Expanded(
                   child: Material(
                     color: ResponsiveHelper.backgroundSecondary,
@@ -141,11 +156,13 @@ class _SearchWidgetState extends State<SearchWidget> {
                         firstDate: DateTime(2020),
                         lastDate: DateTime.now(),
                         currentDate: DateTime.now(),
+                        calendarType: CalendarDatePicker2Type.range,
                       ),
-                      value: [selectedDate],
+                      value: selectedRange,
                       onValueChanged: (dates) {
                         if (dates.isNotEmpty) {
-                          selectedDate = dates[0];
+                          startDate = dates[0];
+                          endDate = dates.length > 1 ? dates[1] : null;
                         }
                       },
                     ),
@@ -217,11 +234,12 @@ class _SearchWidgetState extends State<SearchWidget> {
           // Calendar button - same height as search bar (48px)
           Consumer<ConversationProvider>(
             builder: (context, convoProvider, _) {
+              final hasActiveFilter = convoProvider.searchStartDate != null;
               return Container(
                 width: 48,
                 height: 48,
                 decoration: BoxDecoration(
-                  color: convoProvider.selectedDate != null
+                  color: hasActiveFilter
                       ? Colors.deepPurple.withValues(alpha: 0.5)
                       : const Color(0xFF1F1F25),
                   borderRadius: BorderRadius.circular(24),
@@ -229,13 +247,13 @@ class _SearchWidgetState extends State<SearchWidget> {
                 child: IconButton(
                   padding: EdgeInsets.zero,
                   icon: Icon(
-                    convoProvider.selectedDate != null ? FontAwesomeIcons.calendarDay : FontAwesomeIcons.calendarDays,
+                    hasActiveFilter ? FontAwesomeIcons.calendarDay : FontAwesomeIcons.calendarDays,
                     size: 18,
-                    color: convoProvider.selectedDate != null ? Colors.white : Colors.white70,
+                    color: hasActiveFilter ? Colors.white : Colors.white70,
                   ),
                   onPressed: () async {
                     HapticFeedback.mediumImpact();
-                    await _showDatePicker(context, hasExistingFilter: convoProvider.selectedDate != null);
+                    await _showDateRangePicker(context, hasExistingFilter: hasActiveFilter);
                   },
                 ),
               );

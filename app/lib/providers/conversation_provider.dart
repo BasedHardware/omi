@@ -31,6 +31,9 @@ class ConversationProvider extends ChangeNotifier {
   int totalSearchPages = 1;
   int currentSearchPage = 1;
 
+  DateTime? searchStartDate;
+  DateTime? searchEndDate;
+
   Timer? _processingConversationWatchTimer;
 
   // Add debounce mechanism for refresh
@@ -152,7 +155,12 @@ class ConversationProvider extends ChangeNotifier {
     }
 
     previousQuery = query;
-    var (convos, current, total) = await searchConversationsServer(query, includeDiscarded: showDiscardedConversations);
+    var (convos, current, total) = await searchConversationsServer(
+      query,
+      includeDiscarded: showDiscardedConversations,
+      startDate: searchStartDate,
+      endDate: searchEndDate,
+    );
     convos.sort((a, b) => (b.startedAt ?? b.createdAt).compareTo(a.startedAt ?? a.createdAt));
     searchedConversations = convos;
     currentSearchPage = current;
@@ -177,6 +185,8 @@ class ConversationProvider extends ChangeNotifier {
       previousQuery,
       page: currentSearchPage + 1,
       includeDiscarded: showDiscardedConversations,
+      startDate: searchStartDate,
+      endDate: searchEndDate,
     );
     searchedConversations.addAll(newConvos);
     searchedConversations.sort((a, b) => (b.startedAt ?? b.createdAt).compareTo(a.startedAt ?? a.createdAt));
@@ -515,6 +525,20 @@ class ConversationProvider extends ChangeNotifier {
 
       return true;
     }).toList();
+  }
+
+  /// Set search date range (start and end). Null = no limit on that side.
+  void setSearchDateRange(DateTime? start, DateTime? end) {
+    searchStartDate = start;
+    searchEndDate = end;
+    notifyListeners();
+  }
+
+  /// Clear the search date range filter
+  void clearSearchDateRange() {
+    searchStartDate = null;
+    searchEndDate = null;
+    notifyListeners();
   }
 
   /// Filter conversations by a specific date

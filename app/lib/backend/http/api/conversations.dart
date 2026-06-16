@@ -520,6 +520,8 @@ Future<(List<ServerConversation>, int, int)> searchConversationsServer(
   int? page,
   int? limit,
   bool includeDiscarded = true,
+  DateTime? startDate,
+  DateTime? endDate,
 }) async {
   Logger.debug(Env.apiBaseUrl);
   var response = await makeApiCall(
@@ -531,6 +533,8 @@ Future<(List<ServerConversation>, int, int)> searchConversationsServer(
       'page': page ?? 1,
       'per_page': limit ?? 10,
       'include_discarded': includeDiscarded,
+      if (startDate != null) 'start_date': startDate.toIso8601String(),
+      if (endDate != null) 'end_date': endDate.toIso8601String(),
     }),
   );
   if (response == null) return (<ServerConversation>[], 0, 0);
