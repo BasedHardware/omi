@@ -353,6 +353,11 @@ class CaptureProvider extends ChangeNotifier
   /// can await it before querying disk WALs. Prevents race when backend responds fast.
   Future<void>? _pendingFinalizeAndStamp;
 
+  /// Set in onClosed() when the socket drops during active device recording.
+  /// Consumed in _initiateWebsocket() to trigger onNetworkSocketReconnected()
+  /// on the device connection (e.g. Limitless re-sends enable-data-stream).
+  bool _socketReconnectPending = false;
+
   /// Returns unsynced WALs belonging to the current capture session.
   /// Empty when all frames have been streamed successfully (clean UI).
   List<Wal> get unsyncedSessionWals {
@@ -557,6 +562,16 @@ class CaptureProvider extends ChangeNotifier
     _transcriptServiceReady = true;
     if (_sessionStartSeconds == 0) {
       _sessionStartSeconds = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+    }
+
+    // Notify the device connection that the socket reconnected after a network
+    // outage so it can re-enable streaming if needed (e.g. Limitless pendant).
+    // Guard on deviceRecord: skip if the user has paused — no point waking the
+    // device when _bleBytesStream is cancelled and audio would just be dropped.
+    if (_socketReconnectPending && _recordingDevice != null && recordingState == RecordingState.deviceRecord) {
+      _socketReconnectPending = false;
+      final conn = await ServiceManager.instance().device.ensureConnection(_recordingDevice!.id);
+      await conn?.onNetworkSocketReconnected();
     }
 
     await _loadInProgressConversation();
@@ -809,6 +824,7 @@ class CaptureProvider extends ChangeNotifier
   }
 
   Future _cleanupCurrentState({bool disableNativeBackground = false}) async {
+    _socketReconnectPending = false;
     _stopInProgressConversationRefresh();
     await _closeBleStream(disableNativeBackground: disableNativeBackground);
     _activeSource = null;
@@ -1247,6 +1263,14 @@ class CaptureProvider extends ChangeNotifier
       if (ctx != null) {
         AppSnackbar.showSnackbar(ctx.l10n.transcriptionPausedReconnecting, duration: const Duration(seconds: 3));
       }
+    }
+
+    // Mark that a device-recording session was interrupted by a network drop.
+    // _initiateWebsocket() will call onNetworkSocketReconnected() on the device
+    // connection so it can re-enable streaming (e.g. Limitless re-sends the
+    // enable-data-stream command after its BLE audio times out).
+    if (recordingState == RecordingState.deviceRecord) {
+      _socketReconnectPending = true;
     }
 
     notifyListeners();
