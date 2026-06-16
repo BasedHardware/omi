@@ -35,7 +35,9 @@ export function normalizeSourceState(value: unknown): SourceState {
   }
 
   const bounded =
-    processedIds.length > MAX_PROCESSED ? processedIds.slice(processedIds.length - MAX_PROCESSED) : processedIds
+    processedIds.length > MAX_PROCESSED
+      ? processedIds.slice(processedIds.length - MAX_PROCESSED)
+      : processedIds
   return { lastSyncAt, processedIds: bounded }
 }
 
