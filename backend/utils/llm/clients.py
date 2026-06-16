@@ -530,17 +530,23 @@ def _get_or_create_gemini_llm(
         kwargs: Dict[str, Any] = {'callbacks': [_usage_callback], 'timeout': 120, 'max_retries': 1}
         if streaming:
             kwargs['streaming'] = True
+
+        # thinking_budget is a native google-genai SDK construction param. It must only go to
+        # ChatGoogleGenerativeAI — passing it to the OpenAI-compat ChatOpenAI fallback leaks it into
+        # model_kwargs and crashes at invoke time ("Completions.parse() got an unexpected keyword
+        # argument 'thinking_budget'"). Keep it scoped to the native-SDK branches only.
+        gemini_kwargs = dict(kwargs)
         if thinking_budget is not None and model_name.startswith('gemini-2.5'):
-            kwargs['thinking_budget'] = thinking_budget
+            gemini_kwargs['thinking_budget'] = thinking_budget
 
         if gcp_project:
             gcp_location = os.environ.get('GCP_LOCATION', 'us-central1')
             _llm_cache[key] = ChatGoogleGenerativeAI(
-                model=model_name, project=gcp_project, location=gcp_location, **kwargs
+                model=model_name, project=gcp_project, location=gcp_location, **gemini_kwargs
             )
         elif gemini_key:
-            kwargs['google_api_key'] = gemini_key
-            _llm_cache[key] = ChatGoogleGenerativeAI(model=model_name, **kwargs)
+            gemini_kwargs['google_api_key'] = gemini_key
+            _llm_cache[key] = ChatGoogleGenerativeAI(model=model_name, **gemini_kwargs)
         else:
             logger.warning('No USE_VERTEX_AI or GEMINI_API_KEY — Gemini calls will fail at invoke time')
             _llm_cache[key] = ChatOpenAI(
