@@ -17,6 +17,7 @@ import sys
 import types
 import importlib
 import importlib.util
+from datetime import timedelta, timezone
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -114,6 +115,13 @@ tracker_mod.reset_usage_context = MagicMock()
 tracker_mod.Features = MagicMock()
 tracker_mod.track_usage = MagicMock()
 
+# --- langchain core stubs ---
+langchain_core_mod = _stub_module("langchain_core")
+if not hasattr(langchain_core_mod, "__path__"):
+    langchain_core_mod.__path__ = []
+langchain_runnables_mod = _stub_module("langchain_core.runnables")
+langchain_runnables_mod.RunnableConfig = dict
+
 # --- LLMs/memory stubs ---
 llms_mod = _stub_module("utils.llms")
 if not hasattr(llms_mod, "__path__"):
@@ -172,7 +180,11 @@ def _load_module_from_file(module_name: str, file_path: Path):
     spec = importlib.util.spec_from_file_location(module_name, str(file_path))
     mod = importlib.util.module_from_spec(spec)
     sys.modules[module_name] = mod
-    spec.loader.exec_module(mod)
+    try:
+        spec.loader.exec_module(mod)
+    except Exception:
+        sys.modules.pop(module_name, None)
+        raise
     return mod
 
 
@@ -227,10 +239,31 @@ def _set_user(chat_mod, name: str, tz: str, goal=None):
     chat_mod.notification_db.get_user_time_zone = MagicMock(return_value=tz)
     chat_mod.goals_db.get_user_goal = MagicMock(return_value=goal)
     chat_mod.goals_db.get_user_goals = MagicMock(return_value=[goal] if goal else [])
+    chat_mod.ZoneInfo = _test_zone_info
+
+
+def _test_zone_info(name: str):
+    if name in {"UTC", "Etc/UTC"}:
+        return timezone.utc
+    if name in {"US/Pacific", "America/Los_Angeles"}:
+        return timezone(timedelta(hours=-8), name)
+    if name == "Asia/Tokyo":
+        return timezone(timedelta(hours=9), name)
+    if name == "Europe/London":
+        return timezone.utc
+    if name == "Pacific/Fiji":
+        return timezone(timedelta(hours=12), name)
+    if name == "America/New_York":
+        return timezone(timedelta(hours=-5), name)
+    raise KeyError(name)
 
 
 def _get_agentic_module():
     """Load and return the real utils.retrieval.agentic module."""
+    agentic_stub = sys.modules.get("utils.retrieval.agentic")
+    if agentic_stub is not None and not hasattr(agentic_stub, "CORE_TOOLS"):
+        sys.modules.pop("utils.retrieval.agentic", None)
+
     # First make sure tool submodules are stubbed (they import from database)
     tools_pkg = _stub_module("utils.retrieval.tools")
     if not hasattr(tools_pkg, "__path__"):
@@ -262,6 +295,7 @@ def _get_agentic_module():
         "get_screen_activity_tool",
         "search_screen_activity_tool",
         "save_user_preference_tool",
+        "fetch_url_tool",
     ]
     for name in tool_names:
         mock_tool = MagicMock()
@@ -495,10 +529,10 @@ def test_static_prefix_exceeds_minimum_cache_tokens():
 # ---------------------------------------------------------------------------
 
 
-def test_core_tools_has_24_tools():
-    """CORE_TOOLS must contain exactly 24 tools (web search is now a built-in server tool)."""
+def test_core_tools_has_25_tools():
+    """CORE_TOOLS must contain exactly 25 tools (web search is now a built-in server tool)."""
     agentic_mod = _get_agentic_module()
-    assert len(agentic_mod.CORE_TOOLS) == 24, f"CORE_TOOLS has {len(agentic_mod.CORE_TOOLS)} tools, expected 24"
+    assert len(agentic_mod.CORE_TOOLS) == 25, f"CORE_TOOLS has {len(agentic_mod.CORE_TOOLS)} tools, expected 25"
 
 
 def test_core_tools_list_creates_independent_copy():
@@ -521,9 +555,9 @@ def test_core_tools_list_creates_independent_copy():
     mock_app_tool.name = "custom_app_tool"
     tools_a.append(mock_app_tool)
 
-    assert len(tools_a) == 25
-    assert len(tools_b) == 24
-    assert len(agentic_mod.CORE_TOOLS) == 24, "CORE_TOOLS was mutated!"
+    assert len(tools_a) == 26
+    assert len(tools_b) == 25
+    assert len(agentic_mod.CORE_TOOLS) == 25, "CORE_TOOLS was mutated!"
 
 
 def test_core_tools_order_matches_exports():
@@ -558,6 +592,7 @@ def test_core_tools_order_matches_exports():
         "get_screen_activity_tool",
         "search_screen_activity_tool",
         "save_user_preference_tool",
+        "fetch_url_tool",
     ]
 
     actual_names = [t.name for t in agentic_mod.CORE_TOOLS]
@@ -607,12 +642,15 @@ def test_llm_agent_model_kwargs_via_real_instantiation():
     fake_tiktoken.encoding_for_model = MagicMock(return_value=MagicMock())
 
     # Read source, replace imports, exec in isolated namespace
-    source = (BACKEND_DIR / "utils" / "llm" / "clients.py").read_text()
+    source = (BACKEND_DIR / "utils" / "llm" / "clients.py").read_text(encoding="utf-8")
+    source = source.replace("from langchain_core.language_models import BaseChatModel", "")
     source = source.replace("from langchain_openai import ChatOpenAI, OpenAIEmbeddings", "")
+    source = source.replace("from langchain_google_genai import ChatGoogleGenerativeAI", "")
     source = source.replace("import tiktoken", "")
     source = source.replace("import anthropic", "")
     source = source.replace("from langchain_core.output_parsers import PydanticOutputParser", "")
-    source = source.replace("from models.conversation import Structured", "")
+    source = source.replace("from models.structured import Structured", "")
+    source = source.replace("from utils.byok import get_byok_key", "")
     source = source.replace("from utils.llm.usage_tracker import get_usage_callback", "")
 
     # Create a fake anthropic module with AsyncAnthropic
@@ -621,12 +659,15 @@ def test_llm_agent_model_kwargs_via_real_instantiation():
 
     ns = {
         "os": os,
+        "BaseChatModel": object,
         "ChatOpenAI": FakeChatOpenAI,
+        "ChatGoogleGenerativeAI": FakeChatOpenAI,
         "OpenAIEmbeddings": FakeOpenAIEmbeddings,
         "tiktoken": fake_tiktoken,
         "anthropic": fake_anthropic,
         "PydanticOutputParser": MagicMock(),
         "Structured": MagicMock(),
+        "get_byok_key": MagicMock(return_value=None),
         "get_usage_callback": MagicMock(return_value=[]),
         "List": list,
     }
