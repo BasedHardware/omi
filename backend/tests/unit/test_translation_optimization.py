@@ -21,6 +21,35 @@ os.environ.setdefault(
 )
 os.environ.setdefault("GOOGLE_CLOUD_PROJECT", "test-project")
 
+_BACKEND_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+_REAL_PACKAGE_DIRS = {
+    "utils": os.path.join(_BACKEND_DIR, "utils"),
+    "models": os.path.join(_BACKEND_DIR, "models"),
+}
+
+
+def _restore_real_backend_package(package_name: str) -> None:
+    """Discard empty package stubs left by earlier collected unit tests."""
+    if _BACKEND_DIR not in sys.path:
+        sys.path.insert(0, _BACKEND_DIR)
+
+    package = sys.modules.get(package_name)
+    if package is None:
+        return
+
+    expected_dir = os.path.abspath(_REAL_PACKAGE_DIRS[package_name])
+    package_paths = getattr(package, "__path__", None)
+    if not package_paths:
+        sys.modules.pop(package_name, None)
+        return
+
+    try:
+        has_real_path = any(os.path.abspath(str(path)) == expected_dir for path in package_paths)
+    except TypeError:
+        has_real_path = False
+    if not has_real_path:
+        sys.modules.pop(package_name, None)
+
 
 def _ensure_mock_module(name: str):
     if name not in sys.modules:
@@ -50,11 +79,14 @@ sys.modules["google"].__path__ = []
 _ensure_mock_module("google.cloud")
 sys.modules["google.cloud"].__path__ = []
 _ensure_mock_module("google.cloud.translate_v3")
+sys.modules["google.cloud"].translate_v3 = sys.modules["google.cloud.translate_v3"]
 
 mock_translate_client = MagicMock()
 sys.modules["google.cloud.translate_v3"].TranslationServiceClient = MagicMock(return_value=mock_translate_client)
 
 # Force reimport translation modules
+_restore_real_backend_package("utils")
+_restore_real_backend_package("models")
 for mod_name in list(sys.modules.keys()):
     if 'translation' in mod_name and 'test' not in mod_name:
         del sys.modules[mod_name]
