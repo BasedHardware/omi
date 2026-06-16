@@ -106,6 +106,8 @@ class ConversationProvider extends ChangeNotifier {
     hasDailySummaries = false;
     selectedDate = null;
     selectedFolderId = null;
+    searchStartDate = null;
+    searchEndDate = null;
     previousQuery = '';
     totalSearchPages = 1;
     currentSearchPage = 1;

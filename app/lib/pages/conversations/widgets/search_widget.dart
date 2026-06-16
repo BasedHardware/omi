@@ -130,8 +130,8 @@ class _SearchWidgetState extends State<SearchWidget> {
                         onPressed: () async {
                           final provider = Provider.of<ConversationProvider>(context, listen: false);
                           Navigator.of(context).pop();
-                          provider.setSearchDateRange(startDate, endDate);
                           if (provider.previousQuery.isNotEmpty) {
+                            provider.setSearchDateRange(startDate, endDate);
                             await provider.searchConversations(provider.previousQuery);
                           }
                           final appliedStart = startDate;
