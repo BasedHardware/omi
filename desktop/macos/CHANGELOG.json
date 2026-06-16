@@ -1,8 +1,13 @@
 {
-  "unreleased": [
-    "Added a System Audio setting (Always / Only during meetings / Never); 'Only during meetings' records mic + system audio only while you're in a call"
-  ],
+  "unreleased": [],
   "releases": [
+    {
+      "version": "0.11.464",
+      "date": "2026-06-16",
+      "changes": [
+        "Added a System Audio setting (Always / Only during meetings / Never); 'Only during meetings' records mic + system audio only while you're in a call"
+      ]
+    },
     {
       "version": "0.11.463",
       "date": "2026-06-11",
