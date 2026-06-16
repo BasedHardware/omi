@@ -8,7 +8,7 @@ Verifies:
 import os
 import sys
 from types import ModuleType
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -98,12 +98,14 @@ sys.modules.setdefault('firebase_admin.auth', _fb.auth)
 _deepgram = ModuleType('deepgram')
 _deepgram.DeepgramClient = MagicMock
 _deepgram.DeepgramClientOptions = MagicMock
+_deepgram.LiveTranscriptionEvents = MagicMock()
 sys.modules.setdefault('deepgram', _deepgram)
 
 _speaker_embedding = ModuleType('utils.stt.speaker_embedding')
 _speaker_embedding.SPEAKER_MATCH_THRESHOLD = 0.45
 _speaker_embedding.compare_embeddings = MagicMock(return_value=0.0)
 _speaker_embedding.extract_embedding_from_bytes = MagicMock()
+_speaker_embedding.async_extract_embedding_from_bytes = AsyncMock(return_value=None)
 sys.modules['utils.stt.speaker_embedding'] = _speaker_embedding
 
 import google.cloud.storage as _gcs
