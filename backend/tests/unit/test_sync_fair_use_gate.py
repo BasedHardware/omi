@@ -17,10 +17,12 @@ _STUB_MODULE_NAMES = [
     'database.fair_use',
     'database.users',
     'database.user_usage',
+    'database.announcements',
     'database.conversations',
     'firebase_admin',
     'firebase_admin.auth',
     'firebase_admin.messaging',
+    'stripe',
     'utils.fair_use',
 ]
 _SAVED_MODULES = {mod_name: sys.modules.get(mod_name, _MISSING) for mod_name in _STUB_MODULE_NAMES}
@@ -42,6 +44,7 @@ sys.modules['database.redis_db'].r = _mock_redis
 
 # Stub database._client.db
 sys.modules['database._client'].db = MagicMock()
+sys.modules['database.announcements'].compare_versions = MagicMock(return_value=0)
 
 sys.modules.pop('utils.fair_use', None)
 import utils.fair_use as fair_use_mod
