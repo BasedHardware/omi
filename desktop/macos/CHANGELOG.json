@@ -1,8 +1,13 @@
 {
-  "unreleased": [
-    "Fixed older chat messages failing to load in long chats"
-  ],
+  "unreleased": [],
   "releases": [
+    {
+      "version": "0.11.466",
+      "date": "2026-06-16",
+      "changes": [
+        "Fixed older chat messages failing to load in long chats"
+      ]
+    },
     {
       "version": "0.11.464",
       "date": "2026-06-16",
