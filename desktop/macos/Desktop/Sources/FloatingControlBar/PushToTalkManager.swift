@@ -46,6 +46,10 @@ class PushToTalkManager: ObservableObject {
   // in-session STT + reasoning + routing (tool choice) + speaks the reply. Mic PCM is
   // streamed to RealtimeHubController; there is no transcript→router→ChatProvider hop.
   private var isHubMode = false
+  /// When set, the next finalized PTT turn is a voice follow-up to this agent pill:
+  /// it uses the realtime omni STT and routes the transcript into the pill's agent
+  /// session (RealtimeHub pipeline), NOT the floating bar or the hub model.
+  private var followUpPill: AgentPill?
   // Cached local cue for the instant PTT-up ack (preloaded so play() never hits disk).
   private lazy var ackSound: NSSound? = {
     let s = NSSound(named: "Pop")
@@ -332,6 +336,10 @@ class PushToTalkManager: ObservableObject {
       isHubMode = false
       RealtimeHubController.shared.cancelTurn()
     }
+    if followUpPill != nil {
+      followUpPill = nil
+      AgentPillsManager.shared.recordingPillID = nil
+    }
     stopAudioTranscription()
     state = .idle
     transcriptSegments = []
@@ -352,6 +360,29 @@ class PushToTalkManager: ObservableObject {
     guard state != .idle else { return }
     log("PushToTalkManager: cancelling listening")
     stopListening()
+  }
+
+  // MARK: - Agent voice follow-up
+
+  /// Begin a voice follow-up to a specific agent pill (the pill's mic button). Reuses
+  /// the realtime omni STT capture; the transcript routes to the agent's session via
+  /// AgentPillsManager.continueAgent (not the floating bar / hub model).
+  func startPillFollowUp(for pill: AgentPill) {
+    guard state == .idle else {
+      log("PushToTalkManager: follow-up ignored — PTT busy (state=\(state))")
+      AgentPillsManager.shared.recordingPillID = nil
+      return
+    }
+    log("PushToTalkManager: voice follow-up START for agent \(pill.title)")
+    followUpPill = pill
+    startListening()
+  }
+
+  /// End the in-progress voice follow-up (second mic tap) and send it to the agent.
+  func endPillFollowUp() {
+    guard followUpPill != nil, state != .idle else { return }
+    log("PushToTalkManager: voice follow-up END — finalizing")
+    finalize()
   }
 
   private var finalizedMode: String = "hold"
@@ -427,13 +458,36 @@ class PushToTalkManager: ObservableObject {
   /// True when the turn contains sustained real speech. Falls back to the amplitude
   /// gate if the VAD model isn't available (ONNX missing) so we never silently drop
   /// every turn.
+  /// Peak (0–32767) and mean RMS of a PCM16 buffer — used to log WHY a turn was
+  /// dropped: peak≈0 → mic returned silence (dead capture); high peak + gate-fail →
+  /// classifier misfire; low-but-nonzero → genuinely quiet/far mic.
+  static func audioEnergy(pcm16k data: Data) -> (peak: Int, rms: Int) {
+    let n = data.count / 2
+    guard n > 0 else { return (0, 0) }
+    var peak = 0
+    var sumSq = 0.0
+    data.withUnsafeBytes { (raw: UnsafeRawBufferPointer) in
+      let s = raw.bindMemory(to: Int16.self)
+      for i in 0..<n {
+        let v = Int(s[i])
+        if abs(v) > peak { peak = abs(v) }
+        sumSq += Double(v) * Double(v)
+      }
+    }
+    return (peak, Int((sumSq / Double(n)).squareRoot()))
+  }
+
   static func hubTurnHasSpeech(pcm16k data: Data) -> Bool {
     let count = data.count / 2
     guard Double(count) / 16000.0 >= hubMinTurnAudioSeconds else { return false }  // too short
-    guard let vad = hubVAD, count >= 512 else {
-      let (total, voiced) = voicedAudioSeconds(pcm16k: data, rmsThreshold: hubVoicedRMSThreshold)
-      return total >= hubMinTurnAudioSeconds && voiced >= hubMinVoicedSeconds
-    }
+    // Energy gate FIRST: clear/audible speech (the common case) must always pass. The Silero
+    // classifier was intermittently misclassifying real speech as "no speech" and discarding
+    // whole turns — RMS energy is reliable for audible speech, so accept it outright.
+    let (total, voiced) = voicedAudioSeconds(pcm16k: data, rmsThreshold: hubVoicedRMSThreshold)
+    if total >= hubMinTurnAudioSeconds && voiced >= hubMinVoicedSeconds { return true }
+    // Softer speech that didn't clear the energy bar: a lenient Silero pass as a fallback
+    // (only to catch quiet speech — it must never be the sole gate that drops loud speech).
+    guard let vad = hubVAD, count >= 512 else { return false }
     var floats = [Float](repeating: 0, count: count)
     data.withUnsafeBytes { (raw: UnsafeRawBufferPointer) in
       let s = raw.bindMemory(to: Int16.self)
@@ -446,7 +500,7 @@ class PushToTalkManager: ObservableObject {
     var i = 0
     while i + 512 <= count {
       let p = vad.predict(Array(floats[i..<(i + 512)]))
-      if p > 0.5 {
+      if p > 0.4 {
         speechFrames += 1
         run += 1
         maxRun = max(maxRun, run)
@@ -455,9 +509,8 @@ class PushToTalkManager: ObservableObject {
       }
       i += 512
     }
-    // ~160ms contiguous speech (rejects a single cough/click), or ~320ms total.
-    // Each Silero frame is 512 samples = 32ms at 16kHz.
-    return maxRun >= 5 || speechFrames >= 10
+    // ~96ms contiguous speech, or ~192ms total. Each Silero frame is 512 samples = 32ms.
+    return maxRun >= 3 || speechFrames >= 6
   }
 
   private func finalize() {
@@ -491,8 +544,12 @@ class PushToTalkManager: ObservableObject {
       batchAudioLock.unlock()
       let totalSec = Double(turnAudio.count / 2) / 16000.0
       if !Self.hubTurnHasSpeech(pcm16k: turnAudio) {
+        let (peak, rms) = Self.audioEnergy(pcm16k: turnAudio)
+        let dev = audioCaptureService?.currentDeviceDescription ?? "?"
         log(
-          "PushToTalkManager: discarding hub turn — no sustained speech (Silero VAD), audio \(String(format: "%.2f", totalSec))s — not committing"
+          "PushToTalkManager: discarding hub turn — audio \(String(format: "%.2f", totalSec))s "
+            + "peak=\(peak)/32767 rms=\(rms) device=[\(dev)] "
+            + "(peak≈0 ⇒ dead mic; high peak ⇒ classifier misfire; low ⇒ quiet/far mic) — not committing"
         )
         RealtimeHubController.shared.cancelTurn()
         AnalyticsManager.shared.floatingBarPTTEnded(
@@ -692,6 +749,21 @@ class PushToTalkManager: ObservableObject {
   }
 
   private func sendQuery(_ query: String, wasFollowUp: Bool) {
+    // Voice follow-up to an agent pill: route the transcript into THAT agent's session
+    // (RealtimeHub pipeline) instead of the floating bar.
+    if let pill = followUpPill {
+      followUpPill = nil
+      AgentPillsManager.shared.recordingPillID = nil
+      activeTracer = nil
+      let q = query.trimmingCharacters(in: .whitespacesAndNewlines)
+      if q.isEmpty {
+        log("PushToTalkManager: voice follow-up empty — not sending")
+      } else {
+        log("PushToTalkManager: routing voice follow-up → agent \(pill.title): \"\(q.prefix(60))\"")
+        AgentPillsManager.shared.continueAgent(from: pill, text: q)
+      }
+      return
+    }
     // QueryTracer: hand the PTT tracer to the floating-bar query via TaskLocal so
     // routing, the LLM call, and TTS all record into this same trace. Ownership
     // moves out of activeTracer here; the unstructured Task spawned inside
@@ -763,6 +835,13 @@ class PushToTalkManager: ObservableObject {
     // + spoken reply). Stream mic PCM to the hub and skip both the omni/Deepgram
     // STT path AND the transcript→router→ChatProvider hop. The Haiku classify()
     // router is bypassed — routing is the model's tool choice.
+    // Voice follow-up to an agent: always use the omni STT (we need a transcript to
+    // route to the agent), never the hub model — the hub would answer it itself.
+    if followUpPill != nil {
+      _ = startOmniTranscription()
+      return
+    }
+
     if RealtimeHubController.shared.isActive {
       isHubMode = true
       // Retain the turn's raw audio so finalize() can silence-gate it.
