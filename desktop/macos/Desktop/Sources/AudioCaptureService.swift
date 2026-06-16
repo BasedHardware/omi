@@ -67,6 +67,13 @@ class AudioCaptureService: @unchecked Sendable {
     /// fall back to the built-in mic. Fires at most once per capture session.
     var onSilentMicDetected: (() -> Void)?
 
+    /// Human-readable description of the capture device currently in use — for
+    /// diagnostics (which mic a turn was recorded from).
+    var currentDeviceDescription: String {
+        let isBuiltIn = (deviceID == AudioCaptureService.findBuiltInMicDeviceID())
+        return isBuiltIn ? "built-in id=\(deviceID)" : "id=\(deviceID)"
+    }
+
     // Silent-mic watchdog (fires once per session)
     private var consecutiveSilentWindows: Int = 0
     private var silentMicDetectedFired: Bool = false
