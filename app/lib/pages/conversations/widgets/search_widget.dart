@@ -77,7 +77,7 @@ class _SearchWidgetState extends State<SearchWidget> {
     final convoProvider = Provider.of<ConversationProvider>(context, listen: false);
     DateTime? startDate = convoProvider.searchStartDate;
     DateTime? endDate = convoProvider.searchEndDate;
-    List<DateTime?> selectedRange = [startDate, endDate ?? startDate ?? DateTime.now()];
+    List<DateTime?> selectedRange = [startDate, endDate];
     await showCupertinoModalPopup<void>(
       context: context,
       builder: (BuildContext context) {
