@@ -65,9 +65,16 @@ class _Finder(importlib.abc.MetaPathFinder, importlib.abc.Loader):
         pass
 
 
+def _matches_stub_prefix(module_name):
+    return any(module_name == prefix or module_name.startswith(prefix + '.') for prefix in _STUB)
+
+
 _finder = _Finder()
+_original_stub_modules = {
+    module_name: module for module_name, module in sys.modules.items() if _matches_stub_prefix(module_name)
+}
 for _n in list(sys.modules):
-    if any(_n == p or _n.startswith(p + '.') for p in _STUB):
+    if _matches_stub_prefix(_n):
         sys.modules.pop(_n, None)
 sys.meta_path.insert(0, _finder)
 try:
@@ -75,8 +82,9 @@ try:
 finally:
     sys.meta_path.remove(_finder)
     for _n in list(sys.modules):
-        if any(_n == p or _n.startswith(p + '.') for p in _STUB):
+        if _matches_stub_prefix(_n):
             sys.modules.pop(_n, None)
+    sys.modules.update(_original_stub_modules)
 
 
 def _setup_gates():
