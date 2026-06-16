@@ -16,6 +16,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+BACKEND_DIR = Path(__file__).resolve().parent.parent.parent
+
 os.environ.setdefault(
     "ENCRYPTION_SECRET",
     "omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv",
@@ -25,6 +27,20 @@ os.environ.setdefault(
 def _stub_module(name: str) -> types.ModuleType:
     mod = types.ModuleType(name)
     sys.modules[name] = mod
+    return mod
+
+
+def _ensure_package_path(name: str, path: Path) -> types.ModuleType:
+    mod = sys.modules.get(name)
+    if not isinstance(mod, types.ModuleType):
+        mod = types.ModuleType(name)
+        sys.modules[name] = mod
+    mod.__path__ = [str(path)]
+    if "." in name:
+        parent_name, child_name = name.rsplit(".", 1)
+        parent = sys.modules.get(parent_name)
+        if isinstance(parent, types.ModuleType):
+            setattr(parent, child_name, mod)
     return mod
 
 
@@ -46,6 +62,7 @@ for submodule in [
     "apps",
     "llm_usage",
     "_client",
+    "auth",
 ]:
     mod = _stub_module(f"database.{submodule}")
     setattr(database_mod, submodule, mod)
@@ -59,6 +76,8 @@ for attr in [
     "update_vector_metadata",
     "upsert_action_item_vectors_batch",
     "delete_action_item_vectors_batch",
+    "find_similar_action_items",
+    "upsert_transcript_chunk_vectors",
 ]:
     setattr(vector_db_mod, attr, MagicMock())
 
@@ -76,20 +95,45 @@ for attr in ["get_user_language_preference", "get_people_by_ids"]:
 client_mod = sys.modules["database._client"]
 client_mod.document_id_from_seed = MagicMock(return_value="doc-id")
 
+auth_mod = sys.modules["database.auth"]
+auth_mod.get_user_name = MagicMock(return_value="Test User")
+
+langchain_core_mod = _stub_module("langchain_core")
+langchain_core_mod.__path__ = []
+callbacks_mod = _stub_module("langchain_core.callbacks")
+callbacks_mod.BaseCallbackHandler = object
+outputs_mod = _stub_module("langchain_core.outputs")
+outputs_mod.LLMResult = object
+
+_ensure_package_path("utils", BACKEND_DIR / "utils")
+_ensure_package_path("utils.llm", BACKEND_DIR / "utils" / "llm")
+usage_tracker_stub = sys.modules.get("utils.llm.usage_tracker")
+if usage_tracker_stub is not None and not hasattr(usage_tracker_stub, "Features"):
+    sys.modules.pop("utils.llm.usage_tracker", None)
+
 from utils.llm import usage_tracker
 
 # Stub utils modules that pull in external dependencies.
+_ensure_package_path("utils.conversations", BACKEND_DIR / "utils" / "conversations")
+_MISSING = object()
+_previous_conversation_processing = sys.modules.get("utils.llm.conversation_processing", _MISSING)
+_conversation_processing_stub = types.ModuleType("utils.llm.conversation_processing")
+sys.modules["utils.llm.conversation_processing"] = _conversation_processing_stub
+
 for name in [
     "utils.apps",
     "utils.analytics",
+    "utils.conversations.calendar_linking",
+    "utils.conversations.transcript_chunks",
+    "utils.executors",
     "utils.llm.memories",
-    "utils.llm.conversation_processing",
     "utils.llm.external_integrations",
     "utils.llm.trends",
     "utils.llm.goals",
     "utils.llm.chat",
     "utils.llm.clients",
     "utils.notifications",
+    "utils.subscription",
     "utils.other.hume",
     "utils.retrieval.rag",
     "utils.webhooks",
@@ -106,11 +150,46 @@ for attr in ["get_available_apps", "update_personas_async", "update_persona_prom
 utils_analytics = sys.modules["utils.analytics"]
 utils_analytics.record_usage = MagicMock()
 
+utils_transcript_chunks = sys.modules["utils.conversations.transcript_chunks"]
+utils_transcript_chunks.build_transcript_chunks = MagicMock(return_value=[])
+
+utils_calendar_linking = sys.modules["utils.conversations.calendar_linking"]
+utils_calendar_linking.get_overlapping_calendar_event = MagicMock(return_value=None)
+utils_calendar_linking.write_conversation_link_to_calendar_event = MagicMock()
+
+utils_subscription = sys.modules["utils.subscription"]
+utils_subscription.is_trial_paywalled = MagicMock(return_value=False)
+
+utils_executors = sys.modules["utils.executors"]
+utils_executors.db_executor = MagicMock()
+utils_executors.llm_executor = MagicMock()
+utils_executors.postprocess_executor = MagicMock()
+
+
+class _ImmediateFuture:
+    def __init__(self, fn, *args, **kwargs):
+        try:
+            self._result = fn(*args, **kwargs)
+            self._exception = None
+        except Exception as e:
+            self._result = None
+            self._exception = e
+
+    def result(self):
+        if self._exception:
+            raise self._exception
+        return self._result
+
+
+utils_executors.submit_with_context = MagicMock(
+    side_effect=lambda _executor, fn, *args, **kwargs: _ImmediateFuture(fn, *args, **kwargs)
+)
+
 llm_memories = sys.modules["utils.llm.memories"]
 for attr in ["resolve_memory_conflict", "extract_memories_from_text", "new_memories_extractor"]:
     setattr(llm_memories, attr, MagicMock())
 
-llm_conv = sys.modules["utils.llm.conversation_processing"]
+llm_conv = _conversation_processing_stub
 for attr in [
     "get_transcript_structure",
     "get_app_result",
@@ -168,6 +247,16 @@ utils_storage.precache_conversation_audio = MagicMock()
 import importlib
 
 process_conversation = importlib.import_module("utils.conversations.process_conversation")
+if _previous_conversation_processing is _MISSING:
+    sys.modules.pop("utils.llm.conversation_processing", None)
+    llm_parent = sys.modules.get("utils.llm")
+    if isinstance(llm_parent, types.ModuleType) and hasattr(llm_parent, "conversation_processing"):
+        delattr(llm_parent, "conversation_processing")
+else:
+    sys.modules["utils.llm.conversation_processing"] = _previous_conversation_processing
+    llm_parent = sys.modules.get("utils.llm")
+    if isinstance(llm_parent, types.ModuleType):
+        setattr(llm_parent, "conversation_processing", _previous_conversation_processing)
 
 
 def test_sub_feature_constants_exist():
@@ -431,7 +520,7 @@ def test_action_items_skipped_on_discard():
 def test_llm_calls_use_omi_qos_tier_system():
     """Verify all LLM functions use get_llm() with correct feature keys and cache_key param."""
     conv_proc_path = Path(__file__).resolve().parent.parent.parent / "utils" / "llm" / "conversation_processing.py"
-    conv_proc_source = conv_proc_path.read_text()
+    conv_proc_source = conv_proc_path.read_text(encoding="utf-8")
 
     # get_transcript_structure should use get_llm('conv_structure', cache_key=...)
     struct_match = re.search(
@@ -478,7 +567,7 @@ def test_all_callsites_use_get_llm():
     backend_dir = Path(__file__).resolve().parent.parent.parent
 
     # conversation_processing.py: 9 callsites
-    conv_proc_source = (backend_dir / "utils" / "llm" / "conversation_processing.py").read_text()
+    conv_proc_source = (backend_dir / "utils" / "llm" / "conversation_processing.py").read_text(encoding="utf-8")
     conv_proc_calls = re.findall(r"get_llm\('(\w+)'", conv_proc_source)
     assert 'conv_action_items' in conv_proc_calls, "Missing get_llm('conv_action_items') in conversation_processing.py"
     assert 'conv_app_result' in conv_proc_calls, "Missing get_llm('conv_app_result') in conversation_processing.py"
@@ -492,14 +581,14 @@ def test_all_callsites_use_get_llm():
     ), f"Expected at least 2 get_llm('conv_structure') calls (structure + reprocess), got {conv_proc_calls.count('conv_structure')}"
 
     # knowledge_graph.py: 2 callsites
-    kg_source = (backend_dir / "utils" / "llm" / "knowledge_graph.py").read_text()
+    kg_source = (backend_dir / "utils" / "llm" / "knowledge_graph.py").read_text(encoding="utf-8")
     kg_calls = re.findall(r"get_llm\('(\w+)'", kg_source)
     assert (
         kg_calls.count('knowledge_graph') == 2
     ), f"Expected 2 get_llm('knowledge_graph') calls, got {kg_calls.count('knowledge_graph')}"
 
     # memories.py: 5 callsites (memories x2, learnings x1, memory_category x1, memory_conflict x1)
-    mem_source = (backend_dir / "utils" / "llm" / "memories.py").read_text()
+    mem_source = (backend_dir / "utils" / "llm" / "memories.py").read_text(encoding="utf-8")
     mem_calls = re.findall(r"get_llm\('(\w+)'", mem_source)
     assert mem_calls.count('memories') == 2, f"Expected 2 get_llm('memories') calls, got {mem_calls.count('memories')}"
     assert 'learnings' in mem_calls, "Missing get_llm('learnings') in memories.py"
@@ -516,7 +605,7 @@ def test_no_direct_llm_instance_usage_in_wired_files():
     backend_dir = Path(__file__).resolve().parent.parent.parent
     for filename in ["conversation_processing.py", "knowledge_graph.py", "memories.py"]:
         filepath = backend_dir / "utils" / "llm" / filename
-        source = filepath.read_text()
+        source = filepath.read_text(encoding="utf-8")
         # Check for actual invocations, not just imports
         for usage_pattern in [
             'llm_medium_experiment.invoke',
@@ -583,7 +672,7 @@ def _setup_trigger_apps_mocks(preferred_app_id=None, default_apps=None, availabl
     utils_apps_mod = sys.modules["utils.apps"]
     utils_apps_mod.get_available_apps = MagicMock(return_value=available_apps or [])
 
-    llm_conv_mod = sys.modules["utils.llm.conversation_processing"]
+    llm_conv_mod = llm_conv
     llm_conv_mod.get_app_result = MagicMock(return_value="App result content")
     llm_conv_mod.get_suggested_apps_for_conversation = MagicMock(return_value=(["suggested-app"], "reasoning"))
 
