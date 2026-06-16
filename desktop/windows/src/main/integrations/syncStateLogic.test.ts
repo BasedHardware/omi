@@ -22,7 +22,9 @@ describe('normalizeSourceState', () => {
   it('returns an empty state for missing or malformed persisted data', () => {
     expect(normalizeSourceState(null)).toEqual(emptySourceState())
     expect(normalizeSourceState('bad')).toEqual(emptySourceState())
-    expect(normalizeSourceState({ lastSyncAt: 'soon', processedIds: 'a,b' })).toEqual(emptySourceState())
+    expect(normalizeSourceState({ lastSyncAt: 'soon', processedIds: 'a,b' })).toEqual(
+      emptySourceState()
+    )
   })
 
   it('keeps valid fields and drops invalid processed ids', () => {
