@@ -37,6 +37,12 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
   /// only while the user is actively using it (Gemini idle-closes the WS ~2.5 min).
   private var lastTurnAt: Date?
   private var reconnectPending = false
+  /// When the current warm socket last connected — used to tell a normal idle-close
+  /// (survived a while → keep re-warming) from a fast config/auth failure (don't loop).
+  private var lastWarmAt: Date?
+  /// Consecutive failed (re)connects with no surviving session — caps churn on a hard
+  /// failure. Reset when a socket survives past the idle window or a turn completes.
+  private var hubReconnectStrikes = 0
   /// True between commit and turn-done — used to detect barge-in (a new PTT while
   /// the previous reply is still in flight).
   private var responding = false
@@ -170,19 +176,18 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     lastTurnAt = Date()
     pcmPlayer?.stop()  // stop any prior reply locally
     if speech.isSpeaking { speech.stopSpeaking(at: .immediate) }
-    if bargeIn, sessionProvider == .gemini {
-      // Gemini keeps streaming its reply even after activityEnd, so the only clean
-      // interrupt is to drop the socket — that stops the in-flight audio. The new
-      // turn proceeds on a fresh socket (audio buffers until it reconnects).
-      log("RealtimeHub[gemini]: barge-in — reconnecting to stop in-flight reply")
-      teardownSession()
-    } else if bargeIn {
-      session?.cancelActiveResponse()  // OpenAI: response.cancel + clear input
+    if bargeIn {
+      // Interrupt the in-flight reply IN-SESSION (no teardown — the warm socket and
+      // its conversation context survive). OpenAI: response.cancel + clear input.
+      // Gemini: the fresh activityStart sent by beginInputTurn(interrupting:) cancels
+      // the current generation server-side; the pending-reply gate drops its tail.
+      log("RealtimeHub[\(providerTag)]: barge-in — interrupting in-flight reply (same session)")
+      session?.cancelActiveResponse()
     }
-    ensureWarm()  // (re)connect if needed
+    ensureWarm()  // (re)connect only if the socket idle-closed
     // Open a fresh speech window for this turn (Gemini manual-VAD needs it EVERY
     // turn on a warm session; OpenAI no-op).
-    session?.beginInputTurn()
+    session?.beginInputTurn(interrupting: bargeIn)
     // Speculative, parallel, non-blocking screen grab (item 6a).
     Task.detached(priority: .utility) {
       let shot = ScreenCaptureManager.captureScreenData()
@@ -210,20 +215,17 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     responding = false
     turnTranscript = ""
     assistantText = ""
-    if sessionProvider == .gemini {
-      // The speech window was already opened (activityStart on beginTurn); the only
-      // way to drop it without the model answering the silence is a fresh socket.
-      teardownSession()
-      ensureWarm()
-    } else {
-      session?.cancelActiveResponse()  // OpenAI: clear the uncommitted input buffer
-    }
+    // Abandon the open turn WITHOUT tearing down the socket: close the speech window
+    // and leave the reply gated off so the model never answers the silence. Keeps the
+    // warm session (and its context) so the next real turn is instant and in-context.
+    session?.abandonInputTurn()
     exitVoiceUI()
   }
 
   // MARK: - RealtimeHubSessionDelegate
 
   func hubDidConnect() {
+    lastWarmAt = Date()
     log("RealtimeHub: connected (\(sessionProvider?.displayName ?? "?"))")
   }
 
@@ -233,7 +235,9 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     } else {
       turnTranscript += text
     }
-    barState?.voiceTranscript = turnTranscript
+    // Don't surface Gemini's LIVE partial transcript on the bar: on a quiet/near-silent
+    // hold it transcribes background noise into random words (the bar shows "…" on commit
+    // instead). turnTranscript is still kept for the agent-warm heuristic and the final.
     // Speculatively warm the agent bridge while the user is still talking, if the
     // request looks action-y (inverse of the chat fast-path heuristic). Keeps the
     // existing conditional-attach heuristic intact.
@@ -279,17 +283,39 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
         let answer = await self.escalateToHigherModel(query)
         self.session?.sendToolResult(callId: callId, name: name, output: answer)
       }
+    case .getTasks:
+      // Fast LOCAL read — no agent. Fetch today's + overdue tasks and hand them back
+      // as text for the model to speak (this is the read path, vs spawn_agent actions).
+      Task { @MainActor [weak self] in
+        guard let self else { return }
+        await TasksStore.shared.loadDashboardTasks()
+        let overdue = TasksStore.shared.overdueTasks
+        let today = TasksStore.shared.todaysTasks
+        func list(_ items: [TaskActionItem]) -> String {
+          items.prefix(15).map { "- \($0.description)" }.joined(separator: "\n")
+        }
+        var out = ""
+        if !overdue.isEmpty { out += "Overdue (\(overdue.count)):\n\(list(overdue))\n" }
+        if !today.isEmpty { out += "Due today (\(today.count)):\n\(list(today))\n" }
+        if out.isEmpty { out = "No tasks overdue or due today." }
+        log("RealtimeHub[\(self.providerTag)]: tool get_tasks → \(overdue.count) overdue, \(today.count) today")
+        self.session?.sendToolResult(callId: callId, name: name, output: out)
+      }
     case .spawnAgent:
       let brief = (arguments["brief"] as? String) ?? turnTranscript
       let model = ShortcutSettings.shared.selectedModel.isEmpty
         ? "claude-sonnet-4-6" : ShortcutSettings.shared.selectedModel
       // Non-blocking: spawn renders its own pill ("text bubble") and runs on its
       // own ChatProvider/AgentBridge. We don't await it on the voice loop.
-      let pill = AgentPillsManager.shared.spawnFromUserQuery(brief, model: model, fromVoice: true)
+      // fromVoice:false — the hub model speaks its own natural acknowledgment, so the pill
+      // must NOT also speak its canned randomAck ("on it") or we double up.
+      let pill = AgentPillsManager.shared.spawnFromUserQuery(brief, model: model, fromVoice: false)
       log("RealtimeHub[\(providerTag)]: tool spawn_agent → AgentBridge pill=\"\(pill.title)\" model=\(model)")
+      // Terse directive (not speakable content): the model already said its one-line ack
+      // BEFORE calling, so it should NOT generate a slow second utterance after this.
       session?.sendToolResult(
         callId: callId, name: name,
-        output: "Started a background agent: \"\(pill.title)\". It's working on it now.")
+        output: "Agent started. Acknowledged before the call — do not say anything else.")
     case .screenshot:
       let shot = speculativeScreenshot ?? ScreenCaptureManager.captureScreenData()
       if let shot { session?.injectImage(shot) }
@@ -309,32 +335,36 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
 
   func hubDidFinishTurn() {
     responding = false
+    hubReconnectStrikes = 0  // a completed turn proves the hub works — reset the budget
     let heard = turnTranscript.trimmingCharacters(in: .whitespacesAndNewlines)
     log("RealtimeHub[\(providerTag)]: turn done — heard=\"\(heard.prefix(80))\" audio=\(audioReceivedThisTurn)")
     exitVoiceUI()
   }
 
   func hubDidError(_ message: String) {
-    // A socket we intentionally dropped (barge-in/cancel reconnect) is detached in
-    // teardownSession() before it's released, so its death-rattle never reaches us —
-    // only the live session's errors land here.
+    // A socket we intentionally dropped is detached in teardownSession() before it's
+    // released, so its death-rattle never reaches us — only the live session's errors
+    // land here.
     responding = false
     logError("RealtimeHub: session error — \(message)")
     exitVoiceUI()
-    // Drop the socket; the next PTT reconnects lazily anyway.
+    let aliveFor = lastWarmAt.map { Date().timeIntervalSince($0) } ?? 0
     teardownSession()
-    // If the user has been active recently, the provider likely idle-closed the
-    // warm socket (Gemini does this ~2.5 min idle) — re-warm a fresh one so the
-    // next turn is instant. Bounded to recent activity so an idle, walked-away
-    // session doesn't reconnect-churn forever.
-    let recentlyActive = lastTurnAt.map { Date().timeIntervalSince($0) < 180 } ?? false
-    if isActive, recentlyActive, !reconnectPending {
-      reconnectPending = true
-      DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in
-        guard let self else { return }
-        self.reconnectPending = false
-        if self.isActive, self.session == nil { self.ensureWarm() }
-      }
+    // Re-warm so the NEXT PTT uses the hub, not the STT cascade. Gemini idle-closes
+    // the socket (~2.5 min, close 1008) even before the first turn; managed users have
+    // no BYOK key, so once `session` is nil `isActive` is false and PTT silently falls
+    // back to omni STT. So gate on isEnabled (NOT isActive, which needs a live session).
+    // A socket that survived past the idle window was a normal idle-close → reset the
+    // strike budget and keep re-warming forever; one that died fast is likely a config/
+    // auth failure → let the strikes cap stop the churn.
+    if aliveFor > 60 { hubReconnectStrikes = 0 }
+    guard RealtimeHubSettings.shared.isEnabled, !reconnectPending, hubReconnectStrikes < 5 else { return }
+    hubReconnectStrikes += 1
+    reconnectPending = true
+    DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in
+      guard let self else { return }
+      self.reconnectPending = false
+      if RealtimeHubSettings.shared.isEnabled, self.session == nil { self.ensureWarm() }
     }
   }
 
