@@ -234,7 +234,7 @@ def test_main_methods_timeout_includes_post():
     from pathlib import Path
 
     main_py = Path(__file__).resolve().parents[2] / "main.py"
-    tree = ast.parse(main_py.read_text())
+    tree = ast.parse(main_py.read_text(encoding="utf-8"), filename=str(main_py))
     for node in ast.walk(tree):
         if isinstance(node, ast.Assign):
             for target in node.targets:

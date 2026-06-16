@@ -32,8 +32,10 @@ from omi_cli.commands import auth as auth_cmd
 from omi_cli.commands import config as config_cmd
 from omi_cli.commands import conversation as conversation_cmd
 from omi_cli.commands import goal as goal_cmd
+from omi_cli.commands import local as local_cmd
 from omi_cli.commands import memory as memory_cmd
 from omi_cli.errors import CliError
+from omi_cli.local_client import LocalOmiClient
 from omi_cli.output import Renderer
 
 app = typer.Typer(
@@ -88,6 +90,12 @@ class AppContext:
 
     def make_client(self) -> OmiClient:
         return OmiClient(self.get_profile(), verbose=self.verbose)
+
+    def make_local_client(self) -> LocalOmiClient:
+        profile = self.get_profile()
+        local_api_url = os.environ.get(cfg.ENV_LOCAL_API_URL) or profile.local_api_url
+        local_token = os.environ.get(cfg.ENV_LOCAL_TOKEN) or profile.local_token
+        return LocalOmiClient(api_url=local_api_url or "", token=local_token or "", verbose=self.verbose)
 
 
 def _version_callback(value: bool) -> None:
@@ -150,6 +158,7 @@ app.add_typer(memory_cmd.app, name="memory", help="Memories — facts and learni
 app.add_typer(conversation_cmd.app, name="conversation", help="Conversations — captured & processed audio + text.")
 app.add_typer(action_item_cmd.app, name="action-item", help="Action items — tasks and follow-ups.")
 app.add_typer(goal_cmd.app, name="goal", help="Goals — tracked progress metrics.")
+app.add_typer(local_cmd.app, name="local", help="Local Omi Desktop API tools.")
 
 
 # ---------------------------------------------------------------------------

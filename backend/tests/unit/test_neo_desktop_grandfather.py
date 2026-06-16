@@ -164,7 +164,7 @@ class TestWebhookBuilderPopulatesPeriodStart:
     Verified by reading the source so we don't have to wire the full Stripe SDK."""
 
     def test_builder_reads_current_period_start_active_path(self):
-        with open('routers/payment.py') as f:
+        with open('routers/payment.py', encoding='utf-8') as f:
             src = f.read()
         # Both the inactive-downgrade Subscription(...) and the active
         # Subscription(...) constructors must pass current_period_start.
@@ -173,7 +173,7 @@ class TestWebhookBuilderPopulatesPeriodStart:
         ), "_build_subscription_from_stripe_object must set current_period_start on both branches"
 
     def test_reconcile_paths_set_current_period_start(self):
-        with open('utils/subscription.py') as f:
+        with open('utils/subscription.py', encoding='utf-8') as f:
             src = f.read()
         # find_active_paid_subscription_for_user + reconcile_basic_plan_with_stripe.
         assert (
@@ -188,7 +188,7 @@ class TestPolicyDocstring:
     """Sanity check that the policy comment + cutoff stay in sync with the code."""
 
     def test_cutoff_is_env_overridable(self):
-        with open('utils/subscription.py') as f:
+        with open('utils/subscription.py', encoding='utf-8') as f:
             src = f.read()
         assert "NEO_DESKTOP_GRANDFATHER_CUTOFF" in src
         assert "os.getenv('NEO_DESKTOP_GRANDFATHER_CUTOFF'" in src

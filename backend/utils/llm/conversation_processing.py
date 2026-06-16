@@ -1,11 +1,12 @@
+import unicodedata
 from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 from typing import List, Optional, Tuple
 
 from langchain_core.output_parsers import PydanticOutputParser
 from langchain_core.prompts import ChatPromptTemplate
 from pydantic import BaseModel, Field
 
-from database.auth import get_user_name
 from models.app import App
 from models.calendar_context import CalendarMeetingContext
 from models.conversation import Conversation
@@ -159,15 +160,23 @@ class SpeakerIdMatch(BaseModel):
     speaker_id: int = Field(description="The speaker id assigned to the segment")
 
 
+def _word_count(text: str) -> int:
+    if not text:
+        return 0
+    cjk_chars = sum(1 for c in text if unicodedata.east_asian_width(c) in ('W', 'F', 'H'))
+    if cjk_chars > len(text) * 0.3:
+        return cjk_chars // 2
+    return len(text.split())
+
+
 def should_discard_conversation(
     transcript: str, photos: List[ConversationPhoto] = None, duration_seconds: Optional[float] = None
 ) -> bool:
     # If there's a long transcript, it's very unlikely we want to discard it.
     # This is a performance optimization to avoid unnecessary LLM calls.
-    if transcript and len(transcript.split(' ')) > 100:
+    word_count = _word_count(transcript) if transcript and transcript.strip() else 0
+    if word_count > 100:
         return False
-
-    word_count = len(transcript.split()) if transcript and transcript.strip() else 0
     has_photos = photos and ConversationPhoto.photos_as_string(photos) != 'None'
 
     context_parts = []
@@ -510,19 +519,19 @@ def extract_action_items(
     • Order by: due date → urgency → alphabetical
 
     DUE DATE EXTRACTION:
-    All due_at values MUST be future UTC timestamps with 'Z' suffix. NEVER produce a past date.
+    Resolve each due date in the user's LOCAL time. NEVER produce a past date.
 
-    REFERENCE_TIME: If {started_at} is >7 days before {current_time}, use {current_time} (historical reprocessing). Otherwise use {started_at}.
+    REFERENCE_TIME (user's local time): If {started_at_local} is >7 days before {current_time_local}, use {current_time_local} (historical reprocessing). Otherwise use {started_at_local}.
 
     Date resolution: "today" → REFERENCE_TIME date, "tomorrow" → next day, weekday names → next occurrence, "next week" → +7 days.
     Time resolution: "morning" → 9AM, "afternoon" → 2PM, "evening" → 6PM, "noon" → 12PM, "end of day"/"midnight" → 11:59PM, no time → 11:59PM. "urgent"/"ASAP" → 2h from REFERENCE_TIME.
-    Process: resolve date + time in user's timezone ({tz}), convert to UTC with 'Z' suffix, verify it's future relative to {current_time}. If past, omit due_at.
+    Output the resolved value as the user's LOCAL wall-clock time in ISO 8601 with NO timezone suffix or offset (no 'Z', no '+05:30') — the server converts it to UTC. Verify it is in the future relative to REFERENCE_TIME; if past, omit due_at.
 
-    Example: REFERENCE_TIME "2025-10-03T13:25:00Z", tz "Asia/Kolkata": "tomorrow before 10am" → Oct 4 10:00 IST → "2025-10-04T04:30:00Z"
-    Format: UTC with 'Z' suffix only (e.g., "2025-10-04T04:30:00Z"). No timezone offsets like "+05:30".
+    Example: REFERENCE_TIME "2025-10-03T13:25:00", "tomorrow before 10am" → "2025-10-04T10:00:00"
+    Format: naive local ISO 8601, no suffix (e.g., "2025-10-04T10:00:00").
 
-    Conversation started at: {started_at}
-    Current time: {current_time}
+    Conversation started at (local): {started_at_local}
+    Current time (local): {current_time_local}
     User timezone: {tz}
 
     {format_instructions}'''.replace(
@@ -538,6 +547,20 @@ def extract_action_items(
 
     current_time = datetime.now(timezone.utc)
 
+    # Resolve the user's timezone once; fall back to UTC on an invalid/missing tz (and log it).
+    # The LLM emits naive LOCAL wall-clock due dates (see prompt); we convert them to UTC here
+    # deterministically instead of trusting the model to do the timezone math (the cause of #7059).
+    try:
+        user_tz = ZoneInfo(tz) if tz else timezone.utc
+    except Exception:
+        logger.warning(f'Invalid timezone {tz!r} for action item extraction; falling back to UTC')
+        user_tz = timezone.utc
+
+    started_at_local = (started_at if started_at.tzinfo else started_at.replace(tzinfo=timezone.utc)).astimezone(
+        user_tz
+    )
+    current_time_local = current_time.astimezone(user_tz)
+
     try:
         response = chain.invoke(
             {
@@ -545,9 +568,9 @@ def extract_action_items(
                 'format_instructions': action_items_parser.get_format_instructions(),
                 'language_code': language_code,
                 'response_language': response_language,
-                'started_at': started_at.isoformat(),
-                'current_time': current_time.isoformat(),
-                'tz': tz,
+                'started_at_local': started_at_local.replace(tzinfo=None).isoformat(),
+                'current_time_local': current_time_local.replace(tzinfo=None).isoformat(),
+                'tz': tz or 'UTC',
                 'existing_items_context': existing_items_context,
             }
         )
@@ -557,12 +580,14 @@ def extract_action_items(
         for action_item in response.action_items or []:
             if action_item.created_at is None:
                 action_item.created_at = now
-            # Post-extraction validation: clear due dates more than 1 day in the past
+            # The LLM returns naive LOCAL time; convert to UTC deterministically (and normalize any
+            # tz-aware value), then clear due dates more than 1 day in the past.
             if action_item.due_at is not None:
-                due_utc = (
-                    action_item.due_at if action_item.due_at.tzinfo else action_item.due_at.replace(tzinfo=timezone.utc)
-                )
-                if due_utc < now - timedelta(days=1):
+                if action_item.due_at.tzinfo is None:
+                    action_item.due_at = action_item.due_at.replace(tzinfo=user_tz).astimezone(timezone.utc)
+                else:
+                    action_item.due_at = action_item.due_at.astimezone(timezone.utc)
+                if action_item.due_at < now - timedelta(days=1):
                     logger.warning(
                         f'Clearing past due_at {action_item.due_at.isoformat()} for action item: {action_item.description}'
                     )
@@ -573,6 +598,21 @@ def extract_action_items(
     except Exception as e:
         logger.error(f'Error extracting action items: {e}')
         return []
+
+
+def _local_started_at_iso(started_at: datetime, tz: Optional[str]) -> str:
+    """Render the capture time as the user's local wall-clock for prompt date context (#4773).
+
+    The LLM is unreliable at converting UTC to the user's timezone, which mislabels the time of day
+    in titles and overviews. Convert deterministically here instead. Naive datetimes are treated as
+    UTC; a missing or invalid timezone falls back to UTC.
+    """
+    try:
+        user_tz = ZoneInfo(tz) if tz else timezone.utc
+    except Exception:  # noqa: BLE001 - any unknown/invalid tz falls back to UTC
+        user_tz = timezone.utc
+    aware = started_at if started_at.tzinfo is not None else started_at.replace(tzinfo=timezone.utc)
+    return aware.astimezone(user_tz).replace(tzinfo=None).isoformat()
 
 
 def get_transcript_structure(
@@ -590,11 +630,6 @@ def get_transcript_structure(
         return Structured()  # Should be caught by discard logic, but as a safeguard.
 
     response_language = output_language_code or language_code
-    try:
-        user_name = get_user_name(uid)
-    except Exception as e:
-        logger.warning(f'Failed to load user name for transcript structuring (uid={uid}): {e}')
-        user_name = 'The User'
 
     # First system message: task-specific instructions (static prefix enables cross-conversation caching)
     # NOTE: language instructions are in context_message (second message) to keep this prefix fully static.
@@ -636,7 +671,7 @@ def get_transcript_structure(
     • Vague suggestions ("let's grab coffee soon")
     • Hypothetical scenarios ("if we meet Tuesday...")
 
-    For date context, this content was captured on {started_at}. {tz} is the user's timezone; respond in user local timezone.
+    For date context, this content was captured at {started_at}, which is already the user's local time ({tz}). Interpret it as-is and describe times of day in the title and overview accordingly; do not re-interpret this timestamp as UTC.
 
     {format_instructions}'''.replace(
         '    ', ''
@@ -653,8 +688,8 @@ def get_transcript_structure(
             'format_instructions': parser.get_format_instructions(),
             'language_code': language_code,
             'response_language': response_language,
-            'started_at': started_at.isoformat(),
-            'tz': tz,
+            'started_at': _local_started_at_iso(started_at, tz),
+            'tz': tz or 'UTC',
         }
     )
 
@@ -719,7 +754,7 @@ def get_reprocess_transcript_structure(
     • Vague suggestions ("let's grab coffee soon")
     • Hypothetical scenarios ("if we meet Tuesday...")
     
-    For date context, this content was captured on {started_at}. {tz} is the user's timezone; respond in user local timezone.
+    For date context, this content was captured at {started_at}, which is already the user's local time ({tz}). Interpret it as-is and describe times of day in the title and overview accordingly; do not re-interpret this timestamp as UTC.
 
     Content:
     {full_context}
@@ -738,8 +773,8 @@ def get_reprocess_transcript_structure(
             'format_instructions': parser.get_format_instructions(),
             'language_code': language_code,
             'response_language': response_language,
-            'started_at': started_at.isoformat(),
-            'tz': tz,
+            'started_at': _local_started_at_iso(started_at, tz),
+            'tz': tz or 'UTC',
         }
     )
 

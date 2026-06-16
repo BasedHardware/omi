@@ -62,7 +62,7 @@ from models.message_event import (
 )
 from models.transcript_segment import Translation
 from models.users import PlanType
-from utils.analytics import record_usage
+from utils.analytics import billable_transcription_seconds, record_usage
 from utils.app_integrations import trigger_realtime_integrations
 from utils.apps import is_audio_bytes_app_enabled
 from utils.conversations.process_conversation import retrieve_in_progress_conversation
@@ -390,6 +390,7 @@ async def _stream_handler(
     MAX_PHOTO_BUFFER_SIZE = 100  # Max photos to buffer
     MAX_AUDIO_BUFFER_SIZE = 1024 * 1024 * 10  # 10MB max audio buffer
     MAX_PENDING_REQUESTS = 100  # Max pending conversation requests
+    MAX_PENDING_SPEAKER_SAMPLE_REQUESTS = 50  # Max speaker-sample requests buffered while pusher is down
     MAX_IMAGE_CHUNKS = 50  # Max concurrent image uploads
     IMAGE_CHUNK_TTL = 60.0  # Seconds before incomplete image chunks expire
     IMAGE_CHUNK_CLEANUP_INTERVAL = 2.0  # Seconds between cleanup scans
@@ -543,7 +544,11 @@ async def _stream_handler(
 
             if last_usage_record_timestamp:
                 current_time = time.time()
-                transcription_seconds = int(current_time - last_usage_record_timestamp)
+                # Clamped to the last audio actually received (#4700): keepalive
+                # pings keep the socket alive after the device stops streaming.
+                transcription_seconds = billable_transcription_seconds(
+                    last_usage_record_timestamp, last_audio_received_time, current_time
+                )
 
                 words_to_record = words_transcribed_since_last_record
                 words_transcribed_since_last_record = 0  # reset
@@ -1031,8 +1036,14 @@ async def _stream_handler(
                         return cb
 
                     callback = make_multi_channel_callback(ch_config)
+                    # Pass the user's vocabulary (always includes "Omi") so phone-call /
+                    # multi-channel transcripts get the same keyterm hinting as single-channel.
                     stt_sockets_multi[i] = await _create_stt_socket(
-                        callback, stt_language, TARGET_SAMPLE_RATE, stt_model
+                        callback,
+                        stt_language,
+                        TARGET_SAMPLE_RATE,
+                        stt_model,
+                        kw=vocabulary[:100] if vocabulary else None,
                     )
                 logger.info(
                     f"Multi-channel STT connections established ({len(channel_configs)} channels) {uid} {session_id}"
@@ -1112,6 +1123,11 @@ async def _stream_handler(
         MAX_RETRIES_PER_REQUEST = 3
         pending_conversation_requests: Dict[str, dict] = {}
         pending_request_event = asyncio.Event()
+
+        # Speaker-sample extraction requests buffered while pusher is disconnected,
+        # replayed on reconnect (#6060). Bounded to avoid unbounded growth during
+        # long outages; oldest is dropped when full.
+        pending_speaker_sample_requests: deque = deque(maxlen=MAX_PENDING_SPEAKER_SAMPLE_REQUESTS)
 
         def transcript_send(segments):
             nonlocal segment_buffers
@@ -1509,6 +1525,15 @@ async def _stream_handler(
                     for cid in list(pending_conversation_requests.keys()):
                         pending_conversation_requests[cid]['sent_at'] = time.time()
                         await request_conversation_processing(cid)
+                # Re-send any speaker sample requests buffered while disconnected (#6060)
+                if pending_speaker_sample_requests:
+                    buffered = list(pending_speaker_sample_requests)
+                    pending_speaker_sample_requests.clear()
+                    logger.info(
+                        f"Reconnected to pusher, re-sending {len(buffered)} pending speaker sample requests {uid} {session_id}"
+                    )
+                    for person_id, conv_id, segment_ids in buffered:
+                        await send_speaker_sample_request(person_id, conv_id, segment_ids)
             except PusherCircuitBreakerOpen:
                 raise  # Let caller handle circuit breaker
             except Exception as e:
@@ -1539,6 +1564,13 @@ async def _stream_handler(
             """Send speaker sample extraction request to pusher with segment IDs."""
             nonlocal pusher_ws, pusher_connected
             if not pusher_connected or not pusher_ws:
+                # Buffer instead of dropping so the request survives a transient
+                # pusher disconnect and is replayed on reconnect (#6060).
+                pending_speaker_sample_requests.append((person_id, conv_id, segment_ids))
+                logger.warning(
+                    f"Pusher not connected, buffered speaker sample request: person={person_id}, "
+                    f"{len(segment_ids)} segments ({len(pending_speaker_sample_requests)} pending) {uid} {session_id}"
+                )
                 return
             try:
                 data = bytearray()
@@ -2780,7 +2812,9 @@ async def _stream_handler(
         shutdown_event.set()
         BACKEND_LISTEN_ACTIVE_WS_CONNECTIONS.dec()
         if not use_custom_stt and last_usage_record_timestamp:
-            transcription_seconds = int(time.time() - last_usage_record_timestamp)
+            transcription_seconds = billable_transcription_seconds(
+                last_usage_record_timestamp, last_audio_received_time, time.time()
+            )
             words_to_record = words_transcribed_since_last_record
 
             # Flush any pending speech_ms delta to Redis (#5746 reviewer fix)

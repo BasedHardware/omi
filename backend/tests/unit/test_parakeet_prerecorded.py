@@ -20,10 +20,95 @@ os.environ.setdefault('DEEPGRAM_API_KEY', 'x')
 os.environ.setdefault('HOSTED_PARAKEET_API_URL', 'http://fake-parakeet:8080')
 os.environ.setdefault('ENCRYPTION_SECRET', 'test-secret')
 
+_BACKEND_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
+if _BACKEND_DIR not in sys.path:
+    sys.path.insert(0, _BACKEND_DIR)
+
+_utils_pkg = sys.modules.get('utils')
+if isinstance(_utils_pkg, types.ModuleType):
+    _utils_pkg.__path__ = [os.path.join(_BACKEND_DIR, 'utils')]
+_utils_other_pkg = sys.modules.get('utils.other')
+if isinstance(_utils_other_pkg, types.ModuleType):
+    _utils_other_pkg.__path__ = [os.path.join(_BACKEND_DIR, 'utils', 'other')]
+sys.modules.pop('utils.stt', None)
+sys.modules.pop('utils.stt.pre_recorded', None)
+sys.modules.pop('utils.other.endpoints', None)
+sys.modules.pop('utils.http_client', None)
+
+_database_pkg = sys.modules.setdefault('database', types.ModuleType('database'))
+_database_pkg.__path__ = [os.path.join(_BACKEND_DIR, 'database')]
+
 _db_client = types.ModuleType('database._client')
 _db_client.db = MagicMock()
 _db_client.document_id_from_seed = lambda s: f'id-{s}'
 sys.modules.setdefault('database._client', _db_client)
+_redis_db = types.ModuleType('database.redis_db')
+_redis_db.check_rate_limit = MagicMock(return_value=(True, 0, 0))
+_redis_db.try_acquire_listen_lock = MagicMock(return_value=True)
+sys.modules['database.redis_db'] = _redis_db
+_database_users = types.ModuleType('database.users')
+_database_users.record_user_platform = MagicMock()
+sys.modules['database.users'] = _database_users
+
+_deepgram = types.ModuleType('deepgram')
+_deepgram.DeepgramClient = MagicMock
+_deepgram.DeepgramClientOptions = MagicMock
+_deepgram.LiveTranscriptionEvents = MagicMock()
+sys.modules.setdefault('deepgram', _deepgram)
+_deepgram_live = types.ModuleType('deepgram.clients.live.v1')
+_deepgram_live.LiveOptions = MagicMock
+sys.modules.setdefault('deepgram.clients.live.v1', _deepgram_live)
+sys.modules.setdefault('fal_client', MagicMock())
+
+
+class _WebSocketException(Exception):
+    pass
+
+
+class _ConnectionClosed(_WebSocketException):
+    pass
+
+
+_websockets = types.ModuleType('websockets')
+_websockets.connect = MagicMock()
+_websockets.exceptions = types.SimpleNamespace(
+    ConnectionClosed=_ConnectionClosed,
+    WebSocketException=_WebSocketException,
+)
+sys.modules.setdefault('websockets', _websockets)
+
+
+def _cdist(a, b, metric='cosine'):
+    if metric != 'cosine':
+        raise ValueError(f'unsupported metric: {metric}')
+
+    a_mat = np.asarray(a, dtype=np.float32)
+    b_mat = np.asarray(b, dtype=np.float32)
+    if a_mat.ndim == 1:
+        a_mat = a_mat.reshape(1, -1)
+    if b_mat.ndim == 1:
+        b_mat = b_mat.reshape(1, -1)
+
+    a_mat = a_mat.reshape(a_mat.shape[0], -1)
+    b_mat = b_mat.reshape(b_mat.shape[0], -1)
+    denom = np.linalg.norm(a_mat, axis=1)[:, None] * np.linalg.norm(b_mat, axis=1)[None, :]
+    with np.errstate(divide='ignore', invalid='ignore'):
+        distances = 1.0 - (a_mat @ b_mat.T) / denom
+    distances = np.where(denom <= 0.0, 2.0, distances)
+    return np.clip(distances, 0.0, 2.0).astype(np.float32)
+
+
+_scipy = types.ModuleType('scipy')
+_scipy.__path__ = []
+_scipy_spatial = types.ModuleType('scipy.spatial')
+_scipy_spatial.__path__ = []
+_scipy_distance = types.ModuleType('scipy.spatial.distance')
+_scipy_distance.cdist = _cdist
+_scipy_spatial.distance = _scipy_distance
+_scipy.spatial = _scipy_spatial
+sys.modules.setdefault('scipy', _scipy)
+sys.modules.setdefault('scipy.spatial', _scipy_spatial)
+sys.modules.setdefault('scipy.spatial.distance', _scipy_distance)
 
 import utils.stt.pre_recorded as pr  # noqa: E402
 
@@ -47,6 +132,17 @@ def _mock_parakeet_response(text="Hello world", segments=None):
     resp.raise_for_status = MagicMock()
     resp.json.return_value = {"text": text, "segments": segments}
     return resp
+
+
+def test_cdist_stub_handles_pairwise_rows():
+    distances = _cdist(
+        np.array([[1.0, 0.0], [0.0, 1.0]], dtype=np.float32),
+        np.array([[1.0, 0.0], [1.0, 1.0]], dtype=np.float32),
+    )
+
+    assert distances.shape == (2, 2)
+    assert distances[0, 0] == pytest.approx(0.0)
+    assert distances[1, 0] == pytest.approx(1.0)
 
 
 class TestFactoryRouting:

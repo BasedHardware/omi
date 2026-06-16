@@ -39,6 +39,7 @@ for submod in [
     "llm_usage",
     "chat",
     "goals",
+    "webhook_health",
 ]:
     mod = types.ModuleType(f"database.{submod}")
     sys.modules.setdefault(f"database.{submod}", mod)
@@ -65,10 +66,21 @@ sys.modules["database.notifications"].get_token_only = MagicMock(return_value=No
 sys.modules["database.notifications"].get_mentor_notification_frequency = MagicMock(return_value=0)
 sys.modules["database.conversations"].get_conversations_by_id = MagicMock(return_value=[])
 sys.modules["database.goals"].get_user_goals = MagicMock(return_value=[])
+sys.modules["database.users"].get_user_language_preference = MagicMock(return_value="en")
+sys.modules["database.webhook_health"].record_app_webhook_failure = MagicMock(return_value=0)
+sys.modules["database.webhook_health"].record_app_webhook_success = MagicMock()
+sys.modules["database.webhook_health"].is_app_webhook_disabled = MagicMock(return_value=False)
+sys.modules["database.webhook_health"].disable_app_in_firestore = MagicMock()
+sys.modules["database.webhook_health"].record_dev_webhook_failure = MagicMock(return_value=False)
+sys.modules["database.webhook_health"].record_dev_webhook_success = MagicMock()
+sys.modules["database.webhook_health"]._DEV_FAILURE_THRESHOLD = 100
 
-for name in [
+_utils_stubs = [
     "utils.apps",
     "utils.notifications",
+    "utils.conversations",
+    "utils.conversations.factory",
+    "utils.conversations.render",
     "utils.llm",
     "utils.llm.clients",
     "utils.llm.proactive_notification",
@@ -78,16 +90,25 @@ for name in [
     "utils.mentor_notifications",
     "utils.log_sanitizer",
     "utils.http_client",
-]:
+    "utils.subscription",
+]
+for name in _utils_stubs:
     if name not in sys.modules:
         sys.modules[name] = types.ModuleType(name)
 
 sys.modules["utils.apps"].get_available_apps = MagicMock(return_value=[])
 sys.modules["utils.notifications"].send_notification = MagicMock()
+sys.modules["utils.conversations.factory"].deserialize_conversations = MagicMock(return_value=[])
+sys.modules["utils.conversations.render"].conversations_to_string = MagicMock(return_value="")
+sys.modules["utils.conversations.render"].conversation_to_dict = MagicMock(return_value={})
+sys.modules["utils.conversations.render"].populate_speaker_names = MagicMock()
+sys.modules["utils.conversations.render"].populate_folder_names = MagicMock()
+sys.modules["utils.conversations.render"].serialize_datetimes = MagicMock(side_effect=lambda value: value)
 sys.modules["utils.llm.clients"].generate_embedding = MagicMock(return_value=[0] * 3072)
 sys.modules["utils.mentor_notifications"].process_mentor_notification = MagicMock(return_value=None)
 sys.modules["utils.log_sanitizer"].sanitize = MagicMock(side_effect=lambda x: x)
 sys.modules["utils.log_sanitizer"].sanitize_pii = MagicMock(side_effect=lambda x: x)
+sys.modules["utils.subscription"].is_trial_paywalled = MagicMock(return_value=False)
 
 # Stub proactive_notification named imports
 _proactive_mod = sys.modules["utils.llm.proactive_notification"]
@@ -138,10 +159,17 @@ if _http_mod is not None and not hasattr(_http_mod, '__file__'):
 # run_in_executor calls executor.submit() and wraps the returned Future.
 from concurrent.futures import ThreadPoolExecutor as _TPE
 
-if "utils.executors" not in sys.modules:
-    sys.modules["utils.executors"] = types.ModuleType("utils.executors")
-sys.modules["utils.executors"].critical_executor = _TPE(max_workers=2, thread_name_prefix="test-critical")
-sys.modules["utils.executors"].storage_executor = _TPE(max_workers=2, thread_name_prefix="test-storage")
+_executors_mod = sys.modules.setdefault("utils.executors", types.ModuleType("utils.executors"))
+_executors_mod.critical_executor = _TPE(max_workers=2, thread_name_prefix="test-critical")
+_executors_mod.db_executor = _TPE(max_workers=2, thread_name_prefix="test-db")
+_executors_mod.storage_executor = _TPE(max_workers=2, thread_name_prefix="test-storage")
+
+
+async def _run_blocking(_executor, func, *args, **kwargs):
+    return func(*args, **kwargs)
+
+
+_executors_mod.run_blocking = _run_blocking
 
 import importlib
 
@@ -277,7 +305,7 @@ class TestAsyncTriggerRealtimeIntegrations:
     async def test_no_apps_returns_empty(self):
         """No apps and no mentor → empty result."""
         with patch.object(app_integrations, "get_available_apps", return_value=[]), patch(
-            "utils.mentor_notifications.process_mentor_notification", return_value=None
+            "utils.app_integrations.process_mentor_notification", return_value=None
         ):
             result = await app_integrations.trigger_realtime_integrations("uid-1", [{"text": "hi"}], "conv-1")
         assert result == {}
@@ -297,7 +325,7 @@ class TestAsyncTriggerRealtimeIntegrations:
         mock_client.post = AsyncMock(return_value=mock_response)
 
         with patch.object(app_integrations, "get_available_apps", return_value=[app1, app2]), patch(
-            "utils.mentor_notifications.process_mentor_notification", return_value=None
+            "utils.app_integrations.process_mentor_notification", return_value=None
         ), patch("utils.app_integrations.get_webhook_client", return_value=mock_client):
             await app_integrations.trigger_realtime_integrations("uid-1", [{"text": "hi"}], "conv-1")
 
@@ -317,7 +345,7 @@ class TestAsyncTriggerRealtimeIntegrations:
         mock_client.post = AsyncMock(return_value=mock_response)
 
         with patch.object(app_integrations, "get_available_apps", return_value=[app1]), patch(
-            "utils.mentor_notifications.process_mentor_notification", return_value=None
+            "utils.app_integrations.process_mentor_notification", return_value=None
         ), patch("utils.app_integrations.get_webhook_client", return_value=mock_client), patch.object(
             app_integrations, "send_app_notification"
         ) as mock_notify, patch.object(
@@ -341,7 +369,7 @@ class TestAsyncTriggerRealtimeIntegrations:
         mock_client.post = AsyncMock(return_value=mock_response)
 
         with patch.object(app_integrations, "get_available_apps", return_value=[app1]), patch(
-            "utils.mentor_notifications.process_mentor_notification", return_value=None
+            "utils.app_integrations.process_mentor_notification", return_value=None
         ), patch("utils.app_integrations.get_webhook_client", return_value=mock_client):
             await app_integrations.trigger_realtime_integrations("uid-1", [{"text": "hi"}], None)
 

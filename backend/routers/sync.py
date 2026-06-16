@@ -1,4 +1,5 @@
 import asyncio
+import contextlib
 import io
 import logging
 import os
@@ -9,6 +10,7 @@ import threading
 import time
 import uuid as _uuid
 import wave
+from collections import deque
 from datetime import datetime, timezone
 from typing import Dict, List, Optional, Tuple
 
@@ -35,12 +37,19 @@ from database import conversations as conversations_db
 from database import users as users_db
 from database.conversations import get_closest_conversation_to_timestamps, update_conversation_segments
 from database.sync_jobs import (
+    TERMINAL_STATUSES,
     create_sync_job,
     get_sync_job,
     update_sync_job,
     mark_job_processing,
     mark_job_completed,
     mark_job_failed,
+    mark_job_queued_for_retry,
+    try_acquire_job_run_lock,
+    release_job_run_lock,
+    add_processed_segment,
+    get_processed_segments,
+    try_mark_once,
 )
 from models.conversation import Conversation, CreateConversation
 from models.conversation_enums import ConversationSource
@@ -52,14 +61,31 @@ from utils.other import endpoints as auth
 from utils.other.storage import (
     get_syncing_file_temporal_signed_url,
     delete_syncing_temporal_file,
+    schedule_syncing_temporal_file_deletion,
+    upload_syncing_temporal_file,
+    download_syncing_temporal_file,
     download_audio_chunks_and_merge,
     get_or_create_merged_audio,
     get_merged_audio_signed_url,
+    download_legacy_merged_wav,
+    get_playback_artifact_signed_url,
+    download_playback_artifact,
+    upload_playback_artifact,
+    mark_playback_unavailable,
+    is_playback_unavailable,
+    enqueue_conversation_audio_merge,
     _PRECACHE_FILE_SEM,
 )
 
 from utils import encryption
-from utils.byok import get_byok_keys, set_byok_keys
+from utils.byok import get_byok_keys, set_byok_keys, has_byok_keys
+from utils.cloud_tasks import (
+    enqueue_sync_job,
+    get_sync_tasks_max_attempts,
+    is_audio_merge_dispatch_enabled,
+    is_cloud_tasks_dispatch_enabled,
+    verify_cloud_tasks_oidc,
+)
 from utils.http_client import _get_semaphore
 from utils.log_sanitizer import sanitize
 from utils.stt.pre_recorded import postprocess_words, prerecorded
@@ -205,6 +231,10 @@ def precache_conversation_audio_endpoint(
     if not audio_files:
         return {"status": "no_audio", "message": "No audio files in conversation"}
 
+    if is_audio_merge_dispatch_enabled():
+        enqueue_conversation_audio_merge(uid, conversation_id, audio_files, caller='precache_endpoint')
+        return {"status": "started", "audio_file_count": len(audio_files)}
+
     # Start background parallel pre-caching with bounded concurrency (#7387)
     def _precache_all_parallel():
         logger.info(f"Pre-caching all {len(audio_files)} audio files for conversation {conversation_id} (parallel)")
@@ -232,6 +262,68 @@ def precache_conversation_audio_endpoint(
     return {"status": "started", "audio_file_count": len(audio_files)}
 
 
+AUDIO_URLS_POLL_AFTER_MS = 3000
+
+
+def _get_audio_urls_via_artifacts(uid: str, conversation_id: str, audio_files: list) -> dict:
+    """Artifact-backed /urls: a pure metadata read that never merges in-request.
+
+    Cached = a playback MP3 artifact (or legacy unexpired WAV cache) exists.
+    Everything else is reported pending and enqueued as an audio-merge task
+    (named-task deduped); the app polls until cached.
+    """
+    result = []
+    to_enqueue = []
+    for af in audio_files:
+        audio_file_id = af.get('id')
+        if not audio_file_id:
+            continue
+
+        signed_url = get_playback_artifact_signed_url(uid, conversation_id, audio_file_id)
+        content_type = 'audio/mpeg' if signed_url else None
+        if not signed_url:
+            signed_url = get_merged_audio_signed_url(uid, conversation_id, audio_file_id)
+            content_type = 'audio/wav' if signed_url else None
+
+        if signed_url:
+            result.append(
+                {
+                    "id": audio_file_id,
+                    "status": "cached",
+                    "signed_url": signed_url,
+                    "content_type": content_type,
+                    "duration": af.get('duration', 0),
+                }
+            )
+        elif is_playback_unavailable(uid, conversation_id, audio_file_id):
+            result.append(
+                {
+                    "id": audio_file_id,
+                    "status": "unavailable",
+                    "signed_url": None,
+                    "duration": af.get('duration', 0),
+                }
+            )
+        else:
+            result.append(
+                {
+                    "id": audio_file_id,
+                    "status": "pending",
+                    "signed_url": None,
+                    "duration": af.get('duration', 0),
+                }
+            )
+            to_enqueue.append(af)
+
+    if to_enqueue:
+        enqueue_conversation_audio_merge(uid, conversation_id, to_enqueue, caller='sync_urls')
+
+    return {
+        "audio_files": result,
+        "poll_after_ms": AUDIO_URLS_POLL_AFTER_MS if to_enqueue else None,
+    }
+
+
 @router.get("/v1/sync/audio/{conversation_id}/urls", tags=['v1'])
 def get_audio_signed_urls_endpoint(
     conversation_id: str,
@@ -254,6 +346,9 @@ def get_audio_signed_urls_endpoint(
     audio_files = conversation.get('audio_files', [])
     if not audio_files:
         return {"audio_files": []}
+
+    if is_audio_merge_dispatch_enabled():
+        return _get_audio_urls_via_artifacts(uid, conversation_id, audio_files)
 
     result = []
     uncached_files = []
@@ -390,7 +485,33 @@ def download_audio_file_endpoint(
         if not audio_file.get('chunk_timestamps'):
             raise HTTPException(status_code=500, detail="Audio file has no chunk timestamps")
 
-        if format == "wav":
+        if format == "wav" and is_audio_merge_dispatch_enabled():
+            # Artifact-backed mode: serve only prebuilt audio, never merge
+            # in-request. On miss, enqueue the merge task and tell the client
+            # to poll /urls (old app versions hit this path uncached and get
+            # a fast 202 instead of the inline merge that used to time out).
+            audio_data = download_playback_artifact(uid, conversation_id, audio_file_id)
+            if audio_data is not None:
+                content_type = "audio/mpeg"
+                extension = "mp3"
+            else:
+                # Direct blob download — get_or_create_merged_audio would fall
+                # through to a full inline merge for cached blobs missing
+                # expires_at metadata, violating the no-merge guarantee.
+                legacy_data = None
+                if get_merged_audio_signed_url(uid, conversation_id, audio_file_id):
+                    legacy_data = download_legacy_merged_wav(uid, conversation_id, audio_file_id)
+                if legacy_data is not None:
+                    audio_data = legacy_data
+                    content_type = "audio/wav"
+                    extension = "wav"
+                else:
+                    enqueue_conversation_audio_merge(uid, conversation_id, [audio_file], caller='sync_download')
+                    return JSONResponse(
+                        status_code=202,
+                        content={"status": "pending", "poll_after_ms": AUDIO_URLS_POLL_AFTER_MS},
+                    )
+        elif format == "wav":
             audio_data, was_cached = get_or_create_merged_audio(
                 uid=uid,
                 conversation_id=conversation_id,
@@ -949,6 +1070,41 @@ def identify_speakers_for_segments(
         )
 
 
+ORDERED_ASSIGNMENT_WAIT_SECONDS = 600
+
+
+class _OrderedTurnstile:
+    """Serializes conversation assignment across parallel segment threads in timestamp order.
+
+    Segments are transcribed concurrently, but each must wait its (chronological) turn
+    before looking up / creating a conversation. Without this, timestamp-adjacent chunks
+    race get_closest_conversation_to_timestamps() before any of them has persisted a
+    conversation, so every chunk becomes its own conversation (#6551, #5747).
+    """
+
+    def __init__(self, ordered_keys: List[str]):
+        self._pending = deque(ordered_keys)
+        self._done = set()
+        self._cond = threading.Condition()
+
+    def _advance(self):
+        while self._pending and self._pending[0] in self._done:
+            self._pending.popleft()
+
+    def wait_turn(self, key: str, timeout: float = ORDERED_ASSIGNMENT_WAIT_SECONDS) -> bool:
+        """Block until every earlier key has completed. Returns False on timeout (fail-open)."""
+        with self._cond:
+            return self._cond.wait_for(
+                lambda: self._advance() or not self._pending or self._pending[0] == key, timeout=timeout
+            )
+
+    def complete(self, key: str):
+        with self._cond:
+            self._done.add(key)
+            self._advance()
+            self._cond.notify_all()
+
+
 def process_segment(
     path: str,
     uid: str,
@@ -960,15 +1116,11 @@ def process_segment(
     transcription_prefs: dict = None,
     person_embeddings_cache: dict = None,
     target_conversation_id: str = None,
+    turnstile: Optional[_OrderedTurnstile] = None,
 ):
     try:
         url = get_syncing_file_temporal_signed_url(path)
-
-        def delete_file():
-            time.sleep(480)
-            delete_syncing_temporal_file(path)
-
-        submit_with_context(storage_executor, delete_file)
+        schedule_syncing_temporal_file_deletion(path)
 
         # Apply user transcription preferences (vocabulary, language, model)
         prefs = transcription_prefs or {}
@@ -995,11 +1147,11 @@ def process_segment(
             # DG processed audio successfully but found no speech (silence/noise).
             # Real DG failures now raise RuntimeError and are caught by the except block.
             logger.info(f'No transcript words for segment {path} (silence or noise-only audio)')
-            return
+            return True
         transcript_segments: List[TranscriptSegment] = postprocess_words(words, 0)
         if not transcript_segments:
             logger.warning(f'Postprocessing returned empty for segment {path} (words present but no segments)')
-            return
+            return True
 
         # Speaker identification: voice embedding matching + text-based detection
         audio_bytes = _download_audio_bytes(url) if person_embeddings_cache else None
@@ -1010,6 +1162,13 @@ def process_segment(
         finally:
             if audio_bytes:
                 del audio_bytes
+
+        # Conversation assignment must happen chronologically across the batch: wait until
+        # every earlier-timestamped segment has created/merged its conversation, otherwise
+        # the closest-conversation lookup races and adjacent chunks split into separate
+        # conversations.
+        if turnstile and not turnstile.wait_turn(path):
+            logger.warning(f'sync: ordered assignment wait timed out for {path}, proceeding out of order')
 
         timestamp = get_timestamp_from_path(path)
         segment_end_timestamp = timestamp + transcript_segments[-1].end
@@ -1064,7 +1223,7 @@ def process_segment(
                 logger.info(f'All segments already exist in conversation {closest_memory["id"]}, skipping merge')
                 with lock:
                     response['updated_memories'].add(closest_memory['id'])
-                return
+                return True
 
             # merge and sort segments by start timestamp
             segments = closest_memory['transcript_segments'] + deduped_segments
@@ -1104,11 +1263,36 @@ def process_segment(
                 reason = 'discarded' if closest_memory.get('discarded', False) else 'auto-sync'
                 logger.info(f'Conversation {closest_memory["id"]} reprocessing ({reason}) after segment merge')
                 _reprocess_conversation_after_update(uid, closest_memory['id'], language)
+            else:
+                # Summary/structured data is now stale (it predates the merged segments).
+                # Record it so the caller reprocesses once per conversation at batch end,
+                # instead of once per merged segment.
+                with lock:
+                    response.setdefault('_merged', {})[closest_memory['id']] = language
+        return True
     except Exception as e:
         error_msg = f'Failed to process segment {path}: {e}'
         logger.error(error_msg)
         with lock:
             errors.append(error_msg)
+        return False
+    finally:
+        if turnstile:
+            turnstile.complete(path)
+
+
+def _reprocess_merged_conversations(uid: str, response: dict):
+    """Regenerate summary/structured data for conversations that gained segments this batch.
+
+    The merge path in process_segment only appends transcript segments; without this the
+    conversation keeps the summary generated from its first chunk only.
+    """
+    merged = response.pop('_merged', {})
+    for conversation_id, language in merged.items():
+        try:
+            _reprocess_conversation_after_update(uid, conversation_id, language)
+        except Exception as e:
+            logger.error(f'sync: failed to reprocess merged conversation {conversation_id}: {e}')
 
 
 def _cleanup_files(file_paths):
@@ -1247,6 +1431,11 @@ async def sync_local_files(
             logger.warning(f'sync: failed to load person embeddings, skipping speaker ID uid={uid}: {e}')
             person_embeddings_cache = {}
 
+        # Chronological order + turnstile: STT runs in parallel, but conversation
+        # assignment is serialized oldest-first so adjacent chunks merge instead of
+        # racing into separate conversations (#6551, #5747).
+        ordered_paths = sorted(segmented_paths, key=get_timestamp_from_path)
+        assignment_turnstile = _OrderedTurnstile(ordered_paths)
         await asyncio.gather(
             *[
                 run_blocking(
@@ -1262,10 +1451,13 @@ async def sync_local_files(
                     transcription_prefs,
                     person_embeddings_cache,
                     conversation_id,
+                    assignment_turnstile,
                 )
-                for path in segmented_paths
+                for path in ordered_paths
             ]
         )
+
+        await run_blocking(sync_executor, _reprocess_merged_conversations, uid, response)
 
         # Record DG usage after successful processing (not before, to avoid charging on retries)
         if fair_use_restrict_dg:
@@ -1382,14 +1574,26 @@ async def _run_full_pipeline_background_async(
     should_lock: bool,
     job_dir: str,
     target_conversation_id: str = None,
+    task_mode: bool = False,
 ):
     """Async coordinator for the full sync pipeline (decode → VAD → fair-use → STT → LLM).
 
-    Runs as an asyncio task on the event loop. All blocking work is offloaded to
-    thread pools via run_blocking(). The coordinator itself holds zero thread pool
-    slots — only leaf operations use threads, and only for their actual duration.
+    Inline dispatch (task_mode=False): runs as a fire-and-forget asyncio task,
+    bounded by the per-instance pipeline semaphore; unexpected errors mark the
+    job failed (no retry exists).
+
+    Cloud Tasks dispatch (task_mode=True): runs inside the /v2/sync-jobs/run
+    request — Cloud Run's containerConcurrency is the concurrency bound, so no
+    semaphore; unexpected errors re-raise so the handler can reset the job for
+    a queue retry; segments that completed in a prior attempt are skipped via
+    the processed-segment ledger.
+
+    All blocking work is offloaded to thread pools via run_blocking(). The
+    coordinator itself holds zero thread pool slots — only leaf operations use
+    threads, and only for their actual duration.
     """
-    async with _get_sync_pipeline_semaphore():
+    concurrency_gate = contextlib.nullcontext() if task_mode else _get_sync_pipeline_semaphore()
+    async with concurrency_gate:
         segmented_paths = set()
         wav_paths = []
         stage_timings = {}
@@ -1488,7 +1692,9 @@ async def _run_full_pipeline_background_async(
                 return
 
             if FAIR_USE_ENABLED and total_speech_ms > 0:
-                await run_blocking(db_executor, record_speech_ms, uid, total_speech_ms, source='sync')
+                # Once-guard: a Cloud Tasks retry must not count the same audio twice
+                if await run_blocking(db_executor, try_mark_once, job_id, 'speech_ms'):
+                    await run_blocking(db_executor, record_speech_ms, uid, total_speech_ms, source='sync')
                 speech_totals = await run_blocking(db_executor, get_rolling_speech_ms, uid)
                 triggered_caps = await run_blocking(db_executor, check_soft_caps, uid, speech_totals=speech_totals)
                 if triggered_caps:
@@ -1534,8 +1740,28 @@ async def _run_full_pipeline_background_async(
             segment_errors = []
             segment_lock = threading.Lock()
 
+            # Segments that fully landed in a prior Cloud Tasks attempt are skipped
+            already_processed = set()
+            if task_mode:
+                already_processed = await run_blocking(db_executor, get_processed_segments, job_id)
+                if already_processed:
+                    logger.info(
+                        f'sync_v2 bg: job={job_id} skipping {len(already_processed)} '
+                        f'segment(s) processed in a prior attempt'
+                    )
+
+            # Chronological order + turnstile: STT runs in parallel (per chunk), but
+            # conversation assignment is serialized oldest-first so adjacent chunks merge
+            # instead of racing into separate conversations (#6551, #5747).
+            segment_list = sorted(segmented_paths, key=get_timestamp_from_path)
+            assignment_turnstile = _OrderedTurnstile(segment_list)
+
             def _process_one_segment(path):
-                process_segment(
+                if path in already_processed:
+                    # Release the assignment slot — later segments wait on it
+                    assignment_turnstile.complete(path)
+                    return
+                ok = process_segment(
                     path,
                     uid,
                     response,
@@ -1546,15 +1772,19 @@ async def _run_full_pipeline_background_async(
                     transcription_prefs,
                     person_embeddings_cache,
                     target_conversation_id,
+                    assignment_turnstile,
                 )
+                if ok and task_mode:
+                    add_processed_segment(job_id, path)
 
             chunk_size = 5
-            segment_list = list(segmented_paths)
             for i in range(0, len(segment_list), chunk_size):
                 chunk = segment_list[i : i + chunk_size]
+                # Later segments in a chunk also wait their assignment turn, so widen
+                # their timeout by position to avoid spurious timeouts.
                 seg_tasks = [
-                    asyncio.wait_for(run_blocking(sync_executor, _process_one_segment, path), timeout=300)
-                    for path in chunk
+                    asyncio.wait_for(run_blocking(sync_executor, _process_one_segment, path), timeout=300 + 60 * j)
+                    for j, path in enumerate(chunk)
                 ]
                 seg_results = await asyncio.gather(*seg_tasks, return_exceptions=True)
                 for r in seg_results:
@@ -1573,13 +1803,15 @@ async def _run_full_pipeline_background_async(
                 except Exception:
                     pass
 
+            await run_blocking(sync_executor, _reprocess_merged_conversations, uid, response)
+
             stage_timings['stt_llm_ms'] = int((time.monotonic() - t0) * 1000)
 
             # Record DG usage after processing
             if fair_use_restrict_dg:
                 try:
                     dg_ms = int(total_speech_seconds * 1000)
-                    if dg_ms > 0:
+                    if dg_ms > 0 and await run_blocking(db_executor, try_mark_once, job_id, 'dg_ms'):
                         await run_blocking(db_executor, record_dg_usage_ms, uid, dg_ms)
                 except Exception as e:
                     logger.error(f'sync_v2 bg: DG usage record error for {uid}: {e}')
@@ -1599,7 +1831,7 @@ async def _run_full_pipeline_background_async(
             if successful_segments > 0:
                 try:
                     usage_seconds = int(total_speech_seconds)
-                    if usage_seconds > 0:
+                    if usage_seconds > 0 and await run_blocking(db_executor, try_mark_once, job_id, 'usage'):
                         await run_blocking(
                             db_executor,
                             record_usage,
@@ -1632,6 +1864,10 @@ async def _run_full_pipeline_background_async(
             )
         except Exception as e:
             logger.error(f'sync_v2 bg failed job={job_id} uid={uid}: {e}')
+            if task_mode:
+                # Let the handler decide: queued-reset + Cloud Tasks retry, or
+                # final-attempt consume. Marking failed here would be terminal.
+                raise
             try:
                 await run_blocking(db_executor, mark_job_failed, job_id, str(e))
             except Exception:
@@ -1645,6 +1881,32 @@ async def _run_full_pipeline_background_async(
                     await run_blocking(storage_executor, shutil.rmtree, job_dir, True)
             except Exception as e:
                 logger.error(f'sync_v2 bg: failed to cleanup job dir {job_dir}: {e}')
+
+
+def _stage_files_to_gcs(paths: list):
+    """Upload raw .bin files to the syncing bucket (blob name = local path)."""
+    for p in paths:
+        upload_syncing_temporal_file(p)
+
+
+def _delete_staged_blobs(blob_paths: list):
+    for p in blob_paths:
+        try:
+            delete_syncing_temporal_file(p)
+        except Exception as e:
+            logger.warning(f'Failed to delete staged blob {p}: {e}')
+
+
+async def _delete_staged_blobs_async(blob_paths: list):
+    await run_blocking(storage_executor, _delete_staged_blobs, blob_paths)
+
+
+def _download_staged_files(blob_paths: list) -> bool:
+    """Download staged blobs back to their local paths. False if any is gone."""
+    for p in blob_paths:
+        if not download_syncing_temporal_file(p):
+            return False
+    return True
 
 
 @router.post("/v2/sync-local-files")
@@ -1692,20 +1954,52 @@ async def sync_local_files_v2(
         owned_paths = list(paths)
         paths = []  # Prevent finally cleanup of files now owned by bg task
 
-        # Async coordinator: runs on event loop, offloads blocking work to pools.
-        # No thread pool slot held for the full pipeline duration (fixes #7361).
-        start_background_task(
-            _run_full_pipeline_background_async(
-                job_id,
-                uid,
-                owned_paths,
-                source,
-                should_lock,
-                job_dir,
-                conversation_id,
-            ),
-            name=f'sync_pipeline:{job_id}',
-        )
+        dispatched = False
+        # BYOK keys live only in this request's context and cannot follow a
+        # Cloud Task, so BYOK requests always run inline.
+        if is_cloud_tasks_dispatch_enabled() and not has_byok_keys():
+            try:
+                # sync_executor, NOT storage_executor — same reasoning as the
+                # file save above (#7372): a saturated storage pool would queue
+                # the staging upload and delay the 202.
+                await run_blocking(sync_executor, _stage_files_to_gcs, owned_paths)
+                await run_blocking(
+                    db_executor,
+                    enqueue_sync_job,
+                    {
+                        'schema_version': 1,
+                        'job_id': job_id,
+                        'uid': uid,
+                        'raw_blob_paths': owned_paths,
+                        'source': source.value,
+                        'should_lock': should_lock,
+                        'conversation_id': conversation_id,
+                        'enqueued_at': time.time(),
+                    },
+                )
+                dispatched = True
+                # The handler instance downloads from GCS; local copies are done
+                await run_blocking(sync_executor, _cleanup_files, owned_paths)
+                await run_blocking(sync_executor, shutil.rmtree, job_dir, True)
+            except Exception as e:
+                logger.error(f'sync_v2: Cloud Tasks dispatch failed job={job_id}, falling back inline: {e}')
+                start_background_task(_delete_staged_blobs_async(owned_paths), name=f'sync_unstage:{job_id}')
+
+        if not dispatched:
+            # Async coordinator: runs on event loop, offloads blocking work to pools.
+            # No thread pool slot held for the full pipeline duration (fixes #7361).
+            start_background_task(
+                _run_full_pipeline_background_async(
+                    job_id,
+                    uid,
+                    owned_paths,
+                    source,
+                    should_lock,
+                    job_dir,
+                    conversation_id,
+                ),
+                name=f'sync_pipeline:{job_id}',
+            )
 
         return JSONResponse(
             status_code=202,
@@ -1752,3 +2046,175 @@ def get_sync_job_status(job_id: str, uid: str = Depends(auth.get_current_user_ui
             resp['error'] = job['error']
 
     return resp
+
+
+@router.post("/v2/sync-jobs/run", include_in_schema=False)
+async def run_sync_job(request: Request, task_retry_count: int = Depends(verify_cloud_tasks_oidc)):
+    """Cloud Tasks handler: runs one sync job inside the request.
+
+    Auth is the Cloud Tasks OIDC token (verify_cloud_tasks_oidc), not Firebase.
+    Response semantics drive the queue: 2xx consumes the task, 409 while the
+    run-lock is held retries later, 500 retries with backoff.
+
+    Idempotency: a per-job Redis run-lock serializes concurrent deliveries;
+    terminal jobs are acked without re-running; segments completed by a prior
+    attempt are skipped via the processed-segment ledger inside the pipeline.
+    """
+    try:
+        payload = await request.json()
+        job_id = payload['job_id']
+        uid = payload['uid']
+        blob_paths = list(payload['raw_blob_paths'])
+        source = ConversationSource(payload.get('source') or 'omi')
+        should_lock = bool(payload.get('should_lock', False))
+        conversation_id = payload.get('conversation_id')
+    except Exception as e:
+        # A malformed payload will not fix itself on retry — consume it.
+        logger.error(f'sync job handler: invalid payload, dropping task: {e}')
+        return JSONResponse(status_code=200, content={'status': 'dropped', 'reason': 'invalid_payload'})
+
+    # Fail-closed lock: Redis errors propagate → 500 → Cloud Tasks retries later.
+    lock_token = await run_blocking(db_executor, try_acquire_job_run_lock, job_id)
+    if not lock_token:
+        logger.warning(f'sync job {job_id}: run-lock held by another attempt, deferring')
+        return JSONResponse(status_code=409, content={'status': 'locked'})
+
+    try:
+        job = await run_blocking(db_executor, get_sync_job, job_id)
+        if not job:
+            # Job TTL (24h) expired before dispatch — staged blobs are gone or
+            # about to be (1-day lifecycle); the app re-uploads on 404.
+            logger.warning(f'sync job {job_id}: job expired before dispatch, dropping task')
+            await _delete_staged_blobs_async(blob_paths)
+            return JSONResponse(status_code=200, content={'status': 'dropped', 'reason': 'job_expired'})
+
+        if job['status'] in TERMINAL_STATUSES:
+            # Duplicate delivery, stale-detector-failed job, or a prior attempt
+            # that finished. Never re-run terminal jobs — the app may already be
+            # re-uploading these files as a new job.
+            await _delete_staged_blobs_async(blob_paths)
+            return JSONResponse(status_code=200, content={'status': 'acked', 'job_status': job['status']})
+
+        if not await run_blocking(storage_executor, _download_staged_files, blob_paths):
+            # Blobs deleted by the bucket's 1-day lifecycle (deep queue backlog).
+            await run_blocking(db_executor, mark_job_failed, job_id, 'Staged audio expired before processing')
+            await _delete_staged_blobs_async(blob_paths)
+            return JSONResponse(status_code=200, content={'status': 'dropped', 'reason': 'staged_audio_expired'})
+
+        job_dir = f'syncing/{uid}/{job_id}'
+        try:
+            await _run_full_pipeline_background_async(
+                job_id,
+                uid,
+                blob_paths,
+                source,
+                should_lock,
+                job_dir,
+                conversation_id,
+                task_mode=True,
+            )
+        except Exception as e:
+            max_attempts = get_sync_tasks_max_attempts()
+            if task_retry_count >= max_attempts - 1:
+                logger.error(f'sync job {job_id}: final attempt {task_retry_count + 1} failed, consuming: {e}')
+                await run_blocking(db_executor, mark_job_failed, job_id, f'Failed after {max_attempts} attempts: {e}')
+                await _delete_staged_blobs_async(blob_paths)
+                return JSONResponse(status_code=200, content={'status': 'failed_final'})
+            # Reset to 'queued' so the stale detector cannot terminally fail the
+            # job while the Cloud Tasks retry backoff elapses. Blobs are kept.
+            logger.warning(f'sync job {job_id}: attempt {task_retry_count + 1} failed, will retry: {e}')
+            await run_blocking(db_executor, mark_job_queued_for_retry, job_id, task_retry_count + 1, str(e))
+            return JSONResponse(status_code=500, content={'status': 'retry'})
+
+        # Pipeline returned normally: completed, or it marked the job failed
+        # itself (decode/VAD/DG-budget) — terminal either way, staging is done.
+        await _delete_staged_blobs_async(blob_paths)
+        return JSONResponse(status_code=200, content={'status': 'done'})
+    finally:
+        await run_blocking(db_executor, release_job_run_lock, job_id, lock_token)
+
+
+def _build_playback_artifact(uid: str, conversation_id: str, timestamps: list) -> bytes:
+    """Merge chunks (download → decrypt → decode → gap-fill) and encode MP3 ~48kbps mono."""
+    pcm_data = download_audio_chunks_and_merge(
+        uid, conversation_id, timestamps, fill_gaps=True, sample_rate=AUDIO_SAMPLE_RATE
+    )
+    if not pcm_data:
+        return b''
+    segment = AudioSegment(data=pcm_data, sample_width=2, frame_rate=AUDIO_SAMPLE_RATE, channels=1)
+    del pcm_data
+    buf = io.BytesIO()
+    segment.export(buf, format='mp3', bitrate='48k')
+    return buf.getvalue()
+
+
+@router.post("/v2/audio-merge-jobs/run", include_in_schema=False)
+async def run_audio_merge_job(request: Request, task_retry_count: int = Depends(verify_cloud_tasks_oidc)):
+    """Cloud Tasks handler: build one playback MP3 artifact inside the request.
+
+    Response semantics drive the queue: 2xx consumes the task, 409 while the
+    run-lock is held retries later, 500 retries with backoff. Idempotency:
+    named tasks dedupe enqueues, the run-lock serializes duplicate deliveries,
+    and an existing artifact is acked without rebuilding.
+    """
+    try:
+        payload = await request.json()
+        uid = payload['uid']
+        conversation_id = payload['conversation_id']
+        audio_file_id = payload['audio_file_id']
+        timestamps = list(payload['timestamps'])
+    except Exception as e:
+        logger.error(f'audio_merge handler: invalid payload, dropping task: {e}')
+        return JSONResponse(status_code=200, content={'status': 'dropped', 'reason': 'invalid_payload'})
+
+    lock_key = f'audio:{conversation_id}:{audio_file_id}'
+    lock_token = await run_blocking(db_executor, try_acquire_job_run_lock, lock_key)
+    if not lock_token:
+        return JSONResponse(status_code=409, content={'status': 'locked'})
+
+    try:
+        existing = await run_blocking(
+            storage_executor, get_playback_artifact_signed_url, uid, conversation_id, audio_file_id
+        )
+        if existing:
+            return JSONResponse(status_code=200, content={'status': 'exists'})
+
+        try:
+            mp3_data = await run_blocking(sync_executor, _build_playback_artifact, uid, conversation_id, timestamps)
+        except FileNotFoundError:
+            logger.warning(f'audio_merge: chunks missing conv={conversation_id} file={audio_file_id}, dropping')
+            # Persist the verdict or /urls reports pending forever and clients
+            # poll to exhaustion (named-task tombstones block re-enqueues too)
+            await run_blocking(
+                storage_executor, mark_playback_unavailable, uid, conversation_id, audio_file_id, 'chunks_missing'
+            )
+            return JSONResponse(status_code=200, content={'status': 'dropped', 'reason': 'chunks_missing'})
+        except Exception as e:
+            max_attempts = get_sync_tasks_max_attempts()
+            if task_retry_count >= max_attempts - 1:
+                logger.error(f'audio_merge_failed_final conv={conversation_id} file={audio_file_id}: {e}')
+                # Same pending-forever trap as chunks_missing: a consumed task
+                # leaves a tombstone that blocks re-enqueue. Mark unavailable so
+                # clients stop polling; the 30-day lifecycle grants a retry.
+                await run_blocking(
+                    storage_executor, mark_playback_unavailable, uid, conversation_id, audio_file_id, 'merge_failed'
+                )
+                return JSONResponse(status_code=200, content={'status': 'failed_final'})
+            logger.warning(
+                f'audio_merge: attempt {task_retry_count + 1} failed conv={conversation_id} '
+                f'file={audio_file_id}, will retry: {e}'
+            )
+            return JSONResponse(status_code=500, content={'status': 'retry'})
+
+        if not mp3_data:
+            logger.warning(f'audio_merge: no audio data conv={conversation_id} file={audio_file_id}, dropping')
+            await run_blocking(
+                storage_executor, mark_playback_unavailable, uid, conversation_id, audio_file_id, 'empty_audio'
+            )
+            return JSONResponse(status_code=200, content={'status': 'dropped', 'reason': 'empty_audio'})
+
+        await run_blocking(storage_executor, upload_playback_artifact, uid, conversation_id, audio_file_id, mp3_data)
+        logger.info(f'audio_merge: built artifact conv={conversation_id} file={audio_file_id} size={len(mp3_data)}')
+        return JSONResponse(status_code=200, content={'status': 'done'})
+    finally:
+        await run_blocking(db_executor, release_job_run_lock, lock_key, lock_token)

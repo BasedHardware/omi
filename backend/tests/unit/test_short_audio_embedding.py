@@ -5,23 +5,91 @@ with a clear error instead of crashing the pyannote wespeaker fbank model.
 """
 
 import io
+import importlib
 import os
 import struct
 import sys
+import types
 import wave
 
+import numpy as np
 import pytest
 import httpx
 from unittest.mock import MagicMock
 
+_MISSING = object()
+_SCIPY_MODULES = ("scipy", "scipy.spatial", "scipy.spatial.distance")
+
+
+def _install_scipy_stub_if_missing():
+    try:
+        import scipy.spatial.distance  # noqa: F401
+
+        return None
+    except ModuleNotFoundError as exc:
+        # Only the absent-SciPy case is stubbed; broken SciPy installs should still fail loudly.
+        if exc.name is None or not exc.name.startswith("scipy"):
+            raise
+
+    original_modules = {name: sys.modules.get(name, _MISSING) for name in _SCIPY_MODULES}
+
+    scipy_mod = types.ModuleType("scipy")
+    spatial_mod = types.ModuleType("scipy.spatial")
+    distance_mod = types.ModuleType("scipy.spatial.distance")
+    scipy_mod.__path__ = []
+    spatial_mod.__path__ = []
+
+    def cdist(a, b, metric="cosine"):
+        # speaker_embedding currently imports cdist only for cosine speaker matching.
+        if metric != "cosine":
+            raise NotImplementedError(f"Unsupported scipy stub metric: {metric}")
+
+        a = np.asarray(a, dtype=np.float64)
+        b = np.asarray(b, dtype=np.float64)
+        distances = np.zeros((a.shape[0], b.shape[0]), dtype=np.float64)
+        for i, left in enumerate(a):
+            left_norm = np.linalg.norm(left)
+            for j, right in enumerate(b):
+                denom = left_norm * np.linalg.norm(right)
+                distances[i, j] = 1.0 if denom == 0 else 1.0 - float(np.dot(left, right) / denom)
+        return distances
+
+    distance_mod.cdist = cdist
+    spatial_mod.distance = distance_mod
+    scipy_mod.spatial = spatial_mod
+    sys.modules["scipy"] = scipy_mod
+    sys.modules["scipy.spatial"] = spatial_mod
+    sys.modules["scipy.spatial.distance"] = distance_mod
+    return original_modules
+
+
+def _restore_modules(original_modules):
+    if original_modules is None:
+        return
+
+    for name, module in original_modules.items():
+        if module is _MISSING:
+            sys.modules.pop(name, None)
+        else:
+            sys.modules[name] = module
+
+
+def _import_speaker_embedding_module():
+    original_modules = _install_scipy_stub_if_missing()
+    try:
+        # The imported module keeps its cdist binding; sys.modules stubs are restored below.
+        return importlib.import_module("utils.stt.speaker_embedding")
+    finally:
+        _restore_modules(original_modules)
+
+
 # Mock modules that initialize GCP clients at import time
 sys.modules.setdefault("database._client", MagicMock())
 
-from utils.stt.speaker_embedding import (
-    MIN_EMBEDDING_AUDIO_DURATION,
-    _get_wav_duration,
-    extract_embedding_from_bytes,
-)
+speaker_embedding = _import_speaker_embedding_module()
+MIN_EMBEDDING_AUDIO_DURATION = speaker_embedding.MIN_EMBEDDING_AUDIO_DURATION
+_get_wav_duration = speaker_embedding._get_wav_duration
+extract_embedding_from_bytes = speaker_embedding.extract_embedding_from_bytes
 
 
 def _make_wav_bytes(duration_seconds: float, sample_rate: int = 16000) -> bytes:

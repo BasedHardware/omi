@@ -136,7 +136,10 @@ Authorization: Bearer omi_dev_your_api_key_here
 ```
 
 <Warning>
-Never commit API keys to version control or share them publicly!
+MCP keys (`omi_mcp_...`) only authenticate MCP clients against `/v1/mcp/sse`. They do not authenticate
+REST Developer API calls. For memories, conversations, folders, and action items over HTTP, create a
+Developer API key (`omi_dev_...`) and call endpoints under `/v1/dev/user/...` such as
+`/v1/dev/user/memories`. Never commit API keys to version control or share them publicly.
 </Warning>
 
 ---
@@ -217,6 +220,12 @@ If a key is compromised, revoke it immediately from **Settings → Developer** i
 | **Use Case** | Custom apps, dashboards, automation | Claude Desktop, AI agents |
 | **Authentication** | Bearer token | Environment variable |
 | **Best For** | Web apps, integrations, batch operations | AI-powered workflows |
+
+<Info>
+If you see `404 Not Found` for legacy memory paths such as `/v1/memories` or `/v2/memories`, use the
+Developer API path `/v1/dev/user/memories` instead. If you see `401 Unauthorized` while using an
+`omi_mcp_...` key, create and use an `omi_dev_...` key for REST API requests.
+</Info>
 
 <CardGroup cols={2}>
   <Card title="Use Developer API when you need" icon="code" color="#3b82f6">

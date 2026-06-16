@@ -103,6 +103,17 @@ from utils.other.storage import (
     delete_user_person_speech_samples,
     delete_user_person_speech_sample,
 )
+from database.conversations import get_conversation_ids
+from database.memories import get_memory_ids
+from database.action_items import get_action_item_ids
+from database.screen_activity import get_screen_activity_ids
+from database.vector_db import (
+    delete_conversation_vectors_batch,
+    delete_transcript_chunk_vectors_batch,
+    delete_memory_vectors_batch,
+    delete_action_item_vectors_batch,
+    delete_screen_activity_vectors,
+)
 from utils.webhooks import webhook_first_time_setup
 from database.action_items import get_action_items as get_standalone_action_items
 from utils.byok import has_byok_keys, invalidate_byok_state_cache
@@ -141,6 +152,61 @@ class DeleteAccountRequest(BaseModel):
     reason_details: Optional[str] = None
 
 
+def _purge_derived_user_data(uid: str):
+    """Best-effort purge of a user's data that lives OUTSIDE Firestore — Pinecone vectors and GCS
+    recordings — run before the Firestore wipe removes the IDs we need to enumerate (#5088).
+
+    Each backend is isolated in its own try/except so one failure (or a slow external call) never
+    blocks the others or the subsequent Firestore deletion. IDs are read via lightweight IDs-only
+    queries (no decryption).
+
+    Scope: conversation (ns1), memory (ns2), action-item (ns4), screen-activity (ns3) and
+    transcript-chunk (ns_tchunks) vectors,
+    plus conversation recordings. Known follow-ups NOT covered here: X-post vectors (no delete helper
+    yet), speech-profile / person-sample / private-cloud-sync / chat-upload GCS blobs, and the
+    externally-indexed Typesense collection.
+    """
+    try:
+        conversation_ids = get_conversation_ids(uid)
+        if conversation_ids:
+            delete_conversation_vectors_batch(uid, conversation_ids)
+    except Exception as e:
+        logger.error(f'delete_account purge conversation vectors failed for {uid}: {sanitize(str(e))}')
+
+    try:
+        conversation_ids = get_conversation_ids(uid)
+        if conversation_ids:
+            delete_transcript_chunk_vectors_batch(uid, conversation_ids)
+    except Exception as e:
+        logger.error(f'delete_account purge transcript chunk vectors failed for {uid}: {sanitize(str(e))}')
+
+    try:
+        memory_ids = get_memory_ids(uid)
+        if memory_ids:
+            delete_memory_vectors_batch(uid, memory_ids)
+    except Exception as e:
+        logger.error(f'delete_account purge memory vectors failed for {uid}: {sanitize(str(e))}')
+
+    try:
+        action_item_ids = get_action_item_ids(uid)
+        if action_item_ids:
+            delete_action_item_vectors_batch(uid, action_item_ids)
+    except Exception as e:
+        logger.error(f'delete_account purge action item vectors failed for {uid}: {sanitize(str(e))}')
+
+    try:
+        screen_activity_ids = get_screen_activity_ids(uid)
+        if screen_activity_ids:
+            delete_screen_activity_vectors(uid, screen_activity_ids)
+    except Exception as e:
+        logger.error(f'delete_account purge screen activity vectors failed for {uid}: {sanitize(str(e))}')
+
+    try:
+        delete_all_conversation_recordings(uid)
+    except Exception as e:
+        logger.error(f'delete_account purge recordings failed for {uid}: {sanitize(str(e))}')
+
+
 def _background_wipe_user_data(uid: str):
     try:
         # Twilio caller IDs first, while the phone_numbers subcollection still
@@ -148,6 +214,9 @@ def _background_wipe_user_data(uid: str):
         # — Twilio errors are logged inside and never propagate, so a momentary
         # Twilio outage cannot leave the user half-deleted in Firestore.
         delete_user_caller_ids(uid)
+        # Purge external stores (Pinecone vectors, GCS recordings) BEFORE the Firestore wipe, which
+        # removes the IDs we enumerate. Best-effort + isolated so it never blocks the Firestore wipe.
+        _purge_derived_user_data(uid)
         delete_user_data(uid)
         logger.info(f'delete_account background wipe complete for {uid}')
     except Exception as e:

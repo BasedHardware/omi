@@ -633,15 +633,35 @@ class TestPusherHeaderDemux:
         assert len(private_cloud_queue[0]['data']) == 500
         assert len(private_cloud_sync_buffer) == 0
 
-    def test_flaw_header_102_memory_id_updates_conversation_id(self):
-        """FLAW TEST: memory_id in transcript should update current_conversation_id."""
-        current_conversation_id = 'old-conv'
-        payload = {'segments': [], 'memory_id': 'new-conv-from-memory'}
+    def test_header_102_memory_id_does_not_overwrite_session_conversation_id(self):
+        """A transcript's memory_id must not mutate the authoritative current_conversation_id
+        (set only by header 103). It is only used to route the queued transcript. This prevents a
+        stale lifecycle event from rebinding a newer recording session (issue #6952)."""
+        current_conversation_id = 'active-conv'  # set earlier by header 103
+        transcript_queue = []
+        payload = {'segments': [], 'memory_id': 'stale-conv-from-memory'}
         res = payload
         memory_id = res.get('memory_id')
-        if memory_id:
-            current_conversation_id = memory_id
-        assert current_conversation_id == 'new-conv-from-memory'
+        # Header 102 handling: route by memory_id, never overwrite session state.
+        conversation_or_memory_id = memory_id or current_conversation_id
+        transcript_queue.append({'segments': res.get('segments'), 'memory_id': conversation_or_memory_id})
+
+        # Authoritative session id is unchanged...
+        assert current_conversation_id == 'active-conv'
+        # ...while this transcript is still routed under its own memory_id.
+        assert transcript_queue[0]['memory_id'] == 'stale-conv-from-memory'
+
+    def test_header_102_without_memory_id_falls_back_to_session_conversation_id(self):
+        """When a transcript carries no memory_id, it routes under the session conversation id."""
+        current_conversation_id = 'active-conv'
+        transcript_queue = []
+        res = {'segments': [], 'memory_id': None}
+        memory_id = res.get('memory_id')
+        conversation_or_memory_id = memory_id or current_conversation_id
+        transcript_queue.append({'segments': res.get('segments'), 'memory_id': conversation_or_memory_id})
+
+        assert current_conversation_id == 'active-conv'
+        assert transcript_queue[0]['memory_id'] == 'active-conv'
 
 
 # ===================================================================

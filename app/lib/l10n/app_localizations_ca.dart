@@ -433,7 +433,8 @@ class AppLocalizationsCa extends AppLocalizations {
   String get autoSync => 'Sincronització automàtica';
 
   @override
-  String get autoSyncDescription => 'Sincronitza automàticament els enregistraments fora de línia quan el dispositiu es connecti';
+  String get autoSyncDescription =>
+      'Sincronitza automàticament els enregistraments fora de línia quan el dispositiu es connecti';
 
   @override
   String get deviceSettings => 'Configuració del dispositiu';
@@ -1723,12 +1724,7 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'DISPOSITIUS',
-      one: 'DISPOSITIU',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'DISPOSITIUS', one: 'DISPOSITIU');
     return '$count $_temp0 TROBATS A PROP';
   }
 
@@ -4720,10 +4716,7 @@ class AppLocalizationsCa extends AppLocalizations {
   }
 
   @override
-  String accessesAndTriggeredBy(
-    String accessDescription,
-    String triggerDescription,
-  ) {
+  String accessesAndTriggeredBy(String accessDescription, String triggerDescription) {
     return '$accessDescription i és $triggerDescription.';
   }
 

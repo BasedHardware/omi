@@ -10,6 +10,7 @@ import io
 import os
 import struct
 import tempfile
+import wave
 from unittest.mock import MagicMock, patch, PropertyMock
 
 import numpy as np
@@ -22,8 +23,45 @@ _mock_ort = MagicMock()
 _mock_redis = MagicMock()
 
 import sys
+import types
 
+
+class _MockAudioSegment:
+    """Small pydub substitute for tests that only need WAV samples."""
+
+    def __init__(self, samples):
+        self._samples = samples
+
+    @classmethod
+    def from_file(cls, file_path):
+        with wave.open(file_path, 'rb') as wf:
+            channels = wf.getnchannels()
+            sample_width = wf.getsampwidth()
+            frames = wf.readframes(wf.getnframes())
+        if sample_width != 2:
+            raise ValueError(f'_MockAudioSegment only supports 16-bit PCM WAV, got sample width {sample_width}')
+        samples = np.frombuffer(frames, dtype='<i2').copy()
+        if channels > 1:
+            samples = samples.reshape(-1, channels).mean(axis=1).astype(np.int16)
+        return cls(samples)
+
+    def set_frame_rate(self, sample_rate):
+        return self
+
+    def set_channels(self, channels):
+        return self
+
+    def set_sample_width(self, sample_width):
+        return self
+
+    def get_array_of_samples(self):
+        return self._samples
+
+
+_mock_pydub = types.ModuleType('pydub')
+_mock_pydub.AudioSegment = _MockAudioSegment
 sys.modules.setdefault('onnxruntime', _mock_ort)
+sys.modules.setdefault('pydub', _mock_pydub)
 sys.modules.setdefault('database', MagicMock())
 sys.modules.setdefault('database.redis_db', _mock_redis)
 

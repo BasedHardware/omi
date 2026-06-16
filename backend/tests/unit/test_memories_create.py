@@ -24,14 +24,14 @@ ROUTER_PATH = os.path.join(os.path.dirname(__file__), '..', '..', 'routers', 'me
 
 
 def _read_router():
-    with open(ROUTER_PATH) as f:
+    with open(ROUTER_PATH, encoding='utf-8') as f:
         return f.read()
 
 
 def _grep_router(pattern: str) -> list[str]:
     """Return lines matching pattern in the memories router."""
     matches = []
-    with open(ROUTER_PATH) as f:
+    with open(ROUTER_PATH, encoding='utf-8') as f:
         for line in f:
             if re.search(pattern, line):
                 matches.append(line.strip())

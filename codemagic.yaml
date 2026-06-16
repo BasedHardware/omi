@@ -1275,10 +1275,10 @@ workflows:
             echo "Downloading Omi Computer from release: $LATEST_MACOS_TAG"
 
             # Create directory where bundle_helper.sh expects to find the app
-            # bundle_helper.sh looks at: $PROJECT_DIR/../../desktop/build/
+            # bundle_helper.sh looks at: $PROJECT_DIR/../../desktop/macos/build/
             # PROJECT_DIR = /path/clone/app/macos
             # From working_directory (app/), that's ../desktop
-            mkdir -p ../desktop/build
+            mkdir -p ../desktop/macos/build
 
             # Download the signed app ZIP from GitHub releases
             gh release download "$LATEST_MACOS_TAG" \
@@ -1287,15 +1287,15 @@ workflows:
               --dir /tmp
 
             # Extract - the ZIP contains "Omi Computer.app"
-            unzip -o /tmp/Omi.zip -d ../desktop/build/
+            unzip -o /tmp/Omi.zip -d ../desktop/macos/build/
 
             # Verify extraction
-            if [ -d "../desktop/build/Omi Computer.app" ]; then
+            if [ -d "../desktop/macos/build/Omi Computer.app" ]; then
               echo "SUCCESS: Omi Computer app ready for bundling"
-              ls -la "../desktop/build/"
+              ls -la "../desktop/macos/build/"
             else
               echo "WARNING: Extraction may have failed, checking contents..."
-              ls -la ../desktop/build/
+              ls -la ../desktop/macos/build/
             fi
           else
             echo "WARNING: No Omi Computer release found with -macos tag"
@@ -1580,10 +1580,10 @@ workflows:
 
           # Use dmgbuild instead of create-dmg — writes .DS_Store directly
           # without Finder/AppleScript (which hangs in CI with --skip-jenkins)
-          dmgbuild -s ../desktop/dmg-assets/dmgbuild_settings.py \
+          dmgbuild -s ../desktop/macos/dmg-assets/dmgbuild_settings.py \
             -D app_path="$APP_PATH" \
             -D app_name=Omi \
-            -D assets_dir="$(pwd)/../desktop/dmg-assets" \
+            -D assets_dir="$(pwd)/../desktop/macos/dmg-assets" \
             "Omi ${VERSION}" \
             "$DMG_PATH"
 
@@ -1914,8 +1914,8 @@ workflows:
 
   # ============================================
   # OMI DESKTOP SWIFT RELEASE
-  # Builds, signs, notarizes, and publishes the Swift macOS app from omi/desktop/.
-  # Source code lives directly in omi/desktop/ (monorepo).
+  # Builds, signs, notarizes, and publishes the Swift macOS app from omi/desktop/macos/.
+  # Source code lives directly in omi/desktop/macos/ (monorepo).
   #
   # Trigger: push a tag like v0.0.10+10-macos to BasedHardware/omi
   #   git tag v0.0.10+10-macos && git push origin v0.0.10+10-macos
@@ -1982,7 +1982,7 @@ workflows:
       tag_patterns:
         - pattern: "v*-macos"
           include: true
-    working_directory: desktop
+    working_directory: desktop/macos
     cache:
       cache_paths:
         - ~/Library/Caches/org.swift.swiftpm
@@ -2037,12 +2037,9 @@ workflows:
             "$HOME/Library/MobileDevice/Provisioning Profiles/$PROFILE_UUID.provisionprofile"
           echo "PROFILE_UUID=$PROFILE_UUID" >> $CM_ENV
 
-      - name: Build agent (TypeScript → JavaScript)
+      - name: Prepare agent runtime
         script: |
-          cd agent
-          npm install --no-fund --no-audit
-          npm run build
-          cd ..
+          scripts/prepare-agent-runtime.sh --universal-node
 
       - name: Test pi-mono-extension denylist classifier
         script: |
@@ -2088,33 +2085,6 @@ workflows:
           fi
           echo "ffmpeg: $(file "$FFMPEG_RESOURCE" | sed 's/.*: //')"
 
-      - name: Prepare universal Node.js (arm64 + x86_64)
-        script: |
-          NODE_RESOURCE="Desktop/Sources/Resources/node"
-          NODE_VERSION="v22.14.0"
-          if file "$NODE_RESOURCE" 2>/dev/null | grep -q "universal binary"; then
-            echo "Node.js already universal, skipping download"
-          else
-            echo "Creating universal Node.js $NODE_VERSION..."
-            TEMP_DIR="/tmp/node-universal-$$"
-            mkdir -p "$TEMP_DIR"
-            curl -L -o "$TEMP_DIR/arm64.tar.gz" \
-              "https://nodejs.org/dist/$NODE_VERSION/node-$NODE_VERSION-darwin-arm64.tar.gz"
-            tar -xzf "$TEMP_DIR/arm64.tar.gz" -C "$TEMP_DIR"
-            ARM64=$(find "$TEMP_DIR" -name "node" -type f | head -1)
-            mv "$ARM64" "$TEMP_DIR/node-arm64"
-            curl -L -o "$TEMP_DIR/x86_64.tar.gz" \
-              "https://nodejs.org/dist/$NODE_VERSION/node-$NODE_VERSION-darwin-x64.tar.gz"
-            tar -xzf "$TEMP_DIR/x86_64.tar.gz" -C "$TEMP_DIR"
-            X86=$(find "$TEMP_DIR" -name "node" -type f ! -name "node-arm64" | head -1)
-            lipo -create "$TEMP_DIR/node-arm64" "$X86" -output "$NODE_RESOURCE"
-            chmod +x "$NODE_RESOURCE"
-            xattr -cr "$NODE_RESOURCE"
-            codesign -f -s - "$NODE_RESOURCE"
-            rm -rf "$TEMP_DIR"
-          fi
-          echo "node: $(file "$NODE_RESOURCE" | sed 's/.*: //')"
-
       - name: Prepare universal libwebp (arm64 + x86_64)
         script: |
           # Homebrew's libwebp is arm64-only on M2 runners, but we build a universal app.
@@ -2124,8 +2094,8 @@ workflows:
           mkdir -p /tmp/libwebp-universal
 
           # Fast path: use the prebuilt universal dylibs vendored in the repo
-          # (desktop/vendor/libwebp/, built from libwebp $WEBP_VERSION source with
-          # the same flags as the fallback below — see desktop/vendor/libwebp/README.md).
+          # (desktop/macos/vendor/libwebp/, built from libwebp $WEBP_VERSION source with
+          # the same flags as the fallback below — see desktop/macos/vendor/libwebp/README.md).
           # This skips compiling libwebp from source twice every release run.
           VENDOR_DIR="vendor/libwebp"
           USE_VENDORED=true
@@ -2158,7 +2128,7 @@ workflows:
           # -mmacosx-version-min pins LC_BUILD_VERSION minos to 13.0 even on
           # toolchains where CMAKE_OSX_DEPLOYMENT_TARGET alone doesn't stick
           # (newer SDKs otherwise stamp the SDK version, which would refuse to
-          # load on older macOS). Keep in sync with desktop/vendor/libwebp/README.md.
+          # load on older macOS). Keep in sync with desktop/macos/vendor/libwebp/README.md.
           export MACOSX_DEPLOYMENT_TARGET=13.0
           CMAKE_COMMON="-DBUILD_SHARED_LIBS=ON -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_OSX_DEPLOYMENT_TARGET=13.0 \
@@ -2815,7 +2785,7 @@ workflows:
 
   # ============================================
   # AUTO-DEPLOY: Agent Cloud (agent.mjs → GCS)
-  # Triggered on push to main when desktop/agent-cloud/ changes.
+  # Triggered on push to main when desktop/macos/agent-cloud/ changes.
   # Uploads agent.mjs to GCS; running VMs hot-reload within 10 min.
   # ============================================
   agent-cloud-auto-deploy:
@@ -2838,8 +2808,8 @@ workflows:
     when:
       changeset:
         includes:
-          - 'desktop/agent-cloud/agent.mjs'
-          - 'desktop/agent-cloud/scripts/startup.sh'
+          - 'desktop/macos/agent-cloud/agent.mjs'
+          - 'desktop/macos/agent-cloud/scripts/startup.sh'
     scripts:
       - name: Authenticate with GCP
         script: |
@@ -2853,10 +2823,10 @@ workflows:
           VERSION="$(date -u +%Y-%m-%d-%H%M%S)"
           echo "Deploying version $VERSION to $GCS_BUCKET..."
 
-          gsutil cp desktop/agent-cloud/agent.mjs "$GCS_BUCKET/agent.mjs"
+          gsutil cp desktop/macos/agent-cloud/agent.mjs "$GCS_BUCKET/agent.mjs"
           echo "Uploaded agent.mjs"
 
-          gsutil cp desktop/agent-cloud/scripts/startup.sh "$GCS_BUCKET/startup.sh"
+          gsutil cp desktop/macos/agent-cloud/scripts/startup.sh "$GCS_BUCKET/startup.sh"
           echo "Uploaded startup.sh"
 
           # Update version.txt last — triggers hot-reload on running VMs

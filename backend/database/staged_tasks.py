@@ -33,13 +33,20 @@ def _commit_batch(batch, count):
 
 
 def create_staged_task(uid: str, description: str, **kwargs) -> dict:
-    """Create a staged task.  Deduplicates by case-insensitive description."""
+    """Create a staged task.  Deduplicates by normalized description.
+
+    Uses the same normalization (``_normalize_description``) as the
+    promotion-time dedup in ``promote_staged_task`` → an "[screen] Email
+    John" extraction collapses to an existing "Email John" staged task,
+    so we don't end up with two staged candidates that resolve to the
+    same action_item at promotion time.
+    """
     col = _user_col(uid, 'staged_tasks')
 
     # Deduplicate
-    desc_lower = description.strip().lower()
+    desc_norm = action_items_db._normalize_description(description)
     for doc in col.stream():
-        if doc.to_dict().get('description', '').strip().lower() == desc_lower:
+        if action_items_db._normalize_description(doc.to_dict().get('description', '')) == desc_norm:
             existing = doc.to_dict()
             existing['id'] = doc.id
             return existing
@@ -115,8 +122,21 @@ def batch_update_staged_scores(uid: str, scores: List[dict]) -> None:
 def promote_staged_task(uid: str) -> Optional[dict]:
     """Promote the top-scored staged task to an action_item.
 
-    Returns the new action_item dict or None if no staged tasks exist.
-    Uses database.action_items.create_action_item() for consistent field handling.
+    Returns the new (or pre-existing) action_item dict, or None if no staged
+    tasks exist. Uses ``database.action_items.create_action_item()`` for
+    consistent field handling.
+
+    Deduplicates against the live ``action_items`` collection: if a user
+    already has an active (uncompleted, undeleted) action_item with the same
+    normalized description, the staged task is closed (``completed=True``,
+    ``promotion_skipped='duplicate'``, ``promoted_to`` pointing at the existing
+    item) and the existing item is returned instead of creating a fresh row.
+
+    Without this guard, every conversation that re-mentions the same task is
+    extracted into a new staged task and promoted into a fresh action_item
+    document — Firestore allocates a new id on each ``add()``, so the user's
+    list accumulates 5–6 duplicates per task description over the course of
+    a few hours of activity.
     """
     col = _user_col(uid, 'staged_tasks')
     query = (
@@ -130,6 +150,51 @@ def promote_staged_task(uid: str) -> Optional[dict]:
 
     staged = docs[0].to_dict()
     staged['id'] = docs[0].id
+
+    # Dedup: skip promotion if an active action_item with the same description
+    # already exists. Close the staged task pointing at the existing item.
+    existing = action_items_db.get_active_action_item_by_description(uid, staged['description'])
+    if existing is not None:
+        # Merge enrichment fields the existing item is missing. The staged
+        # task may carry richer context from a later conversation
+        # (e.g. a due_at the user mentioned later) that the original
+        # action_item lacks; without this merge that scheduling info is
+        # silently dropped.
+        merge_fields = {}
+        for field in ('due_at', 'priority', 'category'):
+            staged_value = staged.get(field)
+            if staged_value is not None and not existing.get(field):
+                merge_fields[field] = staged_value
+        if merge_fields:
+            try:
+                action_items_db.update_action_item(uid, existing['id'], merge_fields)
+                existing.update(merge_fields)
+            except Exception as e:
+                # Merge is best-effort — the dedup itself is the primary
+                # win, so don't fail the promotion path on a metadata write.
+                logger.warning(
+                    "Failed to merge staged metadata into action_item %s for user %s: %s",
+                    existing['id'],
+                    uid,
+                    e,
+                )
+
+        col.document(staged['id']).update(
+            {
+                'completed': True,
+                'promoted_at': datetime.now(timezone.utc),
+                'promotion_skipped': 'duplicate',
+                'promoted_to': existing['id'],
+            }
+        )
+        logger.info(
+            "Skipped promotion of staged task %s for user %s — duplicate of action_item %s (merged %d fields)",
+            staged['id'],
+            uid,
+            existing['id'],
+            len(merge_fields),
+        )
+        return existing
 
     # Build action_item data from staged task fields
     action_data = {

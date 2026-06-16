@@ -5,6 +5,7 @@ Unit tests for LLM usage API endpoints.
 import os
 import sys
 import types
+from pathlib import Path
 from unittest.mock import MagicMock
 
 os.environ.setdefault(
@@ -12,16 +13,82 @@ os.environ.setdefault(
     "omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv",
 )
 
+BACKEND_DIR = Path(__file__).resolve().parents[2]
+_STUBBED_MODULES = {}
+
+
+def _ensure_package(name, path):
+    module = sys.modules.get(name)
+    if module is None or not hasattr(module, "__path__"):
+        module = types.ModuleType(name)
+        sys.modules[name] = module
+    module.__path__ = [str(path)]
+
+    if "." in name:
+        parent_name, attr_name = name.rsplit(".", 1)
+        parent = sys.modules.get(parent_name)
+        if parent is not None:
+            setattr(parent, attr_name, module)
+
+    return module
+
+
+def _drop_cached_module(name):
+    sys.modules.pop(name, None)
+
+    if "." in name:
+        parent_name, attr_name = name.rsplit(".", 1)
+        parent = sys.modules.get(parent_name)
+        if parent is not None and hasattr(parent, attr_name):
+            delattr(parent, attr_name)
+
+
+def _install_stub(name):
+    module = types.ModuleType(name)
+    sys.modules[name] = module
+    _STUBBED_MODULES[name] = module
+
+    if "." in name:
+        parent_name, attr_name = name.rsplit(".", 1)
+        parent = sys.modules.get(parent_name)
+        if parent is not None:
+            setattr(parent, attr_name, module)
+
+    return module
+
+
+def _remove_stub(name):
+    module = _STUBBED_MODULES[name]
+    if sys.modules.get(name) is module:
+        sys.modules.pop(name, None)
+
+    if "." in name:
+        parent_name, attr_name = name.rsplit(".", 1)
+        parent = sys.modules.get(parent_name)
+        if parent is not None and getattr(parent, attr_name, None) is module:
+            delattr(parent, attr_name)
+
+
+_ensure_package("database", BACKEND_DIR / "database")
+_ensure_package("utils", BACKEND_DIR / "utils")
+_ensure_package("utils.llm", BACKEND_DIR / "utils" / "llm")
+_ensure_package("utils.other", BACKEND_DIR / "utils" / "other")
+_ensure_package("utils.conversations", BACKEND_DIR / "utils" / "conversations")
+_ensure_package("utils.stt", BACKEND_DIR / "utils" / "stt")
+_ensure_package("models", BACKEND_DIR / "models")
+
+pytz_module = _install_stub("pytz")
+pytz_module.timezone = MagicMock()
+
 # Stub Firestore client to avoid ADC lookups during import.
-mock_client_module = types.ModuleType("database._client")
+mock_client_module = _install_stub("database._client")
 mock_client_module.db = MagicMock()
-sys.modules["database._client"] = mock_client_module
 
 # Stub firebase_admin auth to keep dependency injection lightweight.
-firebase_admin = types.ModuleType("firebase_admin")
+firebase_admin = _install_stub("firebase_admin")
 firebase_admin.auth = MagicMock()
-sys.modules["firebase_admin"] = firebase_admin
 sys.modules["firebase_admin.auth"] = firebase_admin.auth
+_STUBBED_MODULES["firebase_admin.auth"] = firebase_admin.auth
 
 # Stub database submodules used by routers.users to avoid heavy imports.
 for name in [
@@ -34,11 +101,33 @@ for name in [
     "database.redis_db",
     "database.users",
     "database.cache",
+    "database.app_review_config",
+    "database.webhook_health",
+    "database.action_items",
+    "database.screen_activity",
+    "database.vector_db",
 ]:
-    sys.modules[name] = types.ModuleType(name)
+    _install_stub(name)
 
 sys.modules["database.conversations"].get_in_progress_conversation = MagicMock()
 sys.modules["database.conversations"].get_conversation = MagicMock()
+sys.modules["database.conversations"].get_conversation_ids = MagicMock(return_value=[])
+sys.modules["database.memories"].get_memory_ids = MagicMock(return_value=[])
+
+sys.modules["database.app_review_config"].should_hide_subscription_ui = MagicMock(return_value=False)
+sys.modules["database.webhook_health"].record_dev_webhook_success = MagicMock()
+sys.modules["database.action_items"].get_action_item_ids = MagicMock(return_value=[])
+sys.modules["database.action_items"].get_action_items = MagicMock(return_value=[])
+sys.modules["database.screen_activity"].get_screen_activity_ids = MagicMock(return_value=[])
+vector_mod = sys.modules["database.vector_db"]
+for attr in [
+    "delete_conversation_vectors_batch",
+    "delete_transcript_chunk_vectors_batch",
+    "delete_memory_vectors_batch",
+    "delete_action_item_vectors_batch",
+    "delete_screen_activity_vectors",
+]:
+    setattr(vector_mod, attr, MagicMock())
 
 redis_mod = sys.modules["database.redis_db"]
 for attr in [
@@ -54,6 +143,9 @@ for attr in [
     "get_generic_cache",
     "set_generic_cache",
     "set_speech_profile_duration",
+    "get_daily_summary_uid",
+    "store_daily_summary_to_uid",
+    "remove_daily_summary_to_uid",
     "r",
 ]:
     setattr(redis_mod, attr, MagicMock())
@@ -74,26 +166,31 @@ users_mod.get_user_transcription_preferences = MagicMock()
 users_mod.set_user_transcription_preferences = MagicMock()
 users_mod.__all__ = []
 
-llm_usage_mod = types.ModuleType("database.llm_usage")
+llm_usage_mod = _install_stub("database.llm_usage")
 llm_usage_mod.get_usage_summary = MagicMock()
 llm_usage_mod.get_top_features = MagicMock()
-sys.modules["database.llm_usage"] = llm_usage_mod
+llm_usage_mod.record_llm_usage_bucket = MagicMock()
+llm_usage_mod.get_total_llm_cost = MagicMock()
 
 # Stub utils modules that pull in external dependencies.
 for name in [
     "utils.apps",
     "utils.subscription",
     "utils.stripe",
+    "utils.stt.streaming",
+    "utils.log_sanitizer",
+    "utils.twilio_service",
     "utils.llm.followup",
     "utils.notifications",
     "utils.llm.external_integrations",
     "utils.webhooks",
     "utils.other.storage",
+    "utils.byok",
     "utils.phone_calls",
     "database.phone_call_usage",
     "database.phone_call_config",
 ]:
-    sys.modules[name] = types.ModuleType(name)
+    _install_stub(name)
 
 sys.modules["utils.apps"].get_available_app_by_id = MagicMock()
 subscription_mod = sys.modules["utils.subscription"]
@@ -110,9 +207,17 @@ for attr in [
     "adapt_plans_for_legacy_client",
     "legacy_plan_features",
     "is_paid_plan",
+    "is_trial_paywalled",
+    "neo_grandfather_until",
+    "clear_trial_paywall_cache",
+    "get_trial_metadata",
 ]:
     setattr(subscription_mod, attr, MagicMock())
 subscription_mod.get_paid_plan_definitions = MagicMock(return_value=[])
+
+sys.modules["utils.stt.streaming"].deepgram_nova3_multi_languages = MagicMock()
+sys.modules["utils.log_sanitizer"].sanitize = lambda value: value
+sys.modules["utils.twilio_service"].delete_user_caller_ids = MagicMock()
 
 sys.modules["utils.llm.followup"].followup_question_prompt = MagicMock()
 notifications_mod = sys.modules["utils.notifications"]
@@ -126,21 +231,48 @@ sys.modules["utils.webhooks"].webhook_first_time_setup = MagicMock()
 phone_calls_mod = sys.modules["utils.phone_calls"]
 phone_calls_mod.get_quota_snapshot = MagicMock()
 
+byok_mod = sys.modules["utils.byok"]
+byok_mod.has_byok_keys = MagicMock(return_value=False)
+byok_mod.invalidate_byok_state_cache = MagicMock()
+
 storage_mod = sys.modules["utils.other.storage"]
 storage_mod.delete_all_conversation_recordings = MagicMock()
 storage_mod.get_speech_sample_signed_urls = MagicMock()
 storage_mod.delete_user_person_speech_samples = MagicMock()
 storage_mod.delete_user_person_speech_sample = MagicMock()
 
-endpoints_module = types.ModuleType("utils.other.endpoints")
+endpoints_module = _install_stub("utils.other.endpoints")
 endpoints_module.get_current_user_uid = lambda: "test-user"
 endpoints_module.get_current_user_uid_no_byok_validation = lambda: "test-user"
-sys.modules["utils.other.endpoints"] = endpoints_module
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+for _real_module_name in [
+    "models.audio_file",
+    "models.calendar_context",
+    "models.chat",
+    "models.conversation",
+    "models.conversation_enums",
+    "models.conversation_photo",
+    "models.geolocation",
+    "models.notification_message",
+    "models.other",
+    "models.structured",
+    "models.transcript_segment",
+    "models.user_usage",
+    "models.users",
+    "utils.conversations.factory",
+    "routers.users",
+]:
+    _drop_cached_module(_real_module_name)
+
 from routers import users as users_router
+
+_drop_cached_module("routers.users")
+
+for _stubbed_name in reversed(list(_STUBBED_MODULES)):
+    _remove_stub(_stubbed_name)
 
 app = FastAPI()
 app.include_router(users_router.router)

@@ -54,6 +54,47 @@ for submodule in ["llm_usage", "_client"]:
 llm_usage_mod = sys.modules["database.llm_usage"]
 llm_usage_mod.record_llm_usage = MagicMock()
 
+
+def _langchain_core_package():
+    langchain_core_mod = sys.modules.setdefault("langchain_core", types.ModuleType("langchain_core"))
+    langchain_core_mod.__path__ = getattr(langchain_core_mod, "__path__", [])
+    return langchain_core_mod
+
+
+try:
+    import langchain_core.callbacks  # noqa: F401
+except ImportError:
+
+    class _BaseCallbackHandler:
+        pass
+
+    _langchain_core_package()
+    callbacks_mod = types.ModuleType("langchain_core.callbacks")
+    callbacks_mod.BaseCallbackHandler = _BaseCallbackHandler
+    sys.modules["langchain_core.callbacks"] = callbacks_mod
+    setattr(_langchain_core_package(), "callbacks", callbacks_mod)
+
+try:
+    import langchain_core.outputs  # noqa: F401
+except ImportError:
+
+    class _Generation:
+        def __init__(self, text="", generation_info=None, **kwargs):
+            self.text = text
+            self.generation_info = generation_info
+
+    class _LLMResult:
+        def __init__(self, generations=None, llm_output=None, **kwargs):
+            self.generations = generations or []
+            self.llm_output = llm_output
+
+    _langchain_core_package()
+    outputs_mod = types.ModuleType("langchain_core.outputs")
+    outputs_mod.Generation = _Generation
+    outputs_mod.LLMResult = _LLMResult
+    sys.modules["langchain_core.outputs"] = outputs_mod
+    setattr(_langchain_core_package(), "outputs", outputs_mod)
+
 from utils.llm.usage_tracker import (
     Features,
     LLMUsageCallback,
@@ -327,17 +368,20 @@ class TestAsyncSafety:
 
 
 # ===================================================================
-# 5. graph.py ChatOpenAI stream_options includes include_usage
+# 5. ChatOpenAI stream_options includes include_usage
 # ===================================================================
 
 
-class TestGraphStreamOptions:
-    """Verify that graph.py's ChatOpenAI has stream_options={"include_usage": True}."""
+class TestLLMClientsStreamOptions:
+    """Verify that ChatOpenAI streams request usage metadata."""
 
-    def test_graph_py_has_include_usage(self):
-        graph_path = Path(__file__).resolve().parent.parent.parent / "utils" / "retrieval" / "graph.py"
-        source = graph_path.read_text()
-        assert 'stream_options={"include_usage": True}' in source or "stream_options={'include_usage': True}" in source
+    def test_llm_clients_has_include_usage(self):
+        clients_path = Path(__file__).resolve().parent.parent.parent / "utils" / "llm" / "clients.py"
+        source = clients_path.read_text(encoding="utf-8")
+        assert re.search(
+            r"stream_options[\"']?\]\s*=\s*\{[^\n]*[\"']include_usage[\"']:\s*True",
+            source,
+        )
 
 
 # ===================================================================
@@ -352,34 +396,34 @@ class TestSourceTrackUsageWrapping:
 
     def test_app_integrations_proactive_notification(self):
         """utils/app_integrations.py must wrap proactive notification LLM calls."""
-        source = (BACKEND_ROOT / "utils" / "app_integrations.py").read_text()
+        source = (BACKEND_ROOT / "utils" / "app_integrations.py").read_text(encoding="utf-8")
         count = source.count("with track_usage(uid, Features.PROACTIVE_NOTIFICATION):")
         assert count >= 3, f"Expected >= 3 PROACTIVE_NOTIFICATION wrappers, found {count}"
 
     def test_followup_py(self):
         """utils/llm/followup.py must wrap the LLM call with FOLLOWUP."""
-        source = (BACKEND_ROOT / "utils" / "llm" / "followup.py").read_text()
+        source = (BACKEND_ROOT / "utils" / "llm" / "followup.py").read_text(encoding="utf-8")
         assert "with track_usage(uid, Features.FOLLOWUP):" in source
 
     def test_openglass_py(self):
         """utils/llm/openglass.py must wrap the LLM call with OPENGLASS."""
-        source = (BACKEND_ROOT / "utils" / "llm" / "openglass.py").read_text()
+        source = (BACKEND_ROOT / "utils" / "llm" / "openglass.py").read_text(encoding="utf-8")
         assert "with track_usage(uid, Features.OPENGLASS):" in source
 
     def test_routers_apps_app_generator(self):
         """routers/apps.py must wrap generator endpoints with APP_GENERATOR."""
-        source = (BACKEND_ROOT / "routers" / "apps.py").read_text()
+        source = (BACKEND_ROOT / "routers" / "apps.py").read_text(encoding="utf-8")
         count = source.count("with track_usage(uid, Features.APP_GENERATOR):")
         assert count >= 5, f"Expected >= 5 APP_GENERATOR wrappers in routers/apps.py, found {count}"
 
     def test_onboarding_py(self):
         """utils/onboarding.py must wrap the AI check with ONBOARDING."""
-        source = (BACKEND_ROOT / "utils" / "onboarding.py").read_text()
+        source = (BACKEND_ROOT / "utils" / "onboarding.py").read_text(encoding="utf-8")
         assert "with track_usage(self.uid, Features.ONBOARDING):" in source
 
     def test_chat_py_tracking(self):
         """utils/llm/chat.py must wrap LLM calls with CHAT, CONVERSATION_PROCESSING, or REALTIME_INTEGRATIONS."""
-        source = (BACKEND_ROOT / "utils" / "llm" / "chat.py").read_text()
+        source = (BACKEND_ROOT / "utils" / "llm" / "chat.py").read_text(encoding="utf-8")
         assert "with track_usage(uid, Features.CHAT):" in source
         assert (
             "with track_usage(uid, Features.CONVERSATION_PROCESSING):" in source
@@ -388,33 +432,33 @@ class TestSourceTrackUsageWrapping:
 
     def test_persona_py_tracking(self):
         """utils/llm/persona.py must wrap LLM calls with PERSONA."""
-        source = (BACKEND_ROOT / "utils" / "llm" / "persona.py").read_text()
+        source = (BACKEND_ROOT / "utils" / "llm" / "persona.py").read_text(encoding="utf-8")
         count = source.count("with track_usage(uid, Features.PERSONA):")
         assert count >= 2, f"Expected >= 2 PERSONA wrappers in persona.py, found {count}"
 
     def test_apps_py_tracking(self):
         """utils/apps.py must wrap persona generation calls with PERSONA."""
-        source = (BACKEND_ROOT / "utils" / "apps.py").read_text()
+        source = (BACKEND_ROOT / "utils" / "apps.py").read_text(encoding="utf-8")
         count = source.count("with track_usage(")
         assert count >= 4, f"Expected >= 4 track_usage wrappers in utils/apps.py, found {count}"
 
     def test_transcribe_py_describe_image_call(self):
         """routers/transcribe.py must pass uid to describe_image."""
-        source = (BACKEND_ROOT / "routers" / "transcribe.py").read_text()
+        source = (BACKEND_ROOT / "routers" / "transcribe.py").read_text(encoding="utf-8")
         assert "describe_image(uid," in source, "describe_image must be called with uid as first arg"
 
     def test_users_py_followup_call(self):
         """routers/users.py must pass uid to followup_question_prompt."""
-        source = (BACKEND_ROOT / "routers" / "users.py").read_text()
+        source = (BACKEND_ROOT / "routers" / "users.py").read_text(encoding="utf-8")
         assert (
             "followup_question_prompt(uid," in source
         ), "followup_question_prompt must be called with uid as first arg"
 
-    def test_graph_py_usage_callback(self):
-        """utils/retrieval/graph.py must attach _usage_callback to ChatOpenAI."""
-        source = (BACKEND_ROOT / "utils" / "retrieval" / "graph.py").read_text()
-        assert "callbacks=[_usage_callback]" in source, "graph.py must attach usage callback"
-        assert "get_usage_callback" in source, "graph.py must import get_usage_callback"
+    def test_llm_clients_usage_callback(self):
+        """utils/llm/clients.py must attach _usage_callback to ChatOpenAI."""
+        source = (BACKEND_ROOT / "utils" / "llm" / "clients.py").read_text(encoding="utf-8")
+        assert "_usage_callback = get_usage_callback()" in source, "clients.py must initialize the usage callback"
+        assert "'callbacks': [_usage_callback]" in source, "clients.py must attach usage callback"
 
     def test_usage_tracker_imports_in_modified_files(self):
         """Each modified file must import track_usage and Features from usage_tracker."""
@@ -430,7 +474,7 @@ class TestSourceTrackUsageWrapping:
         ]
         import_pattern = re.compile(r'from\s+utils\.llm\.usage_tracker\s+import\s+.*track_usage.*Features')
         for rel_path in files_to_check:
-            source = (BACKEND_ROOT / rel_path).read_text()
+            source = (BACKEND_ROOT / rel_path).read_text(encoding="utf-8")
             # Check for track_usage and Features imports (may be separate lines)
             assert "track_usage" in source, f"{rel_path} missing track_usage import"
             assert "Features" in source, f"{rel_path} missing Features import"
@@ -445,7 +489,7 @@ class TestSourceTrackUsageWrapping:
                 for py_file in src_dir.rglob("*.py"):
                     if "test_" in py_file.name:
                         continue
-                    if pattern in py_file.read_text():
+                    if pattern in py_file.read_text(encoding="utf-8"):
                         found = True
                         break
                 if found:
@@ -462,7 +506,7 @@ class TestSourceTrackUsageWrapping:
         # For followup.py and openglass.py we can do a precise check:
         # the invoke call must be indented further than the track_usage line.
         for rel_path in ["utils/llm/followup.py", "utils/llm/openglass.py"]:
-            source = (BACKEND_ROOT / rel_path).read_text()
+            source = (BACKEND_ROOT / rel_path).read_text(encoding="utf-8")
             lines = source.splitlines()
             in_track_block = False
             invoke_found = False

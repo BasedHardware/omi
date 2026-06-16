@@ -10,26 +10,31 @@ import pytest
 PAYMENT_SOURCE = Path(__file__).resolve().parents[2] / "routers" / "payment.py"
 STRIPE_UTILS_SOURCE = Path(__file__).resolve().parents[2] / "utils" / "stripe.py"
 
+
+def _read_source(path: Path) -> str:
+    return path.read_text(encoding="utf-8")
+
+
 # ---------------------------------------------------------------------------
 # Source-level structural tests (fast, no import needed)
 # ---------------------------------------------------------------------------
 
 
 def test_checkout_request_model_accepts_promotion_code():
-    source = PAYMENT_SOURCE.read_text()
+    source = _read_source(PAYMENT_SOURCE)
     assert 'class CreateCheckoutRequest(BaseModel):' in source
     assert 'promotion_code: Optional[str] = None' in source
 
 
 def test_upgrade_request_model_accepts_promotion_code():
-    source = PAYMENT_SOURCE.read_text()
+    source = _read_source(PAYMENT_SOURCE)
     assert 'class UpgradeSubscriptionRequest(BaseModel):' in source
     assert 'promotion_code: Optional[str] = None' in source
 
 
 def test_checkout_validates_promo_before_reactivation():
     """Promo validation must happen before _try_reactivate_subscription."""
-    source = PAYMENT_SOURCE.read_text()
+    source = _read_source(PAYMENT_SOURCE)
     endpoint_start = source.index("def create_checkout_session_endpoint")
     promo_in_checkout = source.index("PromotionCode.list", endpoint_start)
     reactivation_in_checkout = source.index("_try_reactivate_subscription", endpoint_start)
@@ -38,7 +43,7 @@ def test_checkout_validates_promo_before_reactivation():
 
 def test_upgrade_uses_promotion_code_id_not_coupon():
     """Upgrade must use promotion_code ID (preserves restrictions) not coupon ID."""
-    source = PAYMENT_SOURCE.read_text()
+    source = _read_source(PAYMENT_SOURCE)
     upgrade_start = source.index("def upgrade_subscription_endpoint")
     upgrade_section = source[upgrade_start:]
     assert "{'promotion_code': resolved_promo_id}" in upgrade_section
@@ -47,7 +52,7 @@ def test_upgrade_uses_promotion_code_id_not_coupon():
 
 def test_upgrade_applies_promo_to_schedule_phases():
     """Same-plan interval changes must apply promo discount to the target phase."""
-    source = PAYMENT_SOURCE.read_text()
+    source = _read_source(PAYMENT_SOURCE)
     upgrade_start = source.index("def upgrade_subscription_endpoint")
     upgrade_section = source[upgrade_start:]
     assert "SubscriptionSchedule.modify" in upgrade_section
@@ -57,18 +62,18 @@ def test_upgrade_applies_promo_to_schedule_phases():
 
 
 def test_checkout_helper_uses_discounts_when_promo_provided():
-    source = STRIPE_UTILS_SOURCE.read_text()
+    source = _read_source(STRIPE_UTILS_SOURCE)
     assert "if promotion_code_id:" in source
     assert "session_params['discounts'] = [{'promotion_code': promotion_code_id}]" in source
 
 
 def test_checkout_helper_allows_promo_codes_when_no_promo():
-    source = STRIPE_UTILS_SOURCE.read_text()
+    source = _read_source(STRIPE_UTILS_SOURCE)
     assert "session_params['allow_promotion_codes'] = True" in source
 
 
 def test_upgrade_catches_stripe_invalid_request_error():
-    source = PAYMENT_SOURCE.read_text()
+    source = _read_source(PAYMENT_SOURCE)
     upgrade_start = source.index("def upgrade_subscription_endpoint")
     upgrade_section = source[upgrade_start:]
     assert "stripe.error.InvalidRequestError" in upgrade_section
@@ -79,7 +84,7 @@ def test_upgrade_releases_attached_schedule_before_change():
     Subscription.modify() / SubscriptionSchedule.create(), otherwise Stripe
     rejects the change ("cannot migrate a subscription already attached to a
     schedule") and the user can never switch plans."""
-    source = PAYMENT_SOURCE.read_text()
+    source = _read_source(PAYMENT_SOURCE)
     assert "def _release_attached_schedules" in source
     upgrade_section = source[source.index("def upgrade_subscription_endpoint") :]
     assert "_release_attached_schedules(stripe_sub)" in upgrade_section
@@ -89,7 +94,7 @@ def test_upgrade_releases_attached_schedule_before_change():
 
 
 def test_checkout_catches_stripe_invalid_request_error():
-    source = PAYMENT_SOURCE.read_text()
+    source = _read_source(PAYMENT_SOURCE)
     checkout_start = source.index("def create_checkout_session_endpoint")
     checkout_section = source[checkout_start : source.index("def upgrade_subscription_endpoint")]
     assert "stripe.error.InvalidRequestError" in checkout_section

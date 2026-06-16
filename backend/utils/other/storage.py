@@ -19,6 +19,8 @@ from google.cloud.exceptions import NotFound
 
 from database.redis_db import cache_signed_url, get_cached_signed_url
 from utils import encryption
+from utils.cloud_tasks import enqueue_audio_merge_job, is_audio_merge_dispatch_enabled
+from utils.other.deferred_delete import DeferredDeleter
 from database import users as users_db
 import logging
 
@@ -26,7 +28,10 @@ logger = logging.getLogger(__name__)
 
 # Per-request fan-out limits for storage_executor (#7387)
 _STORAGE_CHUNK_SEM = threading.BoundedSemaphore(32)
-_PRECACHE_FILE_SEM = threading.BoundedSemaphore(2)
+# 4 → 2 in #7526 was load-shedding while the pool was full of sleeping
+# per-file deletion timers; restored to 4 now that the janitor thread
+# (deferred_delete.py) holds those instead of pool threads.
+_PRECACHE_FILE_SEM = threading.BoundedSemaphore(4)
 _CHUNK_WINDOW_SIZE = 8
 
 _merge_tracker_lock = threading.Lock()
@@ -51,7 +56,7 @@ if os.environ.get('SERVICE_ACCOUNT_JSON'):
 else:
     storage_client = storage.Client()
 
-speech_profiles_bucket = os.getenv('BUCKET_SPEECH_PROFILES')
+speech_profiles_bucket = (os.getenv('BUCKET_SPEECH_PROFILES') or '').strip() or None
 postprocessing_audio_bucket = os.getenv('BUCKET_POSTPROCESSING')
 memories_recordings_bucket = os.getenv('BUCKET_MEMORIES_RECORDINGS')
 private_cloud_sync_bucket = os.getenv('BUCKET_PRIVATE_CLOUD_SYNC', 'omi-private-cloud-sync')
@@ -61,37 +66,52 @@ app_thumbnails_bucket = os.getenv('BUCKET_APP_THUMBNAILS')
 chat_files_bucket = os.getenv('BUCKET_CHAT_FILES')
 desktop_updates_bucket = os.getenv('BUCKET_DESKTOP_UPDATES')
 
+_did_warn_missing_speech_profiles_bucket = False
+
+
+def _get_speech_profiles_bucket(required: bool = False):
+    global _did_warn_missing_speech_profiles_bucket
+
+    if speech_profiles_bucket:
+        return storage_client.bucket(speech_profiles_bucket)
+
+    if not _did_warn_missing_speech_profiles_bucket:
+        logger.warning('BUCKET_SPEECH_PROFILES is not configured; speech profile storage is disabled')
+        _did_warn_missing_speech_profiles_bucket = True
+
+    if required:
+        raise RuntimeError('BUCKET_SPEECH_PROFILES is not configured')
+
+    return None
+
 
 # *******************************************
 # ************* SPEECH PROFILE **************
 # *******************************************
 def upload_profile_audio(file_path: str, uid: str):
-    bucket = storage_client.bucket(speech_profiles_bucket)
+    bucket = _get_speech_profiles_bucket(required=True)
     path = f'{uid}/speech_profile.wav'
     blob = bucket.blob(path)
     blob.upload_from_filename(file_path)
     return f'https://storage.googleapis.com/{speech_profiles_bucket}/{path}'
 
 
-def get_user_has_speech_profile(uid: str, max_age_days: int = None) -> bool:
-    bucket = storage_client.bucket(speech_profiles_bucket)
-    blob = bucket.blob(f'{uid}/speech_profile.wav')
-    if not blob.exists():
+def get_user_has_speech_profile(uid: str) -> bool:
+    # No age cutoff: the listen pipeline (routers/transcribe.py) uses the profile
+    # regardless of age, so reporting an old profile as absent only causes the app
+    # to re-prompt users whose profile is still in active use (#5128).
+    bucket = _get_speech_profiles_bucket()
+    if bucket is None:
         return False
 
-    # Check age if max_age_days is specified
-    if max_age_days is not None:
-        blob.reload()
-        if blob.time_created:
-            age = datetime.datetime.now(datetime.timezone.utc) - blob.time_created
-            if age.days > max_age_days:
-                return False
-
-    return True
+    return bucket.blob(f'{uid}/speech_profile.wav').exists()
 
 
 def get_profile_audio_if_exists(uid: str, download: bool = True) -> str:
-    bucket = storage_client.bucket(speech_profiles_bucket)
+    bucket = _get_speech_profiles_bucket()
+    if bucket is None:
+        return None
+
     path = f'{uid}/speech_profile.wav'
     blob = bucket.blob(path)
     if blob.exists():
@@ -105,7 +125,10 @@ def get_profile_audio_if_exists(uid: str, download: bool = True) -> str:
 
 
 def delete_additional_profile_audio(uid: str, file_name: str) -> None:
-    bucket = storage_client.bucket(speech_profiles_bucket)
+    bucket = _get_speech_profiles_bucket()
+    if bucket is None:
+        return
+
     blob = bucket.blob(f'{uid}/additional_profile_recordings/{file_name}')
     if blob.exists():
         logger.info(f'delete_additional_profile_audio deleting {file_name}')
@@ -113,7 +136,10 @@ def delete_additional_profile_audio(uid: str, file_name: str) -> None:
 
 
 def get_additional_profile_recordings(uid: str, download: bool = False) -> List[str]:
-    bucket = storage_client.bucket(speech_profiles_bucket)
+    bucket = _get_speech_profiles_bucket()
+    if bucket is None:
+        return []
+
     blobs = bucket.list_blobs(prefix=f'{uid}/additional_profile_recordings/')
     if download:
         paths = []
@@ -132,14 +158,20 @@ def get_additional_profile_recordings(uid: str, download: bool = False) -> List[
 
 
 def delete_user_person_speech_sample(uid: str, person_id: str, file_name: str) -> None:
-    bucket = storage_client.bucket(speech_profiles_bucket)
+    bucket = _get_speech_profiles_bucket()
+    if bucket is None:
+        return
+
     blob = bucket.blob(f'{uid}/people_profiles/{person_id}/{file_name}')
     if blob.exists():
         blob.delete()
 
 
 def delete_user_person_speech_samples(uid: str, person_id: str) -> None:
-    bucket = storage_client.bucket(speech_profiles_bucket)
+    bucket = _get_speech_profiles_bucket()
+    if bucket is None:
+        return
+
     blobs = bucket.list_blobs(prefix=f'{uid}/people_profiles/{person_id}/')
     for blob in blobs:
         blob.delete()
@@ -161,7 +193,7 @@ def upload_person_speech_sample_from_bytes(
         wav_file.setframerate(sample_rate)
         wav_file.writeframes(audio_bytes)
 
-    bucket = storage_client.bucket(speech_profiles_bucket)
+    bucket = _get_speech_profiles_bucket(required=True)
     filename = f"{uuid_module.uuid4()}.wav"
     path = f'{uid}/people_profiles/{person_id}/{filename}'
     blob = bucket.blob(path)
@@ -171,13 +203,19 @@ def upload_person_speech_sample_from_bytes(
 
 
 def get_user_people_ids(uid: str) -> List[str]:
-    bucket = storage_client.bucket(speech_profiles_bucket)
+    bucket = _get_speech_profiles_bucket()
+    if bucket is None:
+        return []
+
     blobs = bucket.list_blobs(prefix=f'{uid}/people_profiles/')
     return [blob.name.split("/")[-2] for blob in blobs]
 
 
 def get_user_person_speech_samples(uid: str, person_id: str, download: bool = False) -> List[str]:
-    bucket = storage_client.bucket(speech_profiles_bucket)
+    bucket = _get_speech_profiles_bucket()
+    if bucket is None:
+        return []
+
     blobs = bucket.list_blobs(prefix=f'{uid}/people_profiles/{person_id}/')
     if download:
         paths = []
@@ -203,7 +241,10 @@ def get_speech_sample_signed_urls(paths: List[str]) -> List[str]:
     """
     if not paths:
         return []
-    bucket = storage_client.bucket(speech_profiles_bucket)
+    bucket = _get_speech_profiles_bucket()
+    if bucket is None:
+        return []
+
     signed_urls = []
     for path in paths:
         blob = bucket.blob(path)
@@ -274,7 +315,8 @@ def delete_all_conversation_recordings(uid: str):
     if not uid:
         return
     bucket = storage_client.bucket(memories_recordings_bucket)
-    blobs = bucket.list_blobs(prefix=uid)
+    # Trailing slash so a uid is not a prefix of another uid's folder (e.g. "abc" matching "abcd/").
+    blobs = bucket.list_blobs(prefix=f"{uid}/")
     for blob in blobs:
         blob.delete()
 
@@ -303,6 +345,48 @@ def delete_syncing_temporal_file(file_path: str):
         blob.delete()
     except BlobNotFound:
         pass
+
+
+# Long enough for every signed-URL consumer (Deepgram fetch, speaker-ID
+# download) to finish; the URLs themselves expire at 15 minutes.
+SYNCING_TEMPORAL_DELETE_DELAY_SECONDS = 480
+
+_syncing_temporal_deleter = DeferredDeleter(delete_syncing_temporal_file, name='syncing-blob-janitor')
+
+
+def schedule_syncing_temporal_file_deletion(
+    file_path: str, delay_seconds: float = SYNCING_TEMPORAL_DELETE_DELAY_SECONDS
+):
+    """Delete a temporal syncing blob once its signed-URL consumers are done.
+
+    One janitor thread + a due-time heap, instead of the previous per-file
+    time.sleep(480) that parked a storage_executor thread per blob (#7531).
+    """
+    _syncing_temporal_deleter.schedule(file_path, delay_seconds)
+
+
+def upload_syncing_temporal_file(file_path: str):
+    """Stage a local file in the syncing bucket (blob name = local relative path)."""
+    bucket = storage_client.bucket(syncing_local_bucket)
+    bucket.blob(file_path).upload_from_filename(file_path)
+
+
+def download_syncing_temporal_file(file_path: str) -> bool:
+    """Download a staged blob back to its local relative path.
+
+    Returns False when the blob no longer exists (e.g. deleted by the
+    bucket's 1-day lifecycle rule before a deeply delayed task ran).
+    """
+    bucket = storage_client.bucket(syncing_local_bucket)
+    blob = bucket.blob(file_path)
+    directory = os.path.dirname(file_path)
+    if directory:
+        os.makedirs(directory, exist_ok=True)
+    try:
+        blob.download_to_filename(file_path)
+        return True
+    except BlobNotFound:
+        return False
 
 
 # ************************************************
@@ -1016,6 +1100,101 @@ def _pcm_to_wav(pcm_data: bytes, sample_rate: int = 16000, channels: int = 1) ->
     return wav_buffer.getvalue()
 
 
+# ----------------------------------------------------------------------------
+# Playback artifacts: merged MP3 under playback/, expiry via the bucket's
+# 30-day lifecycle rule on the prefix (existence == validity, no metadata).
+# Built off-request by the audio-merge Cloud Tasks handler (routers/sync.py).
+# ----------------------------------------------------------------------------
+
+PLAYBACK_ARTIFACT_PREFIX = 'playback'
+
+
+def _playback_artifact_blob(uid: str, conversation_id: str, audio_file_id: str):
+    bucket = storage_client.bucket(private_cloud_sync_bucket)
+    return bucket.blob(f'{PLAYBACK_ARTIFACT_PREFIX}/{uid}/{conversation_id}/{audio_file_id}.mp3')
+
+
+def get_playback_artifact_signed_url(uid: str, conversation_id: str, audio_file_id: str):
+    blob = _playback_artifact_blob(uid, conversation_id, audio_file_id)
+    if not blob.exists():
+        return None
+    return _get_signed_url(blob, 60)
+
+
+def download_playback_artifact(uid: str, conversation_id: str, audio_file_id: str):
+    blob = _playback_artifact_blob(uid, conversation_id, audio_file_id)
+    try:
+        return blob.download_as_bytes()
+    except BlobNotFound:
+        return None
+
+
+def upload_playback_artifact(uid: str, conversation_id: str, audio_file_id: str, mp3_data: bytes) -> None:
+    blob = _playback_artifact_blob(uid, conversation_id, audio_file_id)
+    blob.upload_from_string(mp3_data, content_type='audio/mpeg')
+
+
+def _playback_unavailable_blob(uid: str, conversation_id: str, audio_file_id: str):
+    bucket = storage_client.bucket(private_cloud_sync_bucket)
+    return bucket.blob(f'{PLAYBACK_ARTIFACT_PREFIX}/{uid}/{conversation_id}/{audio_file_id}.unavailable')
+
+
+def mark_playback_unavailable(uid: str, conversation_id: str, audio_file_id: str, reason: str) -> None:
+    """Mark an audio file as unbuildable (e.g. source chunks gone).
+
+    Without this, /urls would report the file as pending forever and clients
+    would poll to exhaustion. The marker lives under playback/ so the 30-day
+    lifecycle rule grants even these a retry eventually.
+    """
+    blob = _playback_unavailable_blob(uid, conversation_id, audio_file_id)
+    blob.upload_from_string(reason, content_type='text/plain')
+
+
+def is_playback_unavailable(uid: str, conversation_id: str, audio_file_id: str) -> bool:
+    return _playback_unavailable_blob(uid, conversation_id, audio_file_id).exists()
+
+
+def enqueue_conversation_audio_merge(uid: str, conversation_id: str, audio_files: list, caller: str) -> None:
+    """Enqueue one audio-merge Cloud Task per audio file (named-task deduped).
+
+    Enqueue failures are swallowed: the file stays pending and the next /urls
+    poll re-enqueues it.
+    """
+    for af in audio_files:
+        audio_file_id = af.get('id')
+        timestamps = af.get('chunk_timestamps')
+        if not audio_file_id or not timestamps:
+            continue
+        try:
+            enqueue_audio_merge_job(
+                {
+                    'schema_version': 1,
+                    'uid': uid,
+                    'conversation_id': conversation_id,
+                    'audio_file_id': audio_file_id,
+                    'timestamps': timestamps,
+                    'caller': caller,
+                }
+            )
+        except Exception as e:
+            logger.error(f'audio_merge: enqueue failed conv={conversation_id} file={audio_file_id}: {e}')
+
+
+def download_legacy_merged_wav(uid: str, conversation_id: str, audio_file_id: str):
+    """Download a legacy merged WAV cache blob directly — never merges.
+
+    Used by the artifact-backed download path so a cached blob missing
+    expires_at metadata can't fall through get_or_create_merged_audio into
+    the inline merge pipeline (Greptile P1 on #7872).
+    """
+    bucket = storage_client.bucket(private_cloud_sync_bucket)
+    blob = bucket.blob(get_cached_merged_audio_path(uid, conversation_id, audio_file_id))
+    try:
+        return blob.download_as_bytes()
+    except BlobNotFound:
+        return None
+
+
 def precache_conversation_audio(
     uid: str, conversation_id: str, audio_files: list, fill_gaps: bool = True, sample_rate: int = 16000
 ) -> None:
@@ -1030,6 +1209,11 @@ def precache_conversation_audio(
         sample_rate: Audio sample rate in Hz (default 16000)
     """
     if not audio_files:
+        return
+
+    if is_audio_merge_dispatch_enabled():
+        # Eager build at conversation completion, off-process via Cloud Tasks
+        enqueue_conversation_audio_merge(uid, conversation_id, audio_files, caller='process_conversation')
         return
 
     def _precache_all():
@@ -1129,6 +1313,8 @@ def download_speech_profile_bytes(path: str) -> bytes:
     Raises:
         NotFound: If the sample doesn't exist
     """
+    if not speech_profiles_bucket:
+        raise BlobNotFound('Speech profile storage is not configured')
     return download_blob_bytes(speech_profiles_bucket, path)
 
 
@@ -1142,6 +1328,8 @@ def delete_speech_profile_blob(path: str) -> bool:
     Returns:
         True if deleted, False if not found
     """
+    if not speech_profiles_bucket:
+        return False
     return delete_blob(speech_profiles_bucket, path)
 
 

@@ -27,9 +27,61 @@ sys.modules.setdefault("google.cloud.firestore", _google_firestore_module)
 setattr(_google_module, "cloud", _google_cloud_module)
 setattr(_google_cloud_module, "firestore", _google_firestore_module)
 
-from langchain_core.outputs import Generation, LLMResult
+_MISSING = object()
+_LANGCHAIN_MODULES = ("langchain_core", "langchain_core.callbacks", "langchain_core.outputs")
+_original_langchain_modules = {name: sys.modules.get(name, _MISSING) for name in _LANGCHAIN_MODULES}
+_langchain_stubs_installed = False
 
-from utils.llm import usage_tracker
+
+class BaseCallbackHandler:
+    pass
+
+
+class Generation:
+    def __init__(self, text="", generation_info=None, **kwargs):
+        self.text = text
+        self.generation_info = generation_info
+
+
+class LLMResult:
+    def __init__(self, generations=None, llm_output=None, **kwargs):
+        self.generations = generations or []
+        self.llm_output = llm_output
+
+
+try:
+    import langchain_core.callbacks  # noqa: F401
+    from langchain_core.outputs import Generation, LLMResult
+except ModuleNotFoundError as exc:
+    if exc.name is None or not exc.name.startswith("langchain_core"):
+        raise
+
+    _langchain_core_module = sys.modules.setdefault("langchain_core", types.ModuleType("langchain_core"))
+    _langchain_callbacks_module = types.ModuleType("langchain_core.callbacks")
+    _langchain_outputs_module = types.ModuleType("langchain_core.outputs")
+    _langchain_callbacks_module.BaseCallbackHandler = BaseCallbackHandler
+    _langchain_outputs_module.Generation = Generation
+    _langchain_outputs_module.LLMResult = LLMResult
+    sys.modules["langchain_core.callbacks"] = _langchain_callbacks_module
+    sys.modules["langchain_core.outputs"] = _langchain_outputs_module
+    setattr(_langchain_core_module, "callbacks", _langchain_callbacks_module)
+    setattr(_langchain_core_module, "outputs", _langchain_outputs_module)
+    _langchain_stubs_installed = True
+
+
+def _restore_langchain_modules():
+    for _name, _module in _original_langchain_modules.items():
+        if _module is _MISSING:
+            sys.modules.pop(_name, None)
+        else:
+            sys.modules[_name] = _module
+
+
+try:
+    from utils.llm import usage_tracker
+finally:
+    if _langchain_stubs_installed:
+        _restore_langchain_modules()
 
 
 def test_track_usage_context_sets_and_resets():

@@ -21,8 +21,14 @@ pytest tests/unit/test_parakeet_diarization.py -v
 pytest tests/unit/test_parakeet_prerecorded.py -v
 pytest tests/unit/test_parakeet_nim.py -v
 pytest tests/unit/test_parakeet_stream_session.py -v
+pytest tests/unit/test_parakeet_gpu_worker.py -v
+pytest tests/unit/test_parakeet_batch_engine.py -v
+pytest tests/unit/test_parakeet_batch_routing.py -v
+pytest tests/unit/test_parakeet_endpoints.py -v
 pytest tests/unit/test_memory_leak_buffers.py -v
 pytest tests/unit/test_mcp_search_memories.py -v
+pytest tests/unit/test_mcp_client_tool_result.py -v
+pytest tests/unit/test_mcp_data_endpoints.py -v
 pytest tests/unit/test_memory_temporal_brain.py -v
 pytest tests/unit/test_llm_usage_tracker.py -v
 pytest tests/unit/test_process_conversation_usage_context.py -v
@@ -34,6 +40,7 @@ pytest tests/unit/test_daily_summary_regenerate.py -v
 pytest tests/unit/test_chat_tools_messages.py -v
 pytest tests/unit/test_prompt_caching.py -v
 pytest tests/unit/test_mentor_notifications.py -v
+pytest tests/unit/test_proactive_notification_language.py -v
 pytest tests/unit/test_conversations_to_string.py -v
 pytest tests/unit/test_conversation_render_factory.py -v
 pytest tests/unit/test_conversation_redact_enrich.py -v
@@ -60,7 +67,10 @@ pytest tests/unit/test_pusher_private_cloud_data_protection.py -v
 pytest tests/unit/test_pusher_batch_upload.py -v
 pytest tests/unit/test_storage_upload_audio_chunk_data_protection.py -v
 pytest tests/unit/test_storage_opus_encoding.py -v
+pytest tests/unit/test_speech_profile_existence.py -v
 pytest tests/unit/test_storage_fanout_limits.py -v
+pytest tests/unit/test_deferred_blob_janitor.py -v
+pytest tests/unit/test_audio_merge_tasks.py -v
 pytest tests/unit/test_people_conversations_500s.py -v
 pytest tests/unit/test_firestore_read_ops_cache.py -v
 pytest tests/unit/test_ws_auth_handshake.py -v
@@ -69,7 +79,10 @@ pytest tests/unit/test_executors.py -v
 pytest tests/unit/test_modulate_stt.py -v
 pytest tests/unit/test_batch_upload_storage.py -v
 pytest tests/unit/test_action_item_date_validation.py -v
+pytest tests/unit/test_conversation_structure_timezone.py -v
 pytest tests/unit/test_action_item_dedup.py -v
+pytest tests/unit/test_action_item_reminder_cancel_on_complete.py -v
+pytest tests/unit/test_action_item_idempotency.py -v
 pytest tests/unit/test_tools_router.py -v
 pytest tests/unit/test_kg_user_type_mismatch.py -v
 pytest tests/unit/test_kg_edge_id_sanitization.py -v
@@ -79,10 +92,12 @@ pytest tests/unit/test_fair_use_engine.py -v
 pytest tests/unit/test_fair_use_classifier.py -v
 pytest tests/unit/test_fair_use_async.py -v
 pytest tests/unit/test_dg_usage_batch.py -v
+pytest tests/unit/test_billable_transcription_seconds.py -v
 pytest tests/unit/test_sync_fair_use_gate.py -v
 pytest tests/unit/test_sync_pcm_decode.py -v
 pytest tests/unit/test_sync_opus_decode.py -v
 pytest tests/unit/test_sync_silent_failure.py -v
+pytest tests/unit/test_sync_ordered_assignment.py -v
 pytest tests/unit/test_fair_use_free_tier.py -v
 pytest tests/unit/test_fair_use_upgrade.py -v
 pytest tests/unit/test_skip_classifier_restrict.py -v
@@ -91,18 +106,22 @@ pytest tests/unit/test_pusher_circuit_breaker.py -v
 pytest tests/unit/test_pusher_ghost_connections.py -v
 pytest tests/unit/test_async_tasks.py -v
 pytest tests/unit/test_lock_bypass_fixes.py -v
+pytest tests/unit/test_integration_malformed_records.py -v
 pytest tests/unit/test_dev_api_lock_bypass.py -v
 pytest tests/unit/test_dev_api_folder_filters.py -v
+pytest tests/unit/test_dev_api_memories_pagination.py -v
 pytest tests/unit/test_rate_limiting.py -v
 pytest tests/unit/test_memories_batch.py -v
 pytest tests/unit/test_memories_create.py -v
 pytest tests/unit/test_sync_v2.py -v
+pytest tests/unit/test_sync_cloud_tasks.py -v
 pytest tests/unit/test_sync_transcription_prefs.py -v
 pytest tests/unit/test_sync_record_usage.py -v
 pytest tests/unit/test_vision_stream_async.py -v
 pytest tests/unit/test_desktop_transcribe.py -v
 pytest tests/unit/test_desktop_migration.py -v
 pytest tests/unit/test_staged_tasks_batch_scores.py -v
+pytest tests/unit/test_staged_tasks_dedup.py -v
 pytest tests/unit/test_dg_start_guard.py -v
 pytest tests/unit/test_available_plans_resilience.py -v
 pytest tests/unit/test_subscription_restructure.py -v
@@ -134,7 +153,10 @@ pytest tests/unit/test_webhook_auto_disable.py -v
 pytest tests/unit/test_merge_validation.py -v
 pytest tests/unit/test_twilio_account_deletion.py -v
 pytest tests/unit/test_conversation_search_date_validation.py -v
+pytest tests/unit/test_conversation_hybrid_search.py -v
 pytest tests/unit/test_delete_account_stripe_cancel.py -v
+pytest tests/unit/test_delete_account_purge_storage.py -v
+pytest tests/unit/test_apps_review_reply_validation.py -v
 
 # Fair-use integration tests (require Redis; skip gracefully if unavailable)
 if redis-cli ping >/dev/null 2>&1; then

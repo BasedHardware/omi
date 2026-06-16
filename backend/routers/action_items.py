@@ -1,4 +1,5 @@
 import asyncio
+import hashlib
 import uuid
 
 from utils.executors import db_executor
@@ -25,6 +26,7 @@ from utils.notifications import (
     send_action_item_update_message,
     send_action_item_deletion_message,
     send_action_items_batch_deletion_message,
+    sync_action_item_reminder,
 )
 from utils.task_sync import auto_sync_action_item
 from pydantic import BaseModel, Field
@@ -193,9 +195,31 @@ def sync_batch_update(request: SyncBatchRequest, uid: str = Depends(auth.get_cur
 # *****************************
 
 
+def _content_idempotency_key(uid: str, description: str) -> str:
+    """Stable idempotency key from (uid, normalized description).
+
+    Two POSTs from the same user with the same description (modulo case +
+    surrounding whitespace) collapse to the same key, so a flaky-network
+    retry no longer creates a duplicate Firestore document.
+
+    Uses a length-prefixed encoding so the boundary between ``uid`` and
+    ``description`` is unambiguous: ``f"{len(uid)}:{uid}:{description}"``.
+    Without this, a uid containing ``:`` (federated identities, future
+    multi-tenant ids) could collide with a different ``(uid, description)``
+    pair after concatenation.
+    """
+    normalized = (description or '').strip().lower()
+    payload = f"{len(uid)}:{uid}:{normalized}"
+    return hashlib.sha256(payload.encode('utf-8')).hexdigest()
+
+
 @router.post("/v1/action-items", response_model=ActionItemResponse, tags=['action-items'])
 def create_action_item(request: CreateActionItemRequest, uid: str = Depends(auth.get_current_user_uid)):
-    """Create a new action item."""
+    """Create a new action item.
+
+    Content-idempotent on (uid, normalized description): a retry of the same
+    request returns the original action_item rather than creating a duplicate.
+    """
     action_item_data = {
         'description': request.description,
         'completed': request.completed,
@@ -203,14 +227,16 @@ def create_action_item(request: CreateActionItemRequest, uid: str = Depends(auth
         'conversation_id': request.conversation_id,
     }
 
-    action_item_id = action_items_db.create_action_item(uid, action_item_data)
+    idempotency_key = _content_idempotency_key(uid, request.description)
+    action_item_id = action_items_db.create_action_item(uid, action_item_data, idempotency_key=idempotency_key)
     action_item = action_items_db.get_action_item(uid, action_item_id)
 
     if not action_item:
         raise HTTPException(status_code=500, detail="Failed to create action item")
 
-    # Send FCM data message if action item has a due date
-    if request.due_at:
+    # Schedule a reminder only for an open task with a due date — an already-completed item must
+    # not arm a reminder (#5085).
+    if request.due_at and not request.completed:
         send_action_item_data_message(
             user_id=uid,
             action_item_id=action_item_id,
@@ -357,13 +383,16 @@ def update_action_item(
     # Return updated action item
     updated_item = action_items_db.get_action_item(uid, action_item_id)
 
-    # Send FCM update message if due_at changed
-    if 'due_at' in update_data and update_data['due_at']:
-        send_action_item_update_message(
+    # Reconcile the client-scheduled reminder when completion or due date changed, using the final
+    # state: cancel if completed or no due date, (re)schedule only for an open task with a due date
+    # (#5085). Previously this re-armed the reminder whenever due_at was present, even on completion.
+    if 'completed' in update_data or 'due_at' in update_data:
+        sync_action_item_reminder(
             user_id=uid,
             action_item_id=action_item_id,
             description=updated_item.get('description', ''),
-            due_at=update_data['due_at'].isoformat(),
+            completed=bool(updated_item.get('completed')),
+            due_at=updated_item.get('due_at'),
         )
 
     return ActionItemResponse(**updated_item)
@@ -388,6 +417,16 @@ def toggle_action_item_completion(
 
     # Return updated action item
     updated_item = action_items_db.get_action_item(uid, action_item_id)
+
+    # Cancel the scheduled client reminder on completion, or re-schedule it when un-completing an
+    # item that still has a future due date (#5085).
+    sync_action_item_reminder(
+        user_id=uid,
+        action_item_id=action_item_id,
+        description=updated_item.get('description', ''),
+        completed=completed,
+        due_at=updated_item.get('due_at'),
+    )
 
     # Notify sender if this was a shared task that just got completed
     if completed and existing_item.get('shared_from'):

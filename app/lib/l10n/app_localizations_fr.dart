@@ -434,7 +434,8 @@ class AppLocalizationsFr extends AppLocalizations {
   String get autoSync => 'Synchronisation automatique';
 
   @override
-  String get autoSyncDescription => 'Synchroniser automatiquement les enregistrements hors ligne lorsque votre appareil se connecte';
+  String get autoSyncDescription =>
+      'Synchroniser automatiquement les enregistrements hors ligne lorsque votre appareil se connecte';
 
   @override
   String get deviceSettings => 'Paramètres de l\'appareil';
@@ -1725,12 +1726,7 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'APPAREILS',
-      one: 'APPAREIL',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'APPAREILS', one: 'APPAREIL');
     return '$count $_temp0 TROUVÉ(S) À PROXIMITÉ';
   }
 
@@ -4737,10 +4733,7 @@ class AppLocalizationsFr extends AppLocalizations {
   }
 
   @override
-  String accessesAndTriggeredBy(
-    String accessDescription,
-    String triggerDescription,
-  ) {
+  String accessesAndTriggeredBy(String accessDescription, String triggerDescription) {
     return '$accessDescription et est $triggerDescription.';
   }
 

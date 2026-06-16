@@ -433,7 +433,8 @@ class AppLocalizationsTl extends AppLocalizations {
   String get autoSync => 'Awtomatikong pag-sync';
 
   @override
-  String get autoSyncDescription => 'Awtomatikong i-sync ang mga offline na recording kapag nakakonekta ang iyong device';
+  String get autoSyncDescription =>
+      'Awtomatikong i-sync ang mga offline na recording kapag nakakonekta ang iyong device';
 
   @override
   String get deviceSettings => 'Mga Device Setting';
@@ -1720,12 +1721,7 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'DEVICES',
-      one: 'DEVICE',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'DEVICES', one: 'DEVICE');
     return '$count $_temp0 NAHANAP SA MALAPIT';
   }
 
@@ -4732,10 +4728,7 @@ class AppLocalizationsTl extends AppLocalizations {
   }
 
   @override
-  String accessesAndTriggeredBy(
-    String accessDescription,
-    String triggerDescription,
-  ) {
+  String accessesAndTriggeredBy(String accessDescription, String triggerDescription) {
     return '$accessDescription at ay $triggerDescription.';
   }
 
@@ -8532,12 +8525,7 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String nConversationsCreated(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 's',
-      one: '',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 's', one: '');
     return '$count conversation$_temp0 na ginawa';
   }
 

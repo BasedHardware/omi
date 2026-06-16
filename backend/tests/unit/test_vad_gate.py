@@ -2,12 +2,21 @@
 
 import os
 import struct
+import sys
 import tempfile
 import threading
 import time
+import types
 from unittest.mock import MagicMock, patch
 
 import pytest
+
+sys.modules.setdefault('database.redis_db', MagicMock())
+sys.modules.setdefault('onnxruntime', MagicMock())
+if 'pydub' not in sys.modules:
+    _pydub_mod = types.ModuleType('pydub')
+    _pydub_mod.AudioSegment = MagicMock()
+    sys.modules['pydub'] = _pydub_mod
 
 from utils.stt.safe_socket import KeepaliveConfig, SafeDeepgramSocket
 from utils.stt.vad_gate import (

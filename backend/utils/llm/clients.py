@@ -73,6 +73,47 @@ class _OpenAIEmbeddingsProxy:
             return inst
         return self._default
 
+    @staticmethod
+    def _is_key_failure(e: Exception) -> bool:
+        # A user's BYOK OpenAI key being out of quota / invalid / rate-limited must not
+        # silently break memory search (it would return empty). Detect those and fall
+        # back to Omi's key instead. Heuristic on the error text — embeddings have no
+        # typed error here, and a false positive only means one extra default-key call.
+        s = str(e).lower()
+        return any(
+            k in s
+            for k in (
+                'insufficient_quota',
+                'exceeded your current quota',
+                'invalid_api_key',
+                'incorrect api key',
+                'invalid api key',
+                'rate_limit',
+                ' 429',
+                ' 401',
+            )
+        )
+
+    def embed_query(self, text: str) -> List[float]:
+        inst = self._resolve()
+        try:
+            return inst.embed_query(text)
+        except Exception as e:
+            if inst is not self._default and self._is_key_failure(e):
+                logger.warning("BYOK OpenAI embeddings failed (%s); falling back to Omi key", type(e).__name__)
+                return self._default.embed_query(text)
+            raise
+
+    def embed_documents(self, texts: List[str]) -> List[List[float]]:
+        inst = self._resolve()
+        try:
+            return inst.embed_documents(texts)
+        except Exception as e:
+            if inst is not self._default and self._is_key_failure(e):
+                logger.warning("BYOK OpenAI embeddings failed (%s); falling back to Omi key", type(e).__name__)
+                return self._default.embed_documents(texts)
+            raise
+
     def __getattr__(self, name: str):
         return getattr(self._resolve(), name)
 

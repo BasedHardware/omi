@@ -679,7 +679,7 @@ packages:
     source: hosted
     version: "5.1.2"
   flutter_blue_plus:
-    dependency: "direct main"
+    dependency: transitive
     description:
       name: flutter_blue_plus
       sha256: "399b3dbc15562ef59749f04e43a99ccbb91540022380d5f269aff3c2787534e4"
@@ -2564,8 +2564,8 @@ packages:
     dependency: "direct main"
     description:
       path: "."
-      ref: "684fb43710dd4de5538ac2da7d0b1fa405363212"
-      resolved-ref: "684fb43710dd4de5538ac2da7d0b1fa405363212"
+      ref: "af6b457cca4cdd6c97cc2dfa8557333ee09c81f1"
+      resolved-ref: "af6b457cca4cdd6c97cc2dfa8557333ee09c81f1"
       url: "https://github.com/BasedHardware/whisper_flutter_new.git"
     source: git
     version: "1.0.1"
