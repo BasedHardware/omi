@@ -460,7 +460,7 @@ class TestProcessConversationKGLockEnforcement:
             / 'conversations'
             / 'process_conversation.py'
         )
-        tree = ast.parse(src.read_text(), filename=str(src))
+        tree = ast.parse(src.read_text(encoding="utf-8"), filename=str(src))
 
         found = False
         for node in ast.walk(tree):
