@@ -1047,7 +1047,7 @@ class CaptureProvider extends ChangeNotifier
         status: WalStatus.miss,
         storage: WalStorage.disk,
         filePath: name,
-        device: 'omi',
+        device: batchRecordingDevice,
         deviceModel: deviceModel,
       );
     } catch (e) {
@@ -2056,6 +2056,11 @@ class CaptureProvider extends ChangeNotifier
     if (isConnected && !_orphanRecoveryDone) {
       _orphanRecoveryDone = true;
       recoverOrphanedWals();
+    }
+    // On BLE disconnect in batch mode the native writer finalizes the in-progress
+    // recording (.bin.part -> .bin); pick it up shortly after so it appears in the list.
+    if (!isConnected && SharedPreferencesUtil().batchModeEnabled) {
+      Future.delayed(const Duration(seconds: 1), ingestBatchRecordings);
     }
     notifyListeners();
   }
