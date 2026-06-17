@@ -1622,6 +1622,14 @@ class FloatingControlBarManager {
         mostRecentNotificationID = notification.id
     }
 
+    /// Record a completed realtime-hub voice turn into the main chat history (+ backend
+    /// sync) via the shared history provider — the same provider notifications use. The
+    /// hub plays its own audio and never routes through the query path, so this is the
+    /// only way voice turns reach chat history. No-op if the bar isn't set up yet.
+    func recordVoiceTurn(userText: String, assistantText: String) {
+        historyChatProvider?.recordVoiceTurn(userText: userText, assistantText: assistantText)
+    }
+
     private func openRecentNotificationConversationIfAvailable(in window: FloatingControlBarWindow) -> Bool {
         guard let mostRecentNotificationID else { return false }
         return openNotificationConversation(notificationID: mostRecentNotificationID, in: window)
