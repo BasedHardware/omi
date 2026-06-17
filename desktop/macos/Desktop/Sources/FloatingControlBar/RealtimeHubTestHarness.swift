@@ -34,6 +34,15 @@ final class RealtimeHubTestHarness: NSObject, RealtimeHubSessionDelegate {
     super.init()
   }
 
+  /// Pick the image mimeType from the file's magic bytes so the test can swap formats
+  /// (webp/jpeg/png) via the env file without a rebuild.
+  static func sniffMime(_ d: Data) -> String {
+    if d.count >= 12, d[0] == 0x52, d[1] == 0x49, d[8] == 0x57, d[9] == 0x45 { return "image/webp" }
+    if d.count >= 3, d[0] == 0xFF, d[1] == 0xD8, d[2] == 0xFF { return "image/jpeg" }
+    if d.count >= 4, d[0] == 0x89, d[1] == 0x50 { return "image/png" }
+    return "image/webp"
+  }
+
   func run(timeoutSeconds: Double) async -> [String: String] {
     let s = RealtimeHubSession(provider: provider, auth: auth, delegate: self)
     session = s
@@ -48,6 +57,15 @@ final class RealtimeHubTestHarness: NSObject, RealtimeHubSessionDelegate {
       let end = Swift.min(i + frame, audio.count)
       s.sendAudio(audio.subdata(in: i..<end))
       i = end
+    }
+    // Vision regression test: attach a screen image to this turn (like the real hub) so we
+    // can verify the model reads it. OMI_HUB_TEST_IMAGE=/path feeds a known image
+    // (deterministic) instead of the live screen; inert when the env var is unset.
+    if let path = ProcessInfo.processInfo.environment["OMI_HUB_TEST_IMAGE"],
+      let img = try? Data(contentsOf: URL(fileURLWithPath: path))
+    {
+      log("RealtimeHubTestHarness: attaching test image \(img.count) bytes (\(Self.sniffMime(img)))")
+      s.sendVideoFrame(img, mime: Self.sniffMime(img))
     }
     s.commitInputTurn()
 
