@@ -641,6 +641,10 @@ extension OmiBleManager: CBCentralManagerDelegate {
         NSLog("[OmiBle] didDisconnect: \(peripheral.name ?? "<nil>"), uuid=\(uuid), error=\(error?.localizedDescription ?? "nil")")
         cleanupPeripheral(uuid)
 
+        // Finalize the in-progress batch recording so it's saved + ingestable right away
+        // (a plain BLE disconnect never delivers another packet to trigger the gap finalize).
+        BatchAudioWriter.shared.stop("disconnected")
+
         if !isManual {
             let reason = Self.bleReasonString(from: error)
             let code = (error as? CBError)?.code.rawValue ?? -1
