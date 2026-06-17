@@ -151,8 +151,29 @@ enum RealtimeHubTools {
         "name": tool["name"] as? String ?? "",
         "description": tool["description"] as? String ?? "",
       ]
-      if let params = tool["parameters"] as? [String: Any] { decl["parameters"] = params }
+      // Gemini's Schema `type` must be UPPERCASE (OBJECT/STRING/NUMBER/…). The OpenAI
+      // tools use lowercase JSON-schema types, which Gemini silently accepts but degrades
+      // (the model gets less confident about when/how to call) — so convert them.
+      if let params = tool["parameters"] as? [String: Any] {
+        decl["parameters"] = upcasedSchemaTypes(params)
+      }
       return decl
     }
+  }
+
+  /// Recursively uppercase every `type` value in a JSON-schema dict so it matches Gemini's
+  /// Schema enum (object → OBJECT, string → STRING, …).
+  private static func upcasedSchemaTypes(_ schema: [String: Any]) -> [String: Any] {
+    var out = schema
+    if let t = schema["type"] as? String { out["type"] = t.uppercased() }
+    if let props = schema["properties"] as? [String: Any] {
+      var converted: [String: Any] = [:]
+      for (key, value) in props {
+        converted[key] = (value as? [String: Any]).map(upcasedSchemaTypes) ?? value
+      }
+      out["properties"] = converted
+    }
+    if let items = schema["items"] as? [String: Any] { out["items"] = upcasedSchemaTypes(items) }
+    return out
   }
 }
