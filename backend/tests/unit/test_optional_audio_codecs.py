@@ -7,6 +7,33 @@ from unittest.mock import MagicMock
 import pytest
 
 MISSING_OPUS_MESSAGE = "native libopus"
+_MISSING = object()
+
+
+def _capture_module(name: str):
+    parent_name, _, attr = name.rpartition(".")
+    parent = sys.modules.get(parent_name)
+    parent_attr = getattr(parent, attr, _MISSING) if parent is not None else _MISSING
+    return sys.modules.get(name, _MISSING), parent_attr
+
+
+def _restore_module(name: str, captured):
+    module, parent_attr = captured
+    parent_name, _, attr = name.rpartition(".")
+    parent = sys.modules.get(parent_name)
+
+    if module is _MISSING:
+        sys.modules.pop(name, None)
+    else:
+        sys.modules[name] = module
+
+    if parent is None:
+        return
+    if parent_attr is _MISSING:
+        if hasattr(parent, attr):
+            delattr(parent, attr)
+    else:
+        setattr(parent, attr, parent_attr)
 
 
 def _drop_module(name: str):
@@ -113,26 +140,34 @@ def _install_sync_import_stubs(monkeypatch):
 
 
 def test_storage_import_defers_missing_native_opus(monkeypatch):
+    captured_storage = _capture_module("utils.other.storage")
     _install_storage_import_stubs(monkeypatch)
     monkeypatch.setitem(sys.modules, "opuslib", None)
-    _drop_module("utils.other.storage")
+    try:
+        _drop_module("utils.other.storage")
 
-    storage = importlib.import_module("utils.other.storage")
+        storage = importlib.import_module("utils.other.storage")
 
-    assert storage.opuslib is None
-    with pytest.raises(RuntimeError, match=MISSING_OPUS_MESSAGE):
-        storage.encode_pcm_to_opus(b"\x00" * 640)
+        assert storage.opuslib is None
+        with pytest.raises(RuntimeError, match=MISSING_OPUS_MESSAGE):
+            storage.encode_pcm_to_opus(b"\x00" * 640)
+    finally:
+        _restore_module("utils.other.storage", captured_storage)
 
 
 def test_sync_import_defers_missing_native_opus(monkeypatch, tmp_path):
+    captured_sync = _capture_module("routers.sync")
     _install_sync_import_stubs(monkeypatch)
     monkeypatch.setitem(sys.modules, "opuslib", None)
-    _drop_module("routers.sync")
+    try:
+        _drop_module("routers.sync")
 
-    sync = importlib.import_module("routers.sync")
-    opus_path = tmp_path / "audio.opus"
-    opus_path.write_bytes(b"\x00\x00\x00\x00")
+        sync = importlib.import_module("routers.sync")
+        opus_path = tmp_path / "audio.opus"
+        opus_path.write_bytes(b"\x00\x00\x00\x00")
 
-    assert sync.Decoder is None
-    with pytest.raises(RuntimeError, match=MISSING_OPUS_MESSAGE):
-        sync.decode_opus_file_to_wav(str(opus_path), str(tmp_path / "audio.wav"))
+        assert sync.Decoder is None
+        with pytest.raises(RuntimeError, match=MISSING_OPUS_MESSAGE):
+            sync.decode_opus_file_to_wav(str(opus_path), str(tmp_path / "audio.wav"))
+    finally:
+        _restore_module("routers.sync", captured_sync)
