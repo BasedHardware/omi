@@ -33,6 +33,9 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
   private var speculativeWarmDone = false
   private var speculativeScreenshot: Data?
   private var audioReceivedThisTurn = false
+  /// Guards against recording the same turn to chat history twice (a delegate that
+  /// fires turn-done more than once on reconnect/barge-in edges). Reset per turn.
+  private var turnRecorded = false
   /// When the last PTT turn started — used to keep the socket warm via auto-reconnect
   /// only while the user is actively using it (Gemini idle-closes the WS ~2.5 min).
   private var lastTurnAt: Date?
@@ -197,6 +200,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     speculativeWarmDone = false
     speculativeScreenshot = nil
     audioReceivedThisTurn = false
+    turnRecorded = false
     lastTurnAt = Date()
     barState?.isVoiceThinking = false  // new turn → we're recording again, not waiting
     barState?.isVoiceSpeaking = false  // any prior reply is being cut off below
@@ -374,7 +378,16 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     responding = false
     hubReconnectStrikes = 0  // a completed turn proves the hub works — reset the budget
     let heard = turnTranscript.trimmingCharacters(in: .whitespacesAndNewlines)
+    let reply = assistantText.trimmingCharacters(in: .whitespacesAndNewlines)
     log("RealtimeHub[\(providerTag)]: turn done — heard=\"\(heard.prefix(80))\" audio=\(audioReceivedThisTurn)")
+    // Record the completed turn into chat history (+ backend sync) in the background.
+    // The hub plays its reply itself and never routes through the query path, so this is
+    // the only place voice turns get persisted. Idempotent per turn; recordVoiceTurn is
+    // fire-and-forget so it never stalls the warm socket or the next PTT press.
+    if !turnRecorded {
+      turnRecorded = true
+      FloatingControlBarManager.shared.recordVoiceTurn(userText: heard, assistantText: reply)
+    }
     exitVoiceUI()
   }
 
