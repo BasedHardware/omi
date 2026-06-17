@@ -77,6 +77,7 @@ pytest tests/unit/test_transcribe_conversation_cache.py -v
 pytest tests/unit/test_pusher_private_cloud_data_protection.py -v
 pytest tests/unit/test_pusher_batch_upload.py -v
 pytest tests/unit/test_storage_upload_audio_chunk_data_protection.py -v
+pytest tests/unit/test_optional_audio_codecs.py -v
 pytest tests/unit/test_storage_opus_encoding.py -v
 pytest tests/unit/test_speech_profile_existence.py -v
 pytest tests/unit/test_storage_fanout_limits.py -v
