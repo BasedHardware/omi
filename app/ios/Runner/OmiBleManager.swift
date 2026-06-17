@@ -755,6 +755,18 @@ extension OmiBleManager: CBPeripheralDelegate {
             persistBatteryReading(uuid: uuid, level: Int(firstByte))
         }
 
+        // Batch (offline) mode: store audio natively and skip the Dart forward so the
+        // Flutter engine stays idle. Returns true only for the configured audio
+        // characteristic while batch mode is on; everything else falls through.
+        if BatchAudioWriter.shared.handle(
+            peripheralUuid: uuid,
+            serviceUuid: serviceUuid,
+            characteristicUuid: charUuid,
+            value: data
+        ) {
+            return
+        }
+
         let typedData = FlutterStandardTypedData(bytes: data)
         flutterApi?.onCharacteristicValueUpdated(
             peripheralUuid: uuid,
