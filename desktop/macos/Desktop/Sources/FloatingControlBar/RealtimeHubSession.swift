@@ -81,6 +81,9 @@ final class RealtimeHubSession: NSObject {
   private var isOpen = false
   private var terminated = false
   private var pendingAudio: [Data] = []
+  /// Screen frames awaiting an open socket (base64, mime) — flushed into the turn in
+  /// markReady. A cold first turn would otherwise drop the frame before connect.
+  private var pendingVideo: [(b64: String, mime: String)] = []
   private var pendingCommit = false
   /// OpenAI: call_id → function name, captured from response.output_item.added.
   private var openAIFunctionNames: [String: String] = [:]
@@ -110,11 +113,6 @@ final class RealtimeHubSession: NSObject {
   private var usageInCached = 0
   private var usageOutText = 0
   private var usageOutAudio = 0
-  /// Screenshot tool: injecting an image looks like new user input to Gemini, so it
-  /// interrupts its own pending reply. These tell that self-induced interrupt apart
-  /// from a real barge-in (which must drop the turn; this must NOT).
-  private var geminiImageInjected = false
-  private var geminiInterruptAfterInject = false
 
   /// Log prefix that names the provider + model on every line, so it's always
   /// clear which model produced which event.
@@ -175,6 +173,7 @@ final class RealtimeHubSession: NSObject {
       self.rawWS = nil
       self.isOpen = false
       self.pendingAudio.removeAll()
+      self.pendingVideo.removeAll()
       self.pendingCommit = false
       self.openAIFunctionNames.removeAll()
       self.dispatchedToolItems.removeAll()
@@ -182,8 +181,6 @@ final class RealtimeHubSession: NSObject {
       self.pendingActivityStart = false
       self.openAIResponseActive = false
       self.geminiResponsePending = false
-      self.geminiImageInjected = false
-      self.geminiInterruptAfterInject = false
     }
   }
 
@@ -227,6 +224,29 @@ final class RealtimeHubSession: NSObject {
     }
   }
 
+  /// Send one image as a video frame INSIDE the current open activity window (Gemini).
+  /// Manual-VAD requires media to ride a user turn bracketed by activityStart…activityEnd;
+  /// a frame sent here becomes part of the user's speech turn, so the model has the screen
+  /// when it answers. This is the ONLY image delivery this model accepts — a separate
+  /// image-only turn (after the speech turn closed) is rejected with close 1007.
+  func sendVideoFrame(_ image: Data, mime: String) {
+    guard provider == .gemini else { return }
+    let b64 = image.base64EncodedString()
+    q.async { [weak self] in
+      guard let self else { return }
+      // Buffer until the socket is open AND a turn is active, then flush in markReady.
+      // A cold first turn dumps audio + this frame before connect (~300ms); without
+      // buffering the frame is dropped and the model answers blind.
+      guard self.isOpen, self.activityOpen else {
+        self.pendingVideo.append((b64, mime))
+        log("\(self.tag): screen frame buffered until open (\(image.count) bytes)")
+        return
+      }
+      log("\(self.tag): screen frame sent in-turn (\(image.count) bytes)")
+      self.send(json: ["realtimeInput": ["video": ["data": b64, "mimeType": mime]]])
+    }
+  }
+
   /// End the user's PTT turn and ask the model to respond.
   /// Start a new PTT turn. Gemini: open a fresh speech-activity window (must be
   /// done EVERY turn on a warm session). OpenAI: no-op (input_audio_buffer based).
@@ -240,8 +260,6 @@ final class RealtimeHubSession: NSObject {
       // serverContent.interrupted) — no teardown, so conversation context survives.
       if interrupting {
         self.geminiResponsePending = false
-        self.geminiImageInjected = false
-        self.geminiInterruptAfterInject = false
       }
       guard !self.activityOpen else { return }
       self.activityOpen = true
@@ -315,29 +333,20 @@ final class RealtimeHubSession: NSObject {
     }
   }
 
-  /// Inject a screenshot the model can reference on its next response.
-  func injectImage(_ pngData: Data) {
-    let b64 = pngData.base64EncodedString()
+  /// OpenAI screenshot path: add the captured image as a user message item so it's in
+  /// context for the next response. (Gemini sends the screen as an in-turn video frame at
+  /// turn start — see RealtimeHubController.beginTurn — not via this path.)
+  func injectImage(_ image: Data) {
+    let b64 = image.base64EncodedString()
     q.async { [weak self] in
-      guard let self else { return }
-      switch self.provider {
-      case .openai:
-        self.send(json: [
-          "type": "conversation.item.create",
-          "item": [
-            "type": "message", "role": "user",
-            "content": [["type": "input_image", "image_url": "data:image/png;base64,\(b64)"]],
-          ],
-        ])
-      case .gemini:
-        // gemini-3.1-flash-live-preview rejects clientContent mid-session (close 1007 —
-        // it's only for seeding initial history). Send the screenshot as a realtimeInput
-        // video frame instead — the documented mid-session image path.
-        self.send(json: [
-          "realtimeInput": ["video": ["data": b64, "mimeType": "image/png"]]
-        ])
-        self.geminiImageInjected = true  // may self-interrupt; don't drop the turn if so
-      }
+      guard let self, self.provider == .openai else { return }
+      self.send(json: [
+        "type": "conversation.item.create",
+        "item": [
+          "type": "message", "role": "user",
+          "content": [["type": "input_image", "image_url": "data:image/jpeg;base64,\(b64)"]],
+        ],
+      ])
     }
   }
 
@@ -452,6 +461,12 @@ final class RealtimeHubSession: NSObject {
     }
     for chunk in pendingAudio { appendAudioFrame(chunk) }
     pendingAudio.removeAll()
+    // Flush any screen frame INTO the turn (after activityStart + audio, before commit).
+    for v in pendingVideo {
+      send(json: ["realtimeInput": ["video": ["data": v.b64, "mimeType": v.mime]]])
+      log("\(tag): screen frame flushed into turn")
+    }
+    pendingVideo.removeAll()
     if pendingCommit {
       pendingCommit = false
       // Re-run commit now that we're open.
@@ -703,19 +718,10 @@ final class RealtimeHubSession: NSObject {
     }
     guard let sc = e["serverContent"] as? [String: Any] else { return }
     if (sc["interrupted"] as? Bool) == true {
-      if geminiImageInjected {
-        // Self-induced: injecting a screenshot looks like new user input to Gemini, so it
-        // interrupts its own pending reply. Keep the turn alive — the real answer (using
-        // the image) arrives as a fresh generation right after.
-        geminiInterruptAfterInject = true
-        log("\(tag): self-induced interrupt (screenshot) — keeping turn alive")
-      } else {
-        // Real barge-in: drop the pending reply so its trailing audio + bookkeeping
-        // turnComplete are ignored; the new turn (already started via activityStart)
-        // re-arms on commit.
-        geminiResponsePending = false
-        log("\(tag): server confirmed interrupt")
-      }
+      // Barge-in: drop the pending reply so its trailing audio + bookkeeping turnComplete
+      // are ignored; the new turn (already started via activityStart) re-arms on commit.
+      geminiResponsePending = false
+      log("\(tag): server confirmed interrupt")
     }
     // NOTE: do NOT finish on generationComplete — Gemini sends it while the spoken audio
     // is still streaming, so finishing there truncates the reply and makes the next turn
@@ -741,14 +747,8 @@ final class RealtimeHubSession: NSObject {
     if (sc["turnComplete"] as? Bool) == true {
       // Only finish the turn we're actually awaiting a reply for. A turnComplete that
       // closes an interrupted/abandoned generation (pending=false) is ignored, so it
-      // can't prematurely end the live turn — the failure both the reconnect approach
-      // and the earlier same-session attempt hit.
-      geminiImageInjected = false  // the screenshot-injection turn is over either way
-      if geminiInterruptAfterInject {
-        // This turnComplete just closes the screenshot-injection interrupt; the model's
-        // real answer follows as a fresh generation. Swallow it, keep the turn pending.
-        geminiInterruptAfterInject = false
-      } else if geminiResponsePending {
+      // can't prematurely end the live turn.
+      if geminiResponsePending {
         geminiResponsePending = false
         emitText("", isFinal: true)
         finishTurn()
