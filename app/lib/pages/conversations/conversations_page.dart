@@ -19,6 +19,7 @@ import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/sync_provider.dart';
 import 'package:omi/services/wals.dart';
+import 'package:omi/utils/batch_recording.dart';
 import 'package:omi/providers/folder_provider.dart';
 import 'package:omi/providers/home_provider.dart';
 import 'package:omi/services/app_review_service.dart';
@@ -265,7 +266,9 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
             !convoProvider.showDailySummaries;
         final recordingsByDate = <DateTime, List<Wal>>{};
         if (showRecordings) {
-          for (final wal in syncProvider.pendingWals) {
+          // Only batch/offline recordings — never device SD-card/flash sync WALs or
+          // realtime offline buffers (those belong to the Sync page).
+          for (final wal in syncProvider.pendingWals.where((w) => w.device == batchRecordingDevice)) {
             final dt = DateTime.fromMillisecondsSinceEpoch(wal.timerStart * 1000);
             final day = DateTime(dt.year, dt.month, dt.day);
             (recordingsByDate[day] ??= <Wal>[]).add(wal);
