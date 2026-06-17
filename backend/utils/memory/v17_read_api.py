@@ -1,6 +1,13 @@
 from typing import Any, Dict, Iterable, List
 
-from models.v17_memory_contracts import LifecycleState, WorkingMemoryObservation, derive_allowed_use
+from models.v17_memory_contracts import (
+    L1MemoryArchiveClass,
+    L1MemoryArchiveItem,
+    LifecycleState,
+    WorkingMemoryObservation,
+    derive_allowed_use,
+    filter_l1_archive_for_normal_search,
+)
 
 
 def _tokens(query: str) -> set[str]:
@@ -70,6 +77,46 @@ def query_working_memory(
     return results
 
 
+def _coerce_archive_item(record: L1MemoryArchiveItem | Dict[str, Any]) -> L1MemoryArchiveItem:
+    if isinstance(record, L1MemoryArchiveItem):
+        return record
+    return L1MemoryArchiveItem.model_validate(record)
+
+
+def query_l1_archive(
+    query: str, records: Iterable[L1MemoryArchiveItem | Dict[str, Any]], *, include_sensitive: bool = False
+) -> List[Dict[str, Any]]:
+    archive_items = [_coerce_archive_item(record) for record in records]
+    if include_sensitive:
+        items = [item for item in archive_items if _matches(query, item.text)]
+    else:
+        items = filter_l1_archive_for_normal_search(archive_items, query=query)
+    results = []
+    for item in items:
+        archive_class = (
+            item.archive_class.value if isinstance(item.archive_class, L1MemoryArchiveClass) else item.archive_class
+        )
+        if archive_class == L1MemoryArchiveClass.sensitive.value and not include_sensitive:
+            continue
+        results.append(
+            {
+                "memory_id": item.archive_id,
+                "memory_layer": "l1_archive",
+                "content": item.text,
+                "archive_class": archive_class,
+                "confidence": item.confidence,
+                "source": item.source_id,
+                "source_type": item.source_type,
+                "evidence": item.source_refs
+                or [{"quote": quote, "source_id": item.source_id} for quote in item.evidence_quotes],
+                "agent_use": "archived_evidence_not_stable_profile",
+                "search_result_label": item.search_result_label,
+                "normal_search_allowed": item.normal_search_allowed,
+            }
+        )
+    return results
+
+
 def query_durable_memory(
     query: str, records: Iterable[Dict[str, Any]], *, include_superseded: bool = False
 ) -> List[Dict[str, Any]]:
@@ -108,8 +155,11 @@ def query_memory_context(
     *,
     working_records: Iterable[WorkingMemoryObservation | Dict[str, Any]],
     durable_records: Iterable[Dict[str, Any]],
+    l1_archive_records: Iterable[L1MemoryArchiveItem | Dict[str, Any]] = (),
     include_superseded: bool = False,
+    include_l1_archive: bool = False,
 ) -> List[Dict[str, Any]]:
     durable = query_durable_memory(query, durable_records, include_superseded=include_superseded)
     working = query_working_memory(query, working_records)
-    return durable + working
+    archive = query_l1_archive(query, l1_archive_records) if include_l1_archive else []
+    return durable + working + archive

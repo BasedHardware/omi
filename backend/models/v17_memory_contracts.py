@@ -4,7 +4,7 @@ from enum import Enum
 from typing import Any, Dict, List, Optional
 from typing import Literal
 
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import AliasChoices, BaseModel, Field, field_validator, model_validator
 
 
 class LifecycleState(str, Enum):
@@ -64,6 +64,94 @@ class EvidenceRef(BaseModel):
     source_type: Optional[str] = None
     quote: Optional[str] = None
     artifact_ref: Dict[str, Any] = Field(default_factory=dict)
+
+
+class L1MemoryArchiveClass(str, Enum):
+    general = "general"
+    sensitive = "sensitive"
+
+
+class L1MemoryArchiveItem(BaseModel):
+    schema_version: str = "l1_memory_archive_item.v1"
+    archive_id: str = ""
+    user_id: str = ""
+    source_id: str = ""
+    source_type: str = ""
+    text: str
+    archive_class: L1MemoryArchiveClass = Field(
+        default=L1MemoryArchiveClass.general,
+        validation_alias=AliasChoices("archive_class", "class"),
+        serialization_alias="class",
+    )
+    source_refs: List[Dict[str, Any]] = Field(default_factory=list)
+    evidence_quotes: List[str] = Field(default_factory=list)
+    speaker_label: Optional[str] = None
+    speaker_scope: str = "session-local"
+    subject_hint: str = "unknown"
+    confidence: str = "medium"
+    risk_flags: List[str] = Field(default_factory=list)
+    allowed_use: Optional[str] = None
+    normal_search_allowed: bool = True
+    is_stable_profile_fact: bool = False
+    search_result_label: str = "archived_evidence_not_stable_memory"
+    extractor_version: str = "v17_l1_archive_llm_v1"
+
+    @field_validator("confidence")
+    @classmethod
+    def validate_archive_confidence(cls, value: str) -> str:
+        if value not in {"high", "medium", "low"}:
+            raise ValueError("confidence must be high, medium, or low")
+        return value
+
+    @field_validator("text")
+    @classmethod
+    def validate_text(cls, value: str) -> str:
+        stripped = (value or "").strip()
+        if not stripped:
+            raise ValueError("text is required")
+        return stripped
+
+    @model_validator(mode="after")
+    def derive_archive_policy_and_id(self):
+        normalized_risks = {flag.lower() for flag in (self.risk_flags or [])}
+        if normalized_risks.intersection(_SECRET_RISK_FLAGS):
+            self.archive_class = L1MemoryArchiveClass.sensitive
+        if self.archive_class == L1MemoryArchiveClass.sensitive:
+            self.normal_search_allowed = False
+            self.allowed_use = "restricted_archive_only"
+        else:
+            self.normal_search_allowed = True
+            self.allowed_use = "archive_search"
+        self.is_stable_profile_fact = False
+        self.search_result_label = "archived_evidence_not_stable_memory"
+        if not self.archive_id:
+            payload = {
+                "user_id": self.user_id,
+                "source_id": self.source_id,
+                "source_type": self.source_type,
+                "text": self.text,
+                "evidence_quotes": self.evidence_quotes,
+            }
+            self.archive_id = "l1_" + deterministic_contract_id("l1-archive-item", payload)[:20]
+        return self
+
+
+def filter_l1_archive_for_normal_search(
+    items: List[L1MemoryArchiveItem], query: Optional[str] = None
+) -> List[L1MemoryArchiveItem]:
+    query_terms = {term.lower() for term in (query or "").split() if term.strip()}
+    results = [
+        item for item in items if item.archive_class == L1MemoryArchiveClass.general and item.normal_search_allowed
+    ]
+    if query_terms:
+
+        def score(item: L1MemoryArchiveItem) -> tuple[int, str]:
+            haystack = " ".join([item.text, " ".join(item.evidence_quotes)]).lower()
+            return (sum(1 for term in query_terms if term in haystack), item.archive_id)
+
+        results = [item for item in results if score(item)[0] > 0]
+        results.sort(key=score, reverse=True)
+    return results
 
 
 class WorkingMemoryObservation(BaseModel):

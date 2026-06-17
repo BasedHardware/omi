@@ -1,5 +1,5 @@
-from models.v17_memory_contracts import LifecycleState, WorkingMemoryObservation
-from utils.memory.v17_read_api import query_durable_memory, query_memory_context, query_working_memory
+from models.v17_memory_contracts import L1MemoryArchiveItem, LifecycleState, WorkingMemoryObservation
+from utils.memory.v17_read_api import query_durable_memory, query_l1_archive, query_memory_context, query_working_memory
 
 
 def _working(content, status="working"):
@@ -63,3 +63,55 @@ def test_query_memory_context_mixes_l1_and_l2_but_preserves_labels():
     assert "working_context_not_stable_profile" in uses
     assert "review_only_not_profile_fact" in uses
     assert all("lifecycle_status" in result for result in results)
+
+
+def _archive(text, archive_class="general", source_id="src_archive"):
+    return L1MemoryArchiveItem(
+        user_id="user_1",
+        source_id=source_id,
+        source_type="voice_transcript",
+        text=text,
+        archive_class=archive_class,
+        evidence_quotes=[text],
+        source_refs=[{"quote": text, "source_id": source_id}],
+    )
+
+
+def test_query_l1_archive_returns_general_evidence_not_profile_facts():
+    results = query_l1_archive(
+        "Rust fog",
+        [
+            _archive("User was troubleshooting Rust fog and TAA settings."),
+            _archive(
+                "User shared a password manager credential.", archive_class="sensitive", source_id="src_sensitive"
+            ),
+        ],
+    )
+
+    assert len(results) == 1
+    assert results[0]["memory_layer"] == "l1_archive"
+    assert results[0]["archive_class"] == "general"
+    assert results[0]["agent_use"] == "archived_evidence_not_stable_profile"
+    assert results[0]["evidence"][0]["quote"] == "User was troubleshooting Rust fog and TAA settings."
+
+
+def test_query_memory_context_uses_l2_first_and_only_searches_l1_when_requested():
+    durable_records = [_durable("mem_active", "User prefers automatic memory capture.")]
+    archive_records = [_archive("User was troubleshooting Rust fog and TAA settings.")]
+
+    default_results = query_memory_context(
+        "Rust fog",
+        working_records=[],
+        durable_records=durable_records,
+        l1_archive_records=archive_records,
+    )
+    archive_results = query_memory_context(
+        "Rust fog",
+        working_records=[],
+        durable_records=durable_records,
+        l1_archive_records=archive_records,
+        include_l1_archive=True,
+    )
+
+    assert default_results == []
+    assert archive_results[0]["memory_layer"] == "l1_archive"
