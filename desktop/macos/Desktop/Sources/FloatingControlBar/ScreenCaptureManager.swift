@@ -18,6 +18,20 @@ class ScreenCaptureManager {
         return image
     }
 
+    /// Returns JPEG data for the screen under the mouse cursor. Gemini Live's realtime
+    /// video channel reads JPEG/PNG frames; a WebP frame is delivered but not decoded
+    /// (the model then answers blind), so the realtime-hub vision path uses this.
+    static func captureScreenJPEG(quality: CGFloat = 0.7) -> Data? {
+        guard let image = captureScreenImage() else { return nil }
+        let rep = NSBitmapImageRep(cgImage: image)
+        guard let data = rep.representation(using: .jpeg, properties: [.compressionFactor: quality]) else {
+            log("ScreenCaptureManager: JPEG encoding failed")
+            return nil
+        }
+        log("ScreenCaptureManager: Screenshot captured \(image.width)x\(image.height), JPEG \(data.count / 1024) KB")
+        return data
+    }
+
     /// Returns WebP data for the screen under the mouse cursor at full Retina
     /// resolution, compressed in memory via libwebp. No disk I/O.
     static func captureScreenData() -> Data? {
