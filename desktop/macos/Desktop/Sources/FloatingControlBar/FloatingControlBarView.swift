@@ -33,9 +33,11 @@ struct FloatingControlBarView: View {
         .animation(.spring(response: 0.35, dampingFraction: 0.82), value: state.currentNotification?.id)
     }
 
-    /// Whether the bar chrome should stretch to fill the window width
+    /// Whether the bar chrome should stretch to fill the window width. Stays full-width
+    /// for the whole voice turn (listening → thinking → speaking) so the status indicator
+    /// has room and the bar resizes exactly once per turn.
     private var barNeedsFullWidth: Bool {
-        isHovering || state.showingAIConversation || state.isVoiceListening
+        isHovering || state.showingAIConversation || state.isVoiceActive
     }
 
     private var barChrome: some View {
@@ -83,7 +85,7 @@ struct FloatingControlBarView: View {
             }
         }
         .overlay(alignment: .topTrailing) {
-            if isHovering && !state.isVoiceListening {
+            if isHovering && !state.isVoiceActive {
                 Button {
                     openFloatingBarSettings()
                 } label: {
@@ -279,8 +281,8 @@ struct FloatingControlBarView: View {
 
     private var controlBarView: some View {
         Group {
-            if state.isVoiceListening && !state.isVoiceFollowUp {
-                voiceListeningView
+            if state.isVoiceActive && !state.isVoiceFollowUp {
+                voiceActiveView
                     .padding(.horizontal, 6)
                     .padding(.vertical, 3)
                     .frame(height: 50)
@@ -306,11 +308,11 @@ struct FloatingControlBarView: View {
         }
     }
 
-    /// Minimal thin bar shown when not hovering
+    /// Minimal resting indicator shown when not hovering and no voice turn is active —
+    /// a calm, slowly breathing sliver. (Active turns render `voiceActiveView` instead.)
     private var compactCircleView: some View {
-        RoundedRectangle(cornerRadius: 3)
-            .fill(Color.white.opacity(0.5))
-            .frame(width: 28, height: 6)
+        VoiceActivityIndicator(activity: state.voiceActivity, level: state.voiceLevel)
+            .frame(width: 28, height: 14)
     }
 
     private func compactToggle(_ title: String, isOn: Binding<Bool>) -> some View {
@@ -358,20 +360,15 @@ struct FloatingControlBarView: View {
         }
     }
 
-    private var voiceListeningView: some View {
+    /// Unified expanded voice view for the whole turn. The status indicator carries the
+    /// state (listening / thinking / speaking) visually; the text is just the helpful
+    /// detail (transcript, "Release to send", "Thinking…"). One element, no jarring swaps.
+    private var voiceActiveView: some View {
         HStack(spacing: 8) {
-            // Pulsing mic icon
-            Circle()
-                .fill(Color.red)
-                .frame(width: 10, height: 10)
-                .scaleEffect(state.isVoiceListening ? 1.2 : 1.0)
-                .animation(.easeInOut(duration: 0.6).repeatForever(autoreverses: true), value: state.isVoiceListening)
+            VoiceActivityIndicator(activity: state.voiceActivity, level: state.voiceLevel)
+                .frame(width: 34, height: 18)
 
-            Image(systemName: "mic.fill")
-                .scaledFont(size: 14, weight: .semibold)
-                .foregroundColor(.white)
-
-            if state.isVoiceLocked {
+            if state.isVoiceLocked && state.isVoiceListening {
                 Text("LOCKED")
                     .scaledFont(size: 10, weight: .bold)
                     .foregroundColor(.orange)
@@ -381,21 +378,31 @@ struct FloatingControlBarView: View {
                     .cornerRadius(4)
             }
 
-            if !state.voiceTranscript.isEmpty {
-                Text(state.voiceTranscript)
-                    .scaledFont(size: 13)
-                    .foregroundColor(.white.opacity(0.8))
-                    .lineLimit(1)
-                    .truncationMode(.head)
-            } else {
-                Text(
-                    state.isVoiceLocked
-                        ? "Tap \(shortcutSettings.pttShortcut.displayLabel) to send"
-                        : "Release \(shortcutSettings.pttShortcut.displayLabel) to send"
-                )
-                    .scaledFont(size: 13)
-                    .foregroundColor(.white.opacity(0.5))
-            }
+            // Dim only the "Release to send" hint; live transcript / status reads brighter.
+            let isHint = state.voiceActivity == .listening && state.voiceTranscript.isEmpty
+            Text(voiceStatusText)
+                .scaledFont(size: 13)
+                .foregroundColor(.white.opacity(isHint ? 0.5 : 0.85))
+                .lineLimit(1)
+                .truncationMode(.head)
+        }
+    }
+
+    /// The detail text beside the indicator for the current voice state. The indicator
+    /// itself carries the state visually; this is just the helpful detail.
+    private var voiceStatusText: String {
+        switch state.voiceActivity {
+        case .listening:
+            if !state.voiceTranscript.isEmpty { return state.voiceTranscript }
+            return state.isVoiceLocked
+                ? "Tap \(shortcutSettings.pttShortcut.displayLabel) to send"
+                : "Release \(shortcutSettings.pttShortcut.displayLabel) to send"
+        case .thinking:
+            return "Thinking…"
+        case .speaking:
+            return "Speaking…"
+        case .idle:
+            return ""
         }
     }
 
