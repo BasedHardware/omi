@@ -44,10 +44,32 @@ for _mod_name in [
 ]:
     sys.modules.setdefault(_mod_name, MagicMock())
 
+
+def _fill_existing_stub_attrs(module_name, attrs):
+    module = sys.modules.get(module_name)
+    if module is None:
+        return None
+
+    for attr in attrs:
+        if isinstance(module, MagicMock) or not hasattr(module, attr):
+            setattr(module, attr, MagicMock())
+    return module
+
+
 os.environ.setdefault('DEEPGRAM_API_KEY', 'fake-for-test')
 # NOTE: Do NOT set sys.modules['deepgram'].LiveTranscriptionEvents here.
 # MagicMock auto-generates attributes on access, and overwriting would pollute
 # shared pytest state for test_streaming_deepgram_backoff.py's close/error handler tests.
+
+_fill_existing_stub_attrs('utils.async_tasks', ['create_named_task'])
+_fill_existing_stub_attrs('utils.executors', ['sync_executor', 'run_blocking'])
+_fill_existing_stub_attrs('utils.http_client', ['get_stt_client', 'get_stt_semaphore'])
+
+_byok_module = sys.modules.get('utils.byok')
+if _byok_module is not None:
+    _get_byok_key = getattr(_byok_module, 'get_byok_key', None)
+    if isinstance(_byok_module, MagicMock) or isinstance(_get_byok_key, MagicMock) or _get_byok_key is None:
+        _byok_module.get_byok_key = MagicMock(return_value=None)
 
 _speaker_embedding = ModuleType('utils.stt.speaker_embedding')
 _speaker_embedding.SPEAKER_MATCH_THRESHOLD = 0.45
