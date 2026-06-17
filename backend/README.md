@@ -42,7 +42,9 @@ This README provides a quick setup guide for the Omi backend. For a comprehensiv
 
 7. Install `opus` (required for audio processing)
    - Mac: `brew install opus`
-   - Windows: You should already have it if you're on Windows 10 version 1903 and above
+   - Windows: install a native `libopus` build and make sure its DLL directory is on `PATH`
+     - MSYS2 UCRT64 example: `pacman -S mingw-w64-ucrt-x86_64-opus`
+     - Add `C:\msys64\ucrt64\bin` to `PATH`, then verify from a new shell with `where.exe opus.dll`
 
 8. Move to the backend directory: `cd backend`
 
