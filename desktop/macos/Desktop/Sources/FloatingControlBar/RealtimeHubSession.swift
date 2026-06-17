@@ -100,6 +100,16 @@ final class RealtimeHubSession: NSObject {
   /// one. Set on activityEnd (commit); cleared on this turn's `turnComplete`, on a
   /// server `interrupted`, or when a new turn interrupts (beginInputTurn interrupting).
   private var geminiResponsePending = false
+
+  // Per-turn token usage for managed (ephemeral) billing — client-reported. Reset at
+  // commit, reported at finishTurn (only for ephemeral sessions; BYOK pays the provider
+  // directly). OpenAI sends a final usage per response.done (summed across a turn's
+  // responses); Gemini sends cumulative usageMetadata (we keep the latest).
+  private var usageInText = 0
+  private var usageInAudio = 0
+  private var usageInCached = 0
+  private var usageOutText = 0
+  private var usageOutAudio = 0
   /// Screenshot tool: injecting an image looks like new user input to Gemini, so it
   /// interrupts its own pending reply. These tell that self-induced interrupt apart
   /// from a real barge-in (which must drop the turn; this must NOT).
@@ -247,6 +257,7 @@ final class RealtimeHubSession: NSObject {
   func commitInputTurn() {
     q.async { [weak self] in
       guard let self else { return }
+      self.resetTurnUsage()  // fresh per-turn usage before the model responds
       guard self.isOpen else { self.pendingCommit = true; return }
       log("\(self.tag): turn committed")
       switch self.provider {
@@ -525,8 +536,77 @@ final class RealtimeHubSession: NSObject {
   }
 
   private func finishTurn() {
+    reportUsageIfNeeded()
     let d = delegate
     Task { @MainActor in d?.hubDidFinishTurn() }
+  }
+
+  // MARK: - Usage (client-reported billing, managed sessions only)
+
+  private func resetTurnUsage() {
+    usageInText = 0
+    usageInAudio = 0
+    usageInCached = 0
+    usageOutText = 0
+    usageOutAudio = 0
+  }
+
+  /// OpenAI: response.done.usage is final per response → sum across the turn's responses.
+  private func accumulateOpenAIUsage(_ usage: [String: Any]) {
+    func n(_ d: [String: Any]?, _ k: String) -> Int {
+      (d?[k] as? Int) ?? (d?[k] as? NSNumber)?.intValue ?? 0
+    }
+    let inD = usage["input_token_details"] as? [String: Any]
+    let outD = usage["output_token_details"] as? [String: Any]
+    usageInText += n(inD, "text_tokens")
+    usageInAudio += n(inD, "audio_tokens")
+    usageInCached += n(inD, "cached_tokens")
+    usageOutText += n(outD, "text_tokens")
+    usageOutAudio += n(outD, "audio_tokens")
+  }
+
+  /// Gemini: usageMetadata is cumulative for the turn → keep the latest (replace, not sum).
+  private func accumulateGeminiUsage(_ um: [String: Any]) {
+    func split(_ arr: Any?) -> (text: Int, audio: Int) {
+      var t = 0, a = 0
+      for d in (arr as? [[String: Any]]) ?? [] {
+        let c = (d["tokenCount"] as? Int) ?? (d["tokenCount"] as? NSNumber)?.intValue ?? 0
+        if (d["modality"] as? String)?.uppercased() == "AUDIO" { a += c } else { t += c }
+      }
+      return (t, a)
+    }
+    let pin = split(um["promptTokensDetails"])
+    let pout = split(um["responseTokensDetails"])
+    if pin.text == 0 && pin.audio == 0 {
+      usageInText = (um["promptTokenCount"] as? Int) ?? 0
+      usageInAudio = 0
+    } else {
+      usageInText = pin.text
+      usageInAudio = pin.audio
+    }
+    if pout.text == 0 && pout.audio == 0 {
+      usageOutText = (um["candidatesTokenCount"] as? Int) ?? (um["responseTokenCount"] as? Int) ?? 0
+      usageOutAudio = 0
+    } else {
+      usageOutText = pout.text
+      usageOutAudio = pout.audio
+    }
+    usageInCached = (um["cachedContentTokenCount"] as? Int) ?? 0
+  }
+
+  /// Report the turn's usage to the backend (managed sessions only — BYOK pays direct).
+  /// Resets first so a second finishTurn (barge-in edge) can't double-report.
+  private func reportUsageIfNeeded() {
+    let it = usageInText, ia = usageInAudio, ic = usageInCached, ot = usageOutText, oa = usageOutAudio
+    resetTurnUsage()
+    guard auth.isEphemeral, it + ia + ic + ot + oa > 0 else { return }
+    let providerName = provider == .gemini ? "gemini" : "openai"
+    let model = provider.modelID
+    Task {
+      await APIClient.shared.reportRealtimeUsage(
+        provider: providerName, model: model,
+        inputText: it, inputAudio: ia, inputCached: ic, outputText: ot, outputAudio: oa)
+    }
   }
 
   // MARK: OpenAI events
@@ -567,6 +647,9 @@ final class RealtimeHubSession: NSObject {
 
   private func handleOpenAIResponseDone(_ e: [String: Any]) {
     openAIResponseActive = false  // this response finished — a new one may be created
+    if let usage = (e["response"] as? [String: Any])?["usage"] as? [String: Any] {
+      accumulateOpenAIUsage(usage)
+    }
     let output = (e["response"] as? [String: Any])?["output"] as? [[String: Any]] ?? []
     var firedTool = false
     for item in output where (item["type"] as? String) == "function_call" {
@@ -593,6 +676,7 @@ final class RealtimeHubSession: NSObject {
 
   private func handleGemini(_ e: [String: Any]) {
     if e["setupComplete"] != nil { markReady(); return }
+    if let um = e["usageMetadata"] as? [String: Any] { accumulateGeminiUsage(um) }
     if let toolCall = e["toolCall"] as? [String: Any],
       let calls = toolCall["functionCalls"] as? [[String: Any]]
     {
