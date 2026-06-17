@@ -25,8 +25,11 @@ pytest tests/unit/test_parakeet_gpu_worker.py -v
 pytest tests/unit/test_parakeet_batch_engine.py -v
 pytest tests/unit/test_parakeet_batch_routing.py -v
 pytest tests/unit/test_parakeet_endpoints.py -v
+pytest tests/unit/test_diarizer_embedding_decoder_bypass.py -v
 pytest tests/unit/test_memory_leak_buffers.py -v
+pytest tests/unit/test_audiobuffer_guard.py -v
 pytest tests/unit/test_mcp_search_memories.py -v
+pytest tests/unit/test_mcp_memory_filters.py -v
 pytest tests/unit/test_mcp_client_tool_result.py -v
 pytest tests/unit/test_mcp_data_endpoints.py -v
 pytest tests/unit/test_memory_temporal_brain.py -v
@@ -34,6 +37,8 @@ pytest tests/unit/test_llm_usage_tracker.py -v
 pytest tests/unit/test_process_conversation_usage_context.py -v
 pytest tests/unit/test_llm_usage_db.py -v
 pytest tests/unit/test_llm_usage_endpoints.py -v
+pytest tests/unit/test_high_priority_usage_tracking.py -v
+pytest tests/unit/test_new_usage_tracking_gaps.py -v
 pytest tests/unit/test_app_uid_keyerror.py -v
 pytest tests/unit/test_daily_summary_race_condition.py -v
 pytest tests/unit/test_daily_summary_regenerate.py -v
@@ -41,6 +46,7 @@ pytest tests/unit/test_chat_tools_messages.py -v
 pytest tests/unit/test_prompt_caching.py -v
 pytest tests/unit/test_mentor_notifications.py -v
 pytest tests/unit/test_proactive_notification_language.py -v
+pytest tests/unit/test_notification_token_cleanup.py -v
 pytest tests/unit/test_conversations_to_string.py -v
 pytest tests/unit/test_conversation_render_factory.py -v
 pytest tests/unit/test_conversation_redact_enrich.py -v
@@ -65,6 +71,8 @@ pytest tests/unit/test_conversation_model_split.py -v
 pytest tests/unit/test_transcribe_conversation_cache.py -v
 pytest tests/unit/test_pusher_private_cloud_data_protection.py -v
 pytest tests/unit/test_pusher_batch_upload.py -v
+pytest tests/unit/test_file_upload_endpoint_security.py -v
+pytest tests/unit/test_file_upload_security.py -v
 pytest tests/unit/test_storage_upload_audio_chunk_data_protection.py -v
 pytest tests/unit/test_storage_opus_encoding.py -v
 pytest tests/unit/test_speech_profile_existence.py -v
@@ -87,6 +95,7 @@ pytest tests/unit/test_tools_router.py -v
 pytest tests/unit/test_kg_user_type_mismatch.py -v
 pytest tests/unit/test_kg_edge_id_sanitization.py -v
 pytest tests/unit/test_goal_extraction_batch.py -v
+pytest tests/unit/test_goals_id_fallback.py -v
 pytest tests/unit/test_listen_pipeline.py -v
 pytest tests/unit/test_fair_use_models.py -v
 pytest tests/unit/test_fair_use_engine.py -v
@@ -115,6 +124,9 @@ pytest tests/unit/test_dev_api_memories_pagination.py -v
 pytest tests/unit/test_rate_limiting.py -v
 pytest tests/unit/test_memories_batch.py -v
 pytest tests/unit/test_memories_create.py -v
+pytest tests/unit/test_memories_user_review.py -v
+pytest tests/unit/test_memories_validation.py -v
+pytest tests/unit/test_memory_category_auto.py -v
 pytest tests/unit/test_sync_v2.py -v
 pytest tests/unit/test_sync_cloud_tasks.py -v
 pytest tests/unit/test_sync_transcription_prefs.py -v
@@ -154,6 +166,8 @@ pytest tests/unit/test_tts.py -v
 pytest tests/unit/test_webhook_auto_disable.py -v
 pytest tests/unit/test_merge_validation.py -v
 pytest tests/unit/test_twilio_account_deletion.py -v
+pytest tests/unit/test_phone_calls.py -v
+pytest tests/unit/test_twilio_service.py -v
 pytest tests/unit/test_conversation_search_date_validation.py -v
 pytest tests/unit/test_conversation_hybrid_search.py -v
 pytest tests/unit/test_delete_account_stripe_cancel.py -v
