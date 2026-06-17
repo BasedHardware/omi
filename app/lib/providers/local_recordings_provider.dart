@@ -151,29 +151,25 @@ class LocalRecordingsProvider extends ChangeNotifier {
     try {
       final file = File(rec.filePath);
       if (!file.existsSync()) {
-        print('[recordings] upload aborted, file missing: ${rec.fileName}');
+        Logger.error('LocalRecordings: file missing on upload: ${rec.fileName}');
         return;
       }
-      print('[recordings] uploading ${rec.fileName} (${rec.sizeBytes} bytes)');
       final result = await uploadLocalFilesV2([file]);
       SyncRateLimiter.instance.clear();
 
       if (result.completed != null) {
-        print('[recordings] ${rec.fileName} transcribed synchronously (fast-path)');
         await _deleteFileOnly(rec.fileName);
         await _surface(result.completed!.newConversationIds, result.completed!.updatedConversationIds);
       } else if (result.jobId != null) {
         _jobs[rec.fileName] = result.jobId!;
         await _saveJobs();
-        print('[recordings] queued ${rec.fileName} jobId=${result.jobId} (polling every 15s)');
         _startReconcileTimer();
       }
     } on SyncRateLimitedException catch (e) {
-      print('[recordings] rate-limited uploading ${rec.fileName}, retry after ${e.retryAfterSeconds}s');
       SyncRateLimiter.instance.markLimited(retryAfterSeconds: e.retryAfterSeconds);
     } catch (e) {
       _failedName = rec.fileName;
-      print('[recordings] upload FAILED for ${rec.fileName}: $e');
+      Logger.error('LocalRecordings: upload failed for ${rec.fileName}: $e');
     } finally {
       _isUploading = false;
       _uploadingName = null;
@@ -210,13 +206,9 @@ class LocalRecordingsProvider extends ChangeNotifier {
       SyncJobFetch fetch;
       try {
         fetch = await fetchSyncJobStatus(jobId);
-      } catch (e) {
-        print('[recordings] poll error $name job=$jobId: $e');
+      } catch (_) {
         continue; // transient — retry next tick
       }
-      final st = fetch.status;
-      print('[recordings] poll $name job=$jobId outcome=${fetch.outcome.name}'
-          '${st != null ? ' status=${st.status} terminal=${st.isTerminal}' : ''}');
       switch (fetch.outcome) {
         case SyncJobFetchOutcome.transient:
           break;
