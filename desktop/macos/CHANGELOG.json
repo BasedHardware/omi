@@ -1,8 +1,7 @@
 {
   "unreleased": [
     "Faster, cheaper assistant responses via Anthropic prompt caching of the system+tools prefix and conversation history",
-    "Added an experimental Realtime Voice Hub (Settings \u2192 Floating Bar): the realtime model handles your whole voice turn \u2014 listening, deciding, and speaking \u2014 for noticeably faster replies",
-    "Redesigned the floating bar voice indicator with smooth, distinct idle, listening, thinking, and speaking states so you always know whether the assistant is working or done",
+    "Faster voice replies (experimental): the realtime model now handles your whole voice turn \u2014 listening, deciding, and speaking \u2014 instead of the slower transcribe\u2192route\u2192answer pipeline",
     "Voice (push-to-talk) conversations now appear in your chat history",
     "Fixed older chat messages failing to load in long chats"
   ],
