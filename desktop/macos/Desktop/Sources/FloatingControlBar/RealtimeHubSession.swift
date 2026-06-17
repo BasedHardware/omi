@@ -406,12 +406,21 @@ final class RealtimeHubSession: NSObject {
           "model": "models/\(provider.modelID)",
           // Low temperature → tool-choice routing is consistent for identical inputs
           // (default ~1.0 made the same request flip between answering and escalating).
-          "generationConfig": ["responseModalities": ["AUDIO"], "temperature": 0.3],
+          // mediaResolution HIGH so a screenshot frame isn't downsampled to a generic blur.
+          "generationConfig": [
+            "responseModalities": ["AUDIO"], "temperature": 0.3,
+            "mediaResolution": "MEDIA_RESOLUTION_HIGH",
+          ],
           "systemInstruction": ["parts": [["text": RealtimeHubTools.systemInstruction]]],
           "tools": [["functionDeclarations": RealtimeHubTools.geminiFunctionDeclarations]],
           "inputAudioTranscription": [:],
           "outputAudioTranscription": [:],
-          "realtimeInputConfig": ["automaticActivityDetection": ["disabled": true]],
+          // turnCoverage = ALL_VIDEO so an injected screenshot frame is part of the turn
+          // even though we send it after activityEnd (default coverage would drop it).
+          "realtimeInputConfig": [
+            "automaticActivityDetection": ["disabled": true],
+            "turnCoverage": "TURN_INCLUDES_AUDIO_ACTIVITY_AND_ALL_VIDEO",
+          ],
           // Keep the session from degrading as turns accumulate: a sliding context
           // window stops unbounded growth (which was making replies slow to ~30–48s
           // and eventually stop). Without this, long sessions slowly die.
