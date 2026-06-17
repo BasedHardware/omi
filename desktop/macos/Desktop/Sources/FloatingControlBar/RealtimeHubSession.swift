@@ -1,12 +1,12 @@
 import Foundation
 import Network
 
-// MARK: - Realtime Hub Session (Phase 1, CLIENT-DIRECT)
+// MARK: - Realtime Hub Session
 //
-// One persistent WebSocket to a realtime provider, opened with the user's own
-// BYOK key (dev/test only — gated by RealtimeHubSettings.canConnect). The model
-// is the hub: it does in-session STT + reasoning + routing (via tool calls) and
-// speaks the answer.
+// One persistent WebSocket to a realtime provider, opened either with the user's
+// own BYOK key (client-direct, gated by RealtimeHubSettings.canConnect) or with a
+// server-minted ephemeral token (managed users). The model is the hub: it does
+// in-session STT + reasoning + routing (via tool calls) and speaks the answer.
 //
 // Two providers, normalized to ONE internal stream surface
 // (RealtimeHubSessionDelegate):
