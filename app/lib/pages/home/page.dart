@@ -188,7 +188,10 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
       // Reload convos
       if (mounted) {
         Provider.of<ConversationProvider>(context, listen: false).refreshConversations();
-        Provider.of<CaptureProvider>(context, listen: false).refreshInProgressConversations();
+        final captureProvider = Provider.of<CaptureProvider>(context, listen: false);
+        captureProvider.refreshInProgressConversations();
+        // Pick up any batch recordings the native layer wrote while backgrounded/closed.
+        captureProvider.ingestBatchRecordings();
       }
 
       // Ensure agent VM is running and restart keepalive
