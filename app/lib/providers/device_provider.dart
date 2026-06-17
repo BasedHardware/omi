@@ -385,6 +385,12 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
 
     captureProvider?.updateRecordingDevice(null);
 
+    // Offline/batch mode: the native writer finalizes the in-progress recording on
+    // disconnect (.bin.part -> .bin). Surface it shortly after the rename completes.
+    Future.delayed(const Duration(seconds: 1), () {
+      captureProvider?.ingestBatchRecordings();
+    });
+
     // Wals
     ServiceManager.instance().wal.getSyncs().sdcard.setDevice(null);
     ServiceManager.instance().wal.getSyncs().flashPage.setDevice(null);
