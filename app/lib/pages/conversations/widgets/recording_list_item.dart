@@ -62,7 +62,7 @@ class RecordingListItem extends StatelessWidget {
             child: ClipRRect(
               borderRadius: BorderRadius.circular(24.0),
               child: Dismissible(
-                key: ValueKey('rec_${wal.id}'),
+                key: ValueKey('rec_${wal.filePath ?? wal.id}'),
                 direction: wal.isSyncing ? DismissDirection.none : DismissDirection.endToStart,
                 background: Container(
                   alignment: Alignment.centerRight,
