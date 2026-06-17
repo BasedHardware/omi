@@ -41,6 +41,7 @@ import 'package:omi/services/audio_sources/ble_device_source.dart';
 import 'package:omi/services/devices/models.dart';
 import 'package:omi/services/audio_sources/phone_mic_source.dart';
 import 'package:omi/services/wals.dart';
+import 'package:omi/utils/batch_recording.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:omi/utils/enums.dart';
 import 'package:omi/utils/image/image_utils.dart';
@@ -1000,19 +1001,14 @@ class CaptureProvider extends ChangeNotifier
       final dir = dirPath.isNotEmpty ? Directory(dirPath) : await getApplicationDocumentsDirectory();
       if (!await dir.exists()) return 0;
 
-      // The file currently being appended by native — skip until it is finalized.
-      String activeFile = '';
-      final journal = File('${dir.path}/.batch_journal');
-      if (await journal.exists()) {
-        activeFile = (await journal.readAsString()).trim();
-      }
-
       int added = 0;
       for (final entry in dir.listSync()) {
         if (entry is! File) continue;
         final name = entry.path.split('/').last;
+        // Only finalized recordings (audio_*.bin). Files still being written are
+        // *.bin.part and are atomically promoted to *.bin by the native writer.
         if (!name.startsWith('audio_') || !name.endsWith('.bin')) continue;
-        if (name == activeFile || _ingestedBatchFiles.contains(name)) continue;
+        if (_ingestedBatchFiles.contains(name)) continue;
 
         final wal = await _batchWalFromFile(entry, name);
         if (wal == null) continue;
@@ -1032,42 +1028,20 @@ class CaptureProvider extends ChangeNotifier
   }
 
   /// Build a [Wal] from a finalized batch `.bin` file. The filename encodes all
-  /// parameters: audio_{device}_{codec}_{sampleRate}_{channel}_fs{frameSize}_{timestamp}.bin
+  /// parameters (see [BatchRecordingInfo]).
   Future<Wal?> _batchWalFromFile(File file, String name) async {
     try {
-      final base = name.substring(0, name.length - 4); // strip ".bin"
-      int timerStart = int.parse(base.split('_').last);
-      if (timerStart > 100000000000) timerStart ~/= 1000; // ms -> s
-
-      final fsMatch = RegExp(r'_fs(\d+)').firstMatch(name);
-      final frameSize = fsMatch != null ? int.parse(fsMatch.group(1)!) : 160;
-
-      BleAudioCodec codec;
-      if (name.contains('_pcm16_')) {
-        codec = BleAudioCodec.pcm16;
-      } else if (name.contains('_pcm8_')) {
-        codec = BleAudioCodec.pcm8;
-      } else {
-        codec = frameSize == 320 ? BleAudioCodec.opusFS320 : BleAudioCodec.opus;
-      }
+      final info = BatchRecordingInfo.fromFileName(name);
+      if (info == null) return null;
 
       final sizeBytes = await file.length();
       if (sizeBytes <= 0) return null;
 
-      // Rough duration for display/stats only — the backend recomputes the exact
-      // duration from the decoded WAV. ~16 kbps opus + 4-byte per-frame framing.
-      final int bytesPerSec = codec == BleAudioCodec.pcm16
-          ? 32200
-          : codec == BleAudioCodec.pcm8
-              ? 16100
-              : 2400;
-      final seconds = (sizeBytes / bytesPerSec).round().clamp(1, 24 * 3600);
-
       final deviceModel = SharedPreferencesUtil().deviceName.isNotEmpty ? SharedPreferencesUtil().deviceName : 'Omi';
       return Wal(
-        timerStart: timerStart,
-        codec: codec,
-        seconds: seconds,
+        timerStart: info.timerStart,
+        codec: info.codec,
+        seconds: info.estimateSeconds(sizeBytes),
         sampleRate: 16000,
         channel: 1,
         status: WalStatus.miss,
