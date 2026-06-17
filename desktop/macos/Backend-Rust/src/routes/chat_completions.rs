@@ -64,25 +64,25 @@ fn model_cost(upstream_model: &str) -> ModelCost {
             input_per_token: 3.0 / 1_000_000.0,
             output_per_token: 15.0 / 1_000_000.0,
             cache_read_per_token: 0.30 / 1_000_000.0,
-            cache_write_per_token: 3.75 / 1_000_000.0,
+            cache_write_per_token: 6.0 / 1_000_000.0,  // 1h cache write = 2x base input
         },
         "claude-opus-4-6" => ModelCost {
             input_per_token: 15.0 / 1_000_000.0,
             output_per_token: 75.0 / 1_000_000.0,
             cache_read_per_token: 1.50 / 1_000_000.0,
-            cache_write_per_token: 18.75 / 1_000_000.0,
+            cache_write_per_token: 30.0 / 1_000_000.0,  // 1h cache write = 2x base input
         },
         "claude-haiku-4-5" => ModelCost {
             input_per_token: 1.0 / 1_000_000.0,
             output_per_token: 5.0 / 1_000_000.0,
             cache_read_per_token: 0.10 / 1_000_000.0,
-            cache_write_per_token: 1.25 / 1_000_000.0,
+            cache_write_per_token: 2.0 / 1_000_000.0,  // 1h cache write = 2x base input
         },
         _ => ModelCost {
             input_per_token: 3.0 / 1_000_000.0,
             output_per_token: 15.0 / 1_000_000.0,
             cache_read_per_token: 0.30 / 1_000_000.0,
-            cache_write_per_token: 3.75 / 1_000_000.0,
+            cache_write_per_token: 6.0 / 1_000_000.0,  // 1h cache write = 2x base input
         },
     }
 }
@@ -246,13 +246,48 @@ fn translate_request(
 }
 
 /// Ephemeral cache_control breakpoint marker.
+///
+/// Uses the 1-hour cache TTL (GA — no anthropic-beta header) rather than the
+/// default 5 minutes. The floating bar is used intermittently — queries are
+/// routinely more than 5 minutes apart — so a 5-minute cache expires between
+/// sporadic queries and almost every real query pays a full cache-write,
+/// defeating the breakpoint. The 1h TTL keeps the stable system+tools prefix
+/// warm across normal usage. Cost trade-off: a 1h write is 2x base input (vs
+/// 1.25x for 5m); reads stay 0.1x; break-even is ~3 cache hits within the hour.
 fn ephemeral_cache_control() -> serde_json::Value {
-    json!({ "type": "ephemeral" })
+    json!({ "type": "ephemeral", "ttl": "1h" })
 }
 
-/// Wrap a system prompt string in a single text content block carrying an
-/// ephemeral cache_control breakpoint.
+/// Sentinel the desktop client inserts between the static (cacheable) system
+/// prefix and the per-conversation live context (date/time, memories, screen
+/// activity). The prefix is byte-identical across every conversation; the tail
+/// changes per conversation. Splitting here lets the cache_control breakpoint
+/// cover only the stable prefix so a changing tail never busts the cached
+/// ~16k-token prefix. Must match `ChatProvider.cacheSplitSentinel` in the app.
+const SYSTEM_CACHE_SPLIT: &str = "<<<OMI_CACHE_SPLIT_V1>>>";
+
+/// Wrap a system prompt string in cache_control content block(s).
+///
+/// If the prompt carries the `SYSTEM_CACHE_SPLIT` sentinel, emit two blocks: the
+/// static prefix (cached) followed by the live-context tail (uncached, re-sent
+/// every request). Otherwise emit a single cached block (legacy behavior).
 fn cached_system_block(text: String) -> serde_json::Value {
+    if let Some((static_prefix, live_tail)) = text.split_once(SYSTEM_CACHE_SPLIT) {
+        // Both blocks are non-empty in practice (prefix = instructions+tools,
+        // tail = at least the current date/time), so neither trips Anthropic's
+        // empty-text-block rejection.
+        return json!([
+            {
+                "type": "text",
+                "text": static_prefix,
+                "cache_control": ephemeral_cache_control()
+            },
+            {
+                "type": "text",
+                "text": live_tail
+            }
+        ]);
+    }
     json!([{
         "type": "text",
         "text": text,
