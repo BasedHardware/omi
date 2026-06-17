@@ -13,6 +13,7 @@ import 'package:omi/app_globals.dart';
 import 'package:omi/pages/home/firmware_update.dart';
 import 'package:omi/pages/home/omiglass_ota_update.dart';
 import 'package:omi/providers/capture_provider.dart';
+import 'package:omi/providers/local_recordings_provider.dart';
 import 'package:omi/services/devices.dart';
 import 'package:omi/services/devices/omi_connection.dart';
 import 'package:omi/services/notifications.dart';
@@ -27,6 +28,7 @@ import 'package:omi/widgets/confirmation_dialog.dart';
 
 class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption {
   CaptureProvider? captureProvider;
+  LocalRecordingsProvider? localRecordingsProvider;
 
   bool isConnecting = false;
   bool isConnected = false;
@@ -75,8 +77,9 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     ServiceManager.instance().device.subscribe(this, this);
   }
 
-  void setProviders(CaptureProvider provider) {
+  void setProviders(CaptureProvider provider, LocalRecordingsProvider recordingsProvider) {
     captureProvider = provider;
+    localRecordingsProvider = recordingsProvider;
     notifyListeners();
   }
 
@@ -385,10 +388,11 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
 
     captureProvider?.updateRecordingDevice(null);
 
-    // Offline/batch mode: the native writer finalizes the in-progress recording on
-    // disconnect (.bin.part -> .bin). Surface it shortly after the rename completes.
+    // Batch mode: the native writer finalizes the in-progress recording on
+    // disconnect (.bin.part -> .bin). Rescan shortly after the rename completes
+    // so the new recording shows up in the conversations list.
     Future.delayed(const Duration(seconds: 1), () {
-      captureProvider?.ingestBatchRecordings();
+      localRecordingsProvider?.refresh();
     });
 
     // Wals
