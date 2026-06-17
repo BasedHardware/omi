@@ -41,7 +41,6 @@ import 'package:omi/services/audio_sources/ble_device_source.dart';
 import 'package:omi/services/devices/models.dart';
 import 'package:omi/services/audio_sources/phone_mic_source.dart';
 import 'package:omi/services/wals.dart';
-import 'package:omi/utils/batch_recording.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:omi/utils/enums.dart';
 import 'package:omi/utils/image/image_utils.dart';
@@ -912,10 +911,6 @@ class CaptureProvider extends ChangeNotifier
     await _wal.getSyncs().phone.onAudioCodecChanged(codec);
     await _saveNativeBleStreamConfig(device, codec);
 
-    // Batch mode: register any recordings the native layer wrote while the
-    // app was minimized/closed so they appear for upload.
-    await ingestBatchRecordings();
-
     // Create audio source for BLE device
     final pd = await device.getDeviceInfo(connection);
     final deviceModel = pd.modelNumber.isNotEmpty ? pd.modelNumber : "Omi";
@@ -984,79 +979,6 @@ class CaptureProvider extends ChangeNotifier
       case DeviceType.limitless:
       case DeviceType.plaud:
         return null;
-    }
-  }
-
-  // ── Batch (offline) mode: ingest natively-written .bin files into the WAL ──
-
-  /// Filenames already registered this session, to avoid re-parsing on each call.
-  final Set<String> _ingestedBatchFiles = {};
-
-  /// Scan the batch-audio directory for finalized recordings written by the
-  /// native layer and register each as a [Wal] so the existing upload+reconcile
-  /// pipeline can sync it. Mirrors how [StorageSync] ingests device files via
-  /// [LocalWalSync.addExternalWal]. Idempotent — [addExternalWal] dedups by id.
-  Future<int> ingestBatchRecordings() async {
-    if (!SharedPreferencesUtil().batchModeEnabled) return 0;
-    try {
-      final dirPath = SharedPreferencesUtil().getString('batchAudioDir');
-      final dir = dirPath.isNotEmpty ? Directory(dirPath) : await getApplicationDocumentsDirectory();
-      if (!await dir.exists()) {
-        Logger.debug('[batch] ingest: dir does not exist ($dirPath)');
-        return 0;
-      }
-
-      final allFiles = dir.listSync().whereType<File>().map((e) => e.path.split('/').last).toList();
-      final binFiles = allFiles.where((n) => n.startsWith('audio_') && n.endsWith('.bin')).toList();
-      final partFiles = allFiles.where((n) => n.startsWith('audio_') && n.endsWith('.bin.part')).toList();
-      Logger.debug('[batch] ingest scan dir=${dir.path} finalized=${binFiles.length} inProgress=${partFiles.length}');
-
-      int added = 0;
-      for (final name in binFiles) {
-        if (_ingestedBatchFiles.contains(name)) continue;
-        final wal = await _batchWalFromFile(File('${dir.path}/$name'), name);
-        if (wal == null) continue;
-        await _wal.getSyncs().phone.addExternalWal(wal);
-        _ingestedBatchFiles.add(name);
-        added++;
-      }
-      if (added > 0) {
-        Logger.debug('[batch] ingest: registered $added batch recording(s)');
-        notifyListeners();
-      }
-      return added;
-    } catch (e) {
-      Logger.error('ingestBatchRecordings failed: $e');
-      return 0;
-    }
-  }
-
-  /// Build a [Wal] from a finalized batch `.bin` file. The filename encodes all
-  /// parameters (see [BatchRecordingInfo]).
-  Future<Wal?> _batchWalFromFile(File file, String name) async {
-    try {
-      final info = BatchRecordingInfo.fromFileName(name);
-      if (info == null) return null;
-
-      final sizeBytes = await file.length();
-      if (sizeBytes <= 0) return null;
-
-      final deviceModel = SharedPreferencesUtil().deviceName.isNotEmpty ? SharedPreferencesUtil().deviceName : 'Omi';
-      return Wal(
-        timerStart: info.timerStart,
-        codec: info.codec,
-        seconds: info.estimateSeconds(sizeBytes),
-        sampleRate: 16000,
-        channel: 1,
-        status: WalStatus.miss,
-        storage: WalStorage.disk,
-        filePath: name,
-        device: batchRecordingDevice,
-        deviceModel: deviceModel,
-      );
-    } catch (e) {
-      Logger.error('_batchWalFromFile parse failed for $name: $e');
-      return null;
     }
   }
 
