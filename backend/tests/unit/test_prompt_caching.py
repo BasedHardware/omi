@@ -34,6 +34,25 @@ def _ensure_package(name: str, path: Path) -> ModuleType:
 
 _ensure_package("utils", BACKEND_DIR / "utils")
 llm_package = _ensure_package("utils.llm", BACKEND_DIR / "utils" / "llm")
+_ensure_package("models", BACKEND_DIR / "models")
+
+
+def _drop_module_if_missing_attrs(module_name, required_attrs):
+    module = sys.modules.get(module_name)
+    if module is None or all(hasattr(module, name) for name in required_attrs):
+        return
+    sys.modules.pop(module_name, None)
+    parent_name, child_name = module_name.rsplit(".", 1)
+    parent = sys.modules.get(parent_name)
+    if isinstance(parent, ModuleType) and getattr(parent, child_name, None) is module:
+        delattr(parent, child_name)
+
+
+_drop_module_if_missing_attrs("models.conversation_enums", ("CategoryEnum",))
+_drop_module_if_missing_attrs(
+    "models.structured",
+    ("ActionItem", "ActionItemsExtraction", "Event", "Structured"),
+)
 
 _conversation_processing_stub = sys.modules.get("utils.llm.conversation_processing")
 if _conversation_processing_stub is not None and not hasattr(
