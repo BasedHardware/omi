@@ -3420,6 +3420,10 @@ struct SettingsContentView: View {
               if newValue == RealtimeOmniProvider.auto.rawValue {
                 AutoModelSelector.shared.refreshIfStale()
               }
+              // The picker writes @AppStorage directly (bypassing the RealtimeOmniSettings
+              // setter), so post the change ourselves — this is what re-warms the realtime
+              // hub on the newly selected provider (and is a no-op for unchanged providers).
+              NotificationCenter.default.post(name: .realtimeOmniSettingsDidChange, object: nil)
             }
           }
 
