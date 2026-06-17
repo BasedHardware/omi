@@ -906,6 +906,96 @@ def test_anthropic_cache_control_not_5min_default():
 
 
 # ---------------------------------------------------------------------------
+# Tests: Current datetime is kept out of the cached system prefix
+# ---------------------------------------------------------------------------
+
+
+class _FixedDatetime:
+    """datetime stand-in whose now() returns a fixed instant (other attrs pass through)."""
+
+    def __init__(self, fixed):
+        self._fixed = fixed
+
+    def now(self, tz=None):
+        if tz is not None:
+            return self._fixed.astimezone(tz)
+        return self._fixed
+
+    def __getattr__(self, name):
+        from datetime import datetime as _real_datetime
+
+        return getattr(_real_datetime, name)
+
+
+def test_system_prompt_is_time_invariant():
+    """
+    The whole agentic system prompt is wrapped in one cache_control breakpoint, so it must
+    be byte-identical across requests even as wall-clock time advances. The live datetime
+    must NOT leak into it (it goes into the user turn instead).
+    """
+    from datetime import datetime as _dt
+
+    chat_mod = _get_chat_module()
+    fn = chat_mod._get_agentic_qa_prompt
+    _set_user(chat_mod, "Alice", "America/New_York")
+
+    real_datetime = chat_mod.datetime
+    try:
+        chat_mod.datetime = _FixedDatetime(_dt(2024, 1, 19, 14, 23, 45, 123456, tzinfo=timezone.utc))
+        prompt_early = fn("uid_alice")
+        chat_mod.datetime = _FixedDatetime(_dt(2024, 6, 1, 9, 0, 0, 654321, tzinfo=timezone.utc))
+        prompt_late = fn("uid_alice")
+    finally:
+        chat_mod.datetime = real_datetime
+
+    assert prompt_early == prompt_late, (
+        "System prompt changed as time advanced — it must be time-invariant for cache hits.\n"
+        f"First diff at: {_find_first_diff(prompt_early, prompt_late)}"
+    )
+    # The microsecond-precision live timestamp must not appear anywhere in the prompt.
+    assert "123456" not in prompt_early, "Live timestamp leaked into the cached system prompt"
+    assert "654321" not in prompt_late, "Live timestamp leaked into the cached system prompt"
+
+
+def test_current_datetime_block_carries_live_time():
+    """get_current_datetime_block must produce the live time for injection into the user turn."""
+    from datetime import datetime as _dt
+
+    chat_mod = _get_chat_module()
+    _set_user(chat_mod, "Alice", "America/New_York")
+
+    real_datetime = chat_mod.datetime
+    try:
+        chat_mod.datetime = _FixedDatetime(_dt(2024, 1, 19, 14, 23, 45, 123456, tzinfo=timezone.utc))
+        block = chat_mod.get_current_datetime_block("uid_alice")
+    finally:
+        chat_mod.datetime = real_datetime
+
+    assert "<current_datetime>" in block
+    assert "2024-01-19" in block, "Datetime block should contain the live date"
+
+
+def test_datetime_injected_into_user_turn_not_system():
+    """
+    _inject_current_datetime must attach the datetime block to the latest user turn so the
+    model still sees the current time without touching the cached system prefix.
+    """
+    agentic_mod = _get_agentic_module()
+
+    messages = [
+        {"role": "user", "content": "what did I do yesterday?"},
+        {"role": "assistant", "content": "let me check"},
+        {"role": "user", "content": "thanks, and today?"},
+    ]
+    block = "<current_datetime>\nCurrent date time in UTC: 2024-01-19 14:23:45\n</current_datetime>"
+    result = agentic_mod._inject_current_datetime(list(messages), block)
+
+    # The block must be attached to the LAST user message, not the earlier one.
+    assert result[-1]["content"].startswith(block), "Datetime block should prepend the latest user turn"
+    assert result[0]["content"] == "what did I do yesterday?", "Earlier user turns must be untouched"
+
+
+# ---------------------------------------------------------------------------
 # Utility
 # ---------------------------------------------------------------------------
 

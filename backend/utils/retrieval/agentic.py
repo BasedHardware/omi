@@ -49,7 +49,7 @@ from utils.retrieval.tools import (
 from utils.retrieval.tools.app_tools import load_app_tools, get_tool_status_message
 from utils.retrieval.safety import AgentSafetyGuard, SafetyGuardError
 from utils.llm.clients import anthropic_client, ANTHROPIC_AGENT_MODEL
-from utils.llm.chat import _get_agentic_qa_prompt
+from utils.llm.chat import _get_agentic_qa_prompt, get_current_datetime_block
 from utils.other.endpoints import timeit
 from utils.observability.langsmith import is_langsmith_enabled
 import logging
@@ -340,6 +340,24 @@ def _messages_to_anthropic(messages: List[Message]) -> list:
     return anthropic_messages
 
 
+def _inject_current_datetime(anthropic_messages: list, datetime_block: str) -> list:
+    """Prepend the current-datetime block to the latest user turn.
+
+    The datetime changes every request, so it is kept out of the cache_control system
+    prefix (which must stay byte-identical for prompt-cache hits) and delivered here in the
+    user turn instead. Falls back to appending a new user message if there is no trailing
+    user turn to attach it to.
+    """
+    if not datetime_block:
+        return anthropic_messages
+    for msg in reversed(anthropic_messages):
+        if msg["role"] == "user" and isinstance(msg.get("content"), str):
+            msg["content"] = f"{datetime_block}\n\n{msg['content']}"
+            return anthropic_messages
+    anthropic_messages.append({"role": "user", "content": datetime_block})
+    return anthropic_messages
+
+
 # ---------------------------------------------------------------------------
 # Core Anthropic agent streaming loop
 # ---------------------------------------------------------------------------
@@ -577,8 +595,10 @@ You have fetch_url_tool available. When the user shares any URL (starting with h
     # Convert tools to Anthropic format (core = visible, app = defer_loading)
     tool_schemas, tool_registry = _convert_tools(core_tools, app_tools)
 
-    # Convert messages to Anthropic format
+    # Convert messages to Anthropic format. The current datetime is injected into the user
+    # turn (not the system prompt) so the cache_control system prefix stays byte-stable.
     anthropic_messages = _messages_to_anthropic(messages)
+    anthropic_messages = _inject_current_datetime(anthropic_messages, get_current_datetime_block(uid))
 
     callback = AsyncStreamingCallback()
 
