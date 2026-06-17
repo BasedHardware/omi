@@ -523,10 +523,6 @@ class PushToTalkManager: ObservableObject {
     state = .finalizing
     finalizeWorkItem?.cancel()
     finalizeWorkItem = nil
-    // Flags only — the window keeps the bar expanded into "thinking" because commitTurn
-    // sets isVoiceThinking before the reactive resize observer settles (so isVoiceActive
-    // never dips), which is why there's no flicker and no skip-resize coordination here.
-    updateBarState()
 
     // Stop mic immediately — no more audio capture
     audioCaptureService?.stopCapture()
@@ -563,10 +559,10 @@ class PushToTalkManager: ObservableObject {
       // Real speech — instant local ack + commit. The hub speaks the reply and
       // dispatches tools itself; no transcript/router/LLM hop here.
       if ShortcutSettings.shared.pttSoundsEnabled { ackSound?.play() }
-      barState?.voiceTranscript = "…"
       RealtimeHubController.shared.commitTurn()
-      // Leave the bar showing "…"; the hub controller exits the voice UI on turn
-      // completion (so we skip the clearing updateBarState()).
+      // Collapse the bar on release — the hub speaks its reply as audio (no inline
+      // status UI), the same as the legacy voice path.
+      updateBarState()
       AnalyticsManager.shared.floatingBarPTTEnded(
         mode: finalizedMode, hadTranscript: true, transcriptLength: 0)
       log("PushToTalkManager: hub turn committed (instant ack)")
@@ -729,14 +725,14 @@ class PushToTalkManager: ObservableObject {
 
     isCurrentSessionFollowUp = false
 
-    // Reset state. The reactive resize observer won't collapse the bar when a query is in
-    // flight or a conversation is open — it guards on showingAIConversation/showingAIResponse,
-    // which openAIInputWithQuery sets (to the correct response size) right after this.
+    // Reset state — skip PTT collapse resize when we have a query,
+    // because openAIInputWithQuery will resize to the correct size.
+    // Also skip resize when in follow-up mode (panel is already at response size).
     state = .idle
     transcriptSegments = []
     lastInterimText = ""
     currentContextSnapshot = nil
-    updateBarState()
+    updateBarState(skipResize: hasQuery || wasFollowUp)
 
     guard hasQuery else {
       log("PushToTalkManager: no transcript to send")
@@ -1037,8 +1033,9 @@ class PushToTalkManager: ObservableObject {
 
   // MARK: - Bar State Sync
 
-  private func updateBarState() {
+  private func updateBarState(skipResize: Bool = false) {
     guard let barState = barState else { return }
+    let wasListening = barState.isVoiceListening
     let isShowingVoiceUI = (state == .listening || state == .lockedListening)
     barState.isVoiceListening = isShowingVoiceUI
     barState.isVoiceLocked = (state == .lockedListening)
@@ -1047,9 +1044,16 @@ class PushToTalkManager: ObservableObject {
       barState.voiceTranscript = ""
       barState.voiceFollowUpTranscript = ""
     }
-    // The bar's expand/collapse is derived reactively from these flags by the window
-    // (FloatingControlBarWindow.setupVoiceActivityObserver) — one resize per turn, no
-    // imperative calls or skip-flags to keep in sync here.
+
+    // Skip resize when in follow-up mode, expanded AI conversation, or during onboarding
+    // (during onboarding the floating bar shouldn't appear as a separate window)
+    let isOnboarding = !UserDefaults.standard.bool(forKey: "hasCompletedOnboarding")
+    guard !skipResize && !barState.isVoiceFollowUp && !barState.showingAIConversation && !isOnboarding else { return }
+    if barState.isVoiceListening && !wasListening {
+      FloatingControlBarManager.shared.resizeForPTT(expanded: true)
+    } else if !barState.isVoiceListening && wasListening {
+      FloatingControlBarManager.shared.resizeForPTT(expanded: false)
+    }
   }
 }
 
