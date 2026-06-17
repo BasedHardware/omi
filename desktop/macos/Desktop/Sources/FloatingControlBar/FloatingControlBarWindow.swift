@@ -41,6 +41,8 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
     private var suppressHoverResize = false
     private var inputHeightCancellable: AnyCancellable?
     private var responseHeightCancellable: AnyCancellable?
+    private var voiceActivityCancellable: AnyCancellable?
+    private var collapseWorkItem: DispatchWorkItem?
     private var resizeWorkItem: DispatchWorkItem?
     /// Saved center point from before chat opened, used to restore position on close.
     private var preChatCenter: NSPoint?
@@ -85,6 +87,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
         self.maxSize = FloatingControlBarWindow.maxBarSize
 
         setupViews()
+        setupVoiceActivityObserver()
 
         if ShortcutSettings.shared.draggableBarEnabled,
            let savedPosition = UserDefaults.standard.string(forKey: FloatingControlBarWindow.positionKey) {
@@ -519,6 +522,54 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
         inputHeightCancellable = nil
     }
 
+    /// Single owner of the voice-turn expand/collapse. The bar is wide whenever a voice
+    /// turn is active (`isVoiceActive` = listening || thinking || speaking) and collapses
+    /// to the resting sliver when it ends — derived reactively from the published flags
+    /// instead of imperative resize calls scattered across the PTT/hub code (which had to
+    /// coordinate via a `skipResize` flag).
+    private func setupVoiceActivityObserver() {
+        voiceActivityCancellable = state.$isVoiceListening
+            .combineLatest(state.$isVoiceThinking, state.$isVoiceSpeaking)
+            .map { $0 || $1 || $2 }
+            .removeDuplicates()
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] active in
+                self?.onVoiceActiveChanged(active)
+            }
+    }
+
+    /// Expand immediately so the window is already wide when the indicator + text render
+    /// (a delayed expand flashes the content cramped in the sliver first). Defer the
+    /// collapse a beat so the transient listening→thinking dip on PTT-up — `isVoiceActive`
+    /// momentarily clears before commitTurn sets thinking — doesn't blink the bar shut.
+    private func onVoiceActiveChanged(_ active: Bool) {
+        collapseWorkItem?.cancel()
+        collapseWorkItem = nil
+        if active {
+            applyVoiceExpansion(true)
+        } else {
+            let work = DispatchWorkItem { [weak self] in self?.applyVoiceExpansion(false) }
+            collapseWorkItem = work
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.12, execute: work)
+        }
+    }
+
+    private func applyVoiceExpansion(_ active: Bool) {
+        // Onboarding shows no separate bar; follow-up and the AI conversation own their
+        // own layout, so the voice indicator never drives the window size in those modes.
+        guard UserDefaults.standard.bool(forKey: "hasCompletedOnboarding"),
+              !state.isVoiceFollowUp else { return }
+        if active {
+            guard !state.showingAIConversation else { return }
+            resizeForPTTState(expanded: true, animated: false)  // snap — content is ready now
+        } else {
+            // Collapse only when nothing else needs the window expanded.
+            guard !state.showingAIConversation, !state.showingAIResponse,
+                  state.currentNotification == nil, !state.isHoveringBar else { return }
+            resizeForPTTState(expanded: false, animated: true)
+        }
+    }
+
     func updateAIResponse(type: String, text: String) {
         guard state.showingAIConversation else { return }
 
@@ -619,7 +670,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
 
     /// Resize for hover expand/collapse — anchored from center so the circle grows outward.
     func resizeForHover(expanded: Bool) {
-        guard !state.showingAIConversation, !state.isVoiceListening, !state.isShowingNotification, !suppressHoverResize else { return }
+        guard !state.showingAIConversation, !state.isVoiceActive, !state.isShowingNotification, !suppressHoverResize else { return }
         resizeWorkItem?.cancel()
         resizeWorkItem = nil
 
@@ -628,7 +679,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
         let doResize: () -> Void = { [weak self] in
             guard let self = self else { return }
             guard !self.state.showingAIConversation,
-                  !self.state.isVoiceListening,
+                  !self.state.isVoiceActive,
                   !self.state.isShowingNotification,
                   !self.suppressHoverResize
             else { return }
@@ -658,12 +709,16 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
         }
     }
 
-    /// Resize window for PTT state (expanded when listening, compact circle when idle)
-    func resizeForPTTState(expanded: Bool) {
+    /// Resize window for PTT state (expanded when listening, compact circle when idle).
+    /// Expand snaps (animated:false) so the indicator + text never flash cramped while the
+    /// window grows; collapse animates for a smooth shrink back to the resting sliver.
+    func resizeForPTTState(expanded: Bool, animated: Bool = true) {
         let size = expanded
             ? NSSize(width: FloatingControlBarWindow.expandedWidth, height: FloatingControlBarWindow.expandedBarSize.height)
             : FloatingControlBarWindow.minBarSize
-        resizeAnchored(to: size, makeResizable: false, animated: true)
+        // Idempotent: skip when already at the target size (avoids a no-op resize).
+        if abs(frame.width - size.width) < 1, abs(frame.height - size.height) < 1 { return }
+        resizeAnchored(to: size, makeResizable: false, animated: animated)
     }
 
     func showNotification(_ notification: FloatingBarNotification, animated: Bool = true) {
@@ -682,7 +737,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
         state.currentNotification = nil
 
         let targetSize: NSSize
-        if state.isVoiceListening {
+        if state.isVoiceActive {
             targetSize = NSSize(width: Self.expandedWidth, height: Self.expandedBarSize.height)
         } else {
             targetSize = state.isHoveringBar ? Self.expandedBarSize : Self.minBarSize
@@ -693,7 +748,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
     /// Restore the compact pill size when we temporarily surface the bar outside
     /// of an active hover, notification, voice session, or AI conversation.
     func normalizeForTemporaryShow() {
-        guard !state.showingAIConversation, !state.isVoiceListening, state.currentNotification == nil else { return }
+        guard !state.showingAIConversation, !state.isVoiceActive, state.currentNotification == nil else { return }
         resizeAnchored(to: Self.minBarSize, makeResizable: false, animated: false, anchorTop: true)
     }
 
@@ -837,7 +892,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
             minimumWidth = FloatingControlBarWindow.expandedWidth
         } else if state.currentNotification != nil {
             minimumWidth = FloatingControlBarWindow.notificationWidth
-        } else if state.isVoiceListening {
+        } else if state.isVoiceActive {
             minimumWidth = FloatingControlBarWindow.expandedWidth
         } else if state.isHoveringBar {
             minimumWidth = FloatingControlBarWindow.expandedBarSize.width
@@ -1672,11 +1727,6 @@ class FloatingControlBarManager {
     /// Access the bar state for PTT updates.
     var barState: FloatingControlBarState? {
         return window?.state
-    }
-
-    /// Resize the floating bar for PTT state changes.
-    func resizeForPTT(expanded: Bool) {
-        window?.resizeForPTTState(expanded: expanded)
     }
 
     // MARK: - AI Query
