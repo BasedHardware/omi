@@ -399,6 +399,27 @@ class _ProfilePageState extends State<ProfilePage> {
                         ],
                       ),
                     ),
+                    if (SharedPreferencesUtil().getBool('batchStorageFull')) ...[
+                      const SizedBox(height: 12),
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration:
+                            BoxDecoration(color: const Color(0xFF3A2A2A), borderRadius: BorderRadius.circular(12)),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Icon(Icons.warning_amber_rounded, color: Color(0xFFE0A030), size: 18),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Text(
+                                context.l10n.offlineModeStorageFull,
+                                style: TextStyle(color: Colors.orange.shade200, fontSize: 13, height: 1.4),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
                   ],
                 ),
               ),
@@ -512,15 +533,15 @@ class _ProfilePageState extends State<ProfilePage> {
                     chipValue: SharedPreferencesUtil().backgroundModeEnabled ? context.l10n.on : context.l10n.off,
                     onTap: _showBackgroundModeSheet,
                   ),
-                  const Divider(height: 1, color: Color(0xFF3C3C43)),
-                  _buildProfileItem(
-                    title: context.l10n.offlineModeTitle,
-                    icon: const FaIcon(FontAwesomeIcons.floppyDisk, color: Color(0xFF8E8E93), size: 20),
-                    showBetaTag: true,
-                    chipValue: SharedPreferencesUtil().batchModeEnabled ? context.l10n.on : context.l10n.off,
-                    onTap: _showOfflineModeSheet,
-                  ),
                 ],
+                const Divider(height: 1, color: Color(0xFF3C3C43)),
+                _buildProfileItem(
+                  title: context.l10n.offlineModeTitle,
+                  icon: const FaIcon(FontAwesomeIcons.floppyDisk, color: Color(0xFF8E8E93), size: 20),
+                  showBetaTag: true,
+                  chipValue: SharedPreferencesUtil().batchModeEnabled ? context.l10n.on : context.l10n.off,
+                  onTap: _showOfflineModeSheet,
+                ),
               ],
             ),
             const SizedBox(height: 32),
