@@ -76,14 +76,16 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
 
   func setup(barState: FloatingControlBarState) {
     self.barState = barState
-    // Register the observer exactly once — duplicate registrations (re-entrant
-    // setup) fired settingsChanged N times, each tearing down + recreating the
-    // socket, which orphaned a connecting session (Gemini 1001/1008 closes).
+    // The hub provider follows the "Voice Model" picker, so re-warm when it changes —
+    // observe the live settings notification (posted by the picker, RealtimeOmniSettings
+    // setters, and AutoModelSelector). Register exactly once — duplicate registrations
+    // (re-entrant setup) fired settingsChanged N times, each tearing down + recreating
+    // the socket, which orphaned a connecting session (Gemini 1001/1008 closes).
     NotificationCenter.default.removeObserver(
-      self, name: .realtimeHubSettingsDidChange, object: nil)
+      self, name: .realtimeOmniSettingsDidChange, object: nil)
     NotificationCenter.default.addObserver(
       self, selector: #selector(settingsChanged),
-      name: .realtimeHubSettingsDidChange, object: nil)
+      name: .realtimeOmniSettingsDidChange, object: nil)
     // Expose the headless E2E action (omi-ctl action hub_test_turn pcm=… provider=…).
     RealtimeHubTestHarness.registerAutomationAction()
   }
@@ -402,10 +404,22 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
   /// Return the floating bar from its PTT voice state to compact after a hub turn.
   private func exitVoiceUI() {
     guard let barState else { return }
+    // Capture before clearing: a mid-turn error or silent-tap cancel clears the
+    // listening flag here, so PushToTalkManager.updateBarState() (which resizes only
+    // on a wasListening→false transition) would see no change and leave the bar wide.
+    let wasExpandedForVoice = barState.isVoiceListening
     barState.voiceTranscript = ""
     barState.isVoiceListening = false
     barState.isVoiceLocked = false
     barState.isVoiceFollowUp = false
+    // Collapse the bar ourselves in that case — guarded so we never shrink the bar out
+    // from under an open conversation, response, notification, hover, or onboarding.
+    guard wasExpandedForVoice,
+      !barState.showingAIConversation, !barState.showingAIResponse,
+      barState.currentNotification == nil, !barState.isHoveringBar,
+      UserDefaults.standard.bool(forKey: "hasCompletedOnboarding")
+    else { return }
+    FloatingControlBarManager.shared.resizeForPTT(expanded: false)
   }
 
   // MARK: - Tools
