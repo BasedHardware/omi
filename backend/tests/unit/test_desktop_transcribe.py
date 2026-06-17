@@ -5,8 +5,11 @@ Verifies:
 - transcribe_pcm_bytes language/model selection and error propagation
 """
 
+import importlib.util
 import os
+import shutil as _shutil
 import sys
+from pathlib import Path
 from types import ModuleType
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -16,11 +19,74 @@ import pytest
 # Module-level stubs (same pattern as test_sync_transcription_prefs.py)
 # ---------------------------------------------------------------------------
 
+BACKEND_DIR = Path(__file__).resolve().parents[2]
+
+
+def _ensure_package(name, path):
+    module = sys.modules.get(name)
+    if module is None or not hasattr(module, '__path__'):
+        module = ModuleType(name)
+        sys.modules[name] = module
+    module.__path__ = [str(path)]
+
+    if '.' in name:
+        parent_name, attr_name = name.rsplit('.', 1)
+        parent = sys.modules.get(parent_name)
+        if parent is not None:
+            setattr(parent, attr_name, module)
+
+    return module
+
+
+def _install_module(name):
+    module = ModuleType(name)
+    sys.modules[name] = module
+    if '.' in name:
+        parent_name, attr_name = name.rsplit('.', 1)
+        parent = sys.modules.get(parent_name)
+        if parent is not None:
+            setattr(parent, attr_name, module)
+    return module
+
+
+def _attach_existing_module(name):
+    if '.' not in name or name not in sys.modules:
+        return
+    parent_name, attr_name = name.rsplit('.', 1)
+    parent = sys.modules.get(parent_name)
+    if parent is not None:
+        setattr(parent, attr_name, sys.modules[name])
+
+
+def _restore_package_paths():
+    _ensure_package('models', BACKEND_DIR / 'models')
+    _ensure_package('database', BACKEND_DIR / 'database')
+    _ensure_package('utils', BACKEND_DIR / 'utils')
+    _ensure_package('utils.stt', BACKEND_DIR / 'utils' / 'stt')
+    for name in [
+        'utils.chat',
+        'utils.stt.pre_recorded',
+        'utils.stt.speaker_embedding',
+        'google.cloud',
+        'google.cloud.storage',
+    ]:
+        _attach_existing_module(name)
+    notifications = sys.modules.get('utils.notifications')
+    if notifications is not None and not hasattr(notifications, 'send_notification'):
+        notifications.send_notification = MagicMock()
+    redis_db = sys.modules.get('database.redis_db')
+    if redis_db is not None:
+        redis_db.check_rate_limit = MagicMock(return_value=(True, 99, 0))
+        redis_db.try_acquire_listen_lock = MagicMock(return_value=True)
+        redis_db.try_acquire_goal_extraction_lock = MagicMock(return_value=True)
+        redis_db.store_chat_share = MagicMock()
+        redis_db.get_chat_share = MagicMock(return_value=None)
+
+
+_restore_package_paths()
+
 # Stub models package (required before importing utils.stt.pre_recorded)
-_models_pkg = ModuleType('models')
-_models_pkg.__path__ = ['models']
-_models_pkg.__package__ = 'models'
-sys.modules.setdefault('models', _models_pkg)
+_models_pkg = sys.modules['models']
 
 for _msub in [
     'other',
@@ -39,10 +105,7 @@ for _msub in [
         setattr(_models_pkg, _msub, _mm)
 
 # Stub database package
-_database_pkg = ModuleType('database')
-_database_pkg.__path__ = ['database']
-_database_pkg.__package__ = 'database'
-sys.modules.setdefault('database', _database_pkg)
+_database_pkg = sys.modules['database']
 
 for _sub in [
     '_client',
@@ -89,11 +152,21 @@ for _sub in [
         sys.modules[_full] = _m
         setattr(_database_pkg, _sub, _m)
 
+_redis_db_stub = sys.modules['database.redis_db']
+_redis_db_stub.check_rate_limit = MagicMock(return_value=(True, 99, 0))
+_redis_db_stub.try_acquire_listen_lock = MagicMock(return_value=True)
+_redis_db_stub.try_acquire_goal_extraction_lock = MagicMock(return_value=True)
+_redis_db_stub.store_chat_share = MagicMock()
+_redis_db_stub.get_chat_share = MagicMock(return_value=None)
+
 _fb = MagicMock()
 _fb.__path__ = ['firebase_admin']
 sys.modules.setdefault('firebase_admin', _fb)
 sys.modules.setdefault('firebase_admin.messaging', _fb.messaging)
 sys.modules.setdefault('firebase_admin.auth', _fb.auth)
+if not hasattr(sys.modules['firebase_admin.auth'], 'InvalidIdTokenError'):
+    sys.modules['firebase_admin.auth'].InvalidIdTokenError = type('InvalidIdTokenError', (Exception,), {})
+sys.modules['firebase_admin'].auth = sys.modules['firebase_admin.auth']
 
 _deepgram = ModuleType('deepgram')
 _deepgram.DeepgramClient = MagicMock
@@ -101,15 +174,133 @@ _deepgram.DeepgramClientOptions = MagicMock
 _deepgram.LiveTranscriptionEvents = MagicMock()
 sys.modules.setdefault('deepgram', _deepgram)
 
+_fal_client = ModuleType('fal_client')
+_fal_client.submit = MagicMock()
+sys.modules.setdefault('fal_client', _fal_client)
+
+
+def _parse_options_header(value):
+    if value is None:
+        return b'', {}
+    if isinstance(value, str):
+        value = value.encode('latin-1')
+
+    parts = value.split(b';')
+    disposition = parts[0].strip().lower()
+    options = {}
+    for part in parts[1:]:
+        if b'=' not in part:
+            continue
+        key, raw_value = part.split(b'=', 1)
+        raw_value = raw_value.strip()
+        if len(raw_value) >= 2 and raw_value[:1] == b'"' and raw_value[-1:] == b'"':
+            raw_value = raw_value[1:-1]
+        options[key.strip().lower()] = raw_value
+    return disposition, options
+
+
+class _QuerystringParser:
+    def __init__(self, callbacks):
+        self.callbacks = callbacks
+        self.data = bytearray()
+
+    def write(self, data):
+        self.data.extend(data)
+
+    def finalize(self):
+        for item in bytes(self.data).split(b'&'):
+            if not item:
+                continue
+            name, _, value = item.partition(b'=')
+            self.callbacks['on_field_start']()
+            self.callbacks['on_field_name'](name, 0, len(name))
+            self.callbacks['on_field_data'](value, 0, len(value))
+            self.callbacks['on_field_end']()
+        self.callbacks['on_end']()
+
+
+class _MultipartParser:
+    def __init__(self, boundary, callbacks):
+        self.boundary = boundary.encode('latin-1') if isinstance(boundary, str) else boundary
+        self.callbacks = callbacks
+        self.data = bytearray()
+
+    def write(self, data):
+        self.data.extend(data)
+
+    def finalize(self):
+        delimiter = b'--' + self.boundary
+        for part in bytes(self.data).split(delimiter):
+            part = part.strip(b'\r\n')
+            if not part or part == b'--':
+                continue
+            if part.endswith(b'--'):
+                part = part[:-2].strip(b'\r\n')
+            if b'\r\n\r\n' not in part:
+                continue
+
+            header_blob, body = part.split(b'\r\n\r\n', 1)
+            self.callbacks['on_part_begin']()
+            for header in header_blob.split(b'\r\n'):
+                name, _, value = header.partition(b':')
+                name = name.strip()
+                value = value.strip()
+                self.callbacks['on_header_field'](name, 0, len(name))
+                self.callbacks['on_header_value'](value, 0, len(value))
+                self.callbacks['on_header_end']()
+            self.callbacks['on_headers_finished']()
+            self.callbacks['on_part_data'](body, 0, len(body))
+            self.callbacks['on_part_end']()
+        self.callbacks['on_end']()
+
+
+def _install_multipart_stub_if_missing():
+    if importlib.util.find_spec('python_multipart') is None and 'python_multipart' not in sys.modules:
+        python_multipart = ModuleType('python_multipart')
+        python_multipart.__version__ = '0.0.20'
+        python_multipart.MultipartParser = _MultipartParser
+        python_multipart.QuerystringParser = _QuerystringParser
+
+        python_multipart_submodule = ModuleType('python_multipart.multipart')
+        python_multipart_submodule.parse_options_header = _parse_options_header
+
+        sys.modules['python_multipart'] = python_multipart
+        sys.modules['python_multipart.multipart'] = python_multipart_submodule
+
+    if importlib.util.find_spec('multipart') is None and 'multipart' not in sys.modules:
+        multipart = ModuleType('multipart')
+        multipart.__version__ = '0.0.20'
+        multipart.MultipartParser = _MultipartParser
+        multipart.QuerystringParser = _QuerystringParser
+
+        multipart_submodule = ModuleType('multipart.multipart')
+        multipart_submodule.parse_options_header = _parse_options_header
+        multipart_submodule.shutil = _shutil
+
+        sys.modules['multipart'] = multipart
+        sys.modules['multipart.multipart'] = multipart_submodule
+
+    try:
+        import starlette.formparsers as formparsers
+    except ImportError:
+        return
+    formparsers.multipart = sys.modules.get('python_multipart') or sys.modules.get('multipart')
+    formparsers.parse_options_header = _parse_options_header
+
+
+_install_multipart_stub_if_missing()
+
 _speaker_embedding = ModuleType('utils.stt.speaker_embedding')
 _speaker_embedding.SPEAKER_MATCH_THRESHOLD = 0.45
 _speaker_embedding.compare_embeddings = MagicMock(return_value=0.0)
 _speaker_embedding.extract_embedding_from_bytes = MagicMock()
 _speaker_embedding.async_extract_embedding_from_bytes = AsyncMock(return_value=None)
 sys.modules['utils.stt.speaker_embedding'] = _speaker_embedding
+_attach_existing_module('utils.stt.speaker_embedding')
 
-import google.cloud.storage as _gcs
-
+_ensure_package('google', BACKEND_DIR / 'tests')
+_ensure_package('google.cloud', BACKEND_DIR / 'tests')
+_gcs = _install_module('google.cloud.storage')
 _gcs.Client = MagicMock
 
 os.environ.setdefault('OPENAI_API_KEY', 'sk-fake-for-test')
@@ -119,6 +310,7 @@ os.environ.setdefault('ENCRYPTION_SECRET', 'omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7
 
 @pytest.fixture(autouse=True)
 def _ensure_tmp_dir():
+    _restore_package_paths()
     os.makedirs('/tmp', exist_ok=True)
 
 
@@ -556,6 +748,13 @@ def _stub_router_deps():
         rdb.check_rate_limit = MagicMock(return_value=(True, 99, 0))
 
 
+def _install_sync_router_stub():
+    sync_router_stub = ModuleType('routers.sync')
+    sync_router_stub.retrieve_file_paths = MagicMock(return_value=[])
+    sync_router_stub.decode_files_to_wav = MagicMock(return_value=[])
+    sys.modules['routers.sync'] = sync_router_stub
+
+
 def _make_chat_client():
     """Build a TestClient for the chat router with mocked auth."""
     import importlib.util
@@ -568,6 +767,7 @@ def _make_chat_client():
 
     sys.modules.pop('routers.chat', None)
     sys.modules.pop('routers.sync', None)
+    _install_sync_router_stub()
     spec = importlib.util.spec_from_file_location(
         'routers_chat_test',
         os.path.join(os.path.dirname(__file__), '..', '..', 'routers', 'chat.py'),
