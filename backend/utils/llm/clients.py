@@ -235,6 +235,7 @@ MODEL_QOS_PROFILES: Dict[str, Dict[str, Tuple[str, str]]] = {
         # OpenAI — memories & knowledge
         'memories': ('gpt-4.1-mini', 'openai'),
         'memory_l1': ('gpt-4.1-mini', 'openai'),
+        'memory_l2': ('gpt-4.1-mini', 'openai'),
         'learnings': ('gpt-5.4-mini', 'openai'),
         'memory_conflict': ('gpt-4.1-mini', 'openai'),
         'memory_category': ('gpt-4.1-nano', 'openai'),
@@ -286,6 +287,7 @@ MODEL_QOS_PROFILES: Dict[str, Dict[str, Tuple[str, str]]] = {
         # OpenAI — memories & knowledge
         'memories': ('gpt-4.1-mini', 'openai'),
         'memory_l1': ('gpt-4.1-mini', 'openai'),
+        'memory_l2': ('gpt-4.1-mini', 'openai'),
         'learnings': ('o4-mini', 'openai'),
         'memory_conflict': ('gpt-4.1-mini', 'openai'),
         'memory_category': ('gpt-4.1-mini', 'openai'),
@@ -336,6 +338,7 @@ MODEL_QOS_PROFILES: Dict[str, Dict[str, Tuple[str, str]]] = {
         # OpenAI — memories & knowledge
         'memories': ('gpt-4.1-mini', 'openai'),
         'memory_l1': ('gpt-4.1-mini', 'openai'),
+        'memory_l2': ('gpt-4.1-mini', 'openai'),
         'learnings': ('o4-mini', 'openai'),
         'memory_conflict': ('gpt-4.1-mini', 'openai'),
         'memory_category': ('gpt-4.1-mini', 'openai'),

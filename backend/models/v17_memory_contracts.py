@@ -157,6 +157,7 @@ class DurableMemoryPatch(BaseModel):
     decision: DurablePatchDecision
     result_status: LifecycleState
     evidence_ids: List[str] = Field(default_factory=list)
+    evidence_refs: List[EvidenceRef] = Field(default_factory=list)
     target_memory_id: Optional[str] = None
     new_memory_id: Optional[str] = None
     memory_text: Optional[str] = None
@@ -180,4 +181,10 @@ class DurableMemoryPatch(BaseModel):
             raise ValueError("target_memory_id is required for merge/update/add_evidence/skip_duplicate decisions")
         if self.decision == DurablePatchDecision.add and not self.memory_text and not self.new_memory_id:
             raise ValueError("add decisions require memory_text or new_memory_id")
+        if (
+            self.result_status in {LifecycleState.active, LifecycleState.review}
+            and not self.evidence_ids
+            and not self.evidence_refs
+        ):
+            raise ValueError("active/review patches require exact supporting evidence ids or refs")
         return self
