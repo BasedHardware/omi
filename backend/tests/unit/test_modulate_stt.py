@@ -1,11 +1,26 @@
 import asyncio
+import importlib.util
 import json
 import struct
 import sys
 import threading
+import types
 import unittest
+from contextlib import contextmanager
 from io import BytesIO
+from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
+
+BACKEND_DIR = Path(__file__).resolve().parent.parent.parent
+
+
+def _restore_package_path(name, path):
+    package = sys.modules.get(name)
+    if package is not None:
+        package.__path__ = [str(path)]
+
+
+_restore_package_path('utils', BACKEND_DIR / 'utils')
 
 # Stub heavy deps before import
 for mod in [
@@ -32,6 +47,114 @@ for mod in [
 ]:
     if mod not in sys.modules:
         sys.modules[mod] = MagicMock()
+
+
+class _StubWebSocketException(Exception):
+    pass
+
+
+class _StubConnectionClosed(_StubWebSocketException):
+    pass
+
+
+_websockets_stub = types.ModuleType('websockets')
+_websockets_exceptions_stub = types.ModuleType('websockets.exceptions')
+_websockets_exceptions_stub.WebSocketException = _StubWebSocketException
+_websockets_exceptions_stub.ConnectionClosed = _StubConnectionClosed
+_websockets_stub.exceptions = _websockets_exceptions_stub
+_websockets_stub.connect = AsyncMock()
+sys.modules.setdefault('websockets', _websockets_stub)
+sys.modules.setdefault('websockets.exceptions', _websockets_exceptions_stub)
+
+
+def _install_prometheus_client_stub():
+    if 'prometheus_client' in sys.modules:
+        return
+    if importlib.util.find_spec('prometheus_client') is not None:
+        return
+
+    prometheus_client = types.ModuleType('prometheus_client')
+
+    class _Registry:
+        def __init__(self):
+            self._names_to_collectors = {}
+
+    registry = _Registry()
+
+    @contextmanager
+    def _timer():
+        yield
+
+    class _Value:
+        def __init__(self):
+            self._amount = 0
+
+        def inc(self, amount):
+            self._amount += amount
+
+        def set(self, value):
+            self._amount = value
+
+    class _Metric:
+        def __init__(self, name, documentation, labelnames=(), **kwargs):
+            self._name = name
+            self._documentation = documentation
+            self._labelnames = tuple(labelnames or ())
+            self._kwargs = kwargs
+            self._value = _Value()
+            self._register(name)
+
+        def _register(self, name):
+            names = [name]
+            if name.endswith('_total'):
+                names.append(name[: -len('_total')])
+            for metric_name in names:
+                existing = registry._names_to_collectors.get(metric_name)
+                if existing is not None and existing is not self:
+                    raise ValueError(f'Duplicated timeseries in CollectorRegistry: {metric_name}')
+            for metric_name in names:
+                registry._names_to_collectors[metric_name] = self
+
+        def labels(self, *args, **kwargs):
+            return self
+
+        def inc(self, amount=1):
+            self._value.inc(amount)
+
+        def dec(self, amount=1):
+            self._value.inc(-amount)
+
+        def set(self, value):
+            self._value.set(value)
+
+        def observe(self, value):
+            self._value.set(value)
+
+        def time(self):
+            return _timer()
+
+    prometheus_client.Counter = _Metric
+    prometheus_client.Histogram = _Metric
+    prometheus_client.REGISTRY = registry
+    sys.modules['prometheus_client'] = prometheus_client
+
+
+_install_prometheus_client_stub()
+
+_byok_stub = types.ModuleType('utils.byok')
+_byok_stub.get_byok_key = MagicMock(return_value=None)
+sys.modules.setdefault('utils.byok', _byok_stub)
+
+_endpoints_stub = types.ModuleType('utils.other.endpoints')
+_endpoints_stub.timeit = lambda func: func
+sys.modules.setdefault('utils.other.endpoints', _endpoints_stub)
+
+_speaker_embedding_stub = types.ModuleType('utils.stt.speaker_embedding')
+_speaker_embedding_stub.SPEAKER_MATCH_THRESHOLD = 0.75
+_speaker_embedding_stub.async_extract_embedding_from_bytes = AsyncMock(return_value=None)
+_speaker_embedding_stub.compare_embeddings = MagicMock(return_value=0)
+_speaker_embedding_stub.extract_embedding_from_bytes = MagicMock(return_value=None)
+sys.modules.setdefault('utils.stt.speaker_embedding', _speaker_embedding_stub)
 
 # Stub deepgram classes needed at import time
 sys.modules['deepgram'].DeepgramClient = MagicMock
@@ -205,6 +328,7 @@ class TestSafeModulateSocket(unittest.TestCase):
             sock._recv_task.cancel()
             audio = b'\x01\x02\x03\x04'
             sock.send(audio)
+            sock._done_event.set()
             await sock.drain_and_close()
             return sent_data
 
@@ -229,6 +353,7 @@ class TestSafeModulateSocket(unittest.TestCase):
             sock.set_wav_header(b'')
             sock._recv_task.cancel()
             sock.send(b'audio_chunk')
+            sock._done_event.set()
             await sock.drain_and_close()
             return sent_data
 
@@ -806,7 +931,7 @@ class TestProcessAudioParakeet(unittest.TestCase):
             call_args = loop.run_until_complete(run())
             uri = call_args[0][0]
             self.assertEqual(uri, 'ws://parakeet.local/v3/stream?sample_rate=16000')
-            self.assertEqual(call_args.kwargs['extra_headers'], {'authorization': 'secret'})
+            self.assertNotIn('extra_headers', call_args.kwargs)
         finally:
             loop.close()
 
@@ -1278,7 +1403,7 @@ class TestLanguageRoutingExtended(unittest.TestCase):
 
 class TestPrerecordedServiceRouting(unittest.TestCase):
 
-    @patch('utils.stt.pre_recorded.stt_prerecorded_model', 'dg-nova-3')
+    @patch('utils.stt.pre_recorded.stt_prerecorded_models', ['dg-nova-3'])
     def test_default_routes_to_deepgram(self):
         from utils.stt.pre_recorded import PrerecordedSTTService, get_prerecorded_service
 
@@ -1286,7 +1411,7 @@ class TestPrerecordedServiceRouting(unittest.TestCase):
         self.assertEqual(svc, PrerecordedSTTService.DEEPGRAM)
         self.assertEqual(model, 'nova-3')
 
-    @patch('utils.stt.pre_recorded.stt_prerecorded_model', 'modulate-velma-2')
+    @patch('utils.stt.pre_recorded.stt_prerecorded_models', ['modulate-velma-2'])
     def test_modulate_routes_correctly(self):
         from utils.stt.pre_recorded import PrerecordedSTTService, get_prerecorded_service
 
@@ -1295,7 +1420,7 @@ class TestPrerecordedServiceRouting(unittest.TestCase):
         self.assertEqual(lang, 'en')
         self.assertEqual(model, 'velma-2')
 
-    @patch('utils.stt.pre_recorded.stt_prerecorded_model', 'modulate-velma-2')
+    @patch('utils.stt.pre_recorded.stt_prerecorded_models', ['modulate-velma-2'])
     def test_modulate_normalizes_locale(self):
         from utils.stt.pre_recorded import PrerecordedSTTService, get_prerecorded_service
 
@@ -1303,7 +1428,7 @@ class TestPrerecordedServiceRouting(unittest.TestCase):
         self.assertEqual(svc, PrerecordedSTTService.MODULATE)
         self.assertEqual(lang, 'pt')
 
-    @patch('utils.stt.pre_recorded.stt_prerecorded_model', 'dg-nova-2')
+    @patch('utils.stt.pre_recorded.stt_prerecorded_models', ['dg-nova-2'])
     def test_custom_deepgram_model(self):
         from utils.stt.pre_recorded import PrerecordedSTTService, get_prerecorded_service
 
@@ -1311,7 +1436,7 @@ class TestPrerecordedServiceRouting(unittest.TestCase):
         self.assertEqual(svc, PrerecordedSTTService.DEEPGRAM)
         self.assertEqual(model, 'nova-2')
 
-    @patch('utils.stt.pre_recorded.stt_prerecorded_model', 'dg-nova-3')
+    @patch('utils.stt.pre_recorded.stt_prerecorded_models', ['dg-nova-3'])
     def test_multi_language_routes_to_deepgram(self):
         from utils.stt.pre_recorded import PrerecordedSTTService, get_prerecorded_service
 
@@ -1322,7 +1447,7 @@ class TestPrerecordedServiceRouting(unittest.TestCase):
 
 class TestPrerecordedProviderFactory(unittest.TestCase):
 
-    @patch('utils.stt.pre_recorded.stt_prerecorded_model', 'dg-nova-3')
+    @patch('utils.stt.pre_recorded.stt_prerecorded_models', ['dg-nova-3'])
     def test_factory_returns_deepgram_by_default(self):
         from utils.stt.pre_recorded import DeepgramPrerecordedProvider, get_prerecorded_provider
 
@@ -1330,7 +1455,7 @@ class TestPrerecordedProviderFactory(unittest.TestCase):
         self.assertIsInstance(provider, DeepgramPrerecordedProvider)
         self.assertEqual(provider._model, 'nova-3')
 
-    @patch('utils.stt.pre_recorded.stt_prerecorded_model', 'dg-nova-2')
+    @patch('utils.stt.pre_recorded.stt_prerecorded_models', ['dg-nova-2'])
     def test_factory_returns_deepgram_custom_model(self):
         from utils.stt.pre_recorded import DeepgramPrerecordedProvider, get_prerecorded_provider
 
@@ -1338,7 +1463,7 @@ class TestPrerecordedProviderFactory(unittest.TestCase):
         self.assertIsInstance(provider, DeepgramPrerecordedProvider)
         self.assertEqual(provider._model, 'nova-2')
 
-    @patch('utils.stt.pre_recorded.stt_prerecorded_model', 'modulate-velma-2')
+    @patch('utils.stt.pre_recorded.stt_prerecorded_models', ['modulate-velma-2'])
     def test_factory_returns_modulate(self):
         from utils.stt.pre_recorded import ModulatePrerecordedProvider, get_prerecorded_provider
 

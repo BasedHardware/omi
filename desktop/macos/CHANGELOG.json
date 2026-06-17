@@ -3,9 +3,24 @@
     "Faster, cheaper assistant responses via Anthropic prompt caching of the system+tools prefix and conversation history",
     "Added an experimental Realtime Voice Hub (Settings \u2192 Floating Bar): the realtime model handles your whole voice turn \u2014 listening, deciding, and speaking \u2014 for noticeably faster replies",
     "Redesigned the floating bar voice indicator with smooth, distinct idle, listening, thinking, and speaking states so you always know whether the assistant is working or done",
-    "Voice (push-to-talk) conversations now appear in your chat history"
+    "Voice (push-to-talk) conversations now appear in your chat history",
+    "Fixed older chat messages failing to load in long chats"
   ],
   "releases": [
+    {
+      "version": "0.11.465",
+      "date": "2026-06-16",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.464",
+      "date": "2026-06-16",
+      "changes": [
+        "Added a System Audio setting (Always / Only during meetings / Never); 'Only during meetings' records mic + system audio only while you're in a call"
+      ]
+    },
     {
       "version": "0.11.463",
       "date": "2026-06-11",

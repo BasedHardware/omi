@@ -570,8 +570,8 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                   child: provider.isLoading && provider.actionItems.isEmpty
                       ? _buildLoadingState()
                       : categorizedItems.values.every((l) => l.isEmpty)
-                          ? _buildEmptyTasksList()
-                          : _buildTasksList(categorizedItems, provider),
+                      ? _buildEmptyTasksList()
+                      : _buildTasksList(categorizedItems, provider),
                 ),
               ),
               // Hide the purple corner FAB when the empty-state already

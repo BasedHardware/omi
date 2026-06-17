@@ -16,7 +16,16 @@ os.environ.setdefault(
 
 from unittest.mock import MagicMock
 
-from google.cloud.firestore_v1 import FieldFilter
+try:
+    from google.cloud.firestore_v1 import FieldFilter
+except ImportError:
+    # Lightweight test runs may not install Firestore, or may inherit an empty stub from another test.
+
+    class FieldFilter:
+        def __init__(self, field_path, op_string, value):
+            self.field_path = field_path
+            self.op_string = op_string
+            self.value = value
 
 
 def _stub_module(name):

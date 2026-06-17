@@ -18,9 +18,52 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+BACKEND_DIR = Path(__file__).resolve().parents[2]
+
 os.environ.setdefault('TYPESENSE_HOST', 'localhost')
 os.environ.setdefault('TYPESENSE_HOST_PORT', '8108')
 os.environ.setdefault('TYPESENSE_API_KEY', 'test-key-not-real')
+
+_REAL_PACKAGE_DIRS = {
+    "utils": BACKEND_DIR / "utils",
+    "utils.conversations": BACKEND_DIR / "utils" / "conversations",
+}
+
+
+def _remove_module(name: str) -> None:
+    module = sys.modules.pop(name, None)
+    if module is None or "." not in name:
+        return
+
+    parent_name, attr = name.rsplit(".", 1)
+    parent = sys.modules.get(parent_name)
+    if parent is not None and getattr(parent, attr, None) is module:
+        delattr(parent, attr)
+
+
+def _restore_real_backend_package(package_name: str) -> None:
+    """Discard empty package stubs left by earlier collected unit tests."""
+    backend_path = str(BACKEND_DIR)
+    if backend_path not in sys.path:
+        sys.path.insert(0, backend_path)
+
+    package = sys.modules.get(package_name)
+    if package is None:
+        return
+
+    expected_dir = _REAL_PACKAGE_DIRS[package_name].resolve()
+    package_paths = getattr(package, "__path__", None)
+    if not package_paths:
+        _remove_module(package_name)
+        return
+
+    try:
+        has_real_path = any(Path(path).resolve() == expected_dir for path in package_paths)
+    except (OSError, TypeError):
+        has_real_path = False
+    if not has_real_path:
+        _remove_module(package_name)
+
 
 typesense_mod = sys.modules.get('typesense')
 if typesense_mod is None:
@@ -29,10 +72,11 @@ if typesense_mod is None:
 if not hasattr(typesense_mod, 'Client'):
     typesense_mod.Client = MagicMock
 
+_restore_real_backend_package("utils")
+_restore_real_backend_package("utils.conversations")
+
 import utils.conversations.search as search_module
 from utils.conversations.search import keyword_search_conversation_ids, merge_conversation_search_ids
-
-BACKEND_DIR = Path(__file__).resolve().parents[2]
 
 
 class TestMergeConversationSearchIds:

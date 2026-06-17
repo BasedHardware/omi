@@ -600,7 +600,19 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
     @Published var showOmiThresholdAlert = false
 
     private let messagesPageSize = 50
-    private let maxMessagesInMemory = 200
+    /// Raw server records consumed by history pagination (the backend pages newest-first).
+    /// Kept separate from messages.count: deduped pages and live messages merged by
+    /// polling would otherwise stall or skew the offset.
+    private var messagesPaginationOffset = 0
+
+    /// Reset history-pagination state. Must accompany every clear/replace of
+    /// `messages` outside the two loaders (`selectSession`,
+    /// `loadDefaultChatMessages`), which set both fields from a fresh fetch.
+    private func resetMessagesPagination() {
+        messagesPaginationOffset = 0
+        hasMoreMessages = false
+    }
+
     private var multiChatObserver: AnyCancellable?
     private var playwrightExtensionObserver: AnyCancellable?
     private var sessionGroupingObserver: AnyCancellable?
@@ -788,6 +800,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                     await self.agentBridge.stop()
                     self.agentBridgeStarted = false
                     self.messages.removeAll()
+                    self.resetMessagesPagination()
                     self.pendingAttachments.removeAll()
                     self.sessions.removeAll()
                     self.currentSession = nil
@@ -1181,7 +1194,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             currentSession = session
             isInDefaultChat = false
             messages = []
-            hasMoreMessages = false
+            resetMessagesPagination()
             log("Created new chat session: \(session.id)")
             AnalyticsManager.shared.chatSessionCreated()
 
@@ -1250,12 +1263,14 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             )
             messages = persistedMessages.map(ChatMessage.init(from:))
                 .sorted(by: { $0.createdAt < $1.createdAt })
+            messagesPaginationOffset = persistedMessages.count
             // If we got a full page, there might be more messages
             hasMoreMessages = persistedMessages.count == messagesPageSize
             log("ChatProvider loaded \(messages.count) messages for session \(session.id), hasMore: \(hasMoreMessages)")
         } catch {
             logError("Failed to load messages for session", error: error)
             messages = []
+            resetMessagesPagination()
         }
 
         isLoading = false
@@ -1269,36 +1284,54 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
         isLoadingMoreMessages = true
 
         do {
-            let offset = messages.count
-            let olderMessages: [ChatMessageDB]
-            if let sessionId = currentSessionId {
-                olderMessages = try await APIClient.shared.getMessages(
-                    sessionId: sessionId,
-                    limit: messagesPageSize,
-                    offset: offset
-                )
-            } else {
-                olderMessages = try await APIClient.shared.getMessages(
-                    appId: selectedAppId,
-                    limit: messagesPageSize,
-                    offset: offset
-                )
+            // A burst of live messages (e.g. from another device) shifts the
+            // newest-first window, so a fetched page can dedupe entirely to
+            // messages we already hold. Consume up to a few windows per call so
+            // one user action always yields visible progress; the cursor
+            // advances every iteration, so this terminates. Deliberately NOT
+            // derived from the local message count — overcounting (deletions,
+            // polling gaps) would overshoot and silently skip history, while a
+            // duplicate window only costs a redundant fetch.
+            var appendedCount = 0
+            var existingIds = Set(messages.map(\.id))
+            for _ in 0..<3 {
+                let offset = messagesPaginationOffset
+                let olderMessages: [ChatMessageDB]
+                if let sessionId = currentSessionId {
+                    olderMessages = try await APIClient.shared.getMessages(
+                        sessionId: sessionId,
+                        limit: messagesPageSize,
+                        offset: offset
+                    )
+                } else {
+                    olderMessages = try await APIClient.shared.getMessages(
+                        appId: selectedAppId,
+                        limit: messagesPageSize,
+                        offset: offset
+                    )
+                }
+
+                // Advance by raw records consumed — even when dedupe below drops
+                // some — so the next request can never re-issue the same window.
+                messagesPaginationOffset += olderMessages.count
+
+                // Drop the window overlap before appending.
+                let newMessages = olderMessages.map(ChatMessage.init(from:))
+                    .filter { !existingIds.contains($0.id) }
+                existingIds.formUnion(newMessages.map(\.id))
+
+                // Append older messages and re-sort to ensure correct chronological order
+                if !newMessages.isEmpty {
+                    messages.append(contentsOf: newMessages)
+                    messages.sort(by: { $0.createdAt < $1.createdAt })
+                }
+                appendedCount += newMessages.count
+
+                // Check if there are more (based on the raw page size, pre-dedupe)
+                hasMoreMessages = olderMessages.count == messagesPageSize
+                if appendedCount > 0 || !hasMoreMessages { break }
             }
-
-            let newMessages = olderMessages.map(ChatMessage.init(from:))
-
-            // Append older messages and re-sort to ensure correct chronological order
-            messages.append(contentsOf: newMessages)
-            messages.sort(by: { $0.createdAt < $1.createdAt })
-
-            // Cap memory usage: keep only the most recent messages
-            if messages.count > maxMessagesInMemory {
-                messages.removeFirst(messages.count - maxMessagesInMemory)
-            }
-
-            // Check if there are more
-            hasMoreMessages = olderMessages.count == messagesPageSize
-            log("Loaded \(newMessages.count) more messages, total: \(messages.count), hasMore: \(hasMoreMessages)")
+            log("Loaded \(appendedCount) more messages, total: \(messages.count), hasMore: \(hasMoreMessages)")
         } catch {
             logError("Failed to load more messages", error: error)
         }
@@ -1324,6 +1357,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                 } else {
                     currentSession = nil
                     messages = []
+                    resetMessagesPagination()
                 }
             }
 
@@ -1934,6 +1968,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
     func reinitialize() async {
         sessions = []
         messages = []
+        resetMessagesPagination()
         currentSession = nil
         isInDefaultChat = true
         await initialize()
@@ -2147,6 +2182,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                 )
                 messages = persistedMessages.map(ChatMessage.init(from:))
                     .sorted(by: { $0.createdAt < $1.createdAt })
+                messagesPaginationOffset = persistedMessages.count
                 hasMoreMessages = persistedMessages.count == messagesPageSize
                 sessionsLoadError = nil
                 log("ChatProvider loaded \(messages.count) default chat messages, hasMore: \(hasMoreMessages)")
@@ -2162,6 +2198,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
         }
 
         messages = []
+        resetMessagesPagination()
         sessionsLoadError = lastError?.localizedDescription ?? "Failed to load messages. Check your connection and try again."
         isLoading = false
     }
@@ -3604,6 +3641,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
         if isInDefaultChat {
             // Default chat mode: clear UI immediately, delete in background
             messages = []
+            resetMessagesPagination()
             log("Cleared default chat messages")
             Task {
                 do {
@@ -3622,6 +3660,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             }
             currentSession = nil
             messages = []
+            resetMessagesPagination()
 
             // Delete old session in background (don't await — backend is slow)
             if let session = sessionToDelete {
@@ -3651,6 +3690,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
         selectedAppId = appId
         currentSession = nil
         messages = []
+        resetMessagesPagination()
         sessions = []
         errorMessage = nil
         isInDefaultChat = true

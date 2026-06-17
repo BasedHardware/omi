@@ -8,6 +8,7 @@ generate_embedding) with track_usage(uid, Features.REALTIME_INTEGRATIONS).
 import os
 import sys
 import types
+from enum import Enum
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -22,6 +23,82 @@ def _stub_module(name: str) -> types.ModuleType:
     mod = types.ModuleType(name)
     sys.modules[name] = mod
     return mod
+
+
+langchain_core_mod = _stub_module("langchain_core")
+langchain_core_mod.__path__ = []
+langchain_callbacks_mod = _stub_module("langchain_core.callbacks")
+langchain_outputs_mod = _stub_module("langchain_core.outputs")
+
+
+class BaseCallbackHandler:
+    pass
+
+
+class LLMResult:
+    def __init__(self, generations=None, llm_output=None, **kwargs):
+        self.generations = generations or []
+        self.llm_output = llm_output
+
+
+langchain_callbacks_mod.BaseCallbackHandler = BaseCallbackHandler
+langchain_outputs_mod.LLMResult = LLMResult
+setattr(langchain_core_mod, "callbacks", langchain_callbacks_mod)
+setattr(langchain_core_mod, "outputs", langchain_outputs_mod)
+
+
+# Replace models.* stubs unconditionally so stale partial modules from earlier
+# collection cannot hide the minimal classes this import sandbox requires.
+models_mod = _stub_module("models")
+models_mod.__path__ = []
+models_app_mod = _stub_module("models.app")
+models_chat_mod = _stub_module("models.chat")
+models_conversation_mod = _stub_module("models.conversation")
+models_conversation_enums_mod = _stub_module("models.conversation_enums")
+models_notification_mod = _stub_module("models.notification_message")
+
+
+class App:
+    pass
+
+
+class ProactiveNotification:
+    pass
+
+
+class UsageHistoryType(str, Enum):
+    transcript_processed = 'transcript_processed'
+
+
+class Message:
+    pass
+
+
+class Conversation:
+    pass
+
+
+class ConversationSource(str, Enum):
+    workflow = 'workflow'
+    unknown = 'unknown'
+
+
+class NotificationMessage:
+    pass
+
+
+models_app_mod.App = App
+models_app_mod.ProactiveNotification = ProactiveNotification
+models_app_mod.UsageHistoryType = UsageHistoryType
+models_chat_mod.Message = Message
+models_conversation_mod.Conversation = Conversation
+models_conversation_enums_mod.ConversationSource = ConversationSource
+models_notification_mod.NotificationMessage = NotificationMessage
+setattr(models_mod, "app", models_app_mod)
+setattr(models_mod, "chat", models_chat_mod)
+setattr(models_mod, "conversation", models_conversation_mod)
+setattr(models_mod, "conversation_enums", models_conversation_enums_mod)
+setattr(models_mod, "notification_message", models_notification_mod)
 
 
 # Stub database package and submodules
@@ -45,6 +122,7 @@ for submodule in [
     "chat",
     "goals",
     "auth",
+    "webhook_health",
 ]:
     mod = _stub_module(f"database.{submodule}")
     setattr(database_mod, submodule, mod)
@@ -86,6 +164,15 @@ goals_mod.get_user_goals = MagicMock(return_value=[])
 auth_mod = sys.modules["database.auth"]
 auth_mod.get_user_name = MagicMock(return_value="Test User")
 
+users_mod = sys.modules["database.users"]
+users_mod.get_user_language_preference = MagicMock(return_value="en")
+
+webhook_health_mod = sys.modules["database.webhook_health"]
+webhook_health_mod.record_app_webhook_failure = MagicMock(return_value=0)
+webhook_health_mod.record_app_webhook_success = MagicMock()
+webhook_health_mod.is_app_webhook_disabled = MagicMock(return_value=False)
+webhook_health_mod.disable_app_in_firestore = MagicMock()
+
 chat_mod = sys.modules["database.chat"]
 chat_mod.add_app_message = MagicMock(return_value={"id": "msg-1"})
 chat_mod.get_app_messages = MagicMock(return_value=[])
@@ -103,6 +190,11 @@ from utils.llm import usage_tracker
 for name in [
     "utils.apps",
     "utils.notifications",
+    "utils.conversations",
+    "utils.conversations.factory",
+    "utils.conversations.render",
+    "utils.executors",
+    "utils.async_tasks",
     "utils.llm.clients",
     "utils.llm.proactive_notification",
     "utils.mentor_notifications",
@@ -110,6 +202,7 @@ for name in [
     "utils.log_sanitizer",
     "utils.llms",
     "utils.llms.memory",
+    "utils.subscription",
 ]:
     if name not in sys.modules:
         sys.modules[name] = types.ModuleType(name)
@@ -128,12 +221,38 @@ sys.modules["utils.http_client"].get_webhook_semaphore = MagicMock(return_value=
 sys.modules["utils.http_client"].latest_wins_start = MagicMock(return_value=1)
 sys.modules["utils.http_client"].latest_wins_check = MagicMock(return_value=True)
 
+# Ensure executor/async task stubs have correct attributes
+sys.modules["utils.executors"].db_executor = MagicMock()
+
+
+async def _run_blocking(_executor, func, *args, **kwargs):
+    return func(*args, **kwargs)
+
+
+async def _gather_safe(*aws, **_kwargs):
+    return await _asyncio.gather(*aws)
+
+
+sys.modules["utils.executors"].run_blocking = _run_blocking
+sys.modules["utils.async_tasks"].gather_safe = _gather_safe
+
 # Ensure log_sanitizer stubs have correct attributes
 sys.modules["utils.log_sanitizer"].sanitize = MagicMock(side_effect=lambda x: x)
 sys.modules["utils.log_sanitizer"].sanitize_pii = MagicMock(side_effect=lambda x: x)
 
 # Ensure llms.memory stub has correct attributes
 sys.modules["utils.llms.memory"].get_prompt_memories = MagicMock(return_value=[])
+
+sys.modules["utils.subscription"].is_trial_paywalled = MagicMock(return_value=False)
+
+utils_conversations = sys.modules["utils.conversations"]
+utils_conversations.__path__ = []
+utils_conversations_factory = sys.modules["utils.conversations.factory"]
+utils_conversations_factory.deserialize_conversations = MagicMock(return_value=[])
+utils_conversations_render = sys.modules["utils.conversations.render"]
+utils_conversations_render.conversations_to_string = MagicMock(return_value="")
+utils_conversations_render.conversation_to_dict = MagicMock(return_value={})
+utils_conversations_render.serialize_datetimes = MagicMock(side_effect=lambda value: value)
 
 utils_apps = sys.modules["utils.apps"]
 utils_apps.get_available_apps = MagicMock(return_value=[])

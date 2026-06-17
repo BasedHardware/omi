@@ -3,6 +3,7 @@
 import asyncio
 import importlib
 import sys
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import pytest
@@ -39,6 +40,60 @@ def test_metrics_are_reused_after_module_cache_eviction():
                 utils_pkg.__dict__.pop('async_tasks', None)
             else:
                 utils_pkg.async_tasks = previous_attr
+
+
+def test_metrics_are_tracked_in_module_cache():
+    cache = async_tasks_mod._metric_cache()
+    assert async_tasks_mod._METRIC_CACHE_MODULE in sys.modules
+    supervisor_key = async_tasks_mod._metric_cache_key(
+        async_tasks_mod.Counter,
+        'async_supervisor_exit_total',
+        ['label', 'reason'],
+    )
+    drain_duration_key = async_tasks_mod._metric_cache_key(
+        async_tasks_mod.Histogram,
+        'async_drain_duration_seconds',
+        ['label'],
+        buckets=[0.1, 0.5, 1.0, 2.0, 5.0, 10.0, 30.0, 60.0],
+    )
+
+    assert cache[supervisor_key] is async_tasks_mod.SUPERVISOR_EXIT_TOTAL
+    assert cache[drain_duration_key] is async_tasks_mod.DRAIN_DURATION
+
+
+def test_metric_cache_key_handles_nested_lists():
+    cache_key = async_tasks_mod._metric_cache_key(
+        async_tasks_mod.Histogram,
+        'nested_bucket_metric',
+        ['label'],
+        buckets=[[0.1, 0.2], [0.3, 0.4]],
+    )
+
+    hash(cache_key)
+
+
+def test_metric_creation_is_lock_guarded():
+    class FakeMetric:
+        created = 0
+
+        def __init__(self, name, documentation, labelnames=(), **kwargs):
+            type(self).created += 1
+            self.name = name
+
+    with ThreadPoolExecutor(max_workers=8) as executor:
+        metrics = list(
+            executor.map(
+                lambda _: async_tasks_mod._get_or_create_metric(
+                    FakeMetric,
+                    'threaded_cache_metric',
+                    'Threaded cache metric',
+                ),
+                range(8),
+            )
+        )
+
+    assert len({id(metric) for metric in metrics}) == 1
+    assert FakeMetric.created == 1
 
 
 # ---------------------------------------------------------------------------

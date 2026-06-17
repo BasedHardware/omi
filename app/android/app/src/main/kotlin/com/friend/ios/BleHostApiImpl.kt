@@ -1,6 +1,7 @@
 package com.friend.ios
 
 import android.app.Activity
+import android.bluetooth.BluetoothAdapter
 import android.content.Intent
 import android.util.Log
 import androidx.core.content.ContextCompat
@@ -14,12 +15,14 @@ class BleHostApiImpl(private val getActivity: () -> Activity?) : BleHostApi {
 
     companion object {
         private const val TAG = "OmiBle.HostApi"
+        private const val REQUEST_ENABLE_BT = 43
     }
 
     private val bleManager get() = OmiBleManager.instance
 
     private var companionManager: OmiCompanionManager? = null
     private var companionAssociationCallback: ((Result<String>) -> Unit)? = null
+    private var enableBluetoothCallback: ((Result<Boolean>) -> Unit)? = null
 
     fun initCompanionManager(activity: Activity) {
         companionManager = OmiCompanionManager(activity, getActivity)
@@ -90,6 +93,34 @@ class BleHostApiImpl(private val getActivity: () -> Activity?) : BleHostApi {
         return bleManager.getBluetoothState()
     }
 
+    override fun enableBluetooth(callback: (Result<Boolean>) -> Unit) {
+        if (bleManager.getBluetoothState() == "on") {
+            callback(Result.success(true))
+            return
+        }
+        if (enableBluetoothCallback != null) {
+            // A system prompt is already in flight; don't overwrite the pending
+            // callback (which would leave its Future hanging) or stack a second
+            // dialog. Report the current (still-off) state to this caller.
+            callback(Result.success(false))
+            return
+        }
+        val activity = getActivity()
+        if (activity == null) {
+            Log.w(TAG, "enableBluetooth: no activity")
+            callback(Result.success(false))
+            return
+        }
+        enableBluetoothCallback = callback
+        try {
+            activity.startActivityForResult(Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE), REQUEST_ENABLE_BT)
+        } catch (e: Exception) {
+            Log.e(TAG, "enableBluetooth: failed to launch system prompt", e)
+            enableBluetoothCallback = null
+            callback(Result.success(false))
+        }
+    }
+
     override fun isPeripheralConnected(uuid: String): Boolean {
         return bleManager.isPeripheralConnected(uuid)
     }
@@ -151,6 +182,13 @@ class BleHostApiImpl(private val getActivity: () -> Activity?) : BleHostApi {
      * Called from MainActivity.onActivityResult to handle companion chooser result.
      */
     fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?): String? {
+        if (requestCode == REQUEST_ENABLE_BT) {
+            val cb = enableBluetoothCallback
+            enableBluetoothCallback = null
+            cb?.invoke(Result.success(resultCode == Activity.RESULT_OK))
+            return null
+        }
+
         val address = companionManager?.onActivityResult(requestCode, resultCode, data)
         val cb = companionAssociationCallback
         companionAssociationCallback = null

@@ -17,9 +17,51 @@ import pytest
 import httpx
 from unittest.mock import MagicMock
 
-
 _MISSING = object()
 _SCIPY_MODULES = ("scipy", "scipy.spatial", "scipy.spatial.distance")
+_BACKEND_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
+_SPEAKER_EMBEDDING_MODULE = "utils.stt.speaker_embedding"
+_SPEAKER_EMBEDDING_REQUIRED_ATTRS = (
+    "MIN_EMBEDDING_AUDIO_DURATION",
+    "_get_wav_duration",
+    "extract_embedding_from_bytes",
+)
+_IMPORT_STUB_GUARDS = {
+    "utils.http_client": ("get_stt_client",),
+    "utils.executors": ("storage_executor", "run_blocking"),
+    _SPEAKER_EMBEDDING_MODULE: _SPEAKER_EMBEDDING_REQUIRED_ATTRS,
+}
+
+
+def _ensure_package(name, path):
+    module = sys.modules.get(name)
+    if not isinstance(module, types.ModuleType) or not hasattr(module, "__path__"):
+        module = types.ModuleType(name)
+        sys.modules[name] = module
+    module.__path__ = [path]
+
+    if "." in name:
+        parent_name, attr = name.rsplit(".", 1)
+        parent = sys.modules.get(parent_name)
+        if parent is not None:
+            setattr(parent, attr, module)
+
+    return module
+
+
+def _drop_stale_stub(module_name, required_attrs):
+    module = sys.modules.get(module_name)
+    if module is None or all(hasattr(module, attr) for attr in required_attrs):
+        return
+
+    sys.modules.pop(module_name, None)
+    if "." not in module_name:
+        return
+
+    parent_name, attr = module_name.rsplit(".", 1)
+    parent = sys.modules.get(parent_name)
+    if parent is not None and getattr(parent, attr, _MISSING) is module:
+        delattr(parent, attr)
 
 
 def _install_scipy_stub_if_missing():
@@ -76,10 +118,15 @@ def _restore_modules(original_modules):
 
 
 def _import_speaker_embedding_module():
+    _ensure_package("utils", os.path.join(_BACKEND_DIR, "utils"))
+    _ensure_package("utils.stt", os.path.join(_BACKEND_DIR, "utils", "stt"))
+    for module_name, required_attrs in _IMPORT_STUB_GUARDS.items():
+        _drop_stale_stub(module_name, required_attrs)
+
     original_modules = _install_scipy_stub_if_missing()
     try:
         # The imported module keeps its cdist binding; sys.modules stubs are restored below.
-        return importlib.import_module("utils.stt.speaker_embedding")
+        return importlib.import_module(_SPEAKER_EMBEDDING_MODULE)
     finally:
         _restore_modules(original_modules)
 

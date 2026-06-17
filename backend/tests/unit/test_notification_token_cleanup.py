@@ -1,12 +1,57 @@
 import os
 import sys
 import types
+from pathlib import Path
 from unittest.mock import MagicMock
 
 os.environ.setdefault(
     "ENCRYPTION_SECRET",
     "omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv",
 )
+
+BACKEND_DIR = Path(__file__).resolve().parents[2]
+
+
+def _set_module(name, module):
+    sys.modules[name] = module
+    parent_name, _, attr_name = name.rpartition(".")
+    parent = sys.modules.get(parent_name)
+    if parent is not None:
+        setattr(parent, attr_name, module)
+
+
+def _drop_module(name):
+    module = sys.modules.pop(name, None)
+    parent_name, _, attr_name = name.rpartition(".")
+    parent = sys.modules.get(parent_name)
+    if module is not None and parent is not None and getattr(parent, attr_name, None) is module:
+        delattr(parent, attr_name)
+    return module
+
+
+def _restore_module(name, module):
+    if module is None:
+        _drop_module(name)
+        return
+    _set_module(name, module)
+
+
+def _ensure_package(name, path):
+    module = sys.modules.get(name)
+    if not isinstance(module, types.ModuleType):
+        module = types.ModuleType(name)
+        _set_module(name, module)
+    module.__path__ = [str(path)]
+    parent_name, _, attr_name = name.rpartition(".")
+    parent = sys.modules.get(parent_name)
+    if parent is not None:
+        setattr(parent, attr_name, module)
+    return module
+
+
+_ensure_package("database", BACKEND_DIR / "database")
+_ensure_package("utils", BACKEND_DIR / "utils")
+_ensure_package("utils.llm", BACKEND_DIR / "utils" / "llm")
 
 
 class _FakeMessagingException(Exception):
@@ -47,14 +92,10 @@ firebase_admin.messaging = types.SimpleNamespace(
     WebpushFCMOptions=lambda **kwargs: kwargs,
     Message=lambda **kwargs: kwargs,
 )
-sys.modules["firebase_admin"] = firebase_admin
-sys.modules["firebase_admin.auth"] = firebase_admin.auth
-sys.modules["firebase_admin.messaging"] = firebase_admin.messaging
 
 notification_db = types.ModuleType("database.notifications")
 notification_db.get_all_tokens = MagicMock()
 notification_db.remove_bulk_tokens = MagicMock()
-sys.modules["database.notifications"] = notification_db
 
 redis_db = types.ModuleType("database.redis_db")
 for attr in [
@@ -64,11 +105,9 @@ for attr in [
     "has_silent_user_notification_been_sent",
 ]:
     setattr(redis_db, attr, MagicMock())
-sys.modules["database.redis_db"] = redis_db
 
 auth_db = types.ModuleType("database.auth")
 auth_db.get_user_from_uid = MagicMock()
-sys.modules["database.auth"] = auth_db
 
 llm_notifications = types.ModuleType("utils.llm.notifications")
 for attr in [
@@ -77,9 +116,26 @@ for attr in [
     "generate_silent_user_notification",
 ]:
     setattr(llm_notifications, attr, MagicMock())
-sys.modules["utils.llm.notifications"] = llm_notifications
+
+_module_overrides = {
+    "firebase_admin": firebase_admin,
+    "firebase_admin.auth": firebase_admin.auth,
+    "firebase_admin.messaging": firebase_admin.messaging,
+    "database.notifications": notification_db,
+    "database.redis_db": redis_db,
+    "database.auth": auth_db,
+    "utils.llm.notifications": llm_notifications,
+}
+_previous_modules = {name: sys.modules.get(name) for name in [*list(_module_overrides), "utils.notifications"]}
+
+_drop_module("utils.notifications")
+for _name, _module in _module_overrides.items():
+    _set_module(_name, _module)
 
 from utils import notifications
+
+for _name, _module in _previous_modules.items():
+    _restore_module(_name, _module)
 
 
 def setup_function():

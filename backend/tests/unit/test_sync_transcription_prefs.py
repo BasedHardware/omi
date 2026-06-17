@@ -54,6 +54,7 @@ for _sub in [
     'redis_db',
     'redis_pubsub',
     'screen_activity',
+    'sync_jobs',
     'tasks',
     'trends',
     'user_usage',
@@ -129,10 +130,20 @@ _speaker_embedding.SPEAKER_MATCH_THRESHOLD = 0.45
 sys.modules['utils.stt.speaker_embedding'] = _speaker_embedding
 
 # Stub google.cloud.storage.Client to avoid GCS credentials
+import google.cloud as _google_cloud
 import google.cloud.storage as _gcs
 
 _orig_storage_client = _gcs.Client
 _gcs.Client = MagicMock
+
+_tasks_v2 = ModuleType('google.cloud.tasks_v2')
+_tasks_v2.CloudTasksClient = MagicMock
+_tasks_v2.Task = MagicMock
+_tasks_v2.HttpRequest = MagicMock
+_tasks_v2.OidcToken = MagicMock
+_tasks_v2.HttpMethod = MagicMock(POST='POST')
+sys.modules.setdefault('google.cloud.tasks_v2', _tasks_v2)
+setattr(_google_cloud, 'tasks_v2', sys.modules['google.cloud.tasks_v2'])
 
 # Ensure env vars for modules that read them at import time
 os.environ.setdefault('OPENAI_API_KEY', 'sk-fake-for-test')

@@ -18,9 +18,22 @@ from typing import Dict, List, Optional, Set, Tuple
 
 import av
 import numpy as np
-import opuslib  # type: ignore
 
-import lc3  # lc3py
+try:
+    import opuslib  # type: ignore
+except Exception as e:
+    opuslib = None
+    _OPUS_IMPORT_ERROR = e
+else:
+    _OPUS_IMPORT_ERROR = None
+
+try:
+    import lc3  # lc3py
+except Exception as e:
+    lc3 = None
+    _LC3_IMPORT_ERROR = e
+else:
+    _LC3_IMPORT_ERROR = None
 
 from fastapi import APIRouter, Depends
 from fastapi.websockets import WebSocket, WebSocketDisconnect
@@ -128,6 +141,23 @@ from utils.log_sanitizer import sanitize, sanitize_pii
 from utils.async_tasks import supervise_tasks, drain_tasks, create_named_task, wait_for_event
 
 logger = logging.getLogger(__name__)
+
+
+def _get_opuslib():
+    if opuslib is None:
+        raise RuntimeError(
+            'Opus streaming requires opuslib and the native libopus library. '
+            'Install the OS-level Opus package before using the opus codec.'
+        ) from _OPUS_IMPORT_ERROR
+    return opuslib
+
+
+def _get_lc3():
+    if lc3 is None:
+        message = 'LC3 streaming requires lc3py and its native codec library. Install lc3py before using the lc3 codec.'
+        raise RuntimeError(message) from _LC3_IMPORT_ERROR
+    return lc3
+
 
 router = APIRouter()
 
@@ -287,7 +317,7 @@ async def _stream_handler(
         channel_id_to_index = {ch.channel_id: i for i, ch in enumerate(channel_configs)}
         stt_sockets_multi = [None] * len(channel_configs)
         if codec == 'opus':
-            multi_opus_decoders = [opuslib.Decoder(sample_rate, 1) for _ in channel_configs]
+            multi_opus_decoders = [_get_opuslib().Decoder(sample_rate, 1) for _ in channel_configs]
         else:
             multi_opus_decoders = [None] * len(channel_configs)
         channel_mix_buffers = [bytearray() for _ in channel_configs]
@@ -2412,11 +2442,16 @@ async def _stream_handler(
     lc3_decoder = None
 
     if codec == 'opus':
-        opus_decoder = opuslib.Decoder(sample_rate, 1)
+        opus_decoder = _get_opuslib().Decoder(sample_rate, 1)
     elif codec == 'aac':
         aac_decoder = AACDecoder(uid=uid, session_id=session_id, sample_rate=sample_rate, channels=channels)
     elif codec == 'lc3':
-        lc3_decoder = lc3.Decoder(lc3_frame_duration_us, sample_rate)
+        if lc3 is None:
+            websocket_close_code = 1011
+            logger.error(f"LC3 codec requested but lc3py is not installed {uid} {session_id}")
+            await websocket.close(code=websocket_close_code, reason="LC3 codec is not available")
+            return
+        lc3_decoder = _get_lc3().Decoder(lc3_frame_duration_us, sample_rate)
 
     async def receive_data(stt_socket):
         nonlocal websocket_active, websocket_close_code, last_audio_received_time, last_activity_time, current_conversation_id

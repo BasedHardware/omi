@@ -197,10 +197,7 @@ class AnalyticsManager {
   }
 
   void setNameAndEmail() {
-    _setUserPropertiesBatch({
-      '\$name': SharedPreferencesUtil().fullName,
-      '\$email': SharedPreferencesUtil().email,
-    });
+    _setUserPropertiesBatch({'\$name': SharedPreferencesUtil().fullName, '\$email': SharedPreferencesUtil().email});
   }
 
   void track(String eventName, {Map<String, dynamic>? properties}) =>
@@ -247,12 +244,12 @@ class AnalyticsManager {
       track('User Acquisition Source', properties: {'source': source});
 
   void settingsSaved({bool hasWebhookConversationCreated = false, bool hasWebhookTranscriptReceived = false}) => track(
-        'Developer Settings Saved',
-        properties: {
-          'has_webhook_memory_created': hasWebhookConversationCreated,
-          'has_webhook_transcript_received': hasWebhookTranscriptReceived,
-        },
-      );
+    'Developer Settings Saved',
+    properties: {
+      'has_webhook_memory_created': hasWebhookConversationCreated,
+      'has_webhook_transcript_received': hasWebhookTranscriptReceived,
+    },
+  );
 
   void pageOpened(String name) => track('$name Opened');
 
@@ -460,19 +457,18 @@ class AnalyticsManager {
     required String chatTargetId,
     required bool isPersonaChat,
     required bool isVoiceInput,
-  }) =>
-      track(
-        'Chat Message Sent',
-        properties: {
-          'message_length': message.length,
-          'message_word_count': message.split(' ').length,
-          'includes_files': includesFiles,
-          'number_of_files': numberOfFiles,
-          'chat_target_id': chatTargetId,
-          'is_persona_chat': isPersonaChat,
-          'is_voice_input': isVoiceInput,
-        },
-      );
+  }) => track(
+    'Chat Message Sent',
+    properties: {
+      'message_length': message.length,
+      'message_word_count': message.split(' ').length,
+      'includes_files': includesFiles,
+      'number_of_files': numberOfFiles,
+      'chat_target_id': chatTargetId,
+      'is_persona_chat': isPersonaChat,
+      'is_voice_input': isVoiceInput,
+    },
+  );
 
   void chatVoiceInputUsed({required String chatTargetId, required bool isPersonaChat}) {
     track('Chat Voice Input Used', properties: {'chat_target_id': chatTargetId, 'is_persona_chat': isPersonaChat});
@@ -493,9 +489,9 @@ class AnalyticsManager {
       track('Show Discarded Conversations Toggled', properties: {'show_discarded': showDiscarded});
 
   void shortConversationThresholdChanged(int thresholdSeconds) => track(
-        'Short Conversation Threshold Changed',
-        properties: {'threshold_seconds': thresholdSeconds, 'threshold_minutes': thresholdSeconds ~/ 60},
-      );
+    'Short Conversation Threshold Changed',
+    properties: {'threshold_seconds': thresholdSeconds, 'threshold_minutes': thresholdSeconds ~/ 60},
+  );
 
   void voiceResponseToggled(bool enabled) => track('Voice Response Audio Toggled', properties: {'enabled': enabled});
 
@@ -510,28 +506,28 @@ class AnalyticsManager {
   void conversationMergeSelectionModeExited() => track('Conversation Merge Selection Mode Exited');
 
   void conversationSelectedForMerge(String conversationId, int totalSelected) => track(
-        'Conversation Selected For Merge',
-        properties: {'conversation_id': conversationId, 'total_selected': totalSelected},
-      );
+    'Conversation Selected For Merge',
+    properties: {'conversation_id': conversationId, 'total_selected': totalSelected},
+  );
 
   void conversationMergeInitiated(List<String> conversationIds) => track(
-        'Conversation Merge Initiated',
-        properties: {'conversation_count': conversationIds.length, 'conversation_ids': conversationIds},
-      );
+    'Conversation Merge Initiated',
+    properties: {'conversation_count': conversationIds.length, 'conversation_ids': conversationIds},
+  );
 
   void conversationMergeCompleted(String mergedConversationId, List<String> removedConversationIds) => track(
-        'Conversation Merge Completed',
-        properties: {
-          'merged_conversation_id': mergedConversationId,
-          'removed_count': removedConversationIds.length,
-          'removed_conversation_ids': removedConversationIds,
-        },
-      );
+    'Conversation Merge Completed',
+    properties: {
+      'merged_conversation_id': mergedConversationId,
+      'removed_count': removedConversationIds.length,
+      'removed_conversation_ids': removedConversationIds,
+    },
+  );
 
   void conversationMergeFailed(List<String> conversationIds) => track(
-        'Conversation Merge Failed',
-        properties: {'conversation_count': conversationIds.length, 'conversation_ids': conversationIds},
-      );
+    'Conversation Merge Failed',
+    properties: {'conversation_count': conversationIds.length, 'conversation_ids': conversationIds},
+  );
 
   // Important Conversation Share Events
   void importantConversationNotificationReceived(String conversationId) =>
@@ -541,14 +537,14 @@ class AnalyticsManager {
       track('Share To Contacts Sheet Opened', properties: {'conversation_id': conversationId});
 
   void shareToContactsSelected(String conversationId, int contactCount) => track(
-        'Share To Contacts Selected',
-        properties: {'conversation_id': conversationId, 'contact_count': contactCount},
-      );
+    'Share To Contacts Selected',
+    properties: {'conversation_id': conversationId, 'contact_count': contactCount},
+  );
 
   void shareToContactsSmsOpened(String conversationId, int contactCount) => track(
-        'Share To Contacts SMS Opened',
-        properties: {'conversation_id': conversationId, 'contact_count': contactCount},
-      );
+    'Share To Contacts SMS Opened',
+    properties: {'conversation_id': conversationId, 'contact_count': contactCount},
+  );
 
   void chatMessageConversationClicked(ServerConversation conversation) =>
       track('Chat Message Memory Clicked', properties: getConversationEventProperties(conversation));
@@ -685,11 +681,11 @@ class AnalyticsManager {
       track('Delete Account Kept Account', properties: {'step': step, 'reason': reason});
 
   void deleteUser() => PlatformService.executeIfSupported(PlatformService.isAnalyticsSupported, () {
-        final adapter = _adapter;
-        if (adapter == null) return;
-        adapter.track(eventName: 'User Deleted');
-        adapter.reset();
-      });
+    final adapter = _adapter;
+    if (adapter == null) return;
+    adapter.track(eventName: 'User Deleted');
+    adapter.reset();
+  });
 
   // Apps Filter
   void appsFilterOpened() => track('Apps Filter Opened');
@@ -1039,10 +1035,7 @@ class AnalyticsManager {
   // ============================================================================
 
   void audioPlaybackFailed({required String conversationId, required String reason}) {
-    track(
-      'Audio Playback Failed',
-      properties: {'conversation_id': conversationId, 'reason': reason},
-    );
+    track('Audio Playback Failed', properties: {'conversation_id': conversationId, 'reason': reason});
   }
 
   void audioPlaybackStarted({required String conversationId, int? durationSeconds}) {

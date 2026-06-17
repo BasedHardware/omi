@@ -263,6 +263,7 @@ struct SettingsContentView: View {
   @State private var transcriptionAutoDetect: Bool = true
   @State private var transcriptionLanguage: String = "en"
   @State private var vadGateEnabled: Bool = false
+  @State private var systemAudioCaptureMode: AssistantSettings.SystemAudioCaptureMode = .always
 
   // Multi-chat mode setting
   @AppStorage("multiChatEnabled") private var multiChatEnabled = false
@@ -435,6 +436,7 @@ struct SettingsContentView: View {
     _vadGateEnabled = State(initialValue: settings.vadGateEnabled)
     _transcriptionLanguage = State(initialValue: settings.transcriptionLanguage)
     _transcriptionAutoDetect = State(initialValue: settings.transcriptionAutoDetect)
+    _systemAudioCaptureMode = State(initialValue: settings.systemAudioCaptureMode)
   }
 
   /// Computed status text for notifications
@@ -612,9 +614,16 @@ struct SettingsContentView: View {
       settingsCard(settingId: "general.audiorecording") {
         HStack(spacing: 16) {
           Circle()
-            .fill(isTranscribing ? OmiColors.success : OmiColors.textTertiary.opacity(0.3))
+            .fill(
+              isTranscribing
+                ? (appState.isAwaitingMeeting ? OmiColors.warning : OmiColors.success)
+                : OmiColors.textTertiary.opacity(0.3)
+            )
             .frame(width: 12, height: 12)
-            .shadow(color: isTranscribing ? OmiColors.success.opacity(0.5) : .clear, radius: 6)
+            .shadow(
+              color: isTranscribing
+                ? (appState.isAwaitingMeeting ? OmiColors.warning : OmiColors.success).opacity(0.5)
+                : .clear, radius: 6)
 
           Image(systemName: "mic.fill")
             .scaledFont(size: 16)
@@ -628,7 +637,9 @@ struct SettingsContentView: View {
             Text(
               transcriptionError
                 ?? (isTranscribing
-                  ? "Recording and transcribing audio" : "Audio recording is paused")
+                  ? (appState.isAwaitingMeeting
+                    ? "Waiting for a meeting…" : "Recording and transcribing audio")
+                  : "Audio recording is paused")
             )
             .scaledFont(size: 13)
             .foregroundColor(transcriptionError != nil ? OmiColors.warning : OmiColors.textTertiary)
@@ -652,6 +663,59 @@ struct SettingsContentView: View {
             )
             .toggleStyle(.switch)
             .labelsHidden()
+          }
+        }
+      }
+
+      // System Audio capture mode (macOS 14.4+ — system audio capture requires Core Audio taps)
+      if #available(macOS 14.4, *) {
+        settingsCard(settingId: "general.systemaudio") {
+          VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 16) {
+              Image(systemName: "speaker.wave.2.fill")
+                .scaledFont(size: 16)
+                .foregroundColor(OmiColors.purplePrimary)
+
+              VStack(alignment: .leading, spacing: 4) {
+                Text("System Audio")
+                  .scaledFont(size: 16, weight: .semibold)
+                  .foregroundColor(OmiColors.textPrimary)
+
+                Text("Choose when Omi records audio from other apps (calls, videos, music).")
+                  .scaledFont(size: 13)
+                  .foregroundColor(OmiColors.textTertiary)
+              }
+
+              Spacer()
+
+              Picker(
+                "",
+                selection: Binding(
+                  get: { systemAudioCaptureMode },
+                  set: { newValue in
+                    systemAudioCaptureMode = newValue
+                    setSystemAudioCaptureMode(newValue)
+                  }
+                )
+              ) {
+                Text("Always").tag(AssistantSettings.SystemAudioCaptureMode.always)
+                Text("Only during meetings").tag(
+                  AssistantSettings.SystemAudioCaptureMode.onlyDuringMeetings)
+                Text("Never").tag(AssistantSettings.SystemAudioCaptureMode.never)
+              }
+              .pickerStyle(.menu)
+              .labelsHidden()
+              .frame(width: 200)
+            }
+
+            if systemAudioCaptureMode == .onlyDuringMeetings {
+              Text(
+                "Omi captures other apps' audio only while you're in a call (e.g. Zoom, Teams, FaceTime). Detecting browser-based calls like Google Meet requires Screen Recording permission."
+              )
+              .scaledFont(size: 12)
+              .foregroundColor(OmiColors.textTertiary)
+              .fixedSize(horizontal: false, vertical: true)
+            }
           }
         }
       }
@@ -7020,6 +7084,14 @@ struct SettingsContentView: View {
     AssistantSettings.shared.transcriptionEnabled = enabled
   }
 
+  private func setSystemAudioCaptureMode(_ mode: AssistantSettings.SystemAudioCaptureMode) {
+    AnalyticsManager.shared.settingToggled(
+      setting: "system_audio_capture_mode_\(mode.rawValue)", enabled: mode != .never)
+    // Persisting posts .systemAudioCaptureModeDidChange; AppState re-applies the gate live for
+    // any in-progress recording.
+    AssistantSettings.shared.systemAudioCaptureMode = mode
+  }
+
   private func startGlowPreview() {
     isPreviewRunning = true
 
@@ -7143,6 +7215,7 @@ struct SettingsContentView: View {
     transcriptionAutoDetect = AssistantSettings.shared.transcriptionAutoDetect
     vocabularyList = AssistantSettings.shared.transcriptionVocabulary
     vadGateEnabled = AssistantSettings.shared.vadGateEnabled
+    systemAudioCaptureMode = AssistantSettings.shared.systemAudioCaptureMode
 
     Task {
       do {

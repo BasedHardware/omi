@@ -1,6 +1,12 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import { buildGmailPrompt, parseGmailMemories } from './gmailExtract'
 import type { GmailItem } from '../../../shared/types'
+
+vi.mock('./apiClient', () => ({
+  desktopApi: {
+    post: vi.fn()
+  }
+}))
 
 const item = (over: Partial<GmailItem>): GmailItem => ({
   id: 'm1',

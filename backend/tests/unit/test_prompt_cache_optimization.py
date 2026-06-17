@@ -112,17 +112,17 @@ langsmith_prompts_mod.get_prompt_metadata = MagicMock(return_value=(None, None, 
 
 def _read_clients_source() -> str:
     backend_dir = Path(__file__).resolve().parent.parent.parent
-    return (backend_dir / "utils" / "llm" / "clients.py").read_text()
+    return (backend_dir / "utils" / "llm" / "clients.py").read_text(encoding="utf-8")
 
 
 def _read_agentic_source() -> str:
     backend_dir = Path(__file__).resolve().parent.parent.parent
-    return (backend_dir / "utils" / "retrieval" / "agentic.py").read_text()
+    return (backend_dir / "utils" / "retrieval" / "agentic.py").read_text(encoding="utf-8")
 
 
 def _read_chat_source() -> str:
     backend_dir = Path(__file__).resolve().parent.parent.parent
-    return (backend_dir / "utils" / "llm" / "chat.py").read_text()
+    return (backend_dir / "utils" / "llm" / "chat.py").read_text(encoding="utf-8")
 
 
 def test_qos_cache_key_in_clients():

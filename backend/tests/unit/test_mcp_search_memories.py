@@ -13,6 +13,8 @@ from types import ModuleType
 os.environ.setdefault('OPENAI_API_KEY', 'sk-test-not-real')
 os.environ.setdefault('ENCRYPTION_SECRET', 'omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv')
 
+_BACKEND_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
+
 
 class _AutoMockModule(ModuleType):
     def __getattr__(self, name):
@@ -22,6 +24,44 @@ class _AutoMockModule(ModuleType):
         setattr(self, name, mock)
         return mock
 
+
+def _ensure_package_path(name, path):
+    module = sys.modules.get(name)
+    if not isinstance(module, ModuleType):
+        module = ModuleType(name)
+        sys.modules[name] = module
+    module.__path__ = [path]
+    if '.' in name:
+        parent_name, child_name = name.rsplit('.', 1)
+        parent = sys.modules.setdefault(parent_name, ModuleType(parent_name))
+        setattr(parent, child_name, module)
+    return module
+
+
+def _drop_stale_module(module_name, expected_file):
+    module = sys.modules.get(module_name)
+    if module is None:
+        return
+    module_file = getattr(module, '__file__', None)
+    if isinstance(module_file, str) and os.path.abspath(module_file) == expected_file:
+        return
+    sys.modules.pop(module_name, None)
+    parent_name, child_name = module_name.rsplit('.', 1)
+    parent = sys.modules.get(parent_name)
+    if isinstance(parent, ModuleType) and getattr(parent, child_name, None) is module:
+        delattr(parent, child_name)
+
+
+_ensure_package_path('utils', os.path.join(_BACKEND_DIR, 'utils'))
+_ensure_package_path('utils.retrieval', os.path.join(_BACKEND_DIR, 'utils', 'retrieval'))
+_ensure_package_path('models', os.path.join(_BACKEND_DIR, 'models'))
+_drop_stale_module(
+    'utils.retrieval.hybrid',
+    os.path.join(_BACKEND_DIR, 'utils', 'retrieval', 'hybrid.py'),
+)
+_drop_stale_module('models.memories', os.path.join(_BACKEND_DIR, 'models', 'memories.py'))
+_drop_stale_module('models.conversation_enums', os.path.join(_BACKEND_DIR, 'models', 'conversation_enums.py'))
+_drop_stale_module('models.mcp_api_key', os.path.join(_BACKEND_DIR, 'models', 'mcp_api_key.py'))
 
 _stubs = [
     'database._client',
@@ -77,6 +117,8 @@ for mod_name in _stubs:
     if mod_name not in sys.modules:
         sys.modules[mod_name] = _AutoMockModule(mod_name)
 
+if not isinstance(getattr(sys.modules['database._client'], '__file__', None), str):
+    sys.modules['database._client'].document_id_from_seed = lambda seed: 'id-' + str(abs(hash(seed)) % (10**12))
 sys.modules['dependencies'].get_uid_from_mcp_api_key = MagicMock(return_value='user-1')
 sys.modules['dependencies'].get_current_user_id = MagicMock(return_value='user-1')
 sys.modules['utils.other.endpoints'].with_rate_limit = MagicMock(side_effect=lambda dependency, _policy: dependency)

@@ -7,6 +7,7 @@ call reply_to_review directly with its collaborators patched.
 
 import importlib.abc
 import importlib.machinery
+import importlib.util
 import os
 import sys
 import types
@@ -40,10 +41,37 @@ _STUB = (
 )
 
 
+def _is_stubbed_name(name):
+    return any(name == p or name.startswith(p + '.') for p in _STUB)
+
+
+def _snapshot_stubbed_modules():
+    return {name: module for name, module in sys.modules.items() if _is_stubbed_name(name)}
+
+
 def _clear_stubbed_modules():
     for name in list(sys.modules):
-        if any(name == p or name.startswith(p + '.') for p in _STUB):
+        if _is_stubbed_name(name):
             sys.modules.pop(name, None)
+
+
+def _restore_stubbed_modules(snapshot):
+    for name in list(sys.modules):
+        if _is_stubbed_name(name) and name not in snapshot:
+            sys.modules.pop(name, None)
+    sys.modules.update(snapshot)
+
+
+def _install_python_multipart_stub():
+    if 'python_multipart' in sys.modules:
+        return False
+    if importlib.util.find_spec('python_multipart') is not None:
+        return False
+
+    mod = types.ModuleType('python_multipart')
+    mod.__version__ = '0.0.20'
+    sys.modules['python_multipart'] = mod
+    return True
 
 
 class _AutoMock(types.ModuleType):
@@ -71,13 +99,17 @@ class _Finder(importlib.abc.MetaPathFinder, importlib.abc.Loader):
 
 
 _finder = _Finder()
+_stubbed_modules_snapshot = _snapshot_stubbed_modules()
 _clear_stubbed_modules()
+_remove_python_multipart_stub = _install_python_multipart_stub()
 sys.meta_path.insert(0, _finder)
 try:
     from routers import apps as apps_mod
 finally:
     sys.meta_path.remove(_finder)
-    _clear_stubbed_modules()
+    _restore_stubbed_modules(_stubbed_modules_snapshot)
+    if _remove_python_multipart_stub:
+        sys.modules.pop('python_multipart', None)
 
 from fastapi import HTTPException  # noqa: E402
 

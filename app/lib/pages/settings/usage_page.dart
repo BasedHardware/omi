@@ -200,7 +200,13 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
       shareText = baseText;
     }
 
-    await SharePlus.instance.share(ShareParams(files: [XFile(file.path)], subject: periodTitle, text: shareText));
+    await SharePlus.instance.share(
+      ShareParams(
+        files: [XFile(file.path)],
+        subject: periodTitle.isEmpty ? null : periodTitle,
+        text: shareText.isEmpty ? null : shareText,
+      ),
+    );
   }
 
   String _getPeriodForIndex(int index) {

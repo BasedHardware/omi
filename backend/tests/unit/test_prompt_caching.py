@@ -11,13 +11,63 @@ import inspect
 import re
 import sys
 from datetime import datetime, timezone
+from pathlib import Path
 from types import ModuleType
 from unittest.mock import MagicMock
 
 # Mock modules that initialize GCP clients or require API keys at import time
+BACKEND_DIR = Path(__file__).resolve().parent.parent.parent
+
+
+def _ensure_package(name: str, path: Path) -> ModuleType:
+    module = sys.modules.get(name)
+    if not isinstance(module, ModuleType):
+        module = ModuleType(name)
+        sys.modules[name] = module
+    module.__path__ = [str(path)]
+    if "." in name:
+        parent_name, child_name = name.rsplit(".", 1)
+        parent = sys.modules.setdefault(parent_name, ModuleType(parent_name))
+        setattr(parent, child_name, module)
+    return module
+
+
+_ensure_package("utils", BACKEND_DIR / "utils")
+llm_package = _ensure_package("utils.llm", BACKEND_DIR / "utils" / "llm")
+_ensure_package("models", BACKEND_DIR / "models")
+
+
+def _drop_module_if_missing_attrs(module_name, required_attrs):
+    module = sys.modules.get(module_name)
+    if module is None or all(hasattr(module, name) for name in required_attrs):
+        return
+    sys.modules.pop(module_name, None)
+    parent_name, child_name = module_name.rsplit(".", 1)
+    parent = sys.modules.get(parent_name)
+    if isinstance(parent, ModuleType) and getattr(parent, child_name, None) is module:
+        delattr(parent, child_name)
+
+
+_drop_module_if_missing_attrs("models.conversation_enums", ("CategoryEnum",))
+_drop_module_if_missing_attrs(
+    "models.structured",
+    ("ActionItem", "ActionItemsExtraction", "Event", "Structured"),
+)
+
+_conversation_processing_stub = sys.modules.get("utils.llm.conversation_processing")
+if _conversation_processing_stub is not None and not hasattr(
+    _conversation_processing_stub, "_build_conversation_context"
+):
+    sys.modules.pop("utils.llm.conversation_processing", None)
+
 sys.modules.setdefault("database._client", MagicMock())
-_mock_clients = MagicMock()
-sys.modules.setdefault("utils.llm.clients", _mock_clients)
+_mock_clients = sys.modules.get("utils.llm.clients")
+if not isinstance(_mock_clients, ModuleType):
+    _mock_clients = ModuleType("utils.llm.clients")
+    sys.modules["utils.llm.clients"] = _mock_clients
+_mock_clients.get_llm = MagicMock()
+_mock_clients.parser = MagicMock()
+setattr(llm_package, "clients", _mock_clients)
 
 
 class _FakePydanticOutputParser:

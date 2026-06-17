@@ -11,7 +11,13 @@ from concurrent.futures import as_completed, wait, FIRST_COMPLETED
 
 from utils.executors import postprocess_executor, storage_executor
 
-import opuslib
+try:
+    import opuslib
+except Exception as e:
+    opuslib = None
+    _OPUS_IMPORT_ERROR = e
+else:
+    _OPUS_IMPORT_ERROR = None
 from google.cloud import storage
 from google.oauth2 import service_account
 from google.cloud.exceptions import NotFound as BlobNotFound
@@ -67,6 +73,15 @@ chat_files_bucket = os.getenv('BUCKET_CHAT_FILES')
 desktop_updates_bucket = os.getenv('BUCKET_DESKTOP_UPDATES')
 
 _did_warn_missing_speech_profiles_bucket = False
+
+
+def _get_opuslib():
+    if opuslib is None:
+        raise RuntimeError(
+            'Opus support requires opuslib and the native libopus library. '
+            'Install the OS-level Opus package before encoding or decoding .opus audio.'
+        ) from _OPUS_IMPORT_ERROR
+    return opuslib
 
 
 def _get_speech_profiles_bucket(required: bool = False):
@@ -410,7 +425,8 @@ def encode_pcm_to_opus(pcm_data: bytes, sample_rate: int = OPUS_SAMPLE_RATE, cha
     Returns:
         Length-prefixed Opus packets as bytes
     """
-    encoder = opuslib.Encoder(sample_rate, channels, opuslib.APPLICATION_VOIP)
+    opus = _get_opuslib()
+    encoder = opus.Encoder(sample_rate, channels, opus.APPLICATION_VOIP)
     frame_size = sample_rate * OPUS_FRAME_DURATION_MS // 1000
     bytes_per_frame = frame_size * channels * 2  # 16-bit = 2 bytes per sample
 
@@ -456,7 +472,6 @@ def decode_opus_to_pcm(opus_data: bytes, sample_rate: int = OPUS_SAMPLE_RATE, ch
     if len(opus_data) < 8:
         raise ValueError(f"Opus data too short: {len(opus_data)} bytes (need at least 8 for header)")
 
-    decoder = opuslib.Decoder(sample_rate, channels)
     frame_size = sample_rate * OPUS_FRAME_DURATION_MS // 1000
 
     offset = 0
@@ -465,7 +480,7 @@ def decode_opus_to_pcm(opus_data: bytes, sample_rate: int = OPUS_SAMPLE_RATE, ch
     original_pcm_len = struct.unpack_from('<I', opus_data, offset)[0]
     offset += 4
 
-    pcm_parts = []
+    packets = []
     for i in range(packet_count):
         if offset + 2 > len(opus_data):
             raise ValueError(f"Truncated Opus data: expected packet {i}/{packet_count} length at offset {offset}")
@@ -475,8 +490,14 @@ def decode_opus_to_pcm(opus_data: bytes, sample_rate: int = OPUS_SAMPLE_RATE, ch
             raise ValueError(
                 f"Truncated Opus data: packet {i} needs {pkt_len} bytes at offset {offset}, only {len(opus_data) - offset} available"
             )
-        pkt_data = opus_data[offset : offset + pkt_len]
+        packets.append(opus_data[offset : offset + pkt_len])
         offset += pkt_len
+
+    opus = _get_opuslib()
+    decoder = opus.Decoder(sample_rate, channels)
+
+    pcm_parts = []
+    for pkt_data in packets:
         decoded = decoder.decode(pkt_data, frame_size)
         pcm_parts.append(decoded)
 

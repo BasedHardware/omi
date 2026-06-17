@@ -18,6 +18,7 @@ import pytest
 
 class UploadFile:
     """Simulates FastAPI's UploadFile for testing."""
+
     def __init__(self, filename, content=b"test content"):
         self.filename = filename
         self.content = content
@@ -96,9 +97,7 @@ class TestPathTraversalV2:
 
     def test_nested_traversal_stripped(self, uploaded_paths):
         """Deep nesting fully stripped."""
-        simulate_upload_endpoint(
-            [UploadFile("../../../tmp/../../etc/hosts")], uploaded_paths
-        )
+        simulate_upload_endpoint([UploadFile("../../../tmp/../../etc/hosts")], uploaded_paths)
         assert "hosts" in uploaded_paths.paths[0]
         assert "../" not in uploaded_paths.paths[0]
 
@@ -118,9 +117,7 @@ class TestNoneFilenameV2:
 
     def test_none_filename_file_created_and_cleaned(self, uploaded_paths):
         """File should be created in temp dir and cleaned up."""
-        _, temp_files = simulate_upload_endpoint(
-            [UploadFile(None)], uploaded_paths
-        )
+        _, temp_files = simulate_upload_endpoint([UploadFile(None)], uploaded_paths)
         for tf in temp_files:
             assert not tf.exists()
 
@@ -141,6 +138,7 @@ class TestTempFileLocationV2:
     def test_not_in_cwd(self, uploaded_paths):
         """Temp file must not be in current working directory."""
         import os
+
         simulate_upload_endpoint([UploadFile("test.txt")], uploaded_paths)
         cwd = os.getcwd()
         assert not uploaded_paths.paths[0].startswith(cwd + os.sep)
@@ -151,18 +149,17 @@ class TestCleanupV2:
 
     def test_cleanup_on_success(self):
         """Temp file removed after successful upload."""
-        def success_upload(fp):
-            return {'file_name': 'test.txt', 'mime_type': 'text/plain',
-                    'file_id': 'f1', 'thumbnail_name': ''}
 
-        _, temp_files = simulate_upload_endpoint(
-            [UploadFile("test.txt")], success_upload
-        )
+        def success_upload(fp):
+            return {'file_name': 'test.txt', 'mime_type': 'text/plain', 'file_id': 'f1', 'thumbnail_name': ''}
+
+        _, temp_files = simulate_upload_endpoint([UploadFile("test.txt")], success_upload)
         for tf in temp_files:
             assert not tf.exists()
 
     def test_cleanup_on_upload_failure(self):
         """Temp file removed even when upload raises exception."""
+
         def failing_upload(fp):
             raise RuntimeError("upload service unavailable")
 
@@ -170,15 +167,16 @@ class TestCleanupV2:
             simulate_upload_endpoint([UploadFile("test.txt")], failing_upload)
 
         import glob
+
         # No orphan temp files with our UUID pattern
         leftovers = glob.glob(f"{tempfile.gettempdir()}/test_*")
         assert len(leftovers) == 0
 
     def test_multiple_files_all_cleaned(self):
         """Multiple file uploads — all temp files cleaned."""
+
         def success_upload(fp):
-            return {'file_name': 'test', 'mime_type': 'text/plain',
-                    'file_id': 'f1', 'thumbnail_name': ''}
+            return {'file_name': 'test', 'mime_type': 'text/plain', 'file_id': 'f1', 'thumbnail_name': ''}
 
         _, temp_files = simulate_upload_endpoint(
             [UploadFile("a.txt"), UploadFile("b.pdf"), UploadFile("c.png")],

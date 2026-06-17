@@ -30,7 +30,14 @@ from utils.executors import (
 
 from fastapi import APIRouter, UploadFile, File, Depends, HTTPException, Query, Header, Request, Response
 from fastapi.responses import JSONResponse, StreamingResponse
-from opuslib import Decoder
+
+try:
+    from opuslib import Decoder
+except Exception as e:
+    Decoder = None
+    _OPUS_IMPORT_ERROR = e
+else:
+    _OPUS_IMPORT_ERROR = None
 from pydub import AudioSegment
 
 from database import conversations as conversations_db
@@ -119,6 +126,15 @@ AUDIO_SAMPLE_RATE = 16000
 _V1_DEPRECATION_HEADERS = {'Deprecation': 'true', 'Link': '</v2/sync-local-files>; rel="successor-version"'}
 
 router = APIRouter()
+
+
+def _get_opus_decoder_class():
+    if Decoder is None:
+        raise RuntimeError(
+            'Opus sync decoding requires opuslib and the native libopus library. '
+            'Install the OS-level Opus package before processing .opus sync files.'
+        ) from _OPUS_IMPORT_ERROR
+    return Decoder
 
 
 # **********************************************
@@ -601,7 +617,7 @@ def decode_opus_file_to_wav(opus_file_path, wav_file_path, sample_rate=16000, ch
         logger.warning(f"File not found: {sanitize(opus_file_path)}")
         return False
 
-    decoder = Decoder(sample_rate, channels)
+    decoder = _get_opus_decoder_class()(sample_rate, channels)
     frame_count = 0
 
     try:
