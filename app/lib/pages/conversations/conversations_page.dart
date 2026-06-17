@@ -66,6 +66,9 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
 
       if (!mounted) return;
 
+      // Surface any unsynced batch recordings written by the native layer.
+      context.read<CaptureProvider>().ingestBatchRecordings();
+
       // Load folders for folder tabs
       final folderProvider = context.read<FolderProvider>();
       if (folderProvider.folders.isEmpty) {
