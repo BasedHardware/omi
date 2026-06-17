@@ -63,6 +63,21 @@ _RESTORED_MODULES = tuple(_database_stubs + _utils_stubs + ["utils.app_integrati
 # "database" is restored because this test temporarily replaces that parent.
 _MISSING = object()
 _saved_modules = {name: sys.modules.get(name, _MISSING) for name in _RESTORED_MODULES}
+_BACKEND_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
+
+
+def _ensure_package(name, path):
+    module = sys.modules.get(name)
+    if not isinstance(module, types.ModuleType) or not hasattr(module, '__path__'):
+        module = types.ModuleType(name)
+        sys.modules[name] = module
+    module.__path__ = [path]
+    if '.' in name:
+        parent_name, attr = name.rsplit('.', 1)
+        parent = sys.modules.get(parent_name)
+        if parent is not None:
+            setattr(parent, attr, module)
+    return module
 
 
 def _install_module(name, module):
@@ -93,6 +108,8 @@ def _restore_stub_modules():
                 if parent is not None:
                     setattr(parent, attr, original)
 
+
+_ensure_package("utils", os.path.join(_BACKEND_DIR, "utils"))
 
 # Stub database modules
 _db_pkg = types.ModuleType("database")
