@@ -34,7 +34,7 @@ class OmiBatchAudioWriter(private val context: Context) {
     companion object {
         private const val TAG = "OmiBle.BatchWriter"
         private const val FLUTTER_PREFS = "FlutterSharedPreferences"
-        private const val JOURNAL_NAME = ".batch_journal"
+        private const val PART_SUFFIX = ".part" // active (still-being-written) files end .bin.part
         private const val MAX_FILE_BYTES = 32L * 1024 * 1024 // ~32 MB per file
         private const val MAX_FILE_SECONDS = 1800L // 30 min per file
         private const val GAP_MS = 30_000L // close current file after this silence gap
@@ -61,6 +61,7 @@ class OmiBatchAudioWriter(private val context: Context) {
     private var lastFrameMs: Long = 0
     private var lastFsyncMs: Long = 0
     private var storageFull = false
+    private var recovered = false
 
     /** Audio target for this device if batch mode is on — used by the foreground
      *  service to subscribe to the audio characteristic when Flutter is dead. */
@@ -136,6 +137,12 @@ class OmiBatchAudioWriter(private val context: Context) {
             Log.e(TAG, "cannot create batch dir ${config.dir}")
             return
         }
+        // Recover from a previous process that died mid-write: any leftover .bin.part
+        // is a finalized-by-crash orphan — promote it to .bin so it becomes ingestable.
+        if (!recovered) {
+            recovered = true
+            recoverStalePartFiles(dir)
+        }
         if (dir.usableSpace < MIN_FREE_BYTES) {
             if (!storageFull) {
                 Log.w(TAG, "storage low (${dir.usableSpace} bytes free) — pausing batch capture")
@@ -152,7 +159,9 @@ class OmiBatchAudioWriter(private val context: Context) {
         val startSec = nowMs / 1000
         val frameSize = if (config.codec == "opus_fs320") 320 else 160
         val deviceToken = config.deviceType.lowercase(Locale.US).filter { it.isLetterOrDigit() }.ifEmpty { "omi" }
-        val name = "audio_${deviceToken}_${config.codec}_${config.sampleRate}_1_fs${frameSize}_${startSec}.bin"
+        // Write to a .bin.part file while active; rename to .bin only once finalized so
+        // Flutter (which ingests *.bin) never picks up a half-written file.
+        val name = "audio_${deviceToken}_${config.codec}_${config.sampleRate}_1_fs${frameSize}_${startSec}.bin$PART_SUFFIX"
         val file = File(dir, name)
 
         try {
@@ -164,7 +173,6 @@ class OmiBatchAudioWriter(private val context: Context) {
             currentBytes = file.length()
             currentFrames = 0
             lastFsyncMs = nowMs
-            writeJournal(dir, name)
             Log.i(TAG, "opened batch file $name")
         } catch (e: Exception) {
             Log.e(TAG, "open failed for $name: ${e.message}")
@@ -197,6 +205,7 @@ class OmiBatchAudioWriter(private val context: Context) {
 
     private fun closeCurrentLocked(reason: String) {
         val out = raf ?: return
+        val partFile = currentFile
         try {
             out.fd.sync()
         } catch (_: Exception) {
@@ -205,31 +214,44 @@ class OmiBatchAudioWriter(private val context: Context) {
             out.close()
         } catch (_: Exception) {
         }
-        Log.i(TAG, "closed batch file ${currentFile?.name} ($currentFrames frames, $currentBytes bytes, reason=$reason)")
+        if (partFile != null) {
+            if (currentBytes > 0) {
+                // Atomically promote .bin.part -> .bin so it becomes ingestable.
+                val finalFile = File(partFile.parentFile, partFile.name.removeSuffix(PART_SUFFIX))
+                val renamed = partFile.renameTo(finalFile)
+                if (!renamed) Log.w(TAG, "failed to finalize ${partFile.name}")
+                Log.i(TAG, "finalized ${finalFile.name} ($currentFrames frames, $currentBytes bytes, reason=$reason)")
+            } else {
+                partFile.delete() // nothing written — drop the empty placeholder
+            }
+        }
         raf = null
         currentFile = null
         currentStartSec = 0
         currentBytes = 0
         currentFrames = 0
         lastFrameMs = 0
-        clearJournal()
     }
 
-    // ── Journal (so Flutter never ingests the file being written) ──
+    // ── Crash recovery ──
 
-    private fun writeJournal(dir: File, filename: String) {
+    /** Promote any leftover `*.bin.part` from a previous (crashed) process to `.bin`
+     *  so finalized-by-crash recordings are not lost. Empty placeholders are deleted. */
+    private fun recoverStalePartFiles(dir: File) {
         try {
-            File(dir, JOURNAL_NAME).writeText(filename)
+            val parts = dir.listFiles { f ->
+                f.isFile && f.name.startsWith("audio_") && f.name.endsWith(".bin$PART_SUFFIX")
+            } ?: return
+            for (p in parts) {
+                if (p.length() > 0L) {
+                    val finalFile = File(dir, p.name.removeSuffix(PART_SUFFIX))
+                    if (p.renameTo(finalFile)) Log.i(TAG, "recovered stale batch file -> ${finalFile.name}")
+                } else {
+                    p.delete()
+                }
+            }
         } catch (e: Exception) {
-            Log.w(TAG, "journal write failed: ${e.message}")
-        }
-    }
-
-    private fun clearJournal() {
-        try {
-            val dir = currentFile?.parentFile ?: loadConfig()?.dir?.let { File(it) }
-            if (dir != null) File(dir, JOURNAL_NAME).delete()
-        } catch (_: Exception) {
+            Log.w(TAG, "recoverStalePartFiles failed: ${e.message}")
         }
     }
 
