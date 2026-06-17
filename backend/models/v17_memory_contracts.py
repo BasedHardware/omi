@@ -2,6 +2,7 @@ import hashlib
 import json
 from enum import Enum
 from typing import Any, Dict, List, Optional
+from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
@@ -67,7 +68,7 @@ class EvidenceRef(BaseModel):
 
 class WorkingMemoryObservation(BaseModel):
     schema_version: str = "working_memory_observation.v1"
-    observation_id: str
+    observation_id: str = ""
     packet_id: Optional[str] = None
     content: str
     evidence_ids: List[str] = Field(default_factory=list)
@@ -145,6 +146,49 @@ class L2SearchResult(BaseModel):
     score: Optional[float] = None
     content: Optional[str] = None
     metadata: Dict[str, Any] = Field(default_factory=dict)
+
+
+class L2MemoryRoute(BaseModel):
+    schema_version: str = "l2_memory_route.v1"
+    route: Literal["durable", "review", "discard", "hidden"]
+    memory_text: Optional[str] = None
+    evidence_quotes: List[str] = Field(default_factory=list)
+    confidence: str = "medium"
+    reason: str
+    drop_reason: Optional[
+        Literal[
+            "ephemeral_chatter",
+            "third_party_or_unknown_speaker",
+            "ui_or_ocr_context",
+            "unsupported_or_too_noisy",
+            "secret_or_security_sensitive",
+            "duplicate",
+            "not_future_useful",
+            "missing_user_tie",
+        ]
+    ] = None
+
+    @field_validator("confidence")
+    @classmethod
+    def validate_route_confidence(cls, value: str) -> str:
+        if value not in {"high", "medium", "low"}:
+            raise ValueError("confidence must be high, medium, or low")
+        return value
+
+    @model_validator(mode="after")
+    def validate_route_contract(self):
+        if self.route in {"durable", "review"}:
+            if not self.memory_text:
+                raise ValueError("durable/review routes require memory_text")
+            if not self.evidence_quotes:
+                raise ValueError("durable/review routes require exact evidence_quotes")
+            if self.drop_reason is not None:
+                raise ValueError("durable/review routes must not set drop_reason")
+        if self.route in {"discard", "hidden"} and not self.drop_reason:
+            raise ValueError("discard/hidden routes require drop_reason")
+        if self.route == "hidden" and self.drop_reason != "secret_or_security_sensitive":
+            raise ValueError("hidden route requires secret_or_security_sensitive drop_reason")
+        return self
 
 
 class DurableMemoryPatch(BaseModel):

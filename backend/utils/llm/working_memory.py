@@ -9,8 +9,13 @@ from models.v17_memory_contracts import WorkingMemoryObservation, deterministic_
 
 try:
     from .clients import get_llm
-except ModuleNotFoundError:
+
+    _CLIENT_IMPORT_ERROR = None
+except Exception as exc:
+    # Benchmark/product-module tests may run without Firestore ADC or optional provider deps.
+    # Keep the L1 prompt/parser/validation importable so callers can inject an equivalent llm.
     get_llm = None
+    _CLIENT_IMPORT_ERROR = exc
 
 logger = logging.getLogger(__name__)
 

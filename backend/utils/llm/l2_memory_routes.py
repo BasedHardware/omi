@@ -1,0 +1,128 @@
+import json
+import logging
+import re
+from typing import Any, Dict, Optional
+
+from langchain_core.output_parsers import PydanticOutputParser
+from langchain_core.prompts import ChatPromptTemplate
+from pydantic import BaseModel, Field, ValidationError
+
+from models.v17_memory_contracts import L2MemoryRoute
+
+try:
+    from .clients import get_llm
+
+    _CLIENT_IMPORT_ERROR = None
+except Exception as exc:
+    # Benchmark/product-module tests may run without Firestore ADC or optional provider deps.
+    get_llm = None
+    _CLIENT_IMPORT_ERROR = exc
+
+logger = logging.getLogger(__name__)
+
+_QUOTE_WRAPPER_RE = re.compile(r"^\s*User\s+(said|mentioned|stated|talked about|noted)\s+['\"]", re.IGNORECASE)
+
+
+class L2MemoryRouteResponse(BaseModel):
+    route: L2MemoryRoute = Field(...)
+
+
+l2_memory_route_prompt = ChatPromptTemplate.from_messages(
+    [
+        (
+            "system",
+            """
+You are Omi Layer 2 memory routing.
+
+Your only job is to classify one L2 evidence packet as exactly one route:
+- durable: a standalone, future-useful long-term memory about the primary user, their project/work, explicit plan, preference, relationship context, constraint, or durable intent.
+- review: potentially useful but uncertain, ambiguous, or needing human/model review.
+- discard: not durable memory: ephemeral chatter, UI/OCR context, third-party/unknown speaker, duplicate, unsupported/noisy, missing user tie, or not future-useful.
+- hidden: secret/security-sensitive material.
+
+Do NOT output patch operations, lifecycle states, IDs, predicates, graph fields, or ledger details.
+Do NOT output `working`, `active`, `context_only`, `add`, `merge`, `update`, or `skip_duplicate`.
+
+Rules:
+- durable/review require a concise memory_text and at least one exact source quote copied from the packet.
+- discard/hidden require drop_reason.
+- hidden requires drop_reason=secret_or_security_sensitive.
+- Reject quote wrappers like "User said ..."; rewrite into a durable abstraction or discard/review.
+- UI/OCR state, assistant filler, task-switching chatter, and non-primary-speaker/unknown-subject content should usually be discard unless there is a strong explicit user tie.
+- Existing/custom search results are context only and are not primary evidence for new claims.
+
+Return JSON matching:
+{format_instructions}
+""".strip(),
+        ),
+        (
+            "human",
+            """
+Observed head commit id: {observed_head_commit_id}
+
+L2 evidence packet:
+{packet_json}
+
+Custom search replay artifact:
+{custom_search_json}
+""".strip(),
+        ),
+    ]
+)
+
+
+def _content_from_response(response) -> str:
+    content = getattr(response, "content", response)
+    if isinstance(content, list):
+        return "\n".join(str(part) for part in content)
+    return str(content)
+
+
+def _canonical_json(value: Any) -> str:
+    return json.dumps(value, sort_keys=True, separators=(",", ":"), default=str)
+
+
+def _is_quote_wrapper(memory_text: Optional[str]) -> bool:
+    if not memory_text:
+        return False
+    return bool(_QUOTE_WRAPPER_RE.match(memory_text))
+
+
+def classify_l2_memory_route(
+    *,
+    packet: Dict[str, Any],
+    custom_search_artifact: Dict[str, Any],
+    observed_head_commit_id: Optional[str],
+    llm=None,
+) -> Optional[L2MemoryRoute]:
+    parser = PydanticOutputParser(pydantic_object=L2MemoryRouteResponse)
+    messages = l2_memory_route_prompt.format_messages(
+        observed_head_commit_id=observed_head_commit_id or "unknown",
+        packet_json=_canonical_json(packet),
+        custom_search_json=_canonical_json(custom_search_artifact),
+        format_instructions=parser.get_format_instructions(),
+    )
+    if llm is not None:
+        model = llm
+    elif get_llm is not None:
+        model = get_llm("memory_l2")
+    else:
+        logger.error("Error classifying V17 L2 memory route: missing_llm_client")
+        return None
+
+    try:
+        response = model.invoke(messages)
+        parsed = parser.parse(_content_from_response(response))
+        route = parsed.route
+        if _is_quote_wrapper(route.memory_text):
+            return L2MemoryRoute(
+                route="review",
+                memory_text=route.memory_text,
+                evidence_quotes=route.evidence_quotes,
+                confidence="low",
+                reason="Quote-wrapper memory text requires review/rewrite before durable export.",
+            )
+        return route
+    except (ValidationError, Exception) as exc:
+        logger.error("Error classifying V17 L2 memory route: %s", type(exc).__name__)
+        return None
