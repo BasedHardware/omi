@@ -49,6 +49,7 @@ import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/device_provider.dart';
+import 'package:omi/providers/local_recordings_provider.dart';
 import 'package:omi/providers/announcement_provider.dart';
 import 'package:omi/providers/home_provider.dart';
 import 'package:omi/providers/message_provider.dart';
@@ -191,7 +192,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
         final captureProvider = Provider.of<CaptureProvider>(context, listen: false);
         captureProvider.refreshInProgressConversations();
         // Pick up any batch recordings the native layer wrote while backgrounded/closed.
-        captureProvider.ingestBatchRecordings();
+        Provider.of<LocalRecordingsProvider>(context, listen: false).refresh();
       }
 
       // Ensure agent VM is running and restart keepalive
