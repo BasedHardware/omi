@@ -14,6 +14,44 @@ os.environ.setdefault('ENCRYPTION_SECRET', 'omi_test_secret_key_for_unit_tests_o
 
 # Stub database._client so importing models.memories doesn't spin up Firestore.
 _BACKEND_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
+
+
+def _ensure_package_path(name, path):
+    module = sys.modules.get(name)
+    if not isinstance(module, ModuleType):
+        module = ModuleType(name)
+        sys.modules[name] = module
+    module.__path__ = [path]
+    if '.' in name:
+        parent_name, child_name = name.rsplit('.', 1)
+        parent = sys.modules.setdefault(parent_name, ModuleType(parent_name))
+        setattr(parent, child_name, module)
+    return module
+
+
+def _drop_stale_module(module_name, expected_file):
+    module = sys.modules.get(module_name)
+    if module is None:
+        return
+    module_file = getattr(module, '__file__', None)
+    if isinstance(module_file, str) and os.path.abspath(module_file) == expected_file:
+        return
+    sys.modules.pop(module_name, None)
+    parent_name, child_name = module_name.rsplit('.', 1)
+    parent = sys.modules.get(parent_name)
+    if isinstance(parent, ModuleType) and getattr(parent, child_name, None) is module:
+        delattr(parent, child_name)
+
+
+_ensure_package_path('utils', os.path.join(_BACKEND_DIR, 'utils'))
+_ensure_package_path('utils.retrieval', os.path.join(_BACKEND_DIR, 'utils', 'retrieval'))
+_ensure_package_path('models', os.path.join(_BACKEND_DIR, 'models'))
+_drop_stale_module(
+    'utils.retrieval.hybrid',
+    os.path.join(_BACKEND_DIR, 'utils', 'retrieval', 'hybrid.py'),
+)
+_drop_stale_module('models.memories', os.path.join(_BACKEND_DIR, 'models', 'memories.py'))
+
 database_pkg = sys.modules.setdefault('database', ModuleType('database'))
 database_pkg.__path__ = [os.path.join(_BACKEND_DIR, 'database')]
 _client_stub = ModuleType('database._client')
