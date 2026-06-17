@@ -219,10 +219,19 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     // Open a fresh speech window for this turn (Gemini manual-VAD needs it EVERY
     // turn on a warm session; OpenAI no-op).
     session?.beginInputTurn(interrupting: bargeIn)
-    // Speculative, parallel, non-blocking screen grab (item 6a).
+    // Capture the screen at turn START and, for Gemini, send it in-turn right away — early
+    // enough that the ~450KB JPEG uploads/decodes during the seconds of speech, so the
+    // model can see it when it answers. A frame attached at commit (PTT-up) lands too late:
+    // the model starts generating before it decodes and answers blind on the first turn
+    // (correct only on the next turn, once the frame is in context). Non-blocking.
     Task.detached(priority: .utility) {
-      let shot = ScreenCaptureManager.captureScreenData()
-      await MainActor.run { self.speculativeScreenshot = shot }
+      let jpeg = ScreenCaptureManager.captureScreenJPEG()
+      await MainActor.run {
+        self.speculativeScreenshot = jpeg
+        if self.sessionProvider == .gemini, let jpeg {
+          self.session?.sendVideoFrame(jpeg, mime: "image/jpeg")
+        }
+      }
     }
   }
 
@@ -242,6 +251,8 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     // this keeps the bar's `isVoiceActive` true across the PTT-up → thinking handoff, so
     // the window stays expanded (the window observes the flags and resizes itself).
     barState?.isVoiceThinking = true
+    // (The screen frame is sent at turn START — see beginTurn — so it has time to
+    // upload/decode before the model answers. Nothing to attach here.)
     session?.commitInputTurn()
   }
 
@@ -358,9 +369,13 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
         callId: callId, name: name,
         output: "Agent started. Acknowledged before the call — do not say anything else.")
     case .screenshot:
+      // Gemini: the screen is already attached to every turn (see commitTurn), so the
+      // tool is just an ack — pushing another image here is the broken path (mid-tool-call
+      // injection self-interrupts the turn / closes the socket 1007). OpenAI: add the image
+      // as an ordered conversation item (that path works for OpenAI).
       let shot = speculativeScreenshot ?? ScreenCaptureManager.captureScreenData()
-      if let shot { session?.injectImage(shot) }
-      log("RealtimeHub[\(providerTag)]: tool screenshot → local capture (\(shot?.count ?? 0) bytes)")
+      if sessionProvider == .openai, let shot { session?.injectImage(shot) }
+      log("RealtimeHub[\(providerTag)]: tool screenshot → ack (\(shot?.count ?? 0) bytes, screen on turn)")
       session?.sendToolResult(
         callId: callId, name: name,
         output: shot == nil ? "Could not capture the screen." : "Screen captured.")
