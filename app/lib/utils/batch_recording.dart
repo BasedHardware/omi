@@ -1,5 +1,10 @@
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 
+/// Marker stored in [Wal.device] for recordings produced by offline/batch mode.
+/// Lets the conversations list show *only* batch recordings — never the device
+/// SD-card/flash sync WALs or realtime offline buffers (which live on the Sync page).
+const String batchRecordingDevice = 'omibatch';
+
 /// Metadata parsed from a batch recording filename written by the native layer:
 ///
 ///   audio_{device}_{codec}_{sampleRate}_{channel}_fs{frameSize}_{timestamp}.bin
