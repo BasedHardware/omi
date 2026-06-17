@@ -1,5 +1,7 @@
 {
-  "unreleased": [],
+  "unreleased": [
+    "Fixed goal progress rings and labels showing an incorrect value when a tracked value dropped below its starting point"
+  ],
   "releases": [
     {
       "version": "0.11.467",
