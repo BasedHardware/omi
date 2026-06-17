@@ -37,15 +37,21 @@ os.environ.setdefault(
 # Helpers
 # ---------------------------------------------------------------------------
 def _stub_module(name):
-    mod = types.ModuleType(name)
-    sys.modules[name] = mod
+    mod = sys.modules.get(name)
+    if mod is None:
+        mod = types.ModuleType(name)
+        sys.modules[name] = mod
+    if "." in name:
+        parent_name, attr_name = name.rsplit(".", 1)
+        parent = sys.modules.get(parent_name)
+        if parent is not None:
+            setattr(parent, attr_name, mod)
     return mod
 
 
 def _stub_package(name):
-    mod = types.ModuleType(name)
+    mod = _stub_module(name)
     mod.__path__ = []
-    sys.modules[name] = mod
     return mod
 
 
