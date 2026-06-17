@@ -48,7 +48,7 @@ class ConversationsGroupWidget extends StatelessWidget {
               date: date,
             );
           }
-          return RecordingListItem(key: ValueKey('rec_${e.rec!.id}'), wal: e.rec!);
+          return RecordingListItem(key: ValueKey('rec_${e.rec!.filePath ?? e.rec!.id}'), wal: e.rec!);
         }),
         const SizedBox(height: 10),
       ],
