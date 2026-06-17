@@ -29,7 +29,7 @@ def _cosine_cdist(a, b, metric="cosine"):
     denominator = np.linalg.norm(a, axis=1)[:, None] * np.linalg.norm(b, axis=1)[None, :]
 
     with np.errstate(divide="ignore", invalid="ignore"):
-        similarity = np.divide(numerator, denominator, out=np.zeros_like(numerator), where=denominator != 0)
+        similarity = numerator / denominator
     return 1.0 - similarity
 
 
@@ -153,7 +153,15 @@ _http_client_mod = ModuleType("utils.http_client")
 _http_client_mod.get_stt_client = MagicMock()
 _install_module("utils.http_client", _http_client_mod)
 
-_install_module("av", MagicMock())
+_av_mod = ModuleType("av")
+
+
+def _av_open(*args, **kwargs):
+    raise RuntimeError("av is not installed; this test module only covers helpers that do not decode audio")
+
+
+_av_mod.open = _av_open
+_install_module("av", _av_mod)
 
 _storage_mod = ModuleType("utils.other.storage")
 for _name in [
@@ -520,6 +528,12 @@ class TestSpeakerEmbeddingMath:
         b[0, 1] = 1.0
         distance = compare_embeddings(a, b)
         assert distance == pytest.approx(1.0, abs=1e-6)
+
+    def test_compare_zero_vector_distance_nan(self):
+        """Zero-norm inputs match scipy cosine behavior."""
+        zero = np.zeros((1, 512), dtype=np.float32)
+        emb = self._random_embedding(seed=42)
+        assert np.isnan(compare_embeddings(zero, emb))
 
     def test_compare_opposite_vectors_distance_two(self):
         """Opposite vectors → cosine distance 2."""
