@@ -1,4 +1,5 @@
 import importlib
+import importlib.util
 import sys
 import types
 from unittest.mock import MagicMock
@@ -21,6 +22,15 @@ def _module(name: str, **attrs):
     for attr, value in attrs.items():
         setattr(module, attr, value)
     return module
+
+
+def _install_python_multipart_stub(monkeypatch):
+    if "python_multipart" in sys.modules:
+        return
+    if importlib.util.find_spec("python_multipart") is not None:
+        return
+
+    monkeypatch.setitem(sys.modules, "python_multipart", _module("python_multipart", __version__="0.0.20"))
 
 
 def _install_storage_import_stubs(monkeypatch):
@@ -57,6 +67,8 @@ def _install_storage_import_stubs(monkeypatch):
 
 
 def _install_sync_import_stubs(monkeypatch):
+    _install_python_multipart_stub(monkeypatch)
+
     for name in [
         "database._client",
         "database.redis_db",
