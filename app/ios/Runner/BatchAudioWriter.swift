@@ -6,7 +6,9 @@ import Foundation
 ///
 /// On-disk format (what `POST /v2/sync-local-files` decodes):
 ///   [4-byte little-endian uint32 frame_length][frame bytes] ... repeated
-/// File name: audio_{device}_{codec}_{sampleRate}_{channel}_fs{frameSize}_{startSec}.bin
+/// File name: audio_omibatch_{codec}_{sampleRate}_{channel}_fs{frameSize}_{startSec}.bin
+/// (the `omibatch` device marker distinguishes these from offline-sync WAL files,
+/// which share this directory; the backend treats the device segment as a label.)
 ///
 /// Hooked from `OmiBleManager.peripheral(_:didUpdateValueFor:)`. When it consumes a
 /// packet it returns `true`, and the manager skips the Dart forward — so the Flutter
@@ -153,7 +155,11 @@ final class BatchAudioWriter {
 
         let startSec = nowMs / 1000
         let frameSize = config.codec == "opus_fs320" ? 320 : 160
-        let name = "audio_\(sanitize(config.deviceType))_\(config.codec)_\(config.sampleRate)_1_fs\(frameSize)_\(startSec).bin.\(partSuffix)"
+        // Tag the device segment as `omibatch` so the Dart scanner can tell batch
+        // recordings apart from offline-sync WAL flushes, which share this directory
+        // and the same audio_*.bin naming. The backend ignores this segment; keep it
+        // in sync with Dart's `batchRecordingDevice`.
+        let name = "audio_omibatch_\(config.codec)_\(config.sampleRate)_1_fs\(frameSize)_\(startSec).bin.\(partSuffix)"
         let url = dir.appendingPathComponent(name)
 
         if !FileManager.default.fileExists(atPath: url.path) {
@@ -261,11 +267,6 @@ final class BatchAudioWriter {
             deviceType: (json["deviceType"] as? String) ?? "omi",
             dir: dir
         )
-    }
-
-    private func sanitize(_ s: String) -> String {
-        let t = s.lowercased().filter { $0.isLetter || $0.isNumber }
-        return t.isEmpty ? "omi" : t
     }
 
     private func freeBytes(at dir: URL) -> Int64 {
