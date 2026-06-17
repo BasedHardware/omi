@@ -133,6 +133,27 @@ async fn send_and_parse(
     serde_json::from_str(&text).map_err(|e| MintError::BadGateway(e.to_string()))
 }
 
+/// Best-effort: persist a non-secret record of the minted session (for out-of-band
+/// billing reconciliation). Never fails the mint — a transient Firestore blip shouldn't
+/// drop the user to the cascade — but logs loudly, since a missing record means the
+/// session can't be reconciled/billed.
+async fn record_session(
+    state: &AppState,
+    uid: &str,
+    token: &str,
+    provider: &str,
+    model: &str,
+    expires_at: Option<&str>,
+) {
+    if let Err(e) = state
+        .firestore
+        .record_realtime_session(uid, token, provider, model, expires_at.unwrap_or(""), SESSION_MAX_MIN)
+        .await
+    {
+        tracing::warn!("realtime session-record write failed for uid={}: {}", uid, e);
+    }
+}
+
 async fn mint_openai(state: &AppState, uid: &str) -> Result<MintResponse, MintError> {
     let key = state
         .config
@@ -159,6 +180,7 @@ async fn mint_openai(state: &AppState, uid: &str) -> Result<MintResponse, MintEr
         .ok_or_else(|| MintError::BadGateway("openai mint: no client secret in response".into()))?
         .to_string();
     let expires_at = json.get("expires_at").map(|v| v.to_string());
+    record_session(state, uid, &token, "openai", OPENAI_REALTIME_MODEL, expires_at.as_deref()).await;
     tracing::info!("realtime mint(openai) ok for uid={}", uid);
     Ok(MintResponse {
         provider: "openai".to_string(),
@@ -188,7 +210,6 @@ async fn mint_gemini(state: &AppState, uid: &str) -> Result<MintResponse, MintEr
     // verified to connect to the BidiGenerateContentConstrained endpoint; locking the
     // model/config via `liveConnectConstraints` is a follow-up that needs its own
     // spike (the constraint shape wasn't verified) — see Phase 2 spike notes.
-    let _ = GEMINI_LIVE_MODEL;
     let body = serde_json::json!({
         "uses": 1,
         "expireTime": expire,
@@ -205,6 +226,7 @@ async fn mint_gemini(state: &AppState, uid: &str) -> Result<MintResponse, MintEr
         .and_then(|v| v.as_str())
         .ok_or_else(|| MintError::BadGateway("gemini mint: no token name in response".into()))?
         .to_string();
+    record_session(state, uid, &token, "gemini", GEMINI_LIVE_MODEL, Some(&expire)).await;
     tracing::info!("realtime mint(gemini) ok for uid={}", uid);
     Ok(MintResponse {
         provider: "gemini".to_string(),
@@ -213,6 +235,119 @@ async fn mint_gemini(state: &AppState, uid: &str) -> Result<MintResponse, MintEr
     })
 }
 
+// =============================================================================
+// Usage reporting (Phase 2, v1 — client-reported)
+//
+// The realtime WS is client↔provider direct, so the backend never sees usage inline.
+// As a first pass, the CLIENT reports the provider's own per-turn token counts here and
+// we price + record them into the same llm_usage ledger chat uses (account "realtime"),
+// so realtime spend counts toward the user's quota. This is CLIENT-TRUSTED (a tampered
+// client could under-report) — acceptable for v1; the eventual hardening is server-side
+// reconciliation against the provider Usage API (OpenAI exposes per-user usage via the
+// OpenAI-Safety-Identifier; the minted realtime_sessions records are the audit trail).
+// Only MANAGED (ephemeral-token) sessions report — BYOK users pay the provider directly.
+// =============================================================================
+
+/// Per-1M-token rates ($), split by modality the way both providers bill.
+struct RealtimeRates {
+    in_text: f64,
+    in_audio: f64,
+    cached: f64,
+    out_text: f64,
+    out_audio: f64,
+}
+
+/// Realtime model pricing. NOTE: gpt-realtime-2 rates are from OpenAI's published
+/// pricing; the Gemini live audio rates are APPROXIMATE (Google doesn't cleanly publish
+/// live-audio token rates) and should be verified before relying on them for revenue.
+fn realtime_rates(provider: &str, _model: &str) -> RealtimeRates {
+    match provider {
+        // gpt-realtime-2: audio in $32 / out $64, text in $4 / out $24, cached $0.40 per 1M.
+        "openai" => RealtimeRates {
+            in_text: 4.0,
+            in_audio: 32.0,
+            cached: 0.40,
+            out_text: 24.0,
+            out_audio: 64.0,
+        },
+        // gemini-3.1-flash-live (APPROXIMATE — verify): text in $0.50 / out $3.00;
+        // audio ~4x text in, and audio out ~$12 per 1M.
+        _ => RealtimeRates {
+            in_text: 0.50,
+            in_audio: 2.0,
+            cached: 0.125,
+            out_text: 3.0,
+            out_audio: 12.0,
+        },
+    }
+}
+
+#[derive(Debug, Deserialize)]
+struct UsageReport {
+    /// "openai" | "gemini"
+    provider: String,
+    #[serde(default)]
+    model: String,
+    #[serde(default)]
+    input_text_tokens: i64,
+    #[serde(default)]
+    input_audio_tokens: i64,
+    #[serde(default)]
+    input_cached_tokens: i64,
+    #[serde(default)]
+    output_text_tokens: i64,
+    #[serde(default)]
+    output_audio_tokens: i64,
+}
+
+fn usage_cost(r: &UsageReport) -> f64 {
+    let rates = realtime_rates(&r.provider, &r.model);
+    (r.input_text_tokens as f64 * rates.in_text
+        + r.input_audio_tokens as f64 * rates.in_audio
+        + r.input_cached_tokens as f64 * rates.cached
+        + r.output_text_tokens as f64 * rates.out_text
+        + r.output_audio_tokens as f64 * rates.out_audio)
+        / 1_000_000.0
+}
+
+/// Record one client-reported realtime turn's usage into the llm_usage ledger.
+async fn report_usage(
+    State(state): State<AppState>,
+    user: PaywalledAuthUser,
+    Json(report): Json<UsageReport>,
+) -> StatusCode {
+    let input = report.input_text_tokens + report.input_audio_tokens;
+    let output = report.output_text_tokens + report.output_audio_tokens;
+    let cached = report.input_cached_tokens;
+    let total = input + output + cached;
+    if total <= 0 {
+        return StatusCode::NO_CONTENT;
+    }
+    let cost = usage_cost(&report);
+    // Funnels into desktop_chat.cost_usd (counted by get_total_llm_cost/quota) plus a
+    // "desktop_chat_realtime.*" breakdown.
+    if let Err(e) = state
+        .firestore
+        .record_llm_usage(&user.uid, input, output, cached, 0, total, cost, "realtime")
+        .await
+    {
+        tracing::error!("realtime usage record failed for uid={}: {}", user.uid, e);
+        return StatusCode::BAD_GATEWAY;
+    }
+    tracing::info!(
+        "realtime usage uid={} provider={} in={} out={} cached={} cost=${:.5}",
+        user.uid,
+        report.provider,
+        input,
+        output,
+        cached,
+        cost
+    );
+    StatusCode::NO_CONTENT
+}
+
 pub fn realtime_routes() -> Router<AppState> {
-    Router::new().route("/v2/realtime/session", post(mint_session))
+    Router::new()
+        .route("/v2/realtime/session", post(mint_session))
+        .route("/v2/realtime/usage", post(report_usage))
 }
