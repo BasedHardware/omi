@@ -72,7 +72,3 @@ final class RealtimeHubSettings {
     APIKeyService.byokKey(provider.byokProvider) != nil
   }
 }
-
-extension Notification.Name {
-  static let realtimeHubSettingsDidChange = Notification.Name("realtimeHubSettingsDidChange")
-}
