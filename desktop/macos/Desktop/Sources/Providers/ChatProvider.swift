@@ -1645,13 +1645,21 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
     /// Called once at warmup (via ensureBridgeStarted) and cached in cachedMainSystemPrompt.
     /// Conversation history is injected here so the brand-new ACP session starts with context
     /// from before the app launch. After session/new the ACP SDK owns history natively.
-    private func buildSystemPrompt(contextString: String, style: ChatSystemPromptStyle) -> String {
-        // Get user name from AuthService
-        let userName = AuthService.shared.displayName.isEmpty ? "there" : AuthService.shared.givenName
+    /// Display name for prompts, with a stable fallback — one source so the
+    /// cached static prefix and the live-context tail never disagree.
+    private var promptUserName: String {
+        AuthService.shared.displayName.isEmpty ? "there" : AuthService.shared.givenName
+    }
 
-        // Use the context string from backend (includes memories + conversations)
-        // Fall back to just memories if context is empty
-        let contextSection = contextString.isEmpty ? formatMemoriesSection() : contextString
+    /// When `staticBody` is true, build a cache-friendly prefix with no live data:
+    /// the datetime is blanked and the memories fallback is skipped, because the
+    /// live context is appended separately after the cache-split sentinel.
+    private func buildSystemPrompt(contextString: String, style: ChatSystemPromptStyle, staticBody: Bool = false) -> String {
+        let userName = promptUserName
+
+        // Backend context (memories + conversations); fall back to local memories
+        // when empty — unless building the static body (live data lives in the tail).
+        let contextSection = (contextString.isEmpty && !staticBody) ? formatMemoriesSection() : contextString
 
         // Build individual sections
         let goalSection = formatGoalSection()
@@ -1665,7 +1673,8 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             goalSection: goalSection,
             tasksSection: tasksSection,
             aiProfileSection: aiProfileSection,
-            databaseSchema: style.includesDatabaseSchema ? cachedDatabaseSchema : ""
+            databaseSchema: style.includesDatabaseSchema ? cachedDatabaseSchema : "",
+            currentDatetime: staticBody ? "" : nil
         )
 
         // Inject conversation history so the new ACP session has context from before app launch.
@@ -1729,17 +1738,34 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
         return prompt
     }
 
+    /// Sentinel separating the static (cacheable) system prefix from the
+    /// per-conversation live context. The Rust chat proxy splits on this so the
+    /// `cache_control` breakpoint covers only the stable prefix. Must match
+    /// `SYSTEM_CACHE_SPLIT` in `Backend-Rust/src/routes/chat_completions.rs`.
+    static let cacheSplitSentinel = "<<<OMI_CACHE_SPLIT_V1>>>"
+
     private func buildFloatingBarSystemPrompt(contextString: String) -> String {
-        let prompt = buildSystemPrompt(
-            contextString: contextString,
-            style: .floating
-        )
-        return Self.floatingBarSystemPromptPrefix + "\n\n" + prompt
+        // Cache-friendly split: the static prefix is byte-identical across
+        // conversations (so the proxy can cache it); volatile data — datetime,
+        // memories, screen — goes in the live tail after the sentinel, which the
+        // proxy leaves uncached. See SYSTEM_CACHE_SPLIT in chat_completions.rs.
+        let staticPrefix = Self.floatingBarSystemPromptPrefix + "\n\n"
+            + buildSystemPrompt(contextString: "", style: .floating, staticBody: true)
+
+        let tz = TimeZone.current.identifier
+        var live = "<live_context>\nCurrent date/time in \(promptUserName)'s timezone (\(tz)): "
+            + ChatPromptBuilder.currentDatetimeString()
+        if !contextString.isEmpty {
+            live += "\n\(contextString)"
+        }
+        live += "\n</live_context>"
+
+        return staticPrefix + "\n\n" + Self.cacheSplitSentinel + "\n\n" + live
     }
 
     /// Build system prompt for task chat sessions.
     func buildTaskChatSystemPrompt() -> String {
-        let userName = AuthService.shared.displayName.isEmpty ? "there" : AuthService.shared.givenName
+        let userName = promptUserName
         let contextSection = formatMemoriesSection()
         let goalSection = formatGoalSection()
         let tasksSection = formatTasksSection()
@@ -1781,7 +1807,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
 
     /// Builds system prompt using cached memories only (for simple messages)
     private func buildSystemPromptSimple() -> String {
-        let userName = AuthService.shared.displayName.isEmpty ? "there" : AuthService.shared.givenName
+        let userName = promptUserName
         let memoriesSection = formatMemoriesSection()
 
         return ChatPromptBuilder.buildDesktopChat(
@@ -1801,9 +1827,8 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
         prompt = prompt.replacingOccurrences(of: "{user_name}", with: userName)
         prompt = prompt.replacingOccurrences(of: "{tz}", with: TimeZone.current.identifier)
 
-        let df = DateFormatter()
-        df.dateFormat = "yyyy-MM-dd HH:mm:ss"
-        prompt = prompt.replacingOccurrences(of: "{current_datetime_str}", with: df.string(from: Date()))
+        prompt = prompt.replacingOccurrences(
+            of: "{current_datetime_str}", with: ChatPromptBuilder.currentDatetimeString())
 
         let isoFormatter = ISO8601DateFormatter()
         isoFormatter.timeZone = TimeZone.current
