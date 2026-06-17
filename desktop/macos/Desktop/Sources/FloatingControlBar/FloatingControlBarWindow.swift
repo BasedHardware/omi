@@ -41,6 +41,8 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
     private var suppressHoverResize = false
     private var inputHeightCancellable: AnyCancellable?
     private var responseHeightCancellable: AnyCancellable?
+    private var voiceActivityCancellable: AnyCancellable?
+    private var collapseWorkItem: DispatchWorkItem?
     private var resizeWorkItem: DispatchWorkItem?
     /// Saved center point from before chat opened, used to restore position on close.
     private var preChatCenter: NSPoint?
@@ -85,6 +87,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
         self.maxSize = FloatingControlBarWindow.maxBarSize
 
         setupViews()
+        setupVoiceActivityObserver()
 
         if ShortcutSettings.shared.draggableBarEnabled,
            let savedPosition = UserDefaults.standard.string(forKey: FloatingControlBarWindow.positionKey) {
@@ -519,6 +522,54 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
         inputHeightCancellable = nil
     }
 
+    /// Single owner of the voice-turn expand/collapse. The bar is wide whenever a voice
+    /// turn is active (`isVoiceActive` = listening || thinking || speaking) and collapses
+    /// to the resting sliver when it ends — derived reactively from the published flags
+    /// instead of imperative resize calls scattered across the PTT/hub code (which had to
+    /// coordinate via a `skipResize` flag).
+    private func setupVoiceActivityObserver() {
+        voiceActivityCancellable = state.$isVoiceListening
+            .combineLatest(state.$isVoiceThinking, state.$isVoiceSpeaking)
+            .map { $0 || $1 || $2 }
+            .removeDuplicates()
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] active in
+                self?.onVoiceActiveChanged(active)
+            }
+    }
+
+    /// Expand immediately so the window is already wide when the indicator + text render
+    /// (a delayed expand flashes the content cramped in the sliver first). Defer the
+    /// collapse a beat so the transient listening→thinking dip on PTT-up — `isVoiceActive`
+    /// momentarily clears before commitTurn sets thinking — doesn't blink the bar shut.
+    private func onVoiceActiveChanged(_ active: Bool) {
+        collapseWorkItem?.cancel()
+        collapseWorkItem = nil
+        if active {
+            applyVoiceExpansion(true)
+        } else {
+            let work = DispatchWorkItem { [weak self] in self?.applyVoiceExpansion(false) }
+            collapseWorkItem = work
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.12, execute: work)
+        }
+    }
+
+    private func applyVoiceExpansion(_ active: Bool) {
+        // Onboarding shows no separate bar; follow-up and the AI conversation own their
+        // own layout, so the voice indicator never drives the window size in those modes.
+        guard UserDefaults.standard.bool(forKey: "hasCompletedOnboarding"),
+              !state.isVoiceFollowUp else { return }
+        if active {
+            guard !state.showingAIConversation else { return }
+            resizeForPTTState(expanded: true, animated: false)  // snap — content is ready now
+        } else {
+            // Collapse only when nothing else needs the window expanded.
+            guard !state.showingAIConversation, !state.showingAIResponse,
+                  state.currentNotification == nil, !state.isHoveringBar else { return }
+            resizeForPTTState(expanded: false, animated: true)
+        }
+    }
+
     func updateAIResponse(type: String, text: String) {
         guard state.showingAIConversation else { return }
 
@@ -619,7 +670,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
 
     /// Resize for hover expand/collapse — anchored from center so the circle grows outward.
     func resizeForHover(expanded: Bool) {
-        guard !state.showingAIConversation, !state.isVoiceListening, !state.isShowingNotification, !suppressHoverResize else { return }
+        guard !state.showingAIConversation, !state.isVoiceActive, !state.isShowingNotification, !suppressHoverResize else { return }
         resizeWorkItem?.cancel()
         resizeWorkItem = nil
 
@@ -628,7 +679,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
         let doResize: () -> Void = { [weak self] in
             guard let self = self else { return }
             guard !self.state.showingAIConversation,
-                  !self.state.isVoiceListening,
+                  !self.state.isVoiceActive,
                   !self.state.isShowingNotification,
                   !self.suppressHoverResize
             else { return }
@@ -658,12 +709,16 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
         }
     }
 
-    /// Resize window for PTT state (expanded when listening, compact circle when idle)
-    func resizeForPTTState(expanded: Bool) {
+    /// Resize window for PTT state (expanded when listening, compact circle when idle).
+    /// Expand snaps (animated:false) so the indicator + text never flash cramped while the
+    /// window grows; collapse animates for a smooth shrink back to the resting sliver.
+    func resizeForPTTState(expanded: Bool, animated: Bool = true) {
         let size = expanded
             ? NSSize(width: FloatingControlBarWindow.expandedWidth, height: FloatingControlBarWindow.expandedBarSize.height)
             : FloatingControlBarWindow.minBarSize
-        resizeAnchored(to: size, makeResizable: false, animated: true)
+        // Idempotent: skip when already at the target size (avoids a no-op resize).
+        if abs(frame.width - size.width) < 1, abs(frame.height - size.height) < 1 { return }
+        resizeAnchored(to: size, makeResizable: false, animated: animated)
     }
 
     func showNotification(_ notification: FloatingBarNotification, animated: Bool = true) {
@@ -682,7 +737,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
         state.currentNotification = nil
 
         let targetSize: NSSize
-        if state.isVoiceListening {
+        if state.isVoiceActive {
             targetSize = NSSize(width: Self.expandedWidth, height: Self.expandedBarSize.height)
         } else {
             targetSize = state.isHoveringBar ? Self.expandedBarSize : Self.minBarSize
@@ -693,7 +748,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
     /// Restore the compact pill size when we temporarily surface the bar outside
     /// of an active hover, notification, voice session, or AI conversation.
     func normalizeForTemporaryShow() {
-        guard !state.showingAIConversation, !state.isVoiceListening, state.currentNotification == nil else { return }
+        guard !state.showingAIConversation, !state.isVoiceActive, state.currentNotification == nil else { return }
         resizeAnchored(to: Self.minBarSize, makeResizable: false, animated: false, anchorTop: true)
     }
 
@@ -837,7 +892,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
             minimumWidth = FloatingControlBarWindow.expandedWidth
         } else if state.currentNotification != nil {
             minimumWidth = FloatingControlBarWindow.notificationWidth
-        } else if state.isVoiceListening {
+        } else if state.isVoiceActive {
             minimumWidth = FloatingControlBarWindow.expandedWidth
         } else if state.isHoveringBar {
             minimumWidth = FloatingControlBarWindow.expandedBarSize.width
@@ -1032,7 +1087,9 @@ class FloatingControlBarManager {
         barWindow.onSendQuery = { [weak self, weak barWindow, weak floatingProvider] message in
             guard let self = self, let barWindow = barWindow, let provider = floatingProvider else { return }
             Task { @MainActor in
-                await self.routeQuery(message, barWindow: barWindow, provider: provider, fromVoice: false)
+                await self.withQueryTracer(query: message, fromVoice: false) {
+                    await self.routeQuery(message, barWindow: barWindow, provider: provider, fromVoice: false)
+                }
             }
         }
 
@@ -1327,7 +1384,9 @@ class FloatingControlBarManager {
         window.onSendQuery = { [weak self, weak window, weak provider] message in
             guard let self = self, let window = window, let provider = provider else { return }
             Task { @MainActor in
-                await self.routeQuery(message, barWindow: window, provider: provider, fromVoice: window.state.currentQueryFromVoice)
+                await self.withQueryTracer(query: message, fromVoice: window.state.currentQueryFromVoice) {
+                    await self.routeQuery(message, barWindow: window, provider: provider, fromVoice: window.state.currentQueryFromVoice)
+                }
             }
         }
 
@@ -1354,7 +1413,23 @@ class FloatingControlBarManager {
         // Auto-send the query. PTT bypasses the typed onSendQuery closure, so
         // we need to apply the same router rule here ourselves.
         Task { @MainActor in
-            await self.routeQuery(query, barWindow: window, provider: provider, fromVoice: fromVoice)
+            await self.withQueryTracer(query: query, fromVoice: fromVoice) {
+                await self.routeQuery(query, barWindow: window, provider: provider, fromVoice: fromVoice)
+            }
+        }
+    }
+
+    /// QueryTracer: establish the per-query TaskLocal tracer context for a
+    /// floating-bar query. Reuses an existing tracer (PTT transfers one in via
+    /// `QueryTracerContext`) or creates a fresh one for typed queries. The
+    /// tracer's origin is set here, so `total_ms` measures from query submission
+    /// (including the router-classify step) through to the final trace write.
+    private func withQueryTracer(query: String, fromVoice: Bool, _ body: () async -> Void) async {
+        let tracer =
+            QueryTracerContext.current
+            ?? QueryTracer(query: query, inputMode: fromVoice ? .voicePTTBatch : .text)
+        await QueryTracerContext.$current.withValue(tracer) {
+            await body()
         }
     }
 
@@ -1373,7 +1448,24 @@ class FloatingControlBarManager {
         // this down before the chat actually streams anything.
         prepareVisibleQueryState(message, in: barWindow, fromVoice: fromVoice)
 
+        // Skip the Haiku router for obviously-conversational queries (short, no
+        // task/agent signal): they're the common case, almost always route to "chat"
+        // anyway, and skipping removes a ~1.1s round-trip from the critical path.
+        // Ambiguous / task-like queries still go through the router so genuine
+        // background-agent work isn't misrouted. Inline chat is the safe fallback —
+        // it's also what the router defaults to on timeout.
+        let routerTracer = QueryTracerContext.current
+        if Self.routerCanSkipToChat(message) {
+            routerTracer?.mark("router_classify", metadata: ["route": "chat"])
+            await sendAIQuery(message, barWindow: barWindow, provider: provider)
+            return
+        }
+
+        // QueryTracer: the Haiku router call (inline-chat vs background-agent), shown
+        // as its own span instead of an anonymous gap before pre_llm.
+        routerTracer?.begin("router_classify")
         let decision = await AgentPillsManager.classify(message)
+        routerTracer?.end("router_classify", metadata: ["route": decision.route == .agent ? "agent" : "chat"])
         if decision.route == .agent {
             let model = ShortcutSettings.shared.selectedModel.isEmpty
                 ? "claude-sonnet-4-6"
@@ -1426,7 +1518,9 @@ class FloatingControlBarManager {
 
         window.state.currentQueryFromVoice = fromVoice
         Task { @MainActor in
-            await self.sendAIQuery(query, barWindow: window, provider: provider)
+            await self.withQueryTracer(query: query, fromVoice: fromVoice) {
+                await self.sendAIQuery(query, barWindow: window, provider: provider)
+            }
         }
     }
 
@@ -1526,6 +1620,14 @@ class FloatingControlBarManager {
             createdAt: Date()
         )
         mostRecentNotificationID = notification.id
+    }
+
+    /// Record a completed realtime-hub voice turn into the main chat history (+ backend
+    /// sync) via the shared history provider — the same provider notifications use. The
+    /// hub plays its own audio and never routes through the query path, so this is the
+    /// only way voice turns reach chat history. No-op if the bar isn't set up yet.
+    func recordVoiceTurn(userText: String, assistantText: String) {
+        historyChatProvider?.recordVoiceTurn(userText: userText, assistantText: assistantText)
     }
 
     private func openRecentNotificationConversationIfAvailable(in window: FloatingControlBarWindow) -> Bool {
@@ -1635,11 +1737,6 @@ class FloatingControlBarManager {
         return window?.state
     }
 
-    /// Resize the floating bar for PTT state changes.
-    func resizeForPTT(expanded: Bool) {
-        window?.resizeForPTTState(expanded: expanded)
-    }
-
     // MARK: - AI Query
 
     private func prepareVisibleQueryState(_ message: String, in barWindow: FloatingControlBarWindow, fromVoice: Bool) {
@@ -1667,7 +1764,80 @@ class FloatingControlBarManager {
         generation == activeQueryGeneration
     }
 
+    /// Screen / visual cues that, when present in a query, trigger a screenshot capture.
+    private static let screenshotCues = [
+        // explicit screen references
+        "screen", "on my display", "what's on", "whats on", "on display",
+        "look at", "looking at", "do you see", "can you see", "what do you see",
+        "what am i looking at", "screenshot", "visible", "in front of me",
+        "this page", "this window", "this app", "this tab", "this site",
+        // visual verb + deictic (this/that/it)
+        "read this", "read that", "read it", "summarize this", "summarize that",
+        "explain this", "explain that", "what is this", "what's this", "whats this",
+        "what does this", "what is that", "what's that", "translate this", "translate that",
+        "fix this", "fix that", "what's this error", "this error", "this code",
+        "this image", "this picture", "this photo", "this diagram", "this chart",
+        "highlighted", "selected", "this selection",
+    ]
+
+    /// Heuristic: does this query plausibly need a screenshot of the user's screen?
+    /// Defaults to NO — captures only when the text references the screen, something
+    /// visual, or a visual verb paired with a deictic ("read this", "what's that").
+    /// Keeps screenshots off the ~70% of queries that never look at the screen.
+    nonisolated static func queryNeedsScreenshot(_ message: String) -> Bool {
+        let m = message.lowercased()
+        return screenshotCues.contains(where: { m.contains($0) })
+    }
+
+    /// Action/command cues that force the Haiku router to run (never skip to chat).
+    /// Missing one wrongly forces an agent task into inline chat, so this errs broad.
+    private static let routerActionCues = [
+        "open ", "close ", "send", "post ", "reply", "email", "e-mail", "message",
+        "text ", " dm ", "write", "draft", "build", "create", "make ", "generate",
+        "compile", "go to", "go through", "navigate", "browse", "browser", "tab ",
+        "click", "scroll", "fill", "submit", "buy", "order", "add to", "cart",
+        "checkout", "book ", "download", "install", "uninstall", "delete", "remove",
+        "move ", "rename", "copy ", "paste", "schedule", "set up", "set a",
+        "organize", "plan ", "research", "find all", "look through", "summarize all",
+        "gather", "monitor", "automate", "and then", "report", "all my ", "every ",
+    ]
+
+    /// Leading words that mark an obviously-conversational query safe to skip the router.
+    private static let routerChatStarters: Set<String> = [
+        "what", "what's", "whats", "who", "who's", "whos", "when", "where", "why",
+        "how", "how's", "hows", "which", "whose", "is", "are", "am", "was", "were",
+        "do", "does", "did", "can", "could", "should", "would", "will", "hey", "hi",
+        "hello", "yo", "sup", "thanks", "thank", "tell", "explain", "define", "describe",
+    ]
+
+    /// True when a query is obviously conversational (short, no multi-step/task
+    /// signal) — safe to route straight to inline chat and skip the Haiku router.
+    /// Errs toward running the router when in doubt (returns false); inline chat is
+    /// the safe fallback, so only genuine task queries need the background-agent path.
+    nonisolated static func routerCanSkipToChat(_ message: String) -> Bool {
+        let m = message.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        if m.isEmpty { return true }
+        let words = m.split(whereSeparator: { $0 == " " || $0 == "\n" })
+
+        // Checked FIRST: anything that smells like an action/command the router might
+        // route to a background agent (open/send/browse/buy/build/…). We err hard toward
+        // the router even when the query is phrased as a question ("can you open my browser…").
+        if routerActionCues.contains(where: { m.contains($0) }) { return false }
+
+        // Otherwise skip only clearly-conversational queries: a question (question
+        // word or trailing "?") or a greeting, and reasonably short. Everything else
+        // (statements, imperatives we didn't enumerate) goes to the router.
+        if words.count > 10 { return false }
+        if m.hasSuffix("?") { return true }
+        let firstWord = words.first.map(String.init) ?? ""
+        return routerChatStarters.contains(firstWord)
+    }
+
     private func sendAIQuery(_ message: String, barWindow: FloatingControlBarWindow, provider: ChatProvider) async {
+        // QueryTracer: `pre_llm` brackets everything between query submission and
+        // the ChatProvider call (screenshot capture, usage checks, filler audio).
+        let currentTracer = QueryTracerContext.current
+        currentTracer?.begin("pre_llm")
         let queryFromVoice = barWindow.state.currentQueryFromVoice
         prepareVisibleQueryState(message, in: barWindow, fromVoice: queryFromVoice)
         let generation = activeQueryGeneration
@@ -1696,9 +1866,21 @@ class FloatingControlBarManager {
         }
         FloatingBarVoicePlaybackService.shared.interruptCurrentResponse()
 
-        let screenshotData = await Task.detached { () -> Data? in
-            return ScreenCaptureManager.captureScreenData()
-        }.value
+        // Only capture a screenshot when the query is actually about what's on
+        // screen. Capturing on every query cost ~225ms + a large image in the
+        // prompt for questions that never look at the screen ("what's my goal").
+        let needsScreenshot = Self.queryNeedsScreenshot(message)
+        let screenshotData: Data?
+        if needsScreenshot {
+            currentTracer?.begin("screenshot_capture")
+            screenshotData = await Task.detached { () -> Data? in
+                return ScreenCaptureManager.captureScreenData()
+            }.value
+            currentTracer?.end("screenshot_capture")
+        } else {
+            screenshotData = nil
+            currentTracer?.mark("screenshot_capture")
+        }
         barWindow.orderFrontRegardless()
 
         AnalyticsManager.shared.floatingBarQuerySent(messageLength: message.count, hasScreenshot: screenshotData != nil)
@@ -1707,6 +1889,9 @@ class FloatingControlBarManager {
             forVoiceQuery: barWindow.state.currentQueryFromVoice
         )
         if shouldPlayVoice {
+            // QueryTracer: hand the tracer to the playback service so it can close
+            // the `tts_start` span when the first real audio reaches the speaker.
+            FloatingBarVoicePlaybackService.shared.tracer = currentTracer
             FloatingBarVoicePlaybackService.shared.playFillerIfEnabled()
         }
 
@@ -1760,6 +1945,7 @@ class FloatingControlBarManager {
             ? ModelQoS.Claude.defaultSelection
             : ShortcutSettings.shared.selectedModel
         let notificationContextSuffix = notificationContextSuffixIfNeeded(for: message)
+        currentTracer?.end("pre_llm")
         await provider.sendMessage(
             message,
             model: floatingModel,

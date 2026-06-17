@@ -170,7 +170,8 @@ final class AgentPillsWindow: NSPanel, NSWindowDelegate {
     }
 
     private func spawnFollowUp(from pill: AgentPill, text: String) {
-        manager.spawnFromUserQuery(text, model: pill.model)
+        // Continue THIS agent's session (keeps context) rather than spawning a new one.
+        manager.continueAgent(from: pill, text: text)
     }
 
     private func openPillInChat(_ pill: AgentPill) {
@@ -208,9 +209,11 @@ struct AgentPillsContainerView: View {
                 let pill = manager.pills.first(where: { $0.id == hoveredID }) {
                 AgentPillPopover(
                     pill: pill,
+                    isRecording: manager.recordingPillID == pill.id,
                     onDismiss: { manager.dismiss(pillID: pill.id) },
                     onOpenInChat: { onOpenInChat(pill) },
-                    onSendFollowUp: { text in onSendFollowUp(pill, text) }
+                    onSendFollowUp: { text in onSendFollowUp(pill, text) },
+                    onToggleVoice: { manager.toggleFollowUpVoice(for: pill) }
                 )
                 .transition(.move(edge: .top).combined(with: .opacity))
                 .onHover { hovering in

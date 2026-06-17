@@ -207,9 +207,11 @@ struct AgentPillView: View {
 /// doing right now (Clicky-style), and on completion suggested follow-ups.
 struct AgentPillPopover: View {
     @ObservedObject var pill: AgentPill
+    var isRecording: Bool
     var onDismiss: () -> Void
     var onOpenInChat: () -> Void
     var onSendFollowUp: (String) -> Void
+    var onToggleVoice: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -345,6 +347,23 @@ struct AgentPillPopover: View {
                     }
                 }
             }
+
+            Button(action: onToggleVoice) {
+                HStack(spacing: 6) {
+                    Image(systemName: isRecording ? "stop.circle.fill" : "mic.fill")
+                        .font(.system(size: 11))
+                    Text(isRecording ? "Listening… tap to send" : "Voice follow-up")
+                        .scaledFont(size: 11, weight: .medium)
+                }
+                .foregroundColor(.white)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 7)
+                .frame(maxWidth: .infinity)
+                .background(isRecording ? Color.red.opacity(0.40) : Color.white.opacity(0.10))
+                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(isRecording ? "Stop and send voice follow-up" : "Record a voice follow-up")
 
             Button(action: onOpenInChat) {
                 HStack(spacing: 6) {

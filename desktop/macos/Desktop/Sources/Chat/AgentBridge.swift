@@ -88,6 +88,11 @@ actor AgentBridge {
   private var readTask: Task<Void, Never>?
   /// Incremented each time start() is called; stale termination handlers check this
   private var processGeneration: UInt64 = 0
+  /// Last-known chat quota, refreshed in the background. Used for the optimistic
+  /// pre-flight: we fail fast only when a recent check already said we're over.
+  private var lastKnownQuota: APIClient.ChatUsageQuota?
+
+  private func cacheQuota(_ quota: APIClient.ChatUsageQuota) { lastKnownQuota = quota }
 
   /// Pending messages from the bridge
   private var pendingMessages: [InboundMessage] = []
@@ -436,17 +441,26 @@ actor AgentBridge {
       throw BridgeError.notRunning
     }
 
-    // Hard cap: check monthly chat quota before spending any Anthropic tokens.
-    // Free / Operator / Unlimited cap by question count; Architect (pro) caps by
-    // cost_usd. Raises BridgeError.quotaExceeded if over — caller shows upgrade UI.
-    if let quota = await APIClient.shared.fetchChatUsageQuota(), !quota.allowed {
+    // Optimistic quota: don't block the hot path on the pre-flight quota GET.
+    // If a recent background check already told us we're over the cap, fail fast
+    // with the clean upgrade error (no network). Otherwise proceed immediately
+    // and refresh the cache in the background — a real over-limit state is still
+    // enforced by a hard 402 from /v2/chat/completions on the in-flight request.
+    if let cached = lastKnownQuota, !cached.allowed {
+      QueryTracerContext.current?.mark("quota_check", metadata: ["result": "exceeded_cached"])
       throw BridgeError.quotaExceeded(
-        plan: quota.plan,
-        unit: quota.unit,
-        used: quota.used,
-        limit: quota.limit,
-        resetAtUnix: quota.resetAt
+        plan: cached.plan,
+        unit: cached.unit,
+        used: cached.used,
+        limit: cached.limit,
+        resetAtUnix: cached.resetAt
       )
+    }
+    QueryTracerContext.current?.mark("quota_check", metadata: ["mode": "optimistic"])
+    Task { [weak self] in
+      if let quota = await APIClient.shared.fetchChatUsageQuota() {
+        await self?.cacheQuota(quota)
+      }
     }
 
     var queryDict: [String: Any] = [

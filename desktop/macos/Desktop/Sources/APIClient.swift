@@ -148,6 +148,65 @@ actor APIClient {
     return try await performRequest(request)
   }
 
+  /// Phase 2 realtime hub: ask the backend to mint a short-lived ephemeral token
+  /// for `provider` ("openai"|"gemini"). The backend gates on auth + paywall and
+  /// returns 402/403 if not entitled — any non-200 surfaces here as a thrown error,
+  /// so we return nil and the caller falls back to the legacy cascade.
+  func mintRealtimeToken(provider: String) async -> String? {
+    struct Resp: Decodable { let token: String }
+    let base = rustBackendURL
+    guard !base.isEmpty else { return nil }
+    let normalized = base.hasSuffix("/") ? base : base + "/"
+    do {
+      let resp: Resp = try await post(
+        "v2/realtime/session", body: ["provider": provider], customBaseURL: normalized)
+      return resp.token.isEmpty ? nil : resp.token
+    } catch {
+      log("APIClient: realtime token mint failed for \(provider): \(error.localizedDescription)")
+      return nil
+    }
+  }
+
+  /// Report a managed realtime turn's token usage so the backend can price it and record
+  /// it into the llm_usage ledger (counts toward quota). Fire-and-forget; failures are
+  /// logged and dropped (the backend reconciler is the eventual safety net). Only called
+  /// for managed (ephemeral) sessions — BYOK users pay the provider directly.
+  func reportRealtimeUsage(
+    provider: String,
+    model: String,
+    inputText: Int,
+    inputAudio: Int,
+    inputCached: Int,
+    outputText: Int,
+    outputAudio: Int
+  ) async {
+    let base = rustBackendURL
+    guard !base.isEmpty else { return }
+    let normalized = base.hasSuffix("/") ? base : base + "/"
+    guard let url = URL(string: normalized + "v2/realtime/usage") else { return }
+    var request = URLRequest(url: url)
+    request.httpMethod = "POST"
+    request.timeoutInterval = 15
+    request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+    do {
+      let headers = try await buildHeaders(requireAuth: true)
+      for (k, v) in headers { request.setValue(v, forHTTPHeaderField: k) }
+      let body: [String: Any] = [
+        "provider": provider,
+        "model": model,
+        "input_text_tokens": inputText,
+        "input_audio_tokens": inputAudio,
+        "input_cached_tokens": inputCached,
+        "output_text_tokens": outputText,
+        "output_audio_tokens": outputAudio,
+      ]
+      request.httpBody = try JSONSerialization.data(withJSONObject: body)
+      _ = try await session.data(for: request)
+    } catch {
+      log("APIClient: realtime usage report failed: \(error.localizedDescription)")
+    }
+  }
+
   func delete(
     _ endpoint: String,
     requireAuth: Bool = true,

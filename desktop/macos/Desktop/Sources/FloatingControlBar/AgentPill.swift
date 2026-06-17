@@ -89,6 +89,10 @@ final class AgentPillsManager: ObservableObject {
     private var messageCountByPill: [UUID: Int] = [:]
     private var bootChain: Task<Void, Never> = Task {}
 
+    /// Which pill (if any) is currently capturing a voice follow-up — drives the
+    /// pill popover's mic button state.
+    @Published var recordingPillID: UUID?
+
     private init() {}
 
     /// Routing decision for an Ask Omi message — does it stay inline in the
@@ -392,6 +396,43 @@ final class AgentPillsManager: ObservableObject {
         return pill
     }
 
+    // MARK: - Voice follow-up (continue THIS agent's session)
+
+    /// Tap the pill's mic button: start recording if idle, or stop + transcribe +
+    /// send if this pill is already recording.
+    func toggleFollowUpVoice(for pill: AgentPill) {
+        if recordingPillID == pill.id {
+            log("AgentPills: voice follow-up STOP tapped for \(pill.title)")
+            recordingPillID = nil
+            PushToTalkManager.shared.endPillFollowUp()
+        } else if recordingPillID == nil {
+            log("AgentPills: voice follow-up START tapped for \(pill.title)")
+            recordingPillID = pill.id
+            // Routes through the realtime omni STT (hub pipeline); the transcript comes
+            // back into continueAgent(from:text:) for THIS pill's session.
+            PushToTalkManager.shared.startPillFollowUp(for: pill)
+        }
+    }
+
+    /// Send a follow-up to the SAME agent session — reuses the pill's ChatProvider +
+    /// sessionKey so it keeps full context. Falls back to a fresh agent only if the
+    /// session was already torn down (pill dismissed/trimmed).
+    func continueAgent(from pill: AgentPill, text: String) {
+        guard let provider = providersByPill[pill.id] else {
+            spawnFromUserQuery(text, model: pill.model)
+            return
+        }
+        pill.status = .running
+        pill.latestActivity = "Working on your follow-up…"
+        Task { @MainActor [weak self, weak pill, weak provider] in
+            guard let self, let pill, let provider else { return }
+            await provider.sendMessage(
+                text, model: pill.model, systemPromptStyle: .floating,
+                sessionKey: "agent-\(pill.id.uuidString)")
+            self.complete(pill: pill, provider: provider)
+        }
+    }
+
     /// Force-dismiss a pill.
     func dismiss(pillID: UUID) {
         cleanup(pillID: pillID)
@@ -476,12 +517,9 @@ final class AgentPillsManager: ObservableObject {
         }
         pill.completedAt = Date()
         pill.suggestedFollowUps = AgentPillsManager.deriveFollowUps(for: pill)
-        // Tear down this pill's stream so we stop holding the provider — the
-        // node bridge process will deinit when no Swift references remain.
-        streamsByPill[pill.id]?.cancel()
-        streamsByPill[pill.id] = nil
-        providersByPill[pill.id] = nil
-        messageCountByPill[pill.id] = nil
+        // Keep the provider + stream alive after completion so a voice/text follow-up
+        // can continue THIS agent's session with full context. They're torn down on
+        // dismiss, or when the pill is trimmed at the maxPills cap (see cleanup()).
     }
 
     /// Tiny heuristic to suggest 1–2 follow-ups based on the original query.

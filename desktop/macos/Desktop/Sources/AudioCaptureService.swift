@@ -67,6 +67,13 @@ class AudioCaptureService: @unchecked Sendable {
     /// fall back to the built-in mic. Fires at most once per capture session.
     var onSilentMicDetected: (() -> Void)?
 
+    /// Human-readable description of the capture device currently in use — for
+    /// diagnostics (which mic a turn was recorded from).
+    var currentDeviceDescription: String {
+        let isBuiltIn = (deviceID == AudioCaptureService.findBuiltInMicDeviceID())
+        return isBuiltIn ? "built-in id=\(deviceID)" : "id=\(deviceID)"
+    }
+
     // Silent-mic watchdog (fires once per session)
     private var consecutiveSilentWindows: Int = 0
     private var silentMicDetectedFired: Bool = false
@@ -787,6 +794,25 @@ class AudioCaptureService: @unchecked Sendable {
         guard status == noErr else { return false }
         return transport == kAudioDeviceTransportTypeBluetooth
             || transport == kAudioDeviceTransportTypeBluetoothLE
+    }
+
+    /// True when the system's default OUTPUT device transports over Bluetooth.
+    /// Opening a 16 kHz input on a BT device forces it from A2DP into HFP headset
+    /// mode, which drops the OUTPUT rate to 16 kHz and chops streamed playback —
+    /// so the realtime-hub PTT path captures from the built-in mic instead when
+    /// this is true, keeping the BT output in A2DP.
+    static func isDefaultOutputBluetooth() -> Bool {
+        var deviceID = AudioDeviceID(kAudioObjectUnknown)
+        var size = UInt32(MemoryLayout<AudioDeviceID>.size)
+        var address = AudioObjectPropertyAddress(
+            mSelector: kAudioHardwarePropertyDefaultOutputDevice,
+            mScope: kAudioObjectPropertyScopeGlobal,
+            mElement: kAudioObjectPropertyElementMain
+        )
+        let status = AudioObjectGetPropertyData(
+            AudioObjectID(kAudioObjectSystemObject), &address, 0, nil, &size, &deviceID)
+        guard status == noErr, deviceID != kAudioObjectUnknown else { return false }
+        return isBluetoothTransport(deviceID: deviceID)
     }
 
     /// Locate the CoreAudio device ID of the built-in microphone (if present).
