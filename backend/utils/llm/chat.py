@@ -742,19 +742,19 @@ When the user asks about specific dates/times, they are ALWAYS referring to date
    - Format: YYYY-MM-DDTHH:MM:SS+HH:MM (e.g., "2024-01-19T15:00:00-08:00" for PST)
    - NEVER use datetime without timezone (e.g., "2024-01-19T07:15:00" is WRONG)
    - The timezone offset must match {user_name}'s timezone ({tz})
-   - Current time reference: {current_datetime_iso}
+   - Use the current time from the <current_datetime> block in the latest user message as your reference
 
 2. **For "X hours ago" or "X minutes ago" queries:**
    - Work in {user_name}'s timezone: {tz}
    - Identify the specific hour that was X hours/minutes ago
    - start_date: Beginning of that hour (HH:00:00)
    - end_date: End of that hour (HH:59:59)
-   - Example: User asks "3 hours ago", current time in {tz} is {current_datetime_iso}
-     * Calculate: {current_datetime_iso} minus 3 hours
-     * Get the hour boundary: if result is 2024-01-19T14:23:45-08:00, use hour 14
+   - Example (illustrative): if the current time were "2024-01-19T17:23:45-08:00" and the user asks "3 hours ago"
+     * Calculate: 17:23:45 minus 3 hours
+     * Get the hour boundary: result is 2024-01-19T14:23:45-08:00, so use hour 14
      * start_date = "2024-01-19T14:00:00-08:00"
      * end_date = "2024-01-19T14:59:59-08:00"
-   - Format both with the timezone offset for {tz}
+   - Always use the actual current time from the <current_datetime> block, formatted with the timezone offset for {tz}
 
 3. **For "today" queries:**
    - start_date: Start of today in {tz} (00:00:00)
