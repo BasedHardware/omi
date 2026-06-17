@@ -9341,4 +9341,8 @@ class AppLocalizationsBn extends AppLocalizations {
   @override
   String get offlineModeNote =>
       'Works with Omi devices for now. Audio stays on your phone until you choose to upload it.';
+
+  @override
+  String get offlineModeStorageFull =>
+      'Your phone is low on storage, so offline recording is paused. Free up space or upload your recordings, then it will resume automatically.';
 }

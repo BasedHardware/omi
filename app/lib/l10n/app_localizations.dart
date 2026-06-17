@@ -17396,6 +17396,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Works with Omi devices for now. Audio stays on your phone until you choose to upload it.'**
   String get offlineModeNote;
+
+  /// Warning shown in the Offline Mode sheet when local storage is too low to keep recording
+  ///
+  /// In en, this message translates to:
+  /// **'Your phone is low on storage, so offline recording is paused. Free up space or upload your recordings, then it will resume automatically.'**
+  String get offlineModeStorageFull;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {
