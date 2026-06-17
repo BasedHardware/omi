@@ -10,7 +10,9 @@ def _read_source() -> str:
 def test_lc3_import_is_optional():
     source = _read_source()
 
-    assert 'try:\n    import lc3  # lc3py\nexcept ImportError:\n    lc3 = None' in source
+    assert 'try:\n    import lc3  # lc3py' in source
+    assert 'except Exception as e:\n    lc3 = None\n    _LC3_IMPORT_ERROR = e' in source
+    assert 'else:\n    _LC3_IMPORT_ERROR = None' in source
 
 
 def test_lc3_codec_closes_cleanly_when_dependency_missing():
@@ -20,3 +22,4 @@ def test_lc3_codec_closes_cleanly_when_dependency_missing():
     assert 'if lc3 is None:' in source
     assert 'LC3 codec requested but lc3py is not installed' in source
     assert 'await websocket.close(code=websocket_close_code, reason="LC3 codec is not available")' in source
+    assert '_get_lc3().Decoder(lc3_frame_duration_us, sample_rate)' in source
