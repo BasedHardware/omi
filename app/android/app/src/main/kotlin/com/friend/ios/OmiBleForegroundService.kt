@@ -485,6 +485,10 @@ class OmiBleForegroundService : Service() {
             managed.currentGattHash = null
         }
 
+        // Finalize the in-progress batch recording so it's saved + ingestable right away
+        // (a plain BLE disconnect never delivers another packet to trigger the gap finalize).
+        batchAudioWriter.stop("ble_disconnected")
+
         val addr = address.uppercase()
 
         val error = when {
