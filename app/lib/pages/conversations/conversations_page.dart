@@ -17,6 +17,8 @@ import 'package:omi/pages/conversations/widgets/search_widget.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
+import 'package:omi/providers/sync_provider.dart';
+import 'package:omi/services/wals.dart';
 import 'package:omi/providers/folder_provider.dart';
 import 'package:omi/providers/home_provider.dart';
 import 'package:omi/services/app_review_service.dart';
@@ -250,6 +252,26 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
     super.build(context);
     return Consumer<ConversationProvider>(
       builder: (context, convoProvider, child) {
+        // Unsynced local recordings (batch/offline mode) shown inline with conversations,
+        // grouped into the same date buckets. Only in the default view (no search/folder/
+        // starred/daily-summaries filter).
+        final syncProvider = context.watch<SyncProvider>();
+        final bool showRecordings = convoProvider.previousQuery.isEmpty &&
+            convoProvider.selectedFolderId == null &&
+            !convoProvider.showStarredOnly &&
+            !convoProvider.showDailySummaries;
+        final recordingsByDate = <DateTime, List<Wal>>{};
+        if (showRecordings) {
+          for (final wal in syncProvider.pendingWals) {
+            final dt = DateTime.fromMillisecondsSinceEpoch(wal.timerStart * 1000);
+            final day = DateTime(dt.year, dt.month, dt.day);
+            (recordingsByDate[day] ??= <Wal>[]).add(wal);
+          }
+        }
+        final bool hasRecordings = recordingsByDate.isNotEmpty;
+        final mergedDates = <DateTime>{...convoProvider.groupedConversations.keys, ...recordingsByDate.keys}.toList()
+          ..sort((a, b) => b.compareTo(a));
+
         return RefreshIndicator(
           onRefresh: () async {
             HapticFeedback.mediumImpact();
@@ -369,6 +391,7 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
               if (convoProvider.showDailySummaries)
                 const DailySummariesList()
               else if (_nonDiscardedConversationCount(convoProvider) == 0 &&
+                  !hasRecordings &&
                   !convoProvider.isLoadingConversations &&
                   !convoProvider.isFetchingConversations &&
                   !convoProvider.isAwaitingInitialFetchRetry &&
@@ -380,6 +403,7 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
                   child: Center(child: _buildNoConversationsHero(context)),
                 )
               else if (convoProvider.groupedConversations.isEmpty &&
+                  !hasRecordings &&
                   !convoProvider.isLoadingConversations &&
                   !convoProvider.isFetchingConversations &&
                   !convoProvider.isAwaitingInitialFetchRetry)
@@ -392,17 +416,18 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
                   ),
                 )
               else if (convoProvider.groupedConversations.isEmpty &&
+                  !hasRecordings &&
                   (convoProvider.isLoadingConversations ||
                       convoProvider.isFetchingConversations ||
                       convoProvider.isAwaitingInitialFetchRetry))
                 _buildLoadingShimmer()
               else
                 SliverList(
-                  delegate: SliverChildBuilderDelegate(childCount: convoProvider.groupedConversations.length + 1, (
+                  delegate: SliverChildBuilderDelegate(childCount: mergedDates.length + 1, (
                     context,
                     index,
                   ) {
-                    if (index == convoProvider.groupedConversations.length) {
+                    if (index == mergedDates.length) {
                       Logger.debug('loading more conversations');
                       if (convoProvider.isLoadingConversations) {
                         return _buildLoadMoreShimmer();
@@ -427,8 +452,10 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
                         child: const SizedBox(height: 20, width: double.maxFinite),
                       );
                     } else {
-                      var date = convoProvider.groupedConversations.keys.elementAt(index);
-                      List<ServerConversation> memoriesForDate = convoProvider.groupedConversations[date]!;
+                      var date = mergedDates[index];
+                      List<ServerConversation> memoriesForDate =
+                          convoProvider.groupedConversations[date] ?? const <ServerConversation>[];
+                      List<Wal> recordingsForDate = recordingsByDate[date] ?? const <Wal>[];
                       return Column(
                         mainAxisSize: MainAxisSize.min,
                         children: [
@@ -437,6 +464,7 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
                             key: ValueKey(date),
                             isFirst: index == 0,
                             conversations: memoriesForDate,
+                            recordings: recordingsForDate,
                             date: date,
                           ),
                         ],
