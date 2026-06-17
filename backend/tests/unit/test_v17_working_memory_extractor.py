@@ -85,6 +85,49 @@ def test_l1_working_memory_extractor_derives_hidden_allowed_use_for_secret_risk(
     assert observations[0].allowed_use == "hidden"
 
 
+def test_l1_working_memory_extractor_preserves_literal_relationship_fields():
+    fake_llm = FakeLLM("""
+        {
+          "observations": [
+            {
+              "observation_id": "obs_literal",
+              "content": "Another speaker advised choosing 1440x900 as the closest normal aspect ratio.",
+              "literal_observation": "Another speaker advised choosing 1440x900 as the closest normal aspect ratio.",
+              "speaker_attribution": "non_primary_speaker",
+              "source_mode": "conversation",
+              "relationship_to_user": "other_speaker",
+              "subject": "generic_content",
+              "interpretation_level": "literal",
+              "why_captured": "Literal device-resolution advice appeared in the source.",
+              "evidence_ids": ["ev_source_1_0"],
+              "source_refs": [{"source_id": "source_1", "source_unit_id": "0", "quote": "ставь 1440 на 900"}],
+              "status": "working",
+              "confidence": "medium",
+              "risk_flags": []
+            }
+          ]
+        }
+        """)
+
+    observations = extract_working_memory_observations_from_text(
+        uid="user_1",
+        source_id="source_1",
+        source_type="voice_transcript",
+        text="Другой спикер говорит: ставь 1440 на 900, это самое близкое к нормальному соотношению сторон.",
+        user_name="David",
+        llm=fake_llm,
+    )
+
+    observation = observations[0]
+    assert observation.literal_observation.startswith("Another speaker advised")
+    assert observation.speaker_attribution == "non_primary_speaker"
+    assert observation.source_mode == "conversation"
+    assert observation.relationship_to_user == "other_speaker"
+    assert observation.subject == "generic_content"
+    assert observation.interpretation_level == "literal"
+    assert observation.why_captured == "Literal device-resolution advice appeared in the source."
+
+
 def test_l1_working_memory_extractor_skips_tiny_sources_without_llm_call():
     fake_llm = FakeLLM('{"observations": []}')
 

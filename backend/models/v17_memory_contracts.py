@@ -75,6 +75,13 @@ class WorkingMemoryObservation(BaseModel):
     source_refs: List[Dict[str, Any]] = Field(default_factory=list)
     subject_entity_id: Optional[str] = None
     subject_scope: str = "primary_user"
+    literal_observation: Optional[str] = None
+    speaker_attribution: str = "unknown"
+    source_mode: str = "unclear"
+    relationship_to_user: str = "unclear"
+    subject: str = "unclear"
+    interpretation_level: str = "literal"
+    why_captured: Optional[str] = None
     status: LifecycleState = LifecycleState.working
     confidence: str = "medium"
     risk_flags: List[str] = Field(default_factory=list)
@@ -91,6 +98,102 @@ class WorkingMemoryObservation(BaseModel):
         if value not in {"high", "medium", "low"}:
             raise ValueError("confidence must be high, medium, or low")
         return value
+
+    @field_validator("speaker_attribution")
+    @classmethod
+    def normalize_speaker_attribution(cls, value: str) -> str:
+        normalized = (value or "unknown").strip().lower()
+        aliases = {
+            "user": "primary_user",
+            "primary": "primary_user",
+            "non_primary": "non_primary_speaker",
+            "other": "non_primary_speaker",
+            "ai": "assistant",
+        }
+        normalized = aliases.get(normalized, normalized)
+        return (
+            normalized if normalized in {"primary_user", "non_primary_speaker", "assistant", "unknown"} else "unknown"
+        )
+
+    @field_validator("source_mode")
+    @classmethod
+    def normalize_source_mode(cls, value: str) -> str:
+        normalized = (value or "unclear").strip().lower()
+        aliases = {
+            "chat": "conversation",
+            "voice": "conversation",
+            "tutorial": "media_or_tutorial",
+            "media": "media_or_tutorial",
+            "ocr": "ui_or_ocr",
+            "ui": "ui_or_ocr",
+            "game": "game_or_story",
+            "story": "game_or_story",
+        }
+        normalized = aliases.get(normalized, normalized)
+        return (
+            normalized
+            if normalized
+            in {
+                "conversation",
+                "assistant_response",
+                "media_or_tutorial",
+                "ui_or_ocr",
+                "game_or_story",
+                "document",
+                "unclear",
+            }
+            else "unclear"
+        )
+
+    @field_validator("relationship_to_user")
+    @classmethod
+    def normalize_relationship_to_user(cls, value: str) -> str:
+        normalized = (value or "unclear").strip().lower()
+        aliases = {
+            "primary_user": "self",
+            "user": "self",
+            "user_owned_project": "owned_work",
+            "owned_project": "owned_work",
+            "question": "asking_about",
+            "asked_about": "asking_about",
+            "watched": "encountered",
+            "heard": "encountered",
+            "other": "other_speaker",
+            "third_party": "other_speaker",
+        }
+        normalized = aliases.get(normalized, normalized)
+        return (
+            normalized
+            if normalized
+            in {"self", "owned_work", "adopted", "asking_about", "encountered", "other_speaker", "unclear"}
+            else "unclear"
+        )
+
+    @field_validator("subject")
+    @classmethod
+    def normalize_subject(cls, value: str) -> str:
+        normalized = (value or "unclear").strip().lower()
+        aliases = {
+            "user": "primary_user",
+            "project": "user_project",
+            "relationship": "user_relationship",
+            "generic": "generic_content",
+        }
+        normalized = aliases.get(normalized, normalized)
+        return (
+            normalized
+            if normalized
+            in {"primary_user", "user_project", "user_relationship", "third_party", "generic_content", "unclear"}
+            else "unclear"
+        )
+
+    @field_validator("interpretation_level")
+    @classmethod
+    def normalize_interpretation_level(cls, value: str) -> str:
+        normalized = (value or "literal").strip().lower()
+        aliases = {"light": "light_inference", "heavy": "heavy_inference", "inferred": "light_inference"}
+        normalized = aliases.get(normalized, normalized)
+        return normalized if normalized in {"literal", "light_inference", "heavy_inference"} else "literal"
 
     @model_validator(mode="after")
     def derive_read_policy(self):
