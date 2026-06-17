@@ -270,13 +270,15 @@ fn realtime_rates(provider: &str, _model: &str) -> RealtimeRates {
             out_text: 24.0,
             out_audio: 64.0,
         },
-        // gemini-3.1-flash-live (APPROXIMATE — verify): text in $0.50 / out $3.00;
-        // audio ~4x text in, and audio out ~$12 per 1M.
+        // gemini-3.1-flash-live (Google published paid-tier rates, per 1M tokens):
+        // input text $0.75 / audio $3.00; output text $4.50 / audio $12.00. Google does
+        // not publish a live cache-read rate — estimated at ~10% of input text (rarely
+        // fires for realtime turns anyway).
         _ => RealtimeRates {
-            in_text: 0.50,
-            in_audio: 2.0,
-            cached: 0.125,
-            out_text: 3.0,
+            in_text: 0.75,
+            in_audio: 3.0,
+            cached: 0.075,
+            out_text: 4.5,
             out_audio: 12.0,
         },
     }
