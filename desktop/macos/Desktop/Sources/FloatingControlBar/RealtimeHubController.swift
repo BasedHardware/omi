@@ -59,23 +59,19 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
 
   private override init() {
     super.init()
-    // Clear "speaking" when the AVSpeech fallback finishes (native audio uses the
-    // player's drain callback instead).
-    speech.delegate = self
   }
 
   /// In-flight ephemeral mint guard (managed users).
   private var minting = false
 
   /// True when the hub should drive this PTT turn. Read by PushToTalkManager at PTT
-  /// start. BYOK users are ready immediately (own key); managed users are ready only
-  /// once a warm session exists (token minted + connecting) — otherwise PTT falls
-  /// back to the legacy cascade for that turn.
+  /// start. The hub is the default voice path (no opt-in toggle): BYOK users are ready
+  /// immediately (own key); managed users are ready only once a warm session exists
+  /// (token minted + connecting) — otherwise PTT falls back to the legacy cascade for
+  /// that turn.
   var isActive: Bool {
-    guard RealtimeHubSettings.shared.isEnabled else { return false }
-    let provider = RealtimeHubSettings.shared.provider
-    if APIKeyService.byokKey(provider.byokProvider) != nil { return true }
-    return session != nil && sessionProvider == provider
+    if RealtimeHubSettings.shared.canConnect { return true }
+    return session != nil && sessionProvider == RealtimeHubSettings.shared.provider
   }
 
   func setup(barState: FloatingControlBarState) {
@@ -93,9 +89,8 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
   }
 
   @objc private func settingsChanged() {
-    // Only reconnect if enabled and the provider actually changed — avoids
-    // redundant teardown/recreate races on unrelated notifications.
-    if !RealtimeHubSettings.shared.isEnabled { teardownSession(); return }
+    // Only reconnect if the provider actually changed — avoids redundant
+    // teardown/recreate races on unrelated notifications.
     if session != nil, sessionProvider == RealtimeHubSettings.shared.provider { return }
     teardownSession()
     ensureWarm()
@@ -103,11 +98,10 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
 
   // MARK: - Warm session lifecycle (kept open between turns)
 
-  /// Open the WS now if it isn't already (no-op if disabled or already warm).
-  /// BYOK → connect client-direct with the user's key (Phase 1). Otherwise, if
-  /// signed in → mint a server-side ephemeral token (Phase 2) and connect with it.
+  /// Open the WS now if it isn't already (no-op if already warm). BYOK → connect
+  /// client-direct with the user's key. Otherwise, if signed in → mint a server-side
+  /// ephemeral token and connect with it.
   func ensureWarm() {
-    guard RealtimeHubSettings.shared.isEnabled else { return }
     let provider = RealtimeHubSettings.shared.provider
     if session != nil, sessionProvider == provider { return }
     if session != nil { teardownSession() }
@@ -117,7 +111,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     } else if AuthService.shared.isSignedIn {
       mintAndConnect(provider: provider)
     } else {
-      log("RealtimeHub: enabled but no BYOK key and not signed in — hub unavailable (cascade).")
+      log("RealtimeHub: no BYOK key and not signed in — hub unavailable (cascade).")
     }
   }
 
@@ -137,9 +131,8 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
         log("⚠️ RealtimeHub: ephemeral mint failed / not entitled — staying on cascade")
         return
       }
-      // Provider/enable may have changed while minting; only connect if still wanted.
-      guard RealtimeHubSettings.shared.isEnabled,
-        RealtimeHubSettings.shared.provider == provider, self.session == nil
+      // Provider may have changed while minting; only connect if still wanted.
+      guard RealtimeHubSettings.shared.provider == provider, self.session == nil
       else { return }
       self.startSession(provider: provider, auth: .ephemeral(token))
     }
@@ -152,24 +145,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     // Both providers stream native spoken audio (24k PCM) → StreamingPCMPlayer;
     // AVSpeech is only a no-audio fallback.
     if pcmPlayer == nil {
-      let p = StreamingPCMPlayer(sampleRate: 24000)
-      // Feed the live output amplitude to the speaking waveform — but only while we're
-      // actually in the speaking state, so publishing `voiceLevel` never re-renders the
-      // bar outside that window.
-      p.onLevel = { [weak self] level in
-        guard let self, self.barState?.isVoiceSpeaking == true else { return }
-        self.barState?.voiceLevel = CGFloat(level)
-      }
-      // The reply isn't truly over until the buffered audio finishes draining — only
-      // then do we drop "speaking" and let the bar collapse back to idle.
-      p.onPlayingChanged = { [weak self] playing in
-        guard let self, let barState = self.barState else { return }
-        if !playing {
-          barState.isVoiceSpeaking = false
-          barState.voiceLevel = 0
-        }
-      }
-      pcmPlayer = p
+      pcmPlayer = StreamingPCMPlayer(sampleRate: 24000)
     }
     s.start()
     log(
@@ -202,9 +178,6 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     audioReceivedThisTurn = false
     turnRecorded = false
     lastTurnAt = Date()
-    barState?.isVoiceThinking = false  // new turn → we're recording again, not waiting
-    barState?.isVoiceSpeaking = false  // any prior reply is being cut off below
-    barState?.voiceLevel = 0
     pcmPlayer?.stop()  // stop any prior reply locally
     if speech.isSpeaking { speech.stopSpeaking(at: .immediate) }
     if bargeIn {
@@ -246,11 +219,6 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
   /// PTT-up: end the turn; the model now responds (and may call tools).
   func commitTurn() {
     responding = true
-    // Show a distinct "waiting on the model" state (not the red recording dot, which
-    // reads as "still listening") so the user knows to wait rather than re-press. Setting
-    // this keeps the bar's `isVoiceActive` true across the PTT-up → thinking handoff, so
-    // the window stays expanded (the window observes the flags and resizes itself).
-    barState?.isVoiceThinking = true
     // (The screen frame is sent at turn START — see beginTurn — so it has time to
     // upload/decode before the model answers. Nothing to attach here.)
     session?.commitInputTurn()
@@ -297,11 +265,6 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
   }
 
   func hubDidReceiveAudio(_ pcm24k: Data) {
-    if !audioReceivedThisTurn {
-      // First audio of the turn: it's no longer thinking, it's speaking.
-      barState?.isVoiceThinking = false
-      barState?.isVoiceSpeaking = true
-    }
     audioReceivedThisTurn = true
     pcmPlayer?.enqueue(pcm24k)  // native spoken audio (OpenAI + Gemini)
   }
@@ -412,41 +375,34 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     // land here.
     responding = false
     logError("RealtimeHub: session error — \(message)")
-    // The reply is dead — stop any buffered audio and drop the speaking state before
-    // collapsing (the drain callback won't fire for a torn-down engine).
+    // The reply is dead — stop any buffered audio before collapsing.
     pcmPlayer?.stop()
     if speech.isSpeaking { speech.stopSpeaking(at: .immediate) }
-    barState?.isVoiceSpeaking = false
-    barState?.voiceLevel = 0
     exitVoiceUI()
     let aliveFor = lastWarmAt.map { Date().timeIntervalSince($0) } ?? 0
     teardownSession()
     // Re-warm so the NEXT PTT uses the hub, not the STT cascade. Gemini idle-closes
     // the socket (~2.5 min, close 1008) even before the first turn; managed users have
     // no BYOK key, so once `session` is nil `isActive` is false and PTT silently falls
-    // back to omni STT. So gate on isEnabled (NOT isActive, which needs a live session).
+    // back to omni STT. So always try to re-warm (the hub is the default voice path).
     // A socket that survived past the idle window was a normal idle-close → reset the
     // strike budget and keep re-warming forever; one that died fast is likely a config/
     // auth failure → let the strikes cap stop the churn.
     if aliveFor > 60 { hubReconnectStrikes = 0 }
-    guard RealtimeHubSettings.shared.isEnabled, !reconnectPending, hubReconnectStrikes < 5 else { return }
+    guard !reconnectPending, hubReconnectStrikes < 5 else { return }
     hubReconnectStrikes += 1
     reconnectPending = true
     DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in
       guard let self else { return }
       self.reconnectPending = false
-      if RealtimeHubSettings.shared.isEnabled, self.session == nil { self.ensureWarm() }
+      if self.session == nil { self.ensureWarm() }
     }
   }
 
   /// Return the floating bar from its PTT voice state to compact after a hub turn.
-  /// Leaves `isVoiceSpeaking` alone — the turn can finish generating while the buffered
-  /// reply is still playing; the player's drain callback drops speaking when it ends. The
-  /// window observes these flags and collapses itself once `isVoiceActive` goes false.
   private func exitVoiceUI() {
     guard let barState else { return }
     barState.voiceTranscript = ""
-    barState.isVoiceThinking = false
     barState.isVoiceListening = false
     barState.isVoiceLocked = false
     barState.isVoiceFollowUp = false
@@ -523,15 +479,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     utterance.voice =
       AVSpeechSynthesisVoice(language: AVSpeechSynthesisVoice.currentLanguageCode())
       ?? AVSpeechSynthesisVoice(language: "en-US")
-    barState?.isVoiceThinking = false
-    barState?.isVoiceSpeaking = true
     speech.speak(utterance)
-  }
-
-  /// Drop the speaking state once the AVSpeech fallback stops talking.
-  private func finishedSpeaking() {
-    barState?.isVoiceSpeaking = false
-    barState?.voiceLevel = 0
   }
 
   /// Local synthetic mouse click (point_click tool).
@@ -547,21 +495,5 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     down.post(tap: .cghidEventTap)
     up.post(tap: .cghidEventTap)
     return true
-  }
-}
-
-// MARK: - AVSpeech fallback completion
-
-extension RealtimeHubController: AVSpeechSynthesizerDelegate {
-  nonisolated func speechSynthesizer(
-    _ synthesizer: AVSpeechSynthesizer, didFinish utterance: AVSpeechUtterance
-  ) {
-    Task { @MainActor [weak self] in self?.finishedSpeaking() }
-  }
-
-  nonisolated func speechSynthesizer(
-    _ synthesizer: AVSpeechSynthesizer, didCancel utterance: AVSpeechUtterance
-  ) {
-    Task { @MainActor [weak self] in self?.finishedSpeaking() }
   }
 }
