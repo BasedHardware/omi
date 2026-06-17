@@ -33,6 +33,8 @@ final class BatchAudioWriter {
     private var lastFsyncMs: Int64 = 0
     private var storageFull = false
     private var recovered = false
+    private var diagLoggedNoConfig = false
+    private var diagLoggedMatch = false
 
     private let maxFileBytes: Int64 = 32 * 1024 * 1024 // ~32 MB per file
     private let maxFileSeconds: Int64 = 1800 // 30 min per file
@@ -56,12 +58,23 @@ final class BatchAudioWriter {
     @discardableResult
     func handle(peripheralUuid: String, serviceUuid: String, characteristicUuid: String, value: Data) -> Bool {
         guard let config = loadConfig() else {
+            if !diagLoggedNoConfig {
+                diagLoggedNoConfig = true
+                let d = UserDefaults.standard
+                NSLog("[BatchWriter] no config: batchModeEnabled=\(d.bool(forKey: "flutter.batchModeEnabled")) dir=\(d.string(forKey: "flutter.batchAudioDir") ?? "nil") hasStreamConfig=\(d.string(forKey: "flutter.nativeBleStreamConfig") != nil)")
+            }
             queue.async { self.closeCurrentLocked("disabled") }
             return false
         }
+        diagLoggedNoConfig = false
         guard config.deviceId.lowercased() == peripheralUuid.lowercased() else { return false }
         guard config.serviceUuid == serviceUuid.lowercased(),
             config.characteristicUuid == characteristicUuid.lowercased() else { return false }
+
+        if !diagLoggedMatch {
+            diagLoggedMatch = true
+            NSLog("[BatchWriter] matched audio characteristic — batch capture active (device=\(peripheralUuid), dir=\(config.dir))")
+        }
 
         let frames = transformFrames(deviceType: config.deviceType, value: value)
         if !frames.isEmpty {
