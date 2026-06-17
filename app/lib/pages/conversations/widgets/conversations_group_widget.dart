@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'package:omi/backend/schema/conversation.dart';
-import 'package:omi/services/wals.dart';
+import 'package:omi/models/local_recording.dart';
 import 'conversation_list_item.dart';
 import 'date_list_item.dart';
 import 'recording_list_item.dart';
@@ -11,7 +11,7 @@ class ConversationsGroupWidget extends StatelessWidget {
 
   /// Unsynced local recordings (batch/offline mode) for this date, interleaved with
   /// conversations by time. They have no title/icon yet — see [RecordingListItem].
-  final List<Wal> recordings;
+  final List<LocalRecording> recordings;
   final DateTime date;
   final bool isFirst;
   const ConversationsGroupWidget({
@@ -30,9 +30,9 @@ class ConversationsGroupWidget extends StatelessWidget {
 
     // Merge conversations and recordings into one time-sorted list (newest first),
     // matching how conversations are ordered within a date.
-    final entries = <({DateTime time, ServerConversation? convo, Wal? rec})>[
+    final entries = <({DateTime time, ServerConversation? convo, LocalRecording? rec})>[
       for (final c in conversations) (time: c.startedAt ?? c.createdAt, convo: c, rec: null),
-      for (final w in recordings) (time: DateTime.fromMillisecondsSinceEpoch(w.timerStart * 1000), convo: null, rec: w),
+      for (final r in recordings) (time: r.startedAt, convo: null, rec: r),
     ]..sort((a, b) => b.time.compareTo(a.time));
 
     return Column(
@@ -48,7 +48,7 @@ class ConversationsGroupWidget extends StatelessWidget {
               date: date,
             );
           }
-          return RecordingListItem(key: ValueKey('rec_${e.rec!.filePath ?? e.rec!.id}'), wal: e.rec!);
+          return RecordingListItem(key: ValueKey('rec_${e.rec!.id}'), recording: e.rec!);
         }),
         const SizedBox(height: 10),
       ],
