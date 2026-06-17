@@ -15,7 +15,9 @@ import java.util.Locale
  *
  *     [4-byte little-endian uint32 frame_length][frame bytes] ... repeated
  *
- * Files are named `audio_{device}_{codec}_{sampleRate}_{channel}_fs{frameSize}_{startSec}.bin`
+ * Files are named `audio_omibatch_{codec}_{sampleRate}_{channel}_fs{frameSize}_{startSec}.bin`
+ * (the `omibatch` device marker distinguishes these from offline-sync WAL files,
+ * which share this directory; the backend treats the device segment as a label.)
  * so the backend can parse the codec, frame size and start timestamp. Flutter later
  * scans the directory, registers each finalized file as a WAL and uploads it.
  *
@@ -158,10 +160,13 @@ class OmiBatchAudioWriter(private val context: Context) {
 
         val startSec = nowMs / 1000
         val frameSize = if (config.codec == "opus_fs320") 320 else 160
-        val deviceToken = config.deviceType.lowercase(Locale.US).filter { it.isLetterOrDigit() }.ifEmpty { "omi" }
+        // Tag the device segment as `omibatch` so the Dart scanner can tell batch
+        // recordings apart from offline-sync WAL flushes, which share this directory
+        // and the same audio_*.bin naming. The backend ignores this segment; keep it
+        // in sync with Dart's `batchRecordingDevice`.
         // Write to a .bin.part file while active; rename to .bin only once finalized so
-        // Flutter (which ingests *.bin) never picks up a half-written file.
-        val name = "audio_${deviceToken}_${config.codec}_${config.sampleRate}_1_fs${frameSize}_${startSec}.bin$PART_SUFFIX"
+        // Flutter (which scans *.bin) never picks up a half-written file.
+        val name = "audio_omibatch_${config.codec}_${config.sampleRate}_1_fs${frameSize}_${startSec}.bin$PART_SUFFIX"
         val file = File(dir, name)
 
         try {
