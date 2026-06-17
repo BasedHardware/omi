@@ -17,9 +17,8 @@ import 'package:omi/pages/conversations/widgets/search_widget.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
-import 'package:omi/providers/sync_provider.dart';
-import 'package:omi/services/wals.dart';
-import 'package:omi/utils/batch_recording.dart';
+import 'package:omi/providers/local_recordings_provider.dart';
+import 'package:omi/models/local_recording.dart';
 import 'package:omi/providers/folder_provider.dart';
 import 'package:omi/providers/home_provider.dart';
 import 'package:omi/services/app_review_service.dart';
@@ -68,7 +67,7 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
       if (!mounted) return;
 
       // Surface any unsynced batch recordings written by the native layer.
-      context.read<CaptureProvider>().ingestBatchRecordings();
+      context.read<LocalRecordingsProvider>().refresh();
 
       // Load folders for folder tabs
       final folderProvider = context.read<FolderProvider>();
@@ -259,19 +258,19 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
         // Unsynced local recordings (batch/offline mode) shown inline with conversations,
         // grouped into the same date buckets. Only in the default view (no search/folder/
         // starred/daily-summaries filter).
-        final syncProvider = context.watch<SyncProvider>();
+        final recordingsProvider = context.watch<LocalRecordingsProvider>();
         final bool showRecordings = convoProvider.previousQuery.isEmpty &&
             convoProvider.selectedFolderId == null &&
             !convoProvider.showStarredOnly &&
             !convoProvider.showDailySummaries;
-        final recordingsByDate = <DateTime, List<Wal>>{};
+        final recordingsByDate = <DateTime, List<LocalRecording>>{};
         if (showRecordings) {
-          // Only batch/offline recordings — never device SD-card/flash sync WALs or
-          // realtime offline buffers (those belong to the Sync page).
-          for (final wal in syncProvider.pendingWals.where((w) => w.device == batchRecordingDevice)) {
-            final dt = DateTime.fromMillisecondsSinceEpoch(wal.timerStart * 1000);
+          // Batch/offline-mode recordings captured locally — a separate subsystem
+          // from device offline-sync (which lives on the Sync page).
+          for (final rec in recordingsProvider.recordings) {
+            final dt = DateTime.fromMillisecondsSinceEpoch(rec.timerStart * 1000);
             final day = DateTime(dt.year, dt.month, dt.day);
-            (recordingsByDate[day] ??= <Wal>[]).add(wal);
+            (recordingsByDate[day] ??= <LocalRecording>[]).add(rec);
           }
         }
         final bool hasRecordings = recordingsByDate.isNotEmpty;
@@ -461,7 +460,7 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
                       var date = mergedDates[index];
                       List<ServerConversation> memoriesForDate =
                           convoProvider.groupedConversations[date] ?? const <ServerConversation>[];
-                      List<Wal> recordingsForDate = recordingsByDate[date] ?? const <Wal>[];
+                      List<LocalRecording> recordingsForDate = recordingsByDate[date] ?? const <LocalRecording>[];
                       return Column(
                         mainAxisSize: MainAxisSize.min,
                         children: [
