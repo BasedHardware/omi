@@ -966,6 +966,8 @@ class CaptureProvider extends ChangeNotifier
     await SharedPreferencesUtil().saveBool('nativeBleForegroundReady', false);
     await SharedPreferencesUtil()
         .saveBool('nativeBleStreamingEnabled', !batchMode && SharedPreferencesUtil().backgroundModeEnabled);
+    Logger.debug('[batch] config saved: batchMode=$batchMode dir=${docsDir.path} '
+        'deviceId=${device.id} svc=${audioTarget.key} char=${audioTarget.value} type=${device.type.name}');
   }
 
   MapEntry<String, String>? _nativeBleAudioTarget(BtDevice device) {
@@ -999,25 +1001,27 @@ class CaptureProvider extends ChangeNotifier
     try {
       final dirPath = SharedPreferencesUtil().getString('batchAudioDir');
       final dir = dirPath.isNotEmpty ? Directory(dirPath) : await getApplicationDocumentsDirectory();
-      if (!await dir.exists()) return 0;
+      if (!await dir.exists()) {
+        Logger.debug('[batch] ingest: dir does not exist ($dirPath)');
+        return 0;
+      }
+
+      final allFiles = dir.listSync().whereType<File>().map((e) => e.path.split('/').last).toList();
+      final binFiles = allFiles.where((n) => n.startsWith('audio_') && n.endsWith('.bin')).toList();
+      final partFiles = allFiles.where((n) => n.startsWith('audio_') && n.endsWith('.bin.part')).toList();
+      Logger.debug('[batch] ingest scan dir=${dir.path} finalized=${binFiles.length} inProgress=${partFiles.length}');
 
       int added = 0;
-      for (final entry in dir.listSync()) {
-        if (entry is! File) continue;
-        final name = entry.path.split('/').last;
-        // Only finalized recordings (audio_*.bin). Files still being written are
-        // *.bin.part and are atomically promoted to *.bin by the native writer.
-        if (!name.startsWith('audio_') || !name.endsWith('.bin')) continue;
+      for (final name in binFiles) {
         if (_ingestedBatchFiles.contains(name)) continue;
-
-        final wal = await _batchWalFromFile(entry, name);
+        final wal = await _batchWalFromFile(File('${dir.path}/$name'), name);
         if (wal == null) continue;
         await _wal.getSyncs().phone.addExternalWal(wal);
         _ingestedBatchFiles.add(name);
         added++;
       }
       if (added > 0) {
-        Logger.debug('ingestBatchRecordings: registered $added batch recording(s)');
+        Logger.debug('[batch] ingest: registered $added batch recording(s)');
         notifyListeners();
       }
       return added;
@@ -2056,11 +2060,6 @@ class CaptureProvider extends ChangeNotifier
     if (isConnected && !_orphanRecoveryDone) {
       _orphanRecoveryDone = true;
       recoverOrphanedWals();
-    }
-    // On BLE disconnect in batch mode the native writer finalizes the in-progress
-    // recording (.bin.part -> .bin); pick it up shortly after so it appears in the list.
-    if (!isConnected && SharedPreferencesUtil().batchModeEnabled) {
-      Future.delayed(const Duration(seconds: 1), ingestBatchRecordings);
     }
     notifyListeners();
   }
