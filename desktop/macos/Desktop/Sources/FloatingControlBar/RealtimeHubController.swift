@@ -54,7 +54,12 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
   /// spawn creates its own provider; warming this one primes node/auth caches.
   private var warmProvider: ChatProvider?
 
-  private override init() { super.init() }
+  private override init() {
+    super.init()
+    // Clear "speaking" when the AVSpeech fallback finishes (native audio uses the
+    // player's drain callback instead).
+    speech.delegate = self
+  }
 
   /// In-flight ephemeral mint guard (managed users).
   private var minting = false
@@ -143,7 +148,26 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     sessionProvider = provider
     // Both providers stream native spoken audio (24k PCM) → StreamingPCMPlayer;
     // AVSpeech is only a no-audio fallback.
-    if pcmPlayer == nil { pcmPlayer = StreamingPCMPlayer(sampleRate: 24000) }
+    if pcmPlayer == nil {
+      let p = StreamingPCMPlayer(sampleRate: 24000)
+      // Feed the live output amplitude to the speaking waveform — but only while we're
+      // actually in the speaking state, so publishing `voiceLevel` never re-renders the
+      // bar outside that window.
+      p.onLevel = { [weak self] level in
+        guard let self, self.barState?.isVoiceSpeaking == true else { return }
+        self.barState?.voiceLevel = CGFloat(level)
+      }
+      // The reply isn't truly over until the buffered audio finishes draining — only
+      // then do we drop "speaking" and let the bar collapse back to idle.
+      p.onPlayingChanged = { [weak self] playing in
+        guard let self, let barState = self.barState else { return }
+        if !playing {
+          barState.isVoiceSpeaking = false
+          barState.voiceLevel = 0
+        }
+      }
+      pcmPlayer = p
+    }
     s.start()
     log(
       "RealtimeHub: warming \(provider.displayName) session "
@@ -174,6 +198,9 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     speculativeScreenshot = nil
     audioReceivedThisTurn = false
     lastTurnAt = Date()
+    barState?.isVoiceThinking = false  // new turn → we're recording again, not waiting
+    barState?.isVoiceSpeaking = false  // any prior reply is being cut off below
+    barState?.voiceLevel = 0
     pcmPlayer?.stop()  // stop any prior reply locally
     if speech.isSpeaking { speech.stopSpeaking(at: .immediate) }
     if bargeIn {
@@ -206,6 +233,11 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
   /// PTT-up: end the turn; the model now responds (and may call tools).
   func commitTurn() {
     responding = true
+    // Show a distinct "waiting on the model" state (not the red recording dot, which
+    // reads as "still listening") so the user knows to wait rather than re-press. Setting
+    // this keeps the bar's `isVoiceActive` true across the PTT-up → thinking handoff, so
+    // the window stays expanded (the window observes the flags and resizes itself).
+    barState?.isVoiceThinking = true
     session?.commitInputTurn()
   }
 
@@ -250,6 +282,11 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
   }
 
   func hubDidReceiveAudio(_ pcm24k: Data) {
+    if !audioReceivedThisTurn {
+      // First audio of the turn: it's no longer thinking, it's speaking.
+      barState?.isVoiceThinking = false
+      barState?.isVoiceSpeaking = true
+    }
     audioReceivedThisTurn = true
     pcmPlayer?.enqueue(pcm24k)  // native spoken audio (OpenAI + Gemini)
   }
@@ -347,6 +384,12 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     // land here.
     responding = false
     logError("RealtimeHub: session error — \(message)")
+    // The reply is dead — stop any buffered audio and drop the speaking state before
+    // collapsing (the drain callback won't fire for a torn-down engine).
+    pcmPlayer?.stop()
+    if speech.isSpeaking { speech.stopSpeaking(at: .immediate) }
+    barState?.isVoiceSpeaking = false
+    barState?.voiceLevel = 0
     exitVoiceUI()
     let aliveFor = lastWarmAt.map { Date().timeIntervalSince($0) } ?? 0
     teardownSession()
@@ -369,13 +412,16 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
   }
 
   /// Return the floating bar from its PTT voice state to compact after a hub turn.
+  /// Leaves `isVoiceSpeaking` alone — the turn can finish generating while the buffered
+  /// reply is still playing; the player's drain callback drops speaking when it ends. The
+  /// window observes these flags and collapses itself once `isVoiceActive` goes false.
   private func exitVoiceUI() {
     guard let barState else { return }
     barState.voiceTranscript = ""
+    barState.isVoiceThinking = false
     barState.isVoiceListening = false
     barState.isVoiceLocked = false
     barState.isVoiceFollowUp = false
-    FloatingControlBarManager.shared.resizeForPTT(expanded: false)
   }
 
   // MARK: - Tools
@@ -449,7 +495,15 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     utterance.voice =
       AVSpeechSynthesisVoice(language: AVSpeechSynthesisVoice.currentLanguageCode())
       ?? AVSpeechSynthesisVoice(language: "en-US")
+    barState?.isVoiceThinking = false
+    barState?.isVoiceSpeaking = true
     speech.speak(utterance)
+  }
+
+  /// Drop the speaking state once the AVSpeech fallback stops talking.
+  private func finishedSpeaking() {
+    barState?.isVoiceSpeaking = false
+    barState?.voiceLevel = 0
   }
 
   /// Local synthetic mouse click (point_click tool).
@@ -465,5 +519,21 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     down.post(tap: .cghidEventTap)
     up.post(tap: .cghidEventTap)
     return true
+  }
+}
+
+// MARK: - AVSpeech fallback completion
+
+extension RealtimeHubController: AVSpeechSynthesizerDelegate {
+  nonisolated func speechSynthesizer(
+    _ synthesizer: AVSpeechSynthesizer, didFinish utterance: AVSpeechUtterance
+  ) {
+    Task { @MainActor [weak self] in self?.finishedSpeaking() }
+  }
+
+  nonisolated func speechSynthesizer(
+    _ synthesizer: AVSpeechSynthesizer, didCancel utterance: AVSpeechUtterance
+  ) {
+    Task { @MainActor [weak self] in self?.finishedSpeaking() }
   }
 }
