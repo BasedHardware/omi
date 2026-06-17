@@ -1,5 +1,6 @@
 import { Discord, Github, Instagram, Linkedin, Tiktok, X } from 'iconoir-react';
 import Image from 'next/image';
+import { PRODUCT_CONFIG } from '@/src/constants/product';
 
 export default function Footer() {
   return (
@@ -14,8 +15,8 @@ export default function Footer() {
             className="h-auto w-[70px]"
           />
           <p className="mt-1 text-gray-500">Made in San Fransisco</p>
-          <a href={'mailto:team@basedhardware.com>'} className="hover:underline">
-            team@basedhardware.com
+          <a href={'mailto:support@omi.me'} className="hover:underline">
+            support@omi.me
           </a>
           <div className="mt-3 flex items-center gap-3">
             <a
@@ -69,7 +70,7 @@ export default function Footer() {
             <li>
               <a
                 className="text-zinc-400 hover:text-white hover:underline md:text-base"
-                href={'https://www.omi.me/pages/openglass'}
+                href={`${PRODUCT_CONFIG.storeUrl}pages/openglass`}
                 target="_blank"
                 rel="noreferrer"
               >
@@ -79,7 +80,7 @@ export default function Footer() {
             <li>
               <a
                 className="text-zinc-400 hover:text-white hover:underline md:text-base"
-                href={'https://www.omi.me/'}
+                href={PRODUCT_CONFIG.storeUrl}
                 target="_blank"
                 rel="noreferrer"
               >
@@ -89,7 +90,7 @@ export default function Footer() {
             <li>
               <a
                 className="text-zinc-400 hover:text-white hover:underline md:text-base"
-                href={'https://www.omi.me/products/omi-dev-kit-2'}
+                href={PRODUCT_CONFIG.productUrl}
                 target="_blank"
                 rel="noreferrer"
               >
@@ -121,7 +122,7 @@ export default function Footer() {
             </li>
             <li>
               <a
-                href="https://www.omi.me/pages/privacy"
+                href={`${PRODUCT_CONFIG.storeUrl}pages/privacy`}
                 target={'_blank'}
                 rel={'noreferrer'}
                 className="text-zinc-400 hover:text-white hover:underline md:text-base"
@@ -154,7 +155,7 @@ export default function Footer() {
             <li className="font-bold">Company</li>
             <li>
               <a
-                href={'https://www.omi.me/pages/about'}
+                href={`${PRODUCT_CONFIG.storeUrl}pages/about`}
                 className="text-zinc-400 hover:text-white hover:underline md:text-base"
               >
                 About

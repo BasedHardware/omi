@@ -1,5 +1,6 @@
 import getSharedChat from '@/src/actions/chat/get-shared-chat';
 import envConfig from '@/src/constants/envConfig';
+import { PRODUCT_CONFIG } from '@/src/constants/product';
 import { Metadata, ResolvingMetadata } from 'next';
 import { headers } from 'next/headers';
 import Image from 'next/image';
@@ -62,16 +63,7 @@ export async function generateMetadata(
 }
 
 function getPlatformLink(userAgent: string, token: string) {
-  const isAndroid = /android/i.test(userAgent);
-  const isIOS = /iphone|ipad|ipod/i.test(userAgent);
-
-  return isAndroid
-    ? `intent://h.omi.me/chat/${token}#Intent;scheme=https;package=com.friend.ios;S.browser_fallback_url=${encodeURIComponent(
-        'https://play.google.com/store/apps/details?id=com.friend.ios',
-      )};end`
-    : isIOS
-    ? `omi://h.omi.me/chat/${token}`
-    : 'https://omi.me';
+  return PRODUCT_CONFIG.getPlatformLink(userAgent, token, 'chat');
 }
 
 function formatTimestamp(timestamp: string | null) {
@@ -156,7 +148,7 @@ export default async function SharedChatPage(props: ChatPageProps) {
 
           <div className="mt-6 flex items-center justify-center gap-4">
             <a
-              href="https://apps.apple.com/us/app/friend-ai-wearable/id6502156163"
+              href={PRODUCT_CONFIG.appStoreUrl}
               target="_blank"
               rel="noopener noreferrer"
               className="transition-transform duration-300 hover:scale-105"
@@ -170,7 +162,7 @@ export default async function SharedChatPage(props: ChatPageProps) {
               />
             </a>
             <a
-              href="https://play.google.com/store/apps/details?id=com.friend.ios"
+              href={PRODUCT_CONFIG.playStoreUrl}
               target="_blank"
               rel="noopener noreferrer"
               className="transition-transform duration-300 hover:scale-105"

@@ -19,6 +19,7 @@ import {
   type ProactiveNotification,
 } from '../../actions/apps';
 import LoadingState from '@/src/components/loading-state';
+import { PRODUCT_CONFIG } from '@/src/constants/product';
 
 export default function CreateAppPage() {
   const { user, loading, signOut } = useAuth();
@@ -1374,7 +1375,7 @@ export default function CreateAppPage() {
                 <p className="mt-1 text-sm text-gray-400">
                   By submitting this app, I agree to the{' '}
                   <a
-                    href="https://omi.me/pages/terms-of-service"
+                    href={`${PRODUCT_CONFIG.storeUrl}pages/terms-of-service`}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="text-blue-400 underline hover:text-blue-300"
@@ -1383,7 +1384,7 @@ export default function CreateAppPage() {
                   </a>{' '}
                   and{' '}
                   <a
-                    href="https://omi.me/pages/privacy"
+                    href={`${PRODUCT_CONFIG.storeUrl}pages/privacy`}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="text-blue-400 underline hover:text-blue-300"
