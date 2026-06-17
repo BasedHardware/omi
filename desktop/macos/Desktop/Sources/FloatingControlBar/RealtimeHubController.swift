@@ -46,6 +46,15 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
   /// Consecutive failed (re)connects with no surviving session — caps churn on a hard
   /// failure. Reset when a socket survives past the idle window or a turn completes.
   private var hubReconnectStrikes = 0
+  /// After this many consecutive fast failures (e.g. a stale/revoked key failing auth),
+  /// the hub stops re-warming so it doesn't hammer a dead endpoint.
+  private static let maxReconnectStrikes = 5
+  /// True only while a session is connected + authenticated for `sessionProvider`. This is
+  /// what gates `isActive`: a PTT turn enters hub mode only when the hub is genuinely
+  /// connected right now; otherwise it transparently uses the legacy cascade. Set in
+  /// hubDidConnect (fires post-auth, on "ready") and cleared on teardown/error, so a
+  /// stale/revoked key — which never connects — never costs the user a turn.
+  private var hubConnected = false
   /// True between commit and turn-done — used to detect barge-in (a new PTT while
   /// the previous reply is still in flight).
   private var responding = false
@@ -65,13 +74,14 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
   private var minting = false
 
   /// True when the hub should drive this PTT turn. Read by PushToTalkManager at PTT
-  /// start. The hub is the default voice path (no opt-in toggle): BYOK users are ready
-  /// immediately (own key); managed users are ready only once a warm session exists
-  /// (token minted + connecting) — otherwise PTT falls back to the legacy cascade for
-  /// that turn.
+  /// start. The hub is the default voice path (no opt-in toggle).
   var isActive: Bool {
-    if RealtimeHubSettings.shared.canConnect { return true }
-    return session != nil && sessionProvider == RealtimeHubSettings.shared.provider
+    // Drive a turn only when the hub is actually CONNECTED + authenticated for the
+    // currently-selected provider. A turn never enters hub mode on a key/token that can't
+    // connect (stale/revoked key, failed mint, mid-reconnect, or a just-switched provider):
+    // PTT transparently uses the legacy cascade instead, so a broken hub never costs the
+    // user a turn. The hub re-warms in the background and flips this true once it connects.
+    hubConnected && sessionProvider == RealtimeHubSettings.shared.provider
   }
 
   func setup(barState: FloatingControlBarState) {
@@ -162,6 +172,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     session?.stop()
     session = nil
     sessionProvider = nil
+    hubConnected = false  // no live session → PTT falls back to the cascade until re-warm
   }
 
   // MARK: - PTT integration
@@ -243,6 +254,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
 
   func hubDidConnect() {
     lastWarmAt = Date()
+    hubConnected = true  // authenticated + ready — PTT may now route turns to the hub
     log("RealtimeHub: connected (\(sessionProvider?.displayName ?? "?"))")
   }
 
@@ -391,7 +403,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     // strike budget and keep re-warming forever; one that died fast is likely a config/
     // auth failure → let the strikes cap stop the churn.
     if aliveFor > 60 { hubReconnectStrikes = 0 }
-    guard !reconnectPending, hubReconnectStrikes < 5 else { return }
+    guard !reconnectPending, hubReconnectStrikes < Self.maxReconnectStrikes else { return }
     hubReconnectStrikes += 1
     reconnectPending = true
     DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in
