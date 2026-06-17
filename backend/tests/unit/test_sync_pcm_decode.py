@@ -63,6 +63,22 @@ def _ensure_attrs(module_name, attrs):
     return module
 
 
+class _ConversationSource:
+    omi = 'omi'
+    limitless = 'limitless'
+    unknown = 'unknown'
+
+
+def _ensure_conversation_source_stub():
+    source = getattr(sys.modules.setdefault('models.conversation_enums', MagicMock()), 'ConversationSource', None)
+    if source is None or not all(hasattr(source, attr) for attr in ('omi', 'limitless')):
+        sys.modules['models.conversation_enums'].ConversationSource = _ConversationSource
+
+    conversation_mod = sys.modules.setdefault('models.conversation', MagicMock())
+    if not hasattr(getattr(conversation_mod, 'ConversationSource', None), 'omi'):
+        conversation_mod.ConversationSource = sys.modules['models.conversation_enums'].ConversationSource
+
+
 def _install_python_multipart_stub():
     if 'python_multipart' in sys.modules:
         return False
@@ -99,7 +115,7 @@ _ensure_attrs(
     ],
 )
 _ensure_attrs('models.conversation', ['Conversation', 'CreateConversation'])
-_ensure_attrs('models.conversation_enums', ['ConversationSource'])
+_ensure_conversation_source_stub()
 _ensure_attrs('models.transcript_segment', ['TranscriptSegment'])
 _ensure_attrs('utils.conversations.factory', ['deserialize_conversation'])
 _ensure_attrs('utils.conversations.process_conversation', ['process_conversation'])
@@ -139,6 +155,19 @@ _ensure_attrs(
 )
 _ensure_attrs('utils.http_client', ['_get_semaphore'])
 _ensure_attrs('utils.log_sanitizer', ['sanitize'])
+_ensure_attrs(
+    'utils.executors',
+    [
+        'critical_executor',
+        'db_executor',
+        'postprocess_executor',
+        'storage_executor',
+        'sync_executor',
+        'run_blocking',
+        'start_background_task',
+        'submit_with_context',
+    ],
+)
 _ensure_attrs('utils.stt.pre_recorded', ['postprocess_words', 'prerecorded'])
 _ensure_attrs('utils.stt.vad', ['vad_is_empty'])
 _ensure_attrs(
