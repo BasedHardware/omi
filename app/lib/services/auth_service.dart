@@ -27,6 +27,9 @@ class AuthService {
 
   bool isSignedIn() => FirebaseAuth.instance.currentUser != null && !FirebaseAuth.instance.currentUser!.isAnonymous;
 
+  static const _pkceCodeVerifierLength = 64;
+  static const _pkceCharset = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~';
+
   getFirebaseUser() {
     return FirebaseAuth.instance.currentUser;
   }
@@ -209,14 +212,21 @@ class AuthService {
   Future<UserCredential?> authenticateWithProvider(String provider) async {
     try {
       final state = _generateState();
+      final codeVerifier = _generateCodeVerifier();
+      final codeChallenge = _codeChallengeForVerifier(codeVerifier);
       const redirectUri = 'omi://auth/callback';
 
       Logger.debug('Starting OAuth flow for provider: $provider');
 
-      final authUrl = '${Env.apiBaseUrl}v1/auth/authorize'
-          '?provider=$provider'
-          '&redirect_uri=${Uri.encodeComponent(redirectUri)}'
-          '&state=$state';
+      final authUrl = Uri.parse('${Env.apiBaseUrl}v1/auth/authorize').replace(
+        queryParameters: {
+          'provider': provider,
+          'redirect_uri': redirectUri,
+          'state': state,
+          'code_challenge': codeChallenge,
+          'code_challenge_method': 'S256',
+        },
+      ).toString();
 
       Logger.debug('Authorization URL: $authUrl');
 
@@ -292,7 +302,7 @@ class AuthService {
       }
 
       // Exchange the code for OAuth credentials
-      final oauthCredentials = await _exchangeCodeForOAuthCredentials(code, redirectUri);
+      final oauthCredentials = await _exchangeCodeForOAuthCredentials(code, redirectUri, codeVerifier);
 
       if (oauthCredentials == null) {
         throw Exception('Failed to exchange code for OAuth credentials');
@@ -313,7 +323,11 @@ class AuthService {
     }
   }
 
-  Future<Map<String, dynamic>?> _exchangeCodeForOAuthCredentials(String code, String redirectUri) async {
+  Future<Map<String, dynamic>?> _exchangeCodeForOAuthCredentials(
+    String code,
+    String redirectUri,
+    String codeVerifier,
+  ) async {
     try {
       final useCustomToken = Env.useAuthCustomToken;
 
@@ -325,13 +339,14 @@ class AuthService {
           'code': code,
           'redirect_uri': redirectUri,
           'use_custom_token': useCustomToken.toString(),
+          'code_verifier': codeVerifier,
         },
       );
 
       Logger.debug('Token exchange response status: ${response.statusCode}');
-      Logger.debug('Token exchange response body: ${response.body}');
 
       if (response.statusCode == 200) {
+        Logger.debug('Token exchange succeeded');
         return json.decode(response.body);
       } else {
         Logger.debug('Token exchange failed: ${response.body}');
@@ -539,6 +554,16 @@ class AuthService {
     return base64Url.encode(bytes);
   }
 
+  String _generateCodeVerifier([int length = _pkceCodeVerifierLength]) {
+    final random = Random.secure();
+    return List.generate(length, (_) => _pkceCharset[random.nextInt(_pkceCharset.length)]).join();
+  }
+
+  String _codeChallengeForVerifier(String verifier) {
+    final digest = sha256.convert(utf8.encode(verifier));
+    return base64Url.encode(digest.bytes).replaceAll('=', '');
+  }
+
   Future<UserCredential?> linkWithProvider(String provider) async {
     try {
       final currentUser = FirebaseAuth.instance.currentUser;
@@ -547,14 +572,21 @@ class AuthService {
       }
 
       final state = _generateState();
+      final codeVerifier = _generateCodeVerifier();
+      final codeChallenge = _codeChallengeForVerifier(codeVerifier);
       const redirectUri = 'omi://auth/callback';
 
       Logger.debug('Starting OAuth linking flow for provider: $provider');
 
-      final authUrl = '${Env.apiBaseUrl}v1/auth/authorize'
-          '?provider=$provider'
-          '&redirect_uri=${Uri.encodeComponent(redirectUri)}'
-          '&state=$state';
+      final authUrl = Uri.parse('${Env.apiBaseUrl}v1/auth/authorize').replace(
+        queryParameters: {
+          'provider': provider,
+          'redirect_uri': redirectUri,
+          'state': state,
+          'code_challenge': codeChallenge,
+          'code_challenge_method': 'S256',
+        },
+      ).toString();
 
       Logger.debug('Authorization URL: $authUrl');
 
@@ -605,7 +637,7 @@ class AuthService {
       }
 
       // Exchange the code for OAuth credentials
-      final oauthCredentials = await _exchangeCodeForOAuthCredentials(code, redirectUri);
+      final oauthCredentials = await _exchangeCodeForOAuthCredentials(code, redirectUri, codeVerifier);
 
       if (oauthCredentials == null) {
         throw Exception('Failed to exchange code for OAuth credentials');

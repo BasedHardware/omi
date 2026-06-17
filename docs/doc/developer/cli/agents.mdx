@@ -48,8 +48,9 @@ almost always the right call:
 | Interactive use by a human          | `omi auth login --browser`|
 
 API keys are long-lived, scoped, and don't need a browser — perfect for
-agents. The browser OAuth flow exists for humans on a laptop and uses
-short-lived Firebase ID tokens that auto-refresh between calls.
+agents. The browser OAuth flow exists for humans on a laptop, uses a
+loopback callback with PKCE, and stores short-lived Firebase ID tokens that
+auto-refresh between calls.
 
 ```bash
 export OMI_API_KEY=omi_dev_...
