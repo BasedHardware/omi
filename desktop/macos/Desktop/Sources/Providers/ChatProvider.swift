@@ -2411,6 +2411,77 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
         return aiMessage
     }
 
+    /// Record a completed voice turn (realtime-hub / PTT) into chat history.
+    ///
+    /// The realtime hub plays its spoken reply itself and never routes through the
+    /// normal query path, so without this the turn would never appear in chat history
+    /// or sync to the backend. Appends both messages to the in-memory `messages`
+    /// immediately (so the home-page chat shows them live if open), then persists them
+    /// on a single background task — user message first, so the backend `created_at`
+    /// ordering (and therefore reload order) is stable. Fire-and-forget: the realtime
+    /// hub must never await this on the voice hot path. Empty sides are skipped (a
+    /// tool-only turn with no spoken reply still records the user's request).
+    func recordVoiceTurn(userText: String, assistantText: String) {
+        let user = userText.trimmingCharacters(in: .whitespacesAndNewlines)
+        let assistant = assistantText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !user.isEmpty || !assistant.isEmpty else { return }
+
+        let capturedSessionId = isInDefaultChat ? nil : currentSessionId
+        let capturedAppId = overrideAppId ?? selectedAppId
+
+        var userMessage: ChatMessage?
+        var aiMessage: ChatMessage?
+        if !user.isEmpty {
+            let m = ChatMessage(text: user, sender: .user)
+            messages.append(m)
+            userMessage = m
+        }
+        if !assistant.isEmpty {
+            let m = ChatMessage(text: assistant, sender: .ai)
+            messages.append(m)
+            aiMessage = m
+        }
+
+        // saveMessage site: completed realtime-hub voice turn. Persist both sequentially
+        // (user before assistant) off the voice hot path. `pendingSaves` guards the poll
+        // for the lifetime of both saves so they don't return as duplicates.
+        pendingSaves.begin()
+        Task { [weak self] in
+            if let userMessage {
+                await self?.persistVoiceMessage(
+                    userMessage, text: user, sender: "human",
+                    appId: capturedAppId, sessionId: capturedSessionId)
+            }
+            if let aiMessage {
+                await self?.persistVoiceMessage(
+                    aiMessage, text: assistant, sender: "ai",
+                    appId: capturedAppId, sessionId: capturedSessionId)
+            }
+            await MainActor.run { self?.pendingSaves.end() }
+        }
+    }
+
+    /// Persist one voice-turn message and sync its server ID back into `messages` so a
+    /// subsequent poll doesn't duplicate it. Failures leave the in-memory copy unsynced
+    /// (matches the existing saveMessage sites — no retry).
+    private func persistVoiceMessage(
+        _ message: ChatMessage, text: String, sender: String, appId: String?, sessionId: String?
+    ) async {
+        do {
+            let response = try await APIClient.shared.saveMessage(
+                text: text, sender: sender, appId: appId, sessionId: sessionId)
+            await MainActor.run {
+                if let index = self.messages.firstIndex(where: { $0.id == message.id }) {
+                    self.messages[index].id = response.id
+                    self.messages[index].isSynced = true
+                }
+            }
+            log("Saved voice \(sender) message to backend: \(response.id)")
+        } catch {
+            logError("Failed to persist voice \(sender) message", error: error)
+        }
+    }
+
     // MARK: - Pending Attachments
 
     /// Stage attachments for the next message and kick off background upload.
