@@ -1325,12 +1325,16 @@ class FloatingControlBarManager {
         guard let provider = activeFloatingProvider() else { return }
 
         // Re-wire the onSendQuery to use the isolated floating-bar provider.
-        // Subsequent typed messages also go through the AI router.
+        // Subsequent typed messages also go through the AI router. A message arriving
+        // through onSendQuery was always TYPED (PTT/voice bypass this closure and call
+        // routeQuery directly), so force fromVoice:false — otherwise a typed follow-up
+        // after a voice turn inherits the stale currentQueryFromVoice=true and gets
+        // spoken aloud.
         window.onSendQuery = { [weak self, weak window, weak provider] message in
             guard let self = self, let window = window, let provider = provider else { return }
             Task { @MainActor in
-                await self.withQueryTracer(query: message, fromVoice: window.state.currentQueryFromVoice) {
-                    await self.routeQuery(message, barWindow: window, provider: provider, fromVoice: window.state.currentQueryFromVoice)
+                await self.withQueryTracer(query: message, fromVoice: false) {
+                    await self.routeQuery(message, barWindow: window, provider: provider, fromVoice: false)
                 }
             }
         }
