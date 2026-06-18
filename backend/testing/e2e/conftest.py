@@ -275,10 +275,14 @@ def _create_backend_app(fake_firestore_instance, fake_redis_instance, fake_stora
     for module in list(sys.modules.values()):
         if module is None:
             continue
-        if getattr(module, "db", None) is old_db:
-            setattr(module, "db", fake_firestore_instance)
-        if getattr(module, "r", None) is old_r:
-            setattr(module, "r", fake_redis_instance)
+        for attr_name, attr_value in list(vars(module).items()):
+            try:
+                if attr_value is old_db:
+                    setattr(module, attr_name, fake_firestore_instance)
+                elif attr_value is old_r:
+                    setattr(module, attr_name, fake_redis_instance)
+            except Exception:
+                continue
 
     _app_cache = backend_main.app
     return _app_cache

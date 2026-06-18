@@ -86,8 +86,29 @@ def patch_google_firestore():
 def seed_conversation(uid: str, conversation_data: dict):
     """Seed a conversation document into fake Firestore for testing."""
     db = get_mock_firestore()
-    conv_id = conversation_data["id"]
-    db.collection("users").document(uid).collection("conversations").document(conv_id).set(conversation_data)
+    data = dict(conversation_data)
+    for timestamp_field in (
+        "created_at",
+        "updated_at",
+        "started_at",
+        "finished_at",
+        "discarded_at",
+        "deleted_at",
+        "structured_started_at",
+        "structured_finished_at",
+    ):
+        value = data.get(timestamp_field)
+        if isinstance(value, str):
+            data[timestamp_field] = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    for segment in data.get("transcript_segments") or []:
+        if not isinstance(segment, dict):
+            continue
+        for timestamp_field in ("created_at", "updated_at"):
+            value = segment.get(timestamp_field)
+            if isinstance(value, str):
+                segment[timestamp_field] = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    conv_id = data["id"]
+    db.collection("users").document(uid).collection("conversations").document(conv_id).set(data)
 
 
 def seed_memory(uid: str, memory_data: dict):

@@ -12,7 +12,6 @@ jobs:
   hermetic-e2e:
     name: Hermetic Backend E2E
     runs-on: ubuntu-latest
-    continue-on-error: true
     timeout-minutes: 10
 
     steps:

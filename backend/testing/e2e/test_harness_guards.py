@@ -68,7 +68,9 @@ def test_backend_database_globals_are_fake_after_app_import(client, fake_firesto
     import database._client as db_client
     import database.redis_db as redis_db
     import database.webhook_health as webhook_health
+    import utils.fair_use as fair_use
 
     assert db_client.db is fake_firestore
     assert redis_db.r is fake_redis
     assert webhook_health.r is fake_redis
+    assert fair_use.redis_client is fake_redis

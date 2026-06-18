@@ -370,7 +370,7 @@ def _record_dev_webhook_failure_fallback(uid: str, wtype_str: str, status_code: 
     if disabled:
         r.hset(key, 'disabled', '1')
     r.expire(key, _HEALTH_TTL)
-    return disabled
+    return count == _DEV_FAILURE_THRESHOLD
 
 
 def record_dev_webhook_failure(uid: str, wtype: str, status_code: int, error: str) -> bool:
