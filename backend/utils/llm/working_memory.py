@@ -12,8 +12,6 @@ try:
 
     _CLIENT_IMPORT_ERROR = None
 except Exception as exc:
-    # Benchmark/product-module tests may run without Firestore ADC or optional provider deps.
-    # Keep the L1 prompt/parser/validation importable so callers can inject an equivalent llm.
     get_llm = None
     _CLIENT_IMPORT_ERROR = exc
 
@@ -24,43 +22,77 @@ class L1MemoryArchiveItems(BaseModel):
     items: List[L1MemoryArchiveItem] = Field(default_factory=list)
 
 
-l1_memory_archive_prompt = ChatPromptTemplate.from_messages(
-    [
-        (
-            "system",
-            """
-You are the Layer 1 archive extractor for Omi.
+def _source_type_instructions(source_type: str, user_name: str) -> str:
+    """Return source-type-specific guidance for the L1 archive extractor."""
+    type_hint = (source_type or "unknown").lower()
 
-Your job is broad, Base-Omi-like searchable memory capture. Persist source-backed archive items that may be useful for later agent search or Layer 2 durable synthesis. Do not decide durability, do not deduplicate against existing memories, and do not create durable memory IDs.
+    if "voice" in type_hint or "transcript" in type_hint:
+        return (
+            f"This is a voice transcript. Multiple people may be speaking. "
+            f"Extract what was said that matters — decisions, plans, names, relationships, "
+            f"facts about {user_name} or people close to them. "
+            f"Ignore background noise, transcription errors, and long passages where "
+            f"nothing memorable happens."
+        )
+    elif "ocr" in type_hint or "screenshot" in type_hint or "desktop" in type_hint:
+        return (
+            f"This is text from a screenshot or screen capture on {user_name}'s computer. "
+            f"It might show a chat window, code editor, document, email, or app interface. "
+            f"Extract visible facts: what they're working on, who they're talking to, "
+            f"what's on their screen that reveals preferences or context. "
+            f"Ignore transient UI elements (scroll position, loading spinners) unless "
+            f"they reveal something meaningful."
+        )
+    elif "chat" in type_hint or "message" in type_hint or "conversation" in type_hint:
+        return (
+            f"This is a conversation between {user_name} and an AI assistant (and possibly others). "
+            f"Extract what {user_name} said, decided, or revealed about themselves or their life. "
+            f"Ignore generic assistant messages, praise, nudges, and conversational filler. "
+            f"Only extract assistant content when it confirms something {user_name} stated."
+        )
+    else:
+        return f"This is a {source_type} from {user_name}'s digital life. Extract what's worth remembering."
 
-Required behavior:
-- Extract broadly from the source. No topic denylists.
-- Preserve exact source evidence with evidence_quotes and source_refs whenever available.
-- Use simple archive classes only: class="general" for normal searchable archive evidence, class="sensitive" for credentials, secrets, security-sensitive, medical/immigration/family/privacy-sensitive, or other high-risk material.
-- Do not output L1 lifecycle/routes such as working, working_note, context_only, review, hidden, active, rejected, or discard.
-- L1 archive items are not stable profile facts. Layer 2 decides durable/review/discard/hidden promotion later.
-- Keep text source-faithful and useful for search. It may be noisy/current/incidental like old Omi memory, but it must be grounded in the source.
-- Keep speaker labels source-local when present; do not globalize unidentified speakers.
 
-Return only JSON matching these format instructions:
-{format_instructions}
-""".strip(),
-        ),
-        (
-            "human",
-            """
-User name: {user_name}
-User id: {uid}
-Source id: {source_id}
-Source type: {source_type}
-Language instruction: {language_instruction}
+def _build_l1_messages(
+    user_name: str,
+    source_type: str,
+    text: str,
+    format_instructions: str,
+) -> list:
+    """Build L1 extraction messages with source-type-aware system prompt."""
+    source_context = _source_type_instructions(source_type, user_name)
 
-Source text:
-{text}
-""".strip(),
-        ),
+    system = (
+        f"You are looking at something from {user_name}'s life — a conversation, voice transcript,\n"
+        f"screenshot, or document on their computer. Extract what they might want to remember later.\n\n"
+        f"{source_context}\n\n"
+        f"What to extract:\n"
+        f"- Facts about {user_name}: their decisions, plans, preferences, constraints, health, finances.\n"
+        f"- Facts about people {user_name} cares about: family, partner, friends, teammates, coworkers.\n"
+        f"- Facts about projects or ongoing endeavors {user_name} is invested in.\n"
+        f"- Facts about recurring places, pets, or entities in {user_name}'s life.\n"
+        f"- Each item must be grounded in a quote from the source.\n\n"
+        f"What NOT to extract:\n"
+        f"- AI assistant chatter, nudges, generic praise (\"great job!\", \"you can do it!\")\n"
+        f"- Third-party storytelling, movie plots, game narration, article content {user_name}\n"
+        f"  didn't engage with.\n"
+        f"- Transient UI states (\"page loading\", scroll position) unless revealing a preference.\n\n"
+        f"For each item, note who/what it's about in the `about` field:\n"
+        f"- Empty or \"{user_name}\" → about the user themselves\n"
+        f"- A person's name → e.g. \"Sarah\", \"Mom\", \"Dr. Patel\"\n"
+        f"- A project → e.g. \"Omi project\", \"house renovation\"\n"
+        f"- An entity → e.g. \"Milo (cat)\", \"neighborhood coffee shop\"\n"
+        f"- Use class=\"sensitive\" for credentials, health details, finances, family matters.\n\n"
+        f"Return JSON:\n{format_instructions}"
+    )
+
+    human = f"Source ({source_type}):\n{text}"
+
+    return [
+        ("system", system),
+        ("human", human),
     ]
-)
 
 
 def _content_from_response(response) -> str:
@@ -109,16 +141,10 @@ def extract_l1_memory_archive_items_from_text(
     if not stripped_text or (len(stripped_text) < 25 and not low_text_is_security_relevant):
         return []
 
+    name = user_name or "the user"
     parser = PydanticOutputParser(pydantic_object=L1MemoryArchiveItems)
-    messages = l1_memory_archive_prompt.format_messages(
-        user_name=user_name or "the user",
-        uid=uid,
-        source_id=source_id,
-        source_type=source_type,
-        language_instruction=language_instruction or "Use the source language where needed.",
-        text=text,
-        format_instructions=parser.get_format_instructions(),
-    )
+    messages = _build_l1_messages(name, source_type, text, parser.get_format_instructions())
+
     if llm is not None:
         model = llm
     elif get_llm is not None:

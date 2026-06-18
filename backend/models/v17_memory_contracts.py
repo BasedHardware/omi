@@ -87,7 +87,9 @@ class L1MemoryArchiveItem(BaseModel):
     evidence_quotes: List[str] = Field(default_factory=list)
     speaker_label: Optional[str] = None
     speaker_scope: str = "session-local"
-    subject_hint: str = "unknown"
+    # Who/what this item is about — free text, e.g. "David", "Sarah (girlfriend)",
+    # "Omi project", "Milo (cat)", "Dr. Patel". Empty/unknown = about the user.
+    about: str = ""
     confidence: str = "medium"
     risk_flags: List[str] = Field(default_factory=list)
     allowed_use: Optional[str] = None
@@ -260,20 +262,23 @@ class WorkingMemoryObservation(BaseModel):
     @field_validator("subject")
     @classmethod
     def normalize_subject(cls, value: str) -> str:
-        normalized = (value or "unclear").strip().lower()
+        """Allow arbitrary subject descriptions — not restricted to a fixed enum.
+
+        Common aliases are normalized for consistency, but any descriptive value
+        is accepted (e.g. "Milo (cat)", "Sarah", "neighborhood coffee shop").
+        """
+        normalized = (value or "unclear").strip()
+        if not normalized:
+            return "unclear"
         aliases = {
-            "user": "primary_user",
-            "project": "user_project",
-            "relationship": "user_relationship",
-            "generic": "generic_content",
+            "user": "self",
+            "primary_user": "self",
+            "project": "owned_project",
+            "relationship": "person",
+            "third_party": "other",
+            "generic": "general",
         }
-        normalized = aliases.get(normalized, normalized)
-        return (
-            normalized
-            if normalized
-            in {"primary_user", "user_project", "user_relationship", "third_party", "generic_content", "unclear"}
-            else "unclear"
-        )
+        return aliases.get(normalized.lower(), normalized)
 
     @field_validator("interpretation_level")
     @classmethod
