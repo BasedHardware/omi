@@ -1,7 +1,7 @@
 # V17 Memory Product Integration — Implementation Tickets
 
 **Created:** 2026-06-18T20:08:24Z  
-**Status:** Finalized after Wave 3 review; approved with changes incorporated  
+**Status:** Oracle-reviewed; blocked for production implementation until P0 amendments are added  
 **Source Epic:** `docs/epics/v17_memory_product_integration_epic.md`  
 **Decision Brief:** `docs/epics/v17_memory_product_integration_decision_brief.md`  
 **Repos:**
@@ -1370,4 +1370,23 @@ Final requested changes incorporated:
 - Hardened `/v3` read compatibility for old clients and existing `limit` behavior.
 - Added explicit third-party/MCP/developer write-safety criterion.
 
-Final committee outcome: **ready to use as the implementation ticket queue**, with the tickets document as the implementation source of truth.
+Final committee outcome before Oracle: **ready to use as the implementation ticket queue**, with the tickets document as the implementation source of truth.
+
+### Oracle review — External architecture/code critique
+
+Oracle review is recorded in `docs/epics/v17_memory_oracle_review.md`.
+
+Verdict: **BLOCKED** for production implementation. T00–T05 can proceed as design/audit work, but no persistent V17 writes, read switch, vector changes, or external API changes should ship until P0 amendments are incorporated.
+
+Oracle P0 blockers to incorporate before implementation:
+
+1. Define one atomic, fenced Long-term write protocol across idempotency claim, writer lease/fencing token, ledger append, head update, source-version check, purge-generation check, and recovery from every crash point.
+2. Replace empty-list synthesis failures with typed, auditable outcomes so provider failures, parse errors, malformed patches, quote-wrapper candidates, and policy rejections cannot silently advance cursors or improve benchmarks by disappearance.
+3. Replace/adapt current `L1MemoryArchiveItem` contract so fresh source-backed extraction becomes default-access Short-term, not Archive by default.
+4. Define rollout/cutover/rollback reconciliation semantics; a simple `off|shadow|write|read` scalar is not enough to prevent disappearing memories or resurrection after fallback.
+5. Add deletion/account-purge generation fences and apply-time source tombstone/version checks so delayed workers cannot recreate deleted data.
+6. Add durable outbox/projection/vector consistency and fail-closed shared-namespace search gateway before any V17 vector/read rollout.
+7. Define stable logical memory identity across Short-term → Long-term/Archive transitions and cross-tier read/dedup/ranking/pagination behavior.
+8. Strengthen sensitive-data enforcement, third-party consent/scopes, raw-artifact copy-before-drop, live conversation-to-Short-term ingestion, review backlog resolution, and quantitative launch gates.
+
+The next planning pass should convert these Oracle findings into new P0/P1 tickets and reorder the queue so safety infrastructure, benchmark gates, vector gateway, and rollout verifier precede write-mode tickets.
