@@ -77,7 +77,16 @@ function flushPending(): void {
 function dispatch(graph: LocalKnowledgeGraph): void {
   workerBusy = true
   lastDispatched = graph
-  ensureWorker().postMessage({ type: 'replace', nodes: graph.nodes, edges: graph.edges })
+  try {
+    ensureWorker().postMessage({ type: 'replace', nodes: graph.nodes, edges: graph.edges })
+  } catch (err) {
+    // Worker construction failed (e.g. missing kgWorker.js in packaged build).
+    // Reset state so future saves can retry rather than being silently dropped.
+    console.error('[kg:worker] failed to dispatch:', (err as Error).message)
+    worker = null
+    workerBusy = false
+    flushPending()
+  }
 }
 
 function enqueueGraph(graph: LocalKnowledgeGraph): void {
@@ -103,9 +112,10 @@ export function registerKgHandlers(): void {
   ipcMain.handle('kg:status', () => getLocalKGStatus())
 
   ipcMain.handle('kg:queryNodes', (_e, q: string, limit?: number) => {
+    // Resolve cap once so snapshot and DB paths always return the same count.
+    const cap = limit ?? 80
     if (q === '' && kgSnapshot !== null) {
       // Hot path: serve from in-memory snapshot, no SQLite access required.
-      const cap = limit ?? 80
       const nodes = kgSnapshot.nodes
         .slice()
         .sort((a, b) => b.createdAt - a.createdAt)
@@ -114,7 +124,7 @@ export function registerKgHandlers(): void {
       const edges = kgSnapshot.edges.filter((e) => idSet.has(e.sourceId) || idSet.has(e.targetId))
       return { nodes, edges }
     }
-    return queryKgNodes(q, limit)
+    return queryKgNodes(q, cap)
   })
 
   ipcMain.handle('kg:searchFiles', async (_e, q: string, fileType?: string, limit?: number) =>
