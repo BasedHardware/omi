@@ -62,6 +62,16 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
   /// Log tag for the currently-connected provider.
   private var providerTag: String { sessionProvider == .gemini ? "gemini" : "openai" }
 
+  /// Latest local identity card, injected into each new session's system instruction.
+  /// Refreshed off the hot path; an empty string just means "no card yet" (graceful).
+  private var aboutUserCard: String = ""
+
+  private func refreshAboutUserCard() {
+    Task { @MainActor [weak self] in
+      self?.aboutUserCard = await AboutUserCard.build()
+    }
+  }
+
   /// Held warm so spawn_agent's pi-mono bridge boot is off the hot path. The pill
   /// spawn creates its own provider; warming this one primes node/auth caches.
   private var warmProvider: ChatProvider?
@@ -98,6 +108,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
       name: .realtimeOmniSettingsDidChange, object: nil)
     // Expose the headless E2E action (omi-ctl action hub_test_turn pcm=… provider=…).
     RealtimeHubTestHarness.registerAutomationAction()
+    refreshAboutUserCard()
   }
 
   @objc private func settingsChanged() {
@@ -105,6 +116,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     // teardown/recreate races on unrelated notifications.
     if session != nil, sessionProvider == RealtimeHubSettings.shared.provider { return }
     teardownSession()
+    refreshAboutUserCard()
     ensureWarm()
   }
 
@@ -151,7 +163,8 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
   }
 
   private func startSession(provider: RealtimeHubProvider, auth: HubAuth) {
-    let s = RealtimeHubSession(provider: provider, auth: auth, delegate: self)
+    let instructions = RealtimeHubTools.systemInstruction(aboutUser: aboutUserCard)
+    let s = RealtimeHubSession(provider: provider, auth: auth, instructions: instructions, delegate: self)
     session = s
     sessionProvider = provider
     // Both providers stream native spoken audio (24k PCM) → StreamingPCMPlayer;
