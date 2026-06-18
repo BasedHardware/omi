@@ -18,8 +18,12 @@ enum HubTool: String {
   /// Non-blocking: the model acknowledges and moves on.
   case spawnAgent = "spawn_agent"
   /// Read the user's tasks locally (TasksStore) and return them inline to speak — a
-  /// fast synchronous READ, NOT a background agent.
+  /// fast synchronous READ, NOT a background agent. Overdue + due-today only.
   case getTasks = "get_tasks"
+  /// Read the user's full action-item list from the backend with filters (completed,
+  /// due-date range). Fast READ — use for completed tasks, date ranges, or the whole list
+  /// (get_tasks only covers overdue + due-today).
+  case getActionItems = "get_action_items"
   /// Read what Omi knows about the user (memories / facts) and return it inline to speak.
   /// Fast synchronous READ — the answer to "who am I" / "what do you know about me".
   case getMemories = "get_memories"
@@ -31,6 +35,13 @@ enum HubTool: String {
   /// List the user's MOST RECENT conversations, newest first (titles + summaries, no
   /// transcripts). Fast READ — the answer to "most recent / latest / last conversation".
   case getConversations = "get_conversations"
+  /// Formatted recap of what the user actually DID on their Mac — apps used (with minutes),
+  /// conversations, tasks, focus, screen activity. Fast LOCAL READ — the answer to "what did I
+  /// do yesterday / today", "which apps did I use the most", "how did I spend my time".
+  case getDailyRecap = "get_daily_recap"
+  /// Semantically search the user's on-screen history (what they saw / read / worked on).
+  /// Fast LOCAL READ — "when was I looking at X", "find where I read about Y".
+  case searchScreenHistory = "search_screen_history"
   /// Create a new task / to-do / reminder for the user. Fast synchronous WRITE.
   case createActionItem = "create_action_item"
   /// Update an existing task (mark done, change text/due). Needs the task id from get_tasks.
@@ -53,24 +64,34 @@ enum RealtimeHubTools {
 
     IMPORTANT: You CAN read the user's Omi data directly with fast tools — their tasks \
     (get_tasks), what Omi knows about them / their memories & facts (get_memories, \
-    search_memories), and their past conversations (search_conversations) — and you can \
-    make simple task changes (create_action_item, update_action_item). For anything in \
+    search_memories), their past conversations (search_conversations), what they DID on \
+    their Mac (get_daily_recap), and their on-screen history (search_screen_history) — and \
+    you can make simple task changes (create_action_item, update_action_item). For anything in \
     their OTHER apps (calendar, notes, emails, messages, files, reminders, browser) or any \
     multi-step "do X for me" work, use spawn_agent — it hands the request to a background \
     agent that has those tools and can act in the user's apps.
 
-    Using tools: the moment a request needs a tool, briefly acknowledge it OUT LOUD in your \
-    own natural, varied words (keep it short, and don't include any answer or data you don't \
-    have yet), then immediately call the tool. For a READ tool (get_tasks, get_memories, \
-    search_memories, search_conversations, ask_higher_model), speak its result after it \
-    returns. NEVER put an answer — real or guessed — in that acknowledgment, NEVER skip the \
-    tool call, and never read tool JSON or ids aloud. You cannot see the user's data or \
-    screen without calling a tool.
+    Using tools: when a request needs a tool, ALWAYS give a short spoken heads-up first so the \
+    user knows you're on it and that it won't be instant — then call the tool and speak the \
+    result when it returns. Never go silent during a tool call; the user can't see what you're \
+    doing, so a quiet gap feels broken. The catch is variety: that heads-up must be SPECIFIC to \
+    what they actually asked and DIFFERENT every time. Name the real thing you're fetching — \
+    "Pulling up yesterday's activity…", "Scanning your task list…", "Digging through your notes \
+    on the launch…", "Checking your memories for that…", "Getting the latest on that, one \
+    sec…". The thing to avoid is repetition: do NOT reach for the same generic opener ("let me \
+    check", "let me look that up") turn after turn — it's what makes you sound robotic. Keep it \
+    to a few words, vary the wording each turn, and don't include any answer or data you don't \
+    have yet. For a slower step (ask_higher_model, spawn_agent) it's fine to signal it'll take a \
+    moment. NEVER speak an answer — real or guessed — before the tool returns, NEVER skip the \
+    tool call, and never read tool JSON or ids aloud. You cannot see the user's data or screen \
+    without calling a tool.
 
     Decide what to do with each request:
     - The user's TASKS / to-dos / what's due — a READ ("what are my tasks", "what's due \
     today", "what's on my list", "do I have anything today"): you MUST call get_tasks and \
-    speak ONLY what it returns. Never guess, summarize from memory, or make up tasks.
+    speak ONLY what it returns. Never guess, summarize from memory, or make up tasks. For \
+    COMPLETED tasks ("what did I finish"), a SPECIFIC due-date range ("what's due next week"), \
+    or the FULL list ("all my tasks"), call get_action_items instead (it supports filters).
     - WHO the user is / what you know about them / their memories or facts ("who am I", \
     "what do you know about me", "what are my preferences"): you MUST call get_memories (no \
     query) and speak what it returns. For a SPECIFIC fact ("what's my dog's name", "where do \
@@ -83,6 +104,21 @@ enum RealtimeHubTools {
     - What the user DISCUSSED about a TOPIC ("what did I say about X", "what did we decide on \
     Y", "find the conversation about Z"): call search_conversations with a focused query and \
     speak the result.
+    - The user's own ACTIVITY / what they DID / how they spent their time ("what did I do \
+    yesterday", "what did I do today", "which apps did I use the most", "how did I spend my \
+    morning", "summarize my day"): you MUST call get_daily_recap (days_ago: 0 = today, 1 = \
+    yesterday) and speak a SHORT spoken summary of the highlights it returns — top apps, key \
+    conversations, tasks. Do NOT use search_conversations or spawn_agent for this, and never \
+    guess; this is exactly what get_daily_recap is for.
+    - What the user SAW / read / worked on ON SCREEN ("when was I looking at X", "find where I \
+    read about Y", "what was I doing in app Z"): call search_screen_history with a focused \
+    query and speak the result.
+    - ADVICE about the user's OWN productivity / workflow / habits / focus ("how can I improve \
+    my workflow", "how can I be more productive", "what should I change", "how am I doing", \
+    "where am I wasting time"): do NOT answer generically. FIRST call get_daily_recap (days_ago: \
+    1 for today, 7 for the week) — and get_action_items when tasks matter — then base EVERY \
+    suggestion on what they ACTUALLY did: their apps, distracted vs focused sessions, and \
+    overdue / duplicate tasks. Generic advice with no tool call is a failure here.
     - ADD a task / to-do / reminder ("remind me to…", "add … to my list", "I need to…"): \
     call create_action_item with a clear `description` (and `due_at` if a time was given), \
     then confirm out loud. CHANGE an existing task (mark done, edit, reschedule): first \
@@ -186,6 +222,68 @@ enum RealtimeHubTools {
           + "search_conversations is semantic and does NOT order by time, so it's wrong for 'recent'. "
           + "Fast synchronous read. Speak the result.",
         "parameters": ["type": "object", "properties": [:]],
+      ],
+      [
+        "type": "function",
+        "name": HubTool.getDailyRecap.rawValue,
+        "description":
+          "Get a recap of what the user actually DID on their Mac — apps used (with minutes), "
+          + "conversations, tasks, focus sessions, and screen activity — for a day. THIS is the tool "
+          + "for 'what did I do yesterday', 'what did I do today', 'which apps did I use the most', "
+          + "'how did I spend my time'. Do NOT use search_conversations or spawn_agent for these. "
+          + "Fast synchronous read — speak a short summary of what it returns.",
+        "parameters": [
+          "type": "object",
+          "properties": [
+            "days_ago": [
+              "type": "number",
+              "description": "0 = today, 1 = yesterday (default), 7 = the past week.",
+            ]
+          ],
+        ],
+      ],
+      [
+        "type": "function",
+        "name": HubTool.searchScreenHistory.rawValue,
+        "description":
+          "Search the user's on-screen history — what they saw, read, or worked on — by meaning. "
+          + "Use for 'when was I looking at X', 'find where I read about Y', 'what was I doing in "
+          + "app Z'. Returns matching moments with the app and context. Fast synchronous read. "
+          + "Speak the result.",
+        "parameters": [
+          "type": "object",
+          "properties": [
+            "query": [
+              "type": "string", "description": "What the user was looking at / reading / doing.",
+            ],
+            "days": ["type": "number", "description": "How many days back to search; default 7."],
+          ],
+          "required": ["query"],
+        ],
+      ],
+      [
+        "type": "function",
+        "name": HubTool.getActionItems.rawValue,
+        "description":
+          "Read the user's tasks / to-dos from the backend, with optional filters. Use for "
+          + "COMPLETED tasks ('what did I finish'), a DATE RANGE ('what's due next week'), or the "
+          + "FULL list ('all my tasks') — for plain 'what's due today / overdue', prefer get_tasks. "
+          + "Fast synchronous read. Speak a short summary of what it returns.",
+        "parameters": [
+          "type": "object",
+          "properties": [
+            "completed": [
+              "type": "boolean",
+              "description": "true = only done tasks, false = only open tasks. Omit for both.",
+            ],
+            "due_start_date": [
+              "type": "string", "description": "Optional ISO-8601 start of the due-date range.",
+            ],
+            "due_end_date": [
+              "type": "string", "description": "Optional ISO-8601 end of the due-date range.",
+            ],
+          ],
+        ],
       ],
       [
         "type": "function",
