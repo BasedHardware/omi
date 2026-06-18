@@ -4,7 +4,7 @@ Scenario 1: CRUD Golden Path
 Tests basic create-read-update-delete round-trips for conversations,
 action items, and memories through the real API with fake backend services.
 
-All assertions verify data shape preservation through the full
+Assertions focus on real route behavior and durable postconditions through the
 request → router → database → response cycle.
 """
 
@@ -113,16 +113,20 @@ class TestActionItemCRUD:
 
     def test_list_action_items(self, client, auth_headers):
         """Create multiple action items and list them."""
-        client.post("/v1/action-items", json={"description": "Task A"}, headers=auth_headers)
-        client.post("/v1/action-items", json={"description": "Task B"}, headers=auth_headers)
+        create_a = client.post("/v1/action-items", json={"description": "Task A"}, headers=auth_headers)
+        create_b = client.post("/v1/action-items", json={"description": "Task B"}, headers=auth_headers)
+        assert create_a.status_code == 200, create_a.text
+        assert create_b.status_code == 200, create_b.text
+        created_ids = {create_a.json()["id"], create_b.json()["id"]}
 
         resp = client.get("/v1/action-items", headers=auth_headers)
         assert resp.status_code == 200
 
         body = resp.json()
         items = body.get("action_items", [])
-        descriptions = [i["description"] for i in items]
-        assert "Task A" in descriptions or "Task B" in descriptions
+        by_id = {i["id"]: i for i in items}
+        assert created_ids.issubset(by_id.keys())
+        assert {by_id[item_id]["description"] for item_id in created_ids} == {"Task A", "Task B"}
 
     def test_update_action_item(self, client, auth_headers):
         """Update an action item's description."""
@@ -131,6 +135,7 @@ class TestActionItemCRUD:
             json={"description": "Original task"},
             headers=auth_headers,
         )
+        assert create_resp.status_code == 200, create_resp.text
         ai_id = create_resp.json()["id"]
 
         resp = client.patch(
@@ -148,6 +153,7 @@ class TestActionItemCRUD:
             json={"description": "To be deleted"},
             headers=auth_headers,
         )
+        assert create_resp.status_code == 200, create_resp.text
         ai_id = create_resp.json()["id"]
 
         resp = client.delete(f"/v1/action-items/{ai_id}", headers=auth_headers)
@@ -163,6 +169,7 @@ class TestActionItemCRUD:
             json={"description": "Complete me"},
             headers=auth_headers,
         )
+        assert create_resp.status_code == 200, create_resp.text
         ai_id = create_resp.json()["id"]
 
         resp = client.patch(
@@ -201,15 +208,21 @@ class TestMemoryCRUD:
 
     def test_list_memories(self, client, auth_headers):
         """Create multiple memories and list them."""
-        client.post("/v3/memories", json={"content": "Memory A", "category": "interesting"}, headers=auth_headers)
-        client.post("/v3/memories", json={"content": "Memory B", "category": "system"}, headers=auth_headers)
+        create_a = client.post(
+            "/v3/memories", json={"content": "Memory A", "category": "interesting"}, headers=auth_headers
+        )
+        create_b = client.post("/v3/memories", json={"content": "Memory B", "category": "system"}, headers=auth_headers)
+        assert create_a.status_code == 200, create_a.text
+        assert create_b.status_code == 200, create_b.text
+        created_ids = {create_a.json()["id"], create_b.json()["id"]}
 
         resp = client.get("/v3/memories", headers=auth_headers)
         assert resp.status_code == 200
 
         body = resp.json()
-        contents = [m["content"] for m in body]
-        assert any("Memory A" in c or "Memory B" in c for c in contents)
+        by_id = {m["id"]: m for m in body}
+        assert created_ids.issubset(by_id.keys())
+        assert {by_id[mem_id]["content"] for mem_id in created_ids} == {"Memory A", "Memory B"}
 
     def test_edit_memory(self, client, auth_headers):
         """Edit a memory's content."""
@@ -218,6 +231,7 @@ class TestMemoryCRUD:
             json={"content": "Original content", "category": "manual"},
             headers=auth_headers,
         )
+        assert create_resp.status_code == 200, create_resp.text
         mem_id = create_resp.json()["id"]
 
         resp = client.patch(
@@ -226,6 +240,10 @@ class TestMemoryCRUD:
             headers=auth_headers,
         )
         assert resp.status_code == 200, f"Edit failed: {resp.text}"
+        list_resp = client.get("/v3/memories", headers=auth_headers)
+        assert list_resp.status_code == 200, list_resp.text
+        found = [m for m in list_resp.json() if m["id"] == mem_id]
+        assert found and found[0]["content"] == "Edited content"
 
     def test_delete_memory(self, client, auth_headers):
         """Delete a memory and verify it's gone."""
@@ -234,11 +252,15 @@ class TestMemoryCRUD:
             json={"content": "Delete me", "category": "interesting"},
             headers=auth_headers,
         )
+        assert create_resp.status_code == 200, create_resp.text
         mem_id = create_resp.json()["id"]
 
         resp = client.delete(f"/v3/memories/{mem_id}", headers=auth_headers)
         assert resp.status_code == 200, f"Delete failed: {resp.text}"
         assert resp.json()["status"] == "ok"
+        list_resp = client.get("/v3/memories", headers=auth_headers)
+        assert list_resp.status_code == 200, list_resp.text
+        assert mem_id not in {m["id"] for m in list_resp.json()}
 
     def test_batch_create_memories(self, client, auth_headers):
         """Create multiple memories in a single batch request."""
@@ -257,6 +279,10 @@ class TestMemoryCRUD:
         body = resp.json()
         assert body["created_count"] == 3
         assert len(body["memories"]) == 3
+        created_ids = {m["id"] for m in body["memories"]}
+        list_resp = client.get("/v3/memories", headers=auth_headers)
+        assert list_resp.status_code == 200, list_resp.text
+        assert created_ids.issubset({m["id"] for m in list_resp.json()})
 
 
 class TestDataShapePreservation:
@@ -270,6 +296,10 @@ class TestDataShapePreservation:
         assert resp.status_code == 200
 
         body = resp.json()
+        assert body["id"] == sample_conversation_data["id"]
+        assert body["source"] == sample_conversation_data["source"]
+        assert body["structured"]["title"] == sample_conversation_data["structured"]["title"]
+        assert body["transcript_segments"][0]["text"] == sample_conversation_data["transcript_segments"][0]["text"]
         # Check core fields exist
         for field in [
             "id",
@@ -303,6 +333,9 @@ class TestDataShapePreservation:
         assert resp.status_code == 200
 
         body = resp.json()
+        assert body["description"] == "Field check task"
+        assert body["completed"] is False
+        assert body.get("due_at") is not None
         for field in [
             "id",
             "description",

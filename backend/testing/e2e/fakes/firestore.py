@@ -56,13 +56,28 @@ def patch_google_firestore():
             original_init(self, *args, **kwargs)
         except Exception:
             pass  # Init may fail with anonymous creds — that's ok
-        # Replace internal state with mock store methods
+        # Replace internal state with mock store methods. Delegate the fake
+        # client surface broadly so new backend routes do not accidentally
+        # fall through to an uninitialized real Firestore client.
         mock = get_mock_firestore()
-        # Delegate key methods to the mock
-        self.collection = mock.collection
-        self.batch = mock.batch
-        self.get_all = mock.get_all
-        # Keep reference for document() which needs parent chain
+        for attr in dir(mock):
+            if attr.startswith("_"):
+                continue
+            value = getattr(mock, attr, None)
+            if callable(value):
+                setattr(self, attr, value)
+        if not hasattr(mock, "document"):
+
+            def _unsupported_document(*args, **kwargs):
+                raise NotImplementedError("E2E fake Firestore does not support document() yet")
+
+            self.document = _unsupported_document
+        if not hasattr(mock, "collection_group"):
+
+            def _unsupported_collection_group(*args, **kwargs):
+                raise NotImplementedError("E2E fake Firestore does not support collection_group() yet")
+
+            self.collection_group = _unsupported_collection_group
         self._mock = mock
 
     firestore.Client.__init__ = _fake_client_init

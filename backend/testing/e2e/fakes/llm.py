@@ -97,7 +97,7 @@ def configure_llm_fakes(httpserver):
 
     # OpenRouter (uses OpenAI-compatible format)
     httpserver.expect_request("/api/v1/chat/completions").respond_with_json(
-        make_openai_router_response(), status=200, content_type="application/json"
+        make_openrouter_response(), status=200, content_type="application/json"
     )
 
     # OpenAI embeddings
@@ -111,15 +111,6 @@ def configure_llm_fakes(httpserver):
         status=200,
         content_type="application/json",
     )
-
-
-def make_openai_router_response(content: str = None) -> dict:
-    """Build a fake OpenRouter API response."""
-    if content is None:
-        content = json.dumps(DEFAULT_STRUCTURED_RESPONSE)
-    resp = make_openai_chat_response(content)
-    resp["model"] = "openrouter/auto"
-    return resp
 
 
 def configure_llm_error(httpserver, status_code: int = 500):

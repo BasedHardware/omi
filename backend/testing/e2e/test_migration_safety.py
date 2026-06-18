@@ -1,10 +1,9 @@
 """
-Scenario 4: Migration Safety
+Scenario 4: Legacy Shape Compatibility
 
-Tests that:
-1. Old-format documents (pre-migration) are readable by current code
-2. Migration scripts transform old → new format correctly
-3. Migration is idempotent (running twice is a no-op)
+Tests that old-format Firestore documents remain readable by current code and
+that fake-store overwrite behavior is deterministic. These tests do not execute
+production migration scripts.
 """
 
 import json
@@ -71,15 +70,15 @@ class TestLegacyFormatReading:
         assert legacy_conv["id"] in ids
 
 
-class TestMigrationIdempotency:
-    """Migration scripts should be safe to run multiple times."""
+class TestFakeStoreIdempotency:
+    """Fake-store repeated writes should be deterministic."""
 
     def test_double_write_same_id(self, client, auth_headers):
         """
         Writing a document twice with the same ID overwrites (not duplicates).
 
-        This simulates running a migration script twice — the second run
-        should be a no-op or overwrite with same data.
+        This does not execute production migration scripts; it verifies the
+        fake store has deterministic overwrite semantics for stable IDs.
         """
 
         conv_data = {
@@ -105,7 +104,7 @@ class TestMigrationIdempotency:
         # First write
         seed_conversation("123", conv_data)
 
-        # Second write (same id — simulates re-running migration)
+        # Second write with same ID should overwrite deterministically.
         updated = dict(conv_data, structured={**conv_data["structured"], "title": "Updated Title"})
         seed_conversation("123", updated)
 
@@ -206,9 +205,11 @@ class TestFieldShapeEvolution:
         seed_conversation("123", conv_with_extra)
 
         resp = client.get(f"/v1/conversations/{conv_with_extra['id']}", headers=auth_headers)
-        # Pydantic may ignore or reject extra fields depending on config
-        # Either behavior is acceptable as long as it doesn't crash
-        assert resp.status_code in (200, 422), f"Extra fields caused unexpected error: {resp.text}"
+        assert resp.status_code == 200, f"Extra fields should be ignored on read: {resp.text}"
+        body = resp.json()
+        assert body["id"] == conv_with_extra["id"]
+        assert "future_field_v2" not in body
+        assert "experimental_flag" not in body
 
 
 class TestCategoryEnumMigration:
@@ -242,4 +243,4 @@ class TestCategoryEnumMigration:
         memories = resp.json()
         found = [m for m in memories if m["id"] == old_category_mem["id"]]
         assert found, f"Legacy category memory {old_category_mem['id']} not returned"
-        assert found[0]["category"] in ("system", "core")
+        assert found[0]["category"] == "system"

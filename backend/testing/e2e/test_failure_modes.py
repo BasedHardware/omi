@@ -1,10 +1,8 @@
 """
 Scenario 3: Failure Modes
 
-Tests that the backend degrades gracefully when external services fail:
-- LLM returns 500 → conversation saved but unprocessed
-- Redis unavailable → requests still succeed (fail-open)
-- STT timeout → error handling (TODO: needs WS fake)
+Tests that selected invalid inputs and edge cases behave deterministically.
+Full LLM, Redis-unavailable, and STT failure simulations are explicit v2 work.
 """
 
 import pytest
@@ -76,24 +74,18 @@ class TestLLMFailureDegradation:
         assert len(body.get("transcript_segments", [])) >= 1
 
 
-class TestRedisFailOpen:
-    """Verify that Redis unavailability doesn't block requests."""
+class TestRedisFakePaths:
+    """Verify CRUD routes work with fakeredis-backed Redis paths."""
 
-    def test_crud_works_without_redis(self, client, auth_headers):
-        """
-        Basic CRUD operations succeed even if Redis is in fake mode.
-
-        fakeredis provides a working Redis-like interface, so this tests
-        that the backend's fail-open patterns don't throw on Redis operations.
-        Rate limiting should pass through (allowing the request).
-        """
+    def test_crud_works_with_fake_redis(self, client, auth_headers):
+        """Basic CRUD operations succeed with fakeredis-backed Redis operations."""
         # Create action item (triggers rate limiting + Redis ops)
         resp = client.post(
             "/v1/action-items",
             json={"description": "Redis fail-open test"},
             headers=auth_headers,
         )
-        assert resp.status_code == 200, f"Should succeed without real Redis: {resp.text}"
+        assert resp.status_code == 200, f"Should succeed with fakeredis: {resp.text}"
 
         # Create memory (also uses Redis for caching)
         resp = client.post(
@@ -103,8 +95,8 @@ class TestRedisFailOpen:
         )
         assert resp.status_code == 200, f"Memory create should work: {resp.text}"
 
-    def test_conversation_list_works_without_redis_cache(self, client, auth_headers):
-        """Listing conversations works without Redis cache layer."""
+    def test_conversation_list_works_with_fake_redis_cache(self, client, auth_headers):
+        """Listing conversations works with fakeredis cache layer."""
         resp = client.get("/v1/conversations", headers=auth_headers)
         # Should return 200 with empty list or existing conversations
         assert resp.status_code == 200, f"List should work: {resp.text}"
@@ -147,15 +139,15 @@ class TestInvalidInputHandling:
         resp = client.delete("/v3/memories/nonexistent-mem-id", headers=auth_headers)
         assert resp.status_code == 404
 
-    def test_empty_action_item_description_rejected(self, client, auth_headers):
-        """Empty description should be rejected or handled gracefully."""
+    def test_empty_action_item_description_currently_accepted(self, client, auth_headers):
+        """Document current contract: empty descriptions are accepted by the route model."""
         resp = client.post(
             "/v1/action-items",
             json={"description": ""},
             headers=auth_headers,
         )
-        # May return 422 or 200 depending on validation
-        assert resp.status_code in (200, 422)
+        assert resp.status_code == 200, resp.text
+        assert resp.json()["description"] == ""
 
 
 class TestEdgeCases:
@@ -188,6 +180,10 @@ class TestEdgeCases:
             headers=auth_headers,
         )
         assert resp.status_code == 200, f"Long AI should work: {resp.text}"
+        ai_id = resp.json()["id"]
+        read_resp = client.get(f"/v1/action-items/{ai_id}", headers=auth_headers)
+        assert read_resp.status_code == 200, read_resp.text
+        assert read_resp.json()["description"] == long_desc
 
     def test_special_characters_in_title(self, client, auth_headers):
         """Special characters in conversation title are preserved."""

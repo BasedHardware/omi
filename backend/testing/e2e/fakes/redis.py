@@ -48,25 +48,22 @@ def patch_redis_client():
     def _fake_redis_init(self, *args, **kwargs):
         original_init(self, *args, **kwargs)
         fake = get_fake_redis()
-        # Delegate all key methods to the fake
-        for attr in (
-            "get",
-            "set",
-            "delete",
-            "exists",
-            "expire",
-            "ttl",
-            "incr",
-            "decr",
-            "ping",
-            "keys",
-            "flushdb",
-            "flushall",
-            "pipeline",
-            "evalscript",
-            "eval",
-        ):
-            if hasattr(fake, attr):
-                setattr(self, attr, getattr(fake, attr))
+        # Delegate the full public fakeredis surface. A curated allowlist
+        # drifts behind backend Redis usage (`mget`, `setex`, sets, hashes,
+        # Lua script helpers, etc.) and can fall through to a real client.
+        for attr in dir(fake):
+            if attr.startswith("_"):
+                continue
+            value = getattr(fake, attr, None)
+            if callable(value):
+                setattr(self, attr, value)
 
     redis_pkg.Redis.__init__ = _fake_redis_init
+    redis_pkg.StrictRedis.__init__ = _fake_redis_init
+
+    def _fake_from_url(*args, **kwargs):
+        return get_fake_redis()
+
+    redis_pkg.Redis.from_url = staticmethod(_fake_from_url)
+    redis_pkg.StrictRedis.from_url = staticmethod(_fake_from_url)
+    redis_pkg.from_url = _fake_from_url

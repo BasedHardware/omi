@@ -32,6 +32,7 @@ def _fake_google_auth_default(scopes=None, request=None, **kwargs):
 if _original_ga_default is not None:
     _ga_mod.default = _fake_google_auth_default
 
+import dotenv
 import pytest
 
 # ─── Paths ──────────────────────────────────────────────────────────────
@@ -60,6 +61,7 @@ def _set_e2e_env():
     Deliberately overwrite external-service credentials instead of using
     setdefault() so a developer's shell cannot leak real API keys into e2e runs.
     """
+    os.environ["PYTHON_DOTENV_DISABLED"] = "1"
     os.environ["LOCAL_DEVELOPMENT"] = "true"
     os.environ["ENCRYPTION_SECRET"] = "test-encryption-secret-for-e2e-testing-32chars!"
     os.environ["FIREBASE_PROJECT_ID"] = "test-e2e-project"
@@ -85,9 +87,26 @@ def _set_e2e_env():
     # Disable Stripe validation so startup doesn't fail.
     os.environ["STRIPE_SECRET_KEY"] = ""
     os.environ["ADMIN_KEY"] = ""
+    for proxy_var in (
+        "HTTP_PROXY",
+        "HTTPS_PROXY",
+        "ALL_PROXY",
+        "NO_PROXY",
+        "http_proxy",
+        "https_proxy",
+        "all_proxy",
+        "no_proxy",
+    ):
+        os.environ.pop(proxy_var, None)
+
+
+def _disabled_load_dotenv(*args, **kwargs):
+    """Prevent backend/main.py from rehydrating real local secrets from .env."""
+    return False
 
 
 _set_e2e_env()
+dotenv.load_dotenv = _disabled_load_dotenv
 
 
 # ─── Network guard ──────────────────────────────────────────────────────
@@ -123,9 +142,15 @@ def _guarded_socket_connect_ex(self, address):
     return _original_socket_connect_ex(self, address)
 
 
-def _guarded_socket_sendto(self, data, address):
+def _guarded_socket_sendto(self, data, *args):
+    if len(args) == 1:
+        address = args[0]
+    elif len(args) == 2:
+        address = args[1]
+    else:
+        raise TypeError("sendto expected address or flags,address")
     _assert_local_address(address)
-    return _original_socket_sendto(self, data, address)
+    return _original_socket_sendto(self, data, *args)
 
 
 def _guarded_create_connection(address, timeout=None, source_address=None, *args, **kwargs):
@@ -258,6 +283,18 @@ def client(fake_firestore, fake_redis):
 
 DEV_UID = "123"
 DEV_AUTH_HEADERS = {"Authori" + "zation": "Bearer dev-token"}
+
+
+@pytest.fixture(autouse=True)
+def isolate_e2e_state(fake_firestore, fake_redis):
+    """Clear mutable fake service state before and after each test."""
+    from fakes.firestore import clear_user_data
+
+    clear_user_data(DEV_UID)
+    fake_redis.flushall()
+    yield
+    clear_user_data(DEV_UID)
+    fake_redis.flushall()
 
 
 @pytest.fixture()

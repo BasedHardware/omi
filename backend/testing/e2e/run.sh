@@ -37,21 +37,13 @@ if ! command -v python >/dev/null 2>&1; then
     exit 1
 fi
 
-# ─── Install fake dependencies if missing ─────────────────────────────
-install_if_missing() {
-    local import_name="$1"
-    local package_name="${2:-$1}"
-    python -c "import ${import_name}" 2>/dev/null || {
-        echo "Installing ${package_name}..."
-        python -m pip install "${package_name}" --quiet
-    }
+# ─── Verify fake dependencies are installed ───────────────────────────
+python -c "import fake_firestore; import fakeredis; import pytest_httpserver; import aioresponses" 2>/dev/null || {
+    echo "ERROR: E2E test dependencies are not installed."
+    echo "Run: python -m pip install -r testing/e2e/requirements.txt"
+    echo "Then retry: bash testing/e2e/run.sh"
+    exit 1
 }
-
-echo "Checking/installing fake dependencies..."
-install_if_missing fake_firestore fake-firestore
-install_if_missing fakeredis fakeredis
-install_if_missing pytest_httpserver pytest-httpserver
-install_if_missing aioresponses aioresponses
 
 # ─── Verify core backend deps are installed ────────────────────────────
 python -c "import fastapi; import firebase_admin; import google.cloud.firestore" 2>/dev/null || {
