@@ -119,8 +119,13 @@ def seed_memory(uid: str, memory_data: dict):
 def seed_action_item(uid: str, action_item_data: dict):
     """Seed an action item document into fake Firestore for testing."""
     db = get_mock_firestore()
-    ai_id = action_item_data["id"]
-    db.collection("users").document(uid).collection("action_items").document(ai_id).set(action_item_data)
+    data = dict(action_item_data)
+    for timestamp_field in ("created_at", "updated_at", "due_at", "completed_at"):
+        value = data.get(timestamp_field)
+        if isinstance(value, str):
+            data[timestamp_field] = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    ai_id = data["id"]
+    db.collection("users").document(uid).collection("action_items").document(ai_id).set(data)
 
 
 def read_conversation(uid: str, conversation_id: str) -> Optional[dict]:
@@ -150,7 +155,19 @@ def clear_user_data(uid: str):
     """Remove all data for a user from fake Firestore."""
     db = get_mock_firestore()
     user_ref = db.collection("users").document(uid)
-    for coll_name in ["conversations", "memories", "action_items"]:
+    for coll_name in [
+        "conversations",
+        "memories",
+        "action_items",
+        "people",
+        "task_integrations",
+        "chat_sessions",
+        "folders",
+    ]:
         docs = list(user_ref.collection(coll_name).stream())
         for d in docs:
             d.reference.delete()
+    try:
+        user_ref.delete()
+    except Exception:
+        pass

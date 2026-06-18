@@ -67,7 +67,7 @@ if [ "$#" -eq 0 ]; then
 fi
 
 set +e
-python -m pytest "$@" testing/e2e/
+python -m pytest testing/e2e/ "$@"
 PYTEST_EXIT_CODE=$?
 set -e
 

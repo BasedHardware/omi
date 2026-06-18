@@ -52,3 +52,11 @@ def test_network_guard_blocks_sendto_three_arg_form():
             sock.sendto(b"payload", 0, ("93.184.216.34", 80))
     finally:
         sock.close()
+
+
+def test_backend_storage_client_is_fake_after_app_import(client):
+    """The backend storage module should hold the fake GCS client, not google's real client."""
+    from fakes.storage import FakeStorageClient
+    import utils.other.storage as storage_helpers
+
+    assert isinstance(storage_helpers.storage_client, FakeStorageClient)

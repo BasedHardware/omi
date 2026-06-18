@@ -84,6 +84,12 @@ def _set_e2e_env():
     os.environ["TYPESENSE_API_KEY"] = "fake-typesense-key"
     os.environ["BUCKET_SPEECH_PROFILES"] = "speech-profiles"
     os.environ["BUCKET_POSTPROCESSING"] = "postprocessing"
+    os.environ["BUCKET_PRIVATE_CLOUD_SYNC"] = "omi-private-cloud-sync"
+    os.environ["BUCKET_TEMPORAL_SYNC_LOCAL"] = "sync-temporal"
+    os.environ["BUCKET_MEMORIES_RECORDINGS"] = "memories-recordings"
+    os.environ["BUCKET_APP_THUMBNAILS"] = "app-thumbnails"
+    os.environ["BUCKET_CHAT_FILES"] = "chat-files"
+    os.environ["BUCKET_DESKTOP_UPDATES"] = "desktop-updates"
     # Disable Stripe validation so startup doesn't fail.
     os.environ["STRIPE_SECRET_KEY"] = ""
     os.environ["ADMIN_KEY"] = ""
@@ -209,7 +215,7 @@ def fake_storage():
 _app_cache = None
 
 
-def _create_backend_app(fake_firestore_instance, fake_redis_instance):
+def _create_backend_app(fake_firestore_instance, fake_redis_instance, fake_storage_instance):
     """
     Create the real FastAPI app with patched dependencies.
 
@@ -222,10 +228,12 @@ def _create_backend_app(fake_firestore_instance, fake_redis_instance):
 
     from fakes.firestore import patch_google_firestore
     from fakes.redis import patch_redis_client
+    from fakes.storage import patch_google_storage
 
-    # Patch must happen before database modules are imported
+    # Patch must happen before database/storage modules are imported
     patch_google_firestore()
     patch_redis_client()
+    patch_google_storage()
 
     # Initialize Firebase Admin SDK with fake credentials
     import firebase_admin
@@ -260,7 +268,7 @@ def _create_backend_app(fake_firestore_instance, fake_redis_instance):
 
 
 @pytest.fixture()
-def client(fake_firestore, fake_redis):
+def client(fake_firestore, fake_redis, fake_storage):
     """
     Build a FastAPI TestClient wrapping the REAL omi backend.
 
@@ -268,7 +276,7 @@ def client(fake_firestore, fake_redis):
     boundary, sets env vars, then imports and wraps the actual app.
     All router logic, auth, encryption, middleware runs for real.
     """
-    app = _create_backend_app(fake_firestore, fake_redis)
+    app = _create_backend_app(fake_firestore, fake_redis, fake_storage)
 
     from fastapi.testclient import TestClient
     import logging
@@ -286,15 +294,18 @@ DEV_AUTH_HEADERS = {"Authori" + "zation": "Bearer dev-token"}
 
 
 @pytest.fixture(autouse=True)
-def isolate_e2e_state(fake_firestore, fake_redis):
+def isolate_e2e_state(fake_firestore, fake_redis, fake_storage):
     """Clear mutable fake service state before and after each test."""
     from fakes.firestore import clear_user_data
+    from fakes.storage import clear_fake_storage
 
     clear_user_data(DEV_UID)
     fake_redis.flushall()
+    clear_fake_storage()
     yield
     clear_user_data(DEV_UID)
     fake_redis.flushall()
+    clear_fake_storage()
 
 
 @pytest.fixture()
