@@ -16,7 +16,7 @@ final class AboutUserCardTests: XCTestCase {
         XCTAssertTrue(card.contains("- Prefers concise answers"))
         XCTAssertTrue(card.contains("2 overdue"))
         XCTAssertTrue(card.contains("3 due today"))
-        XCTAssertTrue(card.contains("snapshot"))
+        XCTAssertTrue(card.contains("quick snapshot"))
     }
 
     func testRenderEmptyState() {

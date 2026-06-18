@@ -29,7 +29,9 @@ enum AboutUserCard {
   /// Best-effort: any failure degrades to a smaller card, never throws.
   @MainActor
   static func build() async -> String {
-    let name = AuthService.shared.givenName.trimmingCharacters(in: .whitespacesAndNewlines)
+    let auth = AuthService.shared
+    let rawName = auth.givenName.isEmpty ? auth.displayName : auth.givenName
+    let name = rawName.trimmingCharacters(in: .whitespacesAndNewlines)
 
     var facts: [String] = []
     if let memories = try? await MemoryStorage.shared.getLocalMemories(limit: 8) {
