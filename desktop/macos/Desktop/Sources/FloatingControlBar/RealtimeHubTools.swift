@@ -84,8 +84,10 @@ enum RealtimeHubTools {
     sec…". The thing to avoid is repetition: do NOT reach for the same generic opener ("let me \
     check", "let me look that up") turn after turn — it's what makes you sound robotic. Keep it \
     to a few words, vary the wording each turn, and don't include any answer or data you don't \
-    have yet. For a slower step (ask_higher_model, spawn_agent) it's fine to signal it'll take a \
-    moment. NEVER speak an answer — real or guessed — before the tool returns, NEVER skip the \
+    have yet. This matters MOST for the slow steps: BEFORE you call ask_higher_model or spawn_agent you \
+    MUST first say a brief, varied heads-up that you're thinking it through (e.g. "let me work \
+    that through…", "give me a second on that…") — these take several seconds and silence feels \
+    broken. NEVER speak an answer — real or guessed — before the tool returns, NEVER skip the \
     tool call, and never read tool JSON or ids aloud. You cannot see the user's data or screen \
     without calling a tool.
 
