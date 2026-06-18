@@ -295,6 +295,25 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     }
   }
 
+  /// Run an async tool `body`, then speak its result: on throw → `errorText`, on an
+  /// empty/whitespace result → `emptyText`. Shared by the data read/write tool cases so the
+  /// Task / do-catch / blank-check / log / sendToolResult tail lives in exactly one place.
+  private func runToolAndSpeak(
+    callId: String, name: String, detail: String = "",
+    emptyText: String, errorText: String,
+    _ body: @escaping () async throws -> String
+  ) {
+    Task { [weak self] in
+      guard let self else { return }
+      var out: String
+      do { out = try await body() } catch { out = errorText }
+      if out.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { out = emptyText }
+      let suffix = detail.isEmpty ? "" : " \(detail)"
+      log("RealtimeHub[\(self.providerTag)]: tool \(name)\(suffix) → \(out.prefix(60))")
+      self.session?.sendToolResult(callId: callId, name: name, output: out)
+    }
+  }
+
   func hubDidRequestTool(name: String, callId: String, argumentsJSON: String) {
     let arguments =
       (try? JSONSerialization.jsonObject(with: Data(argumentsJSON.utf8)) as? [String: Any]) ?? [:]
@@ -303,9 +322,10 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
       session?.sendToolResult(callId: callId, name: name, output: "Unknown tool.")
       return
     }
+    func arg(_ key: String) -> String { (arguments[key] as? String) ?? turnTranscript }
     switch tool {
     case .askHigherModel:
-      let query = (arguments["query"] as? String) ?? turnTranscript
+      let query = arg("query")
       log("RealtimeHub[\(providerTag)]: tool ask_higher_model → POST /v2/chat/completions (claude-sonnet-4-6) query=\"\(query.prefix(80))\"")
       Task { [weak self] in
         guard let self else { return }
@@ -320,8 +340,9 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
         await TasksStore.shared.loadDashboardTasks()
         let overdue = TasksStore.shared.overdueTasks
         let today = TasksStore.shared.todaysTasks
+        // Include the task id (for update_action_item) — the model is told never to speak ids.
         func list(_ items: [TaskActionItem]) -> String {
-          items.prefix(15).map { "- \($0.description)" }.joined(separator: "\n")
+          items.prefix(15).map { "- \($0.description) [id:\($0.id)]" }.joined(separator: "\n")
         }
         var out = ""
         if !overdue.isEmpty { out += "Overdue (\(overdue.count)):\n\(list(overdue))\n" }
@@ -330,8 +351,84 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
         log("RealtimeHub[\(self.providerTag)]: tool get_tasks → \(overdue.count) overdue, \(today.count) today")
         self.session?.sendToolResult(callId: callId, name: name, output: out)
       }
+    case .getMemories:
+      // Fast READ — "who am I" / "what do you know about me". Backend memories+facts.
+      runToolAndSpeak(
+        callId: callId, name: name,
+        emptyText: "I don't have any memories saved about you yet.",
+        errorText: "Could not read your memories right now."
+      ) { try await APIClient.shared.toolGetMemories(limit: 15).resultText }
+    case .searchMemories:
+      let query = arg("query")
+      runToolAndSpeak(
+        callId: callId, name: name, detail: "q=\"\(query.prefix(60))\"",
+        emptyText: "I couldn't find anything about that.",
+        errorText: "Could not search your memories right now."
+      ) { try await APIClient.shared.toolSearchMemories(query: query, limit: 5).resultText }
+    case .searchConversations:
+      // Capped for voice: top 5, summaries only (no full transcripts).
+      let query = arg("query")
+      runToolAndSpeak(
+        callId: callId, name: name, detail: "q=\"\(query.prefix(60))\"",
+        emptyText: "I couldn't find a conversation about that.",
+        errorText: "Could not search your conversations right now."
+      ) {
+        try await APIClient.shared.toolSearchConversations(
+          query: query, limit: 5, includeTranscript: false
+        ).resultText
+      }
+    case .getConversations:
+      // Fast READ — most recent conversations, newest first (backend orders created_at DESC).
+      // Capped for voice: top 3, summaries only. This is the recency path; search_conversations
+      // is semantic and must NOT be used for "most recent".
+      runToolAndSpeak(
+        callId: callId, name: name,
+        emptyText: "I don't see any recent conversations.",
+        errorText: "Could not read your recent conversations right now."
+      ) {
+        try await APIClient.shared.toolGetConversations(
+          limit: 3, includeTranscript: false
+        ).resultText
+      }
+    case .createActionItem:
+      let description = (arguments["description"] as? String)?
+        .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+      let dueAt = arguments["due_at"] as? String
+      guard !description.isEmpty else {
+        session?.sendToolResult(
+          callId: callId, name: name, output: "No task description was given.")
+        return
+      }
+      runToolAndSpeak(
+        callId: callId, name: name, detail: "\"\(description.prefix(60))\"",
+        emptyText: "Task created.",
+        errorText: "Could not create the task right now."
+      ) {
+        try await APIClient.shared.toolCreateActionItem(
+          description: description, dueAt: dueAt
+        ).resultText
+      }
+    case .updateActionItem:
+      guard let id = (arguments["id"] as? String), !id.isEmpty else {
+        session?.sendToolResult(
+          callId: callId, name: name,
+          output: "Missing the task id — call get_tasks first to find it.")
+        return
+      }
+      let completed = arguments["completed"] as? Bool
+      let newDescription = arguments["description"] as? String
+      let dueAt = arguments["due_at"] as? String
+      runToolAndSpeak(
+        callId: callId, name: name, detail: "id=\(id.prefix(8))",
+        emptyText: "Task updated.",
+        errorText: "Could not update the task right now."
+      ) {
+        try await APIClient.shared.toolUpdateActionItem(
+          id: id, completed: completed, description: newDescription, dueAt: dueAt
+        ).resultText
+      }
     case .spawnAgent:
-      let brief = (arguments["brief"] as? String) ?? turnTranscript
+      let brief = arg("brief")
       let model = ShortcutSettings.shared.selectedModel.isEmpty
         ? "claude-sonnet-4-6" : ShortcutSettings.shared.selectedModel
       // Non-blocking: spawn renders its own pill ("text bubble") and runs on its
