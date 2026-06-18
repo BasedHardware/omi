@@ -974,7 +974,11 @@ class PushToTalkManager: ObservableObject {
               self.transcriptionService?.sendAudio(audioData)
             }
           },
-          onAudioLevel: { _ in }
+          onAudioLevel: { level in
+            // Feed the floating-bar mic waveform (VoiceWaveformBars). Throttled to ~5 Hz
+            // inside the monitor; used only for visualization.
+            AudioLevelMonitor.shared.updateMicrophoneLevel(level)
+          }
         )
         log("PushToTalkManager: mic capture started (batch=\(batchMode))")
       } catch {
