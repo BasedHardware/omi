@@ -1,5 +1,7 @@
 {
-  "unreleased": [],
+  "unreleased": [
+    "Recording now captures audio only during meetings by default — the mic and other apps' audio are captured only while you're in a call. Change this anytime in Settings → General → System Audio (Always / Only during meetings / Never)"
+  ],
   "releases": [
     {
       "version": "0.11.467",
