@@ -32,7 +32,7 @@ This version proves the backend can boot hermetically and that selected core CRU
 | Scenario | Status | Notes |
 |---|---:|---|
 | CRUD golden path | ✅ Green | Conversations are seeded directly because `POST /v1/conversations` processes an existing in-progress conversation; action items and memories use real create/update/delete routes. |
-| Deterministic conversation-processing seam | ✅ Partial | Reprocess route, auth, model serialization, Firestore update, and action-item queryability run with the provider-heavy processing function replaced by deterministic output. Full LLM-client wiring remains v2. |
+| Deterministic conversation-processing seam | ✅ Partial | Reprocess route, auth, model serialization, Firestore update, memory readback, and action-item queryability run with the provider-heavy processing function replaced by deterministic output. Full LLM-client wiring remains v2. |
 | Listen/STT route seam | ✅ Partial | `/v4/web/listen` websocket auth/query parsing/custom-STT dispatch is covered with a fake stream handler. Full Deepgram-compatible streaming fake remains v2. |
 | Storage / speech profile | ✅ Green | `google.cloud.storage.Client` is patched to a temp-dir fake; speech-profile presence, signed URL, sample list, and delete paths run through real routes/helpers. |
 | Webhooks | ✅ Partial | Developer webhook config/status routes and realtime webhook delivery payload are covered with `httpx.MockTransport`. Broader webhook retry/circuit-breaker behavior remains v2. |

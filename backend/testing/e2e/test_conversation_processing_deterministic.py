@@ -1,6 +1,6 @@
 """Deterministic conversation-processing seam coverage."""
 
-from fakes.firestore import seed_action_item, seed_conversation
+from fakes.firestore import seed_action_item, seed_conversation, seed_memory
 
 
 def test_reprocess_route_persists_deterministic_processing_result(client, auth_headers, monkeypatch):
@@ -75,6 +75,20 @@ def test_reprocess_route_persists_deterministic_processing_result(client, auth_h
                 "conversation_id": conversation.id,
             },
         )
+        seed_memory(
+            uid,
+            {
+                "id": "mem-deterministic-processing",
+                "content": "David prefers hermetic backend coverage before broad product e2e claims.",
+                "category": "system",
+                "visibility": "public",
+                "tags": ["e2e", "coverage"],
+                "created_at": "2025-01-15T12:05:00Z",
+                "updated_at": "2025-01-15T12:05:00Z",
+                "conversation_id": conversation.id,
+                "reviewed": True,
+            },
+        )
         refreshed = conversations_db.get_conversation(uid, conversation.id)
         from utils.conversations.factory import deserialize_conversation
 
@@ -100,3 +114,8 @@ def test_reprocess_route_persists_deterministic_processing_result(client, auth_h
     assert action_items.status_code == 200, action_items.text
     descriptions = [item["description"] for item in action_items.json().get("action_items", [])]
     assert "Ship the hermetic harness follow-up" in descriptions
+
+    memories = client.get("/v3/memories", headers=auth_headers)
+    assert memories.status_code == 200, memories.text
+    memory_contents = [memory["content"] for memory in memories.json()]
+    assert "David prefers hermetic backend coverage before broad product e2e claims." in memory_contents
