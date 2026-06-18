@@ -5,7 +5,7 @@ A manually runnable integration test suite that imports the **real omi FastAPI b
 Current dogfood status:
 
 ```text
-68 passed, 6 skipped, 41 warnings
+70 passed, 6 skipped, 43 warnings
 ```
 
 The run installs a local-only socket guard before importing backend code. Any non-local DNS/socket attempt raises an assertion, so real API calls fail the harness instead of silently leaking.
@@ -27,11 +27,12 @@ python -m pip install -r testing/e2e/requirements.txt
 
 ## Scope of v1
 
-This version proves the backend can boot hermetically and that selected core CRUD, user/account, storage, webhook, task-integration, listen-routing, retrieval/search, deterministic processing-seam, and legacy-shape paths can execute without real Firestore, Redis, GCS, Pinecone, Typesense, Google ADC, or production API keys.
+This version proves the backend can boot hermetically and that selected core CRUD, mobile-facing lifecycle, user/account, storage, webhook, task-integration, listen-routing, retrieval/search, deterministic processing-seam, and legacy-shape paths can execute without real Firestore, Redis, GCS, Pinecone, Typesense, Google ADC, or production API keys.
 
 | Scenario | Status | Notes |
 |---|---:|---|
 | CRUD golden path | ✅ Green | Conversations are seeded directly because `POST /v1/conversations` processes an existing in-progress conversation; action items and memories use real create/update/delete routes. |
+| Mobile lifecycle / client compatibility | ✅ Green | Canonical Flutter/desktop-facing flows assert response shapes for conversation lists/details, memory create/list/visibility/delete, action-item list/update/batch/pending-sync/delete, and language/transcription prefs. Conversations are still seeded directly where no generic creation route exists. |
 | Deterministic conversation-processing seam | ✅ Partial | Reprocess route, auth, model serialization, Firestore update, memory readback, and action-item queryability run with the provider-heavy processing function replaced by deterministic output. Full LLM-client wiring remains v2. |
 | Listen/STT route seam | ✅ Partial | `/v4/web/listen` websocket auth/query parsing/custom-STT dispatch is covered with a fake stream handler; custom-STT suggested transcript events also run through the real listen websocket loop into client emission and decrypted conversation readback. Full Deepgram-compatible streaming fake remains v2. |
 | Storage / speech profile | ✅ Green | `google.cloud.storage.Client` is patched to a temp-dir fake; speech-profile presence, signed URL, sample list, and delete paths run through real routes/helpers. |
@@ -89,6 +90,9 @@ bash backend/testing/e2e/run.sh -k "search or retrieval or embedding or vector"
 # User/auth/profile/account routes
 bash backend/testing/e2e/run.sh -k "user_auth_profile"
 
+# Mobile-facing lifecycle / client compatibility
+bash backend/testing/e2e/run.sh -k "mobile_lifecycle"
+
 # Failure / edge modes
 bash backend/testing/e2e/run.sh -k "test_failure_modes"
 
@@ -121,6 +125,7 @@ run.sh
         ├── test_harness_guards.py
         ├── test_listen_stt.py
         ├── test_migration_safety.py
+        ├── test_mobile_lifecycle_compatibility.py
         ├── test_retrieval_search.py
         ├── test_storage_speech_profile.py
         ├── test_task_integrations.py
