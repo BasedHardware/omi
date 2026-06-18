@@ -1,6 +1,6 @@
 # Hermetic Backend E2E Harness
 
-A manually runnable integration test suite that imports the **real omi FastAPI backend** and exercises selected routes against **faked or disabled external dependencies**. It is intended as a local dogfood harness first; there is no CI wiring yet.
+A manually runnable integration test suite that imports the **real omi FastAPI backend** and exercises selected routes against **faked or disabled external dependencies**. It is intended as a local dogfood harness first, with a non-blocking GitHub Actions check used to watch stability before considering it for required CI.
 
 Current dogfood status:
 
@@ -174,7 +174,7 @@ def test_read_seeded_conversation(client, auth_headers, sample_conversation_data
 - [ ] Add marketplace app webhook retry/circuit-breaker tests beyond the developer realtime transcript failure/auto-disable paths.
 - [ ] Improve fake-firestore support for nested task-integration single-doc lookup/delete so the task creation route no longer needs deterministic lookup patching.
 - [ ] Expand retrieval/search beyond the deterministic in-memory vector seam to cover real Typesense keyword behavior and closer Pinecone response compatibility if those service contracts become in-scope.
-- [ ] Run under Python 3.11 in CI-like environments; the local dogfood run used the repo `.venv` Python.
+- [x] Run under Python 3.11 in CI-like environments; the non-blocking `Backend Hermetic E2E` GitHub Action now installs dependencies, prewarms tokenizer cache, and runs the harness.
 
 ## Dependencies
 
