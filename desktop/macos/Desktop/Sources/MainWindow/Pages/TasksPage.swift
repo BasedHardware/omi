@@ -1808,6 +1808,16 @@ class TasksViewModel: ObservableObject {
 
     // MARK: - Actions (delegate to shared store)
 
+    func loadTasksForFirstUse() async {
+        guard TasksPageFirstUseLoadPolicy.shouldLoadTasks(
+            hasRenderedTasks: !store.tasks.isEmpty,
+            isLoading: store.isLoading
+        ) else { return }
+
+        log("TasksPage: First-use loading task list")
+        await store.loadTasksIfNeeded()
+    }
+
     func loadTasks() async {
         await store.loadTasks()
     }
@@ -2261,6 +2271,9 @@ struct TasksPage: View {
         .background(Color.clear)
         // Modal creation sheet removed — Cmd+N now creates inline at top
         .onAppear {
+            Task {
+                await viewModel.loadTasksForFirstUse()
+            }
             // Restore panel UI if coordinator was open when we navigated away
             if chatCoordinator.isPanelOpen, chatCoordinator.activeTaskId != nil {
                 showChatPanel = true

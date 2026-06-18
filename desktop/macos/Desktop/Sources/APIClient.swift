@@ -1709,6 +1709,11 @@ extension APIClient {
     return try await get(endpoint)
   }
 
+  /// Fetches one action item by backend ID.
+  func getActionItem(id: String) async throws -> TaskActionItem {
+    try await get("v1/action-items/\(id)")
+  }
+
   /// Updates an action item
   func updateActionItem(
     id: String,

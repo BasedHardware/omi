@@ -27,15 +27,15 @@ actor ScreenActivitySyncService {
     // MARK: - Public API
 
     /// Start the sync loop. Call after auth is established and database is ready.
-    func start() {
+    func start(initialDelay: TimeInterval = 0) {
         guard !isRunning else {
             log("ScreenActivitySync: already running")
             return
         }
         isRunning = true
         loadCursor()
-        log("ScreenActivitySync: starting (lastSyncedId=\(lastSyncedId))")
-        syncLoop()
+        log("ScreenActivitySync: starting (lastSyncedId=\(lastSyncedId), initialDelay=\(initialDelay)s)")
+        syncLoop(initialDelay: initialDelay)
     }
 
     /// Stop the sync loop.
@@ -49,8 +49,11 @@ actor ScreenActivitySyncService {
 
     // MARK: - Sync loop
 
-    private func syncLoop() {
+    private func syncLoop(initialDelay: TimeInterval) {
         syncTask = Task {
+            if initialDelay > 0 {
+                try? await Task.sleep(nanoseconds: UInt64(initialDelay * 1_000_000_000))
+            }
             while !Task.isCancelled && isRunning {
                 // Skip if user is signed out
                 guard await AuthState.shared.isSignedIn else {

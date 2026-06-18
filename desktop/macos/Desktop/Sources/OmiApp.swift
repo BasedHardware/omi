@@ -220,6 +220,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
   private var screenCaptureSwitch: NSSwitch?
   private var audioRecordingSwitch: NSSwitch?
   private var relaunchOnLoginSuppressedForOnboarding = false
+  private var apiKeyFetchTask: Task<Void, Never>?
+  private var appLifecycleMaintenanceTask: Task<Void, Never>?
+  private var didScheduleInitialSettingsSync = false
+  private var initialSettingsSyncTask: Task<Void, Never>?
 
   func applicationDidFinishLaunching(_ notification: Notification) {
     if ViewExporter.shouldExport() {
@@ -408,21 +412,14 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     AnalyticsManager.shared.trackFirstLaunchIfNeeded()
 
     // Set per-user database path before any async tasks can trigger DB initialization.
-    // This is synchronous and must happen before TierManager / TranscriptionRetryService.
+    // This is synchronous and must happen before ViewModelContainer initializes SQLite.
     let userId = UserDefaults.standard.string(forKey: "auth_userId")
     RewindDatabase.currentUserId = (userId?.isEmpty == false) ? userId : "anonymous"
 
     // Start resource monitoring (memory, CPU, disk)
     ResourceMonitor.shared.start()
 
-    // Recover any pending/failed transcription sessions from previous runs
-    Task {
-      await TranscriptionRetryService.shared.recoverPendingTranscriptions()
-      TranscriptionRetryService.shared.start()
-    }
-
-    // Start recurring task scheduler (checks every 60s for due tasks)
-    RecurringTaskScheduler.shared.start()
+    scheduleAppLifecycleMaintenance()
 
     // Identify user if already signed in
     if AuthState.shared.isSignedIn {
@@ -435,14 +432,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
           AuthService.shared.displayName.isEmpty ? nil : AuthService.shared.displayName
         SentrySDK.setUser(sentryUser)
       }
-      // Fetch conversations on startup
-      AuthService.shared.fetchConversations()
+      // Fetch API keys after first-window warmup settles. First-use paths call waitForKeys().
+      scheduleAPIKeyFetch()
 
-      // Fetch API keys from backend (keys are not bundled in the app)
-      APIKeyService.shared.startFetchingKeys()
-
-      // Fetch subscription plan for floating bar usage limits
-      Task { await FloatingBarUsageLimiter.shared.fetchPlan() }
+      // Fetch subscription plan for floating bar usage limits after the startup warmup settles.
+      scheduleFloatingBarPlanFetch()
 
       // Start trial metadata polling (countdown UI + pre-expiry nudges)
       if let state = AppState.current {
@@ -1173,6 +1167,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     sentryHeartbeatTimer?.invalidate()
     sentryHeartbeatTimer = nil
 
+    apiKeyFetchTask?.cancel()
+    apiKeyFetchTask = nil
+    appLifecycleMaintenanceTask?.cancel()
+    appLifecycleMaintenanceTask = nil
+
     // Stop transcription retry service
     TranscriptionRetryService.shared.stop()
 
@@ -1337,8 +1336,83 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
   }
 
+  private func scheduleFloatingBarPlanFetch() {
+    Task {
+      let delay = StartupWarmupPolicy.floatingBarPlanFetchDelay
+      if delay > 0 {
+        try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+      }
+      guard await AuthState.shared.isSignedIn else { return }
+      await FloatingBarUsageLimiter.shared.fetchPlan()
+    }
+  }
+
+  private func scheduleAPIKeyFetch() {
+    apiKeyFetchTask?.cancel()
+    apiKeyFetchTask = Task {
+      let delay = StartupWarmupPolicy.apiKeyFetchDelay
+      if delay > 0 {
+        try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+      }
+      guard !Task.isCancelled else { return }
+      guard await AuthState.shared.isSignedIn else { return }
+      log("AppDelegate: Starting delayed API key fetch")
+      await APIKeyService.shared.waitForKeys()
+    }
+  }
+
+  private func scheduleAppLifecycleMaintenance() {
+    appLifecycleMaintenanceTask?.cancel()
+    appLifecycleMaintenanceTask = Task {
+      let recoveryDelay = StartupWarmupPolicy.transcriptionRetryRecoveryDelay
+      if recoveryDelay > 0 {
+        try? await Task.sleep(nanoseconds: UInt64(recoveryDelay * 1_000_000_000))
+      }
+      guard !Task.isCancelled else { return }
+
+      await measurePerfAsync("AppDelegate: Transcription retry recovery") {
+        await TranscriptionRetryService.shared.recoverPendingTranscriptions()
+        await MainActor.run {
+          TranscriptionRetryService.shared.start()
+        }
+      }
+
+      let schedulerDelay = max(
+        0,
+        StartupWarmupPolicy.recurringTaskSchedulerInitialDelay
+          - StartupWarmupPolicy.transcriptionRetryRecoveryDelay
+      )
+      if schedulerDelay > 0 {
+        try? await Task.sleep(nanoseconds: UInt64(schedulerDelay * 1_000_000_000))
+      }
+      guard !Task.isCancelled else { return }
+
+      await MainActor.run {
+        RecurringTaskScheduler.shared.start()
+      }
+    }
+  }
+
   func applicationDidBecomeActive(_ notification: Notification) {
+    guard didScheduleInitialSettingsSync else {
+      scheduleInitialSettingsSync()
+      return
+    }
+
     // Sync remote assistant settings so server-side changes take effect promptly
     Task { await SettingsSyncManager.shared.syncFromServer() }
+  }
+
+  private func scheduleInitialSettingsSync() {
+    didScheduleInitialSettingsSync = true
+    initialSettingsSyncTask?.cancel()
+    initialSettingsSyncTask = Task {
+      let delay = StartupWarmupPolicy.initialSettingsSyncDelay
+      if delay > 0 {
+        try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+      }
+      guard !Task.isCancelled else { return }
+      await SettingsSyncManager.shared.syncFromServer()
+    }
   }
 }

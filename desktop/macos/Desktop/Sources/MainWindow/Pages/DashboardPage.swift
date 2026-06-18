@@ -50,12 +50,16 @@ class DashboardViewModel: ObservableObject {
 
         // Load all data in parallel
         async let scoreTask: Void = loadScores()
-        async let tasksTask: Void = tasksStore.loadTasksIfNeeded()  // Don't re-fetch if ViewModelContainer already loaded
+        async let tasksTask: Void = tasksStore.refreshDashboardTasksFromServer()
         async let goalsTask: Void = loadGoals()
 
         let _ = await (scoreTask, tasksTask, goalsTask)
 
         isLoading = false
+    }
+
+    func loadCachedDashboardData() async {
+        await loadGoalsFromLocalSnapshot()
     }
 
     private func loadScores() async {
@@ -94,11 +98,15 @@ class DashboardViewModel: ObservableObject {
 
     private func loadGoalsFromLocal() {
         Task {
-            do {
-                goals = try await GoalStorage.shared.getLocalGoals()
-            } catch {
-                logError("Failed to load goals from local storage", error: error)
-            }
+            await loadGoalsFromLocalSnapshot()
+        }
+    }
+
+    private func loadGoalsFromLocalSnapshot() async {
+        do {
+            goals = try await GoalStorage.shared.getLocalGoals()
+        } catch {
+            logError("Failed to load goals from local storage", error: error)
         }
     }
 

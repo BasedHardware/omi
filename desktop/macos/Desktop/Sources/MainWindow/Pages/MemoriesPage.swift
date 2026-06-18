@@ -470,6 +470,11 @@ class MemoriesViewModel: ObservableObject {
     }
   }
 
+  func loadMemoriesIfNeeded() async {
+    guard !hasLoadedInitially && memories.isEmpty else { return }
+    await loadMemories()
+  }
+
   /// One-time cache reconcile. The local SQLite cache can diverge from the
   /// backend (the source of truth): stale categories after the server-side
   /// category cleanup, plus "orphan" rows whose backendId no longer exists on
@@ -953,6 +958,9 @@ struct MemoriesPage: View {
               .tint(.white)
           }
       }
+    }
+    .task {
+      await viewModel.loadMemoriesIfNeeded()
     }
   }
 

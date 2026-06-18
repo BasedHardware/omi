@@ -62,11 +62,14 @@ class CrispManager: ObservableObject {
 
     /// Call once after sign-in to fetch Crisp messages and listen for activation/Cmd+R.
     ///
-    /// - Parameter performInitialPoll: If `true` (default), kicks off an immediate
-    ///   `pollForMessages()` call that hits `APIClient.shared`. Pass `false` only
-    ///   from lifecycle unit tests that want to exercise observer registration
-    ///   without touching the network, auth state, or firing real notifications.
-    func start(performInitialPoll: Bool = true) {
+    /// - Parameters:
+    ///   - performInitialPoll: If `true` (default), schedules an initial
+    ///     `pollForMessages()` call that hits `APIClient.shared`. Pass `false` only
+    ///     from lifecycle unit tests that want to exercise observer registration
+    ///     without touching the network, auth state, or firing real notifications.
+    ///   - initialPollDelay: Optional delay before the initial poll. Activation and
+    ///     Cmd+R events still poll immediately.
+    func start(performInitialPoll: Bool = true, initialPollDelay: TimeInterval = 0) {
         guard !isStarted else { return }
         isStarted = true
 
@@ -78,7 +81,15 @@ class CrispManager: ObservableObject {
         }
 
         if performInitialPoll {
-            pollForMessages()
+            if initialPollDelay > 0 {
+                Task { [weak self] in
+                    try? await Task.sleep(nanoseconds: UInt64(initialPollDelay * 1_000_000_000))
+                    guard let self, self.isStarted else { return }
+                    self.pollForMessages()
+                }
+            } else {
+                pollForMessages()
+            }
         }
 
         // Refresh on app activation and Cmd+R (no periodic timer)
@@ -117,6 +128,7 @@ class CrispManager: ObservableObject {
 
     private func pollForMessages() {
         pollInvocations += 1
+        guard !isRunningUnderXCTest else { return }
         Task {
             // Skip if in auth backoff period (recent 401 errors)
             guard !AuthBackoffTracker.shared.shouldSkipRequest() else { return }
@@ -163,6 +175,11 @@ class CrispManager: ObservableObject {
                 log("CrispManager: poll failed: \(error)")
             }
         }
+    }
+
+    private var isRunningUnderXCTest: Bool {
+        ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
+            || NSClassFromString("XCTestCase") != nil
     }
 
     private struct CrispUnreadResponse: Codable {

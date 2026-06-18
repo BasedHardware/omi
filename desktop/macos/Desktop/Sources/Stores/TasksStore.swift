@@ -157,6 +157,10 @@ class TasksStore: ObservableObject {
         }
     }
 
+    func refreshDashboardTasksFromServer() async {
+        await DashboardTaskRefreshService.refresh(store: self)
+    }
+
     var todoCount: Int {
         incompleteTasks.count
     }
