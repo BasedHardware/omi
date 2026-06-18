@@ -191,10 +191,24 @@ pub struct AnthropicMessage {
     pub content: serde_json::Value,
 }
 
+/// Anthropic content block type (system prompt blocks are always "text").
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum AnthropicContentBlockType {
+    Text,
+}
+
+/// Anthropic cache control type (currently only "ephemeral" is supported).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum AnthropicCacheControlType {
+    Ephemeral,
+}
+
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 pub struct AnthropicSystemContentBlock {
     #[serde(rename = "type")]
-    pub block_type: String,
+    pub block_type: AnthropicContentBlockType,
     pub text: String,
     pub cache_control: AnthropicCacheControl,
 }
@@ -202,7 +216,7 @@ pub struct AnthropicSystemContentBlock {
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 pub struct AnthropicCacheControl {
     #[serde(rename = "type")]
-    pub cache_type: String,
+    pub cache_type: AnthropicCacheControlType,
 }
 
 #[derive(Debug, Clone, Serialize)]
