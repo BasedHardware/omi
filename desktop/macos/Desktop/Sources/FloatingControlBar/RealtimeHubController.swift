@@ -488,14 +488,17 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
       }
     case .spawnAgent:
       let brief = arg("brief")
+      let title = (arguments["title"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
       let model = ShortcutSettings.shared.selectedModel.isEmpty
         ? "claude-sonnet-4-6" : ShortcutSettings.shared.selectedModel
       // Non-blocking: spawn renders its own pill ("text bubble") and runs on its
       // own ChatProvider/AgentBridge. We don't await it on the voice loop.
       // fromVoice:false — the hub model speaks its own natural acknowledgment, so the pill
       // must NOT also speak its canned randomAck ("on it") or we double up.
-      let pill = AgentPillsManager.shared.spawnFromUserQuery(brief, model: model, fromVoice: false)
-      log("RealtimeHub[\(providerTag)]: tool spawn_agent → AgentBridge pill=\"\(pill.title)\" model=\(model)")
+      let pill = AgentPillsManager.shared.spawnFromUserQuery(
+        brief, model: model, fromVoice: false,
+        preFetchedTitle: (title?.isEmpty == false) ? title : nil)
+      log("RealtimeHub[\(providerTag)]: tool spawn_agent → AgentBridge pill=\"\(pill.title)\" model=\(model) titled=\(title?.isEmpty == false)")
       // Terse directive (not speakable content): the model already said its one-line ack
       // BEFORE calling, so it should NOT generate a slow second utterance after this.
       session?.sendToolResult(

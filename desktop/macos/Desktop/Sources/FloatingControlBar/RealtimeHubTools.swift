@@ -366,7 +366,13 @@ enum RealtimeHubTools {
           "properties": [
             "brief": [
               "type": "string", "description": "A clear, self-contained brief of the task.",
-            ]
+            ],
+            "title": [
+              "type": "string",
+              "description":
+                "A short Title Case label for the task pill (≤ ~5 words, no trailing "
+                + "punctuation), e.g. 'Draft Launch Email'.",
+            ],
           ],
           "required": ["brief"],
         ],
