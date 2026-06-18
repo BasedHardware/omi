@@ -1374,9 +1374,11 @@ Final committee outcome before Oracle: **ready to use as the implementation tick
 
 ### Oracle review — External architecture/code critique
 
-Oracle review is recorded in `docs/epics/v17_memory_oracle_review.md`.
+Oracle critique is recorded in `docs/epics/v17_memory_oracle_review.md`.
 
-Verdict: **BLOCKED** for production implementation. T00–T05 can proceed as design/audit work, but no persistent V17 writes, read switch, vector changes, or external API changes should ship until P0 amendments are incorporated.
+Oracle decision prescription is recorded in `docs/epics/v17_memory_oracle_decision_prescription.md`.
+
+Verdict after decision prescription: **GO for P0 amendment implementation, BLOCKED for production writes**. T00–T05 can proceed as design/audit work, but no persistent V17 writes, read switch, vector changes, or external API changes should ship until P0 amendments are incorporated.
 
 Oracle P0 blockers to incorporate before implementation:
 
