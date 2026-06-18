@@ -1,0 +1,41 @@
+name: Backend Hermetic E2E
+
+on:
+  pull_request:
+    branches: main
+    paths:
+      - 'backend/**'
+      - '.github/workflows/backend-hermetic-e2e.yml'
+  workflow_dispatch:
+
+jobs:
+  hermetic-e2e:
+    name: Hermetic Backend E2E
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+          cache-dependency-path: |
+            backend/requirements.txt
+            backend/testing/e2e/requirements.txt
+
+      - name: Install backend and e2e dependencies
+        working-directory: backend
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+          python -m pip install -r testing/e2e/requirements.txt
+
+      - name: Run hermetic backend e2e harness
+        env:
+          E2E_PYTEST_TIMEOUT: 120s
+        run: bash backend/testing/e2e/run.sh -q --tb=short
