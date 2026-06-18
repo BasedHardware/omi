@@ -5,7 +5,7 @@ A manually runnable integration test suite that imports the **real omi FastAPI b
 Current dogfood status:
 
 ```text
-54 passed, 6 skipped, 35 warnings
+55 passed, 6 skipped, 40 warnings
 ```
 
 The run installs a local-only socket guard before importing backend code. Any non-local DNS/socket attempt raises an assertion, so real API calls fail the harness instead of silently leaking.
@@ -33,7 +33,7 @@ This version proves the backend can boot hermetically and that selected core CRU
 |---|---:|---|
 | CRUD golden path | ✅ Green | Conversations are seeded directly because `POST /v1/conversations` processes an existing in-progress conversation; action items and memories use real create/update/delete routes. |
 | Deterministic conversation-processing seam | ✅ Partial | Reprocess route, auth, model serialization, Firestore update, memory readback, and action-item queryability run with the provider-heavy processing function replaced by deterministic output. Full LLM-client wiring remains v2. |
-| Listen/STT route seam | ✅ Partial | `/v4/web/listen` websocket auth/query parsing/custom-STT dispatch is covered with a fake stream handler. Full Deepgram-compatible streaming fake remains v2. |
+| Listen/STT route seam | ✅ Partial | `/v4/web/listen` websocket auth/query parsing/custom-STT dispatch is covered with a fake stream handler; custom-STT suggested transcript events also run through the real listen websocket loop into client emission and decrypted conversation readback. Full Deepgram-compatible streaming fake remains v2. |
 | Storage / speech profile | ✅ Green | `google.cloud.storage.Client` is patched to a temp-dir fake; speech-profile presence, signed URL, sample list, and delete paths run through real routes/helpers. |
 | Webhooks | ✅ Partial | Developer webhook config/status routes and realtime webhook delivery payload are covered with `httpx.MockTransport`. Broader webhook retry/circuit-breaker behavior remains v2. |
 | Task integrations | ✅ Partial | CRUD/default list paths and Todoist task creation outbound payload are covered. Task creation uses deterministic integration lookup due a fake-firestore single-doc lookup/delete limitation on this nested subcollection shape. |
@@ -52,7 +52,7 @@ This version proves the backend can boot hermetically and that selected core CRU
 | Pinecone | `PINECONE_API_KEY` removed | `database/vector_db.py` only skips Pinecone when the env var is absent. |
 | Typesense | Dummy host/port/API key | Lets import-time Typesense client construction succeed; v1 tests do not perform keyword search. |
 | Google Translate | Anonymous Google credentials | Allows import-time client construction; v1 tests do not call live translation. |
-| LLM/STT/VAD/embeddings | Fake modules scaffolded; route seams covered where deterministic patching is practical | Kept as v2 work where scenarios need real outbound HTTP/WS/provider assertions. |
+| LLM/STT/VAD/embeddings | Fake modules scaffolded; route and custom-STT suggested-transcript seams covered where deterministic patching is practical | Kept as v2 work where scenarios need real outbound HTTP/WS/provider assertions. |
 | Webhook/task external HTTP | `httpx.MockTransport` in targeted tests | Captures outbound payloads without network. |
 
 ## What's real
@@ -103,7 +103,7 @@ run.sh
         │   ├── redis.py                        # FakeRedis + redis.Redis patch
         │   ├── storage.py                      # filesystem-backed fake GCS client
         │   ├── llm.py                          # deterministic LLM fake scaffold
-        │   ├── stt.py                          # Deepgram fake scaffold; WS TODO
+        │   ├── stt.py                          # deterministic custom-STT event helper; Deepgram WS TODO
         │   └── embeddings.py                   # VAD/diarization/embedding fake scaffold
         ├── fixtures/
         │   ├── conversations.json

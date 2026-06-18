@@ -1,21 +1,39 @@
 """
-Fake STT (Speech-to-Text) Deepgram streaming WebSocket.
+Fake STT (Speech-to-Text) helpers.
 
-For v1, STT fakes are simplified — the listen pipeline requires a
-full WebSocket negotiation that is complex to replicate. Tests that
-need STT should be marked as skipped with a TODO for future implementation.
+The listen harness deliberately does not emulate Deepgram's full streaming
+WebSocket protocol yet. For custom-STT mode, the app/client is the STT
+boundary: it sends ``suggested_transcript`` events into the real listen
+websocket after audio bytes establish the session clock. Those deterministic
+events exercise backend transcript handling and persistence without allowing
+Deepgram/network access.
 
-If Deepgram HTTP pre-recorded transcription is used instead, we can
-fake that endpoint.
+If Deepgram HTTP pre-recorded transcription is used instead, we can fake that
+endpoint.
 """
 
-# TODO: Implement Deepgram WebSocket fake for full listen pipeline tests.
-# The Deepgram WS protocol sends JSON metadata followed by binary audio,
-# then streams back transcript results. This requires an async WS handler
-# that buffers audio and returns deterministic transcripts.
-#
-# For now, conversation processing tests seed transcripts directly into
-# Firestore (simulating post-STT state), bypassing the need for STT fakes.
+# TODO: Implement Deepgram WebSocket fake for full /v4/listen and pusher scenarios.
+# The Deepgram WS protocol sends JSON metadata followed by binary audio, then
+# streams back transcript results. That remains broader v2 coverage; custom-STT
+# tests below are explicitly scoped to the backend's suggested-transcript seam.
+
+
+def fake_suggested_transcript_event():
+    """Return a deterministic custom-STT event accepted by routers.transcribe."""
+    return {
+        "type": "suggested_transcript",
+        "stt_provider": "e2e-custom-stt",
+        "segments": [
+            {
+                "id": "seg-custom-stt-1",
+                "text": "Hermetic custom STT transcript from the listen harness.",
+                "speaker": "SPEAKER_00",
+                "is_user": True,
+                "start": 0.0,
+                "end": 1.25,
+            }
+        ],
+    }
 
 
 def configure_stt_fake(httpserver):
