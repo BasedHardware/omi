@@ -323,6 +323,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
       return
     }
     func arg(_ key: String) -> String { (arguments[key] as? String) ?? turnTranscript }
+    func argInt(_ key: String) -> Int? { (arguments[key] as? Int) ?? (arguments[key] as? NSNumber)?.intValue }
     switch tool {
     case .askHigherModel:
       let query = arg("query")
@@ -389,6 +390,47 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
         try await APIClient.shared.toolGetConversations(
           limit: 3, includeTranscript: false
         ).resultText
+      }
+    case .getDailyRecap:
+      // Fast LOCAL read of the on-device activity DB — apps/minutes, conversations, tasks,
+      // focus, screen context. Reuses the SAME executor the desktop chat uses, so voice and
+      // chat answer "what did I do yesterday" from one code path.
+      let daysAgo = argInt("days_ago") ?? 1
+      runToolAndSpeak(
+        callId: callId, name: name, detail: "days_ago=\(daysAgo)",
+        emptyText: "I don't have any activity recorded for then.",
+        errorText: "Could not pull up your activity right now."
+      ) {
+        await ChatToolExecutor.execute(
+          ToolCall(name: "get_daily_recap", arguments: ["days_ago": daysAgo], thoughtSignature: nil))
+      }
+    case .getActionItems:
+      // Backend READ of the full task list with filters (completed / due-date range) — the
+      // capable sibling of the local get_tasks. Same APIClient path the chat agent uses.
+      let completed = arguments["completed"] as? Bool
+      let dueStart = arguments["due_start_date"] as? String
+      let dueEnd = arguments["due_end_date"] as? String
+      runToolAndSpeak(
+        callId: callId, name: name, detail: completed.map { "completed=\($0)" } ?? "",
+        emptyText: "I couldn't find any matching tasks.",
+        errorText: "Could not read your tasks right now."
+      ) {
+        try await APIClient.shared.toolGetActionItems(
+          limit: 25, completed: completed, dueStartDate: dueStart, dueEndDate: dueEnd
+        ).resultText
+      }
+    case .searchScreenHistory:
+      // Fast LOCAL semantic search over screen history (same executor as chat).
+      let query = arg("query")
+      var toolArgs: [String: Any] = ["query": query]
+      if let days = argInt("days") { toolArgs["days"] = days }
+      runToolAndSpeak(
+        callId: callId, name: name, detail: "q=\"\(query.prefix(60))\"",
+        emptyText: "I couldn't find anything on your screen about that.",
+        errorText: "Could not search your screen history right now."
+      ) {
+        await ChatToolExecutor.execute(
+          ToolCall(name: "search_screen_history", arguments: toolArgs, thoughtSignature: nil))
       }
     case .createActionItem:
       let description = (arguments["description"] as? String)?
