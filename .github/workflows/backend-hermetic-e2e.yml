@@ -35,6 +35,15 @@ jobs:
           python -m pip install -r requirements.txt
           python -m pip install -r testing/e2e/requirements.txt
 
+      - name: Prewarm tokenizer cache
+        working-directory: backend
+        run: |
+          python - <<'PY'
+          import tiktoken
+
+          tiktoken.encoding_for_model('gpt-4')
+          PY
+
       - name: Run hermetic backend e2e harness
         env:
           E2E_PYTEST_TIMEOUT: 120s
