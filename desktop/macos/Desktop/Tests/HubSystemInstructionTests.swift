@@ -10,5 +10,7 @@ final class HubSystemInstructionTests: XCTestCase {
         XCTAssertFalse(instr.contains("Always reply in English"))             // old rule gone
         XCTAssertTrue(instr.contains("spawn_agent"))                          // guardrails preserved
         XCTAssertTrue(instr.contains("get_daily_recap"))
+        XCTAssertTrue(instr.contains("ask_higher_model"))
+        XCTAssertTrue(instr.contains("ANSWER YOURSELF"))
     }
 }
