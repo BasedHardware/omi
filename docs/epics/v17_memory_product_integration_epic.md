@@ -29,7 +29,7 @@ Integrate the new V17 two-layer memory system into Omi product surfaces without 
 
 # Product decision update — terminology, rollout, and defaults
 
-This section supersedes earlier wording that framed product states as “Archive / Durable / Context only.” If later historical Wave 1/2/3 notes still say `L1`, `L2`, `Durable`, or user-visible `Context only`, read them as implementation-history context, not final product guidance. The final implementation-ticket source of truth is `docs/epics/v17_memory_implementation_tickets.md`.
+This section supersedes earlier wording that framed product states as “Archive / Durable / Context only.” If later historical Wave 1/2/3 notes still say `L1`, `L2`, `Durable`, or user-visible `Context only`, read them as implementation-history context, not final product guidance. The final normative source of truth is `docs/epics/v17_memory_normative_architecture.md`; implementation-ticket amendments live in `docs/epics/v17_memory_implementation_tickets.md`.
 
 Final policy decisions:
 

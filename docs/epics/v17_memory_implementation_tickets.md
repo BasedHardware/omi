@@ -1,7 +1,8 @@
 # V17 Memory Product Integration — Implementation Tickets
 
 **Created:** 2026-06-18T20:08:24Z  
-**Status:** Oracle-reviewed; blocked for production implementation until P0 amendments are added  
+**Status:** Normative decisions baked in; GO for P0 amendment implementation, BLOCKED for production writes/read switch/vector/API cutover until P0 gates pass  
+**Normative Architecture:** `docs/epics/v17_memory_normative_architecture.md`  
 **Source Epic:** `docs/epics/v17_memory_product_integration_epic.md`  
 **Decision Brief:** `docs/epics/v17_memory_product_integration_decision_brief.md`  
 **Repos:**
@@ -18,21 +19,57 @@
 | Short-term | Fresh source-backed memory before/during L2 processing; default-access while fresh/relevant |
 | Long-term | Stable L2/ledger-backed memory; default-access |
 | Archive | Explicit-query historical/source-backed context; not default-access |
-| Context-only | Not a normal user-visible tier; route useful non-long-term context to Short-term or Archive |
-| Rollout | Whitelist first; old memory behavior unchanged for everyone else |
-| Config | Keep simple: allowlist + mode + backfill enabled/limit + archive opt-in |
+| Context-only | Not a normal user-visible tier; internal alias only, normalized to Archive/non-default outcome |
+| Canonical store | One tiered `users/{uid}/memory_items/{memory_id}` collection for product items; no separate canonical Short-term/Archive stores |
+| Long-term authority | Existing ledger remains Long-term source of truth; `memory_items` is transactional product projection |
+| Existing `short_term` store | Legacy/adapter input only, not V17 canonical store |
+| Stable identity | Opaque server `memory_id`; one-to-one tier transitions keep ID; many-to-one merges use canonical aliases |
+| Rollout | Whitelist first; old memory behavior unchanged for everyone else; `read` is superset of `write` |
+| Rollback | `read → write` uses V17-derived compatibility projection; `write → off` requires decommission reconciliation |
+| Config | Keep simple external mode; hidden internal safety gates allowed |
 | UI | Minimal labels/filter/provenance/edit/delete; users can manage memory by chatting with Omi |
 | Agent mode | Memory-management tools: remember, forget, list, search, provenance, visibility/use policy, promote/demote, explicit archive search |
-| Third-party/MCP/developer API | Default Long-term + Short-term; Archive requires explicit opt-in + explicit archive query |
-| Deletion | Follow existing codebase conventions; extend coverage before any write pilot |
-| Vectors | KISS: existing `ns2` memory namespace + strict metadata filters first; separate namespace only if metadata filtering proves unsafe |
-| Raw artifacts | Keep raw/source artifacts by default; report ephemeral/drop-prone losses honestly |
+| Third-party/MCP/developer API | Existing broad memory permission maps to Long-term + Short-term; Archive/raw provenance require explicit capability + explicit query |
+| Deletion | Follow current product behavior: memory deletion removes memory/projection/vector, not raw source; source/account deletion controls raw deletion |
+| Vectors | KISS: existing `ns2` memory namespace only through fail-closed search gateway + authoritative hydration; separate namespace only evidence-driven fallback |
+| Raw artifacts | Retain available raw/source artifacts indefinitely for now; copy ephemeral bytes durably where feasible; report already-missing losses honestly |
+
+---
+
+## P0 amendment queue to implement before production writes
+
+The Oracle prescription and David decisions are baked in. The original T00–T28 queue remains useful background, but implementation must first update/split/reorder the queue as follows:
+
+| Order | Ticket | Required decision |
+|---:|---|---|
+| 0 | A00 | Create normative architecture spec (`v17_memory_normative_architecture.md`) and make it source of truth over historical Epic wording. |
+| 1 | T00-R | Define rollout capability state machine: `off`, `shadow`, `write`, `read`; `read` includes writes; rollback uses reconciliation. |
+| 2 | T01-R | Define canonical memory state, stable identity, aliases, and derived access policy. |
+| 3 | T02-R | Typed evidence/source versions/canonicalization/payload bounds; no untyped evidence persistence. |
+| 4 | T03-R/T07-R | Replace separate canonical Short-term/Archive stores with unified `memory_items`; check indexes into source control. |
+| 5 | T05-R | Mandatory write and search gateway audit; no direct product vector/ledger mutation bypasses. |
+| 6 | T04-R | Central sensitive-data and consumer-access policy; deterministic checks beyond LLM flags. |
+| 7 | T06-R | Account/source generation fences plus current-product deletion/export/purge semantics. |
+| 8 | T26A | Backend kill switches, telemetry, and metric hygiene before any workers can run. |
+| 9 | T28A | Incremental rollout safety verifier before write-mode tickets. |
+| 10 | T10-R | Durable raw-artifact copy + lineage; retain available raw/source artifacts indefinitely for now. |
+| 11 | T07A | Live source-backed ingestion and reprocessing into Short-term. |
+| 12 | T13-R | Typed synthesis results + memory operation journal; no empty-list failures. |
+| 13 | T27A | Base-anchored benchmark + online-shadow gate before Long-term apply. |
+| 14 | T14/15-R | Atomic Long-term apply transaction + durable outbox; no standalone distributed writer lease. |
+| 15 | T17-R | Review/non-active lifecycle; unresolved review defaults to Archive. |
+| 16 | T19-R | Short-term lifecycle before write rollout; default expiry 30 days. |
+| 17 | T20-R | Shared-namespace search gateway + projection/vector consistency. |
+| 18 | T21-R | Unified read/ranking/pagination/rollback compatibility. |
+| 19 | T22/23-R | Complete API semantics + app capabilities, including batch/import/public/shared/review routes. |
+
+Production writes/read switch/vector changes/external API cutover remain blocked until the applicable P0 gates above are implemented and verified.
 
 ---
 
 ## Safety-first implementation order
 
-Wave 2 reviewers blocked the first draft because it allowed imports/writes before deletion/purge coverage and snapshot safeguards. This revised order is the implementation contract.
+Wave 2 reviewers blocked the first draft because it allowed imports/writes before deletion/purge coverage and snapshot safeguards. This revised order is now superseded by the P0 amendment queue above, but remains as the historical ticket inventory to revise.
 
 | Order | Tickets | Goal | Gate |
 |---:|---|---|---|

@@ -4,6 +4,12 @@
 **Reviewer:** Oracle (`oracle` CLI, browser-backed `gemini-3.5-flash`; same prior browser session could not be followed up because Oracle had no recoverable ChatGPT conversation URL, so this was a new Oracle run using the prior review plus the Epic/tickets/code context)  
 **Purpose:** Convert Oracle's critique into concrete architecture/product/implementation decisions and identify which remaining choices need David's input.
 
+**David follow-up decisions baked in:**
+- Accept the Oracle prescriptions by default.
+- For deletion/account semantics, follow current product behavior found in code (`DELETE /v3/memories*`, `DELETE /v1/users/delete-account`, conversation delete, recording-permission delete) rather than inventing a new stronger deletion promise for V17.
+- Retain available raw/source artifacts indefinitely for now; memory deletion does not delete raw source artifacts; source/account/recording-permission deletion remain the controls that can remove raw artifacts.
+- Use the rest of Oracle's recommended defaults: existing broad memory permission maps to Short-term + Long-term; Archive/raw provenance require new explicit capabilities; no dedicated MVP Archive promotion/review UI.
+
 **Inputs:**
 - `docs/epics/v17_memory_oracle_review.md`
 - `docs/epics/v17_memory_product_integration_epic.md`
