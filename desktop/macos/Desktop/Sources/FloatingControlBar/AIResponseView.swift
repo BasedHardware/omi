@@ -349,11 +349,8 @@ struct AIResponseView: View {
 
     private var voiceFollowUpView: some View {
         HStack(spacing: 8) {
-            Circle()
-                .fill(Color.red)
-                .frame(width: 10, height: 10)
-                .scaleEffect(1.2)
-                .animation(.easeInOut(duration: 0.6).repeatForever(autoreverses: true), value: isVoiceFollowUp)
+            // Playful realtime mic waveform (replaces the old pulsing red dot)
+            VoiceWaveformBars(isActive: isVoiceFollowUp)
 
             Image(systemName: "mic.fill")
                 .scaledFont(size: 14, weight: .semibold)
@@ -375,7 +372,7 @@ struct AIResponseView: View {
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 8)
-        .background(Color.red.opacity(0.15))
+        .background(OmiColors.purplePrimary.opacity(0.12))
         .cornerRadius(8)
     }
 
