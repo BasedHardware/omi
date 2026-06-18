@@ -206,13 +206,26 @@ class TranslationCoordinator:
                     # Found in Redis — adopt as committed, skip re-translation
                     translated_text = redis_cached['text']
                     detected_lang = redis_cached.get('detected_lang', '')
+                    # Guard: skip no-op "translations" that would spam UI badges.
+                    if not should_persist_translation(text, translated_text, detected_lang, self.target_language):
+                        state.committed_text = text
+                        state.assembled_translation = translated_text
+                        state.detected_lang = detected_lang
+                        state.latest_text = text
+                        state.last_update_at = now
+                        self.metrics['prefix_resets'] += 1
+                        continue  # Don't add to batch buffer
                     state.committed_text = text
                     state.assembled_translation = translated_text
                     state.detected_lang = detected_lang
+                    # Bump version so any in-flight batch job is rejected as stale.
+                    state.version = self._next_version()
                     self.metrics['prefix_resets'] += 1
                     # Invalidate any pending batch entries for this segment so
                     # _flush_batch() does not overwrite with stale buffered text.
                     self._batch_buffer = [entry for entry in self._batch_buffer if entry[0] != segment.id]
+                    state.latest_text = text
+                    state.last_update_at = now
                     await self.on_translation_ready(segment.id, translated_text, detected_lang, conversation_id)
                     continue  # Don't add to batch buffer
                 else:
