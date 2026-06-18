@@ -7,7 +7,12 @@ from langchain_core.output_parsers import PydanticOutputParser
 from langchain_core.prompts import ChatPromptTemplate
 from pydantic import BaseModel, Field, ValidationError
 
-from models.v17_memory_contracts import DurableMemoryPatch, deterministic_contract_id
+from models.v17_memory_contracts import (
+    DurableMemoryPatch,
+    DurablePatchDecision,
+    LifecycleState,
+    deterministic_contract_id,
+)
 
 try:
     from .clients import get_llm
@@ -47,6 +52,16 @@ Rules:
 - Reject raw fragments, unsupported claims, wrong-subject claims, and secrets.
 - Custom search results are context only; they are not primary evidence for new claims unless linked to durable evidence.
 - Preserve observed_head_commit_id exactly.
+- Preserve attribution fields on every patch: confidence, relationship_to_user, subject_entity_id, subject_label, and aboutness.
+
+PROMOTION RUBRIC:
+- Promote to active when a Future agent/user would benefit from remembering this, it is stable or meaningfully recurring, it is about the primary user, user-owned work, a close relationship, or an entity the user cares about, and it has direct source evidence.
+- Use review when attribution, durability, or sensitivity is uncertain but the packet may still be useful.
+- Use context_only when the source may help future search/reasoning but should not become durable profile memory.
+- Use reject for unsupported, transient, generic, wrong-subject, media/story narration, or conversational activity facts.
+- Do not rewrite unidentified non-primary speaker facts as user facts; set relationship_to_user=other_speaker or unclear and choose review/context_only/reject unless the user tie is explicit.
+
+DRIFT GUARD: This production prompt and durable_memory_patch.v1 schema are the source of truth for benchmark L2 decisions. Benchmark runners may package evidence and export reports, but must call this product synthesizer for L2 memory decisions.
 
 Return JSON matching:
 {format_instructions}
@@ -119,6 +134,49 @@ def _valid_non_quote_wrapper_patches(patches: List[DurableMemoryPatch]) -> List[
     return [patch for patch in patches if not _is_quote_wrapper(patch.memory_text)]
 
 
+def _with_production_safety_guards(patches: List[DurableMemoryPatch]) -> List[DurableMemoryPatch]:
+    """Apply deterministic active-memory guardrails after LLM synthesis.
+
+    L1 remains the broad searchable archive. L2 active memory should not promote
+    third-party/encountered facts or uncertain subject attribution as stable user
+    profile memory just because the model emitted an active patch.
+    """
+    guarded: List[DurableMemoryPatch] = []
+    for patch in patches:
+        if patch.result_status not in {LifecycleState.active, LifecycleState.review}:
+            guarded.append(patch)
+            continue
+        if patch.aboutness == "third_party" or patch.relationship_to_user in {"encountered", "other_speaker"}:
+            guarded.append(
+                patch.model_copy(
+                    update={
+                        "decision": DurablePatchDecision.context_only,
+                        "result_status": LifecycleState.context_only,
+                        "memory_text": None,
+                        "rationale": (patch.rationale or "")
+                        + " Deterministic guard: third-party/encountered facts stay in L1/context, not active durable memory.",
+                    }
+                )
+            )
+            continue
+        if patch.result_status == LifecycleState.active and (
+            patch.aboutness == "unclear" or patch.relationship_to_user == "unclear"
+        ):
+            guarded.append(
+                patch.model_copy(
+                    update={
+                        "decision": DurablePatchDecision.review,
+                        "result_status": LifecycleState.review,
+                        "rationale": (patch.rationale or "")
+                        + " Deterministic guard: unclear attribution routes to review.",
+                    }
+                )
+            )
+            continue
+        guarded.append(patch)
+    return guarded
+
+
 def synthesize_durable_memory_patches(
     *,
     packet: Dict[str, Any],
@@ -145,6 +203,7 @@ def synthesize_durable_memory_patches(
         response = model.invoke(messages)
         parsed = parser.parse(_content_from_response(response))
         patches = _with_deterministic_patch_ids(parsed.patches, packet, observed_head_commit_id)
+        patches = _with_production_safety_guards(patches)
         return _valid_non_quote_wrapper_patches(patches)
     except (ValidationError, Exception) as exc:
         logger.error("Error synthesizing V17 durable patches: %s", type(exc).__name__)

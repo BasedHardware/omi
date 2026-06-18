@@ -49,6 +49,11 @@ def _patch(decision, **overrides):
         "memory_text": "User prefers automatic memory capture.",
         "predicate": "prefers",
         "arguments": {"object": "automatic memory capture"},
+        "confidence": "medium",
+        "relationship_to_user": "self",
+        "subject_entity_id": "user",
+        "subject_label": "the user",
+        "aboutness": "primary_user",
         "rationale": "Supported by direct quote.",
     }
     payload.update(overrides)
@@ -120,3 +125,85 @@ def test_l2_patch_synthesizer_prompt_includes_existing_memory_context_for_merge_
     assert result[0].target_memory_id == "mem_auto"
     assert "mem_auto" in prompt_text
     assert "User prefers automated memory systems" in prompt_text
+
+
+def test_l2_patch_contract_preserves_relationship_entity_and_confidence_for_benchmark_parity():
+    result = synthesize_durable_memory_patches(
+        packet=_packet(),
+        custom_search_artifact={"search_results": []},
+        observed_head_commit_id="head_1",
+        llm=FakeLLM(
+            {
+                "patches": [
+                    _patch(
+                        "add",
+                        confidence="high",
+                        relationship_to_user="self",
+                        subject_entity_id="user",
+                        subject_label="the user",
+                        aboutness="primary_user",
+                    )
+                ]
+            }
+        ),
+    )
+
+    assert result[0].confidence == "high"
+    assert result[0].relationship_to_user == "self"
+    assert result[0].subject_entity_id == "user"
+    assert result[0].subject_label == "the user"
+    assert result[0].aboutness == "primary_user"
+
+
+def test_l2_patch_prompt_contains_production_usefulness_rubric_and_drift_marker():
+    fake = FakeLLM({"patches": [_patch("add")]})
+
+    synthesize_durable_memory_patches(
+        packet=_packet(),
+        custom_search_artifact={"search_results": []},
+        observed_head_commit_id="head_1",
+        llm=fake,
+    )
+
+    prompt_text = "\n".join(str(message.content) for message in fake.messages)
+    assert "PROMOTION RUBRIC" in prompt_text
+    assert "Future agent/user would benefit from remembering this" in prompt_text
+    assert "Use review when attribution, durability, or sensitivity is uncertain" in prompt_text
+    assert "DRIFT GUARD" in prompt_text
+
+
+def test_l2_patch_safety_guard_keeps_third_party_or_encountered_out_of_active_memory():
+    result = synthesize_durable_memory_patches(
+        packet=_packet(),
+        custom_search_artifact={"search_results": []},
+        observed_head_commit_id="head_1",
+        llm=FakeLLM(
+            {
+                "patches": [
+                    _patch(
+                        "add",
+                        memory_text="Karl Beckner is on assignment in Kabul.",
+                        relationship_to_user="encountered",
+                        aboutness="third_party",
+                        subject_label="Karl Beckner",
+                    )
+                ]
+            }
+        ),
+    )
+
+    assert result[0].decision.value == "context_only"
+    assert result[0].result_status.value == "context_only"
+    assert result[0].memory_text is None
+
+
+def test_l2_patch_safety_guard_routes_unclear_active_memory_to_review():
+    result = synthesize_durable_memory_patches(
+        packet=_packet(),
+        custom_search_artifact={"search_results": []},
+        observed_head_commit_id="head_1",
+        llm=FakeLLM({"patches": [_patch("add", relationship_to_user="unclear", aboutness="unclear")]}),
+    )
+
+    assert result[0].result_status.value == "review"
+    assert result[0].decision.value == "review"

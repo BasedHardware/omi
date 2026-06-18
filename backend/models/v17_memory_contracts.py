@@ -406,6 +406,19 @@ class DurableMemoryPatch(BaseModel):
     arguments: Dict[str, Any] = Field(default_factory=dict)
     supersedes: List[str] = Field(default_factory=list)
     rationale: Optional[str] = None
+    confidence: Literal["high", "medium", "low"] = "medium"
+    relationship_to_user: Literal[
+        "self",
+        "owned_work",
+        "adopted",
+        "asking_about",
+        "encountered",
+        "other_speaker",
+        "unclear",
+    ] = "unclear"
+    subject_entity_id: Optional[str] = None
+    subject_label: Optional[str] = None
+    aboutness: Literal["primary_user", "user_owned_project", "user_relationship", "third_party", "unclear"] = "unclear"
 
     @model_validator(mode="after")
     def validate_decision_contract(self):
