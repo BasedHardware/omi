@@ -5,7 +5,7 @@ A manually runnable integration test suite that imports the **real omi FastAPI b
 Current dogfood status:
 
 ```text
-71 passed, 6 skipped, 43 warnings
+72 passed, 6 skipped, 43 warnings
 ```
 
 The run installs a local-only socket guard before importing backend code. Any non-local DNS/socket attempt raises an assertion, so real API calls fail the harness instead of silently leaking. The runner also wraps pytest in a process-level timeout (`E2E_PYTEST_TIMEOUT`, default `120s`) so websocket/provider-seam regressions fail instead of hanging indefinitely.

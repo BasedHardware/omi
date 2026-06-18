@@ -60,3 +60,15 @@ def test_backend_storage_client_is_fake_after_app_import(client):
     import utils.other.storage as storage_helpers
 
     assert isinstance(storage_helpers.storage_client, FakeStorageClient)
+
+
+def test_backend_database_globals_are_fake_after_app_import(client, fake_firestore, fake_redis):
+    """Already-imported backend modules must not retain real Firestore/Redis clients."""
+
+    import database._client as db_client
+    import database.redis_db as redis_db
+    import database.webhook_health as webhook_health
+
+    assert db_client.db is fake_firestore
+    assert redis_db.r is fake_redis
+    assert webhook_health.r is fake_redis
