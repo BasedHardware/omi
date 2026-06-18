@@ -1,0 +1,90 @@
+#!/usr/bin/env bash
+# ---------------------------------------------------------------------------
+# Hermetic E2E Harness — One-command entry point
+#
+# Usage:
+#   bash backend/testing/e2e/run.sh
+#   cd backend && bash testing/e2e/run.sh -v
+#   cd backend && bash testing/e2e/run.sh -k test_crud
+#
+# Exit code:
+#   0 — all tests passed
+#   1 — one or more tests failed (pytest exit code propagated)
+# ---------------------------------------------------------------------------
+
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+BACKEND_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
+REPO_ROOT="$(cd "$BACKEND_DIR/.." && pwd)"
+cd "$BACKEND_DIR"
+
+echo "=== Omi Hermetic E2E Harness ==="
+echo "Working dir: $(pwd)"
+
+# ─── Detect / activate virtual environment ──────────────────────────────
+for venv_dir in "$REPO_ROOT/.venv" "$BACKEND_DIR/.venv" "$REPO_ROOT/venv" "$BACKEND_DIR/venv"; do
+    if [ -f "$venv_dir/bin/activate" ]; then
+        echo "Activating ${venv_dir}..."
+        # shellcheck disable=SC1090
+        source "$venv_dir/bin/activate"
+        break
+    fi
+done
+
+if ! command -v python >/dev/null 2>&1; then
+    echo "ERROR: python not found on PATH"
+    exit 1
+fi
+
+# ─── Install fake dependencies if missing ─────────────────────────────
+install_if_missing() {
+    local import_name="$1"
+    local package_name="${2:-$1}"
+    python -c "import ${import_name}" 2>/dev/null || {
+        echo "Installing ${package_name}..."
+        python -m pip install "${package_name}" --quiet
+    }
+}
+
+echo "Checking/installing fake dependencies..."
+install_if_missing fake_firestore fake-firestore
+install_if_missing fakeredis fakeredis
+install_if_missing pytest_httpserver pytest-httpserver
+install_if_missing aioresponses aioresponses
+
+# ─── Verify core backend deps are installed ────────────────────────────
+python -c "import fastapi; import firebase_admin; import google.cloud.firestore" 2>/dev/null || {
+    echo "ERROR: Backend dependencies not installed."
+    echo "Run: python -m pip install -r requirements.txt"
+    exit 1
+}
+
+# ─── Create temp dirs that main.py expects ─────────────────────────────
+for d in _temp _samples _segments _speech_profiles; do
+    mkdir -p "$d" 2>/dev/null || true
+done
+
+# ─── Run pytest ────────────────────────────────────────────────────────
+echo ""
+echo "Running e2e tests..."
+echo "================================"
+
+if [ "$#" -eq 0 ]; then
+    set -- -v --tb=short
+fi
+
+set +e
+python -m pytest "$@" testing/e2e/
+PYTEST_EXIT_CODE=$?
+set -e
+
+echo ""
+echo "================================"
+if [ $PYTEST_EXIT_CODE -eq 0 ]; then
+    echo "✅ All e2e tests passed!"
+else
+    echo "❌ Some e2e tests failed (exit code ${PYTEST_EXIT_CODE})"
+fi
+
+exit $PYTEST_EXIT_CODE
