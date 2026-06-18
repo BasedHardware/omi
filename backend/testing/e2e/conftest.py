@@ -260,6 +260,26 @@ def _create_backend_app(fake_firestore_instance, fake_redis_instance, fake_stora
     # Import the real FastAPI app (triggers all backend module imports)
     import main as backend_main
 
+    # Some backend modules bind ``db``/``r`` with ``from database._client import db``
+    # or ``from database.redis_db import r`` at import time. If an import raced ahead
+    # of the constructor monkeypatches above, relink those already-bound module
+    # globals to the hermetic fakes so the e2e harness fails closed instead of
+    # reaching Firestore/Redis on localhost or the public internet.
+    import database._client as db_client
+    import database.redis_db as redis_db
+
+    old_db = db_client.db
+    old_r = redis_db.r
+    db_client.db = fake_firestore_instance
+    redis_db.r = fake_redis_instance
+    for module in list(sys.modules.values()):
+        if module is None:
+            continue
+        if getattr(module, "db", None) is old_db:
+            setattr(module, "db", fake_firestore_instance)
+        if getattr(module, "r", None) is old_r:
+            setattr(module, "r", fake_redis_instance)
+
     _app_cache = backend_main.app
     return _app_cache
 
@@ -299,13 +319,35 @@ def isolate_e2e_state(fake_firestore, fake_redis, fake_storage):
     from fakes.firestore import clear_user_data
     from fakes.storage import clear_fake_storage
 
-    clear_user_data(DEV_UID)
-    fake_redis.flushall()
-    clear_fake_storage()
+    def clear_state():
+        clear_user_data(DEV_UID)
+        fake_redis.flushall()
+        clear_fake_storage()
+        try:
+            import utils.http_client as http_client
+
+            http_client._webhook_circuit_breakers.clear()
+        except Exception:
+            pass
+        try:
+            import database.webhook_health as webhook_health
+
+            webhook_health.r = fake_redis
+            webhook_health._dev_failure_script = None
+            webhook_health._record_failure_script = None
+            webhook_health._record_success_script = None
+        except Exception:
+            pass
+        try:
+            import database.redis_db as redis_db
+
+            redis_db.r = fake_redis
+        except Exception:
+            pass
+
+    clear_state()
     yield
-    clear_user_data(DEV_UID)
-    fake_redis.flushall()
-    clear_fake_storage()
+    clear_state()
 
 
 @pytest.fixture()
