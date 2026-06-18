@@ -49,7 +49,9 @@ enum DashboardTaskRefreshService {
             log(
                 "DashboardTaskRefreshService: Dashboard freshness reconciled sync=\(plan.itemsToSync.count), hardDeleted=\(plan.backendIdsToHardDelete.count), visible=\(plan.dashboardVisibleServerIds.count), completed=\(plan.completedServerIds.count), movedOut=\(plan.movedOutServerIds.count) without loading Tasks page list"
             )
-            AuthBackoffTracker.shared.reportSuccess()
+            if !serverTruth.hadAuthFailure {
+                AuthBackoffTracker.shared.reportSuccess()
+            }
         } catch {
             if case APIError.unauthorized = error {
                 AuthBackoffTracker.shared.reportAuthFailure()
@@ -62,7 +64,9 @@ enum DashboardTaskRefreshService {
 
     private static func fetchDashboardWindowItems(calendar: Calendar) async throws -> [TaskActionItem] {
         let startOfToday = calendar.startOfDay(for: Date())
-        let endOfToday = calendar.date(byAdding: .day, value: 1, to: startOfToday)!
+        guard let endOfToday = calendar.date(byAdding: .day, value: 1, to: startOfToday) else {
+            return []
+        }
         let sevenDaysAgo = calendar.date(byAdding: .day, value: -7, to: Date()) ?? Date()
         let limit = DashboardTaskRefreshPolicy.serverFetchLimit
 
@@ -86,8 +90,8 @@ enum DashboardTaskRefreshService {
 
     private static func fetchExactServerTruth(
         forDashboardIds ids: Set<String>
-    ) async -> (itemsById: [String: TaskActionItem], missingIds: Set<String>) {
-        guard !ids.isEmpty else { return ([:], []) }
+    ) async -> (itemsById: [String: TaskActionItem], missingIds: Set<String>, hadAuthFailure: Bool) {
+        guard !ids.isEmpty else { return ([:], [], false) }
 
         let sortedIds = ids.sorted()
         let results = await DashboardExactTaskFetchLimiter.fetch(ids: sortedIds) { id in
@@ -104,6 +108,7 @@ enum DashboardTaskRefreshService {
         var itemsById: [String: TaskActionItem] = [:]
         var missingIds = Set<String>()
         var failedCount = 0
+        var hadAuthFailure = false
 
         for (id, result) in results {
             switch result {
@@ -115,6 +120,7 @@ enum DashboardTaskRefreshService {
                 failedCount += 1
                 logError("DashboardTaskRefreshService: Exact task refresh failed for \(id)", error: error)
                 if case APIError.unauthorized = error {
+                    hadAuthFailure = true
                     AuthBackoffTracker.shared.reportAuthFailure()
                 }
             }
@@ -124,6 +130,6 @@ enum DashboardTaskRefreshService {
             log("DashboardTaskRefreshService: Exact task refresh skipped \(failedCount) stale classifications")
         }
 
-        return (itemsById, missingIds)
+        return (itemsById, missingIds, hadAuthFailure)
     }
 }

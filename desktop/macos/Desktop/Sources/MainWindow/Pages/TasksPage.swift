@@ -2271,17 +2271,17 @@ struct TasksPage: View {
         .background(Color.clear)
         // Modal creation sheet removed — Cmd+N now creates inline at top
         .onAppear {
-            Task {
+            Task { @MainActor in
                 await viewModel.loadTasksForFirstUse()
+                // If tasks are already loaded, notify sidebar to clear loading indicator
+                if !viewModel.isLoading {
+                    NotificationCenter.default.post(name: .tasksPageDidLoad, object: nil)
+                }
             }
             // Restore panel UI if coordinator was open when we navigated away
             if chatCoordinator.isPanelOpen, chatCoordinator.activeTaskId != nil {
                 showChatPanel = true
                 adjustWindowWidth(expand: true)
-            }
-            // If tasks are already loaded, notify sidebar to clear loading indicator
-            if !viewModel.isLoading {
-                NotificationCenter.default.post(name: .tasksPageDidLoad, object: nil)
             }
             // Ensure prioritization service is running (no-op if already started)
             Task { await TaskPrioritizationService.shared.start() }

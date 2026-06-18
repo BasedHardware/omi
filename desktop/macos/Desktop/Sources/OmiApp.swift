@@ -221,6 +221,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
   private var audioRecordingSwitch: NSSwitch?
   private var relaunchOnLoginSuppressedForOnboarding = false
   private var apiKeyFetchTask: Task<Void, Never>?
+  private var floatingBarPlanFetchTask: Task<Void, Never>?
   private var appLifecycleMaintenanceTask: Task<Void, Never>?
   private var didScheduleInitialSettingsSync = false
   private var initialSettingsSyncTask: Task<Void, Never>?
@@ -1169,8 +1170,12 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     apiKeyFetchTask?.cancel()
     apiKeyFetchTask = nil
+    floatingBarPlanFetchTask?.cancel()
+    floatingBarPlanFetchTask = nil
     appLifecycleMaintenanceTask?.cancel()
     appLifecycleMaintenanceTask = nil
+    initialSettingsSyncTask?.cancel()
+    initialSettingsSyncTask = nil
 
     // Stop transcription retry service
     TranscriptionRetryService.shared.stop()
@@ -1337,11 +1342,13 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
   }
 
   private func scheduleFloatingBarPlanFetch() {
-    Task {
+    floatingBarPlanFetchTask?.cancel()
+    floatingBarPlanFetchTask = Task {
       let delay = StartupWarmupPolicy.floatingBarPlanFetchDelay
       if delay > 0 {
         try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
       }
+      guard !Task.isCancelled else { return }
       guard await AuthState.shared.isSignedIn else { return }
       await FloatingBarUsageLimiter.shared.fetchPlan()
     }
