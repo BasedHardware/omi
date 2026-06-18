@@ -340,10 +340,14 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     switch tool {
     case .askHigherModel:
       let query = arg("query")
-      log("RealtimeHub[\(providerTag)]: tool ask_higher_model → POST /v2/chat/completions (claude-sonnet-4-6) query=\"\(query.prefix(80))\"")
+      let context = (arguments["context"] as? String) ?? ""
+      log(
+        "RealtimeHub[\(providerTag)]: tool ask_higher_model → POST /v2/chat/completions (claude-sonnet-4-6) query=\"\(query.prefix(80))\""
+      )
       Task { [weak self] in
         guard let self else { return }
-        let answer = await self.escalateToHigherModel(query)
+        let answer = await self.escalateToHigherModel(
+          query, context: context, aboutUser: self.aboutUserCard)
         self.session?.sendToolResult(callId: callId, name: name, output: answer)
       }
     case .getTasks:
@@ -590,7 +594,9 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
 
   /// ask_higher_model — reuse the EXISTING prompt-cached /v2/chat/completions
   /// (no new backend route). Returns the assistant text for the model to speak.
-  private func escalateToHigherModel(_ query: String) async -> String {
+  private func escalateToHigherModel(_ query: String, context: String, aboutUser: String)
+    async -> String
+  {
     let baseURL = await APIClient.shared.rustBackendURL
     guard !baseURL.isEmpty else { return "I couldn't reach the model right now." }
     let normalized = baseURL.hasSuffix("/") ? baseURL : baseURL + "/"
@@ -606,18 +612,8 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     } catch {
       return "I couldn't authenticate to the model."
     }
-    let body: [String: Any] = [
-      "model": "claude-sonnet-4-6",
-      "max_tokens": 1024,
-      "messages": [
-        [
-          "role": "user",
-          "content":
-            "Answer concisely for a spoken reply (a few sentences max):\n\n\(query)",
-        ]
-      ],
-      "stream": false,
-    ]
+    let body = RealtimeHubTools.escalationBody(
+      query: query, context: context, aboutUser: aboutUser)
     let t0 = Date()
     do {
       request.httpBody = try JSONSerialization.data(withJSONObject: body)

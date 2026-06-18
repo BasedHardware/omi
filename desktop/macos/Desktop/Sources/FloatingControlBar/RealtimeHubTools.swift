@@ -130,21 +130,35 @@ enum RealtimeHubTools {
     then confirm out loud. CHANGE an existing task (mark done, edit, reschedule): first \
     call get_tasks to get the matching task's id, then call update_action_item with that id.
     - DOING something for the user in their OTHER apps (calendar, notes, emails, messages, \
-    files, browser) or any multi-step work — create/send/open/edit/search/schedule/automate/ \
-    "do X for me": you CANNOT do these yourself. You MUST actually EMIT the spawn_agent \
+    files, browser), any multi-step work, OR anything needing a real look-up / current info \
+    from the web (research something online, find the latest on X) — create/send/open/edit/ \
+    search/schedule/automate/research/"do X for me": you CANNOT do these yourself. You MUST actually EMIT the spawn_agent \
     function call (with a clear, self-contained `brief` and a short `title`). That function \
     call is the ONLY thing that starts the agent — merely SAYING "I'll have an agent do it" \
     without emitting the call does NOTHING: the agent never starts and you have failed the \
     user. So always emit the spawn_agent call. You may add one short natural sentence as you \
     call it, but never instead of it. Do NOT ask clarifying questions before spawning — spawn \
     with what you have. Do NOT wait for it, narrate its steps, refuse, or claim you can't.
-    - Everything else — general questions, facts, chit-chat, explanations, advice, jokes, \
-    and creative or long-form requests (stories, brainstorming, drafts): ANSWER YOURSELF. \
-    You are fully capable; do it directly, even when the ask is long or open-ended. Do \
-    NOT escalate just because a request seems long or hard.
-    - Call ask_higher_model when the answer needs real reasoning or synthesis, or precise \
-    up-to-date facts you don't reliably know, OR when the user pushes back on your previous \
-    answer (rephrases, says you're wrong, asks for a better/deeper answer). Pass a clear \
+    - Everything else — general questions, single facts, simple look-ups you know, chit-chat, \
+    explanations, opinions, advice, jokes, and creative or long-form requests (stories, \
+    brainstorming, drafts): ANSWER YOURSELF. You are fully capable; do it directly, even when \
+    the ask is long, open-ended, or mentions a specific name, date, number, or fact — a \
+    request is NOT hard just because it contains one, and a simple look-up is NEVER a reason \
+    to escalate. Do NOT escalate based on how unsure you feel about your own knowledge: you \
+    are a poor judge of that, so escalate only on the explicit, observable signals below.
+    - There are TWO escalation paths — do not confuse them. ask_higher_model buys more \
+    INTELLIGENCE on something you could already reason about: it returns a smarter spoken \
+    answer but it does NOT browse, search, or fetch live data. spawn_agent is for DOING \
+    multi-step work and for anything needing a real look-up / current web info (see above).
+    - Call ask_higher_model ONLY on these explicit signals — judged from what the user SAYS \
+    and the SHAPE of the request, never from how unsure you feel: (1) the user is unhappy with \
+    your previous answer — pushes back, rephrases, says you're wrong, or asks for a better / \
+    deeper / more thorough answer; (2) the user explicitly asks you to think harder, be more \
+    careful, or reason it through; or (3) the request genuinely needs heavy multi-step \
+    reasoning or careful technical work — non-trivial math, complex code, or weighing several \
+    constraints into one answer — that a quick spoken reply would get wrong. Do NOT use it for \
+    simple look-ups, single facts, current events, or anything you can answer in a sentence or \
+    two — answer those yourself, or use spawn_agent if it truly needs live data. Pass a clear \
     `query` AND any `context` you already have (relevant facts you fetched, what they're \
     referring to); then speak a natural, spoken-length version of what comes back.
     - When you need to see what's on screen, call screenshot first. Use point_click only \
@@ -161,14 +175,25 @@ enum RealtimeHubTools {
         "type": "function",
         "name": HubTool.askHigherModel.rawValue,
         "description":
-          "Get a second opinion from a smarter model and receive text to speak. Use ONLY when the user "
-          + "is dissatisfied with your previous answer (pushes back, rephrases, says you're wrong, or asks "
-          + "for a better/deeper answer), OR when you genuinely need precise up-to-date facts you don't "
-          + "know. Do NOT use it for general, creative, or long-form requests — answer those yourself.",
+          "A smarter model for MORE INTELLIGENCE on something you could already reason about — it returns "
+          + "text to speak but does NOT browse, search, or fetch live data. Use ONLY when (1) the user is "
+          + "dissatisfied with your previous answer (pushes back, rephrases, says you're wrong, asks for a "
+          + "better/deeper answer), (2) the user explicitly asks you to think harder or reason it through, OR "
+          + "(3) the request needs heavy multi-step reasoning or careful technical work (non-trivial math, "
+          + "complex code, multi-constraint synthesis). Do NOT use it for simple look-ups, single facts, "
+          + "current events, or general/creative/long-form requests — answer those yourself, or use spawn_agent "
+          + "if it truly needs live data.",
         "parameters": [
           "type": "object",
           "properties": [
-            "query": ["type": "string", "description": "The full question to escalate."]
+            "query": ["type": "string", "description": "The full question to escalate."],
+            "context": [
+              "type": "string",
+              "description":
+                "Relevant context you already have that helps answer well — facts you fetched, "
+                + "what the user is referring to, or the previous answer they pushed back on. "
+                + "Include only what's relevant; omit if there's nothing useful.",
+            ],
           ],
           "required": ["query"],
         ],
@@ -398,5 +423,34 @@ enum RealtimeHubTools {
     }
     if let items = schema["items"] as? [String: Any] { out["items"] = upcasedSchemaTypes(items) }
     return out
+  }
+
+  /// System prompt for an escalated (ask_higher_model) answer. The realtime model
+  /// voices a natural, spoken-length version of the result, so the higher model is
+  /// told to answer properly rather than pre-shorten for speech.
+  static func escalationSystemPrompt(aboutUser: String) -> String {
+    var s = """
+      You are Omi, a knowledgeable assistant. Answer the user's question accurately and \
+      usefully. A voice assistant will relay your answer aloud and adapt the phrasing for \
+      speech, so be clear and well-structured; you don't need to pre-shorten it.
+      """
+    if !aboutUser.isEmpty { s += "\n\n" + aboutUser }
+    return s
+  }
+
+  static func escalationBody(query: String, context: String, aboutUser: String) -> [String: Any] {
+    let trimmedContext = context.trimmingCharacters(in: .whitespacesAndNewlines)
+    let userContent =
+      trimmedContext.isEmpty ? query : query + "\n\nContext I already have:\n" + trimmedContext
+    let messages: [[String: String]] = [
+      ["role": "system", "content": escalationSystemPrompt(aboutUser: aboutUser)],
+      ["role": "user", "content": userContent],
+    ]
+    return [
+      "model": "claude-sonnet-4-6",
+      "max_tokens": 1024,
+      "messages": messages,
+      "stream": false,
+    ]
   }
 }
