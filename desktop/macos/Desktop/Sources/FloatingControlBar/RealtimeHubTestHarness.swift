@@ -118,7 +118,13 @@ final class RealtimeHubTestHarness: NSObject, RealtimeHubSessionDelegate {
     let stub: String
     switch HubTool(rawValue: name) {
     case .askHigherModel: stub = "Paris is the capital of France."
-    case .getTasks: stub = "Due today (1):\n- Example task"
+    case .getTasks: stub = "Due today (1):\n- Example task [id:task_123]"
+    case .getMemories: stub = "You live in San Francisco and prefer concise answers."
+    case .searchMemories: stub = "Your dog's name is Rex."
+    case .searchConversations: stub = "On Monday you discussed the launch timeline."
+    case .getConversations: stub = "Most recent: today, 'Standup notes'. Before that: yesterday, 'Design review'."
+    case .createActionItem: stub = "Created task: Example task."
+    case .updateActionItem: stub = "Updated the task."
     case .spawnAgent: stub = "Started a background agent."
     case .screenshot: stub = "Screen captured."
     case .pointClick: stub = "Clicked."
