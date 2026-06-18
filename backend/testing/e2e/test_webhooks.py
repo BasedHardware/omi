@@ -5,6 +5,8 @@ import asyncio
 import httpx
 import pytest
 
+import database.webhook_health as webhook_health
+
 
 def _configure_realtime_webhook(client, auth_headers, url="https://webhook.test/realtime"):
     configured = client.post(
@@ -143,3 +145,18 @@ def test_realtime_webhook_auto_disables_after_failure_threshold(client, auth_hea
     status = client.get("/v1/users/developer/webhooks/status", headers=auth_headers)
     assert status.status_code == 200, status.text
     assert status.json()["realtime_transcript"] is False
+
+
+def test_dev_webhook_failure_fallback_only_reports_disable_transition(monkeypatch, fake_redis):
+    """The non-Lua fallback should match the Lua script's one-shot disable semantics."""
+
+    monkeypatch.setattr(webhook_health, "_DEV_FAILURE_THRESHOLD", 2)
+    monkeypatch.setattr(webhook_health, "r", fake_redis)
+
+    assert webhook_health.record_dev_webhook_failure("123", "realtime_transcript", 500, "HTTP 500") is False
+    assert webhook_health.record_dev_webhook_failure("123", "realtime_transcript", 500, "HTTP 500") is True
+    assert webhook_health.record_dev_webhook_failure("123", "realtime_transcript", 500, "HTTP 500") is False
+
+    health = _health(fake_redis)
+    assert health["failure_count"] == "2"
+    assert health["disabled"] == "1"

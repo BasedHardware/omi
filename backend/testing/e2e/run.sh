@@ -66,9 +66,21 @@ if [ "$#" -eq 0 ]; then
     set -- -v --tb=short
 fi
 
+# WebSocket/provider-seam regressions should fail instead of hanging forever.
+# Override with E2E_PYTEST_TIMEOUT=300s when deliberately debugging a slow run.
+PYTEST_TIMEOUT="${E2E_PYTEST_TIMEOUT:-120s}"
+
 set +e
-python -m pytest testing/e2e/ "$@"
-PYTEST_EXIT_CODE=$?
+if command -v timeout >/dev/null 2>&1; then
+    timeout --preserve-status --kill-after=5s "$PYTEST_TIMEOUT" python -m pytest testing/e2e/ "$@"
+    PYTEST_EXIT_CODE=$?
+    if [ $PYTEST_EXIT_CODE -eq 143 ] || [ $PYTEST_EXIT_CODE -eq 124 ]; then
+        echo "ERROR: e2e pytest exceeded timeout ${PYTEST_TIMEOUT}"
+    fi
+else
+    python -m pytest testing/e2e/ "$@"
+    PYTEST_EXIT_CODE=$?
+fi
 set -e
 
 echo ""

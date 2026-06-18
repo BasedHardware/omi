@@ -333,15 +333,31 @@ def _get_dev_failure_script():
 
 
 def _record_dev_webhook_failure_fallback(uid: str, wtype_str: str, status_code: int, error: str) -> bool:
-    """Non-Lua fallback for Redis clients without scripting (e.g. fakeredis in e2e)."""
+    """Non-Lua fallback for Redis clients without scripting (e.g. fakeredis in e2e).
+
+    Keep this behavior equivalent to ``_DEV_RECORD_FAILURE_LUA``: once a webhook
+    is already disabled, additional failures must not return True again because
+    callers use the True transition to send the auto-disable notification.
+    """
     key = f'dev_webhook_health:{uid}:{wtype_str}'
-    current = r.hget(key, 'failure_count')
-    if isinstance(current, bytes):
-        current = current.decode()
+    already_disabled = r.hget(key, 'disabled')
+    if isinstance(already_disabled, bytes):
+        already_disabled = already_disabled.decode()
+    if already_disabled == '1':
+        return False
+
     try:
-        count = int(current or 0) + 1
-    except (TypeError, ValueError):
-        count = 1
+        count = int(r.hincrby(key, 'failure_count', 1))
+    except Exception:
+        current = r.hget(key, 'failure_count')
+        if isinstance(current, bytes):
+            current = current.decode()
+        try:
+            count = int(current or 0) + 1
+        except (TypeError, ValueError):
+            count = 1
+        r.hset(key, 'failure_count', str(count))
+
     disabled = count >= _DEV_FAILURE_THRESHOLD
     r.hset(
         key,
@@ -349,10 +365,10 @@ def _record_dev_webhook_failure_fallback(uid: str, wtype_str: str, status_code: 
             'last_failure_at': str(int(time.time())),
             'last_status': str(status_code),
             'last_error': error[:200],
-            'failure_count': str(count),
-            'disabled': '1' if disabled else '0',
         },
     )
+    if disabled:
+        r.hset(key, 'disabled', '1')
     r.expire(key, _HEALTH_TTL)
     return disabled
 
