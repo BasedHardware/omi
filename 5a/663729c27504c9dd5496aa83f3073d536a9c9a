@@ -1,0 +1,23 @@
+desktop/macos/Desktop/Sources/OmiApp.swift
+  s_838ede91b21776::t_47ed4857f90abf 224,1173-1174,1177-1178,1345-1346,1351
+desktop/macos/Desktop/Sources/MainWindow/Pages/TasksPage.swift
+  s_838ede91b21776::t_47ed4857f90abf 2274,2276-2279
+desktop/macos/Desktop/Sources/Stores/DashboardTaskRefreshService.swift
+  s_838ede91b21776::t_47ed4857f90abf 52-54,67-69,93-94,111,123,133
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.8",
+  "base_commit_sha": "5a663729c27504c9dd5496aa83f3073d536a9c9a",
+  "prompts": {},
+  "sessions": {
+    "s_838ede91b21776": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019edbef-bac9-7702-bb66-f7c1129ca6f9",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Drake Thomsen <drake@draket.xyz>"
+    }
+  }
+}
