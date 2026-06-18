@@ -36,7 +36,7 @@ def test_l1_archive_extractor_emits_general_archive_items_without_lifecycle_rout
         source_id="source_1",
         source_type="voice_transcript",
         text="why does the distance look foggy in Rust with TAA",
-        user_name="David",
+        user_name=None,
         llm=fake_llm,
     )
 
@@ -69,7 +69,7 @@ def test_l1_archive_extractor_converts_secret_risk_to_sensitive_archive():
         source_id="source_1",
         source_type="screenshot_ocr",
         text="password: hunter2",
-        user_name="David",
+        user_name=None,
         llm=fake_llm,
     )
 
@@ -86,7 +86,7 @@ def test_l1_archive_extractor_skips_tiny_sources_without_llm_call():
         source_id="source_1",
         source_type="chat_exchange",
         text="ok",
-        user_name="David",
+        user_name=None,
         llm=fake_llm,
     )
 
@@ -113,7 +113,7 @@ def test_l1_archive_extractor_accepts_short_security_relevant_sources():
         source_id="source_1",
         source_type="screenshot_ocr",
         text="sk-abc123",
-        user_name="David",
+        user_name=None,
         llm=fake_llm,
     )
 

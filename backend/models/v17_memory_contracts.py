@@ -87,8 +87,9 @@ class L1MemoryArchiveItem(BaseModel):
     evidence_quotes: List[str] = Field(default_factory=list)
     speaker_label: Optional[str] = None
     speaker_scope: str = "session-local"
-    # Who/what this item is about — free text, e.g. "David", "Sarah (girlfriend)",
-    # "Omi project", "Milo (cat)", "Dr. Patel". Empty/unknown = about the user.
+    # Who/what this item is about — free text, e.g. "the user", "Sarah (girlfriend)",
+    # "unidentified non-primary speaker (speaker_1)", "Omi project", "Milo (cat)",
+    # "Dr. Patel". Empty/unknown should be treated as uncertain, not as a named user.
     about: str = ""
     confidence: str = "medium"
     risk_flags: List[str] = Field(default_factory=list)

@@ -28,11 +28,15 @@ def _source_type_instructions(source_type: str, user_name: str) -> str:
 
     if "voice" in type_hint or "transcript" in type_hint:
         return (
-            f"This is a voice transcript. Multiple people may be speaking. "
-            f"Extract what was said that matters — decisions, plans, names, relationships, "
-            f"facts about {user_name} or people close to them. "
-            f"Ignore background noise, transcription errors, and long passages where "
-            f"nothing memorable happens."
+            f"This is a voice transcript. Multiple people may be speaking, and speaker labels "
+            f"such as speaker_0/speaker_1 are source-local, not stable identities. "
+            f"Extract memorable facts, decisions, plans, names, relationships, and project context, "
+            f"but do not assume every speaker is {user_name}. "
+            f"Treat a statement as about {user_name} only when source role, first-person context, "
+            f"or surrounding evidence supports that attribution. "
+            f"For unidentified non-primary speakers, preserve the source-local speaker label and archive "
+            f"the item as about that speaker or their relationship/context, not as a user fact. "
+            f"Ignore background noise, transcription errors, and long passages where nothing memorable happens."
         )
     elif "ocr" in type_hint or "screenshot" in type_hint or "desktop" in type_hint:
         return (
@@ -59,6 +63,7 @@ def _build_l1_messages(
     source_type: str,
     text: str,
     format_instructions: str,
+    language_instruction: str = "",
 ) -> list:
     """Build L1 extraction messages with source-type-aware system prompt."""
     source_context = _source_type_instructions(source_type, user_name)
@@ -78,12 +83,24 @@ def _build_l1_messages(
         f"- Third-party storytelling, movie plots, game narration, article content {user_name}\n"
         f"  didn't engage with.\n"
         f"- Transient UI states (\"page loading\", scroll position) unless revealing a preference.\n\n"
+        f"Speaker and attribution rules:\n"
+        f"- The primary user is the owner of this memory account, referred to here as {user_name}.\n"
+        f"- Do NOT infer that every transcript speaker is the primary user.\n"
+        f"- Speaker labels like speaker_0, speaker_1, ent_speaker_0, or human are source/session-local labels.\n"
+        f"- Preserve the source-local label in `speaker_label` when present; keep `speaker_scope` as session-local/source-local.\n"
+        f"- Use `about` = \"the user\" only for facts clearly about the primary user.\n"
+        f"- If an unidentified non-primary speaker says or reveals something, set `about` to a neutral description such as \"unidentified non-primary speaker (speaker_1)\" or to the person's stated name/role if known.\n"
+        f"- Facts about family, friends, teammates, projects, or pets are valid, but keep them about that person/entity; do not rewrite them as facts about the user unless the quote supports that.\n"
+        f"- Do not extract a user's name from assistant-only generic nudges or name-only mentions.\n\n"
         f"For each item, note who/what it's about in the `about` field:\n"
-        f"- Empty or \"{user_name}\" → about the user themselves\n"
-        f"- A person's name → e.g. \"Sarah\", \"Mom\", \"Dr. Patel\"\n"
+        f"- \"the user\" or \"{user_name}\" → only when the evidence is clearly about the primary user\n"
+        f"- A source-local unidentified speaker → e.g. \"unidentified non-primary speaker (speaker_1)\"\n"
+        f"- A person's name or role → e.g. \"Sarah\", \"Mom\", \"Dr. Patel\", \"teammate\"\n"
         f"- A project → e.g. \"Omi project\", \"house renovation\"\n"
         f"- An entity → e.g. \"Milo (cat)\", \"neighborhood coffee shop\"\n"
+        f"- If attribution is uncertain, say so in the item text/about field rather than assigning it to the user.\n"
         f"- Use class=\"sensitive\" for credentials, health details, finances, family matters.\n\n"
+        f"{language_instruction + chr(10) + chr(10) if language_instruction else ''}"
         f"Return JSON:\n{format_instructions}"
     )
 
@@ -143,7 +160,13 @@ def extract_l1_memory_archive_items_from_text(
 
     name = user_name or "the user"
     parser = PydanticOutputParser(pydantic_object=L1MemoryArchiveItems)
-    messages = _build_l1_messages(name, source_type, text, parser.get_format_instructions())
+    messages = _build_l1_messages(
+        name,
+        source_type,
+        text,
+        parser.get_format_instructions(),
+        language_instruction=language_instruction,
+    )
 
     if llm is not None:
         model = llm
