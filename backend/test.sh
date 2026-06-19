@@ -46,6 +46,7 @@ pytest tests/unit/test_v17_mcp_memory_adapter.py -v
 pytest tests/unit/test_v17_product_memory_router.py -v
 pytest tests/unit/test_v17_product_authorization.py -v
 pytest tests/unit/test_v17_app_key_grant_store.py -v
+pytest tests/unit/test_v17_app_key_memory_grant_assignment_readiness.py -v
 pytest tests/unit/test_v17_developer_auth_context_static.py -v
 pytest tests/unit/test_v17_mcp_auth_context_static.py -v
 pytest tests/unit/test_v17_mcp_api_key_auth_context.py -v

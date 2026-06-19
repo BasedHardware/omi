@@ -887,6 +887,26 @@ This closes only the proof-runner scope-extension/readiness subpoint. Remaining 
 - OAuth token introspection remains unimplemented.
 - Production rollout remains **BLOCKED / NO-GO** until all Oracle P0s and required real-service evidence are complete.
 
+### 2026-06-19 — P0-1/P0-6 V17 app/key memory grant assignment readiness runner
+
+Continued Oracle P0-1/P0-6 by adding a safe admin-readiness runner for server-owned V17 app/key memory grant assignment at `users/{uid}/memory_control/v17_app_key_memory_grants`, without changing the production rollout verdict:
+
+- Added `backend/scripts/v17_app_key_memory_grant_assignment_readiness.py` with default `status=NOT_RUN`, `read_only=true`, `mutation_allowed=false`; default mode performs no Firestore reads or writes.
+- `--execute --assignment-file ...` validates a deterministic assignment plan for `uid`, `consumer`, `app_id`, `key_id`, persisted scopes, `default_read`, `archive_read`, `write`, and `archive_default_visible=false` without mutating Firestore.
+- Writes are unreachable unless both `--execute` and `--allow-write` are supplied with a deterministic assignment file; write plans target only `users/{uid}/memory_control/v17_app_key_memory_grants` at `grants.<consumer>.apps.<app_id>.keys.<key_id>`.
+- The runner denies unknown consumers, unknown scopes, unknown capabilities/fields, malformed booleans, `archive_default_visible=true`, and operation flags that lack their required scopes. It never infers grants from MCP advertised metadata, client request fields, or key scopes alone.
+- Archive remains not default-visible even when an explicit `archive_read` capability is assigned.
+
+Verification recorded in `docs/epics/v17_memory_implementation_tickets.md`: RED missing-runner/doc failures (`5 failed`), GREEN runner/doc tests, default readiness run `python3 backend/scripts/v17_app_key_memory_grant_assignment_readiness.py` produced JSON `status: "NOT_RUN"`, focused P0-1/P0-6 tests passed, full V17 regression passed, and async scan remained pre-existing findings only.
+
+This closes only the readiness-runner/admin-assignment-contract subpoint. Remaining P0-1/P0-6 work:
+
+- The runner was not executed against production and no production app/key grants were assigned.
+- Production MCP key scopes were not migrated.
+- OAuth token introspection remains unimplemented.
+- Deployed Firestore/IAM proof against a real target project remains not run.
+- Production rollout remains **BLOCKED / NO-GO** until all Oracle P0s and required real-service evidence are complete.
+
 ## Not-run / not-claimed caveats preserved
 
 - Oracle review has now run and is recorded here, but it blocks production rollout.

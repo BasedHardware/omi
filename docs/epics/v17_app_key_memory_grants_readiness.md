@@ -94,6 +94,69 @@ This artifact is now partly route-wired for one Developer API default-list V17 s
 - MCP SSE advertises OAuth `memories.read` / `memories.write`; route execution must carry the verified scopes/app/key identity to the V17 memory grant seam.
 - Product `/v17` routes remain first-party `omi_chat`; first-party rollout/default-grant path is intentionally unchanged.
 
+## Safe admin assignment readiness runner
+
+Added `backend/scripts/v17_app_key_memory_grant_assignment_readiness.py` as the safe-by-default readiness runner for deterministic server/Admin-owned grant assignment planning.
+
+Default command:
+
+```bash
+python3 backend/scripts/v17_app_key_memory_grant_assignment_readiness.py
+```
+
+Default behavior is `status=NOT_RUN`, `read_only=true`, `mutation_allowed=false`, and no Firestore reads or writes. This is a readiness artifact only.
+
+Dry-run validation command:
+
+```bash
+python3 backend/scripts/v17_app_key_memory_grant_assignment_readiness.py \
+  --execute \
+  --assignment-file /secure/admin/v17-app-key-memory-grants.json
+```
+
+Write command, only for an intentional server/Admin context and deterministic input file:
+
+```bash
+python3 backend/scripts/v17_app_key_memory_grant_assignment_readiness.py \
+  --execute \
+  --allow-write \
+  --assignment-file /secure/admin/v17-app-key-memory-grants.json
+```
+
+The compact form is `python3 backend/scripts/v17_app_key_memory_grant_assignment_readiness.py --execute --allow-write --assignment-file /secure/admin/v17-app-key-memory-grants.json`.
+
+Assignment file shape:
+
+```json
+[
+  {
+    "uid": "<uid>",
+    "consumer": "developer_api",
+    "app_id": "developer-api",
+    "key_id": "<existing-key-id>",
+    "scopes": ["memories.read"],
+    "default_read": true,
+    "archive_read": false,
+    "write": false,
+    "archive_default_visible": false
+  }
+]
+```
+
+Validation/assignment contract:
+
+- writes are unreachable unless **both** `--execute` and `--allow-write` are supplied with `--assignment-file`;
+- writes target only `users/{uid}/memory_control/v17_app_key_memory_grants`;
+- in-document grant targets are deterministic: `grants.<consumer>.apps.<app_id>.keys.<key_id>`;
+- allowed consumers are limited to `developer_api`, `mcp`, and `third_party`;
+- allowed persisted scopes are limited to `memories.read`, `memories.write`, and `memories.archive.read`;
+- `default_read=true` requires `memories.read`; `write=true` requires `memories.write`; `archive_read=true` requires `memories.archive.read`;
+- `archive_default_visible` must be `false`; Archive is never default-visible even when the explicit `archive_read` capability is assigned;
+- unknown consumers, scopes, fields/capabilities, malformed booleans, or client/tool-style scopes such as `tool.search_memories` are denied before writes;
+- grants are never inferred from MCP advertised metadata, client request fields, or MCP/developer key scopes alone.
+
+This runner was not executed against production in this slice; no app/key grants assigned in production or locally through a real Firestore client.
+
 ## Explicit non-claims
 
-No production rollout approval, deployed Firestore rules proof, cloud IAM proof, broad route enforcement for all developer/MCP app-key grants, MCP key scope persistence, production telemetry, benchmark, Pinecone validation, or V17 write convergence is claimed by this slice.
+No production rollout approval, deployed Firestore rules proof, cloud IAM proof, broad route enforcement for all developer/MCP app-key grants, MCP key scope persistence, production app/key grant assignment, production telemetry, benchmark, Pinecone validation, or V17 write convergence is claimed by this slice. The new assignment runner was not executed against production and no app/key grants assigned.
