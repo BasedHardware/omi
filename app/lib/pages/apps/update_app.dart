@@ -464,7 +464,7 @@ class _UpdateAppPageState extends State<UpdateAppPage> {
                       ),
                     ),
                     child: GestureDetector(
-                      onTap: !provider.isValid || !provider.hasChanges
+                      onTap: !provider.isValid
                           ? null
                           : () {
                               var isValid = provider.validateForm();
@@ -488,12 +488,12 @@ class _UpdateAppPageState extends State<UpdateAppPage> {
                                 );
                               }
                             },
-                        child: Container(
-                          padding: const EdgeInsets.all(12.0),
-                          decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(12.0),
-                            color: provider.isValid && provider.hasChanges ? Colors.white : Colors.grey.shade700,
-                          ),
+                      child: Container(
+                        padding: const EdgeInsets.all(12.0),
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(12.0),
+                          color: provider.isValid ? Colors.white : Colors.grey.shade700,
+                        ),
                         child: Text(
                           context.l10n.updateApp,
                           style: const TextStyle(color: Colors.black, fontSize: 16),
