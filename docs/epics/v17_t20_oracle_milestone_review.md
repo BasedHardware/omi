@@ -849,6 +849,26 @@ This closes only the narrow streamable HTTP/SSE `search_memories` P0-1/P0-6 app/
 - Add real FastAPI dependency tests once local route-test dependencies are available; current coverage remains static plus unit seam tests.
 - Production rollout remains **BLOCKED / NO-GO** until all Oracle P0s and required real-service evidence are complete.
 
+### 2026-06-19 — P0-1/P0-6 MCP API-key scope readiness runner / server-owned assignment contract
+
+Continued Oracle P0-1/P0-6 by adding a production-safe MCP API-key scope migration/introspection readiness runner and explicit server-owned scope assignment contract, without changing the production rollout verdict:
+
+- Added `backend/scripts/v17_mcp_api_key_scope_readiness.py` with default `status=NOT_RUN`, `read_only=true`, `mutation_allowed=false`; default mode performs no Firestore reads or writes.
+- `--execute` inventories `mcp_api_keys/{key_id}` documents and distinguishes keys missing `app_id`, missing/malformed `scopes`, verified persisted `memories.read`, and unknown scopes. It does not infer scopes from advertised MCP tool metadata, OAuth security scheme advertisements, or client requests.
+- Writes are unreachable unless both `--execute` and `--allow-write` are supplied with a deterministic server-owned assignment file mapping existing key IDs to `{app_id, scopes}`.
+- Assignment preserves key IDs/users/hashes/prefixes and only allows the server-owned scope allowlist `memories.read`, `memories.write`, and `memories.archive.read`; unknown scopes are denied before mutation.
+- Updated `docs/epics/v17_mcp_app_key_scope_readiness.md` with commands, prerequisites, pass/fail criteria, and non-claims.
+
+Verification recorded in `docs/epics/v17_memory_implementation_tickets.md`: RED missing-runner/doc failures (`4 failed`), GREEN runner/doc tests (`4 passed`), default readiness run `python3 backend/scripts/v17_mcp_api_key_scope_readiness.py` produced JSON `status: "NOT_RUN"`, focused MCP/auth/product regression and full V17 regression were rerun, and async scan remained pre-existing findings only.
+
+This closes only the readiness-runner/server-owned assignment-contract subpoint. Remaining P0-1/P0-6 work:
+
+- The runner was not executed against production and no production MCP key scopes were migrated.
+- No OAuth token introspection was implemented.
+- Deployed Firestore rules/IAM proof against a real target project remains not run.
+- App/key memory grants at `users/{uid}/memory_control/v17_app_key_memory_grants` still require server-owned product/admin assignment separate from MCP key scopes.
+- Production rollout remains **BLOCKED / NO-GO** until all Oracle P0s and required real-service evidence are complete.
+
 ## Not-run / not-claimed caveats preserved
 
 - Oracle review has now run and is recorded here, but it blocks production rollout.

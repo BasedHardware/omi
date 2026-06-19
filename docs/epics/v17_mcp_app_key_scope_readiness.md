@@ -135,6 +135,68 @@ The REST dependency helper now exists as `get_mcp_v17_default_memory_read_contex
 - SSE `get_memories` default-list test only if that tool is promoted to V17 reads.
 - Write-scope tests for create/edit/delete only when V17 write convergence is designed; do not broaden writes through this default-read helper.
 
+## MCP API-key scope readiness runner / server-owned assignment contract
+
+Added `backend/scripts/v17_mcp_api_key_scope_readiness.py` as the production-safe readiness runner for Oracle P0-1/P0-6 MCP key scope migration planning.
+
+Default command:
+
+```bash
+python3 backend/scripts/v17_mcp_api_key_scope_readiness.py
+```
+
+Default behavior is `status=NOT_RUN`, `read_only=true`, `mutation_allowed=false`, and no Firestore reads or writes. It is suitable for checked-in readiness evidence only; it is **not** production proof.
+
+Inventory command, when a real backend runtime/project context is intentionally supplied:
+
+```bash
+python3 backend/scripts/v17_mcp_api_key_scope_readiness.py --execute
+```
+
+`--execute` inventories `mcp_api_keys/{key_id}` documents and reports:
+
+- total key count;
+- keys missing `app_id`;
+- keys missing `scopes`;
+- keys with malformed `scopes`;
+- keys with verified persisted `memories.read`;
+- keys with unknown scopes.
+
+The runner distinguishes missing scopes from verified `memories.read`. It does **not** infer scopes from advertised MCP tool metadata, OAuth security scheme advertisements, or client request fields; in operational review shorthand, do not infer scopes from advertised MCP tool metadata.
+
+Optional assignment command, only for a deterministic server-owned input file:
+
+```bash
+python3 backend/scripts/v17_mcp_api_key_scope_readiness.py \
+  --execute \
+  --allow-write \
+  --assignment-file /secure/admin/mcp-key-scope-assignments.json
+```
+
+The compact form is `python3 backend/scripts/v17_mcp_api_key_scope_readiness.py --execute --allow-write --assignment-file /secure/admin/mcp-key-scope-assignments.json`.
+
+Assignment file shape:
+
+```json
+{
+  "<existing-mcp-key-id>": {
+    "app_id": "mcp-api",
+    "scopes": ["memories.read"]
+  }
+}
+```
+
+Mutation contract:
+
+- writes are unreachable unless **both** `--execute` and `--allow-write` are supplied;
+- only existing key IDs are patched via `mcp_api_keys/{key_id}` update;
+- user IDs, key IDs, hashes, prefixes, and creation timestamps are preserved;
+- allowed server-owned scopes are limited to `memories.read`, `memories.write`, and `memories.archive.read`;
+- unknown scopes such as `tool.search_memories` are denied/skipped before writes;
+- assignment does not create app/key memory grants at `users/{uid}/memory_control/v17_app_key_memory_grants`; that remains a separate server-owned product/admin decision.
+
+This runner was not executed against production in this slice. It provides a safe inventory/plan and an explicit server-owned assignment contract only.
+
 ## Explicit non-claims
 
-This artifact now covers a readiness/context helper plus a backward-compatible persisted MCP API-key auth-context contract. It does **not** wire MCP REST/SSE V17 reads to app/key/scope enforcement, grant scopes to existing keys, create an admin/migration UI for MCP scopes, introspect OAuth tokens, run deployed Firestore/IAM proof, call Pinecone, approve production rollout, expose Archive by default, or claim benchmarks/telemetry/cloud evidence.
+This artifact now covers a readiness/context helper, a backward-compatible persisted MCP API-key auth-context contract, REST/SSE `search_memories` app/key/scope enforcement, and a safe-by-default MCP key scope readiness runner. It does **not** grant scopes to existing keys by default, create a general admin UI, implement OAuth token introspection (no OAuth introspection), run deployed Firestore/IAM proof, call Pinecone, approve production rollout, expose Archive by default, or claim benchmarks/telemetry/cloud evidence. It was not executed against production.
