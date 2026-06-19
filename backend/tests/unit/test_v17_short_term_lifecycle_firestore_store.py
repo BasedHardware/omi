@@ -1,11 +1,16 @@
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 import pytest
 
 from jobs.v17_short_term_lifecycle_worker import (
     FirestoreShortTermLifecycleTransitionStore,
     ShortTermLifecycleTransitionRecord,
+    fetch_short_term_memory_items_firestore,
+    run_short_term_lifecycle_firestore,
 )
+from models.memory_evidence import ArtifactPreservationState, MemoryEvidence, SourceState
+from models.v17_product_memory import MemoryItemStatus, MemoryTier, ProcessingState, V17MemoryItem
+from utils.memory.short_term_lifecycle import DEFAULT_SHORT_TERM_TTL_DAYS
 
 
 class _Snapshot:
@@ -24,6 +29,31 @@ class _DocumentRef:
 
     def get(self, transaction=None):
         return _Snapshot(self._db_client.docs.get(self.path))
+
+
+class _CollectionRef:
+    def __init__(self, db_client, path, filters=None):
+        self._db_client = db_client
+        self.path = path
+        self._filters = list(filters or [])
+
+    def where(self, field_path, op_string, value):
+        return _CollectionRef(self._db_client, self.path, [*self._filters, (field_path, op_string, value)])
+
+    def stream(self):
+        prefix = f'{self.path}/'
+        snapshots = []
+        for path, data in sorted(self._db_client.docs.items()):
+            if not path.startswith(prefix) or '/' in path[len(prefix) :]:
+                continue
+            if all(self._matches(data, field_path, op_string, value) for field_path, op_string, value in self._filters):
+                snapshots.append(_Snapshot(data))
+        return snapshots
+
+    def _matches(self, data, field_path, op_string, value):
+        if op_string != '==':
+            raise AssertionError(f'unexpected query operator {op_string}')
+        return data.get(field_path) == value
 
 
 class _Transaction:
@@ -64,6 +94,9 @@ class _FirestoreFake:
     def document(self, path):
         return _DocumentRef(self, path)
 
+    def collection(self, path):
+        return _CollectionRef(self, path)
+
 
 def _record(**overrides):
     data = {
@@ -92,6 +125,50 @@ def _record(**overrides):
     }
     data.update(overrides)
     return ShortTermLifecycleTransitionRecord(**data)
+
+
+def _evidence(source_id='conv1'):
+    return MemoryEvidence(
+        evidence_id=f'ev-{source_id}',
+        source_id=source_id,
+        source_type='conversation',
+        source_version='v1',
+        quote_refs=[{'text': 'User prefers concise lifecycle audits.'}],
+        content_hash='hash1',
+        source_state=SourceState.active,
+        artifact_preservation=ArtifactPreservationState.preserved,
+    )
+
+
+def _memory_item(memory_id: str, *, tier=MemoryTier.short_term, captured_at=None, **overrides) -> V17MemoryItem:
+    captured_at = captured_at or datetime(2026, 6, 18, 12, 0, tzinfo=timezone.utc)
+    data = {
+        'memory_id': memory_id,
+        'uid': 'u1',
+        'version': 1,
+        'tier': tier,
+        'status': MemoryItemStatus.active,
+        'processing_state': ProcessingState.pending if tier == MemoryTier.short_term else ProcessingState.processed,
+        'content': f'{memory_id} content',
+        'evidence': [_evidence(f'{memory_id}-source')],
+        'source_state': SourceState.active,
+        'sensitivity_labels': [],
+        'visibility': 'private',
+        'user_asserted': False,
+        'captured_at': captured_at,
+        'updated_at': captured_at,
+        'expires_at': (
+            captured_at + timedelta(days=DEFAULT_SHORT_TERM_TTL_DAYS) if tier == MemoryTier.short_term else None
+        ),
+        'ledger_commit_id': 'commit-1' if tier == MemoryTier.long_term else None,
+        'ledger_sequence': 1 if tier == MemoryTier.long_term else None,
+    }
+    data.update(overrides)
+    return V17MemoryItem(**data)
+
+
+def _stored_item(item: V17MemoryItem):
+    return item.model_dump(mode='json')
 
 
 def test_firestore_lifecycle_transition_store_creates_deterministic_idempotent_record():
@@ -140,3 +217,56 @@ def test_firestore_lifecycle_transition_store_rejects_same_key_different_fingerp
     assert len(db_client.docs) == 1
     [payload] = db_client.docs.values()
     assert payload['fingerprint'] == record.fingerprint
+
+
+def test_fetch_short_term_memory_items_firestore_queries_authoritative_short_term_items_only():
+    db_client = _FirestoreFake()
+    stale_short_term = _memory_item('stale-short-term', captured_at=datetime(2026, 5, 1, 12, 0, tzinfo=timezone.utc))
+    fresh_short_term = _memory_item('fresh-short-term')
+    archive = _memory_item('archive', tier=MemoryTier.archive)
+    long_term = _memory_item('long-term', tier=MemoryTier.long_term)
+    db_client.docs = {
+        f'users/u1/memory_items/{stale_short_term.memory_id}': _stored_item(stale_short_term),
+        f'users/u1/memory_items/{fresh_short_term.memory_id}': _stored_item(fresh_short_term),
+        f'users/u1/memory_items/{archive.memory_id}': _stored_item(archive),
+        f'users/u1/memory_items/{long_term.memory_id}': _stored_item(long_term),
+    }
+
+    items = fetch_short_term_memory_items_firestore(uid='u1', db_client=db_client)
+
+    assert [item.memory_id for item in items] == ['fresh-short-term', 'stale-short-term']
+    assert all(item.tier == MemoryTier.short_term for item in items)
+
+
+def test_concrete_firestore_lifecycle_runner_persists_only_required_short_term_transitions_idempotently():
+    db_client = _FirestoreFake()
+    now = datetime(2026, 6, 19, 12, 0, tzinfo=timezone.utc)
+    stale_short_term = _memory_item('stale-short-term', captured_at=now - timedelta(days=45))
+    fresh_short_term = _memory_item('fresh-short-term', captured_at=now - timedelta(days=1))
+    archive = _memory_item('archive', tier=MemoryTier.archive)
+    db_client.docs = {
+        f'users/u1/memory_items/{stale_short_term.memory_id}': _stored_item(stale_short_term),
+        f'users/u1/memory_items/{fresh_short_term.memory_id}': _stored_item(fresh_short_term),
+        f'users/u1/memory_items/{archive.memory_id}': _stored_item(archive),
+    }
+
+    first = run_short_term_lifecycle_firestore(uid='u1', db_client=db_client, now=now, run_id='runner-1')
+    second = run_short_term_lifecycle_firestore(uid='u1', db_client=db_client, now=now, run_id='runner-1')
+
+    transition_docs = {
+        path: payload
+        for path, payload in db_client.docs.items()
+        if path.startswith('users/u1/short_term_lifecycle_transitions/')
+    }
+    assert first.created_count == 1
+    assert first.existing_count == 0
+    assert first.skipped_memory_ids == ['fresh-short-term']
+    assert second.created_count == 0
+    assert second.existing_count == 1
+    assert second.skipped_memory_ids == ['fresh-short-term']
+    assert len(transition_docs) == 1
+    [payload] = transition_docs.values()
+    assert payload['memory_item_id'] == 'stale-short-term'
+    assert payload['outcome'] == 'remain_short_term'
+    assert payload['default_access_allowed'] is False
+    assert payload['archive_default_visible'] is False

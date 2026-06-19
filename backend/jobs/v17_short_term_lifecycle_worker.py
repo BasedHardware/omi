@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from typing import Dict, Iterable, List, Mapping, Optional, Protocol, Tuple
 
 from database.v17_collections import V17Collections
-from models.v17_product_memory import V17MemoryItem
+from models.v17_product_memory import MemoryTier, V17MemoryItem
 from utils.memory.short_term_lifecycle import (
     ShortTermDisposition,
     ShortTermLifecycleDecision,
@@ -172,6 +172,51 @@ def _coerce_dispositions(
     dispositions: Optional[Mapping[str, ShortTermDisposition | str]],
 ) -> Dict[str, ShortTermDisposition | str]:
     return dict(dispositions or {})
+
+
+def fetch_short_term_memory_items_firestore(*, uid: str, db_client) -> List[V17MemoryItem]:
+    """Fetch authoritative Short-term V17 memory_items for a user.
+
+    The lifecycle runner only evaluates `memory_items` in the Short-term tier;
+    Long-term and Archive are intentionally excluded at the Firestore query seam
+    so Archive cannot become default-visible through lifecycle scheduling.
+    """
+
+    if not uid or not uid.strip():
+        raise ValueError('short-term lifecycle firestore fetch uid must be non-empty')
+
+    collection = db_client.collection(V17Collections(uid=uid).memory_items)
+    snapshots = collection.where('tier', '==', MemoryTier.short_term.value).stream()
+    items: List[V17MemoryItem] = []
+    for snapshot in snapshots:
+        item = V17MemoryItem(**(snapshot.to_dict() or {}))
+        if item.uid != uid:
+            raise ValueError(f'short-term lifecycle firestore fetch uid mismatch for {item.memory_id}')
+        if item.tier == MemoryTier.short_term:
+            items.append(item)
+    return sorted(items, key=lambda item: item.memory_id)
+
+
+def run_short_term_lifecycle_firestore(
+    *,
+    uid: str,
+    db_client,
+    run_id: str,
+    now: Optional[datetime] = None,
+    dispositions: Optional[Mapping[str, ShortTermDisposition | str]] = None,
+) -> ShortTermLifecycleWorkerReport:
+    """Concrete Firestore lifecycle runner for authoritative Short-term items."""
+
+    current_time = _current_time(now)
+    items = fetch_short_term_memory_items_firestore(uid=uid, db_client=db_client)
+    store = FirestoreShortTermLifecycleTransitionStore(db_client=db_client, now=current_time)
+    return process_short_term_lifecycle_items(
+        items,
+        store=store,
+        now=current_time,
+        run_id=run_id,
+        dispositions=dispositions,
+    )
 
 
 def _source_refs(item: V17MemoryItem) -> List[Dict[str, Optional[str]]]:
