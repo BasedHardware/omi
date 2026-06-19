@@ -2,9 +2,8 @@
 # run-lint.sh — Run all pre-commit hooks manually (no git commit needed)
 #
 # Usage:
-#   ./scripts/lint/run-lint.sh                  # all files
-#   ./scripts/lint/run-lint.sh --files a.py b.py  # specific files
-#   ./scripts/lint/run-lint.sh --fix             # auto-fix where possible
+#   ./github/scripts/run-lint.sh                  # all files (check only)
+#   ./github/scripts/run-lint.sh --files a.py b.py # specific files
 #
 # Timing (warm cache, M2 MacBook):
 #   black:           ~0.3s    ruff lint+format: ~0.5s
@@ -12,34 +11,48 @@
 #   Total:           ~2.1s
 
 set -euo pipefail
-cd "$(dirname "$0")/../.."
+cd "$(dirname "$0")/.."
 
-ARGS=""
+MODE="check"  # "check" or "fix"
+FILES_ARG=""
+
 if [ "${1:-}" = "--fix" ]; then
-  ARGS="--fix"
+  MODE="fix"
   shift
 fi
 
 if [ "${1:-}" = "--files" ]; then
   shift
+  FILES_ARG="$*"
+fi
+
+if [ -n "$FILES_ARG" ]; then
   # Run on specific files
-  FILES="$*"
-  echo "🔍 Running lints on specified files..."
+  echo "🔍 Running lints on specified files ($MODE)..."
   if command -v pre-commit &>/dev/null; then
-    pre-commit run $ARGS --files $FILES
+    if [ "$MODE" = "fix" ]; then
+      pre-commit run --files $FILES_ARG
+    else
+      pre-commit run --files $FILES_ARG
+    fi
   else
     echo "⚠️  pre-commit not installed, running tools directly"
-    for f in $FILES; do
+    for f in $FILES_ARG; do
       [ "${f##*.}" != "py" ] && continue
-      echo "  black $f" && black --line-length=120 --skip-string-normalization ${ARGS:+--check} "$f" || true
-      echo "  ruff $f" && ruff check ${ARGS:+--fix} --target-version py39 "$f" || true
+      if [ "$MODE" = "fix" ]; then
+        echo "  black (fix) $f" && black --line-length=120 --skip-string-normalization "$f" || true
+        echo "  ruff (fix) $f" && ruff check --fix --target-version py39 "$f" || true
+      else
+        echo "  black (check) $f" && black --check --line-length=120 --skip-string-normalization "$f" || true
+        echo "  ruff (check) $f" && ruff check --target-version py39 "$f" || true
+      fi
     done
   fi
 else
   # Run on all files
-  echo "🔍 Running lints on all files..."
+  echo "🔍 Running lints on all files ($MODE)..."
   if command -v pre-commit &>/dev/null; then
-    pre-commit run --all-files $ARGS
+    pre-commit run --all-files
   else
     echo "⚠️  pre-commit not installed. Install with:"
     echo "   pip install pre-commit && pre-commit install"
