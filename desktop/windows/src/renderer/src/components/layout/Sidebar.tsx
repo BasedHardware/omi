@@ -7,6 +7,7 @@ import {
   LayoutGrid,
   History,
   Brain,
+  Lightbulb,
   Monitor,
   Mic,
   PanelLeftClose,
@@ -26,6 +27,7 @@ const navItems = [
   { label: 'Memories', to: '/memories', Icon: Brain },
   { label: 'Tasks', to: '/tasks', Icon: ListChecks },
   { label: 'Rewind', to: '/rewind', Icon: History },
+  { label: 'Insights', to: '/insights', Icon: Lightbulb },
   { label: 'Apps', to: '/apps', Icon: LayoutGrid },
   { label: 'Settings', to: '/settings', Icon: Settings }
 ]
