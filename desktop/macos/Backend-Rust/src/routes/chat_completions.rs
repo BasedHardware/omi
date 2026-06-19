@@ -237,20 +237,10 @@ fn translate_request(
         model: upstream_model.to_string(),
         max_tokens,
         messages: anthropic_messages,
-        system: system_prompt.and_then(|text| {
-            let text = text.trim().to_string();
-            if text.is_empty() {
-                None
-            } else {
-                Some(vec![AnthropicSystemContentBlock {
-                    block_type: AnthropicContentBlockType::Text,
-                    text,
-                    cache_control: AnthropicCacheControl {
-                        cache_type: AnthropicCacheControlType::Ephemeral,
-                    },
-                }])
-            }
-        }),
+        // Use the system block produced by cached_system_block() above
+        // (line 226) which already handles sentinel splitting for cache
+        // stability — do NOT re-create here or we lose the split.
+        system,
         temperature: req.temperature,
         stream: req.stream,
         tools: if is_tool_choice_none { None } else { anthropic_tools },

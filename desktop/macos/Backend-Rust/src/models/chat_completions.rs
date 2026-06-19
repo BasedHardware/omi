@@ -173,9 +173,11 @@ pub struct AnthropicRequest {
     pub model: String,
     pub max_tokens: u64,
     pub messages: Vec<AnthropicMessage>,
-    // String or array-of-content-blocks. We emit the block form with a
-    // cache_control breakpoint to cache the static tools+system prefix.
+    /// System prompt as array-of-content-blocks with optional cache_control.
+    /// Produced by `cached_system_block()` which handles sentinel splitting
+    /// so volatile live context (dates, times) is excluded from the cached prefix.
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub system: Option<serde_json::Value>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub temperature: Option<f64>,
     pub stream: bool,
