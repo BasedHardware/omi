@@ -1031,6 +1031,17 @@ Continued Oracle P0-8 with `backend/scripts/v17_t20_repair_projection_consistenc
 
 Verification recorded in `docs/epics/v17_memory_implementation_tickets.md`: RED matrix tests failed on missing runner/docs (`4 failed`); final GREEN/static/readiness/regression/async passed. This slice does **not** execute Pinecone/Firestore/cloud calls, mutate shared `ns2` or Firestore, collect benchmarks, wire central telemetry, claim T20 completion, or approve cutover. Production rollout remains **BLOCKED / NO-GO**.
 
+### 2026-06-19 — Oracle P0-8 T21 `/v3` compatibility and cursor pagination readiness/proof matrix
+
+Continued Oracle P0-8 with `backend/scripts/v17_t21_v3_compatibility_cursor_readiness.py`, a safe T21 `/v3` compatibility and cursor pagination readiness/proof matrix. It addresses the P0-8/T21 subpoint for legacy/V17 reader compatibility, cursor pagination readiness, caller response-shape compatibility, and regression evidence inventory only:
+
+- Default and `--execute` CLI modes emit `status=BLOCKED`, `read_only=true`, `mutation_allowed=false`, `network_or_provider_calls_executed=false`, `provider_calls_executed=false`, `benchmark_evidence_collected=false`, `approval_claimed=false`, and `production_rollout_approved=false`.
+- The proof matrix remains `NOT_RUN` with empty evidence arrays for `/v3` endpoint compatibility, stable cursor pagination, category filters, stable ordering, disabled/malformed/no-grant behavior, enabled-but-empty behavior, deleted/non-active records, Archive default-unavailable, external response shape compatibility, developer category filtering, MCP REST/SSE shape consistency, and product/developer/MCP/chat caller regression evidence.
+- The artifact explicitly references existing local route/adapter/test surfaces: `backend/routers/memories.py GET /v3/memories`, `backend/database/memories.py get_memories`, `backend/utils/memory/v17_product_memory_read_service.py`, `backend/utils/memory/v17_developer_memory_adapter.py`, `backend/utils/memory/v17_mcp_memory_adapter.py`, `backend/utils/memory/v17_chat_memory_adapter.py`, `backend/routers/mcp.py`, `backend/routers/mcp_sse.py`, `backend/routers/developer.py`, and existing V17 read/caller tests.
+- The production cutover checklist now points the T21 gate at this matrix and requires proof of `/v3` endpoint compatibility, stable cursor pagination, category filters, stable ordering, disabled/malformed/no-grant behavior, enabled-but-empty behavior, deleted/non-active record exclusion, Archive default-unavailable, external response shape compatibility, developer category filtering, MCP REST/SSE shape consistency, and product/developer/MCP/chat caller regression coverage.
+
+Verification recorded in `docs/epics/v17_memory_implementation_tickets.md`: RED matrix tests failed on missing runner/docs/cutover links (`4 failed`); final GREEN/static/readiness/regression/async passed. This slice does **not** execute production traffic, Pinecone/Firestore/cloud calls, mutate shared `ns2` or Firestore, collect benchmarks, wire central telemetry, claim T21 completion, or approve cutover. Production rollout remains **BLOCKED / NO-GO**.
+
 ## Not-run / not-claimed caveats preserved
 
 - Oracle review has now run and is recorded here, but it blocks production rollout.
