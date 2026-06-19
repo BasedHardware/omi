@@ -926,6 +926,26 @@ This closes only the local shared-`ns2` legacy-filter/readiness subpoint. Remain
 - If metadata filtering is unsafe in real Pinecone, a separate namespace decision remains open.
 - Production rollout remains **BLOCKED / NO-GO** until all Oracle P0s and required real-service evidence are complete.
 
+### 2026-06-19 — P0-7 bounded vector overfetch/refill/candidate-budget hardening
+
+Started Oracle P0-7 with a narrow local algorithmic hardening slice for V17 default vector search, without changing the production rollout verdict:
+
+- `fetch_default_v17_vector_memory_search(...)` now uses configurable, fake-injectable bounded overfetch/refill parameters: `overfetch_factor` defaults to 3 and is capped at 10; `max_candidates` defaults to 50 and is hard capped at `MAX_V17_VECTOR_SEARCH_LIMIT=100`.
+- The first vector query requests more candidates than the return `limit`; if early candidates are removed by freshness/hydration/access checks and the vector source returned a full candidate window, the service refills by increasing the request limit up to the candidate budget. Returned items remain clipped to caller `limit`.
+- Hydration no longer scans the full `users/{uid}/memory_items` collection for vector search. The service hydrates only vector candidate IDs through `users/{uid}/memory_items/{memory_id}` document gets, caching already-read/missing candidate IDs across refill attempts.
+- Response observability now includes low-cardinality counts for overfetch factor, candidate budget/request limit, vector query count, queried candidates, hydrated candidates, hydration rejects by missing/stale/access-denied class, returned count, and budget exhaustion. It does not log candidate IDs.
+- Mandatory P0-4 fences are preserved: missing required projection commit/account generation still fails before vector query/hydration; hit-level uid/account-generation/item-revision/source/content/projection checks still reject during hydration; Archive remains default-unavailable.
+- Product route, Omi chat, MCP, and developer vector caller tests were updated to expect default overfetch and candidate-ID hydration.
+
+Verification recorded in `docs/epics/v17_memory_implementation_tickets.md`: RED vector-service tests failed on the missing `overfetch_factor` parameter (`2 failed, 9 passed`); GREEN vector-service tests passed (`11 passed`); focused product/chat/MCP/developer vector caller regression passed (`60 passed`); full V17 regression passed (`306 passed, 3 warnings`); async scan remained pre-existing findings only.
+
+This closes only the first bounded local P0-7 overfetch/refill/candidate-budget seam. Remaining P0-7/P0 work:
+
+- This refill implementation re-queries larger top-K windows through the existing fake/Pinecone seam; real provider pagination/refill behavior, latency, and recall were not proven.
+- Explicit vector-search timeouts, rate limits, central monotonic telemetry/alerts, and high-volume load tests remain incomplete.
+- Real Pinecone/Firestore benchmarks with malformed metadata, cross-user hits, expired Short-term, Archive, deleted/tombstoned sources, duplicate revisions, partial outages, and high-volume accounts remain required.
+- Production rollout remains **BLOCKED / NO-GO** until all Oracle P0s and required real-service evidence are complete.
+
 ## Not-run / not-claimed caveats preserved
 
 - Oracle review has now run and is recorded here, but it blocks production rollout.

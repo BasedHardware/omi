@@ -585,9 +585,16 @@ def test_vector_search_endpoint_uses_persisted_default_policy_and_excludes_stale
         query='coffee', limit=10, uid='u1', vector_query=fake_vector_query
     )
 
-    assert db_client.document_paths == [_global_read_gate_path(), 'users/u1/memory_control/state']
-    assert db_client.collection_paths == ['users/u1/memory_items']
-    assert vector_calls == [{'uid': 'u1', 'query': 'coffee', 'mode': SearchMode.default, 'limit': 10}]
+    assert db_client.document_paths == [
+        _global_read_gate_path(),
+        'users/u1/memory_control/state',
+        'users/u1/memory_items/stale-short-term',
+        'users/u1/memory_items/archive',
+        'users/u1/memory_items/long-term',
+        'users/u1/memory_items/fresh-short-term',
+    ]
+    assert db_client.collection_paths == []
+    assert vector_calls == [{'uid': 'u1', 'query': 'coffee', 'mode': SearchMode.default, 'limit': 30}]
     assert [item['memory_id'] for item in response['items']] == ['long-term', 'fresh-short-term']
     assert response['scores_by_memory_id'] == {'long-term': 0.9, 'fresh-short-term': 0.8}
     assert response['decisions']['stale-short-term'] == 'access_denied'

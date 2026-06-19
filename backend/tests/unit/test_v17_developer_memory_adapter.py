@@ -578,8 +578,8 @@ def test_developer_vector_adapter_uses_hydrated_vector_service_and_preserves_ran
     assert result.read_decision == V17ReadDecision.USE_V17
     assert result.fallback_reason is None
     results = result.memories
-    assert vector_calls == [{'uid': 'u1', 'query': 'coffee', 'mode': SearchMode.default, 'limit': 10}]
-    assert db_client.collection_paths == ['users/u1/memory_items']
+    assert vector_calls == [{'uid': 'u1', 'query': 'coffee', 'mode': SearchMode.default, 'limit': 30}]
+    assert db_client.collection_paths == []
     assert [item['id'] for item in results] == ['long-term', 'fresh-short-term']
     assert [item['relevance_score'] for item in results] == [0.92, 0.8]
     assert all(item['v17_default_memory'] is True for item in results)

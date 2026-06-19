@@ -17,6 +17,10 @@ class _Snapshot:
     def to_dict(self):
         return dict(self._data or {})
 
+    @property
+    def exists(self):
+        return self._data is not None
+
 
 class _CollectionRef:
     def __init__(self, db_client, path):
@@ -57,6 +61,9 @@ class _DocumentRef:
     def set(self, data):
         self._db_client.set_paths.append(self.path)
         self._db_client.docs[self.path] = dict(data)
+
+    def get(self):
+        return _Snapshot(self._db_client.docs.get(self.path))
 
 
 class _VectorCandidateResult:
@@ -169,8 +176,14 @@ def test_default_v17_vector_search_hydrates_authoritative_items_and_filters_stal
         required_account_generation=0,
     )
 
-    assert vector_calls == [{'uid': 'u1', 'query': 'coffee', 'mode': SearchMode.default, 'limit': 10}]
-    assert db_client.collection_paths == ['users/u1/memory_items']
+    assert vector_calls == [{'uid': 'u1', 'query': 'coffee', 'mode': SearchMode.default, 'limit': 30}]
+    assert db_client.collection_paths == []
+    assert set(db_client.document_paths) == {
+        'users/u1/memory_items/stale-short-term',
+        'users/u1/memory_items/archive',
+        'users/u1/memory_items/long-term',
+        'users/u1/memory_items/fresh-short-term',
+    }
     assert [item['memory_id'] for item in response['items']] == ['long-term', 'fresh-short-term']
     assert response['scores_by_memory_id'] == {'long-term': 0.9, 'fresh-short-term': 0.8}
     assert response['decisions']['stale-short-term'] == 'access_denied'
@@ -490,3 +503,124 @@ def test_default_v17_vector_search_preserves_vector_ranking_after_authoritative_
     )
 
     assert [item['memory_id'] for item in response['items']] == ['older-higher-score', 'newer-lower-score']
+
+
+def test_default_v17_vector_search_overfetches_and_refills_when_early_candidates_are_rejected():
+    now = datetime.now(timezone.utc)
+    stale_short_term = _memory_item(
+        'stale-short-term',
+        now=now,
+        captured_at=now - timedelta(days=45),
+        content='coffee stale short term',
+    )
+    archive = _memory_item('archive', tier=MemoryTier.archive, now=now, content='coffee archived memory')
+    missing_authoritative = _memory_item('missing-authoritative', tier=MemoryTier.long_term, now=now)
+    valid_one = _memory_item('valid-one', tier=MemoryTier.long_term, now=now, content='coffee valid one')
+    valid_two = _memory_item('valid-two', tier=MemoryTier.long_term, now=now, content='coffee valid two')
+    valid_three = _memory_item('valid-three', tier=MemoryTier.long_term, now=now, content='coffee valid three')
+    ranked_hits = [
+        _hit(stale_short_term, score=0.99, vector_id='v17mem:stale-short-term'),
+        _hit(archive, score=0.98, vector_id='v17mem:archive'),
+        _hit(missing_authoritative, score=0.97, vector_id='v17mem:missing-authoritative'),
+        _hit(valid_one, score=0.96, vector_id='v17mem:valid-one'),
+        _hit(valid_two, score=0.95, vector_id='v17mem:valid-two'),
+        _hit(valid_three, score=0.94, vector_id='v17mem:valid-three'),
+    ]
+    db_client = _FirestoreFake(
+        {
+            f'users/u1/memory_items/{item.memory_id}': _stored_item(item)
+            for item in [stale_short_term, archive, valid_one, valid_two, valid_three]
+        }
+    )
+    vector_limits = []
+
+    def fake_vector_query(uid, query, *, mode, limit):
+        vector_limits.append(limit)
+        return _VectorCandidateResult(hits=ranked_hits[:limit], rejected_count=0)
+
+    response = fetch_default_v17_vector_memory_search(
+        uid='u1',
+        query='coffee',
+        db_client=db_client,
+        policy=MemoryAccessPolicy.for_omi_chat(),
+        vector_query=fake_vector_query,
+        limit=3,
+        overfetch_factor=1,
+        max_candidates=6,
+        required_projection_commit_id='projection-1',
+        required_account_generation=0,
+    )
+
+    assert vector_limits == [3, 6]
+    assert [item['memory_id'] for item in response['items']] == ['valid-one', 'valid-two', 'valid-three']
+    assert response['limit'] == 3
+    assert response['candidate_request_limit'] == 6
+    assert response['candidate_budget'] == 6
+    assert response['vector_query_count'] == 2
+    assert response['queried_candidate_count'] == 6
+    assert response['hydrated_candidate_count'] == 5
+    assert response['hydration_rejected_missing_count'] == 1
+    assert response['hydration_rejected_access_denied_count'] == 2
+    assert response['returned_count'] == 3
+    assert set(db_client.document_paths) == {
+        'users/u1/memory_items/stale-short-term',
+        'users/u1/memory_items/archive',
+        'users/u1/memory_items/missing-authoritative',
+        'users/u1/memory_items/valid-one',
+        'users/u1/memory_items/valid-two',
+        'users/u1/memory_items/valid-three',
+    }
+    assert db_client.collection_paths == []
+
+
+def test_default_v17_vector_search_stops_at_candidate_budget_without_unbounded_refill_or_reads():
+    now = datetime.now(timezone.utc)
+    stale_short_term = _memory_item(
+        'stale-short-term',
+        now=now,
+        captured_at=now - timedelta(days=45),
+        content='coffee stale short term',
+    )
+    archive = _memory_item('archive', tier=MemoryTier.archive, now=now, content='coffee archived memory')
+    valid_one = _memory_item('valid-one', tier=MemoryTier.long_term, now=now, content='coffee valid one')
+    valid_two = _memory_item('valid-two', tier=MemoryTier.long_term, now=now, content='coffee valid two')
+    ranked_hits = [
+        _hit(stale_short_term, score=0.99, vector_id='v17mem:stale-short-term'),
+        _hit(archive, score=0.98, vector_id='v17mem:archive'),
+        _hit(valid_one, score=0.97, vector_id='v17mem:valid-one'),
+        _hit(valid_two, score=0.96, vector_id='v17mem:valid-two'),
+    ]
+    db_client = _FirestoreFake(
+        {
+            f'users/u1/memory_items/{item.memory_id}': _stored_item(item)
+            for item in [stale_short_term, archive, valid_one, valid_two]
+        }
+    )
+    vector_limits = []
+
+    def fake_vector_query(uid, query, *, mode, limit):
+        vector_limits.append(limit)
+        return _VectorCandidateResult(hits=ranked_hits[:limit], rejected_count=0)
+
+    response = fetch_default_v17_vector_memory_search(
+        uid='u1',
+        query='coffee',
+        db_client=db_client,
+        policy=MemoryAccessPolicy.for_omi_chat(),
+        vector_query=fake_vector_query,
+        limit=3,
+        overfetch_factor=1,
+        max_candidates=4,
+        required_projection_commit_id='projection-1',
+        required_account_generation=0,
+    )
+
+    assert vector_limits == [3, 4]
+    assert [item['memory_id'] for item in response['items']] == ['valid-one', 'valid-two']
+    assert response['returned_count'] == 2
+    assert response['candidate_budget_exhausted'] is True
+    assert response['candidate_budget'] == 4
+    assert response['candidate_request_limit'] == 4
+    assert response['queried_candidate_count'] == 4
+    assert len(db_client.document_paths) == 4
+    assert db_client.collection_paths == []

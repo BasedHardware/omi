@@ -312,9 +312,14 @@ def test_chat_vector_adapter_uses_hydrated_vector_search_and_preserves_ranking_w
         required_projection_commit_id='projection-1',
     )
 
-    assert vector_calls == [{'uid': 'u1', 'query': 'coffee', 'mode': SearchMode.default, 'limit': 10}]
-    assert db_client.document_get_paths == ['users/u1/memory_control/state']
-    assert db_client.collection_paths == ['users/u1/memory_items']
+    assert vector_calls == [{'uid': 'u1', 'query': 'coffee', 'mode': SearchMode.default, 'limit': 30}]
+    assert db_client.document_get_paths == [
+        'users/u1/memory_control/state',
+        'users/u1/memory_items/stale-short-term',
+        'users/u1/memory_items/archive',
+        'users/u1/memory_items/long-term',
+        'users/u1/memory_items/fresh-short-term',
+    ]
     assert result is not None
     assert result.startswith("Found 2 V17 vector memories matching 'coffee':")
     assert result.index('coffee long term') < result.index('coffee fresh short term')
@@ -388,8 +393,8 @@ def test_chat_vector_decision_adapter_classifies_enabled_denied_and_legacy_safe_
     assert enabled.read_decision == V17ReadDecision.USE_V17
     assert enabled.should_use_legacy_fallback is False
     assert enabled.text is not None and "Found 1 V17 vector memories matching 'coffee':" in enabled.text
-    assert vector_calls == [{'uid': 'u1', 'query': 'coffee', 'mode': SearchMode.default, 'limit': 10}]
-    assert enabled_db.collection_paths == ['users/u1/memory_items']
+    assert vector_calls == [{'uid': 'u1', 'query': 'coffee', 'mode': SearchMode.default, 'limit': 30}]
+    assert enabled_db.collection_paths == []
 
     denied_db = _FirestoreFake(disabled_docs)
     denied = search_v17_default_chat_memories_vector_decision_text(
@@ -399,7 +404,7 @@ def test_chat_vector_decision_adapter_classifies_enabled_denied_and_legacy_safe_
     assert denied.should_use_legacy_fallback is False
     assert denied.fallback_reason == 'v17_reads_disabled'
     assert denied.text == "No memories available for this request."
-    assert vector_calls == [{'uid': 'u1', 'query': 'coffee', 'mode': SearchMode.default, 'limit': 10}]
+    assert vector_calls == [{'uid': 'u1', 'query': 'coffee', 'mode': SearchMode.default, 'limit': 30}]
     assert denied_db.collection_paths == []
 
     legacy_safe_db = _FirestoreFake(disabled_docs)
@@ -414,5 +419,5 @@ def test_chat_vector_decision_adapter_classifies_enabled_denied_and_legacy_safe_
     assert legacy_safe.read_decision == V17ReadDecision.USE_LEGACY_SAFE
     assert legacy_safe.should_use_legacy_fallback is True
     assert legacy_safe.text is None
-    assert vector_calls == [{'uid': 'u1', 'query': 'coffee', 'mode': SearchMode.default, 'limit': 10}]
+    assert vector_calls == [{'uid': 'u1', 'query': 'coffee', 'mode': SearchMode.default, 'limit': 30}]
     assert legacy_safe_db.collection_paths == []
