@@ -41,6 +41,7 @@ from utils.memory.v17_product_authorization import (
 from utils.mcp_data import clean_action_item, clean_chat_message, clean_person, clean_screen_activity_row
 from utils.mcp_memories import (
     collect_filtered_memories,
+    list_v17_default_mcp_memories,
     parse_mcp_bool,
     parse_mcp_datetime,
     parse_mcp_int,
@@ -292,6 +293,20 @@ def get_memories(
             category_list = [MemoryCategory(c.strip()) for c in categories.split(",") if c.strip()]
         except ValueError as e:
             raise HTTPException(status_code=400, detail=f"Invalid category {str(e)}")
+
+    v17_rollout = read_v17_mcp_default_memory_rollout(uid=uid, db_client=db)
+    v17_list_results = list_v17_default_mcp_memories(
+        uid=uid,
+        limit=limit,
+        offset=offset,
+        db_client=db,
+        rollout_decision=v17_rollout,
+    )
+    if v17_list_results.read_decision == V17ReadDecision.USE_V17:
+        return v17_list_results.memories
+    if v17_list_results.read_decision != V17ReadDecision.USE_LEGACY_SAFE:
+        return []
+
     result = collect_filtered_memories(
         lambda batch_offset, batch_limit: memories_db.get_memories(
             uid, batch_limit, batch_offset, [c.value for c in category_list], sort=sort

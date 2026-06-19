@@ -12,7 +12,9 @@ from utils.memory.v17_default_read_rollout import (
     legacy_safe_v17_default_read_rollout_decision,
 )
 from utils.mcp_memories import (
+    V17McpMemoryListResult,
     V17McpMemorySearchResult,
+    list_v17_default_mcp_memories,
     read_v17_mcp_default_memory_rollout,
     search_v17_default_mcp_memories,
     search_v17_default_mcp_memories_vector,
@@ -115,6 +117,22 @@ def test_mcp_rest_search_route_only_reaches_legacy_after_explicit_legacy_safe_de
     )
 
 
+def test_mcp_rest_get_route_only_reaches_legacy_after_explicit_legacy_safe_decision():
+    mcp_py = Path(__file__).resolve().parents[2] / 'routers' / 'mcp.py'
+    contents = mcp_py.read_text(encoding='utf-8')
+    get_route = contents[contents.index('@router.get("/v1/mcp/memories"') : contents.index('class SimpleStructured')]
+
+    assert 'list_v17_default_mcp_memories(' in get_route
+    assert 'if v17_list_results.read_decision == V17ReadDecision.USE_V17:' in get_route
+    assert 'if v17_list_results.read_decision != V17ReadDecision.USE_LEGACY_SAFE:' in get_route
+    assert get_route.index('read_v17_mcp_default_memory_rollout(uid=uid, db_client=db)') < get_route.index(
+        'list_v17_default_mcp_memories('
+    )
+    assert get_route.index('if v17_list_results.read_decision != V17ReadDecision.USE_LEGACY_SAFE:') < get_route.index(
+        'memories_db.get_memories('
+    )
+
+
 def test_mcp_sse_search_tool_only_reaches_legacy_after_explicit_legacy_safe_decision():
     mcp_sse_py = Path(__file__).resolve().parents[2] / 'routers' / 'mcp_sse.py'
     contents = mcp_sse_py.read_text(encoding='utf-8')
@@ -125,6 +143,24 @@ def test_mcp_sse_search_tool_only_reaches_legacy_after_explicit_legacy_safe_deci
     assert 'if v17_vector_results.read_decision != V17ReadDecision.USE_LEGACY_SAFE:' in contents
     assert contents.index('if v17_vector_results.read_decision != V17ReadDecision.USE_LEGACY_SAFE:') < contents.index(
         'vector_db.find_similar_memories(user_id, query, threshold=0.0, limit=fetch_limit)'
+    )
+
+
+def test_mcp_sse_get_tool_only_reaches_legacy_after_explicit_legacy_safe_decision():
+    mcp_sse_py = Path(__file__).resolve().parents[2] / 'routers' / 'mcp_sse.py'
+    contents = mcp_sse_py.read_text(encoding='utf-8')
+    get_tool = contents[
+        contents.index('elif tool_name == "get_memories":') : contents.index('elif tool_name == "create_memory":')
+    ]
+
+    assert 'list_v17_default_mcp_memories(' in get_tool
+    assert 'if v17_list_results.read_decision == V17ReadDecision.USE_V17:' in get_tool
+    assert 'if v17_list_results.read_decision != V17ReadDecision.USE_LEGACY_SAFE:' in get_tool
+    assert get_tool.index('read_v17_mcp_default_memory_rollout(uid=user_id, db_client=db)') < get_tool.index(
+        'list_v17_default_mcp_memories('
+    )
+    assert get_tool.index('if v17_list_results.read_decision != V17ReadDecision.USE_LEGACY_SAFE:') < get_tool.index(
+        'memories_db.get_memories('
     )
 
 
@@ -676,3 +712,119 @@ def test_mcp_vector_adapter_preserves_only_explicit_legacy_safe_classification()
     assert result.should_use_legacy_fallback is True
     assert vector_calls == []
     assert db_client.collection_paths == []
+
+
+def test_mcp_list_adapter_uses_same_rollout_decisions_as_search_and_preserves_default_visibility():
+    now = datetime(2026, 6, 19, 12, 0, tzinfo=timezone.utc)
+    fresh_short_term = _memory_item('fresh-short-term', now=now, content='coffee fresh short term')
+    stale_short_term = _memory_item(
+        'stale-short-term', now=now, captured_at=now - timedelta(days=45), content='coffee stale short term'
+    )
+    long_term = _memory_item('long-term', tier=MemoryTier.long_term, now=now, content='coffee long term')
+    archive = _memory_item('archive', tier=MemoryTier.archive, now=now, content='coffee archive memory')
+    db_client = _FirestoreFake(
+        {
+            f'users/u1/memory_items/{item.memory_id}': _stored_item(item)
+            for item in [archive, stale_short_term, fresh_short_term, long_term]
+        }
+    )
+    rollout = read_v17_mcp_default_memory_rollout(
+        uid='u1', db_client=_FirestoreFake({'users/u1/memory_control/state': _enabled_rollout_doc()})
+    )
+
+    result = list_v17_default_mcp_memories(
+        uid='u1',
+        limit=10,
+        offset=0,
+        db_client=db_client,
+        rollout_decision=rollout,
+        now=now,
+    )
+
+    assert isinstance(result, V17McpMemoryListResult)
+    assert result.read_decision == V17ReadDecision.USE_V17
+    assert db_client.collection_paths == ['users/u1/memory_items']
+    assert [item['id'] for item in result.memories] == ['fresh-short-term', 'long-term']
+    assert all(item['category'] == 'other' for item in result.memories)
+    assert all(item['v17_default_memory'] is True for item in result.memories)
+    assert all(item['archive_default_visible'] is False for item in result.memories)
+    assert all(item['policy']['consumer'] == 'mcp' for item in result.memories)
+    assert all(item['policy']['archive_capability'] is False for item in result.memories)
+
+
+def test_mcp_list_adapter_denies_malformed_missing_or_no_grant_before_memory_reads_and_marks_legacy_safe_only_explicitly():
+    db_client = _FirestoreFake({'users/u1/memory_items/fresh': _stored_item(_memory_item('fresh'))})
+
+    missing = list_v17_default_mcp_memories(
+        uid='u1',
+        limit=10,
+        offset=0,
+        db_client=db_client,
+        rollout_decision=read_v17_mcp_default_memory_rollout(uid='u1', db_client=_FirestoreFake()),
+    )
+    malformed = list_v17_default_mcp_memories(
+        uid='u1',
+        limit=10,
+        offset=0,
+        db_client=db_client,
+        rollout_decision=read_v17_mcp_default_memory_rollout(
+            uid='u1',
+            db_client=_FirestoreFake(
+                {
+                    'users/u1/memory_control/state': {
+                        'schema_version': 1,
+                        'uid': 'u1',
+                        'mode': 'read',
+                        'stage_gates': 'bad',
+                    }
+                }
+            ),
+        ),
+    )
+    no_grant = list_v17_default_mcp_memories(
+        uid='u1',
+        limit=10,
+        offset=0,
+        db_client=db_client,
+        rollout_decision=read_v17_mcp_default_memory_rollout(
+            uid='u1',
+            db_client=_FirestoreFake(
+                {'users/u1/memory_control/state': _enabled_rollout_doc() | {'grants': {'mcp': {}}}}
+            ),
+        ),
+    )
+    legacy_safe = list_v17_default_mcp_memories(
+        uid='u1',
+        limit=10,
+        offset=0,
+        db_client=db_client,
+        rollout_decision=legacy_safe_v17_default_read_rollout_decision(
+            uid='u1', source_path='compatibility/mcp', consumer='mcp', reason='legacy_mcp_compatibility'
+        ),
+    )
+
+    assert missing.read_decision == V17ReadDecision.DENY_MEMORY
+    assert malformed.read_decision == V17ReadDecision.DENY_MEMORY
+    assert no_grant.read_decision == V17ReadDecision.DENY_MEMORY
+    assert legacy_safe.read_decision == V17ReadDecision.USE_LEGACY_SAFE
+    assert legacy_safe.should_use_legacy_fallback is True
+    assert missing.memories == malformed.memories == no_grant.memories == legacy_safe.memories == []
+    assert db_client.collection_paths == []
+
+
+def test_mcp_list_adapter_enabled_empty_returns_empty_v17_result_without_legacy_fallback():
+    rollout = read_v17_mcp_default_memory_rollout(
+        uid='u1', db_client=_FirestoreFake({'users/u1/memory_control/state': _enabled_rollout_doc()})
+    )
+
+    result = list_v17_default_mcp_memories(
+        uid='u1',
+        limit=10,
+        offset=0,
+        db_client=_FirestoreFake(),
+        rollout_decision=rollout,
+    )
+
+    assert result.read_decision == V17ReadDecision.USE_V17
+    assert result.memories == []
+    assert result.should_use_legacy_fallback is False
