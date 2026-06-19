@@ -98,9 +98,10 @@ if [ -n "$STAGED_DESKTOP_RUST_FILES" ]; then
     echo "cargo is not installed. Please install Rust/Cargo first" >&2
     exit 1
   fi
+  echo "$STAGED_DESKTOP_RUST_FILES" | xargs rustfmt
+  echo "$STAGED_DESKTOP_RUST_FILES" | xargs git add
   (
     cd desktop/macos/Backend-Rust && \
-      cargo fmt --check && \
       cargo check --locked
   )
 fi
