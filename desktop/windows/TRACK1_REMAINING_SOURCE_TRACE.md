@@ -78,14 +78,15 @@ Already resolved in Batch 7:
 
 ---
 
-## 6. Settings — Support / Devices / Assistants Tabs
+## 6. Settings — Devices Tab (BLE)
 
 | Field | Value |
 |-------|-------|
-| macOS source | `SettingsSidebar.swift` has `.about`, device section, Crispo support widget |
-| Windows source | None |
-| Exact blocker | Windows has no Bluetooth device pairing, no Crisp.chat, no proactive assistant config |
-| **Classification** | **DO_NOT_DO_NOW** |
+| macOS source | `DeviceType.swift` — device types, battery, manufacturer info; iOS `OmiBleManager.swift` (CBUUID `2A19` = battery level); Android `OmiBleManager.kt` (`00002a19-...`) |
+| Windows source | `DevicesTab.tsx` — **IMPLEMENTED (Web Bluetooth connect + battery)** |
+| **What was added** | (1) Full connect flow: `requestDevice({ acceptAllDevices:true, optionalServices:['battery_service','device_information'] })` → `gatt.connect()` → phase machine: scanning→connecting→reading→connected. (2) Battery Service (`0x180F/0x2A19`): `getUint8(0)` → show percentage; -1 sentinel if service absent. (3) Device Information Service (`0x180A`): read `manufacturer_name_string` + `model_number_string` via `TextDecoder`. (4) Disconnect button + `gattserverdisconnected` event → disconnected phase. (5) Persist last device name/id to localStorage `omi.ble.lastDevice.v1`. (6) Local Web Bluetooth type stubs (dom lib doesn't include these). |
+| **Not implemented** | Full Omi firmware pairing, OTA updates, live audio streaming. Omi-specific GATT service UUIDs are not documented in the repo. |
+| **Classification** | **DONE** (BLE connect + standard battery/device-info GATT read) |
 
 ---
 
@@ -198,7 +199,7 @@ Already resolved in Batch 7:
 | Windows source | `SupportTab.tsx` — **IMPLEMENTED (Batch 11)** |
 | Data exists today | YES — version from package.json via vite `define`, runtime versions from `window.electron.process.versions` |
 | **What was added** | (1) **App identity card** — omi logo + "omi" name + "Version 1.0.0 for Windows" + Electron/Node runtime versions. (2) **Visit Website** → `https://omi.me`. (3) **Help & Docs** → `https://help.omi.me`. (4) **Report an Issue** → `https://github.com/BasedHardware/omi/issues`. (5) **Privacy Policy** → `https://www.omi.me/privacy`. (6) **Terms of Service** → `https://www.omi.me/terms`. (7) **Local data note** — explains screen frames/transcripts/KG are stored on-device only. All links open in system browser via `window.open` → existing `setWindowOpenHandler` → `shell.openExternal`. |
-| **Not implemented** | Software Updates UI (Sparkle is macOS-only; Windows auto-update via electron-builder's built-in updater could be wired in the future). |
+| **Not implemented** | Native auto-install (electron-updater install blocked by nvm/npm junction corruption; no CI publish config). GitHub API checker covers version comparison + download link. |
 | **Tab reorder** | Integrations moved before Shortcuts to better match macOS flow (connection setup → shortcut config). Support added at the end matching macOS's About position. |
 | **Classification** | **DONE** (Support/About tab implemented) |
 
@@ -233,8 +234,8 @@ Already resolved in Batch 7:
 | ✓ | Focus page | `Focus.tsx`, `Sidebar.tsx`, `MainViews.tsx` | Done — manual timer + Rewind app-activity breakdown (no proactive ML) |
 | ✓ | Notifications settings | `NotificationsTab.tsx`, `tabs.ts`, `Settings.tsx`, `useRecorder.ts`, `preferences.ts` | Done — insight notifications tab + recording-saved Web Notification |
 | ✓ | Check for Updates | `SupportTab.tsx` | Done — GitHub API release check (available/up-to-date/error); no electron-updater needed |
-| ✓ | Devices tab | `DevicesTab.tsx`, `tabs.ts`, `Settings.tsx` | Done — honest Devices tab listing supported hardware with BLE-not-available status |
-| ✗ | Auto-update native feed | — | Blocked — npm install fails (nvm/Node v24 cross-contamination); electron-builder.yml has no publish config; no CI release feed |
+| ✓ | Devices tab — BLE connect + battery | `DevicesTab.tsx` | Done — scan→connect, Battery Service read (0x180F/0x2A19), Device Info Service (0x180A), disconnect, last-device localStorage |
+| ✗ | Auto-update native feed | — | Blocked — npm junction still points to nvm v22.9.0; electron-updater install fails; no publish config in CI. GitHub API checker is the mechanism; SupportTab shows installed vs. latest version. |
 | ✓ | Proactive focus detection (Vision-tier) | `focusEngine.ts`, `Focus.tsx`, `NotificationsTab.tsx`, `preferences.ts` | Done — three-tier (Vision → Text-OCR → Heuristic); Gemini Vision via existing rewind:frameImage IPC |
 | ✗ | Native BLE pairing | — | No `noble` or `node-ble` addon; Devices tab shows honest unsupported state |
 | ✓ | Tasks grouping | — | Already done |

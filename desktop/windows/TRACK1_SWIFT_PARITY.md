@@ -171,7 +171,8 @@
 | **Nav change (Batch 6)** | Settings is now a first-class sidebar nav item (after Apps), matching macOS sidebar order exactly. |
 | **Tab reorder (Batch 11)** | Integrations moved before Shortcuts (matches macOS: integrations/connections before keyboard shortcuts). Support tab added at end (matches macOS: About at bottom of sidebar). |
 | **Support/About tab (Batch 11)** | App identity card (omi logo + name + version + Electron/Node), Visit Website, Help & Docs, Report an Issue (GitHub), Privacy Policy, Terms of Service, local data note. All links open in system browser. |
-| **Remaining gaps** | Notifications tab (proactive notification config — infeasible, no Windows notification pipeline). Devices/Bluetooth (hardware-only, infeasible). Assistants enable/disable panel (no proactive assistant infra on Windows). Software Updates UI (Sparkle macOS-only; electron-builder updater could be wired in future). |
+| **Remaining gaps** | Assistants enable/disable panel (no proactive assistant infra on Windows). Native auto-update (electron-updater blocked by npm junction corruption; GitHub API checker is the fallback). Omi-specific firmware pairing/OTA (GATT protocol not documented for Windows). |
+| **What was added** | Notifications tab: insight interval/style, recording-saved notification, focus analysis with vision toggle. Devices tab: Web Bluetooth scan → connect → GATT Battery/Device Info read → disconnect. Support tab: installed vs. latest version comparison, "native auto-install unavailable" note. |
 | **Priority** | P1 — IMPROVED |
 
 ---

@@ -53,6 +53,8 @@ npm run build:win        # produces dist/Omi for Windows-Setup-1.0.0.exe
 - [ ] Settings → Rewind tab shows screen capture toggle
 - [ ] Settings → Advanced tab shows Import/Export memory, file indexing, KG rebuild
 - [ ] Collapse/expand sidebar with toggle button → all items visible in collapsed mode (icons only with tooltips)
+- [ ] Settings → Devices: scan button appears (if Bluetooth available), scan can be cancelled, Disconnect button works
+- [ ] Settings → Support: Check / Recheck button queries GitHub, shows installed vs. latest version
 
 ---
 
@@ -143,7 +145,8 @@ Click **Settings** in the sidebar. Settings opens full-screen with its own tab r
 | Onboarding style | Windows onboarding flow differs from macOS (different step order, 3D brain map vs. progress dots). Both functional. |
 | Overlay agent pills | Floating overlay is missing agent-selection pills present in macOS. |
 | Conversations folder view | No folder organization or starred filter (macOS master-detail). |
-| Bluetooth / hardware pairing | macOS supports Omi hardware, Fieldy, Frame, Limitless, Plaud, Bee pairing. Windows does not. |
+| Bluetooth / hardware pairing | Web Bluetooth: scan → connect → GATT Battery + Device Info read when device exposes standard services. Full Omi firmware pairing/OTA requires mobile SDK (Omi GATT protocol undocumented for Windows). |
+| Native auto-update | GitHub API release check works; native auto-install (electron-updater) blocked by nvm/npm junction corruption on this machine — release feed publish config also not yet set up in CI. |
 | Deeper Settings sections | macOS has Shortcuts customization and per-assistant Notifications config; Windows Settings lacks these tabs. |
 | Google Integrations flag | Gmail/Calendar integrations require `VITE_ENABLE_GOOGLE_INTEGRATION=1` build flag. Sticky Notes (Windows-exclusive) works without a flag. |
 | Settings sidebar hides main nav | By design: Settings opens full-screen with its own tab rail (matching iOS/macOS pattern). "Back" button returns to Dashboard. |
