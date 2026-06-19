@@ -136,11 +136,14 @@ def get_or_create_gemini_llm(
             _llm_cache[key] = ChatGoogleGenerativeAI(model=model_name, **kwargs)
         else:
             logger.warning('No USE_VERTEX_AI or GEMINI_API_KEY — Gemini calls will fail at invoke time')
+            # Strip thinking_budget — it's a ChatGoogleGenerativeAI-only param
+            # that ChatOpenAI rejects at invoke time.
+            fallback_kwargs = {k: v for k, v in kwargs.items() if k != 'thinking_budget'}
             _llm_cache[key] = ChatOpenAI(
                 model=model_name,
                 api_key=SecretStr('not-set'),
                 base_url=GEMINI_OPENAI_BASE_URL,
-                **kwargs,
+                **fallback_kwargs,
             )
     return _llm_cache[key]
 
