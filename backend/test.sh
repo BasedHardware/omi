@@ -54,6 +54,7 @@ pytest tests/unit/test_v17_read_api.py -v
 pytest tests/unit/test_v17_projections.py -v
 pytest tests/unit/test_v17_vector_metadata.py -v
 pytest tests/unit/test_v17_vector_filters.py -v
+pytest tests/unit/test_v17_vector_search_service.py -v
 pytest tests/unit/test_v17_firestore_indexes.py -v
 pytest tests/unit/test_v17_normative_foundations.py -v
 pytest tests/unit/test_v17_typed_synthesis.py -v
