@@ -156,3 +156,11 @@ def test_ai_profile_update_bypasses_cached_getter_for_merge_safety():
 
     assert '_get_ai_user_profile_from_firestore(uid)' in block
     assert 'get_ai_user_profile(uid)' not in block
+
+
+def test_listen_reuses_transcription_projection_language_without_second_user_read():
+    source = open('routers/transcribe.py').read()
+
+    assert source.count('get_user_transcription_preferences(uid)') == 1
+    assert "transcription_prefs.get('language', '')" in source
+    assert 'get_user_language_preference' not in source
