@@ -179,7 +179,13 @@ def _deterministic_materialized_memory_id(*, uid: str, patch: DurableMemoryPatch
 
 
 def _materialize_memory_item(
-    *, uid: str, patch: DurableMemoryPatch, evidence: List[MemoryEvidence], commit_id: str, sequence: int
+    *,
+    uid: str,
+    patch: DurableMemoryPatch,
+    evidence: List[MemoryEvidence],
+    commit_id: str,
+    sequence: int,
+    account_generation: int,
 ) -> V17MemoryItem:
     now = datetime.now(timezone.utc)
     return V17MemoryItem(
@@ -206,7 +212,7 @@ def _materialize_memory_item(
         content_hash=deterministic_contract_id(
             "v17-memory-content", {"content": patch.memory_text, "evidence_ids": patch.evidence_ids}
         ),
-        account_generation=0,
+        account_generation=account_generation,
     )
 
 
@@ -331,7 +337,12 @@ def apply_long_term_patch_transaction(
             outbox_events=outbox_events,
         )
     memory_item = _materialize_memory_item(
-        uid=operation.uid, patch=patch, evidence=evidence, commit_id=commit_id, sequence=next_control.commit_sequence
+        uid=operation.uid,
+        patch=patch,
+        evidence=evidence,
+        commit_id=commit_id,
+        sequence=next_control.commit_sequence,
+        account_generation=control_state.account_generation,
     )
     outbox_events = [
         MemoryOutboxEvent(

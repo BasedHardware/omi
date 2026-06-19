@@ -123,6 +123,16 @@ def test_new_commit_persists_replay_metadata_on_committed_operation():
     assert result.operation.committed_outbox_event_ids == [event.event_id for event in result.outbox_events]
 
 
+def test_materialized_memory_item_carries_control_account_generation_for_future_fence_checks():
+    control = MemoryControlState(uid="u1", head_commit_id="head0", account_generation=7, source_generation=2)
+    operation = _operation(account_generation=7)
+
+    result = apply_long_term_patch_transaction(control_state=control, operation=operation, patch_payload=_patch())
+
+    assert result.status == ApplyStatus.committed
+    assert result.memory_items[0].account_generation == 7
+
+
 def test_apply_is_idempotent_when_operation_already_committed():
     control = MemoryControlState(uid="u1", head_commit_id="head1", account_generation=1, source_generation=2)
     committed = _operation().mark_committed(
