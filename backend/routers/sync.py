@@ -74,6 +74,8 @@ from utils.other.storage import (
     mark_playback_unavailable,
     is_playback_unavailable,
     enqueue_conversation_audio_merge,
+    upload_audio_chunk,
+    precache_conversation_audio,
     _PRECACHE_FILE_SEM,
 )
 
@@ -1117,6 +1119,8 @@ def process_segment(
     person_embeddings_cache: dict = None,
     target_conversation_id: str = None,
     turnstile: Optional[_OrderedTurnstile] = None,
+    private_cloud_sync_enabled: bool = False,
+    data_protection_level: str = None,
 ):
     try:
         url = get_syncing_file_temporal_signed_url(path)
@@ -1153,15 +1157,22 @@ def process_segment(
             logger.warning(f'Postprocessing returned empty for segment {path} (words present but no segments)')
             return True
 
-        # Speaker identification: voice embedding matching + text-based detection
-        audio_bytes = _download_audio_bytes(url) if person_embeddings_cache else None
+        # Download the segment audio once — used for speaker ID and/or to persist the
+        # conversation's audio as a private-cloud chunk (realtime parity, below).
+        audio_bytes = _download_audio_bytes(url) if (person_embeddings_cache or private_cloud_sync_enabled) else None
         try:
-            identify_speakers_for_segments(transcript_segments, audio_bytes, person_embeddings_cache or {}, uid)
+            identify_speakers_for_segments(
+                transcript_segments,
+                audio_bytes if person_embeddings_cache else None,
+                person_embeddings_cache or {},
+                uid,
+            )
         except Exception as e:
             logger.warning(f'Speaker ID (sync): identification failed for {path}: {e}')
         finally:
-            if audio_bytes:
-                del audio_bytes
+            # Keep audio_bytes for chunk storage when private cloud sync is on; free it now otherwise.
+            if audio_bytes is not None and not private_cloud_sync_enabled:
+                audio_bytes = None
 
         # Conversation assignment must happen chronologically across the batch: wait until
         # every earlier-timestamped segment has created/merged its conversation, otherwise
@@ -1198,6 +1209,8 @@ def process_segment(
             created = process_conversation(uid, language, create_memory)
             with lock:
                 response['new_memories'].add(created.id)
+            if private_cloud_sync_enabled:
+                _store_sync_audio_chunk(uid, created.id, timestamp, audio_bytes, data_protection_level)
         else:
 
             transcript_segments = [s.dict() for s in transcript_segments]
@@ -1223,6 +1236,9 @@ def process_segment(
                 logger.info(f'All segments already exist in conversation {closest_memory["id"]}, skipping merge')
                 with lock:
                     response['updated_memories'].add(closest_memory['id'])
+                # No chunk upload here: this segment is a duplicate (retry or overlap with an
+                # existing/realtime conversation), so its audio is already represented — uploading
+                # again would double the audio in the merge.
                 return True
 
             # merge and sort segments by start timestamp
@@ -1252,6 +1268,11 @@ def process_segment(
             # save with updated finished_at
             with lock:
                 response['updated_memories'].add(closest_memory['id'])
+            # Store the chunk before saving segments so "segment present ⇒ chunk present"
+            # holds — a retry that dedup-skips this segment won't leave its audio missing.
+            # Deterministic chunk path makes the upload overwrite-safe.
+            if private_cloud_sync_enabled:
+                _store_sync_audio_chunk(uid, closest_memory['id'], timestamp, audio_bytes, data_protection_level)
             update_conversation_segments(uid, closest_memory['id'], segments, finished_at=new_finished_at)
 
             # Lock existing conversation if credits exhausted
@@ -1293,6 +1314,55 @@ def _reprocess_merged_conversations(uid: str, response: dict):
             _reprocess_conversation_after_update(uid, conversation_id, language)
         except Exception as e:
             logger.error(f'sync: failed to reprocess merged conversation {conversation_id}: {e}')
+
+
+def _wav_bytes_to_pcm16_16k(audio_bytes: Optional[bytes]) -> Optional[bytes]:
+    """Decode WAV bytes to raw PCM16, 16 kHz mono — the format upload_audio_chunk
+    expects (it opus-encodes internally) and the audio merge is hardcoded to."""
+    if not audio_bytes:
+        return None
+    seg = AudioSegment.from_wav(io.BytesIO(audio_bytes))
+    seg = seg.set_frame_rate(16000).set_channels(1).set_sample_width(2)
+    return seg.raw_data
+
+
+def _store_sync_audio_chunk(
+    uid: str,
+    conversation_id: str,
+    timestamp: float,
+    audio_bytes: Optional[bytes],
+    data_protection_level: Optional[str],
+):
+    """Persist a sync segment's audio as a private-cloud chunk, identical in format and
+    naming to the realtime path (chunks/{uid}/{conversation_id}/{ts}.opus[.enc]), so the
+    conversation plays through the existing audio player. Best-effort — audio storage must
+    never fail transcription."""
+    try:
+        pcm = _wav_bytes_to_pcm16_16k(audio_bytes)
+        if not pcm:
+            return
+        upload_audio_chunk(pcm, uid, conversation_id, float(timestamp), data_protection_level)
+        del pcm
+    except Exception as e:
+        logger.warning(f'sync: failed to store audio chunk for {conversation_id}@{timestamp}: {e}')
+
+
+def _finalize_sync_audio_files(uid: str, response: dict):
+    """After all segments are assigned, build audio_files from the uploaded chunks and
+    persist them on each conversation — exactly as the realtime flush does — then warm the
+    playback artifact. Rebuild+replace is idempotent across retries (create_audio_files_from_chunks
+    always rebuilds from the full chunk listing)."""
+    conversation_ids = set(response.get('new_memories', set())) | set(response.get('updated_memories', set()))
+    for conversation_id in conversation_ids:
+        try:
+            audio_files = conversations_db.create_audio_files_from_chunks(uid, conversation_id)
+            if not audio_files:
+                continue
+            files_payload = [af.dict() for af in audio_files]
+            conversations_db.update_conversation(uid, conversation_id, {'audio_files': files_payload})
+            precache_conversation_audio(uid, conversation_id, files_payload)
+        except Exception as e:
+            logger.error(f'sync: failed to finalize audio_files for {conversation_id}: {e}')
 
 
 def _cleanup_files(file_paths):
@@ -1725,6 +1795,15 @@ async def _run_full_pipeline_background_async(
 
             # --- Phase 4: Fetch prefs & embeddings ---
             transcription_prefs = await run_blocking(db_executor, users_db.get_user_transcription_preferences, uid)
+            # Mirror realtime: store conversation audio only when private cloud sync is on.
+            private_cloud_sync_enabled = await run_blocking(
+                db_executor, users_db.get_user_private_cloud_sync_enabled, uid
+            )
+            data_protection_level = (
+                await run_blocking(db_executor, users_db.get_data_protection_level, uid)
+                if private_cloud_sync_enabled
+                else None
+            )
             try:
                 person_embeddings_cache = await run_blocking(db_executor, build_person_embeddings_cache, uid)
                 if person_embeddings_cache:
@@ -1773,6 +1852,8 @@ async def _run_full_pipeline_background_async(
                     person_embeddings_cache,
                     target_conversation_id,
                     assignment_turnstile,
+                    private_cloud_sync_enabled,
+                    data_protection_level,
                 )
                 if ok and task_mode:
                     add_processed_segment(job_id, path)
@@ -1804,6 +1885,11 @@ async def _run_full_pipeline_background_async(
                     pass
 
             await run_blocking(sync_executor, _reprocess_merged_conversations, uid, response)
+
+            # Persist conversation audio (private-cloud chunks → audio_files) so synced
+            # conversations play exactly like realtime ones. Gated on the user's setting.
+            if private_cloud_sync_enabled:
+                await run_blocking(sync_executor, _finalize_sync_audio_files, uid, response)
 
             stage_timings['stt_llm_ms'] = int((time.monotonic() - t0) * 1000)
 
