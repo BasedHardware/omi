@@ -1,5 +1,11 @@
 from datetime import datetime, timezone
 
+from database.v17_vector_repair_pinecone_adapter import (
+    V17_VECTOR_REPAIR_PINECONE_NAMESPACE,
+    V17VectorRepairNotReady,
+    make_v17_pinecone_vector_deleter,
+    make_v17_pinecone_vector_repairer,
+)
 from database.v17_vector_repair_outbox_worker import (
     ack_v17_vector_repair_purge_outbox_record,
     lease_v17_vector_repair_purge_outbox_records,
@@ -27,11 +33,21 @@ def _record(**overrides):
 
 
 def _live_item(**overrides):
+    captured_at = datetime(2026, 6, 19, 11, 0, tzinfo=timezone.utc)
     data = {
         "memory_id": "mem-1",
         "uid": "u1",
+        "version": 1,
+        "tier": "short_term",
         "status": "active",
+        "processing_state": "processed",
         "source_state": "active",
+        "sensitivity_labels": [],
+        "visibility": "private",
+        "user_asserted": True,
+        "captured_at": captured_at,
+        "updated_at": captured_at,
+        "expires_at": datetime(2026, 6, 20, 11, 0, tzinfo=timezone.utc),
         "item_revision": 2,
         "source_commit_id": "source-2",
         "content_hash": "hash-2",
@@ -388,3 +404,102 @@ def test_worker_records_retry_and_dead_letter_failure_deterministically():
     assert dead_updates.patches[-1][1]["status"] == "dead_letter"
     assert dead_updates.patches[-1][1]["attempt_count"] == 3
     assert dead_updates.patches[-1][1]["last_error"] == "pinecone unavailable"
+
+
+def test_pinecone_adapter_delete_passes_vector_id_and_ns2_namespace_to_injected_deleter():
+    calls = []
+    deleter = make_v17_pinecone_vector_deleter(
+        delete_vectors=lambda *, ids, namespace: calls.append({"ids": list(ids), "namespace": namespace})
+        or {"ok": True}
+    )
+
+    result = deleter(_record(vector_id="v17mem:stale"))
+
+    assert V17_VECTOR_REPAIR_PINECONE_NAMESPACE == "ns2"
+    assert calls == [{"ids": ["v17mem:stale"], "namespace": "ns2"}]
+    assert result["action"] == "delete"
+    assert result["vector_ids"] == ["v17mem:stale"]
+    assert result["namespace"] == "ns2"
+
+
+def test_pinecone_adapter_repair_upserts_authoritative_v17_vector_with_ns2_metadata_and_embedding():
+    upserts = []
+    repairer = make_v17_pinecone_vector_repairer(
+        embed_text=lambda content: [0.1, 0.2, 0.3],
+        upsert_vectors=lambda *, vectors, namespace: upserts.append({"vectors": vectors, "namespace": namespace})
+        or {"count": 1},
+        now=datetime(2026, 6, 19, 12, 0, tzinfo=timezone.utc),
+    )
+
+    result = repairer(_record(required_projection_commit_id="projection-2"), _live_item())
+
+    assert len(upserts) == 1
+    assert upserts[0]["namespace"] == "ns2"
+    vector = upserts[0]["vectors"][0]
+    assert vector["id"].startswith("v17mem:")
+    assert vector["values"] == [0.1, 0.2, 0.3]
+    assert vector["metadata"]["uid"] == "u1"
+    assert vector["metadata"]["memory_id"] == "mem-1"
+    assert vector["metadata"]["projection_commit_id"] == "projection-2"
+    assert vector["metadata"]["account_generation"] == 0
+    assert vector["metadata"]["item_revision"] == 2
+    assert vector["metadata"]["source_commit_id"] == "source-2"
+    assert vector["metadata"]["content_hash"] == "hash-2"
+    assert vector["metadata"]["vector_updated_at"] == "2026-06-19T12:00:00+00:00"
+    assert result["action"] == "repair"
+    assert result["vector_id"] == vector["id"]
+    assert result["namespace"] == "ns2"
+
+
+def test_pinecone_adapter_repair_not_ready_without_content_or_required_fences_and_has_no_side_effects():
+    upserts = []
+    repairer = make_v17_pinecone_vector_repairer(
+        embed_text=lambda content: [0.1],
+        upsert_vectors=lambda *, vectors, namespace: upserts.append(vectors),
+    )
+
+    for record, item in [
+        (_record(required_projection_commit_id=""), _live_item()),
+        (_record(), _live_item(content="")),
+        (_record(), _live_item(source_commit_id=None)),
+        (_record(), _live_item(content_hash=None)),
+    ]:
+        try:
+            repairer(record, item)
+        except V17VectorRepairNotReady as exc:
+            assert str(exc)
+        else:
+            raise AssertionError("expected repair not-ready failure")
+
+    assert upserts == []
+
+
+def test_worker_failure_path_records_adapter_failure_and_duplicate_batch_has_one_pinecone_side_effect():
+    calls = []
+    updates = _Updates()
+
+    def failing_delete(*, ids, namespace):
+        calls.append((tuple(ids), namespace))
+        raise RuntimeError("pinecone delete failed")
+
+    deleter = make_v17_pinecone_vector_deleter(delete_vectors=failing_delete)
+
+    result = process_v17_vector_repair_purge_outbox_records(
+        [
+            _record(record_id="dup-a", idempotency_key="dup-key", reason="missing_authoritative_item"),
+            _record(record_id="dup-b", idempotency_key="dup-key", reason="missing_authoritative_item"),
+        ],
+        authoritative_item_loader=lambda record: None,
+        vector_deleter=deleter,
+        vector_repairer=lambda record, item: None,
+        outbox_updater=updates,
+        max_attempts=3,
+    )
+
+    assert calls == [(("vec-1",), "ns2")]
+    assert result["failed_count"] == 1
+    assert result["skipped_count"] == 1
+    assert updates.patches[-1][0] == "dup-a"
+    assert updates.patches[-1][1]["status"] == "pending"
+    assert updates.patches[-1][1]["attempt_count"] == 1
+    assert updates.patches[-1][1]["last_error"] == "pinecone delete failed"

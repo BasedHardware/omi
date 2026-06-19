@@ -468,6 +468,28 @@ This closes only the local Firestore emulator transaction-contention validation 
 - Prove shared `ns2` isolation; add overfetch/refill/budgets, app/key/scope auth, and real benchmark/cloud evidence.
 - Production rollout remains **BLOCKED / NO-GO** until all Oracle P0s and required real-service evidence are complete.
 
+### 2026-06-19 — P0-4 fake-first Pinecone delete/repair adapter seam for vector repair outbox actions
+
+Continued Oracle P0-4 with a narrow Pinecone-compatible adapter seam for the existing fake-injectable outbox worker, without changing the production rollout verdict:
+
+- Added `backend/database/v17_vector_repair_pinecone_adapter.py` with worker-compatible `make_v17_pinecone_vector_deleter(...)` and `make_v17_pinecone_vector_repairer(...)` factories.
+- The delete adapter calls only an injected Pinecone-shaped `delete_vectors(ids=[vector_id], namespace="ns2")` function and returns deterministic action metadata. Unit tests use fakes only; no real Pinecone client is imported or called.
+- The repair adapter calls injected `embed_text(content)` and `upsert_vectors(vectors=[...], namespace="ns2")` functions, builds the deterministic V17 vector id and V17 metadata from the live authoritative `V17MemoryItem` plus the outbox `required_projection_commit_id`, and raises `V17VectorRepairNotReady` before embedding/upsert if content, source commit, content hash, or required projection fence is missing.
+- Namespace isolation is explicit at the seam (`V17_VECTOR_REPAIR_PINECONE_NAMESPACE = "ns2"`), matching the existing memory-vector namespace in `backend/database/vector_db.py`; real shared-`ns2` coexistence proof is still not claimed.
+- Added tests covering delete namespace/id mapping, repair metadata/upsert mapping, not-ready repair with no side effects, injected Pinecone failure propagation through the worker retry path, and duplicate same-batch idempotency with at most one adapter side effect.
+- This is still not production execution. It does **not** start Cloud Run/Tasks or a scheduler, validate production Firestore IAM/deployed rules, call real Pinecone, prove duplicate physical stale-ID removal, prove shared `ns2` isolation, add central telemetry/alerts, run benchmarks, or approve rollout.
+
+Verification recorded in `docs/epics/v17_memory_implementation_tickets.md`: RED missing Pinecone adapter module (`ModuleNotFoundError`), GREEN worker/adapter tests (`13 passed`), focused vector/outbox/product regression (`40 passed`), full `pytest tests/unit/test_v17_*.py -q` (`228 passed, 1 warning`), and async blocker scan exit 0 with pre-existing findings only.
+
+This closes only the fake-first Pinecone delete/upsert adapter mapping seam. Remaining P0-4/P0 work:
+
+- Wire an explicit Cloud Run/Tasks or scheduler/lease-owner execution contract; do not start background production processing from this seam alone.
+- Validate production cloud IAM/service-account bindings and deployed Security Rules against the real Firebase project before rollout.
+- Run real Pinecone delete/upsert validation with duplicate stale physical IDs, tombstoned/deleted/missing authoritative items, failure/retry/dead-letter behavior, and shared-`ns2` legacy isolation evidence.
+- Add central low-cardinality telemetry/alerts for adapter attempts, action counts, retry/dead-letter reasons, latency, stale-vector rates, and ack failures.
+- Add overfetch/refill/budgets, app/key/scope auth, real benchmark/cloud evidence, and explicit production rollout gates.
+- Production rollout remains **BLOCKED / NO-GO** until all Oracle P0s and required real-service evidence are complete.
+
 ## Not-run / not-claimed caveats preserved
 
 - Oracle review has now run and is recorded here, but it blocks production rollout.
