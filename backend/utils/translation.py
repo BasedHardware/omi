@@ -342,18 +342,98 @@ def split_into_sentences(text: str) -> List[str]:
     """Splits text into sentences based on sentence-ending punctuation and newlines.
 
     Recognizes Unicode sentence enders for CJK, Arabic, Hindi, and other non-English languages.
+    Protects common abbreviations (Mr., Dr., U.S., 3.14, etc.) from being split
+    by temporarily replacing them with placeholders before splitting.
     """
     if not text:
         return []
+
+    # Placeholder strategy: replace internal periods in multi-part abbreviations
+    # before sentence splitting, then restore them after. Combined with a
+    # post-split merge step to handle false boundaries at abbreviation tails.
+    #
+    # Handles: U.S., U.K., 3.14, e.g., i.e., etc., vs.
+    # Does NOT attempt to resolve single-period titles (Dr./Mr.) followed by
+    # proper nouns — that requires NLP-level disambiguation.
+
+    _ABBR = 'ⓐⓑⓒ'   # country code internal period
+    _DEC = 'ⓓⓔⓕ'    # decimal point
+    _LAT = 'ⓛⓐⓣ'    # latin abbrev internal period
+
+    _ABBREV_PATTERNS = [
+        # Country codes: U.S. → UⓐⓑⓒS. (internal period protected, trailing period kept)
+        (re.compile(r'\b([A-Z])\.([A-Z])\.'), lambda m: m.group(1) + _ABBR + m.group(2) + '.'),
+        # Decimal/version numbers: 3.14 → 3ⓓⓔⓕ14
+        (re.compile(r'(?<=\d)\.(?=\d)'), _DEC),
+        # Latin abbreviations: e.g. → eⓛⓐⓣg.
+        (re.compile(r'\b([a-z])\.([a-z])\.'), lambda m: m.group(1) + _LAT + m.group(2) + '.'),
+        # etc. → etcⓛⓐⓣ
+        (re.compile(r'\betc\.'), 'etc' + _LAT),
+        # vs. → vsⓛⓐⓣ
+        (re.compile(r'\bvs\.'), 'vs' + _LAT),
+    ]
 
     result = []
     for line in text.split('\n'):
         line = line.strip()
         if not line:
             continue
-        sentences = SENTENCE_FINDALL_RE.findall(line)
-        result.extend(s.strip() for s in sentences if s.strip())
+
+        # Phase 1: Replace abbreviation internals with placeholders
+        protected = line
+        for pattern, replacement in _ABBREV_PATTERNS:
+            protected = pattern.sub(replacement, protected)
+
+        # Phase 2: Split on sentence boundaries
+        raw = SENTENCE_FINDALL_RE.findall(protected)
+
+        # Phase 3: Restore placeholders
+        restored_list = []
+        for s in raw:
+            s = s.strip()
+            if not s:
+                continue
+            restored = (
+                s.replace(_ABBR, '.')
+                 .replace(_DEC, '.')
+                 .replace(_LAT, '.')
+            )
+            restored_list.append(restored)
+
+        # Phase 4: Merge false splits at abbreviation boundaries
+        merged = []
+        for seg in restored_list:
+            if merged and _should_merge(merged[-1], seg):
+                merged[-1] = merged[-1] + ' ' + seg
+            else:
+                merged.append(seg)
+        result.extend(merged)
     return result
+
+
+def _should_merge(prev: str, nxt: str) -> bool:
+    """Decide whether to merge prev segment into the next one.
+
+    Returns True when prev ends with a sentence-ending punctuation mark but
+    appears to be a fragment rather than a complete sentence (e.g., an
+    abbreviation tail like 'U.S.' or a short title like 'Dr.').
+    """
+    if not prev or prev[-1] not in '.!?。！？':
+        return False
+    if not nxt:
+        return False
+
+    # Next segment is a lone lowercase word/fragment — not a real sentence
+    nxt_body = nxt.rstrip('.!?。！؟؟۔।॥ ')
+    if len(nxt_body) <= 15 and nxt and nxt[0].islower():
+        return True
+
+    # Prev ends with a short abbreviation-like token (≤ 6 char body before punctuation)
+    prev_body = prev.rstrip('.!?。！؟ ')
+    if len(prev_body) <= 6:
+        return True
+
+    return False
 
 
 def _redis_cache_key(text_hash: str, dest_lang: str) -> str:
@@ -543,7 +623,31 @@ class TranslationService:
         if not units:
             return []
 
-        # Phase 0: Split each unit's text into sentences
+        # Phase -1: Check full-text caches for each unit before sentence splitting.
+        # This preserves hits from the pre-DD-008 batch path and from
+        # translate_text() calls that wrote full-text entries.
+        full_text_results = {}
+        for unit_id, text in units:
+            text_hash = hashlib.md5(text.encode()).hexdigest()
+            # Check memory LRU first (cheapest)
+            lru_hit = self._check_memory_cache(text_hash, dest_language)
+            if lru_hit:
+                full_text_results[unit_id] = lru_hit
+                continue
+            # Check Redis full-text key
+            redis_hit = get_cached_translation(text_hash, dest_language)
+            if redis_hit:
+                translated = redis_hit["text"]
+                detected = redis_hit.get("detected_lang", "")
+                self._set_memory_cache(text_hash, dest_language, translated, detected)
+                full_text_results[unit_id] = (translated, detected)
+                continue
+
+        # If every unit hit the full-text cache, return immediately.
+        if len(full_text_results) == len(units):
+            return [(uid, *full_text_results[uid]) for uid, _ in units]
+
+        # Phase 0: Split each unit's text into sentences (only for cache-miss units)
         # unit_sentences[i] = list of (sentence_text, sentence_hash) for unit i
         unit_sentences = []
         for unit_id, text in units:
