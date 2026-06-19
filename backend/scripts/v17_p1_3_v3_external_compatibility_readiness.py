@@ -256,6 +256,131 @@ PRODUCT_DECISION_DEPENDENCIES = [
     },
 ]
 
+ORACLE_PRESCRIPTIVE_RECOMMENDATIONS = {
+    "session_slug": "v3-v17-compat-prescripti",
+    "oracle_cli": "consult-oracle 0.14.0",
+    "model_selection_caveat": "gpt-5.5-pro browser returned guidance; model-selection evidence reported resolved unavailable/verified no.",
+    "production_approach": "additive_v3_compatibility_adapter_over_v17_authoritative_writes",
+    "default_body_contract": "List[MemoryDB]",
+    "archive_default": "not_launched_on_v3_default_reads",
+    "enabled_empty": "200_empty_list_no_legacy_fallback",
+    "cursor_default": "additive_opaque_hmac_keyset_cursor_created_at_desc_memory_id_desc",
+    "write_convergence": "v17_writes_and_compatibility_projection_before_v17_reads",
+    "summary": (
+        "Oracle recommends preserving /v3's default List[MemoryDB] body while adding a V17 compatibility "
+        "adapter over V17-authoritative writes and a V17-derived users/{uid}/memories projection. Non-enrolled "
+        "users stay legacy-primary; enrolled malformed/missing/control-timeout states fail closed; no-grant denies; "
+        "enabled-empty returns [] without legacy fallback; Archive is not launched on default /v3; cursor mode is "
+        "additive, signed, keyset, and generation/projection bound."
+    ),
+}
+
+ENGINEERING_DEFAULTS_LOCKED_NOW = [
+    {
+        "default_id": "non_enrolled_legacy_primary",
+        "behavior": "Users outside the V17 cohort keep current legacy /v3 behavior as the selected primary path.",
+        "http_status": 200,
+        "product_escalation_required": False,
+    },
+    {
+        "default_id": "enrolled_malformed_missing_fail_closed",
+        "behavior": "Enrolled users with missing, malformed, uid-mismatched, unsupported-schema, or timed-out control state fail closed before legacy reads.",
+        "http_status": 503,
+        "product_escalation_required": False,
+    },
+    {
+        "default_id": "no_default_memory_grant_privacy_deny",
+        "behavior": "Treat absent/revoked default-memory grant as privacy/consent denial unless product explicitly separates rollout from consent.",
+        "http_status": 403,
+        "product_escalation_required": True,
+    },
+    {
+        "default_id": "enabled_empty_returns_empty",
+        "behavior": "When V17 compatibility projection is enabled and empty, return [] and do not query legacy afterward.",
+        "http_status": 200,
+        "product_escalation_required": False,
+    },
+    {
+        "default_id": "archive_not_launched_on_default_v3",
+        "behavior": "Do not add include_archive=true or Archive vector behavior to the initial /v3 cutover.",
+        "http_status": None,
+        "product_escalation_required": False,
+    },
+    {
+        "default_id": "source_metadata_additive_headers",
+        "behavior": "Keep the JSON body MemoryDB-compatible; expose route-level read-source/read-decision/next-cursor diagnostics through additive headers.",
+        "body_shape_changed": False,
+        "product_escalation_required": False,
+    },
+    {
+        "default_id": "cursor_additive_keyset_signed",
+        "behavior": "Add opaque HMAC keyset cursor mode for V17 canaries while preserving offset behavior only for legacy-primary clients.",
+        "product_escalation_required": False,
+    },
+    {
+        "default_id": "no_legacy_v17_merge_or_exception_fallback",
+        "behavior": "Do not merge legacy and V17 result pages and do not treat None/missing/exceptions as permission to use legacy.",
+        "unsafe_fallback_allowed": False,
+        "product_escalation_required": False,
+    },
+]
+
+IRREDUCIBLE_PRODUCT_API_DECISIONS = [
+    {
+        "decision_id": "no_default_memory_grant_meaning",
+        "recommended_default": "privacy_consent_returns_403",
+        "escalation": "Escalate only if product states default-memory grant is merely rollout eligibility; then add a separate consent control.",
+        "approval_claimed": False,
+    },
+    {
+        "decision_id": "legacy_no_cursor_compatibility_window",
+        "recommended_default": "preserve_offset_only_for_non_v17_clients_require_cursor_for_v17_cohort",
+        "escalation": "Decide how long old clients retain offset/first-page behavior; do not reproduce the 5000-item override in V17 cursor mode.",
+        "approval_claimed": False,
+    },
+]
+
+ORACLE_IMPLEMENTATION_SHAPE = {
+    "decision_service": "backend/utils/memory/v17_v3_compatibility.py",
+    "read_service": "backend/utils/memory/v17_v3_memory_read_service.py",
+    "projection_service": "backend/database/v17_v3_compatibility_projection.py",
+    "projection_store": "users/{uid}/memories as V17-derived compatibility projection",
+    "cursor_service": "backend/utils/memory/v17_v3_cursor.py",
+    "external_write_service": "backend/utils/memory/v17_external_memory_write_service.py",
+    "decision_order": [
+        "global_emergency_gate",
+        "server_side_cohort_membership",
+        "versioned_per_user_control_document",
+        "exact_uid_schema_validation",
+        "default_memory_grant",
+        "account_generation",
+        "write_convergence_and_projection_readiness",
+        "selected_read_path",
+    ],
+    "required_headers": [
+        "X-Omi-Memory-Read-Source",
+        "X-Omi-Memory-Read-Decision",
+        "X-Omi-Memory-Next-Cursor",
+        "Link rel=next",
+    ],
+}
+
+UNSAFE_APPROACHES_TO_AVOID = [
+    "missing_malformed_or_exception_as_use_legacy",
+    "legacy_v17_result_merge",
+    "fallback_because_v17_returned_zero_results",
+    "include_archive_true_as_authorization",
+    "invented_memorydb_field_defaults_from_memory_items",
+    "switch_reads_before_v3_mutations_converge",
+    "direct_legacy_writes_for_enrolled_v17_account",
+    "independent_firestore_pinecone_dual_writes_with_swallowed_failure",
+    "delete_success_before_tombstone_projection_removal_vector_fence_and_cleanup_outbox",
+    "offset_based_or_unsigned_cursor",
+    "allow_pagination_source_generation_epoch_or_filter_change",
+    "apply_5000_first_page_override_to_v17_cursor",
+    "treat_readiness_scripts_or_unit_counts_as_production_evidence",
+]
+
 
 def build_report(*, execute: bool = False) -> dict[str, Any]:
     return {
@@ -276,6 +401,11 @@ def build_report(*, execute: bool = False) -> dict[str, Any]:
         "remaining_gaps": REMAINING_GAPS,
         "runtime_decision_matrix": RUNTIME_DECISION_MATRIX,
         "product_decision_dependencies": PRODUCT_DECISION_DEPENDENCIES,
+        "oracle_prescriptive_recommendations": ORACLE_PRESCRIPTIVE_RECOMMENDATIONS,
+        "engineering_defaults_locked_now": ENGINEERING_DEFAULTS_LOCKED_NOW,
+        "irreducible_product_api_decisions": IRREDUCIBLE_PRODUCT_API_DECISIONS,
+        "oracle_implementation_shape": ORACLE_IMPLEMENTATION_SHAPE,
+        "unsafe_approaches_to_avoid": UNSAFE_APPROACHES_TO_AVOID,
         "non_claims": [
             "No production traffic executed.",
             "No Firestore, Pinecone, cloud, provider, or network calls executed.",

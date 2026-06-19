@@ -134,6 +134,67 @@ def test_v3_readiness_pins_decision_matrix_and_product_dependencies():
         assert dependencies[dependency_id]["approval_claimed"] is False
 
 
+def test_v3_readiness_pins_prescriptive_oracle_defaults_and_escalations():
+    root = Path(__file__).resolve().parents[2]
+    module = _load_module(root / "scripts" / "v17_p1_3_v3_external_compatibility_readiness.py")
+    report = module.build_report(execute=True)
+
+    oracle = report["oracle_prescriptive_recommendations"]
+    assert oracle["session_slug"] == "v3-v17-compat-prescripti"
+    assert oracle["production_approach"] == "additive_v3_compatibility_adapter_over_v17_authoritative_writes"
+    assert oracle["default_body_contract"] == "List[MemoryDB]"
+    assert oracle["archive_default"] == "not_launched_on_v3_default_reads"
+    assert oracle["enabled_empty"] == "200_empty_list_no_legacy_fallback"
+    assert oracle["cursor_default"] == "additive_opaque_hmac_keyset_cursor_created_at_desc_memory_id_desc"
+    assert oracle["write_convergence"] == "v17_writes_and_compatibility_projection_before_v17_reads"
+
+    defaults = {default["default_id"]: default for default in report["engineering_defaults_locked_now"]}
+    assert defaults["non_enrolled_legacy_primary"]["product_escalation_required"] is False
+    assert defaults["enrolled_malformed_missing_fail_closed"]["http_status"] == 503
+    assert defaults["no_default_memory_grant_privacy_deny"]["http_status"] == 403
+    assert defaults["source_metadata_additive_headers"]["body_shape_changed"] is False
+    assert defaults["no_legacy_v17_merge_or_exception_fallback"]["unsafe_fallback_allowed"] is False
+
+    escalations = {decision["decision_id"]: decision for decision in report["irreducible_product_api_decisions"]}
+    assert set(escalations) == {"no_default_memory_grant_meaning", "legacy_no_cursor_compatibility_window"}
+    assert escalations["no_default_memory_grant_meaning"]["recommended_default"] == "privacy_consent_returns_403"
+    assert escalations["legacy_no_cursor_compatibility_window"]["recommended_default"] == (
+        "preserve_offset_only_for_non_v17_clients_require_cursor_for_v17_cohort"
+    )
+
+
+def test_v3_readiness_pins_oracle_implementation_shape_and_unsafe_approaches():
+    root = Path(__file__).resolve().parents[2]
+    module = _load_module(root / "scripts" / "v17_p1_3_v3_external_compatibility_readiness.py")
+    report = module.build_report(execute=True)
+
+    shape = report["oracle_implementation_shape"]
+    assert shape["decision_service"] == "backend/utils/memory/v17_v3_compatibility.py"
+    assert shape["read_service"] == "backend/utils/memory/v17_v3_memory_read_service.py"
+    assert shape["projection_store"] == "users/{uid}/memories as V17-derived compatibility projection"
+    assert shape["cursor_service"] == "backend/utils/memory/v17_v3_cursor.py"
+    assert shape["external_write_service"] == "backend/utils/memory/v17_external_memory_write_service.py"
+    assert shape["decision_order"] == [
+        "global_emergency_gate",
+        "server_side_cohort_membership",
+        "versioned_per_user_control_document",
+        "exact_uid_schema_validation",
+        "default_memory_grant",
+        "account_generation",
+        "write_convergence_and_projection_readiness",
+        "selected_read_path",
+    ]
+
+    unsafe = set(report["unsafe_approaches_to_avoid"])
+    assert "missing_malformed_or_exception_as_use_legacy" in unsafe
+    assert "legacy_v17_result_merge" in unsafe
+    assert "fallback_because_v17_returned_zero_results" in unsafe
+    assert "include_archive_true_as_authorization" in unsafe
+    assert "invented_memorydb_field_defaults_from_memory_items" in unsafe
+    assert "offset_based_or_unsigned_cursor" in unsafe
+    assert "apply_5000_first_page_override_to_v17_cursor" in unsafe
+
+
 def test_v3_readiness_json_round_trips_and_command_summary_is_stable():
     root = Path(__file__).resolve().parents[2]
     module = _load_module(root / "scripts" / "v17_p1_3_v3_external_compatibility_readiness.py")
