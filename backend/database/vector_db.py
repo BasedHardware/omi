@@ -1,12 +1,19 @@
 import json
 import os
 from collections import defaultdict
+from dataclasses import dataclass, field
 from datetime import datetime, timezone, timedelta
 from typing import List
 
 from pinecone import Pinecone
 
 from database import projection_repair
+from database.v17_vector_metadata import (
+    build_v17_archive_memory_vector_filter,
+    build_v17_default_memory_vector_filter,
+    parse_v17_search_vector_hit,
+)
+from models.v17_memory_search_gateway import SearchMode, SearchVectorHit
 from utils.llm.clients import embeddings
 import logging
 
@@ -154,6 +161,12 @@ def delete_vector(uid: str, conversation_id: str):
 # ==========================================
 
 MEMORIES_NAMESPACE = "ns2"
+
+
+@dataclass(frozen=True)
+class V17VectorCandidateQueryResult:
+    hits: List[SearchVectorHit] = field(default_factory=list)
+    rejected_count: int = 0
 
 
 def upsert_memory_vector(
@@ -312,6 +325,45 @@ def search_memories_by_vector(uid: str, query: str, limit: int = 10) -> List[str
     )
 
     return [match['metadata'].get('memory_id') for match in xc.get('matches', [])]
+
+
+def query_v17_memory_vector_candidates(
+    uid: str, query: str, *, mode: SearchMode = SearchMode.default, limit: int = 10
+) -> V17VectorCandidateQueryResult:
+    """Query existing ns2 for V17 candidates using strict tier-safe metadata filters.
+
+    The returned hits are vector candidates only. Product callers must still
+    hydrate authoritative ``memory_items`` and run the V17 search gateway before
+    returning any memory to a user or integration.
+    """
+    if index is None:
+        logger.warning('Pinecone index not initialized, skipping V17 memory vector candidate search')
+        return V17VectorCandidateQueryResult()
+
+    vector = embeddings.embed_query(query)
+    filter_data = (
+        build_v17_archive_memory_vector_filter(uid)
+        if mode == SearchMode.archive_explicit
+        else build_v17_default_memory_vector_filter(uid)
+    )
+    response = index.query(
+        vector=vector,
+        top_k=limit,
+        include_metadata=True,
+        include_values=False,
+        filter=filter_data,
+        namespace=MEMORIES_NAMESPACE,
+    )
+
+    hits: List[SearchVectorHit] = []
+    rejected_count = 0
+    for match in response.get('matches', []):
+        parsed = parse_v17_search_vector_hit(match)
+        if parsed.hit is None:
+            rejected_count += 1
+            continue
+        hits.append(parsed.hit)
+    return V17VectorCandidateQueryResult(hits=hits, rejected_count=rejected_count)
 
 
 def delete_memory_vector(uid: str, memory_id: str):
