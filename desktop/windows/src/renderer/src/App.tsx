@@ -32,12 +32,26 @@ function AppShellInner(): React.JSX.Element {
   const navigate = useNavigate()
   const hideSidebar = pathname === '/settings'
 
+  // Persist the active route to localStorage so the app restores the last page
+  // on relaunch — matches macOS which remembers the selected sidebar item.
+  // Skip /settings (ephemeral full-screen view) and /home (the implicit default).
+  useEffect(() => {
+    if (pathname !== '/settings' && pathname !== '/home') {
+      localStorage.setItem('omi.lastRoute', pathname)
+    }
+  }, [pathname])
+
   // Honor a one-shot destination requested by onboarding (e.g. the final
   // "Take me to my tasks" button). The shell mounts at /home after the
   // onboarding gate redirects; we consume the pending route here and jump to it.
+  // Fall through to the persisted last-route if no pending route.
   useEffect(() => {
     const dest = consumePendingRoute()
-    if (dest) navigate(dest, { replace: true })
+    if (dest) { navigate(dest, { replace: true }); return }
+    const saved = localStorage.getItem('omi.lastRoute')
+    if (saved && saved.startsWith('/') && saved !== '/home') {
+      navigate(saved, { replace: true })
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 

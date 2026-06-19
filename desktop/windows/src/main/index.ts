@@ -1,5 +1,6 @@
 import { app, shell, BrowserWindow, ipcMain, session, nativeImage, desktopCapturer, Tray, Menu, dialog } from 'electron'
 import { join } from 'path'
+import { readFileSync, writeFileSync } from 'fs'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import iconPath from '../../resources/icon.png?asset'
 import { listCaptureSources } from './ipc/capture'
@@ -159,14 +160,40 @@ import {
   updateLocalConversationTitle
 } from './ipc/db'
 
+// ── Window bounds persistence ────────────────────────────────────────────────
+// Save/restore window position and size across restarts so the app reopens
+// where the user left it — matches macOS NSWindow frame autosave behavior.
+type WindowBounds = { x?: number; y?: number; width: number; height: number }
+
+function loadWindowBounds(): WindowBounds | null {
+  try {
+    return JSON.parse(readFileSync(join(app.getPath('userData'), 'main-window-bounds.json'), 'utf8')) as WindowBounds
+  } catch {
+    return null
+  }
+}
+
+function saveWindowBounds(win: BrowserWindow): void {
+  if (win.isMaximized() || win.isMinimized() || win.isFullScreen()) return
+  try {
+    writeFileSync(
+      join(app.getPath('userData'), 'main-window-bounds.json'),
+      JSON.stringify(win.getBounds())
+    )
+  } catch { /* ignore write errors */ }
+}
+
 function createWindow(): BrowserWindow {
   // Create the browser window. 1280x820 gives the two-column Record layout
   // (transcript + screen sidebar) room without overflow; min-size prevents the
   // sidebar from clipping below a usable threshold.
+  const savedBounds = loadWindowBounds()
   const mainWindow = new BrowserWindow({
     title: 'omi',
-    width: 1280,
-    height: 820,
+    width: savedBounds?.width ?? 1280,
+    height: savedBounds?.height ?? 820,
+    x: savedBounds?.x,
+    y: savedBounds?.y,
     minWidth: 1024,
     minHeight: 640,
     show: false,
@@ -195,6 +222,9 @@ function createWindow(): BrowserWindow {
   mainWindow.on('ready-to-show', () => {
     mainWindow.show()
   })
+  // Persist size+position on user resize/move so next launch restores them.
+  mainWindow.on('resize', () => saveWindowBounds(mainWindow))
+  mainWindow.on('move', () => saveWindowBounds(mainWindow))
   perfMark('window:created')
 
   // Allow Firebase + Google OAuth popups to open as real Electron windows so

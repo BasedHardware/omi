@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { AlignLeft, Download, FileText, Search, X } from 'lucide-react'
 import { useRewind } from '../hooks/useRewind'
 import type { RewindFrame } from '../../../shared/types'
@@ -21,6 +21,50 @@ export function Rewind(): React.JSX.Element {
 
   const isToday = dateStr === todayStr
   const frames = isToday ? r.frames : (dateFrames ?? [])
+
+  // Keep a mutable ref updated every render so the keydown handler always has
+  // the latest values without needing to re-register on every state change.
+  const latest = useRef({ frames, cursorTs: r.cursorTs, playing: r.playing, isToday, showSearch })
+  useEffect(() => {
+    latest.current = { frames, cursorTs: r.cursorTs, playing: r.playing, isToday, showSearch }
+  })
+
+  // Keyboard shortcuts — macOS RewindPage parity:
+  //   ← / →  step one frame back / forward
+  //   Space   play / pause (today's live timeline only)
+  //   Ctrl+F  toggle search bar
+  //   Escape  close search bar
+  useEffect(() => {
+    const handler = (e: KeyboardEvent): void => {
+      const tag = (document.activeElement as HTMLElement | null)?.tagName
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return
+
+      const { frames: fs, cursorTs, playing, isToday: isTd, showSearch: ss } = latest.current
+
+      if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+        e.preventDefault()
+        if (fs.length === 0) return
+        // findIndex of the first frame whose ts > cursor, then subtract 1 to get
+        // the current frame (the last one that is at-or-before the cursor).
+        const ahead = fs.findIndex((f) => f.ts > cursorTs)
+        const curIdx = ahead === -1 ? fs.length - 1 : Math.max(0, ahead - 1)
+        if (e.key === 'ArrowLeft' && curIdx > 0) r.setCursorTs(fs[curIdx - 1].ts)
+        else if (e.key === 'ArrowRight' && curIdx < fs.length - 1) r.setCursorTs(fs[curIdx + 1].ts)
+      } else if (e.key === ' ' && isTd) {
+        e.preventDefault()
+        r.setPlaying(!playing)
+      } else if (e.ctrlKey && e.key === 'f') {
+        e.preventDefault()
+        setShowSearch((v) => !v)
+      } else if (e.key === 'Escape' && ss) {
+        e.preventDefault()
+        setShowSearch(false)
+      }
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []) // Registered once; latest values read via the `latest` ref
 
   useEffect(() => {
     if (isToday) { setDateFrames(null); return }

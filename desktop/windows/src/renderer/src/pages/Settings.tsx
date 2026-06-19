@@ -35,8 +35,13 @@ const TAB_COMPONENTS: Partial<Record<SettingsTabId, () => React.JSX.Element>> = 
   support: SupportTab
 }
 
+const SETTINGS_TAB_KEY = 'omi.settings.lastTab'
+
 function SettingsInner(): React.JSX.Element {
-  const [active, setActive] = useState<SettingsTabId>('general')
+  const [active, setActive] = useState<SettingsTabId>(() => {
+    const saved = localStorage.getItem(SETTINGS_TAB_KEY)
+    return (SETTINGS_TABS.some((t) => t.id === saved) ? saved as SettingsTabId : null) ?? 'general'
+  })
   const { query, setQuery } = useSettingsSearch()
   const navigate = useNavigate()
 
@@ -46,6 +51,7 @@ function SettingsInner(): React.JSX.Element {
         active={active}
         onSelect={(id) => {
           setActive(id)
+          localStorage.setItem(SETTINGS_TAB_KEY, id)
           setQuery('') // selecting a tab exits search
         }}
         query={query}

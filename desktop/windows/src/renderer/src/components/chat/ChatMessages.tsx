@@ -77,6 +77,24 @@ function CitationCards({
   )
 }
 
+function CopyMsgButton({ text }: { text: string }): React.JSX.Element {
+  const [copied, setCopied] = useState(false)
+  return (
+    <button
+      onClick={() => {
+        void navigator.clipboard.writeText(text).then(() => {
+          setCopied(true)
+          setTimeout(() => setCopied(false), 1500)
+        })
+      }}
+      className="mt-0.5 self-start rounded px-1.5 py-0.5 text-[10px] text-white/25 opacity-0 transition-all group-hover:opacity-100 hover:bg-white/10 hover:text-white/60"
+      title="Copy message"
+    >
+      {copied ? '✓ Copied' : 'Copy'}
+    </button>
+  )
+}
+
 /**
  * Shared chat message list used by both the main window (Home) and the overlay.
  * Owns bubble styling (per `variant`), markdown rendering, and the smooth reveal
@@ -96,8 +114,9 @@ export function ChatMessages({
     <>
       {messages.map((m, i) => {
         const isLast = i === messages.length - 1
+        const isStreaming = isLast && sending && m.role === 'assistant'
         return (
-          <div key={m.id ?? i} className="flex flex-col">
+          <div key={m.id ?? i} className="group flex flex-col">
             <div className={m.role === 'user' ? cls.user : cls.assistant}>
               {m.role === 'assistant' ? (
                 m.content ? (
@@ -111,6 +130,9 @@ export function ChatMessages({
                 <div className="whitespace-pre-wrap">{m.content}</div>
               )}
             </div>
+            {m.role === 'assistant' && m.content && !isStreaming && (
+              <CopyMsgButton text={m.content} />
+            )}
             {m.role === 'assistant' && m.citations && m.citations.length > 0 && (
               <CitationCards citations={m.citations} variant={variant} />
             )}

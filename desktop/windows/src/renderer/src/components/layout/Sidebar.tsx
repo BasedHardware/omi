@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { NavLink, Link, useLocation } from 'react-router-dom'
+import { NavLink, Link, useLocation, useNavigate } from 'react-router-dom'
 import {
   House,
   GanttChartSquare,
@@ -48,11 +48,29 @@ export function Sidebar(): React.JSX.Element {
   )
   const [rewind, setRewind] = useState<RewindSettings | null>(null)
   const { pathname } = useLocation()
+  const navigate = useNavigate()
 
   useEffect(() => onAuthStateChanged(auth, (u) => setUser(u)), [])
 
   // Keep the displayed name in sync with the editable Settings/onboarding name.
   useEffect(() => onPreferencesChange((p) => setPrefName(p.displayName)), [])
+
+  // Ctrl+1–9: jump to the nth sidebar item — matches macOS Cmd+1–N shortcuts.
+  useEffect(() => {
+    const handler = (e: KeyboardEvent): void => {
+      if (!e.ctrlKey || e.altKey || e.metaKey || e.shiftKey) return
+      const digit = parseInt(e.key, 10)
+      if (isNaN(digit) || digit < 1) return
+      const item = navItems[digit - 1]
+      if (!item) return
+      const tag = (document.activeElement as HTMLElement | null)?.tagName
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return
+      e.preventDefault()
+      navigate(item.to)
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [navigate])
 
   useEffect(() => {
     localStorage.setItem(COLLAPSE_KEY, collapsed ? '1' : '0')
