@@ -3,6 +3,8 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 from typing import Any, Callable, Dict, Iterable, List, Optional
 
+from google.cloud import firestore
+
 from database.v17_collections import V17Collections
 from models.memory_evidence import SourceState
 from models.v17_product_memory import MemoryItemStatus
@@ -118,30 +120,115 @@ def _claim_v17_vector_repair_purge_outbox_snapshot(
     now_iso: str,
     lease_expires_at: str,
 ) -> Optional[Dict[str, Any]]:
+    transaction_factory = getattr(db_client, "transaction", None)
+    if callable(transaction_factory):
+        transaction = transaction_factory()
+        if transaction.__class__.__module__.startswith("google.cloud.firestore"):
+            return _claim_v17_vector_repair_purge_outbox_snapshot_in_firestore_transaction(
+                transaction,
+                db_client=db_client,
+                path=path,
+                worker_id=worker_id,
+                now_iso=now_iso,
+                lease_expires_at=lease_expires_at,
+            )
+        return _claim_v17_vector_repair_purge_outbox_snapshot_in_transaction(
+            transaction=transaction,
+            db_client=db_client,
+            path=path,
+            worker_id=worker_id,
+            now_iso=now_iso,
+            lease_expires_at=lease_expires_at,
+        )
+
+    return _claim_v17_vector_repair_purge_outbox_snapshot_without_transaction(
+        db_client=db_client,
+        path=path,
+        worker_id=worker_id,
+        now_iso=now_iso,
+        lease_expires_at=lease_expires_at,
+    )
+
+
+@firestore.transactional
+def _claim_v17_vector_repair_purge_outbox_snapshot_in_firestore_transaction(
+    transaction,
+    *,
+    db_client,
+    path: str,
+    worker_id: str,
+    now_iso: str,
+    lease_expires_at: str,
+) -> Optional[Dict[str, Any]]:
+    return _claim_v17_vector_repair_purge_outbox_snapshot_in_transaction(
+        transaction=transaction,
+        db_client=db_client,
+        path=path,
+        worker_id=worker_id,
+        now_iso=now_iso,
+        lease_expires_at=lease_expires_at,
+    )
+
+
+def _claim_v17_vector_repair_purge_outbox_snapshot_in_transaction(
+    *,
+    transaction,
+    db_client,
+    path: str,
+    worker_id: str,
+    now_iso: str,
+    lease_expires_at: str,
+) -> Optional[Dict[str, Any]]:
+    doc_ref = db_client.document(path)
+    snapshot = doc_ref.get(transaction=transaction)
+    if not getattr(snapshot, "exists", False):
+        return None
+    record = snapshot.to_dict() or {}
+    if not _is_claimable_v17_vector_repair_purge_outbox_record(record=record, now_iso=now_iso):
+        return None
+    record["outbox_path"] = path
+    transaction.update(doc_ref, _lease_patch(worker_id=worker_id, now_iso=now_iso, lease_expires_at=lease_expires_at))
+    return record
+
+
+def _claim_v17_vector_repair_purge_outbox_snapshot_without_transaction(
+    *,
+    db_client,
+    path: str,
+    worker_id: str,
+    now_iso: str,
+    lease_expires_at: str,
+) -> Optional[Dict[str, Any]]:
     doc_ref = db_client.document(path)
     snapshot = doc_ref.get()
     if not getattr(snapshot, "exists", False):
         return None
     record = snapshot.to_dict() or {}
-    if record.get("event_type") != V17_VECTOR_REPAIR_PURGE_EVENT_TYPE:
-        return None
-    if record.get("status") != V17_VECTOR_REPAIR_OUTBOX_PENDING_STATUS:
-        return None
-    available_at = record.get("available_at")
-    if not isinstance(available_at, str) or available_at > now_iso:
+    if not _is_claimable_v17_vector_repair_purge_outbox_record(record=record, now_iso=now_iso):
         return None
     record["outbox_path"] = path
-    doc_ref.update(
-        {
-            "status": V17_VECTOR_REPAIR_OUTBOX_IN_PROGRESS_STATUS,
-            "lease_owner": worker_id,
-            "leased_at": now_iso,
-            "locked_at": now_iso,
-            "lease_expires_at": lease_expires_at,
-            "updated_at": now_iso,
-        }
-    )
+    doc_ref.update(_lease_patch(worker_id=worker_id, now_iso=now_iso, lease_expires_at=lease_expires_at))
     return record
+
+
+def _is_claimable_v17_vector_repair_purge_outbox_record(*, record: Dict[str, Any], now_iso: str) -> bool:
+    if record.get("event_type") != V17_VECTOR_REPAIR_PURGE_EVENT_TYPE:
+        return False
+    if record.get("status") != V17_VECTOR_REPAIR_OUTBOX_PENDING_STATUS:
+        return False
+    available_at = record.get("available_at")
+    return isinstance(available_at, str) and available_at <= now_iso
+
+
+def _lease_patch(*, worker_id: str, now_iso: str, lease_expires_at: str) -> Dict[str, Any]:
+    return {
+        "status": V17_VECTOR_REPAIR_OUTBOX_IN_PROGRESS_STATUS,
+        "lease_owner": worker_id,
+        "leased_at": now_iso,
+        "locked_at": now_iso,
+        "lease_expires_at": lease_expires_at,
+        "updated_at": now_iso,
+    }
 
 
 def process_v17_vector_repair_purge_outbox_records(

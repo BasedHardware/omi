@@ -46,11 +46,12 @@ Before enabling V17 writes for any production user:
 
 ## Emulator validation gate
 
-Local Firebase emulator validation is now wired for the V17 vector repair/purge outbox writer:
+Local Firebase emulator validation is now wired for the V17 vector repair/purge outbox writer, client-rule denial, and transactional lease contention:
 
 ```bash
 npm run test:v17-vector-repair-outbox:emulator
 npm run test:v17-vector-repair-outbox-rules:emulator
+npm run test:v17-vector-repair-outbox-lease:emulator
 ```
 
 Prerequisites:
@@ -67,6 +68,8 @@ What this gate proves locally:
 - New records retain the pending retry contract: `status=pending`, `attempt_count=0`, `last_error=null`.
 - Write failures are not silently swallowed by `write_v17_vector_repair_purge_outbox_records(...)`; exceptions propagate to the caller for route/worker telemetry and retry/dead-letter handling.
 - Signed-in client SDK direct read/create/update/delete on `memory_outbox` and the other protected V17 collections is denied by Firestore Security Rules; backend/Admin SDK access is required and bypasses client rules through IAM.
+- `lease_v17_vector_repair_purge_outbox_records(...)` claims due pending outbox records through Firestore transaction re-read/update semantics when the client supports transactions.
+- Eight competing local emulator lease attempts against the same pending `users/{uid}/memory_outbox/{record_id}` document produce exactly one returned claim and one stored `in_progress` lease owner/timestamp set, proving the local transaction-contention contract for at-most-one worker action on that record.
 
 What this gate does **not** prove:
 
@@ -94,5 +97,6 @@ Cloud IAM and deployed Security Rules remain future gates until production proje
 ```bash
 npm run test:v17-vector-repair-outbox:emulator
 npm run test:v17-vector-repair-outbox-rules:emulator
+npm run test:v17-vector-repair-outbox-lease:emulator
 cd backend && pytest tests/unit/test_v17_firestore_security_rules.py tests/unit/test_v17_firestore_iam_deployment_doc.py tests/unit/test_v17_vector_repair_outbox_emulator_harness.py -q
 ```

@@ -67,6 +67,8 @@ class _FakeDocumentReference:
         self._store = store
 
     def get(self, transaction=None):
+        if transaction is not None and hasattr(transaction, "read_paths"):
+            transaction.read_paths.append(self.path)
         return _FakeSnapshot(self.path, self._store.get(self.path))
 
     def update(self, patch):
@@ -120,6 +122,32 @@ class _FakeFirestore:
         return _FakeDocumentReference(path, self.store)
 
 
+class _FakeTransaction:
+    def __init__(self, db):
+        self._db = db
+        self.read_paths = []
+        self.update_paths = []
+
+    def get(self, doc_ref):
+        self.read_paths.append(doc_ref.path)
+        return doc_ref.get(transaction=self)
+
+    def update(self, doc_ref, patch):
+        self.update_paths.append(doc_ref.path)
+        doc_ref.update(patch)
+
+
+class _FakeTransactionalFirestore(_FakeFirestore):
+    def __init__(self, docs=None):
+        super().__init__(docs)
+        self.transactions = []
+
+    def transaction(self):
+        transaction = _FakeTransaction(self)
+        self.transactions.append(transaction)
+        return transaction
+
+
 def test_firestore_reader_leases_only_available_pending_vector_repair_records_and_ack_updates_path():
     now = datetime(2026, 6, 19, 12, 0, tzinfo=timezone.utc)
     available = now.isoformat()
@@ -166,6 +194,30 @@ def test_firestore_reader_leases_only_available_pending_vector_repair_records_an
     assert db.store["users/u1/memory_outbox/available"]["status"] == "completed"
     assert db.store["users/u1/memory_outbox/available"]["action"] == "repair"
     assert db.store["users/u1/memory_outbox/available"]["updated_at"] == now.isoformat()
+
+
+def test_firestore_reader_claim_uses_transaction_when_client_supports_it():
+    now = datetime(2026, 6, 19, 12, 0, tzinfo=timezone.utc)
+    path = "users/u1/memory_outbox/transactional"
+    db = _FakeTransactionalFirestore(
+        {path: _record(record_id="transactional", outbox_path=path, available_at=now.isoformat())}
+    )
+
+    leased = lease_v17_vector_repair_purge_outbox_records(
+        db_client=db,
+        uid="u1",
+        worker_id="worker-txn",
+        limit=1,
+        lease_seconds=30,
+        now=now,
+    )
+
+    assert [record["record_id"] for record in leased] == ["transactional"]
+    assert len(db.transactions) == 1
+    assert db.transactions[0].read_paths == [path]
+    assert db.transactions[0].update_paths == [path]
+    assert db.store[path]["status"] == "in_progress"
+    assert db.store[path]["lease_owner"] == "worker-txn"
 
 
 def test_duplicate_lease_after_claim_does_not_duplicate_worker_action():

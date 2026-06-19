@@ -447,11 +447,32 @@ This closes only the narrow fake-backed Firestore reader/ack writer seam. Remain
 - Prove shared `ns2` isolation; add overfetch/refill/budgets, app/key/scope auth, and real benchmark/cloud evidence.
 - Production rollout remains **BLOCKED / NO-GO** until all Oracle P0s and required real-service evidence are complete.
 
+### 2026-06-19 — P0-4 Firestore emulator transaction contention validation for vector repair outbox lease
+
+Continued Oracle P0-4 by hardening the leased Firestore reader seam and validating the claim contract under real local Firestore emulator contention, without changing the production rollout verdict:
+
+- Updated `lease_v17_vector_repair_purge_outbox_records(...)` so each pending document claim uses a Firestore transaction when the injected client supports `transaction()`: the claim re-reads the document inside the transaction, verifies it is still `event_type="vector_repair_purge"`, `status="pending"`, and due, then updates the same document to `in_progress` with lease metadata in the transaction.
+- Kept the existing fake/no-transaction fallback for unit seams, but documented and tested the transactional path separately so production-capable clients do not depend only on in-memory fake behavior.
+- Added `backend/scripts/v17_vector_repair_outbox_lease_emulator_test.py` and `npm run test:v17-vector-repair-outbox-lease:emulator`, which starts the Firebase Firestore emulator, writes one deterministic pending `users/{uid}/memory_outbox/{record_id}` record, launches eight competing worker lease attempts, and asserts exactly one returned claim and one stored `in_progress` lease owner/timestamp set.
+- The ack writer remains explicit and failure-propagating; no Pinecone delete/upsert or production scheduler was added.
+- This is local emulator evidence only. It does **not** validate production cloud IAM/service-account bindings, deployed Security Rules, Cloud Run/Tasks scheduling, real Pinecone deletion/repair, duplicate physical stale-ID removal, shared `ns2` isolation, central telemetry/alerts, benchmarks, or production approval.
+
+Verification recorded in `docs/epics/v17_memory_implementation_tickets.md`: RED transactional unit expectation (`1 failed, 8 passed`), RED missing emulator lease harness/package script (`2 failed`), GREEN focused outbox tests (`11 passed`), real Firestore emulator contention command (`npm run test:v17-vector-repair-outbox-lease:emulator` → PASS, `claimed=1`), focused vector/outbox/product regression (`36 passed`), full `pytest tests/unit/test_v17_*.py -q` (`224 passed, 1 warning`), and async blocker scan exit 0 with pre-existing findings only.
+
+This closes only the local Firestore emulator transaction-contention validation subpoint for the lease seam. Remaining P0-4/P0 work:
+
+- Validate production cloud IAM/service-account bindings and deployed Security Rules against the real Firebase project before rollout.
+- Add Cloud Run/Tasks or another explicit scheduler/lease-owner execution contract; do not start background production processing from this seam alone.
+- Implement injected real Pinecone delete/upsert repair functions and prove duplicate stale-ID removal with Pinecone data, including tombstoned/deleted/missing authoritative items.
+- Add central low-cardinality telemetry/alerts for lease attempts, action counts, retry/dead-letter reasons, latency, stale-vector rates, and ack failures.
+- Prove shared `ns2` isolation; add overfetch/refill/budgets, app/key/scope auth, and real benchmark/cloud evidence.
+- Production rollout remains **BLOCKED / NO-GO** until all Oracle P0s and required real-service evidence are complete.
+
 ## Not-run / not-claimed caveats preserved
 
 - Oracle review has now run and is recorded here, but it blocks production rollout.
 - Real Pinecone validation was **not** run.
-- Real Firestore/cloud validation was **not** run.
+- Production Firestore cloud IAM/deployed Security Rules validation was **not** run; only local Firestore emulator outbox persistence/rules/lease contention gates exist.
 - Benchmark/no-silent-data-loss validation for vector search quality, latency, and recall was **not** run.
 - Production metrics aggregation/central `/metrics` integration was **not** completed.
 - Production rollout/cutover is **not** approved.
