@@ -65,6 +65,8 @@ def make_cache_key(policy: CachePolicy, entity_id: str) -> str:
 
 def invalidate(policy: CachePolicy, entity_id: str) -> None:
     """Best-effort invalidation. Redis failures are logged and swallowed."""
+    if not is_enabled(policy):
+        return
 
     key = make_cache_key(policy, entity_id)
     try:
@@ -112,6 +114,7 @@ def get_or_fetch(policy: CachePolicy, entity_id: str, fetch_fn: Callable[[], Any
         record_request(policy.namespace, 'miss')
 
     payload = _fetch(policy, fetch_fn)
+    now = time.time()
     _set(policy, key, payload, now)
     return payload
 
