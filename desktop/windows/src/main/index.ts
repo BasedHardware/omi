@@ -1,4 +1,4 @@
-import { app, shell, BrowserWindow, ipcMain, session, nativeImage, desktopCapturer } from 'electron'
+import { app, shell, BrowserWindow, ipcMain, session, nativeImage, desktopCapturer, Tray, Menu } from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import iconPath from '../../resources/icon.png?asset'
@@ -37,6 +37,7 @@ import { startRewindCapture } from './rewind/captureService'
 import { startRewindOcr } from './rewind/ocrService'
 import { startRewindRetention } from './rewind/retentionRunner'
 import { prewarmPrimarySourceId } from './rewind/sourceId'
+import { getPersistedRewindSettings, persistRewindSettings } from './rewind/rewindSettings'
 import { perfMark, flushPerfMarks } from '../shared/perf'
 
 // Default the perf log to the user data dir so marks double as lightweight prod
@@ -84,6 +85,65 @@ if (sandbox && process.env.OMI_BENCH !== '1') {
 }
 
 const icon = nativeImage.createFromPath(iconPath)
+
+// Keep a module-level reference so the tray isn't GC'd.
+let tray: Tray | null = null
+// Set to true when we're actually quitting so the close-to-tray intercept
+// doesn't prevent shutdown.
+let isQuitting = false
+
+// Build (or rebuild) the tray context menu, reading live settings each time
+// so the checked state reflects the current toggle value.
+function buildTrayMenu(mainWindow: BrowserWindow): Electron.Menu {
+  const settings = getPersistedRewindSettings()
+  return Menu.buildFromTemplate([
+    {
+      label: 'Open Omi',
+      click: () => {
+        mainWindow.show()
+        mainWindow.focus()
+      }
+    },
+    { type: 'separator' },
+    {
+      label: 'Screen Capture',
+      type: 'checkbox',
+      checked: settings.captureEnabled,
+      click: () => {
+        const current = getPersistedRewindSettings()
+        const updated = persistRewindSettings({ ...current, captureEnabled: !current.captureEnabled })
+        // Broadcast the new settings to all renderer windows (same event that
+        // rewind:setSettings uses) so the sidebar toggle stays in phase.
+        for (const w of BrowserWindow.getAllWindows()) {
+          if (!w.isDestroyed()) w.webContents.send('rewind:settings', updated)
+        }
+        tray?.setContextMenu(buildTrayMenu(mainWindow))
+      }
+    },
+    { type: 'separator' },
+    {
+      label: 'Quit Omi',
+      click: () => {
+        isQuitting = true
+        app.quit()
+      }
+    }
+  ])
+}
+
+function setupTray(mainWindow: BrowserWindow): void {
+  tray = new Tray(icon)
+  tray.setToolTip('Omi')
+  tray.setContextMenu(buildTrayMenu(mainWindow))
+
+  // Left-click on the tray icon shows / focuses the main window (matches macOS
+  // behavior where clicking the menu bar icon opens the app).
+  tray.on('click', () => {
+    mainWindow.show()
+    mainWindow.focus()
+  })
+}
+
 import {
   remapConversationId,
   insertLocalConversation,
@@ -316,6 +376,24 @@ app.whenReady().then(async () => {
   registerScreenSynthHandlers()
 
   const mainWindow = createWindow()
+
+  // System tray — mirrors macOS menu bar icon. Created immediately so the tray
+  // appears as soon as the app launches. Left-click and "Open Omi" show the window.
+  setupTray(mainWindow)
+
+  // Close-to-tray: intercept the window's close event and hide it instead of
+  // destroying it, so Omi keeps running in the system tray just like the macOS
+  // menu-bar app. The tray "Quit Omi" item sets isQuitting=true so the actual
+  // quit path still works.
+  app.on('before-quit', () => {
+    isQuitting = true
+  })
+  mainWindow.on('close', (e) => {
+    if (!isQuitting) {
+      e.preventDefault()
+      mainWindow.hide()
+    }
+  })
 
   // Defer non-essential background services until the window is ready to show, so
   // their synchronous setup (foreground-monitor koffi/user32 init ~60ms, rewind
