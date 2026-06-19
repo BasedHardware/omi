@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { AlignLeft, Download, FileText, Search, X } from 'lucide-react'
+import { AlignLeft, Download, FileText, Printer, Search, X } from 'lucide-react'
 import { useRewind } from '../hooks/useRewind'
 import type { RewindFrame } from '../../../shared/types'
 import { RewindPlayer } from '../components/rewind/RewindPlayer'
@@ -7,6 +7,44 @@ import { RewindTimelineBar } from '../components/rewind/RewindTimelineBar'
 import { RewindThumbnailStrip } from '../components/rewind/RewindThumbnailStrip'
 import { RewindSearchBar } from '../components/rewind/RewindSearchBar'
 import { SearchResultsFilmstrip } from '../components/rewind/SearchResultsFilmstrip'
+
+const htmlEsc = (s: string): string =>
+  s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+
+function buildPrintHtml(frames: RewindFrame[], dateStr: string): string {
+  const header = `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<title>Omi Rewind Export — ${dateStr}</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  @page { margin: 1.25cm 1.5cm; }
+  body { font-family: system-ui, -apple-system, sans-serif; font-size: 10pt; color: #111; line-height: 1.5; }
+  h1 { font-size: 16pt; font-weight: 700; margin-bottom: 4pt; }
+  .meta { font-size: 9pt; color: #555; margin-bottom: 24pt; }
+  .frame { page-break-inside: avoid; margin-bottom: 14pt; padding-bottom: 14pt; border-bottom: 0.5pt solid #ddd; }
+  .frame:last-child { border-bottom: none; }
+  .ts { font-size: 9pt; font-weight: 600; color: #333; }
+  .app { font-size: 9pt; color: #555; margin-top: 1pt; margin-bottom: 4pt; }
+  .ocr { font-size: 8.5pt; color: #222; white-space: pre-wrap; word-break: break-word; }
+  .empty { color: #888; font-style: italic; }
+</style>
+</head>
+<body>
+<h1>Omi Rewind Export</h1>
+<p class="meta">Date: ${dateStr} · ${frames.length} frame${frames.length !== 1 ? 's' : ''} · Exported ${new Date().toLocaleString()}</p>
+`
+  const body = frames.map((f) => {
+    const ts = new Date(f.ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+    const appText = [f.app, f.windowTitle].filter(Boolean).join(' · ') || 'Unknown'
+    const ocrHtml = f.ocrText
+      ? `<p class="ocr">${htmlEsc(f.ocrText)}</p>`
+      : '<p class="empty">No OCR text</p>'
+    return `<div class="frame"><p class="ts">${ts}</p><p class="app">${htmlEsc(appText)}</p>${ocrHtml}</div>`
+  }).join('\n')
+  return `${header}${body}</body></html>`
+}
 
 export function Rewind(): React.JSX.Element {
   const r = useRewind()
@@ -99,6 +137,21 @@ export function Rewind(): React.JSX.Element {
     URL.revokeObjectURL(url)
   }
 
+  const exportPdf = (): void => {
+    try {
+      const iframe = document.createElement('iframe')
+      iframe.style.cssText = 'position:fixed;left:-9999px;top:-9999px;width:1px;height:1px;border:none'
+      iframe.srcdoc = buildPrintHtml(frames, dateStr)
+      document.body.appendChild(iframe)
+      iframe.onload = (): void => {
+        try { iframe.contentWindow?.print() } catch { /* ignore */ }
+        setTimeout(() => { if (document.body.contains(iframe)) document.body.removeChild(iframe) }, 2000)
+      }
+    } catch (err) {
+      console.error('[Rewind] PDF export failed:', err)
+    }
+  }
+
   const exportMarkdown = (): void => {
     const lines: string[] = ['# Omi Rewind Export', '', `**Date:** ${dateStr}`, '']
     for (const f of frames) {
@@ -169,6 +222,14 @@ export function Rewind(): React.JSX.Element {
                   >
                     <FileText className="h-3.5 w-3.5" strokeWidth={1.75} />
                     MD
+                  </button>
+                  <button
+                    onClick={exportPdf}
+                    title="Export frames as PDF (opens print dialog)"
+                    className="flex items-center gap-1.5 rounded bg-white/10 px-3 py-1 text-sm text-white/70 transition-colors hover:bg-white/15 hover:text-white"
+                  >
+                    <Printer className="h-3.5 w-3.5" strokeWidth={1.75} />
+                    PDF
                   </button>
                 </>
               )}

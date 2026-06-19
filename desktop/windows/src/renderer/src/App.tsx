@@ -13,9 +13,8 @@ import { SourcePicker } from './components/SourcePicker'
 // brain map — wrapping the page in Suspense breaks the BrainGraph render. The
 // direct import keeps the map reliable; the bundle-size win is not worth it.
 import { Onboarding } from './pages/Onboarding'
-import { consumePendingRoute } from './lib/preferences'
+import { consumePendingRoute, getPreferences, setPreferences, onPreferencesChange } from './lib/preferences'
 import { useOnboardingComplete } from './hooks/useOnboardingComplete'
-import { getPreferences } from './lib/preferences'
 import { SandboxBadge } from './components/SandboxBadge'
 import { OverlayApp } from './components/overlay/OverlayApp'
 import { RewindCaptureHost } from './components/rewind/RewindCaptureHost'
@@ -73,6 +72,44 @@ function AppShellInner(): React.JSX.Element {
   // saves a chat it can't invalidate ours directly. Main rebroadcasts the change
   // here so this window's Conversations tab refreshes without a relaunch.
   useEffect(() => window.omi.onConversationsChanged(() => invalidateConversationsCache()), [])
+
+  // Font scale — applies the persisted scale to the root element so all
+  // rem-based Tailwind text utilities scale uniformly. Matches macOS Cmd++/−.
+  // Only runs in the main app shell (not the overlay window, which bypasses
+  // AppShellInner and uses its own zoom transform).
+  useEffect(() => {
+    const apply = (scale: number): void => {
+      document.documentElement.style.fontSize = `${scale * 100}%`
+    }
+    apply(getPreferences().fontScale ?? 1.0)
+    return onPreferencesChange((p) => apply(p.fontScale ?? 1.0))
+  }, [])
+
+  // Ctrl+= / Ctrl++ — increase font scale (5% per step, max 125%)
+  // Ctrl+-          — decrease font scale (5% per step, min 85%)
+  // Ctrl+0          — reset to 100%
+  useEffect(() => {
+    const handler = (e: KeyboardEvent): void => {
+      if (!e.ctrlKey || e.altKey || e.metaKey) return
+      const tag = (document.activeElement as HTMLElement | null)?.tagName
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return
+      const step = 0.05
+      if (e.key === '=' || e.key === '+') {
+        e.preventDefault()
+        const next = Math.min(1.25, Math.round(((getPreferences().fontScale ?? 1.0) + step) * 100) / 100)
+        setPreferences({ fontScale: next })
+      } else if (e.key === '-') {
+        e.preventDefault()
+        const next = Math.max(0.85, Math.round(((getPreferences().fontScale ?? 1.0) - step) * 100) / 100)
+        setPreferences({ fontScale: next })
+      } else if (e.key === '0') {
+        e.preventDefault()
+        setPreferences({ fontScale: 1.0 })
+      }
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [])
 
   return (
     <div className="app-canvas flex h-full min-h-0">

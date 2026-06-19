@@ -59,6 +59,10 @@ export type Preferences = {
   // When true, analysis sends 1-2 sampled Rewind screenshots to Gemini Vision
   // instead of text-only OCR. Falls back to text if vision fails.
   focusVisionEnabled?: boolean
+  // Global font scale applied to the root element so all rem-based Tailwind
+  // text utilities scale uniformly. Range: 0.85–1.25. Default (undefined) = 1.0.
+  // Changed via Ctrl+= / Ctrl+- / Ctrl+0 keyboard shortcuts.
+  fontScale?: number
 }
 
 const defaults: Preferences = {
