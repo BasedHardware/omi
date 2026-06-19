@@ -53,7 +53,11 @@ from utils.memory.v17_developer_memory_adapter import (
     search_v17_default_developer_memories,
     search_v17_default_developer_memories_vector,
 )
-from utils.memory.v17_default_read_rollout import V17ReadDecision, legacy_safe_v17_default_read_rollout_decision
+from utils.memory.v17_default_read_rollout import (
+    V17ReadDecision,
+    assert_legacy_memory_write_allowed_for_default_read_decision,
+    legacy_safe_v17_default_read_rollout_decision,
+)
 import logging
 
 logger = logging.getLogger(__name__)
@@ -315,6 +319,13 @@ def create_memory(
     """
     if not request.content or len(request.content.strip()) == 0:
         raise HTTPException(status_code=422, detail="content cannot be empty")
+
+    write_guard = assert_legacy_memory_write_allowed_for_default_read_decision(
+        read_v17_developer_default_memory_rollout(uid=uid, db_client=db),
+        operation='create_memory',
+    )
+    if not write_guard.allowed:
+        raise HTTPException(status_code=write_guard.status_code, detail=write_guard.detail)
 
     # Auto-categorize if no category provided
     category = request.category if request.category else identify_category_for_memory(request.content.strip())

@@ -12,7 +12,11 @@ from utils.memory.v17_developer_memory_adapter import (
     search_v17_default_developer_memories,
     search_v17_default_developer_memories_vector,
 )
-from utils.memory.v17_default_read_rollout import V17ReadDecision, legacy_safe_v17_default_read_rollout_decision
+from utils.memory.v17_default_read_rollout import (
+    V17ReadDecision,
+    assert_legacy_memory_write_allowed_for_default_read_decision,
+    legacy_safe_v17_default_read_rollout_decision,
+)
 
 
 class _Snapshot:
@@ -183,6 +187,19 @@ def test_developer_vector_route_wires_v17_adapter_behind_rollout():
     assert route_index < contents.index(rollout_call, route_index) < contents.index(vector_adapter_call, route_index)
 
 
+def test_developer_create_route_checks_split_brain_guard_before_legacy_write():
+    developer_py = Path(__file__).resolve().parents[2] / 'routers' / 'developer.py'
+    contents = developer_py.read_text(encoding='utf-8')
+
+    route = '@router.post("/v1/dev/user/memories", response_model=MemoryResponse, tags=["developer"])'
+    guard_call = "assert_legacy_memory_write_allowed_for_default_read_decision("
+    legacy_write = "memories_db.create_memory(uid, memory_db.dict())"
+    assert guard_call in contents
+    assert legacy_write in contents
+    route_index = contents.index(route)
+    assert route_index < contents.index(guard_call, route_index) < contents.index(legacy_write, route_index)
+
+
 def test_developer_routes_only_reach_legacy_after_explicit_legacy_safe_decision():
     developer_py = Path(__file__).resolve().parents[2] / 'routers' / 'developer.py'
     contents = developer_py.read_text(encoding='utf-8')
@@ -230,6 +247,67 @@ def test_developer_rollout_reader_fails_closed_without_memory_item_reads_for_mis
     assert no_grant_decision.app_has_default_memory_grant is False
     assert no_grant_decision.v17_default_developer_enabled is False
     assert no_grant.collection_paths == []
+
+
+def test_split_brain_guard_blocks_v17_enabled_developer_legacy_write_without_mutation():
+    read_decision = read_v17_developer_default_memory_rollout(
+        uid='u1', db_client=_FirestoreFake({'users/u1/memory_control/state': _enabled_rollout_doc()})
+    )
+
+    decision = assert_legacy_memory_write_allowed_for_default_read_decision(
+        read_decision,
+        operation='create_memory',
+        allow_write_convergence=False,
+    )
+
+    assert decision.allowed is False
+    assert decision.status_code == 409
+    assert decision.detail == {
+        'enabled': False,
+        'reason': 'v17_default_read_legacy_write_blocked',
+        'consumer': 'developer_api',
+        'operation': 'create_memory',
+        'read_decision': V17ReadDecision.USE_V17.value,
+        'source_path': 'users/u1/memory_control/state',
+    }
+
+
+def test_split_brain_guard_blocks_missing_or_malformed_developer_config_fail_safe():
+    missing = read_v17_developer_default_memory_rollout(uid='u1', db_client=_FirestoreFake())
+    malformed = read_v17_developer_default_memory_rollout(
+        uid='u1',
+        db_client=_FirestoreFake(
+            {'users/u1/memory_control/state': {'uid': 'u1', 'mode': 'read', 'stage_gates': 'bad'}}
+        ),
+    )
+
+    for read_decision in [missing, malformed]:
+        decision = assert_legacy_memory_write_allowed_for_default_read_decision(
+            read_decision,
+            operation='create_memory',
+        )
+        assert decision.allowed is False
+        assert decision.status_code == 409
+        assert decision.detail['reason'] == 'v17_default_read_legacy_write_blocked'
+
+
+def test_split_brain_guard_allows_disabled_or_explicit_converged_developer_legacy_write():
+    disabled = read_v17_developer_default_memory_rollout(
+        uid='u1',
+        db_client=_FirestoreFake(
+            {'users/u1/memory_control/state': _enabled_rollout_doc() | {'mode': V17Mode.off.value}}
+        ),
+    )
+    enabled = read_v17_developer_default_memory_rollout(
+        uid='u1', db_client=_FirestoreFake({'users/u1/memory_control/state': _enabled_rollout_doc()})
+    )
+
+    assert_legacy_memory_write_allowed_for_default_read_decision(disabled, operation='create_memory')
+    assert_legacy_memory_write_allowed_for_default_read_decision(
+        enabled,
+        operation='create_memory',
+        allow_write_convergence=True,
+    )
 
 
 def test_developer_default_v17_adapter_uses_product_search_and_excludes_stale_short_term_and_archive():

@@ -213,6 +213,58 @@ def legacy_safe_v17_default_read_rollout_decision(
     )
 
 
+@dataclass(frozen=True)
+class V17LegacyMemoryWriteGuardDecision:
+    allowed: bool
+    detail: dict
+    status_code: int = 200
+
+
+def assert_legacy_memory_write_allowed_for_default_read_decision(
+    decision: V17DefaultReadRolloutDecision,
+    *,
+    operation: str,
+    allow_write_convergence: bool = False,
+) -> V17LegacyMemoryWriteGuardDecision:
+    """Guard legacy external memory writes while default V17 reads are enabled.
+
+    Developer/MCP create/edit/delete currently mutate legacy `memories` state while
+    V17 reads hydrate from `memory_items`. Until a server-owned convergence/dual-write
+    policy is explicitly passed, block those legacy mutations for consumers whose
+    persisted rollout says V17 reads are authoritative or shadowed. Missing or
+    malformed control state also fails safe; explicitly disabled legacy-safe reads
+    preserve existing legacy write behavior.
+    """
+
+    fail_safe_reasons = {'missing_rollout_state', 'malformed_rollout_state', 'uid_mismatch'}
+    should_block = decision.read_decision in {V17ReadDecision.USE_V17, V17ReadDecision.SHADOW_ONLY}
+    should_block = should_block or decision.fallback_reason in fail_safe_reasons
+    if allow_write_convergence or not should_block:
+        return V17LegacyMemoryWriteGuardDecision(
+            allowed=True,
+            detail={
+                'enabled': True,
+                'reason': 'legacy_memory_write_allowed',
+                'consumer': decision.consumer,
+                'operation': operation,
+                'read_decision': decision.read_decision.value,
+                'source_path': decision.source_path,
+            },
+        )
+    return V17LegacyMemoryWriteGuardDecision(
+        allowed=False,
+        status_code=409,
+        detail={
+            'enabled': False,
+            'reason': 'v17_default_read_legacy_write_blocked',
+            'consumer': decision.consumer,
+            'operation': operation,
+            'read_decision': decision.read_decision.value,
+            'source_path': decision.source_path,
+        },
+    )
+
+
 def _consumer_default_memory_grant_enabled(data: dict, consumer: str) -> bool:
     grants = data.get('grants')
     if isinstance(grants, dict):
