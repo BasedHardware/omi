@@ -106,6 +106,9 @@ class _DocumentRef:
         data = self._db_client.docs.get(self.path)
         return _Snapshot(data, exists=data is not None)
 
+    def set(self, data):
+        self._db_client.docs[self.path] = dict(data)
+
 
 class _VectorCandidateResult:
     def __init__(self, hits, rejected_count=0):
@@ -594,3 +597,109 @@ def test_vector_search_endpoint_uses_persisted_default_policy_and_excludes_stale
     assert response['rollout']['enabled'] is True
     assert response['vector_rejected_count'] == 1
     assert response['archive_default_visible'] is False
+
+
+def test_vector_search_endpoint_does_not_persist_repair_outbox_without_server_flag(monkeypatch):
+    from models.v17_memory_search_gateway import SearchMode, SearchVectorHit
+
+    now = datetime(2026, 6, 19, 12, 0, tzinfo=timezone.utc)
+    stale_projection = _memory_item('stale-projection', tier=MemoryTier.long_term, now=now)
+    db_client = _FirestoreFake(
+        {
+            _global_read_gate_path(): _global_read_gate_doc(),
+            'users/u1/memory_control/state': {
+                'uid': 'u1',
+                'mode': 'read',
+                'fallback_projection_ready': True,
+                'vector_projection_commit_id': 'projection-1',
+                'account_generation': 3,
+                'stage_gates': {'shadow': 'passed', 'write': 'passed', 'read': 'passed'},
+                'grants': {'omi_chat': {'default_memory': True}},
+            },
+            f'users/u1/memory_items/{stale_projection.memory_id}': _stored_item(stale_projection),
+        }
+    )
+    monkeypatch.setattr(v17_memory_product, "db", db_client)
+
+    def fake_vector_query(uid, query, *, mode, limit):
+        assert mode == SearchMode.default
+        return _VectorCandidateResult(
+            hits=[
+                SearchVectorHit(
+                    memory_id=stale_projection.memory_id,
+                    score=0.99,
+                    projection_commit_id='projection-old',
+                    vector_updated_at=stale_projection.updated_at + timedelta(minutes=1),
+                    vector_id='v17mem:stale-projection',
+                    uid=stale_projection.uid,
+                    account_generation=stale_projection.account_generation,
+                    item_revision=stale_projection.item_revision,
+                    source_commit_id=stale_projection.source_commit_id,
+                    content_hash=stale_projection.content_hash,
+                )
+            ]
+        )
+
+    response = v17_memory_product.search_v17_vector_memory(
+        query='coffee', limit=10, uid='u1', vector_query=fake_vector_query
+    )
+
+    assert response['items'] == []
+    assert response['repair_purge_outbox_record_count'] == 1
+    assert response['rollout']['vector_repair_outbox_enabled'] is False
+    assert not any(path.startswith('users/u1/memory_outbox/') for path in db_client.docs)
+
+
+def test_vector_search_endpoint_persists_repair_outbox_only_with_server_flag(monkeypatch):
+    from models.v17_memory_search_gateway import SearchMode, SearchVectorHit
+
+    now = datetime(2026, 6, 19, 12, 0, tzinfo=timezone.utc)
+    stale_projection = _memory_item('stale-projection', tier=MemoryTier.long_term, now=now)
+    db_client = _FirestoreFake(
+        {
+            _global_read_gate_path(): _global_read_gate_doc(),
+            'users/u1/memory_control/state': {
+                'uid': 'u1',
+                'mode': 'read',
+                'fallback_projection_ready': True,
+                'vector_projection_commit_id': 'projection-1',
+                'vector_repair_outbox_enabled': True,
+                'account_generation': 3,
+                'stage_gates': {'shadow': 'passed', 'write': 'passed', 'read': 'passed'},
+                'grants': {'omi_chat': {'default_memory': True}},
+            },
+            f'users/u1/memory_items/{stale_projection.memory_id}': _stored_item(stale_projection),
+        }
+    )
+    monkeypatch.setattr(v17_memory_product, "db", db_client)
+
+    def fake_vector_query(uid, query, *, mode, limit):
+        assert mode == SearchMode.default
+        return _VectorCandidateResult(
+            hits=[
+                SearchVectorHit(
+                    memory_id=stale_projection.memory_id,
+                    score=0.99,
+                    projection_commit_id='projection-old',
+                    vector_updated_at=stale_projection.updated_at + timedelta(minutes=1),
+                    vector_id='v17mem:stale-projection',
+                    uid=stale_projection.uid,
+                    account_generation=stale_projection.account_generation,
+                    item_revision=stale_projection.item_revision,
+                    source_commit_id=stale_projection.source_commit_id,
+                    content_hash=stale_projection.content_hash,
+                )
+            ]
+        )
+
+    response = v17_memory_product.search_v17_vector_memory(
+        query='coffee', limit=10, uid='u1', vector_query=fake_vector_query
+    )
+
+    record = response['repair_purge_outbox_records'][0]
+    outbox_path = f"users/u1/memory_outbox/{record['record_id']}"
+    assert response['items'] == []
+    assert response['rollout']['vector_repair_outbox_enabled'] is True
+    assert record['outbox_path'] == outbox_path
+    assert db_client.docs[outbox_path]['record_id'] == record['record_id']
+    assert db_client.docs[outbox_path]['idempotency_key'] == record['record_id']

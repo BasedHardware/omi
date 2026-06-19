@@ -3,6 +3,7 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, Query
 
 from database._client import db
+from database.v17_vector_repair_outbox import write_v17_vector_repair_purge_outbox_records
 from models.v17_product_memory import MemoryAccessPolicy
 from utils.memory.v17_default_read_rollout import (
     V17ReadDecision,
@@ -57,6 +58,10 @@ def _policy_payload(policy: MemoryAccessPolicy) -> dict:
         'archive_capability': policy.archive_capability,
         'raw_provenance_capability': policy.raw_provenance_capability,
     }
+
+
+def _write_vector_repair_purge_outbox_records(records: list[dict]) -> list[dict]:
+    return write_v17_vector_repair_purge_outbox_records(db_client=db, records=records)
 
 
 def _global_read_gate_observability(gate) -> dict:
@@ -139,6 +144,7 @@ def search_v17_vector_memory(
     global_read_gate = _require_global_v17_read_gate()
     rollout = read_v17_default_read_rollout(uid=uid, db_client=db, consumer='omi_chat')
     rollout_observability = build_v17_default_read_rollout_observability(rollout)
+    rollout_observability['vector_repair_outbox_enabled'] = rollout.vector_repair_outbox_enabled
     if rollout.read_decision != V17ReadDecision.USE_V17:
         raise HTTPException(status_code=403, detail=rollout_observability)
     if not rollout.vector_projection_commit_id:
@@ -153,6 +159,9 @@ def search_v17_vector_memory(
             db_client=db,
             policy=policy,
             vector_query=vector_query if callable(vector_query) else None,
+            repair_purge_outbox_writer=(
+                _write_vector_repair_purge_outbox_records if rollout.vector_repair_outbox_enabled else None
+            ),
             limit=limit,
             required_projection_commit_id=rollout.vector_projection_commit_id,
             required_account_generation=rollout.rollout_capabilities.account_generation,

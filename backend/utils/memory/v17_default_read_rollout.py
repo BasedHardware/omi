@@ -58,6 +58,7 @@ class V17DefaultReadRolloutDecision:
     app_has_default_memory_grant: bool
     archive_capability: bool = False
     vector_projection_commit_id: Optional[str] = None
+    vector_repair_outbox_enabled: bool = False
     reason: str = 'ok'
     explicit_read_decision: V17ReadDecision | None = None
 
@@ -444,6 +445,7 @@ def normalize_v17_default_read_rollout_decision(
         vector_projection_commit_id = data.get('vector_projection_commit_id')
         if not isinstance(vector_projection_commit_id, str) or not vector_projection_commit_id.strip():
             vector_projection_commit_id = None
+        vector_repair_outbox_enabled = data.get('vector_repair_outbox_enabled') is True
         return V17DefaultReadRolloutDecision(
             uid=uid,
             source_path=source_path,
@@ -452,6 +454,7 @@ def normalize_v17_default_read_rollout_decision(
             app_has_default_memory_grant=_consumer_default_memory_grant_enabled(data, consumer),
             archive_capability=False,
             vector_projection_commit_id=vector_projection_commit_id,
+            vector_repair_outbox_enabled=vector_repair_outbox_enabled,
             reason='ok',
         )
     except (TypeError, ValueError, AttributeError):
@@ -487,6 +490,7 @@ def normalize_v17_archive_read_rollout_decision(
             app_has_default_memory_grant=default_decision.app_has_default_memory_grant,
             archive_capability=False,
             vector_projection_commit_id=default_decision.vector_projection_commit_id,
+            vector_repair_outbox_enabled=default_decision.vector_repair_outbox_enabled,
             reason='malformed_archive_capability',
             explicit_read_decision=V17ReadDecision.DENY_MEMORY,
         )
@@ -499,6 +503,7 @@ def normalize_v17_archive_read_rollout_decision(
             app_has_default_memory_grant=default_decision.app_has_default_memory_grant,
             archive_capability=False,
             vector_projection_commit_id=default_decision.vector_projection_commit_id,
+            vector_repair_outbox_enabled=default_decision.vector_repair_outbox_enabled,
             reason=f'missing_{default_decision.grant_reason_key}_archive_capability',
             explicit_read_decision=V17ReadDecision.DENY_MEMORY,
         )
@@ -510,6 +515,7 @@ def normalize_v17_archive_read_rollout_decision(
         app_has_default_memory_grant=default_decision.app_has_default_memory_grant,
         archive_capability=True,
         vector_projection_commit_id=default_decision.vector_projection_commit_id,
+        vector_repair_outbox_enabled=default_decision.vector_repair_outbox_enabled,
         reason='ok',
         explicit_read_decision=V17ReadDecision.USE_V17,
     )

@@ -37,10 +37,26 @@ class _FirestoreFake:
     def __init__(self, docs=None):
         self.docs = docs or {}
         self.collection_paths = []
+        self.document_paths = []
+        self.set_paths = []
 
     def collection(self, path):
         self.collection_paths.append(path)
         return _CollectionRef(self, path)
+
+    def document(self, path):
+        self.document_paths.append(path)
+        return _DocumentRef(self, path)
+
+
+class _DocumentRef:
+    def __init__(self, db_client, path):
+        self._db_client = db_client
+        self.path = path
+
+    def set(self, data):
+        self._db_client.set_paths.append(self.path)
+        self._db_client.docs[self.path] = dict(data)
 
 
 class _VectorCandidateResult:
@@ -363,6 +379,32 @@ def test_default_v17_vector_search_writes_deterministic_repair_purge_outbox_reco
 
     rebuilt = build_v17_vector_repair_purge_outbox_records(uid='u1', candidates=response['repair_purge_candidates'])
     assert [record['record_id'] for record in rebuilt] == [record['record_id']]
+
+
+def test_v17_vector_repair_purge_outbox_persistence_sets_stable_user_outbox_path_idempotently():
+    candidate = {
+        'vector_id': 'v17mem:stale-projection',
+        'memory_id': 'stale-projection',
+        'reason': VectorRepairPurgeReason.stale_projection_commit,
+        'required_projection_commit_id': 'projection-1',
+        'observed_projection_commit_id': 'projection-old',
+        'required_account_generation': 3,
+    }
+    records = build_v17_vector_repair_purge_outbox_records(uid='u1', candidates=[candidate])
+    db_client = _FirestoreFake()
+
+    first_write = write_v17_vector_repair_purge_outbox_records(db_client=db_client, records=records)
+    second_write = write_v17_vector_repair_purge_outbox_records(db_client=db_client, records=records)
+
+    record = records[0]
+    expected_path = f"users/u1/memory_outbox/{record['record_id']}"
+    assert first_write == records
+    assert second_write == records
+    assert record['outbox_path'] == expected_path
+    assert db_client.document_paths == [expected_path, expected_path]
+    assert db_client.set_paths == [expected_path, expected_path]
+    assert db_client.docs[expected_path]['record_id'] == record['record_id']
+    assert db_client.docs[expected_path]['idempotency_key'] == record['record_id']
 
 
 def test_default_v17_vector_search_does_not_write_outbox_for_no_candidates_or_missing_fence():

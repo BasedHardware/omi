@@ -360,6 +360,27 @@ This closes only the durable fake-injectable outbox record seam. Remaining P0-4/
 - Produce real cloud/Pinecone/Firestore/benchmark evidence before production read/vector cutover.
 - Production rollout remains **BLOCKED / NO-GO** until all Oracle P0s and required real-service evidence are complete.
 
+### 2026-06-19 — P0-4 server-flagged repair/purge outbox writer wiring seam
+
+Continued Oracle P0-4 with a narrow fake-backed Firestore persistence and route-wiring seam, without changing the production rollout verdict:
+
+- Validated `write_v17_vector_repair_purge_outbox_records(...)` against a fake Firestore document seam: repeated writes set the same stable `users/{uid}/memory_outbox/{record_id}` document with the same `record_id`/`idempotency_key`.
+- Added a server-owned persisted control bit, `users/{uid}/memory_control/state.vector_repair_outbox_enabled`, parsed as boolean-true only. Missing, false, or malformed values do not enable persistence.
+- Wired only the product `/v17/memory/vector/search` surface to pass the real Firestore outbox writer into `fetch_default_v17_vector_memory_search(...)`, and only when that server flag is true.
+- Disabled/no-flag paths still build response outbox records for observability but do not persist `users/{uid}/memory_outbox/*`; enabled paths persist after vector query and authoritative hydration only when stale-vector records exist.
+- Missing global/per-user rollout gates and missing vector freshness fences still fail before vector query, `memory_items` reads, callbacks, or outbox writes.
+- Returned memory results remain hydrated valid `memory_items`; access-policy rejects remain non-outbox candidates; Archive remains default-unavailable.
+
+Verification recorded in `docs/epics/v17_memory_implementation_tickets.md`: RED flag/wiring tests (`2 failed, 23 passed` with missing `vector_repair_outbox_enabled`), GREEN focused tests (`25 passed`), focused V17 vector/caller regression (`83 passed`), full `pytest tests/unit/test_v17_*.py -q` (`213 passed, 1 warning`), and async blocker scan exit 0 with pre-existing findings only.
+
+This closes only the fake-backed/server-flagged writer wiring seam for one product vector surface. Remaining P0-4/P0 work:
+
+- Run real Firestore emulator/cloud validation for `users/{uid}/memory_outbox/{record_id}` semantics, IAM/rules assumptions, and write failure behavior.
+- Implement the real idempotent Pinecone delete/repair worker with tombstone precedence, duplicate stale-ID proof, retries, dead-lettering, and low-cardinality error telemetry.
+- Prove shared `ns2` isolation; add vector overfetch/refill/budgets/central telemetry and app/key/scope authorization.
+- Produce real cloud/Pinecone/Firestore/benchmark evidence before production read/vector cutover.
+- Production rollout remains **BLOCKED / NO-GO** until all Oracle P0s and required real-service evidence are complete.
+
 ## Not-run / not-claimed caveats preserved
 
 - Oracle review has now run and is recorded here, but it blocks production rollout.
