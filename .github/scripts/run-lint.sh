@@ -11,7 +11,8 @@
 #   Total:           ~2.1s
 
 set -euo pipefail
-cd "$(dirname "$0")/.."
+# Script lives in .github/scripts/ — cd to repo root
+cd "$(dirname "$0")/../.."
 
 MODE="check"  # "check" or "fix"
 FILES_ARG=""

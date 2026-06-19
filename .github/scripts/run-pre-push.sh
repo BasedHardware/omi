@@ -8,7 +8,8 @@
 # Timing: ~5-30s depending on how many files changed
 
 set -euo pipefail
-cd "$(dirname "$0")/.."
+# Script lives in .github/scripts/ — cd to repo root
+cd "$(dirname "$0")/../.."
 
 REMOTE="${1:-origin}"
 
