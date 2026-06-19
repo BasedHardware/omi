@@ -95,6 +95,10 @@ def build_operation_id(
     return "op_" + deterministic_contract_id("v17-memory-operation", payload)[:32]
 
 
+def logical_payload_digest(value: OperationLogicalPayload | Dict[str, Any]) -> str:
+    return deterministic_contract_id("v17-operation-logical-payload", _coerce_logical_payload(value).canonical())
+
+
 class MemoryOperation(BaseModel):
     operation_id: str
     uid: str
@@ -104,6 +108,7 @@ class MemoryOperation(BaseModel):
     target_memory_id: Optional[str] = None
     evidence_ids: List[str] = Field(default_factory=list)
     logical_payload: OperationLogicalPayload
+    logical_payload_digest: str
     account_generation: int
     source_generation: int
     observed_head_commit_id: Optional[str] = None
@@ -151,6 +156,7 @@ class MemoryOperation(BaseModel):
             target_memory_id=target_memory_id,
             evidence_ids=evidence_ids,
             logical_payload=payload_model,
+            logical_payload_digest=logical_payload_digest(payload_model),
             account_generation=account_generation,
             source_generation=source_generation,
             observed_head_commit_id=observed_head_commit_id,
@@ -204,6 +210,8 @@ class MemoryOperation(BaseModel):
         )
         if self.operation_id != expected:
             raise ValueError("operation_id does not match server-computed logical identity")
+        if self.logical_payload_digest != logical_payload_digest(self.logical_payload):
+            raise ValueError("logical_payload_digest does not match canonical logical payload")
         if self.status == MemoryOperationStatus.committed and not self.committed_head_commit_id:
             raise ValueError("committed operations require committed_head_commit_id")
         if (

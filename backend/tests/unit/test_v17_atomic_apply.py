@@ -80,7 +80,7 @@ def test_atomic_apply_commits_memory_operation_control_head_and_outbox_together(
 def test_apply_fails_closed_on_head_or_generation_mismatch_without_outbox():
     control = MemoryControlState(uid="u1", head_commit_id="head-new", account_generation=1, source_generation=2)
     result = apply_long_term_patch_transaction(control_state=control, operation=_operation(), patch_payload=_patch())
-    assert result.status == ApplyStatus.head_mismatch
+    assert result.status == ApplyStatus.retryable_head_mismatch
     assert result.memory_items == []
     assert result.outbox_events == []
 
@@ -122,12 +122,47 @@ def test_apply_is_idempotent_when_operation_already_committed():
     assert result.outbox_events == []
 
 
-def test_control_state_rejects_blank_or_backwards_projection_watermark():
+def test_control_state_rejects_blank_gap_or_backwards_projection_watermark():
     control = MemoryControlState(uid="u1", head_commit_id="head0", account_generation=1, source_generation=2)
-    advanced = control.advance_projection_watermark("head0", projection_sequence=1)
-    assert advanced.projection_watermark_commit_id == "head0"
+    result = apply_long_term_patch_transaction(control_state=control, operation=_operation(), patch_payload=_patch())
+    event = result.outbox_events[0]
+    advanced = control.advance_projection_watermark(event)
+    assert advanced.projection_watermark_commit_id == event.commit_id
 
+    blank_event = event.model_copy(update={"commit_id": ""})
     with pytest.raises(ValueError, match="blank"):
-        control.advance_projection_watermark("", projection_sequence=1)
-    with pytest.raises(ValueError, match="backwards"):
-        advanced.advance_projection_watermark("head0", projection_sequence=0)
+        control.advance_projection_watermark(blank_event)
+    gap_event = event.model_copy(update={"commit_sequence": 2})
+    with pytest.raises(ValueError, match="skip|backwards"):
+        control.advance_projection_watermark(gap_event)
+
+
+def test_committed_operation_with_different_patch_payload_is_payload_mismatch_not_idempotent():
+    control = MemoryControlState(uid="u1", head_commit_id="head1", account_generation=1, source_generation=2)
+    committed = _operation().mark_committed("head1")
+    different_patch = _patch(memory_text="User prefers verbose updates.")
+
+    result = apply_long_term_patch_transaction(
+        control_state=control, operation=committed, patch_payload=different_patch
+    )
+
+    assert result.status == ApplyStatus.payload_mismatch
+
+
+def test_skip_duplicate_advances_audit_head_with_barrier_outbox_but_no_memory_item():
+    control = MemoryControlState(uid="u1", head_commit_id="head0", account_generation=1, source_generation=2)
+    operation = _operation(
+        target_memory_id="mem_existing",
+        logical_payload={"decision": "skip_duplicate", "target_memory_id": "mem_existing", "result_status": "active"},
+    )
+    patch = _patch(
+        decision=DurablePatchDecision.skip_duplicate,
+        target_memory_id="mem_existing",
+        memory_text=None,
+    )
+
+    result = apply_long_term_patch_transaction(control_state=control, operation=operation, patch_payload=patch)
+
+    assert result.status == ApplyStatus.committed
+    assert result.memory_items == []
+    assert [event.payload["action"] for event in result.outbox_events] == ["barrier", "barrier"]

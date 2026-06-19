@@ -32,6 +32,11 @@ class SearchVectorHit(BaseModel):
     score: float
     projection_commit_id: str
     vector_updated_at: datetime
+    uid: Optional[str] = None
+    account_generation: Optional[int] = None
+    item_revision: Optional[int] = None
+    source_commit_id: Optional[str] = None
+    content_hash: Optional[str] = None
 
 
 class HydratedSearchResult(BaseModel):
@@ -67,6 +72,21 @@ def hydrate_and_filter_vector_hits(
             continue
         if required_projection_commit_id and hit.projection_commit_id != required_projection_commit_id:
             decisions[hit.memory_id] = SearchDecision.stale_projection
+            continue
+        if hit.uid is not None and hit.uid != item.uid:
+            decisions[hit.memory_id] = SearchDecision.stale_vector
+            continue
+        if hit.account_generation is not None and hit.account_generation != item.account_generation:
+            decisions[hit.memory_id] = SearchDecision.stale_vector
+            continue
+        if hit.item_revision is not None and hit.item_revision != item.item_revision:
+            decisions[hit.memory_id] = SearchDecision.stale_vector
+            continue
+        if hit.source_commit_id is not None and hit.source_commit_id != item.source_commit_id:
+            decisions[hit.memory_id] = SearchDecision.stale_vector
+            continue
+        if hit.content_hash is not None and hit.content_hash != item.content_hash:
+            decisions[hit.memory_id] = SearchDecision.stale_vector
             continue
         if hit.vector_updated_at < item.updated_at:
             decisions[hit.memory_id] = SearchDecision.stale_vector

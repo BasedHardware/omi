@@ -8,7 +8,7 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 
 from models.memory_evidence import ArtifactPreservationState, MemoryEvidence, SourceState
 from models.v17_memory_contracts import DurableMemoryPatch, deterministic_contract_id
-from models.v17_memory_operations import MemoryOperation, MemoryOperationStatus
+from models.v17_memory_operations import MemoryOperation, MemoryOperationStatus, logical_payload_digest
 from models.v17_product_memory import (
     MemoryItemStatus,
     MemoryTier,
@@ -21,9 +21,10 @@ from models.v17_product_memory import (
 class ApplyStatus(str, Enum):
     committed = "committed"
     idempotent_skip = "idempotent_skip"
-    head_mismatch = "head_mismatch"
+    retryable_head_mismatch = "retryable_head_mismatch"
     generation_mismatch = "generation_mismatch"
     source_not_active = "source_not_active"
+    payload_mismatch = "payload_mismatch"
     invalid_patch = "invalid_patch"
 
 
@@ -92,15 +93,19 @@ class MemoryControlState(BaseModel):
             }
         )
 
-    def advance_projection_watermark(self, commit_id: str, projection_sequence: int) -> "MemoryControlState":
-        if not commit_id or not commit_id.strip():
+    def advance_projection_watermark(self, event: "MemoryOutboxEvent") -> "MemoryControlState":
+        if not event.commit_id or not event.commit_id.strip():
             raise ValueError("projection watermark commit_id must not be blank")
-        if projection_sequence < self.projection_watermark_sequence:
-            raise ValueError("projection watermark cannot move backwards")
+        if event.account_generation != self.account_generation:
+            raise ValueError("projection watermark account_generation mismatch")
+        if event.commit_sequence != self.projection_watermark_sequence + 1:
+            raise ValueError("projection watermark cannot skip commits or move backwards")
+        if self.projection_watermark_commit_id and event.parent_commit_id != self.projection_watermark_commit_id:
+            raise ValueError("projection watermark parent chain mismatch")
         return self.model_copy(
             update={
-                "projection_watermark_commit_id": commit_id,
-                "projection_watermark_sequence": projection_sequence,
+                "projection_watermark_commit_id": event.commit_id,
+                "projection_watermark_sequence": event.commit_sequence,
                 "updated_at": datetime.now(timezone.utc),
             }
         )
@@ -112,6 +117,8 @@ class MemoryOutboxEvent(BaseModel):
     event_type: MemoryOutboxEventType
     status: MemoryOutboxStatus = MemoryOutboxStatus.pending
     commit_id: str
+    parent_commit_id: str
+    commit_sequence: int
     memory_id: Optional[str] = None
     operation_id: str
     account_generation: int
@@ -174,6 +181,13 @@ def _materialize_memory_item(
         expires_at=None,
         ledger_commit_id=commit_id,
         ledger_sequence=sequence,
+        item_revision=1,
+        source_commit_id=commit_id,
+        source_commit_sequence=sequence,
+        content_hash=deterministic_contract_id(
+            "v17-memory-content", {"content": patch.memory_text, "evidence_ids": patch.evidence_ids}
+        ),
+        account_generation=0,
     )
 
 
@@ -181,6 +195,39 @@ def _stale_operation(operation: MemoryOperation) -> MemoryOperation:
     data = operation.model_dump()
     data.update({"status": MemoryOperationStatus.stale_generation, "updated_at": datetime.now(timezone.utc)})
     return MemoryOperation(**data)
+
+
+def _operation_digest_for_patch(patch: DurableMemoryPatch) -> str:
+    return logical_payload_digest(
+        {
+            "decision": patch.decision.value,
+            "memory_text": patch.memory_text,
+            "target_memory_id": patch.target_memory_id,
+            "result_status": patch.result_status.value,
+            "supersedes": patch.supersedes,
+        }
+    )
+
+
+def _barrier_outbox_events(
+    *, operation: MemoryOperation, control_state: MemoryControlState, commit_id: str, sequence: int
+) -> List[MemoryOutboxEvent]:
+    return [
+        MemoryOutboxEvent(
+            event_id=_event_id(event_type, commit_id, None, operation.operation_id),
+            uid=operation.uid,
+            event_type=event_type,
+            commit_id=commit_id,
+            parent_commit_id=control_state.head_commit_id,
+            commit_sequence=sequence,
+            memory_id=None,
+            operation_id=operation.operation_id,
+            account_generation=control_state.account_generation,
+            source_generation=control_state.source_generation,
+            payload={"action": "barrier"},
+        )
+        for event_type in [MemoryOutboxEventType.projection_sync, MemoryOutboxEventType.vector_sync]
+    ]
 
 
 def apply_long_term_patch_transaction(
@@ -191,6 +238,33 @@ def apply_long_term_patch_transaction(
     Production Firestore integration must perform these reads/writes atomically:
     control head/generations, operation journal status, memory item mutation, and outbox append.
     """
+    raw = dict(patch_payload)
+    evidence = raw.pop("evidence", None) or [
+        MemoryEvidence(
+            evidence_id=evidence_id,
+            source_type="unknown",
+            source_id=f"source_for_{evidence_id}",
+            source_version="unknown",
+            artifact_preservation=ArtifactPreservationState.preserved,
+        )
+        for evidence_id in raw.get("evidence_ids", [])
+    ]
+    try:
+        patch = DurableMemoryPatch(**raw)
+    except Exception as exc:
+        return ApplyResult(
+            status=ApplyStatus.invalid_patch,
+            control_state=control_state,
+            operation=operation,
+            reason=type(exc).__name__,
+        )
+    if _operation_digest_for_patch(patch) != operation.logical_payload_digest:
+        return ApplyResult(
+            status=ApplyStatus.payload_mismatch,
+            control_state=control_state,
+            operation=operation,
+            reason="patch digest does not match operation logical payload digest",
+        )
     if operation.status == MemoryOperationStatus.committed:
         return ApplyResult(status=ApplyStatus.idempotent_skip, control_state=control_state, operation=operation)
     if (
@@ -205,23 +279,12 @@ def apply_long_term_patch_transaction(
         )
     if operation.observed_head_commit_id and operation.observed_head_commit_id != control_state.head_commit_id:
         return ApplyResult(
-            status=ApplyStatus.head_mismatch,
+            status=ApplyStatus.retryable_head_mismatch,
             control_state=control_state,
             operation=operation,
             reason="observed head does not match current head",
         )
 
-    raw = dict(patch_payload)
-    evidence = raw.pop("evidence", None) or [
-        MemoryEvidence(
-            evidence_id=evidence_id,
-            source_type="unknown",
-            source_id=f"source_for_{evidence_id}",
-            source_version="unknown",
-            artifact_preservation=ArtifactPreservationState.preserved,
-        )
-        for evidence_id in raw.get("evidence_ids", [])
-    ]
     if any(item.source_state != SourceState.active for item in evidence):
         return ApplyResult(
             status=ApplyStatus.source_not_active,
@@ -229,33 +292,36 @@ def apply_long_term_patch_transaction(
             operation=operation,
             reason="cannot apply memory patch from deleted/purged source evidence",
         )
-    try:
-        patch = DurableMemoryPatch(**raw)
-    except Exception as exc:
-        return ApplyResult(
-            status=ApplyStatus.invalid_patch,
-            control_state=control_state,
-            operation=operation,
-            reason=type(exc).__name__,
-        )
-
     commit_id = control_state.next_commit_id(operation.operation_id)
     next_control = control_state.advance_head(commit_id)
+    committed_operation = operation.mark_committed(commit_id)
+    if patch.decision == "skip_duplicate" or patch.decision.value == "skip_duplicate":
+        outbox_events = _barrier_outbox_events(
+            operation=operation, control_state=control_state, commit_id=commit_id, sequence=next_control.commit_sequence
+        )
+        return ApplyResult(
+            status=ApplyStatus.committed,
+            control_state=next_control,
+            operation=committed_operation,
+            memory_items=[],
+            outbox_events=outbox_events,
+        )
     memory_item = _materialize_memory_item(
         uid=operation.uid, patch=patch, evidence=evidence, commit_id=commit_id, sequence=next_control.commit_sequence
     )
-    committed_operation = operation.mark_committed(commit_id)
     outbox_events = [
         MemoryOutboxEvent(
             event_id=_event_id(event_type, commit_id, memory_item.memory_id, operation.operation_id),
             uid=operation.uid,
             event_type=event_type,
             commit_id=commit_id,
+            parent_commit_id=control_state.head_commit_id,
+            commit_sequence=next_control.commit_sequence,
             memory_id=memory_item.memory_id,
             operation_id=operation.operation_id,
             account_generation=control_state.account_generation,
             source_generation=control_state.source_generation,
-            payload={"memory_id": memory_item.memory_id, "tier": memory_item.tier.value},
+            payload={"memory_id": memory_item.memory_id, "tier": memory_item.tier.value, "action": "upsert"},
         )
         for event_type in [MemoryOutboxEventType.projection_sync, MemoryOutboxEventType.vector_sync]
     ]

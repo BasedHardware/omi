@@ -104,6 +104,11 @@ class V17MemoryItem(BaseModel):
     expires_at: Optional[datetime] = None
     ledger_commit_id: Optional[str] = None
     ledger_sequence: Optional[int] = None
+    item_revision: int = 1
+    source_commit_id: Optional[str] = None
+    source_commit_sequence: Optional[int] = None
+    content_hash: Optional[str] = None
+    account_generation: int = 0
 
     @field_validator("memory_id", "uid", "visibility")
     @classmethod
