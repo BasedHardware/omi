@@ -68,6 +68,13 @@ repos:
       - id: check-yaml
         args: [--unsafe]  # allow custom tags in workflows
       - id: check-json
+        exclude: |
+          (?x)^(
+            app/.*\.json|          # Flutter/Dart generated JSON (may have comments)
+            \.firebase/.*\.json|    # Firebase config JSON
+            \.idea/.*\.json|       # IDE config
+            .*lock\.json|          # Lock files
+          )$
       - id: check-toml
 
       # Catch common mistakes
