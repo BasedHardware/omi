@@ -1,21 +1,36 @@
 import { useEffect, useState } from 'react'
-import { Bell, Lightbulb, Mic } from 'lucide-react'
+import { Bell, Lightbulb, Mic, Target } from 'lucide-react'
 import { SettingRow } from '../SettingRow'
 import { Toggle } from '../Toggle'
 import { getPreferences, onPreferencesChange, setPreferences } from '../../../lib/preferences'
 import type { InsightSettings } from '../../../../../shared/types'
 
 const INSIGHT_INTERVALS = [15, 20, 30, 60]
+const FOCUS_INTERVALS: Array<5 | 10 | 15 | 20> = [5, 10, 15, 20]
 
 export function NotificationsTab(): React.JSX.Element {
   const [insight, setInsight] = useState<InsightSettings | null>(null)
   const [notifRecording, setNotifRecording] = useState<boolean>(
     () => getPreferences().notifyOnRecordingSaved ?? true
   )
+  const [focusEnabled, setFocusEnabled] = useState<boolean>(
+    () => getPreferences().focusAnalysisEnabled ?? false
+  )
+  const [focusInterval, setFocusInterval] = useState<5 | 10 | 15 | 20>(
+    () => getPreferences().focusAnalysisIntervalMin ?? 10
+  )
+  const [focusAlert, setFocusAlert] = useState<boolean>(
+    () => getPreferences().focusDistractionAlert ?? false
+  )
 
   useEffect(() => {
     void window.omi.insightGetSettings().then(setInsight)
-    return onPreferencesChange((p) => setNotifRecording(p.notifyOnRecordingSaved ?? true))
+    return onPreferencesChange((p) => {
+      setNotifRecording(p.notifyOnRecordingSaved ?? true)
+      setFocusEnabled(p.focusAnalysisEnabled ?? false)
+      setFocusInterval(p.focusAnalysisIntervalMin ?? 10)
+      setFocusAlert(p.focusDistractionAlert ?? false)
+    })
   }, [])
 
   const patchInsight = async (patch: Partial<InsightSettings>): Promise<void> => {
@@ -114,11 +129,64 @@ export function NotificationsTab(): React.JSX.Element {
         }
       />
 
+      {/* Focus analysis alerts */}
+      <SettingRow
+        icon={Target}
+        dot={focusEnabled ? 'on' : 'off'}
+        title="Focus analysis"
+        subtitle="Periodically analyzes recent screen activity to classify you as focused, distracted, or neutral. Uses Rewind frames and the Gemini proxy (same as Insights)."
+        keywords="focus distracted alert analysis detection proactive"
+        control={
+          <Toggle
+            on={focusEnabled}
+            onChange={(on) => {
+              setFocusEnabled(on)
+              setPreferences({ focusAnalysisEnabled: on })
+            }}
+            label="Focus analysis"
+          />
+        }
+      >
+        {focusEnabled && (
+          <div className="space-y-3">
+            <label className="flex items-center gap-2 text-sm text-text-secondary">
+              Check every
+              <select
+                value={focusInterval}
+                onChange={(e) => {
+                  const v = Number(e.target.value) as 5 | 10 | 15 | 20
+                  setFocusInterval(v)
+                  setPreferences({ focusAnalysisIntervalMin: v })
+                }}
+                className="rounded-md bg-white/10 px-2 py-1.5 text-white focus:outline-none"
+              >
+                {FOCUS_INTERVALS.map((m) => (
+                  <option key={m} value={m} className="bg-neutral-900">
+                    {m} minutes
+                  </option>
+                ))}
+              </select>
+            </label>
+            <div className="flex items-center justify-between">
+              <label className="text-sm text-text-secondary">Alert on sustained distraction</label>
+              <Toggle
+                on={focusAlert}
+                onChange={(on) => {
+                  setFocusAlert(on)
+                  setPreferences({ focusDistractionAlert: on })
+                }}
+                label="Distraction alert"
+              />
+            </div>
+          </div>
+        )}
+      </SettingRow>
+
       {/* Frequency note */}
       <SettingRow
         icon={Bell}
         title="Notification frequency"
-        subtitle="Insight notifications are throttled to avoid interrupting focus — adjust the interval above. Recording notifications are always shown once per session."
+        subtitle="Insight and focus notifications are throttled to avoid interrupting work. Recording notifications fire once per session."
         keywords="frequency throttle rate limit"
       />
     </>

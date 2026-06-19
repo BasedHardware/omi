@@ -1,4 +1,4 @@
-import { app, shell, BrowserWindow, ipcMain, session, nativeImage, desktopCapturer, Tray, Menu } from 'electron'
+import { app, shell, BrowserWindow, ipcMain, session, nativeImage, desktopCapturer, Tray, Menu, dialog } from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import iconPath from '../../resources/icon.png?asset'
@@ -91,6 +91,12 @@ let tray: Tray | null = null
 // Set to true when we're actually quitting so the close-to-tray intercept
 // doesn't prevent shutdown.
 let isQuitting = false
+// Pending BLE device-selection callback from the `select-bluetooth-device` event.
+// Stored at module level so the ipcMain handler (registered once in whenReady)
+// can call it after the renderer returns the chosen device id.
+let bluetoothCallback: ((deviceId: string) => void) | null = null
+let bluetoothDeviceList: Array<{ deviceId: string; deviceName: string }> = []
+let bluetoothDialogOpen = false
 
 // Build (or rebuild) the tray context menu, reading live settings each time
 // so the checked state reflects the current toggle value.
@@ -229,6 +235,54 @@ function createWindow(): BrowserWindow {
     return { action: 'deny' }
   })
 
+  // Bluetooth: handle device picker for Web Bluetooth requestDevice() calls.
+  // Collects nearby devices for up to 3 s, then presents a native dialog.
+  mainWindow.webContents.on(
+    'select-bluetooth-device',
+    async (event, deviceList, callback) => {
+      event.preventDefault()
+      // Accumulate devices as scanning finds them
+      for (const d of deviceList) {
+        if (!bluetoothDeviceList.some((x) => x.deviceId === d.deviceId)) {
+          bluetoothDeviceList.push({ deviceId: d.deviceId, deviceName: d.deviceName ?? '' })
+        }
+      }
+      bluetoothCallback = callback
+
+      // Debounce: show the dialog 2 s after the last discovery event so we
+      // collect a richer device list before presenting it to the user.
+      if (bluetoothDialogOpen) return
+      bluetoothDialogOpen = true
+      await new Promise<void>((r) => setTimeout(r, 2000))
+      bluetoothDialogOpen = false
+
+      const devs = bluetoothDeviceList
+      const cb = bluetoothCallback
+      bluetoothDeviceList = []
+      bluetoothCallback = null
+      if (!cb) return
+
+      if (devs.length === 0) {
+        cb('') // no devices found
+        return
+      }
+
+      const buttons = [
+        ...devs.map((d) => d.deviceName || `Unknown (${d.deviceId.slice(0, 8)})`),
+        'Cancel'
+      ]
+      const { response } = await dialog.showMessageBox(mainWindow, {
+        title: 'Bluetooth Devices Found',
+        message: `Found ${devs.length} nearby device${devs.length === 1 ? '' : 's'}.\nSelect one to use:`,
+        type: 'question',
+        buttons,
+        cancelId: devs.length,
+        defaultId: 0
+      })
+      cb(response < devs.length ? devs[response].deviceId : '')
+    }
+  )
+
   // HMR for renderer base on electron-vite cli.
   // Load the remote URL for development, or the loopback renderer server in
   // production — a file:// origin would break Firebase sign-in (see
@@ -271,6 +325,19 @@ app.whenReady().then(async () => {
   // see https://github.com/alex8088/electron-toolkit/tree/master/packages/utils
   app.on('browser-window-created', (_, window) => {
     optimizer.watchWindowShortcuts(window)
+  })
+
+  // Bluetooth: allow renderer access to Web Bluetooth API.
+  // `setPermissionCheckHandler` gates whether the browser API is exposed;
+  // `setDevicePermissionHandler` auto-grants previously-seen device access.
+  // Cast to `unknown` first: Electron's TS defs don't include 'bluetooth' yet
+  // but the runtime does support it (added in Electron 22 / Chromium 100).
+  session.defaultSession.setPermissionCheckHandler((_webContents, permission) => {
+    if ((permission as unknown as string) === 'bluetooth') return true
+    return true // permissive for a local Electron app
+  })
+  session.defaultSession.setDevicePermissionHandler((details) => {
+    return (details.deviceType as unknown as string) === 'bluetooth'
   })
 
   // Omi's API doesn't advertise http://localhost:5173 as a CORS-allowed origin.

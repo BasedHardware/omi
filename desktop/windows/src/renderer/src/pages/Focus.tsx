@@ -1,12 +1,28 @@
-import { useEffect, useRef, useState } from 'react'
-import { Target, Play, Square, Trash2, ChevronDown, ChevronUp, Clock } from 'lucide-react'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import {
+  Target,
+  Play,
+  Square,
+  Trash2,
+  ChevronDown,
+  ChevronUp,
+  Clock,
+  Loader,
+  Brain
+} from 'lucide-react'
 import type { RewindFrame } from '../../../shared/types'
 import { EmptyState } from '../components/ui/EmptyState'
 import { cn } from '../lib/utils'
+import {
+  analyzeFocus,
+  loadObservations,
+  saveObservations,
+  type FocusObservation,
+  type FocusStatus
+} from '../lib/focusEngine'
+import { getPreferences, onPreferencesChange } from '../lib/preferences'
 
-// ── App classification ──────────────────────────────────────────────────────
-// Heuristic based on exe/app name. "focus" = work/code apps; "distract" = media/
-// entertainment; "neutral" = browser and productivity apps that can go either way.
+// ── App classification (for Rewind activity breakdown) ──────────────────────
 const FOCUS_PATTERNS = [
   'code', 'cursor', 'vim', 'neovim', 'nvim', 'emacs', 'sublime', 'notepad', 'word', 'excel',
   'outlook', 'onenote', 'notion', 'obsidian', 'rider', 'intellij', 'pycharm', 'webstorm',
@@ -98,7 +114,6 @@ function computeAppStats(frames: RewindFrame[], captureIntervalMs: number): AppS
     const f = sorted[i]
     const app = f.app || f.processName || 'Unknown'
     const next = sorted[i + 1]
-    // Estimate time in this app as the gap to the next frame (capped at 2× interval)
     const gapMs = next ? Math.min(next.ts - f.ts, captureIntervalMs * 2) : captureIntervalMs
     const existing = map.get(app)
     if (existing) {
@@ -114,7 +129,7 @@ function computeAppStats(frames: RewindFrame[], captureIntervalMs: number): AppS
     .sort((a, b) => b.estimatedMs - a.estimatedMs)
 }
 
-// ── Stat card ───────────────────────────────────────────────────────────────
+// ── UI helpers ───────────────────────────────────────────────────────────────
 function StatCard({
   label,
   value,
@@ -135,7 +150,6 @@ function StatCard({
   )
 }
 
-// ── App row ─────────────────────────────────────────────────────────────────
 const CLASS_BADGE: Record<AppClass, { label: string; color: string }> = {
   focus: { label: 'Focus', color: 'bg-green-500/15 text-green-400' },
   distract: { label: 'Distract', color: 'bg-orange-500/15 text-orange-400' },
@@ -173,6 +187,52 @@ function AppRow({ stat, totalMs }: { stat: AppStat; totalMs: number }): React.JS
   )
 }
 
+// ── Focus status display ────────────────────────────────────────────────────
+const STATUS_CONFIG: Record<
+  FocusStatus,
+  { label: string; dot: string; badge: string; text: string }
+> = {
+  focused: {
+    label: 'Focused',
+    dot: 'bg-green-500 animate-pulse',
+    badge: 'bg-green-500/15 text-green-400 border border-green-500/20',
+    text: 'text-green-400'
+  },
+  distracted: {
+    label: 'Distracted',
+    dot: 'bg-orange-500 animate-pulse',
+    badge: 'bg-orange-500/15 text-orange-400 border border-orange-500/20',
+    text: 'text-orange-400'
+  },
+  neutral: {
+    label: 'Neutral',
+    dot: 'bg-white/30',
+    badge: 'bg-white/[0.06] text-white/60 border border-white/10',
+    text: 'text-white/60'
+  }
+}
+
+function ObsRow({ obs }: { obs: FocusObservation }): React.JSX.Element {
+  const cfg = STATUS_CONFIG[obs.status]
+  return (
+    <div className="flex items-start gap-3 px-3 py-2.5">
+      <div className={cn('mt-1.5 h-2 w-2 shrink-0 rounded-full', cfg.dot.replace(' animate-pulse', ''))} />
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-2">
+          <span className={cn('text-sm font-medium', cfg.text)}>{cfg.label}</span>
+          {obs.app && (
+            <span className="truncate text-xs text-text-quaternary">{obs.app}</span>
+          )}
+          <span className="ml-auto shrink-0 text-xs text-text-quaternary">{fmtTime(obs.ts)}</span>
+        </div>
+        {obs.reasoning && (
+          <p className="mt-0.5 text-xs text-text-quaternary">{obs.reasoning}</p>
+        )}
+      </div>
+    </div>
+  )
+}
+
 // ── Main component ──────────────────────────────────────────────────────────
 export function Focus(): React.JSX.Element {
   // Manual timer state
@@ -187,11 +247,29 @@ export function Focus(): React.JSX.Element {
   const [showAllSessions, setShowAllSessions] = useState(false)
 
   // Rewind-powered activity
+  const [allFrames, setAllFrames] = useState<RewindFrame[]>([])
   const [appStats, setAppStats] = useState<AppStat[]>([])
   const [rewindEnabled, setRewindEnabled] = useState<boolean | null>(null)
   const [captureIntervalMs, setCaptureIntervalMs] = useState(10_000)
   const [loadingActivity, setLoadingActivity] = useState(false)
   const [showAllApps, setShowAllApps] = useState(false)
+
+  // Proactive focus analysis
+  const [analysisEnabled, setAnalysisEnabled] = useState(
+    () => getPreferences().focusAnalysisEnabled ?? false
+  )
+  const [analysisIntervalMin, setAnalysisIntervalMin] = useState(
+    () => getPreferences().focusAnalysisIntervalMin ?? 10
+  )
+  const [distractionAlert, setDistractionAlert] = useState(
+    () => getPreferences().focusDistractionAlert ?? false
+  )
+  const [analyzing, setAnalyzing] = useState(false)
+  const [latestObs, setLatestObs] = useState<FocusObservation | null>(null)
+  const [observations, setObservations] = useState<FocusObservation[]>(() => loadObservations())
+  const [showAllObs, setShowAllObs] = useState(false)
+  const analysisTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const prevStatusRef = useRef<FocusStatus | null>(null)
 
   // Load today's Rewind activity
   useEffect(() => {
@@ -205,6 +283,7 @@ export function Focus(): React.JSX.Element {
         const todayStart = new Date()
         todayStart.setHours(0, 0, 0, 0)
         const frames = await window.omi.rewindFrames(todayStart.getTime(), Date.now())
+        setAllFrames(frames)
         setAppStats(computeAppStats(frames, rs.intervalMs))
       } catch (e) {
         console.warn('[focus] activity load failed', e)
@@ -213,6 +292,87 @@ export function Focus(): React.JSX.Element {
       }
     })()
   }, [])
+
+  // Subscribe to preference changes
+  useEffect(() => {
+    return onPreferencesChange((p) => {
+      setAnalysisEnabled(p.focusAnalysisEnabled ?? false)
+      setAnalysisIntervalMin(p.focusAnalysisIntervalMin ?? 10)
+      setDistractionAlert(p.focusDistractionAlert ?? false)
+    })
+  }, [])
+
+  // Run one analysis pass
+  const runAnalysis = useCallback(async (): Promise<void> => {
+    if (analyzing) return
+    setAnalyzing(true)
+    try {
+      // Use allFrames if loaded; otherwise fetch fresh
+      const frames =
+        allFrames.length > 0
+          ? allFrames
+          : await window.omi.rewindFrames(Date.now() - 10 * 60 * 1000, Date.now())
+
+      const obs = await analyzeFocus(frames)
+      setLatestObs(obs)
+
+      const next = [obs, ...observations].slice(0, 60)
+      setObservations(next)
+      saveObservations(next)
+
+      // Distraction alert: if two consecutive analyses are both 'distracted'
+      if (
+        distractionAlert &&
+        obs.status === 'distracted' &&
+        prevStatusRef.current === 'distracted'
+      ) {
+        try {
+          new window.Notification('Focus alert', {
+            body: `Sustained distraction detected (${obs.app}). Time to refocus?`
+          })
+        } catch {
+          /* notifications may be blocked */
+        }
+      }
+      prevStatusRef.current = obs.status
+    } catch (e) {
+      console.warn('[focus] analysis failed', e)
+    } finally {
+      setAnalyzing(false)
+    }
+  }, [analyzing, allFrames, observations, distractionAlert])
+
+  // Periodic analysis loop
+  useEffect(() => {
+    if (!analysisEnabled) {
+      if (analysisTimerRef.current) {
+        clearTimeout(analysisTimerRef.current)
+        analysisTimerRef.current = null
+      }
+      return
+    }
+
+    // Run on mount if enabled
+    void runAnalysis()
+
+    const schedule = (): void => {
+      analysisTimerRef.current = setTimeout(
+        () => {
+          void runAnalysis()
+          schedule()
+        },
+        analysisIntervalMin * 60 * 1000
+      )
+    }
+    schedule()
+
+    return () => {
+      if (analysisTimerRef.current) {
+        clearTimeout(analysisTimerRef.current)
+        analysisTimerRef.current = null
+      }
+    }
+  }, [analysisEnabled, analysisIntervalMin]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Timer tick
   useEffect(() => {
@@ -274,6 +434,7 @@ export function Focus(): React.JSX.Element {
 
   const visibleSessions = showAllSessions ? sessions : sessions.slice(0, 5)
   const visibleApps = showAllApps ? appStats : appStats.slice(0, 8)
+  const visibleObs = showAllObs ? observations : observations.slice(0, 8)
 
   return (
     <div className="flex h-full flex-col overflow-y-auto p-6">
@@ -284,6 +445,78 @@ export function Focus(): React.JSX.Element {
           <p className="text-sm text-white/50">Track your focus sessions and app activity</p>
         </div>
       </div>
+
+      {/* Proactive Analysis Card ─────────────────────────────────────────── */}
+      {analysisEnabled && (
+        <div className="mb-6 surface-card p-5">
+          <div className="mb-4 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <Brain className="h-4 w-4 text-text-quaternary" />
+              <h2 className="font-display text-base font-semibold text-text-primary">
+                Focus Analysis
+              </h2>
+              {latestObs && (
+                <span
+                  className={cn(
+                    'rounded-full px-2 py-0.5 text-xs font-medium',
+                    STATUS_CONFIG[latestObs.status].badge
+                  )}
+                >
+                  {STATUS_CONFIG[latestObs.status].label}
+                </span>
+              )}
+            </div>
+            <button
+              onClick={() => void runAnalysis()}
+              disabled={analyzing}
+              className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs text-text-quaternary hover:bg-white/[0.06] hover:text-text-tertiary disabled:opacity-40"
+            >
+              {analyzing ? (
+                <Loader className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <Brain className="h-3.5 w-3.5" />
+              )}
+              {analyzing ? 'Analyzing…' : 'Analyze now'}
+            </button>
+          </div>
+
+          {latestObs ? (
+            <div>
+              <div className="flex items-center gap-2">
+                <div
+                  className={cn(
+                    'h-2.5 w-2.5 rounded-full',
+                    STATUS_CONFIG[latestObs.status].dot
+                  )}
+                />
+                <p className={cn('text-sm font-medium', STATUS_CONFIG[latestObs.status].text)}>
+                  {latestObs.app || 'Unknown app'}
+                </p>
+                <span className="text-xs text-text-quaternary">·</span>
+                <span className="text-xs text-text-quaternary">
+                  {Math.round(latestObs.confidence * 100)}% confidence
+                </span>
+                <span className="text-xs text-text-quaternary">·</span>
+                <span className="text-xs text-text-quaternary capitalize">
+                  {latestObs.method}
+                </span>
+              </div>
+              {latestObs.reasoning && (
+                <p className="mt-1.5 text-xs text-text-quaternary">{latestObs.reasoning}</p>
+              )}
+              <p className="mt-1.5 text-xs text-text-quaternary opacity-60">
+                Last checked {fmtTime(latestObs.ts)} · checks every {analysisIntervalMin} min
+              </p>
+            </div>
+          ) : (
+            <p className="text-sm text-text-quaternary">
+              {analyzing
+                ? 'Analyzing recent screen activity…'
+                : 'Click "Analyze now" to detect your current focus state.'}
+            </p>
+          )}
+        </div>
+      )}
 
       {/* Manual Timer ─────────────────────────────────────────────────────── */}
       <div className="mb-6 surface-card p-5">
@@ -435,6 +668,36 @@ export function Focus(): React.JSX.Element {
           </p>
         </div>
       ) : null}
+
+      {/* Observations History ──────────────────────────────────────────────── */}
+      {observations.length > 0 && (
+        <div className="mb-6">
+          <h2 className="mb-3 text-xs font-semibold uppercase tracking-wider text-text-quaternary">
+            Recent Analysis ({observations.length})
+          </h2>
+          <div className="surface-card divide-y divide-white/[0.04]">
+            {visibleObs.map((obs) => (
+              <ObsRow key={obs.ts} obs={obs} />
+            ))}
+          </div>
+          {observations.length > 8 && (
+            <button
+              onClick={() => setShowAllObs((v) => !v)}
+              className="mt-2 flex w-full items-center justify-center gap-1.5 py-2 text-xs text-text-quaternary hover:text-text-tertiary"
+            >
+              {showAllObs ? (
+                <>
+                  <ChevronUp className="h-3.5 w-3.5" /> Show less
+                </>
+              ) : (
+                <>
+                  <ChevronDown className="h-3.5 w-3.5" /> Show all {observations.length}
+                </>
+              )}
+            </button>
+          )}
+        </div>
+      )}
 
       {/* Session History ────────────────────────────────────────────────── */}
       <div>

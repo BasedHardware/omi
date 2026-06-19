@@ -50,6 +50,12 @@ export type Preferences = {
   // Notification preferences — whether to show a Windows notification when a
   // recording session ends and is saved (default on).
   notifyOnRecordingSaved?: boolean
+  // Focus analysis — proactive classification of focused/distracted/neutral.
+  // Powered by Rewind frames + Gemini proxy (same path as insightEngine).
+  focusAnalysisEnabled?: boolean
+  focusAnalysisIntervalMin?: 5 | 10 | 15 | 20
+  // Alert via Windows notification when sustained distraction is detected.
+  focusDistractionAlert?: boolean
 }
 
 const defaults: Preferences = {
