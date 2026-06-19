@@ -22,6 +22,7 @@ def test_v17_firestore_security_rules_are_checked_in_and_deny_client_bypass_writ
 
     rules = rules_path.read_text()
     assert "function isServerOwnedV17MemoryPath" in rules
-    assert "allow create, update, delete: if false" in rules
+    assert "allow read, create, update, delete: if false" in rules
+    assert "allow read: if isServerOwnedV17MemoryPath" not in rules
     for collection in V17_PROTECTED_COLLECTIONS:
         assert collection in rules

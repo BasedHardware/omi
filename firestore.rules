@@ -18,13 +18,13 @@ service cloud.firestore {
       ];
     }
 
-    // V17 memory state is server-owned. The backend/Admin SDK performs writes
-    // through IAM and bypasses Firestore client rules; mobile/web clients must
-    // not create, update, or delete these documents directly around the V17
-    // apply gateway, operation journal, head/control documents, or outbox.
+    // V17 memory state is server-owned. The backend/Admin SDK performs all
+    // reads and writes through IAM and bypasses Firestore client rules. Mobile
+    // and web clients must use backend APIs instead of reading internals or
+    // writing around the V17 apply gateway, operation journal, head/control
+    // documents, evidence records, or outbox.
     match /users/{uid}/{collectionId}/{document=**} {
-      allow read: if isServerOwnedV17MemoryPath(collectionId) && isSignedInUser(uid);
-      allow create, update, delete: if false;
+      allow read, create, update, delete: if false;
     }
 
     // No new broad client access is introduced by this V17 rules file. Existing
