@@ -77,6 +77,39 @@ What this gate does **not** prove:
 - Pinecone delete/repair behavior, tombstone precedence, duplicate stale-vector removal, retry/dead-letter workers, or central low-cardinality telemetry.
 - Shared `ns2` isolation or vector benchmark/cutover readiness.
 
+## V17 vector repair outbox execution contract
+
+The first explicit scheduler/lease-owner seam is `run_v17_vector_repair_outbox_worker_tick(...)` in `backend/database/v17_vector_repair_outbox_worker.py`. It is a bounded one-tick contract for Cloud Run Jobs, Cloud Scheduler → Cloud Run/Tasks, or another server-owned scheduler; it is **not** registered with any production scheduler in this repository.
+
+Contract:
+
+1. A server-owned caller constructs `V17VectorRepairOutboxWorkerTickConfig` from control-plane/env config. The default config is `enabled=false`, so the worker fails closed and does not lease records unless a deployer explicitly enables it.
+2. The caller supplies the backend/Admin Firestore client, target `uid`, stable `worker_id`/lease owner identity, bounded `limit`, `lease_seconds`, and `max_attempts`.
+3. The tick leases due pending `vector_repair_purge` records from `users/{uid}/memory_outbox/*` through `lease_v17_vector_repair_purge_outbox_records(...)`, marking stored documents `in_progress` with `lease_owner`, `leased_at`, `locked_at`, and `lease_expires_at`.
+4. Leased records are passed to `process_v17_vector_repair_purge_outbox_records(...)` with injected dependencies only: authoritative item loader, Pinecone-shaped vector deleter, Pinecone-shaped vector repairer, and the Firestore ack writer.
+5. Ack/retry/dead-letter patches are applied through `ack_v17_vector_repair_purge_outbox_record(...)`. The returned summary is deterministic and low-cardinality-friendly: `enabled`, `worker_id`, `uid`, `leased_count`, `processed_count`, `skipped_count`, `failed_count`, `ack_failed_count`, `actions`, and `errors`.
+6. Duplicate same-batch `idempotency_key` records remain at most one adapter side effect through the existing worker idempotency seam. Lease contention remains protected by the transaction re-read/update contract validated in the local emulator harness.
+
+Proposed Cloud Run/Tasks deployment shape (not yet applied):
+
+```text
+service/job: v17-vector-repair-outbox-worker
+trigger: Cloud Scheduler or Cloud Tasks HTTP/job tick, disabled by default
+identity: dedicated backend worker service account with Firestore Admin/Datastore User read-write on users/*/memory_outbox and read on authoritative V17 memory item state; Pinecone credentials scoped to ns2-compatible vector delete/upsert only
+config/env: V17_VECTOR_REPAIR_OUTBOX_WORKER_ENABLED=false by default; V17_VECTOR_REPAIR_OUTBOX_WORKER_ID=<service-region-revision>; V17_VECTOR_REPAIR_OUTBOX_LIMIT=<small bounded int>; V17_VECTOR_REPAIR_OUTBOX_LEASE_SECONDS=<bounded seconds>; V17_VECTOR_REPAIR_OUTBOX_MAX_ATTEMPTS=<int>; V17_VECTOR_REPAIR_PINECONE_NAMESPACE=ns2
+input: explicit uid shard/list source must be server-owned; no client-supplied arbitrary uid execution
+output/telemetry: monotonic counters for leased/processed/skipped/failed/ack_failed/action=delete|repair/dead_letter plus bounded error classes; alerts on dead_letter growth, ack failures, Pinecone failures, and stale-vector backlog age
+```
+
+Remaining deployment gates before enabling this contract in production:
+
+- Real Cloud Run/Tasks or Scheduler wiring and OIDC/IAM proof for the worker identity.
+- Production Firestore IAM and deployed Security Rules validation in the target Firebase project.
+- Real authoritative item loader wiring and production-safe uid sharding/backlog discovery.
+- Real Pinecone delete/upsert validation with duplicate stale physical IDs and tombstone precedence in namespace `ns2`.
+- Retry/backoff/dead-letter central telemetry and alerts.
+- Shared `ns2` isolation evidence proving legacy queries exclude V17 schema records or a separate namespace/filter decision.
+
 ## Rollback notes
 
 - `read → write` should be a config rollback using the reconciled V17-derived compatibility projection; it must not expose stale vectors or resurrect deleted memories.

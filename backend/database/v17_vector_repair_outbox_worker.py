@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Any, Callable, Dict, Iterable, List, Optional
 
@@ -23,6 +24,120 @@ _TERMINAL_OR_LEASED_STATUSES = {
 _DELETE_REASONS = {"missing_authoritative_item"}
 _TOMBSTONE_STATUSES = {"deleted", "tombstoned", "purged", MemoryItemStatus.tombstoned.value}
 _TOMBSTONE_SOURCE_STATES = {SourceState.missing.value, SourceState.tombstoned.value, SourceState.purged.value}
+
+
+@dataclass(frozen=True)
+class V17VectorRepairOutboxWorkerTickConfig:
+    """Server-owned config for one vector repair outbox worker tick.
+
+    The default is intentionally disabled/fail-closed. Cloud Run/Tasks or a
+    scheduler may construct this from server env/control-plane state, but this
+    module does not schedule itself or create production infrastructure.
+    """
+
+    enabled: bool = False
+    worker_id: str = "v17-vector-repair-outbox-worker-disabled"
+    limit: int = 25
+    lease_seconds: int = 300
+    max_attempts: int = 3
+
+
+def run_v17_vector_repair_outbox_worker_tick(
+    *,
+    db_client,
+    uid: str,
+    config: V17VectorRepairOutboxWorkerTickConfig,
+    authoritative_item_loader: Callable[[Dict[str, Any]], Optional[Any]],
+    vector_deleter: Callable[[Dict[str, Any]], Any],
+    vector_repairer: Callable[[Dict[str, Any], Any], Any],
+    now: Optional[datetime] = None,
+) -> Dict[str, Any]:
+    """Run one explicit, fake-injectable lease/process/ack worker tick.
+
+    This is the Cloud Run/Tasks/scheduler execution contract seam for V17 vector
+    repair outbox work: a caller with server-owned config invokes one bounded
+    tick for one uid, leases due pending records, processes them through injected
+    authoritative loader and vector adapter functions, and applies ack/retry/
+    dead-letter patches through the Firestore ack writer. It is disabled by
+    default and does not register a production scheduler.
+    """
+    _validate_worker_tick_inputs(uid=uid, config=config)
+    summary = _empty_worker_tick_summary(uid=uid, config=config)
+    if not config.enabled:
+        return summary
+
+    try:
+        leased = lease_v17_vector_repair_purge_outbox_records(
+            db_client=db_client,
+            uid=uid,
+            worker_id=config.worker_id,
+            limit=config.limit,
+            lease_seconds=config.lease_seconds,
+            now=now,
+        )
+    except Exception as exc:
+        summary["errors"].append({"stage": "lease", "error": str(exc)})
+        return summary
+
+    summary["leased_count"] = len(leased)
+
+    def ack_record(record: Dict[str, Any], patch: Dict[str, Any]) -> None:
+        try:
+            ack_v17_vector_repair_purge_outbox_record(db_client=db_client, record=record, patch=patch, now=now)
+        except Exception as exc:
+            summary["ack_failed_count"] += 1
+            summary["errors"].append(
+                {"stage": "ack", "record_id": str(record.get("record_id") or ""), "error": str(exc)}
+            )
+            if patch.get("status") == V17_VECTOR_REPAIR_OUTBOX_COMPLETED_STATUS:
+                raise
+
+    processed = process_v17_vector_repair_purge_outbox_records(
+        leased,
+        authoritative_item_loader=authoritative_item_loader,
+        vector_deleter=vector_deleter,
+        vector_repairer=vector_repairer,
+        outbox_updater=ack_record,
+        max_attempts=config.max_attempts,
+        now=now,
+    )
+    summary["processed_count"] = processed["processed_count"]
+    summary["skipped_count"] = processed["skipped_count"]
+    summary["failed_count"] = processed["failed_count"]
+    summary["actions"] = processed["actions"]
+    return summary
+
+
+def _validate_worker_tick_inputs(*, uid: str, config: V17VectorRepairOutboxWorkerTickConfig) -> None:
+    if not isinstance(uid, str) or not uid.strip():
+        raise ValueError("uid is required")
+    if not isinstance(config, V17VectorRepairOutboxWorkerTickConfig):
+        raise ValueError("config is required")
+    if not isinstance(config.enabled, bool):
+        raise ValueError("config.enabled must be boolean")
+    if not isinstance(config.worker_id, str) or not config.worker_id.strip():
+        raise ValueError("config.worker_id is required")
+    if config.limit < 1:
+        raise ValueError("config.limit must be positive")
+    if config.lease_seconds < 1:
+        raise ValueError("config.lease_seconds must be positive")
+    if config.max_attempts < 1:
+        raise ValueError("config.max_attempts must be positive")
+
+
+def _empty_worker_tick_summary(*, uid: str, config: V17VectorRepairOutboxWorkerTickConfig) -> Dict[str, Any]:
+    return {
+        "enabled": config.enabled,
+        "worker_id": config.worker_id,
+        "uid": uid,
+        "leased_count": 0,
+        "processed_count": 0,
+        "skipped_count": 0,
+        "failed_count": 0,
+        "ack_failed_count": 0,
+        "actions": [],
+        "errors": [],
+    }
 
 
 def lease_v17_vector_repair_purge_outbox_records(

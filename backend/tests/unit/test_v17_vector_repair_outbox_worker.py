@@ -7,9 +7,11 @@ from database.v17_vector_repair_pinecone_adapter import (
     make_v17_pinecone_vector_repairer,
 )
 from database.v17_vector_repair_outbox_worker import (
+    V17VectorRepairOutboxWorkerTickConfig,
     ack_v17_vector_repair_purge_outbox_record,
     lease_v17_vector_repair_purge_outbox_records,
     process_v17_vector_repair_purge_outbox_records,
+    run_v17_vector_repair_outbox_worker_tick,
 )
 
 
@@ -162,6 +164,176 @@ class _FakeTransactionalFirestore(_FakeFirestore):
         transaction = _FakeTransaction(self)
         self.transactions.append(transaction)
         return transaction
+
+
+def test_worker_tick_disabled_config_does_not_lease_or_call_side_effects():
+    calls = []
+    db = _FakeFirestore(
+        {
+            "users/u1/memory_outbox/available": _record(
+                record_id="available",
+                outbox_path="users/u1/memory_outbox/available",
+                available_at=datetime(2026, 6, 19, 12, 0, tzinfo=timezone.utc).isoformat(),
+            )
+        }
+    )
+
+    result = run_v17_vector_repair_outbox_worker_tick(
+        db_client=db,
+        uid="u1",
+        config=V17VectorRepairOutboxWorkerTickConfig(enabled=False, worker_id="worker-disabled"),
+        authoritative_item_loader=lambda record: calls.append("loader"),
+        vector_deleter=lambda record: calls.append("delete"),
+        vector_repairer=lambda record, item: calls.append("repair"),
+        now=datetime(2026, 6, 19, 12, 0, tzinfo=timezone.utc),
+    )
+
+    assert result == {
+        "enabled": False,
+        "worker_id": "worker-disabled",
+        "uid": "u1",
+        "leased_count": 0,
+        "processed_count": 0,
+        "skipped_count": 0,
+        "failed_count": 0,
+        "ack_failed_count": 0,
+        "actions": [],
+        "errors": [],
+    }
+    assert db.store["users/u1/memory_outbox/available"]["status"] == "pending"
+    assert calls == []
+
+
+def test_worker_tick_enabled_leases_processes_and_acks_delete_or_repair():
+    now = datetime(2026, 6, 19, 12, 0, tzinfo=timezone.utc)
+    db = _FakeFirestore(
+        {
+            "users/u1/memory_outbox/delete": _record(
+                record_id="delete",
+                idempotency_key="delete-key",
+                outbox_path="users/u1/memory_outbox/delete",
+                reason="missing_authoritative_item",
+                vector_id="vec-delete",
+                available_at=now.isoformat(),
+            ),
+            "users/u1/memory_outbox/repair": _record(
+                record_id="repair",
+                idempotency_key="repair-key",
+                outbox_path="users/u1/memory_outbox/repair",
+                reason="stale_item_revision",
+                vector_id="vec-repair",
+                available_at=now.isoformat(),
+            ),
+        }
+    )
+    deleted = []
+    repaired = []
+
+    result = run_v17_vector_repair_outbox_worker_tick(
+        db_client=db,
+        uid="u1",
+        config=V17VectorRepairOutboxWorkerTickConfig(enabled=True, worker_id="worker-a", limit=10),
+        authoritative_item_loader=lambda record: _live_item(memory_id=record["memory_id"]),
+        vector_deleter=lambda record: deleted.append(record["vector_id"]),
+        vector_repairer=lambda record, item: repaired.append((record["vector_id"], item["memory_id"])),
+        now=now,
+    )
+
+    assert result["enabled"] is True
+    assert result["worker_id"] == "worker-a"
+    assert result["uid"] == "u1"
+    assert result["leased_count"] == 2
+    assert result["processed_count"] == 2
+    assert result["failed_count"] == 0
+    assert result["ack_failed_count"] == 0
+    assert result["actions"] == [
+        {"record_id": "delete", "idempotency_key": "delete-key", "action": "delete"},
+        {"record_id": "repair", "idempotency_key": "repair-key", "action": "repair"},
+    ]
+    assert deleted == ["vec-delete"]
+    assert repaired == [("vec-repair", "mem-1")]
+    assert db.store["users/u1/memory_outbox/delete"]["status"] == "completed"
+    assert db.store["users/u1/memory_outbox/delete"]["action"] == "delete"
+    assert db.store["users/u1/memory_outbox/repair"]["status"] == "completed"
+    assert db.store["users/u1/memory_outbox/repair"]["action"] == "repair"
+
+
+def test_worker_tick_lease_failure_returns_deterministic_error_before_actions():
+    class _FailingLeaseFirestore(_FakeFirestore):
+        def collection(self, path):
+            raise RuntimeError(f"lease failed for {path}")
+
+    calls = []
+
+    result = run_v17_vector_repair_outbox_worker_tick(
+        db_client=_FailingLeaseFirestore(),
+        uid="u1",
+        config=V17VectorRepairOutboxWorkerTickConfig(enabled=True, worker_id="worker-a"),
+        authoritative_item_loader=lambda record: calls.append("loader"),
+        vector_deleter=lambda record: calls.append("delete"),
+        vector_repairer=lambda record, item: calls.append("repair"),
+    )
+
+    assert result["leased_count"] == 0
+    assert result["processed_count"] == 0
+    assert result["failed_count"] == 0
+    assert result["ack_failed_count"] == 0
+    assert result["errors"] == [{"stage": "lease", "error": "lease failed for users/u1/memory_outbox"}]
+    assert calls == []
+
+
+def test_worker_tick_ack_failure_is_counted_after_single_adapter_side_effect():
+    class _FailingAckDocumentReference(_FakeDocumentReference):
+        def update(self, patch):
+            if self.path.endswith("/dup-a") and patch.get("status") != "in_progress":
+                raise RuntimeError(f"ack failed for {self.path}")
+            super().update(patch)
+
+    class _FailingAckFirestore(_FakeFirestore):
+        def document(self, path):
+            if path.endswith("/dup-a"):
+                return _FailingAckDocumentReference(path, self.store)
+            return super().document(path)
+
+    now = datetime(2026, 6, 19, 12, 0, tzinfo=timezone.utc)
+    db = _FailingAckFirestore(
+        {
+            "users/u1/memory_outbox/dup-a": _record(
+                record_id="dup-a",
+                idempotency_key="dup-key",
+                outbox_path="users/u1/memory_outbox/dup-a",
+                available_at=now.isoformat(),
+            ),
+            "users/u1/memory_outbox/dup-b": _record(
+                record_id="dup-b",
+                idempotency_key="dup-key",
+                outbox_path="users/u1/memory_outbox/dup-b",
+                available_at=now.isoformat(),
+            ),
+        }
+    )
+    repaired = []
+
+    result = run_v17_vector_repair_outbox_worker_tick(
+        db_client=db,
+        uid="u1",
+        config=V17VectorRepairOutboxWorkerTickConfig(enabled=True, worker_id="worker-a", limit=10),
+        authoritative_item_loader=lambda record: _live_item(),
+        vector_deleter=lambda record: None,
+        vector_repairer=lambda record, item: repaired.append(record["record_id"]),
+        now=now,
+    )
+
+    assert repaired == ["dup-a"]
+    assert result["leased_count"] == 2
+    assert result["processed_count"] == 0
+    assert result["skipped_count"] == 1
+    assert result["failed_count"] == 1
+    assert result["ack_failed_count"] == 2
+    assert result["errors"] == [
+        {"stage": "ack", "record_id": "dup-a", "error": "ack failed for users/u1/memory_outbox/dup-a"},
+        {"stage": "ack", "record_id": "dup-a", "error": "ack failed for users/u1/memory_outbox/dup-a"},
+    ]
 
 
 def test_firestore_reader_leases_only_available_pending_vector_repair_records_and_ack_updates_path():
