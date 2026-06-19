@@ -164,13 +164,14 @@
 |-------|--------|
 | **macOS source** | `Sources/MainWindow/Pages/SettingsPage.swift`, `Sources/MainWindow/SettingsSidebar.swift`, `Sources/MainWindow/Pages/PermissionsPage.swift`, `Sources/MainWindow/Pages/ShortcutsSettingsSection.swift` |
 | **Windows source** | `src/renderer/src/pages/Settings.tsx`, `src/renderer/src/components/settings/` |
-| **macOS sections** | General · Assistants · Devices · Integrations · Shortcuts · Notifications · Support |
-| **Windows sections** | General · Rewind · Privacy · Account · Advanced · Memories |
-| **Status** | 🟡 Partial → improved (Batch 6) |
+| **macOS sections** | General · Assistants · Devices · Integrations · Shortcuts · Notifications · Support · About |
+| **Windows sections** | General · Memories · Rewind · Integrations · Shortcuts · Privacy · Account · Advanced · **Support** (Batch 11) |
+| **Status** | 🟡 Partial → improved (Batch 11) |
 | **Visual gap** | macOS settings use a sidebar rail + right-panel pattern with section groupings. Windows uses a tabbed horizontal navigation with a search bar. Both are dark-themed but the layout and terminology differ significantly. |
-| **Nav change (Batch 6)** | Settings is now a first-class sidebar nav item (after Apps), matching macOS sidebar order exactly. The account avatar row still links to Settings but is now a plain `Link` (not a `NavLink`) to avoid double-active-state. The Settings tab rail retains its own Back→Home button for deep-link convenience. |
-| **Functional gap** | Missing tabs: Shortcuts (keyboard shortcut customization), Notifications (per-assistant alert config), Devices/Bluetooth section, Assistants enable/disable panel, Support (feedback/docs/about). Windows has features macOS doesn't: Memory Export, Sticky Notes import, Retention mode. |
-| **Proposed fix** | (1) Add a **Shortcuts** tab with the global shortcut configurator (already implemented in onboarding — reuse it). (2) Add a **Notifications** tab with per-feature toggles. (3) Rename "Rewind" → "Rewind & Screen" to match macOS "Assistants" terminology more closely. |
+| **Nav change (Batch 6)** | Settings is now a first-class sidebar nav item (after Apps), matching macOS sidebar order exactly. |
+| **Tab reorder (Batch 11)** | Integrations moved before Shortcuts (matches macOS: integrations/connections before keyboard shortcuts). Support tab added at end (matches macOS: About at bottom of sidebar). |
+| **Support/About tab (Batch 11)** | App identity card (omi logo + name + version + Electron/Node), Visit Website, Help & Docs, Report an Issue (GitHub), Privacy Policy, Terms of Service, local data note. All links open in system browser. |
+| **Remaining gaps** | Notifications tab (proactive notification config — infeasible, no Windows notification pipeline). Devices/Bluetooth (hardware-only, infeasible). Assistants enable/disable panel (no proactive assistant infra on Windows). Software Updates UI (Sparkle macOS-only; electron-builder updater could be wired in future). |
 | **Priority** | P1 — IMPROVED |
 
 ---
@@ -361,7 +362,7 @@
 | Rewind / Timeline | 🟡 Partial (improved) | P0 — IMPROVED |
 | Rewind Search | ✅ Works | P0 — DONE |
 | Screen OCR / Context | 🟡 Partial | P2 |
-| Settings | 🟡 Partial (improved) | P1 — IMPROVED |
+| Settings | 🟡 Partial (improved) | P1 — IMPROVED (Support/About tab added, tabs reordered) |
 | System Tray | ✅ Works | P0 — DONE |
 | Notifications | 🟡 Partial | P2 |
 | Integrations | 🟡 Partial | P1 |

@@ -187,14 +187,29 @@ Already resolved in Batch 7:
 
 ---
 
+## 15. Settings — Support / About Tab
+
+| Field | Value |
+|-------|-------|
+| macOS source | `SettingsSidebar.swift` `.about` section — app icon + name + version, Visit Website, Help Center, Privacy Policy, Terms of Service, Software Updates, Report an Issue |
+| Windows source | `SupportTab.tsx` — **IMPLEMENTED (Batch 11)** |
+| Data exists today | YES — version from package.json via vite `define`, runtime versions from `window.electron.process.versions` |
+| **What was added** | (1) **App identity card** — omi logo + "omi" name + "Version 1.0.0 for Windows" + Electron/Node runtime versions. (2) **Visit Website** → `https://omi.me`. (3) **Help & Docs** → `https://help.omi.me`. (4) **Report an Issue** → `https://github.com/BasedHardware/omi/issues`. (5) **Privacy Policy** → `https://www.omi.me/privacy`. (6) **Terms of Service** → `https://www.omi.me/terms`. (7) **Local data note** — explains screen frames/transcripts/KG are stored on-device only. All links open in system browser via `window.open` → existing `setWindowOpenHandler` → `shell.openExternal`. |
+| **Not implemented** | Software Updates UI (Sparkle is macOS-only; Windows auto-update via electron-builder's built-in updater could be wired in the future). |
+| **Tab reorder** | Integrations moved before Shortcuts to better match macOS flow (connection setup → shortcut config). Support added at the end matching macOS's About position. |
+| **Classification** | **DONE** (Support/About tab implemented) |
+
+---
+
 ## Summary
 
 | Priority | Item | Files | Risk |
 |----------|------|-------|------|
-| 1 | Integrations tab (already built, just unwired) | `tabs.ts`, `Settings.tsx` | Very low |
-| 2 | Shortcuts tab in Settings | `tabs.ts`, `Settings.tsx`, new `ShortcutsTab.tsx` | Low |
-| 3 | Chat citation cards | `useChat.ts`, `ChatMessages.tsx` | Low |
-| 4 | Conversations starred filter | `Conversations.tsx` | Low |
+| ✓ | Integrations tab (wired in Batch 6) | `tabs.ts`, `Settings.tsx` | Done |
+| ✓ | Shortcuts tab in Settings | `tabs.ts`, `Settings.tsx`, `ShortcutsTab.tsx` | Done |
+| ✓ | Chat citation cards | `useChat.ts`, `ChatMessages.tsx` | Done |
+| ✓ | Conversations starred filter | `Conversations.tsx` | Done |
+| ✓ | Support/About tab | `tabs.ts`, `Settings.tsx`, `SupportTab.tsx` | Done in Batch 11 |
 | ✓ | Rewind OCR overlay + fullscreen button + JSON export | `Rewind.tsx`, `RewindPlayer.tsx` | Done in Batch 9 |
 | ✗ | Focus page | — | Very high / infeasible |
 | ✗ | Insights page | — | Very high / infeasible |

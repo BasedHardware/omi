@@ -11,6 +11,7 @@ import { AccountTab } from '../components/settings/tabs/AccountTab'
 import { AdvancedTab } from '../components/settings/tabs/AdvancedTab'
 import { ShortcutsTab } from '../components/settings/tabs/ShortcutsTab'
 import { IntegrationsTab } from '../components/settings/tabs/IntegrationsTab'
+import { SupportTab } from '../components/settings/tabs/SupportTab'
 import { Memories } from './Memories'
 
 // The Memories tab renders the full Memories page (its own layout, brain map and
@@ -20,11 +21,12 @@ const TAB_COMPONENTS: Partial<Record<SettingsTabId, () => React.JSX.Element>> = 
   general: GeneralTab,
   memories: undefined, // full-page — handled separately below
   rewind: RewindTab,
-  shortcuts: ShortcutsTab,
   integrations: IntegrationsTab,
+  shortcuts: ShortcutsTab,
   privacy: PrivacyTab,
   account: AccountTab,
-  advanced: AdvancedTab
+  advanced: AdvancedTab,
+  support: SupportTab
 }
 
 function SettingsInner(): React.JSX.Element {
