@@ -45,6 +45,7 @@ PROOF_CONSTANTS = {
     "real_router_dependency_map_proof": _EXTERNAL.REAL_ROUTER_DEPENDENCY_MAP_PROOF,
     "real_router_get_testclient_proof": _EXTERNAL.REAL_ROUTER_GET_TESTCLIENT_PROOF,
     "get_dependency_auth_readiness_proof": _EXTERNAL.GET_DEPENDENCY_AUTH_READINESS_PROOF,
+    "projection_store_readiness_proof": _EXTERNAL.PROJECTION_STORE_READINESS_PROOF,
 }
 
 
@@ -92,6 +93,7 @@ REMAINING_GATES = [
         ),
         "existing_local_proofs": [
             "projection_readiness_proof",
+            "projection_store_readiness_proof",
             "memory_read_service_proof",
             "response_adapter_proof",
         ],

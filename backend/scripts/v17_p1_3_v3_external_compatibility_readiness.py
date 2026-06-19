@@ -623,6 +623,25 @@ GET_DEPENDENCY_AUTH_READINESS_PROOF = {
     ],
 }
 
+PROJECTION_STORE_READINESS_PROOF = {
+    "service": "backend/scripts/v17_p1_3_v3_projection_store_readiness.py",
+    "test": "backend/tests/unit/test_v17_p1_3_v3_projection_store_readiness.py",
+    "runtime_wired": False,
+    "production_rollout_approved": False,
+    "external_calls": [],
+    "covered_defaults": [
+        "read_only_projection_store_api_requirements_inventory",
+        "canonical_projection_path_api_blocked_until_chosen",
+        "memorydb_materialization_without_v17_only_body_leakage",
+        "account_projection_generation_freshness_source_commit_version_evidence_fences",
+        "delete_tombstone_vector_cleanup_fences_required",
+        "enabled_empty_returns_empty_list_no_legacy_fallback",
+        "archive_default_unavailable_no_stale_short_term_default_visible",
+        "pagination_cursor_contract_plus_non_enrolled_legacy_offset_compatibility",
+        "fake_injectable_reader_interface_shape_without_route_wiring",
+    ],
+}
+
 GET_RUNTIME_WIRING_READINESS_PROOF = {
     "service": "backend/scripts/v17_p1_3_v3_get_runtime_wiring_readiness.py",
     "test": "backend/tests/unit/test_v17_p1_3_v3_get_runtime_wiring_readiness.py",
@@ -678,6 +697,7 @@ def build_report(*, execute: bool = False) -> dict[str, Any]:
         "real_router_dependency_map_proof": REAL_ROUTER_DEPENDENCY_MAP_PROOF,
         "real_router_get_testclient_proof": REAL_ROUTER_GET_TESTCLIENT_PROOF,
         "get_dependency_auth_readiness_proof": GET_DEPENDENCY_AUTH_READINESS_PROOF,
+        "projection_store_readiness_proof": PROJECTION_STORE_READINESS_PROOF,
         "get_runtime_wiring_readiness_proof": GET_RUNTIME_WIRING_READINESS_PROOF,
         "non_claims": [
             "No production traffic executed.",
@@ -706,6 +726,7 @@ def build_report(*, execute: bool = False) -> dict[str, Any]:
             "real_router_dependency_map_proof_present": True,
             "real_router_get_testclient_proof_present": True,
             "get_dependency_auth_readiness_proof_present": True,
+            "projection_store_readiness_proof_present": True,
             "read_only": True,
             "mutation_allowed": False,
             "approval_claimed": False,

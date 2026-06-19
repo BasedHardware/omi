@@ -94,6 +94,7 @@ pytest tests/unit/test_v17_p1_3_v3_fastapi_route_contract.py -v
 pytest tests/unit/test_v17_p1_3_v3_real_router_dependency_map.py -v
 pytest tests/unit/test_v17_p1_3_v3_real_router_get_testclient.py -v
 pytest tests/unit/test_v17_p1_3_v3_get_dependency_auth_readiness.py -v
+pytest tests/unit/test_v17_p1_3_v3_projection_store_readiness.py -v
 pytest tests/unit/test_v17_p1_3_v3_get_runtime_wiring_readiness.py -v
 pytest tests/unit/test_v17_cutover_evidence_readiness.py -v
 pytest tests/unit/test_v17_vector_repair_outbox_emulator_harness.py -v

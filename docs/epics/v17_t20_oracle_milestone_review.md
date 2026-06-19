@@ -1526,3 +1526,20 @@ Verification for this slice:
 - Readiness summaries: GET dependency/auth `PARTIAL PARTIAL True True True True False 1 False False False`; GET runtime-wiring `BLOCKED BLOCKED True False False False 9 13 8 4`; `/v3` external compatibility `BLOCKED True False False False False False False False 7 7 True`.
 - Async scan remains pre-existing `HIGH async helpers with blocking: 41`, `STRUCTURAL mixed await+sync DB: 10`; docs hygiene `docs_hygiene 16 BAD=[]`.
 - Production rollout remains **BLOCKED / NO-GO** until all Oracle P0/P1 gates and required real-service evidence are complete.
+
+### 2026-06-19 — P1-3 `/v3` projection store/API readiness
+
+Added the next real-service-adjacent gate as a safe readiness/local contract artifact for the V17-derived compatibility projection read API/store needed before future `GET /v3/memories` cutover:
+
+- Added `backend/scripts/v17_p1_3_v3_projection_store_readiness.py`, a read-only BLOCKED inventory of the exact production store/API requirements for a V17-derived compatibility projection that can feed `/v3/memories`.
+- Added `backend/tests/unit/test_v17_p1_3_v3_projection_store_readiness.py` and registered it in `backend/test.sh`.
+- Linked `projection_store_readiness_proof` from both `backend/scripts/v17_p1_3_v3_external_compatibility_readiness.py` and `backend/scripts/v17_p1_3_v3_get_runtime_wiring_readiness.py`.
+- The artifact records that the canonical projection path/API is still blocked until chosen, while pinning required MemoryDB materialization fields without V17-only body leakage, account/projection generation and freshness fences, source commit/version/evidence fences, delete/tombstone/vector cleanup fences, enabled-empty `[]` with no legacy fallback, Archive default-unavailable and stale Short-term not default-visible requirements, cursor pagination plus non-enrolled legacy offset compatibility, and a fake-injectable reader interface shape for future route wiring.
+- It ties these requirements to the existing local pure projection-readiness, memory-read-service, request/response adapter, route-planner, write-convergence, cursor, FastAPI route-contract, and GET runtime-wiring proofs while marking real Firestore/API/emulator/cloud evidence still missing.
+- No production store writes, runtime route wiring, real Firestore/Pinecone/cloud/provider/network call, emulator/cloud evidence, benchmark, telemetry sink integration, Archive default visibility, stale Short-term default visibility, or approval is claimed.
+
+Verification for this slice:
+
+- RED: `cd backend && pytest tests/unit/test_v17_p1_3_v3_projection_store_readiness.py -q` -> `7 failed in 0.09s` before adding the runner/test.sh/docs/readiness links.
+- Focused GREEN and full verification outputs are recorded with the local commit summary for this slice.
+- Production rollout remains **BLOCKED / NO-GO** until all Oracle P0/P1 gates and required real-service evidence are complete.
