@@ -38,6 +38,10 @@ class V17Collections:
         return f"{self.user_root}/memory_runs"
 
     @property
+    def non_active_memory_routes(self) -> str:
+        return f"{self.user_root}/non_active_memory_routes"
+
+    @property
     def legacy_fallback(self) -> str:
         return f"{self.user_root}/memory_legacy_fallback"
 
@@ -57,6 +61,7 @@ class V17Collections:
             self.memory_lineage,
             self.memory_evidence,
             self.memory_runs,
+            self.non_active_memory_routes,
             self.legacy_fallback,
             self.memory_commits,
         ]
