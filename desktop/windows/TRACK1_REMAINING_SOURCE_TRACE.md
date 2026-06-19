@@ -112,12 +112,12 @@ Already resolved in Batch 7:
 
 | Field | Value |
 |-------|-------|
-| macOS source | `FolderManagementViews.swift`, `ConversationListView.swift` — `folderId` param to API |
-| Windows source | None |
-| Backend source | `GET /v1/conversations?folder_id=X` and folder CRUD endpoints exist |
-| Data exists today | YES for date filter; YES for folders (API exists) |
-| Exact blocker | Would require significant new UI (folder list sidebar, folder assignment) |
-| **Classification** | **DO_NOT_DO_NOW** — too wide, diminishing returns vs other items |
+| macOS source | `FolderManagementViews.swift` (`FolderTabsStrip`), `ConversationsPage.swift` (date popover + filter buttons) |
+| Windows source | `Conversations.tsx` — **IMPLEMENTED (Batch 10)** |
+| Backend source | `GET /v1/folders` returns user folders; `GET /v1/conversations?folder_id=X` filters by folder; both exist |
+| **What was added** | (1) **Date filter dropdown** — "All time / Today / This week / This month" dropdown (client-side, uses `sortAt` timestamp). Button shows current selection, checkmark on active item. (2) **Folder tab strip** — loads `/v1/folders` on mount; shows scrollable horizontal pill strip (colored dot + name + count); clicking re-fetches `/v1/conversations?folder_id=X`. Absent when user has no folders. (3) **Compact view toggle** — `LayoutList` icon button switches between compact (macOS-style: emoji badge + title + timestamp in one line) and expanded (with preview) modes. Persisted to localStorage. (4) **macOS-style timestamps** — cloud rows show "10:43 AM" / "Yesterday, 10:43 AM" / "Jan 29, 10:43 AM" instead of raw `toLocaleString()`. (5) **Emoji badge in compact mode** — 36×36 rounded-xl container with ring, matching `ConversationRowView.swift` compact layout. |
+| **Not implemented** | Folder create/edit/delete UI — requires CRUD sheets and significant new UI; out of scope for a parity sprint. Folder assignment on individual conversations (move-to-folder) also deferred. |
+| **Classification** | **DONE** (date filter + folder filter strip + compact mode + timestamp polish) |
 
 ---
 

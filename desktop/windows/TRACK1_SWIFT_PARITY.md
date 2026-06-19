@@ -122,11 +122,11 @@
 |-------|--------|
 | **macOS source** | `Sources/MainWindow/Pages/ConversationsPage.swift`, `Sources/MainWindow/Pages/ConversationDetailView.swift`, `Sources/MainWindow/Components/ConversationListView.swift`, `Sources/MainWindow/Components/ConversationRowView.swift` |
 | **Windows source** | `src/renderer/src/pages/Conversations.tsx`, `src/renderer/src/pages/ConversationDetail.tsx`, `src/renderer/src/pages/LiveConversation.tsx` |
-| **Status** | 🟡 Partial |
-| **Visual gap** | macOS uses a master-detail split view. Windows uses a flat list with click-to-navigate. macOS conversation cards show star/action icons on hover. Windows cards are more minimal. |
-| **Functional gap** | Missing: folder organization (create/move/delete folders), starred filter, date range filter, multi-select for batch merge, compact/expanded view toggle, speaker name editing inline in transcript. |
-| **Proposed fix** | (1) Add starred toggle to conversation cards and a "Starred" filter chip. (2) Add folder sidebar panel (left rail) matching macOS pattern. (3) Add date range filter dropdown. These three are the most visible to a judge. |
-| **Priority** | P1 |
+| **Status** | 🟡 Partial → improved (Batch 10) |
+| **Visual gap** | macOS uses a master-detail split view. Windows uses a flat list with click-to-navigate. |
+| **Improvements (Batch 10)** | (1) **Date filter** — dropdown (All time / Today / This week / This month), client-side against `sortAt`. (2) **Folder tab strip** — loads `/v1/folders`, shows scrollable pill strip with colored dot + name + count; clicking folder re-fetches `/v1/conversations?folder_id=X`; hidden when no folders. (3) **Compact view** — macOS-style single-line row: 36×36 emoji badge with rounded-xl ring background, title, macOS-style timestamp (today→time-only, yesterday→"Yesterday, HH:MM AM", etc.), star on right. Toggle persisted to localStorage. (4) **macOS-style timestamps** — cloud rows in expanded mode now show "10:43 AM" / "Yesterday, 10:43 AM" / "Jan 29, 10:43 AM" to match `ConversationRowView.swift`'s `formattedTimestamp`. |
+| **Remaining gaps** | Folder create/edit/delete UI; move-to-folder per conversation; master-detail split view; batch merge; speaker name editing. |
+| **Priority** | P1 — IMPROVED |
 
 ---
 
@@ -357,7 +357,7 @@
 | Chat / AI Conversation | 🟡 Partial (improved) | P1 — IMPROVED |
 | Floating Overlay | 🟡 Partial | P1 |
 | Recording / Listening UI | 🟡 Partial (improved) | P1 — IMPROVED |
-| Conversation History | 🟡 Partial | P1 |
+| Conversation History | 🟡 Partial (improved) | P1 — IMPROVED |
 | Rewind / Timeline | 🟡 Partial (improved) | P0 — IMPROVED |
 | Rewind Search | ✅ Works | P0 — DONE |
 | Screen OCR / Context | 🟡 Partial | P2 |
