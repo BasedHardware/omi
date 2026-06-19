@@ -7,6 +7,7 @@ try:
 except ModuleNotFoundError:
     query_v17_memory_vector_candidates = None
 
+from database.v17_vector_repair_outbox import build_v17_vector_repair_purge_outbox_records
 from models.v17_memory_search_gateway import SearchMode, hydrate_and_filter_vector_hits
 from models.v17_product_memory import MemoryAccessPolicy
 from utils.memory.v17_product_memory_read_service import fetch_authoritative_product_memory_items
@@ -23,6 +24,7 @@ def fetch_default_v17_vector_memory_search(
     policy: MemoryAccessPolicy,
     vector_query: Optional[Callable[..., Any]] = None,
     repair_purge_callback: Optional[Callable[[List[Dict[str, Any]]], Any]] = None,
+    repair_purge_outbox_writer: Optional[Callable[[List[Dict[str, Any]]], Any]] = None,
     limit: int = DEFAULT_V17_VECTOR_SEARCH_LIMIT,
     required_projection_commit_id: str,
     required_account_generation: int,
@@ -58,8 +60,13 @@ def fetch_default_v17_vector_memory_search(
         required_account_generation=required_account_generation,
     )
     repair_purge_candidates = list(gateway_result.repair_purge_candidates)
+    repair_purge_outbox_records = build_v17_vector_repair_purge_outbox_records(
+        uid=uid, candidates=repair_purge_candidates
+    )
     if repair_purge_candidates and repair_purge_callback is not None:
         repair_purge_callback(repair_purge_candidates)
+    if repair_purge_outbox_records and repair_purge_outbox_writer is not None:
+        repair_purge_outbox_writer(repair_purge_outbox_records)
     return {
         'uid': uid,
         'query': query,
@@ -75,6 +82,8 @@ def fetch_default_v17_vector_memory_search(
         'vector_rejected_count': int(getattr(candidate_result, 'rejected_count', 0)),
         'repair_purge_candidate_count': len(repair_purge_candidates),
         'repair_purge_candidates': repair_purge_candidates,
+        'repair_purge_outbox_record_count': len(repair_purge_outbox_records),
+        'repair_purge_outbox_records': repair_purge_outbox_records,
         'archive_default_visible': False,
     }
 

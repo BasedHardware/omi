@@ -338,6 +338,28 @@ This closes only the fake-injectable stale-ID repair/purge candidate dispatch se
 - Produce real cloud/Pinecone/Firestore/benchmark evidence before production read/vector cutover.
 - Production rollout remains **BLOCKED / NO-GO** until all Oracle P0s and required real-service evidence are complete.
 
+### 2026-06-19 — P0-4 durable fake-injectable repair/purge outbox record seam
+
+Continued Oracle P0-4 by transforming hydration repair/purge candidates into deterministic durable outbox records, without calling Pinecone or changing the production rollout verdict:
+
+- Added `backend/database/v17_vector_repair_outbox.py` with `build_v17_vector_repair_purge_outbox_records(...)` and fake-friendly `write_v17_vector_repair_purge_outbox_records(...)`.
+- Outbox records target `users/{uid}/memory_outbox/{record_id}` with `event_type="vector_repair_purge"`, `status="pending"`, `attempt_count=0`, and `last_error=None`.
+- `record_id` / `idempotency_key` is deterministic from `uid`, `vector_id`, `memory_id`, `reason`, `required_projection_commit_id`, and `required_account_generation` so retrying the same stale-vector observation is idempotent.
+- Records carry observed/authoritative account generation, item revision, source commit, content hash, and projection commit fields for a later worker to decide delete-vs-repair under tombstone precedence.
+- `fetch_default_v17_vector_memory_search(...)` now builds outbox records after authoritative hydration and calls an injected `repair_purge_outbox_writer` exactly once only when records exist. Missing/no candidates writes nothing.
+- Missing freshness-fence paths still fail before vector query, `memory_items` reads, candidate callbacks, or outbox writer calls.
+- Access-policy rejects remain non-candidates; returned results remain hydrated valid `memory_items`; Archive remains default-unavailable.
+
+Verification recorded in `docs/epics/v17_memory_implementation_tickets.md`: RED missing outbox module (`ModuleNotFoundError`), GREEN vector-service tests (`8 passed`), focused V17 vector/caller regression (`80 passed`), full `pytest tests/unit/test_v17_*.py -q` (`210 passed, 1 warning`), and async blocker scan exit 0 with pre-existing findings only.
+
+This closes only the durable fake-injectable outbox record seam. Remaining P0-4/P0 work:
+
+- Wire the injected writer only after Firestore emulator/cloud validation of `users/{uid}/memory_outbox/{record_id}` semantics.
+- Implement a real idempotent Pinecone delete/repair worker with tombstone precedence, duplicate stale-ID proof, retries, dead-lettering, and low-cardinality error telemetry.
+- Prove shared `ns2` isolation; add vector overfetch/refill/budgets/central telemetry and app/key/scope authorization.
+- Produce real cloud/Pinecone/Firestore/benchmark evidence before production read/vector cutover.
+- Production rollout remains **BLOCKED / NO-GO** until all Oracle P0s and required real-service evidence are complete.
+
 ## Not-run / not-claimed caveats preserved
 
 - Oracle review has now run and is recorded here, but it blocks production rollout.

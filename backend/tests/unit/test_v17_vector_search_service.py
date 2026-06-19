@@ -3,6 +3,10 @@ from datetime import datetime, timedelta, timezone
 from models.memory_evidence import ArtifactPreservationState, MemoryEvidence, SourceState
 from models.v17_memory_search_gateway import SearchMode, SearchVectorHit, VectorRepairPurgeReason
 from models.v17_product_memory import MemoryAccessPolicy, MemoryItemStatus, MemoryTier, ProcessingState, V17MemoryItem
+from database.v17_vector_repair_outbox import (
+    build_v17_vector_repair_purge_outbox_records,
+    write_v17_vector_repair_purge_outbox_records,
+)
 from utils.memory.v17_vector_search_service import fetch_default_v17_vector_memory_search
 
 
@@ -302,6 +306,112 @@ def test_default_v17_vector_search_dispatches_repair_purge_candidates_for_hydrat
         ('v17mem:old-generation', 'old-generation', VectorRepairPurgeReason.stale_account_generation),
     ]
     assert 'valid' not in {candidate['memory_id'] for candidate in repair_batches[0]}
+
+
+def test_default_v17_vector_search_writes_deterministic_repair_purge_outbox_records_once():
+    now = datetime.now(timezone.utc)
+    stale_projection = _memory_item('stale-projection', tier=MemoryTier.long_term, now=now)
+    valid = _memory_item('valid', tier=MemoryTier.long_term, now=now)
+    db_client = _FirestoreFake(
+        {f'users/u1/memory_items/{item.memory_id}': _stored_item(item) for item in [stale_projection, valid]}
+    )
+    writer_batches = []
+
+    def fake_vector_query(uid, query, *, mode, limit):
+        return _VectorCandidateResult(
+            hits=[
+                _hit(
+                    stale_projection,
+                    score=0.98,
+                    vector_id='v17mem:stale-projection',
+                    projection_commit_id='projection-old',
+                ),
+                _hit(valid, score=0.95, vector_id='v17mem:valid'),
+            ],
+            rejected_count=0,
+        )
+
+    response = fetch_default_v17_vector_memory_search(
+        uid='u1',
+        query='coffee',
+        db_client=db_client,
+        policy=MemoryAccessPolicy.for_omi_chat(),
+        vector_query=fake_vector_query,
+        repair_purge_outbox_writer=lambda records: writer_batches.append(records),
+        limit=5,
+        required_projection_commit_id='projection-1',
+        required_account_generation=0,
+    )
+
+    assert [item['memory_id'] for item in response['items']] == ['valid']
+    assert len(writer_batches) == 1
+    assert writer_batches[0] == response['repair_purge_outbox_records']
+    assert response['repair_purge_outbox_record_count'] == 1
+    record = writer_batches[0][0]
+    assert record['record_id'].startswith('v17vrp_')
+    assert record['idempotency_key'] == record['record_id']
+    assert record['uid'] == 'u1'
+    assert record['event_type'] == 'vector_repair_purge'
+    assert record['status'] == 'pending'
+    assert record['vector_id'] == 'v17mem:stale-projection'
+    assert record['memory_id'] == 'stale-projection'
+    assert record['reason'] == VectorRepairPurgeReason.stale_projection_commit
+    assert record['required_projection_commit_id'] == 'projection-1'
+    assert record['observed_projection_commit_id'] == 'projection-old'
+    assert record['required_account_generation'] == 0
+    assert record['outbox_path'] == f"users/u1/memory_outbox/{record['record_id']}"
+
+    rebuilt = build_v17_vector_repair_purge_outbox_records(uid='u1', candidates=response['repair_purge_candidates'])
+    assert [record['record_id'] for record in rebuilt] == [record['record_id']]
+
+
+def test_default_v17_vector_search_does_not_write_outbox_for_no_candidates_or_missing_fence():
+    now = datetime.now(timezone.utc)
+    valid = _memory_item('valid', tier=MemoryTier.long_term, now=now)
+    db_client = _FirestoreFake({f'users/u1/memory_items/{valid.memory_id}': _stored_item(valid)})
+    writer_batches = []
+    vector_calls = []
+
+    def fake_vector_query(uid, query, *, mode, limit):
+        vector_calls.append({'uid': uid, 'query': query, 'mode': mode, 'limit': limit})
+        return _VectorCandidateResult(hits=[_hit(valid, score=0.95, vector_id='v17mem:valid')], rejected_count=0)
+
+    response = fetch_default_v17_vector_memory_search(
+        uid='u1',
+        query='coffee',
+        db_client=db_client,
+        policy=MemoryAccessPolicy.for_omi_chat(),
+        vector_query=fake_vector_query,
+        repair_purge_outbox_writer=lambda records: writer_batches.append(records),
+        limit=5,
+        required_projection_commit_id='projection-1',
+        required_account_generation=0,
+    )
+
+    assert [item['memory_id'] for item in response['items']] == ['valid']
+    assert response['repair_purge_candidates'] == []
+    assert response['repair_purge_outbox_records'] == []
+    assert writer_batches == []
+
+    try:
+        fetch_default_v17_vector_memory_search(
+            uid='u1',
+            query='coffee',
+            db_client=db_client,
+            policy=MemoryAccessPolicy.for_omi_chat(),
+            vector_query=fake_vector_query,
+            repair_purge_outbox_writer=lambda records: writer_batches.append(records),
+            limit=5,
+            required_projection_commit_id=None,
+            required_account_generation=0,
+        )
+    except ValueError as exc:
+        assert str(exc) == 'required_projection_commit_id is required'
+    else:
+        raise AssertionError('expected missing projection fence to fail closed')
+
+    assert len(vector_calls) == 1
+    assert writer_batches == []
 
 
 def test_default_v17_vector_search_preserves_vector_ranking_after_authoritative_filtering():
