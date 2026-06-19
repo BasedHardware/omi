@@ -1,10 +1,11 @@
 from datetime import datetime
-from typing import Optional
+from typing import Any, Callable, Optional
 
 from config.v17_memory import V17Capabilities
 from models.v17_product_memory import MemoryAccessPolicy, MemoryConsumer
 from utils.memory.v17_default_read_rollout import V17DefaultReadRolloutDecision, read_v17_default_read_rollout
 from utils.memory.v17_product_memory_read_service import fetch_default_product_memory_search
+from utils.memory.v17_vector_search_service import fetch_default_v17_vector_memory_search
 
 V17DeveloperDefaultMemoryRolloutDecision = V17DefaultReadRolloutDecision
 
@@ -30,7 +31,7 @@ def _parse_datetime(value) -> datetime:
 
 
 def _format_developer_memory(item: dict, policy: MemoryAccessPolicy) -> dict:
-    updated_at = _parse_datetime(item.get('date'))
+    updated_at = _parse_datetime(item.get('date') or item.get('updated_at') or item.get('captured_at'))
     return {
         'id': item['memory_id'],
         'content': item.get('content') or '',
@@ -96,3 +97,55 @@ def search_v17_default_developer_memories(
         offset=bounded_offset,
     )
     return [_format_developer_memory(item, policy) for item in response['items']]
+
+
+def search_v17_default_developer_memories_vector(
+    *,
+    uid: str,
+    query: str,
+    limit: int,
+    db_client,
+    rollout_capabilities: Optional[V17Capabilities],
+    app_has_default_memory_grant: bool,
+    vector_query: Optional[Callable[..., Any]] = None,
+    required_projection_commit_id: Optional[str] = None,
+) -> Optional[list[dict]]:
+    """Return hydrated V17 vector memories for the developer API caller.
+
+    Returns `None` before vector lookup or `users/{uid}/memory_items` reads when
+    persisted V17 read rollout or the developer default-memory grant is missing.
+    Archive is deliberately default-disabled here; explicit Archive routes remain
+    separate and capability-gated.
+    """
+
+    if not rollout_capabilities or not rollout_capabilities.v17_reads_enabled:
+        return None
+    if not app_has_default_memory_grant:
+        return None
+
+    bounded_limit = max(1, min(limit, 100))
+    policy = MemoryAccessPolicy(
+        consumer=MemoryConsumer.developer_api,
+        app_has_default_memory_grant=True,
+        archive_capability=False,
+        raw_provenance_capability=False,
+    )
+    response = fetch_default_v17_vector_memory_search(
+        uid=uid,
+        query=query,
+        db_client=db_client,
+        policy=policy,
+        vector_query=vector_query,
+        limit=bounded_limit,
+        required_projection_commit_id=required_projection_commit_id,
+    )
+
+    scores_by_memory_id = response.get('scores_by_memory_id', {})
+    formatted = []
+    for item in response['items']:
+        memory = _format_developer_memory(item, policy)
+        memory_id = item['memory_id']
+        memory['relevance_score'] = round(float(scores_by_memory_id.get(memory_id, 0)), 4)
+        memory['vector_search'] = True
+        formatted.append(memory)
+    return formatted

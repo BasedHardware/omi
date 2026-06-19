@@ -51,6 +51,7 @@ from utils.llm.memories import identify_category_for_memory
 from utils.memory.v17_developer_memory_adapter import (
     read_v17_developer_default_memory_rollout,
     search_v17_default_developer_memories,
+    search_v17_default_developer_memories_vector,
 )
 import logging
 
@@ -209,6 +210,53 @@ def get_memories(
             )
             continue
     return valid_memories
+
+
+@router.get("/v1/dev/user/memories/vector/search", tags=["developer"])
+def search_memories_vector(
+    query: str = Query(..., min_length=1),
+    uid: str = Depends(get_uid_with_memories_read),
+    limit: int = Query(10, ge=1, le=100),
+):
+    """Search developer-readable default V17 memory through hydrated vector candidates.
+
+    This narrow developer API vector endpoint fails closed unless the persisted
+    server-owned rollout state enables `developer_api` V17 default-memory reads.
+    Vector hits are hydrated from authoritative `users/{uid}/memory_items` before
+    returning results, so stale Short-term and Archive remain unavailable by default.
+    """
+
+    v17_rollout = read_v17_developer_default_memory_rollout(uid=uid, db_client=db)
+    v17_memories = search_v17_default_developer_memories_vector(
+        uid=uid,
+        query=query,
+        limit=limit,
+        db_client=db,
+        rollout_capabilities=v17_rollout.rollout_capabilities,
+        app_has_default_memory_grant=v17_rollout.app_has_default_memory_grant,
+    )
+    if v17_memories is None:
+        raise HTTPException(
+            status_code=403,
+            detail={
+                'enabled': False,
+                'reason': v17_rollout.fallback_reason,
+                'consumer': 'developer_api',
+                'archive_default_visible': False,
+                'archive_capability': False,
+            },
+        )
+    return {
+        'items': v17_memories,
+        'returned_count': len(v17_memories),
+        'archive_default_visible': False,
+        'policy': {
+            'consumer': 'developer_api',
+            'app_has_default_memory_grant': True,
+            'archive_capability': False,
+            'raw_provenance_capability': False,
+        },
+    }
 
 
 @router.post("/v1/dev/user/memories", response_model=MemoryResponse, tags=["developer"])
