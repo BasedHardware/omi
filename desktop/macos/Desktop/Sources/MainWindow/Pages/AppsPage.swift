@@ -304,6 +304,17 @@ struct AppsPage: View {
                 selectedExportDestination = dest
             }
         }
+        .onReceive(NotificationCenter.default.publisher(for: .desktopAutomationOpenImportRequested)) { note in
+            if let raw = note.userInfo?["connector"] as? String {
+                if raw == "__more_sources" {
+                    selectedConnector = ImportConnector.all.first {
+                        !$0.isConnected && $0.id != "chatgpt" && $0.id != "claude"
+                    } ?? ImportConnector.all.first
+                } else if let connector = ImportConnector.all.first(where: { $0.id == raw }) {
+                    selectedConnector = connector
+                }
+            }
+        }
         .onAppear {
             // If apps are already loaded, notify sidebar to clear loading indicator
             if !appProvider.isLoading {

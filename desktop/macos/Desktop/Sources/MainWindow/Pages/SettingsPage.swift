@@ -303,7 +303,6 @@ struct SettingsContentView: View {
 
   enum SettingsSection: String, CaseIterable {
     case general = "General"
-    case device = "Device"
     case rewind = "Rewind"
     case transcription = "Transcription"
     case notifications = "Notifications"
@@ -452,8 +451,6 @@ struct SettingsContentView: View {
         switch selectedSection {
         case .general:
           generalSection
-        case .device:
-          DeviceSettingsPage()
         case .rewind:
           rewindSection
         case .transcription:
@@ -1644,7 +1641,6 @@ struct SettingsContentView: View {
               trackingItem("Onboarding steps completed")
               trackingItem("Settings changes")
               trackingItem("App installations and usage")
-              trackingItem("Device connection status")
               trackingItem("Transcript processing events")
               trackingItem("Conversation creation and updates")
               trackingItem("Memory extraction events")
