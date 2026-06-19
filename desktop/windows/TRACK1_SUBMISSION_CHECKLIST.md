@@ -139,13 +139,12 @@ Click **Settings** in the sidebar. Settings opens full-screen with its own tab r
 
 | Gap | Notes |
 |-----|-------|
-| Overlay agent pills | Floating overlay is missing agent-selection pills present in macOS. |
+| Overlay agent pills | macOS pills (`AgentPill.swift`) are background ACP node subprocesses running via `ChatProvider` + `AgentBridge` + `FloatingControlBarManager`. No equivalent infrastructure on Windows; static "Omi" pill is correct. |
 | Native auto-update | GitHub API release check works (SupportTab shows installed vs. latest version + download link). Native auto-install (electron-updater) blocked by nvm/npm junction corruption; release feed publish config also not yet set up in CI. |
 | Onboarding style | Windows onboarding flow differs from macOS (different step order, 3D brain map vs. progress dots). Both are functional and complete. |
 | Google Integrations flag | Gmail/Calendar integrations require `VITE_ENABLE_GOOGLE_INTEGRATION=1` build flag. Sticky Notes (Windows-exclusive) works without a flag. |
 | Full Omi BLE pairing | Web Bluetooth connect + GATT Battery/Device-Info read implemented. Full Omi firmware pairing and OTA require mobile SDK (Omi-specific GATT UUIDs not documented in this repo). |
-| PDF export in Rewind | Rewind exports as JSON and Markdown. PDF requires a native library (not yet added). |
-| Font scaling | macOS Cmd++/− font-size zoom not implemented on Windows. |
+| Overlay background agents | macOS agent pills run ACP node subprocesses (ChatProvider + AgentBridge infrastructure). No equivalent on Windows; static "Omi" pill is correct representation. |
 
 ---
 
@@ -170,6 +169,8 @@ Click **Settings** in the sidebar. Settings opens full-screen with its own tab r
 - **feat(windows):** Focus page — manual Pomodoro timer, Rewind-powered app-activity breakdown, Gemini Vision three-tier classifier (Vision → Text-OCR → Heuristic)
 - **feat(windows):** Notifications settings — proactive insight notifications + focus analysis + recording-saved Web Notification
 - **feat(windows):** Devices tab — Web Bluetooth scan → connect, GATT Battery + Device Info read, disconnect, last-device persistence
+- **feat(windows):** Rewind PDF export — iframe + Chromium print dialog, no new dependencies; text-only (timestamp, app, window, OCR per frame)
+- **feat(windows):** Font scaling — Ctrl+= increase, Ctrl+- decrease, Ctrl+0 reset (5% steps, 85–125% range); applies globally via root font-size; Settings > General shows current % + Reset
 
 ---
 
@@ -189,6 +190,8 @@ Click **Settings** in the sidebar. Settings opens full-screen with its own tab r
 | Focus page (manual timer + Rewind activity + Vision) | ✅ |
 | Notifications settings (insights + focus + recording) | ✅ |
 | BLE Devices tab (scan → connect → battery read) | ✅ |
+| Rewind PDF export (Chromium print dialog) | ✅ |
+| Font scaling Ctrl+=/−/0 | ✅ |
 
 **Verdict: Ready to submit.**  
-All P0 judging criteria met. Remaining gaps are P2 polish items (overlay agent pills, PDF export, font scaling).
+All P0 judging criteria met. Remaining gap: overlay background agent pills (requires ACP subprocess infrastructure not present on Windows).

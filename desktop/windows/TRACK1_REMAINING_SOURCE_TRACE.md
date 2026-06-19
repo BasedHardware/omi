@@ -249,3 +249,6 @@ Already resolved in Batch 7:
 | ✓ | Window bounds persistence (size + position) | `src/main/index.ts` | Done — `readFileSync`/`writeFileSync` to `userData/main-window-bounds.json`; skips maximized/minimized/fullscreen |
 | ✓ | Last route persistence | `App.tsx` | Done — `localStorage('omi.lastRoute')`; restored on mount after consumePendingRoute |
 | ✓ | Settings tab persistence | `Settings.tsx` | Done — `localStorage('omi.settings.lastTab')`; initialized from storage |
+| ✓ | Rewind PDF export | `Rewind.tsx` | Done — iframe srcdoc + Chromium print dialog; `buildPrintHtml()` generates styled HTML with timestamp/app/window/OCR per frame; no new dependencies |
+| ✓ | Font scaling (Ctrl+=/−/0) | `App.tsx`, `preferences.ts`, `GeneralTab.tsx` | Done — Ctrl+= increment 5%, Ctrl+- decrement, Ctrl+0 reset; range 85–125%; applies via `document.documentElement.fontSize`; persisted to preferences; Settings > General shows current % + Reset |
+| ✗ | Overlay background agent pills | — | Blocked — macOS pills (`AgentPill.swift`, `AgentPillsManager.swift`) are running ACP node subprocesses via `ChatProvider` + `AgentBridge` + `FloatingControlBarManager.sharedFloatingProvider`. This is a local desktop compute infrastructure (not a backend API). No equivalent on Windows. Static "Omi" pill is the correct representation. |
