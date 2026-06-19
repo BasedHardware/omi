@@ -73,6 +73,7 @@ pytest tests/unit/test_v17_shared_ns2_legacy_isolation_readiness.py -v
 pytest tests/unit/test_v17_vector_search_provider_readiness.py -v
 pytest tests/unit/test_v17_t20_repair_projection_consistency_readiness.py -v
 pytest tests/unit/test_v17_t21_v3_compatibility_cursor_readiness.py -v
+pytest tests/unit/test_v17_t22_t23_external_writes_caller_coverage_readiness.py -v
 pytest tests/unit/test_v17_cutover_evidence_readiness.py -v
 pytest tests/unit/test_v17_vector_repair_outbox_emulator_harness.py -v
 pytest tests/unit/test_v17_firestore_indexes.py -v

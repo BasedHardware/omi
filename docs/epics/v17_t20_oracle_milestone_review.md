@@ -1042,6 +1042,17 @@ Continued Oracle P0-8 with `backend/scripts/v17_t21_v3_compatibility_cursor_read
 
 Verification recorded in `docs/epics/v17_memory_implementation_tickets.md`: RED matrix tests failed on missing runner/docs/cutover links (`4 failed`); final GREEN/static/readiness/regression/async passed. This slice does **not** execute production traffic, Pinecone/Firestore/cloud calls, mutate shared `ns2` or Firestore, collect benchmarks, wire central telemetry, claim T21 completion, or approve cutover. Production rollout remains **BLOCKED / NO-GO**.
 
+### 2026-06-19 — Oracle P0-8 T22/T23 external writes and caller coverage readiness/proof matrix
+
+Continued Oracle P0-8 with `backend/scripts/v17_t22_t23_external_writes_caller_coverage_readiness.py`, a safe T22/T23 external writes and caller coverage readiness/proof matrix. It addresses the P0-8/T22/T23 subpoint for external create/edit/delete/list/search write/read convergence, caller coverage across Developer API, MCP REST/SSE, chat, tools, and agent paths, and durable write-convergence evidence inventory only:
+
+- Default and `--execute` CLI modes emit `status=BLOCKED`, `read_only=true`, `mutation_allowed=false`, `network_or_provider_calls_executed=false`, `provider_calls_executed=false`, `benchmark_evidence_collected=false`, `approval_claimed=false`, and `production_rollout_approved=false`.
+- The proof matrix remains `NOT_RUN` with empty evidence arrays for external create/edit/delete/list/search write/read convergence; Developer API write/read paths; MCP REST/SSE write/read/list/search paths; chat/tool/agent caller coverage; dual-write/outbox or V17-write convergence plan; delete/review/import compatibility; no legacy unsafe fallback after V17 writes; app/key/scope grant enforcement; Archive default-unavailable; response-shape compatibility; and rollback/disable behavior.
+- The artifact explicitly references existing local route/adapter/test surfaces: `backend/routers/memories.py`, `backend/routers/developer.py`, `backend/routers/mcp.py`, `backend/routers/mcp_sse.py`, `backend/routers/tools.py`, `backend/routers/agent_tools.py`, `backend/database/memories.py`, the legacy write guard, external default-read authorization, V17 Developer/MCP/chat/product adapters, and existing guard/caller tests.
+- The production cutover checklist now points the T22/T23 gate at this matrix and requires proof of external create/edit/delete/list/search write/read convergence, Developer API write/read paths, MCP REST/SSE write/read/list/search paths, chat/tool/agent caller coverage, durable V17-write convergence or dual-write/outbox evidence, delete/review/import compatibility, no legacy unsafe fallback after V17 writes, app/key/scope grant enforcement, Archive default-unavailable, response-shape compatibility, and rollback/disable behavior.
+
+Verification recorded in `docs/epics/v17_memory_implementation_tickets.md`: RED matrix tests failed on missing runner/docs/cutover links (`4 failed`); final GREEN/static/readiness/regression/async passed. This slice does **not** execute production traffic, Pinecone/Firestore/cloud calls, mutate shared `ns2` or Firestore, collect benchmarks, execute external writes, wire central telemetry, claim T22/T23 completion, or approve cutover. Production rollout remains **BLOCKED / NO-GO**.
+
 ## Not-run / not-claimed caveats preserved
 
 - Oracle review has now run and is recorded here, but it blocks production rollout.
