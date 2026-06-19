@@ -219,6 +219,46 @@ def test_developer_batch_create_route_checks_split_brain_guard_before_categoriza
     assert guard_index < contents.index(legacy_write, route_index) < contents.index(vector_write, route_index)
 
 
+def test_developer_delete_route_checks_split_brain_guard_before_reads_and_legacy_delete():
+    developer_py = Path(__file__).resolve().parents[2] / 'routers' / 'developer.py'
+    contents = developer_py.read_text(encoding='utf-8')
+
+    route = '@router.delete("/v1/dev/user/memories/{memory_id}", tags=["developer"])'
+    guard_call = "assert_legacy_memory_write_allowed_for_default_read_decision("
+    legacy_read = "memory = memories_db.get_memory(uid, memory_id)"
+    legacy_delete = "memories_db.delete_memory(uid, memory_id)"
+    assert guard_call in contents
+    assert legacy_read in contents
+    assert legacy_delete in contents
+    route_index = contents.index(route)
+    guard_index = contents.index(guard_call, route_index)
+    assert (
+        route_index
+        < guard_index
+        < contents.index(legacy_read, route_index)
+        < contents.index(legacy_delete, route_index)
+    )
+
+
+def test_developer_update_route_checks_split_brain_guard_before_reads_and_legacy_mutations():
+    developer_py = Path(__file__).resolve().parents[2] / 'routers' / 'developer.py'
+    contents = developer_py.read_text(encoding='utf-8')
+
+    route = '@router.patch("/v1/dev/user/memories/{memory_id}", response_model=CleanerMemory, tags=["developer"])'
+    guard_call = "assert_legacy_memory_write_allowed_for_default_read_decision("
+    legacy_read = "memory = memories_db.get_memory(uid, memory_id)"
+    legacy_edit = "memories_db.edit_memory(uid, memory_id, request.content.strip())"
+    legacy_update = "memories_db.update_memory_fields(uid, memory_id, update_data)"
+    assert guard_call in contents
+    assert legacy_read in contents
+    assert legacy_edit in contents
+    assert legacy_update in contents
+    route_index = contents.index(route)
+    guard_index = contents.index(guard_call, route_index)
+    assert route_index < guard_index < contents.index(legacy_read, route_index)
+    assert guard_index < contents.index(legacy_edit, route_index) < contents.index(legacy_update, route_index)
+
+
 def test_developer_routes_only_reach_legacy_after_explicit_legacy_safe_decision():
     developer_py = Path(__file__).resolve().parents[2] / 'routers' / 'developer.py'
     contents = developer_py.read_text(encoding='utf-8')
@@ -308,6 +348,26 @@ def test_split_brain_guard_blocks_v17_enabled_developer_batch_create_without_mut
     assert decision.detail['consumer'] == 'developer_api'
     assert decision.detail['operation'] == 'batch_create_memories'
     assert decision.detail['read_decision'] == V17ReadDecision.USE_V17.value
+
+
+def test_split_brain_guard_blocks_v17_enabled_developer_edit_and_delete_without_mutation():
+    read_decision = read_v17_developer_default_memory_rollout(
+        uid='u1', db_client=_FirestoreFake({'users/u1/memory_control/state': _enabled_rollout_doc()})
+    )
+
+    for operation in ['update_memory', 'delete_memory']:
+        decision = assert_legacy_memory_write_allowed_for_default_read_decision(
+            read_decision,
+            operation=operation,
+            allow_write_convergence=False,
+        )
+
+        assert decision.allowed is False
+        assert decision.status_code == 409
+        assert decision.detail['reason'] == 'v17_default_read_legacy_write_blocked'
+        assert decision.detail['consumer'] == 'developer_api'
+        assert decision.detail['operation'] == operation
+        assert decision.detail['read_decision'] == V17ReadDecision.USE_V17.value
 
 
 def test_split_brain_guard_blocks_missing_or_malformed_developer_config_fail_safe():

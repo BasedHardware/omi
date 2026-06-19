@@ -241,6 +241,23 @@ This closes only the narrow Oracle P0-3 subpoint for developer batch-create. Rem
 - Decide and implement durable V17 write convergence / dual-write outbox before any authoritative external read cutover.
 - Production rollout remains **BLOCKED / NO-GO** until all Oracle P0s and required real-service evidence are complete.
 
+### 2026-06-19 — third P0-3 developer edit/delete write/read split-brain guard slice
+
+Implemented the next narrow Oracle P0-3 write/read split-brain guard after the developer batch-create guard, without changing the production rollout verdict:
+
+- Applied `assert_legacy_memory_write_allowed_for_default_read_decision(...)` to external developer `DELETE /v1/dev/user/memories/{memory_id}` before legacy `memories_db.get_memory(...)` or `memories_db.delete_memory(...)`.
+- Applied the same guard to external developer `PATCH /v1/dev/user/memories/{memory_id}` before legacy `memories_db.get_memory(...)`, `edit_memory(...)`, `change_memory_visibility(...)`, or `update_memory_fields(...)`.
+- The guard uses the same persisted `developer_api` default-read rollout decision as developer V17 reads and blocks legacy mutation/delete with HTTP 409 for `USE_V17`, `SHADOW_ONLY`, missing, malformed, or uid-mismatched control state unless an explicit server-owned convergence policy is passed through the shared guard.
+- V17-disabled reads preserve existing developer edit/delete behavior; Archive remains default-unavailable and no read surface was broadened.
+
+Verification recorded in `docs/epics/v17_memory_implementation_tickets.md`: RED edit/delete guard-order failures (`2 failed, 18 passed`), GREEN developer adapter tests (`20 passed`), focused regression (`32 passed`), full `pytest tests/unit/test_v17_*.py -q` (`198 passed, 1 warning`), and async blocker scan exit 0 with pre-existing findings only.
+
+This closes only the narrow Oracle P0-3 subpoints for developer edit and delete. Remaining P0-3 work:
+
+- Add equivalent MCP REST and streamable HTTP/SSE create/edit/delete protection.
+- Decide and implement durable V17 write convergence / dual-write outbox before any authoritative external read cutover.
+- Production rollout remains **BLOCKED / NO-GO** until all Oracle P0s and required real-service evidence are complete.
+
 ## Not-run / not-claimed caveats preserved
 
 - Oracle review has now run and is recorded here, but it blocks production rollout.

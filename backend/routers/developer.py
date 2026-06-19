@@ -462,6 +462,13 @@ def delete_memory(
 
     - **memory_id**: The ID of the memory to delete
     """
+    write_guard = assert_legacy_memory_write_allowed_for_default_read_decision(
+        read_v17_developer_default_memory_rollout(uid=uid, db_client=db),
+        operation='delete_memory',
+    )
+    if not write_guard.allowed:
+        raise HTTPException(status_code=write_guard.status_code, detail=write_guard.detail)
+
     memory = memories_db.get_memory(uid, memory_id)
     if not memory:
         raise HTTPException(status_code=404, detail="Memory not found")
@@ -487,16 +494,23 @@ def update_memory(
     - **tags**: New tags for the memory (optional)
     - **category**: New category for the memory (optional)
     """
-    memory = memories_db.get_memory(uid, memory_id)
-    if not memory:
-        raise HTTPException(status_code=404, detail="Memory not found")
-    if memory.get('is_locked', False):
-        raise HTTPException(status_code=402, detail="A paid plan is required to access this memory.")
+    write_guard = assert_legacy_memory_write_allowed_for_default_read_decision(
+        read_v17_developer_default_memory_rollout(uid=uid, db_client=db),
+        operation='update_memory',
+    )
+    if not write_guard.allowed:
+        raise HTTPException(status_code=write_guard.status_code, detail=write_guard.detail)
 
     if request.content is None and request.visibility is None and request.tags is None and request.category is None:
         raise HTTPException(
             status_code=422, detail="At least one field (content, visibility, tags, or category) must be provided"
         )
+
+    memory = memories_db.get_memory(uid, memory_id)
+    if not memory:
+        raise HTTPException(status_code=404, detail="Memory not found")
+    if memory.get('is_locked', False):
+        raise HTTPException(status_code=402, detail="A paid plan is required to access this memory.")
 
     old_visibility = memory.get('visibility')
 
