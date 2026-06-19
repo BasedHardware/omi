@@ -27,6 +27,12 @@ actor RewindIndexer {
     private var nextRetryTime: Date = .distantPast
     private static let maxBackoffSeconds: Double = 300 // Cap at 5 minutes
 
+    /// Retention enforcement: prune screenshots/video older than the user's
+    /// `rewindRetentionDays` setting. `.distantPast` means the first frame after
+    /// launch runs cleanup immediately; afterwards it runs at most every 6h.
+    private var lastRetentionCleanupAt: Date = .distantPast
+    private let retentionCleanupInterval: TimeInterval = 6 * 60 * 60
+
     // MARK: - Initialization
 
     private init() {}
@@ -142,6 +148,7 @@ actor RewindIndexer {
     func processFrame(_ frame: CapturedFrame) async {
         // Ensure initialized with backoff
         guard await ensureInitialized() else { return }
+        scheduleRetentionCleanupIfDue()
 
         do {
             // Convert JPEG to CGImage for video encoding.
@@ -238,6 +245,7 @@ actor RewindIndexer {
     /// Process a frame directly from a CGImage (macOS 14+ path, avoids JPEG decode round-trip)
     func processFrame(cgImage: CGImage, appName: String, windowTitle: String?, captureTime: Date) async {
         guard await ensureInitialized() else { return }
+        scheduleRetentionCleanupIfDue()
 
         do {
             // Add frame to video encoder (CGImage directly, no decode needed)
@@ -318,6 +326,7 @@ actor RewindIndexer {
     /// Process a frame with additional metadata (focus status, etc.)
     func processFrame(_ frame: CapturedFrame, focusStatus: String?, extractedTasks: [String]?, insight: String?) async {
         guard await ensureInitialized() else { return }
+        scheduleRetentionCleanupIfDue()
 
         do {
             // Convert JPEG to CGImage for video encoding.
@@ -422,6 +431,16 @@ actor RewindIndexer {
     }
 
     // MARK: - Cleanup
+
+    /// Enforce the data-retention window if a cleanup is due. Throttled to once
+    /// per `retentionCleanupInterval` and fire-and-forget so frame ingestion is
+    /// never blocked by deletion. Called from the frame pipeline; the first frame
+    /// after launch prunes anything past the retention setting.
+    private func scheduleRetentionCleanupIfDue() {
+        guard Date().timeIntervalSince(lastRetentionCleanupAt) >= retentionCleanupInterval else { return }
+        lastRetentionCleanupAt = Date()
+        Task { await self.runCleanup() }
+    }
 
     /// Run cleanup to remove old screenshots
     func runCleanup() async {
