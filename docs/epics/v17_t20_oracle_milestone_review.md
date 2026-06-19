@@ -959,12 +959,33 @@ Continued Oracle P0-7 with a narrow local central telemetry seam for hydrated V1
 
 Verification recorded in `docs/epics/v17_memory_implementation_tickets.md`: RED collection failure for missing telemetry module (`ModuleNotFoundError`), GREEN vector-service tests passed (`13 passed`), focused product/chat/MCP/developer vector caller regression passed (`60 passed`), full V17 regression passed (`308 passed, 3 warnings`), and async scan remained pre-existing findings only.
 
-This closes only the fake-injectable central telemetry payload/emitter subpoint. Remaining P0-7/P0 work:
+This closes only the fake-injectable central telemetry payload/emitter subpoint. Remaining P0-7/P0 work after this telemetry slice:
 
 - No Prometheus/OpenTelemetry/Cloud Monitoring sink, dashboard, or alert policy was implemented or exercised.
-- Explicit vector-search timeout/rate-limit controls remain incomplete.
+- Explicit vector-search timeout/rate-limit controls remained incomplete until the follow-up slice below.
 - Real Pinecone/Firestore provider pagination/refill behavior, load, recall, and latency benchmarks remain unproven.
 - Real Pinecone/Firestore benchmarks with malformed metadata, cross-user hits, expired Short-term, Archive, deleted/tombstoned sources, duplicate revisions, partial outages, and high-volume accounts remain required.
+- Production rollout remains **BLOCKED / NO-GO** until all Oracle P0s and required real-service evidence are complete.
+
+### 2026-06-19 — P0-7 V17 vector-search timeout/rate-limit control seam
+
+Continued Oracle P0-7 with explicit fake-injectable local timeout/rate-limit controls for hydrated V17 vector search, without changing the production rollout verdict:
+
+- `fetch_default_v17_vector_memory_search(...)` now accepts bounded `max_vector_queries`, `max_candidate_hydration_reads`, `timeout_seconds`, and an injected monotonic `clock` for deterministic tests without sleeps.
+- Required projection commit/account generation fences still fail before any vector query or Firestore hydration.
+- The service stops refill when the vector-query budget is exhausted and stops candidate document gets when the hydration-read budget or injected deadline is exhausted.
+- It returns already validated results clipped to caller `limit`, does not fall back to legacy, and does not expose Archive by default.
+- Response state now includes `search_status`, `vector_query_budget_exhausted`, `hydration_read_budget_exhausted`, `timeout_exhausted`, budget/read counters, and `legacy_fallback_used=false`.
+- Candidates not read because the hydration budget/deadline stopped hydration are not marked as missing-authoritative repair/purge candidates.
+- Telemetry adds low-cardinality timeout/control-exhaustion metrics/events using bounded labels only; tests continue to forbid uid, raw query, memory IDs, vector IDs, raw errors, and idempotency labels.
+
+Verification recorded in `docs/epics/v17_memory_implementation_tickets.md`: RED vector-service tests failed on missing control kwargs (`4 failed, 13 passed`); GREEN vector-service tests passed (`17 passed`); focused product/chat/MCP/developer vector caller regression passed (`60 passed`); full V17 regression passed (`312 passed, 3 warnings`); async scan remained pre-existing findings only.
+
+This closes only the local fake-injectable timeout/rate-limit control subpoint. Remaining P0-7/P0 work:
+
+- No Prometheus/OpenTelemetry/Cloud Monitoring sink, dashboard, or alert policy was implemented or exercised.
+- Real Pinecone/Firestore provider pagination/refill behavior and provider-level timeout semantics remain unproven.
+- Real load, recall, latency, malformed metadata, cross-user hit, expired Short-term, Archive, deleted/tombstoned source, duplicate revision, partial outage, and high-volume account benchmarks remain required.
 - Production rollout remains **BLOCKED / NO-GO** until all Oracle P0s and required real-service evidence are complete.
 
 ## Not-run / not-claimed caveats preserved

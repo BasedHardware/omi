@@ -96,6 +96,21 @@ def _build_v17_vector_search_telemetry_payloads(
             _safe_int(search_summary.get('candidate_budget')),
             {**labels_base, 'status': 'bounded'},
         ),
+        _metric(
+            'v17_vector_search_control_exhausted_total',
+            int(bool(search_summary.get('vector_query_budget_exhausted'))),
+            {**labels_base, 'reason': 'vector_query_budget_exhausted'},
+        ),
+        _metric(
+            'v17_vector_search_control_exhausted_total',
+            int(bool(search_summary.get('hydration_read_budget_exhausted'))),
+            {**labels_base, 'reason': 'hydration_read_budget_exhausted'},
+        ),
+        _metric(
+            'v17_vector_search_timeout_exhausted_total',
+            int(bool(search_summary.get('timeout_exhausted'))),
+            {**labels_base, 'status': 'exhausted'},
+        ),
     ]
 
     for reason, key in (
@@ -152,6 +167,35 @@ def _build_v17_vector_search_telemetry_payloads(
                 {
                     'candidate_budget': _safe_int(search_summary.get('candidate_budget')),
                     'candidate_request_limit': _safe_int(search_summary.get('candidate_request_limit')),
+                    'returned_count': _safe_int(search_summary.get('returned_count')),
+                },
+            )
+        )
+
+    for reason in ('vector_query_budget_exhausted', 'hydration_read_budget_exhausted'):
+        if bool(search_summary.get(reason)):
+            payloads.append(
+                _event(
+                    'v17_vector_search_control_exhausted',
+                    {**labels_base, 'event_type': 'threshold_signal', 'reason': reason},
+                    {
+                        'vector_query_count': _safe_int(search_summary.get('vector_query_count')),
+                        'candidate_hydration_read_count': _safe_int(
+                            search_summary.get('candidate_hydration_read_count')
+                        ),
+                        'returned_count': _safe_int(search_summary.get('returned_count')),
+                    },
+                )
+            )
+
+    if bool(search_summary.get('timeout_exhausted')):
+        payloads.append(
+            _event(
+                'v17_vector_search_timeout_exhausted',
+                {**labels_base, 'event_type': 'threshold_signal'},
+                {
+                    'vector_query_count': _safe_int(search_summary.get('vector_query_count')),
+                    'candidate_hydration_read_count': _safe_int(search_summary.get('candidate_hydration_read_count')),
                     'returned_count': _safe_int(search_summary.get('returned_count')),
                 },
             )

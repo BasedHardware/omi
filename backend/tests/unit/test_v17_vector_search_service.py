@@ -720,3 +720,161 @@ def test_default_v17_vector_search_telemetry_failure_is_recorded_without_masking
         'name': 'v17_vector_search_candidates_total',
         'error': 'central telemetry unavailable for v17_vector_search_candidates_total',
     }
+
+
+def test_default_v17_vector_search_stops_refill_at_vector_query_budget_and_returns_validated_results():
+    now = datetime.now(timezone.utc)
+    stale_short_term = _memory_item('stale-short-term', now=now, captured_at=now - timedelta(days=45))
+    valid_one = _memory_item('valid-one', tier=MemoryTier.long_term, now=now)
+    valid_two = _memory_item('valid-two', tier=MemoryTier.long_term, now=now)
+    ranked_hits = [
+        _hit(stale_short_term, score=0.99, vector_id='v17mem:stale-short-term'),
+        _hit(valid_one, score=0.98, vector_id='v17mem:valid-one'),
+        _hit(valid_two, score=0.97, vector_id='v17mem:valid-two'),
+    ]
+    db_client = _FirestoreFake(
+        {
+            f'users/u1/memory_items/{item.memory_id}': _stored_item(item)
+            for item in [stale_short_term, valid_one, valid_two]
+        }
+    )
+    vector_limits = []
+
+    def fake_vector_query(uid, query, *, mode, limit):
+        vector_limits.append(limit)
+        return _VectorCandidateResult(hits=ranked_hits[:limit], rejected_count=0)
+
+    response = fetch_default_v17_vector_memory_search(
+        uid='u1',
+        query='coffee',
+        db_client=db_client,
+        policy=MemoryAccessPolicy.for_omi_chat(),
+        vector_query=fake_vector_query,
+        limit=2,
+        overfetch_factor=1,
+        max_candidates=3,
+        max_vector_queries=1,
+        required_projection_commit_id='projection-1',
+        required_account_generation=0,
+    )
+
+    assert vector_limits == [2]
+    assert [item['memory_id'] for item in response['items']] == ['valid-one']
+    assert response['returned_count'] == 1
+    assert response['vector_query_count'] == 1
+    assert response['max_vector_queries'] == 1
+    assert response['vector_query_budget_exhausted'] is True
+    assert response['search_status'] == 'vector_query_budget_exhausted'
+    assert response['legacy_fallback_used'] is False
+    assert response['archive_default_visible'] is False
+
+
+def test_default_v17_vector_search_stops_hydration_at_read_budget_without_unbounded_firestore_reads():
+    now = datetime.now(timezone.utc)
+    valid_one = _memory_item('valid-one', tier=MemoryTier.long_term, now=now)
+    valid_two = _memory_item('valid-two', tier=MemoryTier.long_term, now=now)
+    valid_three = _memory_item('valid-three', tier=MemoryTier.long_term, now=now)
+    db_client = _FirestoreFake(
+        {f'users/u1/memory_items/{item.memory_id}': _stored_item(item) for item in [valid_one, valid_two, valid_three]}
+    )
+
+    def fake_vector_query(uid, query, *, mode, limit):
+        return _VectorCandidateResult(
+            hits=[
+                _hit(valid_one, score=0.99, vector_id='v17mem:valid-one'),
+                _hit(valid_two, score=0.98, vector_id='v17mem:valid-two'),
+                _hit(valid_three, score=0.97, vector_id='v17mem:valid-three'),
+            ][:limit],
+            rejected_count=0,
+        )
+
+    response = fetch_default_v17_vector_memory_search(
+        uid='u1',
+        query='coffee',
+        db_client=db_client,
+        policy=MemoryAccessPolicy.for_omi_chat(),
+        vector_query=fake_vector_query,
+        limit=3,
+        overfetch_factor=1,
+        max_candidates=3,
+        max_candidate_hydration_reads=2,
+        required_projection_commit_id='projection-1',
+        required_account_generation=0,
+    )
+
+    assert db_client.document_paths == ['users/u1/memory_items/valid-one', 'users/u1/memory_items/valid-two']
+    assert [item['memory_id'] for item in response['items']] == ['valid-one', 'valid-two']
+    assert response['hydrated_candidate_count'] == 2
+    assert response['candidate_hydration_read_count'] == 2
+    assert response['max_candidate_hydration_reads'] == 2
+    assert response['hydration_read_budget_exhausted'] is True
+    assert response['search_status'] == 'hydration_read_budget_exhausted'
+    assert 'valid-three' not in response['decisions']
+    assert 'valid-three' not in {candidate['memory_id'] for candidate in response['repair_purge_candidates']}
+
+
+def test_default_v17_vector_search_uses_injected_clock_to_timeout_before_vector_query_without_sleeping():
+    clock_values = iter([10.0, 10.2])
+    vector_calls = []
+
+    def fake_clock():
+        return next(clock_values)
+
+    def fake_vector_query(uid, query, *, mode, limit):
+        vector_calls.append(limit)
+        return _VectorCandidateResult(hits=[], rejected_count=0)
+
+    response = fetch_default_v17_vector_memory_search(
+        uid='u1',
+        query='coffee',
+        db_client=_FirestoreFake(),
+        policy=MemoryAccessPolicy.for_omi_chat(),
+        vector_query=fake_vector_query,
+        timeout_seconds=0.1,
+        clock=fake_clock,
+        limit=3,
+        required_projection_commit_id='projection-1',
+        required_account_generation=0,
+    )
+
+    assert vector_calls == []
+    assert response['items'] == []
+    assert response['vector_query_count'] == 0
+    assert response['timeout_seconds'] == 0.1
+    assert response['timeout_exhausted'] is True
+    assert response['search_status'] == 'timeout_exhausted'
+    assert response['legacy_fallback_used'] is False
+
+
+def test_default_v17_vector_search_telemetry_includes_bounded_timeout_and_budget_status_without_identifiers():
+    clock_values = iter([10.0, 11.0])
+    emitted = []
+
+    response = fetch_default_v17_vector_memory_search(
+        uid='u1',
+        query='coffee raw query text',
+        db_client=_FirestoreFake(),
+        policy=MemoryAccessPolicy.for_omi_chat(),
+        vector_query=lambda uid, query, *, mode, limit: _VectorCandidateResult(hits=[], rejected_count=0),
+        telemetry_emitter=lambda payload: emitted.append(payload),
+        telemetry_config=V17VectorSearchTelemetryConfig(enabled=True, consumer='omi_chat', surface='chat'),
+        timeout_seconds=0.1,
+        clock=lambda: next(clock_values),
+        limit=3,
+        required_projection_commit_id='projection-1',
+        required_account_generation=0,
+    )
+
+    assert response['timeout_exhausted'] is True
+    metric_names = {payload['name'] for payload in emitted if payload['kind'] == 'metric'}
+    event_names = {payload['name'] for payload in emitted if payload['kind'] == 'event'}
+    assert 'v17_vector_search_timeout_exhausted_total' in metric_names
+    assert 'v17_vector_search_control_exhausted_total' in metric_names
+    assert 'v17_vector_search_timeout_exhausted' in event_names
+    rendered = repr(emitted)
+    for forbidden in {'u1', 'coffee raw query text'}:
+        assert forbidden not in rendered
+    for payload in emitted:
+        assert set(payload['labels']).issubset(
+            {'component', 'consumer', 'surface', 'mode', 'status', 'reason', 'event_type'}
+        )
