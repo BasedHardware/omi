@@ -2,7 +2,9 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:omi/utils/l10n_extensions.dart';
+import 'package:omi/utils/logger.dart';
 import 'package:provider/provider.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/models/playback_state.dart';
@@ -602,6 +604,13 @@ class _WalItemDetailPageState extends State<WalItemDetailPage> {
     setState(() => _isSharing = true);
     try {
       await syncProvider.shareWalAsWav(widget.wal);
+    } catch (e) {
+      Logger.error('AudioPlayerUtils: Failed to share WAL audio: $e');
+      if (mounted) {
+        AppSnackbar.showSnackbarError(
+          context.l10n.audioPlaybackFailed,
+        );
+      }
     } finally {
       if (mounted) {
         setState(() => _isSharing = false);
