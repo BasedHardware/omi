@@ -200,6 +200,25 @@ def test_developer_create_route_checks_split_brain_guard_before_legacy_write():
     assert route_index < contents.index(guard_call, route_index) < contents.index(legacy_write, route_index)
 
 
+def test_developer_batch_create_route_checks_split_brain_guard_before_categorization_and_legacy_writes():
+    developer_py = Path(__file__).resolve().parents[2] / 'routers' / 'developer.py'
+    contents = developer_py.read_text(encoding='utf-8')
+
+    route = '@router.post("/v1/dev/user/memories/batch", response_model=BatchMemoriesResponse, tags=["developer"])'
+    guard_call = "assert_legacy_memory_write_allowed_for_default_read_decision("
+    categorization = "identify_category_for_memory(mem_req.content.strip())"
+    legacy_write = "memories_db.save_memories(uid, [mem.dict() for mem in memory_dbs])"
+    vector_write = "upsert_memory_vectors_batch("
+    assert guard_call in contents
+    assert categorization in contents
+    assert legacy_write in contents
+    assert vector_write in contents
+    route_index = contents.index(route)
+    guard_index = contents.index(guard_call, route_index)
+    assert route_index < guard_index < contents.index(categorization, route_index)
+    assert guard_index < contents.index(legacy_write, route_index) < contents.index(vector_write, route_index)
+
+
 def test_developer_routes_only_reach_legacy_after_explicit_legacy_safe_decision():
     developer_py = Path(__file__).resolve().parents[2] / 'routers' / 'developer.py'
     contents = developer_py.read_text(encoding='utf-8')
@@ -270,6 +289,25 @@ def test_split_brain_guard_blocks_v17_enabled_developer_legacy_write_without_mut
         'read_decision': V17ReadDecision.USE_V17.value,
         'source_path': 'users/u1/memory_control/state',
     }
+
+
+def test_split_brain_guard_blocks_v17_enabled_developer_batch_create_without_mutation():
+    read_decision = read_v17_developer_default_memory_rollout(
+        uid='u1', db_client=_FirestoreFake({'users/u1/memory_control/state': _enabled_rollout_doc()})
+    )
+
+    decision = assert_legacy_memory_write_allowed_for_default_read_decision(
+        read_decision,
+        operation='batch_create_memories',
+        allow_write_convergence=False,
+    )
+
+    assert decision.allowed is False
+    assert decision.status_code == 409
+    assert decision.detail['reason'] == 'v17_default_read_legacy_write_blocked'
+    assert decision.detail['consumer'] == 'developer_api'
+    assert decision.detail['operation'] == 'batch_create_memories'
+    assert decision.detail['read_decision'] == V17ReadDecision.USE_V17.value
 
 
 def test_split_brain_guard_blocks_missing_or_malformed_developer_config_fail_safe():

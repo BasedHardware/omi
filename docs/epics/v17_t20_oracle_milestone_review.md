@@ -224,6 +224,23 @@ This closes only the first narrow Oracle P0-3 subpoint for developer single-crea
 - Decide and implement durable V17 write convergence / dual-write outbox before any authoritative external read cutover.
 - Production rollout remains **BLOCKED / NO-GO** until all Oracle P0s and required real-service evidence are complete.
 
+### 2026-06-19 — second P0-3 developer batch-create write/read split-brain guard slice
+
+Implemented the next narrow Oracle P0-3 write/read split-brain guard after the developer single-create guard, without changing the production rollout verdict:
+
+- Applied `assert_legacy_memory_write_allowed_for_default_read_decision(...)` to external developer `POST /v1/dev/user/memories/batch` after shape/limit validation but before auto-categorization, `memories_db.save_memories(...)`, vector upsert, or persona updates.
+- The guard uses the same persisted `developer_api` default-read rollout decision as developer V17 reads and blocks legacy batch mutation with HTTP 409 for `USE_V17`, `SHADOW_ONLY`, missing, malformed, or uid-mismatched control state unless an explicit server-owned convergence policy is passed through the shared guard.
+- V17-disabled reads preserve existing developer batch-create behavior; Archive remains default-unavailable and no read surface was broadened.
+
+Verification recorded in `docs/epics/v17_memory_implementation_tickets.md`: RED batch-route guard-order failure (`1 failed, 16 passed`), GREEN developer adapter tests (`17 passed`), focused regression (`29 passed`), full `pytest tests/unit/test_v17_*.py -q` (`195 passed, 1 warning`), and async blocker scan exit 0 with pre-existing findings only.
+
+This closes only the narrow Oracle P0-3 subpoint for developer batch-create. Remaining P0-3 work:
+
+- Extend the same guard/policy to developer edit and delete.
+- Add equivalent MCP REST and streamable HTTP/SSE create/edit/delete protection.
+- Decide and implement durable V17 write convergence / dual-write outbox before any authoritative external read cutover.
+- Production rollout remains **BLOCKED / NO-GO** until all Oracle P0s and required real-service evidence are complete.
+
 ## Not-run / not-claimed caveats preserved
 
 - Oracle review has now run and is recorded here, but it blocks production rollout.

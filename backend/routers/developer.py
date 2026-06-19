@@ -377,6 +377,13 @@ def create_memories_batch(
     if len(request.memories) > 25:
         raise HTTPException(status_code=422, detail="Maximum 25 memories per batch request")
 
+    write_guard = assert_legacy_memory_write_allowed_for_default_read_decision(
+        read_v17_developer_default_memory_rollout(uid=uid, db_client=db),
+        operation='batch_create_memories',
+    )
+    if not write_guard.allowed:
+        raise HTTPException(status_code=write_guard.status_code, detail=write_guard.detail)
+
     # Prepare memories
     memory_dbs = []
     has_public = False
