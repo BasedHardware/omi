@@ -40,8 +40,14 @@ from utils.memory.v17_default_read_rollout import (
     assert_legacy_memory_write_allowed_for_default_read_decision,
     read_v17_write_convergence_gate,
 )
+from utils.memory.v17_product_authorization import (
+    V17ProductAuthorizationContext,
+    authorize_v17_external_default_memory_read,
+)
 from utils.mcp_data import clean_action_item, clean_chat_message, clean_person, clean_screen_activity_row
 from utils.mcp_memories import (
+    McpV17VerifiedAuth,
+    build_mcp_v17_default_memory_read_context,
     collect_filtered_memories,
     parse_mcp_bool,
     parse_mcp_datetime,
@@ -105,15 +111,32 @@ PEOPLE_READ_SECURITY = [{"type": "oauth2", "scopes": ["people.read"]}]
 class MCPSession:
     """Represents an active MCP session."""
 
-    def __init__(self, session_id: str, user_id: str):
+    def __init__(
+        self,
+        session_id: str,
+        user_id: str,
+        auth_context: Optional[V17ProductAuthorizationContext] = None,
+    ):
         self.session_id = session_id
         self.user_id = user_id
+        self.auth_context = auth_context
         self.created_at = datetime.utcnow()
         self.initialized = False
 
 
 def authenticate_api_key(authorization: Optional[str]) -> Optional[str]:
     """Validate API key from Authorization header and return user_id if valid."""
+    auth_context = authenticate_api_key_auth_context(authorization)
+    return auth_context.uid if auth_context else None
+
+
+def authenticate_api_key_auth_context(authorization: Optional[str]) -> Optional[V17ProductAuthorizationContext]:
+    """Validate an MCP bearer token and return persisted app/key/scope V17 context.
+
+    Streamable HTTP/SSE must not infer scopes from MCP tool advertisements or
+    client-supplied request fields. Missing persisted scopes/app_id/key_id are
+    carried through to the V17 grant authorizer so memory reads fail closed.
+    """
     if not authorization:
         return None
 
@@ -125,7 +148,18 @@ def authenticate_api_key(authorization: Optional[str]) -> Optional[str]:
     if not token.startswith("omi_mcp_"):
         return None
 
-    return mcp_api_key_db.get_user_id_by_api_key(token)
+    user_data = mcp_api_key_db.get_user_and_scopes_by_api_key(token)
+    if not user_data or not user_data.get("user_id"):
+        return None
+
+    return build_mcp_v17_default_memory_read_context(
+        McpV17VerifiedAuth(
+            uid=user_data["user_id"],
+            app_id=user_data.get("app_id"),
+            key_id=user_data.get("key_id"),
+            scopes=tuple(user_data.get("scopes") or ()),
+        )
+    )
 
 
 def invalid_mcp_auth_exception(
@@ -512,7 +546,12 @@ def _parse_mcp_date(value: Optional[str], field: str) -> Optional[datetime]:
         raise ToolExecutionError(f"Invalid {field} format: '{value}'. Expected YYYY-MM-DD.", code=-32602)
 
 
-def execute_tool(user_id: str, tool_name: str, arguments: dict) -> dict:
+def execute_tool(
+    user_id: str,
+    tool_name: str,
+    arguments: dict,
+    auth_context: Optional[V17ProductAuthorizationContext] = None,
+) -> dict:
     """Execute an MCP tool and return the result. Raises ToolExecutionError on failure."""
 
     if tool_name == "get_user_profile":
@@ -725,6 +764,12 @@ def execute_tool(user_id: str, tool_name: str, arguments: dict) -> dict:
             raise ToolExecutionError(str(e), code=-32602)
         fetch_limit = min(limit * 3, 60)
 
+        if auth_context is None:
+            raise ToolExecutionError("Missing MCP API app/key identity for V17 memory authorization", code=-32009)
+        v17_app_key_grant = authorize_v17_external_default_memory_read(auth_context, db_client=db)
+        if not v17_app_key_grant.allowed:
+            raise ToolExecutionError(str(v17_app_key_grant.observability), code=-32009)
+
         v17_rollout = read_v17_mcp_default_memory_rollout(uid=user_id, db_client=db)
         v17_vector_results = search_v17_default_mcp_memories_vector(
             uid=user_id,
@@ -930,7 +975,10 @@ def create_mcp_error(id: Any, code: int, message: str) -> dict:
 
 
 def handle_mcp_message(
-    user_id: str, message: dict, session: Optional[MCPSession] = None
+    user_id: str,
+    message: dict,
+    session: Optional[MCPSession] = None,
+    auth_context: Optional[V17ProductAuthorizationContext] = None,
 ) -> tuple[Optional[dict], Optional[str]]:
     """
     Process an incoming MCP JSON-RPC message and return a response.
@@ -944,7 +992,7 @@ def handle_mcp_message(
     if method == "initialize":
         # Create a new session
         session_id = str(uuid.uuid4())
-        new_session = MCPSession(session_id, user_id)
+        new_session = MCPSession(session_id, user_id, auth_context=auth_context)
         new_session.initialized = True
         active_sessions[session_id] = new_session
         new_session_id = session_id
@@ -982,7 +1030,7 @@ def handle_mcp_message(
             return create_mcp_error(msg_id, -32602, "Tool name is required"), None
 
         try:
-            result = execute_tool(user_id, tool_name, arguments)
+            result = execute_tool(user_id, tool_name, arguments, auth_context=auth_context)
         except ToolExecutionError as e:
             return create_mcp_error(msg_id, e.code, e.message), None
 
@@ -1069,9 +1117,10 @@ async def mcp_streamable_http(
     - Session ID is returned in Mcp-Session-Id header after initialization
     """
     # Authenticate
-    user_id = authenticate_api_key(authorization)
-    if not user_id:
+    auth_context = authenticate_api_key_auth_context(authorization)
+    if not auth_context:
         raise invalid_mcp_auth_exception()
+    user_id = auth_context.uid
 
     # Rate limit per-user
     check_rate_limit_inline(user_id, "mcp:sse")
@@ -1099,7 +1148,7 @@ async def mcp_streamable_http(
     if all_notifications:
         # Process notifications without response
         for msg in messages:
-            handle_mcp_message(user_id, msg, session)
+            handle_mcp_message(user_id, msg, session, auth_context=auth_context)
         return Response(status_code=202)
 
     # Process messages and collect responses
@@ -1107,7 +1156,7 @@ async def mcp_streamable_http(
     new_session_id = None
 
     for msg in messages:
-        response, session_id = handle_mcp_message(user_id, msg, session)
+        response, session_id = handle_mcp_message(user_id, msg, session, auth_context=auth_context)
         if session_id:
             new_session_id = session_id
         if response:

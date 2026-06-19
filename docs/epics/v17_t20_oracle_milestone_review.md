@@ -82,7 +82,6 @@ Oracle affirmed the foundation that vector candidates hydrate through authoritat
 7. API strategy: additive switch on existing `/v3`, MCP, developer endpoints vs private/experimental `/v17` until compatibility is complete.
 8. Launch thresholds: acceptable recall regression, p95/p99 latency, empty-after-hydration rate, stale-vector rate, error rate, and observation period before expanding allowlist.
 
-## Not-run / not-claimed caveats preserved
 
 ## Follow-up implementation slices after Oracle review
 
@@ -826,6 +825,25 @@ Verification recorded in `docs/epics/v17_memory_implementation_tickets.md`: RED 
 This closes only the narrow MCP REST `/v1/mcp/memories/search` P0-1/P0-6 app/key/scope composition subpoint. Remaining P0-1/P0-6 work:
 
 - Wire streamable HTTP/SSE `search_memories` through verified app/key/scope context and stored grant composition before tool V17 reads.
+- Add a production MCP key-scope migration or OAuth token introspection path; do not infer scopes from advertised MCP tool metadata.
+- Deployed Firestore rules/IAM proof against a real target project remains not run.
+- Add real FastAPI dependency tests once local route-test dependencies are available; current coverage remains static plus unit seam tests.
+- Production rollout remains **BLOCKED / NO-GO** until all Oracle P0s and required real-service evidence are complete.
+
+### 2026-06-19 — P0-1/P0-6 MCP streamable HTTP/SSE search_memories app/key/scope composition
+
+Continued Oracle P0-1/P0-6 by wiring streamable HTTP/SSE MCP `search_memories` tool execution through persisted MCP API-key app/key/scope context and server-owned app/key grant composition, without changing the production rollout verdict:
+
+- Added `authenticate_api_key_auth_context(...)` in `backend/routers/mcp_sse.py`, so POST `/v1/mcp/sse` authenticates bearer tokens through persisted MCP API-key auth context (`uid`, `app_id`, `key_id`, persisted scopes) instead of uid-only auth for tool execution.
+- `MCPSession`, `handle_mcp_message(...)`, and `execute_tool(...)` now thread an optional `V17ProductAuthorizationContext` into tool calls while keeping uid-only helper compatibility available for untouched/non-V17 direct paths.
+- The `search_memories` tool calls `authorize_v17_external_default_memory_read(auth_context, db_client=db)` before reading MCP rollout state, calling `search_v17_default_mcp_memories_vector(...)`, touching legacy vector fallback, or hydrating `memory_items` candidates.
+- Missing app/key identity, missing/wrong persisted `memories.read` scope, missing/malformed `users/{uid}/memory_control/v17_app_key_memory_grants`, disabled grant, missing persisted grant scope, or missing `default_read=true` fails closed with MCP tool error `-32009` before V17 reads/vector side effects.
+- Valid persisted MCP key scope plus a matching stored `grants.mcp.apps.{app_id}.keys.{key_id}` default-read grant reaches the existing V17 MCP vector adapter; default-read policy keeps `archive_capability=false` and no Archive path/default exposure was added.
+
+Verification recorded in `docs/epics/v17_memory_implementation_tickets.md`: RED SSE route/static tests (`2 failed, 14 passed`), GREEN route/static tests (`16 passed`), focused MCP/auth/product regression (`38 passed, 2 warnings`), full V17 regression (`291 passed, 3 warnings`), and async blocker scan exit 0 with pre-existing findings only.
+
+This closes only the narrow streamable HTTP/SSE `search_memories` P0-1/P0-6 app/key/scope composition subpoint. Remaining P0-1/P0-6 work:
+
 - Add a production MCP key-scope migration or OAuth token introspection path; do not infer scopes from advertised MCP tool metadata.
 - Deployed Firestore rules/IAM proof against a real target project remains not run.
 - Add real FastAPI dependency tests once local route-test dependencies are available; current coverage remains static plus unit seam tests.

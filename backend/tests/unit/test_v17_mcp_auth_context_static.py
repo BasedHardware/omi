@@ -93,12 +93,14 @@ def test_valid_injected_mcp_context_composes_with_stored_default_read_grant_with
     assert decision.reason == 'ok'
 
 
-def test_mcp_routes_advertise_memories_read_but_do_not_yet_wire_v17_context_dependency():
+def test_mcp_routes_advertise_memories_read_and_wire_v17_context_only_on_memory_search_paths():
     rest_source = (ROOT / 'routers' / 'mcp.py').read_text()
     sse_source = (ROOT / 'routers' / 'mcp_sse.py').read_text()
 
     assert 'uid: str = Depends(get_uid_from_mcp_api_key)' in rest_source
     assert 'MEMORIES_READ_SECURITY = [{"type": "oauth2", "scopes": ["memories.read"]}]' in sse_source
-    assert 'def execute_tool(user_id: str, tool_name: str, arguments: dict) -> dict:' in sse_source
-    assert 'build_mcp_v17_default_memory_read_context' not in rest_source
-    assert 'build_mcp_v17_default_memory_read_context' not in sse_source
+    assert 'auth_context: Optional[V17ProductAuthorizationContext] = None' in sse_source
+    assert 'authenticate_api_key_auth_context' in sse_source
+    assert 'authorize_v17_external_default_memory_read(auth_context, db_client=db)' in sse_source
+    assert 'get_mcp_v17_default_memory_read_context' in rest_source
+    assert 'build_mcp_v17_default_memory_read_context' in sse_source

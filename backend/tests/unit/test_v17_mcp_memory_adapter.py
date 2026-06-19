@@ -58,17 +58,48 @@ def test_mcp_rest_uid_only_routes_keep_legacy_mcp_api_key_dependency():
     assert 'get_mcp_v17_default_memory_read_context' not in list_route
 
 
-def test_mcp_sse_search_tool_wires_v17_vector_adapter_before_legacy_vector_search():
+def test_mcp_sse_search_tool_wires_app_key_scope_grant_before_v17_vector_adapter_and_legacy_search():
     mcp_sse_py = Path(__file__).resolve().parents[2] / 'routers' / 'mcp_sse.py'
     contents = mcp_sse_py.read_text(encoding='utf-8')
+    search_tool = contents[
+        contents.index('elif tool_name == "search_memories":') : contents.index(
+            'elif tool_name == "search_conversations":'
+        )
+    ]
 
+    grant_call = 'authorize_v17_external_default_memory_read(auth_context, db_client=db)'
     rollout_call = 'read_v17_mcp_default_memory_rollout(uid=user_id, db_client=db)'
     vector_adapter_call = 'search_v17_default_mcp_memories_vector('
     legacy_call = 'vector_db.find_similar_memories(user_id, query, threshold=0.0, limit=fetch_limit)'
-    assert rollout_call in contents
-    assert vector_adapter_call in contents
-    assert legacy_call in contents
-    assert contents.index(rollout_call) < contents.index(vector_adapter_call) < contents.index(legacy_call)
+    assert 'auth_context: Optional[V17ProductAuthorizationContext] = None' in contents
+    assert 'auth_context=auth_context' in contents
+    assert grant_call in search_tool
+    assert rollout_call in search_tool
+    assert vector_adapter_call in search_tool
+    assert legacy_call in search_tool
+    assert search_tool.index(grant_call) < search_tool.index(rollout_call)
+    assert search_tool.index(grant_call) < search_tool.index(vector_adapter_call)
+    assert search_tool.index(grant_call) < search_tool.index(legacy_call)
+    assert search_tool.index(rollout_call) < search_tool.index(vector_adapter_call) < search_tool.index(legacy_call)
+
+
+def test_mcp_sse_transport_authenticates_full_mcp_api_key_context_without_inferred_scopes():
+    mcp_sse_py = Path(__file__).resolve().parents[2] / 'routers' / 'mcp_sse.py'
+    contents = mcp_sse_py.read_text(encoding='utf-8')
+
+    assert (
+        'def authenticate_api_key_auth_context(authorization: Optional[str]) -> Optional[V17ProductAuthorizationContext]:'
+        in contents
+    )
+    assert 'mcp_api_key_db.get_user_and_scopes_by_api_key(token)' in contents
+    assert 'McpV17VerifiedAuth(' in contents
+    assert 'scopes=tuple(user_data.get("scopes") or ())' in contents
+    assert 'auth_context = authenticate_api_key_auth_context(authorization)' in contents
+    assert 'user_id = auth_context.uid' in contents
+    assert (
+        'user_id = authenticate_api_key(authorization)'
+        not in contents[contents.index('@router.post("/v1/mcp/sse"') : contents.index('@router.get("/v1/mcp/sse"')]
+    )
 
 
 def test_mcp_rest_search_route_only_reaches_legacy_after_explicit_legacy_safe_decision():
