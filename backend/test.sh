@@ -69,6 +69,7 @@ pytest tests/unit/test_v17_vector_repair_outbox_deployment_contract.py -v
 pytest tests/unit/test_v17_vector_repair_outbox_oidc_iam_proof.py -v
 pytest tests/unit/test_v17_firestore_rules_iam_proof.py -v
 pytest tests/unit/test_v17_pinecone_repair_validation_readiness.py -v
+pytest tests/unit/test_v17_shared_ns2_legacy_isolation_readiness.py -v
 pytest tests/unit/test_v17_vector_repair_outbox_emulator_harness.py -v
 pytest tests/unit/test_v17_firestore_indexes.py -v
 pytest tests/unit/test_v17_normative_foundations.py -v

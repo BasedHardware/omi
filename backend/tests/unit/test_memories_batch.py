@@ -143,7 +143,13 @@ class TestUpsertMemoryVectorsBatch:
         vector_db.find_similar_memories('uid-abc', 'hello', subject_entity_id='user')
 
         fake_index.query.assert_called_once()
-        assert fake_index.query.call_args.kwargs['filter'] == {'uid': 'uid-abc', 'subject_entity_id': 'user'}
+        assert fake_index.query.call_args.kwargs['filter'] == {
+            '$and': [
+                {'uid': {'$eq': 'uid-abc'}},
+                {'v17_schema_version': {'$exists': False}},
+                {'subject_entity_id': {'$eq': 'user'}},
+            ]
+        }
 
 
 class TestBatchMemoriesRateLimitPolicy:

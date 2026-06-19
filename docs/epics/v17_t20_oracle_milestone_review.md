@@ -907,6 +907,25 @@ This closes only the readiness-runner/admin-assignment-contract subpoint. Remain
 - Deployed Firestore/IAM proof against a real target project remains not run.
 - Production rollout remains **BLOCKED / NO-GO** until all Oracle P0s and required real-service evidence are complete.
 
+### 2026-06-19 — P0-5 shared ns2 legacy/V17 isolation local readiness
+
+Continued Oracle P0-5 by adding a safe local guard/readiness slice for shared `ns2` legacy/V17 vector isolation, without changing the production rollout verdict:
+
+- Added `backend/scripts/v17_shared_ns2_legacy_isolation_readiness.py` with default `status=NOT_RUN`, `read_only=true`, and `mutation_allowed=false`; default mode performs no Pinecone query or mutation.
+- The runner inventories legacy `ns2` memory search paths (`database.vector_db.find_similar_memories`, `database.vector_db.search_memories_by_vector`), required V17 metadata barriers, stale/deleted physical-ID risk, and P0-7 overfetch/refill implications.
+- Added `build_legacy_memory_vector_filter(...)` in `backend/database/vector_db.py` and wired legacy `find_similar_memories(...)` plus `search_memories_by_vector(...)` to include exact uid filtering and `v17_schema_version: {"$exists": false}` before top-k, preserving subject filtering where applicable.
+- This local guard prevents V17 schema vectors from consuming legacy top-k slots in the legacy adapters before hydration. It does not prove real Pinecone coexistence, stale/deleted physical-ID cleanup, baseline recall retention, or provider behavior.
+
+Verification recorded in `docs/epics/v17_memory_implementation_tickets.md`: RED missing-runner/filter tests (`4 failed`), GREEN readiness/filter tests (`4 passed`), default readiness run `python3 backend/scripts/v17_shared_ns2_legacy_isolation_readiness.py` produced JSON `status: "NOT_RUN"`, execute readiness returned exit 2 due missing Pinecone prerequisites, focused vector/filter tests passed, full V17 regression passed, and async scan remained pre-existing findings only.
+
+This closes only the local shared-`ns2` legacy-filter/readiness subpoint. Remaining P0-5 work:
+
+- No real Pinecone shared `ns2` proof was run because provider credentials/config were unavailable.
+- No production baseline recall/coexistence benchmark was run.
+- Stale/deleted physical-ID and duplicate V17 physical-ID proof remains provider-backed work.
+- If metadata filtering is unsafe in real Pinecone, a separate namespace decision remains open.
+- Production rollout remains **BLOCKED / NO-GO** until all Oracle P0s and required real-service evidence are complete.
+
 ## Not-run / not-claimed caveats preserved
 
 - Oracle review has now run and is recorded here, but it blocks production rollout.
@@ -1044,6 +1063,10 @@ The V17 query has schema and tier filters, but the legacy vector functions are e
 “Legacy code untouched” is not evidence that legacy behavior remains unchanged. No real Pinecone validation or legacy-plus-V17 coexistence benchmark was run.
 
 **Required fix:** Prove with real `ns2` data that legacy queries explicitly exclude V17 schema records and retain baseline recall. Otherwise add a legacy schema filter or separate namespace before inserting production V17 vectors.
+
+**2026-06-19 local readiness slice:** Added `backend/scripts/v17_shared_ns2_legacy_isolation_readiness.py`, a safe-by-default shared-namespace artifact that inventories the legacy `ns2` memory search paths (`find_similar_memories`, `search_memories_by_vector`), the required V17 metadata barriers (`v17_schema_version`, `uid`, `memory_tier`, `status`, `source_state`, `restricted_sensitivity`, account/revision/source/content/projection fences), and remaining stale/deleted physical-ID plus overfetch/refill risks. Default output is `status=NOT_RUN`, `read_only=true`, `mutation_allowed=false`; `--execute` only checks provider prerequisites for a future read-only inventory and performs no Pinecone query or mutation in this slice.
+
+Also added a narrow local code guard: legacy queries exclude V17 schema before top-k selection via `{'v17_schema_version': {'$exists': False}}`, so legacy queries exclude V17 schema records instead of letting V17 Short-term/Long-term/Archive/stale/tombstoned candidates consume legacy result slots. No real Pinecone shared `ns2` proof, recall benchmark, provider query output, production coexistence validation, or rollout approval is claimed; real shared-`ns2` data validation and baseline recall evidence remain required.
 
 ---
 

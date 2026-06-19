@@ -163,6 +163,26 @@ def delete_vector(uid: str, conversation_id: str):
 MEMORIES_NAMESPACE = "ns2"
 
 
+def build_legacy_memory_vector_filter(uid: str, subject_entity_id: str | None = None) -> dict:
+    """Return the legacy ns2 memory-search filter with an explicit V17 schema barrier.
+
+    Legacy memory vectors in ``ns2`` do not carry ``v17_schema_version``. V17
+    vectors intentionally do, so every legacy search path must exclude that
+    field before top-k is selected. This prevents V17 Short-term, Long-term,
+    Archive, stale-revision, or tombstoned candidates from occupying legacy
+    result slots or being hydrated as legacy memories.
+    """
+    filter_data = {
+        '$and': [
+            {'uid': {'$eq': uid}},
+            {'v17_schema_version': {'$exists': False}},
+        ]
+    }
+    if subject_entity_id:
+        filter_data['$and'].append({'subject_entity_id': {'$eq': subject_entity_id}})
+    return filter_data
+
+
 @dataclass(frozen=True)
 class V17VectorCandidateQueryResult:
     hits: List[SearchVectorHit] = field(default_factory=list)
@@ -274,9 +294,7 @@ def find_similar_memories(
         return []
 
     vector = embeddings.embed_query(content)
-    filter_data = {'uid': uid}
-    if subject_entity_id:
-        filter_data['subject_entity_id'] = subject_entity_id
+    filter_data = build_legacy_memory_vector_filter(uid, subject_entity_id=subject_entity_id)
 
     xc = index.query(
         vector=vector, top_k=limit, include_metadata=True, filter=filter_data, namespace=MEMORIES_NAMESPACE
@@ -318,7 +336,7 @@ def search_memories_by_vector(uid: str, query: str, limit: int = 10) -> List[str
         return []
 
     vector = embeddings.embed_query(query)
-    filter_data = {'uid': uid}
+    filter_data = build_legacy_memory_vector_filter(uid)
 
     xc = index.query(
         vector=vector, top_k=limit, include_metadata=True, filter=filter_data, namespace=MEMORIES_NAMESPACE
