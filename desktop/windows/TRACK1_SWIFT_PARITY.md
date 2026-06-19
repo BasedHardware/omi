@@ -224,12 +224,12 @@
 | Field | Detail |
 |-------|--------|
 | **macOS source** | `Sources/MainWindow/Pages/DashboardPage.swift`, `DailyScoreWidget.swift`, `TodaysTasksWidget.swift`, `GoalsWidget.swift`, `FocusSummaryWidget.swift`, `RecentConversationsWidget.swift` |
-| **Windows source** | Merged into `src/renderer/src/pages/Home.tsx` (QuickTaskWidget, QuickGoalsWidget only) |
-| **Status** | 🟡 Partial |
-| **Visual gap** | macOS Dashboard has 5 distinct widgets in a grid layout. Windows Home page shows only task and goal quick-glance widgets, collapsed when chat starts. No daily score, no focus summary, no recent conversations widget. |
-| **Functional gap** | No DailyScore widget. No FocusSummary widget. No RecentConversations widget on dashboard. |
-| **Proposed fix** | Separate Home from Dashboard. Create a dedicated `/dashboard` route with a widget grid matching macOS: recent conversations, active tasks, goal progress, and insight count. QuickTaskWidget and QuickGoalsWidget already exist — compose them into a grid layout. |
-| **Priority** | P0 |
+| **Windows source** | `src/renderer/src/pages/Home.tsx`, `src/renderer/src/components/home/QuickTaskWidget.tsx`, `src/renderer/src/components/home/QuickGoalsWidget.tsx`, `src/renderer/src/components/home/QuickConversationsWidget.tsx` |
+| **Status** | 🟡 Partial → improved (Batch 3) |
+| **Visual gap** | Sidebar now shows "Dashboard" label. Widget grid now shows Tasks + Goals (top row) + Recent Conversations (full-width bottom row). Still missing: DailyScore, FocusSummary widgets. Chat flow preserved below widgets. |
+| **Functional gap** | No DailyScore or FocusSummary widget. Conversations widget fetches from /v1/conversations and shows 3 most recent with emoji, title, relative time. |
+| **Proposed fix** | Add DailyScore and FocusSummary if backend endpoints exist — deferred to future batch. |
+| **Priority** | P0 — IMPROVED |
 
 ---
 
@@ -363,7 +363,7 @@
 | System Tray | ✅ Works | P0 — DONE |
 | Notifications | 🟡 Partial | P2 |
 | Integrations | 🟡 Partial | P1 |
-| Dashboard Page | 🟡 Partial | P0 |
+| Dashboard Page | 🟡 Partial (improved) | P0 — IMPROVED |
 | Memories Page (nav placement) | ✅ Works | P0 — DONE |
 | Tasks Page | 🟡 Partial | P1 |
 | Insights Page | ❌ Missing | P1 |

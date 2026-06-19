@@ -5,6 +5,7 @@ import { auth, onAuthStateChanged } from '../lib/firebase'
 import { useAppState } from '../state/AppStateProvider'
 import { QuickTaskWidget } from '../components/home/QuickTaskWidget'
 import { QuickGoalsWidget } from '../components/home/QuickGoalsWidget'
+import { QuickConversationsWidget } from '../components/home/QuickConversationsWidget'
 import { Markdown } from '../components/Markdown'
 import { maybeBuildLocalGraph } from '../lib/kgSynthesis'
 import { cn } from '../lib/utils'
@@ -93,7 +94,8 @@ export function Home(): React.JSX.Element {
   const [widgetsH, setWidgetsH] = useState(0)
   const [tasksReady, setTasksReady] = useState(false)
   const [goalsReady, setGoalsReady] = useState(false)
-  const widgetsReady = tasksReady && goalsReady
+  const [convsReady, setConvsReady] = useState(false)
+  const widgetsReady = tasksReady && goalsReady && convsReady
 
   // Only fade the thread's top once it actually overflows — otherwise a short
   // thread would sit entirely inside the fade and look washed out.
@@ -139,6 +141,7 @@ export function Home(): React.JSX.Element {
     const t = setTimeout(() => {
       setTasksReady(true)
       setGoalsReady(true)
+      setConvsReady(true)
     }, 6000)
     return () => clearTimeout(t)
   }, [])
@@ -257,6 +260,10 @@ export function Home(): React.JSX.Element {
           >
             <QuickTaskWidget onReady={() => setTasksReady(true)} />
             <QuickGoalsWidget onReady={() => setGoalsReady(true)} />
+            <QuickConversationsWidget
+              onReady={() => setConvsReady(true)}
+              className="sm:col-span-2"
+            />
           </div>
           <div className="h-12" />
         </div>

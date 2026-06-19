@@ -19,7 +19,7 @@ import type { User } from 'firebase/auth'
 import type { RewindSettings } from '../../../../shared/types'
 
 const navItems = [
-  { label: 'Home', to: '/home', Icon: House },
+  { label: 'Dashboard', to: '/home', Icon: House },
   { label: 'Conversations', to: '/conversations', Icon: GanttChartSquare },
   { label: 'Memories', to: '/memories', Icon: Brain },
   { label: 'Tasks', to: '/tasks', Icon: ListChecks },
