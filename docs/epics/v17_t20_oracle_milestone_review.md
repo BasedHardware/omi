@@ -1488,3 +1488,20 @@ Verification for this slice:
 - Normal-env full V17 regression: `454 passed, 3 warnings in 7.18s`.
 - `/v3` readiness: `BLOCKED True False False False False False False False False 7 7 True`; docs hygiene `docs_hygiene 16 BAD=[]`.
 - Production rollout remains **BLOCKED / NO-GO** until all Oracle P0/P1 gates and required real-service evidence are complete.
+
+### 2026-06-19 — P1-3 `/v3` GET runtime-wiring remaining-gates readiness
+
+Created the next safe readiness artifact after the real-router GET legacy baseline proof, without changing `backend/routers/memories.py` or runtime behavior:
+
+- Added `backend/scripts/v17_p1_3_v3_get_runtime_wiring_readiness.py`, a read-only BLOCKED inventory of the exact remaining real-service/runtime gates before future `GET /v3/memories` V17 cutover.
+- Added `backend/tests/unit/test_v17_p1_3_v3_get_runtime_wiring_readiness.py` and registered it in `backend/test.sh`.
+- Linked the new artifact from `backend/scripts/v17_p1_3_v3_external_compatibility_readiness.py` as `get_runtime_wiring_readiness_proof` while keeping `/v3` runtime status `BLOCKED`.
+- The gate inventory covers real server-side V17 cohort/enrollment/control fail-closed reads, real V17-derived MemoryDB-compatible compatibility projection reads including empty projection state, external create/update/delete write-convergence/source-of-truth evidence, real cursor signing secret/config and validation integration, real route-level dependency overrides/auth/rate-limit TestClient behavior, non-enrolled legacy compatibility including `offset=0 -> limit=5000`, enrolled no-grant/projection-not-ready/write-not-ready no-fallback behavior, Archive default-unavailable and stale Short-term not default-visible proof, observability/telemetry, and explicit approval gates.
+- It ties each gate to existing local proof artifacts (`v17_v3_compatibility`, cursor, projection readiness, memory read service, write convergence, response/request adapters, route planner, route-signature integration, FastAPI route contract, real-router dependency map, and real-router GET TestClient) while marking real service/runtime evidence still missing.
+- It documents a proposed safe future cutover sequence but deliberately does not implement runtime wiring, production writes, Archive default visibility, telemetry sink integration, cloud validation, benchmarks, or approval.
+
+Verification for this slice:
+
+- RED: `cd backend && env -u VIRTUAL_ENV PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin python3 -m pytest tests/unit/test_v17_p1_3_v3_get_runtime_wiring_readiness.py -q` -> `6 failed in 0.08s` before adding the runner/test.sh/docs/external-readiness link.
+- Focused GREEN and full verification outputs are recorded with the local commit summary for this slice.
+- Production rollout remains **BLOCKED / NO-GO** until all Oracle P0/P1 gates and required real-service evidence are complete.
