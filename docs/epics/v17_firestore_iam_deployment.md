@@ -161,10 +161,41 @@ auth: Cloud Run IAM (roles/run.invoker) plus Scheduler/Tasks OIDC serviceAccount
 
 Important readiness caveat: the executable trigger surface now matches the intended HTTP/OIDC Cloud Run/Tasks shape through `POST /v17-vector-repair-outbox-worker/tick`, but OIDC is still enforced by Cloud Run IAM/platform configuration rather than local test credentials. In this local slice, `gcloud` was not installed/on PATH and no target project/region was configured, so the proof runner was run only in `NOT_RUN`/prerequisite-failure mode. No Cloud Run service, Cloud Tasks queue, Cloud Scheduler job, IAM binding, deployed rules validation, production Firestore IAM proof, or Pinecone operation was created or claimed.
 
+### Production Firestore IAM and deployed Security Rules proof runner
+
+`backend/scripts/v17_firestore_rules_iam_proof.py` is the safe read-only readiness/proof runner for production Firestore IAM and deployed Security Rules on the V17 vector repair outbox paths. It inventories the exact production validation commands by default and only runs read-only commands when `--execute` is explicitly passed:
+
+```bash
+python3 backend/scripts/v17_firestore_rules_iam_proof.py
+python3 backend/scripts/v17_firestore_rules_iam_proof.py --project PROJECT_ID --execute
+```
+
+Read-only inventory commands:
+
+```text
+gcloud firestore databases describe (default) --project PROJECT_ID --format=json
+gcloud projects get-iam-policy PROJECT_ID --format=json
+gcloud iam service-accounts get-iam-policy WORKER_SA --project PROJECT_ID --format=json
+gcloud iam service-accounts get-iam-policy BACKEND_SA --project PROJECT_ID --format=json
+firebase firestore:rules:get --project PROJECT_ID
+```
+
+Prerequisites for a real PASS/FAIL proof are an authenticated `gcloud` CLI, authenticated Firebase CLI, a target Firebase/GCP project, the deployed Firestore database, the deployed Security Rules release, and the intended Admin worker/backend service-account names. Without those prerequisites the runner emits `status=NOT_RUN` with explicit missing prerequisites; that is a readiness artifact, not production evidence.
+
+Pass/fail criteria for the runner (including explicit client denial checks):
+
+- `client_denial.memory_outbox`: deployed Security Rules deny client read/create/update/delete on `users/{uid}/memory_outbox/{record_id}`.
+- `worker_firestore_iam`: Admin worker service account has Firestore read/write IAM (`roles/datastore.user` or narrower custom role) and no owner/editor role.
+- `memory_control.server_owned`: `users/{uid}/memory_control/state` remains server-owned/Admin-only, including the `vector_repair_outbox_enabled` gate.
+- `no_client_vector_repair_enablement`: no client enablement of `vector_repair_outbox_enabled` is possible through deployed rules.
+- `no_broad_public_access`: project and service-account IAM have no broad public access (`allUsers` / `allAuthenticatedUsers`).
+
+The runner is guarded against mutating commands: no `firebase deploy`, no `gcloud firestore databases update`, no IAM `set-iam-policy`, and no IAM binding mutations. It does not deploy rules, change IAM, mutate databases, write outbox documents, or call Pinecone. A PASS is still only Firestore IAM/deployed-rules evidence for these paths; it is not production approval and does not close Pinecone duplicate stale physical-ID cleanup, shared `ns2` isolation, retry/dead-letter telemetry, or benchmark gates.
+
 Remaining deployment gates before enabling this contract in production:
 
 - Run `python3 backend/scripts/v17_vector_repair_outbox_oidc_iam_proof.py --project PROJECT_ID --region REGION --execute` against the target project and attach exact JSON output before unpausing Scheduler or enabling the worker.
-- Production Firestore IAM and deployed Security Rules validation in the target Firebase project.
+- Run `python3 backend/scripts/v17_firestore_rules_iam_proof.py --project PROJECT_ID --execute` against the target Firebase project and attach exact JSON output before enabling `vector_repair_outbox_enabled` or the worker.
 - Production-safe uid sharding/backlog discovery and worker identity ownership model.
 - Real Pinecone delete/upsert validation with duplicate stale physical IDs and tombstone precedence in namespace `ns2`.
 - Retry/backoff/dead-letter central telemetry and alerts.

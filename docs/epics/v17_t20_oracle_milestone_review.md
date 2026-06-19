@@ -613,6 +613,27 @@ This closes only the readiness/proof-runner artifact for the Cloud Run OIDC/IAM 
 - Complete overfetch/refill/budgets, app/key/scope auth, benchmarks, and explicit rollout gates.
 - Production rollout remains **BLOCKED / NO-GO** until all Oracle P0s and required real-service evidence are complete.
 
+### 2026-06-19 — P0-4 Firestore IAM/deployed Security Rules proof-runner readiness artifact
+
+Continued Oracle P0-4 by adding a safe production Firestore IAM/deployed Security Rules validation runner for the V17 vector repair outbox paths, without claiming real cloud proof or changing the production rollout verdict:
+
+- Added `backend/scripts/v17_firestore_rules_iam_proof.py`, a safe-by-default runner that inventories production Firestore IAM and deployed Security Rules proof commands by default and only executes read-only `gcloud` / Firebase commands when `--execute` is explicitly passed.
+- The runner covers `gcloud firestore databases describe`, project IAM, worker/backend service-account IAM policies, and deployed Firestore rules via `firebase firestore:rules:get`.
+- Pass/fail criteria cover client denial on `users/{uid}/memory_outbox/{record_id}`, Admin worker service-account Firestore IAM, server-owned `users/{uid}/memory_control/state`, no client enablement of `vector_repair_outbox_enabled`, and no broad public IAM access.
+- Static tests assert the runner contains the required outbox/control/gate proof targets and that generated commands do not contain mutating deployment/database/IAM operations.
+- Attempted only safe local readiness: inventory mode printed JSON `status: NOT_RUN` with missing project; `command -v gcloud` and `command -v firebase` produced no output; `--execute` exited 2 with `status: NOT_RUN` prerequisites for missing project, missing `gcloud`, and missing `firebase`. Therefore no production Firestore IAM/deployed-rules proof was run or claimed.
+
+Verification recorded in `docs/epics/v17_memory_implementation_tickets.md`: RED missing runner/doc tests (`2 failed`), GREEN static test (`2 passed`), readiness command outputs (`NOT_RUN` and safe `--execute` prerequisite failure), focused vector/outbox/docs regression (`40 passed`), full V17 regression (`252 passed, 1 warning`), and async scan exit 0 with pre-existing findings only.
+
+This closes only the readiness/proof-runner artifact for the production Firestore IAM/deployed Security Rules validation slice. Remaining P0-4/P0 work:
+
+- Run this Firestore proof runner with `--execute` against an authenticated target Firebase project and attach exact JSON output before enabling `vector_repair_outbox_enabled` or the worker.
+- Run the OIDC/IAM proof runner with `--execute` against the target project and attach exact JSON output before unpausing Scheduler or enabling the worker.
+- Run real Pinecone duplicate stale physical-ID delete/repair/tombstone validation in `ns2` and prove shared-namespace isolation.
+- Add central retry/dead-letter/backlog telemetry and alerts.
+- Complete overfetch/refill/budgets, app/key/scope auth, benchmarks, and explicit rollout gates.
+- Production rollout remains **BLOCKED / NO-GO** until all Oracle P0s and required real-service evidence are complete.
+
 ## Not-run / not-claimed caveats preserved
 
 - Oracle review has now run and is recorded here, but it blocks production rollout.
