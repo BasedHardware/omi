@@ -570,6 +570,28 @@ This closes only the static disabled deployment/proof contract artifact for Clou
 - Add central retry/dead-letter/backlog telemetry/alerts, overfetch/refill/budgets, app/key/scope auth, benchmarks, and explicit rollout gates.
 - Production rollout remains **BLOCKED / NO-GO** until all Oracle P0s and required real-service evidence are complete.
 
+### 2026-06-19 — P0-4 disabled HTTP trigger shim for Cloud Run/Tasks OIDC
+
+Continued Oracle P0-4 by resolving the prior CLI-vs-HTTP trigger-surface caveat with a minimal disabled-by-default ASGI shim, without deploying cloud resources or changing the production rollout verdict:
+
+- Added `create_v17_vector_repair_outbox_worker_app(...)` and `run_v17_vector_repair_outbox_worker_http_tick(...)` in `backend/scripts/v17_vector_repair_outbox_worker_entrypoint.py`.
+- The module-level `app` exposes `POST /v17-vector-repair-outbox-worker/tick` for a Cloud Run service command such as `uvicorn scripts.v17_vector_repair_outbox_worker_entrypoint:app --host 0.0.0.0 --port 8080`.
+- The HTTP shim is fail-closed by default: absent/false `V17_VECTOR_REPAIR_OUTBOX_WORKER_ENABLED` returns the deterministic no-op JSON summary and does not build Firestore/Pinecone/embedding dependencies or lease/process/ack records.
+- Enabled HTTP execution still requires server-owned env config for explicit `V17_VECTOR_REPAIR_OUTBOX_UID` and stable `V17_VECTOR_REPAIR_OUTBOX_WORKER_ID`; there is no request-body uid and no unbounded scan.
+- Authentication is deliberately documented as Cloud Run IAM (`roles/run.invoker`) plus Cloud Scheduler/Tasks OIDC `serviceAccountEmail`/`audience` at the platform layer; the app does not add a weak app-level bearer-token scheme.
+- Updated the static deployment YAML and Firestore/IAM deployment doc to use the HTTP shim service command and to remove the prior “HTTP shim must exist” caveat. The artifact remains disabled (`V17_VECTOR_REPAIR_OUTBOX_WORKER_ENABLED=false`, Scheduler `PAUSED`).
+- No Cloud Run service, Cloud Tasks queue, Cloud Scheduler job, IAM binding, production Firestore rules validation, Pinecone delete/upsert, shared-`ns2` proof, telemetry alert, benchmark, or production approval was created or claimed.
+
+Verification recorded in `docs/epics/v17_memory_implementation_tickets.md`: RED HTTP shim tests (`5 failed, 10 passed` for missing `create_v17_vector_repair_outbox_worker_app` and Cloud Run IAM documentation), RED deployment contract test (`1 failed` for missing `uvicorn`/HTTP shim contract), GREEN focused trigger tests (`36 passed`), disabled CLI smoke JSON, full `pytest tests/unit/test_v17_*.py -q` (`248 passed, 1 warning`), and async scan exit 0 with pre-existing findings only.
+
+This closes only the local executable trigger-surface mismatch. Remaining P0-4/P0 work:
+
+- Run real OIDC/IAM proof commands from the artifact against the target project and attach exact output.
+- Validate production Firestore IAM/service-account bindings and deployed Security Rules.
+- Run real Pinecone duplicate stale physical-ID delete/repair/tombstone precedence validation and shared-`ns2` isolation proof.
+- Add central retry/dead-letter/backlog telemetry/alerts, overfetch/refill/budgets, app/key/scope auth, benchmarks, and explicit rollout gates.
+- Production rollout remains **BLOCKED / NO-GO** until all Oracle P0s and required real-service evidence are complete.
+
 ## Not-run / not-claimed caveats preserved
 
 - Oracle review has now run and is recorded here, but it blocks production rollout.

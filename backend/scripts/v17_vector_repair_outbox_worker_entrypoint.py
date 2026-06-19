@@ -8,6 +8,22 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Dict, Mapping, Optional
 
+try:
+    from fastapi import FastAPI
+except (ModuleNotFoundError, ImportError):
+
+    class FastAPI:
+        def __init__(self, *args, **kwargs):
+            self.routes_by_path = {}
+
+        def post(self, path, include_in_schema=False):
+            def decorator(func):
+                self.routes_by_path[path] = func
+                return func
+
+            return decorator
+
+
 _BACKEND_DIR = Path(__file__).resolve().parents[1]
 if str(_BACKEND_DIR) not in sys.path:
     sys.path.insert(0, str(_BACKEND_DIR))
@@ -195,6 +211,94 @@ def make_v17_authoritative_item_loader(*, db_client: Any) -> Callable[[Dict[str,
     return load_authoritative_item
 
 
+def run_v17_vector_repair_outbox_worker_http_tick(
+    *,
+    env: Mapping[str, str],
+    dependency_builder: Callable[[Mapping[str, str]], V17VectorRepairOutboxProductionDependencies],
+    tick_runner: Callable[..., Dict[str, Any]] = run_v17_vector_repair_outbox_worker_tick,
+) -> Dict[str, Any]:
+    """Cloud Run/Tasks HTTP shim for one disabled-by-default worker tick.
+
+    Authentication is intentionally delegated to Cloud Run IAM (roles/run.invoker)
+    with Cloud Scheduler/Tasks OIDC tokens and an exact audience, as documented
+    in the deployment contract. This endpoint does not invent an app-level bearer
+    token scheme. If it is exposed without Cloud Run/IAP IAM, the worker must
+    still remain disabled by env and fail closed before dependencies are built.
+    The uid/shard and worker id come only from server-owned environment config,
+    never from a client request body.
+    """
+    try:
+        entrypoint_config = parse_v17_vector_repair_outbox_worker_entrypoint_config(env)
+    except ValueError as exc:
+        return _entrypoint_summary(config_valid=False, errors=[_error("config", str(exc))])
+
+    if not entrypoint_config.enabled:
+        return _entrypoint_summary(config_valid=True)
+
+    if entrypoint_config.uid is None or entrypoint_config.tick_config is None:
+        return _entrypoint_summary(
+            config_valid=False,
+            errors=[_error("config", "enabled worker config is incomplete")],
+        )
+
+    try:
+        dependencies = dependency_builder(env)
+    except ValueError as exc:
+        return _entrypoint_summary(config_valid=False, errors=[_error("dependencies", str(exc))])
+
+    try:
+        summary = tick_runner(
+            db_client=dependencies.db_client,
+            uid=entrypoint_config.uid,
+            config=entrypoint_config.tick_config,
+            authoritative_item_loader=dependencies.authoritative_item_loader,
+            vector_deleter=dependencies.vector_deleter,
+            vector_repairer=dependencies.vector_repairer,
+        )
+    except Exception as exc:
+        summary = _entrypoint_summary(
+            config_valid=True,
+            enabled=True,
+            uid=entrypoint_config.uid,
+            worker_id=entrypoint_config.tick_config.worker_id,
+            errors=[_error("tick", str(exc))],
+        )
+
+    output = dict(summary)
+    output["config_valid"] = True
+    return output
+
+
+def create_v17_vector_repair_outbox_worker_app(
+    *,
+    env: Optional[Mapping[str, str]] = None,
+    dependency_builder: Callable[
+        [Mapping[str, str]], V17VectorRepairOutboxProductionDependencies
+    ] = build_v17_vector_repair_outbox_production_dependencies,
+    tick_runner: Callable[..., Dict[str, Any]] = run_v17_vector_repair_outbox_worker_tick,
+) -> FastAPI:
+    """Create the minimal ASGI surface used by Cloud Run service deployments.
+
+    The route is sync on purpose: production Firestore/Pinecone/embedding clients
+    are synchronous, and FastAPI runs sync handlers in a threadpool.
+    """
+    effective_env = os.environ if env is None else env
+    worker_app = FastAPI(title="v17-vector-repair-outbox-worker", docs_url=None, redoc_url=None, openapi_url=None)
+    routes_by_path = {}
+
+    @worker_app.post("/v17-vector-repair-outbox-worker/tick", include_in_schema=False)
+    def v17_vector_repair_outbox_worker_tick_http() -> Dict[str, Any]:
+        return run_v17_vector_repair_outbox_worker_http_tick(
+            env=effective_env,
+            dependency_builder=dependency_builder,
+            tick_runner=tick_runner,
+        )
+
+    routes_by_path["/v17-vector-repair-outbox-worker/tick"] = v17_vector_repair_outbox_worker_tick_http
+    worker_app.routes_by_path = routes_by_path
+    return worker_app
+
+
 def main(
     *,
     env: Optional[Mapping[str, str]] = None,
@@ -317,6 +421,9 @@ def _missing_production_dependency(record: Dict[str, Any]) -> None:
 
 def _missing_production_repair_dependency(record: Dict[str, Any], item: Any) -> None:
     raise RuntimeError("production vector repair worker dependencies are not wired in this wrapper contract")
+
+
+app = create_v17_vector_repair_outbox_worker_app()
 
 
 if __name__ == "__main__":

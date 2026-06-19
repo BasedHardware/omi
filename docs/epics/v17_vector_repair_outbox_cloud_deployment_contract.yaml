@@ -10,9 +10,11 @@
 # - No cloud resources are created by this file.
 # - No production IAM, deployed Firestore rules, Pinecone delete/upsert, shared
 #   ns2 isolation, or Scheduler/Tasks execution has been proven by this artifact.
-# - The current Python entrypoint is a CLI one-tick worker. An HTTP shim (for
-#   example POST /v17-vector-repair-outbox-worker/tick that invokes the same
-#   entrypoint/tick contract) must exist before applying the Service/Tasks shape.
+# - The current Python entrypoint exposes both a CLI smoke path and a minimal
+#   POST /v17-vector-repair-outbox-worker/tick ASGI shim. The shim delegates
+#   authentication to Cloud Run IAM (roles/run.invoker) plus Scheduler/Tasks
+#   OIDC audience checks at the platform layer; it does not implement an
+#   app-level bearer token.
 
 contract:
   name: v17-vector-repair-outbox-worker
@@ -50,8 +52,13 @@ contract:
             containerConcurrency: 1
             containers:
               - image: REGION-docker.pkg.dev/PROJECT_ID/omi/backend:V17_VECTOR_REPAIR_IMAGE_DIGEST
-                command: ["python3"]
-                args: ["backend/scripts/v17_vector_repair_outbox_worker_entrypoint.py"]
+                command: ["uvicorn"]
+                args:
+                  - scripts.v17_vector_repair_outbox_worker_entrypoint:app
+                  - --host
+                  - 0.0.0.0
+                  - --port
+                  - "8080"
                 env:
                   - name: V17_VECTOR_REPAIR_OUTBOX_WORKER_ENABLED
                     value: "false"
@@ -182,9 +189,11 @@ contract:
         - no Pinecone/OpenAI/Firestore dependency initialization occurs
     staticConfigReview:
       passCriteria:
+        - Cloud Run service command exposes POST /v17-vector-repair-outbox-worker/tick via scripts.v17_vector_repair_outbox_worker_entrypoint:app
         - V17_VECTOR_REPAIR_OUTBOX_WORKER_ENABLED remains value: "false"
         - Cloud Scheduler state remains PAUSED
         - Cloud Run ingress is restricted and invoker IAM is required
+        - Auth enforcement is Cloud Run IAM (roles/run.invoker) with OIDC audience; the app shim has no app-level bearer token
         - OIDC oidcToken audience exactly matches the worker tick URI
         - uid source is server-owned; clients cannot choose arbitrary uid
         - retryConfig maxAttempts/maxRetryDuration and dead-letter handling are documented

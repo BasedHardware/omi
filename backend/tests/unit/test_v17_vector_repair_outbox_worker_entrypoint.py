@@ -283,6 +283,132 @@ def test_main_enabled_missing_production_dependency_config_fails_before_lease(mo
     ]
 
 
+def test_http_shim_disabled_post_fails_closed_without_dependency_initialization():
+    calls = []
+    app = entrypoint.create_v17_vector_repair_outbox_worker_app(
+        env={},
+        dependency_builder=lambda env: calls.append("deps"),
+        tick_runner=lambda **kwargs: calls.append("tick"),
+    )
+
+    response = app.routes_by_path["/v17-vector-repair-outbox-worker/tick"]()
+
+    assert calls == []
+    assert response == {
+        "enabled": False,
+        "config_valid": True,
+        "uid": None,
+        "worker_id": None,
+        "leased_count": 0,
+        "processed_count": 0,
+        "skipped_count": 0,
+        "failed_count": 0,
+        "ack_failed_count": 0,
+        "actions": [],
+        "errors": [],
+    }
+
+
+def test_http_shim_enabled_malformed_config_denies_before_dependencies():
+    calls = []
+    app = entrypoint.create_v17_vector_repair_outbox_worker_app(
+        env={"V17_VECTOR_REPAIR_OUTBOX_WORKER_ENABLED": "true"},
+        dependency_builder=lambda env: calls.append("deps"),
+        tick_runner=lambda **kwargs: calls.append("tick"),
+    )
+
+    response = app.routes_by_path["/v17-vector-repair-outbox-worker/tick"]()
+
+    assert calls == []
+    assert response["config_valid"] is False
+    assert response["errors"] == [{"stage": "config", "error": "V17_VECTOR_REPAIR_OUTBOX_UID is required when enabled"}]
+
+
+def test_http_shim_enabled_uses_fake_dependencies_for_one_tick_summary():
+    calls = []
+    deps = entrypoint.V17VectorRepairOutboxProductionDependencies(
+        db_client=object(),
+        authoritative_item_loader=object(),
+        vector_deleter=object(),
+        vector_repairer=object(),
+    )
+
+    def fake_dependency_builder(env):
+        calls.append(("deps", dict(env)))
+        return deps
+
+    def fake_tick_runner(**kwargs):
+        calls.append(("tick", kwargs))
+        return {
+            "enabled": True,
+            "worker_id": "worker-http",
+            "uid": "u-http",
+            "leased_count": 1,
+            "processed_count": 1,
+            "skipped_count": 0,
+            "failed_count": 0,
+            "ack_failed_count": 0,
+            "actions": [{"record_id": "rec-http", "idempotency_key": "idem-http", "action": "repair"}],
+            "errors": [],
+        }
+
+    app = entrypoint.create_v17_vector_repair_outbox_worker_app(
+        env={
+            "V17_VECTOR_REPAIR_OUTBOX_WORKER_ENABLED": "true",
+            "V17_VECTOR_REPAIR_OUTBOX_UID": "u-http",
+            "V17_VECTOR_REPAIR_OUTBOX_WORKER_ID": "worker-http",
+        },
+        dependency_builder=fake_dependency_builder,
+        tick_runner=fake_tick_runner,
+    )
+
+    response = app.routes_by_path["/v17-vector-repair-outbox-worker/tick"]()
+
+    assert calls[0][0] == "deps"
+    assert calls[1][0] == "tick"
+    assert calls[1][1]["db_client"] is deps.db_client
+    assert response["config_valid"] is True
+    assert response["actions"] == [{"record_id": "rec-http", "idempotency_key": "idem-http", "action": "repair"}]
+
+
+def test_http_shim_dependency_failure_is_deterministic_summary_before_tick():
+    calls = []
+
+    def failing_dependency_builder(env):
+        calls.append(("deps", dict(env)))
+        raise ValueError("PINECONE_API_KEY is required when V17 vector repair worker is enabled")
+
+    app = entrypoint.create_v17_vector_repair_outbox_worker_app(
+        env={
+            "V17_VECTOR_REPAIR_OUTBOX_WORKER_ENABLED": "true",
+            "V17_VECTOR_REPAIR_OUTBOX_UID": "u-http",
+            "V17_VECTOR_REPAIR_OUTBOX_WORKER_ID": "worker-http",
+        },
+        dependency_builder=failing_dependency_builder,
+        tick_runner=lambda **kwargs: calls.append(("tick", kwargs)),
+    )
+
+    response = app.routes_by_path["/v17-vector-repair-outbox-worker/tick"]()
+
+    assert [call[0] for call in calls] == ["deps"]
+    assert response["config_valid"] is False
+    assert response["errors"] == [
+        {
+            "stage": "dependencies",
+            "error": "PINECONE_API_KEY is required when V17 vector repair worker is enabled",
+        }
+    ]
+
+
+def test_http_shim_documents_cloud_run_iam_oidc_enforcement_not_custom_auth():
+    source = entrypoint.__loader__.get_source(entrypoint.__name__)
+
+    assert "Cloud Run IAM (roles/run.invoker)" in source
+    assert "OIDC" in source
+    assert "custom shared secret" not in source
+    assert "V17_VECTOR_REPAIR_OUTBOX_UID" in source
+
+
 def test_production_dependency_resolver_builds_lazy_clients_and_loader_from_env():
     calls = []
     docs = {

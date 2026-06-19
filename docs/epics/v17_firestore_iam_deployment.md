@@ -92,7 +92,7 @@ Contract:
 
 ### Disabled-by-default Cloud Run/Tasks wrapper contract
 
-`backend/scripts/v17_vector_repair_outbox_worker_entrypoint.py` is the checked-in Cloud Run/Tasks wrapper contract for this tick. It is intentionally fake-injectable and does not create Cloud Tasks, Cloud Scheduler, Cloud Run Jobs, Firebase emulator processes, or Pinecone clients while disabled.
+`backend/scripts/v17_vector_repair_outbox_worker_entrypoint.py` is the checked-in Cloud Run/Tasks wrapper contract for this tick. It now exposes both the CLI smoke path and a minimal ASGI HTTP shim at `POST /v17-vector-repair-outbox-worker/tick`. It is intentionally fake-injectable and does not create Cloud Tasks, Cloud Scheduler, Cloud Run Jobs, Firebase emulator processes, or Pinecone clients while disabled.
 
 The wrapper now includes a narrow production dependency resolver, but the resolver is invoked only after `V17_VECTOR_REPAIR_OUTBOX_WORKER_ENABLED=true` and config validation. Disabled/default CLI smoke still does not initialize Pinecone, the embedding provider, or the Firestore client singleton.
 
@@ -102,13 +102,19 @@ Wrapper behavior:
 2. Fails closed/no-ops when `V17_VECTOR_REPAIR_OUTBOX_WORKER_ENABLED` is absent, empty, or `false`; a disabled invocation prints one deterministic JSON summary and does not lease records.
 3. Treats malformed booleans, missing enabled `uid`, missing enabled `worker_id`, and non-positive numeric bounds as config denial; it prints a deterministic JSON summary with `config_valid=false` and exits nonzero before calling the tick.
 4. When enabled and injected with production-safe dependencies, invokes exactly one `run_v17_vector_repair_outbox_worker_tick(...)` for one explicit uid and stable lease owner. There is no unbounded production scan and no client-supplied arbitrary uid execution.
-5. Prints one JSON object suitable for Cloud Run/Tasks logs. Unit tests cover disabled no-op, malformed config denial, required uid/lease-owner denial, enabled fake tick summary, worker/action failure summary, dependency resolver invocation, missing dependency config denial before lease, and no scheduler enqueue side effects.
+5. Prints/returns one JSON object suitable for Cloud Run/Tasks logs. Unit tests cover disabled no-op, malformed config denial, required uid/lease-owner denial, enabled fake tick summary, worker/action failure summary, dependency resolver invocation, missing dependency config denial before lease, HTTP shim disabled no-op, HTTP shim config/dependency denial, HTTP shim fake enabled tick, and no scheduler enqueue side effects.
 6. Production dependency resolution requires `PINECONE_API_KEY`, `PINECONE_INDEX_NAME`, and `OPENAI_API_KEY`; constructs Admin Firestore from `database._client.db`; loads authoritative `users/{uid}/memory_items/{memory_id}` as `V17MemoryItem`; and wraps Pinecone `index.delete`/`index.upsert` plus `utils.llm.clients.embeddings.embed_query` through the explicit `ns2` adapter seam.
 
-Proposed disabled command shape (not yet applied):
+Disabled CLI smoke command shape:
 
 ```bash
 python3 backend/scripts/v17_vector_repair_outbox_worker_entrypoint.py
+```
+
+Proposed disabled Cloud Run service command shape (not yet applied):
+
+```bash
+uvicorn scripts.v17_vector_repair_outbox_worker_entrypoint:app --host 0.0.0.0 --port 8080
 ```
 
 Proposed env contract (not yet enabled):
@@ -129,12 +135,13 @@ V17_VECTOR_REPAIR_PINECONE_NAMESPACE=ns2
 Proposed Cloud Run/Tasks deployment shape (not yet applied):
 
 ```text
-service/job: v17-vector-repair-outbox-worker
-trigger: Cloud Scheduler or Cloud Tasks HTTP/job tick, disabled by default; OIDC-authenticated if HTTP-triggered
+service: v17-vector-repair-outbox-worker
+trigger: Cloud Scheduler or Cloud Tasks HTTP POST /v17-vector-repair-outbox-worker/tick, disabled by default; OIDC-authenticated at Cloud Run IAM/platform layer
 identity: dedicated backend worker service account with Firestore Admin/Datastore User read-write on users/*/memory_outbox and read on authoritative V17 memory item state; Pinecone credentials scoped to ns2-compatible vector delete/upsert only
 config/env: wrapper env above, with V17_VECTOR_REPAIR_OUTBOX_WORKER_ENABLED=false until production gates pass
 input: explicit uid shard/list source must be server-owned; no client-supplied arbitrary uid execution
 output/telemetry: monotonic counters for leased/processed/skipped/failed/ack_failed/action=delete|repair/dead_letter plus bounded error classes; alerts on dead_letter growth, ack failures, Pinecone failures, and stale-vector backlog age
+auth: Cloud Run IAM (roles/run.invoker) plus Scheduler/Tasks OIDC serviceAccountEmail/audience; the app shim intentionally has no app-level bearer token
 ```
 
 ### Cloud Run/Tasks/Scheduler static deployment contract and OIDC/IAM proof artifact
@@ -150,11 +157,11 @@ output/telemetry: monotonic counters for leased/processed/skipped/failed/ack_fai
 - Server-owned uid-shard placeholders only; clients must not select arbitrary uid execution.
 - Explicit proof commands and pass/fail criteria to run later with `gcloud`/Firebase against the target project.
 
-Important readiness caveat: the current Python worker entrypoint is a CLI one-tick wrapper. The contract records the intended HTTP/OIDC Cloud Run/Tasks shape, but an HTTP shim such as `POST /v17-vector-repair-outbox-worker/tick` must exist before applying the Service/Tasks/Scheduler resources. Because that shim and cloud project credentials are not present in this local slice, no Cloud Run service, Cloud Tasks queue, Cloud Scheduler job, IAM binding, deployed rules validation, or Pinecone operation was created or claimed.
+Important readiness caveat: the executable trigger surface now matches the intended HTTP/OIDC Cloud Run/Tasks shape through `POST /v17-vector-repair-outbox-worker/tick`, but OIDC is still enforced by Cloud Run IAM/platform configuration rather than local test credentials. Because no cloud project credentials were used in this local slice, no Cloud Run service, Cloud Tasks queue, Cloud Scheduler job, IAM binding, deployed rules validation, or Pinecone operation was created or claimed.
 
 Remaining deployment gates before enabling this contract in production:
 
-- Add/validate the HTTP shim or choose a Cloud Run Job + OAuth trigger pattern; do not apply the HTTP Cloud Tasks/Scheduler shape until the executable entrypoint matches the trigger.
+- Run the disabled Cloud Run/Tasks HTTP shim through the OIDC/IAM proof commands in a target project before unpausing Scheduler or enabling the worker.
 - Run the OIDC/IAM proof commands from `docs/epics/v17_vector_repair_outbox_cloud_deployment_contract.yaml` against the target project and attach output to the rollout ticket.
 - Production Firestore IAM and deployed Security Rules validation in the target Firebase project.
 - Production-safe uid sharding/backlog discovery and worker identity ownership model.

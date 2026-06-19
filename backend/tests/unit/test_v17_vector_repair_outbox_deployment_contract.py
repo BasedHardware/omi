@@ -4,8 +4,9 @@ REQUIRED_CONTRACT_TERMS = [
     "apiVersion: serving.knative.dev/v1",
     "kind: Service",
     "v17-vector-repair-outbox-worker",
-    "python3",
-    "backend/scripts/v17_vector_repair_outbox_worker_entrypoint.py",
+    "uvicorn",
+    "scripts.v17_vector_repair_outbox_worker_entrypoint:app",
+    "POST /v17-vector-repair-outbox-worker/tick",
     "V17_VECTOR_REPAIR_OUTBOX_WORKER_ENABLED",
     "value: \"false\"",
     "V17_VECTOR_REPAIR_OUTBOX_UID",
@@ -29,6 +30,8 @@ REQUIRED_CONTRACT_TERMS = [
     "roles/datastore.user",
     "disabled-by-default",
     "not applied",
+    "Cloud Run IAM (roles/run.invoker)",
+    "no app-level bearer token",
 ]
 
 FORBIDDEN_CLAIMS = [
@@ -59,3 +62,5 @@ def test_v17_vector_repair_outbox_cloud_deployment_contract_is_disabled_and_oidc
     assert "uri: https://REGION-PROJECT_ID.run.app/v17-vector-repair-outbox-worker/tick" in contract
     assert "V17_VECTOR_REPAIR_OUTBOX_WORKER_ENABLED=true" in contract
     assert "Do not set the true value until all production gates pass" in contract
+    assert "CLI one-tick entrypoint" not in contract
+    assert "must exist before applying the Service/Tasks shape" not in contract
