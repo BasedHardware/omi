@@ -1,0 +1,199 @@
+#!/usr/bin/env python3
+"""Safe Oracle P1-3 `/v3` external compatibility readiness inventory.
+
+This runner is intentionally proof-only. It does not import FastAPI routers, read
+Firestore, call providers, mutate state, run production traffic, or claim approval.
+It pins the exact `/v3` route surfaces and remaining compatibility gaps that must
+be resolved before external V17 rollout can be approved.
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+from typing import Any
+
+V3_SURFACES = [
+    {
+        "surface_id": "list_default_memories",
+        "route": "GET /v3/memories",
+        "source_file": "backend/routers/memories.py",
+        "handler": "get_memories",
+        "current_read_source": "legacy users/{uid}/memories via database.memories.get_memories",
+        "v17_gap": "No route-local V17 rollout decision/read seam or source metadata contract is wired here yet.",
+        "status": "BLOCKED",
+        "evidence": [],
+    },
+    {
+        "surface_id": "create_memory",
+        "route": "POST /v3/memories",
+        "source_file": "backend/routers/memories.py",
+        "handler": "create_memory",
+        "current_read_source": "legacy users/{uid}/memories write plus vector upsert",
+        "v17_gap": "External write convergence/dual-write semantics are not proven for V17 memory_items.",
+        "status": "BLOCKED",
+        "evidence": [],
+    },
+    {
+        "surface_id": "batch_create_memory",
+        "route": "POST /v3/memories/batch",
+        "source_file": "backend/routers/memories.py",
+        "handler": "create_memories_batch",
+        "current_read_source": "legacy users/{uid}/memories batch write plus vector upsert",
+        "v17_gap": "Batch write convergence and rollback semantics are not proven for V17 memory_items.",
+        "status": "BLOCKED",
+        "evidence": [],
+    },
+    {
+        "surface_id": "edit_memory",
+        "route": "PATCH /v3/memories/{memory_id}",
+        "source_file": "backend/routers/memories.py",
+        "handler": "edit_memory",
+        "current_read_source": "legacy users/{uid}/memories validation/edit plus vector re-upsert",
+        "v17_gap": "V17 edit/update convergence and no unsafe fallback after V17 writes are not proven.",
+        "status": "BLOCKED",
+        "evidence": [],
+    },
+    {
+        "surface_id": "delete_memory",
+        "route": "DELETE /v3/memories/{memory_id}",
+        "source_file": "backend/routers/memories.py",
+        "handler": "delete_memory",
+        "current_read_source": "legacy users/{uid}/memories validation/delete plus vector delete",
+        "v17_gap": "V17 tombstone/delete/account-generation convergence is not proven for external callers.",
+        "status": "BLOCKED",
+        "evidence": [],
+    },
+    {
+        "surface_id": "missing_read_endpoint_gap",
+        "route": "GET /v3/memories/{memory_id}",
+        "source_file": "backend/routers/memories.py",
+        "handler": None,
+        "current_read_source": "not registered in backend/routers/memories.py",
+        "v17_gap": "No single-memory external read route is available to prove read/list shape parity.",
+        "status": "NOT_RUN",
+        "evidence": [],
+    },
+    {
+        "surface_id": "missing_search_endpoint_gap",
+        "route": "GET /v3/memories/search",
+        "source_file": "backend/routers/memories.py",
+        "handler": None,
+        "current_read_source": "not registered in backend/routers/memories.py",
+        "v17_gap": "No `/v3` semantic search route is available to prove list/search shape parity.",
+        "status": "NOT_RUN",
+        "evidence": [],
+    },
+]
+
+REMAINING_GAPS = [
+    {
+        "gap_id": "disabled_malformed_no_grant_semantics",
+        "status": "BLOCKED",
+        "route_refs": ["GET /v3/memories"],
+        "required_proof": "Decide and test whether disabled, malformed, missing, or no-grant rollout returns legacy-safe, empty, or explicit denial for `/v3`; do not allow implicit unsafe legacy fallback after V17-write states.",
+        "approval_claimed": False,
+        "evidence": [],
+    },
+    {
+        "gap_id": "enabled_empty_semantics",
+        "status": "BLOCKED",
+        "route_refs": ["GET /v3/memories"],
+        "required_proof": "When V17 default reads are explicitly enabled and `memory_items` is empty, prove `/v3` returns an empty V17 result without falling back to stale legacy rows.",
+        "approval_claimed": False,
+        "evidence": [],
+    },
+    {
+        "gap_id": "response_shape_source_metadata",
+        "status": "BLOCKED",
+        "route_refs": ["GET /v3/memories"],
+        "required_proof": "Define and test additive V17/default policy and source metadata in the external MemoryDB-compatible response shape without silently fabricating category/review/manual/edit fields.",
+        "approval_claimed": False,
+        "evidence": [],
+    },
+    {
+        "gap_id": "archive_default_unavailable",
+        "status": "BLOCKED",
+        "route_refs": ["GET /v3/memories"],
+        "required_proof": "Prove Archive tier is default-unavailable for `/v3` unless an explicit Archive-capable product decision exists.",
+        "approval_claimed": False,
+        "evidence": [],
+    },
+    {
+        "gap_id": "category_filter_compatibility",
+        "status": "NOT_RUN",
+        "route_refs": ["GET /v3/memories"],
+        "required_proof": "`/v3` currently exposes limit/offset only; category/filter compatibility needs a product/API decision and fixtures before runtime changes.",
+        "approval_claimed": False,
+        "evidence": [],
+    },
+    {
+        "gap_id": "unsafe_legacy_fallback_after_v17_writes",
+        "status": "BLOCKED",
+        "route_refs": [
+            "POST /v3/memories",
+            "POST /v3/memories/batch",
+            "PATCH /v3/memories/{memory_id}",
+            "DELETE /v3/memories/{memory_id}",
+        ],
+        "required_proof": "External create/edit/delete must have a durable V17 convergence plan before `/v3` read fallback semantics can be broadened.",
+        "approval_claimed": False,
+        "evidence": [],
+    },
+    {
+        "gap_id": "cursor_pagination_stability",
+        "status": "NOT_RUN",
+        "route_refs": ["GET /v3/memories"],
+        "required_proof": "Current `/v3` uses limit/offset with a first-page limit override; stable V17 cursor pagination remains unproven.",
+        "approval_claimed": False,
+        "evidence": [],
+    },
+]
+
+
+def build_report(*, execute: bool = False) -> dict[str, Any]:
+    return {
+        "artifact": "v17_p1_3_v3_external_compatibility_readiness",
+        "status": "BLOCKED",
+        "execute": execute,
+        "read_only": True,
+        "mutation_allowed": False,
+        "network_or_provider_calls_executed": False,
+        "provider_calls_executed": False,
+        "firestore_reads_executed": False,
+        "firestore_writes_executed": False,
+        "benchmark_evidence_collected": False,
+        "production_rollout_approved": False,
+        "approval_claimed": False,
+        "scope": "Oracle P1-3 `/v3` external compatibility readiness only; no runtime behavior changed.",
+        "v3_surfaces": V3_SURFACES,
+        "remaining_gaps": REMAINING_GAPS,
+        "non_claims": [
+            "No production traffic executed.",
+            "No Firestore, Pinecone, cloud, provider, or network calls executed.",
+            "No Firestore reads or writes executed.",
+            "No benchmark evidence collected.",
+            "No telemetry sink integration claimed.",
+            "No external rollout approval claimed.",
+        ],
+        "summary": {
+            "status": "BLOCKED",
+            "surface_count": len(V3_SURFACES),
+            "gap_count": len(REMAINING_GAPS),
+            "read_only": True,
+            "mutation_allowed": False,
+            "approval_claimed": False,
+        },
+    }
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--execute", action="store_true", help="Emit the same safe report with execute=true")
+    args = parser.parse_args()
+    print(json.dumps(build_report(execute=args.execute), indent=2, sort_keys=True))
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
