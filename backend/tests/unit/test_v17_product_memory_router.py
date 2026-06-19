@@ -60,8 +60,9 @@ import routers.v17_memory_product as v17_memory_product
 
 
 class _Snapshot:
-    def __init__(self, data=None):
+    def __init__(self, data=None, exists=True):
         self._data = data
+        self.exists = exists
 
     def to_dict(self):
         return dict(self._data or {})
@@ -85,10 +86,31 @@ class _FirestoreFake:
     def __init__(self, docs=None):
         self.docs = docs or {}
         self.collection_paths = []
+        self.document_paths = []
 
     def collection(self, path):
         self.collection_paths.append(path)
         return _CollectionRef(self, path)
+
+    def document(self, path):
+        self.document_paths.append(path)
+        return _DocumentRef(self, path)
+
+
+class _DocumentRef:
+    def __init__(self, db_client, path):
+        self._db_client = db_client
+        self.path = path
+
+    def get(self):
+        data = self._db_client.docs.get(self.path)
+        return _Snapshot(data, exists=data is not None)
+
+
+class _VectorCandidateResult:
+    def __init__(self, hits, rejected_count=0):
+        self.hits = hits
+        self.rejected_count = rejected_count
 
 
 def _evidence(source_id='conv1'):
@@ -146,6 +168,13 @@ def test_product_router_registers_concrete_default_v17_search_route():
 def test_product_router_registers_capability_gated_archive_search_route():
     assert any(
         method == "GET" and path == "/v17/memory/archive/search"
+        for method, path, _kwargs, _func in v17_memory_product.router.routes
+    )
+
+
+def test_product_router_registers_concrete_default_v17_vector_search_route():
+    assert any(
+        method == "GET" and path == "/v17/memory/vector/search"
         for method, path, _kwargs, _func in v17_memory_product.router.routes
     )
 
@@ -246,4 +275,85 @@ def test_archive_search_endpoint_requires_explicit_capability_and_only_returns_a
     assert response['policy']['archive_capability'] is True
     assert response['archive_capability_required'] is True
     assert response['archive_capability_granted'] is True
+    assert response['archive_default_visible'] is False
+
+
+def test_vector_search_endpoint_requires_persisted_rollout_before_vector_or_memory_item_reads(monkeypatch):
+    db_client = _FirestoreFake({})
+    vector_query = MagicMock()
+    monkeypatch.setattr(v17_memory_product, "db", db_client)
+
+    try:
+        v17_memory_product.search_v17_vector_memory(query='coffee', limit=10, uid='u1', vector_query=vector_query)
+    except _HTTPException as exc:
+        assert exc.status_code == 403
+        assert exc.detail['fallback_reason'] == 'missing_rollout_state'
+    else:
+        raise AssertionError('expected disabled persisted rollout to fail closed')
+
+    assert db_client.document_paths == ['users/u1/memory_control/state']
+    assert db_client.collection_paths == []
+    vector_query.assert_not_called()
+
+
+def test_vector_search_endpoint_uses_persisted_default_policy_and_excludes_stale_short_term_and_archive(monkeypatch):
+    from models.v17_memory_search_gateway import SearchMode, SearchVectorHit
+
+    now = datetime(2026, 6, 19, 12, 0, tzinfo=timezone.utc)
+    fresh_short_term = _memory_item('fresh-short-term', now=now, content='coffee fresh short term')
+    stale_short_term = _memory_item(
+        'stale-short-term', now=now, captured_at=now - timedelta(days=45), content='coffee stale short term'
+    )
+    long_term = _memory_item('long-term', tier=MemoryTier.long_term, now=now, content='coffee long term')
+    archive = _memory_item('archive', tier=MemoryTier.archive, now=now, content='coffee archived memory')
+    db_client = _FirestoreFake(
+        {
+            'users/u1/memory_control/state': {
+                'uid': 'u1',
+                'mode': 'read',
+                'fallback_projection_ready': True,
+                'stage_gates': {'shadow': 'passed', 'write': 'passed', 'read': 'passed'},
+                'grants': {'omi_chat': {'default_memory': True}},
+            },
+            **{
+                f'users/u1/memory_items/{item.memory_id}': _stored_item(item)
+                for item in [stale_short_term, archive, fresh_short_term, long_term]
+            },
+        }
+    )
+    monkeypatch.setattr(v17_memory_product, "db", db_client)
+
+    def hit(item, score):
+        return SearchVectorHit(
+            memory_id=item.memory_id,
+            score=score,
+            projection_commit_id='projection-1',
+            vector_updated_at=item.updated_at + timedelta(minutes=1),
+            uid=item.uid,
+        )
+
+    vector_calls = []
+
+    def fake_vector_query(uid, query, *, mode, limit):
+        vector_calls.append({'uid': uid, 'query': query, 'mode': mode, 'limit': limit})
+        return _VectorCandidateResult(
+            hits=[hit(stale_short_term, 0.99), hit(archive, 0.98), hit(long_term, 0.90), hit(fresh_short_term, 0.80)],
+            rejected_count=1,
+        )
+
+    response = v17_memory_product.search_v17_vector_memory(
+        query='coffee', limit=10, uid='u1', vector_query=fake_vector_query
+    )
+
+    assert db_client.document_paths == ['users/u1/memory_control/state']
+    assert db_client.collection_paths == ['users/u1/memory_items']
+    assert vector_calls == [{'uid': 'u1', 'query': 'coffee', 'mode': SearchMode.default, 'limit': 10}]
+    assert [item['memory_id'] for item in response['items']] == ['long-term', 'fresh-short-term']
+    assert response['scores_by_memory_id'] == {'long-term': 0.9, 'fresh-short-term': 0.8}
+    assert response['decisions']['stale-short-term'] == 'access_denied'
+    assert response['decisions']['archive'] == 'access_denied'
+    assert response['policy']['consumer'] == 'omi_chat'
+    assert response['policy']['archive_capability'] is False
+    assert response['rollout']['enabled'] is True
+    assert response['vector_rejected_count'] == 1
     assert response['archive_default_visible'] is False
