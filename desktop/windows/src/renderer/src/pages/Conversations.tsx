@@ -4,16 +4,20 @@ import {
   CalendarDays,
   Check,
   CheckSquare,
+  Clipboard,
   Folder,
+  FolderPlus,
   GanttChartSquare,
   LayoutList,
   MessageSquare,
   Mic,
+  Pencil,
   Radio,
   Search,
   Share2,
   Star,
-  Trash2
+  Trash2,
+  X
 } from 'lucide-react'
 import { omiApi } from '../lib/apiClient'
 import {
@@ -142,26 +146,56 @@ function ConversationSkeleton(): React.JSX.Element {
 
 function CompactRow({
   r,
-  onToggleStar
+  editingId,
+  editTitle,
+  onToggleStar,
+  onStartEdit,
+  onEditChange,
+  onCommitEdit,
+  onCancelEdit,
+  onCopy,
+  onDeleteSingle
 }: {
   r: ConversationRow
+  editingId: string | null
+  editTitle: string
   onToggleStar: (id: string, current: boolean) => Promise<void>
+  onStartEdit: (id: string, title: string) => void
+  onEditChange: (v: string) => void
+  onCommitEdit: (id: string) => void
+  onCancelEdit: () => void
+  onCopy: (r: ConversationRow) => void
+  onDeleteSingle: (id: string) => void
 }): React.JSX.Element {
+  const isEditing = editingId === r.id
   return (
     <div className="surface-card-interactive group relative flex items-center overflow-hidden">
       <Link
         to={`/conversations/${r.id}`}
-        className="flex min-w-0 flex-1 items-center gap-3 px-4 py-3"
+        className={`flex min-w-0 flex-1 items-center gap-3 px-4 py-3 ${isEditing ? 'pointer-events-none' : ''}`}
       >
-        {/* Emoji badge — matches macOS RoundedRectangle(cornerRadius: 12) emoji container */}
         <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white/[0.07] text-base leading-none ring-1 ring-inset ring-white/[0.06]">
           {r.emoji || '💬'}
         </div>
-        {/* Title + meta */}
         <div className="min-w-0 flex-1">
-          <p className="truncate text-sm font-medium text-white/90">
-            {r.title || <span className="italic text-text-tertiary">loading…</span>}
-          </p>
+          {isEditing ? (
+            <input
+              autoFocus
+              value={editTitle}
+              onChange={(e) => onEditChange(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') { e.preventDefault(); onCommitEdit(r.id) }
+                if (e.key === 'Escape') onCancelEdit()
+              }}
+              onBlur={() => onCommitEdit(r.id)}
+              onClick={(e) => e.preventDefault()}
+              className="w-full rounded bg-white/10 px-1.5 py-0.5 text-sm text-white focus:outline-none focus:ring-1 focus:ring-white/30"
+            />
+          ) : (
+            <p className="truncate text-sm font-medium text-white/90">
+              {r.title || <span className="italic text-text-tertiary">loading…</span>}
+            </p>
+          )}
           <p className="mt-0.5 truncate text-xs text-white/40">
             {formatConversationTs(r.sortAt)}
             {r.localKind === 'chat' && <span className="ml-1.5 text-white/25">· Chat</span>}
@@ -171,20 +205,41 @@ function CompactRow({
           </p>
         </div>
       </Link>
-      {/* Star — always on right, amber when starred, reveals on hover when not */}
-      {r.source === 'cloud' && (
+      {/* Row action buttons — revealed on hover */}
+      <div className="mr-2 flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
         <button
-          onClick={() => void onToggleStar(r.id, r.starred ?? false)}
-          title={r.starred ? 'Unstar' : 'Star'}
-          className={`mr-3 shrink-0 rounded-md p-1.5 transition-all ${
-            r.starred
-              ? 'text-amber-400'
-              : 'text-white/0 group-hover:text-white/30 hover:!text-amber-400/70'
-          }`}
+          onClick={(e) => { e.preventDefault(); onStartEdit(r.id, r.title) }}
+          title="Edit title"
+          className="rounded-md p-1.5 text-white/30 hover:text-white/80"
         >
-          <Star className="h-3.5 w-3.5" fill={r.starred ? 'currentColor' : 'none'} />
+          <Pencil className="h-3.5 w-3.5" />
         </button>
-      )}
+        <button
+          onClick={(e) => { e.preventDefault(); onCopy(r) }}
+          title="Copy preview"
+          className="rounded-md p-1.5 text-white/30 hover:text-white/80"
+        >
+          <Clipboard className="h-3.5 w-3.5" />
+        </button>
+        <button
+          onClick={(e) => { e.preventDefault(); onDeleteSingle(r.id) }}
+          title="Delete"
+          className="rounded-md p-1.5 text-white/30 hover:text-red-400"
+        >
+          <Trash2 className="h-3.5 w-3.5" />
+        </button>
+        {r.source === 'cloud' && (
+          <button
+            onClick={(e) => { e.preventDefault(); void onToggleStar(r.id, r.starred ?? false) }}
+            title={r.starred ? 'Unstar' : 'Star'}
+            className={`rounded-md p-1.5 transition-colors ${
+              r.starred ? 'text-amber-400' : 'text-white/30 hover:text-amber-400/70'
+            }`}
+          >
+            <Star className="h-3.5 w-3.5" fill={r.starred ? 'currentColor' : 'none'} />
+          </button>
+        )}
+      </div>
     </div>
   )
 }
@@ -202,6 +257,8 @@ export function Conversations(): React.JSX.Element {
   const [showDateMenu, setShowDateMenu] = useState(false)
   const [folderId, setFolderId] = useState<string | null>(null)
   const [folders, setFolders] = useState<FolderItem[]>([])
+  const [creatingFolder, setCreatingFolder] = useState(false)
+  const [newFolderName, setNewFolderName] = useState('')
   const [compact, setCompact] = useState(() => localStorage.getItem('conv-compact') === 'true')
   const [selectMode, setSelectMode] = useState(false)
   const [selected, setSelected] = useState<Set<string>>(new Set())
@@ -210,6 +267,9 @@ export function Conversations(): React.JSX.Element {
     null
   )
   const pendingTimeoutRef = useRef<number | null>(null)
+  // Inline title edit
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [editTitle, setEditTitle] = useState('')
   // Stable ref so loadAll / subscriptions always see the current folderId
   const folderIdRef = useRef<string | null>(null)
   folderIdRef.current = folderId
@@ -324,6 +384,65 @@ export function Conversations(): React.JSX.Element {
       await omiApi.patch(`/v1/conversations/${id}/starred`, null, { params: { starred: next } })
     } catch {
       setRows((rs) => rs.map((r) => (r.id === id ? { ...r, starred: current } : r)))
+    }
+  }
+
+  const startEdit = (id: string, title: string): void => {
+    setEditingId(id)
+    setEditTitle(title)
+  }
+  const cancelEdit = (): void => setEditingId(null)
+  const commitEdit = async (id: string): Promise<void> => {
+    const newTitle = editTitle.trim()
+    setEditingId(null)
+    if (!newTitle) return
+    const row = rows.find((r) => r.id === id)
+    if (!row || newTitle === row.title) return
+    setRows((rs) => rs.map((r) => (r.id === id ? { ...r, title: newTitle } : r)))
+    try {
+      if (row.source === 'local') {
+        await window.omi.updateLocalConversationTitle(id, newTitle)
+      } else {
+        await omiApi.patch(`/v1/conversations/${id}`, { title: newTitle })
+      }
+    } catch {
+      setRows((rs) => rs.map((r) => (r.id === id ? { ...r, title: row.title } : r)))
+    }
+  }
+
+  const copyRow = (r: ConversationRow): void => {
+    void navigator.clipboard.writeText(`${r.title}\n\n${r.preview}`)
+  }
+
+  const doDeleteSingle = (id: string): void => {
+    const timeout = window.setTimeout(() => {
+      setPendingDelete(null)
+      void executeDeletion([id])
+    }, 5000)
+    pendingTimeoutRef.current = timeout
+    setPendingDelete({ ids: [id], timeout })
+  }
+
+  const createFolder = async (): Promise<void> => {
+    const name = newFolderName.trim()
+    if (!name) { setCreatingFolder(false); return }
+    setCreatingFolder(false)
+    setNewFolderName('')
+    try {
+      const res = await omiApi.post<FolderItem>('/v1/folders', { name, color: '#6B7280' })
+      if (res.data) setFolders((f) => [...f, res.data])
+    } catch { /* silent fail */ }
+  }
+
+  const deleteFolder = async (id: string): Promise<void> => {
+    setFolders((f) => f.filter((x) => x.id !== id))
+    if (folderId === id) setFolderId(null)
+    try {
+      await omiApi.delete(`/v1/folders/${id}`)
+    } catch {
+      // Restore on failure — reload from server
+      const res = await omiApi.get<FolderItem[]>('/v1/folders').catch(() => null)
+      if (res?.data) setFolders(res.data)
     }
   }
 
@@ -535,9 +654,9 @@ export function Conversations(): React.JSX.Element {
         </button>
       </div>
 
-      {/* Folder tab strip — only shown when user has folders */}
-      {folders.length > 0 && (
-        <div className="flex items-center gap-1.5 overflow-x-auto px-6 pb-2 lg:px-10 [scrollbar-width:none]">
+      {/* Folder tab strip — always shown so "+" button is accessible */}
+      <div className="flex items-center gap-1.5 overflow-x-auto px-6 pb-2 lg:px-10 [scrollbar-width:none]">
+        {folders.length > 0 && (
           <button
             onClick={() => setFolderId(null)}
             className={`flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium transition-all ${
@@ -549,11 +668,12 @@ export function Conversations(): React.JSX.Element {
             <Folder className="h-3 w-3" />
             All
           </button>
-          {folders.map((f) => (
+        )}
+        {folders.map((f) => (
+          <div key={f.id} className="group/folder relative flex shrink-0 items-center">
             <button
-              key={f.id}
               onClick={() => setFolderId(f.id === folderId ? null : f.id)}
-              className={`flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium transition-all ${
+              className={`flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1 pr-6 text-xs font-medium transition-all ${
                 folderId === f.id
                   ? 'bg-white/15 text-white'
                   : 'text-white/45 hover:bg-white/5 hover:text-white/70'
@@ -568,9 +688,41 @@ export function Conversations(): React.JSX.Element {
                 <span className="text-white/25">{f.conversation_count}</span>
               )}
             </button>
-          ))}
-        </div>
-      )}
+            {/* Delete folder — revealed on hover */}
+            <button
+              onClick={() => void deleteFolder(f.id)}
+              title={`Delete folder "${f.name}"`}
+              className="absolute right-1 rounded-full p-0.5 text-white/0 transition-colors group-hover/folder:text-white/40 group-hover/folder:hover:text-white/80"
+            >
+              <X className="h-3 w-3" />
+            </button>
+          </div>
+        ))}
+        {/* Create folder inline */}
+        {creatingFolder ? (
+          <input
+            autoFocus
+            value={newFolderName}
+            onChange={(e) => setNewFolderName(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') { e.preventDefault(); void createFolder() }
+              if (e.key === 'Escape') { setCreatingFolder(false); setNewFolderName('') }
+            }}
+            onBlur={() => void createFolder()}
+            placeholder="Folder name…"
+            className="w-28 rounded-full bg-white/10 px-3 py-1 text-xs text-white focus:outline-none focus:ring-1 focus:ring-white/30"
+          />
+        ) : (
+          <button
+            onClick={() => setCreatingFolder(true)}
+            title="New folder"
+            className="flex shrink-0 items-center gap-1 rounded-full px-2 py-1 text-xs text-white/30 transition-colors hover:bg-white/5 hover:text-white/60"
+          >
+            <FolderPlus className="h-3.5 w-3.5" />
+            <span className="hidden sm:inline">New folder</span>
+          </button>
+        )}
+      </div>
 
       {/* Select mode action bar */}
       {selectMode && (
@@ -700,49 +852,91 @@ export function Conversations(): React.JSX.Element {
               if (compact) {
                 return (
                   <li key={r.id}>
-                    <CompactRow r={r} onToggleStar={toggleStar} />
+                    <CompactRow
+                      r={r}
+                      editingId={editingId}
+                      editTitle={editTitle}
+                      onToggleStar={toggleStar}
+                      onStartEdit={startEdit}
+                      onEditChange={setEditTitle}
+                      onCommitEdit={(id) => void commitEdit(id)}
+                      onCancelEdit={cancelEdit}
+                      onCopy={copyRow}
+                      onDeleteSingle={doDeleteSingle}
+                    />
                   </li>
                 )
               }
 
               // Expanded mode — title + improved timestamp + preview
+              const isEditingThis = editingId === r.id
               return (
                 <li key={r.id}>
                   <div className="surface-card-interactive group relative block">
-                    {r.source === 'cloud' && (
+                    {/* Hover action buttons — top-right */}
+                    <div className="absolute right-3 top-3 flex items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
                       <button
-                        onClick={(e) => {
-                          e.preventDefault()
-                          void toggleStar(r.id, r.starred ?? false)
-                        }}
-                        title={r.starred ? 'Unstar' : 'Star'}
-                        className={`absolute right-3 top-3 rounded-md p-1.5 transition-all ${
-                          r.starred
-                            ? 'text-amber-400'
-                            : 'text-white/0 group-hover:text-white/35 hover:!text-white/70'
-                        }`}
+                        onClick={(e) => { e.preventDefault(); startEdit(r.id, r.title) }}
+                        title="Edit title"
+                        className="rounded-md p-1.5 text-white/30 hover:text-white/80"
                       >
-                        <Star
-                          className="h-3.5 w-3.5"
-                          fill={r.starred ? 'currentColor' : 'none'}
-                        />
+                        <Pencil className="h-3.5 w-3.5" />
                       </button>
-                    )}
-                    <Link to={`/conversations/${r.id}`} className="block p-5">
-                      <div className="flex items-start justify-between gap-3 pr-6">
-                        <div className="font-display text-base font-semibold leading-tight text-text-primary">
-                          {r.emoji && <span className="mr-1.5">{r.emoji}</span>}
-                          {r.title || <span className="italic text-text-tertiary">loading…</span>}
-                        </div>
-                        {r.localKind === 'chat' ? (
+                      <button
+                        onClick={(e) => { e.preventDefault(); copyRow(r) }}
+                        title="Copy preview"
+                        className="rounded-md p-1.5 text-white/30 hover:text-white/80"
+                      >
+                        <Clipboard className="h-3.5 w-3.5" />
+                      </button>
+                      <button
+                        onClick={(e) => { e.preventDefault(); doDeleteSingle(r.id) }}
+                        title="Delete"
+                        className="rounded-md p-1.5 text-white/30 hover:text-red-400"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                      {r.source === 'cloud' && (
+                        <button
+                          onClick={(e) => { e.preventDefault(); void toggleStar(r.id, r.starred ?? false) }}
+                          title={r.starred ? 'Unstar' : 'Star'}
+                          className={`rounded-md p-1.5 transition-colors ${
+                            r.starred ? 'text-amber-400' : 'text-white/30 hover:text-amber-400/70'
+                          }`}
+                        >
+                          <Star className="h-3.5 w-3.5" fill={r.starred ? 'currentColor' : 'none'} />
+                        </button>
+                      )}
+                    </div>
+                    <Link to={`/conversations/${r.id}`} className={`block p-5 ${isEditingThis ? 'pointer-events-none' : ''}`}>
+                      <div className="flex items-start justify-between gap-3 pr-28">
+                        {isEditingThis ? (
+                          <input
+                            autoFocus
+                            value={editTitle}
+                            onChange={(e) => setEditTitle(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') { e.preventDefault(); void commitEdit(r.id) }
+                              if (e.key === 'Escape') cancelEdit()
+                            }}
+                            onBlur={() => void commitEdit(r.id)}
+                            onClick={(e) => e.preventDefault()}
+                            className="font-display w-full rounded bg-white/10 px-2 py-0.5 text-base font-semibold text-text-primary focus:outline-none focus:ring-1 focus:ring-white/30"
+                          />
+                        ) : (
+                          <div className="font-display text-base font-semibold leading-tight text-text-primary">
+                            {r.emoji && <span className="mr-1.5">{r.emoji}</span>}
+                            {r.title || <span className="italic text-text-tertiary">loading…</span>}
+                          </div>
+                        )}
+                        {!isEditingThis && (r.localKind === 'chat' ? (
                           <span className="badge shrink-0">Chat</span>
                         ) : (
                           r.source === 'local' && (
                             <span className="badge-warning shrink-0">Not synced</span>
                           )
-                        )}
+                        ))}
                       </div>
-                      {/* macOS-style timestamp for cloud rows; original subtitle for local (includes duration/count) */}
                       <div className="mt-1 text-xs text-text-quaternary">
                         {r.source === 'cloud' ? formatConversationTs(r.sortAt) : r.subtitle}
                       </div>
