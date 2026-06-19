@@ -27,6 +27,7 @@ REQUIRED_EXISTING_PROOF_KEYS = {
     "fastapi_route_contract_proof",
     "real_router_dependency_map_proof",
     "real_router_get_testclient_proof",
+    "get_dependency_auth_readiness_proof",
 }
 
 
@@ -101,6 +102,8 @@ def test_get_runtime_wiring_readiness_links_current_proofs_and_marks_runtime_evi
     )
     assert proofs["real_router_get_testclient_proof"]["runtime_wired"] is False
     assert proofs["real_router_get_testclient_proof"]["missing_real_service_runtime_evidence"] is True
+    assert proofs["get_dependency_auth_readiness_proof"]["controlled_testclient_under_stubs"] is True
+    assert proofs["get_dependency_auth_readiness_proof"]["runtime_wired"] is False
     assert proofs["real_router_dependency_map_proof"]["imports_real_router_under_stubs"] is True
     assert proofs["route_planner_proof"]["runtime_wired"] is False
     assert proofs["memory_read_service_proof"]["runtime_wired"] is False
@@ -142,7 +145,7 @@ def test_get_runtime_wiring_readiness_json_summary_is_stable():
         "proof_status": "BLOCKED",
         "remaining_gate_count": 9,
         "blocked_gate_count": 9,
-        "existing_local_proof_count": 12,
+        "existing_local_proof_count": 13,
         "missing_real_service_runtime_evidence_count": 9,
         "read_only": True,
         "mutation_allowed": False,
@@ -159,9 +162,12 @@ def test_get_runtime_wiring_readiness_is_registered_in_test_runner_and_docs():
     oracle_doc = (root.parent / "docs" / "epics" / "v17_t20_oracle_milestone_review.md").read_text(encoding="utf-8")
 
     assert "test_v17_p1_3_v3_get_runtime_wiring_readiness.py" in test_sh
+    assert "test_v17_p1_3_v3_get_dependency_auth_readiness.py" in test_sh
     assert "v17_p1_3_v3_get_runtime_wiring_readiness.py" in ticket_doc
+    assert "v17_p1_3_v3_get_dependency_auth_readiness.py" in ticket_doc
     assert "GET runtime-wiring remaining-gates readiness" in ticket_doc
     assert "v17_p1_3_v3_get_runtime_wiring_readiness.py" in oracle_doc
+    assert "v17_p1_3_v3_get_dependency_auth_readiness.py" in oracle_doc
     assert "GET runtime-wiring remaining-gates readiness" in oracle_doc
     assert "v17_p1_3_v3_get_runtime_wiring_readiness.py" in (
         root / "scripts" / "v17_p1_3_v3_external_compatibility_readiness.py"

@@ -1505,3 +1505,24 @@ Verification for this slice:
 - RED: `cd backend && env -u VIRTUAL_ENV PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin python3 -m pytest tests/unit/test_v17_p1_3_v3_get_runtime_wiring_readiness.py -q` -> `6 failed in 0.08s` before adding the runner/test.sh/docs/external-readiness link.
 - Focused GREEN and full verification outputs are recorded with the local commit summary for this slice.
 - Production rollout remains **BLOCKED / NO-GO** until all Oracle P0/P1 gates and required real-service evidence are complete.
+
+### 2026-06-19 — P1-3 `/v3` GET dependency/auth/rate-limit TestClient proof
+
+Added the next controlled route-level proof under stubs, without changing `backend/routers/memories.py` or the rollout verdict:
+
+- Added `backend/scripts/v17_p1_3_v3_get_dependency_auth_readiness.py`, which launches repo-managed `backend/venv/bin/python`, imports the real `routers.memories` only after explicit stubs, and builds minimal FastAPI apps without importing `backend/main.py`.
+- Added `backend/tests/unit/test_v17_p1_3_v3_get_dependency_auth_readiness.py` and registered it in `backend/test.sh`.
+- Linked `get_dependency_auth_readiness_proof` from both `backend/scripts/v17_p1_3_v3_external_compatibility_readiness.py` and `backend/scripts/v17_p1_3_v3_get_runtime_wiring_readiness.py`.
+- The proof records that current `GET /v3/memories` uses `auth.get_current_user_uid` (`utils.other.endpoints.get_current_user_uid` equivalent), has no current route-level rate-limit dependency, can be auth-overridden to a stub uid under TestClient, and is blocked in the controlled proof when the auth override is absent.
+- With auth override, the route still calls stubbed legacy `memories_db.get_memories(uid, limit, offset)`, preserving the non-enrolled legacy baseline. No V17 cohort/control dependency is present or invoked.
+- No runtime wiring, mutating route execution, real Firestore/Pinecone/cloud/provider/network call, benchmark, telemetry sink integration, Archive default visibility, stale Short-term default visibility, or approval is claimed.
+
+Verification for this slice:
+
+- RED: `cd backend && env -u VIRTUAL_ENV PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin python3 -m pytest tests/unit/test_v17_p1_3_v3_get_dependency_auth_readiness.py -q` -> `6 failed in 0.08s` before adding the runner/test.sh/docs/readiness links.
+- Focused GREEN: `cd backend && env -u VIRTUAL_ENV PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin python3 -m pytest tests/unit/test_v17_p1_3_v3_get_dependency_auth_readiness.py tests/unit/test_v17_p1_3_v3_external_compatibility_readiness.py tests/unit/test_v17_p1_3_v3_get_runtime_wiring_readiness.py -q` -> `21 passed in 1.51s`.
+- Venv proof: `venv/bin/python -m pytest tests/unit/test_v17_p1_3_v3_get_dependency_auth_readiness.py -q` -> `6 passed in 1.41s`; readiness summary `PARTIAL PARTIAL True True True True False 1 False False False`.
+- Normal-env focused `/v3` proof suite: `89 passed in 5.08s`; normal-env full V17 regression: `466 passed, 3 warnings in 8.63s`.
+- Readiness summaries: GET dependency/auth `PARTIAL PARTIAL True True True True False 1 False False False`; GET runtime-wiring `BLOCKED BLOCKED True False False False 9 13 8 4`; `/v3` external compatibility `BLOCKED True False False False False False False False 7 7 True`.
+- Async scan remains pre-existing `HIGH async helpers with blocking: 41`, `STRUCTURAL mixed await+sync DB: 10`; docs hygiene `docs_hygiene 16 BAD=[]`.
+- Production rollout remains **BLOCKED / NO-GO** until all Oracle P0/P1 gates and required real-service evidence are complete.

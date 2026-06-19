@@ -44,6 +44,7 @@ PROOF_CONSTANTS = {
     "fastapi_route_contract_proof": _EXTERNAL.FASTAPI_ROUTE_CONTRACT_PROOF,
     "real_router_dependency_map_proof": _EXTERNAL.REAL_ROUTER_DEPENDENCY_MAP_PROOF,
     "real_router_get_testclient_proof": _EXTERNAL.REAL_ROUTER_GET_TESTCLIENT_PROOF,
+    "get_dependency_auth_readiness_proof": _EXTERNAL.GET_DEPENDENCY_AUTH_READINESS_PROOF,
 }
 
 
@@ -140,6 +141,7 @@ REMAINING_GATES = [
             "fastapi_route_contract_proof",
             "real_router_dependency_map_proof",
             "real_router_get_testclient_proof",
+            "get_dependency_auth_readiness_proof",
         ],
         "missing_real_service_runtime_evidence": True,
         "required_before_runtime_change": True,

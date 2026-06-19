@@ -605,6 +605,24 @@ REAL_ROUTER_GET_TESTCLIENT_PROOF = {
     ],
 }
 
+GET_DEPENDENCY_AUTH_READINESS_PROOF = {
+    "service": "backend/scripts/v17_p1_3_v3_get_dependency_auth_readiness.py",
+    "test": "backend/tests/unit/test_v17_p1_3_v3_get_dependency_auth_readiness.py",
+    "runtime_wired": False,
+    "production_rollout_approved": False,
+    "external_calls": [],
+    "controlled_testclient_under_stubs": True,
+    "covered_defaults": [
+        "real_get_route_uses_auth_get_current_user_uid_dependency",
+        "minimal_fastapi_app_can_override_get_auth_dependency_to_stub_uid",
+        "get_without_auth_override_is_blocked_in_controlled_testclient_probe",
+        "current_get_route_has_no_rate_limit_dependency",
+        "get_with_auth_override_calls_stubbed_legacy_get_memories_for_non_enrolled_baseline",
+        "no_v17_cohort_control_dependency_present_or_invoked",
+        "no_main_app_startup_no_external_calls_no_mutations_no_runtime_cutover",
+    ],
+}
+
 GET_RUNTIME_WIRING_READINESS_PROOF = {
     "service": "backend/scripts/v17_p1_3_v3_get_runtime_wiring_readiness.py",
     "test": "backend/tests/unit/test_v17_p1_3_v3_get_runtime_wiring_readiness.py",
@@ -659,6 +677,7 @@ def build_report(*, execute: bool = False) -> dict[str, Any]:
         "fastapi_route_contract_proof": FASTAPI_ROUTE_CONTRACT_PROOF,
         "real_router_dependency_map_proof": REAL_ROUTER_DEPENDENCY_MAP_PROOF,
         "real_router_get_testclient_proof": REAL_ROUTER_GET_TESTCLIENT_PROOF,
+        "get_dependency_auth_readiness_proof": GET_DEPENDENCY_AUTH_READINESS_PROOF,
         "get_runtime_wiring_readiness_proof": GET_RUNTIME_WIRING_READINESS_PROOF,
         "non_claims": [
             "No production traffic executed.",
@@ -686,6 +705,7 @@ def build_report(*, execute: bool = False) -> dict[str, Any]:
             "fastapi_route_contract_proof_present": True,
             "real_router_dependency_map_proof_present": True,
             "real_router_get_testclient_proof_present": True,
+            "get_dependency_auth_readiness_proof_present": True,
             "read_only": True,
             "mutation_allowed": False,
             "approval_claimed": False,
