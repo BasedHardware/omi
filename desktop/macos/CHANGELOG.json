@@ -1,8 +1,13 @@
 {
-  "unreleased": [
-    "Fixed paid subscribers seeing a bogus \"Upgrade Required\" prompt when opening or using chat"
-  ],
+  "unreleased": [],
   "releases": [
+    {
+      "version": "0.11.474",
+      "date": "2026-06-19",
+      "changes": [
+        "Fixed paid subscribers seeing a bogus \"Upgrade Required\" prompt when opening or using chat"
+      ]
+    },
     {
       "version": "0.11.473",
       "date": "2026-06-19",
