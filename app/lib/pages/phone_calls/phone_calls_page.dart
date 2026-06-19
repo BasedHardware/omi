@@ -53,6 +53,7 @@ class _PhoneCallsPageState extends State<PhoneCallsPage> with SingleTickerProvid
   Future<void> _loadContacts() async {
     try {
       bool hasPermission = await FlutterContacts.requestPermission(readonly: true);
+      if (!mounted) return;
       if (!hasPermission) {
         setState(() {
           _permissionDenied = true;
@@ -65,12 +66,14 @@ class _PhoneCallsPageState extends State<PhoneCallsPage> with SingleTickerProvid
       contacts = contacts.where((c) => c.phones.isNotEmpty).toList();
       contacts.sort((a, b) => a.displayName.compareTo(b.displayName));
 
+      if (!mounted) return;
       setState(() {
         _contacts = contacts;
         _filteredContacts = contacts;
         _loadingContacts = false;
       });
     } catch (e) {
+      if (!mounted) return;
       setState(() {
         _loadingContacts = false;
       });
@@ -467,10 +470,7 @@ class _PhoneCallsPageState extends State<PhoneCallsPage> with SingleTickerProvid
       items: [
         PopupMenuItem<String>(
           value: 'paste',
-          child: Text(
-            context.l10n.paste,
-            style: const TextStyle(color: Colors.white),
-          ),
+          child: Text(context.l10n.paste, style: const TextStyle(color: Colors.white)),
         ),
       ],
     );
