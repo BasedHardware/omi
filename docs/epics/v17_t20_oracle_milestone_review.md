@@ -988,6 +988,25 @@ This closes only the local fake-injectable timeout/rate-limit control subpoint. 
 - Real load, recall, latency, malformed metadata, cross-user hit, expired Short-term, Archive, deleted/tombstoned source, duplicate revision, partial outage, and high-volume account benchmarks remain required.
 - Production rollout remains **BLOCKED / NO-GO** until all Oracle P0s and required real-service evidence are complete.
 
+### 2026-06-19 — P0-7 V17 vector-search provider-proof readiness artifact
+
+Continued Oracle P0-7 with `backend/scripts/v17_vector_search_provider_readiness.py`, a safe-by-default provider-proof/readiness artifact for the real Pinecone/Firestore evidence still required before production rollout:
+
+- Default CLI output is an honest `status=NOT_RUN`, `read_only=true`, `mutation_allowed=false`, `provider_calls_executed=false`, `benchmark_evidence_collected=false`, and `production_rollout_approved=false`.
+- The artifact inventories required prerequisites/config: `PINECONE_API_KEY`, `PINECONE_INDEX_NAME`, `PINECONE_INDEX_HOST`, `V17_PROVIDER_PROOF_FIRESTORE_PROJECT`, `V17_PROVIDER_PROOF_UID`, plus optional proof namespace.
+- Planned read-only proof cases cover provider pagination/refill semantics, provider vector query timeout behavior, Firestore candidate-ID hydration read counts, malformed/stale metadata, cross-user hits, expired Short-term, Archive default-unavailable, deleted/tombstoned sources, duplicate revisions, partial outages, high-volume account candidate budgets, and load/recall/latency criteria.
+- `--execute` remains read-only and exits nonzero with `NOT_RUN` when prerequisites are missing; no Pinecone upsert/delete/update and no Firestore create/set/update/delete operations are planned or performed.
+- Static tests assert the script contains no provider/Firestore mutating method calls and that non-claims are explicit.
+
+Verification recorded in `docs/epics/v17_memory_implementation_tickets.md`: RED readiness tests failed on missing runner/docs (`4 failed`); intermediate GREEN for runner failed only on missing docs (`1 failed, 3 passed`); final GREEN readiness tests passed; default readiness output returned `NOT_RUN` with missing prerequisites; execute without prerequisites exited 2 with `NOT_RUN`; full V17 regression and async scan remained green/pre-existing only.
+
+This closes only a readiness/non-claim artifact for future provider proof. Remaining P0-7/P0 work:
+
+- No real Pinecone/Firestore provider proof was executed.
+- Provider pagination/refill, provider-level timeout semantics, load/recall/latency benchmarks, malformed metadata, cross-user hits, expired Short-term, Archive default-unavailable, deleted/tombstoned sources, duplicate revisions, partial outages, and high-volume account evidence remain **NOT_RUN**.
+- No production benchmark evidence, central monitoring sink/alert policy, or production approval is claimed.
+- Production rollout remains **BLOCKED / NO-GO** until all Oracle P0s and required real-service evidence are complete.
+
 ## Not-run / not-claimed caveats preserved
 
 - Oracle review has now run and is recorded here, but it blocks production rollout.
