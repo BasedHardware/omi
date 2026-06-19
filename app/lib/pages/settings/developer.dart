@@ -62,6 +62,7 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
 
   // iPad requires a non-zero sharePositionOrigin (popover anchor) for the share sheet.
   Rect _shareOrigin() {
+    if (!mounted) return const Rect.fromLTWH(0, 0, 100, 100);
     final box = context.findRenderObject() as RenderBox?;
     if (box != null && box.hasSize && box.size.width > 0 && box.size.height > 0) {
       return box.localToGlobal(Offset.zero) & box.size;
