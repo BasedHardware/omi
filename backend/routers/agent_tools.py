@@ -262,7 +262,12 @@ class ExecuteToolRequest(BaseModel):
     params: dict = {}
 
 
-@router.post("/v1/agent/execute-tool")
+class ExecuteToolResponse(BaseModel):
+    result: str | None = None
+    error: str | None = None
+
+
+@router.post("/v1/agent/execute-tool", response_model=ExecuteToolResponse)
 async def execute_tool(
     body: ExecuteToolRequest,
     uid: str = Depends(with_rate_limit(get_current_user_uid, "agent:execute_tool")),
