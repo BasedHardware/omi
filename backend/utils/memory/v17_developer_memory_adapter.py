@@ -1,67 +1,12 @@
-from dataclasses import dataclass
 from datetime import datetime
 from typing import Optional
 
-from config.v17_memory import V17Capabilities, V17Mode, V17RolloutState, decide_v17_capabilities
-from database.v17_collections import V17Collections
+from config.v17_memory import V17Capabilities
 from models.v17_product_memory import MemoryAccessPolicy, MemoryConsumer
+from utils.memory.v17_default_read_rollout import V17DefaultReadRolloutDecision, read_v17_default_read_rollout
 from utils.memory.v17_product_memory_read_service import fetch_default_product_memory_search
 
-
-@dataclass(frozen=True)
-class V17DeveloperDefaultMemoryRolloutDecision:
-    uid: str
-    source_path: str
-    rollout_capabilities: V17Capabilities
-    app_has_default_memory_grant: bool
-    archive_capability: bool = False
-    reason: str = 'ok'
-
-    @property
-    def v17_default_developer_enabled(self) -> bool:
-        return self.rollout_capabilities.v17_reads_enabled and self.app_has_default_memory_grant
-
-    @property
-    def fallback_reason(self) -> Optional[str]:
-        if self.v17_default_developer_enabled:
-            return None
-        if self.reason != 'ok':
-            return self.reason
-        if not self.rollout_capabilities.v17_reads_enabled:
-            return 'v17_reads_disabled'
-        if not self.app_has_default_memory_grant:
-            return 'missing_developer_default_memory_grant'
-        return 'v17_default_developer_disabled'
-
-
-def _disabled_v17_developer_rollout_decision(
-    uid: str, source_path: str, reason: str
-) -> V17DeveloperDefaultMemoryRolloutDecision:
-    return V17DeveloperDefaultMemoryRolloutDecision(
-        uid=uid,
-        source_path=source_path,
-        rollout_capabilities=V17Capabilities(
-            uid=uid,
-            mode=V17Mode.off,
-            legacy_only=True,
-            shadow_artifacts_enabled=False,
-            v17_writes_enabled=False,
-            v17_reads_enabled=False,
-            legacy_reads_authoritative=True,
-        ),
-        app_has_default_memory_grant=False,
-        archive_capability=False,
-        reason=reason,
-    )
-
-
-def _developer_default_memory_grant_enabled(data: dict) -> bool:
-    grants = data.get('grants')
-    if isinstance(grants, dict):
-        developer_grants = grants.get('developer') or grants.get('developer_api')
-        if isinstance(developer_grants, dict) and developer_grants.get('default_memory') is True:
-            return True
-    return data.get('developer_default_memory_grant') is True
+V17DeveloperDefaultMemoryRolloutDecision = V17DefaultReadRolloutDecision
 
 
 def read_v17_developer_default_memory_rollout(*, uid: str, db_client) -> V17DeveloperDefaultMemoryRolloutDecision:
@@ -73,39 +18,7 @@ def read_v17_developer_default_memory_rollout(*, uid: str, db_client) -> V17Deve
     this developer default-memory path regardless of persisted Archive fields.
     """
 
-    source_path = V17Collections(uid=uid).memory_control_state
-    try:
-        snapshot = db_client.document(source_path).get()
-        data = snapshot.to_dict() if getattr(snapshot, 'exists', True) else None
-        if not isinstance(data, dict):
-            return _disabled_v17_developer_rollout_decision(uid, source_path, 'missing_rollout_state')
-        if data.get('uid', uid) != uid:
-            return _disabled_v17_developer_rollout_decision(uid, source_path, 'uid_mismatch')
-
-        state = V17RolloutState(
-            uid=uid,
-            mode=data.get('mode', V17Mode.off.value),
-            mode_epoch=int(data.get('mode_epoch', 0) or 0),
-            cutover_epoch=int(data.get('cutover_epoch', 0) or 0),
-            account_generation=int(data.get('account_generation', 0) or 0),
-            last_reconciled_legacy_revision=data.get('last_reconciled_legacy_revision'),
-            fallback_projection_ready=data.get('fallback_projection_ready') is True,
-            persistent_v17_writes_started=data.get('persistent_v17_writes_started') is True,
-            decommission_reconciled=data.get('decommission_reconciled') is True,
-            writes_blocked=data.get('writes_blocked') is True,
-            stage_gates=data.get('stage_gates') or {},
-        )
-        capabilities = decide_v17_capabilities(uid, state.mode, state)
-        return V17DeveloperDefaultMemoryRolloutDecision(
-            uid=uid,
-            source_path=source_path,
-            rollout_capabilities=capabilities,
-            app_has_default_memory_grant=_developer_default_memory_grant_enabled(data),
-            archive_capability=False,
-            reason='ok',
-        )
-    except (TypeError, ValueError, AttributeError):
-        return _disabled_v17_developer_rollout_decision(uid, source_path, 'malformed_rollout_state')
+    return read_v17_default_read_rollout(uid=uid, db_client=db_client, consumer='developer_api')
 
 
 def _parse_datetime(value) -> datetime:
