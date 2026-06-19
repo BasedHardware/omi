@@ -112,7 +112,10 @@ if [ -n "$STAGED_DESKTOP_RUST_INPUTS" ]; then
   if [ -n "$STAGED_DESKTOP_RUST_FILES" ]; then
     while IFS= read -r file; do
       [ -n "$file" ] || continue
-      rustfmt "$file"
+      if ! rustfmt --edition 2021 "$file"; then
+        echo "rustfmt failed for $file" >&2
+        exit 1
+      fi
       git add "$file"
     done <<EOF
 $STAGED_DESKTOP_RUST_FILES
