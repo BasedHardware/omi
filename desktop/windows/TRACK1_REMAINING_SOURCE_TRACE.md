@@ -148,9 +148,11 @@ Already resolved in Batch 7:
 | Field | Value |
 |-------|-------|
 | macOS source | `FocusPage.swift`, `FocusAssistant.swift`, `FocusModels.swift` — proactive session detection |
-| Windows source | None |
-| Exact blocker | Requires screen activity analysis + proactive assistant. Not viable without major backend work. |
-| **Classification** | **DO_NOT_DO_NOW** |
+| Windows source | `Focus.tsx` — **IMPLEMENTED** |
+| Data used | `rewindFrames(todayStart, now)` for today's app activity; `rewindGetSettings()` for interval; localStorage for manual sessions |
+| **What was added** | (1) **Manual focus timer** — Pomodoro-style start/stop with optional label; sessions saved to localStorage history (keep last 100). (2) **Today's app activity** (Rewind-powered) — groups today's captured frames by app, estimates time per app (gap × captures), classifies apps as `focus` (editors/code), `distract` (media/social), or `neutral`. (3) **Stats row** — Focus time, Distraction time, Focus Rate %, Total tracked time. (4) **App breakdown list** with progress bars colored by class. (5) **Session history** — scrollable list of manual timer sessions with duration, timestamp, delete. (6) Empty/loading states; "Rewind required" notice when screen capture is off. |
+| **Not implemented** | Automatic per-frame Focused/Distracted status (macOS uses Gemini Vision; no ML pipeline on Windows). |
+| **Classification** | **DONE** (manual timer + Rewind-powered activity breakdown) |
 
 ---
 
@@ -229,10 +231,13 @@ Already resolved in Batch 7:
 | ✓ | Chat audio file attachment | `useChat.ts`, `Home.tsx` | Done — paperclip → POST /v2/voice-messages multipart, SSE stream |
 | ✓ | Speaker label assignment | `ConversationDetail.tsx` | Done — click chip → person picker, GET /v1/users/people, PATCH assign-speaker |
 | ✓ | Software updates — "Check for Updates" link | `SupportTab.tsx` | Done — GitHub releases link (no auto-updater: no publish config) |
-| ✗ | Focus page | — | Infeasible — macOS FocusAssistant.swift requires proactive local ML inference; no Windows equivalent |
-| ✗ | Notifications settings (proactive) | — | Infeasible — no notification generation infra on Windows |
-| ✗ | Auto-update (electron-updater) | — | Blocked — no `publish` section in electron-builder.yml, no CI release feed configured |
-| ✗ | BLE/Devices | — | Blocked — no `noble` or `node-ble` native addon; no Windows BLE bridge |
+| ✓ | Focus page | `Focus.tsx`, `Sidebar.tsx`, `MainViews.tsx` | Done — manual timer + Rewind app-activity breakdown (no proactive ML) |
+| ✓ | Notifications settings | `NotificationsTab.tsx`, `tabs.ts`, `Settings.tsx`, `useRecorder.ts`, `preferences.ts` | Done — insight notifications tab + recording-saved Web Notification |
+| ✓ | Check for Updates | `SupportTab.tsx` | Done — GitHub API release check (available/up-to-date/error); no electron-updater needed |
+| ✓ | Devices tab | `DevicesTab.tsx`, `tabs.ts`, `Settings.tsx` | Done — honest Devices tab listing supported hardware with BLE-not-available status |
+| ✗ | Auto-update native feed | — | Blocked — npm install fails (nvm/Node v24 cross-contamination); electron-builder.yml has no publish config; no CI release feed |
+| ✗ | Proactive focus detection | — | No ML pipeline on Windows; macOS FocusAssistant.swift uses Gemini Vision per frame |
+| ✗ | Native BLE pairing | — | No `noble` or `node-ble` addon; Devices tab shows honest unsupported state |
 | ✓ | Tasks grouping | — | Already done |
 | ✓ | Screen context | — | Already present |
 | ✓ | Overlay drag/resize/pill | — | Done in Batch 7 |
