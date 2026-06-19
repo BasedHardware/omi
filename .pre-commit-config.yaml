@@ -70,10 +70,11 @@ repos:
       - id: check-json
         exclude: |
           (?x)^(
-            app/.*\.json|          # Flutter/Dart generated JSON (may have comments)
-            \.firebase/.*\.json|    # Firebase config JSON
+            \.firebase/.*\.json|    # Firebase config (may have comments)
             \.idea/.*\.json|       # IDE config
             .*lock\.json|          # Lock files
+            app/lib/.*\.g\.json|   # Dart codegen generated JSON
+            app/.*arb              # App resource bundles (not strict JSON)
           )$
       - id: check-toml
 
