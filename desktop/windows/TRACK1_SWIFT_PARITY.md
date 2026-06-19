@@ -310,13 +310,12 @@
 
 | Field | Detail |
 |-------|--------|
-| **macOS source** | `Sources/MainWindow/Pages/FocusPage.swift` |
-| **Windows source** | None |
-| **Status** | ❌ Missing |
-| **Visual gap** | macOS has a Focus mode with timer, distraction detection alerts, session history, and streak tracking. Windows has no equivalent. |
-| **Functional gap** | No Focus mode at all on Windows. |
-| **Proposed fix** | Out of scope for a quick parity sprint — requires new backend features. Mark as known gap. |
-| **Priority** | P2 |
+| **macOS source** | `Sources/MainWindow/Pages/FocusPage.swift`, `FocusAssistant.swift` |
+| **Windows source** | `src/renderer/src/pages/Focus.tsx`, `src/renderer/src/lib/focusEngine.ts` |
+| **Status** | ✅ Implemented |
+| **What exists** | Manual focus timer (Pomodoro-style), today's app-activity breakdown (Rewind-powered), session history. Three-tier Gemini analysis engine: Vision (Rewind JPEG → Gemini Vision, 8 s timeout, in-memory cache) → Text-OCR (summarizeActivity + Gemini text) → Heuristic (keyword). Method badge + visualEvidence shown in UI. Sustained-distraction alert via Windows notification. |
+| **Remaining gap** | Per-second frame-level streaming (macOS runs FocusAssistant continuously). Windows checks on demand / at configurable interval. Streak tracking not implemented. |
+| **Priority** | P2 — substantially addressed |
 
 ---
 

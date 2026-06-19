@@ -72,11 +72,9 @@ Already resolved in Batch 7:
 | Field | Value |
 |-------|-------|
 | macOS source | `SettingsSidebar.swift` `.notifications` section: task/focus/insight/memory/daily-summary notification toggles |
-| Windows source | None |
-| Backend source | Proactive assistant system (`ProactiveAssistantsPlugin.swift`, `InsightAssistant.swift`, `FocusAssistant.swift`). No equivalent on Windows. |
-| Data exists today | NO — Windows has no proactive assistant backend |
-| Exact blocker | Windows has no notification generation pipeline |
-| **Classification** | **DO_NOT_DO_NOW** — proactive assistant infrastructure absent |
+| Windows source | `NotificationsTab.tsx` — **IMPLEMENTED** |
+| **What was added** | (1) **Proactive insights** toggle + interval dropdown + notification style (Omi / Windows) + denylist textarea. (2) **Recording saved** Windows notification toggle. (3) **Focus analysis** toggle + interval dropdown + sustained-distraction alert toggle + **Screenshot vision analysis** sub-toggle (sends 1-2 Rewind frames to Gemini Vision; falls back to text-OCR). All wired to `preferences.ts` with live `onPreferencesChange` subscriptions. |
+| **Classification** | **DONE** |
 
 ---
 
@@ -151,8 +149,9 @@ Already resolved in Batch 7:
 | Windows source | `Focus.tsx` — **IMPLEMENTED** |
 | Data used | `rewindFrames(todayStart, now)` for today's app activity; `rewindGetSettings()` for interval; localStorage for manual sessions |
 | **What was added** | (1) **Manual focus timer** — Pomodoro-style start/stop with optional label; sessions saved to localStorage history (keep last 100). (2) **Today's app activity** (Rewind-powered) — groups today's captured frames by app, estimates time per app (gap × captures), classifies apps as `focus` (editors/code), `distract` (media/social), or `neutral`. (3) **Stats row** — Focus time, Distraction time, Focus Rate %, Total tracked time. (4) **App breakdown list** with progress bars colored by class. (5) **Session history** — scrollable list of manual timer sessions with duration, timestamp, delete. (6) Empty/loading states; "Rewind required" notice when screen capture is off. |
-| **Not implemented** | Automatic per-frame Focused/Distracted status (macOS uses Gemini Vision; no ML pipeline on Windows). |
-| **Classification** | **DONE** (manual timer + Rewind-powered activity breakdown) |
+| **Vision analysis added** | Three-tier classification engine: (1) **Vision** — selects 1-2 most recent Rewind frames with stored JPEGs, fetches via existing `rewind:frameImage` IPC (already path-validated), sends as `inlineData` parts to Gemini Vision with 8 s timeout; returns `visualEvidence` field. In-memory cache avoids duplicate Gemini calls within a session. (2) **Text/OCR** — `summarizeActivity()` → Gemini text prompt (same pattern as insightEngine). (3) **Heuristic** — keyword match on exe/app name; no network. Public entry `analyzeFocus(frames, useVision)`. |
+| **UI additions** | Method badge in analysis card (Vision / Text-OCR / Heuristic); `visualEvidence` description shown when vision method used; fallback note "Vision unavailable — used text-OCR/heuristic" when vision enabled but fell through. |
+| **Classification** | **DONE** (manual timer + Rewind app-activity breakdown + Gemini Vision three-tier classifier) |
 
 ---
 
@@ -236,7 +235,7 @@ Already resolved in Batch 7:
 | ✓ | Check for Updates | `SupportTab.tsx` | Done — GitHub API release check (available/up-to-date/error); no electron-updater needed |
 | ✓ | Devices tab | `DevicesTab.tsx`, `tabs.ts`, `Settings.tsx` | Done — honest Devices tab listing supported hardware with BLE-not-available status |
 | ✗ | Auto-update native feed | — | Blocked — npm install fails (nvm/Node v24 cross-contamination); electron-builder.yml has no publish config; no CI release feed |
-| ✗ | Proactive focus detection | — | No ML pipeline on Windows; macOS FocusAssistant.swift uses Gemini Vision per frame |
+| ✓ | Proactive focus detection (Vision-tier) | `focusEngine.ts`, `Focus.tsx`, `NotificationsTab.tsx`, `preferences.ts` | Done — three-tier (Vision → Text-OCR → Heuristic); Gemini Vision via existing rewind:frameImage IPC |
 | ✗ | Native BLE pairing | — | No `noble` or `node-ble` addon; Devices tab shows honest unsupported state |
 | ✓ | Tasks grouping | — | Already done |
 | ✓ | Screen context | — | Already present |
