@@ -1020,6 +1020,17 @@ Verification is recorded in `docs/epics/v17_memory_implementation_tickets.md`: R
 
 This closes only the safe checklist/readiness inventory for Oracle P0-8. It does **not** execute or claim final Oracle approval, real Pinecone validation, real Firestore/cloud validation, benchmarks, central telemetry aggregation, T20/T21/T22/T23 completion, or production cutover approval. Production rollout remains **BLOCKED / NO-GO**.
 
+### 2026-06-19 — Oracle P0-8 T20 repair/projection-consistency readiness/proof matrix
+
+Continued Oracle P0-8 with `backend/scripts/v17_t20_repair_projection_consistency_readiness.py`, a safe T20 repair/projection-consistency readiness/proof matrix. It addresses the P0-8/T20 subpoint for projection freshness, vector repair convergence, shared `ns2` isolation, and no-silent-data-loss evidence inventory only:
+
+- Default and `--execute` CLI modes emit `status=BLOCKED`, `read_only=true`, `mutation_allowed=false`, `network_or_provider_calls_executed=false`, `provider_calls_executed=false`, `benchmark_evidence_collected=false`, `approval_claimed=false`, and `production_rollout_approved=false`.
+- The proof matrix remains `NOT_RUN` with empty evidence arrays for projection_commit_id parity, account_generation parity, item_revision/source_commit_id/content_hash parity, tombstone/deleted source handling, stale physical vector detection, duplicate vector detection, repair outbox enqueue/dead-letter/backlog, repair worker convergence, shared ns2 legacy/V17 isolation under stale candidates, and no silent data loss.
+- The artifact explicitly references existing local seams/runners: `v17_vector_search_provider_readiness.py`, `v17_shared_ns2_legacy_isolation_readiness.py`, `v17_pinecone_repair_validation_readiness.py`, `v17_vector_repair_outbox_telemetry.py`, vector repair outbox record/worker modules, vector metadata gateway, and vector search service.
+- The production cutover checklist now points the T20 repair/projection-consistency gate at this matrix and requires proof of projection_commit_id/account_generation/item_revision/source_commit_id/content_hash parity, repair outbox enqueue/dead-letter/backlog, and shared ns2 legacy/V17 isolation under stale candidates.
+
+Verification recorded in `docs/epics/v17_memory_implementation_tickets.md`: RED matrix tests failed on missing runner/docs (`4 failed`); final GREEN/static/readiness/regression/async passed. This slice does **not** execute Pinecone/Firestore/cloud calls, mutate shared `ns2` or Firestore, collect benchmarks, wire central telemetry, claim T20 completion, or approve cutover. Production rollout remains **BLOCKED / NO-GO**.
+
 ## Not-run / not-claimed caveats preserved
 
 - Oracle review has now run and is recorded here, but it blocks production rollout.

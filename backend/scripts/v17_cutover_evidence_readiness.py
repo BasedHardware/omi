@@ -77,12 +77,14 @@ CUTOVER_EVIDENCE_GATES: Dict[str, Dict[str, Any]] = {
         "status": CUTOVER_GATE_STATUS_BLOCKED,
         "summary": "T20 repair/projection-consistency is not demonstrated with real vector repair, shared namespace, and authoritative projection evidence.",
         "required_proof_commands_or_artifacts": [
-            "T20 repair/projection-consistency evidence tying projection_commit_id/account_generation/item_revision to provider vectors and memory_items",
-            "Vector repair outbox worker execution artifact proving stale physical vectors/tombstones/duplicates converge without data loss",
-            "Shared ns2 legacy/V17 isolation proof with repair/refill behavior under stale candidates",
+            "python3 backend/scripts/v17_t20_repair_projection_consistency_readiness.py",
+            "T20 repair/projection-consistency evidence tying projection_commit_id/account_generation/item_revision/source_commit_id/content_hash to memory_items, vector metadata, and vector repair outbox records",
+            "Vector repair outbox enqueue/dead-letter/backlog and worker execution artifact proving stale physical vectors/tombstones/duplicates converge without data loss",
+            "shared ns2 legacy/V17 isolation under stale candidates proof with repair/refill behavior",
         ],
         "blockers": [
             "real repair/projection consistency not proven",
+            "T20 readiness matrix remains NOT_RUN/BLOCKED with empty evidence",
             "Pinecone repair and shared ns2 validation remain readiness-only",
         ],
         "evidence": [],
