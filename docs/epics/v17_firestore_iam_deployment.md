@@ -15,9 +15,11 @@ users/{uid}/memory_items/{memory_id}
 users/{uid}/memory_operations/{operation_id}
 users/{uid}/memory_outbox/{event_id}
 users/{uid}/memory_control/{doc_id}
+users/{uid}/memory_control/v17_app_key_memory_grants
 users/{uid}/memory_state/{doc_id}
 users/{uid}/memory_commits/{commit_id}
 users/{uid}/memory_evidence/{evidence_id}
+mcp_api_keys/{key_id}
 ```
 
 ## Required service account
@@ -223,8 +225,11 @@ Prerequisites for a real PASS/FAIL proof are an authenticated `gcloud` CLI, auth
 Pass/fail criteria for the runner (including explicit client denial checks):
 
 - `client_denial.memory_outbox`: deployed Security Rules deny client read/create/update/delete on `users/{uid}/memory_outbox/{record_id}`.
+- `client_denial.v17_app_key_memory_grants`: deployed Security Rules deny client read/create/update/delete on `users/{uid}/memory_control/v17_app_key_memory_grants`; V17 app/key memory grant assignment remains server-owned/Admin-only.
+- `mcp_api_key_inventory`: deployed Security Rules/IAM proof includes `mcp_api_keys/{key_id}` as Admin-only MCP API-key inventory; clients cannot self-read or mutate MCP key `app_id`/`scopes`.
 - `worker_firestore_iam`: Admin worker service account has Firestore read/write IAM (`roles/datastore.user` or narrower custom role) and no owner/editor role.
 - `memory_control.server_owned`: `users/{uid}/memory_control/state` remains server-owned/Admin-only, including the `vector_repair_outbox_enabled` gate.
+- `app_key_grants.server_owned`: `users/{uid}/memory_control/v17_app_key_memory_grants` remains server-owned/Admin-only and cannot be self-granted by app/key clients.
 - `no_client_vector_repair_enablement`: no client enablement of `vector_repair_outbox_enabled` is possible through deployed rules.
 - `no_broad_public_access`: project and service-account IAM have no broad public access (`allUsers` / `allAuthenticatedUsers`).
 

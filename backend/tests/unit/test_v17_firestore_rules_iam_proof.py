@@ -9,10 +9,15 @@ REQUIRED_STATIC_TERMS = [
     "firebase firestore:rules:get",
     "users/{uid}/memory_outbox/{record_id}",
     "users/{uid}/memory_control/state",
+    "users/{uid}/memory_control/v17_app_key_memory_grants",
+    "mcp_api_keys/{key_id}",
     "vector_repair_outbox_enabled",
     "client_denial.memory_outbox",
+    "client_denial.v17_app_key_memory_grants",
+    "mcp_api_key_inventory",
     "worker_firestore_iam",
     "memory_control.server_owned",
+    "app_key_grants.server_owned",
     "no_client_vector_repair_enablement",
     "no_broad_public_access",
     "NOT_RUN",
@@ -71,8 +76,12 @@ def test_v17_firestore_rules_iam_doc_references_proof_runner_and_pass_fail_gates
     assert "python3 backend/scripts/v17_firestore_rules_iam_proof.py" in doc
     assert "users/{uid}/memory_outbox/{record_id}" in doc
     assert "users/{uid}/memory_control/state" in doc
+    assert "users/{uid}/memory_control/v17_app_key_memory_grants" in doc
+    assert "mcp_api_keys/{key_id}" in doc
     assert "vector_repair_outbox_enabled" in doc
     assert "client denial" in doc
+    assert "MCP API-key" in doc
+    assert "app/key memory grant" in doc
     assert "Admin worker service account" in doc
     assert "no client enablement of `vector_repair_outbox_enabled`" in doc
     assert "no broad public access" in doc

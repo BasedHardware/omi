@@ -869,6 +869,24 @@ This closes only the readiness-runner/server-owned assignment-contract subpoint.
 - App/key memory grants at `users/{uid}/memory_control/v17_app_key_memory_grants` still require server-owned product/admin assignment separate from MCP key scopes.
 - Production rollout remains **BLOCKED / NO-GO** until all Oracle P0s and required real-service evidence are complete.
 
+### 2026-06-19 — P0-1/P0-6 Firestore/IAM proof scope extension for MCP keys and app/key grants
+
+Continued Oracle P0-1/P0-6 by extending the existing safe-by-default Firestore IAM/deployed Security Rules proof runner to include the external-auth/server-owned state required by MCP key scope and app/key grants, without changing the production rollout verdict:
+
+- Extended `backend/scripts/v17_firestore_rules_iam_proof.py` pass/fail inventory to include `mcp_api_keys/{key_id}` and `users/{uid}/memory_control/v17_app_key_memory_grants` alongside the existing V17 vector repair outbox/control paths.
+- The runner remains default `status=NOT_RUN`, read-only, and non-mutating. `--execute` still only allows `gcloud`/Firebase describe/get commands; it does not deploy rules, change IAM, mutate Firestore, assign MCP scopes, or assign app/key grants.
+- Updated checked-in `firestore.rules` comments to make the server-owned MCP API-key and V17 app/key grant boundaries explicit; client rules still deny direct read/create/update/delete.
+- Updated Firestore/IAM docs with the new proof-scope paths and pass/fail criteria.
+
+Verification recorded in `docs/epics/v17_memory_implementation_tickets.md`: RED proof-scope test failures (`2 failed`), GREEN proof runner/doc tests (`2 passed`), default readiness run `python3 backend/scripts/v17_firestore_rules_iam_proof.py` produced JSON `status: "NOT_RUN"` with missing target-project prerequisite, execute readiness run returned exit 2 `status: "NOT_RUN"` due to missing project/`gcloud`/`firebase`, focused MCP/auth/proof tests passed, full V17 regression passed, and async scan remained pre-existing findings only.
+
+This closes only the proof-runner scope-extension/readiness subpoint. Remaining P0-1/P0-6 work:
+
+- The deployed Firestore/IAM proof was not run against a real target project because target project credentials/CLI prerequisites were unavailable locally.
+- Production MCP key scopes were not migrated, and production app/key grants were not assigned.
+- OAuth token introspection remains unimplemented.
+- Production rollout remains **BLOCKED / NO-GO** until all Oracle P0s and required real-service evidence are complete.
+
 ## Not-run / not-claimed caveats preserved
 
 - Oracle review has now run and is recorded here, but it blocks production rollout.
