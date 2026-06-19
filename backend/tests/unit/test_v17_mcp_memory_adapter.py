@@ -714,6 +714,116 @@ def test_mcp_vector_adapter_preserves_only_explicit_legacy_safe_classification()
     assert db_client.collection_paths == []
 
 
+def test_mcp_v17_search_and_list_format_mark_compatibility_derived_category_review_manual_fields():
+    now = datetime(2026, 6, 19, 12, 0, tzinfo=timezone.utc)
+    long_term = _memory_item('long-term', tier=MemoryTier.long_term, now=now, content='coffee long term')
+    db_client = _FirestoreFake({f'users/u1/memory_items/{long_term.memory_id}': _stored_item(long_term)})
+    rollout = read_v17_mcp_default_memory_rollout(
+        uid='u1', db_client=_FirestoreFake({'users/u1/memory_control/state': _enabled_rollout_doc()})
+    )
+
+    list_result = list_v17_default_mcp_memories(
+        uid='u1', limit=10, offset=0, db_client=db_client, rollout_decision=rollout, now=now
+    )
+
+    vector_result = search_v17_default_mcp_memories_vector(
+        uid='u1',
+        query='coffee',
+        limit=10,
+        db_client=db_client,
+        rollout_decision=rollout,
+        vector_query=lambda *args, **kwargs: _VectorCandidateResult(
+            [
+                SearchVectorHit(
+                    memory_id='long-term',
+                    score=0.88,
+                    projection_commit_id='projection-1',
+                    vector_updated_at=now,
+                    uid=long_term.uid,
+                    account_generation=long_term.account_generation,
+                    item_revision=long_term.item_revision,
+                    source_commit_id=long_term.source_commit_id,
+                    content_hash=long_term.content_hash,
+                )
+            ]
+        ),
+    )
+
+    for memory in [list_result.memories[0], vector_result.memories[0]]:
+        assert memory['category'] == 'other'
+        assert memory['category_source'] == 'mcp_v17_compatibility_default_no_source_category'
+        assert memory['reviewed'] is False
+        assert memory['reviewed_source'] == 'mcp_v17_compatibility_default_no_review_state'
+        assert memory['manually_added'] is False
+        assert memory['manually_added_source'] == 'mcp_v17_compatibility_default_no_manual_state'
+        assert memory['v17_default_memory'] is True
+        assert memory['archive_default_visible'] is False
+
+
+def test_mcp_v17_list_adapter_applies_category_review_manual_filters_to_explicit_compatibility_fields():
+    now = datetime(2026, 6, 19, 12, 0, tzinfo=timezone.utc)
+    long_term = _memory_item('long-term', tier=MemoryTier.long_term, now=now, content='coffee long term')
+    db_client = _FirestoreFake({f'users/u1/memory_items/{long_term.memory_id}': _stored_item(long_term)})
+    rollout = read_v17_mcp_default_memory_rollout(
+        uid='u1', db_client=_FirestoreFake({'users/u1/memory_control/state': _enabled_rollout_doc()})
+    )
+
+    matching = list_v17_default_mcp_memories(
+        uid='u1',
+        limit=10,
+        offset=0,
+        db_client=db_client,
+        rollout_decision=rollout,
+        categories=['other'],
+        reviewed=False,
+        manually_added=False,
+        now=now,
+    )
+    mismatched = list_v17_default_mcp_memories(
+        uid='u1',
+        limit=10,
+        offset=0,
+        db_client=db_client,
+        rollout_decision=rollout,
+        categories=['personal'],
+        reviewed=True,
+        manually_added=True,
+        now=now,
+    )
+
+    assert [item['id'] for item in matching.memories] == ['long-term']
+    assert mismatched.memories == []
+
+
+def test_mcp_rest_and_sse_get_paths_pass_filters_into_v17_list_adapter_and_rest_model_exposes_sources():
+    mcp_py = Path(__file__).resolve().parents[2] / 'routers' / 'mcp.py'
+    mcp_contents = mcp_py.read_text(encoding='utf-8')
+    rest_model = mcp_contents[mcp_contents.index('class CleanerMemory') : mcp_contents.index('class SearchedMemory')]
+    get_route = mcp_contents[
+        mcp_contents.index('@router.get("/v1/mcp/memories"') : mcp_contents.index('class SimpleStructured')
+    ]
+
+    assert 'category_source: Optional[str] = None' in rest_model
+    assert 'reviewed: Optional[bool] = None' in rest_model
+    assert 'reviewed_source: Optional[str] = None' in rest_model
+    assert 'manually_added: Optional[bool] = None' in rest_model
+    assert 'manually_added_source: Optional[str] = None' in rest_model
+    assert 'categories=[category.value for category in category_list]' in get_route
+    assert 'reviewed=reviewed' in get_route[get_route.index('list_v17_default_mcp_memories(') :]
+    assert 'manually_added=manually_added' in get_route[get_route.index('list_v17_default_mcp_memories(') :]
+
+    mcp_sse_py = Path(__file__).resolve().parents[2] / 'routers' / 'mcp_sse.py'
+    sse_contents = mcp_sse_py.read_text(encoding='utf-8')
+    get_tool = sse_contents[
+        sse_contents.index('elif tool_name == "get_memories":') : sse_contents.index(
+            'elif tool_name == "create_memory":'
+        )
+    ]
+    assert 'categories=valid_categories' in get_tool
+    assert 'reviewed=reviewed' in get_tool[get_tool.index('list_v17_default_mcp_memories(') :]
+    assert 'manually_added=manually_added' in get_tool[get_tool.index('list_v17_default_mcp_memories(') :]
+
+
 def test_mcp_list_adapter_uses_same_rollout_decisions_as_search_and_preserves_default_visibility():
     now = datetime(2026, 6, 19, 12, 0, tzinfo=timezone.utc)
     fresh_short_term = _memory_item('fresh-short-term', now=now, content='coffee fresh short term')

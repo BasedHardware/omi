@@ -100,6 +100,11 @@ def _format_v17_mcp_default_memory_item(item: dict, policy: MemoryAccessPolicy) 
         'id': item['memory_id'],
         'content': item.get('content') or '',
         'category': 'other',
+        'category_source': 'mcp_v17_compatibility_default_no_source_category',
+        'reviewed': False,
+        'reviewed_source': 'mcp_v17_compatibility_default_no_review_state',
+        'manually_added': False,
+        'manually_added_source': 'mcp_v17_compatibility_default_no_manual_state',
         'v17_default_memory': True,
         'archive_default_visible': False,
         'policy': {
@@ -393,6 +398,11 @@ def search_v17_default_mcp_memories(
                 'id': item['memory_id'],
                 'content': item['content'],
                 'category': 'other',
+                'category_source': 'mcp_v17_compatibility_default_no_source_category',
+                'reviewed': False,
+                'reviewed_source': 'mcp_v17_compatibility_default_no_review_state',
+                'manually_added': False,
+                'manually_added_source': 'mcp_v17_compatibility_default_no_manual_state',
                 'relevance_score': round(1.0 - (rank * 0.0001), 4),
                 'v17_default_memory': True,
                 'archive_default_visible': False,
@@ -416,6 +426,9 @@ def list_v17_default_mcp_memories(
     rollout_decision: Optional[V17McpDefaultMemoryRolloutDecision] = None,
     rollout_capabilities: Optional[V17Capabilities] = None,
     app_has_default_memory_grant: bool = True,
+    categories: Optional[list[str]] = None,
+    reviewed: Optional[bool] = None,
+    manually_added: Optional[bool] = None,
     now: Optional[datetime] = None,
 ) -> V17McpMemoryListResult:
     """List default-visible V17 memories for MCP get/list callers.
@@ -468,8 +481,19 @@ def list_v17_default_mcp_memories(
         limit=bounded_limit,
         offset=bounded_offset,
     )
+    normalized_categories = {str(category) for category in categories or [] if str(category)}
+    formatted_memories = []
+    for item in response['items']:
+        formatted = _format_v17_mcp_default_memory_item(item, policy)
+        if normalized_categories and formatted['category'] not in normalized_categories:
+            continue
+        if reviewed is not None and formatted['reviewed'] != reviewed:
+            continue
+        if manually_added is not None and formatted['manually_added'] != manually_added:
+            continue
+        formatted_memories.append(formatted)
     return V17McpMemoryListResult(
-        memories=[_format_v17_mcp_default_memory_item(item, policy) for item in response['items']],
+        memories=formatted_memories,
         read_decision=V17ReadDecision.USE_V17,
     )
 
@@ -555,6 +579,11 @@ def search_v17_default_mcp_memories_vector(
                 'id': memory_id,
                 'content': item.get('content') or '',
                 'category': 'other',
+                'category_source': 'mcp_v17_compatibility_default_no_source_category',
+                'reviewed': False,
+                'reviewed_source': 'mcp_v17_compatibility_default_no_review_state',
+                'manually_added': False,
+                'manually_added_source': 'mcp_v17_compatibility_default_no_manual_state',
                 'relevance_score': round(float(scores_by_memory_id.get(memory_id, 0)), 4),
                 'v17_default_memory': True,
                 'archive_default_visible': False,

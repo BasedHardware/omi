@@ -180,6 +180,14 @@ class CleanerMemory(BaseModel):
     id: str
     content: str
     category: MemoryCategory
+    category_source: Optional[str] = None
+    reviewed: Optional[bool] = None
+    reviewed_source: Optional[str] = None
+    manually_added: Optional[bool] = None
+    manually_added_source: Optional[str] = None
+    v17_default_memory: Optional[bool] = None
+    archive_default_visible: Optional[bool] = None
+    policy: Optional[dict] = None
 
 
 class SearchedMemory(CleanerMemory):
@@ -301,6 +309,9 @@ def get_memories(
         offset=offset,
         db_client=db,
         rollout_decision=v17_rollout,
+        categories=[category.value for category in category_list],
+        reviewed=reviewed,
+        manually_added=manually_added,
     )
     if v17_list_results.read_decision == V17ReadDecision.USE_V17:
         return v17_list_results.memories

@@ -599,6 +599,9 @@ def execute_tool(
             offset=offset,
             db_client=db,
             rollout_decision=v17_rollout,
+            categories=valid_categories,
+            reviewed=reviewed,
+            manually_added=manually_added,
         )
         if v17_list_results.read_decision == V17ReadDecision.USE_V17:
             return {"memories": v17_list_results.memories}
