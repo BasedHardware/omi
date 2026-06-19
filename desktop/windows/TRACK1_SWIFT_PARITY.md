@@ -337,10 +337,10 @@
 |-------|--------|
 | **macOS source** | `Sources/MainWindow/Pages/MemoryGraph/MemoryGraphPage.swift`, `Sources/MainWindow/Pages/MemoryGraph/ForceDirectedSimulation.swift` |
 | **Windows source** | `src/renderer/src/components/BrainGraph.tsx` (Three.js + D3), `src/renderer/src/hooks/useMemoryGraph.ts` |
-| **Status** | ✅ Works (different visual style, equally capable) |
+| **Status** | ✅ Works — interaction restored |
 | **Visual gap** | macOS uses a 2D force-directed graph (SwiftUI Canvas). Windows uses a 3D WebGL sphere with Three.js — more visually impressive. |
-| **Functional gap** | Both show node interaction. Windows graph is shown during onboarding and in Memories page. macOS shows it only in Memories. |
-| **Proposed fix** | None required — Windows implementation is at parity or better. |
+| **Functional gap** | **Issue found:** Memories page was passing `interactive={false}`, which replaced `OrbitControls` with a `CameraRig` that locks the camera every frame. Graph rendered but drag/zoom/click were all dead. **Fix applied:** removed `interactive={false}` (defaults to `true`), added pointer/click handlers to `GraphNodeMesh` — hover shows pointer cursor (via `gl.domElement.style.cursor`), click selects a node with a visible glow boost (2.2× emissive, 1.35× halo). Non-interactive (onboarding) path is unchanged. |
+| **Test status** | `npm run typecheck` ✅ · drag rotates ✅ · scroll zooms ✅ · node click selects/highlights ✅ · onboarding graph unchanged ✅ |
 | **Priority** | — |
 
 ---
@@ -443,6 +443,16 @@
 | Show recording status bar in sidebar | `src/renderer/src/components/layout/Sidebar.tsx` | 2h | P1 |
 | Enable Google integrations build flag | Build config / `.env` | 15m | P1 |
 | Markdown rendering in chat messages | `src/renderer/src/components/chat/ChatMessages.tsx` | 1h | P1 |
+
+---
+
+## Build & Runtime Status
+
+| Step | Status | Notes |
+|------|--------|-------|
+| `npm run build:win` | ✅ Passes | Fixed: moved `three`/`@react-three/fiber`/`@react-three/drei` to devDependencies — they are Vite-bundled renderer packages and should not be in electron-builder's native module traversal |
+| App launches after install | ✅ Fixed | Fixed: native Koffi module now included. Root cause: pnpm does not hoist `@koromix/koffi-win32-x64` (koffi's prebuilt binary package) to top-level `node_modules/`. Added `scripts/copy-koffi-native.mjs` to copy `koffi.node` from the pnpm virtual store into `node_modules/koffi/build/koffi/win32_x64/` before packaging — koffi's own fallback search path, already covered by `asarUnpack: node_modules/koffi/**` |
+| Installer produced | ✅ `dist/Omi for Windows-Setup-1.0.0.exe` | Signed, NSIS installer |
 
 ---
 
