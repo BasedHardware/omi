@@ -7,6 +7,8 @@ from database.v17_collections import V17Collections
 
 SUPPORTED_DEFAULT_READ_CONSUMERS = {'mcp', 'developer_api', 'omi_chat'}
 DEFAULT_READ_OBSERVABILITY_CONSUMERS = ('mcp', 'developer_api', 'omi_chat')
+V17_DEFAULT_READ_ROLLOUT_SCHEMA_VERSION = 1
+V17_DEFAULT_READ_ROLLOUT_TIMEOUT_SECONDS = 2.0
 V17_DEFAULT_READ_ROLLOUT_METRIC_NAME = 'v17_default_read_rollout_decisions_total'
 V17_GLOBAL_READ_GATE_PATH = 'memory_control/v17_global_read_gate'
 V17_WRITE_CONVERGENCE_GATE_PATH = 'memory_control/v17_write_convergence_gate'
@@ -16,8 +18,10 @@ _LOW_CARDINALITY_FALLBACK_REASON_BUCKETS = {
     'missing_developer_default_memory_grant',
     'missing_mcp_default_memory_grant',
     'missing_rollout_state',
+    'rollout_read_failed',
     'uid_mismatch',
     'unsupported_consumer',
+    'unsupported_rollout_schema',
     'v17_reads_disabled',
 }
 
@@ -349,58 +353,27 @@ def assert_legacy_memory_write_allowed_for_default_read_decision(
 
 def _consumer_default_memory_grant_enabled(data: dict, consumer: str) -> bool:
     grants = data.get('grants')
-    if isinstance(grants, dict):
-        if consumer == 'developer_api':
-            grant_keys = ['developer', 'developer_api']
-        elif consumer == 'omi_chat':
-            grant_keys = ['omi_chat', 'chat']
-        else:
-            grant_keys = [consumer]
-        for grant_key in grant_keys:
-            consumer_grants = grants.get(grant_key)
-            if isinstance(consumer_grants, dict) and consumer_grants.get('default_memory') is True:
-                return True
-
-    if consumer == 'mcp':
-        return data.get('mcp_default_memory_grant') is True
-    if consumer == 'developer_api':
-        return data.get('developer_default_memory_grant') is True
-    if consumer == 'omi_chat':
-        return data.get('omi_chat_default_memory_grant') is True or data.get('chat_default_memory_grant') is True
-    return False
+    if not isinstance(grants, dict):
+        return False
+    consumer_grants = grants.get(consumer)
+    if not isinstance(consumer_grants, dict):
+        return False
+    return consumer_grants.get('default_memory') is True
 
 
 def _consumer_archive_capability_value(data: dict, consumer: str) -> bool | None:
     grants = data.get('grants')
-    if isinstance(grants, dict):
-        if consumer == 'developer_api':
-            grant_keys = ['developer', 'developer_api']
-        elif consumer == 'omi_chat':
-            grant_keys = ['omi_chat', 'chat']
-        else:
-            grant_keys = [consumer]
-        for grant_key in grant_keys:
-            consumer_grants = grants.get(grant_key)
-            if isinstance(consumer_grants, dict) and 'archive' in consumer_grants:
-                archive_capability = consumer_grants.get('archive')
-                if not isinstance(archive_capability, bool):
-                    return None
-                return archive_capability
-
-    top_level_keys = []
-    if consumer == 'mcp':
-        top_level_keys = ['mcp_archive_capability']
-    elif consumer == 'developer_api':
-        top_level_keys = ['developer_archive_capability', 'developer_api_archive_capability']
-    elif consumer == 'omi_chat':
-        top_level_keys = ['omi_chat_archive_capability', 'chat_archive_capability']
-    for key in top_level_keys:
-        if key in data:
-            archive_capability = data.get(key)
-            if not isinstance(archive_capability, bool):
-                return None
-            return archive_capability
-    return False
+    if not isinstance(grants, dict):
+        return False
+    consumer_grants = grants.get(consumer)
+    if not isinstance(consumer_grants, dict):
+        return False
+    if 'archive' not in consumer_grants:
+        return False
+    archive_capability = consumer_grants.get('archive')
+    if not isinstance(archive_capability, bool):
+        return None
+    return archive_capability
 
 
 def normalize_v17_default_read_rollout_decision(
@@ -424,9 +397,13 @@ def normalize_v17_default_read_rollout_decision(
             return disabled_v17_default_read_rollout_decision(
                 uid=uid, source_path=source_path, consumer=consumer, reason='missing_rollout_state'
             )
-        if data.get('uid', uid) != uid:
+        if data.get('uid') != uid:
             return disabled_v17_default_read_rollout_decision(
                 uid=uid, source_path=source_path, consumer=consumer, reason='uid_mismatch'
+            )
+        if data.get('schema_version') != V17_DEFAULT_READ_ROLLOUT_SCHEMA_VERSION:
+            return disabled_v17_default_read_rollout_decision(
+                uid=uid, source_path=source_path, consumer=consumer, reason='unsupported_rollout_schema'
             )
 
         state = V17RolloutState(
@@ -521,16 +498,29 @@ def normalize_v17_archive_read_rollout_decision(
     )
 
 
+def _get_firestore_document_snapshot(document_ref):
+    try:
+        return document_ref.get(timeout=V17_DEFAULT_READ_ROLLOUT_TIMEOUT_SECONDS)
+    except TypeError as exc:
+        if 'timeout' not in str(exc):
+            raise
+        return document_ref.get()
+
+
 def read_v17_default_read_rollout(*, uid: str, db_client, consumer: str) -> V17DefaultReadRolloutDecision:
     """Read and normalize server-owned persisted default-read rollout state."""
 
     source_path = V17Collections(uid=uid).memory_control_state
     try:
-        snapshot = db_client.document(source_path).get()
+        snapshot = _get_firestore_document_snapshot(db_client.document(source_path))
         data = snapshot.to_dict() if getattr(snapshot, 'exists', True) else None
     except (TypeError, ValueError, AttributeError):
         return disabled_v17_default_read_rollout_decision(
             uid=uid, source_path=source_path, consumer=consumer, reason='malformed_rollout_state'
+        )
+    except Exception:
+        return disabled_v17_default_read_rollout_decision(
+            uid=uid, source_path=source_path, consumer=consumer, reason='rollout_read_failed'
         )
     return normalize_v17_default_read_rollout_decision(uid=uid, source_path=source_path, consumer=consumer, data=data)
 
@@ -540,11 +530,15 @@ def read_v17_archive_read_rollout(*, uid: str, db_client, consumer: str) -> V17D
 
     source_path = V17Collections(uid=uid).memory_control_state
     try:
-        snapshot = db_client.document(source_path).get()
+        snapshot = _get_firestore_document_snapshot(db_client.document(source_path))
         data = snapshot.to_dict() if getattr(snapshot, 'exists', True) else None
     except (TypeError, ValueError, AttributeError):
         return disabled_v17_default_read_rollout_decision(
             uid=uid, source_path=source_path, consumer=consumer, reason='malformed_rollout_state'
+        )
+    except Exception:
+        return disabled_v17_default_read_rollout_decision(
+            uid=uid, source_path=source_path, consumer=consumer, reason='rollout_read_failed'
         )
     return normalize_v17_archive_read_rollout_decision(uid=uid, source_path=source_path, consumer=consumer, data=data)
 
@@ -552,10 +546,12 @@ def read_v17_archive_read_rollout(*, uid: str, db_client, consumer: str) -> V17D
 def _read_v17_default_rollout_state_doc(*, uid: str, db_client):
     source_path = V17Collections(uid=uid).memory_control_state
     try:
-        snapshot = db_client.document(source_path).get()
+        snapshot = _get_firestore_document_snapshot(db_client.document(source_path))
         data = snapshot.to_dict() if getattr(snapshot, 'exists', True) else None
     except (TypeError, ValueError, AttributeError):
         return source_path, None, 'malformed_rollout_state'
+    except Exception:
+        return source_path, None, 'rollout_read_failed'
     return source_path, data, None
 
 

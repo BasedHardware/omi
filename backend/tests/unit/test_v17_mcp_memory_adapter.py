@@ -352,6 +352,7 @@ def _stored_item(item):
 
 def _enabled_rollout_doc(uid='u1'):
     return {
+        'schema_version': 1,
         'uid': uid,
         'mode': V17Mode.read.value,
         'mode_epoch': 7,
@@ -441,7 +442,9 @@ def test_mcp_default_v17_rollout_reader_fails_closed_for_missing_malformed_or_mi
     assert missing.document_get_paths == ['users/u1/memory_control/state']
     assert missing.collection_paths == []
 
-    malformed = _FirestoreFake({'users/u1/memory_control/state': {'uid': 'u1', 'mode': 'read', 'stage_gates': 'bad'}})
+    malformed = _FirestoreFake(
+        {'users/u1/memory_control/state': {'schema_version': 1, 'uid': 'u1', 'mode': 'read', 'stage_gates': 'bad'}}
+    )
     malformed_decision = read_v17_mcp_default_memory_rollout(uid='u1', db_client=malformed)
     assert malformed_decision.v17_default_mcp_enabled is False
     assert malformed_decision.app_has_default_memory_grant is False

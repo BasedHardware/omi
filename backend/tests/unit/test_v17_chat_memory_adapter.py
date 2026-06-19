@@ -140,6 +140,7 @@ def _hit(item, *, score, projection_commit_id='projection-1'):
 
 def _enabled_rollout_doc(uid='u1'):
     return {
+        'schema_version': 1,
         'uid': uid,
         'mode': V17Mode.read.value,
         'mode_epoch': 7,
@@ -195,7 +196,9 @@ def test_chat_rollout_reader_fails_closed_without_memory_item_reads_for_missing_
     assert read_v17_chat_default_memory_rollout(uid='u1', db_client=missing).v17_default_enabled is False
     assert missing.collection_paths == []
 
-    malformed = _FirestoreFake({'users/u1/memory_control/state': {'uid': 'u1', 'mode': 'read', 'stage_gates': 'bad'}})
+    malformed = _FirestoreFake(
+        {'users/u1/memory_control/state': {'schema_version': 1, 'uid': 'u1', 'mode': 'read', 'stage_gates': 'bad'}}
+    )
     malformed_decision = read_v17_chat_default_memory_rollout(uid='u1', db_client=malformed)
     assert malformed_decision.v17_default_enabled is False
     assert malformed_decision.app_has_default_memory_grant is False

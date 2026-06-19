@@ -1,6 +1,8 @@
 from config.v17_memory import PASSED, V17Mode, V17StageGate
 from utils.memory.v17_default_read_rollout import (
     V17ReadDecision,
+    V17_DEFAULT_READ_ROLLOUT_SCHEMA_VERSION,
+    V17_DEFAULT_READ_ROLLOUT_TIMEOUT_SECONDS,
     V17_GLOBAL_READ_GATE_PATH,
     V17_WRITE_CONVERGENCE_GATE_PATH,
     assert_legacy_memory_write_allowed_for_default_read_decision,
@@ -31,17 +33,22 @@ class _DocumentRef:
         self._db_client = db_client
         self.path = path
 
-    def get(self):
+    def get(self, timeout=None):
         self._db_client.document_get_paths.append(self.path)
+        self._db_client.document_get_timeouts.append(timeout)
+        if self._db_client.get_exception is not None:
+            raise self._db_client.get_exception
         if self.path not in self._db_client.docs:
             return _Snapshot(None, exists=False)
         return _Snapshot(self._db_client.docs[self.path], exists=True)
 
 
 class _FirestoreFake:
-    def __init__(self, docs=None):
+    def __init__(self, docs=None, *, get_exception=None):
         self.docs = docs or {}
+        self.get_exception = get_exception
         self.document_get_paths = []
+        self.document_get_timeouts = []
         self.collection_paths = []
 
     def document(self, path):
@@ -54,6 +61,7 @@ class _FirestoreFake:
 
 def _enabled_rollout_doc(uid='u1'):
     return {
+        'schema_version': V17_DEFAULT_READ_ROLLOUT_SCHEMA_VERSION,
         'uid': uid,
         'mode': V17Mode.read.value,
         'mode_epoch': 7,
@@ -238,7 +246,16 @@ def test_shared_rollout_helper_fails_closed_for_missing_malformed_uid_mismatch_a
     assert missing_decision.fallback_reason == 'missing_rollout_state'
     assert missing.collection_paths == []
 
-    malformed = _FirestoreFake({'users/u1/memory_control/state': {'uid': 'u1', 'mode': 'read', 'stage_gates': 'bad'}})
+    malformed = _FirestoreFake(
+        {
+            'users/u1/memory_control/state': {
+                'schema_version': V17_DEFAULT_READ_ROLLOUT_SCHEMA_VERSION,
+                'uid': 'u1',
+                'mode': 'read',
+                'stage_gates': 'bad',
+            }
+        }
+    )
     malformed_decision = read_v17_default_read_rollout(uid='u1', db_client=malformed, consumer='developer_api')
     assert malformed_decision.v17_default_developer_enabled is False
     assert malformed_decision.read_decision == V17ReadDecision.DENY_MEMORY
@@ -262,6 +279,80 @@ def test_shared_rollout_helper_fails_closed_for_missing_malformed_uid_mismatch_a
     assert no_grant_decision.read_decision == V17ReadDecision.DENY_MEMORY
     assert no_grant_decision.fallback_reason == 'missing_developer_default_memory_grant'
     assert no_grant.collection_paths == []
+
+
+def test_rollout_doc_requires_exact_uid_schema_and_canonical_nested_grant_precedence():
+    missing_uid = _enabled_rollout_doc()
+    missing_uid.pop('uid')
+    missing_uid_decision = read_v17_default_read_rollout(
+        uid='u1', db_client=_FirestoreFake({'users/u1/memory_control/state': missing_uid}), consumer='mcp'
+    )
+    assert missing_uid_decision.read_decision == V17ReadDecision.DENY_MEMORY
+    assert missing_uid_decision.fallback_reason == 'uid_mismatch'
+
+    missing_schema = _enabled_rollout_doc()
+    missing_schema.pop('schema_version')
+    missing_schema_decision = read_v17_default_read_rollout(
+        uid='u1', db_client=_FirestoreFake({'users/u1/memory_control/state': missing_schema}), consumer='mcp'
+    )
+    assert missing_schema_decision.read_decision == V17ReadDecision.DENY_MEMORY
+    assert missing_schema_decision.fallback_reason == 'unsupported_rollout_schema'
+
+    unsupported_schema = _enabled_rollout_doc() | {'schema_version': 0}
+    unsupported_schema_decision = read_v17_default_read_rollout(
+        uid='u1', db_client=_FirestoreFake({'users/u1/memory_control/state': unsupported_schema}), consumer='mcp'
+    )
+    assert unsupported_schema_decision.read_decision == V17ReadDecision.DENY_MEMORY
+    assert unsupported_schema_decision.fallback_reason == 'unsupported_rollout_schema'
+
+    nested_false_with_stale_top_level_true = _enabled_rollout_doc() | {
+        'grants': {'mcp': {'default_memory': False}},
+        'mcp_default_memory_grant': True,
+    }
+    nested_false_decision = read_v17_default_read_rollout(
+        uid='u1',
+        db_client=_FirestoreFake({'users/u1/memory_control/state': nested_false_with_stale_top_level_true}),
+        consumer='mcp',
+    )
+    assert nested_false_decision.app_has_default_memory_grant is False
+    assert nested_false_decision.read_decision == V17ReadDecision.DENY_MEMORY
+    assert nested_false_decision.fallback_reason == 'missing_mcp_default_memory_grant'
+
+    nested_absent_with_stale_top_level_true = _enabled_rollout_doc() | {
+        'grants': {'mcp': {}},
+        'mcp_default_memory_grant': True,
+    }
+    nested_absent_decision = read_v17_default_read_rollout(
+        uid='u1',
+        db_client=_FirestoreFake({'users/u1/memory_control/state': nested_absent_with_stale_top_level_true}),
+        consumer='mcp',
+    )
+    assert nested_absent_decision.app_has_default_memory_grant is False
+    assert nested_absent_decision.read_decision == V17ReadDecision.DENY_MEMORY
+    assert nested_absent_decision.fallback_reason == 'missing_mcp_default_memory_grant'
+
+
+def test_rollout_reads_use_bounded_timeout_and_fail_closed_for_firestore_transport_exceptions():
+    class PermissionDenied(Exception):
+        pass
+
+    db_client = _FirestoreFake({'users/u1/memory_control/state': _enabled_rollout_doc()})
+    decision = read_v17_default_read_rollout(uid='u1', db_client=db_client, consumer='mcp')
+    assert decision.read_decision == V17ReadDecision.USE_V17
+    assert db_client.document_get_timeouts == [V17_DEFAULT_READ_ROLLOUT_TIMEOUT_SECONDS]
+
+    failing_db_client = _FirestoreFake(get_exception=PermissionDenied('permission denied'))
+    failing_decision = read_v17_default_read_rollout(uid='u1', db_client=failing_db_client, consumer='mcp')
+    assert failing_decision.read_decision == V17ReadDecision.DENY_MEMORY
+    assert failing_decision.fallback_reason == 'rollout_read_failed'
+    assert failing_db_client.document_get_timeouts == [V17_DEFAULT_READ_ROLLOUT_TIMEOUT_SECONDS]
+
+    failing_shared_decisions = read_v17_default_read_rollout_decisions(uid='u1', db_client=failing_db_client)
+    assert {consumer: decision.fallback_reason for consumer, decision in failing_shared_decisions.items()} == {
+        'mcp': 'rollout_read_failed',
+        'developer_api': 'rollout_read_failed',
+        'omi_chat': 'rollout_read_failed',
+    }
 
 
 def test_shared_rollout_helper_distinguishes_shadow_only_and_explicit_legacy_safe_decisions():

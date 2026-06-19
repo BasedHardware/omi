@@ -143,6 +143,7 @@ def _hit(item, *, score, projection_commit_id='projection-1'):
 
 def _enabled_rollout_doc(uid='u1'):
     return {
+        'schema_version': 1,
         'uid': uid,
         'mode': V17Mode.read.value,
         'mode_epoch': 7,
@@ -158,7 +159,7 @@ def _enabled_rollout_doc(uid='u1'):
             V17StageGate.read.value: PASSED,
         },
         'grants': {
-            'developer': {
+            'developer_api': {
                 'default_memory': True,
                 'archive': True,
             }
@@ -320,13 +321,17 @@ def test_developer_rollout_reader_fails_closed_without_memory_item_reads_for_mis
     assert read_v17_developer_default_memory_rollout(uid='u1', db_client=missing).v17_default_developer_enabled is False
     assert missing.collection_paths == []
 
-    malformed = _FirestoreFake({'users/u1/memory_control/state': {'uid': 'u1', 'mode': 'read', 'stage_gates': 'bad'}})
+    malformed = _FirestoreFake(
+        {'users/u1/memory_control/state': {'schema_version': 1, 'uid': 'u1', 'mode': 'read', 'stage_gates': 'bad'}}
+    )
     malformed_decision = read_v17_developer_default_memory_rollout(uid='u1', db_client=malformed)
     assert malformed_decision.v17_default_developer_enabled is False
     assert malformed_decision.app_has_default_memory_grant is False
     assert malformed.collection_paths == []
 
-    no_grant = _FirestoreFake({'users/u1/memory_control/state': _enabled_rollout_doc() | {'grants': {'developer': {}}}})
+    no_grant = _FirestoreFake(
+        {'users/u1/memory_control/state': _enabled_rollout_doc() | {'grants': {'developer_api': {}}}}
+    )
     no_grant_decision = read_v17_developer_default_memory_rollout(uid='u1', db_client=no_grant)
     assert no_grant_decision.rollout_capabilities.v17_reads_enabled is True
     assert no_grant_decision.app_has_default_memory_grant is False
@@ -402,7 +407,7 @@ def test_split_brain_guard_blocks_missing_or_malformed_developer_config_fail_saf
     malformed = read_v17_developer_default_memory_rollout(
         uid='u1',
         db_client=_FirestoreFake(
-            {'users/u1/memory_control/state': {'uid': 'u1', 'mode': 'read', 'stage_gates': 'bad'}}
+            {'users/u1/memory_control/state': {'schema_version': 1, 'uid': 'u1', 'mode': 'read', 'stage_gates': 'bad'}}
         ),
     )
 
@@ -495,7 +500,7 @@ def test_developer_default_v17_adapter_returns_denied_decision_when_rollout_or_g
     grantless_decision = read_v17_developer_default_memory_rollout(
         uid='u1',
         db_client=_FirestoreFake(
-            {'users/u1/memory_control/state': _enabled_rollout_doc() | {'grants': {'developer': {}}}}
+            {'users/u1/memory_control/state': _enabled_rollout_doc() | {'grants': {'developer_api': {}}}}
         ),
     )
 
@@ -607,7 +612,7 @@ def test_developer_vector_adapter_returns_denied_decision_before_vector_or_memor
     grantless_decision = read_v17_developer_default_memory_rollout(
         uid='u1',
         db_client=_FirestoreFake(
-            {'users/u1/memory_control/state': _enabled_rollout_doc() | {'grants': {'developer': {}}}}
+            {'users/u1/memory_control/state': _enabled_rollout_doc() | {'grants': {'developer_api': {}}}}
         ),
     )
 

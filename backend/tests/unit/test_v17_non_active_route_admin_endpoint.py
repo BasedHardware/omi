@@ -107,6 +107,7 @@ class _FirestoreFake:
 
 def _enabled_rollout_doc(uid="u1"):
     return {
+        "schema_version": 1,
         "uid": uid,
         "mode": V17Mode.read.value,
         "mode_epoch": 7,
@@ -246,7 +247,7 @@ def test_admin_read_rollout_decision_endpoint_reports_disabled_consumers_for_mis
             },
         ),
         (
-            {"users/u1/memory_control/state": {"uid": "u1", "mode": "read", "stage_gates": "bad"}},
+            {"users/u1/memory_control/state": {"schema_version": 1, "uid": "u1", "mode": "read", "stage_gates": "bad"}},
             {
                 "mcp": "malformed_rollout_state",
                 "developer_api": "malformed_rollout_state",

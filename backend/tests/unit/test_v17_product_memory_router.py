@@ -215,6 +215,7 @@ def test_product_search_endpoint_uses_default_policy_and_excludes_stale_short_te
         {
             _global_read_gate_path(): _global_read_gate_doc(),
             'users/u1/memory_control/state': {
+                'schema_version': 1,
                 'uid': 'u1',
                 'mode': 'read',
                 'fallback_projection_ready': True,
@@ -323,6 +324,7 @@ def test_product_search_endpoint_rejects_disabled_missing_malformed_and_no_grant
         (
             {
                 'users/u1/memory_control/state': {
+                    'schema_version': 1,
                     'uid': 'u1',
                     'mode': 'off',
                     'grants': {'omi_chat': {'default_memory': True}},
@@ -331,12 +333,13 @@ def test_product_search_endpoint_rejects_disabled_missing_malformed_and_no_grant
             'v17_reads_disabled',
         ),
         (
-            {'users/u1/memory_control/state': {'uid': 'u1', 'mode': 'read', 'stage_gates': 'bad'}},
+            {'users/u1/memory_control/state': {'schema_version': 1, 'uid': 'u1', 'mode': 'read', 'stage_gates': 'bad'}},
             'malformed_rollout_state',
         ),
         (
             {
                 'users/u1/memory_control/state': {
+                    'schema_version': 1,
                     'uid': 'u1',
                     'mode': 'read',
                     'fallback_projection_ready': True,
@@ -405,6 +408,7 @@ def test_archive_search_endpoint_rejects_missing_malformed_disabled_and_no_serve
         (
             {
                 'users/u1/memory_control/state': {
+                    'schema_version': 1,
                     'uid': 'u1',
                     'mode': 'read',
                     'fallback_projection_ready': True,
@@ -417,6 +421,7 @@ def test_archive_search_endpoint_rejects_missing_malformed_disabled_and_no_serve
         (
             {
                 'users/u1/memory_control/state': {
+                    'schema_version': 1,
                     'uid': 'u1',
                     'mode': 'read',
                     'fallback_projection_ready': True,
@@ -429,6 +434,7 @@ def test_archive_search_endpoint_rejects_missing_malformed_disabled_and_no_serve
         (
             {
                 'users/u1/memory_control/state': {
+                    'schema_version': 1,
                     'uid': 'u1',
                     'mode': 'off',
                     'grants': {'omi_chat': {'default_memory': True, 'archive': True}},
@@ -439,6 +445,7 @@ def test_archive_search_endpoint_rejects_missing_malformed_disabled_and_no_serve
         (
             {
                 'users/u1/memory_control/state': {
+                    'schema_version': 1,
                     'uid': 'u1',
                     'mode': 'read',
                     'fallback_projection_ready': True,
@@ -481,6 +488,7 @@ def test_archive_search_endpoint_requires_explicit_intent_and_server_capability_
         {
             _global_read_gate_path(): _global_read_gate_doc(),
             'users/u1/memory_control/state': {
+                'schema_version': 1,
                 'uid': 'u1',
                 'mode': 'read',
                 'fallback_projection_ready': True,
@@ -543,6 +551,7 @@ def test_vector_search_endpoint_uses_persisted_default_policy_and_excludes_stale
         {
             _global_read_gate_path(): _global_read_gate_doc(),
             'users/u1/memory_control/state': {
+                'schema_version': 1,
                 'uid': 'u1',
                 'mode': 'read',
                 'fallback_projection_ready': True,
@@ -615,6 +624,7 @@ def test_vector_search_endpoint_does_not_persist_repair_outbox_without_server_fl
         {
             _global_read_gate_path(): _global_read_gate_doc(),
             'users/u1/memory_control/state': {
+                'schema_version': 1,
                 'uid': 'u1',
                 'mode': 'read',
                 'fallback_projection_ready': True,
@@ -666,6 +676,7 @@ def test_vector_search_endpoint_persists_repair_outbox_only_with_server_flag(mon
         {
             _global_read_gate_path(): _global_read_gate_doc(),
             'users/u1/memory_control/state': {
+                'schema_version': 1,
                 'uid': 'u1',
                 'mode': 'read',
                 'fallback_projection_ready': True,
