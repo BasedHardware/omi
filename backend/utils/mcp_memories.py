@@ -37,6 +37,47 @@ class V17McpDefaultMemoryRolloutDecision:
     def v17_default_mcp_enabled(self) -> bool:
         return self.rollout_capabilities.v17_reads_enabled and self.app_has_default_memory_grant
 
+    @property
+    def fallback_reason(self) -> Optional[str]:
+        if self.v17_default_mcp_enabled:
+            return None
+        if self.reason != 'ok':
+            return self.reason
+        if not self.rollout_capabilities.v17_reads_enabled:
+            return 'v17_reads_disabled'
+        if not self.app_has_default_memory_grant:
+            return 'missing_mcp_default_memory_grant'
+        return 'v17_default_mcp_disabled'
+
+
+def build_v17_mcp_default_memory_rollout_observability(
+    decision: V17McpDefaultMemoryRolloutDecision,
+) -> dict:
+    capabilities = decision.rollout_capabilities
+    fallback_reason = decision.fallback_reason
+    reason = fallback_reason or decision.reason
+    return {
+        'uid': decision.uid,
+        'source_path': decision.source_path,
+        'enabled': decision.v17_default_mcp_enabled,
+        'reason': reason,
+        'mode': capabilities.mode.value,
+        'v17_reads_enabled': capabilities.v17_reads_enabled,
+        'legacy_reads_authoritative': capabilities.legacy_reads_authoritative,
+        'mcp_default_memory_grant': decision.app_has_default_memory_grant,
+        'archive_default_visible': False,
+        'archive_capability': decision.archive_capability,
+        'fallback_reason': fallback_reason,
+        'grants': {'mcp_default_memory': decision.app_has_default_memory_grant},
+        'capabilities': {
+            'legacy_only': capabilities.legacy_only,
+            'shadow_artifacts_enabled': capabilities.shadow_artifacts_enabled,
+            'v17_writes_enabled': capabilities.v17_writes_enabled,
+            'v17_reads_enabled': capabilities.v17_reads_enabled,
+            'legacy_reads_authoritative': capabilities.legacy_reads_authoritative,
+        },
+    }
+
 
 def _disabled_v17_mcp_rollout_decision(uid: str, source_path: str, reason: str) -> V17McpDefaultMemoryRolloutDecision:
     return V17McpDefaultMemoryRolloutDecision(

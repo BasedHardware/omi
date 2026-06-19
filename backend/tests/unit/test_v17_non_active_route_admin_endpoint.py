@@ -4,6 +4,8 @@ import types
 from datetime import datetime, timezone
 from unittest.mock import MagicMock
 
+from config.v17_memory import PASSED, V17Mode, V17StageGate
+
 os.environ.setdefault(
     "ENCRYPTION_SECRET",
     "omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv",
@@ -66,6 +68,62 @@ def _report(uid="u1"):
     )
 
 
+class _Snapshot:
+    def __init__(self, data=None, *, exists=True):
+        self._data = data
+        self.exists = exists
+
+    def to_dict(self):
+        if self._data is None:
+            return None
+        return dict(self._data)
+
+
+class _DocumentRef:
+    def __init__(self, db_client, path):
+        self._db_client = db_client
+        self.path = path
+
+    def get(self):
+        self._db_client.document_get_paths.append(self.path)
+        if self.path not in self._db_client.docs:
+            return _Snapshot(None, exists=False)
+        return _Snapshot(self._db_client.docs[self.path], exists=True)
+
+
+class _FirestoreFake:
+    def __init__(self, docs=None):
+        self.docs = docs or {}
+        self.document_get_paths = []
+        self.collection_paths = []
+
+    def document(self, path):
+        return _DocumentRef(self, path)
+
+    def collection(self, path):
+        self.collection_paths.append(path)
+        raise AssertionError(f"admin rollout inspection must not read collections: {path}")
+
+
+def _enabled_rollout_doc(uid="u1"):
+    return {
+        "uid": uid,
+        "mode": V17Mode.read.value,
+        "mode_epoch": 7,
+        "cutover_epoch": 7,
+        "account_generation": 3,
+        "fallback_projection_ready": True,
+        "persistent_v17_writes_started": True,
+        "writes_blocked": False,
+        "stage_gates": {
+            V17StageGate.shadow.value: PASSED,
+            V17StageGate.write.value: PASSED,
+            V17StageGate.read.value: PASSED,
+        },
+        "grants": {"mcp": {"default_memory": True, "archive": True}},
+    }
+
+
 def test_admin_router_registers_concrete_v17_admin_report_route():
     assert any(
         method == "GET" and path == "/v17/admin/users/{uid}/non-active-route-report"
@@ -73,9 +131,92 @@ def test_admin_router_registers_concrete_v17_admin_report_route():
     )
 
     assert any(
+        method == "GET" and path == "/v17/admin/users/{uid}/read-rollout-decision"
+        for method, path, _kwargs, _func in v17_memory_admin.router.routes
+    )
+
+    assert any(
         method == "POST" and path == "/v17/admin/users/{uid}/short-term-lifecycle/run"
         for method, path, _kwargs, _func in v17_memory_admin.router.routes
     )
+
+
+def test_admin_read_rollout_decision_endpoint_reports_enabled_policy_without_memory_item_reads(monkeypatch):
+    os.environ["ADMIN_KEY"] = "secret"
+    db_client = _FirestoreFake({"users/u1/memory_control/state": _enabled_rollout_doc()})
+    monkeypatch.setattr(v17_memory_admin, "db", db_client)
+
+    response = v17_memory_admin.get_v17_read_rollout_decision("u1", secret_key="secret")
+
+    assert db_client.document_get_paths == ["users/u1/memory_control/state"]
+    assert db_client.collection_paths == []
+    assert response == {
+        "uid": "u1",
+        "source_path": "users/u1/memory_control/state",
+        "enabled": True,
+        "reason": "ok",
+        "mode": "read",
+        "v17_reads_enabled": True,
+        "legacy_reads_authoritative": False,
+        "mcp_default_memory_grant": True,
+        "archive_default_visible": False,
+        "archive_capability": False,
+        "fallback_reason": None,
+        "grants": {"mcp_default_memory": True},
+        "capabilities": {
+            "legacy_only": False,
+            "shadow_artifacts_enabled": True,
+            "v17_writes_enabled": True,
+            "v17_reads_enabled": True,
+            "legacy_reads_authoritative": False,
+        },
+    }
+
+
+def test_admin_read_rollout_decision_endpoint_fails_closed_for_missing_malformed_uid_mismatch_and_no_grant(monkeypatch):
+    os.environ["ADMIN_KEY"] = "secret"
+    cases = [
+        ({}, "missing_rollout_state"),
+        (
+            {"users/u1/memory_control/state": {"uid": "u1", "mode": "read", "stage_gates": "bad"}},
+            "malformed_rollout_state",
+        ),
+        ({"users/u1/memory_control/state": _enabled_rollout_doc(uid="other")}, "uid_mismatch"),
+        (
+            {"users/u1/memory_control/state": _enabled_rollout_doc() | {"grants": {"mcp": {}}}},
+            "missing_mcp_default_memory_grant",
+        ),
+    ]
+
+    for docs, reason in cases:
+        db_client = _FirestoreFake(docs)
+        monkeypatch.setattr(v17_memory_admin, "db", db_client)
+
+        response = v17_memory_admin.get_v17_read_rollout_decision("u1", secret_key="secret")
+
+        assert response["enabled"] is False
+        assert response["reason"] == reason
+        assert response["fallback_reason"] == reason
+        assert response["archive_default_visible"] is False
+        assert response["archive_capability"] is False
+        assert db_client.document_get_paths == ["users/u1/memory_control/state"]
+        assert db_client.collection_paths == []
+
+
+def test_admin_read_rollout_decision_endpoint_rejects_invalid_admin_key(monkeypatch):
+    os.environ["ADMIN_KEY"] = "secret"
+    db_client = _FirestoreFake({"users/u1/memory_control/state": _enabled_rollout_doc()})
+    monkeypatch.setattr(v17_memory_admin, "db", db_client)
+
+    try:
+        v17_memory_admin.get_v17_read_rollout_decision("u1", secret_key="wrong")
+    except _HTTPException as exc:
+        assert exc.status_code == 403
+    else:
+        raise AssertionError("expected admin auth failure")
+
+    assert db_client.document_get_paths == []
+    assert db_client.collection_paths == []
 
 
 def test_admin_endpoint_surfaces_non_active_route_report_counts_without_memory_items(monkeypatch):
