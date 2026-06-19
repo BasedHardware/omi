@@ -346,7 +346,7 @@ ORACLE_IMPLEMENTATION_SHAPE = {
     "projection_service": "backend/database/v17_v3_compatibility_projection.py",
     "projection_store": "users/{uid}/memories as V17-derived compatibility projection",
     "cursor_service": "backend/utils/memory/v17_v3_cursor.py",
-    "external_write_service": "backend/utils/memory/v17_external_memory_write_service.py",
+    "external_write_service": "backend/utils/memory/v17_v3_write_convergence.py",
     "decision_order": [
         "global_emergency_gate",
         "server_side_cohort_membership",
@@ -462,6 +462,22 @@ MEMORY_READ_SERVICE_PROOF = {
     ],
 }
 
+WRITE_CONVERGENCE_PROOF = {
+    "service": "backend/utils/memory/v17_v3_write_convergence.py",
+    "test": "backend/tests/unit/test_v17_v3_write_convergence.py",
+    "runtime_wired": False,
+    "production_rollout_approved": False,
+    "external_calls": [],
+    "covered_defaults": [
+        "create_update_require_v17_authoritative_write_path_projection_update_commit_and_current_generation",
+        "delete_requires_tombstone_projection_removal_vector_cleanup_outbox_fence",
+        "missing_stale_partial_swallowed_failure_dual_write_without_durable_outbox_generation_mismatch_fail_closed",
+        "external_writes_disabled_safe_only_when_reads_blocked_or_no_active_write_surfaces",
+        "no_enrolled_v17_legacy_direct_write_fallback_knob",
+        "archive_default_unavailable_no_stale_short_term_default_visible",
+    ],
+}
+
 
 def build_report(*, execute: bool = False) -> dict[str, Any]:
     return {
@@ -491,6 +507,7 @@ def build_report(*, execute: bool = False) -> dict[str, Any]:
         "cursor_service_proof": CURSOR_SERVICE_PROOF,
         "projection_readiness_proof": PROJECTION_READINESS_PROOF,
         "memory_read_service_proof": MEMORY_READ_SERVICE_PROOF,
+        "write_convergence_proof": WRITE_CONVERGENCE_PROOF,
         "non_claims": [
             "No production traffic executed.",
             "No Firestore, Pinecone, cloud, provider, or network calls executed.",
@@ -509,6 +526,7 @@ def build_report(*, execute: bool = False) -> dict[str, Any]:
             "cursor_service_proof_present": True,
             "projection_readiness_proof_present": True,
             "memory_read_service_proof_present": True,
+            "write_convergence_proof_present": True,
             "read_only": True,
             "mutation_allowed": False,
             "approval_claimed": False,
