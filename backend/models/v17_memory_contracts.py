@@ -1,10 +1,13 @@
 import hashlib
 import json
 from enum import Enum
+from datetime import datetime
 from typing import Any, Dict, List, Optional
 from typing import Literal
 
 from pydantic import AliasChoices, BaseModel, Field, field_validator, model_validator
+
+from models.v17_product_memory import MemoryTier
 
 
 class LifecycleState(str, Enum):
@@ -292,6 +295,45 @@ class WorkingMemoryObservation(BaseModel):
     @model_validator(mode="after")
     def derive_read_policy(self):
         self.allowed_use = derive_allowed_use(self.status, self.risk_flags)
+        return self
+
+
+class SourceBackedMemoryCandidate(BaseModel):
+    schema_version: str = "source_backed_memory_candidate.v1"
+    candidate_id: str
+    user_id: str
+    source_id: str
+    source_type: str
+    source_version: str
+    text: str
+    evidence_ids: List[str] = Field(default_factory=list)
+    source_refs: List[Dict[str, Any]] = Field(default_factory=list)
+    captured_at: datetime
+    expires_at: datetime
+    initial_tier: MemoryTier = MemoryTier.short_term
+    archive_id: Optional[str] = None
+    default_access_candidate: bool = True
+    risk_flags: List[str] = Field(default_factory=list)
+    extractor_version: str = "v17_source_backed_candidate_v1"
+
+    @field_validator("candidate_id", "user_id", "source_id", "source_type", "source_version", "text")
+    @classmethod
+    def validate_required_text(cls, value: str) -> str:
+        stripped = (value or "").strip()
+        if not stripped:
+            raise ValueError("required source-backed candidate fields must be non-empty")
+        return stripped
+
+    @model_validator(mode="after")
+    def validate_candidate_tier(self):
+        if self.initial_tier == MemoryTier.archive:
+            self.default_access_candidate = False
+        else:
+            self.initial_tier = MemoryTier.short_term
+            self.default_access_candidate = True
+            self.archive_id = None
+        if self.expires_at <= self.captured_at:
+            raise ValueError("expires_at must be after captured_at")
         return self
 
 
