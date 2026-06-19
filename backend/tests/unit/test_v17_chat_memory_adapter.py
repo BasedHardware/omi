@@ -7,10 +7,13 @@ from models.v17_memory_search_gateway import SearchMode, SearchVectorHit
 from models.v17_product_memory import MemoryItemStatus, MemoryTier, ProcessingState, V17MemoryItem
 from utils.memory.short_term_lifecycle import DEFAULT_SHORT_TERM_TTL_DAYS
 from utils.memory.v17_chat_memory_adapter import (
+    V17ChatMemorySearchResult,
     read_v17_chat_default_memory_rollout,
+    search_v17_default_chat_memories_vector_decision_text,
     search_v17_default_chat_memories_text,
     search_v17_default_chat_memories_vector_text,
 )
+from utils.memory.v17_default_read_rollout import V17ReadDecision
 
 
 class _Snapshot:
@@ -159,11 +162,13 @@ def test_chat_memory_tool_wires_v17_adapter_before_legacy_vector_search():
     memory_tools_py = Path(__file__).resolve().parents[2] / 'utils' / 'retrieval' / 'tools' / 'memory_tools.py'
     contents = memory_tools_py.read_text(encoding='utf-8')
 
-    rollout_call = 'search_v17_default_chat_memories_vector_text('
+    rollout_call = 'search_v17_default_chat_memories_vector_decision_text('
     legacy_call = 'vector_db.find_similar_memories(uid, query, threshold=0.0, limit=fetch_limit)'
     assert rollout_call in contents
     assert legacy_call in contents
     assert contents.index(rollout_call) < contents.index(legacy_call)
+    assert 'if v17_default_memories is not None:' not in contents
+    assert 'V17ReadDecision.USE_LEGACY_SAFE' in contents
 
 
 def test_chat_rollout_reader_supports_omi_chat_grant_without_reading_memory_items():
@@ -351,3 +356,58 @@ def test_chat_vector_adapter_returns_none_without_rollout_or_grant_before_vector
     assert vector_calls == []
     assert disabled_db.collection_paths == []
     assert grantless_db.collection_paths == []
+
+
+def test_chat_vector_decision_adapter_classifies_enabled_denied_and_legacy_safe_without_unsafe_reads():
+    now = datetime(2026, 6, 19, 12, 0, tzinfo=timezone.utc)
+    fresh_short_term = _memory_item('fresh-short-term', now=now, content='coffee fresh short term')
+    enabled_docs = {
+        'users/u1/memory_control/state': _enabled_rollout_doc(),
+        f'users/u1/memory_items/{fresh_short_term.memory_id}': _stored_item(fresh_short_term),
+    }
+    disabled_docs = {
+        'users/u1/memory_control/state': _enabled_rollout_doc() | {'mode': V17Mode.off.value},
+        f'users/u1/memory_items/{fresh_short_term.memory_id}': _stored_item(fresh_short_term),
+    }
+    vector_calls = []
+
+    def fake_vector_query(uid, query, *, mode, limit):
+        vector_calls.append({'uid': uid, 'query': query, 'mode': mode, 'limit': limit})
+        return _VectorCandidateResult(hits=[_hit(fresh_short_term, score=0.9)])
+
+    enabled_db = _FirestoreFake(enabled_docs)
+    enabled = search_v17_default_chat_memories_vector_decision_text(
+        uid='u1', query='coffee', limit=10, db_client=enabled_db, vector_query=fake_vector_query
+    )
+    assert isinstance(enabled, V17ChatMemorySearchResult)
+    assert enabled.read_decision == V17ReadDecision.USE_V17
+    assert enabled.should_use_legacy_fallback is False
+    assert enabled.text is not None and "Found 1 V17 vector memories matching 'coffee':" in enabled.text
+    assert vector_calls == [{'uid': 'u1', 'query': 'coffee', 'mode': SearchMode.default, 'limit': 10}]
+    assert enabled_db.collection_paths == ['users/u1/memory_items']
+
+    denied_db = _FirestoreFake(disabled_docs)
+    denied = search_v17_default_chat_memories_vector_decision_text(
+        uid='u1', query='coffee', limit=10, db_client=denied_db, vector_query=fake_vector_query
+    )
+    assert denied.read_decision == V17ReadDecision.DENY_MEMORY
+    assert denied.should_use_legacy_fallback is False
+    assert denied.fallback_reason == 'v17_reads_disabled'
+    assert denied.text == "No memories available for this request."
+    assert vector_calls == [{'uid': 'u1', 'query': 'coffee', 'mode': SearchMode.default, 'limit': 10}]
+    assert denied_db.collection_paths == []
+
+    legacy_safe_db = _FirestoreFake(disabled_docs)
+    legacy_safe = search_v17_default_chat_memories_vector_decision_text(
+        uid='u1',
+        query='coffee',
+        limit=10,
+        db_client=legacy_safe_db,
+        vector_query=fake_vector_query,
+        allow_legacy_safe_fallback=True,
+    )
+    assert legacy_safe.read_decision == V17ReadDecision.USE_LEGACY_SAFE
+    assert legacy_safe.should_use_legacy_fallback is True
+    assert legacy_safe.text is None
+    assert vector_calls == [{'uid': 'u1', 'query': 'coffee', 'mode': SearchMode.default, 'limit': 10}]
+    assert legacy_safe_db.collection_paths == []

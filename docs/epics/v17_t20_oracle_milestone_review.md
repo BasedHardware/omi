@@ -144,6 +144,26 @@ This closes the narrow Oracle P0-1 subpoint for the product default/vector/Archi
 - Complete shared `ns2`, third-party app/key/scope authorization, vector overfetch/budgets, central telemetry, and real cloud/Pinecone/Firestore/benchmark evidence.
 - Production rollout remains **BLOCKED / NO-GO** until all Oracle P0s and required real-service evidence are complete.
 
+### 2026-06-19 — Omi chat vector fallback explicit read-decision slice
+
+Implemented one narrow Oracle P0-2 fallback-caller-family slice after the global product-read gate, without changing the production rollout verdict:
+
+- Added `V17ChatMemorySearchResult` in `backend/utils/memory/v17_chat_memory_adapter.py` so the Omi chat vector adapter returns explicit `V17ReadDecision` semantics plus fallback reason instead of using `None` as an ambiguous downgrade signal.
+- Wired the mature Omi chat `search_memories_tool` in `backend/utils/retrieval/tools/memory_tools.py` to call the explicit decision adapter and to preserve legacy vector fallback only when the decision is explicitly `USE_LEGACY_SAFE`.
+- Missing, malformed, no-grant, disabled, or shadow-only Omi-chat rollout decisions now avoid V17 vector search and `users/{uid}/memory_items` reads and return a safe no-memory response instead of silently calling legacy `vector_db.find_similar_memories(...)`.
+- Enabled/granted Omi-chat rollout continues using hydrated V17 vector search with default Archive unavailable; no Archive exposure was broadened.
+- The old text wrapper is retained only as an explicit compatibility/legacy-safe opt-in path; it is not used by the production chat tool.
+
+Verification recorded in `docs/epics/v17_memory_implementation_tickets.md`: RED import failure for missing `V17ChatMemorySearchResult`, GREEN chat adapter tests (`8 passed`), focused regression (`20 passed`), full `pytest tests/unit/test_v17_*.py -q` (`183 passed, 1 warning`), and async blocker scan exit 0 with pre-existing findings only.
+
+This closes one Oracle P0-2 subpoint for the Omi chat vector fallback caller family. Remaining P0-2/P0 work:
+
+- Continue converting any remaining fallback callers (chat default/list path if promoted, MCP REST/SSE list/default paths, developer list/category paths) so only explicit `USE_LEGACY_SAFE` can downgrade to legacy.
+- Address P0-3 write/read split-brain before authoritative read cutover.
+- Make P0-4 vector freshness/purge fences mandatory and complete repair/stale-ID proof.
+- Complete shared `ns2`, third-party app/key/scope authorization, vector overfetch/budgets, central telemetry, and real cloud/Pinecone/Firestore/benchmark evidence.
+- Production rollout remains **BLOCKED / NO-GO** until all Oracle P0s and required real-service evidence are complete.
+
 ## Not-run / not-claimed caveats preserved
 
 - Oracle review has now run and is recorded here, but it blocks production rollout.
