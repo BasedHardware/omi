@@ -5,13 +5,10 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from database._client import db
 from database.v17_vector_repair_outbox import write_v17_vector_repair_purge_outbox_records
 from models.v17_product_memory import MemoryAccessPolicy
-from utils.memory.v17_default_read_rollout import (
-    V17ReadDecision,
-    V17_GLOBAL_READ_GATE_PATH,
-    build_v17_default_read_rollout_observability,
-    read_v17_archive_read_rollout,
-    read_v17_default_read_rollout,
-    read_v17_global_read_gate,
+from utils.memory.v17_default_read_rollout import V17_GLOBAL_READ_GATE_PATH
+from utils.memory.v17_product_authorization import (
+    V17ProductAuthorizationContext,
+    authorize_v17_product_memory_route,
 )
 from utils.memory.v17_product_memory_read_service import (
     MAX_PRODUCT_MEMORY_READ_LIMIT,
@@ -73,12 +70,11 @@ def _global_read_gate_observability(gate) -> dict:
     }
 
 
-def _require_global_v17_read_gate() -> dict:
-    gate = read_v17_global_read_gate(db_client=db)
-    observability = _global_read_gate_observability(gate)
-    if gate.read_decision != V17ReadDecision.USE_V17:
-        raise HTTPException(status_code=403, detail=observability)
-    return observability
+def _require_v17_product_authorization(context: V17ProductAuthorizationContext):
+    decision = authorize_v17_product_memory_route(context, db_client=db)
+    if not decision.allowed:
+        raise HTTPException(status_code=decision.status_code, detail=decision.observability)
+    return decision
 
 
 @router.get('/v17/memory/search', tags=['memories', 'v17'])
@@ -97,13 +93,12 @@ def search_v17_product_memory(
     """
 
     _validate_search_pagination(limit, offset)
-    global_read_gate = _require_global_v17_read_gate()
-    rollout = read_v17_default_read_rollout(uid=uid, db_client=db, consumer='omi_chat')
-    rollout_observability = build_v17_default_read_rollout_observability(rollout)
-    if rollout.read_decision != V17ReadDecision.USE_V17:
-        raise HTTPException(status_code=403, detail=rollout_observability)
-
-    policy = _default_omi_chat_policy()
+    authz = _require_v17_product_authorization(
+        V17ProductAuthorizationContext(uid=uid, consumer='omi_chat', surface='product_default_search')
+    )
+    global_read_gate = _global_read_gate_observability(authz.global_gate)
+    rollout_observability = authz.observability
+    policy = authz.policy or _default_omi_chat_policy()
     try:
         response = fetch_default_product_memory_search(
             uid=uid,
@@ -141,17 +136,20 @@ def search_v17_vector_memory(
     """
 
     _validate_vector_limit(limit)
-    global_read_gate = _require_global_v17_read_gate()
-    rollout = read_v17_default_read_rollout(uid=uid, db_client=db, consumer='omi_chat')
-    rollout_observability = build_v17_default_read_rollout_observability(rollout)
+    authz = _require_v17_product_authorization(
+        V17ProductAuthorizationContext(uid=uid, consumer='omi_chat', surface='product_vector_search')
+    )
+    rollout = authz.rollout
+    if rollout is None:
+        raise HTTPException(status_code=403, detail=authz.observability)
+    global_read_gate = _global_read_gate_observability(authz.global_gate)
+    rollout_observability = authz.observability
     rollout_observability['vector_repair_outbox_enabled'] = rollout.vector_repair_outbox_enabled
-    if rollout.read_decision != V17ReadDecision.USE_V17:
-        raise HTTPException(status_code=403, detail=rollout_observability)
     if not rollout.vector_projection_commit_id:
         rollout_observability['fallback_reason'] = 'missing_vector_projection_commit_id'
         raise HTTPException(status_code=403, detail=rollout_observability)
 
-    policy = _default_omi_chat_policy()
+    policy = authz.policy or _default_omi_chat_policy()
     try:
         response = fetch_default_v17_vector_memory_search(
             uid=uid,
@@ -196,13 +194,18 @@ def search_v17_archive_memory(
     if not include_archive:
         raise HTTPException(status_code=403, detail='explicit archive capability is required')
 
-    global_read_gate = _require_global_v17_read_gate()
-    rollout = read_v17_archive_read_rollout(uid=uid, db_client=db, consumer='omi_chat')
-    rollout_observability = build_v17_default_read_rollout_observability(rollout)
-    if rollout.read_decision != V17ReadDecision.USE_V17 or not rollout.archive_capability:
-        raise HTTPException(status_code=403, detail=rollout_observability)
-
-    policy = _archive_omi_chat_policy()
+    authz = _require_v17_product_authorization(
+        V17ProductAuthorizationContext(
+            uid=uid,
+            consumer='omi_chat',
+            surface='product_archive_search',
+            explicit_archive_request=include_archive,
+            requires_archive_capability=True,
+        )
+    )
+    global_read_gate = _global_read_gate_observability(authz.global_gate)
+    rollout_observability = authz.observability
+    policy = authz.policy or _archive_omi_chat_policy()
     try:
         response = fetch_archive_product_memory_search(
             uid=uid,

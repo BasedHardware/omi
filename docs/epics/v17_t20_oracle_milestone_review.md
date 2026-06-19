@@ -675,6 +675,26 @@ This closes only the central telemetry payload/emitter seam. Remaining P0-4/P0 w
 - Complete overfetch/refill/budgets, app/key/scope auth, benchmarks, and explicit rollout gates.
 - Production rollout remains **BLOCKED / NO-GO** until all Oracle P0s and required real-service evidence are complete.
 
+### 2026-06-19 — P0-1 shared V17 product authorization decision seam
+
+Returned from the locally exhausted P0-4 seam work to Oracle P0-1 and added the first shared product-route authorization seam, without changing the production rollout verdict:
+
+- Added `backend/utils/memory/v17_product_authorization.py` with `V17ProductAuthorizationContext`, `V17ProductAuthorizationDecision`, and `authorize_v17_product_memory_route(...)`.
+- The seam is pure/fake-injectable and carries `uid`, `consumer`, `surface`, optional `app_id`/`key_id`/`scopes`, explicit Archive request intent, the global read gate, per-user rollout/default grant state, persisted Archive capability, and deterministic deny reasons.
+- The decision checks the global read gate before per-user rollout reads and denies missing/malformed/disabled/no-grant control states before any vector query or `users/{uid}/memory_items` access.
+- Default product authorization always builds an Omi-chat policy with `archive_capability=false`, even when a persisted Archive capability exists; persisted capability alone does not make Archive default-visible.
+- Archive authorization requires both `explicit_archive_request=true` and persisted server-owned Archive capability; explicit request alone is denied and persisted capability without explicit request is denied before per-user rollout/item reads.
+- Wired product `/v17/memory/search`, `/v17/memory/vector/search`, and `/v17/memory/archive/search` through the shared seam before memory/vector reads while preserving existing default Archive-unavailable behavior.
+
+Verification recorded in `docs/epics/v17_memory_implementation_tickets.md`: RED import failure for missing `utils.memory.v17_product_authorization`, GREEN seam tests (`5 passed`), focused product/default rollout regression (`34 passed`), full `pytest tests/unit/test_v17_*.py -q` (`264 passed, 1 warning`), and async scan exit 0 with pre-existing findings only.
+
+This addresses the narrow Oracle P0-1 subpoint that product default/vector/Archive routes share a server-side authorization decision before `memory_items` access. Remaining P0-1/P0-6/P0 work:
+
+- Persist and enforce app/key/scope-specific grants for MCP/developer/third-party memory access; this seam only carries the context and does not yet implement per-key grant storage.
+- Add real FastAPI dependency/scope tests for product and external surfaces.
+- Continue P0-7 overfetch/refill/budget work and real cloud/Pinecone/Firestore/benchmark evidence.
+- Production rollout remains **BLOCKED / NO-GO** until all Oracle P0s and required real-service evidence are complete.
+
 ## Not-run / not-claimed caveats preserved
 
 - Oracle review has now run and is recorded here, but it blocks production rollout.

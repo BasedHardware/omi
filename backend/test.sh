@@ -44,6 +44,7 @@ pytest tests/unit/test_v17_chat_memory_adapter.py -v
 pytest tests/unit/test_v17_developer_memory_adapter.py -v
 pytest tests/unit/test_v17_mcp_memory_adapter.py -v
 pytest tests/unit/test_v17_product_memory_router.py -v
+pytest tests/unit/test_v17_product_authorization.py -v
 pytest tests/unit/test_v17_short_term_lifecycle_worker.py -v
 pytest tests/unit/test_v17_short_term_lifecycle_firestore_store.py -v
 pytest tests/unit/test_v17_memory_contracts.py -v
