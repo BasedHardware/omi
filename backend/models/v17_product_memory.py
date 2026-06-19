@@ -1,9 +1,10 @@
 import uuid
-from datetime import datetime
+from dataclasses import dataclass
+from datetime import datetime, timezone
 from enum import Enum
 from typing import List, Optional
 
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from models.memory_evidence import MemoryEvidence, SourceState
 
@@ -27,6 +28,47 @@ class ProcessingState(str, Enum):
     blocked = "blocked"
 
 
+class MemoryConsumer(str, Enum):
+    omi_chat = "omi_chat"
+    agent = "agent"
+    third_party = "third_party"
+    developer_api = "developer_api"
+    mcp = "mcp"
+    admin_debug = "admin_debug"
+    eval = "eval"
+    unknown = "unknown"
+
+
+@dataclass(frozen=True)
+class AccessDecision:
+    allowed: bool
+    reason: str
+
+
+@dataclass(frozen=True)
+class MemoryAccessPolicy:
+    consumer: MemoryConsumer
+    app_has_default_memory_grant: bool = False
+    archive_capability: bool = False
+    raw_provenance_capability: bool = False
+
+    @classmethod
+    def for_omi_chat(cls, archive_capability: bool = False) -> "MemoryAccessPolicy":
+        return cls(
+            consumer=MemoryConsumer.omi_chat, app_has_default_memory_grant=True, archive_capability=archive_capability
+        )
+
+    @classmethod
+    def for_third_party(
+        cls, app_has_default_memory_grant: bool = False, archive_capability: bool = False
+    ) -> "MemoryAccessPolicy":
+        return cls(
+            consumer=MemoryConsumer.third_party,
+            app_has_default_memory_grant=app_has_default_memory_grant,
+            archive_capability=archive_capability,
+        )
+
+
 class V17MemoryItemAlias(BaseModel):
     old_memory_id: str
     canonical_memory_id: str
@@ -34,40 +76,40 @@ class V17MemoryItemAlias(BaseModel):
     reason: str
     created_at: datetime
 
+    @model_validator(mode="after")
+    def validate_alias(self):
+        if self.old_memory_id == self.canonical_memory_id:
+            raise ValueError("alias cannot point to self")
+        return self
+
 
 class V17MemoryItem(BaseModel):
+    model_config = ConfigDict(validate_assignment=True)
+
     memory_id: str
     uid: str
     canonical_memory_id: Optional[str] = None
-    aliases: List[str] = Field(default_factory=list)
-    version: int = 1
+    version: int
     tier: MemoryTier
-    status: MemoryItemStatus = MemoryItemStatus.active
-    processing_state: ProcessingState = ProcessingState.pending
-    content: Optional[str] = None
+    status: MemoryItemStatus
+    processing_state: ProcessingState
+    content: Optional[str]
     evidence: List[MemoryEvidence] = Field(default_factory=list)
-    source_state: SourceState = SourceState.active
-    sensitivity_labels: List[str] = Field(default_factory=list)
-    visibility: str = "private"
-    user_asserted: bool = False
+    source_state: SourceState
+    sensitivity_labels: List[str]
+    visibility: str
+    user_asserted: bool
     captured_at: datetime
     updated_at: datetime
     expires_at: Optional[datetime] = None
     ledger_commit_id: Optional[str] = None
     ledger_sequence: Optional[int] = None
 
-    @field_validator("memory_id")
+    @field_validator("memory_id", "uid", "visibility")
     @classmethod
-    def validate_memory_id(cls, value: str) -> str:
+    def validate_nonblank(cls, value: str) -> str:
         if not value or not value.strip():
-            raise ValueError("memory_id is required")
-        return value
-
-    @field_validator("uid")
-    @classmethod
-    def validate_uid(cls, value: str) -> str:
-        if not value or not value.strip():
-            raise ValueError("uid is required")
+            raise ValueError("required fields must not be blank")
         return value
 
     @field_validator("version")
@@ -77,20 +119,39 @@ class V17MemoryItem(BaseModel):
             raise ValueError("version must be positive")
         return value
 
+    @field_validator("captured_at", "updated_at", "expires_at")
+    @classmethod
+    def validate_timezone(cls, value: Optional[datetime]) -> Optional[datetime]:
+        if value is not None and (value.tzinfo is None or value.utcoffset() is None):
+            raise ValueError("timestamps must be timezone-aware")
+        return value
+
+    @field_validator("sensitivity_labels")
+    @classmethod
+    def normalize_sensitivity(cls, value: List[str]) -> List[str]:
+        return sorted({label.strip().lower() for label in value if label and label.strip()})
+
     @model_validator(mode="after")
     def validate_tier_invariants(self):
-        if self.tier == MemoryTier.short_term and self.status == MemoryItemStatus.active:
+        if self.updated_at < self.captured_at:
+            raise ValueError("updated_at must be >= captured_at")
+        if self.status == MemoryItemStatus.active and not (self.content or "").strip():
+            raise ValueError("active memory requires content")
+        if self.tier == MemoryTier.short_term:
             if self.expires_at is None:
-                raise ValueError("active short_term memory requires expires_at")
+                raise ValueError("short_term memory requires expires_at")
+            if self.expires_at <= self.captured_at:
+                raise ValueError("short_term expires_at must be after captured_at")
         if self.tier == MemoryTier.long_term and self.status == MemoryItemStatus.active:
             if not self.ledger_commit_id:
                 raise ValueError("active long_term memory requires ledger_commit_id")
             if self.ledger_sequence is None:
                 raise ValueError("active long_term memory requires ledger_sequence")
-        if self.tier == MemoryTier.archive and self.user_asserted:
-            raise ValueError("archive memory cannot be user_asserted active memory")
-        if self.source_state == SourceState.active and not self.evidence and not self.user_asserted:
-            raise ValueError("non-user-asserted active-source memory requires evidence")
+            if self.processing_state != ProcessingState.processed:
+                raise ValueError("active long_term memory requires processing_state=processed")
+        if self.source_state == SourceState.active and not self.user_asserted:
+            if not any(e.source_state == SourceState.active for e in self.evidence):
+                raise ValueError("active source memory requires at least one active evidence record")
         return self
 
 
@@ -98,15 +159,73 @@ def new_memory_id() -> str:
     return f"mem_{uuid.uuid4().hex}"
 
 
-def derived_default_access_allowed(item: V17MemoryItem, consumer: str) -> bool:
+def _base_policy_checks(item: V17MemoryItem, policy: MemoryAccessPolicy, now: datetime) -> Optional[AccessDecision]:
     if item.status != MemoryItemStatus.active:
-        return False
+        return AccessDecision(False, "not_active")
+    if item.processing_state == ProcessingState.blocked:
+        return AccessDecision(False, "processing_blocked")
     if item.source_state in {SourceState.tombstoned, SourceState.purged}:
-        return False
-    if "credential" in item.sensitivity_labels or "secret" in item.sensitivity_labels:
-        return False
+        return AccessDecision(False, "source_not_active")
+    if item.tier == MemoryTier.short_term and item.expires_at and item.expires_at <= now:
+        return AccessDecision(False, "short_term_expired")
+    if policy.consumer == MemoryConsumer.unknown:
+        return AccessDecision(False, "unknown_consumer")
+    if _has_restricted_sensitivity(item):
+        return AccessDecision(False, "restricted_sensitivity")
+    if item.visibility not in {"private", "public", "shared"}:
+        return AccessDecision(False, "unknown_visibility")
+    return None
+
+
+def _has_restricted_sensitivity(item: V17MemoryItem) -> bool:
+    restricted = {
+        "credential",
+        "secret",
+        "financial",
+        "health",
+        "intimate",
+        "minor",
+        "minors",
+        "workplace_confidential",
+        "identity_authentication",
+    }
+    return bool(set(item.sensitivity_labels).intersection(restricted))
+
+
+def is_default_access_eligible(
+    item: V17MemoryItem, policy: MemoryAccessPolicy, now: Optional[datetime] = None
+) -> AccessDecision:
+    current_time = now or datetime.now(timezone.utc)
+    base = _base_policy_checks(item, policy, current_time)
+    if base is not None:
+        return base
     if item.tier == MemoryTier.archive:
-        return consumer in {"archive_explicit", "admin_debug", "eval"}
+        return AccessDecision(False, "archive_requires_explicit_query")
+    if policy.consumer in {MemoryConsumer.third_party, MemoryConsumer.developer_api, MemoryConsumer.mcp}:
+        if not policy.app_has_default_memory_grant:
+            return AccessDecision(False, "missing_default_memory_grant")
     if item.tier in {MemoryTier.short_term, MemoryTier.long_term}:
-        return consumer not in {"archive_only"}
-    return False
+        return AccessDecision(True, "default_memory_allowed")
+    return AccessDecision(False, "unsupported_tier")
+
+
+def is_archive_access_eligible(
+    item: V17MemoryItem, policy: MemoryAccessPolicy, now: Optional[datetime] = None
+) -> AccessDecision:
+    current_time = now or datetime.now(timezone.utc)
+    base = _base_policy_checks(item, policy, current_time)
+    if base is not None:
+        return base
+    if item.tier != MemoryTier.archive:
+        return AccessDecision(False, "not_archive")
+    if not policy.archive_capability:
+        return AccessDecision(False, "missing_archive_capability")
+    return AccessDecision(True, "archive_explicit_allowed")
+
+
+def derived_default_access_allowed(item: V17MemoryItem, consumer: str) -> bool:
+    try:
+        policy = MemoryAccessPolicy(consumer=MemoryConsumer(consumer), app_has_default_memory_grant=True)
+    except ValueError:
+        policy = MemoryAccessPolicy(consumer=MemoryConsumer.unknown)
+    return is_default_access_eligible(item, policy).allowed

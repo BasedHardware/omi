@@ -3,58 +3,172 @@ from datetime import datetime, timedelta, timezone
 import pytest
 from pydantic import ValidationError
 
-from config.v17_memory import V17Mode, V17RolloutConfig, V17RolloutState, decide_v17_capabilities
+from config.v17_memory import (
+    V17Mode,
+    V17RolloutConfig,
+    V17RolloutState,
+    V17StageGate,
+    decide_v17_capabilities,
+)
 from database.v17_collections import V17Collections
-from models.memory_evidence import MemoryEvidence, SourceState
+from models.memory_evidence import ArtifactPreservationState, MemoryEvidence, SourceState, SourceStateReason
 from models.v17_product_memory import (
+    MemoryAccessPolicy,
+    MemoryConsumer,
     MemoryItemStatus,
     MemoryTier,
     ProcessingState,
     V17MemoryItem,
     V17MemoryItemAlias,
     derived_default_access_allowed,
+    is_archive_access_eligible,
+    is_default_access_eligible,
     new_memory_id,
 )
 
 
-def test_rollout_modes_are_explicit_and_read_is_superset_of_write():
+def _evidence(**overrides):
+    base = {
+        "evidence_id": "ev1",
+        "source_id": "conv1",
+        "source_type": "conversation",
+        "source_version": "v1",
+        "quote_refs": [{"text": "I prefer concise updates"}],
+        "content_hash": "hash1",
+        "artifact_preservation": ArtifactPreservationState.preserved,
+    }
+    base.update(overrides)
+    return MemoryEvidence(**base)
+
+
+def _item(**overrides):
+    now = datetime.now(timezone.utc)
+    base = {
+        "memory_id": new_memory_id(),
+        "uid": "u1",
+        "version": 1,
+        "tier": MemoryTier.short_term,
+        "status": MemoryItemStatus.active,
+        "processing_state": ProcessingState.pending,
+        "content": "User prefers concise updates.",
+        "evidence": [_evidence()],
+        "source_state": SourceState.active,
+        "sensitivity_labels": [],
+        "visibility": "private",
+        "user_asserted": False,
+        "captured_at": now,
+        "updated_at": now,
+        "expires_at": now + timedelta(days=30),
+    }
+    base.update(overrides)
+    return V17MemoryItem(**base)
+
+
+def test_rollout_modes_are_explicit_and_read_is_superset_of_write_after_gates_pass():
+    state = V17RolloutState(
+        uid="u1",
+        mode=V17Mode.read,
+        mode_epoch=2,
+        fallback_projection_ready=True,
+        stage_gates={
+            V17StageGate.shadow: "passed",
+            V17StageGate.write: "passed",
+            V17StageGate.read: "passed",
+        },
+    )
     non_allowlisted = V17RolloutConfig(enabled_users={"u1"}, mode=V17Mode.read).for_user("u2")
     assert non_allowlisted.mode == V17Mode.off
     assert non_allowlisted.legacy_only is True
     assert non_allowlisted.v17_writes_enabled is False
     assert non_allowlisted.v17_reads_enabled is False
 
-    shadow = V17RolloutConfig(enabled_users={"u1"}, mode=V17Mode.shadow).for_user("u1")
+    shadow = V17RolloutConfig(enabled_users={"u1"}, mode=V17Mode.shadow).for_user("u1", state)
     assert shadow.shadow_artifacts_enabled is True
     assert shadow.v17_writes_enabled is False
     assert shadow.v17_reads_enabled is False
 
-    write = V17RolloutConfig(enabled_users={"u1"}, mode=V17Mode.write).for_user("u1")
+    write = V17RolloutConfig(enabled_users={"u1"}, mode=V17Mode.write).for_user("u1", state)
     assert write.v17_writes_enabled is True
     assert write.v17_reads_enabled is False
     assert write.legacy_reads_authoritative is True
 
-    read = V17RolloutConfig(enabled_users={"u1"}, mode=V17Mode.read).for_user("u1")
+    read = V17RolloutConfig(enabled_users={"u1"}, mode=V17Mode.read).for_user("u1", state)
     assert read.v17_writes_enabled is True
     assert read.v17_reads_enabled is True
     assert read.legacy_reads_authoritative is False
 
 
-def test_rollout_state_blocks_write_to_off_after_persistent_writes_without_reconciliation():
+def test_rollout_capabilities_fail_closed_without_required_state_and_gates():
+    cfg = V17RolloutConfig(enabled_users={"u1"}, mode=V17Mode.read)
+
+    no_state = cfg.for_user("u1")
+    assert no_state.v17_writes_enabled is False
+    assert no_state.v17_reads_enabled is False
+    assert no_state.shadow_artifacts_enabled is True
+
+    gates_missing = cfg.for_user(
+        "u1",
+        V17RolloutState(uid="u1", mode=V17Mode.read, fallback_projection_ready=True, stage_gates={}),
+    )
+    assert gates_missing.v17_writes_enabled is False
+    assert gates_missing.v17_reads_enabled is False
+
+    no_fallback = cfg.for_user(
+        "u1",
+        V17RolloutState(
+            uid="u1",
+            mode=V17Mode.read,
+            fallback_projection_ready=False,
+            stage_gates={
+                V17StageGate.shadow: "passed",
+                V17StageGate.write: "passed",
+                V17StageGate.read: "passed",
+            },
+        ),
+    )
+    assert no_fallback.v17_writes_enabled is True
+    assert no_fallback.v17_reads_enabled is False
+
+    writes_blocked = cfg.for_user(
+        "u1",
+        V17RolloutState(
+            uid="u1",
+            mode=V17Mode.read,
+            fallback_projection_ready=True,
+            writes_blocked=True,
+            stage_gates={
+                V17StageGate.shadow: "passed",
+                V17StageGate.write: "passed",
+                V17StageGate.read: "passed",
+            },
+        ),
+    )
+    assert writes_blocked.v17_writes_enabled is False
+    assert writes_blocked.v17_reads_enabled is False
+
+
+def test_rollout_state_transitions_increment_epoch_and_protect_legacy_authoritative_downgrades():
     state = V17RolloutState(
         uid="u1",
-        mode=V17Mode.write,
+        mode=V17Mode.read,
         mode_epoch=2,
         persistent_v17_writes_started=True,
-        fallback_projection_ready=True,
+        fallback_projection_ready=False,
         decommission_reconciled=False,
     )
 
-    assert state.can_transition_to(V17Mode.read) is True
+    assert state.can_transition_to(V17Mode.write) is False
+    assert state.can_transition_to(V17Mode.shadow) is False
     assert state.can_transition_to(V17Mode.off) is False
 
-    state.decommission_reconciled = True
-    assert state.can_transition_to(V17Mode.off) is True
+    state.fallback_projection_ready = True
+    next_state = state.transition_to(V17Mode.write)
+    assert next_state.mode == V17Mode.write
+    assert next_state.mode_epoch == 3
+
+    assert next_state.can_transition_to(V17Mode.off) is False
+    next_state.decommission_reconciled = True
+    assert next_state.can_transition_to(V17Mode.off) is True
 
 
 def test_v17_collections_define_unified_memory_items_and_no_separate_short_term_archive_store():
@@ -71,86 +185,121 @@ def test_v17_collections_define_unified_memory_items_and_no_separate_short_term_
 
 def test_product_memory_item_invariants_short_term_long_term_archive():
     now = datetime.now(timezone.utc)
-    evidence = MemoryEvidence(
-        evidence_id="ev1",
-        source_id="conv1",
-        source_type="conversation",
-        source_version="v1",
-        quote_refs=[{"text": "I prefer concise updates"}],
-        content_hash="hash1",
-    )
-    short = V17MemoryItem(
-        memory_id=new_memory_id(),
-        uid="u1",
-        tier=MemoryTier.short_term,
-        status=MemoryItemStatus.active,
-        processing_state=ProcessingState.pending,
-        content="User prefers concise updates.",
-        evidence=[evidence],
-        captured_at=now,
-        updated_at=now,
-        expires_at=now + timedelta(days=30),
-    )
+    short = _item(captured_at=now, updated_at=now, expires_at=now + timedelta(days=30))
     assert short.tier == MemoryTier.short_term
-    assert derived_default_access_allowed(short, consumer="omi_chat") is True
+    assert is_default_access_eligible(short, MemoryAccessPolicy.for_omi_chat(), now=now).allowed is True
 
     with pytest.raises(ValidationError, match="expires_at"):
-        V17MemoryItem(
-            memory_id=new_memory_id(),
-            uid="u1",
-            tier=MemoryTier.short_term,
-            status=MemoryItemStatus.active,
-            processing_state=ProcessingState.pending,
-            content="Missing expiry.",
-            evidence=[evidence],
-            captured_at=now,
-            updated_at=now,
-        )
+        _item(expires_at=None)
 
-    long = V17MemoryItem(
-        memory_id=new_memory_id(),
-        uid="u1",
+    long = _item(
         tier=MemoryTier.long_term,
-        status=MemoryItemStatus.active,
         processing_state=ProcessingState.processed,
-        content="User prefers concise updates.",
-        evidence=[evidence],
+        expires_at=None,
         ledger_commit_id="commit1",
         ledger_sequence=7,
-        captured_at=now,
-        updated_at=now,
     )
-    assert derived_default_access_allowed(long, consumer="third_party") is True
+    assert (
+        is_default_access_eligible(
+            long, MemoryAccessPolicy.for_third_party(app_has_default_memory_grant=True), now=now
+        ).allowed
+        is True
+    )
 
     with pytest.raises(ValidationError, match="ledger_commit_id"):
-        V17MemoryItem(
-            memory_id=new_memory_id(),
+        _item(tier=MemoryTier.long_term, processing_state=ProcessingState.processed, expires_at=None)
+
+    archive = _item(tier=MemoryTier.archive, processing_state=ProcessingState.processed, expires_at=None)
+    assert is_default_access_eligible(archive, MemoryAccessPolicy.for_omi_chat(), now=now).allowed is False
+    assert (
+        is_archive_access_eligible(archive, MemoryAccessPolicy.for_omi_chat(archive_capability=True), now=now).allowed
+        is True
+    )
+    assert derived_default_access_allowed(archive, consumer="archive_explicit") is False
+
+
+def test_persisted_memory_item_metadata_is_required_and_timestamps_are_valid():
+    now = datetime.now(timezone.utc)
+    payload = _item().model_dump()
+    for field in [
+        "version",
+        "status",
+        "processing_state",
+        "source_state",
+        "sensitivity_labels",
+        "visibility",
+        "user_asserted",
+    ]:
+        broken = dict(payload)
+        broken.pop(field)
+        with pytest.raises(ValidationError):
+            V17MemoryItem(**broken)
+
+    naive = dict(payload)
+    naive["captured_at"] = datetime(2026, 1, 1)
+    with pytest.raises(ValidationError, match="timezone"):
+        V17MemoryItem(**naive)
+
+    backwards = dict(payload)
+    backwards["updated_at"] = now - timedelta(days=1)
+    backwards["captured_at"] = now
+    with pytest.raises(ValidationError, match="updated_at"):
+        V17MemoryItem(**backwards)
+
+
+def test_access_policy_fails_closed_for_unknown_consumers_expiry_blocked_and_archive_default():
+    now = datetime.now(timezone.utc)
+    item = _item()
+
+    unknown = MemoryAccessPolicy(consumer=MemoryConsumer.unknown)
+    assert is_default_access_eligible(item, unknown, now=now).allowed is False
+
+    expired = _item(
+        captured_at=now - timedelta(days=31), updated_at=now - timedelta(days=1), expires_at=now - timedelta(seconds=1)
+    )
+    assert is_default_access_eligible(expired, MemoryAccessPolicy.for_omi_chat(), now=now).allowed is False
+
+    blocked = _item(processing_state=ProcessingState.blocked)
+    assert is_default_access_eligible(blocked, MemoryAccessPolicy.for_omi_chat(), now=now).allowed is False
+
+    restricted = _item(sensitivity_labels=["Health"])
+    assert (
+        is_default_access_eligible(
+            restricted, MemoryAccessPolicy.for_third_party(app_has_default_memory_grant=True), now=now
+        ).allowed
+        is False
+    )
+
+
+def test_archive_transition_preserves_user_asserted_provenance_and_identity():
+    memory_id = new_memory_id()
+    now = datetime.now(timezone.utc)
+    archived = _item(
+        memory_id=memory_id,
+        version=2,
+        tier=MemoryTier.archive,
+        processing_state=ProcessingState.processed,
+        user_asserted=True,
+        expires_at=None,
+        updated_at=now + timedelta(seconds=1),
+    )
+
+    assert archived.memory_id == memory_id
+    assert archived.version == 2
+    assert archived.user_asserted is True
+    assert archived.tier == MemoryTier.archive
+
+
+def test_memory_item_alias_rejects_self_aliases():
+    with pytest.raises(ValidationError, match="self"):
+        V17MemoryItemAlias(
+            old_memory_id="mem_same",
+            canonical_memory_id="mem_same",
             uid="u1",
-            tier=MemoryTier.long_term,
-            status=MemoryItemStatus.active,
-            processing_state=ProcessingState.processed,
-            content="No ledger.",
-            evidence=[evidence],
-            captured_at=now,
-            updated_at=now,
+            reason="many_to_one_merge",
+            created_at=datetime.now(timezone.utc),
         )
 
-    archive = V17MemoryItem(
-        memory_id=new_memory_id(),
-        uid="u1",
-        tier=MemoryTier.archive,
-        status=MemoryItemStatus.active,
-        processing_state=ProcessingState.processed,
-        content="Older source-backed context.",
-        evidence=[evidence],
-        captured_at=now,
-        updated_at=now,
-    )
-    assert derived_default_access_allowed(archive, consumer="omi_chat") is False
-    assert derived_default_access_allowed(archive, consumer="archive_explicit") is True
-
-
-def test_memory_item_alias_preserves_old_ids_after_many_to_one_merge():
     alias = V17MemoryItemAlias(
         old_memory_id="mem_old",
         canonical_memory_id="mem_new",
@@ -158,21 +307,51 @@ def test_memory_item_alias_preserves_old_ids_after_many_to_one_merge():
         reason="many_to_one_merge",
         created_at=datetime.now(timezone.utc),
     )
-
     assert alias.old_memory_id == "mem_old"
     assert alias.canonical_memory_id == "mem_new"
-    assert alias.reason == "many_to_one_merge"
 
 
-def test_evidence_requires_source_identity_or_typed_missing_reason():
+def test_evidence_requires_source_identity_or_typed_missing_reason_and_artifact_outcome():
     with pytest.raises(ValidationError, match="source_id"):
-        MemoryEvidence(evidence_id="ev_bad", source_type="conversation", source_version="v1")
+        MemoryEvidence(
+            evidence_id="ev_bad",
+            source_type="conversation",
+            source_version="v1",
+            artifact_preservation=ArtifactPreservationState.preserved,
+        )
+
+    with pytest.raises(ValidationError, match="artifact_preservation"):
+        MemoryEvidence(evidence_id="ev_bad", source_id="conv1", source_type="conversation", source_version="v1")
 
     missing = MemoryEvidence(
         evidence_id="ev_missing",
         source_type="conversation",
         source_state=SourceState.missing,
-        missing_source_reason="ephemeral_already_missing",
+        source_state_reason=SourceStateReason.ephemeral_already_missing,
+        artifact_preservation=ArtifactPreservationState.ephemeral_already_missing,
     )
     assert missing.source_state == SourceState.missing
-    assert missing.missing_source_reason == "ephemeral_already_missing"
+    assert missing.source_state_reason == SourceStateReason.ephemeral_already_missing
+
+    with pytest.raises(ValidationError, match="whitespace"):
+        MemoryEvidence(
+            evidence_id="  ",
+            source_id="conv1",
+            source_type="conversation",
+            source_version="v1",
+            artifact_preservation=ArtifactPreservationState.preserved,
+        )
+
+
+def test_item_source_state_requires_consistent_active_evidence():
+    with pytest.raises(ValidationError, match="active evidence"):
+        _item(
+            evidence=[
+                _evidence(
+                    source_state=SourceState.tombstoned,
+                    source_state_reason=SourceStateReason.deleted_by_user,
+                    artifact_preservation=ArtifactPreservationState.deleted_by_user,
+                )
+            ],
+            source_state=SourceState.active,
+        )
