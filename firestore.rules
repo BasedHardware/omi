@@ -1,0 +1,37 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isSignedInUser(uid) {
+      return request.auth != null && request.auth.uid == uid;
+    }
+
+    function isServerOwnedV17MemoryPath(collectionId) {
+      return collectionId in [
+        'memory_items',
+        'memory_operations',
+        'memory_outbox',
+        'memory_control',
+        'memory_state',
+        'memory_commits',
+        'memory_evidence'
+      ];
+    }
+
+    // V17 memory state is server-owned. The backend/Admin SDK performs writes
+    // through IAM and bypasses Firestore client rules; mobile/web clients must
+    // not create, update, or delete these documents directly around the V17
+    // apply gateway, operation journal, head/control documents, or outbox.
+    match /users/{uid}/{collectionId}/{document=**} {
+      allow read: if isServerOwnedV17MemoryPath(collectionId) && isSignedInUser(uid);
+      allow create, update, delete: if false;
+    }
+
+    // No new broad client access is introduced by this V17 rules file. Existing
+    // non-V17 client-access rules must be added explicitly before deployment if
+    // a Firebase project relies on direct client Firestore access.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
