@@ -323,7 +323,6 @@ def get_llm(feature: str, streaming: bool = False, cache_key: Optional[str] = No
 def get_qos_info() -> Dict[str, Dict[str, str]]:
     """Return full feature→(model, provider) mapping for the active profile (debugging/monitoring)."""
     info: Dict[str, Dict[str, str]] = {}
-    active_profile = get_active_profile()
     all_features = get_all_configured_features()
     for feature in sorted(all_features):
         model, provider = _get_model_config(feature)

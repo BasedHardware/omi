@@ -208,8 +208,6 @@ _PERPLEXITY_ONLY_FEATURES = {'web_search'}
 # Feature-specific client config (temperature, headers — orthogonal to model choice).
 # Only applied when a feature resolves to an OpenRouter model.
 _OPENROUTER_TEMPERATURES: Dict[str, float] = {
-    'persona_chat': 0.8,
-    'persona_chat_premium': 0.8,
     'wrapped_analysis': 0.7,
 }
 

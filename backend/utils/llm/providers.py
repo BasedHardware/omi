@@ -76,7 +76,19 @@ def get_or_create_openai_compatible_llm(
         raise ValueError(f"Unknown OpenAI-compatible provider '{provider}'")
 
     provider_config = OPENAI_COMPATIBLE_PROVIDERS[provider]
-    key = _cache_key(provider, model_name, streaming, options)
+    # Only include options that are actually transferred to kwargs in the cache key,
+    # so arbitrary caller options don't create duplicate cache entries.
+    _handled_options = {
+        'request_timeout',
+        'max_retries',
+        'temperature',
+        'extra_body',
+        'base_url',
+        'default_headers',
+        'api_key',
+    }
+    _effective_options = {k: v for k, v in options.items() if k in _handled_options}
+    key = _cache_key(provider, model_name, streaming, _effective_options)
     if key not in _llm_cache:
         kwargs: Dict[str, Any] = {
             'callbacks': [_usage_callback],
@@ -115,7 +127,14 @@ def get_or_create_gemini_llm(
     BYOK users still go through the OpenAI-compatible Gemini endpoint in clients.py.
     """
 
-    key = (model_name, streaming, 'gemini', thinking_budget)
+    # Build cache key — only include thinking_budget when we'll actually use it
+    # (i.e., when Vertex AI or API key is configured). The fallback ChatOpenAI
+    # path strips thinking_budget, so including it would create duplicate entries.
+    _has_gemini_creds = bool(
+        os.environ.get('USE_VERTEX_AI', '').lower() == 'true' and os.environ.get('GOOGLE_CLOUD_PROJECT', '')
+    ) or bool(os.environ.get('GEMINI_API_KEY', ''))
+    cache_budget = thinking_budget if _has_gemini_creds else None
+    key = (model_name, streaming, 'gemini', cache_budget)
     if key not in _llm_cache:
         use_vertex = os.environ.get('USE_VERTEX_AI', '').lower() == 'true'
         gcp_project = os.environ.get('GOOGLE_CLOUD_PROJECT', '') if use_vertex else ''
