@@ -1,6 +1,12 @@
+import os
+
+os.environ.setdefault("FIRESTORE_EMULATOR_HOST", "localhost:8787")
+os.environ.setdefault("GOOGLE_CLOUD_PROJECT", "test")
+
 from langchain_core.messages import AIMessage
 
 from models.v17_memory_contracts import L1MemoryArchiveItem
+from utils.llm import working_memory
 from utils.llm.working_memory import extract_l1_memory_archive_items_from_text
 
 
@@ -37,6 +43,7 @@ def test_l1_archive_extractor_emits_general_archive_items_without_lifecycle_rout
         source_type="voice_transcript",
         text="why does the distance look foggy in Rust with TAA",
         user_name=None,
+        persist_route_outcomes=False,
         llm=fake_llm,
     )
 
@@ -70,12 +77,59 @@ def test_l1_archive_extractor_converts_secret_risk_to_sensitive_archive():
         source_type="screenshot_ocr",
         text="password: hunter2",
         user_name=None,
+        persist_route_outcomes=False,
         llm=fake_llm,
     )
 
     assert items[0].archive_class.value == "sensitive"
     assert items[0].normal_search_allowed is False
     assert items[0].allowed_use == "restricted_archive_only"
+
+
+def test_l1_archive_extractor_persists_archive_route_outcomes_with_deterministic_identity(monkeypatch):
+    persisted = []
+
+    def fake_persist(outcome, *, db_client=None):
+        persisted.append(outcome)
+        return outcome
+
+    monkeypatch.setattr(working_memory, "persist_non_active_route_outcome", fake_persist)
+    fake_llm = FakeLLM("""
+        {
+          "items": [
+            {
+              "text": "User adopted a rescue dog named Milo.",
+              "class": "general",
+              "evidence_quotes": ["we adopted Milo from the shelter"],
+              "confidence": "high"
+            }
+          ]
+        }
+        """)
+
+    items = extract_l1_memory_archive_items_from_text(
+        uid="user_1",
+        source_id="source_1",
+        source_type="voice_transcript",
+        text="we adopted Milo from the shelter and he likes carrots",
+        run_id="run_1",
+        llm=fake_llm,
+    )
+
+    assert len(items) == 1
+    assert len(persisted) == 1
+    outcome = persisted[0]
+    assert outcome.uid == "user_1"
+    assert outcome.route.value == "archive"
+    assert outcome.source_ids == ["source_1"]
+    assert outcome.run_id == "run_1"
+    assert outcome.patch_id == items[0].archive_id
+    assert outcome.idempotency_key == f"l1-archive:source_1:{items[0].archive_id}"
+    assert outcome.default_long_term_visible is False
+    assert outcome.audit_metadata["archive_id"] == items[0].archive_id
+    assert outcome.audit_metadata["archive_class"] == "general"
+    assert outcome.audit_metadata["preserved"] is True
+    assert outcome.audit_metadata["observable_loss"] is False
 
 
 def test_l1_archive_extractor_skips_tiny_sources_without_llm_call():
@@ -87,6 +141,7 @@ def test_l1_archive_extractor_skips_tiny_sources_without_llm_call():
         source_type="chat_exchange",
         text="ok",
         user_name=None,
+        persist_route_outcomes=False,
         llm=fake_llm,
     )
 
@@ -114,6 +169,7 @@ def test_l1_archive_extractor_accepts_short_security_relevant_sources():
         source_type="screenshot_ocr",
         text="sk-abc123",
         user_name=None,
+        persist_route_outcomes=False,
         llm=fake_llm,
     )
 

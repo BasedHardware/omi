@@ -5,6 +5,11 @@ from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import PydanticOutputParser
 from pydantic import BaseModel, Field
 
+from database.v17_non_active_memory_routes import (
+    NonActiveRoute,
+    NonActiveRouteOutcome,
+    persist_non_active_route_outcome,
+)
 from models.v17_memory_contracts import L1MemoryArchiveItem, deterministic_contract_id
 
 try:
@@ -151,6 +156,9 @@ def extract_l1_memory_archive_items_from_text(
     text: str,
     user_name: Optional[str] = None,
     language_instruction: str = "",
+    run_id: Optional[str] = None,
+    persist_route_outcomes: bool = True,
+    db_client=None,
     llm=None,
 ) -> List[L1MemoryArchiveItem]:
     stripped_text = text.strip() if text else ""
@@ -179,7 +187,54 @@ def extract_l1_memory_archive_items_from_text(
     try:
         response = model.invoke(messages)
         parsed = parser.parse(_content_from_response(response))
-        return _with_deterministic_archive_ids(parsed.items, uid, source_id, source_type)
+        items = _with_deterministic_archive_ids(parsed.items, uid, source_id, source_type)
     except Exception as exc:
         logger.error("Error extracting V17 L1 archive items: %s", type(exc).__name__)
         return []
+
+    if persist_route_outcomes:
+        _persist_l1_archive_route_outcomes(
+            uid=uid,
+            source_id=source_id,
+            source_type=source_type,
+            run_id=run_id,
+            items=items,
+            db_client=db_client,
+        )
+    return items
+
+
+def _persist_l1_archive_route_outcomes(
+    *,
+    uid: str,
+    source_id: str,
+    source_type: str,
+    run_id: Optional[str],
+    items: List[L1MemoryArchiveItem],
+    db_client=None,
+) -> None:
+    for item in items:
+        outcome = NonActiveRouteOutcome(
+            uid=uid,
+            route=NonActiveRoute.archive,
+            idempotency_key=f"l1-archive:{source_id}:{item.archive_id}",
+            source_ids=[source_id],
+            reason="l1_archive_extractor_emitted_archive_item",
+            run_id=run_id or f"l1-archive:{source_id}",
+            patch_id=item.archive_id,
+            audit_metadata={
+                "source": "utils.llm.working_memory.extract_l1_memory_archive_items_from_text",
+                "source_type": source_type,
+                "archive_id": item.archive_id,
+                "archive_class": item.archive_class.value,
+                "allowed_use": item.allowed_use,
+                "normal_search_allowed": item.normal_search_allowed,
+                "preserved": True,
+                "observable_loss": False,
+                "remediation_state": "archive_product_tier",
+            },
+        )
+        if db_client is not None:
+            persist_non_active_route_outcome(outcome, db_client=db_client)
+        else:
+            persist_non_active_route_outcome(outcome)
