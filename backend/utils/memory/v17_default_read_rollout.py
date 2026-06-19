@@ -6,6 +6,17 @@ from database.v17_collections import V17Collections
 
 SUPPORTED_DEFAULT_READ_CONSUMERS = {'mcp', 'developer_api', 'omi_chat'}
 DEFAULT_READ_OBSERVABILITY_CONSUMERS = ('mcp', 'developer_api', 'omi_chat')
+V17_DEFAULT_READ_ROLLOUT_METRIC_NAME = 'v17_default_read_rollout_decisions_total'
+_LOW_CARDINALITY_FALLBACK_REASON_BUCKETS = {
+    'malformed_rollout_state',
+    'missing_chat_default_memory_grant',
+    'missing_developer_default_memory_grant',
+    'missing_mcp_default_memory_grant',
+    'missing_rollout_state',
+    'uid_mismatch',
+    'unsupported_consumer',
+    'v17_reads_disabled',
+}
 
 
 @dataclass(frozen=True)
@@ -263,6 +274,83 @@ def build_v17_default_read_rollout_audit_events(decisions: dict[str, V17DefaultR
     return {'events': events, 'counters': build_v17_default_read_rollout_decision_counters(events)}
 
 
+def _bucket_v17_default_read_consumer(consumer: str) -> str:
+    if consumer in SUPPORTED_DEFAULT_READ_CONSUMERS:
+        return consumer
+    return 'unsupported_consumer'
+
+
+def _bucket_v17_default_read_fallback_reason(fallback_reason: str | None) -> str:
+    if not fallback_reason:
+        return 'none'
+    if fallback_reason in _LOW_CARDINALITY_FALLBACK_REASON_BUCKETS:
+        return fallback_reason
+    if fallback_reason.startswith('missing_') and fallback_reason.endswith('_default_memory_grant'):
+        return 'missing_default_memory_grant_other'
+    if fallback_reason.startswith('v17_default_') and fallback_reason.endswith('_disabled'):
+        return 'v17_default_consumer_disabled'
+    return 'other'
+
+
+def _format_prometheus_sample(metric_name: str, labels: dict[str, str], value: int) -> str:
+    formatted_labels = ','.join(f'{label}="{str(label_value)}"' for label, label_value in labels.items())
+    return f'{metric_name}{{{formatted_labels}}} {int(value)}'
+
+
+def render_v17_default_read_rollout_metrics(counters: dict) -> str:
+    """Render local rollout decision counters as low-cardinality Prometheus text.
+
+    The caller passes already-aggregated counters from local rollout audit events.
+    Labels are intentionally limited to consumer, outcome, and fallback reason
+    bucket. Do not add uid, source_path, app/source identifiers, or raw dynamic
+    fallback strings here; those belong in admin/debug JSON, not ops metrics.
+    """
+
+    lines = [
+        f'# HELP {V17_DEFAULT_READ_ROLLOUT_METRIC_NAME} Local V17 default-read rollout decisions by consumer and outcome.',
+        f'# TYPE {V17_DEFAULT_READ_ROLLOUT_METRIC_NAME} counter',
+    ]
+    for consumer, consumer_counters in sorted((counters.get('by_consumer') or {}).items()):
+        consumer_bucket = _bucket_v17_default_read_consumer(str(consumer))
+        enabled_count = int((consumer_counters or {}).get('enabled', 0) or 0)
+        if enabled_count:
+            lines.append(
+                _format_prometheus_sample(
+                    V17_DEFAULT_READ_ROLLOUT_METRIC_NAME,
+                    {'consumer': consumer_bucket, 'outcome': 'enabled', 'fallback_reason': 'none'},
+                    enabled_count,
+                )
+            )
+
+        fallback_reasons = (consumer_counters or {}).get('fallback_reasons') or {}
+        if fallback_reasons:
+            fallback_buckets: dict[str, int] = {}
+            for fallback_reason, count in fallback_reasons.items():
+                fallback_bucket = _bucket_v17_default_read_fallback_reason(str(fallback_reason))
+                fallback_buckets[fallback_bucket] = fallback_buckets.get(fallback_bucket, 0) + int(count or 0)
+            for fallback_bucket, count in sorted(fallback_buckets.items()):
+                if not count:
+                    continue
+                lines.append(
+                    _format_prometheus_sample(
+                        V17_DEFAULT_READ_ROLLOUT_METRIC_NAME,
+                        {'consumer': consumer_bucket, 'outcome': 'fallback', 'fallback_reason': fallback_bucket},
+                        count,
+                    )
+                )
+        else:
+            fallback_count = int((consumer_counters or {}).get('fallback', 0) or 0)
+            if fallback_count:
+                lines.append(
+                    _format_prometheus_sample(
+                        V17_DEFAULT_READ_ROLLOUT_METRIC_NAME,
+                        {'consumer': consumer_bucket, 'outcome': 'fallback', 'fallback_reason': 'unknown_fallback'},
+                        fallback_count,
+                    )
+                )
+    return '\n'.join(lines) + '\n'
+
+
 def build_v17_default_read_rollout_observability_report(
     decisions: dict[str, V17DefaultReadRolloutDecision],
 ) -> dict:
@@ -276,6 +364,7 @@ def build_v17_default_read_rollout_observability_report(
         'archive_capability': False,
         'decision_audit_events': audit['events'],
         'decision_counters': audit['counters'],
+        'decision_metrics_prometheus': render_v17_default_read_rollout_metrics(audit['counters']),
         'consumers': {
             consumer: build_v17_default_read_rollout_observability(decision) for consumer, decision in decisions.items()
         },

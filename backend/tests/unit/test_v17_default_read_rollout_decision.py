@@ -1,6 +1,7 @@
 from config.v17_memory import PASSED, V17Mode, V17StageGate
 from utils.memory.v17_default_read_rollout import (
     build_v17_default_read_rollout_audit_events,
+    render_v17_default_read_rollout_metrics,
     read_v17_default_read_rollout,
     read_v17_default_read_rollout_decisions,
 )
@@ -182,3 +183,59 @@ def test_shared_rollout_helper_builds_local_audit_events_and_counters_without_me
             },
         },
     }
+
+
+def test_shared_rollout_helper_renders_low_cardinality_prometheus_metrics_without_uid_or_source_labels():
+    rollout_doc = _enabled_rollout_doc() | {
+        'grants': {
+            'mcp': {'default_memory': True, 'archive': True},
+            'developer_api': {},
+            'omi_chat': {'default_memory': True, 'archive': True},
+        }
+    }
+    db_client = _FirestoreFake({'users/u1/memory_control/state': rollout_doc})
+
+    decisions = read_v17_default_read_rollout_decisions(uid='u1', db_client=db_client)
+    audit = build_v17_default_read_rollout_audit_events(decisions)
+    metrics = render_v17_default_read_rollout_metrics(audit['counters'])
+
+    assert db_client.document_get_paths == ['users/u1/memory_control/state']
+    assert db_client.collection_paths == []
+    assert 'uid' not in metrics
+    assert 'u1' not in metrics
+    assert 'source_path' not in metrics
+    assert 'users/u1/memory_control/state' not in metrics
+    assert (
+        'v17_default_read_rollout_decisions_total{consumer="mcp",outcome="enabled",fallback_reason="none"} 1' in metrics
+    )
+    assert (
+        'v17_default_read_rollout_decisions_total{consumer="developer_api",outcome="fallback",'
+        'fallback_reason="missing_developer_default_memory_grant"} 1' in metrics
+    )
+    assert (
+        'v17_default_read_rollout_decisions_total{consumer="omi_chat",outcome="enabled",fallback_reason="none"} 1'
+        in metrics
+    )
+    assert 'archive' not in metrics
+
+
+def test_shared_rollout_metrics_buckets_unknown_dynamic_fallback_reasons():
+    counters = {
+        'total': {'enabled': 0, 'fallback': 1},
+        'by_consumer': {
+            'mcp': {
+                'enabled': 0,
+                'fallback': 1,
+                'fallback_reasons': {'customer-specific uid u1 path users/u1/memory_control/state': 1},
+            }
+        },
+    }
+
+    metrics = render_v17_default_read_rollout_metrics(counters)
+
+    assert 'customer-specific' not in metrics
+    assert 'users/u1' not in metrics
+    assert (
+        'v17_default_read_rollout_decisions_total{consumer="mcp",outcome="fallback",fallback_reason="other"} 1'
+        in metrics
+    )
