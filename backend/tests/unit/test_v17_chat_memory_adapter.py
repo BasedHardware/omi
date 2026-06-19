@@ -3,11 +3,13 @@ from pathlib import Path
 
 from config.v17_memory import PASSED, V17Mode, V17StageGate
 from models.memory_evidence import ArtifactPreservationState, MemoryEvidence, SourceState
+from models.v17_memory_search_gateway import SearchMode, SearchVectorHit
 from models.v17_product_memory import MemoryItemStatus, MemoryTier, ProcessingState, V17MemoryItem
 from utils.memory.short_term_lifecycle import DEFAULT_SHORT_TERM_TTL_DAYS
 from utils.memory.v17_chat_memory_adapter import (
     read_v17_chat_default_memory_rollout,
     search_v17_default_chat_memories_text,
+    search_v17_default_chat_memories_vector_text,
 )
 
 
@@ -64,6 +66,12 @@ class _FirestoreFake:
         return _DocumentRef(self, path)
 
 
+class _VectorCandidateResult:
+    def __init__(self, hits, rejected_count=0):
+        self.hits = hits
+        self.rejected_count = rejected_count
+
+
 def _evidence(source_id='conv1'):
     return MemoryEvidence(
         evidence_id=f'ev-{source_id}',
@@ -109,6 +117,20 @@ def _stored_item(item):
     return item.model_dump(mode='json')
 
 
+def _hit(item, *, score, projection_commit_id='projection-1'):
+    return SearchVectorHit(
+        memory_id=item.memory_id,
+        score=score,
+        projection_commit_id=projection_commit_id,
+        vector_updated_at=item.updated_at + timedelta(minutes=1),
+        uid=item.uid,
+        account_generation=item.account_generation,
+        item_revision=item.item_revision,
+        source_commit_id=item.source_commit_id,
+        content_hash=item.content_hash,
+    )
+
+
 def _enabled_rollout_doc(uid='u1'):
     return {
         'uid': uid,
@@ -137,7 +159,7 @@ def test_chat_memory_tool_wires_v17_adapter_before_legacy_vector_search():
     memory_tools_py = Path(__file__).resolve().parents[2] / 'utils' / 'retrieval' / 'tools' / 'memory_tools.py'
     contents = memory_tools_py.read_text(encoding='utf-8')
 
-    rollout_call = 'search_v17_default_chat_memories_text('
+    rollout_call = 'search_v17_default_chat_memories_vector_text('
     legacy_call = 'vector_db.find_similar_memories(uid, query, threshold=0.0, limit=fetch_limit)'
     assert rollout_call in contents
     assert legacy_call in contents
@@ -237,5 +259,95 @@ def test_chat_default_v17_adapter_returns_none_when_rollout_or_grant_disabled_wi
         search_v17_default_chat_memories_text(uid='u1', query='coffee', limit=10, db_client=grantless_db, now=now)
         is None
     )
+    assert disabled_db.collection_paths == []
+    assert grantless_db.collection_paths == []
+
+
+def test_chat_vector_adapter_uses_hydrated_vector_search_and_preserves_ranking_without_archive_default():
+    now = datetime(2026, 6, 19, 12, 0, tzinfo=timezone.utc)
+    fresh_short_term = _memory_item('fresh-short-term', now=now, content='coffee fresh short term')
+    stale_short_term = _memory_item(
+        'stale-short-term', now=now, captured_at=now - timedelta(days=45), content='coffee stale short term'
+    )
+    long_term = _memory_item('long-term', tier=MemoryTier.long_term, now=now, content='coffee long term')
+    archive = _memory_item('archive', tier=MemoryTier.archive, now=now, content='coffee archive memory')
+    docs = {'users/u1/memory_control/state': _enabled_rollout_doc()}
+    docs.update(
+        {
+            f'users/u1/memory_items/{item.memory_id}': _stored_item(item)
+            for item in [archive, stale_short_term, fresh_short_term, long_term]
+        }
+    )
+    db_client = _FirestoreFake(docs)
+    vector_calls = []
+
+    def fake_vector_query(uid, query, *, mode, limit):
+        vector_calls.append({'uid': uid, 'query': query, 'mode': mode, 'limit': limit})
+        return _VectorCandidateResult(
+            hits=[
+                _hit(stale_short_term, score=0.99),
+                _hit(archive, score=0.98),
+                _hit(long_term, score=0.92),
+                _hit(fresh_short_term, score=0.80),
+            ],
+            rejected_count=1,
+        )
+
+    result = search_v17_default_chat_memories_vector_text(
+        uid='u1',
+        query='coffee',
+        limit=10,
+        db_client=db_client,
+        vector_query=fake_vector_query,
+        required_projection_commit_id='projection-1',
+    )
+
+    assert vector_calls == [{'uid': 'u1', 'query': 'coffee', 'mode': SearchMode.default, 'limit': 10}]
+    assert db_client.document_get_paths == ['users/u1/memory_control/state']
+    assert db_client.collection_paths == ['users/u1/memory_items']
+    assert result is not None
+    assert result.startswith("Found 2 V17 vector memories matching 'coffee':")
+    assert result.index('coffee long term') < result.index('coffee fresh short term')
+    assert '(relevance: 0.92, tier: long_term' in result
+    assert '(relevance: 0.80, tier: short_term' in result
+    assert 'coffee stale short term' not in result
+    assert 'coffee archive memory' not in result
+    assert 'archive_default_visible=False' in result
+
+
+def test_chat_vector_adapter_returns_none_without_rollout_or_grant_before_vector_or_memory_item_reads():
+    now = datetime(2026, 6, 19, 12, 0, tzinfo=timezone.utc)
+    fresh_short_term = _memory_item('fresh-short-term', now=now, content='coffee fresh short term')
+    disabled_db = _FirestoreFake(
+        {
+            'users/u1/memory_control/state': _enabled_rollout_doc() | {'mode': V17Mode.off.value},
+            f'users/u1/memory_items/{fresh_short_term.memory_id}': _stored_item(fresh_short_term),
+        }
+    )
+    grantless_db = _FirestoreFake(
+        {
+            'users/u1/memory_control/state': _enabled_rollout_doc() | {'grants': {'omi_chat': {}}},
+            f'users/u1/memory_items/{fresh_short_term.memory_id}': _stored_item(fresh_short_term),
+        }
+    )
+    vector_calls = []
+
+    def fake_vector_query(uid, query, *, mode, limit):
+        vector_calls.append({'uid': uid, 'query': query, 'mode': mode, 'limit': limit})
+        return _VectorCandidateResult(hits=[_hit(fresh_short_term, score=0.9)])
+
+    assert (
+        search_v17_default_chat_memories_vector_text(
+            uid='u1', query='coffee', limit=10, db_client=disabled_db, vector_query=fake_vector_query
+        )
+        is None
+    )
+    assert (
+        search_v17_default_chat_memories_vector_text(
+            uid='u1', query='coffee', limit=10, db_client=grantless_db, vector_query=fake_vector_query
+        )
+        is None
+    )
+    assert vector_calls == []
     assert disabled_db.collection_paths == []
     assert grantless_db.collection_paths == []
