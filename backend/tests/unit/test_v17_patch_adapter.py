@@ -17,7 +17,11 @@ sys.modules['database._client'] = client_stub
 
 from database.memory_ledger import HeadConflict
 from models.v17_memory_contracts import DurableMemoryPatch
-from utils.memory.v17_patch_adapter import apply_v17_patch_to_ledger_state, patch_to_ledger_mutations
+from utils.memory.v17_patch_adapter import (
+    apply_v17_patch_to_ledger_state,
+    patch_to_ledger_mutations,
+    persist_non_active_route_for_patch,
+)
 
 
 def _patch(decision, **overrides):
@@ -86,6 +90,56 @@ def test_v17_patch_adapter_update_adds_new_fact_and_supersedes_target():
 
 def test_v17_patch_adapter_skip_duplicate_has_no_ledger_mutations():
     assert patch_to_ledger_mutations(_patch("skip_duplicate", target_memory_id="mem_1")) == []
+
+
+def test_v17_patch_adapter_persists_non_active_patch_decisions_through_route_store(monkeypatch):
+    captured = []
+
+    def fake_persist(outcome, *, db_client=None):
+        captured.append((outcome, db_client))
+        return outcome
+
+    fake_db = object()
+    import utils.memory.v17_patch_adapter as adapter
+
+    monkeypatch.setattr(adapter, "persist_non_active_route_outcome", fake_persist)
+    patch = _patch(
+        "review",
+        result_status="review",
+        evidence_refs=[
+            {"evidence_id": "ev_1", "source_id": "conv_1", "source_type": "conversation"},
+            {"evidence_id": "ev_2", "source_id": "conv_1", "source_type": "conversation"},
+        ],
+        evidence_ids=["ev_1", "ev_2"],
+        rationale="low confidence conflict needs human review",
+    )
+
+    persisted = persist_non_active_route_for_patch("u1", patch, audit_metadata={"actor": "unit"}, db_client=fake_db)
+
+    assert persisted is captured[0][0]
+    outcome, used_db = captured[0]
+    assert used_db is fake_db
+    assert outcome.uid == "u1"
+    assert outcome.route == "review"
+    assert outcome.idempotency_key == "v17_patch:idem_review"
+    assert outcome.source_ids == ["conv_1", "ev_1", "ev_2", "pkt_1"]
+    assert outcome.reason == "low confidence conflict needs human review"
+    assert outcome.run_id == "v17_test"
+    assert outcome.patch_id == "patch_review"
+    assert outcome.audit_metadata["actor"] == "unit"
+    assert outcome.audit_metadata["decision"] == "review"
+    assert outcome.audit_metadata["result_status"] == "review"
+    assert outcome.audit_metadata["route_store_source"] == "v17_patch_adapter"
+
+
+def test_v17_patch_adapter_does_not_persist_active_patch_decisions(monkeypatch):
+    import utils.memory.v17_patch_adapter as adapter
+
+    persist_mock = MagicMock()
+    monkeypatch.setattr(adapter, "persist_non_active_route_outcome", persist_mock)
+
+    assert persist_non_active_route_for_patch("u1", _patch("add")) is None
+    persist_mock.assert_not_called()
 
 
 def test_v17_patch_adapter_repeat_apply_is_idempotent_and_checks_head():

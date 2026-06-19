@@ -1,8 +1,14 @@
 import hashlib
 import json
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from database import memory_ledger
+from database.v17_non_active_memory_routes import (
+    NonActiveRoute,
+    NonActiveRouteOutcome,
+    PersistedNonActiveRouteOutcome,
+    persist_non_active_route_outcome,
+)
 from models.v17_memory_contracts import DurableMemoryPatch, DurablePatchDecision
 
 
@@ -85,6 +91,64 @@ def patch_to_ledger_mutations(patch: DurableMemoryPatch) -> List[Dict[str, Any]]
         return mutations
 
     return []
+
+
+_NON_ACTIVE_ROUTE_BY_DECISION = {
+    DurablePatchDecision.review: NonActiveRoute.review,
+    DurablePatchDecision.context_only: NonActiveRoute.context_only,
+    DurablePatchDecision.reject: NonActiveRoute.reject,
+    DurablePatchDecision.skip_duplicate: NonActiveRoute.skip,
+}
+
+
+def persist_non_active_route_for_patch(
+    uid: str,
+    patch: DurableMemoryPatch,
+    *,
+    reason: Optional[str] = None,
+    audit_metadata: Optional[Dict[str, Any]] = None,
+    db_client=None,
+) -> Optional[PersistedNonActiveRouteOutcome]:
+    route = _NON_ACTIVE_ROUTE_BY_DECISION.get(patch.decision)
+    if route is None:
+        return None
+
+    outcome = NonActiveRouteOutcome(
+        uid=uid,
+        route=route,
+        idempotency_key=f"v17_patch:{patch.idempotency_key}",
+        source_ids=_source_ids_for_patch_route(patch),
+        reason=reason or patch.rationale or f"{patch.decision.value} decision",
+        run_id=patch.run_id,
+        patch_id=patch.patch_id,
+        audit_metadata={
+            **(audit_metadata or {}),
+            "route_store_source": "v17_patch_adapter",
+            "decision": patch.decision.value,
+            "result_status": patch.result_status.value,
+            "confidence": patch.confidence,
+            "packet_id": patch.packet_id,
+            "target_memory_id": patch.target_memory_id,
+            "new_memory_id": patch.new_memory_id,
+        },
+    )
+    if db_client is not None:
+        return persist_non_active_route_outcome(outcome, db_client=db_client)
+    return persist_non_active_route_outcome(outcome)
+
+
+def _source_ids_for_patch_route(patch: DurableMemoryPatch) -> List[str]:
+    source_ids = [patch.packet_id]
+    source_ids.extend(patch.evidence_ids or [])
+    for evidence_ref in patch.evidence_refs:
+        source_ids.append(evidence_ref.evidence_id)
+        if evidence_ref.source_id:
+            source_ids.append(evidence_ref.source_id)
+    if patch.target_memory_id:
+        source_ids.append(patch.target_memory_id)
+    if patch.new_memory_id:
+        source_ids.append(patch.new_memory_id)
+    return sorted({source_id for source_id in source_ids if source_id})
 
 
 def apply_v17_patch_to_ledger_state(

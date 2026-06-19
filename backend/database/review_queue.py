@@ -6,6 +6,11 @@ from config.memory_confidence import CONFIDENCE_BANDS
 from database import memories as memories_db
 from database import memory_ledger
 from database import short_term_memories as short_term_db
+from database.v17_non_active_memory_routes import (
+    NonActiveRoute,
+    NonActiveRouteOutcome,
+    persist_non_active_route_outcome,
+)
 from ._client import db
 
 users_collection = 'users'
@@ -185,6 +190,7 @@ def resolve_review_conflict(
 
     mutations = [] if effective_decision == 'drop' else resolution_mutations(item, effective_decision, correction)
     commit_result = append_resolution_commit(uid, item, effective_decision, correction, mutations)
+    _persist_non_active_review_resolution(uid, item, effective_decision, reason, commit_result)
 
     now = datetime.now(timezone.utc)
     status_by_decision = {
@@ -223,6 +229,63 @@ def resolve_review_conflict(
         'correction': correction_record,
         'item': {**item, **update},
     }
+
+
+def _persist_non_active_review_resolution(
+    uid: str,
+    item: Dict[str, Any],
+    decision: str,
+    reason: str,
+    commit_result: Optional[Dict[str, Any]],
+) -> None:
+    route_by_decision = {
+        'reject': NonActiveRoute.reject,
+        'drop': NonActiveRoute.skip,
+    }
+    route = route_by_decision.get(decision)
+    if route is None:
+        return
+
+    review_id = item.get('review_id') or item.get('fact_id') or 'unknown_review'
+    resolution_commit_id = ((commit_result or {}).get('commit') or {}).get('commit_id')
+    persist_non_active_route_outcome(
+        NonActiveRouteOutcome(
+            uid=uid,
+            route=route,
+            idempotency_key=f"review_queue:{review_id}:{decision}",
+            source_ids=_review_resolution_source_ids(item),
+            reason=reason or f"review_queue_{decision}",
+            run_id=f"review_queue:{review_id}",
+            patch_id=None,
+            audit_metadata={
+                'route_store_source': 'review_queue',
+                'decision': decision,
+                'review_id': review_id,
+                'fact_id': item.get('fact_id'),
+                'conflict_with': item.get('conflict_with') or [],
+                'source_commit_id': item.get('source_commit_id'),
+                'source_short_term_id': item.get('source_short_term_id'),
+                'resolution_commit_id': resolution_commit_id,
+            },
+        )
+    )
+
+
+def _review_resolution_source_ids(item: Dict[str, Any]) -> List[str]:
+    source_ids = [
+        item.get('review_id'),
+        item.get('fact_id'),
+        item.get('source_commit_id'),
+        item.get('source_short_term_id'),
+    ]
+    candidate = item.get('candidate') or {}
+    for evidence in candidate.get('evidence') or candidate.get('evidence_set') or []:
+        if isinstance(evidence, dict):
+            source_ids.append(evidence.get('evidence_id'))
+            source_ids.append(evidence.get('source_id'))
+        elif evidence:
+            source_ids.append(str(evidence))
+    return sorted({source_id for source_id in source_ids if source_id})
 
 
 def append_resolution_commit(
