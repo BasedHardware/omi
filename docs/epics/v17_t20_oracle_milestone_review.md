@@ -425,6 +425,28 @@ This closes only the first fake-injectable worker decision/idempotency/retry sea
 - Prove shared `ns2` isolation; add overfetch/refill/budgets, app/key/scope auth, and real benchmark/cloud evidence.
 - Production rollout remains **BLOCKED / NO-GO** until all Oracle P0s and required real-service evidence are complete.
 
+### 2026-06-19 — P0-4 leased Firestore reader/ack writer seam for vector repair outbox
+
+Continued Oracle P0-4 with a narrow fake-backed Firestore lease/read/ack seam for prepared `vector_repair_purge` records, without changing the production rollout verdict:
+
+- Added `lease_v17_vector_repair_purge_outbox_records(...)` in `backend/database/v17_vector_repair_outbox_worker.py` for `users/{uid}/memory_outbox/*` records.
+- The reader selects only `event_type="vector_repair_purge"`, `status="pending"`, and `available_at <= now` records under the target user outbox, then re-reads each document before claiming it.
+- Claiming marks the stored document `in_progress` with `lease_owner`, `leased_at`, `locked_at`, `lease_expires_at`, and `updated_at`; returned records preserve the original pending status so they can be passed to the existing pure processor.
+- Added `ack_v17_vector_repair_purge_outbox_record(...)` to apply the worker's ack/retry/dead-letter patches (`in_progress`, `completed`, `pending`, `dead_letter`, `attempt_count`, `last_error`, `action`) to the deterministic outbox document path.
+- Tests prove pending/available selection, terminal/in-progress/future/wrong-event skip behavior, ack path updates, duplicate lease prevention when paired with the existing idempotent worker seam, and ack write-failure propagation.
+- The seam documents its fake-backed concurrency contract. It is **not** a production scheduler and does **not** claim real Firestore transaction contention validation, Cloud Run/Tasks leasing, production IAM/deployed rules validation, real Pinecone delete/upsert, duplicate physical stale-ID proof, shared `ns2` isolation, central telemetry, benchmark evidence, or production approval.
+
+Verification recorded in `docs/epics/v17_memory_implementation_tickets.md`: RED missing lease/ack imports (`ImportError`), GREEN worker seam tests (`8 passed`), focused vector/outbox/product regression (`34 passed`), full `pytest tests/unit/test_v17_*.py -q` (`222 passed, 1 warning`), and async blocker scan exit 0 with pre-existing findings only.
+
+This closes only the narrow fake-backed Firestore reader/ack writer seam. Remaining P0-4/P0 work:
+
+- Validate the lease/ack contract under real Firestore emulator transaction contention and then production cloud IAM/deployed Security Rules before rollout.
+- Add Cloud Run/Tasks or another explicit scheduler/lease-owner execution contract; do not start background production processing from this seam alone.
+- Implement injected real Pinecone delete/upsert repair functions and prove duplicate stale-ID removal with Pinecone data, including tombstoned/deleted/missing authoritative items.
+- Add central low-cardinality telemetry/alerts for lease attempts, action counts, retry/dead-letter reasons, latency, stale-vector rates, and ack failures.
+- Prove shared `ns2` isolation; add overfetch/refill/budgets, app/key/scope auth, and real benchmark/cloud evidence.
+- Production rollout remains **BLOCKED / NO-GO** until all Oracle P0s and required real-service evidence are complete.
+
 ## Not-run / not-claimed caveats preserved
 
 - Oracle review has now run and is recorded here, but it blocks production rollout.

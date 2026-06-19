@@ -1,4 +1,10 @@
-from database.v17_vector_repair_outbox_worker import process_v17_vector_repair_purge_outbox_records
+from datetime import datetime, timezone
+
+from database.v17_vector_repair_outbox_worker import (
+    ack_v17_vector_repair_purge_outbox_record,
+    lease_v17_vector_repair_purge_outbox_records,
+    process_v17_vector_repair_purge_outbox_records,
+)
 
 
 def _record(**overrides):
@@ -42,6 +48,178 @@ class _Updates:
 
     def __call__(self, record, patch):
         self.patches.append((record["record_id"], dict(patch)))
+
+
+class _FakeSnapshot:
+    def __init__(self, path, data):
+        self.reference = _FakeDocumentReference(path, None)
+        self.id = path.rsplit("/", 1)[-1]
+        self.exists = data is not None
+        self._data = dict(data) if data is not None else None
+
+    def to_dict(self):
+        return dict(self._data) if self._data is not None else None
+
+
+class _FakeDocumentReference:
+    def __init__(self, path, store):
+        self.path = path
+        self._store = store
+
+    def get(self, transaction=None):
+        return _FakeSnapshot(self.path, self._store.get(self.path))
+
+    def update(self, patch):
+        self._store[self.path].update(dict(patch))
+
+    def set(self, data):
+        self._store[self.path] = dict(data)
+
+
+class _FakeQuery:
+    def __init__(self, store, collection_path, filters=None, limit_count=None):
+        self._store = store
+        self._collection_path = collection_path
+        self._filters = filters or []
+        self._limit_count = limit_count
+
+    def where(self, *args, **kwargs):
+        field, op, value = args
+        return _FakeQuery(self._store, self._collection_path, self._filters + [(field, op, value)], self._limit_count)
+
+    def limit(self, limit_count):
+        return _FakeQuery(self._store, self._collection_path, self._filters, limit_count)
+
+    def stream(self):
+        matches = []
+        prefix = f"{self._collection_path}/"
+        for path, data in sorted(self._store.items()):
+            if not path.startswith(prefix):
+                continue
+            if all(self._matches(data, field, op, value) for field, op, value in self._filters):
+                matches.append(_FakeSnapshot(path, data))
+        return matches[: self._limit_count]
+
+    @staticmethod
+    def _matches(data, field, op, value):
+        if op == "==":
+            return data.get(field) == value
+        if op == "<=":
+            return data.get(field) <= value
+        raise AssertionError(f"unexpected op {op}")
+
+
+class _FakeFirestore:
+    def __init__(self, docs=None):
+        self.store = dict(docs or {})
+
+    def collection(self, path):
+        return _FakeQuery(self.store, path)
+
+    def document(self, path):
+        return _FakeDocumentReference(path, self.store)
+
+
+def test_firestore_reader_leases_only_available_pending_vector_repair_records_and_ack_updates_path():
+    now = datetime(2026, 6, 19, 12, 0, tzinfo=timezone.utc)
+    available = now.isoformat()
+    future = datetime(2026, 6, 19, 12, 5, tzinfo=timezone.utc).isoformat()
+    db = _FakeFirestore(
+        {
+            "users/u1/memory_outbox/available": _record(
+                record_id="available", outbox_path="users/u1/memory_outbox/available", available_at=available
+            ),
+            "users/u1/memory_outbox/completed": _record(
+                record_id="completed", status="completed", available_at=available
+            ),
+            "users/u1/memory_outbox/in-progress": _record(
+                record_id="in-progress", status="in_progress", available_at=available
+            ),
+            "users/u1/memory_outbox/future": _record(record_id="future", available_at=future),
+            "users/u1/memory_outbox/other-event": _record(
+                record_id="other-event", event_type="other", available_at=available
+            ),
+        }
+    )
+
+    leased = lease_v17_vector_repair_purge_outbox_records(
+        db_client=db,
+        uid="u1",
+        worker_id="worker-a",
+        limit=10,
+        lease_seconds=30,
+        now=now,
+    )
+
+    assert [record["record_id"] for record in leased] == ["available"]
+    assert leased[0]["status"] == "pending"
+    assert db.store["users/u1/memory_outbox/available"]["status"] == "in_progress"
+    assert db.store["users/u1/memory_outbox/available"]["lease_owner"] == "worker-a"
+
+    ack_v17_vector_repair_purge_outbox_record(
+        db_client=db,
+        record=leased[0],
+        patch={"status": "completed", "action": "repair"},
+        now=now,
+    )
+
+    assert db.store["users/u1/memory_outbox/available"]["status"] == "completed"
+    assert db.store["users/u1/memory_outbox/available"]["action"] == "repair"
+    assert db.store["users/u1/memory_outbox/available"]["updated_at"] == now.isoformat()
+
+
+def test_duplicate_lease_after_claim_does_not_duplicate_worker_action():
+    now = datetime(2026, 6, 19, 12, 0, tzinfo=timezone.utc)
+    path = "users/u1/memory_outbox/dup"
+    db = _FakeFirestore({path: _record(record_id="dup", outbox_path=path, available_at=now.isoformat())})
+    deleted = []
+
+    first_lease = lease_v17_vector_repair_purge_outbox_records(
+        db_client=db,
+        uid="u1",
+        worker_id="worker-a",
+        limit=10,
+        lease_seconds=30,
+        now=now,
+    )
+    second_lease = lease_v17_vector_repair_purge_outbox_records(
+        db_client=db,
+        uid="u1",
+        worker_id="worker-b",
+        limit=10,
+        lease_seconds=30,
+        now=now,
+    )
+
+    result = process_v17_vector_repair_purge_outbox_records(
+        first_lease + second_lease,
+        authoritative_item_loader=lambda record: None,
+        vector_deleter=lambda record: deleted.append(record["vector_id"]),
+        vector_repairer=lambda record, item: None,
+        outbox_updater=lambda record, patch: None,
+    )
+
+    assert [record["record_id"] for record in first_lease] == ["dup"]
+    assert second_lease == []
+    assert deleted == ["vec-1"]
+    assert result["processed_count"] == 1
+
+
+def test_ack_writer_failure_propagates_deterministically():
+    class _FailingFirestore(_FakeFirestore):
+        def document(self, path):
+            raise RuntimeError(f"write failed for {path}")
+
+    try:
+        ack_v17_vector_repair_purge_outbox_record(
+            db_client=_FailingFirestore(),
+            record=_record(record_id="bad", outbox_path="users/u1/memory_outbox/bad"),
+            patch={"status": "dead_letter"},
+        )
+    except RuntimeError as exc:
+        assert "users/u1/memory_outbox/bad" in str(exc)
+    else:
+        raise AssertionError("expected ack writer failure to propagate")
 
 
 def test_worker_deletes_stale_vector_when_authoritative_item_is_missing():
