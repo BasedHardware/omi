@@ -404,25 +404,23 @@ class AddAppProvider extends ChangeNotifier {
     // Source code URL.
     if (sourceCodeUrlController.text != (app.sourceCodeUrl ?? '')) return true;
 
-    // External integration.
+    // External integration. Compare null-safe (not gated on ext != null) so adding
+    // these fields to an app that previously had no integration is also detected.
     final ext = app.externalIntegration;
-    if (ext != null) {
-      if (triggerEvent != ext.triggersOn) return true;
-      if (webhookUrlController.text != (ext.webhookUrl ?? '')) return true;
-      if (setupCompletedController.text != (ext.setupCompletedUrl ?? '')) return true;
-      if (instructionsController.text != (ext.setupInstructionsFilePath ?? '')) return true;
-      if (appHomeUrlController.text != (ext.appHomeUrl ?? '')) return true;
-      if (chatToolsManifestUrlController.text != (ext.chatToolsManifestUrl ?? '')) return true;
-      final originalAuthUrl = ext.authSteps.isNotEmpty ? ext.authSteps.first.url : '';
-      if (authUrlController.text != originalAuthUrl) return true;
-      final originalActions = (ext.actions ?? []).map((a) => a.action).toSet();
-      if (!setEquals(actions.map((a) => a['action'] as String).toSet(), originalActions)) return true;
-    }
+    if (triggerEvent != ext?.triggersOn) return true;
+    if (webhookUrlController.text != (ext?.webhookUrl ?? '')) return true;
+    if (setupCompletedController.text != (ext?.setupCompletedUrl ?? '')) return true;
+    if (instructionsController.text != (ext?.setupInstructionsFilePath ?? '')) return true;
+    if (appHomeUrlController.text != (ext?.appHomeUrl ?? '')) return true;
+    if (chatToolsManifestUrlController.text != (ext?.chatToolsManifestUrl ?? '')) return true;
+    final originalAuthUrl = (ext?.authSteps.isNotEmpty ?? false) ? ext!.authSteps.first.url : '';
+    if (authUrlController.text != originalAuthUrl) return true;
+    final originalActions = (ext?.actions ?? []).map((a) => a.action).toSet();
+    if (!setEquals(actions.map((a) => a['action'] as String).toSet(), originalActions)) return true;
 
-    // Proactive notification scopes.
-    if (app.proactiveNotification != null) {
-      if (!setEquals(selectedScopes.map((s) => s.id).toSet(), app.proactiveNotification!.scopes.toSet())) return true;
-    }
+    // Proactive notification scopes (null-safe for the same reason as above).
+    final originalScopes = (app.proactiveNotification?.scopes ?? const <String>[]).toSet();
+    if (!setEquals(selectedScopes.map((s) => s.id).toSet(), originalScopes)) return true;
 
     // Thumbnails (order-insensitive).
     if (!setEquals(thumbnailIds.toSet(), app.thumbnailIds.toSet())) return true;
