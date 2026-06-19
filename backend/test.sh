@@ -50,6 +50,7 @@ pytest tests/unit/test_v17_atomic_apply.py -v
 pytest tests/unit/test_v17_search_gateway.py -v
 pytest tests/unit/test_v17_firestore_apply_store.py -v
 pytest tests/unit/test_v17_firestore_security_rules.py -v
+pytest tests/unit/test_v17_firestore_iam_deployment_doc.py -v
 pytest tests/unit/test_memory_ingestion_pipeline.py -v
 pytest tests/unit/test_working_memory_candidate_schema.py -v
 pytest tests/unit/test_llm_usage_tracker.py -v
