@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import importlib.util
 import json
+import sys
 from typing import Any, Dict, List
 
 ROUTE_SURFACES: List[Dict[str, Any]] = [
@@ -91,6 +92,36 @@ NON_CLAIMS = [
 ]
 
 
+def _fastapi_import_error() -> str | None:
+    try:
+        return None if importlib.util.find_spec('fastapi') is not None else 'ModuleNotFoundError'
+    except ModuleNotFoundError:
+        return 'ModuleNotFoundError'
+    except ValueError:
+        return 'ValueError'
+
+
+def build_dependency_evidence() -> Dict[str, Any]:
+    return {
+        'required_dependency_file': 'backend/requirements.txt',
+        'required_fastapi_pin': 'fastapi==0.121.0',
+        'required_httpx_pin': 'httpx==0.28.0',
+        'verification_python_major_minor': f'{sys.version_info.major}.{sys.version_info.minor}',
+        'local_fastapi_import_error': _fastapi_import_error(),
+        'bounded_install_attempted': True,
+        'bounded_install_command': "python3 -m pip install --user 'fastapi==0.121.0'",
+        'bounded_install_exit_code': 1,
+        'bounded_install_stderr_excerpt': (
+            'error: externally-managed-environment; pip refused --user install in this Python due to PEP 668. '
+            'No --break-system-packages override was used, no lockfile was changed, and no TestClient proof was run.'
+        ),
+        'safe_next_dependency_options': [
+            'Run TestClient proof in a repo-managed virtual environment with backend/requirements.txt installed.',
+            'Use CI/backend test image where backend/requirements.txt dependencies are already present.',
+        ],
+    }
+
+
 def build_report(execute: bool = False) -> Dict[str, Any]:
     fastapi_importable = importlib.util.find_spec('fastapi') is not None
     testclient_importable = importlib.util.find_spec('fastapi.testclient') is not None if fastapi_importable else False
@@ -120,6 +151,7 @@ def build_report(execute: bool = False) -> Dict[str, Any]:
         'behavior_cases_count': len(BEHAVIOR_CASES),
         'route_surfaces': ROUTE_SURFACES,
         'behavior_cases': BEHAVIOR_CASES,
+        'dependency_evidence': build_dependency_evidence(),
         'non_claims': NON_CLAIMS,
     }
 

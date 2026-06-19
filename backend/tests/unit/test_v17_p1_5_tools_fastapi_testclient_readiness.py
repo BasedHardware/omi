@@ -88,6 +88,27 @@ def test_tools_fastapi_testclient_readiness_links_existing_local_proof_and_non_c
     assert 'No Firestore/Pinecone/cloud/provider calls' in text
 
 
+def test_tools_fastapi_testclient_readiness_pins_exact_dependency_and_install_blocker():
+    report = _run_readiness('--execute')
+    text = json.dumps(report, sort_keys=True)
+
+    assert report['dependency_evidence']['required_dependency_file'] == 'backend/requirements.txt'
+    assert report['dependency_evidence']['required_fastapi_pin'] == 'fastapi==0.121.0'
+    assert report['dependency_evidence']['required_httpx_pin'] == 'httpx==0.28.0'
+    assert report['dependency_evidence']['verification_python_major_minor']
+    assert report['dependency_evidence']['local_fastapi_import_error'] in ('ModuleNotFoundError', None)
+    assert report['dependency_evidence']['bounded_install_attempted'] is True
+    assert (
+        report['dependency_evidence']['bounded_install_command'] == "python3 -m pip install --user 'fastapi==0.121.0'"
+    )
+    assert report['dependency_evidence']['bounded_install_exit_code'] == 1
+    assert 'externally-managed-environment' in report['dependency_evidence']['bounded_install_stderr_excerpt']
+    assert 'PEP 668' in report['dependency_evidence']['bounded_install_stderr_excerpt']
+    assert 'fastapi==0.121.0' in text
+    assert 'httpx==0.28.0' in text
+    assert 'externally-managed-environment' in text
+
+
 def test_tools_fastapi_testclient_readiness_registered_and_documented():
     test_sh = TEST_SH.read_text()
     ticket_doc = TICKET_DOC.read_text()
