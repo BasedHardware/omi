@@ -111,6 +111,36 @@ void main() {
     });
   });
 
+  group('AddAppProvider.clear', () {
+    test('resets the fields the dirty check reads (no stale state leaks in)', () {
+      final p = AddAppProvider();
+      p.appNameController.text = 'stale';
+      p.webhookUrlController.text = 'https://stale';
+      p.authUrlController.text = 'https://stale-auth';
+      p.sourceCodeUrlController.text = 'https://stale-src';
+      p.triggerEvent = 'memory_creation';
+      p.isPaid = true;
+      p.selectedCapabilities = [AppCapability(title: 'chat', id: 'chat')];
+      p.selectedScopes = [];
+      p.thumbnailIds = ['t1'];
+      p.actions = [
+        {'action': 'create_conversation'},
+      ];
+
+      p.clear();
+
+      expect(p.appNameController.text, isEmpty);
+      expect(p.webhookUrlController.text, isEmpty);
+      expect(p.authUrlController.text, isEmpty);
+      expect(p.sourceCodeUrlController.text, isEmpty);
+      expect(p.triggerEvent, isNull);
+      expect(p.isPaid, isFalse);
+      expect(p.selectedCapabilities, isEmpty);
+      expect(p.thumbnailIds, isEmpty);
+      expect(p.actions, isEmpty);
+    });
+  });
+
   group('AddAppProvider.hasDataChanged — external integration', () {
     late App app;
     late AddAppProvider provider;
