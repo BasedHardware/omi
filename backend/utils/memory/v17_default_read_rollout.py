@@ -164,13 +164,19 @@ def read_v17_global_read_gate(*, db_client) -> V17GlobalReadGateDecision:
     """Read the global emergency V17 product-read gate before per-user rollout state."""
 
     try:
-        snapshot = db_client.document(V17_GLOBAL_READ_GATE_PATH).get()
+        snapshot = _get_firestore_document_snapshot(db_client.document(V17_GLOBAL_READ_GATE_PATH))
         data = snapshot.to_dict() if getattr(snapshot, 'exists', True) else None
-    except Exception:
+    except (TypeError, ValueError, AttributeError):
         return V17GlobalReadGateDecision(
             source_path=V17_GLOBAL_READ_GATE_PATH,
             read_decision=V17ReadDecision.DENY_MEMORY,
             reason='malformed_global_read_gate',
+        )
+    except Exception:
+        return V17GlobalReadGateDecision(
+            source_path=V17_GLOBAL_READ_GATE_PATH,
+            read_decision=V17ReadDecision.DENY_MEMORY,
+            reason='global_read_gate_read_failed',
         )
     return normalize_v17_global_read_gate(data)
 
@@ -216,13 +222,19 @@ def read_v17_write_convergence_gate(*, db_client) -> V17WriteConvergencePolicy:
     """Read server-owned durable write convergence/outbox readiness."""
 
     try:
-        snapshot = db_client.document(V17_WRITE_CONVERGENCE_GATE_PATH).get()
+        snapshot = _get_firestore_document_snapshot(db_client.document(V17_WRITE_CONVERGENCE_GATE_PATH))
         data = snapshot.to_dict() if getattr(snapshot, 'exists', True) else None
-    except Exception:
+    except (TypeError, ValueError, AttributeError):
         return V17WriteConvergencePolicy(
             source_path=V17_WRITE_CONVERGENCE_GATE_PATH,
             ready=False,
             reason='malformed_write_convergence_gate',
+        )
+    except Exception:
+        return V17WriteConvergencePolicy(
+            source_path=V17_WRITE_CONVERGENCE_GATE_PATH,
+            ready=False,
+            reason='write_convergence_gate_read_failed',
         )
     return normalize_v17_write_convergence_gate(data)
 

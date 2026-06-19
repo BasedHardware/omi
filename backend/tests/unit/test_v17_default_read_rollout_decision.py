@@ -90,9 +90,25 @@ def test_global_read_gate_allows_reads_only_when_enabled_and_kill_switch_inactiv
     decision = read_v17_global_read_gate(db_client=db_client)
 
     assert db_client.document_get_paths == [V17_GLOBAL_READ_GATE_PATH]
+    assert db_client.document_get_timeouts == [V17_DEFAULT_READ_ROLLOUT_TIMEOUT_SECONDS]
     assert db_client.collection_paths == []
     assert decision.read_decision == V17ReadDecision.USE_V17
     assert decision.fallback_reason is None
+
+
+def test_global_read_gate_uses_bounded_timeout_and_fails_closed_for_firestore_transport_exceptions():
+    class PermissionDenied(Exception):
+        pass
+
+    failing_db_client = _FirestoreFake(get_exception=PermissionDenied('permission denied'))
+
+    decision = read_v17_global_read_gate(db_client=failing_db_client)
+
+    assert failing_db_client.document_get_paths == [V17_GLOBAL_READ_GATE_PATH]
+    assert failing_db_client.document_get_timeouts == [V17_DEFAULT_READ_ROLLOUT_TIMEOUT_SECONDS]
+    assert failing_db_client.collection_paths == []
+    assert decision.read_decision == V17ReadDecision.DENY_MEMORY
+    assert decision.fallback_reason == 'global_read_gate_read_failed'
 
 
 def test_global_read_gate_fails_closed_for_missing_disabled_kill_switch_and_malformed_config():
@@ -141,9 +157,25 @@ def test_write_convergence_gate_requires_durable_outbox_dual_write_and_delete_re
     policy = read_v17_write_convergence_gate(db_client=db_client)
 
     assert db_client.document_get_paths == [V17_WRITE_CONVERGENCE_GATE_PATH]
+    assert db_client.document_get_timeouts == [V17_DEFAULT_READ_ROLLOUT_TIMEOUT_SECONDS]
     assert db_client.collection_paths == []
     assert policy.ready is True
     assert policy.reason == 'ok'
+
+
+def test_write_convergence_gate_uses_bounded_timeout_and_fails_closed_for_firestore_transport_exceptions():
+    class DeadlineExceeded(Exception):
+        pass
+
+    failing_db_client = _FirestoreFake(get_exception=DeadlineExceeded('deadline exceeded'))
+
+    policy = read_v17_write_convergence_gate(db_client=failing_db_client)
+
+    assert failing_db_client.document_get_paths == [V17_WRITE_CONVERGENCE_GATE_PATH]
+    assert failing_db_client.document_get_timeouts == [V17_DEFAULT_READ_ROLLOUT_TIMEOUT_SECONDS]
+    assert failing_db_client.collection_paths == []
+    assert policy.ready is False
+    assert policy.reason == 'write_convergence_gate_read_failed'
 
 
 def test_write_convergence_gate_fails_closed_for_missing_or_malformed_readiness_config():

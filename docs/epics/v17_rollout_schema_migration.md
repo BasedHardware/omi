@@ -73,6 +73,15 @@ The parser intentionally rejects the following compatibility shapes. These names
 - Nested alias `grants.chat.default_memory` without `grants.omi_chat.default_memory: true` → `missing_chat_default_memory_grant`.
 - Nested alias `grants.developer.default_memory` without `grants.developer_api.default_memory: true` → `missing_developer_default_memory_grant`.
 
+## Global gate and write-convergence read semantics
+
+Global and convergence gates are server-owned controls, separate from per-user rollout docs:
+
+- `memory_control/v17_global_read_gate`
+- `memory_control/v17_write_convergence_gate`
+
+Reads of these gates use the same bounded Firestore `.get(timeout=2.0)` helper as `users/{uid}/memory_control/state` when the SDK supports the timeout argument. Timeout, permission, deadline, or transport exceptions fail closed with explicit low-cardinality reasons: `global_read_gate_read_failed` denies V17 product reads and `write_convergence_gate_read_failed` keeps legacy write convergence not ready. Missing or malformed gate documents remain explicit fail-closed states (`missing_global_read_gate`, `malformed_global_read_gate`, `missing_write_convergence_gate`, `malformed_write_convergence_gate`) and do not expose Archive by default or make stale Short-term memory default-visible.
+
 ## Local readiness artifact
 
 `backend/scripts/v17_rollout_schema_readiness.py` emits a read-only JSON inventory with:
