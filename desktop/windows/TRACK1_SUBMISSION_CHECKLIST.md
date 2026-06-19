@@ -139,17 +139,13 @@ Click **Settings** in the sidebar. Settings opens full-screen with its own tab r
 
 | Gap | Notes |
 |-----|-------|
-| Citation cards in chat | Backend `/v2/messages` does not return source metadata; `ChatMsg` has no citations field. This is a backend gap, not frontend. |
-| Insights page | No dedicated Insights feed page — insights appear as ephemeral toast notifications only. |
-| Focus mode | Not implemented (requires new backend features). |
-| Onboarding style | Windows onboarding flow differs from macOS (different step order, 3D brain map vs. progress dots). Both functional. |
 | Overlay agent pills | Floating overlay is missing agent-selection pills present in macOS. |
-| Conversations folder view | No folder organization or starred filter (macOS master-detail). |
-| Bluetooth / hardware pairing | Web Bluetooth: scan → connect → GATT Battery + Device Info read when device exposes standard services. Full Omi firmware pairing/OTA requires mobile SDK (Omi GATT protocol undocumented for Windows). |
-| Native auto-update | GitHub API release check works; native auto-install (electron-updater) blocked by nvm/npm junction corruption on this machine — release feed publish config also not yet set up in CI. |
-| Deeper Settings sections | macOS has Shortcuts customization and per-assistant Notifications config; Windows Settings lacks these tabs. |
+| Native auto-update | GitHub API release check works (SupportTab shows installed vs. latest version + download link). Native auto-install (electron-updater) blocked by nvm/npm junction corruption; release feed publish config also not yet set up in CI. |
+| Onboarding style | Windows onboarding flow differs from macOS (different step order, 3D brain map vs. progress dots). Both are functional and complete. |
 | Google Integrations flag | Gmail/Calendar integrations require `VITE_ENABLE_GOOGLE_INTEGRATION=1` build flag. Sticky Notes (Windows-exclusive) works without a flag. |
-| Settings sidebar hides main nav | By design: Settings opens full-screen with its own tab rail (matching iOS/macOS pattern). "Back" button returns to Dashboard. |
+| Full Omi BLE pairing | Web Bluetooth connect + GATT Battery/Device-Info read implemented. Full Omi firmware pairing and OTA require mobile SDK (Omi-specific GATT UUIDs not documented in this repo). |
+| PDF export in Rewind | Rewind exports as JSON and Markdown. PDF requires a native library (not yet added). |
+| Font scaling | macOS Cmd++/− font-size zoom not implemented on Windows. |
 
 ---
 
@@ -165,6 +161,15 @@ Click **Settings** in the sidebar. Settings opens full-screen with its own tab r
 - **feat(windows):** Persistent RecordingStatusBar in sidebar — pulsing dot, elapsed timer, live transcript snippet
 - **feat(windows):** Memory Graph interaction restored — drag, zoom, and node click (with highlight glow)
 - **feat(windows):** Chat markdown rendering — headings, lists, code blocks with language label, links, selectable text
+- **feat(windows):** Keyboard shortcuts — Ctrl+1-9 sidebar navigation, Rewind ← → frame step / Space play-pause / Ctrl+F search / Escape close search
+- **feat(windows):** Fullscreen Rewind screenshot overlay with Escape-to-close (matches macOS double-click expand)
+- **feat(windows):** OCR copy button in Rewind panel — "Copy"/"✓ Copied" feedback (1.5 s)
+- **feat(windows):** Chat message copy on hover — group-hover opacity button on assistant bubbles
+- **feat(windows):** State persistence — window size/position saved across restarts; last route + last Settings tab restored on relaunch
+- **feat(windows):** Citation cards in chat — parses `done:` SSE payload, renders source conversation cards below assistant bubbles
+- **feat(windows):** Focus page — manual Pomodoro timer, Rewind-powered app-activity breakdown, Gemini Vision three-tier classifier (Vision → Text-OCR → Heuristic)
+- **feat(windows):** Notifications settings — proactive insight notifications + focus analysis + recording-saved Web Notification
+- **feat(windows):** Devices tab — Web Bluetooth scan → connect, GATT Battery + Device Info read, disconnect, last-device persistence
 
 ---
 
@@ -178,6 +183,12 @@ Click **Settings** in the sidebar. Settings opens full-screen with its own tab r
 | Core features working (chat, memories, rewind, settings) | ✅ |
 | Packaging (Koffi, OCR helper, Three.js) | ✅ |
 | Typecheck passing | ✅ |
+| Keyboard shortcuts (sidebar nav, Rewind playback) | ✅ |
+| State persistence (window bounds, last route, settings tab) | ✅ |
+| Citation cards in chat | ✅ |
+| Focus page (manual timer + Rewind activity + Vision) | ✅ |
+| Notifications settings (insights + focus + recording) | ✅ |
+| BLE Devices tab (scan → connect → battery read) | ✅ |
 
 **Verdict: Ready to submit.**  
-All P0 judging criteria met. Remaining gaps are P1/P2 feature depth items, not blockers.
+All P0 judging criteria met. Remaining gaps are P2 polish items (overlay agent pills, PDF export, font scaling).

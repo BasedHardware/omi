@@ -237,7 +237,15 @@ Already resolved in Batch 7:
 | ✓ | Devices tab — BLE connect + battery | `DevicesTab.tsx` | Done — scan→connect, Battery Service read (0x180F/0x2A19), Device Info Service (0x180A), disconnect, last-device localStorage |
 | ✗ | Auto-update native feed | — | Blocked — npm junction still points to nvm v22.9.0; electron-updater install fails; no publish config in CI. GitHub API checker is the mechanism; SupportTab shows installed vs. latest version. |
 | ✓ | Proactive focus detection (Vision-tier) | `focusEngine.ts`, `Focus.tsx`, `NotificationsTab.tsx`, `preferences.ts` | Done — three-tier (Vision → Text-OCR → Heuristic); Gemini Vision via existing rewind:frameImage IPC |
-| ✗ | Native BLE pairing | — | No `noble` or `node-ble` addon; Devices tab shows honest unsupported state |
+| ✗ | Native BLE pairing | — | No `noble` or `node-ble` addon; Web Bluetooth handles scan→connect→battery read |
 | ✓ | Tasks grouping | — | Already done |
 | ✓ | Screen context | — | Already present |
 | ✓ | Overlay drag/resize/pill | — | Done in Batch 7 |
+| ✓ | Keyboard shortcuts — Ctrl+1-9 sidebar nav | `Sidebar.tsx` | Done — matches macOS Cmd+1-N; skips text inputs |
+| ✓ | Keyboard shortcuts — Rewind (← → Space Ctrl+F Esc) | `Rewind.tsx` | Done — mutable-ref pattern avoids stale closure; Space limited to today |
+| ✓ | Rewind fullscreen overlay (Escape close) | `RewindPlayer.tsx` | Done — `FullscreenOverlay` component with own keydown; matches macOS double-click expand |
+| ✓ | OCR copy button in Rewind panel | `RewindPlayer.tsx` | Done — "Copy"/"✓ Copied" 1.5 s feedback |
+| ✓ | Chat message copy on hover | `ChatMessages.tsx` | Done — group-hover `CopyMsgButton`; isStreaming guard prevents partial copy |
+| ✓ | Window bounds persistence (size + position) | `src/main/index.ts` | Done — `readFileSync`/`writeFileSync` to `userData/main-window-bounds.json`; skips maximized/minimized/fullscreen |
+| ✓ | Last route persistence | `App.tsx` | Done — `localStorage('omi.lastRoute')`; restored on mount after consumePendingRoute |
+| ✓ | Settings tab persistence | `Settings.tsx` | Done — `localStorage('omi.settings.lastTab')`; initialized from storage |
