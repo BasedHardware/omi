@@ -20,6 +20,7 @@ from models.v17_memory_apply import (
     apply_long_term_patch_transaction,
 )
 from models.v17_memory_operations import MemoryOperation
+from models.v17_product_memory import MemoryItemStatus, V17MemoryItem
 
 
 class V17FirestoreApplyError(Exception):
@@ -88,6 +89,23 @@ def _apply_long_term_patch_firestore_transaction(
         collections=collections,
         evidence_ids=operation.evidence_ids,
     )
+    target_validation = _validate_authoritative_targets(
+        db_client=db_client,
+        transaction=transaction,
+        collections=collections,
+        operation=operation,
+        control_state=control_state,
+    )
+    if target_validation is not None:
+        _write_apply_result(
+            transaction=transaction,
+            db_client=db_client,
+            collections=collections,
+            operation_ref=operation_ref,
+            result=target_validation,
+        )
+        return target_validation
+
     authoritative_payload = dict(patch_payload)
     authoritative_payload["evidence"] = evidence_items
 
@@ -124,6 +142,49 @@ def _read_authoritative_evidence(
         )
         evidence_items.append(evidence)
     return evidence_items
+
+
+def _validate_authoritative_targets(
+    *,
+    db_client,
+    transaction,
+    collections: V17Collections,
+    operation: MemoryOperation,
+    control_state: MemoryControlState,
+) -> Optional[ApplyResult]:
+    target_ids = _operation_target_ids(operation)
+    for target_id in target_ids:
+        target_ref = db_client.document(f"{collections.memory_items}/{target_id}")
+        snapshot = target_ref.get(transaction=transaction)
+        if not snapshot.exists:
+            return _target_not_active(control_state, operation, f"missing target memory item: {target_id}")
+        target = V17MemoryItem(**(snapshot.to_dict() or {}))
+        if target.uid != operation.uid:
+            return _target_not_active(control_state, operation, "target memory uid mismatch")
+        if target.account_generation != control_state.account_generation:
+            return _target_not_active(control_state, operation, "target memory generation mismatch")
+        if target.status != MemoryItemStatus.active:
+            return _target_not_active(control_state, operation, "target memory is not active")
+    return None
+
+
+def _operation_target_ids(operation: MemoryOperation) -> List[str]:
+    target_ids = []
+    if operation.target_memory_id:
+        target_ids.append(operation.target_memory_id)
+    if operation.logical_payload.target_memory_id:
+        target_ids.append(operation.logical_payload.target_memory_id)
+    target_ids.extend(operation.logical_payload.supersedes or [])
+    return sorted(set(target_ids))
+
+
+def _target_not_active(control_state: MemoryControlState, operation: MemoryOperation, reason: str) -> ApplyResult:
+    return ApplyResult(
+        status=ApplyStatus.target_not_active,
+        control_state=control_state,
+        operation=operation,
+        reason=reason,
+    )
 
 
 def _write_apply_result(

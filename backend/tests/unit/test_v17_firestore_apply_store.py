@@ -15,6 +15,7 @@ from models.memory_evidence import ArtifactPreservationState, MemoryEvidence, So
 from models.v17_memory_apply import ApplyStatus, MemoryControlState
 from models.v17_memory_contracts import DurablePatchDecision, LifecycleState
 from models.v17_memory_operations import MemoryOperation, MemoryOperationType
+from models.v17_product_memory import MemoryItemStatus, MemoryTier, ProcessingState, V17MemoryItem
 
 
 class _FakeSnapshot:
@@ -125,17 +126,46 @@ def _stored_model(model):
     return model.model_dump(mode="json")
 
 
-def _db_with(control=None, operation=None, evidence=None):
+def _db_with(control=None, operation=None, evidence=None, target_items=None):
     control = control or MemoryControlState(uid="u1", head_commit_id="head0", account_generation=1, source_generation=2)
     operation = operation or _operation()
     evidence = evidence or _evidence()
-    return _FakeDb(
-        {
-            "users/u1/memory_control/state": _stored_model(control),
-            f"users/u1/memory_operations/{operation.operation_id}": _stored_model(operation),
-            "users/u1/memory_evidence/ev1": _stored_model(evidence),
-        }
+    docs = {
+        "users/u1/memory_control/state": _stored_model(control),
+        f"users/u1/memory_operations/{operation.operation_id}": _stored_model(operation),
+        "users/u1/memory_evidence/ev1": _stored_model(evidence),
+    }
+    for target_item in target_items or []:
+        docs[f"users/u1/memory_items/{target_item.memory_id}"] = _stored_model(target_item)
+    return _FakeDb(docs)
+
+
+def _target_item(**overrides):
+    now = datetime.now(timezone.utc)
+    data = dict(
+        memory_id="mem1",
+        uid="u1",
+        version=1,
+        tier=MemoryTier.long_term,
+        status=MemoryItemStatus.active,
+        processing_state=ProcessingState.processed,
+        content="User prefers concise updates.",
+        evidence=[_evidence()],
+        source_state=SourceState.active,
+        sensitivity_labels=[],
+        visibility="private",
+        user_asserted=False,
+        captured_at=now,
+        updated_at=now,
+        ledger_commit_id="head0",
+        ledger_sequence=1,
+        source_commit_id="head0",
+        source_commit_sequence=1,
+        content_hash="hash1",
+        account_generation=1,
     )
+    data.update(overrides)
+    return V17MemoryItem(**data)
 
 
 def test_firestore_apply_reads_authoritative_docs_and_writes_commit_projection_operation_and_outbox_atomically():
@@ -178,3 +208,51 @@ def test_firestore_apply_uses_stored_evidence_not_caller_payload_and_does_not_wr
     assert result.status == ApplyStatus.source_not_active
     written_paths = [path for path, _ in db.transaction_obj.sets]
     assert written_paths == [f"users/u1/memory_operations/{operation.operation_id}"]
+
+
+def test_firestore_apply_reads_target_memory_and_fails_closed_when_target_is_missing():
+    operation = _operation(
+        target_memory_id="mem1",
+        logical_payload={
+            "decision": "update",
+            "target_memory_id": "mem1",
+            "memory_text": "Updated.",
+            "result_status": "active",
+        },
+    )
+    db = _db_with(operation=operation)
+    patch = _patch(decision=DurablePatchDecision.update, target_memory_id="mem1", memory_text="Updated.")
+
+    result = apply_long_term_patch_firestore(
+        uid="u1",
+        operation_id=operation.operation_id,
+        patch_payload=patch,
+        db_client=db,
+    )
+
+    assert result.status == ApplyStatus.target_not_active
+    written_paths = [path for path, _ in db.transaction_obj.sets]
+    assert written_paths == [f"users/u1/memory_operations/{operation.operation_id}"]
+
+
+def test_firestore_apply_allows_update_when_target_is_authoritative_active_same_generation():
+    operation = _operation(
+        target_memory_id="mem1",
+        logical_payload={
+            "decision": "update",
+            "target_memory_id": "mem1",
+            "memory_text": "Updated.",
+            "result_status": "active",
+        },
+    )
+    db = _db_with(operation=operation, target_items=[_target_item()])
+    patch = _patch(decision=DurablePatchDecision.update, target_memory_id="mem1", memory_text="Updated.")
+
+    result = apply_long_term_patch_firestore(
+        uid="u1",
+        operation_id=operation.operation_id,
+        patch_payload=patch,
+        db_client=db,
+    )
+
+    assert result.status == ApplyStatus.committed

@@ -24,6 +24,7 @@ class ApplyStatus(str, Enum):
     retryable_head_mismatch = "retryable_head_mismatch"
     generation_mismatch = "generation_mismatch"
     source_not_active = "source_not_active"
+    target_not_active = "target_not_active"
     payload_mismatch = "payload_mismatch"
     invalid_patch = "invalid_patch"
 
