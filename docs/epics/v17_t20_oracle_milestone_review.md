@@ -634,6 +634,26 @@ This closes only the readiness/proof-runner artifact for the production Firestor
 - Complete overfetch/refill/budgets, app/key/scope auth, benchmarks, and explicit rollout gates.
 - Production rollout remains **BLOCKED / NO-GO** until all Oracle P0s and required real-service evidence are complete.
 
+### 2026-06-19 — P0-4 Pinecone repair/shared-ns2 validation readiness artifact
+
+Continued Oracle P0-4 by adding a safe real-Pinecone validation readiness runner/artifact for the duplicate stale physical-ID/tombstone/repair/retry/shared-`ns2` proof that Oracle still requires, without claiming real Pinecone evidence or changing the production rollout verdict:
+
+- Added `backend/scripts/v17_pinecone_repair_validation_readiness.py`, a safe-by-default runner that emits `status=NOT_RUN` readiness JSON in default mode and performs no Pinecone delete/upsert/query mutation.
+- The readiness artifact records exact prerequisites and pass/fail criteria for duplicate stale physical IDs, tombstone/delete precedence for missing/deleted/tombstoned/purged authoritative items, live stale item repair/upsert, retry/dead-letter behavior, shared `ns2` read-only isolation, and legacy vectors not touched.
+- Execute mode is gated by explicit credentials/config (`PINECONE_API_KEY`, `PINECONE_INDEX_NAME`, `PINECONE_INDEX_HOST`) plus `--allow-throwaway-mutation`, a non-`ns2` `--test-namespace`, a long `v17-proof-...` `--throwaway-prefix`, exact `--confirm-throwaway-prefix`, and optional `--shared-ns2-readonly`; the runner refuses shared `ns2` mutation.
+- Static tests assert the safety gates and ensure no broad delete/update command terms are present; `backend/test.sh` now includes the test file.
+- Local readiness runs printed `NOT_RUN` with missing Pinecone prerequisites; `--execute` also reported missing explicit mutation/namespace/prefix gates. Therefore no real Pinecone validation, no deletion/upsert, no tombstone precedence proof, no retry/dead-letter proof, and no shared `ns2` isolation proof was run or claimed.
+
+Verification recorded in `docs/epics/v17_memory_implementation_tickets.md`: RED missing runner/doc tests (`3 failed`), GREEN static test (`3 passed`), readiness command outputs (`NOT_RUN` and safe `--execute` prerequisite failure), focused vector/outbox/docs regression, full V17 regression, and async scan exit 0 with pre-existing findings only.
+
+This closes only the Pinecone validation readiness/non-claim artifact. Remaining P0-4/P0 work:
+
+- Implement/run the real throwaway Pinecone fixture validation with exact PASS/FAIL output for duplicate stale physical IDs, delete/repair/tombstone precedence, retry/dead-letter, and post-run absence of prefix-scoped stale vectors.
+- Produce read-only shared `ns2` coexistence evidence proving legacy queries exclude V17 schema records and baseline recall remains intact, or choose a separate namespace/filter before production inserts.
+- Run the OIDC/IAM and Firestore IAM/deployed-rules proof runners against target cloud projects and attach exact output.
+- Add central retry/dead-letter/backlog telemetry and alerts, overfetch/refill/budgets, app/key/scope auth, benchmarks, and explicit rollout gates.
+- Production rollout remains **BLOCKED / NO-GO** until all Oracle P0s and required real-service evidence are complete.
+
 ## Not-run / not-claimed caveats preserved
 
 - Oracle review has now run and is recorded here, but it blocks production rollout.

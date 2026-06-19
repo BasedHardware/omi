@@ -192,6 +192,37 @@ Pass/fail criteria for the runner (including explicit client denial checks):
 
 The runner is guarded against mutating commands: no `firebase deploy`, no `gcloud firestore databases update`, no IAM `set-iam-policy`, and no IAM binding mutations. It does not deploy rules, change IAM, mutate databases, write outbox documents, or call Pinecone. A PASS is still only Firestore IAM/deployed-rules evidence for these paths; it is not production approval and does not close Pinecone duplicate stale physical-ID cleanup, shared `ns2` isolation, retry/dead-letter telemetry, or benchmark gates.
 
+### Pinecone repair/shared-ns2 validation readiness runner
+
+`backend/scripts/v17_pinecone_repair_validation_readiness.py` is the safe-by-default readiness artifact for the real Pinecone validation still required by Oracle P0-4. Default mode is inventory only and prints `status=NOT_RUN`; it never deletes, upserts, queries, or mutates Pinecone in default mode:
+
+```bash
+python3 backend/scripts/v17_pinecone_repair_validation_readiness.py
+```
+
+A future real throwaway validation run must be explicitly gated with credentials and safety flags. The runner requires `PINECONE_API_KEY`, `PINECONE_INDEX_NAME`, `PINECONE_INDEX_HOST`, a non-`ns2` throwaway namespace, a long `v17-proof-...` throwaway vector id prefix, exact prefix confirmation, and explicit mutation acknowledgement before any future execute-mode mutation can be considered:
+
+```bash
+python3 backend/scripts/v17_pinecone_repair_validation_readiness.py \
+  --execute \
+  --allow-throwaway-mutation \
+  --test-namespace v17-proof-throwaway-namespace \
+  --throwaway-prefix v17-proof-ticket- \
+  --confirm-throwaway-prefix v17-proof-ticket- \
+  --shared-ns2-readonly
+```
+
+Pass/fail criteria for a later real Pinecone proof:
+
+- `duplicate_stale_physical_ids`: duplicate stale physical IDs under the confirmed throwaway prefix are all deleted or repaired, with no stale duplicate remaining after validation.
+- `tombstone_precedence_delete`: missing/deleted/tombstoned/purged authoritative items choose delete over repair for every matching throwaway vector.
+- `live_stale_item_repair_upsert`: a live stale item produces exactly one repair/upsert with current projection/account-generation metadata.
+- `retry_dead_letter_behavior`: injected or observed Pinecone delete/upsert failures produce retry patches, then `dead_letter` at max attempts, with ack failures counted separately.
+- `shared_ns2_isolation`: shared `ns2` isolation is read-only inventory only in this runner; evidence must prove legacy vectors not touched, legacy queries exclude V17 schema records, and baseline legacy recall is retained before any production V17 `ns2` inserts.
+- `legacy_vectors_not_touched`: no broad delete/update is allowed; mutating validation must be constrained to the confirmed throwaway test namespace and throwaway prefix, never shared `ns2`.
+
+Current local output is an honest readiness/non-claim artifact only. The local environment has no Pinecone target configuration recorded here, so no real duplicate stale physical-ID delete/repair, tombstone precedence, retry/dead-letter behavior, or shared `ns2` isolation proof is claimed. This is not production approval.
+
 Remaining deployment gates before enabling this contract in production:
 
 - Run `python3 backend/scripts/v17_vector_repair_outbox_oidc_iam_proof.py --project PROJECT_ID --region REGION --execute` against the target project and attach exact JSON output before unpausing Scheduler or enabling the worker.
