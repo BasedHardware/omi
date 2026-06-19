@@ -1,18 +1,20 @@
 import Foundation
 
-// MARK: - Realtime Hub (Phase 1)
+// MARK: - Realtime Hub
 //
 // "Realtime-as-hub": instead of the cascade (STT → router → Claude → TTS), one
 // realtime model is the single hub. It does in-session STT, reasoning, routing
 // (as tool choice), and speaks the answer. Its tools call the EXISTING backend
 // endpoints / app code — no new backend routes.
 //
-// Phase 1 is CLIENT-DIRECT + dev/test only: the realtime WS connects straight to
-// the provider with the user's own BYOK key (see APIKeyService). It is gated so
-// it never runs for managed (non-BYOK) users. Phase 2 will replace the BYOK key
-// with a server-minted ephemeral token to make it shippable.
+// The hub is the default voice path — there is no opt-in toggle. Every PTT turn
+// routes through it whenever it can connect: BYOK users connect client-direct with
+// their own key (see APIKeyService); managed users connect with a server-minted
+// ephemeral token. When neither is available (no key, mint fails / not entitled) the
+// turn falls back to the legacy STT cascade. The provider follows the user's "Voice
+// Model" choice in Advanced settings (RealtimeOmniSettings) — no separate picker.
 
-enum RealtimeHubProvider: String, CaseIterable, Sendable {
+enum RealtimeHubProvider: String, Sendable {
   case openai
   case gemini
 
@@ -20,13 +22,6 @@ enum RealtimeHubProvider: String, CaseIterable, Sendable {
     switch self {
     case .openai: return "OpenAI Realtime"
     case .gemini: return "Gemini Live"
-    }
-  }
-
-  var subtitle: String {
-    switch self {
-    case .openai: return "gpt-realtime-2 · native spoken audio"
-    case .gemini: return "gemini native-audio Live · spoken audio + tools"
     }
   }
 
@@ -58,48 +53,22 @@ enum RealtimeHubProvider: String, CaseIterable, Sendable {
 final class RealtimeHubSettings {
   static let shared = RealtimeHubSettings()
 
-  private let enabledKey = "realtimeHubEnabled"
-  private let providerKey = "realtimeHubProvider"
+  private init() {}
 
-  private init() {
-    UserDefaults.standard.register(defaults: [
-      enabledKey: false,
-      providerKey: RealtimeHubProvider.openai.rawValue,
-    ])
-  }
-
-  /// Master switch. When off, the floating bar uses the legacy STT → router →
-  /// Claude → TTS cascade. Ships behind this flag.
-  var isEnabled: Bool {
-    get { UserDefaults.standard.bool(forKey: enabledKey) }
-    set {
-      UserDefaults.standard.set(newValue, forKey: enabledKey)
-      NotificationCenter.default.post(name: .realtimeHubSettingsDidChange, object: nil)
-    }
-  }
-
+  /// The hub provider follows the user's "Voice Model" choice in Advanced settings —
+  /// there is no separate hub picker. The two map 1:1 (same underlying models), and
+  /// `.auto` is already resolved to a concrete provider by `effectiveProvider`.
   var provider: RealtimeHubProvider {
-    get {
-      let raw = UserDefaults.standard.string(forKey: providerKey)
-      return raw.flatMap(RealtimeHubProvider.init(rawValue:)) ?? .openai
-    }
-    set {
-      UserDefaults.standard.set(newValue.rawValue, forKey: providerKey)
-      NotificationCenter.default.post(name: .realtimeHubSettingsDidChange, object: nil)
+    switch RealtimeOmniSettings.shared.effectiveProvider {
+    case .gptRealtime2: return .openai
+    case .geminiFlashLive, .auto: return .gemini
     }
   }
 
-  /// The hub may only run client-direct when the user has supplied the selected
-  /// provider's own key (BYOK / dev key). This is the managed-user gate: managed
-  /// users have no BYOK key, so the hub stays off and the cascade is used.
+  /// True when the hub can connect client-direct with the user's own provider key
+  /// (BYOK / dev key). Managed users without a key connect via a minted ephemeral
+  /// token instead (see RealtimeHubController.ensureWarm); both reach the hub.
   var canConnect: Bool {
     APIKeyService.byokKey(provider.byokProvider) != nil
   }
-
-  /// True when the hub should drive this PTT turn (enabled + a usable key).
-  var isActive: Bool { isEnabled && canConnect }
-}
-
-extension Notification.Name {
-  static let realtimeHubSettingsDidChange = Notification.Name("realtimeHubSettingsDidChange")
 }

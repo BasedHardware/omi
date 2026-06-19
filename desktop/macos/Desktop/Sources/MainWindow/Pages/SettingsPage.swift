@@ -271,12 +271,7 @@ struct SettingsContentView: View {
 
   // AI Chat settings
   @AppStorage("chatBridgeMode") private var chatBridgeMode: String = "piMono"
-  @AppStorage("realtimeOmniProvider") private var realtimeOmniProvider: String = RealtimeOmniProvider.auto.rawValue
-  // Realtime-as-hub (Phase 1, dev/BYOK only): the realtime model is the single
-  // tool-dispatching voice hub. Provider toggle persisted here; RealtimeHubSession
-  // reads it at connect.
-  @AppStorage("realtimeHubEnabled") private var realtimeHubEnabled = false
-  @AppStorage("realtimeHubProvider") private var realtimeHubProvider: String = RealtimeHubProvider.openai.rawValue
+  @AppStorage("realtimeOmniProvider") private var realtimeOmniProvider: String = RealtimeOmniProvider.gptRealtime2.rawValue
   @AppStorage("askModeEnabled") private var askModeEnabled = false
   @AppStorage("claudeMdEnabled") private var claudeMdEnabled = true
   @AppStorage("projectClaudeMdEnabled") private var projectClaudeMdEnabled = true
@@ -2530,75 +2525,6 @@ struct SettingsContentView: View {
       voiceSpeedSlider(settingId: "floatingbar.voicespeed")
         .opacity(shortcutSettings.hasAnyFloatingBarVoiceAnswersEnabled ? 1 : 0.55)
         .disabled(!shortcutSettings.hasAnyFloatingBarVoiceAnswersEnabled)
-
-      realtimeHubCard
-      realtimeHubProviderCard
-        .opacity(realtimeHubEnabled ? 1 : 0.55)
-        .disabled(!realtimeHubEnabled)
-    }
-  }
-
-  // MARK: Realtime-as-hub (Phase 1, dev/BYOK only)
-
-  /// The realtime model becomes the single voice hub: in-session STT + reasoning
-  /// + tool-choice routing + spoken reply, bypassing the STT→Haiku router→Claude
-  /// cascade. Client-direct using the user's own BYOK key (dev/test only).
-  private var realtimeHubCard: some View {
-    settingsCard(settingId: "floatingbar.realtimehub") {
-      HStack(spacing: 16) {
-        VStack(alignment: .leading, spacing: 4) {
-          Text("Realtime Voice Hub (experimental)")
-            .scaledFont(size: 16, weight: .semibold)
-            .foregroundColor(OmiColors.textPrimary)
-          Text(
-            "Let the realtime model run the whole voice turn — listen, decide, and speak — "
-              + "instead of the slower transcribe→route→answer pipeline. Uses your own provider key."
-          )
-          .scaledFont(size: 13)
-          .foregroundColor(OmiColors.textSecondary)
-        }
-        Spacer()
-        Toggle("", isOn: $realtimeHubEnabled)
-          .toggleStyle(.switch)
-          .tint(OmiColors.purplePrimary)
-          .onChange(of: realtimeHubEnabled) { _ in
-            NotificationCenter.default.post(name: .realtimeHubSettingsDidChange, object: nil)
-          }
-      }
-    }
-  }
-
-  private var realtimeHubProviderCard: some View {
-    let provider = RealtimeHubProvider(rawValue: realtimeHubProvider) ?? .openai
-    let hasKey = APIKeyService.byokKey(provider.byokProvider) != nil
-    return settingsCard(settingId: "floatingbar.realtimehub.provider") {
-      HStack(spacing: 16) {
-        VStack(alignment: .leading, spacing: 4) {
-          Text("Hub Provider")
-            .scaledFont(size: 16, weight: .semibold)
-            .foregroundColor(OmiColors.textPrimary)
-          Text(
-            hasKey
-              ? provider.subtitle
-              : "⚠️ No \(provider.byokProvider.displayName) key set — add one in Developer settings to use this provider."
-          )
-          .scaledFont(size: 13)
-          .foregroundColor(hasKey ? OmiColors.textSecondary : OmiColors.purplePrimary)
-        }
-        Spacer()
-        Picker("", selection: $realtimeHubProvider) {
-          ForEach(RealtimeHubProvider.allCases, id: \.rawValue) { p in
-            Text(p.displayName).tag(p.rawValue)
-          }
-        }
-        .pickerStyle(.menu)
-        .labelsHidden()
-        .frame(width: 180)
-        .tint(OmiColors.purplePrimary)
-        .onChange(of: realtimeHubProvider) { _ in
-          NotificationCenter.default.post(name: .realtimeHubSettingsDidChange, object: nil)
-        }
-      }
     }
   }
 
@@ -3490,6 +3416,10 @@ struct SettingsContentView: View {
               if newValue == RealtimeOmniProvider.auto.rawValue {
                 AutoModelSelector.shared.refreshIfStale()
               }
+              // The picker writes @AppStorage directly (bypassing the RealtimeOmniSettings
+              // setter), so post the change ourselves — this is what re-warms the realtime
+              // hub on the newly selected provider (and is a no-op for unchanged providers).
+              NotificationCenter.default.post(name: .realtimeOmniSettingsDidChange, object: nil)
             }
           }
 

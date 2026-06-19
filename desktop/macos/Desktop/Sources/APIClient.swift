@@ -3217,7 +3217,10 @@ extension APIClient {
 
   /// Checks if an external integration app's setup is complete
   func isAppSetupCompleted(url: String, uid: String) async -> Bool {
-    guard !url.isEmpty else { return true }
+    // An empty/unknown completion URL means setup cannot be verified, so report
+    // not-completed (consistent with the invalid-URL and network-failure paths
+    // below). Returning true here would wrongly mark an unconfigured app as set up.
+    guard !url.isEmpty else { return false }
     guard let fullUrl = URL(string: "\(url)?uid=\(uid)") else { return false }
     var request = URLRequest(url: fullUrl)
     request.httpMethod = "GET"

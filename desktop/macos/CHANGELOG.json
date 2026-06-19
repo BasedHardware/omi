@@ -2,6 +2,27 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.11.470",
+      "date": "2026-06-19",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.469",
+      "date": "2026-06-18",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.468",
+      "date": "2026-06-18",
+      "changes": [
+        "Recording now captures audio only during meetings by default \u2014 the mic and other apps' audio are captured only while you're in a call. Change this anytime in Settings \u2192 General \u2192 System Audio (Always / Only during meetings / Never)"
+      ]
+    },
+    {
       "version": "0.11.467",
       "date": "2026-06-17",
       "changes": [
