@@ -1466,3 +1466,25 @@ Verification for this slice:
 - `/v3` readiness: `BLOCKED True False False False False False False False False 7 7 True True`.
 - Async scan remains pre-existing `HIGH async helpers with blocking: 41`, `STRUCTURAL mixed await+sync DB: 10`; docs hygiene `docs_hygiene 16 BAD=[]`.
 - Production rollout remains **BLOCKED / NO-GO** until all Oracle P0/P1 gates and required real-service evidence are complete.
+
+### 2026-06-19 — P1-3 `/v3` real-router GET-only TestClient proof under stubs
+
+Continued the safe bridge toward runtime with a controlled real-router GET-only TestClient proof, without changing runtime behavior or rollout verdict:
+
+- Added `backend/scripts/v17_p1_3_v3_real_router_get_testclient.py`, which launches repo-managed `backend/venv/bin/python`, installs explicit import stubs, imports the real `routers.memories` module, builds a minimal `FastAPI()` app, overrides auth to `stubbed-test-uid`, includes the real router, and executes only `GET /v3/memories` plus `GET /v3/memories?limit=17&offset=3`.
+- Added `backend/tests/unit/test_v17_p1_3_v3_real_router_get_testclient.py` and registered it in `backend/test.sh`.
+- Linked the proof from `backend/scripts/v17_p1_3_v3_external_compatibility_readiness.py` as `real_router_get_testclient_proof` while keeping `/v3` runtime status `BLOCKED`.
+- The proof records current runtime behavior, not desired future cutover: `GET /v3/memories` still reaches stubbed legacy `memories_db.get_memories(uid, limit, offset)`. The default first page currently coerces `offset=0` to `limit=5000`; explicit `limit=17&offset=3` reaches the legacy stub unchanged.
+- The response serializes through the real route response model as `List[MemoryDB]` compatible data; POST/DELETE/vector/persona/executor mutation paths remain unexecuted; V17 request adapter, route planner, and response adapter are not invoked yet.
+- No `backend/main.py` import, production app startup, real Firestore/Pinecone/cloud/provider/network call, mutation, runtime cutover, benchmark, telemetry sink integration, or rollout approval is claimed. Archive remains default-unavailable and stale Short-term is not made default-visible.
+
+Verification for this slice:
+
+- RED: `cd backend && env -u VIRTUAL_ENV PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin python3 -m pytest tests/unit/test_v17_p1_3_v3_real_router_get_testclient.py -q` -> `4 failed in 0.07s` before adding the runner/readiness/docs/test.sh registration.
+- Parent recovery fixed the sibling-proof import by loading `v17_p1_3_v3_real_router_dependency_map.py` via `Path(__file__).with_name(...)`, then tightened the response assertion around behavior rather than optional `None` fields added by `response_model` serialization.
+- Focused GREEN: `black --line-length 120 --skip-string-normalization scripts/v17_p1_3_v3_real_router_get_testclient.py tests/unit/test_v17_p1_3_v3_real_router_get_testclient.py scripts/v17_p1_3_v3_external_compatibility_readiness.py tests/unit/test_v17_p1_3_v3_external_compatibility_readiness.py && env -u VIRTUAL_ENV PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin python3 -m pytest tests/unit/test_v17_p1_3_v3_real_router_get_testclient.py tests/unit/test_v17_p1_3_v3_external_compatibility_readiness.py -q` -> `1 file reformatted, 3 files left unchanged`, `13 passed in 1.47s`.
+- Venv proof: `venv/bin/python -m pytest tests/unit/test_v17_p1_3_v3_real_router_get_testclient.py -q` -> `4 passed in 1.39s`; `venv/bin/python scripts/v17_p1_3_v3_real_router_get_testclient.py --execute` -> `BLOCKED True True True True False 2`.
+- Normal-env focused `/v3` proof suite: `82 passed in 4.99s`.
+- Normal-env full V17 regression: `454 passed, 3 warnings in 7.18s`.
+- `/v3` readiness: `BLOCKED True False False False False False False False False 7 7 True`; docs hygiene `docs_hygiene 16 BAD=[]`.
+- Production rollout remains **BLOCKED / NO-GO** until all Oracle P0/P1 gates and required real-service evidence are complete.

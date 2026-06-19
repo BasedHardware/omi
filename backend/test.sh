@@ -92,6 +92,7 @@ pytest tests/unit/test_v17_v3_route_planner.py -v
 pytest tests/unit/test_v17_p1_3_v3_route_signature_integration.py -v
 pytest tests/unit/test_v17_p1_3_v3_fastapi_route_contract.py -v
 pytest tests/unit/test_v17_p1_3_v3_real_router_dependency_map.py -v
+pytest tests/unit/test_v17_p1_3_v3_real_router_get_testclient.py -v
 pytest tests/unit/test_v17_cutover_evidence_readiness.py -v
 pytest tests/unit/test_v17_vector_repair_outbox_emulator_harness.py -v
 pytest tests/unit/test_v17_firestore_indexes.py -v

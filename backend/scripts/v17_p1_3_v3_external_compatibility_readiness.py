@@ -585,6 +585,26 @@ REAL_ROUTER_DEPENDENCY_MAP_PROOF = {
     ],
 }
 
+REAL_ROUTER_GET_TESTCLIENT_PROOF = {
+    "service": "backend/scripts/v17_p1_3_v3_real_router_get_testclient.py",
+    "test": "backend/tests/unit/test_v17_p1_3_v3_real_router_get_testclient.py",
+    "runtime_wired": False,
+    "production_rollout_approved": False,
+    "external_calls": [],
+    "get_only_testclient_under_stubs": True,
+    "post_delete_unexecuted": True,
+    "covered_defaults": [
+        "minimal_fastapi_app_includes_real_memories_router_under_explicit_stubs",
+        "get_v3_memories_calls_stubbed_legacy_memories_db_get_memories",
+        "default_first_page_observes_current_offset_zero_limit_5000_override",
+        "explicit_limit_offset_reach_stubbed_legacy_get_memories_when_offset_nonzero",
+        "list_memorydb_response_model_serializes_legacy_compatible_items",
+        "post_delete_unexecuted_and_mutation_flags_remain_false",
+        "v17_request_adapter_route_planner_response_adapter_not_invoked_yet",
+        "no_main_app_startup_no_external_calls_no_mutations_no_runtime_cutover",
+    ],
+}
+
 
 def build_report(*, execute: bool = False) -> dict[str, Any]:
     return {
@@ -621,6 +641,7 @@ def build_report(*, execute: bool = False) -> dict[str, Any]:
         "route_signature_integration_proof": ROUTE_SIGNATURE_INTEGRATION_PROOF,
         "fastapi_route_contract_proof": FASTAPI_ROUTE_CONTRACT_PROOF,
         "real_router_dependency_map_proof": REAL_ROUTER_DEPENDENCY_MAP_PROOF,
+        "real_router_get_testclient_proof": REAL_ROUTER_GET_TESTCLIENT_PROOF,
         "non_claims": [
             "No production traffic executed.",
             "No Firestore, Pinecone, cloud, provider, or network calls executed.",
@@ -646,6 +667,7 @@ def build_report(*, execute: bool = False) -> dict[str, Any]:
             "route_signature_integration_proof_present": True,
             "fastapi_route_contract_proof_present": True,
             "real_router_dependency_map_proof_present": True,
+            "real_router_get_testclient_proof_present": True,
             "read_only": True,
             "mutation_allowed": False,
             "approval_claimed": False,
