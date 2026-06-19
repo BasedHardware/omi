@@ -240,6 +240,7 @@ def _read_capabilities(uid='u1', *, enabled=True):
         v17_writes_enabled=enabled,
         v17_reads_enabled=enabled,
         legacy_reads_authoritative=not enabled,
+        account_generation=3,
     )
 
 
@@ -279,6 +280,10 @@ def _memory_item(memory_id: str, *, tier=MemoryTier.short_term, now=None, captur
         ),
         'ledger_commit_id': 'commit-1' if tier == MemoryTier.long_term else None,
         'ledger_sequence': 1 if tier == MemoryTier.long_term else None,
+        'item_revision': 1,
+        'source_commit_id': f'source-commit-{memory_id}',
+        'content_hash': f'content-hash-{memory_id}',
+        'account_generation': 3,
     }
     data.update(overrides)
     return V17MemoryItem(**data)
@@ -295,6 +300,7 @@ def _enabled_rollout_doc(uid='u1'):
         'mode_epoch': 7,
         'cutover_epoch': 7,
         'account_generation': 3,
+        'vector_projection_commit_id': 'projection-1',
         'fallback_projection_ready': True,
         'persistent_v17_writes_started': True,
         'writes_blocked': False,
@@ -482,28 +488,44 @@ def test_mcp_vector_adapter_uses_hydrated_vector_service_and_preserves_ranking_w
                     score=0.99,
                     projection_commit_id='projection-1',
                     vector_updated_at=now,
-                    uid='u1',
+                    uid=archive.uid,
+                    account_generation=archive.account_generation,
+                    item_revision=archive.item_revision,
+                    source_commit_id=archive.source_commit_id,
+                    content_hash=archive.content_hash,
                 ),
                 SearchVectorHit(
                     memory_id='long-term',
                     score=0.88,
                     projection_commit_id='projection-1',
                     vector_updated_at=now,
-                    uid='u1',
+                    uid=long_term.uid,
+                    account_generation=long_term.account_generation,
+                    item_revision=long_term.item_revision,
+                    source_commit_id=long_term.source_commit_id,
+                    content_hash=long_term.content_hash,
                 ),
                 SearchVectorHit(
                     memory_id='stale-short-term',
                     score=0.77,
                     projection_commit_id='projection-1',
                     vector_updated_at=now,
-                    uid='u1',
+                    uid=stale_short_term.uid,
+                    account_generation=stale_short_term.account_generation,
+                    item_revision=stale_short_term.item_revision,
+                    source_commit_id=stale_short_term.source_commit_id,
+                    content_hash=stale_short_term.content_hash,
                 ),
                 SearchVectorHit(
                     memory_id='fresh-short-term',
                     score=0.66,
                     projection_commit_id='projection-1',
                     vector_updated_at=now,
-                    uid='u1',
+                    uid=fresh_short_term.uid,
+                    account_generation=fresh_short_term.account_generation,
+                    item_revision=fresh_short_term.item_revision,
+                    source_commit_id=fresh_short_term.source_commit_id,
+                    content_hash=fresh_short_term.content_hash,
                 ),
             ],
             rejected_count=1,
@@ -516,6 +538,7 @@ def test_mcp_vector_adapter_uses_hydrated_vector_service_and_preserves_ranking_w
         db_client=db_client,
         rollout_capabilities=_read_capabilities(),
         vector_query=vector_query,
+        required_projection_commit_id='projection-1',
     )
 
     assert isinstance(result, V17McpMemorySearchResult)

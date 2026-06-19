@@ -298,6 +298,26 @@ This closes only the fail-closed convergence readiness seam. Remaining P0-3/P0 w
 - Complete shared `ns2`, third-party app/key/scope authorization, vector overfetch/budgets, central telemetry, and real cloud/Pinecone/Firestore/benchmark evidence.
 - Production rollout remains **BLOCKED / NO-GO** until all Oracle P0s and required real-service evidence are complete.
 
+### 2026-06-19 — P0-4 mandatory vector freshness/account-generation fence seam
+
+Started Oracle P0-4 with a narrow mandatory vector freshness fence, without changing the production rollout verdict:
+
+- V17 vector hydration now requires a server-owned `vector_projection_commit_id` from persisted default-read rollout state plus the current account generation.
+- `fetch_default_v17_vector_memory_search(...)` requires `required_projection_commit_id` and `required_account_generation`; missing or malformed values fail fast.
+- `hydrate_and_filter_vector_hits(...)` now rejects candidates missing mandatory vector metadata (`uid`, `account_generation`, `item_revision`, `source_commit_id`, `content_hash`) and rejects stale projection/account-generation/item-revision/source/content mismatches before returning results.
+- Product vector route, Omi chat vector adapter, MCP vector adapter, and developer vector adapter deny with `missing_vector_projection_commit_id` before vector/memory reads when the rollout lacks the fence.
+- Archive remains default-unavailable and no read surface was broadened.
+
+Verification recorded in `docs/epics/v17_memory_implementation_tickets.md`: RED vector-service tests (`2 failed, 2 passed`), focused fixture failure while adapting mandatory fences (`5 failed, 68 passed`), GREEN focused suite (`76 passed`), full `pytest tests/unit/test_v17_*.py -q` (`206 passed, 1 warning`), and formatting (`14 files left unchanged`).
+
+This closes only the first narrow P0-4 freshness/account-generation seam. Remaining P0-4/P0 work:
+
+- Implement/validate real vector purge/repair worker behavior and stale-ID deletion against Pinecone/Firestore.
+- Prove shared `ns2` isolation.
+- Add app/key/scope third-party authorization and vector overfetch/refill/budgets/telemetry.
+- Produce real cloud/Pinecone/Firestore/benchmark evidence before production read/vector cutover.
+- Production rollout remains **BLOCKED / NO-GO** until all Oracle P0s and required real-service evidence are complete.
+
 ## Not-run / not-claimed caveats preserved
 
 - Oracle review has now run and is recorded here, but it blocks production rollout.

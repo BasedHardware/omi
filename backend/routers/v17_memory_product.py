@@ -141,6 +141,9 @@ def search_v17_vector_memory(
     rollout_observability = build_v17_default_read_rollout_observability(rollout)
     if rollout.read_decision != V17ReadDecision.USE_V17:
         raise HTTPException(status_code=403, detail=rollout_observability)
+    if not rollout.vector_projection_commit_id:
+        rollout_observability['fallback_reason'] = 'missing_vector_projection_commit_id'
+        raise HTTPException(status_code=403, detail=rollout_observability)
 
     policy = _default_omi_chat_policy()
     try:
@@ -151,6 +154,8 @@ def search_v17_vector_memory(
             policy=policy,
             vector_query=vector_query if callable(vector_query) else None,
             limit=limit,
+            required_projection_commit_id=rollout.vector_projection_commit_id,
+            required_account_generation=rollout.rollout_capabilities.account_generation,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc

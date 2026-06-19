@@ -142,6 +142,7 @@ def test_default_v17_vector_search_hydrates_authoritative_items_and_filters_stal
         vector_query=fake_vector_query,
         limit=10,
         required_projection_commit_id='projection-1',
+        required_account_generation=0,
     )
 
     assert vector_calls == [{'uid': 'u1', 'query': 'coffee', 'mode': SearchMode.default, 'limit': 10}]
@@ -152,6 +153,64 @@ def test_default_v17_vector_search_hydrates_authoritative_items_and_filters_stal
     assert response['decisions']['archive'] == 'access_denied'
     assert response['vector_rejected_count'] == 2
     assert response['archive_default_visible'] is False
+
+
+def test_default_v17_vector_search_rejects_hits_missing_mandatory_freshness_fence_fields():
+    now = datetime.now(timezone.utc)
+    item = _memory_item('missing-fence-fields', tier=MemoryTier.long_term, now=now)
+    db_client = _FirestoreFake({f'users/u1/memory_items/{item.memory_id}': _stored_item(item)})
+
+    def fake_vector_query(uid, query, *, mode, limit):
+        return _VectorCandidateResult(
+            hits=[
+                SearchVectorHit(
+                    memory_id=item.memory_id,
+                    score=0.99,
+                    projection_commit_id='projection-1',
+                    vector_updated_at=item.updated_at + timedelta(minutes=1),
+                )
+            ],
+            rejected_count=0,
+        )
+
+    response = fetch_default_v17_vector_memory_search(
+        uid='u1',
+        query='coffee',
+        db_client=db_client,
+        policy=MemoryAccessPolicy.for_omi_chat(),
+        vector_query=fake_vector_query,
+        limit=5,
+        required_projection_commit_id='projection-1',
+        required_account_generation=0,
+    )
+
+    assert response['items'] == []
+    assert response['decisions'] == {'missing-fence-fields': 'stale_vector'}
+
+
+def test_default_v17_vector_search_rejects_vectors_from_purged_account_generation_even_when_item_matches_hit():
+    now = datetime.now(timezone.utc)
+    stale_generation_item = _memory_item('stale-generation', tier=MemoryTier.long_term, now=now, account_generation=2)
+    db_client = _FirestoreFake(
+        {f'users/u1/memory_items/{stale_generation_item.memory_id}': _stored_item(stale_generation_item)}
+    )
+
+    def fake_vector_query(uid, query, *, mode, limit):
+        return _VectorCandidateResult(hits=[_hit(stale_generation_item, score=0.99)], rejected_count=0)
+
+    response = fetch_default_v17_vector_memory_search(
+        uid='u1',
+        query='coffee',
+        db_client=db_client,
+        policy=MemoryAccessPolicy.for_omi_chat(),
+        vector_query=fake_vector_query,
+        limit=5,
+        required_projection_commit_id='projection-1',
+        required_account_generation=3,
+    )
+
+    assert response['items'] == []
+    assert response['decisions'] == {'stale-generation': 'stale_vector'}
 
 
 def test_default_v17_vector_search_preserves_vector_ranking_after_authoritative_filtering():
@@ -184,6 +243,7 @@ def test_default_v17_vector_search_preserves_vector_ranking_after_authoritative_
         vector_query=fake_vector_query,
         limit=5,
         required_projection_commit_id='projection-1',
+        required_account_generation=0,
     )
 
     assert [item['memory_id'] for item in response['items']] == ['older-higher-score', 'newer-lower-score']

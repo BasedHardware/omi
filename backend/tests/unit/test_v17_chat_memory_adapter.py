@@ -111,6 +111,10 @@ def _memory_item(memory_id: str, *, tier=MemoryTier.short_term, now=None, captur
         ),
         'ledger_commit_id': 'commit-1' if tier == MemoryTier.long_term else None,
         'ledger_sequence': 1 if tier == MemoryTier.long_term else None,
+        'item_revision': 1,
+        'source_commit_id': f'source-commit-{memory_id}',
+        'content_hash': f'content-hash-{memory_id}',
+        'account_generation': 3,
     }
     data.update(overrides)
     return V17MemoryItem(**data)
@@ -141,6 +145,7 @@ def _enabled_rollout_doc(uid='u1'):
         'mode_epoch': 7,
         'cutover_epoch': 7,
         'account_generation': 3,
+        'vector_projection_commit_id': 'projection-1',
         'fallback_projection_ready': True,
         'persistent_v17_writes_started': True,
         'writes_blocked': False,

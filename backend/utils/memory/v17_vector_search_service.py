@@ -23,7 +23,8 @@ def fetch_default_v17_vector_memory_search(
     policy: MemoryAccessPolicy,
     vector_query: Optional[Callable[..., Any]] = None,
     limit: int = DEFAULT_V17_VECTOR_SEARCH_LIMIT,
-    required_projection_commit_id: Optional[str] = None,
+    required_projection_commit_id: str,
+    required_account_generation: int,
 ) -> Dict[str, Any]:
     """Hydrate V17 vector candidates through authoritative `memory_items` before returning results.
 
@@ -36,6 +37,10 @@ def fetch_default_v17_vector_memory_search(
     """
 
     bounded_limit = _validate_limit(limit)
+    _validate_freshness_fence(
+        required_projection_commit_id=required_projection_commit_id,
+        required_account_generation=required_account_generation,
+    )
     candidate_query = vector_query or query_v17_memory_vector_candidates
     if candidate_query is None:
         raise RuntimeError('query_v17_memory_vector_candidates is unavailable')
@@ -49,6 +54,7 @@ def fetch_default_v17_vector_memory_search(
         policy=policy,
         mode=SearchMode.default,
         required_projection_commit_id=required_projection_commit_id,
+        required_account_generation=required_account_generation,
     )
     return {
         'uid': uid,
@@ -71,3 +77,10 @@ def _validate_limit(limit: int) -> int:
     if limit < 1 or limit > MAX_V17_VECTOR_SEARCH_LIMIT:
         raise ValueError(f'limit must be between 1 and {MAX_V17_VECTOR_SEARCH_LIMIT}')
     return limit
+
+
+def _validate_freshness_fence(*, required_projection_commit_id: str, required_account_generation: int) -> None:
+    if not isinstance(required_projection_commit_id, str) or not required_projection_commit_id.strip():
+        raise ValueError('required_projection_commit_id is required')
+    if not isinstance(required_account_generation, int) or required_account_generation < 0:
+        raise ValueError('required_account_generation must be a nonnegative integer')

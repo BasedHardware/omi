@@ -149,6 +149,10 @@ def _memory_item(memory_id: str, *, tier=MemoryTier.short_term, now=None, captur
         ),
         'ledger_commit_id': 'commit-1' if tier == MemoryTier.long_term else None,
         'ledger_sequence': 1 if tier == MemoryTier.long_term else None,
+        'item_revision': 1,
+        'source_commit_id': f'source-commit-{memory_id}',
+        'content_hash': f'content-hash-{memory_id}',
+        'account_generation': 3,
     }
     data.update(overrides)
     return V17MemoryItem(**data)
@@ -211,6 +215,8 @@ def test_product_search_endpoint_uses_default_policy_and_excludes_stale_short_te
                 'uid': 'u1',
                 'mode': 'read',
                 'fallback_projection_ready': True,
+                'vector_projection_commit_id': 'projection-1',
+                'account_generation': 3,
                 'stage_gates': {'shadow': 'passed', 'write': 'passed', 'read': 'passed'},
                 'grants': {'omi_chat': {'default_memory': True}},
             },
@@ -537,6 +543,8 @@ def test_vector_search_endpoint_uses_persisted_default_policy_and_excludes_stale
                 'uid': 'u1',
                 'mode': 'read',
                 'fallback_projection_ready': True,
+                'vector_projection_commit_id': 'projection-1',
+                'account_generation': 3,
                 'stage_gates': {'shadow': 'passed', 'write': 'passed', 'read': 'passed'},
                 'grants': {'omi_chat': {'default_memory': True}},
             },
@@ -555,6 +563,10 @@ def test_vector_search_endpoint_uses_persisted_default_policy_and_excludes_stale
             projection_commit_id='projection-1',
             vector_updated_at=item.updated_at + timedelta(minutes=1),
             uid=item.uid,
+            account_generation=item.account_generation,
+            item_revision=item.item_revision,
+            source_commit_id=item.source_commit_id,
+            content_hash=item.content_hash,
         )
 
     vector_calls = []

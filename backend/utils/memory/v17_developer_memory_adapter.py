@@ -187,6 +187,13 @@ def search_v17_default_developer_memories_vector(
         )
 
     bounded_limit = max(1, min(limit, 100))
+    projection_commit_id = required_projection_commit_id or decision.vector_projection_commit_id
+    if not projection_commit_id:
+        return V17DeveloperMemorySearchResult(
+            memories=[],
+            read_decision=V17ReadDecision.DENY_MEMORY,
+            fallback_reason='missing_vector_projection_commit_id',
+        )
     policy = MemoryAccessPolicy(
         consumer=MemoryConsumer.developer_api,
         app_has_default_memory_grant=True,
@@ -200,7 +207,8 @@ def search_v17_default_developer_memories_vector(
         policy=policy,
         vector_query=vector_query,
         limit=bounded_limit,
-        required_projection_commit_id=required_projection_commit_id,
+        required_projection_commit_id=projection_commit_id,
+        required_account_generation=decision.rollout_capabilities.account_generation,
     )
 
     scores_by_memory_id = response.get('scores_by_memory_id', {})

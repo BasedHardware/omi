@@ -8,7 +8,6 @@ from models.v17_product_memory import (
     MemoryTier,
     ProcessingState,
     V17MemoryItem,
-    new_memory_id,
 )
 
 
@@ -40,13 +39,31 @@ def _item(memory_id, *, tier=MemoryTier.short_term, status=MemoryItemStatus.acti
         expires_at=expires_at if expires_at is not None else now + timedelta(days=30),
         ledger_commit_id="commit1" if tier == MemoryTier.long_term else None,
         ledger_sequence=1 if tier == MemoryTier.long_term else None,
+        item_revision=1,
+        source_commit_id=f"source-commit-{memory_id}",
+        content_hash=f"content-hash-{memory_id}",
+        account_generation=0,
+    )
+
+
+def _hit(item, *, score=0.9, projection_commit_id="commit1"):
+    return SearchVectorHit(
+        memory_id=item.memory_id,
+        score=score,
+        projection_commit_id=projection_commit_id,
+        vector_updated_at=item.updated_at,
+        uid=item.uid,
+        account_generation=item.account_generation,
+        item_revision=item.item_revision,
+        source_commit_id=item.source_commit_id,
+        content_hash=item.content_hash,
     )
 
 
 def test_search_gateway_hydrates_authoritative_items_and_drops_stale_or_missing_hits():
     item = _item("mem1")
     hits = [
-        SearchVectorHit(memory_id="mem1", score=0.9, projection_commit_id="commit1", vector_updated_at=item.updated_at),
+        _hit(item, score=0.9),
         SearchVectorHit(
             memory_id="missing", score=0.8, projection_commit_id="commit1", vector_updated_at=item.updated_at
         ),
@@ -58,6 +75,7 @@ def test_search_gateway_hydrates_authoritative_items_and_drops_stale_or_missing_
         policy=MemoryAccessPolicy.for_omi_chat(),
         mode=SearchMode.default,
         required_projection_commit_id="commit1",
+        required_account_generation=0,
     )
 
     assert [entry.item.memory_id for entry in result.results] == ["mem1"]
@@ -67,14 +85,7 @@ def test_search_gateway_hydrates_authoritative_items_and_drops_stale_or_missing_
 def test_search_gateway_fail_closed_on_stale_projection_or_default_archive_access():
     archive = _item("arch1", tier=MemoryTier.archive, expires_at=None)
     stale = _item("mem_stale")
-    hits = [
-        SearchVectorHit(
-            memory_id="arch1", score=0.9, projection_commit_id="commit1", vector_updated_at=archive.updated_at
-        ),
-        SearchVectorHit(
-            memory_id="mem_stale", score=0.8, projection_commit_id="old", vector_updated_at=stale.updated_at
-        ),
-    ]
+    hits = [_hit(archive, score=0.9), _hit(stale, score=0.8, projection_commit_id="old")]
 
     result = hydrate_and_filter_vector_hits(
         hits=hits,
@@ -82,6 +93,7 @@ def test_search_gateway_fail_closed_on_stale_projection_or_default_archive_acces
         policy=MemoryAccessPolicy.for_omi_chat(),
         mode=SearchMode.default,
         required_projection_commit_id="commit1",
+        required_account_generation=0,
     )
 
     assert result.results == []
@@ -92,14 +104,7 @@ def test_search_gateway_fail_closed_on_stale_projection_or_default_archive_acces
 def test_explicit_archive_query_requires_archive_capability_and_still_rejects_sensitive_items():
     archive = _item("arch1", tier=MemoryTier.archive, expires_at=None)
     secret = _item("secret1", tier=MemoryTier.archive, expires_at=None, sensitive=True)
-    hits = [
-        SearchVectorHit(
-            memory_id="arch1", score=0.9, projection_commit_id="commit1", vector_updated_at=archive.updated_at
-        ),
-        SearchVectorHit(
-            memory_id="secret1", score=0.8, projection_commit_id="commit1", vector_updated_at=secret.updated_at
-        ),
-    ]
+    hits = [_hit(archive, score=0.9), _hit(secret, score=0.8)]
 
     result = hydrate_and_filter_vector_hits(
         hits=hits,
@@ -107,6 +112,7 @@ def test_explicit_archive_query_requires_archive_capability_and_still_rejects_se
         policy=MemoryAccessPolicy.for_omi_chat(archive_capability=True),
         mode=SearchMode.archive_explicit,
         required_projection_commit_id="commit1",
+        required_account_generation=0,
     )
 
     assert [entry.item.memory_id for entry in result.results] == ["arch1"]

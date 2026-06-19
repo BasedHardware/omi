@@ -57,6 +57,7 @@ class V17DefaultReadRolloutDecision:
     rollout_capabilities: V17Capabilities
     app_has_default_memory_grant: bool
     archive_capability: bool = False
+    vector_projection_commit_id: Optional[str] = None
     reason: str = 'ok'
     explicit_read_decision: V17ReadDecision | None = None
 
@@ -440,6 +441,9 @@ def normalize_v17_default_read_rollout_decision(
             writes_blocked=data.get('writes_blocked') is True,
             stage_gates=data.get('stage_gates') or {},
         )
+        vector_projection_commit_id = data.get('vector_projection_commit_id')
+        if not isinstance(vector_projection_commit_id, str) or not vector_projection_commit_id.strip():
+            vector_projection_commit_id = None
         return V17DefaultReadRolloutDecision(
             uid=uid,
             source_path=source_path,
@@ -447,6 +451,7 @@ def normalize_v17_default_read_rollout_decision(
             rollout_capabilities=decide_v17_capabilities(uid, state.mode, state),
             app_has_default_memory_grant=_consumer_default_memory_grant_enabled(data, consumer),
             archive_capability=False,
+            vector_projection_commit_id=vector_projection_commit_id,
             reason='ok',
         )
     except (TypeError, ValueError, AttributeError):
@@ -481,6 +486,7 @@ def normalize_v17_archive_read_rollout_decision(
             rollout_capabilities=default_decision.rollout_capabilities,
             app_has_default_memory_grant=default_decision.app_has_default_memory_grant,
             archive_capability=False,
+            vector_projection_commit_id=default_decision.vector_projection_commit_id,
             reason='malformed_archive_capability',
             explicit_read_decision=V17ReadDecision.DENY_MEMORY,
         )
@@ -492,6 +498,7 @@ def normalize_v17_archive_read_rollout_decision(
             rollout_capabilities=default_decision.rollout_capabilities,
             app_has_default_memory_grant=default_decision.app_has_default_memory_grant,
             archive_capability=False,
+            vector_projection_commit_id=default_decision.vector_projection_commit_id,
             reason=f'missing_{default_decision.grant_reason_key}_archive_capability',
             explicit_read_decision=V17ReadDecision.DENY_MEMORY,
         )
@@ -502,6 +509,7 @@ def normalize_v17_archive_read_rollout_decision(
         rollout_capabilities=default_decision.rollout_capabilities,
         app_has_default_memory_grant=default_decision.app_has_default_memory_grant,
         archive_capability=True,
+        vector_projection_commit_id=default_decision.vector_projection_commit_id,
         reason='ok',
         explicit_read_decision=V17ReadDecision.USE_V17,
     )

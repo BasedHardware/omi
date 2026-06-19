@@ -29,6 +29,7 @@ class V17Capabilities:
     v17_writes_enabled: bool
     v17_reads_enabled: bool
     legacy_reads_authoritative: bool
+    account_generation: int = 0
 
 
 @dataclass
@@ -153,6 +154,7 @@ def decide_v17_capabilities(uid: str, mode: V17Mode | str, state: V17RolloutStat
         v17_writes_enabled=write_enabled,
         v17_reads_enabled=read_enabled,
         legacy_reads_authoritative=not read_enabled,
+        account_generation=state.account_generation,
     )
 
 

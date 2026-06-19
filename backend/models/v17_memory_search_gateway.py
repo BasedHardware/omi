@@ -56,7 +56,8 @@ def hydrate_and_filter_vector_hits(
     authoritative_items: Dict[str, V17MemoryItem],
     policy: MemoryAccessPolicy,
     mode: SearchMode,
-    required_projection_commit_id: Optional[str],
+    required_projection_commit_id: str,
+    required_account_generation: int,
 ) -> SearchGatewayResult:
     """Fail-closed vector gateway.
 
@@ -70,22 +71,31 @@ def hydrate_and_filter_vector_hits(
         if item is None:
             decisions[hit.memory_id] = SearchDecision.missing_authoritative_item
             continue
-        if required_projection_commit_id and hit.projection_commit_id != required_projection_commit_id:
+        if hit.projection_commit_id != required_projection_commit_id:
             decisions[hit.memory_id] = SearchDecision.stale_projection
             continue
-        if hit.uid is not None and hit.uid != item.uid:
+        if hit.uid is None or hit.account_generation is None or hit.item_revision is None:
             decisions[hit.memory_id] = SearchDecision.stale_vector
             continue
-        if hit.account_generation is not None and hit.account_generation != item.account_generation:
+        if hit.source_commit_id is None or hit.content_hash is None:
             decisions[hit.memory_id] = SearchDecision.stale_vector
             continue
-        if hit.item_revision is not None and hit.item_revision != item.item_revision:
+        if item.account_generation != required_account_generation:
             decisions[hit.memory_id] = SearchDecision.stale_vector
             continue
-        if hit.source_commit_id is not None and hit.source_commit_id != item.source_commit_id:
+        if hit.uid != item.uid:
             decisions[hit.memory_id] = SearchDecision.stale_vector
             continue
-        if hit.content_hash is not None and hit.content_hash != item.content_hash:
+        if hit.account_generation != item.account_generation:
+            decisions[hit.memory_id] = SearchDecision.stale_vector
+            continue
+        if hit.item_revision != item.item_revision:
+            decisions[hit.memory_id] = SearchDecision.stale_vector
+            continue
+        if hit.source_commit_id != item.source_commit_id:
+            decisions[hit.memory_id] = SearchDecision.stale_vector
+            continue
+        if hit.content_hash != item.content_hash:
             decisions[hit.memory_id] = SearchDecision.stale_vector
             continue
         if hit.vector_updated_at < item.updated_at:
