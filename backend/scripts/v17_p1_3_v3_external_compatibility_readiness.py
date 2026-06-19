@@ -442,6 +442,26 @@ PROJECTION_READINESS_PROOF = {
     ],
 }
 
+MEMORY_READ_SERVICE_PROOF = {
+    "service": "backend/utils/memory/v17_v3_memory_read_service.py",
+    "test": "backend/tests/unit/test_v17_v3_memory_read_service.py",
+    "runtime_wired": False,
+    "production_rollout_approved": False,
+    "external_calls": [],
+    "covered_defaults": [
+        "non_enrolled_legacy_primary_plan_marker_only_no_data_fetching",
+        "enrolled_missing_malformed_fail_closed_no_legacy_fallback",
+        "no_default_memory_grant_privacy_consent_deny_403",
+        "projection_not_ready_or_write_convergence_not_ready_fail_closed",
+        "enabled_projection_ready_empty_returns_200_empty_list_no_legacy_fallback",
+        "projection_ready_page_preserves_caller_supplied_list_memorydb_body",
+        "additive_headers_for_read_source_read_decision_next_cursor_link_only",
+        "invalid_v17_cursor_offset_or_5000_override_fail_closed_no_downgrade",
+        "offset_limit_5000_behavior_legacy_primary_only",
+        "archive_default_unavailable_no_stale_short_term_default_visible",
+    ],
+}
+
 
 def build_report(*, execute: bool = False) -> dict[str, Any]:
     return {
@@ -470,6 +490,7 @@ def build_report(*, execute: bool = False) -> dict[str, Any]:
         "decision_service_proof": DECISION_SERVICE_PROOF,
         "cursor_service_proof": CURSOR_SERVICE_PROOF,
         "projection_readiness_proof": PROJECTION_READINESS_PROOF,
+        "memory_read_service_proof": MEMORY_READ_SERVICE_PROOF,
         "non_claims": [
             "No production traffic executed.",
             "No Firestore, Pinecone, cloud, provider, or network calls executed.",
@@ -487,6 +508,7 @@ def build_report(*, execute: bool = False) -> dict[str, Any]:
             "decision_service_proof_present": True,
             "cursor_service_proof_present": True,
             "projection_readiness_proof_present": True,
+            "memory_read_service_proof_present": True,
             "read_only": True,
             "mutation_allowed": False,
             "approval_claimed": False,

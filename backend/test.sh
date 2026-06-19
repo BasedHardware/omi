@@ -84,6 +84,7 @@ pytest tests/unit/test_v17_p1_3_v3_external_compatibility_readiness.py -v
 pytest tests/unit/test_v17_v3_compatibility.py -v
 pytest tests/unit/test_v17_v3_cursor.py -v
 pytest tests/unit/test_v17_v3_projection_readiness.py -v
+pytest tests/unit/test_v17_v3_memory_read_service.py -v
 pytest tests/unit/test_v17_cutover_evidence_readiness.py -v
 pytest tests/unit/test_v17_vector_repair_outbox_emulator_harness.py -v
 pytest tests/unit/test_v17_firestore_indexes.py -v

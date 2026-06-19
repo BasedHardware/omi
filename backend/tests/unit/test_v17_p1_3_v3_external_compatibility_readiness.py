@@ -258,6 +258,25 @@ def test_v3_readiness_links_pure_decision_and_cursor_service_proofs_without_roll
         "archive_default_unavailable_no_stale_short_term_default_visible",
     ]
 
+    read_service_proof = report["memory_read_service_proof"]
+    assert read_service_proof["service"] == "backend/utils/memory/v17_v3_memory_read_service.py"
+    assert read_service_proof["test"] == "backend/tests/unit/test_v17_v3_memory_read_service.py"
+    assert read_service_proof["runtime_wired"] is False
+    assert read_service_proof["production_rollout_approved"] is False
+    assert read_service_proof["external_calls"] == []
+    assert read_service_proof["covered_defaults"] == [
+        "non_enrolled_legacy_primary_plan_marker_only_no_data_fetching",
+        "enrolled_missing_malformed_fail_closed_no_legacy_fallback",
+        "no_default_memory_grant_privacy_consent_deny_403",
+        "projection_not_ready_or_write_convergence_not_ready_fail_closed",
+        "enabled_projection_ready_empty_returns_200_empty_list_no_legacy_fallback",
+        "projection_ready_page_preserves_caller_supplied_list_memorydb_body",
+        "additive_headers_for_read_source_read_decision_next_cursor_link_only",
+        "invalid_v17_cursor_offset_or_5000_override_fail_closed_no_downgrade",
+        "offset_limit_5000_behavior_legacy_primary_only",
+        "archive_default_unavailable_no_stale_short_term_default_visible",
+    ]
+
 
 def test_v3_readiness_json_round_trips_and_command_summary_is_stable():
     root = Path(__file__).resolve().parents[2]
@@ -275,6 +294,7 @@ def test_v3_readiness_json_round_trips_and_command_summary_is_stable():
         "decision_service_proof_present": True,
         "cursor_service_proof_present": True,
         "projection_readiness_proof_present": True,
+        "memory_read_service_proof_present": True,
         "read_only": True,
         "mutation_allowed": False,
         "approval_claimed": False,
@@ -291,13 +311,16 @@ def test_v3_readiness_is_registered_in_test_runner_and_oracle_docs():
     assert "test_v17_v3_compatibility.py" in test_sh
     assert "test_v17_v3_cursor.py" in test_sh
     assert "test_v17_v3_projection_readiness.py" in test_sh
+    assert "test_v17_v3_memory_read_service.py" in test_sh
     assert "v17_p1_3_v3_external_compatibility_readiness.py" in ticket_doc
     assert "backend/utils/memory/v17_v3_compatibility.py" in ticket_doc
     assert "backend/utils/memory/v17_v3_cursor.py" in ticket_doc
     assert "backend/utils/memory/v17_v3_projection_readiness.py" in ticket_doc
+    assert "backend/utils/memory/v17_v3_memory_read_service.py" in ticket_doc
     assert "Oracle P1-3 `/v3` external compatibility readiness slice" in ticket_doc
     assert "v17_p1_3_v3_external_compatibility_readiness.py" in oracle_doc
     assert "backend/utils/memory/v17_v3_compatibility.py" in oracle_doc
     assert "backend/utils/memory/v17_v3_cursor.py" in oracle_doc
     assert "backend/utils/memory/v17_v3_projection_readiness.py" in oracle_doc
+    assert "backend/utils/memory/v17_v3_memory_read_service.py" in oracle_doc
     assert "local `/v3` external compatibility readiness slice" in oracle_doc
