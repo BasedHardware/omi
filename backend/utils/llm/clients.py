@@ -42,6 +42,7 @@ from utils.llm.model_config import (
     _get_model_config,
 )
 from utils.llm.providers import (
+    ChatGoogleGenerativeAI,  # backward-compat re-export (was here pre-refactor)
     GEMINI_OPENAI_BASE_URL,
     get_default_client,
     get_or_create_gemini_llm as _get_or_create_gemini_llm,
