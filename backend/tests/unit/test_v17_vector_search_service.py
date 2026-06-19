@@ -8,6 +8,7 @@ from database.v17_vector_repair_outbox import (
     write_v17_vector_repair_purge_outbox_records,
 )
 from utils.memory.v17_vector_search_service import fetch_default_v17_vector_memory_search
+from utils.memory.v17_vector_search_telemetry import V17VectorSearchTelemetryConfig
 
 
 class _Snapshot:
@@ -624,3 +625,98 @@ def test_default_v17_vector_search_stops_at_candidate_budget_without_unbounded_r
     assert response['queried_candidate_count'] == 4
     assert len(db_client.document_paths) == 4
     assert db_client.collection_paths == []
+
+
+def test_default_v17_vector_search_emits_low_cardinality_telemetry_without_identifiers():
+    now = datetime.now(timezone.utc)
+    stale_short_term = _memory_item('stale-short-term', now=now, captured_at=now - timedelta(days=45))
+    archive = _memory_item('archive', tier=MemoryTier.archive, now=now)
+    valid = _memory_item('valid', tier=MemoryTier.long_term, now=now)
+    db_client = _FirestoreFake(
+        {f'users/u1/memory_items/{item.memory_id}': _stored_item(item) for item in [stale_short_term, archive, valid]}
+    )
+    emitted = []
+
+    def fake_vector_query(uid, query, *, mode, limit):
+        return _VectorCandidateResult(
+            hits=[
+                _hit(stale_short_term, score=0.99, vector_id='v17mem:stale-short-term'),
+                _hit(archive, score=0.98, vector_id='v17mem:archive'),
+                _hit(valid, score=0.97, vector_id='v17mem:valid'),
+            ],
+            rejected_count=7,
+        )
+
+    response = fetch_default_v17_vector_memory_search(
+        uid='u1',
+        query='coffee raw query text',
+        db_client=db_client,
+        policy=MemoryAccessPolicy.for_omi_chat(),
+        vector_query=fake_vector_query,
+        telemetry_emitter=lambda payload: emitted.append(payload),
+        telemetry_config=V17VectorSearchTelemetryConfig(enabled=True),
+        limit=3,
+        overfetch_factor=1,
+        max_candidates=3,
+        required_projection_commit_id='projection-1',
+        required_account_generation=0,
+    )
+
+    assert response['telemetry'] == {'enabled': True, 'emitted_count': len(emitted), 'failed_count': 0, 'errors': []}
+    metric_names = {payload['name'] for payload in emitted if payload['kind'] == 'metric'}
+    assert {
+        'v17_vector_search_candidates_total',
+        'v17_vector_search_hydration_rejects_total',
+        'v17_vector_search_result_count',
+        'v17_vector_search_empty_after_hydration_total',
+        'v17_vector_search_budget_exhausted_total',
+    }.issubset(metric_names)
+    rendered = repr(emitted)
+    for forbidden in {
+        'u1',
+        'coffee raw query text',
+        'stale-short-term',
+        'archive',
+        'valid',
+        'v17mem:stale-short-term',
+    }:
+        assert forbidden not in rendered
+    for payload in emitted:
+        assert set(payload['labels']).issubset(
+            {'component', 'consumer', 'surface', 'mode', 'status', 'reason', 'event_type'}
+        )
+
+
+def test_default_v17_vector_search_telemetry_failure_is_recorded_without_masking_results():
+    now = datetime.now(timezone.utc)
+    valid = _memory_item('valid', tier=MemoryTier.long_term, now=now)
+    db_client = _FirestoreFake({f'users/u1/memory_items/{valid.memory_id}': _stored_item(valid)})
+
+    def fake_vector_query(uid, query, *, mode, limit):
+        return _VectorCandidateResult(hits=[_hit(valid, score=0.95, vector_id='v17mem:valid')], rejected_count=0)
+
+    def failing_emitter(payload):
+        raise RuntimeError(f"central telemetry unavailable for {payload['name']}")
+
+    response = fetch_default_v17_vector_memory_search(
+        uid='u1',
+        query='coffee',
+        db_client=db_client,
+        policy=MemoryAccessPolicy.for_omi_chat(),
+        vector_query=fake_vector_query,
+        telemetry_emitter=failing_emitter,
+        telemetry_config=V17VectorSearchTelemetryConfig(enabled=True),
+        limit=3,
+        required_projection_commit_id='projection-1',
+        required_account_generation=0,
+    )
+
+    assert [item['memory_id'] for item in response['items']] == ['valid']
+    assert response['telemetry']['enabled'] is True
+    assert response['telemetry']['emitted_count'] == 0
+    assert response['telemetry']['failed_count'] > 0
+    assert response['telemetry']['errors'][0] == {
+        'stage': 'telemetry',
+        'name': 'v17_vector_search_candidates_total',
+        'error': 'central telemetry unavailable for v17_vector_search_candidates_total',
+    }

@@ -10,6 +10,10 @@ except ModuleNotFoundError:
 from database.v17_vector_repair_outbox import build_v17_vector_repair_purge_outbox_records
 from models.v17_memory_search_gateway import SearchDecision, SearchMode, SearchVectorHit, hydrate_and_filter_vector_hits
 from models.v17_product_memory import MemoryAccessPolicy, V17MemoryItem
+from utils.memory.v17_vector_search_telemetry import (
+    V17VectorSearchTelemetryConfig,
+    emit_v17_vector_search_telemetry,
+)
 
 DEFAULT_V17_VECTOR_SEARCH_LIMIT = 10
 MAX_V17_VECTOR_SEARCH_LIMIT = 100
@@ -27,6 +31,8 @@ def fetch_default_v17_vector_memory_search(
     vector_query: Optional[Callable[..., Any]] = None,
     repair_purge_callback: Optional[Callable[[List[Dict[str, Any]]], Any]] = None,
     repair_purge_outbox_writer: Optional[Callable[[List[Dict[str, Any]]], Any]] = None,
+    telemetry_emitter: Optional[Callable[[Dict[str, Any]], Any]] = None,
+    telemetry_config: Optional[V17VectorSearchTelemetryConfig] = None,
     limit: int = DEFAULT_V17_VECTOR_SEARCH_LIMIT,
     overfetch_factor: int = DEFAULT_V17_VECTOR_OVERFETCH_FACTOR,
     max_candidates: int = DEFAULT_V17_VECTOR_MAX_CANDIDATES,
@@ -99,7 +105,7 @@ def fetch_default_v17_vector_memory_search(
         repair_purge_callback(repair_purge_candidates)
     if repair_purge_outbox_records and repair_purge_outbox_writer is not None:
         repair_purge_outbox_writer(repair_purge_outbox_records)
-    return {
+    response = {
         'uid': uid,
         'query': query,
         'items': [result.item.model_dump(mode='json') for result in returned_results],
@@ -138,6 +144,27 @@ def fetch_default_v17_vector_memory_search(
         'repair_purge_outbox_records': repair_purge_outbox_records,
         'archive_default_visible': False,
     }
+    response['telemetry'] = _emit_vector_search_telemetry(
+        response=response,
+        telemetry_emitter=telemetry_emitter,
+        telemetry_config=telemetry_config,
+    )
+    return response
+
+
+def _emit_vector_search_telemetry(
+    *,
+    response: Dict[str, Any],
+    telemetry_emitter: Optional[Callable[[Dict[str, Any]], Any]],
+    telemetry_config: Optional[V17VectorSearchTelemetryConfig],
+) -> Dict[str, Any]:
+    if telemetry_emitter is None or telemetry_config is None:
+        return {'enabled': False, 'emitted_count': 0, 'failed_count': 0, 'errors': []}
+    return emit_v17_vector_search_telemetry(
+        search_summary=response,
+        emitter=telemetry_emitter,
+        config=telemetry_config,
+    )
 
 
 def _validate_limit(limit: int) -> int:

@@ -946,6 +946,27 @@ This closes only the first bounded local P0-7 overfetch/refill/candidate-budget 
 - Real Pinecone/Firestore benchmarks with malformed metadata, cross-user hits, expired Short-term, Archive, deleted/tombstoned sources, duplicate revisions, partial outages, and high-volume accounts remain required.
 - Production rollout remains **BLOCKED / NO-GO** until all Oracle P0s and required real-service evidence are complete.
 
+### 2026-06-19 — P0-7 V17 vector-search low-cardinality telemetry seam
+
+Continued Oracle P0-7 with a narrow local central telemetry seam for hydrated V17 vector search, without changing the production rollout verdict:
+
+- Added `backend/utils/memory/v17_vector_search_telemetry.py` with `V17VectorSearchTelemetryConfig` and `emit_v17_vector_search_telemetry(...)`.
+- Wired optional `telemetry_emitter` / `telemetry_config` into `fetch_default_v17_vector_memory_search(...)`; missing or disabled telemetry is a no-op.
+- Emitted fake-injectable low-cardinality metric/event payloads for vector query count, queried/hydrated/vector-rejected candidates, candidate request limit/budget, hydration rejects by bounded reason, returned count, empty-after-hydration, and candidate-budget exhaustion.
+- Telemetry emitter failures are recorded in `response["telemetry"]` and do not mask successful search results or fail-closed filtering behavior.
+- Payload labels are bounded to `component`, `consumer`, `surface`, `mode`, `status`, `reason`, and `event_type`; tests forbid uid, raw query text, memory IDs, and vector IDs in emitted payloads.
+- Mandatory P0-4 fences and candidate-ID hydration remain unchanged; Archive remains default-unavailable.
+
+Verification recorded in `docs/epics/v17_memory_implementation_tickets.md`: RED collection failure for missing telemetry module (`ModuleNotFoundError`), GREEN vector-service tests passed (`13 passed`), focused product/chat/MCP/developer vector caller regression passed (`60 passed`), full V17 regression passed (`308 passed, 3 warnings`), and async scan remained pre-existing findings only.
+
+This closes only the fake-injectable central telemetry payload/emitter subpoint. Remaining P0-7/P0 work:
+
+- No Prometheus/OpenTelemetry/Cloud Monitoring sink, dashboard, or alert policy was implemented or exercised.
+- Explicit vector-search timeout/rate-limit controls remain incomplete.
+- Real Pinecone/Firestore provider pagination/refill behavior, load, recall, and latency benchmarks remain unproven.
+- Real Pinecone/Firestore benchmarks with malformed metadata, cross-user hits, expired Short-term, Archive, deleted/tombstoned sources, duplicate revisions, partial outages, and high-volume accounts remain required.
+- Production rollout remains **BLOCKED / NO-GO** until all Oracle P0s and required real-service evidence are complete.
+
 ## Not-run / not-claimed caveats preserved
 
 - Oracle review has now run and is recorded here, but it blocks production rollout.
