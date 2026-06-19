@@ -5,7 +5,7 @@ from typing import Any, Dict, List, Optional
 
 from database.v17_collections import V17Collections
 from models.v17_product_memory import MemoryAccessPolicy, V17MemoryItem
-from utils.memory.v17_read_api import query_default_product_memory_items
+from utils.memory.v17_read_api import query_archive_product_memory_items, query_default_product_memory_items
 
 DEFAULT_PRODUCT_MEMORY_READ_LIMIT = 100
 MAX_PRODUCT_MEMORY_READ_LIMIT = 500
@@ -45,6 +45,43 @@ def fetch_default_product_memory_search(
         'limit': bounded_limit,
         'offset': bounded_offset,
         'archive_default_visible': False,
+    }
+
+
+def fetch_archive_product_memory_search(
+    uid: str,
+    query: str,
+    *,
+    db_client,
+    policy: MemoryAccessPolicy,
+    now: Optional[datetime] = None,
+    limit: int = DEFAULT_PRODUCT_MEMORY_READ_LIMIT,
+    offset: int = 0,
+) -> Dict[str, Any]:
+    """Fetch authoritative V17 `memory_items` and return explicit archive search results.
+
+    Archive search is intentionally separate from default product reads. Callers
+    must pass a policy with `archive_capability=True`; without it, the underlying
+    archive query returns no items and this response advertises the denied gate.
+    """
+
+    bounded_limit = _validate_limit(limit)
+    bounded_offset = _validate_offset(offset)
+    items = fetch_authoritative_product_memory_items(uid=uid, db_client=db_client)
+    results = query_archive_product_memory_items(query, items, policy=policy, now=now)
+    total_count = len(results)
+    paged_items = results[bounded_offset : bounded_offset + bounded_limit]
+    return {
+        'uid': uid,
+        'query': query,
+        'items': paged_items,
+        'total_count': total_count,
+        'returned_count': len(paged_items),
+        'limit': bounded_limit,
+        'offset': bounded_offset,
+        'archive_default_visible': False,
+        'archive_capability_required': True,
+        'archive_capability_granted': policy.archive_capability,
     }
 
 

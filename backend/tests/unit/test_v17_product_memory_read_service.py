@@ -11,7 +11,10 @@ from models.v17_product_memory import (
     V17MemoryItem,
 )
 from utils.memory.short_term_lifecycle import DEFAULT_SHORT_TERM_TTL_DAYS
-from utils.memory.v17_product_memory_read_service import fetch_default_product_memory_search
+from utils.memory.v17_product_memory_read_service import (
+    fetch_archive_product_memory_search,
+    fetch_default_product_memory_search,
+)
 
 
 class _Snapshot:
@@ -174,3 +177,48 @@ def test_fetch_default_product_memory_search_rejects_uid_mismatches():
             now=now,
             db_client=db_client,
         )
+
+
+def test_fetch_archive_product_memory_search_requires_archive_capability_and_keeps_default_separate():
+    now = datetime(2026, 6, 19, 12, 0, tzinfo=timezone.utc)
+    fresh_short_term = _memory_item('fresh-short-term', now=now, content='coffee fresh short term')
+    long_term = _memory_item('long-term', tier=MemoryTier.long_term, now=now, content='coffee long term')
+    archive = _memory_item('archive', tier=MemoryTier.archive, now=now, content='coffee archived memory')
+    db_client = _FirestoreFake(
+        {
+            f'users/u1/memory_items/{item.memory_id}': _stored_item(item)
+            for item in [archive, fresh_short_term, long_term]
+        }
+    )
+
+    denied = fetch_archive_product_memory_search(
+        uid='u1',
+        query='coffee',
+        policy=MemoryAccessPolicy.for_omi_chat(archive_capability=False),
+        now=now,
+        db_client=db_client,
+    )
+    allowed = fetch_archive_product_memory_search(
+        uid='u1',
+        query='coffee',
+        policy=MemoryAccessPolicy.for_omi_chat(archive_capability=True),
+        now=now,
+        db_client=db_client,
+    )
+    default = fetch_default_product_memory_search(
+        uid='u1',
+        query='coffee',
+        policy=MemoryAccessPolicy.for_omi_chat(),
+        now=now,
+        db_client=db_client,
+    )
+
+    assert denied['archive_capability_required'] is True
+    assert denied['archive_capability_granted'] is False
+    assert denied['items'] == []
+    assert allowed['archive_capability_required'] is True
+    assert allowed['archive_capability_granted'] is True
+    assert [item['memory_id'] for item in allowed['items']] == ['archive']
+    assert allowed['total_count'] == 1
+    assert allowed['archive_default_visible'] is False
+    assert [item['memory_id'] for item in default['items']] == ['fresh-short-term', 'long-term']

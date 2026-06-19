@@ -28,6 +28,13 @@ class _APIRouter:
 
         return decorator
 
+    def post(self, path, **kwargs):
+        def decorator(func):
+            self.routes.append(("POST", path, kwargs, func))
+            return func
+
+        return decorator
+
 
 def _identity(default=None, **_kwargs):
     return default
@@ -136,6 +143,13 @@ def test_product_router_registers_concrete_default_v17_search_route():
     )
 
 
+def test_product_router_registers_capability_gated_archive_search_route():
+    assert any(
+        method == "GET" and path == "/v17/memory/archive/search"
+        for method, path, _kwargs, _func in v17_memory_product.router.routes
+    )
+
+
 def test_main_registers_v17_product_memory_router():
     main_py = os.path.join(os.path.dirname(__file__), "..", "..", "main.py")
     with open(main_py, encoding="utf-8") as handle:
@@ -190,3 +204,46 @@ def test_product_search_endpoint_rejects_invalid_pagination(monkeypatch):
             raise AssertionError(f"expected invalid pagination failure for {kwargs}")
 
     v17_memory_product.fetch_default_product_memory_search.assert_not_called()
+
+
+def test_archive_search_endpoint_rejects_missing_archive_capability_before_firestore(monkeypatch):
+    monkeypatch.setattr(v17_memory_product, "fetch_archive_product_memory_search", MagicMock())
+
+    try:
+        v17_memory_product.search_v17_archive_memory(
+            query='coffee', limit=25, offset=0, include_archive=False, uid='u1'
+        )
+    except _HTTPException as exc:
+        assert exc.status_code == 403
+        assert 'archive capability' in exc.detail
+    else:
+        raise AssertionError('expected archive route to reject missing capability')
+
+    v17_memory_product.fetch_archive_product_memory_search.assert_not_called()
+
+
+def test_archive_search_endpoint_requires_explicit_capability_and_only_returns_archive(monkeypatch):
+    now = datetime(2026, 6, 19, 12, 0, tzinfo=timezone.utc)
+    fresh_short_term = _memory_item('fresh-short-term', now=now, content='coffee fresh short term')
+    long_term = _memory_item('long-term', tier=MemoryTier.long_term, now=now, content='coffee long term')
+    archive = _memory_item('archive', tier=MemoryTier.archive, now=now, content='coffee archived memory')
+    db_client = _FirestoreFake(
+        {
+            f'users/u1/memory_items/{item.memory_id}': _stored_item(item)
+            for item in [fresh_short_term, long_term, archive]
+        }
+    )
+    monkeypatch.setattr(v17_memory_product, "db", db_client)
+    monkeypatch.setattr(v17_memory_product, "_current_time", lambda: now)
+
+    response = v17_memory_product.search_v17_archive_memory(
+        query='coffee', limit=25, offset=0, include_archive=True, uid='u1'
+    )
+
+    assert db_client.collection_paths == ['users/u1/memory_items']
+    assert [item['memory_id'] for item in response['items']] == ['archive']
+    assert response['policy']['consumer'] == 'omi_chat'
+    assert response['policy']['archive_capability'] is True
+    assert response['archive_capability_required'] is True
+    assert response['archive_capability_granted'] is True
+    assert response['archive_default_visible'] is False
