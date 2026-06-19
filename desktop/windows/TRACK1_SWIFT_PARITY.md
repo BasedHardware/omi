@@ -106,12 +106,12 @@
 | Field | Detail |
 |-------|--------|
 | **macOS source** | `Sources/MainWindow/Components/LiveTranscriptView.swift`, `Sources/MainWindow/Components/AudioLevelWaveformView.swift`, `Sources/RecordingTimer.swift`, `Sources/AudioLevelMonitor.swift` |
-| **Windows source** | `src/renderer/src/components/recording/ContinuousRecordingHost.tsx`, `src/renderer/src/components/GlobalRecordButton.tsx`, `src/main/ipc/omiListen.ts` |
-| **Status** | 🟡 Partial |
-| **Visual gap** | macOS shows a live transcript panel with dual waveform (mic + system audio) and an animated pulsing indicator directly in the main window sidebar/header during recording. Windows shows recording state only in the LiveConversation page and the GlobalRecordButton dropdown — no persistent visual indicator in the sidebar during continuous recording. |
-| **Functional gap** | Missing: live waveform bars in the main window during recording, elapsed time display (HH:MM:SS), live transcript snippet visible in sidebar, pulsing/color-change recording indicator. |
-| **Proposed fix** | Add a small recording status bar at the bottom of the sidebar (or top of the main content area) that shows: pulsing dot + elapsed time + latest transcript word. Reuse `ContinuousRecordingHost` state for this. |
-| **Priority** | P1 |
+| **Windows source** | `src/renderer/src/components/recording/RecordingStatusBar.tsx` (new, Batch 4), `src/renderer/src/components/recording/ContinuousRecordingHost.tsx`, `src/renderer/src/components/GlobalRecordButton.tsx`, `src/renderer/src/lib/liveConversation.ts` |
+| **Status** | 🟡 Partial → improved (Batch 4) |
+| **Visual gap** | Now shows a pulsing rose dot + "Listening" / "Connecting…" label + MM:SS elapsed timer + last-6-words transcript snippet in the sidebar (above mic/screen toggles) when the live session is active or manual recording runs. Collapsed sidebar shows just the dot with a tooltip. Still missing: waveform bars, audio level visualization. |
+| **Functional gap** | No waveform/audio-level bars (would require real-time audio level IPC from main). Live transcript snippet shows the tail of the last recognized segment. |
+| **Proposed fix** | Audio level bars deferred — would require new IPC from the WebAudio pipeline. |
+| **Priority** | P1 — IMPROVED |
 
 ---
 
@@ -354,7 +354,7 @@
 | Login / Auth | ✅ Works | — |
 | Chat / AI Conversation | 🟡 Partial | P1 |
 | Floating Overlay | 🟡 Partial | P1 |
-| Recording / Listening UI | 🟡 Partial | P1 |
+| Recording / Listening UI | 🟡 Partial (improved) | P1 — IMPROVED |
 | Conversation History | 🟡 Partial | P1 |
 | Rewind / Timeline | 🟡 Partial | P0 |
 | Rewind Search | ✅ Works | P0 — DONE |

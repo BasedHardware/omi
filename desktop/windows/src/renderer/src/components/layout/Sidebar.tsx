@@ -15,6 +15,7 @@ import {
 import { auth, onAuthStateChanged } from '../../lib/firebase'
 import { getPreferences, onPreferencesChange, setPreferences } from '../../lib/preferences'
 import { cn } from '../../lib/utils'
+import { RecordingStatusBar } from '../recording/RecordingStatusBar'
 import type { User } from 'firebase/auth'
 import type { RewindSettings } from '../../../../shared/types'
 
@@ -210,6 +211,10 @@ export function Sidebar(): React.JSX.Element {
       </div>
 
       <div className="my-2 h-px w-full bg-white/10" />
+
+      {/* Recording status indicator — visible while a live mic session or manual
+          recording is active. Mirrors the macOS sidebar recording state panel. */}
+      <RecordingStatusBar collapsed={collapsed} />
 
       {/* Quick capture toggles, sitting just above the account row. */}
       <div className="flex flex-col gap-1">
