@@ -1,6 +1,7 @@
 {
   "unreleased": [
-    "Fixed paid subscribers seeing a bogus \"Upgrade Required\" prompt when opening or using chat"
+    "Fixed paid subscribers seeing a bogus \"Upgrade Required\" prompt when opening or using chat",
+    "Screen recordings are now actually deleted once they pass your Data Retention window (cleanup was never running, so recordings accumulated indefinitely)"
   ],
   "releases": [
     {
