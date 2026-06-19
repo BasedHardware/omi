@@ -1007,6 +1007,19 @@ This closes only a readiness/non-claim artifact for future provider proof. Remai
 - No production benchmark evidence, central monitoring sink/alert policy, or production approval is claimed.
 - Production rollout remains **BLOCKED / NO-GO** until all Oracle P0s and required real-service evidence are complete.
 
+### 2026-06-19 — Oracle P0-8 V17 cutover evidence readiness/checklist artifact
+
+Started Oracle P0-8 with `backend/scripts/v17_cutover_evidence_readiness.py`, a safe-by-default production-cutover evidence readiness checklist. It does not attempt cloud/provider execution and does not claim approval:
+
+- Default and `--execute` CLI modes emit `status=BLOCKED`, `read_only=true`, `mutation_allowed=false`, `network_or_provider_calls_executed=false`, `benchmark_evidence_collected=false`, `approval_claimed=false`, and `production_rollout_approved=false`.
+- Every gate remains `BLOCKED` or `NOT_RUN` with empty evidence arrays and explicit blockers: milestone Oracle/final approval, real Pinecone validation, real Firestore/cloud IAM/rules validation, recall/precision/latency/no-silent-data-loss benchmarks, production metrics aggregation/central telemetry, T20 repair/projection-consistency, T21 `/v3` compatibility and cursor pagination, T22/T23 external writes and caller coverage, and production cutover approval.
+- Each gate inventories required proof commands/artifacts, including follow-up use of the provider readiness runner, Firestore rules/IAM proof runner, central telemetry/dashboard/alert artifacts, T20 repair/projection consistency output, T21 `/v3` compatibility and cursor pagination matrix, T22/T23 external writes and caller coverage matrix, benchmark reports, and an explicit final production owner approval artifact.
+- Static tests assert the runner contains no mutating Pinecone/Firestore/deploy command calls, that evidence remains empty, and that approval is not claimed.
+
+Verification is recorded in `docs/epics/v17_memory_implementation_tickets.md`: RED cutover readiness tests initially failed on the missing runner/docs (`4 failed`); after adding the runner but before docs update they failed only on missing exact script/doc terms (`2 failed, 2 passed`); final GREEN readiness tests passed; default and execute readiness commands returned `BLOCKED` with no provider/network calls and `production_rollout_approved=false`; full V17 regression and async scan remained green/pre-existing only.
+
+This closes only the safe checklist/readiness inventory for Oracle P0-8. It does **not** execute or claim final Oracle approval, real Pinecone validation, real Firestore/cloud validation, benchmarks, central telemetry aggregation, T20/T21/T22/T23 completion, or production cutover approval. Production rollout remains **BLOCKED / NO-GO**.
+
 ## Not-run / not-claimed caveats preserved
 
 - Oracle review has now run and is recorded here, but it blocks production rollout.
