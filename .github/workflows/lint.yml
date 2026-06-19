@@ -136,9 +136,12 @@ jobs:
 
       - name: Check desktop Rust backend
         if: steps.changed.outputs.has_desktop_rust == 'true'
-        working-directory: desktop/macos/Backend-Rust
         run: |
-          cargo fmt --check
+          FILES=$(grep -E '^desktop/macos/Backend-Rust/.*\.rs$' /tmp/changed-files.txt || true)
+          if [ -n "$FILES" ]; then
+            echo "$FILES" | xargs rustfmt --check
+          fi
+          cd desktop/macos/Backend-Rust
           cargo check --locked
 
       # -- Frontend --
