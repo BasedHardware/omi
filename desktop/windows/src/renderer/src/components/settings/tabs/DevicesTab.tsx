@@ -1,6 +1,58 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { Bluetooth, Cpu, Mic, Info, Loader, CheckCircle, AlertCircle, Radio } from 'lucide-react'
 import { SettingRow } from '../SettingRow'
+
+// ── Minimal Web Bluetooth type stubs ────────────────────────────────────────
+// TypeScript's dom lib doesn't include Web Bluetooth. These stubs cover only
+// what we use: requestDevice, gatt.connect/disconnect, getPrimaryService,
+// getCharacteristic, readValue, and the gattserverdisconnected event.
+interface BleChar {
+  readValue(): Promise<DataView>
+}
+interface BleService {
+  getCharacteristic(c: string): Promise<BleChar>
+}
+interface BleServer {
+  connected: boolean
+  connect(): Promise<BleServer>
+  disconnect(): void
+  getPrimaryService(s: string): Promise<BleService>
+}
+interface BleDevice {
+  id: string
+  name?: string
+  gatt?: BleServer
+  addEventListener(type: 'gattserverdisconnected', cb: () => void): void
+  removeEventListener(type: 'gattserverdisconnected', cb: () => void): void
+}
+interface BleApi {
+  requestDevice(opts: unknown): Promise<BleDevice>
+}
+
+// Standard GATT short names (Web Bluetooth spec)
+const BATTERY_SERVICE = 'battery_service'
+const BATTERY_LEVEL = 'battery_level'
+const DEVICE_INFO_SERVICE = 'device_information'
+const MANUFACTURER_NAME = 'manufacturer_name_string'
+const MODEL_NUMBER = 'model_number_string'
+
+const LAST_DEVICE_KEY = 'omi.ble.lastDevice.v1'
+type LastDevice = { name: string; id: string; seenAt: number }
+
+function saveLastDevice(name: string, id: string): void {
+  try {
+    localStorage.setItem(LAST_DEVICE_KEY, JSON.stringify({ name, id, seenAt: Date.now() }))
+  } catch { /* quota */ }
+}
+
+function loadLastDevice(): LastDevice | null {
+  try {
+    const raw = localStorage.getItem(LAST_DEVICE_KEY)
+    return raw ? (JSON.parse(raw) as LastDevice) : null
+  } catch {
+    return null
+  }
+}
 
 const SUPPORTED_DEVICES = [
   { name: 'Omi', description: 'Omi wearable AI device — voice capture, speaker, haptics', icon: '🎙️' },
@@ -10,80 +62,175 @@ const SUPPORTED_DEVICES = [
   { name: 'Bee', description: 'Bee AI wearable companion', icon: '🐝' }
 ]
 
-type ScanState =
-  | { phase: 'idle' }
-  | { phase: 'scanning' }
-  | { phase: 'found'; deviceName: string; deviceId: string }
-  | { phase: 'cancelled' }
-  | { phase: 'error'; message: string }
-  | { phase: 'unavailable'; reason: string }
+type Phase =
+  | 'idle'
+  | 'scanning'
+  | 'connecting'
+  | 'reading'
+  | 'connected'
+  | 'disconnected'
+  | 'cancelled'
+  | 'error'
+  | 'unavailable'
 
 export function DevicesTab(): React.JSX.Element {
   const [btAvailable, setBtAvailable] = useState<boolean | null>(null)
-  const [scan, setScan] = useState<ScanState>({ phase: 'idle' })
+  const [phase, setPhase] = useState<Phase>('idle')
+  const [deviceName, setDeviceName] = useState('')
+  const [deviceId, setDeviceId] = useState('')
+  // battery: number = level 0-100; null = not yet read; -1 = service missing
+  const [battery, setBattery] = useState<number | null>(null)
+  const [manufacturer, setManufacturer] = useState<string | null>(null)
+  const [model, setModel] = useState<string | null>(null)
+  const [errorMsg, setErrorMsg] = useState('')
+  const [unavailableReason, setUnavailableReason] = useState('')
+  const [lastDevice, setLastDevice] = useState<LastDevice | null>(null)
+
+  // Keep the live BluetoothDevice object in a ref — not state — so event
+  // listener registration/removal doesn't cause extra renders.
+  const deviceRef = useRef<BleDevice | null>(null)
 
   useEffect(() => {
-    // Check Web Bluetooth API availability at runtime
-    if (typeof navigator !== 'undefined' && 'bluetooth' in navigator) {
-      setBtAvailable(true)
-    } else {
-      setBtAvailable(false)
-    }
+    setBtAvailable(typeof navigator !== 'undefined' && 'bluetooth' in navigator)
+    setLastDevice(loadLastDevice())
   }, [])
+
+  const onDisconnected = useCallback(() => {
+    setPhase('disconnected')
+  }, [])
+
+  const handleDisconnect = (): void => {
+    deviceRef.current?.gatt?.disconnect()
+    // gattserverdisconnected event fires synchronously → onDisconnected flips phase
+  }
+
+  const resetDeviceInfo = (): void => {
+    setBattery(null)
+    setManufacturer(null)
+    setModel(null)
+    setErrorMsg('')
+    setUnavailableReason('')
+  }
 
   const handleScan = async (): Promise<void> => {
     if (!btAvailable) return
-    setScan({ phase: 'scanning' })
+    setPhase('scanning')
+    resetDeviceInfo()
+
+    const nav = navigator as unknown as { bluetooth?: BleApi }
+    if (!nav.bluetooth) {
+      setPhase('unavailable')
+      setUnavailableReason('Web Bluetooth API not exposed in this environment')
+      setBtAvailable(false)
+      return
+    }
+
     try {
-      // Request any nearby BLE device — Electron routes this through the main
-      // process `select-bluetooth-device` handler (native dialog). Returns a
-      // BluetoothDevice with name + id. Full Omi pairing requires mobile app.
-      type BleApi = { requestDevice: (opts: unknown) => Promise<{ name?: string; id: string }> }
-      const nav = navigator as unknown as { bluetooth?: BleApi }
-      if (!nav.bluetooth) {
-        setScan({ phase: 'unavailable', reason: 'Web Bluetooth API not exposed' })
-        setBtAvailable(false)
+      // Request any BLE device. optionalServices lets us read battery and device-info
+      // services post-connection without restricting which devices appear in the picker.
+      const device = await nav.bluetooth.requestDevice({
+        acceptAllDevices: true,
+        optionalServices: [BATTERY_SERVICE, DEVICE_INFO_SERVICE]
+      })
+
+      const name = device.name ?? 'Unknown BLE device'
+      setDeviceName(name)
+      setDeviceId(device.id)
+      saveLastDevice(name, device.id)
+      setLastDevice({ name, id: device.id, seenAt: Date.now() })
+
+      // Swap in the new device listener
+      const prev = deviceRef.current
+      if (prev) prev.removeEventListener('gattserverdisconnected', onDisconnected)
+      deviceRef.current = device
+      device.addEventListener('gattserverdisconnected', onDisconnected)
+
+      if (!device.gatt) {
+        // Some environments expose a BluetoothDevice without GATT support
+        setPhase('connected')
         return
       }
-      const device = await nav.bluetooth.requestDevice({
-        // acceptAllDevices discovers any nearby BLE peripheral.
-        // Omi-specific service UUIDs are undocumented; discovery-only is honest.
-        acceptAllDevices: true,
-        optionalServices: []
-      })
-      setScan({
-        phase: 'found',
-        deviceName: device.name ?? 'Unknown BLE device',
-        deviceId: device.id
-      })
+
+      setPhase('connecting')
+      const server = await device.gatt.connect()
+      setPhase('reading')
+
+      // ── Battery Service (standard GATT 0x180F / 0x2A19) ────────────────
+      // Confirmed present in iOS OmiBleManager.swift (CBUUID "2A19") and
+      // Android OmiBleManager.kt (UUID "00002a19-..."). Any device exposing
+      // standard battery GATT will return a 0–100 integer.
+      try {
+        const bSvc = await server.getPrimaryService(BATTERY_SERVICE)
+        const bChar = await bSvc.getCharacteristic(BATTERY_LEVEL)
+        const bVal = await bChar.readValue()
+        setBattery(bVal.getUint8(0))
+      } catch {
+        setBattery(-1) // -1 = service not available on this device
+      }
+
+      // ── Device Information Service (standard GATT 0x180A) ───────────────
+      try {
+        const diSvc = await server.getPrimaryService(DEVICE_INFO_SERVICE)
+        try {
+          const mfrChar = await diSvc.getCharacteristic(MANUFACTURER_NAME)
+          const mfrVal = await mfrChar.readValue()
+          setManufacturer(new TextDecoder().decode(mfrVal.buffer as ArrayBufferLike))
+        } catch { /* characteristic not exposed by this device */ }
+        try {
+          const mdlChar = await diSvc.getCharacteristic(MODEL_NUMBER)
+          const mdlVal = await mdlChar.readValue()
+          setModel(new TextDecoder().decode(mdlVal.buffer as ArrayBufferLike))
+        } catch { /* characteristic not exposed by this device */ }
+      } catch { /* device_information service absent */ }
+
+      setPhase('connected')
     } catch (e: unknown) {
       const err = e as Error
       if (err.name === 'NotFoundError' || err.message?.includes('cancel')) {
-        // User dismissed the picker — not an error
-        setScan({ phase: 'cancelled' })
+        setPhase('cancelled')
       } else if (err.name === 'NotSupportedError') {
-        setScan({ phase: 'unavailable', reason: 'Bluetooth not supported on this system' })
+        setPhase('unavailable')
+        setUnavailableReason('Bluetooth not supported on this system')
         setBtAvailable(false)
       } else {
-        setScan({ phase: 'error', message: err.message ?? 'Unknown Bluetooth error' })
+        setPhase('error')
+        setErrorMsg(err.message ?? 'Unknown Bluetooth error')
       }
     }
   }
 
+  const isActive = phase === 'connected' || phase === 'reading' || phase === 'connecting'
+  const isBusy = phase === 'scanning' || phase === 'connecting' || phase === 'reading'
+
+  const subtitleText = (): string => {
+    if (phase === 'idle') {
+      return lastDevice
+        ? `Last connected: ${lastDevice.name} — scan to reconnect.`
+        : 'Discover and connect to a nearby Bluetooth LE device to read battery and device info.'
+    }
+    if (phase === 'scanning') return 'Opening Bluetooth device picker…'
+    if (phase === 'connecting') return `Connecting to ${deviceName}…`
+    if (phase === 'reading') return `Connected — reading battery and device info…`
+    if (phase === 'connected') return `Connected to ${deviceName}`
+    if (phase === 'disconnected') return `Disconnected from ${deviceName}. Scan to reconnect.`
+    if (phase === 'cancelled') return 'Scan cancelled.'
+    if (phase === 'error') return `Error: ${errorMsg}`
+    if (phase === 'unavailable') return `Unavailable: ${unavailableReason}`
+    return ''
+  }
+
   return (
     <>
-      {/* Bluetooth availability banner */}
+      {/* Bluetooth unavailable banner */}
       {btAvailable === false && (
         <div className="mb-6 flex items-start gap-3 rounded-xl border border-blue-500/20 bg-blue-500/[0.07] px-4 py-3.5">
           <Bluetooth className="mt-0.5 h-4 w-4 shrink-0 text-blue-400" />
           <div>
-            <p className="text-sm font-medium text-text-primary">
-              Bluetooth discovery not available
-            </p>
+            <p className="text-sm font-medium text-text-primary">Bluetooth not available</p>
             <p className="mt-1 text-xs text-text-secondary">
               Web Bluetooth is not available in this environment. Use the{' '}
               <a
-                href="https://www.omi.me"
+                href="#"
                 onClick={(e) => {
                   e.preventDefault()
                   window.open('https://www.omi.me')
@@ -98,66 +245,69 @@ export function DevicesTab(): React.JSX.Element {
         </div>
       )}
 
-      {/* BLE Scan (only when API available) */}
+      {/* Scan + Connect row (only when BT API available) */}
       {btAvailable === true && (
         <SettingRow
           icon={Radio}
-          title="Scan for nearby devices"
-          subtitle={
-            scan.phase === 'idle'
-              ? 'Discover nearby Bluetooth LE devices. Full Omi firmware pairing requires the mobile app — this shows which devices are in range.'
-              : scan.phase === 'scanning'
-                ? 'Opening Bluetooth device picker…'
-                : scan.phase === 'found'
-                  ? `Discovered: ${scan.deviceName}`
-                  : scan.phase === 'cancelled'
-                    ? 'Scan cancelled.'
-                    : scan.phase === 'error'
-                      ? `Scan error: ${scan.message}`
-                      : scan.phase === 'unavailable'
-                        ? `Bluetooth unavailable: ${scan.reason}`
-                        : ''
-          }
-          keywords="bluetooth scan ble device discover pair omi openglass"
+          title="Scan and connect"
+          subtitle={subtitleText()}
+          keywords="bluetooth scan ble device connect pair omi openglass battery info"
           control={
             <div className="flex items-center gap-2">
-              {scan.phase === 'scanning' && (
-                <Loader className="h-4 w-4 animate-spin text-text-quaternary" />
-              )}
-              {scan.phase === 'found' && (
-                <CheckCircle className="h-4 w-4 text-green-400" />
-              )}
-              {(scan.phase === 'error' || scan.phase === 'unavailable') && (
+              {isBusy && <Loader className="h-4 w-4 animate-spin text-text-quaternary" />}
+              {phase === 'connected' && <CheckCircle className="h-4 w-4 text-green-400" />}
+              {(phase === 'error' || phase === 'unavailable') && (
                 <AlertCircle className="h-4 w-4 text-orange-400" />
+              )}
+              {isActive && (
+                <button onClick={handleDisconnect} className="btn-ghost text-red-400">
+                  Disconnect
+                </button>
               )}
               <button
                 onClick={() => void handleScan()}
-                disabled={scan.phase === 'scanning'}
+                disabled={isBusy}
                 className="btn-ghost disabled:opacity-50"
               >
-                {scan.phase === 'scanning'
+                {isBusy
                   ? 'Scanning…'
-                  : scan.phase === 'found' || scan.phase === 'cancelled'
+                  : isActive || phase === 'disconnected' || phase === 'cancelled'
                     ? 'Scan again'
                     : 'Scan'}
               </button>
             </div>
           }
         >
-          {scan.phase === 'found' && (
-            <div className="mt-2 rounded-lg border border-green-500/20 bg-green-500/[0.07] px-3 py-2">
-              <p className="text-xs font-medium text-green-400">{scan.deviceName}</p>
-              <p className="mt-0.5 text-xs text-text-quaternary">
-                ID: {scan.deviceId.slice(0, 16)}…
-                {' · '}
-                Discovery only — full Omi pairing requires the mobile app
+          {/* Device info card — shown while connecting, reading, or connected */}
+          {isActive && (
+            <div className="mt-2 space-y-1.5 rounded-lg border border-green-500/20 bg-green-500/[0.07] px-3 py-2.5">
+              <div className="flex items-center justify-between">
+                <p className="text-sm font-medium text-green-400">{deviceName}</p>
+                {battery !== null && battery >= 0 && (
+                  <span className="text-xs text-text-secondary">{battery}% battery</span>
+                )}
+                {battery === -1 && (
+                  <span className="text-xs text-text-quaternary">Battery unavailable</span>
+                )}
+                {battery === null && phase === 'reading' && (
+                  <span className="text-xs text-text-quaternary">Reading…</span>
+                )}
+              </div>
+              {(manufacturer != null || model != null) && (
+                <p className="text-xs text-text-secondary">
+                  {[manufacturer, model].filter(Boolean).join(' · ')}
+                </p>
+              )}
+              <p className="text-xs text-text-quaternary">
+                ID: {deviceId.length > 20 ? `${deviceId.slice(0, 20)}…` : deviceId}
+                {' · '}Full Omi pairing and OTA require the mobile app
               </p>
             </div>
           )}
         </SettingRow>
       )}
 
-      {/* Supported device types */}
+      {/* Supported device list */}
       <SettingRow
         icon={Bluetooth}
         title="Supported devices"
@@ -192,7 +342,7 @@ export function DevicesTab(): React.JSX.Element {
       <SettingRow
         icon={Cpu}
         title="Hardware integration roadmap"
-        subtitle="Full BLE pairing (firmware updates, battery monitoring, live audio streaming) is planned for a future Windows release."
+        subtitle="Full BLE pairing, firmware OTA, and live audio streaming from device are planned for a future Windows release. Standard GATT Battery and Device Information services are read now when available."
         keywords="roadmap ble bluetooth windows native coming soon"
       />
 

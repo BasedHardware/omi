@@ -84,16 +84,16 @@ export function SupportTab(): React.JSX.Element {
         title="Check for Updates"
         subtitle={
           updateState.status === 'idle'
-            ? `Current version: ${__APP_VERSION__}.`
+            ? `Installed: ${__APP_VERSION__} · Checks GitHub releases for a newer Windows build.`
             : updateState.status === 'checking'
-              ? 'Checking GitHub for the latest release…'
+              ? `Installed: ${__APP_VERSION__} · Checking GitHub for the latest release…`
               : updateState.status === 'up-to-date'
-                ? `You're on the latest version (${updateState.version}).`
+                ? `Installed: ${updateState.version} · You are on the latest version.`
                 : updateState.status === 'available'
-                  ? `Version ${updateState.version} is available — open GitHub to download.`
-                  : `Could not check for updates: ${updateState.message}`
+                  ? `Installed: ${__APP_VERSION__} · Latest: ${updateState.version} — download from GitHub to update. Native auto-install unavailable until release feed is configured.`
+                  : `Installed: ${__APP_VERSION__} · Could not check: ${updateState.message}`
         }
-        keywords="update check releases version latest upgrade"
+        keywords="update check releases version latest upgrade install"
         control={
           <div className="flex items-center gap-2">
             {updateState.status === 'checking' && (
@@ -105,24 +105,25 @@ export function SupportTab(): React.JSX.Element {
             {updateState.status === 'error' && (
               <AlertCircle className="h-4 w-4 text-orange-400" />
             )}
-            {updateState.status === 'available' ? (
+            {updateState.status === 'available' && (
               <button
                 onClick={() => openLink(updateState.url)}
                 className="btn-ghost text-blue-400"
               >
                 Download
               </button>
-            ) : (
-              <button
-                onClick={
-                  updateState.status === 'checking' ? undefined : handleCheckUpdates
-                }
-                disabled={updateState.status === 'checking'}
-                className="btn-ghost disabled:opacity-50"
-              >
-                {updateState.status === 'idle' ? 'Check' : 'Recheck'}
-              </button>
             )}
+            <button
+              onClick={updateState.status === 'checking' ? undefined : handleCheckUpdates}
+              disabled={updateState.status === 'checking'}
+              className="btn-ghost disabled:opacity-50"
+            >
+              {updateState.status === 'checking'
+                ? 'Checking…'
+                : updateState.status === 'idle'
+                  ? 'Check'
+                  : 'Recheck'}
+            </button>
           </div>
         }
       />
