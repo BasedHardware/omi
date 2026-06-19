@@ -53,6 +53,7 @@ from utils.memory.v17_developer_memory_adapter import (
     search_v17_default_developer_memories,
     search_v17_default_developer_memories_vector,
 )
+from utils.memory.v17_default_read_rollout import V17ReadDecision, legacy_safe_v17_default_read_rollout_decision
 import logging
 
 logger = logging.getLogger(__name__)
@@ -179,17 +180,47 @@ def get_memories(
 
     if not category_list:
         v17_rollout = read_v17_developer_default_memory_rollout(uid=uid, db_client=db)
-        v17_memories = search_v17_default_developer_memories(
+        v17_result = search_v17_default_developer_memories(
             uid=uid,
             query='',
             limit=limit,
             offset=offset,
             db_client=db,
-            rollout_capabilities=v17_rollout.rollout_capabilities,
-            app_has_default_memory_grant=v17_rollout.app_has_default_memory_grant,
+            rollout_decision=v17_rollout,
         )
-        if v17_memories is not None:
-            return [CleanerMemory.model_validate(memory) for memory in v17_memories]
+    else:
+        # Category filters remain a legacy-only compatibility path until T22/T23
+        # resolves external read/write/category split-brain. Classify that
+        # fallback explicitly instead of relying on an ambiguous `None` result.
+        v17_result = search_v17_default_developer_memories(
+            uid=uid,
+            query='',
+            limit=limit,
+            offset=offset,
+            db_client=db,
+            rollout_decision=legacy_safe_v17_default_read_rollout_decision(
+                uid=uid,
+                source_path=f'users/{uid}/memory_control/state',
+                consumer='developer_api',
+                reason='developer_category_legacy_safe_fallback_explicit',
+            ),
+        )
+
+    if v17_result.read_decision == V17ReadDecision.USE_V17:
+        return [CleanerMemory.model_validate(memory) for memory in v17_result.memories]
+    if v17_result.read_decision in {V17ReadDecision.DENY_MEMORY, V17ReadDecision.SHADOW_ONLY}:
+        raise HTTPException(
+            status_code=403,
+            detail={
+                'enabled': False,
+                'reason': v17_result.fallback_reason,
+                'consumer': 'developer_api',
+                'archive_default_visible': False,
+                'archive_capability': False,
+            },
+        )
+    if v17_result.should_use_legacy_fallback:
+        pass
 
     memories = memories_db.get_memories(uid, limit, offset, [c.value for c in category_list])
     # Validate each record individually so a single malformed/legacy doc (e.g. missing a required
@@ -227,28 +258,38 @@ def search_memories_vector(
     """
 
     v17_rollout = read_v17_developer_default_memory_rollout(uid=uid, db_client=db)
-    v17_memories = search_v17_default_developer_memories_vector(
+    v17_result = search_v17_default_developer_memories_vector(
         uid=uid,
         query=query,
         limit=limit,
         db_client=db,
-        rollout_capabilities=v17_rollout.rollout_capabilities,
-        app_has_default_memory_grant=v17_rollout.app_has_default_memory_grant,
+        rollout_decision=v17_rollout,
     )
-    if v17_memories is None:
+    if v17_result.read_decision in {V17ReadDecision.DENY_MEMORY, V17ReadDecision.SHADOW_ONLY}:
         raise HTTPException(
             status_code=403,
             detail={
                 'enabled': False,
-                'reason': v17_rollout.fallback_reason,
+                'reason': v17_result.fallback_reason,
+                'consumer': 'developer_api',
+                'archive_default_visible': False,
+                'archive_capability': False,
+            },
+        )
+    if v17_result.should_use_legacy_fallback:
+        raise HTTPException(
+            status_code=403,
+            detail={
+                'enabled': False,
+                'reason': v17_result.fallback_reason,
                 'consumer': 'developer_api',
                 'archive_default_visible': False,
                 'archive_capability': False,
             },
         )
     return {
-        'items': v17_memories,
-        'returned_count': len(v17_memories),
+        'items': v17_result.memories,
+        'returned_count': len(v17_result.memories),
         'archive_default_visible': False,
         'policy': {
             'consumer': 'developer_api',

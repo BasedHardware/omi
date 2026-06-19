@@ -185,6 +185,27 @@ This closes the Oracle P0-2 subpoint for MCP REST/SSE vector search fallback dow
 - Complete shared `ns2`, third-party app/key/scope authorization, vector overfetch/budgets, central telemetry, and real cloud/Pinecone/Firestore/benchmark evidence.
 - Production rollout remains **BLOCKED / NO-GO** until all Oracle P0s and required real-service evidence are complete.
 
+### 2026-06-19 — developer API fallback explicit read-decision slice
+
+Implemented the next narrow Oracle P0-2 developer API fallback-caller slice after the MCP vector caller work, without changing the production rollout verdict:
+
+- Added `V17DeveloperMemorySearchResult` in `backend/utils/memory/v17_developer_memory_adapter.py` so developer default-list and vector adapters return explicit `V17ReadDecision` semantics plus fallback reason instead of using `None` as an ambiguous downgrade signal.
+- Wired developer default list (`GET /v1/dev/user/memories` with no category filter) and developer vector search (`GET /v1/dev/user/memories/vector/search`) to pass the persisted developer rollout decision into the adapter and branch on `USE_V17` / `USE_LEGACY_SAFE` / `DENY_MEMORY` / `SHADOW_ONLY` before any legacy fallback.
+- Missing, malformed, no-grant, disabled, or shadow-only developer rollout decisions now avoid V17 vector search and `users/{uid}/memory_items` reads and return 403 instead of silently calling legacy `memories_db.get_memories(...)` on the V17-enabled list path.
+- Category-filtered developer list remains a legacy-only compatibility path until T22/T23 resolves category/read/write split-brain, but that fallback is now explicitly classified as `USE_LEGACY_SAFE` (`developer_category_legacy_safe_fallback_explicit`) rather than implicit `None`.
+- Enabled/granted developer rollout continues using hydrated V17 default/vector reads with default Archive unavailable; no Archive exposure was broadened.
+
+Verification recorded in `docs/epics/v17_memory_implementation_tickets.md`: RED import failure for missing `V17DeveloperMemorySearchResult`, GREEN developer adapter tests (`11 passed`), focused regression (`23 passed`), full `pytest tests/unit/test_v17_*.py -q` (`189 passed, 1 warning`), and async blocker scan exit 0 with pre-existing findings only.
+
+This closes the Oracle P0-2 subpoint for developer default-list/vector fallback downgrade semantics. Remaining P0-2/P0 work:
+
+- MCP list (`GET /v1/mcp/memories`) remains legacy-only/not V17-default-read-wired; if it becomes a V17 default/list path, convert it through explicit decisions before rollout.
+- Developer category filtering still has external read/write/category split-brain risk and remains a T22/T23 compatibility follow-up before any authoritative external read cutover.
+- Address P0-3 write/read split-brain before authoritative read cutover.
+- Make P0-4 vector freshness/purge fences mandatory and complete repair/stale-ID proof.
+- Complete shared `ns2`, third-party app/key/scope authorization, vector overfetch/budgets, central telemetry, and real cloud/Pinecone/Firestore/benchmark evidence.
+- Production rollout remains **BLOCKED / NO-GO** until all Oracle P0s and required real-service evidence are complete.
+
 ## Not-run / not-claimed caveats preserved
 
 - Oracle review has now run and is recorded here, but it blocks production rollout.

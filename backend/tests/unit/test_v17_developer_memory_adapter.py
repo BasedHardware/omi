@@ -7,10 +7,12 @@ from models.v17_memory_search_gateway import SearchMode, SearchVectorHit
 from models.v17_product_memory import MemoryItemStatus, MemoryTier, ProcessingState, V17MemoryItem
 from utils.memory.short_term_lifecycle import DEFAULT_SHORT_TERM_TTL_DAYS
 from utils.memory.v17_developer_memory_adapter import (
+    V17DeveloperMemorySearchResult,
     read_v17_developer_default_memory_rollout,
     search_v17_default_developer_memories,
     search_v17_default_developer_memories_vector,
 )
+from utils.memory.v17_default_read_rollout import V17ReadDecision, legacy_safe_v17_default_read_rollout_decision
 
 
 class _Snapshot:
@@ -181,6 +183,23 @@ def test_developer_vector_route_wires_v17_adapter_behind_rollout():
     assert route_index < contents.index(rollout_call, route_index) < contents.index(vector_adapter_call, route_index)
 
 
+def test_developer_routes_only_reach_legacy_after_explicit_legacy_safe_decision():
+    developer_py = Path(__file__).resolve().parents[2] / 'routers' / 'developer.py'
+    contents = developer_py.read_text(encoding='utf-8')
+
+    denied_check = 'if v17_result.read_decision in {V17ReadDecision.DENY_MEMORY, V17ReadDecision.SHADOW_ONLY}:'
+    legacy_safe_check = 'if v17_result.should_use_legacy_fallback:'
+    legacy_call = 'memories_db.get_memories(uid, limit, offset, [c.value for c in category_list])'
+    assert denied_check in contents
+    assert legacy_safe_check in contents
+    assert legacy_call in contents
+    assert contents.index(denied_check) < contents.index(legacy_safe_check) < contents.index(legacy_call)
+
+    route = '@router.get("/v1/dev/user/memories/vector/search", tags=["developer"])'
+    route_index = contents.index(route)
+    assert contents.index(denied_check, route_index) < contents.index(legacy_safe_check, route_index)
+
+
 def test_developer_rollout_reader_derives_default_memory_grant_without_reading_memory_items():
     db_client = _FirestoreFake({'users/u1/memory_control/state': _enabled_rollout_doc()})
 
@@ -231,17 +250,20 @@ def test_developer_default_v17_adapter_uses_product_search_and_excludes_stale_sh
         uid='u1', db_client=_FirestoreFake({'users/u1/memory_control/state': _enabled_rollout_doc()})
     )
 
-    results = search_v17_default_developer_memories(
+    result = search_v17_default_developer_memories(
         uid='u1',
         query='coffee',
         limit=10,
         offset=0,
         db_client=db_client,
-        rollout_capabilities=decision.rollout_capabilities,
-        app_has_default_memory_grant=decision.app_has_default_memory_grant,
+        rollout_decision=decision,
         now=now,
     )
 
+    assert isinstance(result, V17DeveloperMemorySearchResult)
+    assert result.read_decision == V17ReadDecision.USE_V17
+    assert result.fallback_reason is None
+    results = result.memories
     assert db_client.collection_paths == ['users/u1/memory_items']
     assert [item['id'] for item in results] == ['fresh-short-term', 'long-term']
     assert [item['content'] for item in results] == ['coffee fresh short term', 'coffee long term']
@@ -253,7 +275,7 @@ def test_developer_default_v17_adapter_uses_product_search_and_excludes_stale_sh
     assert all(item['policy']['archive_capability'] is False for item in results)
 
 
-def test_developer_default_v17_adapter_returns_none_when_rollout_or_grant_disabled_without_firestore_read():
+def test_developer_default_v17_adapter_returns_denied_decision_when_rollout_or_grant_disabled_without_firestore_read():
     now = datetime(2026, 6, 19, 12, 0, tzinfo=timezone.utc)
     fresh_short_term = _memory_item('fresh-short-term', now=now, content='coffee fresh short term')
     db_client = _FirestoreFake({f'users/u1/memory_items/{fresh_short_term.memory_id}': _stored_item(fresh_short_term)})
@@ -270,32 +292,39 @@ def test_developer_default_v17_adapter_returns_none_when_rollout_or_grant_disabl
         ),
     )
 
-    assert (
-        search_v17_default_developer_memories(
-            uid='u1',
-            query='coffee',
-            limit=10,
-            offset=0,
-            db_client=db_client,
-            rollout_capabilities=disabled_decision.rollout_capabilities,
-            app_has_default_memory_grant=disabled_decision.app_has_default_memory_grant,
-            now=now,
-        )
-        is None
+    disabled_result = search_v17_default_developer_memories(
+        uid='u1', query='coffee', limit=10, offset=0, db_client=db_client, rollout_decision=disabled_decision, now=now
     )
-    assert (
-        search_v17_default_developer_memories(
-            uid='u1',
-            query='coffee',
-            limit=10,
-            offset=0,
-            db_client=db_client,
-            rollout_capabilities=grantless_decision.rollout_capabilities,
-            app_has_default_memory_grant=grantless_decision.app_has_default_memory_grant,
-            now=now,
-        )
-        is None
+    grantless_result = search_v17_default_developer_memories(
+        uid='u1', query='coffee', limit=10, offset=0, db_client=db_client, rollout_decision=grantless_decision, now=now
     )
+
+    assert disabled_result.memories == []
+    assert disabled_result.read_decision == V17ReadDecision.DENY_MEMORY
+    assert disabled_result.fallback_reason == 'v17_reads_disabled'
+    assert grantless_result.memories == []
+    assert grantless_result.read_decision == V17ReadDecision.DENY_MEMORY
+    assert grantless_result.fallback_reason == 'missing_developer_default_memory_grant'
+    assert db_client.collection_paths == []
+
+
+def test_developer_default_v17_adapter_classifies_explicit_legacy_safe_without_firestore_read():
+    db_client = _FirestoreFake()
+    legacy_safe = legacy_safe_v17_default_read_rollout_decision(
+        uid='u1',
+        source_path='users/u1/memory_control/state',
+        consumer='developer_api',
+        reason='developer_category_legacy_safe_fallback_explicit',
+    )
+
+    result = search_v17_default_developer_memories(
+        uid='u1', query='', limit=10, offset=0, db_client=db_client, rollout_decision=legacy_safe
+    )
+
+    assert result.memories == []
+    assert result.read_decision == V17ReadDecision.USE_LEGACY_SAFE
+    assert result.fallback_reason == 'developer_category_legacy_safe_fallback_explicit'
+    assert result.should_use_legacy_fallback is True
     assert db_client.collection_paths == []
 
 
@@ -330,16 +359,18 @@ def test_developer_vector_adapter_uses_hydrated_vector_service_and_preserves_ran
             rejected_count=1,
         )
 
-    results = search_v17_default_developer_memories_vector(
+    result = search_v17_default_developer_memories_vector(
         uid='u1',
         query='coffee',
         limit=10,
         db_client=db_client,
-        rollout_capabilities=decision.rollout_capabilities,
-        app_has_default_memory_grant=decision.app_has_default_memory_grant,
+        rollout_decision=decision,
         vector_query=vector_query,
     )
 
+    assert result.read_decision == V17ReadDecision.USE_V17
+    assert result.fallback_reason is None
+    results = result.memories
     assert vector_calls == [{'uid': 'u1', 'query': 'coffee', 'mode': SearchMode.default, 'limit': 10}]
     assert db_client.collection_paths == ['users/u1/memory_items']
     assert [item['id'] for item in results] == ['long-term', 'fresh-short-term']
@@ -350,7 +381,7 @@ def test_developer_vector_adapter_uses_hydrated_vector_service_and_preserves_ran
     assert all(item['policy']['archive_capability'] is False for item in results)
 
 
-def test_developer_vector_adapter_returns_none_before_vector_or_memory_reads_when_rollout_or_grant_disabled():
+def test_developer_vector_adapter_returns_denied_decision_before_vector_or_memory_reads_when_rollout_or_grant_disabled():
     now = datetime(2026, 6, 19, 12, 0, tzinfo=timezone.utc)
     fresh_short_term = _memory_item('fresh-short-term', now=now, content='coffee fresh short term')
     db_client = _FirestoreFake({f'users/u1/memory_items/{fresh_short_term.memory_id}': _stored_item(fresh_short_term)})
@@ -373,29 +404,55 @@ def test_developer_vector_adapter_returns_none_before_vector_or_memory_reads_whe
         ),
     )
 
-    assert (
-        search_v17_default_developer_memories_vector(
-            uid='u1',
-            query='coffee',
-            limit=10,
-            db_client=db_client,
-            rollout_capabilities=disabled_decision.rollout_capabilities,
-            app_has_default_memory_grant=disabled_decision.app_has_default_memory_grant,
-            vector_query=vector_query,
-        )
-        is None
+    disabled_result = search_v17_default_developer_memories_vector(
+        uid='u1',
+        query='coffee',
+        limit=10,
+        db_client=db_client,
+        rollout_decision=disabled_decision,
+        vector_query=vector_query,
     )
-    assert (
-        search_v17_default_developer_memories_vector(
-            uid='u1',
-            query='coffee',
-            limit=10,
-            db_client=db_client,
-            rollout_capabilities=grantless_decision.rollout_capabilities,
-            app_has_default_memory_grant=grantless_decision.app_has_default_memory_grant,
-            vector_query=vector_query,
-        )
-        is None
+    grantless_result = search_v17_default_developer_memories_vector(
+        uid='u1',
+        query='coffee',
+        limit=10,
+        db_client=db_client,
+        rollout_decision=grantless_decision,
+        vector_query=vector_query,
     )
+
+    assert disabled_result.memories == []
+    assert disabled_result.read_decision == V17ReadDecision.DENY_MEMORY
+    assert disabled_result.fallback_reason == 'v17_reads_disabled'
+    assert grantless_result.memories == []
+    assert grantless_result.read_decision == V17ReadDecision.DENY_MEMORY
+    assert grantless_result.fallback_reason == 'missing_developer_default_memory_grant'
+    assert vector_calls == []
+    assert db_client.collection_paths == []
+
+
+def test_developer_vector_adapter_classifies_explicit_legacy_safe_without_vector_or_memory_reads():
+    db_client = _FirestoreFake()
+    vector_calls = []
+
+    def vector_query(uid, query, *, mode, limit):
+        vector_calls.append({'uid': uid, 'query': query, 'mode': mode, 'limit': limit})
+        return _VectorCandidateResult([])
+
+    legacy_safe = legacy_safe_v17_default_read_rollout_decision(
+        uid='u1',
+        source_path='users/u1/memory_control/state',
+        consumer='developer_api',
+        reason='developer_vector_legacy_safe_fallback_explicit',
+    )
+
+    result = search_v17_default_developer_memories_vector(
+        uid='u1', query='coffee', limit=10, db_client=db_client, rollout_decision=legacy_safe, vector_query=vector_query
+    )
+
+    assert result.memories == []
+    assert result.read_decision == V17ReadDecision.USE_LEGACY_SAFE
+    assert result.fallback_reason == 'developer_vector_legacy_safe_fallback_explicit'
+    assert result.should_use_legacy_fallback is True
     assert vector_calls == []
     assert db_client.collection_paths == []
