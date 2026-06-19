@@ -212,6 +212,12 @@ const STATUS_CONFIG: Record<
   }
 }
 
+const METHOD_LABEL: Record<FocusObservation['method'], string> = {
+  vision: 'Vision',
+  llm: 'Text-OCR',
+  heuristic: 'Heuristic'
+}
+
 function ObsRow({ obs }: { obs: FocusObservation }): React.JSX.Element {
   const cfg = STATUS_CONFIG[obs.status]
   return (
@@ -223,10 +229,18 @@ function ObsRow({ obs }: { obs: FocusObservation }): React.JSX.Element {
           {obs.app && (
             <span className="truncate text-xs text-text-quaternary">{obs.app}</span>
           )}
+          <span className="shrink-0 rounded-full bg-white/[0.06] px-1.5 py-0.5 text-[10px] text-text-quaternary">
+            {METHOD_LABEL[obs.method]}
+          </span>
           <span className="ml-auto shrink-0 text-xs text-text-quaternary">{fmtTime(obs.ts)}</span>
         </div>
         {obs.reasoning && (
           <p className="mt-0.5 text-xs text-text-quaternary">{obs.reasoning}</p>
+        )}
+        {obs.visualEvidence && (
+          <p className="mt-0.5 text-xs italic text-text-quaternary opacity-60">
+            {obs.visualEvidence}
+          </p>
         )}
       </div>
     </div>
@@ -264,6 +278,9 @@ export function Focus(): React.JSX.Element {
   const [distractionAlert, setDistractionAlert] = useState(
     () => getPreferences().focusDistractionAlert ?? false
   )
+  const [visionEnabled, setVisionEnabled] = useState(
+    () => getPreferences().focusVisionEnabled ?? false
+  )
   const [analyzing, setAnalyzing] = useState(false)
   const [latestObs, setLatestObs] = useState<FocusObservation | null>(null)
   const [observations, setObservations] = useState<FocusObservation[]>(() => loadObservations())
@@ -299,6 +316,7 @@ export function Focus(): React.JSX.Element {
       setAnalysisEnabled(p.focusAnalysisEnabled ?? false)
       setAnalysisIntervalMin(p.focusAnalysisIntervalMin ?? 10)
       setDistractionAlert(p.focusDistractionAlert ?? false)
+      setVisionEnabled(p.focusVisionEnabled ?? false)
     })
   }, [])
 
@@ -307,13 +325,13 @@ export function Focus(): React.JSX.Element {
     if (analyzing) return
     setAnalyzing(true)
     try {
-      // Use allFrames if loaded; otherwise fetch fresh
+      // Use allFrames if loaded; otherwise fetch fresh (includes imagePath for vision)
       const frames =
         allFrames.length > 0
           ? allFrames
           : await window.omi.rewindFrames(Date.now() - 10 * 60 * 1000, Date.now())
 
-      const obs = await analyzeFocus(frames)
+      const obs = await analyzeFocus(frames, visionEnabled)
       setLatestObs(obs)
 
       const next = [obs, ...observations].slice(0, 60)
@@ -340,7 +358,7 @@ export function Focus(): React.JSX.Element {
     } finally {
       setAnalyzing(false)
     }
-  }, [analyzing, allFrames, observations, distractionAlert])
+  }, [analyzing, allFrames, observations, distractionAlert, visionEnabled])
 
   // Periodic analysis loop
   useEffect(() => {
@@ -497,12 +515,26 @@ export function Focus(): React.JSX.Element {
                   {Math.round(latestObs.confidence * 100)}% confidence
                 </span>
                 <span className="text-xs text-text-quaternary">·</span>
-                <span className="text-xs text-text-quaternary capitalize">
-                  {latestObs.method}
+                <span className="text-xs text-text-quaternary">
+                  {latestObs.method === 'vision'
+                    ? 'Vision'
+                    : latestObs.method === 'llm'
+                      ? 'Text-OCR'
+                      : 'Heuristic'}
                 </span>
               </div>
               {latestObs.reasoning && (
                 <p className="mt-1.5 text-xs text-text-quaternary">{latestObs.reasoning}</p>
+              )}
+              {latestObs.visualEvidence && (
+                <p className="mt-1 text-xs italic text-text-quaternary opacity-70">
+                  📷 {latestObs.visualEvidence}
+                </p>
+              )}
+              {visionEnabled && latestObs.method !== 'vision' && (
+                <p className="mt-1 text-xs text-text-quaternary opacity-50">
+                  Vision unavailable — used {latestObs.method === 'llm' ? 'text-OCR' : 'heuristic'} fallback
+                </p>
               )}
               <p className="mt-1.5 text-xs text-text-quaternary opacity-60">
                 Last checked {fmtTime(latestObs.ts)} · checks every {analysisIntervalMin} min

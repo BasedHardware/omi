@@ -56,6 +56,9 @@ export type Preferences = {
   focusAnalysisIntervalMin?: 5 | 10 | 15 | 20
   // Alert via Windows notification when sustained distraction is detected.
   focusDistractionAlert?: boolean
+  // When true, analysis sends 1-2 sampled Rewind screenshots to Gemini Vision
+  // instead of text-only OCR. Falls back to text if vision fails.
+  focusVisionEnabled?: boolean
 }
 
 const defaults: Preferences = {

@@ -22,6 +22,9 @@ export function NotificationsTab(): React.JSX.Element {
   const [focusAlert, setFocusAlert] = useState<boolean>(
     () => getPreferences().focusDistractionAlert ?? false
   )
+  const [focusVision, setFocusVision] = useState<boolean>(
+    () => getPreferences().focusVisionEnabled ?? false
+  )
 
   useEffect(() => {
     void window.omi.insightGetSettings().then(setInsight)
@@ -30,6 +33,7 @@ export function NotificationsTab(): React.JSX.Element {
       setFocusEnabled(p.focusAnalysisEnabled ?? false)
       setFocusInterval(p.focusAnalysisIntervalMin ?? 10)
       setFocusAlert(p.focusDistractionAlert ?? false)
+      setFocusVision(p.focusVisionEnabled ?? false)
     })
   }, [])
 
@@ -176,6 +180,23 @@ export function NotificationsTab(): React.JSX.Element {
                   setPreferences({ focusDistractionAlert: on })
                 }}
                 label="Distraction alert"
+              />
+            </div>
+            <div className="flex items-start justify-between gap-4">
+              <div className="min-w-0">
+                <p className="text-sm text-text-secondary">Screenshot vision analysis</p>
+                <p className="mt-0.5 text-xs text-text-quaternary">
+                  Sends 1–2 sampled Rewind screenshots to Gemini Vision for richer
+                  classification. Falls back to text-OCR if vision fails or times out.
+                </p>
+              </div>
+              <Toggle
+                on={focusVision}
+                onChange={(on) => {
+                  setFocusVision(on)
+                  setPreferences({ focusVisionEnabled: on })
+                }}
+                label="Vision analysis"
               />
             </div>
           </div>
