@@ -1,4 +1,4 @@
-import { Globe, BookOpen, Bug, FileText, Info } from 'lucide-react'
+import { Globe, BookOpen, Bug, FileText, Info, Download } from 'lucide-react'
 import omiLogo from '../../../assets/omilogo.png'
 import { SettingRow } from '../SettingRow'
 
@@ -43,6 +43,20 @@ export function SupportTab(): React.JSX.Element {
         control={
           <button onClick={() => openLink('https://help.omi.me')} className="btn-ghost">
             Open
+          </button>
+        }
+      />
+      <SettingRow
+        icon={Download}
+        title="Check for Updates"
+        subtitle={`Current version: ${__APP_VERSION__}. View all releases on GitHub to check for a newer build.`}
+        keywords="update check releases version latest upgrade"
+        control={
+          <button
+            onClick={() => openLink('https://github.com/BasedHardware/omi/releases')}
+            className="btn-ghost"
+          >
+            Releases
           </button>
         }
       />

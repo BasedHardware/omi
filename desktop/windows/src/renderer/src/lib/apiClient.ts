@@ -1,5 +1,6 @@
 import axios, { type AxiosInstance, type InternalAxiosRequestConfig } from 'axios'
 import { auth } from './firebase'
+import { getPreferences } from './preferences'
 
 // Retried statuses: 429 (rate limited) and 503 (transient). Anything else fails
 // fast as before.
@@ -21,6 +22,11 @@ function makeClient(baseURL: string): AxiosInstance {
       const token = await user.getIdToken()
       config.headers.Authorization = `Bearer ${token}`
     }
+    const bk = getPreferences().byokKeys
+    if (bk?.openai) config.headers['X-BYOK-OpenAI'] = bk.openai
+    if (bk?.anthropic) config.headers['X-BYOK-Anthropic'] = bk.anthropic
+    if (bk?.gemini) config.headers['X-BYOK-Gemini'] = bk.gemini
+    if (bk?.deepgram) config.headers['X-BYOK-Deepgram'] = bk.deepgram
     return config
   })
 

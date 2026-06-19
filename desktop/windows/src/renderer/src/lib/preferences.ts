@@ -39,6 +39,14 @@ export type Preferences = {
   // disables the sweep. Read with `?? 'dry-run'`.
   retentionMode?: 'off' | 'dry-run' | 'live'
   onboardingCompletedAt?: number
+  // BYOK (Bring Your Own Keys) — stored locally; SHA-256 fingerprints are sent to
+  // the backend on activation, but actual keys only leave this device as request headers.
+  byokKeys?: {
+    openai?: string
+    anthropic?: string
+    gemini?: string
+    deepgram?: string
+  }
 }
 
 const defaults: Preferences = {

@@ -8,6 +8,7 @@ import {
   Keyboard,
   Puzzle,
   Info,
+  Key,
   type LucideIcon
 } from 'lucide-react'
 
@@ -20,6 +21,7 @@ export type SettingsTabId =
   | 'privacy'
   | 'account'
   | 'advanced'
+  | 'byok'
   | 'support'
 
 export const SETTINGS_TABS: { id: SettingsTabId; label: string; Icon: LucideIcon }[] = [
@@ -31,5 +33,6 @@ export const SETTINGS_TABS: { id: SettingsTabId; label: string; Icon: LucideIcon
   { id: 'privacy', label: 'Privacy', Icon: ShieldCheck },
   { id: 'account', label: 'Account', Icon: CircleUserRound },
   { id: 'advanced', label: 'Advanced', Icon: SlidersHorizontal },
+  { id: 'byok', label: 'API Keys', Icon: Key },
   { id: 'support', label: 'Support', Icon: Info }
 ]
