@@ -592,6 +592,27 @@ This closes only the local executable trigger-surface mismatch. Remaining P0-4/P
 - Add central retry/dead-letter/backlog telemetry/alerts, overfetch/refill/budgets, app/key/scope auth, benchmarks, and explicit rollout gates.
 - Production rollout remains **BLOCKED / NO-GO** until all Oracle P0s and required real-service evidence are complete.
 
+### 2026-06-19 — P0-4 read-only OIDC/IAM proof runner for disabled HTTP worker
+
+Continued Oracle P0-4 by adding a safe read-only proof runner for the disabled Cloud Run HTTP shim, without claiming production cloud proof or changing the production rollout verdict:
+
+- Added `backend/scripts/v17_vector_repair_outbox_oidc_iam_proof.py`, which inventories the exact OIDC/IAM proof commands by default and only executes read-only `gcloud` `describe` / `get-iam-policy` commands when `--execute` is explicitly passed.
+- The runner covers the Cloud Run service description, Cloud Run IAM policy, Scheduler job description, Tasks queue description, project IAM policy, and worker/scheduler service-account IAM policies. It rejects non-allowlisted command verbs in-process.
+- Pass/fail checks include disabled worker env (`V17_VECTOR_REPAIR_OUTBOX_WORKER_ENABLED=false`), worker service account, restricted ingress, invoker IAM required, no public Run invoker, scheduler `state=PAUSED`, Scheduler OIDC `serviceAccountEmail`/`audience`, POST method, queue single concurrency plus bounded retry, worker Firestore role (`roles/datastore.user` or narrower custom role), no owner/editor on the worker service account, and scheduler token-creator policy presence.
+- Updated the Cloud Run/Tasks/Scheduler deployment YAML and Firestore/IAM deployment doc with the runner command, `--execute` command, prerequisites, pass/fail criteria, known blockers, and explicit non-claims.
+- Attempted only safe local discovery/readiness: the runner printed `NOT_RUN` without project/region; `command -v gcloud` produced no output; `--execute` exited 2 with `NOT_RUN` prerequisites including missing project, missing region, and `gcloud CLI is not installed or not on PATH`. Therefore no production OIDC/IAM proof was run or claimed.
+
+Verification recorded in `docs/epics/v17_memory_implementation_tickets.md`: RED missing proof-runner/static reference tests (`2 failed`), GREEN proof-runner test (`2 passed`), readiness command outputs (`NOT_RUN` and safe `--execute` prerequisite failure), focused vector/outbox/docs regression (`38 passed`), full V17 regression (`250 passed, 1 warning`), and async scan exit 0 with pre-existing findings only.
+
+This closes only the readiness/proof-runner artifact for the Cloud Run OIDC/IAM slice. Remaining P0-4/P0 work:
+
+- Run the proof runner with `--execute` against an authenticated target project and attach exact JSON output before unpausing Scheduler or enabling the worker.
+- Validate production Firestore IAM and deployed Security Rules in the real Firebase project.
+- Run real Pinecone duplicate stale physical-ID delete/repair/tombstone validation in `ns2` and prove shared-namespace isolation.
+- Add central retry/dead-letter/backlog telemetry and alerts.
+- Complete overfetch/refill/budgets, app/key/scope auth, benchmarks, and explicit rollout gates.
+- Production rollout remains **BLOCKED / NO-GO** until all Oracle P0s and required real-service evidence are complete.
+
 ## Not-run / not-claimed caveats preserved
 
 - Oracle review has now run and is recorded here, but it blocks production rollout.

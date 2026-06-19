@@ -157,12 +157,13 @@ auth: Cloud Run IAM (roles/run.invoker) plus Scheduler/Tasks OIDC serviceAccount
 - Server-owned uid-shard placeholders only; clients must not select arbitrary uid execution.
 - Explicit proof commands and pass/fail criteria to run later with `gcloud`/Firebase against the target project.
 
-Important readiness caveat: the executable trigger surface now matches the intended HTTP/OIDC Cloud Run/Tasks shape through `POST /v17-vector-repair-outbox-worker/tick`, but OIDC is still enforced by Cloud Run IAM/platform configuration rather than local test credentials. Because no cloud project credentials were used in this local slice, no Cloud Run service, Cloud Tasks queue, Cloud Scheduler job, IAM binding, deployed rules validation, or Pinecone operation was created or claimed.
+`backend/scripts/v17_vector_repair_outbox_oidc_iam_proof.py` is the safe read-only proof runner for the Cloud Run/Tasks/Scheduler OIDC/IAM slice. Without `--execute`, it prints a `NOT_RUN` JSON readiness inventory containing the exact `gcloud run services describe`, `gcloud run services get-iam-policy`, `gcloud scheduler jobs describe`, `gcloud tasks queues describe`, `gcloud projects get-iam-policy`, and `gcloud iam service-accounts get-iam-policy` commands. With `--execute`, it only runs those allowlisted read-only describe/get-iam-policy commands, then checks that the worker env remains disabled, Scheduler is paused, OIDC `serviceAccountEmail`/`audience` match the contract, public Run invoker bindings are absent, and required worker/scheduler IAM bindings exist. It fails honestly when `gcloud`, project, region, service, job, queue, auth, or IAM resources are missing.
+
+Important readiness caveat: the executable trigger surface now matches the intended HTTP/OIDC Cloud Run/Tasks shape through `POST /v17-vector-repair-outbox-worker/tick`, but OIDC is still enforced by Cloud Run IAM/platform configuration rather than local test credentials. In this local slice, `gcloud` was not installed/on PATH and no target project/region was configured, so the proof runner was run only in `NOT_RUN`/prerequisite-failure mode. No Cloud Run service, Cloud Tasks queue, Cloud Scheduler job, IAM binding, deployed rules validation, production Firestore IAM proof, or Pinecone operation was created or claimed.
 
 Remaining deployment gates before enabling this contract in production:
 
-- Run the disabled Cloud Run/Tasks HTTP shim through the OIDC/IAM proof commands in a target project before unpausing Scheduler or enabling the worker.
-- Run the OIDC/IAM proof commands from `docs/epics/v17_vector_repair_outbox_cloud_deployment_contract.yaml` against the target project and attach output to the rollout ticket.
+- Run `python3 backend/scripts/v17_vector_repair_outbox_oidc_iam_proof.py --project PROJECT_ID --region REGION --execute` against the target project and attach exact JSON output before unpausing Scheduler or enabling the worker.
 - Production Firestore IAM and deployed Security Rules validation in the target Firebase project.
 - Production-safe uid sharding/backlog discovery and worker identity ownership model.
 - Real Pinecone delete/upsert validation with duplicate stale physical IDs and tombstone precedence in namespace `ns2`.

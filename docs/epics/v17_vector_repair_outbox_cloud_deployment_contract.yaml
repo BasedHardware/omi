@@ -197,9 +197,24 @@ contract:
         - OIDC oidcToken audience exactly matches the worker tick URI
         - uid source is server-owned; clients cannot choose arbitrary uid
         - retryConfig maxAttempts/maxRetryDuration and dead-letter handling are documented
+    readOnlyProofRunner:
+      commandInventory: >-
+        python3 backend/scripts/v17_vector_repair_outbox_oidc_iam_proof.py
+        --project PROJECT_ID --region REGION
+      executeCommand: >-
+        python3 backend/scripts/v17_vector_repair_outbox_oidc_iam_proof.py
+        --project PROJECT_ID --region REGION --execute
+      notes:
+        - The proof runner is read-only and allowlists only gcloud describe/get-iam-policy commands.
+        - Without --execute it prints a NOT_RUN readiness inventory with exact commands and prerequisites.
+        - With --execute it fails honestly when gcloud auth/project/service/job/queue/IAM resources are missing.
+        - production Firestore IAM/deployed rules validation gates remain open until a target project run passes and deployed rules are separately proven.
+        - real Pinecone duplicate stale physical ID delete/repair validation remains open until real ns2 fixtures pass.
     commandsToRunLater:
       # Replace PROJECT_ID/REGION/service account names before execution. These
       # are proof commands only; they were not run while adding this artifact.
+      - python3 backend/scripts/v17_vector_repair_outbox_oidc_iam_proof.py --project PROJECT_ID --region REGION
+      - python3 backend/scripts/v17_vector_repair_outbox_oidc_iam_proof.py --project PROJECT_ID --region REGION --execute
       - gcloud run services describe v17-vector-repair-outbox-worker --region=REGION --project=PROJECT_ID --format=json
       - gcloud run services get-iam-policy v17-vector-repair-outbox-worker --region=REGION --project=PROJECT_ID --format=json
       - gcloud scheduler jobs describe v17-vector-repair-outbox-worker-tick --location=REGION --project=PROJECT_ID --format=json
