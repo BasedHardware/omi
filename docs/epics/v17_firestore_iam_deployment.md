@@ -92,7 +92,9 @@ Contract:
 
 ### Disabled-by-default Cloud Run/Tasks wrapper contract
 
-`backend/scripts/v17_vector_repair_outbox_worker_entrypoint.py` is the first checked-in Cloud Run/Tasks wrapper contract for this tick. It is intentionally fake-injectable and does not create Cloud Tasks, Cloud Scheduler, Cloud Run Jobs, Firebase emulator processes, or Pinecone clients.
+`backend/scripts/v17_vector_repair_outbox_worker_entrypoint.py` is the checked-in Cloud Run/Tasks wrapper contract for this tick. It is intentionally fake-injectable and does not create Cloud Tasks, Cloud Scheduler, Cloud Run Jobs, Firebase emulator processes, or Pinecone clients while disabled.
+
+The wrapper now includes a narrow production dependency resolver, but the resolver is invoked only after `V17_VECTOR_REPAIR_OUTBOX_WORKER_ENABLED=true` and config validation. Disabled/default CLI smoke still does not initialize Pinecone, the embedding provider, or the Firestore client singleton.
 
 Wrapper behavior:
 
@@ -100,7 +102,8 @@ Wrapper behavior:
 2. Fails closed/no-ops when `V17_VECTOR_REPAIR_OUTBOX_WORKER_ENABLED` is absent, empty, or `false`; a disabled invocation prints one deterministic JSON summary and does not lease records.
 3. Treats malformed booleans, missing enabled `uid`, missing enabled `worker_id`, and non-positive numeric bounds as config denial; it prints a deterministic JSON summary with `config_valid=false` and exits nonzero before calling the tick.
 4. When enabled and injected with production-safe dependencies, invokes exactly one `run_v17_vector_repair_outbox_worker_tick(...)` for one explicit uid and stable lease owner. There is no unbounded production scan and no client-supplied arbitrary uid execution.
-5. Prints one JSON object suitable for Cloud Run/Tasks logs. Unit tests cover disabled no-op, malformed config denial, required uid/lease-owner denial, enabled fake tick summary, worker/action failure summary, and no scheduler enqueue side effects.
+5. Prints one JSON object suitable for Cloud Run/Tasks logs. Unit tests cover disabled no-op, malformed config denial, required uid/lease-owner denial, enabled fake tick summary, worker/action failure summary, dependency resolver invocation, missing dependency config denial before lease, and no scheduler enqueue side effects.
+6. Production dependency resolution requires `PINECONE_API_KEY`, `PINECONE_INDEX_NAME`, and `OPENAI_API_KEY`; constructs Admin Firestore from `database._client.db`; loads authoritative `users/{uid}/memory_items/{memory_id}` as `V17MemoryItem`; and wraps Pinecone `index.delete`/`index.upsert` plus `utils.llm.clients.embeddings.embed_query` through the explicit `ns2` adapter seam.
 
 Proposed disabled command shape (not yet applied):
 
@@ -117,6 +120,9 @@ V17_VECTOR_REPAIR_OUTBOX_WORKER_ID=<stable service/region/revision lease owner> 
 V17_VECTOR_REPAIR_OUTBOX_LIMIT=<small positive int, default 25>
 V17_VECTOR_REPAIR_OUTBOX_LEASE_SECONDS=<positive int, default 300>
 V17_VECTOR_REPAIR_OUTBOX_MAX_ATTEMPTS=<positive int, default 3>
+PINECONE_API_KEY=<worker secret; required only when enabled>
+PINECONE_INDEX_NAME=<worker index; required only when enabled>
+OPENAI_API_KEY=<embedding provider key; required only when enabled>
 V17_VECTOR_REPAIR_PINECONE_NAMESPACE=ns2
 ```
 
@@ -135,7 +141,7 @@ Remaining deployment gates before enabling this contract in production:
 
 - Real Cloud Run/Tasks or Scheduler wiring and OIDC/IAM proof for the worker identity and trigger principal.
 - Production Firestore IAM and deployed Security Rules validation in the target Firebase project.
-- Real authoritative item loader wiring and production-safe uid sharding/backlog discovery.
+- Production-safe uid sharding/backlog discovery and worker identity ownership model.
 - Real Pinecone delete/upsert validation with duplicate stale physical IDs and tombstone precedence in namespace `ns2`.
 - Retry/backoff/dead-letter central telemetry and alerts.
 - Shared `ns2` isolation evidence proving legacy queries exclude V17 schema records or a separate namespace/filter decision.

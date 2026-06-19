@@ -190,3 +190,212 @@ def test_entrypoint_contract_has_no_scheduler_enqueue_side_effects():
     assert "enqueue_" not in source
     assert "CloudTasksClient" not in source
     assert "firebase emulators" not in source
+
+
+def test_main_disabled_path_does_not_initialize_production_dependencies(monkeypatch):
+    printer = _Printer()
+    calls = []
+
+    monkeypatch.setattr(
+        entrypoint, "build_v17_vector_repair_outbox_production_dependencies", lambda env: calls.append("deps")
+    )
+
+    exit_code = entrypoint.main(env={}, print_json=printer)
+
+    assert exit_code == 0
+    assert calls == []
+    assert printer.payload()["enabled"] is False
+
+
+def test_main_enabled_calls_production_dependency_resolver_once(monkeypatch):
+    printer = _Printer()
+    calls = []
+    deps = entrypoint.V17VectorRepairOutboxProductionDependencies(
+        db_client=object(),
+        authoritative_item_loader=object(),
+        vector_deleter=object(),
+        vector_repairer=object(),
+    )
+
+    def fake_resolver(env):
+        calls.append(dict(env))
+        return deps
+
+    def fake_runner(**kwargs):
+        return {
+            "enabled": True,
+            "worker_id": "worker-a",
+            "uid": "u1",
+            "leased_count": 0,
+            "processed_count": 0,
+            "skipped_count": 0,
+            "failed_count": 0,
+            "ack_failed_count": 0,
+            "actions": [],
+            "errors": [],
+        }
+
+    monkeypatch.setattr(entrypoint, "build_v17_vector_repair_outbox_production_dependencies", fake_resolver)
+
+    exit_code = entrypoint.main(
+        env={
+            "V17_VECTOR_REPAIR_OUTBOX_WORKER_ENABLED": "true",
+            "V17_VECTOR_REPAIR_OUTBOX_UID": "u1",
+            "V17_VECTOR_REPAIR_OUTBOX_WORKER_ID": "worker-a",
+        },
+        tick_runner=fake_runner,
+        print_json=printer,
+    )
+
+    assert exit_code == 0
+    assert len(calls) == 1
+    assert calls[0]["V17_VECTOR_REPAIR_OUTBOX_WORKER_ENABLED"] == "true"
+    assert printer.payload()["config_valid"] is True
+
+
+def test_main_enabled_missing_production_dependency_config_fails_before_lease(monkeypatch):
+    printer = _Printer()
+    calls = []
+
+    def fake_runner(**kwargs):
+        calls.append("tick")
+        return {}
+
+    exit_code = entrypoint.main(
+        env={
+            "V17_VECTOR_REPAIR_OUTBOX_WORKER_ENABLED": "true",
+            "V17_VECTOR_REPAIR_OUTBOX_UID": "u1",
+            "V17_VECTOR_REPAIR_OUTBOX_WORKER_ID": "worker-a",
+        },
+        tick_runner=fake_runner,
+        print_json=printer,
+    )
+
+    payload = printer.payload()
+    assert exit_code == 2
+    assert calls == []
+    assert payload["config_valid"] is False
+    assert payload["errors"] == [
+        {
+            "stage": "dependencies",
+            "error": "PINECONE_API_KEY is required when V17 vector repair worker is enabled",
+        }
+    ]
+
+
+def test_production_dependency_resolver_builds_lazy_clients_and_loader_from_env():
+    calls = []
+    docs = {
+        "users/u1/memory_items/mem1": {
+            "memory_id": "mem1",
+            "uid": "u1",
+            "version": 1,
+            "tier": "long_term",
+            "status": "active",
+            "processing_state": "processed",
+            "content": "User prefers concise updates.",
+            "evidence": [
+                {
+                    "evidence_id": "ev1",
+                    "source_id": "src1",
+                    "source_version": "v1",
+                    "source_type": "conversation",
+                    "artifact_preservation": "preserved",
+                    "source_state": "active",
+                }
+            ],
+            "source_state": "active",
+            "sensitivity_labels": [],
+            "visibility": "private",
+            "user_asserted": False,
+            "captured_at": "2026-06-19T00:00:00+00:00",
+            "updated_at": "2026-06-19T00:00:00+00:00",
+            "ledger_commit_id": "ledger-1",
+            "ledger_sequence": 1,
+            "item_revision": 2,
+            "source_commit_id": "source-1",
+            "content_hash": "hash-1",
+            "account_generation": 7,
+        }
+    }
+
+    class Snapshot:
+        def __init__(self, data):
+            self.exists = data is not None
+            self._data = data
+
+        def to_dict(self):
+            return self._data
+
+    class Document:
+        def __init__(self, path):
+            self.path = path
+
+        def get(self):
+            calls.append(("get", self.path))
+            return Snapshot(docs.get(self.path))
+
+    class DB:
+        def document(self, path):
+            return Document(path)
+
+    class Index:
+        def delete(self, **kwargs):
+            calls.append(("delete", kwargs))
+            return {"deleted": 1}
+
+        def upsert(self, **kwargs):
+            calls.append(("upsert", kwargs))
+            return {"upserted": 1}
+
+    class PineconeClient:
+        def __init__(self, api_key):
+            calls.append(("pinecone", api_key))
+
+        def Index(self, name):
+            calls.append(("index", name))
+            return Index()
+
+    class PineconeModule:
+        Pinecone = PineconeClient
+
+    class ClientModule:
+        db = DB()
+
+    class Embeddings:
+        def embed_query(self, content):
+            calls.append(("embed", content))
+            return [0.1, 0.2]
+
+    class LlmClientsModule:
+        embeddings = Embeddings()
+
+    def module_loader(name):
+        calls.append(("import", name))
+        if name == "pinecone":
+            return PineconeModule
+        if name == "database._client":
+            return ClientModule
+        if name == "utils.llm.clients":
+            return LlmClientsModule
+        raise AssertionError(name)
+
+    deps = entrypoint.build_v17_vector_repair_outbox_production_dependencies(
+        {
+            "PINECONE_API_KEY": "pc-key",
+            "PINECONE_INDEX_NAME": "memory-index",
+            "OPENAI_API_KEY": "openai-key",
+        },
+        module_loader=module_loader,
+    )
+
+    item = deps.authoritative_item_loader({"uid": "u1", "memory_id": "mem1"})
+    deps.vector_deleter({"vector_id": "vec1"})
+    deps.vector_repairer({"required_projection_commit_id": "projection-1"}, item)
+
+    assert ("pinecone", "pc-key") in calls
+    assert ("index", "memory-index") in calls
+    assert ("get", "users/u1/memory_items/mem1") in calls
+    assert ("delete", {"ids": ["vec1"], "namespace": "ns2"}) in calls
+    assert ("embed", "User prefers concise updates.") in calls
+    assert any(call[0] == "upsert" and call[1]["namespace"] == "ns2" for call in calls)

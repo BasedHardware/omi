@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import importlib
 import json
 import os
 import sys
@@ -11,10 +12,17 @@ _BACKEND_DIR = Path(__file__).resolve().parents[1]
 if str(_BACKEND_DIR) not in sys.path:
     sys.path.insert(0, str(_BACKEND_DIR))
 
+from database.v17_collections import V17Collections
 from database.v17_vector_repair_outbox_worker import (
     V17VectorRepairOutboxWorkerTickConfig,
     run_v17_vector_repair_outbox_worker_tick,
 )
+from database.v17_vector_repair_pinecone_adapter import (
+    V17_VECTOR_REPAIR_PINECONE_NAMESPACE,
+    make_v17_pinecone_vector_deleter,
+    make_v17_pinecone_vector_repairer,
+)
+from models.v17_product_memory import V17MemoryItem
 
 V17_VECTOR_REPAIR_OUTBOX_WORKER_ENABLED_ENV = "V17_VECTOR_REPAIR_OUTBOX_WORKER_ENABLED"
 V17_VECTOR_REPAIR_OUTBOX_UID_ENV = "V17_VECTOR_REPAIR_OUTBOX_UID"
@@ -22,6 +30,9 @@ V17_VECTOR_REPAIR_OUTBOX_WORKER_ID_ENV = "V17_VECTOR_REPAIR_OUTBOX_WORKER_ID"
 V17_VECTOR_REPAIR_OUTBOX_LIMIT_ENV = "V17_VECTOR_REPAIR_OUTBOX_LIMIT"
 V17_VECTOR_REPAIR_OUTBOX_LEASE_SECONDS_ENV = "V17_VECTOR_REPAIR_OUTBOX_LEASE_SECONDS"
 V17_VECTOR_REPAIR_OUTBOX_MAX_ATTEMPTS_ENV = "V17_VECTOR_REPAIR_OUTBOX_MAX_ATTEMPTS"
+PINECONE_API_KEY_ENV = "PINECONE_API_KEY"
+PINECONE_INDEX_NAME_ENV = "PINECONE_INDEX_NAME"
+OPENAI_API_KEY_ENV = "OPENAI_API_KEY"
 
 
 @dataclass(frozen=True)
@@ -29,6 +40,14 @@ class V17VectorRepairOutboxEntrypointConfig:
     enabled: bool
     uid: Optional[str]
     tick_config: Optional[V17VectorRepairOutboxWorkerTickConfig]
+
+
+@dataclass(frozen=True)
+class V17VectorRepairOutboxProductionDependencies:
+    db_client: Any
+    authoritative_item_loader: Callable[[Dict[str, Any]], Optional[Any]]
+    vector_deleter: Callable[[Dict[str, Any]], Any]
+    vector_repairer: Callable[[Dict[str, Any], Any], Any]
 
 
 def run_v17_vector_repair_outbox_worker_entrypoint(
@@ -120,20 +139,100 @@ def parse_v17_vector_repair_outbox_worker_entrypoint_config(
     )
 
 
-def main() -> int:
-    """CLI hook for disabled-by-default Cloud Run/Tasks images.
+def build_v17_vector_repair_outbox_production_dependencies(
+    env: Mapping[str, str],
+    *,
+    module_loader: Callable[[str], Any] = importlib.import_module,
+) -> V17VectorRepairOutboxProductionDependencies:
+    """Build production dependencies for an explicitly enabled worker invocation.
 
-    The checked-in CLI is a contract harness only: disabled/default config prints
-    a no-op summary. Enabled production execution still requires explicit service
-    wiring to pass the Firestore client, authoritative loader, and Pinecone-shaped
-    adapters into `run_v17_vector_repair_outbox_worker_entrypoint(...)`.
+    This resolver is deliberately called only after wrapper config has enabled the
+    worker. Disabled/default CLI smoke therefore avoids importing or initializing
+    Pinecone, embedding, or Firestore client singletons. Required secret/config
+    env is validated before importing network clients so enabled misconfiguration
+    fails deterministically before leasing any outbox record.
     """
+    pinecone_api_key = _required_dependency_env(env, PINECONE_API_KEY_ENV)
+    pinecone_index_name = _required_dependency_env(env, PINECONE_INDEX_NAME_ENV)
+    _required_dependency_env(env, OPENAI_API_KEY_ENV)
+
+    pinecone_module = module_loader("pinecone")
+    firestore_client_module = module_loader("database._client")
+    llm_clients_module = module_loader("utils.llm.clients")
+
+    pinecone_client = pinecone_module.Pinecone(api_key=pinecone_api_key)
+    pinecone_index = pinecone_client.Index(pinecone_index_name)
+    db_client = firestore_client_module.db
+    embeddings = llm_clients_module.embeddings
+
+    return V17VectorRepairOutboxProductionDependencies(
+        db_client=db_client,
+        authoritative_item_loader=make_v17_authoritative_item_loader(db_client=db_client),
+        vector_deleter=make_v17_pinecone_vector_deleter(
+            delete_vectors=pinecone_index.delete,
+            namespace=V17_VECTOR_REPAIR_PINECONE_NAMESPACE,
+        ),
+        vector_repairer=make_v17_pinecone_vector_repairer(
+            embed_text=embeddings.embed_query,
+            upsert_vectors=pinecone_index.upsert,
+            namespace=V17_VECTOR_REPAIR_PINECONE_NAMESPACE,
+        ),
+    )
+
+
+def make_v17_authoritative_item_loader(*, db_client: Any) -> Callable[[Dict[str, Any]], Optional[V17MemoryItem]]:
+    """Return a worker-compatible loader for authoritative `memory_items` docs."""
+
+    def load_authoritative_item(record: Dict[str, Any]) -> Optional[V17MemoryItem]:
+        uid = _required_record_str(record, "uid")
+        memory_id = _required_record_str(record, "memory_id")
+        snapshot = db_client.document(f"{V17Collections(uid=uid).memory_items}/{memory_id}").get()
+        if not getattr(snapshot, "exists", False):
+            return None
+        data = snapshot.to_dict() or {}
+        return V17MemoryItem(**data)
+
+    return load_authoritative_item
+
+
+def main(
+    *,
+    env: Optional[Mapping[str, str]] = None,
+    tick_runner: Callable[..., Dict[str, Any]] = run_v17_vector_repair_outbox_worker_tick,
+    print_json: Callable[[str], Any] = print,
+) -> int:
+    """CLI hook for disabled-by-default Cloud Run/Tasks images."""
+    effective_env = os.environ if env is None else env
+    try:
+        entrypoint_config = parse_v17_vector_repair_outbox_worker_entrypoint_config(effective_env)
+    except ValueError as exc:
+        print_json(
+            json.dumps(_entrypoint_summary(config_valid=False, errors=[_error("config", str(exc))]), sort_keys=True)
+        )
+        return 2
+
+    if not entrypoint_config.enabled:
+        print_json(json.dumps(_entrypoint_summary(config_valid=True), sort_keys=True))
+        return 0
+
+    try:
+        dependencies = build_v17_vector_repair_outbox_production_dependencies(effective_env)
+    except ValueError as exc:
+        print_json(
+            json.dumps(
+                _entrypoint_summary(config_valid=False, errors=[_error("dependencies", str(exc))]), sort_keys=True
+            )
+        )
+        return 2
+
     return run_v17_vector_repair_outbox_worker_entrypoint(
-        env=os.environ,
-        db_client=None,
-        authoritative_item_loader=_missing_production_dependency,
-        vector_deleter=_missing_production_dependency,
-        vector_repairer=_missing_production_repair_dependency,
+        env=effective_env,
+        db_client=dependencies.db_client,
+        authoritative_item_loader=dependencies.authoritative_item_loader,
+        vector_deleter=dependencies.vector_deleter,
+        vector_repairer=dependencies.vector_repairer,
+        tick_runner=tick_runner,
+        print_json=print_json,
     )
 
 
@@ -163,6 +262,20 @@ def _positive_int_env(env: Mapping[str, str], key: str, default: int) -> int:
     if value < 1:
         raise ValueError(f"{key} must be a positive integer")
     return value
+
+
+def _required_dependency_env(env: Mapping[str, str], key: str) -> str:
+    value = env.get(key)
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError(f"{key} is required when V17 vector repair worker is enabled")
+    return value.strip()
+
+
+def _required_record_str(record: Dict[str, Any], key: str) -> str:
+    value = record.get(key)
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError(f"record {key} is required")
+    return value.strip()
 
 
 def _entrypoint_summary(

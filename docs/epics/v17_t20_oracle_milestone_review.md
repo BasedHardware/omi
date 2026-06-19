@@ -528,7 +528,20 @@ Verification recorded in `docs/epics/v17_memory_implementation_tickets.md`: RED 
 
 This closes only the first disabled-by-default wrapper/config parser contract. Remaining P0-4/P0 work:
 
-- Wire real production-safe dependencies for the wrapper: Admin Firestore client, authoritative item loader, Pinecone delete/upsert adapter, and embedding provider, still disabled by default.
+### 2026-06-19 — P0-4 production-safe dependency resolver behind disabled wrapper
+
+Continued Oracle P0-4 by wiring a narrow production dependency resolver behind the disabled wrapper, without enabling production execution or changing the production rollout verdict:
+
+- Added `V17VectorRepairOutboxProductionDependencies` and `build_v17_vector_repair_outbox_production_dependencies(...)` to `backend/scripts/v17_vector_repair_outbox_worker_entrypoint.py`.
+- `main(...)` now parses wrapper config first; when disabled it prints the same no-op JSON without initializing Pinecone, the embedding provider, or the Firestore client singleton. Enabled mode invokes the resolver exactly once after explicit `uid`/`worker_id` config validation.
+- Enabled dependency resolution fails deterministically before lease/tick when `PINECONE_API_KEY`, `PINECONE_INDEX_NAME`, or `OPENAI_API_KEY` is absent. It does not silently skip Pinecone/embedding work.
+- When dependency env is present, the resolver lazily constructs Admin Firestore via `database._client.db`, an authoritative `users/{uid}/memory_items/{memory_id}` loader returning `V17MemoryItem`, and Pinecone `delete`/`upsert` repair adapters using `utils.llm.clients.embeddings.embed_query` with explicit namespace `ns2`.
+- Tests use monkeypatch/fakes only; no real Pinecone, OpenAI, Firestore cloud, Cloud Run/Tasks, Scheduler, IAM, deployed rules, duplicate stale physical-ID cleanup, shared-`ns2` proof, central alerts, benchmarks, or production approval is claimed.
+
+Verification recorded in `docs/epics/v17_memory_implementation_tickets.md`: RED dependency-factory tests (`4 failed, 6 passed`), GREEN entrypoint tests (`10 passed`), focused wrapper/outbox/doc regression (`30 passed`), disabled CLI smoke JSON, full `pytest tests/unit/test_v17_*.py -q` (`242 passed, 1 warning`), and async scan exit 0 with pre-existing findings only.
+
+This closes only the narrow production dependency factory behind the disabled wrapper. Remaining P0-4/P0 work:
+
 - Add real Cloud Run/Tasks/Scheduler deployment config and OIDC/IAM proof for the worker identity and trigger principal.
 - Validate production Firestore IAM/service-account bindings and deployed Security Rules against the real Firebase project before rollout.
 - Run real Pinecone delete/upsert validation with duplicate stale physical IDs, tombstoned/deleted/missing authoritative items, retry/dead-letter behavior, and shared-`ns2` legacy isolation evidence.
