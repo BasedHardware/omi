@@ -146,6 +146,7 @@ class AddAppProvider extends ChangeNotifier {
       selectePaymentPlan = null;
     }
     isPaid = paid;
+    checkValidity();
     notifyListeners();
   }
 
@@ -324,6 +325,7 @@ class AddAppProvider extends ChangeNotifier {
       return;
     }
     selectePaymentPlan = plan;
+    checkValidity();
     notifyListeners();
   }
 
@@ -409,6 +411,10 @@ class AddAppProvider extends ChangeNotifier {
       if (instructionsController.text != (ext.setupInstructionsFilePath ?? '')) return true;
       if (appHomeUrlController.text != (ext.appHomeUrl ?? '')) return true;
       if (chatToolsManifestUrlController.text != (ext.chatToolsManifestUrl ?? '')) return true;
+      final originalAuthUrl = ext.authSteps.isNotEmpty ? ext.authSteps.first.url : '';
+      if (authUrlController.text != originalAuthUrl) return true;
+      final originalActions = (ext.actions ?? []).map((a) => a.action).toSet();
+      if (!setEquals(actions.map((a) => a['action'] as String).toSet(), originalActions)) return true;
     }
 
     // Proactive notification scopes.
@@ -1008,6 +1014,7 @@ class AddAppProvider extends ChangeNotifier {
       return;
     }
     makeAppPublic = value;
+    checkValidity();
     notifyListeners();
   }
 
