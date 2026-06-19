@@ -225,13 +225,14 @@ Already resolved in Batch 7:
 | ✓ | Conversation copy shareable link | `Conversations.tsx` | Done — visibility=shared + h.omi.me URL |
 | ✓ | Conversation multi-select merge | `Conversations.tsx` | Done — `POST /v1/conversations/merge` |
 | ✓ | Speaker display names (person_id → name) | `ConversationDetail.tsx` | Done — people[] from GET /v1/conversations/{id} |
-| ✗ | Focus page | — | Infeasible — needs proactive assistant pipeline |
-| ✗ | Notifications settings (proactive) | — | Infeasible — no notification generation infra |
-| ✗ | BYOK | — | High blast-radius — touches every API call header injection |
-| ✗ | Software updates | — | Requires electron-updater package + CI config |
-| ✗ | Chat audio attachment | — | Endpoint confirmed (POST /v2/voice-messages) but needs audio recorder UI |
-| ✗ | Speaker label assignment UI | — | Endpoints confirmed but complex multi-step UI with person picker |
-| ✗ | BLE/Devices | — | No native BLE addon |
+| ✓ | BYOK — settings UI + header injection | `BYOKTab.tsx`, `tabs.ts`, `Settings.tsx`, `apiClient.ts`, `preferences.ts` | Done — X-BYOK-* headers, SHA-256 fingerprints, POST /v1/users/me/byok-active |
+| ✓ | Chat audio file attachment | `useChat.ts`, `Home.tsx` | Done — paperclip → POST /v2/voice-messages multipart, SSE stream |
+| ✓ | Speaker label assignment | `ConversationDetail.tsx` | Done — click chip → person picker, GET /v1/users/people, PATCH assign-speaker |
+| ✓ | Software updates — "Check for Updates" link | `SupportTab.tsx` | Done — GitHub releases link (no auto-updater: no publish config) |
+| ✗ | Focus page | — | Infeasible — macOS FocusAssistant.swift requires proactive local ML inference; no Windows equivalent |
+| ✗ | Notifications settings (proactive) | — | Infeasible — no notification generation infra on Windows |
+| ✗ | Auto-update (electron-updater) | — | Blocked — no `publish` section in electron-builder.yml, no CI release feed configured |
+| ✗ | BLE/Devices | — | Blocked — no `noble` or `node-ble` native addon; no Windows BLE bridge |
 | ✓ | Tasks grouping | — | Already done |
 | ✓ | Screen context | — | Already present |
 | ✓ | Overlay drag/resize/pill | — | Done in Batch 7 |
