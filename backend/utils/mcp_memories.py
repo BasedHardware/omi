@@ -1,6 +1,10 @@
 from datetime import datetime, timezone
 from typing import Callable, Optional
 
+from config.v17_memory import V17Capabilities
+from models.v17_product_memory import MemoryAccessPolicy, MemoryConsumer
+from utils.memory.v17_product_memory_read_service import fetch_default_product_memory_search
+
 ACTIVITY_TAGS = {
     'activity',
     'focus',
@@ -216,3 +220,66 @@ def collect_filtered_memories(
         'scanned_count': scanned_count,
         'scan_truncated': scan_truncated,
     }
+
+
+def search_v17_default_mcp_memories(
+    *,
+    uid: str,
+    query: str,
+    limit: int,
+    db_client,
+    rollout_capabilities: Optional[V17Capabilities],
+    app_has_default_memory_grant: bool = True,
+    now: Optional[datetime] = None,
+) -> Optional[list[dict]]:
+    """Search default-visible V17 product memory for the MCP memory-search caller.
+
+    This is an explicit caller adapter for `/v1/mcp/memories/search`: callers must
+    pass V17 read rollout capabilities and the MCP default-memory grant before it
+    touches Firestore. Archive capability is always false here; Archive remains
+    available only through the separate explicit product Archive search seam.
+
+    Returns `None` when the caller should keep using the legacy MCP memory path.
+    """
+
+    if not rollout_capabilities or not rollout_capabilities.v17_reads_enabled:
+        return None
+    if not app_has_default_memory_grant:
+        return None
+
+    bounded_limit = max(1, min(limit, 20))
+    policy = MemoryAccessPolicy(
+        consumer=MemoryConsumer.mcp,
+        app_has_default_memory_grant=True,
+        archive_capability=False,
+        raw_provenance_capability=False,
+    )
+    response = fetch_default_product_memory_search(
+        uid=uid,
+        query=query,
+        db_client=db_client,
+        policy=policy,
+        now=now,
+        limit=bounded_limit,
+        offset=0,
+    )
+
+    formatted = []
+    for rank, item in enumerate(response['items']):
+        formatted.append(
+            {
+                'id': item['memory_id'],
+                'content': item['content'],
+                'category': 'other',
+                'relevance_score': round(1.0 - (rank * 0.0001), 4),
+                'v17_default_memory': True,
+                'archive_default_visible': False,
+                'policy': {
+                    'consumer': policy.consumer.value,
+                    'app_has_default_memory_grant': policy.app_has_default_memory_grant,
+                    'archive_capability': policy.archive_capability,
+                    'raw_provenance_capability': policy.raw_provenance_capability,
+                },
+            }
+        )
+    return formatted
