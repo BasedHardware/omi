@@ -35,7 +35,7 @@ jobs:
           echo "has_personas=$(echo "$FILES" | grep -q '^web/personas-open-source/' && echo true || echo false)" >> $GITHUB_OUTPUT
           # Also run the Rust check when this workflow changes so CI PRs dogfood
           # the new guard instead of only validating YAML syntax.
-          echo "has_desktop_rust=$(echo "$FILES" | grep -qE '^desktop/macos/Backend-Rust/.*\.rs$|^\.github/workflows/lint\.yml$' && echo true || echo false)" >> $GITHUB_OUTPUT
+          echo "has_desktop_rust=$(echo "$FILES" | grep -qE '^desktop/macos/Backend-Rust/|^\.github/workflows/lint\.yml$' && echo true || echo false)" >> $GITHUB_OUTPUT
 
       # -- Universal source hygiene --
       - name: Check merge conflict markers
