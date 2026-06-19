@@ -39,7 +39,8 @@ if [ -z "$MERGE_BASE" ]; then
   exit 1
 fi
 
-CHANGED_FILES=$(git diff --name-only "$MERGE_BASE" HEAD -- 'backend/**/*.py' 2>/dev/null || true)
+# Match both backend/*.py (root-level) and backend/**/*.py (subdirectories)
+CHANGED_FILES=$(git diff --name-only "$MERGE_BASE" HEAD -- 'backend/*.py' 'backend/**/*.py' 2>/dev/null || true)
 
 if [ -z "$CHANGED_FILES" ]; then
   echo "ℹ️  No backend Python files changed"
@@ -71,8 +72,15 @@ while IFS= read -r f; do
   done
 
   # Strategy 2: prefix glob — test_<module_prefix>*.py
-  find backend/tests/unit backend/tests/integration \
-    -name "test_${MODULE_NAME}*.py" >> "$TEST_TMP" 2>/dev/null || true
+  # Note: find outputs paths relative to cwd (repo root), so strip
+  # the leading "backend/" prefix to get test-relative paths
+  while IFS= read -r match; do
+    [ -z "$match" ] && continue
+    # Strip "backend/" prefix from find output
+    local_path="${match#backend/}"
+    echo "$local_path" >> "$TEST_TMP"
+  done < <(find backend/tests/unit backend/tests/integration \
+    -name "test_${MODULE_NAME}*.py" 2>/dev/null || true)
 done <<< "$CHANGED_FILES"
 
 TEST_TARGETS=$(sort -u "$TEST_TMP" | while read t; do
@@ -89,4 +97,13 @@ echo "Running: $COUNT test file(s)"
 echo ""
 
 cd backend
-python -m pytest -v --timeout=30 --tb=short $TEST_TARGETS
+
+# Build pytest args — only include --timeout if plugin is available
+PYTEST_ARGS="-v --tb=short"
+if python -m pytest --timeout-version >/dev/null 2>&1; then
+  PYTEST_ARGS="$PYTEST_ARGS --timeout=30"
+else
+  echo "ℹ️  pytest-timeout not installed, running without timeout"
+fi
+
+python -m pytest $PYTEST_ARGS $TEST_TARGETS

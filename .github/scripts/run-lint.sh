@@ -16,6 +16,7 @@ cd "$(dirname "$0")/../.."
 
 MODE="check"  # "check" or "fix"
 FILES_ARG=""
+FAIL=0
 
 if [ "${1:-}" = "--fix" ]; then
   MODE="fix"
@@ -31,21 +32,33 @@ if [ -n "$FILES_ARG" ]; then
   # Run on specific files
   echo "🔍 Running lints on specified files ($MODE)..."
   if command -v pre-commit &>/dev/null; then
-    if [ "$MODE" = "fix" ]; then
-      pre-commit run --files $FILES_ARG
-    else
-      pre-commit run --files $FILES_ARG
-    fi
+    pre-commit run --files $FILES_ARG || FAIL=1
   else
     echo "⚠️  pre-commit not installed, running tools directly"
     for f in $FILES_ARG; do
       [ "${f##*.}" != "py" ] && continue
       if [ "$MODE" = "fix" ]; then
-        echo "  black (fix) $f" && black --line-length=120 --skip-string-normalization "$f" || true
-        echo "  ruff (fix) $f" && ruff check --fix --target-version py39 "$f" || true
+        echo "  black (fix) $f"
+        if ! black --line-length=120 --skip-string-normalization "$f" 2>&1; then
+          echo "    ❌ black failed on $f"
+          FAIL=1
+        fi
+        echo "  ruff (fix) $f"
+        if ! ruff check --fix --target-version py39 "$f" 2>&1; then
+          echo "    ❌ ruff failed on $f"
+          FAIL=1
+        fi
       else
-        echo "  black (check) $f" && black --check --line-length=120 --skip-string-normalization "$f" || true
-        echo "  ruff (check) $f" && ruff check --target-version py39 "$f" || true
+        echo "  black (check) $f"
+        if ! black --check --line-length=120 --skip-string-normalization "$f" 2>&1; then
+          echo "    ❌ black failed on $f"
+          FAIL=1
+        fi
+        echo "  ruff (check) $f"
+        if ! ruff check --target-version py39 "$f" 2>&1; then
+          echo "    ❌ ruff failed on $f"
+          FAIL=1
+        fi
       fi
     done
   fi
@@ -53,12 +66,18 @@ else
   # Run on all files
   echo "🔍 Running lints on all files ($MODE)..."
   if command -v pre-commit &>/dev/null; then
-    pre-commit run --all-files
+    pre-commit run --all-files || FAIL=1
   else
     echo "⚠️  pre-commit not installed. Install with:"
     echo "   pip install pre-commit && pre-commit install"
     exit 1
   fi
+fi
+
+if [ "$FAIL" -ne 0 ]; then
+  echo ""
+  echo "❌ Lint errors found"
+  exit 1
 fi
 
 echo "✅ Lint complete"
