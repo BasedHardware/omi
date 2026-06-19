@@ -100,7 +100,9 @@ final class WaveBarsModel {
         // Center bars taller -> a friendly arch.
         let mid = Double(barCount - 1) / 2
         weights = (0..<barCount).map { i in
-            0.72 + 0.45 * (1.0 - abs(Double(i) - mid) / max(mid, 1.0))
+            let dist: Double = abs(Double(i) - mid) / max(mid, 1.0)
+            let arch: Double = 1.0 - dist
+            return 0.72 + 0.45 * arch
         }
     }
 
