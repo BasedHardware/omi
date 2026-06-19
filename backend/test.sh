@@ -57,6 +57,7 @@ pytest tests/unit/test_v17_firestore_iam_deployment_doc.py -v
 pytest tests/unit/test_v17_non_active_routes.py -v
 pytest tests/unit/test_v17_non_active_route_audit.py -v
 pytest tests/unit/test_v17_non_active_route_report.py -v
+pytest tests/unit/test_v17_non_active_route_admin_endpoint.py -v
 pytest tests/unit/test_v17_review_queue_non_active_routes.py -v
 pytest tests/unit/test_memory_ingestion_pipeline.py -v
 pytest tests/unit/test_working_memory_candidate_schema.py -v

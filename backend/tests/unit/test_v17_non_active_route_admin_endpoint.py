@@ -1,0 +1,110 @@
+import os
+import sys
+import types
+from unittest.mock import MagicMock
+
+os.environ.setdefault(
+    "ENCRYPTION_SECRET",
+    "omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv",
+)
+
+
+class _HTTPException(Exception):
+    def __init__(self, status_code, detail):
+        super().__init__(detail)
+        self.status_code = status_code
+        self.detail = detail
+
+
+class _APIRouter:
+    def __init__(self):
+        self.routes = []
+
+    def get(self, path, **kwargs):
+        def decorator(func):
+            self.routes.append(("GET", path, kwargs, func))
+            return func
+
+        return decorator
+
+
+def _identity(default=None, **_kwargs):
+    return default
+
+
+fastapi_stub = types.ModuleType("fastapi")
+fastapi_stub.APIRouter = _APIRouter
+fastapi_stub.Header = _identity
+fastapi_stub.HTTPException = _HTTPException
+fastapi_stub.Query = _identity
+sys.modules["fastapi"] = fastapi_stub
+sys.modules["database._client"] = MagicMock()
+
+from database.v17_non_active_memory_routes import NonActiveRoute
+from utils.memory.v17_non_active_route_audit import NonActiveRouteAuditReport
+
+import routers.v17_memory_admin as v17_memory_admin
+
+
+def _report(uid="u1"):
+    return NonActiveRouteAuditReport(
+        uid=uid,
+        status="green",
+        total_accounted_outcomes=6,
+        counts_by_route={route.value: 1 for route in NonActiveRoute},
+        evidence=[],
+        missing_source_ids=[],
+        red_reasons=[],
+    )
+
+
+def test_admin_router_registers_concrete_v17_admin_report_route():
+    assert any(
+        method == "GET" and path == "/v17/admin/users/{uid}/non-active-route-report"
+        for method, path, _kwargs, _func in v17_memory_admin.router.routes
+    )
+
+
+def test_admin_endpoint_surfaces_non_active_route_report_counts_without_memory_items(monkeypatch):
+    os.environ["ADMIN_KEY"] = "secret"
+    calls = []
+
+    def fake_fetch(uid, *, run_id=None, expected_source_ids=None):
+        calls.append((uid, run_id, expected_source_ids))
+        return _report(uid)
+
+    monkeypatch.setattr(v17_memory_admin, "fetch_non_active_route_audit_report", fake_fetch)
+
+    response = v17_memory_admin.get_v17_non_active_route_report(
+        "u1",
+        run_id="run-1",
+        expected_source_ids=" src-review,src-archive ,, src-hidden ",
+        secret_key="secret",
+    )
+
+    assert calls == [("u1", "run-1", ["src-review", "src-archive", "src-hidden"])]
+    assert response["status"] == "green"
+    assert response["total_accounted_outcomes"] == 6
+    assert response["counts_by_route"] == {
+        "review": 1,
+        "archive": 1,
+        "context_only": 1,
+        "reject": 1,
+        "hidden": 1,
+        "skip": 1,
+    }
+
+
+def test_admin_endpoint_rejects_missing_or_invalid_admin_key(monkeypatch):
+    os.environ["ADMIN_KEY"] = "secret"
+    monkeypatch.setattr(v17_memory_admin, "fetch_non_active_route_audit_report", MagicMock(return_value=_report()))
+
+    try:
+        v17_memory_admin.get_v17_non_active_route_report("u1", secret_key="wrong")
+    except _HTTPException as exc:
+        assert exc.status_code == 403
+        assert exc.detail == "You are not authorized to perform this action"
+    else:
+        raise AssertionError("expected admin auth failure")
+
+    v17_memory_admin.fetch_non_active_route_audit_report.assert_not_called()
